@@ -111,3 +111,11 @@ def test_weather_parsing_and_params():
     assert out["weather.temperature"].unit == "°F"
     assert out["weather.description"].value == "Light rain"
     assert describe_weather_code(None) == ""
+
+
+def test_psutil_provider_without_cpu_freq(monkeypatch):
+    import psutil
+
+    monkeypatch.delattr(psutil, "cpu_freq", raising=False)
+    values = PsutilProvider().read()
+    assert "cpu.freq" not in values and "cpu.load" in values

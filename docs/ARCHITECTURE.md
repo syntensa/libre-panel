@@ -49,6 +49,7 @@ myfans = "my_plugin:FanProvider"
 ```python
 from libre_panel.sensors import Reading, SensorProvider
 
+
 class FanProvider(SensorProvider):
     name = "myfans"
 

@@ -109,7 +109,12 @@ class PsutilProvider(SensorProvider):
     def read(self) -> dict[str, Reading]:
         out: dict[str, Reading] = {}
         out["cpu.load"] = Reading("cpu.load", psutil.cpu_percent(interval=None), "%", "CPU load")
-        freq = psutil.cpu_freq()
+        # cpu_freq does not exist on every platform (e.g. macOS on Apple Silicon).
+        freq_reader = getattr(psutil, "cpu_freq", None)
+        try:
+            freq = freq_reader() if freq_reader else None
+        except (OSError, RuntimeError, NotImplementedError):
+            freq = None
         if freq:
             out["cpu.freq"] = Reading("cpu.freq", freq.current, "MHz", "CPU clock")
         out["cpu.cores"] = Reading("cpu.cores", float(psutil.cpu_count() or 0), "", "CPU threads")

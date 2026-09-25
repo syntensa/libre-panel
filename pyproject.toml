@@ -32,7 +32,7 @@ dependencies = [
 [project.optional-dependencies]
 serial = ["pyserial>=3.5"]
 usb = ["pyusb>=1.2", "pycryptodome>=3.19", "libusb-package>=1.0"]
-dev = ["pytest>=8", "ruff>=0.5", "pyserial>=3.5", "pycryptodome>=3.19"]
+dev = ["pytest>=8", "ruff==0.16.9", "pyserial>=3.5", "pycryptodome>=3.19"]
 
 [project.scripts]
 libre-panel = "libre_panel.cli:main"
