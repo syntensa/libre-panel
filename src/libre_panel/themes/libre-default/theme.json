@@ -1,0 +1,50 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "Libre Default",
+  "author": "Libre Panel contributors",
+  "license": "CC0-1.0",
+  "description": "Clean starter theme for 3.5\" panels in landscape (480x320).",
+  "display": { "model": "turing-3.5", "orientation": "landscape", "width": 480, "height": 320 },
+  "background": { "color": "#0b1016", "image": null },
+  "refresh_ms": 1000,
+  "widgets": [
+    { "id": "title", "type": "text", "x": 16, "y": 12, "text": "LIBRE PANEL", "font_size": 13, "color": "#64748b" },
+    { "id": "date", "type": "clock", "x": 16, "y": 30, "format": "%A, %d %B", "font_size": 17, "color": "#94a3b8" },
+    { "id": "clock", "type": "clock", "x": 464, "y": 8, "format": "%H:%M", "font_size": 40, "color": "#e2e8f0", "align": "right" },
+
+    { "id": "cpu-ring", "type": "gauge", "x": 16, "y": 66, "w": 136, "h": 136, "sensor": "cpu.load", "thickness": 12,
+      "color": "#22d3ee", "background": "#1e293b", "color_rules": [{ "above": 85, "color": "#f87171" }] },
+    { "id": "cpu-value", "type": "metric", "x": 84, "y": 112, "sensor": "cpu.load", "format": "{value:.0f}%",
+      "font_size": 30, "color": "#f1f5f9", "align": "center" },
+    { "id": "cpu-label", "type": "text", "x": 84, "y": 150, "text": "CPU", "font_size": 14, "color": "#94a3b8", "align": "center" },
+
+    { "id": "ram-ring", "type": "gauge", "x": 168, "y": 66, "w": 136, "h": 136, "sensor": "mem.load", "thickness": 12,
+      "color": "#a78bfa", "background": "#1e293b", "color_rules": [{ "above": 90, "color": "#f87171" }] },
+    { "id": "ram-value", "type": "metric", "x": 236, "y": 112, "sensor": "mem.load", "format": "{value:.0f}%",
+      "font_size": 30, "color": "#f1f5f9", "align": "center" },
+    { "id": "ram-label", "type": "text", "x": 236, "y": 150, "text": "RAM", "font_size": 14, "color": "#94a3b8", "align": "center" },
+
+    { "id": "temp-label", "type": "text", "x": 324, "y": 70, "text": "CPU TEMP", "font_size": 13, "color": "#94a3b8" },
+    { "id": "temp-value", "type": "metric", "x": 324, "y": 86, "sensor": "cpu.temp", "format": "{value:.0f}{unit}",
+      "fallback": "n/a", "font_size": 28, "color": "#f1f5f9",
+      "color_rules": [{ "above": 70, "color": "#fbbf24" }, { "above": 85, "color": "#f87171" }] },
+
+    { "id": "disk-label", "type": "text", "x": 324, "y": 128, "text": "DISK", "font_size": 13, "color": "#94a3b8" },
+    { "id": "disk-value", "type": "metric", "x": 464, "y": 128, "sensor": "disk.load", "format": "{value:.0f}%",
+      "font_size": 13, "color": "#cbd5e1", "align": "right" },
+    { "id": "disk-bar", "type": "bar", "x": 324, "y": 148, "w": 140, "h": 8, "sensor": "disk.load",
+      "color": "#34d399", "background": "#1e293b", "radius": 4, "color_rules": [{ "above": 90, "color": "#f87171" }] },
+
+    { "id": "net-down-label", "type": "text", "x": 324, "y": 168, "text": "Down", "font_size": 13, "color": "#94a3b8" },
+    { "id": "net-down", "type": "metric", "x": 464, "y": 166, "sensor": "net.down", "format": "{value:bytes}/s",
+      "font_size": 15, "color": "#34d399", "align": "right" },
+    { "id": "net-up-label", "type": "text", "x": 324, "y": 190, "text": "Up", "font_size": 13, "color": "#94a3b8" },
+    { "id": "net-up", "type": "metric", "x": 464, "y": 188, "sensor": "net.up", "format": "{value:bytes}/s",
+      "font_size": 15, "color": "#f472b6", "align": "right" },
+
+    { "id": "history-bg", "type": "rect", "x": 16, "y": 222, "w": 448, "h": 84, "color": "#111827", "radius": 8 },
+    { "id": "history", "type": "graph", "x": 16, "y": 232, "w": 448, "h": 74, "sensor": "cpu.load", "history": 120,
+      "color": "#22d3ee", "fill": true, "line_width": 2 },
+    { "id": "history-label", "type": "text", "x": 26, "y": 228, "text": "CPU HISTORY", "font_size": 11, "color": "#64748b" }
+  ]
+}

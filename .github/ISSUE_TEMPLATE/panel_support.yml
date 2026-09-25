@@ -1,0 +1,34 @@
+name: Panel support / hardware test
+description: Report a panel that is missing, or how a supported one behaves
+labels: [hardware]
+body:
+  - type: input
+    id: product
+    attributes:
+      label: Product name and size
+      placeholder: e.g. TURZX 9.2" USB, WeAct Display FS 3.5"
+    validations:
+      required: true
+  - type: textarea
+    id: devices
+    attributes:
+      label: Output of `libre-panel devices`
+      description: Install with `pip install "libre-panel[usb,serial]"` first. Serial numbers of your own device can be removed.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: What happens with `libre-panel run --driver turzx`?
+      options:
+        - The panel shows the theme correctly
+        - The panel shows something, but wrong (colors, rotation, cut off)
+        - Nothing on the panel
+        - Error message
+        - Not tried
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Error output, a photo of the panel and of the back label help a lot.

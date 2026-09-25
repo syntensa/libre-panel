@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Libre Panel Theme Editor</title>
+  <link rel="stylesheet" href="/static/editor.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Libre Panel <span>Theme Editor</span></div>
+    <label>Theme <select id="theme-select"></select></label>
+    <button id="btn-new" type="button">New</button>
+    <button id="btn-save" type="button" class="primary">Save</button>
+    <button id="btn-save-as" type="button">Save as…</button>
+    <button id="btn-activate" type="button" title="Save and show this theme on the panel">Show on panel</button>
+    <button id="btn-import" type="button">Import</button>
+    <button id="btn-export" type="button">Export</button>
+    <input type="file" id="import-file" accept=".json,application/json" hidden>
+    <span class="spacer"></span>
+    <label class="toggle"><input type="checkbox" id="live-toggle"> Live sensors</label>
+  </header>
+
+  <nav class="panelbar" aria-label="Panel model">
+    <label>Panel <select id="model-select"></select></label>
+    <label>Orientation
+      <select id="orientation-select">
+        <option value="landscape">Landscape</option>
+        <option value="portrait">Portrait</option>
+      </select>
+    </label>
+    <span id="custom-size" hidden>
+      <input type="number" id="custom-w" min="16" max="4096" aria-label="Custom width"> ×
+      <input type="number" id="custom-h" min="16" max="4096" aria-label="Custom height">
+    </span>
+    <label>On size change
+      <select id="adapt-mode">
+        <option value="scale">Scale layout</option>
+        <option value="keep">Keep positions</option>
+      </select>
+    </label>
+    <span id="panel-info" class="muted"></span>
+  </nav>
+
+  <main class="layout">
+    <aside class="left">
+      <h2>Widgets</h2>
+      <div class="add-row">
+        <select id="add-type" aria-label="Widget type"></select>
+        <button id="btn-add" type="button">Add</button>
+      </div>
+      <ul id="widget-list"></ul>
+      <p class="hint">Drag widgets on the preview. Arrow keys nudge (Shift = 10 px), Del removes, Ctrl+D duplicates, Ctrl+S saves.</p>
+    </aside>
+
+    <section class="stage" id="stage">
+      <div class="canvas-wrap" id="canvas-wrap">
+        <img id="preview" alt="Panel preview">
+        <div id="overlay"></div>
+      </div>
+    </section>
+
+    <aside class="right">
+      <h2 id="props-title">Theme</h2>
+      <form id="props" autocomplete="off"></form>
+    </aside>
+  </main>
+
+  <footer class="status" id="status">Loading…</footer>
+  <script src="/static/editor.js"></script>
+</body>
+</html>

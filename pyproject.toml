@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "libre-panel"
+version = "0.1.0.dev0"
+description = "Free software for USB system-monitor displays (TURZX / Turing Smart Screen and compatibles) with a visual theme editor."
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "Libre Panel contributors" }]
+keywords = ["turzx", "turing-smart-screen", "system-monitor", "lcd", "hardware-monitor", "theme-editor"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Topic :: System :: Monitoring",
+    "Topic :: System :: Hardware",
+]
+dependencies = [
+    "pillow>=10.1",
+    "psutil>=5.9",
+]
+
+[project.optional-dependencies]
+serial = ["pyserial>=3.5"]
+usb = ["pyusb>=1.2", "pycryptodome>=3.19", "libusb-package>=1.0"]
+dev = ["pytest>=8", "ruff>=0.5", "pyserial>=3.5", "pycryptodome>=3.19"]
+
+[project.scripts]
+libre-panel = "libre_panel.cli:main"
+
+# Third-party packages can add sensor providers or display drivers without
+# touching the core, e.g. an optional fan-analysis plugin.
+[project.entry-points."libre_panel.sensors"]
+psutil = "libre_panel.sensors.psutil_provider:PsutilProvider"
+librehardwaremonitor = "libre_panel.sensors.librehardwaremonitor:LibreHardwareMonitorProvider"
+demo = "libre_panel.sensors.demo:DemoProvider"
+
+[project.entry-points."libre_panel.devices"]
+auto = "libre_panel.devices.auto:AutoDisplay"
+virtual = "libre_panel.devices.virtual:VirtualDisplay"
+turzx = "libre_panel.devices.turzx:TurzxDisplay"
+
+[project.urls]
+Homepage = "https://github.com/syntensa/libre-panel"
+Issues = "https://github.com/syntensa/libre-panel/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+libre_panel = ["themes/**/*", "editor/static/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

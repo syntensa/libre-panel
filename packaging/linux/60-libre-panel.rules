@@ -1,0 +1,6 @@
+# Libre Panel: let logged-in users access USB system-monitor panels.
+# Install: sudo cp 60-libre-panel.rules /etc/udev/rules.d/ && sudo udevadm control --reload-rules
+# then unplug and replug the panel.
+
+# Turing / TURZX V1.x USB panels (2.8" round, 4.6", 5.2", 8", 8.8", 9.2", 12.3")
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1cbe", MODE="0660", TAG+="uaccess"

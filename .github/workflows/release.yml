@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev,usb]"
+      - run: pytest -q
+
+  python-package:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - run: python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-package
+          path: dist/*
+
+  standalone:
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            name: windows-x64
+          - os: ubuntu-latest
+            name: linux-x64
+          - os: macos-latest
+            name: macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ".[usb,serial]" pyinstaller
+      - name: Build
+        run: >
+          pyinstaller --noconfirm --clean --name libre-panel
+          --collect-data libre_panel --collect-all libusb_package
+          --copy-metadata libre-panel
+          packaging/pyinstaller/libre_panel_app.py
+      - name: Smoke test
+        shell: bash
+        run: dist/libre-panel/libre-panel preview spur-ii -o smoke.png
+      - name: Archive
+        shell: bash
+        run: |
+          cp LICENSE README.md dist/libre-panel/
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "libre-panel-${GITHUB_REF_NAME}-${{ matrix.name }}.zip" ./dist/libre-panel/*
+          else
+            tar -C dist -czf "libre-panel-${GITHUB_REF_NAME}-${{ matrix.name }}.tar.gz" libre-panel
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: standalone-${{ matrix.name }}
+          path: libre-panel-*
+
+  github-release:
+    needs: [python-package, standalone]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Draft release with all files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" artifacts/*
+          --repo "$GITHUB_REPOSITORY" --draft --generate-notes
+          --title "Libre Panel $GITHUB_REF_NAME"
+
+  pypi:
+    needs: [python-package, standalone]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # trusted publishing, no stored token
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: python-package
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1

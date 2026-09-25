@@ -1,0 +1,707 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "SPUR II",
+  "author": "SPUR II / Libre Panel contributors",
+  "license": "CC-BY-4.0",
+  "description": "The SPUR II classic layout for 1920x480 bar panels (8.8\"/9.2\"): two load charts over four sections, arctic base with the teal signature.",
+  "display": {
+    "model": "turing-9.2-usb",
+    "orientation": "landscape",
+    "width": 1920,
+    "height": 480
+  },
+  "background": {
+    "color": "#070A0E",
+    "image": null
+  },
+  "refresh_ms": 1000,
+  "widgets": [
+    {
+      "id": "wordmark",
+      "type": "text",
+      "x": 29,
+      "y": 10,
+      "text": "SPUR II",
+      "font_size": 46,
+      "color": "#EEF6FF"
+    },
+    {
+      "id": "wordmark-accent",
+      "type": "rect",
+      "x": 31,
+      "y": 66,
+      "w": 72,
+      "h": 4,
+      "color": "#13E5D7",
+      "radius": 2
+    },
+    {
+      "id": "date",
+      "type": "clock",
+      "x": 1640,
+      "y": 24,
+      "format": "%a %d.%m.",
+      "font_size": 24,
+      "color": "#8A94A6",
+      "align": "right"
+    },
+    {
+      "id": "clock",
+      "type": "clock",
+      "x": 1891,
+      "y": 8,
+      "format": "%H:%M:%S",
+      "font_size": 52,
+      "color": "#EEF6FF",
+      "align": "right"
+    },
+    {
+      "id": "cpu-chart-bg",
+      "type": "rect",
+      "x": 29,
+      "y": 84,
+      "w": 930,
+      "h": 200,
+      "color": "#0B1016",
+      "radius": 10,
+      "outline": "#1D2531",
+      "outline_width": 1
+    },
+    {
+      "id": "cpu-chart-label",
+      "type": "text",
+      "x": 45,
+      "y": 96,
+      "text": "CPU LOAD",
+      "font_size": 22,
+      "color": "#13E5D7"
+    },
+    {
+      "id": "cpu-chart-value",
+      "type": "metric",
+      "x": 943,
+      "y": 92,
+      "sensor": "cpu.load",
+      "format": "{value:.0f}%",
+      "font_size": 30,
+      "color": "#EEF6FF",
+      "align": "right"
+    },
+    {
+      "id": "cpu-chart",
+      "type": "graph",
+      "x": 41,
+      "y": 130,
+      "w": 906,
+      "h": 146,
+      "sensor": "cpu.load",
+      "min": 0,
+      "max": 100,
+      "history": 300,
+      "color": "#13E5D7",
+      "fill": true,
+      "line_width": 2
+    },
+    {
+      "id": "gpu-chart-bg",
+      "type": "rect",
+      "x": 989,
+      "y": 84,
+      "w": 902,
+      "h": 200,
+      "color": "#0B1016",
+      "radius": 10,
+      "outline": "#1D2531",
+      "outline_width": 1
+    },
+    {
+      "id": "gpu-chart-label",
+      "type": "text",
+      "x": 1005,
+      "y": 96,
+      "text": "GPU LOAD",
+      "font_size": 22,
+      "color": "#99D4FF"
+    },
+    {
+      "id": "gpu-chart-value",
+      "type": "metric",
+      "x": 1875,
+      "y": 92,
+      "sensor": "gpu.load",
+      "format": "{value:.0f}%",
+      "font_size": 30,
+      "color": "#EEF6FF",
+      "align": "right"
+    },
+    {
+      "id": "gpu-chart",
+      "type": "graph",
+      "x": 1001,
+      "y": 130,
+      "w": 878,
+      "h": 146,
+      "sensor": "gpu.load",
+      "min": 0,
+      "max": 100,
+      "history": 300,
+      "color": "#99D4FF",
+      "fill": true,
+      "line_width": 2
+    },
+    {
+      "id": "cpu-box",
+      "type": "rect",
+      "x": 29,
+      "y": 298,
+      "w": 450,
+      "h": 172,
+      "color": "#0B1016",
+      "radius": 10,
+      "outline": "#1D2531",
+      "outline_width": 1
+    },
+    {
+      "id": "cpu-title",
+      "type": "text",
+      "x": 45,
+      "y": 306,
+      "text": "CPU",
+      "font_size": 22,
+      "color": "#13E5D7"
+    },
+    {
+      "id": "cpu-rule",
+      "type": "rect",
+      "x": 45,
+      "y": 338,
+      "w": 418,
+      "h": 2,
+      "color": "#1D2531"
+    },
+    {
+      "id": "cpu-temp-label",
+      "type": "text",
+      "x": 45,
+      "y": 352,
+      "text": "TEMP",
+      "font_size": 20,
+      "color": "#8A94A6"
+    },
+    {
+      "id": "cpu-temp-value",
+      "type": "metric",
+      "x": 256,
+      "y": 349,
+      "sensor": "cpu.temp",
+      "format": "{value:.0f}{unit}",
+      "font_size": 24,
+      "color": "#EEF6FF",
+      "align": "right",
+      "color_rules": [
+        {
+          "above": 80,
+          "color": "#FFC368"
+        },
+        {
+          "above": 90,
+          "color": "#FF6B6B"
+        }
+      ]
+    },
+    {
+      "id": "cpu-temp-bar",
+      "type": "bar",
+      "x": 276,
+      "y": 360,
+      "w": 183,
+      "h": 10,
+      "sensor": "cpu.temp",
+      "min": 30,
+      "max": 95,
+      "color": "#13E5D7",
+      "background": "#1D2531",
+      "radius": 5,
+      "color_rules": [
+        {
+          "above": 80,
+          "color": "#FFC368"
+        },
+        {
+          "above": 90,
+          "color": "#FF6B6B"
+        }
+      ]
+    },
+    {
+      "id": "cpu-watt-label",
+      "type": "text",
+      "x": 45,
+      "y": 388,
+      "text": "WATT",
+      "font_size": 20,
+      "color": "#8A94A6"
+    },
+    {
+      "id": "cpu-watt-value",
+      "type": "metric",
+      "x": 256,
+      "y": 385,
+      "sensor": "cpu.power",
+      "format": "{value:.0f} W",
+      "font_size": 24,
+      "color": "#EEF6FF",
+      "align": "right"
+    },
+    {
+      "id": "cpu-watt-bar",
+      "type": "bar",
+      "x": 276,
+      "y": 396,
+      "w": 183,
+      "h": 10,
+      "sensor": "cpu.power",
+      "min": 0,
+      "max": 150,
+      "color": "#13E5D7",
+      "background": "#1D2531",
+      "radius": 5
+    },
+    {
+      "id": "cpu-freq-label",
+      "type": "text",
+      "x": 45,
+      "y": 424,
+      "text": "FREQ",
+      "font_size": 20,
+      "color": "#8A94A6"
+    },
+    {
+      "id": "cpu-freq-value",
+      "type": "metric",
+      "x": 256,
+      "y": 421,
+      "sensor": "cpu.freq",
+      "format": "{value:.0f} MHz",
+      "font_size": 24,
+      "color": "#EEF6FF",
+      "align": "right"
+    },
+    {
+      "id": "cpu-freq-bar",
+      "type": "bar",
+      "x": 276,
+      "y": 432,
+      "w": 183,
+      "h": 10,
+      "sensor": "cpu.freq",
+      "min": 0,
+      "max": 5500,
+      "color": "#13E5D7",
+      "background": "#1D2531",
+      "radius": 5
+    },
+    {
+      "id": "ram-box",
+      "type": "rect",
+      "x": 499,
+      "y": 298,
+      "w": 460,
+      "h": 172,
+      "color": "#0B1016",
+      "radius": 10,
+      "outline": "#1D2531",
+      "outline_width": 1
+    },
+    {
+      "id": "ram-title",
+      "type": "text",
+      "x": 515,
+      "y": 306,
+      "text": "RAM",
+      "font_size": 22,
+      "color": "#D7C4FF"
+    },
+    {
+      "id": "ram-rule",
+      "type": "rect",
+      "x": 515,
+      "y": 338,
+      "w": 428,
+      "h": 2,
+      "color": "#1D2531"
+    },
+    {
+      "id": "ram-used-label",
+      "type": "text",
+      "x": 515,
+      "y": 352,
+      "text": "USED",
+      "font_size": 20,
+      "color": "#8A94A6"
+    },
+    {
+      "id": "ram-used-value",
+      "type": "metric",
+      "x": 726,
+      "y": 349,
+      "sensor": "mem.used",
+      "format": "{value:.1f} GiB",
+      "font_size": 24,
+      "color": "#EEF6FF",
+      "align": "right"
+    },
+    {
+      "id": "ram-used-bar",
+      "type": "bar",
+      "x": 746,
+      "y": 360,
+      "w": 193,
+      "h": 10,
+      "sensor": "mem.load",
+      "min": 0,
+      "max": 100,
+      "color": "#D7C4FF",
+      "background": "#1D2531",
+      "radius": 5
+    },
+    {
+      "id": "ram-vram-label",
+      "type": "text",
+      "x": 515,
+      "y": 388,
+      "text": "VRAM",
+      "font_size": 20,
+      "color": "#8A94A6"
+    },
+    {
+      "id": "ram-vram-value",
+      "type": "metric",
+      "x": 726,
+      "y": 385,
+      "sensor": "gpu.mem.load",
+      "format": "{value:.0f}%",
+      "font_size": 24,
+      "color": "#EEF6FF",
+      "align": "right"
+    },
+    {
+      "id": "ram-vram-bar",
+      "type": "bar",
+      "x": 746,
+      "y": 396,
+      "w": 193,
+      "h": 10,
+      "sensor": "gpu.mem.load",
+      "min": 0,
+      "max": 100,
+      "color": "#D7C4FF",
+      "background": "#1D2531",
+      "radius": 5
+    },
+    {
+      "id": "ram-disk-label",
+      "type": "text",
+      "x": 515,
+      "y": 424,
+      "text": "DISK",
+      "font_size": 20,
+      "color": "#8A94A6"
+    },
+    {
+      "id": "ram-disk-value",
+      "type": "metric",
+      "x": 726,
+      "y": 421,
+      "sensor": "disk.load",
+      "format": "{value:.0f}%",
+      "font_size": 24,
+      "color": "#EEF6FF",
+      "align": "right"
+    },
+    {
+      "id": "ram-disk-bar",
+      "type": "bar",
+      "x": 746,
+      "y": 432,
+      "w": 193,
+      "h": 10,
+      "sensor": "disk.load",
+      "min": 0,
+      "max": 100,
+      "color": "#D7C4FF",
+      "background": "#1D2531",
+      "radius": 5
+    },
+    {
+      "id": "gpu-box",
+      "type": "rect",
+      "x": 989,
+      "y": 298,
+      "w": 380,
+      "h": 172,
+      "color": "#0B1016",
+      "radius": 10,
+      "outline": "#1D2531",
+      "outline_width": 1
+    },
+    {
+      "id": "gpu-title",
+      "type": "text",
+      "x": 1005,
+      "y": 306,
+      "text": "GPU",
+      "font_size": 22,
+      "color": "#99D4FF"
+    },
+    {
+      "id": "gpu-rule",
+      "type": "rect",
+      "x": 1005,
+      "y": 338,
+      "w": 348,
+      "h": 2,
+      "color": "#1D2531"
+    },
+    {
+      "id": "gpu-temp-label",
+      "type": "text",
+      "x": 1005,
+      "y": 352,
+      "text": "TEMP",
+      "font_size": 20,
+      "color": "#8A94A6"
+    },
+    {
+      "id": "gpu-temp-value",
+      "type": "metric",
+      "x": 1216,
+      "y": 349,
+      "sensor": "gpu.temp",
+      "format": "{value:.0f}{unit}",
+      "font_size": 24,
+      "color": "#EEF6FF",
+      "align": "right",
+      "color_rules": [
+        {
+          "above": 80,
+          "color": "#FFC368"
+        },
+        {
+          "above": 90,
+          "color": "#FF6B6B"
+        }
+      ]
+    },
+    {
+      "id": "gpu-temp-bar",
+      "type": "bar",
+      "x": 1236,
+      "y": 360,
+      "w": 113,
+      "h": 10,
+      "sensor": "gpu.temp",
+      "min": 30,
+      "max": 95,
+      "color": "#99D4FF",
+      "background": "#1D2531",
+      "radius": 5,
+      "color_rules": [
+        {
+          "above": 80,
+          "color": "#FFC368"
+        },
+        {
+          "above": 90,
+          "color": "#FF6B6B"
+        }
+      ]
+    },
+    {
+      "id": "gpu-watt-label",
+      "type": "text",
+      "x": 1005,
+      "y": 388,
+      "text": "WATT",
+      "font_size": 20,
+      "color": "#8A94A6"
+    },
+    {
+      "id": "gpu-watt-value",
+      "type": "metric",
+      "x": 1216,
+      "y": 385,
+      "sensor": "gpu.power",
+      "format": "{value:.0f} W",
+      "font_size": 24,
+      "color": "#EEF6FF",
+      "align": "right"
+    },
+    {
+      "id": "gpu-watt-bar",
+      "type": "bar",
+      "x": 1236,
+      "y": 396,
+      "w": 113,
+      "h": 10,
+      "sensor": "gpu.power",
+      "min": 0,
+      "max": 350,
+      "color": "#99D4FF",
+      "background": "#1D2531",
+      "radius": 5
+    },
+    {
+      "id": "gpu-fan-label",
+      "type": "text",
+      "x": 1005,
+      "y": 424,
+      "text": "FAN",
+      "font_size": 20,
+      "color": "#8A94A6"
+    },
+    {
+      "id": "gpu-fan-value",
+      "type": "metric",
+      "x": 1216,
+      "y": 421,
+      "sensor": "gpu.fan",
+      "format": "{value:.0f} RPM",
+      "font_size": 24,
+      "color": "#EEF6FF",
+      "align": "right"
+    },
+    {
+      "id": "gpu-fan-bar",
+      "type": "bar",
+      "x": 1236,
+      "y": 432,
+      "w": 113,
+      "h": 10,
+      "sensor": "gpu.fan",
+      "min": 0,
+      "max": 3000,
+      "color": "#99D4FF",
+      "background": "#1D2531",
+      "radius": 5
+    },
+    {
+      "id": "net-box",
+      "type": "rect",
+      "x": 1389,
+      "y": 298,
+      "w": 502,
+      "h": 172,
+      "color": "#0B1016",
+      "radius": 10,
+      "outline": "#1D2531",
+      "outline_width": 1
+    },
+    {
+      "id": "net-title",
+      "type": "text",
+      "x": 1405,
+      "y": 306,
+      "text": "NET",
+      "font_size": 22,
+      "color": "#7CF2B0"
+    },
+    {
+      "id": "net-rule",
+      "type": "rect",
+      "x": 1405,
+      "y": 338,
+      "w": 470,
+      "h": 2,
+      "color": "#1D2531"
+    },
+    {
+      "id": "net-down-label",
+      "type": "text",
+      "x": 1405,
+      "y": 352,
+      "text": "DOWN",
+      "font_size": 20,
+      "color": "#8A94A6"
+    },
+    {
+      "id": "net-down-value",
+      "type": "metric",
+      "x": 1604,
+      "y": 349,
+      "sensor": "net.down",
+      "format": "{value:bytes}/s",
+      "font_size": 24,
+      "color": "#EEF6FF",
+      "align": "right"
+    },
+    {
+      "id": "net-down-bar",
+      "type": "bar",
+      "x": 1624,
+      "y": 360,
+      "w": 247,
+      "h": 10,
+      "sensor": "net.down",
+      "min": 0,
+      "max": 125000000,
+      "color": "#7CF2B0",
+      "background": "#1D2531",
+      "radius": 5
+    },
+    {
+      "id": "net-up-label",
+      "type": "text",
+      "x": 1405,
+      "y": 388,
+      "text": "UP",
+      "font_size": 20,
+      "color": "#8A94A6"
+    },
+    {
+      "id": "net-up-value",
+      "type": "metric",
+      "x": 1604,
+      "y": 385,
+      "sensor": "net.up",
+      "format": "{value:bytes}/s",
+      "font_size": 24,
+      "color": "#EEF6FF",
+      "align": "right"
+    },
+    {
+      "id": "net-up-bar",
+      "type": "bar",
+      "x": 1624,
+      "y": 396,
+      "w": 247,
+      "h": 10,
+      "sensor": "net.up",
+      "min": 0,
+      "max": 125000000,
+      "color": "#7CF2B0",
+      "background": "#1D2531",
+      "radius": 5
+    },
+    {
+      "id": "net-uptime-label",
+      "type": "text",
+      "x": 1405,
+      "y": 424,
+      "text": "UPTIME",
+      "font_size": 20,
+      "color": "#8A94A6"
+    },
+    {
+      "id": "net-uptime-value",
+      "type": "metric",
+      "x": 1604,
+      "y": 421,
+      "sensor": "sys.uptime",
+      "format": "{value:duration}",
+      "font_size": 24,
+      "color": "#EEF6FF",
+      "align": "right"
+    }
+  ]
+}
