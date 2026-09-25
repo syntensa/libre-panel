@@ -10,7 +10,7 @@ from pathlib import Path
 from PIL import Image, ImageOps
 
 from libre_panel.config import Config, ConfigError, load_config
-from libre_panel.devices.base import create_display
+from libre_panel.devices.base import DeviceError, Display, FrameError, create_display
 from libre_panel.devices.models import find_model
 from libre_panel.render.renderer import Renderer, changed_region
 from libre_panel.sensors.base import SensorHub, SensorProvider, create_provider
@@ -87,8 +87,71 @@ def _theme_file(theme: Theme) -> Path | None:
     return theme.root / THEME_FILENAME if theme.root else None
 
 
+class _Link:
+    """Keeps the panel connected: a missing or unplugged panel is retried with
+    growing pauses instead of ending the program (autostart before USB is up,
+    replugging, standby)."""
+
+    BACKOFF_S = (1, 2, 5, 10, 30)
+
+    def __init__(self, display: Display, brightness: int) -> None:
+        self.display = display
+        self.brightness = brightness
+        self.connected = False
+        self.failures = 0
+        self.retry_at = 0.0
+
+    def ensure(self, now: float) -> bool:
+        if self.connected:
+            return True
+        if now < self.retry_at:
+            return False
+        try:
+            self.display.open()
+            self.display.set_brightness(self.brightness)
+        except DeviceError as exc:
+            self.display.close()
+            self._failed(exc, now)
+            return False
+        if self.failures:
+            log.info("panel connected")
+        self.connected, self.failures = True, 0
+        return True
+
+    def show(self, frame: Image.Image, region: tuple[int, int, int, int], now: float) -> bool:
+        try:
+            self.display.show(frame, region)
+        except FrameError as exc:
+            log.error("frame skipped: %s", exc)
+            return False
+        except DeviceError as exc:
+            self.display.close()
+            self.connected = False
+            self._failed(exc, now)
+            return False
+        return True
+
+    def set_brightness(self, percent: int) -> None:
+        self.brightness = percent
+        if self.connected:
+            try:
+                self.display.set_brightness(percent)
+            except DeviceError as exc:
+                log.warning("brightness not set: %s", exc)
+
+    def _failed(self, exc: Exception, now: float) -> None:
+        if self.failures == 0:
+            log.warning("panel not available: %s (retrying in the background)", exc)
+        delay = self.BACKOFF_S[min(self.failures, len(self.BACKOFF_S) - 1)]
+        self.failures += 1
+        self.retry_at = now + delay
+
+
 def run(config: Config, once: bool = False, stop: threading.Event | None = None) -> None:
-    """Main loop: sample sensors, render, push only what changed."""
+    """Main loop: sample sensors, render, push only what changed.
+
+    With ``once`` a single frame is sent and any device error is raised.
+    """
     stop = stop or threading.Event()
     theme = load_configured_theme(config)
     for warning in theme.warnings:
@@ -98,10 +161,15 @@ def run(config: Config, once: bool = False, stop: threading.Event | None = None)
     display = create_display(config.device)
     size = target_size(config, theme)
     watcher = _Watcher(config.path, _theme_file(theme))
+    link = _Link(display, config.device.brightness)
     previous = None
     try:
-        display.open()
-        display.set_brightness(config.device.brightness)
+        if once:
+            display.open()
+            display.set_brightness(config.device.brightness)
+            frame, _ = renderer.render(hub.snapshot())
+            display.show(fit_frame(frame, size, theme.background_color), None)
+            return
         while not stop.is_set():
             started = time.monotonic()
             if watcher.changed():
@@ -113,21 +181,21 @@ def run(config: Config, once: bool = False, stop: threading.Event | None = None)
                 else:
                     device = config.device  # the open device stays as it is
                     if fresh.device.brightness != device.brightness:
-                        display.set_brightness(fresh.device.brightness)
+                        link.set_brightness(fresh.device.brightness)
                         device.brightness = fresh.device.brightness
                     fresh.device, config = device, fresh
                     theme, renderer = new_theme, Renderer(new_theme)
                     size, previous = target_size(config, theme), None
                     watcher = _Watcher(config.path, _theme_file(theme))
                     log.info("reloaded theme %r", config.theme)
-            frame, _ = renderer.render(hub.snapshot())
-            frame = fit_frame(frame, size, theme.background_color)
-            region = changed_region(previous, frame)
-            if region is not None:
-                display.show(frame, region)
-            previous = frame
-            if once:
-                break
+            if link.ensure(started):
+                frame, _ = renderer.render(hub.snapshot())
+                frame = fit_frame(frame, size, theme.background_color)
+                region = changed_region(previous, frame)
+                if region is not None:
+                    previous = frame if link.show(frame, region, started) else None
+            else:
+                previous = None  # send a full frame after reconnecting
             interval = (config.refresh_ms or theme.refresh_ms) / 1000
             stop.wait(max(0.0, interval - (time.monotonic() - started)))
     finally:

@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 from libre_panel.config import WeatherConfig
 from libre_panel.sensors.base import Reading, SensorHub, SensorProvider
 from libre_panel.sensors.librehardwaremonitor import parse_value, readings_from_tree
@@ -41,62 +44,85 @@ def test_psutil_provider_reads_basics():
         assert key in values
 
 
-def test_lhm_parsing():
+def test_lhm_value_parsing():
     assert parse_value("45,5 °C") == (45.5, "°C")
     assert parse_value("1234 RPM") == (1234.0, "RPM")
+    assert parse_value("NaN MHz") == (None, "")
     assert parse_value("-") == (None, "")
-    tree = {
-        "Text": "Sensor",
+
+
+def lhm_fixture():
+    # Real LibreHardwareMonitor output, see tests/data/README.md
+    return json.loads((Path(__file__).parent / "data" / "lhm_data.json").read_text("utf-8"))
+
+
+def test_lhm_real_output():
+    out = readings_from_tree(lhm_fixture())
+    expected = {
+        "cpu.temp": (40.0, "°C"),  # "Core (Tctl/Tdie)" on AMD
+        "cpu.load": (0.4, "%"),
+        "cpu.power": (25.6, "W"),
+        "gpu.temp": (27.0, "°C"),
+        "gpu.load": (0.0, "%"),
+        "gpu.power": (10.9, "W"),  # "GPU Package" = board power
+        "gpu.freq": (210.0, "MHz"),
+        "gpu.mem.load": (3.5, "%"),
+        "gpu.mem.used": (577.0, "MB"),
+        "gpu.fan": (0.0, "RPM"),  # a stopped fan is a valid reading
+    }
+    for key, (value, unit) in expected.items():
+        assert (out[key].value, out[key].unit) == (value, unit), key
+    # No average clock in this version: mean of the cores that report one ("NaN" skipped).
+    assert round(out["cpu.freq"].value, 1) == round((4724.9 * 5 + 3149.9 * 2) / 7, 1)
+    assert out["cpu.name"].value == "AMD Ryzen 7 7800X3D"
+    assert out["gpu.name"].value == "NVIDIA GeForce RTX 4080 SUPER"
+    assert out["lhm:/gpu-nvidia/0/throughput/0"].unit == "MB/s"  # no raw value: as displayed
+    raw = out["lhm:/gpu-nvidia/0/throughput/1"]  # raw value present: bytes per second
+    assert (raw.value, raw.unit) == (307200.5, "B/s")
+    assert "lhm:/gpu-nvidia/0/throughput/2" not in out  # value "-"
+
+
+def test_lhm_prefers_the_dedicated_gpu():
+    tree = lhm_fixture()
+    computer = tree["Children"][0]
+    igpu = {
+        "Text": "AMD Radeon(TM) Graphics",
+        "HardwareId": "/gpu-amd/1",
+        "ImageURL": "images_icon/ati.png",
         "Children": [
             {
-                "Text": "AMD Ryzen",
-                "Children": [
-                    {
-                        "Text": "Core (Tctl/Tdie)",
-                        "Value": "61,2 °C",
-                        "SensorId": "/amdcpu/0/temperature/2",
-                        "Type": "Temperature",
-                    },
-                    {
-                        "Text": "CPU Total",
-                        "Value": "12,0 %",
-                        "SensorId": "/amdcpu/0/load/0",
-                        "Type": "Load",
-                    },
-                ],
-            },
-            {
-                "Text": "Radeon",
+                "Text": "Temperatures",
                 "Children": [
                     {
                         "Text": "GPU Core",
-                        "Value": "48 °C",
-                        "SensorId": "/gpu-amd/0/temperature/0",
+                        "Value": "45,0 °C",
+                        "SensorId": "/gpu-amd/1/temperature/0",
                         "Type": "Temperature",
-                    },
-                    {
-                        "Text": "GPU Package",
-                        "Value": "212,4 W",
-                        "SensorId": "/gpu-amd/0/power/3",
-                        "Type": "Power",
-                    },
-                    {
-                        "Text": "GPU Fan",
-                        "Value": "0 RPM",
-                        "SensorId": "/gpu-amd/0/fan/0",
-                        "Type": "Fan",
-                    },
+                        "Children": [],
+                    }
                 ],
-            },
+            }
         ],
     }
-    out = readings_from_tree(tree)
-    assert out["cpu.temp"].value == 61.2
-    assert out["cpu.load"].value == 12.0
-    assert out["gpu.temp"].value == 48.0
-    assert out["gpu.power"].value == 212.4  # board power (TBP), as SPUR II verified
-    assert out["gpu.fan"].value == 0.0  # a stopped fan is a valid reading
-    assert "lhm:/amdcpu/0/load/0" in out
+    computer["Children"].insert(0, igpu)  # listed first, still not chosen
+    assert readings_from_tree(tree)["gpu.temp"].value == 27.0
+    assert readings_from_tree(tree, gpu="radeon")["gpu.temp"].value == 45.0
+    assert "lhm:/gpu-amd/1/temperature/0" in readings_from_tree(tree)
+
+
+def test_lhm_throughput_uses_raw_bytes():
+    leaf = {
+        "Text": "Download Speed",
+        "Type": "Throughput",
+        "Value": "1,2 MB/s",
+        "RawValue": 1234567.0,
+        "SensorId": "/nic/0/throughput/1",
+    }
+    out = readings_from_tree({"Children": [leaf]})
+    assert (out["lhm:/nic/0/throughput/1"].value, out["lhm:/nic/0/throughput/1"].unit) == (
+        1234567.0,
+        "B/s",
+    )
 
 
 def test_weather_parsing_and_params():

@@ -1,9 +1,10 @@
 """Turing / TURZX V1.x USB panels (VID 0x1CBE): 2.8" round, 4.6", 5.2", 8", 8.8", 9.2", 12.3".
 
-Status: experimental. The protocol comes from the GPL-3.0 reference
-implementation turing-smart-screen-python (Matthieu Houdebine) and was
-verified on real hardware (9.2", PID 0x0092) by the SPUR II project, which
-also found the fixes marked below. See docs/protocol/turzx-usb.md.
+The protocol comes from the GPL-3.0 reference implementation
+turing-smart-screen-python (Matthieu Houdebine) and was verified on real
+hardware (9.2", PID 0x0092) by the SPUR II project, which also found the
+fixes marked below. See docs/protocol/turzx-usb.md. ``libre-panel doctor``
+checks a panel end to end.
 
 Wire format: every command is one 512-byte packet. 500 bytes of plain text
 ([0] command id, [2:4] magic 1A 6D, [4:8] milliseconds since local midnight,
@@ -28,7 +29,7 @@ from typing import Any
 
 from PIL import Image
 
-from libre_panel.devices.base import DeviceError, Display
+from libre_panel.devices.base import DeviceError, Display, FrameError
 from libre_panel.devices.models import MODELS, PanelModel, orientation_of
 
 log = logging.getLogger(__name__)
@@ -43,6 +44,9 @@ ACK = 0xC8
 # reply is off by one until the device stalls (found by SPUR II). Asking for
 # more than one packet consumes it.
 READ_LEN = 1024
+
+# Larger payloads make the panel time out (reference library).
+MAX_PAYLOAD = 1024 * 1024
 
 CMD_SYNC = 10
 CMD_BRIGHTNESS = 14
@@ -112,11 +116,52 @@ def encode_png_rgba(image: Image.Image, compress_level: int = 2) -> bytes:
     return buffer.getvalue()
 
 
+def encode_frame(image: Image.Image) -> bytes:
+    """PNG for one frame, within the panel's payload limit.
+
+    Level 2 is fast (about 12 ms for 1920x480, SPUR II); busy frames fall
+    back to level 9. JPEG is no fallback: the 9.2" panel shows it wrongly.
+    """
+    png = encode_png_rgba(image, 2)
+    if len(png) > MAX_PAYLOAD:
+        png = encode_png_rgba(image, 9)
+    if len(png) > MAX_PAYLOAD:
+        raise FrameError(
+            f"frame too detailed for the panel ({len(png) // 1024} KB, limit "
+            f"{MAX_PAYLOAD // 1024} KB); use fewer photos or gradients in the theme"
+        )
+    return png
+
+
 def to_native(frame: Image.Image) -> Image.Image:
     """Rotate a theme frame into the panel's portrait framebuffer."""
     if orientation_of(*frame.size) == "landscape":
         return frame.transpose(Image.Transpose.ROTATE_270)  # verified on 9.2"
     return frame.transpose(Image.Transpose.ROTATE_180)  # per reference library, unverified
+
+
+def access_hint(exc: Exception) -> str | None:
+    """Explain the usual reasons a panel cannot be opened, per operating system."""
+    errno = getattr(exc, "errno", None)
+    text = str(exc).lower()
+    busy = errno == 16 or "busy" in text
+    denied = errno == 13 or "access" in text or "permission" in text
+    if sys.platform == "win32" and (busy or denied):
+        return (
+            "the panel is in use by another program, usually the TURZX app. "
+            "Quit it (tray icon -> Exit) and try again."
+        )
+    if busy:
+        return "the panel is in use by another program (TURZX or other monitor software)."
+    if denied and sys.platform.startswith("linux"):
+        return (
+            "no permission to use the panel. Install the udev rule: "
+            "sudo cp packaging/linux/60-libre-panel.rules /etc/udev/rules.d/ "
+            "&& sudo udevadm control --reload-rules, then replug the panel."
+        )
+    if denied:
+        return "no permission to use the panel."
+    return None
 
 
 def _backend() -> Any:
@@ -162,14 +207,19 @@ class UsbTransport:
                 device.detach_kernel_driver(0)
             device.set_configuration()
         except usb.core.USBError as exc:
-            if getattr(exc, "errno", None) == 13:
-                raise DeviceError(
-                    "permission denied: install the udev rule from packaging/linux/"
-                ) from exc
-            log.debug("set_configuration: %s", exc)
-        interface = usb.util.find_descriptor(device.get_active_configuration(), bInterfaceNumber=0)
-        if interface is None:
-            raise DeviceError("USB interface 0 not found")
+            hint = access_hint(exc)
+            if hint:
+                raise DeviceError(hint) from exc
+            log.debug("set_configuration: %s", exc)  # already configured is fine
+        try:
+            interface = usb.util.find_descriptor(
+                device.get_active_configuration(), bInterfaceNumber=0
+            )
+            if interface is None:
+                raise DeviceError("USB interface 0 not found")
+            usb.util.claim_interface(device, 0)
+        except usb.core.USBError as exc:
+            raise DeviceError(access_hint(exc) or f"cannot open the panel: {exc}") from exc
 
         def endpoint(direction: int) -> Any:
             return usb.util.find_descriptor(
@@ -224,10 +274,16 @@ class UsbTransport:
     def close(self) -> None:
         try:
             import usb.util
-
-            usb.util.dispose_resources(self.device)
-        except Exception:  # closing must never raise
-            pass
+        except ImportError:
+            return
+        for release in (
+            lambda: usb.util.release_interface(self.device, 0),
+            lambda: usb.util.dispose_resources(self.device),
+        ):
+            try:
+                release()
+            except Exception:  # the device may already be gone; closing must never raise
+                pass
 
 
 class TurzxUsbDisplay(Display):
@@ -243,26 +299,47 @@ class TurzxUsbDisplay(Display):
         super().__init__(config)
         self.model = model
         self.transport: UsbTransport | None = None
+        self.brightness: int | None = None
+        self.firmware_id = ""
 
     def open(self) -> None:
         pid = self.model.usb_ids[0][1] if self.model and self.model.usb_ids else None
         self.transport = UsbTransport.open(pid)
         self.model = self.model or USB_PIDS.get(self.transport.pid)
-        reply = self.transport.sync()
+        try:
+            reply = self.transport.sync()
+        except DeviceError:
+            self.close()
+            raise
+        self.firmware_id = reply[2:10].split(b"\x00")[0].decode("ascii", "replace")
         log.info(
             "connected to %s (%s)",
             self.model.label if self.model else f"PID {self.transport.pid:04x}",
-            reply[2:10].split(b"\x00")[0].decode("ascii", "replace"),
+            self.firmware_id,
         )
 
     def set_brightness(self, percent: int) -> None:
+        self.brightness = percent
         if self.transport:
             self.transport.command(CMD_BRIGHTNESS, bytes([brightness_arg(percent)]))
 
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
+        png = encode_frame(to_native(frame))
+        try:
+            self._send_png(png)
+        except DeviceError as exc:
+            # A replug, standby or a crashed earlier session leaves the pipe out of
+            # step; one fresh connection with a resync usually fixes it (SPUR II).
+            log.warning("panel stopped answering (%s); reconnecting", exc)
+            self.close()
+            self.open()
+            if self.brightness is not None:
+                self.set_brightness(self.brightness)
+            self._send_png(png)
+
+    def _send_png(self, png: bytes) -> None:
         if self.transport is None:
             raise DeviceError("panel not open")
-        png = encode_png_rgba(to_native(frame))
         self.transport.command(CMD_UPLOAD_PNG, struct.pack(">I", len(png)), png, timeout_ms=5000)
 
     def close(self) -> None:

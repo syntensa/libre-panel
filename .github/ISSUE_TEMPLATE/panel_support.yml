@@ -10,13 +10,17 @@ body:
     validations:
       required: true
   - type: textarea
+    id: doctor
+    attributes:
+      label: Report from `libre-panel doctor`
+      description: USB panels. Paste the contents of libre-panel-doctor-*.txt.
+      render: text
+  - type: textarea
     id: devices
     attributes:
       label: Output of `libre-panel devices`
-      description: Install with `pip install "libre-panel[usb,serial]"` first. Serial numbers of your own device can be removed.
+      description: Serial panels, or if doctor finds nothing. Install with `pip install "libre-panel[usb,serial]"` first; serial numbers can be removed.
       render: text
-    validations:
-      required: true
   - type: dropdown
     id: result
     attributes:

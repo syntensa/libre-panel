@@ -2,8 +2,9 @@
 
 Thanks for helping! The most valuable contributions right now:
 
-1. **Testing hardware.** Own a panel? Run `libre-panel devices` and report what
-   works — especially USB sizes other than 9.2", and any serial panel.
+1. **Testing hardware.** Own a panel? Run `libre-panel doctor` and attach the
+   report to a "panel support" issue — every passing report turns a model
+   from *unverified* into *supported*.
 2. **Themes.** Build one in the editor and share it (with a license for any
    fonts/images you include).
 3. **Drivers** for the families marked *planned* in [docs/HARDWARE.md](docs/HARDWARE.md).

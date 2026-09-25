@@ -167,6 +167,13 @@ def _cmd_devices(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    from libre_panel.doctor import run_doctor
+
+    report = run_doctor(args.report, ask_questions=not args.no_questions, frames=args.frames)
+    return 1 if report.failed else 0
+
+
 def _cmd_config(args: argparse.Namespace) -> int:
     if args.action == "path":
         print(config_dir() / "config.toml")
@@ -236,6 +243,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("devices", help="list drivers and connected serial/USB devices")
     p.set_defaults(func=_cmd_devices)
+
+    p = sub.add_parser("doctor", help="check a connected panel and write a report")
+    p.add_argument("--report", type=Path, help="where to write the report")
+    p.add_argument("--no-questions", action="store_true", help="do not ask what the panel shows")
+    p.add_argument("--frames", type=int, default=20, help="frames for the speed test")
+    p.set_defaults(func=_cmd_doctor)
 
     p = sub.add_parser("config", help="create or locate config.toml")
     p.add_argument("action", choices=["init", "path"])

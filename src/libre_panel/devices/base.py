@@ -19,6 +19,10 @@ class DeviceError(RuntimeError):
     pass
 
 
+class FrameError(DeviceError):
+    """This frame cannot be shown (e.g. too large); the connection is fine."""
+
+
 class Display:
     name = "base"
 

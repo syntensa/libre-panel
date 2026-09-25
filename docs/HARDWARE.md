@@ -5,8 +5,10 @@
 
 **Driver status**
 
-- **experimental** — driver exists; the protocol was verified on at least one
-  panel of the family, other sizes still need a tester.
+- **supported** — `libre-panel doctor` passed on this model.
+- **unverified** — the driver exists and the protocol is proven on another size
+  of the same family, but nobody has confirmed this model yet. Please run
+  `libre-panel doctor` and report the result.
 - **planned** — the panel is in the catalog (editor menu, sizes), the driver is
   not written yet. Design themes now; they will work once the driver lands.
 
@@ -15,16 +17,16 @@
 | Model id | Size | Resolution (landscape) | Connection | Driver |
 |---|---|---|---|---|
 | `turing-2.1` | 2.1" round | 480×480 | serial, rev. C | planned |
-| `turing-2.8-usb` | 2.8" round | 480×480 | USB, V1.x | experimental |
+| `turing-2.8-usb` | 2.8" round | 480×480 | USB, V1.x | unverified |
 | `turing-3.5` | 3.5" | 480×320 | serial, rev. A | planned |
-| `turing-4.6-usb` | 4.6" | 960×320 | USB, V1.x | experimental |
+| `turing-4.6-usb` | 4.6" | 960×320 | USB, V1.x | unverified |
 | `turing-5` | 5" | 800×480 | serial, rev. C | planned |
-| `turing-5.2-usb` | 5.2" | 1280×720 | USB, V1.x | experimental |
-| `turing-8-usb` | 8" | 1280×800 | USB, V1.x | experimental |
+| `turing-5.2-usb` | 5.2" | 1280×720 | USB, V1.x | unverified |
+| `turing-8-usb` | 8" | 1280×800 | USB, V1.x | unverified |
 | `turing-8.8` | 8.8" | 1920×480 | serial, rev. C (V0.x) | planned |
-| `turing-8.8-usb` | 8.8" | 1920×480 | USB, V1.x | experimental |
-| `turing-9.2-usb` | 9.2" | 1920×480 | USB, V1.x | experimental, **verified** |
-| `turing-12.3-usb` | 12.3" | 1920×720 | USB, V1.x | experimental |
+| `turing-8.8-usb` | 8.8" | 1920×480 | USB, V1.x | unverified |
+| `turing-9.2-usb` | 9.2" | 1920×480 | USB, V1.x | unverified — protocol proven on this panel by SPUR II |
+| `turing-12.3-usb` | 12.3" | 1920×720 | USB, V1.x | unverified |
 
 USB (V1.x) panels identify as VID `0x1CBE` with a size-specific PID; see
 [protocol notes](protocol/turzx-usb.md). The 9.2" panel is 480×1920, not the
@@ -75,8 +77,21 @@ Ubuntu) or `uucp` (Arch) group.
 
 **macOS:** `brew install libusb` for USB panels.
 
+## Check your panel
+
+```bash
+pip install "libre-panel[usb]"
+libre-panel doctor
+```
+
+`doctor` uses only the commands normal operation uses (handshake, brightness,
+frames). It shows test cards in both orientations and asks what you see,
+dims and brightens the panel, measures the frame rate, reconnects once and
+writes `libre-panel-doctor-<model>.txt`. The report contains no serial numbers
+or personal paths.
+
 ## Help add your panel
 
-Run `libre-panel devices` and open a
+Run `libre-panel doctor` (USB panels) or `libre-panel devices` and open a
 ["panel support" issue](https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml)
 with the output, the product name and a photo of the back label.

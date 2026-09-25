@@ -36,7 +36,10 @@ class PanelModel:
     shape: str = "rect"  # "rect" or "round"
     usb_ids: tuple[tuple[int, int], ...] = ()
     serial_numbers: tuple[str, ...] = ()
-    driver: str = "planned"  # "planned" | "experimental" | "supported"
+    # "supported": `libre-panel doctor` passed on this model.
+    # "unverified": driver exists, protocol proven on the family, this model not confirmed yet.
+    # "planned": no driver yet.
+    driver: str = "planned"
     notes: str = ""
 
     def size(self, orientation: str) -> tuple[int, int]:
@@ -250,8 +253,15 @@ MODELS: tuple[PanelModel, ...] = (
 )
 
 # Drivers that exist so far (see devices/turzx_usb.py); everything else is planned.
-_DRIVER_STATUS = {"usb-turing": "experimental"}
-MODELS = tuple(replace(m, driver=_DRIVER_STATUS.get(m.protocol, m.driver)) for m in MODELS)
+_DRIVER_STATUS = {"usb-turing": "unverified"}
+# Models confirmed with `libre-panel doctor`; add a model here only with a passing report.
+_CONFIRMED: set[str] = set()
+MODELS = tuple(
+    replace(
+        m, driver="supported" if m.id in _CONFIRMED else _DRIVER_STATUS.get(m.protocol, m.driver)
+    )
+    for m in MODELS
+)
 
 _BY_ID = {m.id: m for m in MODELS}
 

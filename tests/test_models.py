@@ -36,7 +36,7 @@ def test_usb_lookup():
 
 
 def test_driver_status():
-    assert {m.driver for m in MODELS if m.protocol == "usb-turing"} == {"experimental"}
+    assert {m.driver for m in MODELS if m.protocol == "usb-turing"} <= {"unverified", "supported"}
     assert get_model("turing-3.5").driver == "planned"
 
 

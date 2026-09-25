@@ -10,9 +10,10 @@ first. Each hardware step needs a tester with the panel.
 - [x] Visual editor: drag & drop, properties, panel menu with rescaling, import/export
 - [x] Panel catalog for all Turing/TURZX sizes and compatible brands
 - [x] Sensors: psutil, LibreHardwareMonitor, demo; configurable Open-Meteo weather
-- [x] TURZX V1.x USB driver, PNG path (experimental)
+- [x] TURZX V1.x USB driver, PNG path, with reconnect and simulator tests
+- [x] `libre-panel doctor`: hardware check with test cards and report
 - [x] Built-in themes: Libre Default, SPUR II
-- [ ] Hardware test of the USB driver on 9.2" and at least one other V1.x size
+- [ ] `doctor` passed on the 9.2" (then: status "supported") and at least one other V1.x size
 - [ ] First release: PyPI + Windows/Linux/macOS downloads (see RELEASING.md)
 
 ## 0.2 — smooth panels

@@ -574,7 +574,7 @@ function buildModelMenu() {
   for (const model of state.models) {
     if (!groups.has(model.vendor)) groups.set(model.vendor, el("optgroup", { label: model.vendor }));
     const size = `${model.landscape[0]}×${model.landscape[1]}`;
-    const status = model.driver === "planned" ? " · driver planned" : model.driver === "experimental" ? " · experimental" : "";
+    const status = { planned: " · driver planned", unverified: " · not yet confirmed" }[model.driver] || "";
     groups.get(model.vendor).append(el("option", { value: model.id, text: `${model.label} — ${size}${status}` }));
   }
   select.append(...groups.values(), el("optgroup", { label: "Other" }, el("option", { value: "custom", text: "Custom size" })));

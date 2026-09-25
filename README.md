@@ -9,9 +9,11 @@ vendor app.
 <p align="center"><img src="docs/images/spur-ii.png" alt="The SPUR II theme on a 1920x480 panel" width="100%"></p>
 
 > **Status: pre-alpha.** The theme editor, renderer and sensors work today.
-> Hardware drivers are being ported panel family by panel family — see
-> [supported panels](docs/HARDWARE.md). Until your panel is supported you can
-> design themes and preview them without hardware.
+> The driver for Turing/TURZX USB panels (4.6"–12.3", 2.8" round) is written
+> and tested against a protocol simulator; each size becomes "supported" once
+> `libre-panel doctor` has passed on real hardware — see
+> [supported panels](docs/HARDWARE.md). Serial panels follow. Without a
+> supported panel you can still design themes and preview them.
 
 ## Features
 
@@ -49,6 +51,7 @@ libre-panel run                     # only drive the panel (e.g. for autostart)
 libre-panel preview spur-ii -o spur.png   # render a theme to an image
 libre-panel models                  # all known panels and their resolutions
 libre-panel devices                 # which panel is connected?
+libre-panel doctor                  # check the panel end to end, write a report
 libre-panel sensors                 # every sensor key with its current value
 libre-panel config init             # write a commented config.toml
 libre-panel location "Berlin"       # coordinates for the weather config
