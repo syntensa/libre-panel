@@ -13,6 +13,8 @@ from typing import Any
 
 TURING = "Turing Smart Screen / TURZX"
 
+EDGES = ("top", "right", "bottom", "left")
+
 # Protocol families. Panels in one family share a driver.
 PROTOCOLS = {
     "serial-a": "Serial (CH552T), Turing rev. A",
@@ -41,11 +43,27 @@ class PanelModel:
     # "planned": no driver yet.
     driver: str = "planned"
     notes: str = ""
+    # Pixels of the framebuffer (native, portrait) behind the bezel:
+    # top, right, bottom, left. Measured with the ruler card of `libre-panel doctor`.
+    hidden: tuple[int, int, int, int] = (0, 0, 0, 0)
 
     def size(self, orientation: str) -> tuple[int, int]:
         """Frame size for ``portrait`` or ``landscape``."""
         short, long = sorted((self.native_width, self.native_height))
         return (long, short) if orientation == "landscape" else (short, long)
+
+    def hidden_edges(self, orientation: str) -> dict[str, int]:
+        """The hidden strips at the edges of a frame in ``orientation``.
+
+        Data for layouts and the editor's guide; nothing crops or moves a frame.
+        Frames reach the framebuffer turned as the USB driver turns them: a
+        landscape frame a quarter turn clockwise (its top lands on the
+        framebuffer's right edge), a portrait frame half a turn.
+        """
+        top, right, bottom, left = self.hidden
+        if orientation == "landscape":
+            return {"top": right, "right": bottom, "bottom": left, "left": top}
+        return {"top": bottom, "right": left, "bottom": top, "left": right}
 
     @property
     def label(self) -> str:
@@ -58,6 +76,7 @@ class PanelModel:
         data["usb_ids"] = [f"{v:04x}:{p:04x}" for v, p in self.usb_ids]
         data["landscape"] = list(self.size("landscape"))
         data["portrait"] = list(self.size("portrait"))
+        data["hidden"] = {o: self.hidden_edges(o) for o in ("landscape", "portrait")}
         data["protocol_name"] = PROTOCOLS.get(self.protocol, self.protocol)
         return data
 
@@ -165,8 +184,9 @@ MODELS: tuple[PanelModel, ...] = (
         notes="V1.x hardware",
     ),
     PanelModel(
-        # The reference library lists 462x1920; the panel itself uses 480x1920
-        # (verified on hardware by SPUR II: no edge of a test card is cut off).
+        # The framebuffer is 480x1920, but the bezel hides its last 18 columns:
+        # 1920x462 are visible, the reference library's size (measured with a
+        # 1 px ruler on the 9.2"; in landscape the strip is at the top).
         "turing-9.2-usb",
         TURING,
         "Turing",
@@ -176,6 +196,7 @@ MODELS: tuple[PanelModel, ...] = (
         "usb-turing",
         usb_ids=((0x1CBE, 0x0092),),
         notes="protocol verified on hardware",
+        hidden=(0, 18, 0, 0),
     ),
     PanelModel(
         "turing-12.3-usb",

@@ -75,9 +75,14 @@ commands. Firmware is out of scope.
 
 ## Frames
 
-- The framebuffer is **480×1920 portrait** on the 9.2" (the reference library's
-  462 is wrong for this panel). A 1920×480 landscape design is rotated with
-  **ROTATE_270** before sending. **verified**
+- The framebuffer is **480×1920 portrait** on the 9.2". A 1920×480 landscape
+  design is rotated with **ROTATE_270** before sending. **verified**
+- The bezel hides the framebuffer's last **18 columns** (its right edge): the
+  visible area is 1920×462, the reference library's size. In landscape the
+  strip is the frame's top 18 rows; in portrait (ROTATE_180) its left 18
+  columns. Measured with a 1 px ruler; the catalog carries it as data
+  (`hidden`) for layouts and the editor, and nothing crops the frame.
+  **verified**
 - PNG frames must be **colour type 6 (RGBA)**. With RGB the decoder is off by
   one byte per pixel and tiles the image four times. **verified**
 - A full PNG frame takes about 87 ms on the device → roughly **9 fps** for full

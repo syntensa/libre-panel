@@ -156,6 +156,15 @@ h3 { margin: 12px 0 6px; font-size: 12px; color: var(--muted); font-weight: 500;
 .stage:hover .box.locked { border-color: rgba(138, 151, 168, 0.18); }
 .box.selected, .stage:hover .box.selected { border: 1px solid var(--accent); background: rgba(34, 211, 238, 0.07); }
 .guide { position: absolute; background: var(--guide); pointer-events: none; }
+/* the part of the frame the panel's bezel hides; hover shows how much (title) */
+.hidden-strip {
+  position: absolute;
+  background: repeating-linear-gradient(-45deg, rgba(251, 191, 36, 0.32) 0 3px, rgba(251, 191, 36, 0.08) 3px 7px);
+}
+.hidden-strip.top { border-bottom: 1px dashed var(--warn); }
+.hidden-strip.bottom { border-top: 1px dashed var(--warn); }
+.hidden-strip.left { border-right: 1px dashed var(--warn); }
+.hidden-strip.right { border-left: 1px dashed var(--warn); }
 .guide.v { width: 1px; top: 0; bottom: 0; }
 .guide.h { height: 1px; left: 0; right: 0; }
 .marquee { position: absolute; border: 1px solid var(--accent); background: rgba(34, 211, 238, 0.08); pointer-events: none; }

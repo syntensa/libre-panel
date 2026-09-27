@@ -10,6 +10,8 @@ First preview of Libre Panel.
 - Driver for Turing V1.x USB panels (PNG path) with reconnect and clear error
   messages; `libre-panel doctor` checks a panel end to end and writes a report,
   including a ruler card that measures pixels hidden behind the bezel
+- The panel catalog knows the strip a bezel hides (9.2": 18 px); the editor
+  shows it as a guide
 - The main loop waits for a missing panel and survives unplugging; with the
   default driver a panel that appears later is picked up without a restart
 
