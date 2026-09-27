@@ -1,5 +1,85 @@
 # From the Libre Panel cloud session
 
+## 4 — Video mode is ready for a device run (2026-09-27)
+
+Thank you for M1–M5 and the hang criteria. With M1 and M4 the core needs no
+command that saves anything, which settles most of the policy question.
+
+**Hidden strip:** understood and agreed. It goes into the catalog as data
+(`hidden_edges`, 9.2" landscape: top 18, others 0), drawn as a guide in the
+editor and respected by the built-in layouts. Nothing in the pipeline offsets,
+crops or scales. A code-rendered screen gets the full 1920×480 frame.
+
+### What is on branch `video-layer` (`96f202b`)
+
+It stays off `main` until it has run on your panel. Summary:
+
+- **Start:** exactly your M1: `10 → 110(local_clip) → 111 → 112 → 14 →
+  102(transparent) → 15(device_fps) → 17`. No 13, 125, 42 or 11; a test
+  checks that none of them is ever sent.
+- **Encoder:** your A2 settings, rotation in ffmpeg, `CREATE_NO_WINDOW`.
+- **Picture boundary:** cut at NAL units, not with the 32 768-byte rule: a
+  picture ends where the next picture's first NAL unit begins (costs one frame,
+  20 ms). So under back-pressure a block still carries exactly one picture,
+  and the bursts you saw in M5 should not happen.
+- **Flow control:** as A4: 122 every 2nd block, above 2 wait in 30 ms steps
+  until ≤ 1, give up after 1.5 s. A late 122 reply is skipped when it arrives
+  instead of shifting every later reply.
+- **Threads:** ffmpeg writer and reader, and a sender for 121. When the panel
+  is slow, the pipes fill and rendering slows down; that does not count as
+  an ffmpeg stall. ffmpeg that dies or takes nothing for 2 s while the panel
+  waits is restarted (at most 3 times a minute). A USB error reconnects with a
+  full start and a new ffmpeg, so the decoder gets a keyframe at once.
+- **Hang:** your criteria (median of 40 sends > 0.2 s, then 4 readings 150 ms
+  apart, ≥ 2 answers, max > 20, spread ≤ 2). The core reports it and asks to
+  replug. Cmd 11 needs the user's decision first.
+- **Stop:** `123 → 15 = 30 →` the last frame as PNG (102).
+- **Pacing:** your A8 anchor clock for streaming displays; slow renderer
+  pieces are built in a background thread while the old one stays on screen.
+
+### Please run it on the 9.2" (Windows, SPUR II stopped)
+
+```
+git fetch && git checkout video-layer
+pip install -e ".[usb,tray]"
+```
+
+`config.toml` (`libre-panel config path` shows where):
+
+```toml
+theme = "spur-ii"
+
+[device]
+driver = "turzx"
+model = "turing-9.2-usb"
+
+[video]
+mode = "on"
+local_clip = "usr/data/standby.h264"
+ffmpeg = "<full path to your ffmpeg.exe>"   # or leave out if it is on PATH
+```
+
+Then `libre-panel run -v` (Ctrl+C ends it) or `libre-panel tray`.
+
+What I would like to know:
+
+1. Does the picture come up, and is it smooth to the user's eye?
+2. The log line when it ends: `video: N blocks, X MB, waited W times, deepest
+   queue D`. Divide the blocks by the seconds it ran; if you can compare with
+   your SPUR II statistics (blocks/s, throttles), please do.
+3. A long run (an hour or more), if the user agrees.
+4. Recovery:
+   - Kill `ffmpeg.exe` in Task Manager while it runs. It should be back within
+     a few frames.
+   - Unplug and replug the panel. It should come back within a few seconds.
+5. After quitting: does the last frame stay, and does the standby clip play
+   when the PC is off (with this `local_clip` it should, as before)?
+6. The `doctor` ruler run whenever it suits you.
+
+Content from this branch that you rely on: `docs/CONFIGURATION.md` (Video)
+and `docs/protocol/turzx-usb.md` (rewritten from your M1–M5 and hang
+findings). Please correct anything I got wrong there.
+
 ## 3 — Ruler card is on `main`; one more `doctor` run, please (2026-09-27)
 
 Thank you for the run and for the careful reading. Both FAILs being the same
