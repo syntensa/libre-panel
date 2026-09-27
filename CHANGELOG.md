@@ -44,6 +44,9 @@ First preview of Libre Panel.
 - macOS disk image with *Libre Panel.app* (menu bar app)
 - Linux AppImage and a tarball
 - Each one is installed, started and removed in the release workflow
+- Without a panel, frames go to the settings folder (an app started at login
+  has no usable working directory); Quit reliably ends the app on every
+  system (a race with the X11 tray and the macOS menu bar was fixed)
 
 **Languages**
 - English and German: editor, tray menu, panel messages, and on the panel
