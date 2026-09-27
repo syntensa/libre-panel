@@ -8,7 +8,8 @@ First preview of Libre Panel.
 - Panel catalog: all Turing/TURZX sizes from 2.1" to 12.3" plus compatible
   brands; choose the panel from a menu, layouts rescale
 - Driver for Turing V1.x USB panels (PNG path) with reconnect and clear error
-  messages; `libre-panel doctor` checks a panel end to end and writes a report
+  messages; `libre-panel doctor` checks a panel end to end and writes a report,
+  including a ruler card that measures pixels hidden behind the bezel
 - The main loop waits for a missing panel and survives unplugging; with the
   default driver a panel that appears later is picked up without a restart
 
@@ -18,6 +19,9 @@ First preview of Libre Panel.
 - Graphics engine: bundled fonts (Barlow, JetBrains Mono), palettes, glow and
   shadows, gradients, segmented bars, smooth graphs, frosted glass, 21 line
   icons with live weather symbols, equal-width digits, values that glide
+- Fast frames: only the parts that change are drawn again (pixel-identical to
+  a full redraw), slow pieces are prepared in the background so the frame
+  rate holds, gauges are drawn from cached parts
 - Built-in themes: SPUR II, Libre Default, Orbit (round), Slate (5"),
   Column (3.5" portrait)
 

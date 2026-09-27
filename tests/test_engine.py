@@ -270,3 +270,81 @@ def test_scales_keep_small_values_visible():
     assert _fraction(100, 0, 100, "log") == 1.0
     frame, _ = render(theme(bar(scale="sqrt")), {"v": 4.0})  # 4 % -> 20 % of the track
     assert frame.getpixel((35, 10))[0] > 200 and frame.getpixel((45, 10))[0] < 100
+
+
+@pytest.mark.parametrize("theme_id", ["spur-ii", "libre-default", "orbit", "slate", "column"])
+def test_incremental_frames_equal_full_renders(theme_id):
+    """Composing only changed regions gives exactly the frame a full render gives."""
+    from datetime import datetime, timedelta
+
+    from PIL import ImageChops
+
+    from libre_panel.sensors.base import SensorHub
+    from libre_panel.sensors.demo import DemoProvider
+    from libre_panel.theme.model import find_theme, load_theme
+
+    theme = load_theme(find_theme(theme_id))
+    fast, full = Renderer(theme, animate=True), Renderer(theme, animate=True)
+    full.incremental = False
+    hub = SensorHub([DemoProvider({})])
+    snapshot = hub.snapshot()
+    start = datetime(2026, 9, 27, 23, 59, 58)
+    for i in range(120):
+        if i % 25 == 0:
+            snapshot = hub.snapshot()  # new readings: bars glide, graphs move
+        snapshot.now = start + timedelta(seconds=i / 25)  # seconds tick, the date changes
+        now = 1000.0 + i / 25
+        a, boxes_a = fast.render(snapshot, now)
+        b, boxes_b = full.render(snapshot, now)
+        assert boxes_a == boxes_b
+        assert ImageChops.difference(a, b).getbbox() is None, f"frame {i} differs"
+
+
+def test_background_builds_keep_frames_coming():
+    """In video mode a slow piece is built in the helper thread: the frame goes
+    out at once with the previous piece, and the new one follows."""
+    import threading
+    import time as clock
+    from datetime import datetime
+
+    from PIL import ImageChops
+
+    from libre_panel.sensors.base import Reading
+    from libre_panel.sensors.demo import demo_snapshot
+
+    theme = parse_theme(
+        {
+            "format": "libre-panel-theme/1",
+            "name": "t",
+            "display": {"width": 120, "height": 40},
+            "widgets": [{"type": "metric", "id": "v", "x": 0, "y": 0, "sensor": "cpu.load"}],
+        }
+    )
+    renderer = Renderer(theme)
+    renderer.background_builds = True
+    snapshot = demo_snapshot()
+    snapshot.now = datetime(2026, 9, 27, 12, 0)
+    snapshot.readings["cpu.load"] = Reading("cpu.load", 10.0, "%", "CPU")
+    first, _ = renderer.render(snapshot, 1.0)  # first frame: built right away
+
+    gate = threading.Event()
+    slow = renderer._text_piece
+
+    def blocked_text_piece(*args):
+        gate.wait(5)
+        return slow(*args)
+
+    renderer._text_piece = blocked_text_piece
+    snapshot.readings["cpu.load"] = Reading("cpu.load", 99.0, "%", "CPU")
+    started = clock.perf_counter()
+    during, _ = renderer.render(snapshot, 2.0)
+    assert clock.perf_counter() - started < 0.5  # did not wait for the build
+    assert ImageChops.difference(first, during).getbbox() is None  # still the old value
+    gate.set()
+    for _ in range(100):
+        after, _ = renderer.render(snapshot, 3.0)
+        if ImageChops.difference(first, after).getbbox() is not None:
+            break
+        clock.sleep(0.02)
+    assert ImageChops.difference(first, after).getbbox() is not None  # the new value arrived
+    renderer.close()
