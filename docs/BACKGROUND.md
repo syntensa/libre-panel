@@ -11,12 +11,27 @@ libre-panel autostart status
 libre-panel autostart disable
 ```
 
-With the release downloads on Windows, double-click **LibrePanel.exe** (the
-program without a console window); `libre-panel.exe` is the command-line tool.
+With the downloads:
+
+- **Windows setup:** the installer offers *Start Libre Panel when I log in*
+  and starts it at the end. The start menu entry is *Libre Panel*. The
+  command-line tool is `libre-panel.exe` in the installation folder
+  (`%LOCALAPPDATA%\Programs\Libre Panel`). Updates and uninstalling quit a
+  running Libre Panel first; uninstalling also removes autostart (your
+  settings and themes stay).
+- **macOS:** open the disk image and drag *Libre Panel* to *Applications*.
+  The download is not signed yet, so macOS refuses the first start: open
+  *System Settings → Privacy & Security* and choose *Open Anyway* (or run
+  `xattr -dr com.apple.quarantine "/Applications/Libre Panel.app"`). The
+  command-line tool is `"/Applications/Libre Panel.app/Contents/MacOS/libre-panel"`.
+  Autostart points at the app, so keep it in *Applications*.
+- **Linux AppImage:** `chmod +x Libre_Panel-*.AppImage`, then double-click
+  it or run it without arguments for the tray app; with arguments it is the
+  command line (`./Libre_Panel-…AppImage autostart enable`). Autostart
+  points at the AppImage file; if you move it, enable autostart again. The
+  AppImage needs FUSE, which desktop distributions include.
+
 Installed with pip, add the `tray` extra: `pipx install "libre-panel[usb,tray]"`.
-The macOS download is not signed yet, so Gatekeeper blocks it; run
-`xattr -dr com.apple.quarantine .` once in the unpacked folder (or install
-with pipx).
 
 ## Tray menu
 

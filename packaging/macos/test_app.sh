@@ -26,7 +26,8 @@ echo "== the LaunchAgent points at the app"
 home="$(mktemp -d)"
 HOME="$home" "$app/Contents/MacOS/libre-panel" autostart enable
 agent="$home/Library/LaunchAgents/io.github.syntensa.libre-panel.plist"
-test "$(plutil -extract ProgramArguments.0 raw "$agent")" = "$app/Contents/MacOS/LibrePanel"
+real() { python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
+test "$(real "$(plutil -extract ProgramArguments.0 raw "$agent")")" = "$(real "$app/Contents/MacOS/LibrePanel")"
 test "$(plutil -extract ProgramArguments.1 raw "$agent")" = "tray"
 
 echo "== opened like a double-click"

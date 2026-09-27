@@ -5,7 +5,7 @@ Libre Panel ships three ways; one git tag produces all of them.
 | Channel | For | Built by |
 |---|---|---|
 | PyPI (`pipx install libre-panel`) | Linux/macOS users, developers | `release.yml` → trusted publishing |
-| GitHub Release downloads | everyone, no Python needed | `release.yml` → PyInstaller on Windows, Linux, macOS |
+| GitHub Release downloads | everyone, no Python needed | `release.yml`: Windows setup + portable zip, macOS disk image, Linux AppImage + tarball |
 | Distribution packages (winget, Flathub, AUR, Homebrew) | later | community / follow-up |
 
 ## One-time setup
@@ -39,10 +39,21 @@ The tag starts `release.yml`: tests, build, PyInstaller bundles, a draft
 GitHub Release with all files attached, and the PyPI upload after approval.
 Review the draft release notes and publish.
 
-Every bundle is smoke-tested on its own system before it is attached: it
-renders a theme, starts the background app the way autostart does
-(`LibrePanel.exe` on Windows), waits for frames, and quits it through the
-editor API (`packaging/smoke_test.py`).
+Every download is tested on its own system before it is attached:
+
+- the program renders a theme and starts as the background app the way
+  autostart starts it, draws frames and quits through the editor API
+  (`packaging/smoke_test.py`);
+- Windows: the setup installs silently, the start menu entry and autostart
+  entry exist, the installed app runs, and the uninstaller quits a running
+  app and removes files, shortcut and autostart
+  (`packaging/windows/test_installer.py`, Inno Setup script
+  `packaging/windows/libre-panel.iss`);
+- macOS: the disk image mounts, the app is a menu bar app, it runs as the
+  LaunchAgent starts it and when opened like a double-click
+  (`packaging/macos/test_app.sh`);
+- Linux: the AppImage runs without a desktop and on an X11 tray, and its
+  autostart entry points at the AppImage file (`packaging/linux/test_appimage.sh`).
 
 **Dry run:** start *Release* by hand (Actions → Release → Run workflow). It
 builds and tests everything but publishes nothing; the bundles are attached to

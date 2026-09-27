@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -99,7 +100,8 @@ def _cmd_quit(args: argparse.Namespace) -> int:
     if not _instance_running():
         print(t("Libre Panel is not running."))
         return 0
-    url = (running_instance() or {}).get("editor")
+    info = running_instance() or {}
+    url, pid = info.get("editor"), info.get("pid")
     if url:
         request = urllib.request.Request(
             url + "api/app",
@@ -111,9 +113,17 @@ def _cmd_quit(args: argparse.Namespace) -> int:
             opener.open(request, timeout=5).read()
         except OSError as exc:
             logging.getLogger("libre_panel").warning("quit request failed: %s", exc)
+    import psutil
+
+    def gone() -> bool:
+        # The process itself must be gone too, so an uninstaller finds no files in use.
+        return not _instance_running() and not (
+            isinstance(pid, int) and pid != os.getpid() and psutil.pid_exists(pid)
+        )
+
     deadline = time.monotonic() + args.timeout
     while time.monotonic() < deadline:
-        if not _instance_running():
+        if gone():
             print(t("Libre Panel has quit."))
             return 0
         time.sleep(0.2)

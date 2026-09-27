@@ -36,7 +36,14 @@ First preview of Libre Panel.
 - Only one Libre Panel drives the panel; starting it again opens the running
   editor. A broken config or theme no longer stops it: it resumes when the
   file is fixed
-- Windows release build with `LibrePanel.exe` (no console window)
+- `libre-panel quit`, `libre-panel udev-rules`
+
+**Downloads**
+- Windows setup (per user, German/English, start menu, optional start at
+  login, clean uninstall) and a portable zip
+- macOS disk image with *Libre Panel.app* (menu bar app)
+- Linux AppImage and a tarball
+- Each one is installed, started and removed in the release workflow
 
 **Languages**
 - English and German: editor, tray menu, panel messages, and on the panel

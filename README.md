@@ -47,16 +47,29 @@ vendor app.
   extras never bloat the core.
 - Windows, Linux and macOS. GPL-3.0.
 
-## Quick start
+## Install
+
+Download from the [releases](https://github.com/syntensa/libre-panel/releases)
+(no Python needed):
+
+| System | Download | |
+|---|---|---|
+| Windows 10/11 | `libre-panel-…-windows-x64-setup.exe` | installs for your user (no admin rights), start menu entry, optional start at login; uninstall in *Settings → Apps* |
+| macOS 11+ (Apple silicon) | `libre-panel-…-macos-arm64.dmg` | drag *Libre Panel* to *Applications*; lives in the menu bar |
+| Linux (x86-64) | `Libre_Panel-…-x86_64.AppImage` | make it executable and double-click; no installation |
+
+A portable Windows zip and a Linux tarball are there too. After the first
+start, the icon in the tray (menu bar) opens the theme editor; *Start with
+system* makes it start at every login. More in
+[Running in the background](docs/BACKGROUND.md).
+
+With Python instead:
 
 ```bash
 pipx install "libre-panel[usb,tray]"   # or: pip install "libre-panel[usb,tray]"
 libre-panel tray                    # background app with tray icon; opens the editor
 libre-panel autostart enable        # start it whenever you log in
 ```
-
-Release downloads need no Python: on Windows unzip and double-click
-`LibrePanel.exe`. More in [Running in the background](docs/BACKGROUND.md).
 
 Other commands:
 
@@ -68,6 +81,8 @@ libre-panel preview spur-ii -o spur.png   # render a theme to an image
 libre-panel models                  # all known panels and their resolutions
 libre-panel devices                 # which panel is connected?
 libre-panel doctor                  # check the panel end to end, write a report
+libre-panel quit                    # quit the background app
+libre-panel udev-rules              # Linux: the rule that gives your user USB access
 libre-panel sensors                 # every sensor key with its current value
 libre-panel config init             # write a commented config.toml
 libre-panel location "Berlin"       # coordinates for the weather config
