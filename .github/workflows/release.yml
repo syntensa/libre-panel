@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   test:
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -21,6 +22,7 @@ jobs:
       - run: pytest -q
 
   python-package:
+    timeout-minutes: 15
     needs: test
     runs-on: ubuntu-latest
     steps:
@@ -39,6 +41,7 @@ jobs:
     # Build, package and test on each system: the program folder, then what
     # people download (Windows setup, macOS disk image, Linux AppImage), which
     # is installed, started as autostart/double-click would, and removed.
+    timeout-minutes: 45
     needs: test
     strategy:
       fail-fast: false
@@ -127,6 +130,7 @@ jobs:
             dist/*.AppImage
 
   github-release:
+    timeout-minutes: 15
     needs: [python-package, standalone]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -146,6 +150,7 @@ jobs:
           --title "Libre Panel $GITHUB_REF_NAME"
 
   pypi:
+    timeout-minutes: 15
     needs: [python-package, standalone]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest

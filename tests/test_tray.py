@@ -300,3 +300,13 @@ def test_no_icon_update_during_or_after_the_stop(tray):
     updater.join()
     tray.refresh()  # the tray's poll loop may still come by once
     assert events == ["update start", "update end", "stop"]
+
+
+def test_quit_always_ends_the_process():
+    """Even if a GUI library never returns, the process ends after Quit."""
+    code = (
+        "import time\nfrom libre_panel.cli import _exit_later\n_exit_later(0.5)\ntime.sleep(60)\n"
+    )
+    started = time.monotonic()
+    result = subprocess.run([sys.executable, "-c", code], timeout=30)
+    assert result.returncode == 0 and time.monotonic() - started < 20

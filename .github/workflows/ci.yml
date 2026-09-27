@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   lint:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -21,6 +22,7 @@ jobs:
       - run: ruff format --check .
 
   test:
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -41,6 +43,7 @@ jobs:
 
   desktop:
     # The editor in a real browser and the tray icon on a real X11 tray.
+    timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

@@ -179,7 +179,14 @@ class Tray:
         """Remove the icon once no update is under way."""
         with self._lock:
             self._stopped = True
-        if self.icon is not None:
+        if self.icon is None:
+            return
+        if sys.platform == "darwin" and threading.current_thread() is not threading.main_thread():
+            # AppKit ends its event loop reliably only when asked on the main thread.
+            from PyObjCTools import AppHelper
+
+            AppHelper.callAfter(self.icon.stop)
+        else:
             self.icon.stop()
 
     def refresh(self) -> None:

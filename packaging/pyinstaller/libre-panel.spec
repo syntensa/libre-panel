@@ -30,7 +30,7 @@ hiddenimports += usb_hidden
 if sys.platform == "win32":
     hiddenimports += ["pystray._win32"]
 elif sys.platform == "darwin":
-    hiddenimports += ["pystray._darwin"]
+    hiddenimports += ["pystray._darwin", "PyObjCTools.AppHelper"]
 else:
     hiddenimports += ["pystray._xorg"]
 icon = str(ROOT / "packaging" / "icons" / "libre-panel.ico") if sys.platform == "win32" else None

@@ -65,10 +65,27 @@ def _background(args: argparse.Namespace, use_icon: bool, open_editor: bool) -> 
     try:
         log_path = _log_file() if use_icon else None
         app = BackgroundApp(args.config, port=args.port)
+        app.on_quit(_exit_later)
         return run_app(app, use_icon=use_icon, open_editor=open_editor, log_path=log_path)
     finally:
         lock.release()
         _exit_if_threads_hang()
+
+
+def _exit_later(seconds: float = 15.0) -> None:
+    """Quit means quit: if a GUI library keeps the process alive, end it anyway."""
+    import threading
+
+    def force() -> None:
+        logging.getLogger("libre_panel").warning(
+            "still running %.0f s after Quit; exiting anyway", seconds
+        )
+        logging.shutdown()
+        os._exit(0)
+
+    timer = threading.Timer(seconds, force)
+    timer.daemon = True
+    timer.start()
 
 
 def _exit_if_threads_hang(grace_s: float = 5.0) -> None:
