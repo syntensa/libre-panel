@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 
 import pytest
 
@@ -53,7 +54,7 @@ def tray(isolated_home):
     app.start()
     tray = Tray(app, pystray, log_path=isolated_home / "logs" / "libre-panel.log")
     tray.icon = FakeIcon()
-    app.on_quit(tray.icon.stop)
+    app.on_quit(tray.stop_icon)
     yield tray
     app.quit()
     app.shutdown()
@@ -268,3 +269,34 @@ def test_cli_prints_the_udev_rule(capsys):
     assert cli.main(["udev-rules"]) == 0
     out = capsys.readouterr().out
     assert 'ATTRS{idVendor}=="1cbe"' in out and 'TAG+="uaccess"' in out
+
+
+def test_no_icon_update_during_or_after_the_stop(tray):
+    """On X11 an update that meets the stop waits forever: stop waits for a
+    running update, and nothing updates the icon afterwards."""
+    events = []
+
+    class SlowIcon(FakeIcon):
+        def __setattr__(self, name, value):
+            if name == "title" and getattr(self, "stopped", False):
+                events.append("update after stop")
+            if name == "title" and getattr(self, "armed", False):
+                events.append("update start")
+                time.sleep(0.3)  # an update in progress while Quit arrives
+                events.append("update end")
+            object.__setattr__(self, name, value)
+
+        def stop(self):
+            events.append("stop")
+            self.stopped = True
+
+    tray.icon = SlowIcon()
+    object.__setattr__(tray.icon, "armed", True)
+    tray._last = None
+    updater = threading.Thread(target=tray.refresh)
+    updater.start()
+    time.sleep(0.1)  # the update is running
+    tray.stop_icon()
+    updater.join()
+    tray.refresh()  # the tray's poll loop may still come by once
+    assert events == ["update start", "update end", "stop"]

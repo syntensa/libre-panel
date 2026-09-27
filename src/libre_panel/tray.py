@@ -79,6 +79,10 @@ class Tray:
         self.log_path = log_path
         self.icon: Any = None
         self._last: tuple | None = None
+        # Icon updates and stopping never overlap: on X11 an update sent after
+        # the stop waits forever for the icon's (finished) event loop.
+        self._lock = threading.Lock()
+        self._stopped = False
 
     # -- menu ------------------------------------------------------------------
 
@@ -171,10 +175,20 @@ class Tray:
 
     # -- icon ------------------------------------------------------------------
 
+    def stop_icon(self) -> None:
+        """Remove the icon once no update is under way."""
+        with self._lock:
+            self._stopped = True
+        if self.icon is not None:
+            self.icon.stop()
+
     def refresh(self) -> None:
         """Update icon, tooltip and menu when something changed."""
-        if self.icon is None:
-            return
+        with self._lock:
+            if self.icon is not None and not self._stopped:
+                self._refresh()
+
+    def _refresh(self) -> None:
         state = self.app.panel.state()
         snapshot = self.app.snapshot()
         signature = (
@@ -213,7 +227,7 @@ class Tray:
         self.icon = self.pystray.Icon(
             "libre-panel", logo(64, state["state"]), tooltip(state), self.build_menu()
         )
-        self.app.on_quit(self.icon.stop)
+        self.app.on_quit(self.stop_icon)
         self.icon.run(setup=self._setup)
 
 

@@ -317,7 +317,9 @@ class BackgroundApp:
             self.set_autostart(value)
         elif action == "quit":
             # Answer the request first; the server stops as part of quitting.
-            threading.Timer(0.3, self.quit).start()
+            timer = threading.Timer(0.3, self.quit)
+            timer.daemon = True
+            timer.start()
         else:
             raise ValueError(f"unknown action {action!r}")
         return self.snapshot()

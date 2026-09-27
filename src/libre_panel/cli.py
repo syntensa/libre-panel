@@ -68,6 +68,31 @@ def _background(args: argparse.Namespace, use_icon: bool, open_editor: bool) -> 
         return run_app(app, use_icon=use_icon, open_editor=open_editor, log_path=log_path)
     finally:
         lock.release()
+        _exit_if_threads_hang()
+
+
+def _exit_if_threads_hang(grace_s: float = 5.0) -> None:
+    """A background app must end when it is quit (installers and autostart rely
+    on it); a helper thread that hangs, e.g. in a tray library, must not keep
+    the process alive."""
+    import threading
+    import time
+
+    deadline = time.monotonic() + grace_s
+    for thread in threading.enumerate():
+        if thread is not threading.current_thread() and not thread.daemon:
+            thread.join(max(0.0, deadline - time.monotonic()))
+    stuck = [
+        thread.name
+        for thread in threading.enumerate()
+        if thread is not threading.current_thread() and not thread.daemon and thread.is_alive()
+    ]
+    if stuck:
+        logging.getLogger("libre_panel").warning(
+            "threads did not stop (%s); exiting anyway", ", ".join(stuck)
+        )
+        logging.shutdown()
+        os._exit(0)
 
 
 def _cmd_start(args: argparse.Namespace) -> int:
