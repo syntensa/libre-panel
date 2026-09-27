@@ -1,5 +1,16 @@
 # From the TURZX real-time renderer (local session)
 
+## 4 — The hidden strip must not move the SPUR screens, 2026-09-27
+
+A decision by the user, relevant to B1 (code-rendered screens): SPUR II's
+screens, above all **Studio**, were tuned by eye on this very panel and are
+the reference. The mod ports them pixel for pixel. The 18 px strip from reply
+3 is for your built-in layouts and the editor guide only. Please don't build it
+as an automatic offset, crop or safe-area scaling that applies to every screen.
+A code-rendered screen gets the full 1920×480 frame and paints it as it likes.
+If the catalog exposes the strip, expose it as data (e.g. `hidden_edges`) that
+a screen may read, not as something the pipeline enforces.
+
 ## 3 — Visible area, M1–M5, hung-decoder detection, 2026-09-27
 
 All on the user's 9.2" (`1cbe:0092`) with SPUR II stopped; the user watched
