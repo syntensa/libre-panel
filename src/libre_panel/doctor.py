@@ -21,6 +21,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from libre_panel import __version__
+from libre_panel.config import ConfigError, load_config
 from libre_panel.devices.base import DeviceError, list_serial_ports
 from libre_panel.devices.models import PanelModel, models_for_usb
 
@@ -219,8 +220,10 @@ class Doctor:
         pause: Callable[[float], None] = time.sleep,
         seconds_per_card: float = 6.0,
         frames: int = 20,
+        brightness: int = 60,
     ) -> None:
         self.ask = ask
+        self.brightness = brightness  # set again after the brightness check
         self.say = say
         self.pause = pause
         self.seconds_per_card = seconds_per_card
@@ -364,7 +367,7 @@ class Doctor:
         for percent in (10, 100):
             transport.command(CMD_BRIGHTNESS, bytes([brightness_arg(percent)]))
             self.pause(1.5)
-        transport.command(CMD_BRIGHTNESS, bytes([brightness_arg(60)]))
+        transport.command(CMD_BRIGHTNESS, bytes([brightness_arg(self.brightness)]))
         self._question("brightness (command 14)", "Did the panel go dark and then bright?")
 
         w, h = model.size("landscape")
@@ -396,11 +399,18 @@ class Doctor:
 
 
 def run_doctor(
-    report_path: Path | None = None, ask_questions: bool = True, frames: int = 20
+    report_path: Path | None = None,
+    ask_questions: bool = True,
+    frames: int = 20,
+    config_path: Path | None = None,
 ) -> Report:
     ask = input if ask_questions and sys.stdin.isatty() else None
     print("Libre Panel doctor — close the TURZX app before starting.\n")
-    doctor = Doctor(ask=ask, frames=frames)
+    try:
+        brightness = load_config(config_path).device.brightness
+    except ConfigError:
+        brightness = 60
+    doctor = Doctor(ask=ask, frames=frames, brightness=brightness)
     report = doctor.run()
     path = report_path or Path(
         f"libre-panel-doctor-{report.model.id if report.model else 'no-panel'}.txt"

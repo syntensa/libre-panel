@@ -325,7 +325,12 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     from libre_panel.instance import InstanceLock
 
     with InstanceLock():
-        report = run_doctor(args.report, ask_questions=not args.no_questions, frames=args.frames)
+        report = run_doctor(
+            args.report,
+            ask_questions=not args.no_questions,
+            frames=args.frames,
+            config_path=args.config,
+        )
     return 1 if report.failed else 0
 
 

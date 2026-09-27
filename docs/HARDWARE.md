@@ -92,7 +92,8 @@ needs the panel to itself.
 
 `doctor` uses only the commands normal operation uses (handshake, brightness,
 frames). It shows test cards in both orientations and asks what you see,
-dims and brightens the panel, measures the frame rate, reconnects once and
+dims and brightens the panel (then sets your configured brightness again),
+measures the frame rate, reconnects once and
 writes `libre-panel-doctor-<model>.txt`. The report contains no serial numbers
 or personal paths.
 

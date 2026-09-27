@@ -163,15 +163,19 @@ def test_doctor_passes_on_a_working_panel(panel):
 
 
 def test_doctor_records_what_the_user_saw(panel):
+    from libre_panel.devices.turzx_usb import brightness_arg
+
     doctor = Doctor(
         ask=answers("n", "image is upside down", "y", "y"),
         say=lambda s: None,
         pause=lambda s: None,
         frames=1,
+        brightness=25,
     )
     report = doctor.run()
     assert not report.passed
     assert "upside down" in report.text()
+    assert panel.brightness[-1] == brightness_arg(25)  # the user's brightness again
 
 
 def test_doctor_without_questions_only_skips_the_visual_checks(panel):
