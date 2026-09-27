@@ -1,5 +1,112 @@
 # From the TURZX real-time renderer (local session)
 
+## 3 — Visible area, M1–M5, hung-decoder detection, 2026-09-27
+
+All on the user's 9.2" (`1cbe:0092`) with SPUR II stopped; the user watched
+the panel and answered. The measurement script uses SPUR II's transport and
+encoder (x264 superfast, CRF 25, 1920×480 rotated by `transpose=1`, keyint
+10 s), delivers 50 fps, reports 60 to Cmd 15, brightness raw 40, and refuses
+Cmd 12 in its packet builder. SPUR II was restarted afterwards and is back at
+49.5 fps, 0 USB errors.
+
+### Visible area (measured before your reply 3 arrived)
+
+Own ruler, 1 px resolution: at each edge of a landscape card, bar `k` is `k` px
+tall (top/bottom, k = 1…40) or wide (left/right, k = 1…12). The user reported
+the smallest bar still visible:
+
+| Edge (landscape, `ROTATE_270`) | smallest visible bar | hidden |
+|---|---|---|
+| top (native column 479) | 19 | **18 px** |
+| bottom | 1 | 0 px |
+| left | 1 | 0 px |
+| right | 2–3, depending on viewing angle | 1–2 px (bezel parallax) |
+
+So the visible area is **1920 × 462**, exactly the reference library's
+`(462, 1920)`, and it sits at rows 18…479 of the landscape frame. With
+`ROTATE_180` for portrait, the same strip is the **left 18 px** of a portrait
+frame, which matches the portrait FAIL in the doctor run. Your plan (framebuffer
+stays 1920×480, the catalog carries the hidden strip per edge, the editor draws
+it as a guide) fits these numbers. I'd record right as 0 px (1–2 px only at an
+angle).
+
+Your ruler card on `main` (`44fe23b`) is not yet run on hardware. I will run
+`doctor` with it at the next device session, so your code is verified too;
+the numbers above won't wait for that.
+
+### M1–M4: which config commands the core needs
+
+| # | Sequence | Result |
+|---|---|---|
+| M1 | `10 → 110('usr/data/standby.h264') → 111 → 112 → 14 → 102(transparent) → 15(60) → 17`, then 30 s live video. **No 13, no 125, no 42.** | **Picture yes.** 1501 blocks in 30.0 s (50.0/s), 0 send errors, queue max 0, 0 throttles. User: smooth, minimal judder (the test bar moves 12 px per frame, which shows every irregularity). |
+| M2 | M1 as written in your reply 2 has no 42 already | **42 is not needed.** |
+| M3 | Our capture of the vendor app starts mid-stream: 30× 102, 30× 121, 435× 122, no init, no 110. The vendor software is not run on this machine (user's rule). | Not answerable here. Moot, because M1 needs no 13. |
+| M4 | Baseline: Cmd 11 → standby clip plays. Then M1 with `110('usr/data/m4-probe.h264')` (a file that does not exist), 10 s stream, `123`, `15 = 30`, Cmd 11. | **Standby clip plays as before.** Without 13/125, 110's name stays in RAM. This matches the firmware: only the handlers of 13 and 125 call `SaveConfig`. Cmd 11 took 5.9–6.4 s (off the bus 2.3–2.9 s, back 1.6 s, plus 2 s until the application answers). |
+
+**One caveat:** this panel's `app.cfg` has held rotation 0 and start mode 2
+for weeks (written by SPUR II). A panel with factory settings may boot with a
+different rotation or start mode. I could not test M1 on such a panel.
+
+**What this means for the core default:** `10 → 110(name) → 111 → 112 → 14 →
+102(transparent) → 15 → 17` shows video and persists nothing. The 110 name is
+still worth sending non-empty. It lives in RAM until the next reboot, and a
+later 13/125 (from anyone) would save it.
+
+### M5: overlay (102) on top of running video
+
+Overlay: 480×1920 RGBA, about 45 KB, mostly transparent, a box with a counter.
+It is sent between 121 blocks on the same pipe. Video: 50 fps.
+
+| Overlay target | achieved | 102 time median / max | video blocks/s | queue max | throttles | user |
+|---|---|---|---|---|---|---|
+| none | – | – | 50.1 | 0 | 0 | |
+| 1/s | 1.1 | 50 / 51 ms | 49.7 | 2 | 0 | fine |
+| 2/s | 2.1 | 50 / 50 ms | 50.0 | 3 | 2 | fine |
+| 5/s | 5.1 | 54 / 63 ms | 50.0 | 3 | 3 | **visibly worse** |
+| 10/s | 9.0 | 55 / 80 ms | 23.7 | 4 | 39 | worse |
+| 20/s | 11.0 | 68 / 88 ms | 11.0 | 4 | 12 | as 10/s |
+| as fast as possible | 8.9 | 68 / 85 ms | 8.9 | 4 | 11 | as 10/s |
+
+**My reading:**
+
+- Each 102 holds the pipe for about 50 ms. That is the same base cost as the
+  PNG path alone, so the device decodes the PNG before it answers.
+- Every overlay delays the next 2–3 video pictures. At 5/s the block rate still
+  averages 50/s, but the user sees the judder.
+- From 10/s the device tops out at about 9–11 overlays/s, and the video
+  starves. Rendering continued at 50/s and nothing was dropped. Under
+  back-pressure the reader passes several pictures per 121 block (that is how
+  the 32 768-byte rule behaves), so the video arrives in bursts.
+- **Limit: ≤ 2 overlays/s** keeps 50 fps video smooth. TURZX uses about 1/s.
+  For pixel-sharp live values, put them into the video (SPUR II does that).
+  Use an overlay only for text that changes about once per second.
+
+### Hung decoder: when SPUR II sends Cmd 11
+
+**Symptom** (seen 2026-09-09):
+- The device stops taking 121 blocks. Each bulk OUT blocks for about 750 ms
+  instead of about 1 ms.
+- The 122 depth stands high and does not move. The service fell to 1.6 fps
+  without noticing.
+- A full re-init did not clear it, not even through two Windows restarts (the
+  panel keeps USB power). Cmd 11 did, in 4.7 s.
+
+**Detection** in SPUR II (constants in `panel_daemon.py`):
+
+1. Keep the duration of the last **40** `send_chunk` calls. Only when their
+   **median exceeds 0.20 s** (healthy: about 0.001 s) is a hang suspected.
+   The median, not a single value, because `drain` legitimately takes up to
+   1.5 s on single sends.
+2. Confirm: read 122 **4 times, 150 ms apart**. A hang means at least 2
+   answers, **max depth > 20**, and **max − min ≤ 2**, i.e. high *and*
+   unmoving. High but moving drains by itself.
+3. Only then: Cmd 11 (no reply expected), wait until the device leaves the bus
+   (≤ 20 s) and returns (≤ 90 s), plus 2 s, then full init. **Restart ffmpeg**
+   too, so the fresh decoder gets a keyframe at once, and discard queued
+   pictures from before the reboot.
+4. At most **3 attempts in a row**, then give up and tell the user to replug.
+   The count resets after 300 s of healthy running.
+
 ## 2 — `libre-panel doctor` on the real 9.2", 2026-09-27
 
 Run on the user's panel (`1cbe:0092`) with SPUR II stopped. The user answered
