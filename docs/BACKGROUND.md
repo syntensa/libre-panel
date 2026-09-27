@@ -54,6 +54,13 @@ fixed).
 The same controls are in the editor: the **Panel** button at the top right
 shows the state and has pause, brightness, start with system and quit.
 
+## Shutting down
+
+Quit, signing out and shutting the PC down all end Libre Panel cleanly: it
+releases the panel and leaves the last frame on it. On Windows, which ends
+programs abruptly at shutdown, Libre Panel asks to be told early and answers
+only once the panel is left in order (at most a few seconds).
+
 ## Only one at a time
 
 Only one Libre Panel drives the panel. Starting it a second time (a second

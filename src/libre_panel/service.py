@@ -225,6 +225,7 @@ class BackgroundApp:
         self.autostart_command = autostart_command or launch_command(config_path)
         self.quit_requested = threading.Event()
         self._on_quit: list[Callable[[], None]] = []
+        self.session_watcher: Any = None  # Windows: stops cleanly at shutdown (tray.run_app)
 
     # -- lifecycle -----------------------------------------------------------
 
