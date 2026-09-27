@@ -29,7 +29,8 @@ fps = 10                       # 1-60; values glide between readings
 model = "auto"                 # or an id from `libre-panel models`
 driver = "auto"                # panel if connected, else PNG; "turzx" or "virtual" to force
 brightness = 60                # 0-100
-output = "libre-panel-frame.png"   # frames go here when no panel is used
+output = "libre-panel-frame.png"   # frames go here when no panel is used;
+                                   # a relative path is inside the settings folder
 
 [sensors]
 providers = ["psutil"]         # order = priority; also "librehardwaremonitor", "demo", plugins

@@ -32,7 +32,8 @@ def api(url, action=None):
         request.data = json.dumps({"action": action}).encode()
         request.add_header("X-Libre-Panel", "1")
         request.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(request, timeout=10) as response:
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # local, no proxy
+    with opener.open(request, timeout=10) as response:
         return json.loads(response.read())
 
 

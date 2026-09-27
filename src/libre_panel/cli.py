@@ -78,6 +78,55 @@ def _cmd_tray(args: argparse.Namespace) -> int:
     return _background(args, use_icon=not args.no_icon, open_editor=not args.background)
 
 
+def _instance_running() -> bool:
+    from libre_panel.instance import AlreadyRunning, InstanceLock
+
+    try:
+        InstanceLock().acquire().release()
+    except AlreadyRunning:
+        return True
+    return False
+
+
+def _cmd_quit(args: argparse.Namespace) -> int:
+    """Quit the running background app, e.g. before an installer replaces it."""
+    import json
+    import time
+    import urllib.request
+
+    from libre_panel.service import running_instance
+
+    if not _instance_running():
+        print(t("Libre Panel is not running."))
+        return 0
+    url = (running_instance() or {}).get("editor")
+    if url:
+        request = urllib.request.Request(
+            url + "api/app",
+            data=json.dumps({"action": "quit"}).encode(),
+            headers={"X-Libre-Panel": "1", "Content-Type": "application/json"},
+        )
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # local, no proxy
+        try:
+            opener.open(request, timeout=5).read()
+        except OSError as exc:
+            logging.getLogger("libre_panel").warning("quit request failed: %s", exc)
+    deadline = time.monotonic() + args.timeout
+    while time.monotonic() < deadline:
+        if not _instance_running():
+            print(t("Libre Panel has quit."))
+            return 0
+        time.sleep(0.2)
+    print(t("Libre Panel did not quit (it may run in a terminal)."), file=sys.stderr)
+    return 1
+
+
+def _cmd_udev_rules(args: argparse.Namespace) -> int:
+    rules = Path(__file__).resolve().parent / "assets" / "60-libre-panel.rules"
+    sys.stdout.write(rules.read_text(encoding="utf-8"))
+    return 0
+
+
 def _cmd_autostart(args: argparse.Namespace) -> int:
     from libre_panel.autostart import Autostart, launch_command
 
@@ -279,6 +328,13 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("autostart", help="start Libre Panel when you log in")
     p.add_argument("action", choices=["enable", "disable", "status"])
     p.set_defaults(func=_cmd_autostart)
+
+    p = sub.add_parser("quit", help="quit the running background app")
+    p.add_argument("--timeout", type=float, default=15, help="seconds to wait")
+    p.set_defaults(func=_cmd_quit)
+
+    p = sub.add_parser("udev-rules", help="print the Linux udev rule for USB panel access")
+    p.set_defaults(func=_cmd_udev_rules)
 
     p = sub.add_parser("run", help="drive the display")
     p.add_argument("--once", action="store_true", help="render a single frame and exit")

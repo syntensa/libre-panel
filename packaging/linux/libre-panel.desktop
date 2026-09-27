@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Libre Panel
+GenericName=System monitor panel
+GenericName[de]=Systemmonitor-Panel
+Comment=Shows system sensors on a USB monitor panel
+Comment[de]=Zeigt Systemsensoren auf einem USB-Monitor-Panel
+Exec=libre-panel
+Icon=libre-panel
+Terminal=false
+Categories=System;Monitor;
+Keywords=TURZX;Turing;smart screen;LCD;sensors;

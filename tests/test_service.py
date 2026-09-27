@@ -252,3 +252,20 @@ def test_auto_driver_switches_to_a_panel_that_appears(tmp_path, monkeypatch):
     assert Panel.shown == [None]  # the first frame on the panel is complete
     assert Panel.brightness == 40
     display.close()
+
+
+def test_relative_output_is_in_the_settings_folder(isolated_home, tmp_path, monkeypatch):
+    from libre_panel.config import DeviceConfig
+    from libre_panel.devices.base import DeviceError
+    from libre_panel.devices.virtual import VirtualDisplay
+
+    monkeypatch.chdir(tmp_path)  # like "/" for an app started by a double-click
+    display = VirtualDisplay(DeviceConfig(driver="virtual", output="frame.png"))
+    display.show(Image.new("RGB", (8, 8)))
+    assert (isolated_home / "frame.png").exists() and not (tmp_path / "frame.png").exists()
+
+    blocked = tmp_path / "file"
+    blocked.write_text("")
+    display = VirtualDisplay(DeviceConfig(driver="virtual", output=str(blocked / "frame.png")))
+    with pytest.raises(DeviceError):  # retried by the main loop, never a crash
+        display.show(Image.new("RGB", (8, 8)))

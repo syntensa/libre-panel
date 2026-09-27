@@ -68,14 +68,17 @@ installs a bundled libusb.
 **Linux:** allow your user to access the panel, then replug it:
 
 ```bash
-sudo cp packaging/linux/60-libre-panel.rules /etc/udev/rules.d/
+libre-panel udev-rules | sudo tee /etc/udev/rules.d/60-libre-panel.rules
 sudo udevadm control --reload-rules
 ```
+
+(With the AppImage: `./Libre_Panel-x86_64.AppImage udev-rules | sudo tee …`.)
 
 Serial panels appear as `/dev/ttyACM*`; add yourself to the `dialout` (Debian,
 Ubuntu) or `uucp` (Arch) group.
 
-**macOS:** `brew install libusb` for USB panels.
+**macOS:** nothing to install; libusb comes with Libre Panel (the release
+download and `pip install "libre-panel[usb]"` alike).
 
 ## Check your panel
 

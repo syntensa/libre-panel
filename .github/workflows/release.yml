@@ -36,8 +36,12 @@ jobs:
           path: dist/*
 
   standalone:
+    # Build, package and test on each system: the program folder, then what
+    # people download (Windows setup, macOS disk image, Linux AppImage), which
+    # is installed, started as autostart/double-click would, and removed.
     needs: test
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -53,32 +57,74 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install ".[usb,serial,tray]" pyinstaller
+      - name: Version
+        shell: bash
+        run: |
+          version=$(python -c "from importlib.metadata import version; print(version('libre-panel'))")
+          numeric=$(python -c "import re, sys; n = re.findall(r'\d+', sys.argv[1])[:3]; print('.'.join((n + ['0'] * 3)[:3]) + '.0')" "$version")
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "NUMERIC=$numeric" >> "$GITHUB_ENV"
+          case "${{ runner.os }}" in
+            Windows) echo "CLI=dist/libre-panel/libre-panel.exe" >> "$GITHUB_ENV"
+                     echo "GUI=dist/libre-panel/LibrePanel.exe" >> "$GITHUB_ENV" ;;
+            macOS)   echo "CLI=dist/Libre Panel.app/Contents/MacOS/libre-panel" >> "$GITHUB_ENV"
+                     echo "GUI=dist/Libre Panel.app/Contents/MacOS/LibrePanel" >> "$GITHUB_ENV" ;;
+            Linux)   echo "CLI=dist/libre-panel/libre-panel" >> "$GITHUB_ENV"
+                     echo "GUI=dist/libre-panel/libre-panel" >> "$GITHUB_ENV" ;;
+          esac
       - name: Build
         run: pyinstaller --noconfirm --clean packaging/pyinstaller/libre-panel.spec
       - name: Smoke test (render)
         shell: bash
-        run: dist/libre-panel/libre-panel preview spur-ii -o smoke.png
+        run: '"$CLI" preview spur-ii -o smoke.png'
       - name: Smoke test (background app, started as at login)
         shell: bash
+        run: python packaging/smoke_test.py "$GUI" tray --background
+
+      - name: Windows setup
+        if: runner.os == 'Windows'
+        shell: pwsh
         run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            python packaging/smoke_test.py dist/libre-panel/LibrePanel.exe --background
-          else
-            python packaging/smoke_test.py dist/libre-panel/libre-panel tray --background
-          fi
-      - name: Archive
-        shell: bash
+          Copy-Item LICENSE, README.md dist/libre-panel/
+          7z a "dist/libre-panel-$env:VERSION-windows-x64-portable.zip" ./dist/libre-panel/*
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc "/DAppVersion=$env:VERSION" "/DNumericVersion=$env:NUMERIC" packaging\windows\libre-panel.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test the Windows setup (install, run, uninstall)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: python packaging/windows/test_installer.py "dist/libre-panel-$env:VERSION-windows-x64-setup.exe"
+
+      - name: macOS disk image
+        if: runner.os == 'macOS'
+        run: packaging/macos/build_dmg.sh "dist/libre-panel-$VERSION-macos-arm64.dmg"
+      - name: Test the disk image (mount, run, double-click, quit)
+        if: runner.os == 'macOS'
+        run: packaging/macos/test_app.sh "dist/libre-panel-$VERSION-macos-arm64.dmg"
+
+      - name: Linux AppImage and archive
+        if: runner.os == 'Linux'
         run: |
           cp LICENSE README.md dist/libre-panel/
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            7z a "libre-panel-${GITHUB_REF_NAME}-${{ matrix.name }}.zip" ./dist/libre-panel/*
-          else
-            tar -C dist -czf "libre-panel-${GITHUB_REF_NAME}-${{ matrix.name }}.tar.gz" libre-panel
-          fi
+          tar -C dist -czf "dist/libre-panel-$VERSION-linux-x64.tar.gz" libre-panel
+          packaging/linux/build_appimage.sh "$VERSION" "dist/Libre_Panel-$VERSION-x86_64.AppImage"
+      - name: Test the AppImage (headless and on an X11 tray)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update && sudo apt-get install -y xvfb stalonetray
+          packaging/linux/test_appimage.sh "dist/Libre_Panel-$VERSION-x86_64.AppImage"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: standalone-${{ matrix.name }}
-          path: libre-panel-*
+          name: release-${{ matrix.name }}
+          if-no-files-found: error
+          path: |
+            dist/*.zip
+            dist/*-setup.exe
+            dist/*.dmg
+            dist/*.tar.gz
+            dist/*.AppImage
 
   github-release:
     needs: [python-package, standalone]

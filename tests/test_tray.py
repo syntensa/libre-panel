@@ -239,3 +239,32 @@ def test_real_tray_icon_on_x11(isolated_home):
     output = proc.stdout.read().decode(errors="replace")
     assert "Traceback" not in output, output
     assert running_instance() is None
+
+
+def test_cli_quit_stops_the_background_app(isolated_home, capsys):
+    write_config(isolated_home)
+    assert cli.main(["quit"]) == 0
+    assert "not running" in capsys.readouterr().out
+    app = BackgroundApp(port=0, autostart=Autostart("win32", registry=FakeRegistry()))
+    result = []
+    thread = threading.Thread(target=lambda: result.append(run_app(app, use_icon=False)))
+    from libre_panel.instance import InstanceLock
+
+    lock = InstanceLock().acquire()
+    try:
+        thread.start()
+        assert wait_for(lambda: running_instance() is not None)
+        # the lock belongs to "another process" here: release it when the app quits
+        app.on_quit(lock.release)
+        assert cli.main(["quit", "--timeout", "10"]) == 0
+        assert "has quit" in capsys.readouterr().out
+        thread.join(10)
+        assert result == [0]
+    finally:
+        lock.release()
+
+
+def test_cli_prints_the_udev_rule(capsys):
+    assert cli.main(["udev-rules"]) == 0
+    out = capsys.readouterr().out
+    assert 'ATTRS{idVendor}=="1cbe"' in out and 'TAG+="uaccess"' in out

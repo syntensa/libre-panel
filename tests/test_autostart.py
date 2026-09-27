@@ -195,3 +195,23 @@ def test_glib_starts_the_entry_with_exact_arguments(tmp_path):
             break
         time.sleep(0.05)
     assert json.loads(out.read_text()) == args
+
+
+def test_launch_command_from_an_appimage(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", "/tmp/.mount_LibreP1234/usr/lib/libre-panel/libre-panel")
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("APPIMAGE", "/home/u/Apps/Libre_Panel-x86_64.AppImage")
+    assert launch_command() == ["/home/u/Apps/Libre_Panel-x86_64.AppImage", "tray", "--background"]
+
+
+def test_launch_command_from_the_mac_app(tmp_path, monkeypatch):
+    macos = tmp_path / "Libre Panel.app" / "Contents" / "MacOS"
+    macos.mkdir(parents=True)
+    (macos / "libre-panel").write_text("")
+    (macos / "LibrePanel").write_text("")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(macos / "libre-panel"))
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.delenv("APPIMAGE", raising=False)
+    assert launch_command() == [str(macos / "LibrePanel"), "tray", "--background"]

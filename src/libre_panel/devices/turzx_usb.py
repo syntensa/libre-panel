@@ -157,7 +157,7 @@ def access_hint(exc: Exception) -> str | None:
     if denied and sys.platform.startswith("linux"):
         return t(
             "no permission to use the panel. Install the udev rule: "
-            "sudo cp packaging/linux/60-libre-panel.rules /etc/udev/rules.d/ "
+            "libre-panel udev-rules | sudo tee /etc/udev/rules.d/60-libre-panel.rules "
             "&& sudo udevadm control --reload-rules, then replug the panel."
         )
     if denied:

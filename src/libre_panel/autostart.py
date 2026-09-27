@@ -23,7 +23,8 @@ APP_NAME = "Libre Panel"
 DESKTOP_FILE = "libre-panel.desktop"
 MAC_LABEL = "io.github.syntensa.libre-panel"
 WINDOWS_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-WINDOWED_EXE = "LibrePanel.exe"  # the release build's program without a console window
+# The release build's program without a console window (Windows) or Dock icon (macOS).
+WINDOWED_EXE = {"win32": "LibrePanel.exe", "darwin": "LibrePanel"}
 
 ICON_PATH = Path(__file__).resolve().parent / "assets" / "libre-panel.png"
 
@@ -32,9 +33,12 @@ def launch_command(config_path: Path | None = None) -> list[str]:
     """The command the system runs at login: the tray app, without opening the editor."""
     options = ["--config", str(Path(config_path).resolve())] if config_path else []
     if getattr(sys, "frozen", False):  # release build
+        appimage = os.environ.get("APPIMAGE")  # the .AppImage file, not its temporary mount
+        if appimage and sys.platform.startswith("linux"):
+            return [appimage, *options, "tray", "--background"]
         exe = Path(sys.executable)
-        windowed = exe.with_name(WINDOWED_EXE)
-        if sys.platform == "win32" and windowed.exists():
+        windowed = exe.with_name(WINDOWED_EXE.get(sys.platform, exe.name))
+        if windowed.exists():
             exe = windowed
         return [str(exe), *options, "tray", "--background"]
     python = Path(sys.executable)

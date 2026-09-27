@@ -14,6 +14,7 @@ def main() -> None:
     icons = ROOT / "packaging/icons"
     icons.mkdir(exist_ok=True)
     logo(512).save(icons / "libre-panel-512.png", optimize=True)
+    logo(1024).save(icons / "libre-panel.icns")  # macOS app
     logo(256).save(
         icons / "libre-panel.ico",
         format="ICO",

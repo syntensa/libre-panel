@@ -1,0 +1,9 @@
+#!/bin/sh
+# Entry point of the AppImage. Without a command (a double-click) Libre Panel
+# starts in the background with its tray icon; with one it is the normal
+# command line: ./Libre_Panel-x86_64.AppImage editor | autostart enable | ...
+HERE="$(dirname "$(readlink -f "$0")")"
+if [ "$#" -eq 0 ]; then
+    set -- tray
+fi
+exec "$HERE/usr/lib/libre-panel/libre-panel" "$@"

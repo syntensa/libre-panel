@@ -45,7 +45,7 @@ model = "auto"
 driver = "auto"
 # 0-100
 brightness = 60
-# Where frames go when no panel is used.
+# Where frames go when no panel is used (relative = in this settings folder).
 output = "libre-panel-frame.png"
 
 [sensors]
