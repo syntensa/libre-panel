@@ -14,6 +14,9 @@ libre-panel autostart disable
 With the release downloads on Windows, double-click **LibrePanel.exe** (the
 program without a console window); `libre-panel.exe` is the command-line tool.
 Installed with pip, add the `tray` extra: `pipx install "libre-panel[usb,tray]"`.
+The macOS download is not signed yet, so Gatekeeper blocks it; run
+`xattr -dr com.apple.quarantine .` once in the unpacked folder (or install
+with pipx).
 
 ## Tray menu
 

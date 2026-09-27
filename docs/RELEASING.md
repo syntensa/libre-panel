@@ -19,6 +19,11 @@ Libre Panel ships three ways; one git tag produces all of them.
    SmartScreen warnings. Free signing for open source is available through
    [SignPath Foundation](https://signpath.org); add the signing step to the
    Windows job once approved.
+4. **Code signing (macOS):** Gatekeeper blocks unsigned downloads, including
+   when the LaunchAgent starts them at login. Until the bundle is signed and
+   notarized (needs a paid Apple Developer ID), users run once:
+   `xattr -dr com.apple.quarantine libre-panel` in the unpacked folder, or
+   install with `pipx` instead.
 
 ## Cutting a release
 

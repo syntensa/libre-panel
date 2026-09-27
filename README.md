@@ -17,6 +17,8 @@ vendor app.
 
 ## Features
 
+<p align="center"><img src="docs/images/editor.png" alt="The theme editor with the SPUR II theme on a 9.2 inch panel" width="100%"></p>
+
 - **Visual theme editor** in your browser, rendered by the same engine that
   drives the panel: drag and drop with snapping and alignment guides,
   multi-select, align and distribute, undo/redo, copy/paste, layers with lock
