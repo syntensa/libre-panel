@@ -43,6 +43,8 @@ First preview of Libre Panel.
   editor. A broken config or theme no longer stops it: it resumes when the
   file is fixed
 - `libre-panel quit`, `libre-panel udev-rules`
+- Windows: shutting down or signing out stops Libre Panel cleanly instead of
+  cutting it off
 
 **Downloads**
 - Windows setup (per user, German/English, start menu, optional start at

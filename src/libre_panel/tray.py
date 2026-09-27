@@ -246,18 +246,43 @@ def _quit_on_signals(app: BackgroundApp) -> None:
             signal.signal(getattr(signal, name), lambda *_: app.quit())
 
 
+# Windows asks the user about programs that take longer than about 5 s.
+SESSION_END_S = 4.5
+
+
+def _stop_with_windows(app: BackgroundApp, stopped: threading.Event):
+    """Stop cleanly when Windows shuts down or the user signs out."""
+    if sys.platform != "win32":
+        return None
+    from libre_panel.winsession import SessionEndWatcher, shut_down_early
+
+    def session_ends() -> None:
+        log.info("Windows is ending the session; stopping the panel")
+        app.quit()
+        stopped.wait(SESSION_END_S)  # answer Windows once the panel is left in order
+
+    try:
+        shut_down_early()
+        return SessionEndWatcher(session_ends).start()
+    except OSError as exc:
+        log.warning("no clean stop at shutdown: %s", exc)
+        return None
+
+
 def run_app(
     app: BackgroundApp,
     use_icon: bool = True,
     open_editor: bool = False,
     log_path: Path | None = None,
 ) -> int:
-    """Run until Quit (tray, editor), Ctrl+C or SIGTERM."""
+    """Run until Quit (tray, editor), Ctrl+C, SIGTERM or the end of the Windows session."""
     url = app.start()
     if open_editor:
         webbrowser.open(url)
     pystray = load_pystray() if use_icon else None
     _quit_on_signals(app)
+    stopped = threading.Event()
+    app.session_watcher = _stop_with_windows(app, stopped)
     try:
         if pystray is not None:
             try:
@@ -273,4 +298,7 @@ def run_app(
     finally:
         app.quit()
         app.shutdown()
+        stopped.set()
+        if app.session_watcher is not None:
+            app.session_watcher.stop()
     return 0
