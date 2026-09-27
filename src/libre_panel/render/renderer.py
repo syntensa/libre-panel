@@ -2,15 +2,27 @@
 
 The theme editor uses this same renderer for its preview, so what the editor
 shows is exactly what the panel shows.
+
+Every widget is drawn into its own layer (shapes at 3x for smooth edges),
+effects (shadow, glow, opacity) are applied to that layer and the result is
+composited. Layers that did not change are reused from a cache, so a frame
+where only a few values moved costs little.
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import math
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
-from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont, ImageOps
 
+from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
+from libre_panel.icons import draw_icon, weather_icon_name
 from libre_panel.render.formatting import FormatError, safe_format
 from libre_panel.sensors.base import Snapshot
 from libre_panel.theme.model import Theme, ThemeError, resolve_asset
@@ -20,16 +32,22 @@ log = logging.getLogger(__name__)
 # Shapes are drawn at this scale and downsampled for smooth edges.
 SUPERSAMPLE = 3
 _ANCHORS = {"left": "la", "center": "ma", "right": "ra"}
+_DIGITS = "0123456789"
 
 Box = list[int]  # [x, y, w, h]
+RGBA = tuple[int, int, int, int]
 
 
-def rgba(color: str | None, alpha_scale: float = 1.0) -> tuple[int, int, int, int] | None:
-    if color is None:
-        return None
-    rgb = ImageColor.getrgb(color)
-    alpha = rgb[3] if len(rgb) == 4 else 255
-    return (rgb[0], rgb[1], rgb[2], int(alpha * alpha_scale))
+@dataclass
+class Piece:
+    """A rendered widget: an RGBA layer placed at (x, y)."""
+
+    layer: Image.Image
+    x: int
+    y: int
+    box: Box | None = None  # hit box for the editor; defaults to the layer bounds
+    backdrop: Image.Image | None = None  # "L" mask: blur the canvas beneath first
+    backdrop_radius: int = 0
 
 
 def changed_region(
@@ -53,22 +71,89 @@ def _fraction(value: float | None, lo: float, hi: float) -> float:
     return min(1.0, max(0.0, (value - lo) / (hi - lo)))
 
 
-def _rule_color(widget: dict[str, Any], value: float | None) -> str:
-    color = widget["color"]
+def _rule_color(widget: dict[str, Any], value: float | None) -> str | None:
+    """The color of the highest threshold the value exceeds, or None."""
+    color = None
     if value is None:
-        return color
+        return None
     for rule in sorted(widget.get("color_rules", []), key=lambda r: r["above"]):
         if value > rule["above"]:
             color = rule["color"]
     return color
 
 
+def _lerp(a: RGBA, b: RGBA, t: float) -> RGBA:
+    t = min(1.0, max(0.0, t))
+    return tuple(round(a[i] + (b[i] - a[i]) * t) for i in range(4))  # type: ignore[return-value]
+
+
+def _blur(img: Image.Image, radius: float) -> Image.Image:
+    """Colour-true Gaussian blur of an RGBA image (premultiplied alpha)."""
+    if radius <= 0:
+        return img
+    pre = img.convert("RGBa")
+    if max(img.size) > 320 and radius >= 4:  # blur at half size: 4x cheaper, same look
+        small = pre.resize((max(1, img.width // 2), max(1, img.height // 2)), Image.BILINEAR)
+        pre = small.filter(ImageFilter.GaussianBlur(radius / 2)).resize(img.size, Image.BILINEAR)
+    else:
+        pre = pre.filter(ImageFilter.GaussianBlur(radius))
+    return pre.convert("RGBA")
+
+
+def _scale_alpha(img: Image.Image, factor: float) -> Image.Image:
+    if factor >= 0.999:
+        return img
+    out = img.copy()
+    out.putalpha(img.getchannel("A").point(lambda a: int(a * factor)))
+    return out
+
+
+def _gradient(size: tuple[int, int], a: RGBA, b: RGBA, horizontal: bool) -> Image.Image:
+    """Linear gradient from ``a`` to ``b``."""
+    steps = size[0] if horizontal else size[1]
+    strip = Image.new("RGBA", (steps, 1) if horizontal else (1, steps))
+    strip.putdata([_lerp(a, b, i / max(1, steps - 1)) for i in range(steps)])
+    return strip.resize(size, Image.NEAREST)
+
+
+def _catmull_rom(points: list[tuple[float, float]], samples: int = 6) -> list[tuple[float, float]]:
+    """Smooth curve through all points (centripetal-free, uniform Catmull-Rom)."""
+    if len(points) < 3:
+        return points
+    out = [points[0]]
+    padded = [points[0], *points, points[-1]]
+    for i in range(1, len(padded) - 2):
+        p0, p1, p2, p3 = padded[i - 1], padded[i], padded[i + 1], padded[i + 2]
+        for step in range(1, samples + 1):
+            t = step / samples
+            t2, t3 = t * t, t * t * t
+            out.append(
+                tuple(
+                    0.5
+                    * (
+                        2 * p1[k]
+                        + (-p0[k] + p2[k]) * t
+                        + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2
+                        + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3
+                    )
+                    for k in (0, 1)
+                )
+            )
+    return out
+
+
 class Renderer:
-    def __init__(self, theme: Theme) -> None:
+    def __init__(self, theme: Theme, animate: bool = False) -> None:
         self.theme = theme
+        self.animate = animate
         self.warnings: list[str] = []
-        self._fonts: dict[tuple[str, int], ImageFont.ImageFont | ImageFont.FreeTypeFont] = {}
+        self.moving = False  # True while an animation has not settled yet
+        self._fonts: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
+        self._digit_width: dict[int, float] = {}
         self._images: dict[tuple[str, int, int], Image.Image | None] = {}
+        self._anim: dict[str, tuple[float, float]] = {}
+        self._cache: dict[str, tuple[Any, Piece]] = {}
+        self._keys = {w["id"]: json.dumps(w, sort_keys=True) for w in theme.widgets}
         self._background = self._load_background()
 
     # -- resources ---------------------------------------------------------
@@ -78,16 +163,31 @@ class Renderer:
             self.warnings.append(message)
             log.warning(message)
 
-    def font(self, path: str, size: int) -> ImageFont.ImageFont | ImageFont.FreeTypeFont:
+    def color(self, value: str | None, alpha_scale: float = 1.0) -> RGBA | None:
+        if value is None:
+            return None
+        if value.startswith("@"):
+            value = self.theme.palette.get(value[1:], "#ff00ff")
+        rgb = ImageColor.getrgb(value)
+        alpha = rgb[3] if len(rgb) == 4 else 255
+        return (rgb[0], rgb[1], rgb[2], int(alpha * alpha_scale))
+
+    def font(self, ref: str, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+        ref = ref or self.theme.font or DEFAULT_FONT
         size = max(4, min(int(size), 512))
-        key = (path, size)
+        key = (ref, size)
         if key not in self._fonts:
             font = None
-            if path and self.theme.root is not None:
-                try:
-                    font = ImageFont.truetype(str(resolve_asset(self.theme.root, path)), size)
-                except (OSError, ThemeError) as exc:
-                    self._warn(f"font {path!r} could not be loaded ({exc}); using default")
+            try:
+                builtin = builtin_font_path(ref)
+                if builtin is not None:
+                    font = ImageFont.truetype(str(builtin), size)
+                elif self.theme.root is not None:
+                    font = ImageFont.truetype(str(resolve_asset(self.theme.root, ref)), size)
+            except (OSError, ThemeError) as exc:
+                self._warn(f"font {ref!r} could not be loaded ({exc}); using the default font")
+            if font is None and ref != DEFAULT_FONT:
+                font = ImageFont.truetype(str(builtin_font_path(DEFAULT_FONT)), size)
             self._fonts[key] = font or ImageFont.load_default(size)
         return self._fonts[key]
 
@@ -115,7 +215,68 @@ class Renderer:
             return None
         return ImageOps.fit(image, (self.theme.width, self.theme.height))
 
-    # -- compositing helpers ----------------------------------------------
+    # -- animation ---------------------------------------------------------
+
+    def _eased(self, widget: dict[str, Any], target: float | None, now: float) -> float | None:
+        """Glide towards new values instead of jumping (theme animation.smoothing_ms)."""
+        wid = widget["id"]
+        if (
+            target is None
+            or not self.animate
+            or not widget.get("smooth", False)
+            or self.theme.smoothing_ms <= 0
+        ):
+            if target is not None:
+                self._anim[wid] = (target, now)
+            return target
+        previous = self._anim.get(wid)
+        if previous is None:
+            self._anim[wid] = (target, now)
+            return target
+        value, then = previous
+        tau = self.theme.smoothing_ms / 1000 / 3  # ~95 % of the way after smoothing_ms
+        value += (target - value) * (1 - math.exp(-max(0.0, now - then) / tau))
+        span = abs(widget.get("max", 100) - widget.get("min", 0)) or 1.0
+        if abs(target - value) < span * 0.002:
+            value = target
+        else:
+            self.moving = True
+        self._anim[wid] = (value, now)
+        return value
+
+    # -- effects and compositing ------------------------------------------
+
+    def _effects(self, widget: dict[str, Any], piece: Piece) -> Piece:
+        layer = _scale_alpha(piece.layer, widget.get("opacity", 1.0))
+        glow = widget.get("glow", 0.0)
+        shadow = widget.get("shadow")
+        box = piece.box or [piece.x, piece.y, piece.layer.width, piece.layer.height]
+        if not glow and not shadow:
+            return Piece(layer, piece.x, piece.y, box, piece.backdrop, piece.backdrop_radius)
+        pad = 0
+        if glow:
+            pad = max(pad, widget.get("glow_radius", 10) * 2)
+        if shadow:
+            pad = max(pad, widget.get("shadow_blur", 6) * 2 + abs(widget.get("shadow_offset", 3)))
+        size = (layer.width + 2 * pad, layer.height + 2 * pad)
+        out = Image.new("RGBA", size, (0, 0, 0, 0))
+        if shadow:
+            tint = self.color(shadow)
+            silhouette = Image.new("RGBA", layer.size, (*tint[:3], 0))
+            silhouette.putalpha(layer.getchannel("A").point(lambda a: a * tint[3] // 255))
+            offset = widget.get("shadow_offset", 3)
+            base = Image.new("RGBA", size, (0, 0, 0, 0))
+            base.paste(silhouette, (pad + offset, pad + offset))
+            out.alpha_composite(_blur(base, widget.get("shadow_blur", 6)))
+        if glow:
+            base = Image.new("RGBA", size, (0, 0, 0, 0))
+            base.paste(layer, (pad, pad))
+            halo = _blur(base, widget.get("glow_radius", 10))
+            boost = 1.0 + glow * 2.5  # light spills: brighter than the shape's own alpha
+            halo.putalpha(halo.getchannel("A").point(lambda a: min(255, int(a * boost * glow))))
+            out.alpha_composite(halo)
+        out.alpha_composite(layer, (pad, pad))
+        return Piece(out, piece.x - pad, piece.y - pad, box, piece.backdrop, piece.backdrop_radius)
 
     @staticmethod
     def _paste(canvas: Image.Image, layer: Image.Image, x: int, y: int) -> None:
@@ -127,21 +288,48 @@ class Renderer:
         crop = layer.crop((x0 - x, y0 - y, x1 - x, y1 - y))
         canvas.alpha_composite(crop, (x0, y0))
 
-    def _shape_layer(self, w: int, h: int) -> tuple[Image.Image, ImageDraw.ImageDraw]:
-        layer = Image.new("RGBA", (max(1, w * SUPERSAMPLE), max(1, h * SUPERSAMPLE)), (0, 0, 0, 0))
-        return layer, ImageDraw.Draw(layer)
+    def _composite(self, canvas: Image.Image, piece: Piece) -> None:
+        if piece.backdrop is not None and piece.box is not None:
+            bx, by, bw, bh = piece.box
+            region = (
+                max(bx, 0),
+                max(by, 0),
+                min(bx + bw, canvas.width),
+                min(by + bh, canvas.height),
+            )
+            if region[2] > region[0] and region[3] > region[1]:
+                blurred = canvas.crop(region).filter(
+                    ImageFilter.GaussianBlur(piece.backdrop_radius)
+                )
+                mask = piece.backdrop.crop(
+                    (region[0] - bx, region[1] - by, region[2] - bx, region[3] - by)
+                )
+                canvas.paste(blurred, region[:2], mask)
+        self._paste(canvas, piece.layer, piece.x, piece.y)
 
-    def _finish_shape(
-        self, canvas: Image.Image, layer: Image.Image, x: int, y: int, w: int, h: int
-    ) -> None:
-        small = layer.resize((max(1, w), max(1, h)), Image.Resampling.LANCZOS)
-        self._paste(canvas, small, x, y)
+    def _cached(
+        self, widget: dict[str, Any], content: Any, build: Callable[[], Piece | None]
+    ) -> Piece | None:
+        """Reuse the finished layer while the widget and its content stay the same."""
+        wid = widget["id"]
+        hit = self._cache.get(wid)
+        if hit is not None and hit[0] == content:
+            return hit[1]
+        piece = build()
+        if piece is not None:
+            piece = self._effects(widget, piece)
+            self._cache[wid] = (content, piece)
+        return piece
 
     # -- rendering ---------------------------------------------------------
 
-    def render(self, snapshot: Snapshot) -> tuple[Image.Image, dict[str, Box]]:
+    def render(
+        self, snapshot: Snapshot, now: float | None = None
+    ) -> tuple[Image.Image, dict[str, Box]]:
+        now = time.monotonic() if now is None else now
         theme = self.theme
-        canvas = Image.new("RGBA", (theme.width, theme.height), rgba(theme.background_color))
+        self.moving = False
+        canvas = Image.new("RGBA", (theme.width, theme.height), self.color(theme.background_color))
         if self._background is not None:
             canvas.alpha_composite(self._background)
         boxes: dict[str, Box] = {}
@@ -150,28 +338,73 @@ class Renderer:
                 continue
             draw = getattr(self, f"_draw_{widget['type']}")
             try:
-                box = draw(canvas, widget, snapshot)
+                piece = draw(widget, snapshot, now)
+                if piece is None:
+                    continue
+                self._composite(canvas, piece)
             except Exception as exc:  # one broken widget must not blank the panel
                 self._warn(f"widget {widget['id']!r} failed: {exc}")
                 continue
-            if box:
-                boxes[widget["id"]] = box
+            boxes[widget["id"]] = piece.box or [
+                piece.x,
+                piece.y,
+                piece.layer.width,
+                piece.layer.height,
+            ]
         return canvas.convert("RGB"), boxes
 
-    def _text(self, canvas: Image.Image, widget: dict[str, Any], text: str, color: str) -> Box:
+    # -- text --------------------------------------------------------------
+
+    def _digit_cell(self, font: ImageFont.FreeTypeFont | ImageFont.ImageFont) -> float:
+        key = id(font)
+        if key not in self._digit_width:
+            self._digit_width[key] = max(font.getlength(d) for d in _DIGITS)
+        return self._digit_width[key]
+
+    def _text_piece(self, widget: dict[str, Any], text: str, color: str) -> Piece:
         font = self.font(widget.get("font", ""), widget.get("font_size", 24))
-        anchor = _ANCHORS.get(widget.get("align", "left"), "la")
+        fill = self.color(color)
         x, y = widget["x"], widget["y"]
-        measure = ImageDraw.Draw(canvas)
-        x0, y0, x1, y1 = measure.textbbox((x, y), text, font=font, anchor=anchor)
-        x0, y0 = int(x0), int(y0)
-        w, h = max(1, int(x1) - x0 + 1), max(1, int(y1) - y0 + 1)
+        align = widget.get("align", "left")
+        spacing = widget.get("letter_spacing", 0)
+        tabular = widget.get("tabular", False)
+        if "\n" in text or not (spacing or (tabular and any(c in _DIGITS for c in text))):
+            anchor = _ANCHORS.get(align, "la")
+            measure = ImageDraw.Draw(Image.new("L", (1, 1)))
+            x0, y0, x1, y1 = measure.textbbox((x, y), text, font=font, anchor=anchor)
+            x0, y0 = int(math.floor(x0)), int(math.floor(y0))
+            w, h = max(1, math.ceil(x1) - x0 + 1), max(1, math.ceil(y1) - y0 + 1)
+            layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+            ImageDraw.Draw(layer).text((x - x0, y - y0), text, font=font, anchor=anchor, fill=fill)
+            return Piece(layer, x0, y0)
+        # Hand layout: letter spacing and/or equal-width digits.
+        cell = self._digit_cell(font)
+        advances = []
+        for ch in text:
+            advance = cell if tabular and ch in _DIGITS else font.getlength(ch)
+            advances.append(advance + spacing)
+        total = max(1.0, sum(advances) - spacing)
+        ascent, descent = font.getmetrics()
+        start = {"left": x, "center": x - total / 2, "right": x - total}.get(align, x)
+        margin = max(2, widget.get("font_size", 24) // 6)  # room for overhanging glyphs
+        w, h = math.ceil(total) + 2 * margin, ascent + descent
         layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        ImageDraw.Draw(layer).text(
-            (x - x0, y - y0), text, font=font, anchor=anchor, fill=rgba(color)
-        )
-        self._paste(canvas, layer, x0, y0)
-        return [x0, y0, w, h]
+        draw = ImageDraw.Draw(layer)
+        pen = float(margin)
+        for ch, advance in zip(text, advances, strict=True):
+            if tabular and ch in _DIGITS:
+                draw.text(
+                    (pen + (cell - font.getlength(ch)) / 2, 0),
+                    ch,
+                    font=font,
+                    fill=fill,
+                    anchor="la",
+                )
+            else:
+                draw.text((pen, 0), ch, font=font, fill=fill, anchor="la")
+            pen += advance
+        left = math.floor(start) - margin
+        return Piece(layer, left, y, box=[left + margin, y, math.ceil(total), h])
 
     def _format(self, widget: dict[str, Any], reading: Any) -> tuple[str, float | None]:
         if reading is None or reading.value is None:
@@ -182,123 +415,301 @@ class Renderer:
             text = reading.value if isinstance(reading.value, str) else widget.get("fallback", "--")
         return text, _number(reading.value)
 
-    def _draw_text(self, canvas: Image.Image, widget: dict[str, Any], snapshot: Snapshot) -> Box:
-        return self._text(canvas, widget, widget["text"], widget["color"])
+    def _text_widget(self, widget: dict[str, Any], text: str, color: str) -> Piece | None:
+        return self._cached(widget, (text, color), lambda: self._text_piece(widget, text, color))
 
-    def _draw_metric(self, canvas: Image.Image, widget: dict[str, Any], snapshot: Snapshot) -> Box:
+    def _draw_text(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        return self._text_widget(widget, widget["text"], widget["color"])
+
+    def _draw_metric(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         text, value = self._format(widget, snapshot.readings.get(widget["sensor"]))
-        return self._text(canvas, widget, text, _rule_color(widget, value))
+        return self._text_widget(widget, text, _rule_color(widget, value) or widget["color"])
 
-    def _draw_weather(self, canvas: Image.Image, widget: dict[str, Any], snapshot: Snapshot) -> Box:
+    def _draw_weather(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         text, _ = self._format(widget, snapshot.readings.get(f"weather.{widget['field']}"))
-        return self._text(canvas, widget, text, widget["color"])
+        return self._text_widget(widget, text, widget["color"])
 
-    def _draw_clock(self, canvas: Image.Image, widget: dict[str, Any], snapshot: Snapshot) -> Box:
+    def _draw_clock(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         try:
             text = snapshot.now.strftime(widget["format"])[:100]
         except ValueError:
             text = "--:--"
-        return self._text(canvas, widget, text, widget["color"])
+        return self._text_widget(widget, text, widget["color"])
 
-    def _draw_image(
-        self, canvas: Image.Image, widget: dict[str, Any], snapshot: Snapshot
-    ) -> Box | None:
-        image = self._asset_image(widget["src"], widget["w"], widget["h"])
-        if image is None:
-            return [widget["x"], widget["y"], max(widget["w"], 1), max(widget["h"], 1)]
-        self._paste(canvas, image, widget["x"], widget["y"])
-        return [widget["x"], widget["y"], image.width, image.height]
+    # -- pictures ----------------------------------------------------------
 
-    def _draw_rect(self, canvas: Image.Image, widget: dict[str, Any], snapshot: Snapshot) -> Box:
+    def _draw_image(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        def build() -> Piece:
+            image = self._asset_image(widget["src"], widget["w"], widget["h"])
+            if image is None:
+                empty = Image.new("RGBA", (max(widget["w"], 1), max(widget["h"], 1)), (0, 0, 0, 0))
+                return Piece(empty, widget["x"], widget["y"])
+            return Piece(image, widget["x"], widget["y"])
+
+        return self._cached(widget, None, build)
+
+    def _draw_icon(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        name = widget["icon"]
+        if name == "weather":
+            night = not 6 <= snapshot.now.hour < 20
+            name = weather_icon_name(snapshot.value("weather.code"), night)
+        color = self.color(widget["color"])
+
+        def build() -> Piece:
+            icon = draw_icon(name, widget["size"], color, float(widget["stroke"]))
+            return Piece(icon, widget["x"], widget["y"])
+
+        return self._cached(widget, (name, color), build)
+
+    # -- shapes ------------------------------------------------------------
+
+    def _canvas(self, w: int, h: int) -> tuple[Image.Image, ImageDraw.ImageDraw]:
+        layer = Image.new("RGBA", (max(1, w * SUPERSAMPLE), max(1, h * SUPERSAMPLE)), (0, 0, 0, 0))
+        return layer, ImageDraw.Draw(layer)
+
+    @staticmethod
+    def _down(layer: Image.Image, w: int, h: int) -> Image.Image:
+        return layer.resize((max(1, w), max(1, h)), Image.Resampling.LANCZOS)
+
+    def _fill_shape(
+        self,
+        layer: Image.Image,
+        box: list[float],
+        radius: float,
+        a: RGBA,
+        b: RGBA | None,
+        horizontal: bool,
+    ) -> None:
+        """Rounded rectangle filled with a colour or a gradient running across the layer."""
+        if b is None:
+            ImageDraw.Draw(layer).rounded_rectangle(box, radius=radius, fill=a)
+            return
+        mask = Image.new("L", layer.size, 0)
+        ImageDraw.Draw(mask).rounded_rectangle(box, radius=radius, fill=255)
+        layer.paste(_gradient(layer.size, a, b, horizontal), (0, 0), mask)
+
+    def _draw_rect(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
         s = SUPERSAMPLE
-        layer, draw = self._shape_layer(w, h)
-        radius = min(widget["radius"], w // 2, h // 2) * s
-        draw.rounded_rectangle(
-            [0, 0, w * s - 1, h * s - 1],
-            radius=radius,
-            fill=rgba(widget["color"]),
-            outline=rgba(widget["outline"]),
-            width=widget["outline_width"] * s if widget["outline"] else 0,
-        )
-        self._finish_shape(canvas, layer, x, y, w, h)
-        return [x, y, w, h]
 
-    def _draw_bar(self, canvas: Image.Image, widget: dict[str, Any], snapshot: Snapshot) -> Box:
-        x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
-        s = SUPERSAMPLE
-        value = _number(snapshot.value(widget["sensor"]))
-        frac = _fraction(value, widget["min"], widget["max"])
-        layer, draw = self._shape_layer(w, h)
-        radius = min(widget["radius"], w // 2, h // 2) * s
-        W, H = w * s, h * s
-        if widget["background"]:
-            draw.rounded_rectangle(
-                [0, 0, W - 1, H - 1], radius=radius, fill=rgba(widget["background"])
+        def build() -> Piece:
+            layer, draw = self._canvas(w, h)
+            radius = min(widget["radius"], w // 2, h // 2) * s
+            box = [0, 0, w * s - 1, h * s - 1]
+            if widget["color"]:
+                self._fill_shape(
+                    layer,
+                    box,
+                    radius,
+                    self.color(widget["color"]),
+                    self.color(widget["color2"]),
+                    widget["gradient"] == "horizontal",
+                )
+            if widget["outline"]:
+                draw.rounded_rectangle(
+                    box,
+                    radius=radius,
+                    outline=self.color(widget["outline"]),
+                    width=widget["outline_width"] * s,
+                )
+            backdrop = None
+            if widget["backdrop_blur"]:
+                mask = Image.new("L", layer.size, 0)
+                ImageDraw.Draw(mask).rounded_rectangle(box, radius=radius, fill=255)
+                backdrop = self._down(mask, w, h)
+            return Piece(
+                self._down(layer, w, h), x, y, [x, y, w, h], backdrop, widget["backdrop_blur"]
             )
-        if frac > 0:
-            direction = widget["direction"]
+
+        return self._cached(widget, None, build)
+
+    def _draw_bar(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
+        target = _number(snapshot.value(widget["sensor"]))
+        value = self._eased(widget, target, now)
+        frac = _fraction(value, widget["min"], widget["max"])
+        rule = _rule_color(widget, target)
+        key = (round(frac, 4), rule)
+        return self._cached(widget, key, lambda: self._bar_piece(widget, frac, rule, x, y, w, h))
+
+    def _bar_piece(
+        self, widget: dict[str, Any], frac: float, rule: str | None, x: int, y: int, w: int, h: int
+    ) -> Piece:
+        s = SUPERSAMPLE
+        layer, draw = self._canvas(w, h)
+        W, H = w * s, h * s
+        radius = min(widget["radius"], w // 2, h // 2) * s
+        direction = widget["direction"]
+        horizontal = direction in ("right", "left")
+        a = self.color(rule or widget["color"])  # colour where the bar starts
+        b = None if rule else self.color(widget["color2"])  # colour where a full bar ends
+        track = self.color(widget["background"])
+
+        def span(p0: float, p1: float) -> list[float]:
+            """Rectangle covering the part p0..p1 (0 = start, 1 = end) of the bar."""
             if direction == "right":
-                rect = [0, 0, max(1, int(W * frac)) - 1, H - 1]
+                box = [p0 * W, 0, p1 * W - 1, H - 1]
             elif direction == "left":
-                rect = [W - max(1, int(W * frac)), 0, W - 1, H - 1]
-            elif direction == "up":
-                rect = [0, H - max(1, int(H * frac)), W - 1, H - 1]
-            else:
-                rect = [0, 0, W - 1, max(1, int(H * frac)) - 1]
-            fill_r = min(radius, (rect[2] - rect[0]) // 2, (rect[3] - rect[1]) // 2)
-            draw.rounded_rectangle(rect, radius=fill_r, fill=rgba(_rule_color(widget, value)))
-        self._finish_shape(canvas, layer, x, y, w, h)
-        return [x, y, w, h]
+                box = [(1 - p1) * W, 0, (1 - p0) * W - 1, H - 1]
+            elif direction == "down":
+                box = [0, p0 * H, W - 1, p1 * H - 1]
+            else:  # up
+                box = [0, (1 - p1) * H, W - 1, (1 - p0) * H - 1]
+            # Even the smallest value stays visible as a sliver.
+            box[2], box[3] = max(box[2], box[0]), max(box[3], box[1])
+            return box
 
-    def _draw_gauge(self, canvas: Image.Image, widget: dict[str, Any], snapshot: Snapshot) -> Box:
-        x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
-        s = SUPERSAMPLE
-        value = _number(snapshot.value(widget["sensor"]))
+        n = widget["segments"]
+        if n > 0:
+            gap = widget["segment_gap"] * s / (W if horizontal else H)
+            cell = (1 - gap * (n - 1)) / n
+            colors = self._gradient_colors(a, b, n)
+            for i in range(n):
+                box = span(i * (cell + gap), i * (cell + gap) + cell)
+                seg_r = min(radius, (box[2] - box[0]) / 2, (box[3] - box[1]) / 2)
+                amount = min(1.0, max(0.0, frac * n - i))  # the last lit segment may be partial
+                if track and amount < 1:
+                    draw.rounded_rectangle(box, radius=seg_r, fill=track)
+                if amount > 0:
+                    color = colors[i]
+                    draw.rounded_rectangle(
+                        box, radius=seg_r, fill=(*color[:3], int(color[3] * amount))
+                    )
+        else:
+            if track:
+                draw.rounded_rectangle([0, 0, W - 1, H - 1], radius=radius, fill=track)
+            if frac > 0:
+                box = span(0, frac)
+                fill_r = min(radius, (box[2] - box[0]) / 2, (box[3] - box[1]) / 2)
+                if b is None:
+                    draw.rounded_rectangle(box, radius=fill_r, fill=a)
+                else:
+                    # The gradient spans the whole track, so a colour always means the same value.
+                    first, last = (b, a) if direction in ("left", "up") else (a, b)
+                    self._fill_shape(layer, box, fill_r, first, last, horizontal)
+        return Piece(self._down(layer, w, h), x, y, [x, y, w, h])
+
+    @staticmethod
+    def _gradient_colors(a: RGBA, b: RGBA | None, n: int) -> list[RGBA]:
+        if b is None:
+            return [a] * n
+        return [_lerp(a, b, i / max(1, n - 1)) for i in range(n)]
+
+    def _draw_gauge(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        target = _number(snapshot.value(widget["sensor"]))
+        value = self._eased(widget, target, now)
         frac = _fraction(value, widget["min"], widget["max"])
-        start, end = widget["start_angle"], widget["end_angle"]
-        thickness = max(1, widget["thickness"]) * s
-        layer, draw = self._shape_layer(w, h)
-        bbox = [0, 0, w * s - 1, h * s - 1]
-        if widget["background"]:
-            draw.arc(bbox, start, end, fill=rgba(widget["background"]), width=thickness)
-        if frac > 0:
-            draw.arc(
-                bbox,
-                start,
-                start + (end - start) * frac,
-                fill=rgba(_rule_color(widget, value)),
-                width=thickness,
-            )
-        self._finish_shape(canvas, layer, x, y, w, h)
-        return [x, y, w, h]
+        rule = _rule_color(widget, target)
+        return self._cached(
+            widget, (round(frac, 4), rule), lambda: self._gauge_piece(widget, frac, rule)
+        )
 
-    def _draw_graph(self, canvas: Image.Image, widget: dict[str, Any], snapshot: Snapshot) -> Box:
+    def _gauge_piece(self, widget: dict[str, Any], frac: float, rule: str | None) -> Piece:
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
         s = SUPERSAMPLE
+        layer, draw = self._canvas(w, h)
         W, H = w * s, h * s
-        layer, draw = self._shape_layer(w, h)
-        if widget["background"]:
-            draw.rectangle([0, 0, W - 1, H - 1], fill=rgba(widget["background"]))
+        start, end = widget["start_angle"], widget["end_angle"]
+        sweep = end - start
+        th = max(1, widget["thickness"]) * s
+        box = [0, 0, W - 1, H - 1]
+        cx, cy = (W - 1) / 2, (H - 1) / 2
+        rx, ry = (W - th) / 2, (H - th) / 2  # centre line of the ring
+        round_cap = widget["cap"] == "round"
+
+        def point(angle: float, inset: float = 0.0) -> tuple[float, float]:
+            rad = math.radians(angle)
+            return cx + (rx - inset) * math.cos(rad), cy + (ry - inset) * math.sin(rad)
+
+        def cap(angle: float, color: RGBA) -> None:
+            px, py = point(angle)
+            draw.ellipse([px - th / 2, py - th / 2, px + th / 2, py + th / 2], fill=color)
+
+        track = self.color(widget["background"])
+        if track:
+            draw.arc(box, start, end, fill=track, width=th)
+            if round_cap:
+                cap(start, track)
+                cap(end, track)
+        a = self.color(rule or widget["color"])
+        b = None if rule else self.color(widget["color2"])
+        if frac > 0:
+            stop = start + sweep * frac
+            if b is None:
+                draw.arc(box, start, stop, fill=a, width=th)
+                end_color = a
+            else:
+                # Colour follows the scale, so 90 % always looks like 90 %.
+                steps = max(2, int(abs(sweep * frac) / 1.5))
+                for i in range(steps):
+                    a0 = start + sweep * frac * i / steps
+                    a1 = start + sweep * frac * (i + 1) / steps
+                    draw.arc(box, a0, a1 + 0.8, fill=_lerp(a, b, (a0 - start) / sweep), width=th)
+                end_color = _lerp(a, b, frac)
+            if round_cap:
+                cap(start, a)
+                cap(stop, end_color)
+        ticks = widget["ticks"]
+        if ticks > 0:
+            tick = self.color(widget["tick_color"] or widget["background"] or widget["color"])
+            length = th * 0.6
+            for i in range(ticks + 1):
+                angle = start + sweep * i / ticks
+                p0 = point(angle, th / 2 + 2 * s)
+                p1 = point(angle, th / 2 + 2 * s + length)
+                draw.line([p0, p1], fill=tick, width=max(1, s))
+        return Piece(self._down(layer, w, h), x, y, [x, y, w, h])
+
+    def _draw_graph(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         slots = max(2, widget["history"])
         values = snapshot.history.get(widget["sensor"], [])[-slots:]
+        key = (len(values), tuple(values[-3:]), values[0] if values else None)
+        return self._cached(widget, key, lambda: self._graph_piece(widget, values, slots))
+
+    def _graph_piece(self, widget: dict[str, Any], values: list[float], slots: int) -> Piece:
+        x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
+        s = SUPERSAMPLE
+        W, H = w * s, h * s
+        layer, draw = self._canvas(w, h)
+        if widget["background"]:
+            draw.rectangle([0, 0, W - 1, H - 1], fill=self.color(widget["background"]))
+        if widget["grid"] > 0 and widget["grid_color"]:
+            grid = self.color(widget["grid_color"])
+            for i in range(1, widget["grid"] + 1):
+                gy = round(H * i / (widget["grid"] + 1))
+                draw.line([(0, gy), (W - 1, gy)], fill=grid, width=max(1, s // 2))
         if len(values) >= 2:
             lo = widget["min"] if widget["min"] is not None else min(values)
             hi = widget["max"] if widget["max"] is not None else max(values)
             if hi == lo:
                 hi = lo + 1
-            offset = slots - len(values)
             pad = widget["line_width"] * s
-            points = []
-            for i, v in enumerate(values):
-                px = (offset + i) * (W - 1) / (slots - 1)
-                py = pad + (H - 1 - 2 * pad) * (1 - _fraction(v, lo, hi))
-                points.append((px, py))
+            offset = slots - len(values)
+            points = [
+                (
+                    (offset + i) * (W - 1) / (slots - 1),
+                    pad + (H - 1 - 2 * pad) * (1 - _fraction(v, lo, hi)),
+                )
+                for i, v in enumerate(values)
+            ]
+            if widget["smooth"]:
+                points = [(px, min(H - 1 - pad, max(pad, py))) for px, py in _catmull_rom(points)]
+            color = self.color(widget["color"])
             if widget["fill"]:
-                polygon = points + [(points[-1][0], H - 1), (points[0][0], H - 1)]
-                draw.polygon(polygon, fill=rgba(widget["color"], 0.25))
-            draw.line(
-                points, fill=rgba(widget["color"]), width=widget["line_width"] * s, joint="curve"
-            )
-        self._finish_shape(canvas, layer, x, y, w, h)
-        return [x, y, w, h]
+                area = Image.new("L", layer.size, 0)
+                polygon = [*points, (points[-1][0], H - 1), (points[0][0], H - 1)]
+                ImageDraw.Draw(area).polygon(polygon, fill=255)
+                if widget["fill_fade"]:
+                    top = int(min(py for _, py in points))
+                    fade = Image.new("L", (1, H), 0)
+                    fade.putdata(
+                        [int(115 * max(0.0, 1 - (row - top) / max(1, H - top))) for row in range(H)]
+                    )
+                    alpha = ImageChops.multiply(area, fade.resize(layer.size))
+                else:
+                    alpha = area.point(lambda v: v * 64 // 255)
+                tint = Image.new("RGBA", layer.size, (*color[:3], 255))
+                tint.putalpha(ImageChops.multiply(alpha, Image.new("L", layer.size, color[3])))
+                layer.alpha_composite(tint)
+            draw.line(points, fill=color, width=widget["line_width"] * s, joint="curve")
+        return Piece(self._down(layer, w, h), x, y, [x, y, w, h])

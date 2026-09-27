@@ -65,10 +65,10 @@ def test_color_rules():
         "color": "#000000",
         "color_rules": [{"above": 90, "color": "#ff0000"}, {"above": 70, "color": "#ffff00"}],
     }
-    assert _rule_color(widget, 50) == "#000000"
+    assert _rule_color(widget, 50) is None  # no threshold reached: widget colour applies
     assert _rule_color(widget, 75) == "#ffff00"
     assert _rule_color(widget, 95) == "#ff0000"
-    assert _rule_color(widget, None) == "#000000"
+    assert _rule_color(widget, None) is None
 
 
 def test_bar_fill_color_follows_value():

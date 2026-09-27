@@ -14,7 +14,19 @@ from libre_panel.devices.models import get_model
 from libre_panel.theme.model import parse_theme
 
 # Sizes that should grow with the smaller scale factor (not stretched).
-_UNIFORM = ("font_size", "thickness", "radius", "outline_width", "line_width")
+_UNIFORM = (
+    "font_size",
+    "thickness",
+    "radius",
+    "outline_width",
+    "line_width",
+    "glow_radius",
+    "shadow_offset",
+    "shadow_blur",
+    "letter_spacing",
+    "segment_gap",
+    "backdrop_blur",
+)
 # Widgets whose box must keep its aspect ratio.
 _KEEP_ASPECT = ("gauge", "image")
 
@@ -24,8 +36,17 @@ def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any
     out = dict(widget)
     for key in _UNIFORM:
         if key in out and isinstance(out[key], (int, float)):
-            minimum = 6 if key == "font_size" else (0 if key == "radius" else 1)
-            out[key] = max(minimum, round(out[key] * s))
+            if key == "letter_spacing":  # may be negative (tight tracking)
+                out[key] = round(out[key] * s)
+                continue
+            minimum = {"font_size": 6, "thickness": 1, "line_width": 1, "outline_width": 1}
+            out[key] = max(minimum.get(key, 0), round(out[key] * s))
+    if widget["type"] == "icon":  # square: keep it square and centred
+        size = max(8, round(widget["size"] * s))
+        cx = (widget["x"] + widget["size"] / 2) * sx
+        cy = (widget["y"] + widget["size"] / 2) * sy
+        out["size"], out["x"], out["y"] = size, round(cx - size / 2), round(cy - size / 2)
+        return out
     has_box = "w" in out and "h" in out
     if has_box and widget["type"] in _KEEP_ASPECT and out["w"] > 0 and out["h"] > 0:
         cx = (widget["x"] + widget["w"] / 2) * sx

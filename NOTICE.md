@@ -14,6 +14,12 @@ theme.
 **LibreHardwareMonitor** (MPL-2.0) — optional, separate program used as a
 sensor source on Windows; not bundled.
 
+**Barlow** (Jeremy Tribby) and **JetBrains Mono** (JetBrains) — bundled fonts
+under the SIL Open Font License 1.1, see `src/libre_panel/fonts/`.
+
+**librehardwaremonitor-api** (Sab44, MIT) — the real LibreHardwareMonitor
+output in `tests/data/` comes from its test fixtures.
+
 **Open-Meteo** — weather data from <https://open-meteo.com>, CC BY 4.0.
 
 **lian-li-linux** (MIT) — reference for Lian Li LCD protocols (not used yet).

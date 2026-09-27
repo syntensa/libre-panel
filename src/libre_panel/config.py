@@ -25,8 +25,12 @@ DEFAULT_CONFIG_TOML = """\
 # Name of a built-in theme or of a folder in the user themes directory.
 theme = "libre-default"
 
-# Optional: override the theme's refresh interval (milliseconds).
+# Optional: override how often sensors are read (milliseconds); the theme sets it.
 # refresh_ms = 1000
+
+# Frames per second: values glide smoothly between sensor readings.
+# 1 turns animation off (least CPU and USB traffic).
+fps = 10
 
 [device]
 # Your panel. "auto" detects it; list all models with:  libre-panel models
@@ -116,6 +120,7 @@ class WeatherConfig:
 class Config:
     theme: str = "libre-default"
     refresh_ms: int | None = None
+    fps: int = 10
     device: DeviceConfig = field(default_factory=DeviceConfig)
     sensors: SensorsConfig = field(default_factory=SensorsConfig)
     weather: WeatherConfig = field(default_factory=WeatherConfig)
@@ -135,6 +140,10 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     cfg = Config(path=path)
     if "theme" in data:
         cfg.theme = _expect(data["theme"], str, "theme")
+    if "fps" in data:
+        cfg.fps = _expect(data["fps"], int, "fps")
+        if not 1 <= cfg.fps <= 60:
+            raise ConfigError("fps: must be between 1 and 60")
     if "refresh_ms" in data:
         cfg.refresh_ms = _expect(data["refresh_ms"], int, "refresh_ms")
         if cfg.refresh_ms < 100:

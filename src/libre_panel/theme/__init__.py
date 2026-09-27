@@ -1,4 +1,5 @@
 from libre_panel.theme.model import (
+    EFFECT_FIELDS,
     THEME_FORMAT,
     WIDGET_SPECS,
     Theme,
@@ -13,6 +14,7 @@ from libre_panel.theme.model import (
 )
 
 __all__ = [
+    "EFFECT_FIELDS",
     "THEME_FORMAT",
     "WIDGET_SPECS",
     "Theme",

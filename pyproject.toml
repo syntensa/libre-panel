@@ -57,7 +57,7 @@ Issues = "https://github.com/syntensa/libre-panel/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-libre_panel = ["themes/**/*", "editor/static/*"]
+libre_panel = ["themes/**/*", "editor/static/*", "fonts/*.ttf", "fonts/*.txt", "fonts/*.md"]
 
 [tool.ruff]
 line-length = 100

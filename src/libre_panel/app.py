@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -148,7 +149,8 @@ class _Link:
 
 
 def run(config: Config, once: bool = False, stop: threading.Event | None = None) -> None:
-    """Main loop: sample sensors, render, push only what changed.
+    """Main loop: read sensors at the theme's rate, render at ``config.fps`` so
+    values glide between readings, and send only frames that changed.
 
     With ``once`` a single frame is sent and any device error is raised.
     """
@@ -156,13 +158,15 @@ def run(config: Config, once: bool = False, stop: threading.Event | None = None)
     theme = load_configured_theme(config)
     for warning in theme.warnings:
         log.warning("theme %s: %s", config.theme, warning)
-    renderer = Renderer(theme)
+    renderer = Renderer(theme, animate=config.fps > 1)
     hub = build_hub(config)
     display = create_display(config.device)
     size = target_size(config, theme)
     watcher = _Watcher(config.path, _theme_file(theme))
     link = _Link(display, config.device.brightness)
     previous = None
+    snapshot = None
+    next_sample = 0.0
     try:
         if once:
             display.open()
@@ -184,19 +188,27 @@ def run(config: Config, once: bool = False, stop: threading.Event | None = None)
                         link.set_brightness(fresh.device.brightness)
                         device.brightness = fresh.device.brightness
                     fresh.device, config = device, fresh
-                    theme, renderer = new_theme, Renderer(new_theme)
-                    size, previous = target_size(config, theme), None
+                    theme, renderer = new_theme, Renderer(new_theme, animate=config.fps > 1)
+                    size, previous, next_sample = target_size(config, theme), None, 0.0
                     watcher = _Watcher(config.path, _theme_file(theme))
                     log.info("reloaded theme %r", config.theme)
+            if started >= next_sample or snapshot is None:
+                snapshot = hub.snapshot()
+                next_sample = started + (config.refresh_ms or theme.refresh_ms) / 1000
             if link.ensure(started):
-                frame, _ = renderer.render(hub.snapshot())
+                snapshot.now = datetime.now()  # the clock ticks between readings too
+                frame, _ = renderer.render(snapshot, started)
                 frame = fit_frame(frame, size, theme.background_color)
                 region = changed_region(previous, frame)
                 if region is not None:
                     previous = frame if link.show(frame, region, started) else None
             else:
                 previous = None  # send a full frame after reconnecting
-            interval = (config.refresh_ms or theme.refresh_ms) / 1000
+            # While something glides, draw at full fps; otherwise wake for the next
+            # reading, but at least twice a second so a seconds clock never skips.
+            interval = 1 / config.fps
+            if not renderer.moving:
+                interval = max(interval, min(0.5, next_sample - started))
             stop.wait(max(0.0, interval - (time.monotonic() - started)))
     finally:
         display.close()
