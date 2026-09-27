@@ -21,8 +21,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from libre_panel import __version__
-from libre_panel.config import ConfigError, load_config, set_active_theme, user_themes_dir
+from libre_panel import __version__, i18n
+from libre_panel.config import (
+    ConfigError,
+    load_config,
+    set_active_theme,
+    set_config_value,
+    user_themes_dir,
+)
 from libre_panel.devices.models import MODELS, PROTOCOLS
 from libre_panel.editor.presets import presets_for_editor
 from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_fonts
@@ -50,6 +56,8 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 MAX_JSON = 2 * 1024 * 1024
 MAX_ASSET = 10 * 1024 * 1024
 ASSET_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ttf", ".otf"}
+# Parts of the language catalog the editor needs.
+_EDITOR_TABLES = ("messages", "fields", "widgets", "enums", "icons")
 _ASSET_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 _CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -164,6 +172,8 @@ class EditorHandler(BaseHTTPRequestHandler):
                 return self._json({"theme": load_config(self.state.config_path).theme})
             except ConfigError as exc:
                 return self._error(str(exc))
+        if path == "/api/i18n":
+            return self._json(self._i18n())
         if path == "/api/app":
             if self.controls is None:
                 return self._json({"available": False})
@@ -179,7 +189,26 @@ class EditorHandler(BaseHTTPRequestHandler):
         content_type = _CONTENT_TYPES.get(file.suffix, "application/octet-stream")
         self._send(200, file.read_bytes(), content_type)
 
+    def _i18n(self) -> dict[str, Any]:
+        try:
+            setting = load_config(self.state.config_path).language
+        except ConfigError:
+            setting = "auto"
+        return {
+            "language": i18n.language(),
+            "setting": setting,
+            "languages": i18n.LANGUAGES,
+            **{k: v for k, v in i18n.catalog(i18n.language()).items() if k in _EDITOR_TABLES},
+        }
+
     def _specs(self) -> dict[str, Any]:
+        presets = presets_for_editor()
+        for preset in presets["presets"]:
+            preset["name"] = i18n.t(preset["name"])
+        models = [m.to_dict() for m in MODELS]
+        for model in models:
+            if model.get("notes"):
+                model["notes"] = i18n.t(model["notes"])
         return {
             "version": __version__,
             "widgets": {
@@ -187,12 +216,12 @@ class EditorHandler(BaseHTTPRequestHandler):
             },
             "common": {k: list(v) for k, v in COMMON_FIELDS.items()},
             "effect_fields": list(EFFECT_FIELDS),
-            "models": [m.to_dict() for m in MODELS],
+            "models": models,
             "protocols": PROTOCOLS,
             "fonts": [BUILTIN_PREFIX + name for name in builtin_fonts()],
             "default_font": DEFAULT_FONT,
             "icons": list(ICON_NAMES),
-            **presets_for_editor(),
+            **presets,
         }
 
     def _assets(self, theme_id: str) -> None:
@@ -248,12 +277,28 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._activate()
         if path == "/api/app":
             return self._app_action()
+        if path == "/api/language":
+            return self._set_language()
         match = re.fullmatch(r"/api/themes/([^/]+)/assets", path)
         if match:
             return self._upload_asset(match.group(1), parse_qs(url.query))
         if path.startswith("/api/themes/"):
             return self._save(path[len("/api/themes/") :])
         self._error("not found", HTTPStatus.NOT_FOUND)
+
+    def _set_language(self) -> None:
+        payload = self._read_json()
+        if payload is None:
+            return
+        setting = payload.get("language") if isinstance(payload, dict) else None
+        if setting not in ("auto", *i18n.LANGUAGES):
+            return self._error("language must be auto, en or de")
+        try:
+            set_config_value("language", setting, self.state.config_path)
+        except ConfigError as exc:
+            return self._error(str(exc))
+        i18n.set_language(setting)  # the tray and the panel follow at once
+        self._json(self._i18n())
 
     def _app_action(self) -> None:
         payload = self._read_json()

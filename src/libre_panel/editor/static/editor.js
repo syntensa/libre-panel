@@ -87,6 +87,72 @@ function svgIcon(name) {
   return svg;
 }
 
+// ---------------------------------------------------------------- language
+
+/** Translate an English text; {name} placeholders are filled from `vars`. */
+function t(text, vars = {}) {
+  const message = state.i18n?.messages?.[text] ?? text;
+  return message.replace(/\{(\w+)\}/g, (all, name) => (name in vars ? String(vars[name]) : all));
+}
+const fieldLabel = (key) => state.i18n?.fields?.[key] ?? key.replace(/_/g, " ");
+const widgetLabel = (type) => state.i18n?.widgets?.[type] ?? type;
+const enumLabel = (value) => state.i18n?.enums?.[value] ?? value;
+const iconLabel = (name) => state.i18n?.icons?.[name] ?? name;
+
+function applyI18n() {
+  document.documentElement.lang = state.i18n?.language || "en";
+  const clean = (text) => text.replace(/\s+/g, " ").trim();
+  for (const node of document.querySelectorAll("[data-i18n]")) node.textContent = t(clean(node.textContent));
+  for (const node of document.querySelectorAll("[data-i18n-attr]")) {
+    for (const attr of node.dataset.i18nAttr.split(" ")) node.setAttribute(attr, t(clean(node.getAttribute(attr))));
+  }
+}
+
+const RESTORE_KEY = "libre-panel-restore";
+
+/** Switching the language reloads the editor; unsaved work comes back after the reload. */
+async function setLanguage(setting) {
+  try {
+    await api("POST", "/api/language", { language: setting });
+  } catch (error) {
+    setStatus(error.message, "error");
+    return;
+  }
+  try {
+    const keep = { theme: state.theme, themeId: state.themeId, builtin: state.builtin, dirty: state.dirty };
+    sessionStorage.setItem(RESTORE_KEY, JSON.stringify(keep));
+    state.dirty = false; // nothing is lost, so no "leave page?" question
+  } catch {
+    if (!confirmDiscard()) return;
+    state.dirty = false;
+  }
+  location.reload();
+}
+
+function takeRestore() {
+  try {
+    const raw = sessionStorage.getItem(RESTORE_KEY);
+    sessionStorage.removeItem(RESTORE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function restoreSession(saved) {
+  state.theme = saved.theme;
+  state.themeId = saved.themeId;
+  state.builtin = saved.builtin;
+  state.selection = new Set();
+  state.boxes = {};
+  await loadAssets();
+  await refreshThemeList(saved.themeId ?? "");
+  resetHistory();
+  if (saved.dirty) markDirty();
+  else markClean();
+  refreshAll();
+}
+
 function setStatus(message, kind = "") {
   const bar = $("#status");
   bar.textContent = message;
@@ -159,14 +225,14 @@ function undo() {
   if (!state.undo.length) return;
   state.redo.push(snapshot());
   restore(state.undo.pop());
-  setStatus("Undone");
+  setStatus(t("Undone"));
 }
 
 function redo() {
   if (!state.redo.length) return;
   state.undo.push(snapshot());
   restore(state.redo.pop());
-  setStatus("Redone");
+  setStatus(t("Redone"));
 }
 
 function updateHistoryButtons() {
@@ -176,16 +242,16 @@ function updateHistoryButtons() {
 
 function markDirty() {
   state.dirty = true;
-  document.title = "● Libre Panel Theme Editor";
+  document.title = "● " + t("Libre Panel Theme Editor");
 }
 
 function markClean() {
   state.dirty = false;
-  document.title = "Libre Panel Theme Editor";
+  document.title = t("Libre Panel Theme Editor");
 }
 
 function confirmDiscard() {
-  return !state.dirty || confirm("Discard unsaved changes?");
+  return !state.dirty || confirm(t("Discard unsaved changes?"));
 }
 
 function resetHistory() {
@@ -224,8 +290,8 @@ async function render() {
     state.size = [data.width, data.height];
     layoutStage();
     drawOverlay();
-    if (data.warnings.length) setStatus("Warning: " + data.warnings.join(" · "), "warn");
-    else setStatus(`${state.theme.name} · ${data.width}×${data.height}${state.dirty ? " · unsaved" : ""}`);
+    if (data.warnings.length) setStatus(t("Warning: {text}", { text: data.warnings.join(" · ") }), "warn");
+    else setStatus(`${state.theme.name} · ${data.width}×${data.height}${state.dirty ? " · " + t("unsaved") : ""}`);
   } catch (error) {
     if (seq === state.renderSeq) setStatus(error.message, "error");
   }
@@ -274,7 +340,7 @@ function drawOverlay() {
     if (!box) continue;
     const node = el("div", {
       class: ["box", state.selection.has(widget.id) ? "selected" : "", widget.locked ? "locked" : ""].join(" "),
-      title: `${widget.id} (${widget.type})${widget.locked ? " — locked" : ""}`,
+      title: `${widget.id} (${widgetLabel(widget.type)})${widget.locked ? " — " + t("locked") : ""}`,
     });
     node.dataset.id = widget.id;
     placeBox(node, box);
@@ -542,7 +608,7 @@ function insertPreset(preset) {
   }
   setSelection(ids);
   scheduleRender(0);
-  setStatus(`Added "${preset.name}" — drag it into place; all its parts move together while selected`);
+  setStatus(t('Added "{name}" — drag it into place; all its parts move together while selected', { name: preset.name }));
 }
 
 function moveWidget(index, delta) {
@@ -586,7 +652,7 @@ function copySelection() {
   const widgets = selectedWidgets();
   if (!widgets.length) return;
   state.clipboard = clone(widgets);
-  setStatus(`Copied ${widgets.length} widget${widgets.length > 1 ? "s" : ""}`);
+  setStatus(widgets.length === 1 ? t("Copied 1 widget") : t("Copied {count} widgets", { count: widgets.length }));
 }
 
 function paste() {
@@ -687,19 +753,19 @@ function buildList() {
           class: [state.selection.has(widget.id) ? "selected" : "", visible ? "" : "hidden-widget"].join(" "),
           onclick: (event) => toggleSelection(widget.id, event.shiftKey || event.ctrlKey || event.metaKey),
         },
-        el("span", { class: "type", text: widget.type }),
+        el("span", { class: "type", text: widgetLabel(widget.type), title: widget.type }),
         el("span", { class: "wid", text: widget.id }),
         el(
           "span",
           { class: "actions" },
-          button("↑", "Move backward", () => moveWidget(index, -1)),
-          button("↓", "Move forward", () => moveWidget(index, 1)),
+          button("↑", t("Move backward"), () => moveWidget(index, -1)),
+          button("↓", t("Move forward"), () => moveWidget(index, 1)),
         ),
         el(
           "span",
           { class: "flags" },
-          button(visible ? "eye" : "eye-off", visible ? "Hide" : "Show", () => toggleFlag(widget, "visible"), `icon-btn ${visible ? "" : "on"}`),
-          button(widget.locked ? "lock" : "unlock", widget.locked ? "Unlock" : "Lock", () => toggleFlag(widget, "locked"), `icon-btn ${widget.locked ? "on" : ""}`),
+          button(visible ? "eye" : "eye-off", visible ? t("Hide") : t("Show"), () => toggleFlag(widget, "visible"), `icon-btn ${visible ? "" : "on"}`),
+          button(widget.locked ? "lock" : "unlock", widget.locked ? t("Unlock") : t("Lock"), () => toggleFlag(widget, "locked"), `icon-btn ${widget.locked ? "on" : ""}`),
         ),
       ),
     );
@@ -719,7 +785,7 @@ function numberInput(value, onChange, { step = "1", allowEmpty = false, min, max
     min,
     max,
     value: value ?? "",
-    placeholder: allowEmpty ? "auto" : undefined,
+    placeholder: allowEmpty ? t("auto") : undefined,
     oninput: (event) => {
       const raw = event.target.value;
       if (raw === "" && allowEmpty) onChange(null);
@@ -734,19 +800,19 @@ function resolveColor(value) {
 }
 
 function colorInput(value, onChange, optional) {
-  const text = el("input", { type: "text", value: value ?? "", placeholder: optional ? "none" : "#rrggbb or @name" });
+  const text = el("input", { type: "text", value: value ?? "", placeholder: optional ? t("none") : t("#rrggbb or @name") });
   const hex = (v) => (/^#[0-9a-f]{6}/i.test(v || "") ? v.slice(0, 7) : "#000000");
-  const picker = el("input", { type: "color", value: hex(resolveColor(value)), title: "Pick a colour" });
+  const picker = el("input", { type: "color", value: hex(resolveColor(value)), title: t("Pick a colour") });
   const names = Object.keys(state.theme.palette || {});
   const palette = names.length
     ? el(
         "select",
-        { title: "Use a palette colour", class: "palette-pick" },
-        el("option", { value: "", text: "palette…" }),
+        { title: t("Use a palette colour"), class: "palette-pick" },
+        el("option", { value: "", text: t("palette…") }),
         ...names.map((n) => el("option", { value: `@${n}`, text: n, selected: value === `@${n}` })),
       )
     : null;
-  const none = optional ? el("input", { type: "checkbox", checked: value === null, title: "No colour" }) : null;
+  const none = optional ? el("input", { type: "checkbox", checked: value === null, title: t("No colour") }) : null;
   const valid = (v) => /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v) || (v.startsWith("@") && names.includes(v.slice(1)));
   const apply = (next) => {
     if (next !== null && !valid(next)) return;
@@ -776,12 +842,12 @@ function colorInput(value, onChange, optional) {
     apply(palette.value);
   });
   none?.addEventListener("change", () => apply(none.checked ? null : text.value || picker.value));
-  return el("div", { class: "row" }, picker, text, palette, none ? el("label", { class: "check" }, none, "none") : null);
+  return el("div", { class: "row" }, picker, text, palette, none ? el("label", { class: "check" }, none, t("none")) : null);
 }
 
 async function uploadAsset(accept) {
   if (!state.themeId || state.builtin) {
-    setStatus("Save the theme under your own name (Save as…) before adding files.", "warn");
+    setStatus(t("Save the theme under your own name (Save as…) before adding files."), "warn");
     return null;
   }
   const input = el("input", { type: "file", accept });
@@ -794,7 +860,7 @@ async function uploadAsset(accept) {
   try {
     const data = await api("POST", `/api/themes/${encodeURIComponent(state.themeId)}/assets?name=${encodeURIComponent(name)}`, await chosen.arrayBuffer(), true);
     await loadAssets();
-    setStatus(`Added ${data.path}`);
+    setStatus(t("Added {path}", { path: data.path }));
     return data.path;
   } catch (error) {
     setStatus(error.message, "error");
@@ -802,21 +868,21 @@ async function uploadAsset(accept) {
   }
 }
 
-function fontInput(value, onChange, emptyLabel = "Theme font") {
+function fontInput(value, onChange, emptyLabel = t("Theme font")) {
   const fonts = state.assets.filter((a) => /\.(ttf|otf)$/i.test(a));
   const select = el(
     "select",
     { onchange: (e) => onChange(e.target.value) },
     el("option", { value: "", text: emptyLabel, selected: !value }),
-    el("optgroup", { label: "Built-in" }, ...state.specs.fonts.map((f) => el("option", { value: f, text: f.slice(8), selected: f === value }))),
-    fonts.length ? el("optgroup", { label: "This theme" }, ...fonts.map((f) => el("option", { value: f, text: f, selected: f === value }))) : null,
+    el("optgroup", { label: t("Built-in") }, ...state.specs.fonts.map((f) => el("option", { value: f, text: f.slice(8), selected: f === value }))),
+    fonts.length ? el("optgroup", { label: t("This theme") }, ...fonts.map((f) => el("option", { value: f, text: f, selected: f === value }))) : null,
   );
   if (value && !state.specs.fonts.includes(value) && !fonts.includes(value)) {
     select.append(el("option", { value, text: value, selected: true }));
   }
   const upload = el("button", {
     type: "button",
-    text: "Upload…",
+    text: t("Upload…"),
     onclick: async () => {
       const path = await uploadAsset(".ttf,.otf");
       if (path) {
@@ -833,13 +899,13 @@ function assetInput(value, onChange) {
   const select = el(
     "select",
     { onchange: (e) => onChange(e.target.value) },
-    el("option", { value: "", text: "none", selected: !value }),
+    el("option", { value: "", text: t("none"), selected: !value }),
     ...images.map((a) => el("option", { value: a, text: a, selected: a === value })),
   );
   if (value && !images.includes(value)) select.append(el("option", { value, text: value, selected: true }));
   const upload = el("button", {
     type: "button",
-    text: "Upload…",
+    text: t("Upload…"),
     onclick: async () => {
       const path = await uploadAsset(".png,.jpg,.jpeg,.gif,.webp");
       if (path) {
@@ -859,7 +925,7 @@ function rulesInput(rules, onChange) {
         el(
           "div",
           { class: "row" },
-          "above",
+          t("above"),
           numberInput(rule.above, (v) => {
             rule.above = v;
             onChange(rules);
@@ -872,7 +938,7 @@ function rulesInput(rules, onChange) {
             type: "button",
             class: "small danger",
             text: "✕",
-            title: "Remove rule",
+            title: t("Remove rule"),
             onclick: () => {
               rules.splice(i, 1);
               onChange(rules);
@@ -884,7 +950,7 @@ function rulesInput(rules, onChange) {
       el("button", {
         type: "button",
         class: "small",
-        text: "+ colour rule",
+        text: t("+ colour rule"),
         onclick: () => {
           rules.push({ above: rules.length ? rules[rules.length - 1].above + 10 : 80, color: "#f87171" });
           onChange(rules);
@@ -905,16 +971,16 @@ function controlFor(key, kind, value, onChange) {
     const unit = key === "opacity" || key === "glow";
     return numberInput(value, onChange, { step: String(STEPS[key] || "any"), allowEmpty: optional, min: unit ? 0 : undefined, max: unit ? 1 : undefined });
   }
-  if (base === "bool") return el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!value, onchange: (e) => onChange(e.target.checked) }), "on");
+  if (base === "bool") return el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!value, onchange: (e) => onChange(e.target.checked) }), t("on"));
   if (base === "color") return colorInput(value, onChange, optional);
   if (base === "rules") return rulesInput(value || [], (rules) => onChange(rules));
   if (base === "font") return fontInput(value, onChange);
   if (base === "asset") return assetInput(value, onChange);
   if (base === "icon") {
-    return el("select", { onchange: (e) => onChange(e.target.value) }, ...state.specs.icons.map((i) => el("option", { value: i, text: i === "weather" ? "weather (live)" : i, selected: i === value })));
+    return el("select", { onchange: (e) => onChange(e.target.value) }, ...state.specs.icons.map((i) => el("option", { value: i, text: i === "weather" ? t("weather (live)") : iconLabel(i), selected: i === value })));
   }
   if (base.startsWith("enum:")) {
-    return el("select", { onchange: (e) => onChange(e.target.value) }, ...base.slice(5).split("|").map((o) => el("option", { value: o, text: o, selected: o === value })));
+    return el("select", { onchange: (e) => onChange(e.target.value) }, ...base.slice(5).split("|").map((o) => el("option", { value: o, text: enumLabel(o), selected: o === value })));
   }
   if (base === "text") return el("textarea", { oninput: (e) => onChange(e.target.value) }, value || "");
   const input = el("input", { type: "text", value: value ?? "", oninput: (e) => onChange(e.target.value) });
@@ -924,9 +990,9 @@ function controlFor(key, kind, value, onChange) {
 
 function hintFor(widget, key, kind) {
   if (kind === "format") return FORMAT_HINT;
-  if (key === "format" && widget.type === "clock") return "strftime, e.g. %H:%M · %H:%M:%S · %A %d %B";
-  if (key === "scale") return "sqrt/log keep small values visible (network rates)";
-  if (key === "hide_if_missing") return "hide when the sensor has no value (e.g. weather off)";
+  if (key === "format" && widget.type === "clock") return t("strftime, e.g. {examples}", { examples: "%H:%M · %H:%M:%S · %A %d %B" });
+  if (key === "scale") return t("sqrt/log keep small values visible (network rates)");
+  if (key === "hide_if_missing") return t("hide when the sensor has no value (e.g. weather off)");
   return null;
 }
 
@@ -939,7 +1005,7 @@ function buildProps() {
   if (state.selection.size > 1) return buildMultiProps(form);
   const widget = single();
   if (!widget) return buildThemeProps(form);
-  $("#props-title").textContent = `${widget.type} widget`;
+  $("#props-title").textContent = t("{type} widget", { type: widgetLabel(widget.type) });
   const spec = { ...state.specs.common, ...state.specs.widgets[widget.type] };
   const change = (key) => (value) => {
     if (key === "id") return renameWidget(widget, value);
@@ -955,7 +1021,7 @@ function buildProps() {
     const [kind] = spec[key];
     const control = controlFor(key, kind, widget[key], change(key));
     if (POSITION_FIELDS.includes(key)) control.dataset.pos = key;
-    return field(key.replace(/_/g, " "), control, hintFor(widget, key, kind));
+    return field(fieldLabel(key), control, hintFor(widget, key, kind));
   };
   const position = POSITION_FIELDS.filter((k) => k in spec);
   form.append(el("div", { class: "quad" }, ...position.map(row)));
@@ -963,38 +1029,38 @@ function buildProps() {
   const main = Object.keys(spec).filter((k) => !POSITION_FIELDS.includes(k) && !ADVANCED_FIELDS.includes(k) && !effects.includes(k));
   form.append(...main.map(row));
   const effectsActive = (widget.glow || 0) > 0 || !!widget.shadow || (widget.opacity ?? 1) < 1;
-  form.append(el("details", { open: effectsActive }, el("summary", { text: "Effects" }), el("div", { class: "fields" }, ...effects.map(row))));
-  form.append(el("details", {}, el("summary", { text: "Advanced" }), el("div", { class: "fields" }, ...ADVANCED_FIELDS.filter((k) => k in spec).map(row))));
+  form.append(el("details", { open: effectsActive }, el("summary", { text: t("Effects") }), el("div", { class: "fields" }, ...effects.map(row))));
+  form.append(el("details", {}, el("summary", { text: t("Advanced") }), el("div", { class: "fields" }, ...ADVANCED_FIELDS.filter((k) => k in spec).map(row))));
 }
 
 function buildMultiProps(form) {
   const count = state.selection.size;
-  $("#props-title").textContent = `${count} widgets`;
+  $("#props-title").textContent = t("{count} widgets", { count });
   const button = (label, title, action) => el("button", { type: "button", text: label, title, onclick: action });
   form.append(
-    el("h2", { text: "Align" }),
+    el("h2", { text: t("Align") }),
     el(
       "div",
       { class: "align-grid" },
-      button("⇤ Left", "Align left edges", () => align("left")),
-      button("↔ Center", "Align horizontal centres", () => align("center")),
-      button("Right ⇥", "Align right edges", () => align("right")),
-      button("⇹ Spread", "Distribute horizontally", () => align("distribute-h")),
-      button("⤒ Top", "Align top edges", () => align("top")),
-      button("↕ Middle", "Align vertical centres", () => align("middle")),
-      button("Bottom ⤓", "Align bottom edges", () => align("bottom")),
-      button("⇳ Spread", "Distribute vertically", () => align("distribute-v")),
+      button("⇤ " + t("Left"), t("Align left edges"), () => align("left")),
+      button("↔ " + t("Center"), t("Align horizontal centres"), () => align("center")),
+      button(t("Right") + " ⇥", t("Align right edges"), () => align("right")),
+      button("⇹ " + t("Spread"), t("Distribute horizontally"), () => align("distribute-h")),
+      button("⤒ " + t("Top"), t("Align top edges"), () => align("top")),
+      button("↕ " + t("Middle"), t("Align vertical centres"), () => align("middle")),
+      button(t("Bottom") + " ⤓", t("Align bottom edges"), () => align("bottom")),
+      button("⇳ " + t("Spread"), t("Distribute vertically"), () => align("distribute-v")),
     ),
-    el("h2", { class: "section-title", text: "Selection" }),
+    el("h2", { class: "section-title", text: t("Selection") }),
     el(
       "div",
       { class: "align-grid" },
-      button("Duplicate", "Ctrl+D", duplicateSelection),
-      button("Copy", "Ctrl+C", copySelection),
-      button("Lock", "Lock all", () => setLock(true)),
-      button("Unlock", "Unlock all", () => setLock(false)),
+      button(t("Duplicate"), "Ctrl+D", duplicateSelection),
+      button(t("Copy"), "Ctrl+C", copySelection),
+      button(t("Lock"), t("Lock all"), () => setLock(true)),
+      button(t("Unlock"), t("Unlock all"), () => setLock(false)),
     ),
-    el("button", { type: "button", class: "danger", text: `Delete ${count} widgets`, onclick: deleteSelection }),
+    el("button", { type: "button", class: "danger", text: t("Delete {count} widgets", { count }), onclick: deleteSelection }),
   );
 }
 
@@ -1008,7 +1074,7 @@ function setLock(locked) {
 function renameWidget(widget, value) {
   const next = value.trim();
   if (!next || state.theme.widgets.some((w) => w !== widget && w.id === next)) {
-    setStatus(`Widget id "${next}" is empty or already used`, "error");
+    setStatus(t('Widget id "{id}" is empty or already used', { id: next }), "error");
     return;
   }
   commit(`rename:${widget.id}`);
@@ -1032,7 +1098,7 @@ function syncPositionFields() {
 }
 
 function buildThemeProps(form) {
-  $("#props-title").textContent = "Theme";
+  $("#props-title").textContent = t("Theme");
   const theme = state.theme;
   theme.background = theme.background || { color: "#000000", image: null };
   theme.animation = theme.animation || { smoothing_ms: 400 };
@@ -1043,19 +1109,19 @@ function buildThemeProps(form) {
     scheduleRender();
   };
   form.append(
-    field("name", controlFor("name", "string", theme.name, set("name", (v) => (theme.name = v)))),
-    field("author", controlFor("author", "string", theme.author, set("author", (v) => (theme.author = v)))),
-    field("license", controlFor("license", "string", theme.license, set("license", (v) => (theme.license = v))), "e.g. CC0-1.0, CC-BY-4.0"),
-    field("description", controlFor("description", "text", theme.description, set("description", (v) => (theme.description = v)))),
-    el("h2", { class: "section-title", text: "Look" }),
-    field("font", fontInput(theme.font === state.specs.default_font ? "" : theme.font, set("font", (v) => (theme.font = v || state.specs.default_font)), "Default (Barlow Medium)"), "used by every text widget without its own font"),
-    field("background", colorInput(theme.background.color, set("bg", (v) => (theme.background.color = v)), false)),
-    field("background image", assetInput(theme.background.image, set("bgimg", (v) => (theme.background.image = v || null)))),
-    el("h2", { class: "section-title", text: "Palette" }),
+    field(t("name"), controlFor("name", "string", theme.name, set("name", (v) => (theme.name = v)))),
+    field(t("author"), controlFor("author", "string", theme.author, set("author", (v) => (theme.author = v)))),
+    field(t("license"), controlFor("license", "string", theme.license, set("license", (v) => (theme.license = v))), t("e.g. CC0-1.0, CC-BY-4.0")),
+    field(t("description"), controlFor("description", "text", theme.description, set("description", (v) => (theme.description = v)))),
+    el("h2", { class: "section-title", text: t("Look") }),
+    field(fieldLabel("font"), fontInput(theme.font === state.specs.default_font ? "" : theme.font, set("font", (v) => (theme.font = v || state.specs.default_font)), t("Default (Barlow Medium)")), t("used by every text widget without its own font")),
+    field(fieldLabel("background"), colorInput(theme.background.color, set("bg", (v) => (theme.background.color = v)), false)),
+    field(t("background image"), assetInput(theme.background.image, set("bgimg", (v) => (theme.background.image = v || null)))),
+    el("h2", { class: "section-title", text: t("Palette") }),
     buildPaletteEditor(),
-    el("h2", { class: "section-title", text: "Timing" }),
-    field("sensor refresh (ms)", numberInput(theme.refresh_ms, set("refresh", (v) => (theme.refresh_ms = Math.max(100, v || 1000))))),
-    field("smoothing (ms)", numberInput(theme.animation.smoothing_ms, set("smooth", (v) => (theme.animation.smoothing_ms = Math.max(0, Math.min(5000, v ?? 0))))), "how long bars and rings take to glide to a new value; 0 = jump"),
+    el("h2", { class: "section-title", text: t("Timing") }),
+    field(t("sensor refresh (ms)"), numberInput(theme.refresh_ms, set("refresh", (v) => (theme.refresh_ms = Math.max(100, v || 1000))))),
+    field(t("smoothing (ms)"), numberInput(theme.animation.smoothing_ms, set("smooth", (v) => (theme.animation.smoothing_ms = Math.max(0, Math.min(5000, v ?? 0))))), t("how long bars and rings take to glide to a new value; 0 = jump")),
   );
 }
 
@@ -1075,7 +1141,7 @@ function buildPaletteEditor() {
   for (const [name, color] of Object.entries(palette)) {
     const picker = el("input", { type: "color", value: /^#[0-9a-f]{6}/i.test(color) ? color.slice(0, 7) : "#000000" });
     const hex = el("input", { type: "text", value: color });
-    const label = el("input", { type: "text", value: name, title: "Name (a-z, 0-9, - _)" });
+    const label = el("input", { type: "text", value: name, title: t("Name (a-z, 0-9, - _)") });
     const setColor = (v) => {
       if (!/^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v)) return;
       commit(`palette:${name}`);
@@ -1091,7 +1157,7 @@ function buildPaletteEditor() {
       const next = label.value.trim();
       if (next === name) return;
       if (!PALETTE_NAME_RE.test(next) || next in palette) {
-        setStatus(`"${next}" is not a valid or free palette name`, "error");
+        setStatus(t('"{name}" is not a valid or free palette name', { name: next }), "error");
         label.value = name;
         return;
       }
@@ -1106,7 +1172,7 @@ function buildPaletteEditor() {
       type: "button",
       class: "small danger",
       text: "✕",
-      title: "Remove (uses become the plain colour)",
+      title: t("Remove (uses become the plain colour)"),
       onclick: () => {
         commit();
         replaceReferences(`@${name}`, palette[name]);
@@ -1121,7 +1187,7 @@ function buildPaletteEditor() {
     el("button", {
       type: "button",
       class: "small",
-      text: "+ colour",
+      text: t("+ colour"),
       onclick: () => {
         let i = 1;
         while (`color${i}` in palette) i++;
@@ -1130,7 +1196,7 @@ function buildPaletteEditor() {
         buildProps();
       },
     }),
-    el("small", { class: "muted", text: "Widgets use palette colours as @name; change a colour here and the whole theme follows." }),
+    el("small", { class: "muted", text: t("Widgets use palette colours as @name; change a colour here and the whole theme follows.") }),
   );
   return box;
 }
@@ -1144,10 +1210,10 @@ function buildModelMenu() {
   for (const model of state.models) {
     if (!groups.has(model.vendor)) groups.set(model.vendor, el("optgroup", { label: model.vendor }));
     const size = `${model.landscape[0]}×${model.landscape[1]}`;
-    const status = { planned: " · driver planned", unverified: " · not yet confirmed" }[model.driver] || "";
+    const status = { planned: " · " + t("driver planned"), unverified: " · " + t("not yet confirmed") }[model.driver] || "";
     groups.get(model.vendor).append(el("option", { value: model.id, text: `${model.label} — ${size}${status}` }));
   }
-  select.append(...groups.values(), el("optgroup", { label: "Other" }, el("option", { value: "custom", text: "Custom size" })));
+  select.append(...groups.values(), el("optgroup", { label: t("Other") }, el("option", { value: "custom", text: t("Custom size") })));
 }
 
 function syncPanelBar() {
@@ -1159,7 +1225,10 @@ function syncPanelBar() {
   $("#custom-w").value = display.width || state.size[0];
   $("#custom-h").value = display.height || state.size[1];
   const info = currentModel();
-  $("#panel-info").textContent = info ? `${info.protocol_name} · driver ${info.driver}${info.notes ? " · " + info.notes : ""}` : "any size, e.g. for panels not in the list yet";
+  const driver = { supported: t("driver supported"), unverified: t("driver unverified"), planned: t("driver planned") };
+  $("#panel-info").textContent = info
+    ? `${info.protocol_name} · ${driver[info.driver] || info.driver}${info.notes ? " · " + info.notes : ""}`
+    : t("any size, e.g. for panels not in the list yet");
 }
 
 async function onPanelChange() {
@@ -1191,8 +1260,8 @@ async function onPanelChange() {
 async function refreshThemeList(selectId) {
   state.themes = await api("GET", "/api/themes");
   const select = $("#theme-select");
-  select.replaceChildren(...state.themes.map((t) => el("option", { value: t.id, text: t.builtin ? `${t.id} (built-in)` : t.id })));
-  if (!state.themeId) select.append(el("option", { value: "", text: "(unsaved)" }));
+  select.replaceChildren(...state.themes.map((theme) => el("option", { value: theme.id, text: theme.builtin ? t("{id} (built-in)", { id: theme.id }) : theme.id })));
+  if (!state.themeId) select.append(el("option", { value: "", text: t("(unsaved)") }));
   select.value = selectId ?? state.themeId ?? "";
 }
 
@@ -1215,7 +1284,7 @@ async function loadTheme(id) {
   markClean();
   refreshAll();
   await render();
-  if (data.warnings.length) setStatus("Warning: " + data.warnings.join(" · "), "warn");
+  if (data.warnings.length) setStatus(t("Warning: {text}", { text: data.warnings.join(" · ") }), "warn");
 }
 
 async function save() {
@@ -1223,7 +1292,7 @@ async function save() {
   try {
     await api("POST", `/api/themes/${encodeURIComponent(state.themeId)}`, { theme: state.theme, source: state.themeId });
     markClean();
-    setStatus(`Saved ${state.themeId}`);
+    setStatus(t("Saved {id}", { id: state.themeId }));
   } catch (error) {
     setStatus(error.message, "error");
   }
@@ -1231,13 +1300,13 @@ async function save() {
 
 async function saveAs() {
   const suggestion = slug(state.theme.name) + (state.builtin ? "-custom" : "");
-  const id = prompt("Save theme as (letters, digits, - _ .):", suggestion || "my-theme");
+  const id = prompt(t("Save theme as (letters, digits, - _ .):"), suggestion || "my-theme");
   if (!id) return;
   if (!THEME_NAME_RE.test(id) || id.includes("..")) {
-    setStatus(`"${id}" is not a valid theme name`, "error");
+    setStatus(t('"{id}" is not a valid theme name', { id }), "error");
     return;
   }
-  if (state.themes.some((t) => t.id === id && !t.builtin) && !confirm(`Overwrite your theme "${id}"?`)) return;
+  if (state.themes.some((theme) => theme.id === id && !theme.builtin) && !confirm(t('Overwrite your theme "{id}"?', { id }))) return;
   try {
     await api("POST", `/api/themes/${encodeURIComponent(id)}`, { theme: state.theme, source: state.themeId });
     state.themeId = id;
@@ -1245,7 +1314,7 @@ async function saveAs() {
     markClean();
     await loadAssets();
     await refreshThemeList(id);
-    setStatus(`Saved ${id}`);
+    setStatus(t("Saved {id}", { id }));
   } catch (error) {
     setStatus(error.message, "error");
   }
@@ -1259,7 +1328,7 @@ async function activate() {
   }
   try {
     await api("POST", "/api/activate", { id: state.themeId });
-    setStatus(`"${state.themeId}" is now shown on the panel`);
+    setStatus(t('"{id}" is now shown on the panel', { id: state.themeId }));
   } catch (error) {
     setStatus(error.message, "error");
   }
@@ -1272,7 +1341,7 @@ function newTheme() {
   const [width, height] = model[orientation];
   state.theme = {
     format: "libre-panel-theme/1",
-    name: "My theme",
+    name: t("My theme"),
     author: "",
     license: "CC-BY-4.0",
     description: "",
@@ -1321,9 +1390,9 @@ async function importTheme(file) {
     markDirty();
     await refreshThemeList("");
     refreshAll();
-    setStatus(`Imported ${file.name}. Images/fonts of the original theme are not included; save and upload them.`);
+    setStatus(t("Imported {file}. Images/fonts of the original theme are not included; save and upload them.", { file: file.name }));
   } catch (error) {
-    setStatus(`Import failed: ${error.message}`, "error");
+    setStatus(t("Import failed: {error}", { error: error.message }), "error");
   }
 }
 
@@ -1331,14 +1400,15 @@ async function importTheme(file) {
 
 // -- background app: status, pause, brightness, autostart, quit ---------------
 
-const APP_STATE_TEXT = {
-  starting: "Starting",
-  showing: "Showing",
-  waiting: "Waiting for the panel",
-  paused: "Paused",
-  error: "Needs attention",
-  stopped: "Stopped",
-};
+const appStateText = (key) =>
+  ({
+    starting: t("Starting"),
+    showing: t("Showing"),
+    waiting: t("Waiting for the panel"),
+    paused: t("Paused"),
+    error: t("Needs attention"),
+    stopped: t("Stopped"),
+  })[key] || key;
 
 function renderApp(app) {
   state.app = app;
@@ -1349,12 +1419,12 @@ function renderApp(app) {
     return;
   }
   const panel = app.panel;
-  const label = APP_STATE_TEXT[panel.state] || panel.state;
+  const label = appStateText(panel.state);
   chip.hidden = false;
   chip.dataset.state = panel.state;
   $("#app-popover").dataset.state = panel.state;
-  $("#app-chip-text").textContent = `Panel · ${label}`;
-  chip.title = `${panel.target || "Panel"}: ${label}${panel.detail ? ` – ${panel.detail}` : ""}`;
+  $("#app-chip-text").textContent = `${t("Panel")} · ${label}`;
+  chip.title = `${panel.target || t("Panel")}: ${label}${panel.detail ? ` – ${panel.detail}` : ""}`;
   $("#app-state").textContent = label;
   $("#app-detail").textContent = panel.detail || "";
   $("#app-detail").hidden = !panel.detail;
@@ -1368,7 +1438,7 @@ function renderApp(app) {
   autostart.checked = Boolean(app.autostart);
   autostart.disabled = app.autostart === null;
   $("#app-autostart-where").textContent = app.autostart_location || "";
-  $("#app-pause").textContent = panel.state === "paused" ? "Resume panel" : "Pause panel";
+  $("#app-pause").textContent = panel.state === "paused" ? t("Resume panel") : t("Pause panel");
 }
 
 async function pollApp() {
@@ -1377,7 +1447,7 @@ async function pollApp() {
     renderApp(await api("GET", "/api/app"));
   } catch {
     $("#app-chip").dataset.state = "gone";
-    $("#app-chip-text").textContent = "Panel · not running";
+    $("#app-chip-text").textContent = `${t("Panel")} · ${t("not running")}`;
   }
 }
 
@@ -1401,14 +1471,14 @@ function toggleAppPopover(open = $("#app-popover").hidden) {
 }
 
 async function quitApp() {
-  if (!confirm("Quit Libre Panel? The panel stops updating until you start it again.")) return;
+  if (!confirm(t("Quit Libre Panel? The panel stops updating until you start it again."))) return;
   if (!(await appAction("quit"))) return;
   state.appQuit = true;
   clearInterval(state.appTimer);
   toggleAppPopover(false);
   $("#app-chip").dataset.state = "gone";
-  $("#app-chip-text").textContent = "Panel · quit";
-  setStatus("Libre Panel has quit. You can close this tab.", "warn");
+  $("#app-chip-text").textContent = `${t("Panel")} · ${t("quit")}`;
+  setStatus(t("Libre Panel has quit. You can close this tab."), "warn");
 }
 
 function setupApp() {
@@ -1467,11 +1537,15 @@ function onKey(event) {
 
 async function init() {
   try {
+    state.i18n = await api("GET", "/api/i18n");
+    applyI18n();
+    markClean();
+    $("#lang-select").value = state.i18n.setting;
     state.specs = await api("GET", "/api/specs");
     state.models = state.specs.models;
-    $("#add-type").replaceChildren(...Object.keys(state.specs.widgets).map((t) => el("option", { value: t, text: t })));
+    $("#add-type").replaceChildren(...Object.keys(state.specs.widgets).map((type) => el("option", { value: type, text: widgetLabel(type) })));
     $("#presets").replaceChildren(
-      ...state.specs.presets.map((p) => el("button", { type: "button", text: p.name, title: `Insert "${p.name}"`, onclick: () => insertPreset(p) })),
+      ...state.specs.presets.map((p) => el("button", { type: "button", text: p.name, title: t('Insert "{name}"', { name: p.name }), onclick: () => insertPreset(p) })),
     );
     buildModelMenu();
     api("GET", "/api/sensors")
@@ -1482,14 +1556,19 @@ async function init() {
       })
       .catch(() => {});
     await refreshThemeList();
-    // Start with the theme the panel shows.
-    const active = await api("GET", "/api/active").then((a) => a.theme, () => null);
-    const first =
-      state.themes.find((t) => t.id === active) || state.themes.find((t) => t.id === "libre-default") || state.themes[0];
-    if (first) await loadTheme(first.id);
-    else newTheme();
+    const restored = takeRestore(); // after a language switch
+    if (restored?.theme) {
+      await restoreSession(restored);
+    } else {
+      // Start with the theme the panel shows.
+      const active = await api("GET", "/api/active").then((a) => a.theme, () => null);
+      const first =
+        state.themes.find((theme) => theme.id === active) || state.themes.find((theme) => theme.id === "libre-default") || state.themes[0];
+      if (first) await loadTheme(first.id);
+      else newTheme();
+    }
   } catch (error) {
-    setStatus(`Could not start the editor: ${error.message}`, "error");
+    setStatus(t("Could not start the editor: {error}", { error: error.message }), "error");
   }
 
   $("#theme-select").addEventListener("change", async (event) => {
@@ -1504,6 +1583,7 @@ async function init() {
       setStatus(error.message, "error");
     }
   });
+  $("#lang-select").addEventListener("change", (event) => setLanguage(event.target.value));
   $("#btn-new").addEventListener("click", newTheme);
   $("#btn-save").addEventListener("click", save);
   $("#btn-save-as").addEventListener("click", saveAs);

@@ -21,6 +21,7 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont, ImageOps
 
+from libre_panel import i18n
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
 from libre_panel.icons import draw_icon, weather_icon_name
 from libre_panel.render.formatting import FormatError, safe_format
@@ -28,6 +29,9 @@ from libre_panel.sensors.base import Snapshot
 from libre_panel.theme.model import Theme, ThemeError, resolve_asset
 
 log = logging.getLogger(__name__)
+
+# Sensor texts shown in the user's language on the panel.
+TRANSLATED_READINGS = {"weather.description"}
 
 # Shapes are drawn at this scale and downsampled for smooth edges.
 SUPERSAMPLE = 3
@@ -434,11 +438,14 @@ class Renderer:
     def _format(self, widget: dict[str, Any], reading: Any) -> tuple[str, float | None]:
         if reading is None or reading.value is None:
             return widget.get("fallback", "--"), None
+        value = reading.value
+        if reading.key in TRANSLATED_READINGS and isinstance(value, str):
+            value = i18n.t(value)  # e.g. "Overcast" -> "Bedeckt"
         try:
-            text = safe_format(widget["format"], reading.value, reading.unit, reading.label)
+            text = safe_format(widget["format"], value, reading.unit, reading.label)
         except FormatError:
-            text = reading.value if isinstance(reading.value, str) else widget.get("fallback", "--")
-        return text, _number(reading.value)
+            text = value if isinstance(value, str) else widget.get("fallback", "--")
+        return text, _number(value)
 
     def _text_widget(self, widget: dict[str, Any], text: str, color: str) -> Piece | None:
         return self._cached(widget, (text, color), lambda: self._text_piece(widget, text, color))
@@ -456,7 +463,7 @@ class Renderer:
 
     def _draw_clock(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         try:
-            text = snapshot.now.strftime(widget["format"])[:100]
+            text = i18n.format_date(snapshot.now, widget["format"])[:100]
         except ValueError:
             text = "--:--"
         return self._text_widget(widget, text, widget["color"])

@@ -25,6 +25,10 @@ DEFAULT_CONFIG_TOML = """\
 # Name of a built-in theme or of a folder in the user themes directory.
 theme = "libre-default"
 
+# "auto" (the system language), "en" or "de": editor, tray and the date and
+# weather texts on the panel.
+language = "auto"
+
 # Optional: override how often sensors are read (milliseconds); the theme sets it.
 # refresh_ms = 1000
 
@@ -119,6 +123,7 @@ class WeatherConfig:
 @dataclass
 class Config:
     theme: str = "libre-default"
+    language: str = "auto"
     refresh_ms: int | None = None
     fps: int = 10
     device: DeviceConfig = field(default_factory=DeviceConfig)
@@ -140,6 +145,10 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     cfg = Config(path=path)
     if "theme" in data:
         cfg.theme = _expect(data["theme"], str, "theme")
+    if "language" in data:
+        cfg.language = _expect(data["language"], str, "language")
+        if cfg.language not in ("auto", "en", "de"):
+            raise ConfigError('language: must be "auto", "en" or "de"')
     if "fps" in data:
         cfg.fps = _expect(data["fps"], int, "fps")
         if not 1 <= cfg.fps <= 60:

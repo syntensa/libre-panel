@@ -10,6 +10,7 @@ from pathlib import Path
 from libre_panel import __version__
 from libre_panel.config import ConfigError, config_dir, load_config, write_default_config
 from libre_panel.devices.base import DeviceError
+from libre_panel.i18n import t
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
@@ -56,7 +57,7 @@ def _background(args: argparse.Namespace, use_icon: bool, open_editor: bool) -> 
         url = (running_instance() or {}).get("editor")
         if not url:
             raise
-        print(f"Libre Panel is already running. Theme editor: {url}")
+        print(t("Libre Panel is already running. Theme editor: {url}", url=url))
         if open_editor:
             webbrowser.open(url)
         return 0
@@ -83,12 +84,13 @@ def _cmd_autostart(args: argparse.Namespace) -> int:
     autostart = Autostart()
     if args.action == "enable":
         where = autostart.enable(launch_command(args.config))
-        print(f"Libre Panel starts in the background when you log in ({where}).")
+        print(t("Libre Panel starts in the background when you log in ({where}).", where=where))
     elif args.action == "disable":
-        print("Autostart removed." if autostart.disable() else "Autostart was not enabled.")
+        print(t("Autostart removed.") if autostart.disable() else t("Autostart was not enabled."))
+    elif autostart.is_enabled():
+        print(t("Autostart is enabled ({where}).", where=autostart.location()))
     else:
-        state = "enabled" if autostart.is_enabled() else "disabled"
-        print(f"Autostart is {state} ({autostart.location()}).")
+        print(t("Autostart is disabled."))
     return 0
 
 
@@ -130,7 +132,7 @@ def _cmd_editor(args: argparse.Namespace) -> int:
     except AlreadyRunning:
         url = (running_instance() or {}).get("editor")
         if url:  # the background app already serves the editor
-            print(f"Libre Panel is running. Theme editor: {url}")
+            print(t("Libre Panel is already running. Theme editor: {url}", url=url))
             if not args.no_browser:
                 webbrowser.open(url)
             return 0
@@ -344,10 +346,15 @@ def main(argv: list[str] | None = None, default_command: str = "start") -> int:
         # Programs without a console (pythonw, the windowed build) have no stderr.
         handlers=[logging.StreamHandler()] if sys.stderr else [logging.NullHandler()],
     )
+    from libre_panel import i18n
     from libre_panel.instance import AlreadyRunning
     from libre_panel.theme.model import ThemeError
     from libre_panel.weather.open_meteo import WeatherError
 
+    try:
+        i18n.set_language(load_config(args.config).language)
+    except ConfigError:
+        i18n.set_language("auto")  # the command reports the config error itself
     try:
         return args.func(args)
     except AlreadyRunning as exc:

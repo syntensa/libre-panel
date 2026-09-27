@@ -38,6 +38,11 @@ First preview of Libre Panel.
   file is fixed
 - Windows release build with `LibrePanel.exe` (no console window)
 
+**Languages**
+- English and German: editor, tray menu, panel messages, and on the panel
+  weekday and month names ("Sonntag, 27. September") and weather
+  descriptions; `language = "auto"` follows the system, switch in the editor
+
 **Sensors**
 - psutil, LibreHardwareMonitor (checked against real output), demo;
   Open-Meteo weather (off by default)

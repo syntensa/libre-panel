@@ -20,26 +20,27 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from libre_panel import i18n
 from libre_panel.branding import logo
 from libre_panel.config import config_dir, set_active_theme
+from libre_panel.i18n import t
 from libre_panel.service import BackgroundApp
 from libre_panel.theme.model import list_themes
 
 log = logging.getLogger(__name__)
 
-_STATE_TEXT = {
-    "starting": "starting",
-    "showing": "showing on {target}",
-    "waiting": "waiting for the panel",
-    "paused": "paused",
-    "error": "needs attention",
-    "stopped": "stopped",
-}
-
 
 def headline(state: dict[str, Any]) -> str:
-    text = _STATE_TEXT.get(state["state"], state["state"])
-    return "Libre Panel: " + text.format(target=state.get("target") or "the panel")
+    target = state.get("target") or t("the panel")
+    text = {
+        "starting": t("starting"),
+        "showing": t("showing on {target}", target=target),
+        "waiting": t("waiting for the panel"),
+        "paused": t("paused"),
+        "error": t("needs attention"),
+        "stopped": t("stopped"),
+    }.get(state["state"], state["state"])
+    return "Libre Panel: " + text
 
 
 def tooltip(state: dict[str, Any]) -> str:
@@ -86,20 +87,20 @@ class Tray:
         app = self.app
         return menu(
             item(lambda _: headline(app.panel.state()), None, enabled=False),
-            item("Open theme editor", self.open_editor, default=True),
-            item("Theme", menu(self._theme_items)),
-            item("Brightness", menu(self._brightness_items)),
-            item("Pause panel", self.toggle_pause, checked=lambda _: app.panel.paused),
+            item(t("Open theme editor"), self.open_editor, default=True),
+            item(t("Theme"), menu(self._theme_items)),
+            item(t("Brightness"), menu(self._brightness_items)),
+            item(t("Pause panel"), self.toggle_pause, checked=lambda _: app.panel.paused),
             menu.SEPARATOR,
             item(
-                "Start with system",
+                t("Start with system"),
                 self.toggle_autostart,
                 checked=lambda _: bool(app.snapshot()["autostart"]),
             ),
-            item("Open settings folder", self.open_settings),
-            item("Open log", self.open_log, visible=self.log_path is not None),
+            item(t("Open settings folder"), self.open_settings),
+            item(t("Open log"), self.open_log, visible=self.log_path is not None),
             menu.SEPARATOR,
-            item("Quit Libre Panel", self.quit),
+            item(t("Quit Libre Panel"), self.quit),
         )
 
     def _theme_items(self):
@@ -117,7 +118,7 @@ class Tray:
         item = self.pystray.MenuItem
         for step in self.app.BRIGHTNESS_STEPS:
             yield item(
-                "Off" if step == 0 else f"{step} %",
+                t("Off") if step == 0 else f"{step} %",
                 self._later(self.app.set_brightness, step),
                 checked=lambda _, step=step: self.app.brightness() == step,
                 radio=True,
@@ -177,6 +178,7 @@ class Tray:
         state = self.app.panel.state()
         snapshot = self.app.snapshot()
         signature = (
+            i18n.language(),
             state["state"],
             state["target"],
             state["detail"],
@@ -186,9 +188,12 @@ class Tray:
         )
         if signature == self._last:
             return
-        changed_state = self._last is None or self._last[0] != signature[0]
+        changed_state = self._last is None or self._last[1] != signature[1]
+        changed_language = self._last is not None and self._last[0] != signature[0]
         self._last = signature
         try:
+            if changed_language:
+                self.icon.menu = self.build_menu()
             if changed_state:
                 self.icon.icon = logo(64, state["state"])
             self.icon.title = tooltip(state)
@@ -239,7 +244,7 @@ def run_app(
             except Exception:  # the icon is a convenience; the panel must keep running
                 log.exception("tray icon failed; Libre Panel keeps running without one")
         if not app.quit_requested.is_set():
-            print(f"Libre Panel is running. Theme editor: {url}  (Ctrl+C to stop)")
+            print(t("Libre Panel is running. Theme editor: {url}  (Ctrl+C to stop)", url=url))
             while not app.quit_requested.wait(0.5):  # a timeout keeps Ctrl+C working on Windows
                 pass
     except KeyboardInterrupt:

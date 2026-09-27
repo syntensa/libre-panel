@@ -36,6 +36,8 @@ vendor app.
   off by default, no API key.
 - **Nothing hard-coded**: location, units, sensors and panel all live in one
   config file.
+- **English and German** in the editor, the tray and on the panel (dates,
+  weather); follows the system language.
 - **Safe to share themes**: themes are plain JSON plus images/fonts, and cannot
   run code or read files outside their folder.
 - **Runs quietly in the background**: tray icon with theme, brightness, pause

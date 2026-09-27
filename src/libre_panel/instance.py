@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import IO
 
 from libre_panel.config import config_dir
+from libre_panel.i18n import t
 
 LOCK_FILENAME = "libre-panel.lock"
 
@@ -34,8 +35,10 @@ class InstanceLock:
         except OSError as exc:
             handle.close()
             raise AlreadyRunning(
-                "Libre Panel is already running and drives the panel (look for its tray "
-                "icon, or stop `libre-panel run`/`start` in the other terminal)"
+                t(
+                    "Libre Panel is already running and drives the panel (look for its tray "
+                    "icon, or stop `libre-panel run`/`start` in the other terminal)"
+                )
             ) from exc
         handle.seek(0)
         handle.truncate()

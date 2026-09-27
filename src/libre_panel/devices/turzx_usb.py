@@ -31,6 +31,7 @@ from PIL import Image
 
 from libre_panel.devices.base import DeviceError, Display, FrameError
 from libre_panel.devices.models import MODELS, PanelModel, orientation_of
+from libre_panel.i18n import t
 
 log = logging.getLogger(__name__)
 
@@ -147,20 +148,20 @@ def access_hint(exc: Exception) -> str | None:
     busy = errno == 16 or "busy" in text
     denied = errno == 13 or "access" in text or "permission" in text
     if sys.platform == "win32" and (busy or denied):
-        return (
+        return t(
             "the panel is in use by another program, usually the TURZX app. "
             "Quit it (tray icon -> Exit) and try again."
         )
     if busy:
-        return "the panel is in use by another program (TURZX or other monitor software)."
+        return t("the panel is in use by another program (TURZX or other monitor software).")
     if denied and sys.platform.startswith("linux"):
-        return (
+        return t(
             "no permission to use the panel. Install the udev rule: "
             "sudo cp packaging/linux/60-libre-panel.rules /etc/udev/rules.d/ "
             "&& sudo udevadm control --reload-rules, then replug the panel."
         )
     if denied:
-        return "no permission to use the panel."
+        return t("no permission to use the panel.")
     return None
 
 
@@ -199,8 +200,10 @@ class UsbTransport:
             raise DeviceError("libusb not found: pip install libusb-package") from exc
         if device is None or pid is None:
             raise DeviceError(
-                "no Turing/TURZX USB panel found. Is it plugged in, and is the TURZX app closed? "
-                "(it holds the device exclusively)"
+                t(
+                    "no Turing/TURZX USB panel found. Is it plugged in, and is the TURZX app "
+                    "closed? (it holds the device exclusively)"
+                )
             )
         try:
             if sys.platform.startswith("linux") and device.is_kernel_driver_active(0):
@@ -319,7 +322,7 @@ class TurzxUsbDisplay(Display):
         )
 
     def describe(self) -> str:
-        return self.model.label if self.model else "TURZX USB panel"
+        return self.model.label if self.model else t("TURZX USB panel")
 
     def set_brightness(self, percent: int) -> None:
         self.brightness = percent

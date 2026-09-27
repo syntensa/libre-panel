@@ -7,113 +7,120 @@
   <link rel="icon" type="image/png" href="/static/icon.png">
   <link rel="stylesheet" href="/static/editor.css">
 </head>
+<!-- Texts marked with data-i18n (the element's text) and data-i18n-attr (the
+     listed attributes) are translated from their English wording on load. -->
 <body>
   <header class="topbar">
-    <div class="brand"><img src="/static/icon.png" alt="" width="22" height="22"> Libre Panel <span>Theme Editor</span></div>
-    <label>Theme <select id="theme-select"></select></label>
-    <button id="btn-new" type="button">New</button>
-    <button id="btn-save" type="button" class="primary" title="Ctrl+S">Save</button>
-    <button id="btn-save-as" type="button">Save as…</button>
-    <button id="btn-activate" type="button" title="Save and show this theme on the panel">Show on panel</button>
-    <button id="btn-import" type="button">Import</button>
-    <button id="btn-export" type="button">Export</button>
+    <div class="brand"><img src="/static/icon.png" alt="" width="22" height="22"> Libre Panel <span data-i18n>Theme Editor</span></div>
+    <label><span data-i18n>Theme</span> <select id="theme-select"></select></label>
+    <button id="btn-new" type="button" data-i18n>New</button>
+    <button id="btn-save" type="button" class="primary" title="Ctrl+S" data-i18n>Save</button>
+    <button id="btn-save-as" type="button" data-i18n>Save as…</button>
+    <button id="btn-activate" type="button" title="Save and show this theme on the panel" data-i18n data-i18n-attr="title">Show on panel</button>
+    <button id="btn-import" type="button" data-i18n>Import</button>
+    <button id="btn-export" type="button" data-i18n>Export</button>
     <input type="file" id="import-file" accept=".json,application/json" hidden>
     <span class="spacer"></span>
-    <button id="btn-undo" type="button" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
-    <button id="btn-redo" type="button" title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
-    <label class="toggle"><input type="checkbox" id="live-toggle"> Live sensors</label>
+    <button id="btn-undo" type="button" title="Undo (Ctrl+Z)" aria-label="Undo" data-i18n-attr="title aria-label">↶</button>
+    <button id="btn-redo" type="button" title="Redo (Ctrl+Y)" aria-label="Redo" data-i18n-attr="title aria-label">↷</button>
     <div class="app-wrap">
       <button id="app-chip" type="button" class="app-chip" aria-haspopup="dialog" aria-expanded="false" hidden>
         <span class="dot" aria-hidden="true"></span><span id="app-chip-text">Panel</span>
       </button>
-      <div id="app-popover" class="popover" role="dialog" aria-label="Panel" hidden>
+      <div id="app-popover" class="popover" role="dialog" aria-label="Panel" data-i18n-attr="aria-label" hidden>
         <div class="pop-head"><span class="dot" aria-hidden="true"></span><strong id="app-state">…</strong></div>
         <p id="app-detail" class="pop-detail" hidden></p>
         <dl class="pop-facts">
-          <dt>Output</dt><dd id="app-target">–</dd>
-          <dt>Theme</dt><dd id="app-theme">–</dd>
+          <dt data-i18n>Output</dt><dd id="app-target">–</dd>
+          <dt data-i18n>Theme</dt><dd id="app-theme">–</dd>
         </dl>
-        <label class="field"><span>Brightness <output id="app-brightness-value"></output></span>
+        <label class="field"><span><span data-i18n>Brightness</span> <output id="app-brightness-value"></output></span>
           <input type="range" id="app-brightness" min="0" max="100" step="5">
         </label>
-        <label class="check"><input type="checkbox" id="app-autostart"> Start with system</label>
+        <label class="check"><input type="checkbox" id="app-autostart"> <span data-i18n>Start with system</span></label>
         <small id="app-autostart-where" class="muted"></small>
         <div class="pop-actions">
-          <button id="app-pause" type="button">Pause panel</button>
-          <button id="app-quit" type="button" class="danger">Quit Libre Panel</button>
+          <button id="app-pause" type="button" data-i18n>Pause panel</button>
+          <button id="app-quit" type="button" class="danger" data-i18n>Quit Libre Panel</button>
         </div>
       </div>
     </div>
   </header>
 
-  <nav class="panelbar" aria-label="Panel and view">
-    <label>Panel <select id="model-select"></select></label>
-    <label>Orientation
+  <nav class="panelbar" aria-label="Panel and view" data-i18n-attr="aria-label">
+    <label><span data-i18n>Panel</span> <select id="model-select"></select></label>
+    <label><span data-i18n>Orientation</span>
       <select id="orientation-select">
-        <option value="landscape">Landscape</option>
-        <option value="portrait">Portrait</option>
+        <option value="landscape" data-i18n>Landscape</option>
+        <option value="portrait" data-i18n>Portrait</option>
       </select>
     </label>
     <span id="custom-size" hidden>
-      <input type="number" id="custom-w" min="16" max="4096" aria-label="Custom width"> ×
-      <input type="number" id="custom-h" min="16" max="4096" aria-label="Custom height">
+      <input type="number" id="custom-w" min="16" max="4096" aria-label="Custom width" data-i18n-attr="aria-label"> ×
+      <input type="number" id="custom-h" min="16" max="4096" aria-label="Custom height" data-i18n-attr="aria-label">
     </span>
-    <label>On size change
+    <label><span data-i18n>On size change</span>
       <select id="adapt-mode">
-        <option value="scale">Scale layout</option>
-        <option value="keep">Keep positions</option>
+        <option value="scale" data-i18n>Scale layout</option>
+        <option value="keep" data-i18n>Keep positions</option>
       </select>
     </label>
     <span id="panel-info" class="muted"></span>
     <span class="spacer"></span>
-    <span class="group" role="group" aria-label="Zoom">
-      <button id="zoom-fit" type="button" title="Fit to window">Fit</button>
-      <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+    <span class="group" role="group" aria-label="Zoom" data-i18n-attr="aria-label">
+      <button id="zoom-fit" type="button" title="Fit to window" data-i18n data-i18n-attr="title">Fit</button>
+      <button id="zoom-out" type="button" aria-label="Zoom out" data-i18n-attr="aria-label">−</button>
       <span id="zoom-label" class="muted">100%</span>
-      <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+      <button id="zoom-in" type="button" aria-label="Zoom in" data-i18n-attr="aria-label">+</button>
     </span>
-    <label>Snap
+    <label><span data-i18n>Snap</span>
       <select id="snap-select">
-        <option value="0">off</option>
+        <option value="0" data-i18n>off</option>
         <option value="1">1 px</option>
         <option value="4" selected>4 px</option>
         <option value="8">8 px</option>
         <option value="16">16 px</option>
       </select>
     </label>
-    <label class="toggle"><input type="checkbox" id="guides-toggle" checked> Guides</label>
+    <label class="toggle"><input type="checkbox" id="guides-toggle" checked> <span data-i18n>Guides</span></label>
+    <label class="toggle" title="Preview with this computer's sensors instead of sample values" data-i18n-attr="title"><input type="checkbox" id="live-toggle"> <span data-i18n>Live sensors</span></label>
   </nav>
 
   <main class="layout">
     <aside class="left">
-      <h2>Add</h2>
+      <h2 data-i18n>Add</h2>
       <div class="add-row">
-        <select id="add-type" aria-label="Widget type"></select>
-        <button id="btn-add" type="button">Add</button>
+        <select id="add-type" aria-label="Widget type" data-i18n-attr="aria-label"></select>
+        <button id="btn-add" type="button" data-i18n>Add</button>
       </div>
-      <h3>Building blocks</h3>
+      <h3 data-i18n>Building blocks</h3>
       <div id="presets" class="presets"></div>
-      <h2 class="section-title">Layers</h2>
+      <h2 class="section-title" data-i18n>Layers</h2>
       <ul id="widget-list"></ul>
-      <p class="hint">Shift-click or drag a frame to select several. Arrows nudge (Shift = 10 px),
-        Alt while dragging turns snapping off. Ctrl+Z/Y undo, Ctrl+C/V copy, Ctrl+D duplicate,
-        Ctrl+A select all, Del removes. Locked layers ignore clicks on the canvas; pick them here.</p>
+      <p class="hint" data-i18n>Shift-click or drag a frame to select several. Arrows nudge (Shift = 10 px), Alt while dragging turns snapping off. Ctrl+Z/Y undo, Ctrl+C/V copy, Ctrl+D duplicate, Ctrl+A select all, Del removes. Locked layers ignore clicks on the canvas; pick them here.</p>
     </aside>
 
     <section class="stage" id="stage">
       <div class="canvas-wrap" id="canvas-wrap">
-        <img id="preview" alt="Panel preview">
+        <img id="preview" alt="Panel preview" data-i18n-attr="alt">
         <div id="overlay"></div>
       </div>
     </section>
 
     <aside class="right">
-      <h2 id="props-title">Theme</h2>
+      <h2 id="props-title" data-i18n>Theme</h2>
       <form id="props" autocomplete="off"></form>
     </aside>
   </main>
 
-  <footer class="status" id="status">Loading…</footer>
+  <footer class="statusbar">
+    <span class="status" id="status" data-i18n>Loading…</span>
+    <select id="lang-select" title="Language" aria-label="Language" data-i18n-attr="title aria-label">
+      <option value="auto" data-i18n>System language</option>
+      <option value="en">English</option>
+      <option value="de">Deutsch</option>
+    </select>
+  </footer>
   <script src="/static/editor.js"></script>
 </body>
 </html>

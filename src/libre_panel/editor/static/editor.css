@@ -114,7 +114,7 @@ h3 { margin: 12px 0 6px; font-size: 12px; color: var(--muted); font-weight: 500;
 #widget-list li:hover { background: var(--panel-2); }
 #widget-list li.selected { background: #0f3440; outline: 1px solid var(--accent); }
 #widget-list li.hidden-widget .wid { color: var(--muted); text-decoration: line-through; }
-#widget-list .type { font-size: 11px; color: var(--muted); width: 46px; flex: none; }
+#widget-list .type { font-size: 11px; color: var(--muted); width: 58px; flex: none; overflow: hidden; text-overflow: ellipsis; }
 #widget-list .wid { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #widget-list .actions { display: none; gap: 1px; }
 #widget-list li:hover .actions, #widget-list li.selected .actions { display: flex; }
@@ -160,8 +160,11 @@ h3 { margin: 12px 0 6px; font-size: 12px; color: var(--muted); font-weight: 500;
 .guide.h { height: 1px; left: 0; right: 0; }
 .marquee { position: absolute; border: 1px solid var(--accent); background: rgba(34, 211, 238, 0.08); pointer-events: none; }
 
-#props { display: grid; gap: 10px; }
-.field { display: grid; gap: 4px; }
+/* minmax(0, 1fr): long option texts must not widen the column past the sidebar */
+#props { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.field { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+details > .fields { grid-template-columns: minmax(0, 1fr); }
+.field .row button { flex: none; white-space: nowrap; }
 .field > span { color: var(--muted); font-size: 12px; }
 .field input[type="text"], .field input[type="number"], .field select, .field textarea { width: 100%; }
 .field textarea { min-height: 56px; resize: vertical; }
@@ -203,7 +206,7 @@ details > .fields { display: grid; gap: 10px; margin-top: 8px; }
   right: 0;
   top: calc(100% + 8px);
   z-index: 20;
-  width: 300px;
+  width: 330px;
   display: grid;
   gap: 10px;
   padding: 14px;
@@ -223,17 +226,27 @@ details > .fields { display: grid; gap: 10px; margin-top: 8px; }
 .popover input[type="range"] { width: 100%; padding: 0; accent-color: var(--accent); }
 .popover small { font-size: 11px; overflow-wrap: anywhere; margin-top: -6px; }
 .pop-actions { display: flex; gap: 8px; justify-content: space-between; }
+.pop-actions button { white-space: nowrap; }
 
-.status {
-  padding: 6px 16px;
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 3px 8px 3px 16px;
   border-top: 1px solid var(--line);
   background: var(--panel);
+}
+.status {
+  flex: 1;
+  min-width: 0;
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+#lang-select { font-size: 12px; padding: 1px 6px; background: transparent; border-color: transparent; color: var(--muted); }
+#lang-select:hover, #lang-select:focus-visible { border-color: var(--line); color: var(--text); }
 .status.warn { color: var(--warn); }
 .status.error { color: var(--error); }
 

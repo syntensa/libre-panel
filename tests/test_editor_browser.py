@@ -186,3 +186,22 @@ def test_panel_controls_of_the_background_app(isolated_home):
     finally:
         app.quit()
         app.shutdown()
+
+
+def test_language_switch_keeps_unsaved_work(page, isolated_home):
+    from libre_panel.config import load_config
+
+    js(page, "state.theme.name = 'Work in progress'; markDirty()")
+    page.select_option("#lang-select", "de")
+    page.wait_for_function("document.documentElement.lang === 'de'")
+    page.wait_for_function("state.theme && state.theme.name === 'Work in progress'")
+    assert load_config().language == "de"
+    assert page.locator("#btn-save").inner_text() == "Speichern"
+    assert page.locator("#btn-activate").get_attribute("title").startswith("Theme speichern")
+    assert js(page, "state.dirty") is True  # still unsaved, nothing lost
+    assert page.locator("#add-type option").first.inner_text() == "Fläche"
+    js(page, "setSelection(['clock'])")
+    assert page.locator("#props-title").text_content() == "Element: Uhr"
+    page.select_option("#lang-select", "en")
+    page.wait_for_function("document.documentElement.lang === 'en'")
+    assert page.locator("#btn-save").inner_text() == "Save"

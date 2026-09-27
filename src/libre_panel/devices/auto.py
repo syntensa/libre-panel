@@ -16,6 +16,7 @@ from PIL import Image
 from libre_panel.devices.base import Display
 from libre_panel.devices.turzx import TurzxDisplay
 from libre_panel.devices.virtual import VirtualDisplay
+from libre_panel.i18n import t
 
 log = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ class AutoDisplay(Display):
             self._impl.set_brightness(percent)
 
     def describe(self) -> str:
-        return self._impl.describe() if self._impl else "no panel yet"
+        return self._impl.describe() if self._impl else t("no panel yet")
 
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
         if self._impl is None:

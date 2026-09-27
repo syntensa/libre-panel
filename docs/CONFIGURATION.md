@@ -21,7 +21,9 @@ Set `LIBRE_PANEL_HOME` to use another folder (portable installs). Changes to
 
 ```toml
 theme = "libre-default"        # built-in or user theme
+language = "auto"              # "auto" (system language), "en" or "de"
 # refresh_ms = 1000            # override the theme's refresh interval
+fps = 10                       # 1-60; values glide between readings
 
 [device]
 model = "auto"                 # or an id from `libre-panel models`
@@ -43,6 +45,21 @@ provider = "open-meteo"
 units = "metric"               # or "imperial"
 update_minutes = 15
 ```
+
+## Language
+
+Libre Panel speaks English and German. `language = "auto"` follows the
+system language; the editor has a switch at the bottom right, which writes
+this setting. It covers the editor, the tray menu, messages about the panel,
+and the panel itself: weekday and month names (in German with "27."), and
+weather descriptions. Texts that are part of a theme (such as "CPU TEMP")
+stay as the theme's author wrote them. Command-line output for diagnostics
+(`models`, `devices`, `sensors`, `doctor`) is in English.
+
+Translations live in `src/libre_panel/locale/<language>.json`, keyed by the
+English text; a test makes sure every text has one. To add a language, copy
+`de.json`, translate the values and add the language to `LANGUAGES` in
+`src/libre_panel/i18n.py`.
 
 ## Windows sensors (GPU, power, fans)
 

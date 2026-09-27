@@ -9,6 +9,7 @@ from pathlib import Path
 from PIL import Image
 
 from libre_panel.devices.base import Display
+from libre_panel.i18n import t
 
 
 class VirtualDisplay(Display):
@@ -26,7 +27,7 @@ class VirtualDisplay(Display):
         self.brightness = max(0, min(100, percent))
 
     def describe(self) -> str:
-        return f"PNG file {self.output}" if self.output else "virtual display"
+        return t("PNG file {path}", path=self.output) if self.output else t("virtual display")
 
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
         self.frame = frame.copy()

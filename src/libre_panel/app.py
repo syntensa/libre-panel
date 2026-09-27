@@ -11,6 +11,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
+from libre_panel import i18n
 from libre_panel.config import Config, ConfigError, load_config
 from libre_panel.devices.base import DeviceError, Display, FrameError, create_display
 from libre_panel.devices.models import find_model
@@ -183,6 +184,7 @@ def run(
     """
     stop = stop or threading.Event()
     status = status or RunStatus()
+    i18n.set_language(config.language)
     theme = load_configured_theme(config)
     status.theme = config.theme
     for warning in theme.warnings:
@@ -217,6 +219,7 @@ def run(
                         link.set_brightness(fresh.device.brightness)
                         device.brightness = fresh.device.brightness
                     fresh.device, config = device, fresh
+                    i18n.set_language(config.language)
                     theme, renderer = new_theme, Renderer(new_theme, animate=config.fps > 1)
                     size, previous, next_sample = target_size(config, theme), None, 0.0
                     watcher = _Watcher(config.path, _theme_file(theme))

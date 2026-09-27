@@ -11,6 +11,7 @@ from PIL import Image
 
 from libre_panel.devices.base import DeviceError, Display
 from libre_panel.devices.models import PROTOCOLS, find_model
+from libre_panel.i18n import t
 
 
 class TurzxDisplay(Display):
@@ -39,7 +40,7 @@ class TurzxDisplay(Display):
             self._impl.set_brightness(percent)
 
     def describe(self) -> str:
-        return self.model.label if self.model else "TURZX panel"
+        return self.model.label if self.model else t("TURZX panel")
 
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
         if self._impl is None:
