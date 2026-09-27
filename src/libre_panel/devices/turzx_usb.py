@@ -25,6 +25,7 @@ import logging
 import struct
 import sys
 import time
+from datetime import datetime
 from typing import Any
 
 from PIL import Image
@@ -59,10 +60,11 @@ USB_PIDS = {pid: m for m in MODELS if m.protocol == "usb-turing" for _vid, pid i
 
 
 def ms_since_midnight(now: float | None = None) -> int:
-    now = time.time() if now is None else now
-    local = time.localtime(now)
-    midnight = time.mktime((local.tm_year, local.tm_mon, local.tm_mday, 0, 0, 0, 0, 0, -1))
-    return int((now - midnight) * 1000) & 0xFFFFFFFF
+    # From the local wall clock, not via mktime: Windows' mktime fails for
+    # midnights before 1970, i.e. for "now" near the epoch east of UTC.
+    local = datetime.fromtimestamp(time.time() if now is None else now)
+    seconds = (local.hour * 60 + local.minute) * 60 + local.second
+    return (seconds * 1000 + local.microsecond // 1000) & 0xFFFFFFFF
 
 
 def _cipher() -> Any:

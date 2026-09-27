@@ -1,4 +1,5 @@
 import struct
+import time
 
 import pytest
 from PIL import Image
@@ -91,3 +92,18 @@ def test_show_sends_png_after_header():
     assert len(sent) == 512 + size
     with Image.open(__import__("io").BytesIO(sent[512:])) as png:
         assert png.size == (480, 1920) and png.mode == "RGBA"
+
+
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="needs time.tzset to switch time zones")
+def test_ms_since_midnight_east_of_utc(monkeypatch):
+    """Near the epoch, midnight east of UTC lies before 1970 (mktime fails on Windows)."""
+    from libre_panel.devices.turzx_usb import ms_since_midnight
+
+    monkeypatch.setenv("TZ", "Europe/Berlin")
+    time.tzset()
+    try:
+        assert ms_since_midnight(0) == 3_600_000  # 01:00 local time
+        assert ms_since_midnight(90_061.5) == ((2 * 60 + 1) * 60 + 1) * 1000 + 500
+    finally:
+        monkeypatch.undo()
+        time.tzset()
