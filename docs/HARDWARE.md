@@ -103,6 +103,11 @@ distance from the edge. Enter the smallest number whose line you can still
 see (0 when every line is visible); the report lists the hidden pixels per
 edge, so layouts can keep clear of them.
 
+Known so far: the 9.2" hides 18 px at the top in landscape (on the left in
+portrait). The editor shows such a strip as a hatched guide and snaps to its
+edge; the built-in layouts keep text and values out of it. Nothing is cut
+off or moved: a background may run under the bezel.
+
 ## Help add your panel
 
 Run `libre-panel doctor` (USB panels) or `libre-panel devices` and open a

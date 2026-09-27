@@ -177,6 +177,17 @@ const clone = (value) => JSON.parse(JSON.stringify(value));
 const widgetById = (id) => state.theme.widgets.find((w) => w.id === id);
 const selectedWidgets = () => state.theme.widgets.filter((w) => state.selection.has(w.id));
 const currentModel = () => state.models.find((m) => m.id === state.theme?.display?.model);
+
+// Strips of the frame that the panel's bezel hides, when the theme is exactly
+// that panel's size: a guide only, nothing is cropped or moved.
+function hiddenEdges() {
+  const model = currentModel();
+  const [w, h] = state.size || [0, 0];
+  const orientation = w > h ? "landscape" : "portrait";
+  if (!model?.hidden || model[orientation][0] !== w || model[orientation][1] !== h) return null;
+  const edges = model.hidden[orientation];
+  return Object.values(edges).some((px) => px > 0) ? edges : null;
+}
 const single = () => (state.selection.size === 1 ? widgetById([...state.selection][0]) : null);
 
 function slug(text) {
@@ -335,6 +346,24 @@ function placeBox(node, [x, y, w, h]) {
 function drawOverlay() {
   const overlay = $("#overlay");
   overlay.replaceChildren();
+  const hidden = hiddenEdges();
+  if (hidden) {
+    const [w, h] = state.size;
+    const rects = {
+      top: [0, 0, w, hidden.top],
+      right: [w - hidden.right, 0, hidden.right, h],
+      bottom: [0, h - hidden.bottom, w, hidden.bottom],
+      left: [0, 0, hidden.left, h],
+    };
+    for (const [edge, px] of Object.entries(hidden)) {
+      if (!px) continue;
+      const node = el("div", { class: `hidden-strip ${edge}`, title: t("Hidden behind the panel's frame: {px} px", { px }) });
+      const [x, y, rw, rh] = rects[edge];
+      const z = state.zoom;
+      Object.assign(node.style, { left: `${x * z}px`, top: `${y * z}px`, width: `${rw * z}px`, height: `${rh * z}px` });
+      overlay.append(node);
+    }
+  }
   for (const widget of state.theme.widgets) {
     const box = state.boxes[widget.id];
     if (!box) continue;
@@ -440,6 +469,11 @@ function snapDelta(dx, dy, free) {
     const threshold = 6 / state.zoom;
     const xs = [0, state.size[0] / 2, state.size[0]];
     const ys = [0, state.size[1] / 2, state.size[1]];
+    const hidden = hiddenEdges();
+    if (hidden) {
+      xs.push(hidden.left, state.size[0] - hidden.right);
+      ys.push(hidden.top, state.size[1] - hidden.bottom);
+    }
     for (const [id, box] of Object.entries(state.boxes)) {
       if (state.selection.has(id)) continue;
       xs.push(box[0], box[0] + box[2] / 2, box[0] + box[2]);

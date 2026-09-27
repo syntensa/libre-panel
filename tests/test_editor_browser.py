@@ -130,6 +130,17 @@ def test_panel_menu_rescales(page):
     assert js(page, "document.querySelector('#canvas-wrap').classList.contains('round')")
 
 
+def test_hidden_strip_is_shown_and_snaps(page):
+    assert page.locator(".hidden-strip").count() == 0  # the default panel hides nothing
+    page.select_option("#model-select", "turing-9.2-usb")
+    page.wait_for_function("state.size[0] === 1920 && document.querySelector('.hidden-strip.top')")
+    zoom = js(page, "state.zoom")
+    strip = page.locator(".hidden-strip.top").bounding_box()
+    assert strip["height"] == pytest.approx(18 * zoom, abs=1)
+    assert "18 px" in page.locator(".hidden-strip.top").get_attribute("title")
+    assert js(page, "hiddenEdges().top") == 18
+
+
 def test_plain_editor_hides_the_panel_controls(page):
     page.wait_for_timeout(300)
     assert page.locator("#app-chip").is_hidden()
