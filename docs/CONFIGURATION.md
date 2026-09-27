@@ -45,6 +45,11 @@ provider = "open-meteo"
 # longitude = 0.0              #   libre-panel location "Your City"
 units = "metric"               # or "imperial"
 update_minutes = 15
+
+[video]
+mode = "off"                   # "on": smooth video mode (TURZX USB panels, needs ffmpeg)
+fps = 50                       # frames per second in video mode
+local_clip = ""                # required for "on", see below
 ```
 
 ## Language
@@ -61,6 +66,46 @@ Translations live in `src/libre_panel/locale/<language>.json`, keyed by the
 English text; a test makes sure every text has one. To add a language, copy
 `de.json`, translate the values and add the language to `LANGUAGES` in
 `src/libre_panel/i18n.py`.
+
+## Video
+
+TURZX USB panels (VID 1CBE) have a hardware video decoder. In video mode
+Libre Panel sends every frame as H.264 video at up to 50 fps instead of one
+PNG image per frame, which the panel accepts only about 9 times a second.
+Moving things (gliding values, graphs, glow) run smoothly.
+
+```toml
+[video]
+mode = "on"
+local_clip = "usr/data/standby.h264"
+```
+
+- **ffmpeg** encodes the video. Install it (Windows: `winget install ffmpeg`;
+  macOS: `brew install ffmpeg`; Linux: the `ffmpeg` package), or set
+  `ffmpeg = "C:/path/to/ffmpeg.exe"`. It must include libx264, which the
+  usual builds do. It uses one CPU core, lightly.
+- **`local_clip`** is the name the panel's video start command carries: the
+  clip the panel plays by itself while the PC is off, if it has one (vendor
+  app: standby video). The command copies this name into the panel's memory,
+  and while the PC is off the panel plays whatever name is there. Nothing is
+  saved on the panel; after it loses power it is back to its own setting.
+- When Libre Panel stops, the panel returns to its power-on frame rate and
+  keeps showing the last frame.
+
+| Setting | Default | |
+|---|---|---|
+| `mode` | `"off"` | `"on"` turns video mode on |
+| `fps` | 50 | frames per second (1–60) |
+| `device_fps` | 60 | the rate reported to the panel; must be at least `fps`. The panel's player never catches up once behind, so it gets a little more than it needs |
+| `crf` | 25 | quality, 0–51; lower is sharper and needs more USB bandwidth |
+| `preset` | `"superfast"` | x264 speed preset |
+| `keyframe_s` | 10 | seconds between keyframes; below 3 flat backgrounds visibly pulse |
+| `maxrate` | `"2M"` | highest bit rate, e.g. `"1500k"` |
+| `ffmpeg` | `""` | path to ffmpeg; empty = look in `PATH` |
+| `local_clip` | `""` | see above |
+
+The settings were measured on the 9.2" panel; the details are in
+[the protocol notes](protocol/turzx-usb.md#two-layers-h264-video--png-overlay-smooth-path).
 
 ## Windows sensors (GPU, power, fans)
 

@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -170,6 +171,51 @@ class _Link:
         self.retry_at = now + delay
 
 
+class _Pacer:
+    """Frame clock for streaming displays, without drift (SPUR II).
+
+    Frame n is due at anchor + n / fps. A loop that falls more than a frame
+    behind takes a new anchor instead of sprinting to catch up: the panel's
+    player would show the burst late anyway.
+    """
+
+    def __init__(
+        self,
+        clock: Callable[[], float] = time.perf_counter,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self.clock, self.sleep = clock, sleep
+        self.fps = 0
+        self.frames = 0
+        self.anchor = (0.0, 0)
+        self.reanchored = 0
+
+    def reset(self) -> None:
+        self.fps = 0
+
+    def wait(self, fps: int, stop: threading.Event) -> None:
+        """Wait until the next frame is due."""
+        now = self.clock()
+        if fps != self.fps:
+            self.fps, self.anchor = fps, (now, self.frames)
+        self.frames += 1
+        start, first = self.anchor
+        due = start + (self.frames - first) / fps
+        if now < due:
+            if due - now > 0.05:
+                stop.wait(due - now)
+            else:
+                self.sleep(due - now)  # precise also on Windows (high-resolution timer)
+        elif now - due > 1 / fps:
+            self.anchor = (now, self.frames)
+            self.reanchored += 1
+
+
+def _same_device(a, b) -> bool:
+    """Brightness changes on the open panel; anything else needs it opened again."""
+    return replace(a, brightness=0) == replace(b, brightness=0)
+
+
 def run(
     config: Config,
     once: bool = False,
@@ -177,7 +223,8 @@ def run(
     status: RunStatus | None = None,
 ) -> None:
     """Main loop: read sensors at the theme's rate, render at ``config.fps`` so
-    values glide between readings, and send only frames that changed.
+    values glide between readings, and send only frames that changed. A
+    streaming display (video mode) gets every frame at its own steady rate.
 
     With ``once`` a single frame is sent and any device error is raised.
     ``status`` is kept up to date for status displays.
@@ -195,6 +242,7 @@ def run(
     size = target_size(config, theme)
     watcher = _Watcher(config.path, _theme_file(theme))
     link = _Link(display, config.device.brightness, status)
+    pacer = _Pacer()
     previous = None
     snapshot = None
     next_sample = 0.0
@@ -214,12 +262,19 @@ def run(
                 except (ConfigError, ThemeError) as exc:
                     log.warning("keeping the current theme: %s", exc)  # e.g. half-written file
                 else:
-                    device = config.device  # the open device stays as it is
-                    if fresh.device.brightness != device.brightness:
+                    device = config.device
+                    if not _same_device(device, fresh.device):
+                        log.info("device settings changed; opening the panel again")
+                        display.close()
+                        display = create_display(fresh.device)
+                        link = _Link(display, fresh.device.brightness, status)
+                        device = fresh.device
+                    elif fresh.device.brightness != device.brightness:
                         link.set_brightness(fresh.device.brightness)
                         device.brightness = fresh.device.brightness
                     fresh.device, config = device, fresh
                     i18n.set_language(config.language)
+                    renderer.close()
                     theme, renderer = new_theme, Renderer(new_theme, animate=config.fps > 1)
                     size, previous, next_sample = target_size(config, theme), None, 0.0
                     watcher = _Watcher(config.path, _theme_file(theme))
@@ -229,14 +284,25 @@ def run(
                 snapshot = hub.snapshot()
                 next_sample = started + (config.refresh_ms or theme.refresh_ms) / 1000
             if link.ensure(started):
+                streaming = display.streaming
+                # a slow piece (a new background) must not stall a video
+                renderer.background_builds = streaming
                 snapshot.now = datetime.now()  # the clock ticks between readings too
                 frame, _ = renderer.render(snapshot, started)
                 frame = fit_frame(frame, size, theme.background_color)
-                region = changed_region(previous, frame)
-                if region is not None:
-                    previous = frame if link.show(frame, region, started) else None
+                if streaming:
+                    link.show(frame, None, started)
+                    previous = None
+                else:
+                    region = changed_region(previous, frame)
+                    if region is not None:
+                        previous = frame if link.show(frame, region, started) else None
             else:
                 previous = None  # send a full frame after reconnecting
+            if link.connected and display.streaming:
+                pacer.wait(display.stream_fps, stop)
+                continue
+            pacer.reset()
             # While something glides, draw at full fps; otherwise wake for the next
             # reading, but at least twice a second so a seconds clock never skips.
             interval = 1 / config.fps
@@ -245,4 +311,5 @@ def run(
             stop.wait(max(0.0, interval - (time.monotonic() - started)))
     finally:
         display.close()
+        renderer.close()
         hub.close()

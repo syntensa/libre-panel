@@ -24,6 +24,7 @@ import io
 import logging
 import struct
 import sys
+import threading
 import time
 from datetime import datetime
 from typing import Any
@@ -177,10 +178,15 @@ def _backend() -> Any:
 
 
 class UsbTransport:
-    """Bulk transport on interface 0 (EP 0x01 OUT, EP 0x81 IN, 512-byte packets)."""
+    """Bulk transport on interface 0 (EP 0x01 OUT, EP 0x81 IN, 512-byte packets).
+
+    Thread-safe: each command and its reply form one unit.
+    """
 
     def __init__(self, device: Any, ep_out: Any, ep_in: Any, pid: int) -> None:
         self.device, self.ep_out, self.ep_in, self.pid = device, ep_out, ep_in, pid
+        self._lock = threading.RLock()
+        self._late = 0  # replies to queries we stopped waiting for; skipped when they come
 
     @classmethod
     def open(cls, pid: int | None = None) -> UsbTransport:
@@ -242,28 +248,59 @@ class UsbTransport:
         import usb.core
 
         dropped = 0
-        for _ in range(limit):
-            try:
-                self.ep_in.read(READ_LEN, timeout_ms)
-                dropped += 1
-            except usb.core.USBError:
-                break
+        with self._lock:
+            for _ in range(limit):
+                try:
+                    self.ep_in.read(READ_LEN, timeout_ms)
+                    dropped += 1
+                except usb.core.USBError:
+                    break
+            self._late = 0
         return dropped
+
+    def _reply(self, cmd: int, timeout_ms: int) -> bytes:
+        reply = bytes(self.ep_in.read(READ_LEN, timeout_ms))
+        while self._late and reply[:1] != bytes([cmd]):
+            self._late -= 1  # the late answer to an earlier query
+            reply = bytes(self.ep_in.read(READ_LEN, timeout_ms))
+        return reply
 
     def command(
         self, cmd: int, args: bytes = b"", payload: bytes = b"", timeout_ms: int = 2000
     ) -> bytes:
         import usb.core
 
-        try:
-            self.ep_out.write(build_packet(cmd, args) + payload, timeout_ms)
-            reply = bytes(self.ep_in.read(READ_LEN, timeout_ms))
-        except usb.core.USBError as exc:
-            raise DeviceError(f"USB error on command {cmd}: {exc}") from exc
+        with self._lock:
+            try:
+                self.ep_out.write(build_packet(cmd, args) + payload, timeout_ms)
+                reply = self._reply(cmd, timeout_ms)
+            except usb.core.USBError as exc:
+                raise DeviceError(f"USB error on command {cmd}: {exc}") from exc
         if not reply or reply[0] != cmd:
             raise DeviceError(f"command {cmd}: unexpected reply {reply[:16].hex(' ')}")
         if ACK not in (reply[1:2] + reply[8:9]):
             raise DeviceError(f"command {cmd} not accepted: {reply[:16].hex(' ')}")
+        return reply
+
+    def query(self, cmd: int, timeout_ms: int = 400) -> bytes | None:
+        """A status request. While the panel decodes video it sometimes answers
+        late; then this returns None and the late answer is skipped later."""
+        import usb.core
+
+        with self._lock:
+            try:
+                self.ep_out.write(build_packet(cmd), timeout_ms)
+            except usb.core.USBError as exc:
+                raise DeviceError(f"USB error on command {cmd}: {exc}") from exc
+            try:
+                reply = self._reply(cmd, timeout_ms)
+            except usb.core.USBTimeoutError:
+                self._late = min(self._late + 1, 8)
+                return None
+            except usb.core.USBError as exc:
+                raise DeviceError(f"USB error on command {cmd}: {exc}") from exc
+        if reply[:1] != bytes([cmd]):
+            raise DeviceError(f"command {cmd}: unexpected reply {reply[:16].hex(' ')}")
         return reply
 
     def sync(self, attempts: int = 3) -> bytes:

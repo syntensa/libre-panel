@@ -25,6 +25,10 @@ class FrameError(DeviceError):
 
 class Display:
     name = "base"
+    # A streaming display (a video encoder) wants every frame at ``stream_fps``,
+    # changed or not; others get only frames that changed, at the configured fps.
+    streaming = False
+    stream_fps = 0
 
     def __init__(self, config: DeviceConfig) -> None:
         self.config = config

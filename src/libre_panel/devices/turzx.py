@@ -29,17 +29,29 @@ class TurzxDisplay(Display):
                 f"{self.model.label}: the {PROTOCOLS[protocol]} protocol is not implemented yet. "
                 'Use driver = "virtual" meanwhile; see docs/HARDWARE.md for the plan.'
             )
-        from libre_panel.devices.turzx_usb import TurzxUsbDisplay
-
-        impl = TurzxUsbDisplay(self.config, self.model)
+        if self.config.video.mode == "on":
+            from libre_panel.devices.turzx_video import TurzxVideoDisplay as Impl
+        else:
+            from libre_panel.devices.turzx_usb import TurzxUsbDisplay as Impl
+        impl = Impl(self.config, self.model)
         impl.open()
         self._impl, self.model = impl, impl.model
+
+    @property
+    def streaming(self) -> bool:
+        return bool(self._impl and self._impl.streaming)
+
+    @property
+    def stream_fps(self) -> int:
+        return self._impl.stream_fps if self._impl else 0
 
     def set_brightness(self, percent: int) -> None:
         if self._impl:
             self._impl.set_brightness(percent)
 
     def describe(self) -> str:
+        if self._impl is not None:
+            return self._impl.describe()
         return self.model.label if self.model else t("TURZX panel")
 
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
