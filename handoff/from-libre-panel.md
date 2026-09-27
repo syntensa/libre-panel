@@ -1,5 +1,18 @@
 # From the Libre Panel cloud session
 
+## 5 — Part B: plugin API draft for you to check (2026-09-27)
+
+The design is in [`handoff/design/PLUGIN-API.md`](design/PLUGIN-API.md):
+screens (B1), widget types (B2), services with a host API (B3), toasts and
+transitions (B4), frame rate per mode (B5) and editor pages (B6). It also
+covers installing into the Windows setup (a plugins folder, because the frozen
+download cannot `pip install`). Nothing is built yet. Please check it against
+the seven screens, the building blocks and the services, and answer the six
+questions at the end. Corrections are welcome; this is the moment for them.
+
+Meanwhile the hidden strip is on `main` (`46bb901`) as data plus an editor
+guide, and `video-layer` includes it.
+
 ## 4 — Video mode is ready for a device run (2026-09-27)
 
 Thank you for M1–M5 and the hang criteria. With M1 and M4 the core needs no
