@@ -66,8 +66,11 @@ def main(command):
                 proc.kill()
                 proc.wait(10)
             log = home / "logs" / "libre-panel.log"
-            if log.exists():
-                print(log.read_text(encoding="utf-8"))
+            text = log.read_text(encoding="utf-8") if log.exists() else ""
+            print(text)
+        # Quit has to work by itself, not through the last-resort exit.
+        if "exiting anyway" in text:
+            raise SystemExit("FAIL: the app only ended through the last-resort exit")
     print("OK")
 
 
