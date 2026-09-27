@@ -96,6 +96,12 @@ dims and brightens the panel, measures the frame rate, reconnects once and
 writes `libre-panel-doctor-<model>.txt`. The report contains no serial numbers
 or personal paths.
 
+Some panels hide a few pixels behind the bezel. `doctor` measures that with a
+ruler card: yellow lines every 2 pixels along each edge, numbered by their
+distance from the edge. Enter the smallest number whose line you can still
+see (0 when every line is visible); the report lists the hidden pixels per
+edge, so layouts can keep clear of them.
+
 ## Help add your panel
 
 Run `libre-panel doctor` (USB panels) or `libre-panel devices` and open a

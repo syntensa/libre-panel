@@ -38,6 +38,8 @@ class Step:
 class Report:
     steps: list[Step] = field(default_factory=list)
     model: PanelModel | None = None
+    # Pixels the glass hides per edge (landscape), from the ruler card.
+    hidden: dict[str, int | None] = field(default_factory=dict)
 
     @property
     def passed(self) -> bool:
@@ -141,6 +143,61 @@ def test_card(
             x = cx - ramp_w // 2 + i * ramp_w // steps
             d.rectangle([x, ramp_y, x + ramp_w // steps - 1, ramp_y + unit // 2], fill=(v, v, v))
     return img
+
+
+RULER_EDGES = ("top", "bottom", "left", "right")
+
+
+def ruler_card(width: int, height: int, step: int = 2, depth: int = 40) -> Image.Image:
+    """Numbered lines at exact distances from each edge.
+
+    For every edge a row of short yellow lines runs parallel to it, the line
+    labelled ``k`` exactly ``k`` pixels in from the edge. The smallest number
+    whose line is still visible is the width of the strip the glass hides.
+    """
+    img = Image.new("RGB", (width, height), "black")
+    d = ImageDraw.Draw(img)
+    font = _font(11)
+    marks = list(range(0, depth + 1, step))
+    length = 12
+    for edge in RULER_EDGES:
+        horizontal = edge in ("top", "bottom")
+        along = width if horizontal else height
+        margin = depth + 30  # keep clear of the corners and the other rulers
+        spacing = (along - 2 * margin) / len(marks)
+        for i, k in enumerate(marks):
+            pos = round(margin + i * spacing)
+            if edge == "top":
+                d.line([(pos, k), (pos + length, k)], fill="#ffd400")
+                d.text((pos, k + 3), str(k), font=font, fill="white", anchor="la")
+            elif edge == "bottom":
+                y = height - 1 - k
+                d.line([(pos, y), (pos + length, y)], fill="#ffd400")
+                d.text((pos, y - 3), str(k), font=font, fill="white", anchor="ld")
+            elif edge == "left":
+                d.line([(k, pos), (k, pos + length)], fill="#ffd400")
+                d.text((k + 3, pos), str(k), font=font, fill="white", anchor="la")
+            else:
+                x = width - 1 - k
+                d.line([(x, pos), (x, pos + length)], fill="#ffd400")
+                d.text((x - 3, pos), str(k), font=font, fill="white", anchor="ra")
+    cx, cy = width // 2, height // 2
+    d.text((cx, cy - 12), "RULER", font=_font(22), fill="white", anchor="mm")
+    d.text(
+        (cx, cy + 14),
+        "at each edge: the smallest number whose yellow line you can see",
+        font=_font(12),
+        fill="#cbd5e1",
+        anchor="mm",
+    )
+    return img
+
+
+def _printable(data: bytes) -> str:
+    """ASCII if the bytes are text, hex otherwise (real panels answer with binary)."""
+    if data and all(32 <= b < 127 for b in data):
+        return repr(data.decode("ascii"))
+    return data.hex(" ") or "(empty)"
 
 
 def _versions() -> str:
@@ -252,14 +309,34 @@ class Doctor:
                     "the driver for serial panels is not available yet",
                 )
 
+    def _ruler(self, model) -> None:
+        """Measure the strip the glass hides at each edge (landscape)."""
+        w, h = model.size("landscape")
+        self._send(ruler_card(w, h))
+        self.say("\nThe panel should now show the RULER card (landscape).")
+        if self.ask is None:
+            self.pause(self.seconds_per_card)
+            self._step("hidden edges (ruler)", "skip", "not measured (no questions asked)")
+            return
+        hidden = {}
+        for edge in RULER_EDGES:
+            answer = self.ask(
+                f"{edge.capitalize()} edge: smallest number whose yellow line you can see "
+                "(0 = all, Enter = cannot tell)? "
+            ).strip()
+            hidden[edge] = int(answer) if answer.isdigit() else None
+        parts = [f"{edge} {'?' if v is None else f'{v} px'}" for edge, v in hidden.items()]
+        self.report.hidden = hidden
+        self._step("hidden edges (ruler)", "info", "hidden: " + ", ".join(parts))
+
     def _checks(self) -> None:
         from libre_panel.devices.turzx_usb import CMD_BRIGHTNESS, brightness_arg
 
         transport = self.transport
         dropped = transport.drain()
         reply = transport.sync()
-        ident = reply[2:10].split(b"\x00")[0].decode("ascii", "replace")
-        detail = f"reply {reply[:2].hex(' ')} '{ident}'"
+        ident = reply[2:10].split(b"\x00")[0]
+        detail = f"reply {reply[:2].hex(' ')}, then {_printable(ident)}"
         if dropped:
             detail += f", cleared {dropped} stale replies"
         self._step("handshake (command 10)", "ok", detail)
@@ -280,6 +357,9 @@ class Doctor:
                 "Is the white frame visible on all four edges, is 'UP' at the top edge, "
                 "is the text readable (not mirrored) and are RED/GREEN/BLUE the right colours?",
             )
+
+        if not round_panel:
+            self._ruler(model)
 
         for percent in (10, 100):
             transport.command(CMD_BRIGHTNESS, bytes([brightness_arg(percent)]))

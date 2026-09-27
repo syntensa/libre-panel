@@ -143,12 +143,20 @@ def answers(*replies):
 
 
 def test_doctor_passes_on_a_working_panel(panel):
-    doctor = Doctor(ask=answers("y", "y", "y"), say=lambda s: None, pause=lambda s: None, frames=5)
+    # two test cards, the ruler (top, bottom, left, right), brightness
+    doctor = Doctor(
+        ask=answers("y", "y", "18", "0", "0", "", "y"),
+        say=lambda s: None,
+        pause=lambda s: None,
+        frames=5,
+    )
     report = doctor.run()
     assert report.passed, report.text()
     text = report.text()
     assert "turing-9.2-usb" in text and "fps" in text and "turzx_00" in text
-    assert panel.commands.count(102) == 2 + 5 + 1  # two cards, speed test, final card
+    assert report.hidden == {"top": 18, "bottom": 0, "left": 0, "right": None}
+    assert "hidden: top 18 px, bottom 0 px, left 0 px, right ?" in text
+    assert panel.commands.count(102) == 2 + 1 + 5 + 1  # cards, ruler, speed test, final card
     assert panel.brightness == [10, 102, 61]
     sizes = {frame.size for frame in panel.frames}
     assert sizes == {(480, 1920)}  # both orientations end up in the portrait framebuffer
@@ -184,3 +192,26 @@ def test_doctor_report_has_no_personal_data(panel):
     text = report.text().lower()
     for private in ("serial number", "serial=", "serial_number", "users\\", "/home/"):
         assert private not in text
+
+
+def test_ruler_lines_sit_exactly_at_their_distance():
+    from libre_panel.doctor import ruler_card
+
+    card = ruler_card(1920, 480)
+    yellow = (255, 212, 0)
+    for k in (0, 2, 18, 40):
+        # the line labelled k runs somewhere along the edge, exactly k pixels in
+        top_row = [card.getpixel((x, k)) for x in range(card.width)]
+        bottom_row = [card.getpixel((x, card.height - 1 - k)) for x in range(card.width)]
+        left_col = [card.getpixel((k, y)) for y in range(card.height)]
+        right_col = [card.getpixel((card.width - 1 - k, y)) for y in range(card.height)]
+        for line in (top_row, bottom_row, left_col, right_col):
+            assert line.count(yellow) >= 12, k
+
+
+def test_handshake_bytes_are_shown_as_hex_when_binary():
+    from libre_panel.doctor import _printable
+
+    assert _printable(b"turzx_00") == "'turzx_00'"
+    assert _printable(b"\x9a\xf3\x01") == "9a f3 01"
+    assert _printable(b"") == "(empty)"
