@@ -4,11 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Libre Panel Theme Editor</title>
+  <link rel="icon" type="image/png" href="/static/icon.png">
   <link rel="stylesheet" href="/static/editor.css">
 </head>
 <body>
   <header class="topbar">
-    <div class="brand">Libre Panel <span>Theme Editor</span></div>
+    <div class="brand"><img src="/static/icon.png" alt="" width="22" height="22"> Libre Panel <span>Theme Editor</span></div>
     <label>Theme <select id="theme-select"></select></label>
     <button id="btn-new" type="button">New</button>
     <button id="btn-save" type="button" class="primary" title="Ctrl+S">Save</button>
@@ -21,6 +22,28 @@
     <button id="btn-undo" type="button" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
     <button id="btn-redo" type="button" title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
     <label class="toggle"><input type="checkbox" id="live-toggle"> Live sensors</label>
+    <div class="app-wrap">
+      <button id="app-chip" type="button" class="app-chip" aria-haspopup="dialog" aria-expanded="false" hidden>
+        <span class="dot" aria-hidden="true"></span><span id="app-chip-text">Panel</span>
+      </button>
+      <div id="app-popover" class="popover" role="dialog" aria-label="Panel" hidden>
+        <div class="pop-head"><span class="dot" aria-hidden="true"></span><strong id="app-state">…</strong></div>
+        <p id="app-detail" class="pop-detail" hidden></p>
+        <dl class="pop-facts">
+          <dt>Output</dt><dd id="app-target">–</dd>
+          <dt>Theme</dt><dd id="app-theme">–</dd>
+        </dl>
+        <label class="field"><span>Brightness <output id="app-brightness-value"></output></span>
+          <input type="range" id="app-brightness" min="0" max="100" step="5">
+        </label>
+        <label class="check"><input type="checkbox" id="app-autostart"> Start with system</label>
+        <small id="app-autostart-where" class="muted"></small>
+        <div class="pop-actions">
+          <button id="app-pause" type="button">Pause panel</button>
+          <button id="app-quit" type="button" class="danger">Quit Libre Panel</button>
+        </div>
+      </div>
+    </div>
   </header>
 
   <nav class="panelbar" aria-label="Panel and view">

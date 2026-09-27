@@ -37,6 +37,8 @@ const state = {
   redo: [],
   lastCommit: { key: null, time: 0 },
   clipboard: null,
+  app: null, // the background app (tray/start) when it serves this editor
+  appTimer: null,
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -1201,6 +1203,9 @@ async function loadAssets() {
 async function loadTheme(id) {
   const data = await api("GET", `/api/themes/${encodeURIComponent(id)}`);
   state.themeId = id;
+  const select = $("#theme-select");
+  for (const option of [...select.options]) if (!option.value) option.remove();
+  select.value = id;
   state.builtin = data.builtin;
   state.theme = data.theme;
   state.selection = new Set();
@@ -1324,6 +1329,106 @@ async function importTheme(file) {
 
 // ---------------------------------------------------------------- setup
 
+// -- background app: status, pause, brightness, autostart, quit ---------------
+
+const APP_STATE_TEXT = {
+  starting: "Starting",
+  showing: "Showing",
+  waiting: "Waiting for the panel",
+  paused: "Paused",
+  error: "Needs attention",
+  stopped: "Stopped",
+};
+
+function renderApp(app) {
+  state.app = app;
+  const chip = $("#app-chip");
+  if (!app.available) {
+    chip.hidden = true;
+    clearInterval(state.appTimer);
+    return;
+  }
+  const panel = app.panel;
+  const label = APP_STATE_TEXT[panel.state] || panel.state;
+  chip.hidden = false;
+  chip.dataset.state = panel.state;
+  $("#app-popover").dataset.state = panel.state;
+  $("#app-chip-text").textContent = `Panel · ${label}`;
+  chip.title = `${panel.target || "Panel"}: ${label}${panel.detail ? ` – ${panel.detail}` : ""}`;
+  $("#app-state").textContent = label;
+  $("#app-detail").textContent = panel.detail || "";
+  $("#app-detail").hidden = !panel.detail;
+  $("#app-target").textContent = panel.target || "–";
+  $("#app-theme").textContent = panel.theme || "–";
+  const slider = $("#app-brightness");
+  if (document.activeElement !== slider && app.brightness !== null) slider.value = app.brightness;
+  slider.disabled = app.brightness === null;
+  $("#app-brightness-value").textContent = `${slider.value} %`;
+  const autostart = $("#app-autostart");
+  autostart.checked = Boolean(app.autostart);
+  autostart.disabled = app.autostart === null;
+  $("#app-autostart-where").textContent = app.autostart_location || "";
+  $("#app-pause").textContent = panel.state === "paused" ? "Resume panel" : "Pause panel";
+}
+
+async function pollApp() {
+  if (document.hidden || state.appQuit) return;
+  try {
+    renderApp(await api("GET", "/api/app"));
+  } catch {
+    $("#app-chip").dataset.state = "gone";
+    $("#app-chip-text").textContent = "Panel · not running";
+  }
+}
+
+async function appAction(action, value) {
+  try {
+    renderApp(await api("POST", "/api/app", { action, value }));
+    return true;
+  } catch (error) {
+    setStatus(error.message, "error");
+    return false;
+  }
+}
+
+function toggleAppPopover(open = $("#app-popover").hidden) {
+  const popover = $("#app-popover");
+  // Open towards the side with room (the top bar wraps on narrow windows).
+  popover.classList.toggle("from-left", $("#app-chip").getBoundingClientRect().right < 320);
+  popover.hidden = !open;
+  $("#app-chip").setAttribute("aria-expanded", String(open));
+  if (open) pollApp();
+}
+
+async function quitApp() {
+  if (!confirm("Quit Libre Panel? The panel stops updating until you start it again.")) return;
+  if (!(await appAction("quit"))) return;
+  state.appQuit = true;
+  clearInterval(state.appTimer);
+  toggleAppPopover(false);
+  $("#app-chip").dataset.state = "gone";
+  $("#app-chip-text").textContent = "Panel · quit";
+  setStatus("Libre Panel has quit. You can close this tab.", "warn");
+}
+
+function setupApp() {
+  $("#app-chip").addEventListener("click", () => toggleAppPopover());
+  $("#app-pause").addEventListener("click", () => appAction(state.app?.panel.state === "paused" ? "resume" : "pause"));
+  $("#app-quit").addEventListener("click", quitApp);
+  $("#app-autostart").addEventListener("change", (event) => appAction("autostart", event.target.checked));
+  const slider = $("#app-brightness");
+  slider.addEventListener("input", () => ($("#app-brightness-value").textContent = `${slider.value} %`));
+  slider.addEventListener("change", () => appAction("brightness", Number(slider.value)));
+  document.addEventListener("pointerdown", (event) => {
+    if (!$("#app-popover").hidden && !event.target.closest(".app-wrap")) toggleAppPopover(false);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !$("#app-popover").hidden) toggleAppPopover(false);
+  });
+  pollApp();
+  state.appTimer = setInterval(pollApp, 2000);
+}
+
 function setLive(on) {
   state.live = on;
   clearInterval(state.liveTimer);
@@ -1377,7 +1482,10 @@ async function init() {
       })
       .catch(() => {});
     await refreshThemeList();
-    const first = state.themes.find((t) => t.id === "libre-default") || state.themes[0];
+    // Start with the theme the panel shows.
+    const active = await api("GET", "/api/active").then((a) => a.theme, () => null);
+    const first =
+      state.themes.find((t) => t.id === active) || state.themes.find((t) => t.id === "libre-default") || state.themes[0];
     if (first) await loadTheme(first.id);
     else newTheme();
   } catch (error) {
@@ -1438,6 +1546,7 @@ async function init() {
     if (state.dirty) event.preventDefault();
   });
   updateHistoryButtons();
+  setupApp();
 }
 
 init();

@@ -14,44 +14,81 @@ from libre_panel.devices.base import DeviceError
 
 def _cmd_run(args: argparse.Namespace) -> int:
     from libre_panel.app import run
+    from libre_panel.instance import InstanceLock
 
     config = load_config(args.config)
     if args.driver:
         config.device.driver = args.driver
     if args.theme:
         config.theme = args.theme
-    try:
-        run(config, once=args.once)
-    except KeyboardInterrupt:
-        pass
+    with InstanceLock():
+        try:
+            run(config, once=args.once)
+        except KeyboardInterrupt:
+            pass
     return 0
 
 
-def _cmd_start(args: argparse.Namespace) -> int:
-    """Everything at once: drive the panel and open the editor."""
-    import threading
+def _log_file() -> Path:
+    """Background runs log to a file (there is no terminal to read)."""
+    from logging.handlers import RotatingFileHandler
 
-    from libre_panel.app import run
-    from libre_panel.editor.server import serve
+    path = config_dir() / "logs" / "libre-panel.log"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handler = RotatingFileHandler(path, maxBytes=1_000_000, backupCount=2, encoding="utf-8")
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logging.getLogger().addHandler(handler)
+    return path
 
-    config = load_config(args.config)
-    stop = threading.Event()
 
-    def panel() -> None:
-        try:
-            run(config, stop=stop)
-        except (ConfigError, DeviceError) as exc:
-            logging.getLogger("libre_panel").error("panel stopped: %s", exc)
-        except Exception:
-            logging.getLogger("libre_panel").exception("panel stopped")
+def _background(args: argparse.Namespace, use_icon: bool, open_editor: bool) -> int:
+    """Drive the panel and serve the editor until Quit; one instance at a time."""
+    import webbrowser
 
-    thread = threading.Thread(target=panel, name="panel", daemon=True)
-    thread.start()
+    from libre_panel.instance import AlreadyRunning, InstanceLock
+    from libre_panel.service import BackgroundApp, running_instance
+    from libre_panel.tray import run_app
+
+    lock = InstanceLock()
     try:
-        serve(port=args.port, open_browser=not args.no_browser, config_path=args.config)
+        lock.acquire()
+    except AlreadyRunning:
+        url = (running_instance() or {}).get("editor")
+        if not url:
+            raise
+        print(f"Libre Panel is already running. Theme editor: {url}")
+        if open_editor:
+            webbrowser.open(url)
+        return 0
+    try:
+        log_path = _log_file() if use_icon else None
+        app = BackgroundApp(args.config, port=args.port)
+        return run_app(app, use_icon=use_icon, open_editor=open_editor, log_path=log_path)
     finally:
-        stop.set()
-        thread.join(timeout=5)
+        lock.release()
+
+
+def _cmd_start(args: argparse.Namespace) -> int:
+    """Everything at once in a terminal: drive the panel and open the editor."""
+    return _background(args, use_icon=False, open_editor=not args.no_browser)
+
+
+def _cmd_tray(args: argparse.Namespace) -> int:
+    return _background(args, use_icon=not args.no_icon, open_editor=not args.background)
+
+
+def _cmd_autostart(args: argparse.Namespace) -> int:
+    from libre_panel.autostart import Autostart, launch_command
+
+    autostart = Autostart()
+    if args.action == "enable":
+        where = autostart.enable(launch_command(args.config))
+        print(f"Libre Panel starts in the background when you log in ({where}).")
+    elif args.action == "disable":
+        print("Autostart removed." if autostart.disable() else "Autostart was not enabled.")
+    else:
+        state = "enabled" if autostart.is_enabled() else "disabled"
+        print(f"Autostart is {state} ({autostart.location()}).")
     return 0
 
 
@@ -82,8 +119,21 @@ def _cmd_preview(args: argparse.Namespace) -> int:
 
 
 def _cmd_editor(args: argparse.Namespace) -> int:
-    from libre_panel.editor.server import serve
+    import webbrowser
 
+    from libre_panel.editor.server import serve
+    from libre_panel.instance import AlreadyRunning, InstanceLock
+    from libre_panel.service import running_instance
+
+    try:
+        InstanceLock().acquire().release()
+    except AlreadyRunning:
+        url = (running_instance() or {}).get("editor")
+        if url:  # the background app already serves the editor
+            print(f"Libre Panel is running. Theme editor: {url}")
+            if not args.no_browser:
+                webbrowser.open(url)
+            return 0
     serve(port=args.port, open_browser=not args.no_browser, config_path=args.config)
     return 0
 
@@ -169,8 +219,10 @@ def _cmd_devices(args: argparse.Namespace) -> int:
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
     from libre_panel.doctor import run_doctor
+    from libre_panel.instance import InstanceLock
 
-    report = run_doctor(args.report, ask_questions=not args.no_questions, frames=args.frames)
+    with InstanceLock():
+        report = run_doctor(args.report, ask_questions=not args.no_questions, frames=args.frames)
     return 1 if report.failed else 0
 
 
@@ -213,6 +265,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--no-browser", action="store_true")
     p.set_defaults(func=_cmd_start)
+
+    p = sub.add_parser("tray", help="run in the background with a tray icon")
+    p.add_argument("--port", type=int, default=8765, help="editor port (another is used if taken)")
+    p.add_argument(
+        "--background", action="store_true", help="do not open the editor (used at login)"
+    )
+    p.add_argument("--no-icon", action="store_true", help="run without a tray icon")
+    p.set_defaults(func=_cmd_tray)
+
+    p = sub.add_parser("autostart", help="start Libre Panel when you log in")
+    p.add_argument("action", choices=["enable", "disable", "status"])
+    p.set_defaults(func=_cmd_autostart)
 
     p = sub.add_parser("run", help="drive the display")
     p.add_argument("--once", action="store_true", help="render a single frame and exit")
@@ -261,17 +325,34 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+def main(argv: list[str] | None = None, default_command: str = "start") -> int:
+    parser = build_parser()
+    argv = sys.argv[1:] if argv is None else list(argv)
+    if default_command == "start":
+        args = parser.parse_args(argv)
+    else:  # e.g. LibrePanel.exe: `--background` alone means `tray --background`
+        args, rest = parser.parse_known_args(argv)
+        if args.command is None:
+            chosen = parser.parse_args([default_command, *rest])
+            chosen.config, chosen.verbose = args.config, args.verbose
+            args = chosen
+        elif rest:
+            parser.error("unrecognized arguments: " + " ".join(rest))
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(levelname)s %(name)s: %(message)s",
+        # Programs without a console (pythonw, the windowed build) have no stderr.
+        handlers=[logging.StreamHandler()] if sys.stderr else [logging.NullHandler()],
     )
+    from libre_panel.instance import AlreadyRunning
     from libre_panel.theme.model import ThemeError
     from libre_panel.weather.open_meteo import WeatherError
 
     try:
         return args.func(args)
+    except AlreadyRunning as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     except (ConfigError, ThemeError, DeviceError, WeatherError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2

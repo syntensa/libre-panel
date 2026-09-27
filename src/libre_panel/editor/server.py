@@ -52,10 +52,11 @@ MAX_ASSET = 10 * 1024 * 1024
 ASSET_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ttf", ".otf"}
 _ASSET_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 _CONTENT_TYPES = {
-    ".html": "text/html",
-    ".js": "text/javascript",
-    ".css": "text/css",
-    ".svg": "image/svg+xml",
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".svg": "image/svg+xml; charset=utf-8",
+    ".png": "image/png",
 }
 
 
@@ -84,6 +85,8 @@ class EditorHandler(BaseHTTPRequestHandler):
     server_version = f"LibrePanelEditor/{__version__}"
     state: EditorState
     allowed_hosts: set[str]
+    # The running background app (tray or `start`); None for a plain `libre-panel editor`.
+    controls: Any = None
 
     def log_message(self, fmt: str, *args: Any) -> None:
         log.debug("editor: " + fmt, *args)
@@ -161,6 +164,10 @@ class EditorHandler(BaseHTTPRequestHandler):
                 return self._json({"theme": load_config(self.state.config_path).theme})
             except ConfigError as exc:
                 return self._error(str(exc))
+        if path == "/api/app":
+            if self.controls is None:
+                return self._json({"available": False})
+            return self._json({"available": True, **self.controls.snapshot()})
         self._error("not found", HTTPStatus.NOT_FOUND)
 
     def _static(self, name: str) -> None:
@@ -170,7 +177,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         if not file.is_file():
             return self._error("not found", HTTPStatus.NOT_FOUND)
         content_type = _CONTENT_TYPES.get(file.suffix, "application/octet-stream")
-        self._send(200, file.read_bytes(), content_type + "; charset=utf-8")
+        self._send(200, file.read_bytes(), content_type)
 
     def _specs(self) -> dict[str, Any]:
         return {
@@ -239,12 +246,28 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._adapt()
         if path == "/api/activate":
             return self._activate()
+        if path == "/api/app":
+            return self._app_action()
         match = re.fullmatch(r"/api/themes/([^/]+)/assets", path)
         if match:
             return self._upload_asset(match.group(1), parse_qs(url.query))
         if path.startswith("/api/themes/"):
             return self._save(path[len("/api/themes/") :])
         self._error("not found", HTTPStatus.NOT_FOUND)
+
+    def _app_action(self) -> None:
+        payload = self._read_json()
+        if payload is None:
+            return
+        if self.controls is None:
+            return self._error("this editor does not run the panel", HTTPStatus.NOT_FOUND)
+        if not isinstance(payload, dict) or not isinstance(payload.get("action"), str):
+            return self._error('expected {"action": ...}')
+        try:
+            snapshot = self.controls.act(payload["action"], payload.get("value"))
+        except (ValueError, ConfigError, OSError) as exc:
+            return self._error(str(exc))
+        self._json({"available": True, **snapshot})
 
     def _base_folder(self, base: Any) -> Path | None:
         if isinstance(base, str) and valid_theme_name(base):
@@ -344,10 +367,29 @@ class EditorHandler(BaseHTTPRequestHandler):
         self._json({"ok": True, "path": f"assets/{name}"})
 
 
-def make_server(port: int = 8765, config_path: Path | None = None) -> ThreadingHTTPServer:
+class EditorServer(ThreadingHTTPServer):
+    daemon_threads = True
+
+    def handle_error(self, request: Any, client_address: Any) -> None:
+        # A browser that closes a tab mid-request is normal, not an error.
+        import sys
+
+        if isinstance(sys.exc_info()[1], ConnectionError):
+            log.debug("editor: client went away")
+            return
+        log.exception("editor: request failed")
+
+
+def make_server(
+    port: int = 8765, config_path: Path | None = None, controls: Any = None
+) -> ThreadingHTTPServer:
     state = EditorState(config_path)
-    handler = type("Handler", (EditorHandler,), {"state": state, "allowed_hosts": set()})
-    server = ThreadingHTTPServer(("127.0.0.1", port), handler)
+    handler = type(
+        "Handler",
+        (EditorHandler,),
+        {"state": state, "allowed_hosts": set(), "controls": controls},
+    )
+    server = EditorServer(("127.0.0.1", port), handler)
     real_port = server.server_address[1]
     handler.allowed_hosts = {f"127.0.0.1:{real_port}", f"localhost:{real_port}"}
     server.editor_state = state  # type: ignore[attr-defined]
@@ -355,7 +397,10 @@ def make_server(port: int = 8765, config_path: Path | None = None) -> ThreadingH
 
 
 def serve(port: int = 8765, open_browser: bool = True, config_path: Path | None = None) -> None:
-    server = make_server(port, config_path)
+    try:
+        server = make_server(port, config_path)
+    except OSError:  # port taken: any free port will do
+        server = make_server(0, config_path)
     url = f"http://127.0.0.1:{server.server_address[1]}/"
     print(f"Libre Panel theme editor running at {url}  (Ctrl+C to stop)")
     if open_browser:

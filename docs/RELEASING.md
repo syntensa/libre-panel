@@ -34,6 +34,19 @@ The tag starts `release.yml`: tests, build, PyInstaller bundles, a draft
 GitHub Release with all files attached, and the PyPI upload after approval.
 Review the draft release notes and publish.
 
+Every bundle is smoke-tested on its own system before it is attached: it
+renders a theme, starts the background app the way autostart does
+(`LibrePanel.exe` on Windows), waits for frames, and quits it through the
+editor API (`packaging/smoke_test.py`).
+
+**Dry run:** start *Release* by hand (Actions → Release → Run workflow). It
+builds and tests everything but publishes nothing; the bundles are attached to
+the run as artifacts.
+
+The bundles are built from `packaging/pyinstaller/libre-panel.spec`. The icons
+come from `packaging/make_icons.py` (the logo is drawn in
+`src/libre_panel/branding.py`); rerun it after changing the logo.
+
 ## Versioning
 
 [Semantic versioning](https://semver.org). The theme format has its own version

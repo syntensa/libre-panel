@@ -12,7 +12,7 @@ first. Each hardware step needs a tester with the panel.
 - [x] Sensors: psutil, LibreHardwareMonitor, demo; configurable Open-Meteo weather
 - [x] TURZX V1.x USB driver, PNG path, with reconnect and simulator tests
 - [x] `libre-panel doctor`: hardware check with test cards and report
-- [x] Built-in themes: Libre Default, SPUR II
+- [x] Built-in themes: Libre Default, SPUR II, Orbit, Slate, Column
 - [ ] `doctor` passed on the 9.2" (then: status "supported") and at least one other V1.x size
 - [ ] First release: PyPI + Windows/Linux/macOS downloads (see RELEASING.md)
 
@@ -20,8 +20,9 @@ first. Each hardware step needs a tester with the panel.
 
 - [ ] H.264 video layer for V1.x USB panels (25–50 fps, protocol documented in
       [turzx-usb.md](protocol/turzx-usb.md)); needs `ffmpeg`
-- [ ] Animations: value easing, smooth scrolling graphs, rolling clock digits
-- [ ] Glow / soft-shadow style for widgets
+- [x] Animations: values glide between readings
+- [ ] Smooth scrolling graphs, rolling clock digits
+- [x] Glow / soft-shadow style for widgets
 - [ ] Standby image when the PC shuts down
 
 ## 0.3 — every Turing panel
@@ -29,11 +30,11 @@ first. Each hardware step needs a tester with the panel.
 - [ ] Serial rev. A (3.5", UsbPCMonitor), rev. B (XuanFang), rev. C (2.1", 5",
       8.8" V0.x), rev. D (Kipye), WeAct
 - [ ] Partial updates for serial panels (only changed rectangles)
-- [ ] Automatic panel detection from USB ids
+- [x] Automatic panel detection from USB ids (V1.x USB panels)
 
 ## 0.4 — for everyone
 
-- [ ] Tray app with autostart (Windows task, systemd user service, LaunchAgent)
+- [x] Tray app with autostart (Windows `Run` key, XDG autostart, LaunchAgent; systemd user service documented)
 - [ ] Installers: Windows setup, Flatpak / AppImage, Homebrew, winget
 - [ ] Editor and default labels in several languages
 - [ ] Theme gallery (import by link)

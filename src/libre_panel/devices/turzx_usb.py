@@ -318,6 +318,9 @@ class TurzxUsbDisplay(Display):
             self.firmware_id,
         )
 
+    def describe(self) -> str:
+        return self.model.label if self.model else "TURZX USB panel"
+
     def set_brightness(self, percent: int) -> None:
         self.brightness = percent
         if self.transport:

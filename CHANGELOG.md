@@ -4,14 +4,40 @@
 
 First preview of Libre Panel.
 
-- Theme format `libre-panel-theme/1`, visual browser editor with panel menu,
-  drag & drop, rescaling between panel sizes, import/export, "show on panel"
-- Renderer: text, metric, bar, gauge, graph, clock, image, weather, rect;
-  color rules; safe format strings
-- Sensors: psutil, LibreHardwareMonitor (checked against real output), demo; Open-Meteo weather
-  (off by default)
-- Panel catalog: all Turing/TURZX sizes from 2.1" to 12.3" plus compatible brands
+**Panels**
+- Panel catalog: all Turing/TURZX sizes from 2.1" to 12.3" plus compatible
+  brands; choose the panel from a menu, layouts rescale
 - Driver for Turing V1.x USB panels (PNG path) with reconnect and clear error
   messages; `libre-panel doctor` checks a panel end to end and writes a report
-- The main loop waits for a missing panel and survives unplugging
-- Built-in themes: Libre Default, SPUR II
+- The main loop waits for a missing panel and survives unplugging; with the
+  default driver a panel that appears later is picked up without a restart
+
+**Themes and rendering**
+- Theme format `libre-panel-theme/1`: text, metric, bar, gauge, graph, clock,
+  image, weather, icon and rect widgets; colour rules; safe format strings
+- Graphics engine: bundled fonts (Barlow, JetBrains Mono), palettes, glow and
+  shadows, gradients, segmented bars, smooth graphs, frosted glass, 21 line
+  icons with live weather symbols, equal-width digits, values that glide
+- Built-in themes: SPUR II, Libre Default, Orbit (round), Slate (5"),
+  Column (3.5" portrait)
+
+**Editor**
+- Visual editor in the browser with the same renderer as the panel: snapping
+  and guides, multi-select, align/distribute, undo/redo, copy/paste, layers
+  with lock and hide, building blocks, palette and font pickers, zoom,
+  import/export, "show on panel"
+
+**Background app**
+- `libre-panel tray`: tray icon with status, theme, brightness, pause,
+  start with system, settings folder, log and quit; the editor has the same
+  controls; runs without an icon where there is no tray
+- `libre-panel autostart enable|disable|status`: Windows `Run` key, XDG
+  autostart entry, macOS LaunchAgent
+- Only one Libre Panel drives the panel; starting it again opens the running
+  editor. A broken config or theme no longer stops it: it resumes when the
+  file is fixed
+- Windows release build with `LibrePanel.exe` (no console window)
+
+**Sensors**
+- psutil, LibreHardwareMonitor (checked against real output), demo;
+  Open-Meteo weather (off by default)

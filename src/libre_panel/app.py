@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -88,6 +89,20 @@ def _theme_file(theme: Theme) -> Path | None:
     return theme.root / THEME_FILENAME if theme.root else None
 
 
+@dataclass
+class RunStatus:
+    """What the main loop is doing, for the tray icon and the editor.
+
+    The loop thread writes it; other threads only read single attributes.
+    """
+
+    state: str = "starting"  # starting | showing | waiting
+    target: str = ""  # where frames go: a panel model, or a PNG file
+    theme: str = ""
+    detail: str = ""  # why the panel is not available
+    frames: int = 0
+
+
 class _Link:
     """Keeps the panel connected: a missing or unplugged panel is retried with
     growing pauses instead of ending the program (autostart before USB is up,
@@ -95,9 +110,10 @@ class _Link:
 
     BACKOFF_S = (1, 2, 5, 10, 30)
 
-    def __init__(self, display: Display, brightness: int) -> None:
+    def __init__(self, display: Display, brightness: int, status: RunStatus) -> None:
         self.display = display
         self.brightness = brightness
+        self.status = status
         self.connected = False
         self.failures = 0
         self.retry_at = 0.0
@@ -117,6 +133,8 @@ class _Link:
         if self.failures:
             log.info("panel connected")
         self.connected, self.failures = True, 0
+        self.status.target = self.display.describe()
+        self.status.state, self.status.detail = "showing", ""
         return True
 
     def show(self, frame: Image.Image, region: tuple[int, int, int, int], now: float) -> bool:
@@ -130,6 +148,8 @@ class _Link:
             self.connected = False
             self._failed(exc, now)
             return False
+        self.status.frames += 1
+        self.status.target = self.display.describe()  # auto may switch from PNG to a panel
         return True
 
     def set_brightness(self, percent: int) -> None:
@@ -141,6 +161,7 @@ class _Link:
                 log.warning("brightness not set: %s", exc)
 
     def _failed(self, exc: Exception, now: float) -> None:
+        self.status.state, self.status.detail = "waiting", str(exc)
         if self.failures == 0:
             log.warning("panel not available: %s (retrying in the background)", exc)
         delay = self.BACKOFF_S[min(self.failures, len(self.BACKOFF_S) - 1)]
@@ -148,14 +169,22 @@ class _Link:
         self.retry_at = now + delay
 
 
-def run(config: Config, once: bool = False, stop: threading.Event | None = None) -> None:
+def run(
+    config: Config,
+    once: bool = False,
+    stop: threading.Event | None = None,
+    status: RunStatus | None = None,
+) -> None:
     """Main loop: read sensors at the theme's rate, render at ``config.fps`` so
     values glide between readings, and send only frames that changed.
 
     With ``once`` a single frame is sent and any device error is raised.
+    ``status`` is kept up to date for status displays.
     """
     stop = stop or threading.Event()
+    status = status or RunStatus()
     theme = load_configured_theme(config)
+    status.theme = config.theme
     for warning in theme.warnings:
         log.warning("theme %s: %s", config.theme, warning)
     renderer = Renderer(theme, animate=config.fps > 1)
@@ -163,7 +192,7 @@ def run(config: Config, once: bool = False, stop: threading.Event | None = None)
     display = create_display(config.device)
     size = target_size(config, theme)
     watcher = _Watcher(config.path, _theme_file(theme))
-    link = _Link(display, config.device.brightness)
+    link = _Link(display, config.device.brightness, status)
     previous = None
     snapshot = None
     next_sample = 0.0
@@ -191,6 +220,7 @@ def run(config: Config, once: bool = False, stop: threading.Event | None = None)
                     theme, renderer = new_theme, Renderer(new_theme, animate=config.fps > 1)
                     size, previous, next_sample = target_size(config, theme), None, 0.0
                     watcher = _Watcher(config.path, _theme_file(theme))
+                    status.theme = config.theme
                     log.info("reloaded theme %r", config.theme)
             if started >= next_sample or snapshot is None:
                 snapshot = hub.snapshot()

@@ -38,6 +38,10 @@ class Display:
     def set_brightness(self, percent: int) -> None:
         """0-100. Drivers without brightness control ignore it."""
 
+    def describe(self) -> str:
+        """What frames go to, for status displays (tray, editor)."""
+        return self.name
+
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
         """Push ``frame`` (RGB, theme size). ``region`` is the changed box
         (x0, y0, x1, y1); drivers that support partial updates send only that."""

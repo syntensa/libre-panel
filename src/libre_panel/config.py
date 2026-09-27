@@ -210,21 +210,70 @@ def write_default_config(path: Path | None = None, overwrite: bool = False) -> P
     return path
 
 
-_THEME_LINE = re.compile(r"^theme\s*=.*$", re.MULTILINE)
+def _toml_literal(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int | float):
+        return repr(value)
+    if isinstance(value, str):
+        return json.dumps(value)  # a JSON string is a valid TOML basic string
+    raise TypeError(f"cannot write {type(value).__name__} to config.toml")
+
+
+_HEADER = re.compile(r"^[ \t]*\[", re.MULTILINE)
+_TABLE = re.compile(r"^[ \t]*\[[ \t]*([A-Za-z0-9_-]+)[ \t]*\][ \t]*(?:#.*)?$", re.MULTILINE)
+
+
+def _with_key(text: str, table: str | None, key: str, literal: str) -> str:
+    line = f"{key} = {literal}"
+    if table is None:  # top-level keys come before the first [table] header
+        first = _HEADER.search(text)
+        start, end = 0, first.start() if first else len(text)
+    else:
+        header = next((m for m in _TABLE.finditer(text) if m.group(1) == table), None)
+        if header is None:
+            return text.rstrip("\n") + f"\n\n[{table}]\n{line}\n"
+        start = text.find("\n", header.end()) + 1 or len(text)
+        following = _HEADER.search(text, start)
+        end = following.start() if following else len(text)
+    body = text[start:end]
+    pattern = re.compile(rf"^[ \t]*{re.escape(key)}[ \t]*=.*$", re.MULTILINE)
+    body, count = pattern.subn(line, body, count=1)
+    if not count:
+        body = line + "\n" + body
+    return text[:start] + body + text[end:]
+
+
+def set_config_value(name: str, value: Any, path: Path | None = None) -> Path:
+    """Change one setting (``"theme"``, ``"device.brightness"``, ...) in config.toml.
+
+    The rest of the file, comments included, stays as it is. The new file is
+    checked before it is written (atomically), so a mistake never leaves a
+    config behind that would not load.
+    """
+    path = path or config_dir() / CONFIG_FILENAME
+    if not path.exists():
+        write_default_config(path)
+    table, _, key = name.rpartition(".")
+    text = _with_key(path.read_text(encoding="utf-8"), table or None, key, _toml_literal(value))
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"{path}: could not set {name} ({exc}); please edit it by hand") from exc
+    written = data.get(table, {}) if table else data
+    if not isinstance(written, dict) or written.get(key) != value:
+        raise ConfigError(f"{path}: could not set {name}; please edit it by hand")
+    parse_config(data, path)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
+    return path
 
 
 def set_active_theme(name: str, path: Path | None = None) -> Path:
     """Point config.toml at another theme, keeping the rest of the file (and comments)."""
-    path = path or config_dir() / CONFIG_FILENAME
-    if not path.exists():
-        write_default_config(path)
-    text = path.read_text(encoding="utf-8")
-    line = f"theme = {json.dumps(name)}"  # a JSON string is a valid TOML basic string
-    # Only top-level keys count: everything before the first [table] header.
-    table = re.search(r"^\s*\[", text, re.MULTILINE)
-    head, tail = (text[: table.start()], text[table.start() :]) if table else (text, "")
-    head, count = _THEME_LINE.subn(line, head, count=1)
-    text = (head if count else line + "\n" + head) + tail
-    parse_config(tomllib.loads(text), path)  # never write a config that would not load
-    path.write_text(text, encoding="utf-8")
-    return path
+    return set_config_value("theme", name, path)
+
+
+def set_brightness(percent: int, path: Path | None = None) -> Path:
+    return set_config_value("device.brightness", int(percent), path)

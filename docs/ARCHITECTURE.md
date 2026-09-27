@@ -21,7 +21,12 @@
 | `weather` | Open-Meteo provider, background polling, off by default. |
 | `devices` | Panel catalog (`models`), `Display` drivers, USB/serial discovery. |
 | `editor` | Local HTTP server (127.0.0.1 only) + vanilla JS editor, no build step. |
-| `app` | Main loop: sample → render → diff → send; reloads config/theme on change. |
+| `app` | Main loop: sample → render → diff → send; reloads config/theme on change; reports its state (`RunStatus`). |
+| `service` | Background app: the main loop in a thread (pause/resume, restarts after a broken config is fixed), the editor server, and the controls shared by tray and editor. |
+| `tray` | Tray icon and menu (pystray); runs without an icon where there is no tray. |
+| `autostart` | Login start per system: Windows `Run` key, XDG autostart entry, macOS LaunchAgent. |
+| `instance` | OS file lock so only one process drives the panel. |
+| `branding` | The logo, drawn in code (tray icon with status dot, app icons). |
 | `cli` | `libre-panel` command. |
 
 ## Design rules

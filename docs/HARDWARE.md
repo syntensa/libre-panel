@@ -84,6 +84,9 @@ pip install "libre-panel[usb]"
 libre-panel doctor
 ```
 
+Quit the vendor app and a running Libre Panel (tray → Quit) first; `doctor`
+needs the panel to itself.
+
 `doctor` uses only the commands normal operation uses (handshake, brightness,
 frames). It shows test cards in both orientations and asks what you see,
 dims and brightens the panel, measures the frame rate, reconnects once and

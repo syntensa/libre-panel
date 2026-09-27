@@ -25,6 +25,9 @@ class VirtualDisplay(Display):
     def set_brightness(self, percent: int) -> None:
         self.brightness = max(0, min(100, percent))
 
+    def describe(self) -> str:
+        return f"PNG file {self.output}" if self.output else "virtual display"
+
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
         self.frame = frame.copy()
         self.frames_shown += 1

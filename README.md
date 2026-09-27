@@ -36,6 +36,9 @@ vendor app.
   config file.
 - **Safe to share themes**: themes are plain JSON plus images/fonts, and cannot
   run code or read files outside their folder.
+- **Runs quietly in the background**: tray icon with theme, brightness, pause
+  and quit; starts with the system if you want (Windows, Linux, macOS); picks
+  up the panel whenever it is plugged in.
 - **Pluggable**: sensor sources and display drivers are plugins, so optional
   extras never bloat the core.
 - Windows, Linux and macOS. GPL-3.0.
@@ -43,15 +46,20 @@ vendor app.
 ## Quick start
 
 ```bash
-pipx install "libre-panel[usb]"     # or: pip install "libre-panel[usb]"
-libre-panel                         # drives the panel and opens the editor
+pipx install "libre-panel[usb,tray]"   # or: pip install "libre-panel[usb,tray]"
+libre-panel tray                    # background app with tray icon; opens the editor
+libre-panel autostart enable        # start it whenever you log in
 ```
+
+Release downloads need no Python: on Windows unzip and double-click
+`LibrePanel.exe`. More in [Running in the background](docs/BACKGROUND.md).
 
 Other commands:
 
 ```bash
+libre-panel                         # panel + editor in a terminal (Ctrl+C stops)
 libre-panel editor                  # only the theme editor
-libre-panel run                     # only drive the panel (e.g. for autostart)
+libre-panel run                     # only drive the panel
 libre-panel preview spur-ii -o spur.png   # render a theme to an image
 libre-panel models                  # all known panels and their resolutions
 libre-panel devices                 # which panel is connected?
@@ -82,6 +90,7 @@ Themes are plain JSON plus images/fonts — see [docs/THEMES.md](docs/THEMES.md)
 ## Documentation
 
 - [Supported panels](docs/HARDWARE.md)
+- [Running in the background: tray, autostart](docs/BACKGROUND.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Theme format and sensor keys](docs/THEMES.md)
 - [Architecture](docs/ARCHITECTURE.md)

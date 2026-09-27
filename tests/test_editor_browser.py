@@ -3,6 +3,7 @@
 CI runs this in its own job: pip install playwright && playwright install chromium
 """
 
+import contextlib
 import threading
 
 import pytest
@@ -23,8 +24,8 @@ def editor_url():
     srv.editor_state.close()
 
 
-@pytest.fixture
-def page(editor_url):
+@contextlib.contextmanager
+def browser_page(url):
     with playwright.sync_playwright() as p:
         try:
             browser = p.chromium.launch()
@@ -37,7 +38,7 @@ def page(editor_url):
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
         page.on("dialog", lambda d: d.accept("my-test" if d.type == "prompt" else None))
-        page.goto(editor_url)
+        page.goto(url)
         page.wait_for_function(
             "document.querySelector('#preview').src.startsWith('data:image/png')"
         )
@@ -45,6 +46,12 @@ def page(editor_url):
         yield page
         assert errors == []
         browser.close()
+
+
+@pytest.fixture
+def page(editor_url):
+    with browser_page(editor_url) as page:
+        yield page
 
 
 def js(page, expression):
@@ -121,3 +128,61 @@ def test_panel_menu_rescales(page):
     page.select_option("#model-select", "turing-2.1")
     page.wait_for_function("state.size[0] === 480 && state.size[1] === 480")
     assert js(page, "document.querySelector('#canvas-wrap').classList.contains('round')")
+
+
+def test_plain_editor_hides_the_panel_controls(page):
+    page.wait_for_timeout(300)
+    assert page.locator("#app-chip").is_hidden()
+
+
+def test_panel_controls_of_the_background_app(isolated_home):
+    from test_service import FakeRegistry, wait_for, write_config
+
+    from libre_panel.autostart import Autostart
+    from libre_panel.config import load_config
+    from libre_panel.service import BackgroundApp
+
+    write_config(isolated_home)
+    registry = FakeRegistry()
+    app = BackgroundApp(port=0, autostart=Autostart("win32", registry=registry))
+    url = app.start()
+    try:
+        with browser_page(url) as page:
+            chip = page.locator("#app-chip")
+            page.wait_for_function(
+                "document.querySelector('#app-chip').dataset.state === 'showing'"
+            )
+            assert chip.inner_text() == "Panel · Showing"
+            assert "PNG file" in chip.get_attribute("title")
+            chip.click()
+            popover = page.locator("#app-popover")
+            assert popover.is_visible()
+            assert page.locator("#app-state").inner_text() == "Showing"
+            assert page.locator("#app-theme").inner_text() == "libre-default"
+
+            page.locator("#app-brightness").evaluate(
+                "(el) => { el.value = 30; el.dispatchEvent(new Event('change')); }"
+            )
+            assert wait_for(lambda: load_config().device.brightness == 30)
+
+            page.locator("#app-autostart").check()
+            assert wait_for(lambda: "Libre Panel" in registry.values)
+
+            page.click("#app-pause")
+            page.wait_for_function("document.querySelector('#app-state').textContent === 'Paused'")
+            assert app.panel.paused
+            assert page.locator("#app-pause").inner_text() == "Resume panel"
+            page.click("#app-pause")
+            page.wait_for_function(
+                "document.querySelector('#app-pause').textContent === 'Pause panel'"
+            )
+
+            page.keyboard.press("Escape")
+            assert popover.is_hidden()
+            chip.click()
+            page.click("#app-quit")  # the confirm dialog is accepted by the fixture
+            page.wait_for_function("document.querySelector('#status').textContent.includes('quit')")
+            assert app.quit_requested.wait(5)
+    finally:
+        app.quit()
+        app.shutdown()

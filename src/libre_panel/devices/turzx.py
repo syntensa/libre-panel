@@ -38,6 +38,9 @@ class TurzxDisplay(Display):
         if self._impl:
             self._impl.set_brightness(percent)
 
+    def describe(self) -> str:
+        return self.model.label if self.model else "TURZX panel"
+
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
         if self._impl is None:
             raise DeviceError("panel not open")
