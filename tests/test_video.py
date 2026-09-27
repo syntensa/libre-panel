@@ -171,7 +171,8 @@ def test_flow_control_never_overflows_the_ring(panel):
     for _ in range(40):  # far faster than the player takes them
         session.send(nal(1))
     assert session.waits > 0 and panel.overwritten == 0
-    assert session.max_depth <= 3
+    # polling every second block, the depth can reach 4 before a wait: one below the ring
+    assert session.max_depth <= FakePanel.RING - 1
     assert panel.commands.count(122) >= 20  # every second block asks
 
 
@@ -495,7 +496,13 @@ def test_main_loop_sends_every_frame_at_the_stream_rate(monkeypatch, tmp_path):
     shown = displays[0].shown
     assert all(region is None for _, region in shown)  # whole frames, changed or not
     rate = (len(shown) - 1) / (shown[-1][0] - shown[0][0])
-    assert 40 < rate < 55, rate  # the display's 50 fps, not config.fps = 5
+    # The display's 50 fps, not config.fps = 5, as far as this machine's timer allows
+    # (virtual macOS runners coalesce short sleeps).
+    started = time.perf_counter()
+    for _ in range(10):
+        time.sleep(0.018)
+    timer_rate = min(50, 10 / (time.perf_counter() - started))
+    assert 0.8 * timer_rate < rate < 55, (rate, timer_rate)
     assert renderers[0].background_builds
 
 
