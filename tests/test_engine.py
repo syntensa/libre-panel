@@ -244,3 +244,29 @@ def test_same_frame_twice_is_identical():
     a, _ = renderer.render(snap)
     b, _ = renderer.render(snap)
     assert a.tobytes() == b.tobytes()
+
+
+def test_hide_if_missing():
+    widgets = [
+        {"type": "metric", "id": "m", "sensor": "gpu.temp", "hide_if_missing": True},
+        {"type": "icon", "id": "i", "icon": "weather", "hide_if_missing": True},
+        {"type": "weather", "id": "w", "hide_if_missing": True},
+        {"type": "metric", "id": "shown", "sensor": "gpu.temp"},
+    ]
+    _, boxes = render(theme(*widgets))
+    assert set(boxes) == {"shown"}
+    _, boxes = render(
+        theme(*widgets), {"gpu.temp": 50.0, "weather.code": 1.0, "weather.temperature": 9.0}
+    )
+    assert set(boxes) == {"m", "i", "w", "shown"}
+
+
+def test_scales_keep_small_values_visible():
+    from libre_panel.render.renderer import _fraction
+
+    assert _fraction(1, 0, 100) == 0.01
+    assert round(_fraction(1, 0, 100, "sqrt"), 2) == 0.1
+    assert 0.1 < _fraction(1, 0, 100, "log") < 0.5
+    assert _fraction(100, 0, 100, "log") == 1.0
+    frame, _ = render(theme(bar(scale="sqrt")), {"v": 4.0})  # 4 % -> 20 % of the track
+    assert frame.getpixel((35, 10))[0] > 200 and frame.getpixel((45, 10))[0] < 100

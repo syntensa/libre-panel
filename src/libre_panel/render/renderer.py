@@ -65,10 +65,21 @@ def _number(value: Any) -> float | None:
     return float(value)
 
 
-def _fraction(value: float | None, lo: float, hi: float) -> float:
+def _fraction(value: float | None, lo: float, hi: float, scale: str = "linear") -> float:
+    """Position of ``value`` between ``lo`` and ``hi`` (0..1).
+
+    ``sqrt`` and ``log`` keep small values visible on huge ranges such as
+    network rates (SPUR II used a square-root scale for exactly that).
+    """
     if value is None or hi == lo:
         return 0.0
-    return min(1.0, max(0.0, (value - lo) / (hi - lo)))
+    linear = min(1.0, max(0.0, (value - lo) / (hi - lo)))
+    if scale == "sqrt":
+        return math.sqrt(linear)
+    if scale == "log":
+        span = abs(hi - lo)
+        return math.log1p(linear * span) / math.log1p(span)
+    return linear
 
 
 def _rule_color(widget: dict[str, Any], value: float | None) -> str | None:
@@ -334,7 +345,7 @@ class Renderer:
             canvas.alpha_composite(self._background)
         boxes: dict[str, Box] = {}
         for widget in theme.widgets:
-            if not widget.get("visible", True):
+            if not widget.get("visible", True) or self._missing(widget, snapshot):
                 continue
             draw = getattr(self, f"_draw_{widget['type']}")
             try:
@@ -352,6 +363,20 @@ class Renderer:
                 piece.layer.height,
             ]
         return canvas.convert("RGB"), boxes
+
+    @staticmethod
+    def _missing(widget: dict[str, Any], snapshot: Snapshot) -> bool:
+        if not widget.get("hide_if_missing"):
+            return False
+        if widget["type"] == "weather":
+            key = f"weather.{widget['field']}"
+        elif widget["type"] == "icon" and widget["icon"] == "weather":
+            key = "weather.code"
+        elif widget["type"] == "graph":
+            return len(snapshot.history.get(widget["sensor"], [])) < 2
+        else:
+            key = widget.get("sensor")
+        return key is not None and snapshot.value(key) is None
 
     # -- text --------------------------------------------------------------
 
@@ -527,7 +552,7 @@ class Renderer:
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
         target = _number(snapshot.value(widget["sensor"]))
         value = self._eased(widget, target, now)
-        frac = _fraction(value, widget["min"], widget["max"])
+        frac = _fraction(value, widget["min"], widget["max"], widget.get("scale", "linear"))
         rule = _rule_color(widget, target)
         key = (round(frac, 4), rule)
         return self._cached(widget, key, lambda: self._bar_piece(widget, frac, rule, x, y, w, h))
@@ -598,7 +623,7 @@ class Renderer:
     def _draw_gauge(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         target = _number(snapshot.value(widget["sensor"]))
         value = self._eased(widget, target, now)
-        frac = _fraction(value, widget["min"], widget["max"])
+        frac = _fraction(value, widget["min"], widget["max"], widget.get("scale", "linear"))
         rule = _rule_color(widget, target)
         return self._cached(
             widget, (round(frac, 4), rule), lambda: self._gauge_piece(widget, frac, rule)
@@ -688,7 +713,8 @@ class Renderer:
             points = [
                 (
                     (offset + i) * (W - 1) / (slots - 1),
-                    pad + (H - 1 - 2 * pad) * (1 - _fraction(v, lo, hi)),
+                    pad
+                    + (H - 1 - 2 * pad) * (1 - _fraction(v, lo, hi, widget.get("scale", "linear"))),
                 )
                 for i, v in enumerate(values)
             ]

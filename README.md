@@ -6,7 +6,7 @@ Design your own dashboard in a visual editor, pick your panel from a menu, and
 show CPU, GPU, memory, network, weather and more. No account, no cloud, no
 vendor app.
 
-<p align="center"><img src="docs/images/spur-ii.png" alt="The SPUR II theme on a 1920x480 panel" width="100%"></p>
+<p align="center"><img src="docs/images/gallery.png" alt="Built-in themes: SPUR II (1920x480), Libre Default (3.5 inch), Orbit (round), Slate (5 inch) and Column (3.5 inch portrait)" width="100%"></p>
 
 > **Status: pre-alpha.** The theme editor, renderer and sensors work today.
 > The driver for Turing/TURZX USB panels (4.6"–12.3", 2.8" round) is written
@@ -61,15 +61,19 @@ Close the vendor app first; it keeps the panel to itself.
 
 ## Themes
 
-Two themes ship with Libre Panel:
-
 | Theme | Panel | |
 |---|---|---|
-| `libre-default` | 3.5" (480×320) | clean starter theme, CC0 |
-| `spur-ii` | 8.8" / 9.2" bar (1920×480) | the SPUR II classic layout, CC-BY-4.0 |
+| `spur-ii` | 8.8" / 9.2" bar (1920×480) | the SPUR II layout: load charts, four sections, light on every value |
+| `libre-default` | 3.5" (480×320) | two rings, temperature, disk, network and history |
+| `orbit` | round 2.1" / 2.8" (480×480) | three concentric rings around a large clock |
+| `slate` | 5" (800×480) | four cards: CPU, GPU, memory, network |
+| `column` | 3.5" portrait (320×480) | clock, resource rows and network |
 
-Open either in the editor, adapt it to your panel and save it under your own
-name. The format is documented in [docs/THEMES.md](docs/THEMES.md).
+Every theme adapts to any other panel from the editor's panel menu. The engine
+behind them: bundled fonts (Barlow, JetBrains Mono), colour palettes, glow and
+shadows, gradients, segmented bars, smooth history graphs, 21 line icons
+including live weather symbols, and values that glide instead of jumping.
+Themes are plain JSON plus images/fonts — see [docs/THEMES.md](docs/THEMES.md).
 
 ## Documentation
 

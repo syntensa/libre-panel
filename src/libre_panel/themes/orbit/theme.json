@@ -1,0 +1,285 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "Orbit",
+  "author": "Libre Panel contributors",
+  "license": "CC0-1.0",
+  "description": "For round 2.1\"/2.8\" panels: three concentric rings (CPU, GPU, memory) around a large clock.",
+  "display": {
+    "model": "turing-2.1",
+    "orientation": "landscape",
+    "width": 480,
+    "height": 480
+  },
+  "palette": {
+    "bg": "#070A10",
+    "bg2": "#0D1320",
+    "card": "#101722",
+    "card2": "#0B1018",
+    "edge": "#1B2534",
+    "text": "#F1F5F9",
+    "muted": "#8793A6",
+    "dim": "#4A5568",
+    "cpu": "#22D3EE",
+    "cpu_deep": "#0B6C85",
+    "gpu": "#60A5FA",
+    "gpu_deep": "#1E4E9C",
+    "ram": "#C084FC",
+    "ram_deep": "#6B2FB3",
+    "net": "#34D399",
+    "net_deep": "#146C4E",
+    "up": "#F472B6",
+    "warn": "#FBBF24",
+    "crit": "#F87171"
+  },
+  "font": "builtin:Barlow-Medium",
+  "background": {
+    "color": "@bg",
+    "image": null
+  },
+  "refresh_ms": 1000,
+  "animation": {
+    "smoothing_ms": 450
+  },
+  "widgets": [
+    {
+      "type": "rect",
+      "id": "backdrop",
+      "x": 0,
+      "y": 0,
+      "w": 480,
+      "h": 480,
+      "color": "@bg2",
+      "color2": "@bg"
+    },
+    {
+      "type": "gauge",
+      "id": "cpu-ring",
+      "x": 10,
+      "y": 10,
+      "w": 460,
+      "h": 460,
+      "sensor": "cpu.load",
+      "start_angle": 125,
+      "end_angle": 415,
+      "thickness": 16,
+      "color": "@cpu_deep",
+      "color2": "@cpu",
+      "background": "#ffffff0d",
+      "glow": 0.6,
+      "glow_radius": 8,
+      "color_rules": [
+        {
+          "above": 92,
+          "color": "@crit"
+        }
+      ]
+    },
+    {
+      "type": "gauge",
+      "id": "gpu-ring",
+      "x": 40,
+      "y": 40,
+      "w": 400,
+      "h": 400,
+      "sensor": "gpu.load",
+      "start_angle": 125,
+      "end_angle": 415,
+      "thickness": 14,
+      "color": "@gpu_deep",
+      "color2": "@gpu",
+      "background": "#ffffff0d",
+      "glow": 0.6,
+      "glow_radius": 8,
+      "color_rules": [
+        {
+          "above": 92,
+          "color": "@crit"
+        }
+      ]
+    },
+    {
+      "type": "gauge",
+      "id": "ram-ring",
+      "x": 68,
+      "y": 68,
+      "w": 344,
+      "h": 344,
+      "sensor": "mem.load",
+      "start_angle": 125,
+      "end_angle": 415,
+      "thickness": 12,
+      "color": "@ram_deep",
+      "color2": "@ram",
+      "background": "#ffffff0d",
+      "glow": 0.6,
+      "glow_radius": 8,
+      "color_rules": [
+        {
+          "above": 92,
+          "color": "@crit"
+        }
+      ]
+    },
+    {
+      "type": "clock",
+      "id": "date",
+      "x": 240,
+      "y": 156,
+      "format": "%a %d %b",
+      "font_size": 20,
+      "color": "@muted",
+      "align": "center",
+      "tabular": false,
+      "letter_spacing": 2
+    },
+    {
+      "type": "clock",
+      "id": "clock",
+      "x": 240,
+      "y": 176,
+      "format": "%H:%M",
+      "font_size": 92,
+      "color": "@text",
+      "align": "center",
+      "font": "builtin:Barlow-SemiBold",
+      "glow": 0.3
+    },
+    {
+      "type": "text",
+      "id": "cpu-legend",
+      "x": 160,
+      "y": 299,
+      "text": "CPU",
+      "font_size": 13,
+      "color": "@cpu",
+      "align": "center",
+      "letter_spacing": 2
+    },
+    {
+      "type": "metric",
+      "id": "cpu-legend-value",
+      "x": 160,
+      "y": 316,
+      "sensor": "cpu.load",
+      "format": "{value:.0f}%",
+      "font_size": 24,
+      "color": "@text",
+      "align": "center",
+      "font": "builtin:Barlow-SemiBold",
+      "tabular": true
+    },
+    {
+      "type": "text",
+      "id": "gpu-legend",
+      "x": 240,
+      "y": 299,
+      "text": "GPU",
+      "font_size": 13,
+      "color": "@gpu",
+      "align": "center",
+      "letter_spacing": 2
+    },
+    {
+      "type": "metric",
+      "id": "gpu-legend-value",
+      "x": 240,
+      "y": 316,
+      "sensor": "gpu.load",
+      "format": "{value:.0f}%",
+      "font_size": 24,
+      "color": "@text",
+      "align": "center",
+      "font": "builtin:Barlow-SemiBold",
+      "tabular": true
+    },
+    {
+      "type": "text",
+      "id": "ram-legend",
+      "x": 320,
+      "y": 299,
+      "text": "RAM",
+      "font_size": 13,
+      "color": "@ram",
+      "align": "center",
+      "letter_spacing": 2
+    },
+    {
+      "type": "metric",
+      "id": "ram-legend-value",
+      "x": 320,
+      "y": 316,
+      "sensor": "mem.load",
+      "format": "{value:.0f}%",
+      "font_size": 24,
+      "color": "@text",
+      "align": "center",
+      "font": "builtin:Barlow-SemiBold",
+      "tabular": true
+    },
+    {
+      "type": "icon",
+      "id": "temp-icon",
+      "x": 176,
+      "y": 392,
+      "icon": "temperature",
+      "size": 20,
+      "color": "@muted",
+      "stroke": 2
+    },
+    {
+      "type": "metric",
+      "id": "cpu-temp",
+      "x": 202,
+      "y": 390,
+      "sensor": "cpu.temp",
+      "format": "{value:.0f}°",
+      "font_size": 20,
+      "color": "@cpu",
+      "fallback": "--",
+      "color_rules": [
+        {
+          "above": 75,
+          "color": "@warn"
+        },
+        {
+          "above": 88,
+          "color": "@crit"
+        }
+      ],
+      "tabular": true
+    },
+    {
+      "type": "metric",
+      "id": "gpu-temp",
+      "x": 252,
+      "y": 390,
+      "sensor": "gpu.temp",
+      "format": "{value:.0f}°",
+      "font_size": 20,
+      "color": "@gpu",
+      "fallback": "--",
+      "color_rules": [
+        {
+          "above": 75,
+          "color": "@warn"
+        },
+        {
+          "above": 88,
+          "color": "@crit"
+        }
+      ],
+      "tabular": true
+    },
+    {
+      "type": "icon",
+      "id": "weather-icon",
+      "x": 294,
+      "y": 391,
+      "icon": "weather",
+      "size": 22,
+      "color": "@muted",
+      "stroke": 1.8,
+      "hide_if_missing": true
+    }
+  ]
+}

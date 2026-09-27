@@ -18,6 +18,7 @@ _WAVES: dict[str, tuple[str, str, float, float, float]] = {
     "gpu.load": ("GPU load", "%", 55, 40, 23),
     "gpu.temp": ("GPU temperature", "°C", 62, 12, 31),
     "gpu.power": ("GPU power", "W", 180, 90, 21),
+    "gpu.freq": ("GPU clock", "MHz", 2400, 300, 17),
     "gpu.mem.load": ("GPU memory", "%", 40, 15, 37),
     "gpu.fan": ("GPU fan", "RPM", 1400, 400, 41),
     "mem.load": ("Memory usage", "%", 47, 6, 43),
@@ -63,6 +64,8 @@ class DemoProvider(SensorProvider):
                 value = min(100.0, max(0.0, value))
             out[key] = Reading(key, value, unit, label)
         out["sys.uptime"] = Reading("sys.uptime", 3 * 86400 + 5 * 3600 + 42 * 60, "s", "Uptime")
+        out["cpu.name"] = Reading("cpu.name", "8-Core Processor", "", "CPU")
+        out["gpu.name"] = Reading("gpu.name", "Graphics Card", "", "GPU")
         if self.include_weather:
             for key, (label, unit, value) in _WEATHER.items():
                 out[key] = Reading(key, value, unit, label)
@@ -87,12 +90,12 @@ def demo_history(provider: DemoProvider, key: str, samples: int, step: float = 1
     values = []
     for i in range(samples):
         t = t0 - (samples - 1 - i) * step
-        # Incommensurate waves read like real load instead of a clean sine.
+        # Incommensurate slow waves plus a little flutter read like real load.
         v = (
             base
-            + amp * 0.55 * math.sin(2 * math.pi * t / (period * 3.7))
+            + amp * 0.6 * math.sin(2 * math.pi * t / (period * 3.7))
             + amp * 0.35 * math.sin(2 * math.pi * t / (period * 1.3) + 1.1)
-            + amp * 0.25 * math.sin(t * 1.7) * math.sin(t / 5.3)
+            + amp * 0.08 * math.sin(t * 0.9) * math.sin(t / 3.1)
         )
         if unit == "%":
             v = min(100.0, max(0.0, v))

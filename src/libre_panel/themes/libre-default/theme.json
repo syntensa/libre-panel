@@ -3,48 +3,416 @@
   "name": "Libre Default",
   "author": "Libre Panel contributors",
   "license": "CC0-1.0",
-  "description": "Clean starter theme for 3.5\" panels in landscape (480x320).",
-  "display": { "model": "turing-3.5", "orientation": "landscape", "width": 480, "height": 320 },
-  "background": { "color": "#0b1016", "image": null },
+  "description": "Clean starter theme for 3.5\" panels in landscape (480x320): two rings, temperature, disk and network, and a CPU history.",
+  "display": {
+    "model": "turing-3.5",
+    "orientation": "landscape",
+    "width": 480,
+    "height": 320
+  },
+  "palette": {
+    "bg": "#090D13",
+    "bg2": "#0E141D",
+    "card": "#111822",
+    "card2": "#0C1219",
+    "edge": "#1C2633",
+    "text": "#F1F5F9",
+    "muted": "#8391A5",
+    "dim": "#4B5768",
+    "accent": "#22D3EE",
+    "accent_deep": "#0E6F86",
+    "violet": "#A78BFA",
+    "violet_deep": "#5B3FB8",
+    "green": "#34D399",
+    "pink": "#F472B6",
+    "warn": "#FBBF24",
+    "crit": "#F87171"
+  },
+  "font": "builtin:Barlow-Medium",
+  "background": {
+    "color": "@bg",
+    "image": null
+  },
   "refresh_ms": 1000,
+  "animation": {
+    "smoothing_ms": 450
+  },
   "widgets": [
-    { "id": "title", "type": "text", "x": 16, "y": 12, "text": "LIBRE PANEL", "font_size": 13, "color": "#64748b" },
-    { "id": "date", "type": "clock", "x": 16, "y": 30, "format": "%A, %d %B", "font_size": 17, "color": "#94a3b8" },
-    { "id": "clock", "type": "clock", "x": 464, "y": 8, "format": "%H:%M", "font_size": 40, "color": "#e2e8f0", "align": "right" },
-
-    { "id": "cpu-ring", "type": "gauge", "x": 16, "y": 66, "w": 136, "h": 136, "sensor": "cpu.load", "thickness": 12,
-      "color": "#22d3ee", "background": "#1e293b", "color_rules": [{ "above": 85, "color": "#f87171" }] },
-    { "id": "cpu-value", "type": "metric", "x": 84, "y": 112, "sensor": "cpu.load", "format": "{value:.0f}%",
-      "font_size": 30, "color": "#f1f5f9", "align": "center" },
-    { "id": "cpu-label", "type": "text", "x": 84, "y": 150, "text": "CPU", "font_size": 14, "color": "#94a3b8", "align": "center" },
-
-    { "id": "ram-ring", "type": "gauge", "x": 168, "y": 66, "w": 136, "h": 136, "sensor": "mem.load", "thickness": 12,
-      "color": "#a78bfa", "background": "#1e293b", "color_rules": [{ "above": 90, "color": "#f87171" }] },
-    { "id": "ram-value", "type": "metric", "x": 236, "y": 112, "sensor": "mem.load", "format": "{value:.0f}%",
-      "font_size": 30, "color": "#f1f5f9", "align": "center" },
-    { "id": "ram-label", "type": "text", "x": 236, "y": 150, "text": "RAM", "font_size": 14, "color": "#94a3b8", "align": "center" },
-
-    { "id": "temp-label", "type": "text", "x": 324, "y": 70, "text": "CPU TEMP", "font_size": 13, "color": "#94a3b8" },
-    { "id": "temp-value", "type": "metric", "x": 324, "y": 86, "sensor": "cpu.temp", "format": "{value:.0f}{unit}",
-      "fallback": "n/a", "font_size": 28, "color": "#f1f5f9",
-      "color_rules": [{ "above": 70, "color": "#fbbf24" }, { "above": 85, "color": "#f87171" }] },
-
-    { "id": "disk-label", "type": "text", "x": 324, "y": 128, "text": "DISK", "font_size": 13, "color": "#94a3b8" },
-    { "id": "disk-value", "type": "metric", "x": 464, "y": 128, "sensor": "disk.load", "format": "{value:.0f}%",
-      "font_size": 13, "color": "#cbd5e1", "align": "right" },
-    { "id": "disk-bar", "type": "bar", "x": 324, "y": 148, "w": 140, "h": 8, "sensor": "disk.load",
-      "color": "#34d399", "background": "#1e293b", "radius": 4, "color_rules": [{ "above": 90, "color": "#f87171" }] },
-
-    { "id": "net-down-label", "type": "text", "x": 324, "y": 168, "text": "Down", "font_size": 13, "color": "#94a3b8" },
-    { "id": "net-down", "type": "metric", "x": 464, "y": 166, "sensor": "net.down", "format": "{value:bytes}/s",
-      "font_size": 15, "color": "#34d399", "align": "right" },
-    { "id": "net-up-label", "type": "text", "x": 324, "y": 190, "text": "Up", "font_size": 13, "color": "#94a3b8" },
-    { "id": "net-up", "type": "metric", "x": 464, "y": 188, "sensor": "net.up", "format": "{value:bytes}/s",
-      "font_size": 15, "color": "#f472b6", "align": "right" },
-
-    { "id": "history-bg", "type": "rect", "x": 16, "y": 222, "w": 448, "h": 84, "color": "#111827", "radius": 8 },
-    { "id": "history", "type": "graph", "x": 16, "y": 232, "w": 448, "h": 74, "sensor": "cpu.load", "history": 120,
-      "color": "#22d3ee", "fill": true, "line_width": 2 },
-    { "id": "history-label", "type": "text", "x": 26, "y": 228, "text": "CPU HISTORY", "font_size": 11, "color": "#64748b" }
+    {
+      "type": "rect",
+      "id": "backdrop",
+      "x": 0,
+      "y": 0,
+      "w": 480,
+      "h": 320,
+      "color": "@bg2",
+      "color2": "@bg"
+    },
+    {
+      "type": "clock",
+      "id": "clock",
+      "x": 16,
+      "y": 8,
+      "format": "%H:%M",
+      "font_size": 44,
+      "color": "@text",
+      "font": "builtin:Barlow-SemiBold",
+      "glow": 0.25
+    },
+    {
+      "type": "clock",
+      "id": "date",
+      "x": 18,
+      "y": 60,
+      "format": "%A, %d %B",
+      "font_size": 16,
+      "color": "@muted",
+      "tabular": false
+    },
+    {
+      "type": "icon",
+      "id": "weather-icon",
+      "x": 380,
+      "y": 14,
+      "icon": "weather",
+      "size": 30,
+      "color": "@muted",
+      "stroke": 1.8,
+      "hide_if_missing": true
+    },
+    {
+      "type": "weather",
+      "id": "weather-temp",
+      "x": 464,
+      "y": 16,
+      "field": "temperature",
+      "format": "{value:.0f}°",
+      "font_size": 26,
+      "color": "@text",
+      "align": "right",
+      "font": "builtin:Barlow-SemiBold",
+      "hide_if_missing": true
+    },
+    {
+      "type": "weather",
+      "id": "weather-desc",
+      "x": 464,
+      "y": 49,
+      "field": "description",
+      "format": "{value}",
+      "font_size": 13,
+      "color": "@muted",
+      "align": "right",
+      "tabular": false,
+      "hide_if_missing": true
+    },
+    {
+      "type": "gauge",
+      "id": "cpu-ring",
+      "x": 20,
+      "y": 94,
+      "w": 124,
+      "h": 124,
+      "sensor": "cpu.load",
+      "thickness": 11,
+      "color": "@accent_deep",
+      "color2": "@accent",
+      "background": "#ffffff10",
+      "ticks": 0,
+      "glow": 0.55,
+      "glow_radius": 7,
+      "color_rules": [
+        {
+          "above": 90,
+          "color": "@crit"
+        }
+      ]
+    },
+    {
+      "type": "metric",
+      "id": "cpu-value",
+      "x": 82,
+      "y": 138,
+      "sensor": "cpu.load",
+      "format": "{value:.0f}%",
+      "font_size": 30,
+      "color": "@text",
+      "align": "center",
+      "font": "builtin:Barlow-SemiBold",
+      "tabular": true
+    },
+    {
+      "type": "icon",
+      "id": "cpu-icon",
+      "x": 73,
+      "y": 178,
+      "icon": "cpu",
+      "size": 18,
+      "color": "@accent",
+      "stroke": 2
+    },
+    {
+      "type": "text",
+      "id": "cpu-label",
+      "x": 82,
+      "y": 223,
+      "text": "CPU",
+      "font_size": 13,
+      "color": "@muted",
+      "align": "center",
+      "letter_spacing": 3
+    },
+    {
+      "type": "gauge",
+      "id": "ram-ring",
+      "x": 160,
+      "y": 94,
+      "w": 124,
+      "h": 124,
+      "sensor": "mem.load",
+      "thickness": 11,
+      "color": "@violet_deep",
+      "color2": "@violet",
+      "background": "#ffffff10",
+      "ticks": 0,
+      "glow": 0.55,
+      "glow_radius": 7,
+      "color_rules": [
+        {
+          "above": 90,
+          "color": "@crit"
+        }
+      ]
+    },
+    {
+      "type": "metric",
+      "id": "ram-value",
+      "x": 222,
+      "y": 138,
+      "sensor": "mem.load",
+      "format": "{value:.0f}%",
+      "font_size": 30,
+      "color": "@text",
+      "align": "center",
+      "font": "builtin:Barlow-SemiBold",
+      "tabular": true
+    },
+    {
+      "type": "icon",
+      "id": "ram-icon",
+      "x": 213,
+      "y": 178,
+      "icon": "ram",
+      "size": 18,
+      "color": "@violet",
+      "stroke": 2
+    },
+    {
+      "type": "text",
+      "id": "ram-label",
+      "x": 222,
+      "y": 223,
+      "text": "MEMORY",
+      "font_size": 13,
+      "color": "@muted",
+      "align": "center",
+      "letter_spacing": 3
+    },
+    {
+      "type": "rect",
+      "id": "side-card",
+      "x": 300,
+      "y": 90,
+      "w": 164,
+      "h": 146,
+      "color": "@card",
+      "color2": "@card2",
+      "radius": 12,
+      "outline": "@edge"
+    },
+    {
+      "type": "icon",
+      "id": "temp-icon",
+      "x": 312,
+      "y": 102,
+      "icon": "temperature",
+      "size": 18,
+      "color": "@muted",
+      "stroke": 2
+    },
+    {
+      "type": "text",
+      "id": "temp-label",
+      "x": 334,
+      "y": 104,
+      "text": "CPU TEMP",
+      "font_size": 12,
+      "color": "@muted",
+      "letter_spacing": 2
+    },
+    {
+      "type": "metric",
+      "id": "temp-value",
+      "x": 312,
+      "y": 120,
+      "sensor": "cpu.temp",
+      "format": "{value:.0f}{unit}",
+      "font_size": 32,
+      "color": "@text",
+      "fallback": "n/a",
+      "font": "builtin:Barlow-SemiBold",
+      "color_rules": [
+        {
+          "above": 75,
+          "color": "@warn"
+        },
+        {
+          "above": 88,
+          "color": "@crit"
+        }
+      ],
+      "tabular": true
+    },
+    {
+      "type": "icon",
+      "id": "disk-icon",
+      "x": 312,
+      "y": 164,
+      "icon": "disk",
+      "size": 16,
+      "color": "@muted",
+      "stroke": 2
+    },
+    {
+      "type": "text",
+      "id": "disk-label",
+      "x": 334,
+      "y": 165,
+      "text": "DISK",
+      "font_size": 12,
+      "color": "@muted",
+      "letter_spacing": 2
+    },
+    {
+      "type": "metric",
+      "id": "disk-value",
+      "x": 452,
+      "y": 164,
+      "sensor": "disk.load",
+      "format": "{value:.0f}%",
+      "font_size": 14,
+      "color": "@text",
+      "align": "right",
+      "tabular": true
+    },
+    {
+      "type": "bar",
+      "id": "disk-bar",
+      "x": 312,
+      "y": 186,
+      "w": 140,
+      "h": 6,
+      "sensor": "disk.load",
+      "color": "@green",
+      "background": "#ffffff12",
+      "radius": 1,
+      "segments": 14,
+      "segment_gap": 3,
+      "glow": 0.4,
+      "glow_radius": 5,
+      "color_rules": [
+        {
+          "above": 90,
+          "color": "@crit"
+        }
+      ]
+    },
+    {
+      "type": "icon",
+      "id": "down-icon",
+      "x": 311,
+      "y": 202,
+      "icon": "download",
+      "size": 14,
+      "color": "@green",
+      "stroke": 2.2
+    },
+    {
+      "type": "metric",
+      "id": "net-down",
+      "x": 452,
+      "y": 201,
+      "sensor": "net.down",
+      "format": "{value:bytes}/s",
+      "font_size": 14,
+      "color": "@text",
+      "align": "right",
+      "tabular": true
+    },
+    {
+      "type": "icon",
+      "id": "up-icon",
+      "x": 311,
+      "y": 218,
+      "icon": "upload",
+      "size": 14,
+      "color": "@pink",
+      "stroke": 2.2
+    },
+    {
+      "type": "metric",
+      "id": "net-up",
+      "x": 452,
+      "y": 217,
+      "sensor": "net.up",
+      "format": "{value:bytes}/s",
+      "font_size": 14,
+      "color": "@text",
+      "align": "right",
+      "tabular": true
+    },
+    {
+      "type": "rect",
+      "id": "history-card",
+      "x": 16,
+      "y": 248,
+      "w": 448,
+      "h": 60,
+      "color": "@card",
+      "color2": "@card2",
+      "radius": 10,
+      "outline": "@edge"
+    },
+    {
+      "type": "graph",
+      "id": "history",
+      "x": 22,
+      "y": 256,
+      "w": 436,
+      "h": 48,
+      "sensor": "cpu.load",
+      "history": 120,
+      "min": 0,
+      "max": 100,
+      "color": "@accent",
+      "fill": true,
+      "fill_fade": true,
+      "smooth": true,
+      "line_width": 2,
+      "grid": 1,
+      "grid_color": "#ffffff0c",
+      "glow": 0.4,
+      "glow_radius": 6
+    },
+    {
+      "type": "text",
+      "id": "history-label",
+      "x": 28,
+      "y": 256,
+      "text": "CPU HISTORY",
+      "font_size": 10,
+      "color": "@dim",
+      "letter_spacing": 2
+    }
   ]
 }

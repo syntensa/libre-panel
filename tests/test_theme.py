@@ -24,7 +24,7 @@ def minimal(**display):
     }
 
 
-@pytest.mark.parametrize("name", ["libre-default", "spur-ii"])
+@pytest.mark.parametrize("name", ["libre-default", "spur-ii", "orbit", "slate", "column"])
 def test_builtin_themes_are_valid(name):
     theme = load_theme(find_theme(name))
     assert theme.warnings == []

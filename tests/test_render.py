@@ -4,10 +4,22 @@ from PIL import Image
 from libre_panel.render.renderer import Renderer, _rule_color, changed_region
 from libre_panel.sensors.base import Reading, Snapshot
 from libre_panel.sensors.demo import demo_snapshot
-from libre_panel.theme.model import THEME_FORMAT, find_theme, load_theme, parse_theme
+from libre_panel.theme.model import (
+    THEME_FORMAT,
+    builtin_themes_dir,
+    find_theme,
+    load_theme,
+    parse_theme,
+)
+
+BUILTIN = sorted(p.parent.name for p in builtin_themes_dir().glob("*/theme.json"))
 
 
-@pytest.mark.parametrize("name", ["libre-default", "spur-ii"])
+def test_all_themes_are_covered():
+    assert {"libre-default", "spur-ii", "orbit", "slate", "column"} <= set(BUILTIN)
+
+
+@pytest.mark.parametrize("name", BUILTIN)
 def test_builtin_themes_render(name):
     theme = load_theme(find_theme(name))
     renderer = Renderer(theme)

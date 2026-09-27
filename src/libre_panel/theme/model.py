@@ -42,6 +42,7 @@ _COMMON: dict[str, tuple[str, Any]] = {
     "y": ("int", 0),
     "visible": ("bool", True),
     "locked": ("bool", False),  # editor only: not draggable
+    "hide_if_missing": ("bool", False),  # hide when its sensor has no value
     "opacity": ("number", 1.0),
     "glow": ("number", 0.0),  # 0 = off, 1 = strong
     "glow_radius": ("int", 10),
@@ -95,6 +96,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "background": ("color?", "#1f2937"),
         "radius": ("int", 4),
         "direction": ("enum:right|left|up|down", "right"),
+        "scale": ("enum:linear|sqrt|log", "linear"),
         "segments": ("int", 0),
         "segment_gap": ("int", 2),
         "smooth": ("bool", True),
@@ -112,6 +114,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "color": ("color", "#22d3ee"),
         "color2": ("color?", None),
         "background": ("color?", "#1f2937"),
+        "scale": ("enum:linear|sqrt|log", "linear"),
         "cap": ("enum:round|flat", "round"),
         "ticks": ("int", 0),
         "tick_color": ("color?", None),
@@ -124,6 +127,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "h": ("int", 60),
         "min": ("number?", 0),
         "max": ("number?", 100),
+        "scale": ("enum:linear|sqrt|log", "linear"),
         "history": ("int", 60),
         "color": ("color", "#22d3ee"),
         "fill": ("bool", True),
