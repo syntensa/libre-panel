@@ -59,7 +59,7 @@ local_clip = "usr/data/standby.h264"
 ffmpeg = "<full path to your ffmpeg.exe>"   # or leave out if it is on PATH
 ```
 
-Then `libre-panel run -v` (Ctrl+C ends it) or `libre-panel tray`.
+Then `libre-panel -v run` (Ctrl+C ends it) or `libre-panel tray`.
 
 What I would like to know:
 
