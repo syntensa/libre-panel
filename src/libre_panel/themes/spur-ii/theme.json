@@ -48,7 +48,8 @@
       "w": 1920,
       "h": 480,
       "color": "@bg2",
-      "color2": "@bg"
+      "color2": "@bg",
+      "locked": true
     },
     {
       "type": "text",

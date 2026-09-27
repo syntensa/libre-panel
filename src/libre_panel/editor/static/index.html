@@ -11,17 +11,19 @@
     <div class="brand">Libre Panel <span>Theme Editor</span></div>
     <label>Theme <select id="theme-select"></select></label>
     <button id="btn-new" type="button">New</button>
-    <button id="btn-save" type="button" class="primary">Save</button>
+    <button id="btn-save" type="button" class="primary" title="Ctrl+S">Save</button>
     <button id="btn-save-as" type="button">Save as…</button>
     <button id="btn-activate" type="button" title="Save and show this theme on the panel">Show on panel</button>
     <button id="btn-import" type="button">Import</button>
     <button id="btn-export" type="button">Export</button>
     <input type="file" id="import-file" accept=".json,application/json" hidden>
     <span class="spacer"></span>
+    <button id="btn-undo" type="button" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
+    <button id="btn-redo" type="button" title="Redo (Ctrl+Y)" aria-label="Redo">↷</button>
     <label class="toggle"><input type="checkbox" id="live-toggle"> Live sensors</label>
   </header>
 
-  <nav class="panelbar" aria-label="Panel model">
+  <nav class="panelbar" aria-label="Panel and view">
     <label>Panel <select id="model-select"></select></label>
     <label>Orientation
       <select id="orientation-select">
@@ -40,17 +42,39 @@
       </select>
     </label>
     <span id="panel-info" class="muted"></span>
+    <span class="spacer"></span>
+    <span class="group" role="group" aria-label="Zoom">
+      <button id="zoom-fit" type="button" title="Fit to window">Fit</button>
+      <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+      <span id="zoom-label" class="muted">100%</span>
+      <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+    </span>
+    <label>Snap
+      <select id="snap-select">
+        <option value="0">off</option>
+        <option value="1">1 px</option>
+        <option value="4" selected>4 px</option>
+        <option value="8">8 px</option>
+        <option value="16">16 px</option>
+      </select>
+    </label>
+    <label class="toggle"><input type="checkbox" id="guides-toggle" checked> Guides</label>
   </nav>
 
   <main class="layout">
     <aside class="left">
-      <h2>Widgets</h2>
+      <h2>Add</h2>
       <div class="add-row">
         <select id="add-type" aria-label="Widget type"></select>
         <button id="btn-add" type="button">Add</button>
       </div>
+      <h3>Building blocks</h3>
+      <div id="presets" class="presets"></div>
+      <h2 class="section-title">Layers</h2>
       <ul id="widget-list"></ul>
-      <p class="hint">Drag widgets on the preview. Arrow keys nudge (Shift = 10 px), Del removes, Ctrl+D duplicates, Ctrl+S saves.</p>
+      <p class="hint">Shift-click or drag a frame to select several. Arrows nudge (Shift = 10 px),
+        Alt while dragging turns snapping off. Ctrl+Z/Y undo, Ctrl+C/V copy, Ctrl+D duplicate,
+        Ctrl+A select all, Del removes. Locked layers ignore clicks on the canvas; pick them here.</p>
     </aside>
 
     <section class="stage" id="stage">

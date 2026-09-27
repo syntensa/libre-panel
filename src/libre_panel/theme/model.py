@@ -50,6 +50,7 @@ _COMMON: dict[str, tuple[str, Any]] = {
     "shadow_offset": ("int", 3),
     "shadow_blur": ("int", 6),
 }
+COMMON_FIELDS = _COMMON
 # Fields the editor groups under "Effects".
 EFFECT_FIELDS = ("opacity", "glow", "glow_radius", "shadow", "shadow_offset", "shadow_blur")
 

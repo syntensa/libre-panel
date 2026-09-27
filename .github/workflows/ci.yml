@@ -38,3 +38,15 @@ jobs:
         run: |
           libre-panel preview libre-default -o libre-default.png
           libre-panel preview spur-ii -o spur-ii.png
+
+  editor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]" playwright
+      - run: python -m playwright install --with-deps chromium
+      - name: Theme editor in a real browser
+        run: pytest -q tests/test_editor_browser.py

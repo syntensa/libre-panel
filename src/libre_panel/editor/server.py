@@ -24,11 +24,16 @@ from urllib.parse import parse_qs, urlparse
 from libre_panel import __version__
 from libre_panel.config import ConfigError, load_config, set_active_theme, user_themes_dir
 from libre_panel.devices.models import MODELS, PROTOCOLS
+from libre_panel.editor.presets import presets_for_editor
+from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_fonts
+from libre_panel.icons import ICON_NAMES
 from libre_panel.render.renderer import Renderer
 from libre_panel.sensors.base import SensorHub
 from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import (
+    COMMON_FIELDS,
+    EFFECT_FIELDS,
     WIDGET_SPECS,
     ThemeError,
     find_theme,
@@ -144,6 +149,9 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._json(self._specs())
         if path == "/api/themes":
             return self._json(list_themes())
+        match = re.fullmatch(r"/api/themes/([^/]+)/assets", path)
+        if match:
+            return self._assets(match.group(1))
         if path.startswith("/api/themes/"):
             return self._get_theme(path[len("/api/themes/") :])
         if path == "/api/sensors":
@@ -170,9 +178,27 @@ class EditorHandler(BaseHTTPRequestHandler):
             "widgets": {
                 t: {k: list(v) for k, v in spec.items()} for t, spec in WIDGET_SPECS.items()
             },
+            "common": {k: list(v) for k, v in COMMON_FIELDS.items()},
+            "effect_fields": list(EFFECT_FIELDS),
             "models": [m.to_dict() for m in MODELS],
             "protocols": PROTOCOLS,
+            "fonts": [BUILTIN_PREFIX + name for name in builtin_fonts()],
+            "default_font": DEFAULT_FONT,
+            "icons": list(ICON_NAMES),
+            **presets_for_editor(),
         }
+
+    def _assets(self, theme_id: str) -> None:
+        try:
+            folder = find_theme(theme_id)
+        except ThemeError as exc:
+            return self._error(str(exc), HTTPStatus.NOT_FOUND)
+        files = sorted(
+            path.relative_to(folder).as_posix()
+            for path in folder.rglob("*")
+            if path.is_file() and path.suffix.lower() in ASSET_EXTENSIONS
+        )
+        self._json(files)
 
     def _get_theme(self, theme_id: str) -> None:
         try:

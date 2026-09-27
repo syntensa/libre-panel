@@ -97,3 +97,22 @@ def test_save_upload_and_adapt(server, isolated_home):
         {"theme": theme_dict(), "model": "turing-8.8-usb", "orientation": "landscape"},
     )
     assert status == 200 and data["theme"]["display"]["width"] == 1920
+
+
+def test_specs_offer_fonts_icons_and_presets(server):
+    _, specs = request(server, "GET", "/api/specs")
+    assert "builtin:Barlow-SemiBold" in specs["fonts"]
+    assert "weather" in specs["icons"]
+    assert {p["id"] for p in specs["presets"]} >= {"ring", "cpu-card", "section"}
+    assert "glow" in specs["effect_fields"] and "locked" in specs["common"]
+
+
+def test_theme_assets_listing(server, isolated_home):
+    request(server, "POST", "/api/themes/mine", {"theme": theme_dict(), "source": "libre-default"})
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    )
+    request(server, "POST", "/api/themes/mine/assets?name=logo.png", png,
+            {"Content-Type": "application/octet-stream"})  # fmt: skip
+    status, files = request(server, "GET", "/api/themes/mine/assets")
+    assert status == 200 and files == ["assets/logo.png"]

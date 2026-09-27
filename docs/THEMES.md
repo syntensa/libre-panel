@@ -26,10 +26,14 @@ to write or review themes by hand.
   "license": "CC-BY-4.0",
   "description": "What it shows and for which panel.",
   "display": { "model": "turing-3.5", "orientation": "landscape", "width": 480, "height": 320 },
-  "background": { "color": "#0b1016", "image": null },
+  "palette": { "bg": "#0b1016", "text": "#f1f5f9", "accent": "#22d3ee" },
+  "font": "builtin:Barlow-Medium",
+  "background": { "color": "@bg", "image": null },
   "refresh_ms": 1000,
+  "animation": { "smoothing_ms": 400 },
   "widgets": [
-    { "type": "clock", "id": "clock", "x": 240, "y": 20, "format": "%H:%M", "font_size": 48, "align": "center" }
+    { "type": "clock", "id": "clock", "x": 240, "y": 20, "format": "%H:%M", "font_size": 48,
+      "align": "center", "color": "@text", "glow": 0.3 }
   ]
 }
 ```
@@ -37,33 +41,50 @@ to write or review themes by hand.
 - `display.model` is an id from `libre-panel models` (or `"custom"` with an
   explicit `width`/`height`). With a model, the size follows from
   `orientation`; a conflicting width/height is an error.
-- Colors are `#rgb`, `#rrggbb` or `#rrggbbaa`.
+- Colours are `#rgb`, `#rrggbb` or `#rrggbbaa` — or `@name` for an entry of the
+  theme's `palette`. Change a palette colour and every widget using it follows.
+- `font` is the default for all text; `builtin:Barlow-Regular`, `-Medium`,
+  `-SemiBold`, `-Bold`, `builtin:BarlowCondensed-Medium`, `-SemiBold`,
+  `builtin:JetBrainsMono-Medium`, `-Bold` ship with Libre Panel (SIL OFL), or
+  use a `.ttf`/`.otf` inside the theme folder.
+- `refresh_ms` is how often sensors are read; `animation.smoothing_ms` is how
+  long bars and rings glide to a new value (0 = jump).
 - Widgets are drawn in list order: later ones are on top.
 - Unknown fields are ignored with a warning, so newer themes still load.
 
 ## Widgets
 
-Every widget has `id` (unique), `type`, `x`, `y` and `visible`. Text-like
-widgets share `font` (a `.ttf`/`.otf` inside the theme folder, empty = built-in
-font), `font_size`, `color` and `align` (`left`, `center`, `right`; `x` is the
-left edge, center or right edge accordingly; `y` is the top).
+Every widget has `id` (unique), `type`, `x`, `y`, `visible`, `locked` (editor
+only), `hide_if_missing` (hide when its sensor has no value, e.g. weather
+switched off) and the effects `opacity` (0–1), `glow` (0–1) with
+`glow_radius`, and `shadow` (a colour) with `shadow_offset` and `shadow_blur`.
+
+Text-like widgets share `font` (empty = the theme font), `font_size`, `color`,
+`align` (`left`, `center`, `right`; `x` is the left edge, centre or right edge
+accordingly; `y` is the top of the line), `letter_spacing` and `tabular`
+(equal-width digits so numbers do not jitter; on by default for values).
 
 | Type | Fields | |
 |---|---|---|
 | `text` | `text` | static label, may contain line breaks |
 | `metric` | `sensor`, `format`, `fallback`, `color_rules` | a sensor value as text |
-| `bar` | `sensor`, `w`, `h`, `min`, `max`, `color`, `background`, `radius`, `direction`, `color_rules` | progress bar; `direction` `right`/`left`/`up`/`down` |
-| `gauge` | `sensor`, `w`, `h`, `min`, `max`, `start_angle`, `end_angle`, `thickness`, `color`, `background`, `color_rules` | ring; angles clockwise from 3 o'clock, default 135→405 |
-| `graph` | `sensor`, `w`, `h`, `min`, `max`, `history`, `color`, `fill`, `line_width`, `background` | history line; `min`/`max` `null` = automatic |
+| `bar` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `color`, `color2`, `background`, `radius`, `direction`, `segments`, `segment_gap`, `smooth`, `color_rules` | progress bar; `color2` makes a gradient along the track, `segments` an LED-style bar |
+| `gauge` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `start_angle`, `end_angle`, `thickness`, `color`, `color2`, `background`, `cap`, `ticks`, `tick_color`, `smooth`, `color_rules` | ring; angles clockwise from 3 o'clock, default 135→405; `cap` round or flat |
+| `graph` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `history`, `color`, `fill`, `fill_fade`, `smooth`, `line_width`, `grid`, `grid_color`, `background` | history; `min`/`max` `null` = automatic, `smooth` draws a curve |
 | `clock` | `format` | date/time with [strftime codes](https://strftime.org), e.g. `%H:%M:%S`, `%A %d %B` |
 | `image` | `src`, `w`, `h` | a picture from the theme folder; `w`/`h` 0 = original size |
 | `weather` | `field`, `format`, `fallback` | `temperature`, `apparent_temperature`, `humidity`, `wind_speed`, `description`, `code` |
-| `rect` | `w`, `h`, `color`, `radius`, `outline`, `outline_width` | panels, frames, separators |
+| `icon` | `icon`, `size`, `color`, `stroke` | line icons: cpu, gpu, ram, disk, network, download, upload, temperature, fan, power, clock, sun, moon, cloud, partly, rain, snow, storm, fog, humidity, wind — and `weather`, which follows the live weather (day/night) |
+| `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur` | cards, frames, separators; `backdrop_blur` gives frosted glass |
 
-`color_rules` change the color by value; the highest matching threshold wins:
+`scale` is `linear`, `sqrt` or `log`: the latter two keep small values visible
+on huge ranges such as network rates.
+
+`color_rules` change the colour by value; the highest matching threshold wins
+(and replaces a gradient):
 
 ```json
-"color_rules": [{ "above": 70, "color": "#fbbf24" }, { "above": 85, "color": "#f87171" }]
+"color_rules": [{ "above": 70, "color": "@warn" }, { "above": 85, "color": "@crit" }]
 ```
 
 ## Format strings
@@ -95,6 +116,7 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `net.down`, `net.up` | B/s | psutil |
 | `fan.<chip>.<name>`, `temp.<chip>.<name>` | RPM, °C | psutil (Linux) |
 | `battery.load`, `sys.uptime` | %, s | psutil |
+| `cpu.name`, `gpu.name` | text | LibreHardwareMonitor |
 | `weather.*` | | Open-Meteo, when enabled |
 | `lhm:/<sensor id>` | | any LibreHardwareMonitor sensor |
 

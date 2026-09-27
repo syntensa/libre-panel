@@ -17,13 +17,17 @@ vendor app.
 
 ## Features
 
-- **Visual theme editor** in your browser: drag widgets, change colors, fonts,
-  sensors and thresholds, with a live preview rendered by the same engine that
-  drives the panel.
+- **Visual theme editor** in your browser, rendered by the same engine that
+  drives the panel: drag and drop with snapping and alignment guides,
+  multi-select, align and distribute, undo/redo, copy/paste, layers with lock
+  and hide, ready-made building blocks (CPU card, ring, bar rows, clock,
+  weather, network …), palette and font pickers, zoom.
 - **Every panel size from a menu**: 2.1" round up to 12.3", portrait or
   landscape. Switching the panel rescales your layout.
-- **Widgets**: text, sensor values, bars, ring gauges, history graphs, clock /
-  date, images, weather, rectangles — with color rules (e.g. turn red above 85 °C).
+- **Widgets**: text, sensor values, bars (also segmented), ring gauges, smooth
+  history graphs, clock / date, images, weather, 21 line icons (with live
+  weather symbols), cards with frosted glass — with glow, shadows, gradients,
+  colour rules (e.g. turn red above 85 °C) and values that glide smoothly.
 - **Sensors**: CPU, RAM, disk, network, temperatures and fans via `psutil`;
   on Windows also GPU, power and more through [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor).
 - **Weather** from [Open-Meteo](https://open-meteo.com) for *your* location —
