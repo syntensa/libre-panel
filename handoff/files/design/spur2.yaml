@@ -1,0 +1,321 @@
+# SPUR II — Themedatei
+#
+# Der Renderer liest diese Datei und BEOBACHTET sie: speichern genuegt, das
+# Panel aendert sich sofort. Das ist zugleich die Grundlage fuer den
+# eingebauten Editor — der schreibt am Ende nur hier hinein.
+#
+# Zum Schwarzwert: dieses LCD kann kein tiefes Schwarz. Die Rampe unten ist
+# deshalb bewusst etwas gespreizter als das urspruengliche SPUR II, und `void`
+# ist echtes Schwarz — tiefer als der Panel-Boden geht ohnehin nicht. Struktur
+# traegt vor allem ueber Linien und Kanalfarben, nicht ueber Flaechenhelligkeit;
+# am Geraet gepruefte Erkenntnis, siehe docs/DESIGN.md.
+
+name: SPUR II
+version: 2
+
+# ARKTIS-GRUND MIT TEAL-SIGNATUR (2026-09-20, am Panel verglichen). Der Grund
+# von Arktis ist dunkler und klarer, die Buntfarben kommen bei 40 % Helligkeit
+# besser durch — nur das Eisblau von Arktis wollte der Nutzer nicht, die
+# Signatur bleibt Teal. Der Auslieferungsstand steht als Farbthema
+# "SPUR II Legacy" bereit (design/farbthemen/spur2_legacy.yaml).
+farben:
+  # Basisrampe, von unten nach oben
+  void: "#000000"          # tiefster Grund
+  base_low: "#060A0F"      # Grundflaeche unten
+  base: "#0A1119"          # Grundflaeche oben
+  grid_min: "#101A25"      # Raster 8 px
+  surf_1: "#14202E"        # tiefste gehobene Flaeche
+  grid_maj: "#1A2939"      # Raster 40 px
+  surf_2: "#1F3147"        # gehobene Flaeche
+  track: "#162332"         # Rinne der Balken
+  rule_soft: "#1C2B3C"     # Hilfslinien im Diagramm
+  rule: "#32475E"          # Trennlinien
+  rule_strong: "#496480"   # Kante der Balkenrinne
+
+  # Text
+  tx_1: "#EEF6FF"          # Werte, Wortmarke
+  tx_2: "#B8CAE0"          # sekundaer
+  tx_3: "#8CA0B8"          # Beschriftungen
+
+  # Signatur: Teal auf der HELLIGKEIT der Arktis-Familie (Y 0,611 gegen
+  # Eisblau 0,609) — nicht auf derselben HSL-Zahl, die waere sichtbar heller.
+  akzent: "#13E5D7"
+  akzent_tief: "#19746E"
+
+  # Zustaende
+  ok: "#6FE3B5"
+  warn: "#FFCB6B"
+  krit: "#FF7A85"
+
+# Sensorkanaele — Farbe je Kanal, gleiche wahrgenommene Helligkeit
+kanaele:
+  CPU: "#13E5D7"   # Teal
+  MEM: "#E0A8FF"   # Violett
+  GPU: "#A3AEFF"   # Indigo
+  NET: "#7EE8A6"   # Gruen
+  # Fuer alles OHNE Zugehoerigkeit: Luefter ohne Zuordnung (siehe
+  # oben.luefter_kanal) und der Lautstaerkebalken, der nur mangels Platz in der
+  # NET-Sektion sitzt. Weiss, weil jede Buntfarbe eine Zugehoerigkeit
+  # behaupten wuerde, die es nicht gibt.
+  NEUTRAL: "#EEF6FF"
+
+# Beschriftungen — international, keine Umlaute
+beschriftung:
+  # Hardwarenamen neben der Sektionsueberschrift. CPU und GPU erkennt die
+  # Sensorquelle selbst; was hier steht, schlaegt sie. Fuer RAM und NET gibt
+  # es nichts Erkanntes, dort steht nur, was hier eingetragen ist. Zu lange
+  # Namen werden gekuerzt, damit sie nicht in die naechste Sektion laufen.
+  # Auf false blendet alle Hardwarenamen aus, ohne die Eintraege zu verlieren.
+  modelle_zeigen: true
+  modelle:
+    MEM: "<RAM-MODELL>"
+  sektionen:
+    CPU: CPU
+    MEM: RAM
+    GPU: GPU
+    NET: NET
+  zeilen:
+    CPU: [TEMP, WATT, FREQ]
+    MEM: [RAM, VRAM, TEMP]
+    GPU: [TEMP, WATT, FREQ]
+    NET: [UP, DOWN, VOL]
+
+# Der Streifen oben rechts neben der Wortmarke
+oben:
+  luefter: true
+  max_luefter: 6
+  uhr: true
+  uhrformat: "%H:%M:%S"
+  # Schriftgroessen im Streifen. Zum Vergleich: die Zeilenbeschriftungen
+  # darunter sind 25, die Werte 34.
+  schrift_label: 23
+  schrift_wert: 34
+  schrift_einheit: 17
+  schrift_uhr: 60
+  # Luefter umbenennen. Schluessel ist der LHM-Sensorname; die Namen kommen
+  # sonst aus FanControl, Unterstriche werden dabei zu Leerzeichen.
+  # Die Farbe sagt bereits, wozu ein Luefter gehoert — "Rear" und "GPU" davor
+  # waeren dieselbe Information ein zweites Mal. Gekuerzt gewinnt die Zeile
+  # rund 120 px, die den Abstaenden zugutekommen.
+  luefter_namen:
+    "Fan #1": Intake       # kuehlt die CPU-Seite, teal
+    "Fan #3": Intake       # kuehlt die GPU-Seite, indigo
+
+  # Welcher Luefter kuehlt was. Zwei Wirkungen: der Punkt vor dem Namen
+  # bekommt die Farbe der Sektion, und die Reihe wird danach sortiert — erst
+  # CPU, dann die Unzugeordneten, dann GPU, also dieselbe Abfolge wie die
+  # Sektionen darunter. Wer hier fehlt, bleibt neutral (Kanal FAN) und steht
+  # zwischen den Gruppen.
+  luefter_kanal:
+    "Fan #1": CPU        # Rear Intake
+    "Fan #2": CPU        # CPU
+    "Fan #3": GPU        # GPU Intake
+    "GPU Fan": GPU       # GPU
+    # "Fan #4" (Exhaust) bleibt bewusst ohne Zuordnung
+
+animation:
+  easing: 0.16          # Anteil pro Frame, den ein Wert Richtung Ziel geht
+  glow: 0.6             # Staerke des Glow, 0 = aus
+  glow_radius: 3        # Weichzeichnung, auf 1/4-Aufloesung gerechnet
+  graph_sekunden: 90    # nur informativ: das Fenster folgt aus Breite und fps
+  # Deckkraft der Flaeche unter der Kurve, 0..255. Das urspruengliche
+  # SPUR-Theme nutzte 72.
+  graph_fuellung: 105
+  raster: true          # 8/40-px-Raster zeichnen
+
+# Wertebereich je Balken: [von, bis]. Ohne Eintrag gilt 0 bis Vollausschlag
+# aus der Sensordefinition.
+#
+# Die Untergrenzen sind kein Schoenheitsfehler, sondern der Punkt: ein
+# Temperaturbalken ab 0 °C verschenkt die halbe Breite, weil eine CPU nie so
+# kalt ist. Und der Taktbalken zeigt den Takt, NICHT die Auslastung — die
+# steht im Diagramm darueber.
+balken:
+  cpu_temp: [30, 95]
+  cpu_watt: [0, 200]
+  cpu_takt: [400, 5800]
+  gpu_temp: [25, 95]
+  gpu_watt: [0, 340]
+  gpu_takt: [0, 3100]
+  mem_belegt: [0, 32]
+  vram_belegt: [0, 16]
+  # Riegeltemperatur wie bei CPU und GPU mit Untergrenze: DDR5 steht im
+  # Leerlauf bei 35..40 und kommt unter Last kaum ueber 60 — von 0 bis 85
+  # stuende der Balken dauerhaft auf halber Breite und ruehrte sich nicht.
+  mem_temp: [25, 70]
+  vol: [0, 100]
+  # Vollausschlag des Netzverlaufs in MB/s. Gemessen an der eigenen Leitung:
+  # rund 120 runter, 50 hoch. Zu grosse Werte lassen den Verlauf platt wirken.
+  net_down: [0, 120]
+  net_up: [0, 50]
+
+# Transiente Meldungen im unteren Drittel. Diagramme und Kopfzeile bleiben
+# dabei stehen — verdeckt wird nur der Zeilenblock.
+#
+# `aktiv` ist der Hauptschalter, darunter steht je Art einer. Der Name einer
+# Art ist zugleich ihr Schluessel im Code: eine Einblendung meldet ihre Art an,
+# und der Renderer prueft genau diesen Eintrag. Neue Arten tauchen auf der
+# Steuerseite dadurch von selbst als Schalter auf.
+einblendungen:
+  aktiv: true
+  lautstaerke: true     # Drehen am Rad, Stummschaltung
+  warnungen: true       # Temperaturen und Hotspot-Abstand, siehe warn_werte
+  hinweise: true        # Meldungen des Dienstes, z. B. Panel neu gestartet
+  musik: true           # neues Stueck, mit Cover und Symbol der Quell-App
+  spielmodus: true      # Wechsel in den Spielmodus und zurueck
+  geraete: true         # USB-Laufwerk angesteckt/entfernt, Controller und Akku
+  # Kennfarbe des Bandes aus dem Cover statt aus der Palette. Bricht bewusst
+  # mit der Farbdisziplin des Themas — deshalb abschaltbar. Graue und sehr
+  # dunkle Cover fallen automatisch auf die Palette zurueck.
+  musik_coverfarbe: true
+
+  # Haltezeit in Sekunden, ohne Ein- und Ausblenden. Warnungen setzen sich
+  # darueber hinweg und stehen laenger.
+  dauer: 2
+  # Zuendlinie (seit 2026-09-16): die Oberkante zuendet aus der Mitte, der
+  # Kasten rollt von ihr herab; beim Gehen rollt er in sie hinein und sie
+  # erlischt. Nichts faehrt mehr von unten herein.
+  ein: 0.45             # Aufrollen
+  aus: 0.32             # Einrollen
+
+  # Wie lange dieselbe Warnung Ruhe gibt, bevor sie erneut erscheinen darf.
+  # Ohne das meldet eine GPU, die an der Schwelle pendelt, im Sekundentakt.
+  warn_ruhe: 120
+  # Welche Werte eine Warnung einblenden duerfen. Moeglich sind cpu_temp,
+  # gpu_temp, gpu_hotspot und vram_belegt. VRAM bewusst nicht — hoher Verbrauch
+  # ist im Spiel der Normalfall. Der Hotspot-Abstand haengt nicht an dieser
+  # Liste, nur am Schalter `warnungen`.
+  warn_werte: [cpu_temp, gpu_temp, gpu_hotspot]
+
+# Welcher Bildschirm in welchem Modus. Gewaehlt wird auf der Steuerseite
+# (http://127.0.0.1:8777, ganz oben) mit Vorschaubild; dort erscheint dieser
+# Block nicht als Formular. Welche Varianten es gibt, steht in tools/screens.py.
+#   normal: klassisch, studio, horizont
+#   spiel:  kopfzeile, fokus, sitzung
+screens:
+  normal: studio
+  spiel: fokus
+
+# Spielbildschirm "Fokus" (tools/screen_fokus.py). Logo, Logoquelle und die
+# Skala des Frametime-Verlaufs teilt er sich mit dem Block `spielmodus`.
+fokus:
+  sektionen:
+    FRAMES: FRAMES
+    CPU: CPU
+    GPU: GPU
+    SYS: SYSTEM
+  zeilen:
+    FRAMES: [1% LOW, LATENZ, LIMIT]
+    CPU: [TEMP, WATT, FREQ]
+    GPU: [TEMP, WATT, FREQ]      # wie CPU; der Hotspot warnt per Einblendung
+    SYS: [RAM, VRAM, VOL]
+  schrift_fps: 150             # die grosse Zahl im FRAMES-Block
+  fps_max: 175                 # Oberkante des FPS-Verlaufs (unten ist 0)
+  latenz_max_ms: 50            # Vollausschlag des Latenzbalkens
+
+# Bildschirm "Studio" im Normalbetrieb (tools/screen_studio.py): Uhr,
+# Wiedergabekarte, Ringinstrumente. Die Musik-Einblendung entfaellt dort —
+# die Karte zeigt dasselbe dauerhaft.
+studio:
+  schrift_uhr: 176             # Groesse der Uhr
+  sekunden: true               # Sekunden neben der Uhr und als Laufbalken
+  # Rahmen und Fortschritt der Wiedergabekarte in der Farbe des Covers. Graue
+  # Cover fallen auf die neutrale Kante zurueck.
+  coverfarbe: true
+  # Laeuft nichts, zeigt die Karte das Wetter (einstellungen.yaml -> wetter).
+  # Eine pausierte Wiedergabe bleibt so viele Minuten stehen, dann auch.
+  wetter_nach_pause_min: 2
+
+# SPUR II 3D (2026-09-18): Licht aus Blender, Farbe aus dem Thema. Blender
+# rendert farblose Lichtebenen nach design/3d/ (Skripte dort), der Dienst
+# faerbt sie ein (tools/licht3d.py). false zeichnet das Element flach wie
+# vor 3D; fehlen die Ebenen, ebenfalls.
+plastisch:
+  ringe: true                  # Studio-Ringe und Ring-Bausteine als Roehre
+  balken: true                 # Balken ab 6 px Hoehe als Roehre mit runden Enden
+  luefter: true                # Rotor nach den Noctua G2 (neun Blaetter), farbig schattiert
+  luefter_glow: 1              # Schein um den Rahmen, der die Drehzahl zeigt; wirkt sofort
+  wetter: true                 # Wettersymbole als Koerper: Sonne, Wolken, Tropfen, Blitz
+  # Lichtfuehrung (2026-09-19, tools/lichtfuehrung.py): Wortmarke und Rahmen
+  # tragen Normalen und werden live beleuchtet — Fuehrungslicht fest oben
+  # links, Streiflicht nach dem echten Sonnenstand (wetter.breite/laenge),
+  # dazu Lichtlaeufe bei Ereignissen (lichtfuehrung.laeufe).
+  marke: true                  # "SPUR II" mit scharfen Facetten
+  rahmen: true                 # Rahmen als Grat mit Schein, Studio-Karte als Mulde
+  streiflicht: true            # das bewegte Licht auf Facetten und Graten
+  tiefenraum: true             # Staub in der Tiefe, von den Elementen ausgehend (tools/tiefenraum.py)
+  tiefenraum_staerke: 1.5      # wie deutlich der Staub ist; wirkt sofort, ohne Neustart
+  # Facetten-Stil (2026-09-20): "weniger rund, aber ein erhabener 3D-Effekt" —
+  # Balken, Ringe, Schrift und Kurven wie die Wortmarke: flache Deckflaeche in
+  # der Farbe, scharfe 45-Grad-Facette am Rand, Licht vom Fuehrungslicht.
+  facette_formen: true         # Balken und Ringe erhaben statt Roehre (tools/facettenformen.py)
+  facette_schrift: false       # jedes Zeichen ab 20 px mit Fase (tools/facettenschrift.py)
+  facette_kurve: erhaben       # Verlaufskurven als erhabenes Plateau (tools/facettenkurve.py);
+                               # statt true auch: zart, standard, kraeftig, erhaben
+
+lichtfuehrung:
+  # Wann das Streiflicht einmal ueber das Panel zieht: start (erstes Bild
+  # nach dem Start), auftritt (Ende eines Auftritts), musik (neues Stueck),
+  # stunde (volle Stunde). Leere Liste: nie.
+  laeufe: [start, auftritt, musik, stunde]
+
+# Spielbildschirm "Sitzung" (tools/screen_sitzung.py): Bilanz der Runde.
+sitzung:
+  # Grenzen der FPS-Stufen in der Verteilung. Sechs Werte ergeben sieben
+  # Zeilen — Platz ist fuer sechs, also fuenf Grenzen. Die Faerbung folgt der
+  # Untergrenze einer Stufe: unter 60 kritisch, unter 90 Warnung.
+  stufen: [60, 90, 120, 144, 165]
+  schrift_durchschnitt: 120    # die grosse Zahl "Ø FPS"
+
+# Beschriftungen im Spielmodus, Bildschirm `kopfzeile`. Das Geruest bleibt dasselbe — vier Sektionen,
+# je drei Zeilen —, nur was darin steht, wechselt. Die Zuordnung der Werte zu
+# den Zeilen steht im Code, die Namen hier.
+spielmodus:
+  sektionen:
+    CPU: CPU
+    MEM: RAM
+    GPU: GPU
+    NET: FRAMES
+  zeilen:
+    CPU: [TEMP, WATT, FREQ]
+    MEM: [RAM, VRAM, TEMP]
+    GPU: [TEMP, HOT, WATT]     # Takt raus, Hotspot rein: im Spiel die Grenze
+    # Wer bremst, die Latenz, und die Lautstaerke — mit ihrem Balken wie im
+    # Normalbetrieb. Der Frametime-Verlauf steht neben den ersten beiden Zeilen.
+    NET: [LIMIT, LATENZ, VOL]
+  # Obere Grenze des Frametime-Verlaufs in ms. 33,3 entspricht 30 fps — was
+  # darueber liegt, ist ein Ruckler und stoesst oben an.
+  frametime_max_ms: 33.3
+  logo: true                   # Spiel-Logo in der Kopfzeile
+  # Woher das Logo kommt: `steam` ist das Logo aus dem Steam-Cache, `symbol`
+  # das Programmsymbol der EXE. Bei Live-Service-Spielen ist das Steam-Logo
+  # die Grafik der laufenden Saison — bei Battlefield 6 gerade "SEASON 4".
+  # Das ist gewollt: laedt Steam zur naechsten Saison die neue Grafik, zieht
+  # das Panel binnen fuenf Minuten nach, ohne Neustart. Fehlt ein Steam-Logo,
+  # gilt das Programmsymbol.
+  logo_quelle: steam
+  # Hoehe des Logos in Pixeln. Die Saisongrafik traegt den Spielnamen als
+  # kleine Zeile ueber der grossen Saisonzahl; unter rund 60 px ist die nicht
+  # mehr lesbar. Mehr als 76 passt nicht zwischen Oberkante und Diagramme.
+  logo_hoehe: 68
+  # Schriftgroessen der Kopfzeile im Spielmodus. FPS am groessten und in der
+  # Akzentfarbe — die eine Zahl, die man im Augenwinkel liest. 1 % low etwas
+  # groesser als die Luefterwerte (34), damit die beiden Spielwerte sich von
+  # der Luefterreihe rechts davon abheben. Die Luefter bleiben stehen; wird es
+  # zu eng, fallen erst ihre Namen, dann das "RPM" weg.
+  schrift_fps: 56
+  schrift_hud: 40
+
+schwellen:
+  # Anteil des Vollausschlags, ab dem ein Balken warnt bzw. kritisch wird
+  warn: 0.72
+  krit: 0.9
+
+  # Welche ZAHLEN sich mitfaerben. Bewusst nicht alle: ein hoher Takt ist gut,
+  # eine hohe Temperatur nicht — bei FREQ waere dieselbe Faerbung ein
+  # Fehlalarm. Leere Liste schaltet die Einfaerbung ab.
+  #
+  # VRAM am 2026-09-13 herausgenommen: im Spiel sind 13 von 16 GB normal, Zahl
+  # und Balken standen dauernd gelb. Belegter Grafikspeicher ist genutzter
+  # Speicher, kein Schaden.
+  faerben: [cpu_temp, gpu_temp, mem_belegt]
