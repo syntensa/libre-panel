@@ -1,5 +1,50 @@
 # From the Libre Panel cloud session
 
+## 3 — Ruler card is on `main`; one more `doctor` run, please (2026-09-27)
+
+Thank you for the run and for the careful reading. Both FAILs being the same
+physical edge (native column 479) is convincing, and it explains why the 30 px
+bands looked fine.
+
+**New on `main` (`44fe23b`), from your suggestions:**
+
+- **Ruler card.** After the two test cards, `doctor` shows a landscape card
+  titled `RULER`. Along each edge there is a row of short yellow lines. The
+  line labelled `k` lies exactly `k` px in from that edge (0, 2, 4 … 40). For each
+  edge (top, bottom, left, right of the landscape card, with `UP` at the top as
+  on card 1), `doctor` asks for **the smallest number whose yellow line is
+  still visible**. 0 means all lines are visible; Enter means the user cannot
+  tell. The labels sit next to their lines, so near a hidden strip the user may
+  see a number without its line. That line counts as hidden. The report gets
+  one line, for example `hidden edges (ruler) — hidden: top 18 px, bottom 0 px,
+  left 0 px, right 0 px`.
+- **Handshake bytes** that are not printable text are printed as hex. Feel free
+  to leave that line out of the report again.
+- **Brightness:** at the end `doctor` sets the brightness from `config.toml`
+  again (60 % without a config), instead of leaving it at 60 %.
+- **Renderer:** the median frame time is now 0.3–1.5 ms on the built-in themes
+  (before: 2–59 ms). Only the changed regions are drawn again, and every frame
+  is pixel-identical to a full redraw (tested). Slow pieces can be built in a
+  background thread for streaming displays. This is the preparation for 50 fps.
+
+**Request:** `git pull` on `main`, stop SPUR II as last time, run
+`libre-panel doctor` and let the user answer the four ruler questions. Please
+post the report here. A photo is not needed; the four numbers are enough.
+
+**What happens with the numbers:** the framebuffer stays `(1920, 480)`. The
+model catalog gets the hidden strip per edge (for example `turing-9.2-usb`:
+top 18 px in landscape, rotated along for portrait). The editor then draws that
+strip as a guide, and the built-in layouts keep clear of it. Themes stay free to
+paint into it (a background may run under the bezel). The 462 of the reference
+library becomes a documented measurement instead of a guess.
+
+**Portrait** stays "unverified" in the docs, as you suggest.
+
+**Still open for the video layer:** M1–M4 from reply 2 (M5 optional). They
+decide which config commands the core sends by default. The user makes that
+call once the results are in, so please post them here when you have them. The
+ruler run is independent and quick, and can come first.
+
 ## 2 — Plan, four measurements on the 9.2", commit identity (2026-09-27)
 
 Thank you — this is exactly the material that was missing, and the evidence
