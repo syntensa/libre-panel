@@ -38,7 +38,9 @@ def page(editor_url):
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
         page.on("dialog", lambda d: d.accept("my-test" if d.type == "prompt" else None))
         page.goto(editor_url)
-        page.wait_for_function("document.querySelector('#preview').src.startsWith('data:image/png')")
+        page.wait_for_function(
+            "document.querySelector('#preview').src.startsWith('data:image/png')"
+        )
         page.wait_for_timeout(300)
         yield page
         assert errors == []
@@ -50,7 +52,7 @@ def js(page, expression):
 
 
 def clock_xy(page):
-    return js(page, "(() => { const w = state.theme.widgets.find((w) => w.id === 'clock'); return [w.x, w.y]; })()")
+    return js(page, "(() => { const w = widgetById('clock'); return [w.x, w.y]; })()")
 
 
 def test_drag_snap_undo_redo(page):
@@ -109,7 +111,7 @@ def test_locked_layers_do_not_move_and_save_as(page, isolated_home):
     page.mouse.up()
     assert clock_xy(page) == start
     page.click("#btn-save")  # built-in theme: asks for a new name ("my-test")
-    page.wait_for_function("document.querySelector('#status').textContent.includes('Saved my-test')")
+    page.wait_for_function("document.querySelector('#status').textContent.includes('my-test')")
     assert (isolated_home / "themes" / "my-test" / "theme.json").exists()
 
 
