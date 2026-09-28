@@ -1,0 +1,424 @@
+"""Video mode for TURZX USB panels: frames go to the panel's H.264 decoder at up to 50 fps.
+
+The panel has two layers: an H.264 stream (command 121) underneath and an
+RGBA PNG (command 102) on top. The PNG path alone manages about 9 fps on
+the 9.2", because the panel takes about 60 ms per full frame. The decoder has
+no such limit. Libre Panel puts the whole frame into the video and keeps the
+PNG layer transparent.
+
+Everything here was measured on the 9.2" by the SPUR II project, which has
+driven the panel this way around the clock at 50 fps
+(docs/protocol/turzx-usb.md, "Video layer"):
+
+- **Start:** ``110(name)`` clears the framebuffer (without it the screen
+  stays black), ``111`` stops the local playback that 110 started, ``112``
+  asks whether it still plays, then brightness, a transparent PNG layer, the
+  player's rate (``15``) and the block size (``17``).
+- **One picture per 121 block.** The panel's queue counts blocks, so a
+  keyframe cut into three blocks looks like a queue of three.
+- **Flow control:** ask for the queue depth (``122``) every second block;
+  above 2, wait in 30 ms steps until it is at most 1. The queue is a ring of
+  five blocks that silently overwrites unread ones, so flooding breaks the
+  picture.
+- **The player's rate** (``15``) is reported above the rate delivered: the
+  player shows each picture strictly on its own clock and never catches up.
+- **Stop:** ``123`` ends the stream, ``15 = 30`` gives the panel its power-on
+  rate back (its own standby clip plays at the last rate set), and the last
+  frame stays on the panel as a sharp PNG.
+- **A hung decoder** takes each block only after about 750 ms and its queue
+  stands high without moving. Detected as SPUR II does it (see
+  :meth:`VideoSession.check_hang`).
+
+This mode never sends commands that store anything on the panel: the start
+sequence without 13 (save settings), 125 and 42 shows the video, and after a
+power cycle the panel behaves exactly as before (measured on the 9.2").
+The name sent with 110 stays in the panel's memory until it restarts.
+"""
+
+from __future__ import annotations
+
+import logging
+import queue
+import statistics
+import struct
+import threading
+import time
+from collections import deque
+from collections.abc import Callable
+
+from PIL import Image
+
+from libre_panel.devices.base import DeviceError, FrameError
+from libre_panel.devices.h264 import (
+    Encoder,
+    EncoderSettings,
+    EncoderStopped,
+    ffmpeg_command,
+    find_ffmpeg,
+)
+from libre_panel.devices.models import PanelModel, orientation_of
+from libre_panel.devices.turzx_usb import (
+    CMD_BRIGHTNESS,
+    CMD_FRAME_RATE,
+    CMD_STOP_STREAM,
+    CMD_UPLOAD_PNG,
+    TurzxUsbDisplay,
+    UsbTransport,
+    brightness_arg,
+    encode_frame,
+    encode_png_rgba,
+    to_native,
+)
+from libre_panel.i18n import t
+
+log = logging.getLogger(__name__)
+
+CMD_CHUNK_SIZE = 17
+CMD_PLAY_LOCAL = 110  # clears the framebuffer; the name goes into the panel's settings in RAM
+CMD_STOP_LOCAL = 111
+CMD_LOCAL_PLAYING = 112
+CMD_H264_BLOCK = 121
+CMD_QUEUE_DEPTH = 122
+
+# The panel's own block size; it answers 17 with 0, meaning this default.
+DEFAULT_BLOCK = 202752
+# The player's rate after power-on. Set again on exit, because the panel's own
+# standby clip plays at the last rate set (at 60 it stutters).
+POWER_ON_FPS = 30
+
+
+def transparent_layer(size: tuple[int, int]) -> bytes:
+    """A fully transparent PNG layer. Opaque black would hide the video completely."""
+    return encode_png_rgba(Image.new("RGBA", size, (0, 0, 0, 0)), compress_level=9)
+
+
+class DecoderHung(DeviceError):
+    """The panel's decoder stopped taking pictures; reconnecting does not help."""
+
+
+class VideoSession:
+    """Start, picture blocks with flow control, and stop, on one open transport."""
+
+    HIGH, LOW = 2, 1  # queue depth that starts waiting, and the depth to wait for
+    POLL_EVERY = 2  # blocks between depth queries
+    WAIT_S, GIVE_UP_S = 0.03, 1.5
+    # Hang detection (SPUR II): a healthy block takes about 1 ms. When the median
+    # of the last 40 exceeds 0.2 s, four depth readings 150 ms apart decide.
+    HANG_WINDOW, HANG_MEDIAN_S = 40, 0.2
+    HANG_READINGS, HANG_READING_GAP_S, HANG_DEPTH, HANG_SPREAD = 4, 0.15, 20, 2
+
+    def __init__(
+        self,
+        transport: UsbTransport,
+        native_size: tuple[int, int],
+        device_fps: int,
+        brightness: int,
+        local_clip: str,
+        sleep: Callable[[float], None] = time.sleep,
+        clock: Callable[[], float] = time.perf_counter,
+    ) -> None:
+        self.transport = transport
+        self.native_size = native_size
+        self.device_fps = device_fps
+        self.brightness = brightness
+        self.local_clip = local_clip
+        self.sleep, self.clock = sleep, clock
+        self.block_size = DEFAULT_BLOCK
+        self.blocks = self.bytes = self.waits = self.max_depth = 0
+        self.send_times: deque[float] = deque(maxlen=self.HANG_WINDOW)
+
+    def start(self) -> None:
+        name = self.local_clip.encode("utf-8")
+        if not name:
+            # An empty name would erase the panel's standby clip setting.
+            raise DeviceError(t("video.local_clip is not set (see docs/CONFIGURATION.md, Video)"))
+        command = self.transport.command
+        command(CMD_PLAY_LOCAL, struct.pack(">I", len(name)) + bytes(4) + name)
+        command(CMD_STOP_LOCAL)
+        command(CMD_LOCAL_PLAYING)
+        command(CMD_BRIGHTNESS, bytes([brightness_arg(self.brightness)]))
+        layer = transparent_layer(self.native_size)
+        command(CMD_UPLOAD_PNG, struct.pack(">I", len(layer)), layer, timeout_ms=5000)
+        command(CMD_FRAME_RATE, bytes([self.device_fps]))
+        reply = command(CMD_CHUNK_SIZE)
+        size = int.from_bytes(reply[8:12], "big") if len(reply) >= 12 else 0
+        if 0 < size <= 1024 * 1024:
+            self.block_size = size
+
+    def send(self, picture: bytes) -> None:
+        """One picture; pictures larger than a block (rare keyframes) take several."""
+        for start in range(0, len(picture), self.block_size):
+            block = picture[start : start + self.block_size]
+            began = self.clock()
+            self.transport.command(
+                CMD_H264_BLOCK, struct.pack(">I", len(block)), block, timeout_ms=5000
+            )
+            self.send_times.append(self.clock() - began)
+            self.blocks += 1
+            self.bytes += len(block)
+            if self.blocks % self.POLL_EVERY == 0:
+                depth = self.depth()
+                if depth is not None and depth > self.HIGH:
+                    self._wait_for_room()
+            self.check_hang()
+
+    def depth(self) -> int | None:
+        reply = self.transport.query(CMD_QUEUE_DEPTH)
+        if reply is None or len(reply) <= 8:
+            return None
+        self.max_depth = max(self.max_depth, reply[8])
+        return reply[8]
+
+    def _wait_for_room(self) -> None:
+        self.waits += 1
+        started = self.clock()
+        while self.clock() - started < self.GIVE_UP_S:
+            self.sleep(self.WAIT_S)
+            depth = self.depth()
+            if depth is None or depth <= self.LOW:
+                return
+        log.debug("the panel's video queue did not go down within %.1f s", self.GIVE_UP_S)
+
+    def check_hang(self) -> None:
+        """Raise :class:`DecoderHung` when blocks go slowly *and* the queue stands high
+        without moving. The median, not one slow block: waiting for room legitimately
+        makes single sends slow, and a high queue that moves drains by itself."""
+        times = self.send_times
+        if len(times) < self.HANG_WINDOW or statistics.median(times) <= self.HANG_MEDIAN_S:
+            return
+        times.clear()  # decide once per window
+        readings = []
+        for i in range(self.HANG_READINGS):
+            if i:
+                self.sleep(self.HANG_READING_GAP_S)
+            depth = self.depth()
+            if depth is not None:
+                readings.append(depth)
+        log.warning("video blocks go slowly; queue depth %s", readings)
+        if (
+            len(readings) >= 2
+            and max(readings) > self.HANG_DEPTH
+            and max(readings) - min(readings) <= self.HANG_SPREAD
+        ):
+            raise DecoderHung(
+                t(
+                    "the panel's video decoder hangs (queue stuck at {depth}). "
+                    "Unplug the panel and plug it in again.",
+                    depth=max(readings),
+                )
+            )
+
+    def stop(self, last_frame: bytes | None = None) -> None:
+        """End the stream; ``last_frame`` (a native PNG) stays on the panel."""
+        command = self.transport.command
+        command(CMD_STOP_STREAM)
+        command(CMD_FRAME_RATE, bytes([POWER_ON_FPS]))
+        if last_frame:
+            command(CMD_UPLOAD_PNG, struct.pack(">I", len(last_frame)), last_frame, timeout_ms=5000)
+
+
+class TurzxVideoDisplay(TurzxUsbDisplay):
+    """Every frame goes through ffmpeg into the panel's H.264 decoder.
+
+    Three threads keep the render loop from ever waiting on USB: ffmpeg's
+    writer and reader (see :class:`~libre_panel.devices.h264.Encoder`) and a
+    sender for the 121 blocks. When the panel is slow, the small queue
+    between reader and sender fills and ffmpeg's pipe slows the render loop
+    down: fewer frames, never torn ones. A stopped ffmpeg is restarted; a USB
+    error reconnects and starts the video again.
+    """
+
+    name = "turzx-video"
+    streaming = True
+    RESTARTS_PER_MINUTE = 3
+    STALL_S = 2.0  # ffmpeg taking no frames this long, while the panel waits for pictures
+
+    def __init__(self, config, model: PanelModel | None = None) -> None:
+        super().__init__(config, model)
+        self.video = config.video
+        self.stream_fps = self.video.fps
+        self.settings = EncoderSettings(
+            fps=self.video.fps,
+            crf=self.video.crf,
+            preset=self.video.preset,
+            keyframe_s=self.video.keyframe_s,
+            maxrate=self.video.maxrate,
+        )
+        self.session: VideoSession | None = None
+        self.encoder: Encoder | None = None
+        self._ffmpeg: str | None = None
+        self._pictures: queue.Queue[bytes] = queue.Queue(maxsize=2)
+        self._sender: threading.Thread | None = None
+        self._stop_sender = threading.Event()
+        self._error: Exception | None = None
+        self._generation = 0
+        self._restarts: list[float] = []
+        self._why_stopped = "no output"
+        self._last_frame: Image.Image | None = None
+
+    # -- connection ----------------------------------------------------------
+
+    def open(self) -> None:
+        self._ffmpeg = self._ffmpeg or find_ffmpeg(self.video.ffmpeg)  # before touching the panel
+        super().open()
+        try:
+            self._start_video()
+        except Exception:
+            self.close()
+            raise
+
+    def describe(self) -> str:
+        return t("{panel}, video {fps} fps", panel=super().describe(), fps=self.stream_fps)
+
+    def _start_video(self) -> None:
+        native = (self.model.native_width, self.model.native_height) if self.model else (480, 1920)
+        self.session = VideoSession(
+            self.transport,
+            native,
+            self.video.device_fps,
+            self.brightness if self.brightness is not None else self.config.brightness,
+            self.video.local_clip,
+        )
+        self.session.start()
+        self._error = None
+        self._stop_sender = threading.Event()
+        self._sender = threading.Thread(
+            target=self._send_loop,
+            args=(self.session, self._stop_sender),
+            name="panel-video",
+            daemon=True,
+        )
+        self._sender.start()
+
+    def _stop_video(self) -> None:
+        self._stop_encoder()
+        self._stop_sender.set()
+        if self._sender is not None:
+            self._sender.join(10)
+            self._sender = None
+        while not self._pictures.empty():
+            self._pictures.get_nowait()
+
+    def _send_loop(self, session: VideoSession, stop: threading.Event) -> None:
+        while not stop.is_set():
+            try:
+                picture = self._pictures.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            try:
+                session.send(picture)
+            except DeviceError as exc:
+                self._error = exc
+                return
+
+    # -- encoder ---------------------------------------------------------------
+
+    def _start_encoder(self, size: tuple[int, int]) -> None:
+        self._stop_encoder()
+        now = time.monotonic()
+        self._restarts = [t0 for t0 in self._restarts if now - t0 < 60] + [now]
+        if len(self._restarts) > self.RESTARTS_PER_MINUTE + 1:
+            raise DeviceError(t("ffmpeg keeps stopping: {reason}", reason=self._why_stopped))
+        rotate = 270 if orientation_of(*size) == "landscape" else 180  # as to_native
+        command = ffmpeg_command(self._ffmpeg, size, rotate, self.settings)
+        self._generation += 1
+        generation = self._generation
+
+        def deliver(picture: bytes) -> None:
+            while generation == self._generation and self._error is None:
+                try:
+                    self._pictures.put(picture, timeout=0.2)
+                    return
+                except queue.Full:
+                    continue
+
+        self.encoder = Encoder(command, size, deliver)
+
+    def _stop_encoder(self) -> None:
+        if self.encoder is not None:
+            self._generation += 1  # pictures of the old stream are dropped
+            self.encoder.close()
+            self.encoder = None
+            while not self._pictures.empty():  # the new stream starts with a keyframe
+                self._pictures.get_nowait()
+
+    # -- frames ------------------------------------------------------------------
+
+    def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
+        if self.transport is None or self.session is None:
+            raise DeviceError("panel not open")
+        if isinstance(self._error, DecoderHung):
+            raise self._error  # a new connection does not help; the main loop tries later
+        if self._error is not None:
+            self._heal(self._error)
+        frame = frame.convert("RGB")
+        self._last_frame = frame
+        data = frame.tobytes()
+        encoder = self.encoder
+        if encoder is None or encoder.size != frame.size or not encoder.alive:
+            if encoder is not None and encoder.size == frame.size:
+                self._restarting(encoder.reason())
+            self._start_encoder(frame.size)
+        try:
+            self._feed(data)
+        except EncoderStopped as exc:
+            if self._error is not None:
+                return  # the panel failed meanwhile; the next frame reconnects
+            self._restarting(str(exc))
+            self._start_encoder(frame.size)
+            self._feed(data)
+
+    def _feed(self, data: bytes) -> None:
+        """Hand a frame to ffmpeg. Waiting is right while the panel sets the pace
+        (the pictures queue is full; USB timeouts bound that); ffmpeg taking nothing
+        while the panel waits for pictures has stalled."""
+        idle = 0.0
+        while True:
+            try:
+                self.encoder.write(data, timeout=0.25)
+                return
+            except EncoderStopped:
+                if not self.encoder.alive or self._error is not None:
+                    raise
+                if self._pictures.full():
+                    idle = 0.0
+                    continue
+                idle += 0.25
+                if idle >= self.STALL_S:
+                    stalled = f"ffmpeg took no frames for {self.STALL_S:.0f} s"
+                    raise EncoderStopped(stalled) from None
+
+    def _restarting(self, reason: str) -> None:
+        self._why_stopped = reason
+        log.warning("ffmpeg stopped (%s); starting it again", reason)
+
+    def _heal(self, exc: Exception) -> None:
+        """Reconnect after a USB error and start the video again (a full start)."""
+        log.warning("panel stopped answering (%s); reconnecting", exc)
+        self._stop_video()
+        super().close()
+        self.session = None
+        super().open()
+        self._start_video()
+
+    def close(self) -> None:
+        self._stop_video()
+        if self.transport is not None and self.session is not None and self._error is None:
+            try:
+                last = encode_frame(to_native(self._last_frame)) if self._last_frame else None
+            except FrameError:
+                last = None  # too detailed for a PNG: the video's last picture stays
+            try:
+                self.session.stop(last)
+            except DeviceError as exc:
+                log.debug("stopping the video: %s", exc)
+        if self.session is not None and self.session.blocks:
+            log.info(
+                "video: %d blocks, %.1f MB, waited %d times, deepest queue %d",
+                self.session.blocks,
+                self.session.bytes / 1e6,
+                self.session.waits,
+                self.session.max_depth,
+            )
+        self.session = None
+        super().close()

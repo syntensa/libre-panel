@@ -64,6 +64,14 @@ class AutoDisplay(Display):
         self._impl = VirtualDisplay(self.config)
         self._impl.open()
 
+    @property
+    def streaming(self) -> bool:
+        return bool(self._impl and self._impl.streaming)
+
+    @property
+    def stream_fps(self) -> int:
+        return self._impl.stream_fps if self._impl else 0
+
     def set_brightness(self, percent: int) -> None:
         self._brightness = percent
         if self._impl:
