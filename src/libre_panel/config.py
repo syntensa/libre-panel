@@ -96,11 +96,31 @@ def user_themes_dir() -> Path:
 
 
 @dataclass
+class VideoConfig:
+    """Video mode for panels with an H.264 decoder (TURZX USB): smooth frame rates."""
+
+    mode: str = "off"  # "off" | "on"
+    fps: int = 50
+    # Reported to the panel. Its player shows pictures strictly at this rate and
+    # never catches up, so it must be above ``fps`` (SPUR II: 60 for 50).
+    device_fps: int = 60
+    crf: int = 25
+    preset: str = "superfast"
+    keyframe_s: float = 10.0
+    maxrate: str = "2M"
+    ffmpeg: str = ""  # path to ffmpeg; empty = search PATH
+    # The name the video start command (110) needs: the panel's own standby
+    # clip, so its standby behaviour stays as it was.
+    local_clip: str = ""
+
+
+@dataclass
 class DeviceConfig:
     model: str = "auto"
     driver: str = "auto"
     brightness: int = 60
     output: str = "libre-panel-frame.png"
+    video: VideoConfig = field(default_factory=VideoConfig)
 
 
 @dataclass
@@ -198,6 +218,7 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     if not 0 <= cfg.device.brightness <= 100:
         raise ConfigError("device.brightness: must be between 0 and 100")
     cfg.device.output = _expect(dev.get("output", cfg.device.output), str, "device.output")
+    cfg.device.video = _parse_video(_expect(data.get("video", {}), dict, "video"))
 
     sensors = dict(data.get("sensors", {}))
     providers = sensors.pop("providers", cfg.sensors.providers)
@@ -236,6 +257,43 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
             'weather.longitude (find them with: libre-panel location "Your City")'
         )
     return cfg
+
+
+_MAXRATE = re.compile(r"^[0-9]+(\.[0-9]+)?[kKM]?$")
+
+
+def _parse_video(v: dict[str, Any]) -> VideoConfig:
+    from libre_panel.devices.h264 import X264_PRESETS
+
+    video = VideoConfig()
+    video.mode = _expect(v.get("mode", video.mode), str, "video.mode")
+    if video.mode not in ("off", "on"):
+        raise ConfigError('video.mode: must be "off" or "on"')
+    video.fps = _expect(v.get("fps", video.fps), int, "video.fps")
+    if not 1 <= video.fps <= 60:
+        raise ConfigError("video.fps: must be between 1 and 60")
+    video.device_fps = _expect(v.get("device_fps", video.device_fps), int, "video.device_fps")
+    if not video.fps <= video.device_fps <= 120:
+        raise ConfigError("video.device_fps: must be at least video.fps and at most 120")
+    video.crf = _expect(v.get("crf", video.crf), int, "video.crf")
+    if not 0 <= video.crf <= 51:
+        raise ConfigError("video.crf: must be between 0 and 51")
+    video.preset = _expect(v.get("preset", video.preset), str, "video.preset")
+    if video.preset not in X264_PRESETS:
+        raise ConfigError(f"video.preset: must be one of {', '.join(X264_PRESETS)}")
+    video.keyframe_s = float(
+        _expect(v.get("keyframe_s", video.keyframe_s), (int, float), "video.keyframe_s")
+    )
+    if not 1 <= video.keyframe_s <= 60:
+        raise ConfigError("video.keyframe_s: must be between 1 and 60 seconds")
+    video.maxrate = _expect(v.get("maxrate", video.maxrate), str, "video.maxrate")
+    if not _MAXRATE.match(video.maxrate):
+        raise ConfigError('video.maxrate: a bit rate such as "2M" or "1500k"')
+    video.ffmpeg = _expect(v.get("ffmpeg", video.ffmpeg), str, "video.ffmpeg")
+    video.local_clip = _expect(v.get("local_clip", video.local_clip), str, "video.local_clip")
+    if len(video.local_clip.encode("utf-8")) > 200:
+        raise ConfigError("video.local_clip: at most 200 bytes")
+    return video
 
 
 def load_config(path: Path | None = None) -> Config:

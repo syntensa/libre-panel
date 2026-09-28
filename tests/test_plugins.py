@@ -9,6 +9,7 @@ import pytest
 
 from libre_panel import app, cli
 from libre_panel.config import Config, ModeConfig, SensorsConfig, ServicesConfig, parse_config
+from libre_panel.devices.base import Display
 from libre_panel.plugins import PluginHost, ServiceManager, discover
 from libre_panel.plugins.loader import API_VERSION, reset_registry
 
@@ -563,23 +564,14 @@ def test_plugin_transition(plugin_folder):
     assert transition("wipe").duration == 0.3
 
 
-class Capture:
+class Capture(Display):
     """A display that keeps every frame."""
 
     frames = []
 
     def __init__(self, config):
-        self.config = config
+        super().__init__(config)
         Capture.frames = []
-
-    def open(self):
-        pass
-
-    def close(self):
-        pass
-
-    def set_brightness(self, percent):
-        pass
 
     def describe(self):
         return "capture"

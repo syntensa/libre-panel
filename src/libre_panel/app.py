@@ -6,7 +6,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -186,9 +186,59 @@ def _theme_name(config: Config, host: Any) -> str:
     return config.theme
 
 
-def _fps(config: Config, host: Any) -> int:
+def _fps(config: Config, host: Any, display: Any = None) -> int:
+    """Frames per second: the active mode's, else a streaming display's, else config.fps."""
     mode = config.modes.get(host.mode or "") if host is not None else None
-    return mode.fps if mode is not None and mode.fps else config.fps
+    if mode is not None and mode.fps:
+        return mode.fps
+    if display is not None and display.streaming:
+        return display.stream_fps
+    return config.fps
+
+
+class _Pacer:
+    """Frame clock for streaming displays, without drift (SPUR II).
+
+    Frame n is due at anchor + n / fps. A loop that falls more than a frame
+    behind takes a new anchor instead of sprinting to catch up: the panel's
+    player would show the burst late anyway.
+    """
+
+    def __init__(
+        self,
+        clock: Callable[[], float] = time.perf_counter,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self.clock, self.sleep = clock, sleep
+        self.fps = 0
+        self.frames = 0
+        self.anchor = (0.0, 0)
+        self.reanchored = 0
+
+    def reset(self) -> None:
+        self.fps = 0
+
+    def wait(self, fps: int, stop: threading.Event) -> None:
+        """Wait until the next frame is due."""
+        now = self.clock()
+        if fps != self.fps:
+            self.fps, self.anchor = fps, (now, self.frames)
+        self.frames += 1
+        start, first = self.anchor
+        due = start + (self.frames - first) / fps
+        if now < due:
+            if due - now > 0.05:
+                stop.wait(due - now)
+            else:
+                self.sleep(due - now)  # precise also on Windows (high-resolution timer)
+        elif now - due > 1 / fps:
+            self.anchor = (now, self.frames)
+            self.reanchored += 1
+
+
+def _same_device(a, b) -> bool:
+    """Brightness changes on the open panel; anything else needs it opened again."""
+    return replace(a, brightness=0) == replace(b, brightness=0)
 
 
 def run(
@@ -200,7 +250,8 @@ def run(
     on_config: Callable[[Config], None] | None = None,
 ) -> None:
     """Main loop: read sensors at the theme's rate, render at ``config.fps`` so
-    values glide between readings, and send only frames that changed.
+    values glide between readings, and send only frames that changed. A
+    streaming display (video mode) gets every frame at its own steady rate.
 
     With ``once`` a single frame is sent and any device error is raised.
     ``status`` is kept up to date for status displays. ``host`` connects the
@@ -235,6 +286,7 @@ def run(
     toasts = ToastLayer(theme, theme.toast_anchor)
     blend: tuple[Any, Image.Image, float] | None = None  # a transition under way
     last_frame: Image.Image | None = None
+    pacer = _Pacer()
     previous = None
     snapshot = None
     next_sample = 0.0
@@ -258,8 +310,14 @@ def run(
                     log.warning("keeping theme %r: %s", shown, exc)  # e.g. half-written file
                     refused = wanted
                 else:
-                    device = config.device  # the open device stays as it is
-                    if fresh.device.brightness != device.brightness:
+                    device = config.device
+                    if not _same_device(device, fresh.device):
+                        log.info("device settings changed; opening the panel again")
+                        display.close()
+                        display = create_display(fresh.device)
+                        link = _Link(display, fresh.device.brightness, status)
+                        device = fresh.device
+                    elif fresh.device.brightness != device.brightness:
                         link.set_brightness(fresh.device.brightness)
                         device.brightness = fresh.device.brightness
                     fresh.device, config = device, fresh
@@ -292,7 +350,10 @@ def run(
                 next_sample = started + (config.refresh_ms or theme.refresh_ms) / 1000
             was_connected = link.connected
             if link.ensure(started):
-                renderer.fps = _fps(config, host)  # screens may pace animations by it
+                streaming = display.streaming
+                # a slow piece (a new background) must not stall a video
+                renderer.background_builds = streaming
+                renderer.fps = _fps(config, host, display)  # screens may pace animations by it
                 snapshot.now = datetime.now()  # the clock ticks between readings too
                 frame, _ = renderer.render(snapshot, started)
                 frame = fit_frame(frame, size, theme.background_color)
@@ -305,13 +366,21 @@ def run(
                         frame = kind.frame(old, frame, progress)
                 last_frame = frame
                 frame = toasts.apply(frame, started)
-                region = changed_region(previous, frame)
-                if region is not None:
-                    previous = frame if link.show(frame, region, started) else None
+                if streaming:
+                    link.show(frame, None, started)
+                    previous = None
+                else:
+                    region = changed_region(previous, frame)
+                    if region is not None:
+                        previous = frame if link.show(frame, region, started) else None
             else:
                 previous = None  # send a full frame after reconnecting
             if host is not None and link.connected != was_connected:
                 host.emit("panel-connected" if link.connected else "panel-lost")
+            if link.connected and display.streaming:
+                pacer.wait(_fps(config, host, display), stop)  # every frame, on a steady clock
+                continue
+            pacer.reset()
             # While something glides, draw at full fps; otherwise wake for the next
             # reading, but at least twice a second so a seconds clock never skips.
             interval = 1 / _fps(config, host)

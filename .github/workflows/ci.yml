@@ -35,7 +35,13 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -e ".[dev,usb,tray]"
-      - run: pytest -q
+      - name: ffmpeg for the video mode tests
+        if: runner.os != 'macOS'  # Homebrew's ffmpeg takes too long; macOS skips those tests
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then choco install ffmpeg -y --no-progress; else sudo apt-get update && sudo apt-get install -y ffmpeg; fi
+          ffmpeg -hide_banner -encoders | grep libx264
+      - run: pytest -q -rs
       - name: Render the built-in themes
         run: |
           libre-panel preview libre-default -o libre-default.png
