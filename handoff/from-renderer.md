@@ -1,5 +1,152 @@
 # From the TURZX real-time renderer (local session)
 
+## 5 — `video-layer` on the 9.2": first results; answers on part B (2026-09-28)
+
+`video-layer` at `8ce4ab3`, own venv (`pip install -e ".[usb,tray]"`), Windows
+11. Tests: 253 passed, 11 skipped. `libre-panel -v tray`, theme `spur-ii`,
+`psutil` only (SPUR's sensors come with the mod), brightness 40, ffmpeg with
+libx264. SPUR II stopped; the user watched the panel. The driver sends only
+10, 110, 111, 112, 14, 102, 15, 17, 121, 122, 123 (checked in the code).
+
+### Your list from reply 4
+
+| # | Result |
+|---|---|
+| 1 Picture | **Up at once.** 10 167 blocks in 204 s = **49.8/s**, waited 0 times, deepest queue 1. But see "what the user saw" below. |
+| 2 Numbers | Same as SPUR II (49.5–50.0/s, queue max 1, 0 throttles). Long run below. |
+| 3 Long run | Running since 13:08:52; results follow in the next reply. |
+| 4a ffmpeg killed | `ffmpeg stopped (no output); starting it again` in the same second. User: "hardly noticed anything". |
+| 4b Unplugged | `USB error on command 121: [Errno 32] Pipe error; reconnecting`, then "panel not available … retrying in the background", then `panel connected` once plugged in again. Picture came back by itself; after it, 49.4 blocks/s. |
+| 5 After quitting | The last frame stays. Standby clip with the PC off: comes with test 7. |
+| 6 `doctor` ruler | See below. |
+| 7 Windows shutdown | Later today, when the user shuts down. |
+
+**What the user saw, and why it matters.** With the built-in `spur-ii` theme
+the user's first answer was "**1 fps**". The pipe carried 50 pictures/s
+(ffmpeg: 50.4 pictures/s), but only **2 KB/s**. Nearly every picture equalled the one
+before, because the theme changes once per second (`refresh_ms` 1000,
+values glide 0.45 s, graphs jump one sample). With `refresh_ms = 100` there
+was movement, but "it judders": the graph now jumps 10 times a second. SPUR
+II carries about 250 KB/s because its graphs scroll **per frame**, and that is
+what makes 50 fps visible. **Suggestion for the core:** in streaming mode,
+let graphs scroll continuously between samples (move the curve by
+`elapsed / sample interval` of a sample width each frame) and keep the
+glide running across readings. Otherwise video mode looks like the PNG path.
+
+**Transport with steady motion.** To separate the driver from the theme I fed
+`TurzxDisplay` directly with the M1 pattern (a bar moving 12 px per frame,
+anchor-clock pacing, 30 s) and timed every 121 block. User: "as smooth as M1".
+
+| Run | waits | deepest queue | block gap median / p99 / max | gaps > 50 ms |
+|---|---|---|---|---|
+| core, run 1 (right after quitting the tray app) | **14** | **4** | 20.0 / 25.7 / 79.5 ms | 7 |
+| core, run 2 | 0 | 1 | 20.0 / 22.2 / 27.1 ms | 0 |
+| core, run 3 | 0 | 1 | 20.0 / 22.0 / 22.8 ms | 0 |
+| SPUR II's pipeline (M1 again) | 0 | 1 | 20.0 / 22.2 / 25.9 ms | 0 |
+
+`show()` itself was always exact (max 21.4 ms). I can't explain run 1 and could
+not reproduce it. A depth of 4 is one short of the 5-block ring. If it comes
+back in the long run, I'll chase it.
+
+**`doctor` ruler (your `44fe23b`).** Test cards as before: top edge (landscape)
+and left edge (portrait) cut off. On the ruler the user answered: top, "up to
+10, the **8** is cut in half"; bottom, left and right, everything visible. The
+report says `top 10 px`, **but that is the labels, not the lines.** The
+1 px × 12 px lines can't be told apart at this size, and the 11 px labels sit
+3–14 px *below* their line. A half-cut "8" (rows 11–22) puts the edge at about
+row 16–17, which fits the 18 px measured with our bars. **Please keep 18 in the
+catalog.** Suggestions:
+- Draw bars that start at the edge and are `k` px deep, like ours.
+- Put the numbers well inside (≥ 45 px from the edge), in a size one can read
+  at arm's length (our 20 px labels worked).
+- Before the brightness step, say "watch the panel now" and wait for Enter.
+  This time it ran while the user was reading, so it is marked "not checked".
+  It was confirmed in the first run.
+
+**Small things**
+- The bytes after `0a c8` in the Sync reply change with every connection (log:
+  `(oK…)`, `(;…)`, `(n…)`; doctor now `d8 80 cf 02`). They are not an
+  identifier; I'd drop them from the "connected to" log line (they print as
+  mojibake).
+- `set_config_value("device.brightness", …)` replaced the whole line and so
+  dropped its trailing comment (`brightness = 40  # …`). The docstring promises
+  comments stay.
+
+### Answers on part B (questions 2, 3, 4, 6), before building against `mod-base`
+
+**2 — Who switches screens.** Three sources, in this priority:
+1. **Game mode:** automatic, from game detection.
+2. **Autopilot:** rules from the settings, first match wins. Signals: music
+   playing → Studio, microphone in use (a call), mean CPU/GPU load over
+   `dauer_s`, foreground app, time window. It needs 8 s of stable state
+   before switching and keeps a screen at least 20 s (`sofort: true` skips
+   that, for calls). Load rules are ignored in the first 240 s after boot.
+   The autopilot rests during game mode.
+3. **The user's choice** in the console.
+
+With your API this maps to 3 = `config.toml` theme, 2 = a service with
+`show_theme`/`restore_theme`, 1 = a mode. **One mismatch:** your order is
+*service request > mode theme > config*, SPUR's is *mode > autopilot >
+user*. The autopilot can call `restore_theme` on `mode-changed`, which works.
+**If two services ask for a theme at the same time (autopilot and game
+mode), which wins?** A `priority` on `show_theme`, or "the last caller
+wins", would settle it.
+
+**3 — Transitions.**
+- **Röhre**, 0.9 s, between normal screens: a tube opens in the accent
+  colour and uncovers the new screen. It needs the theme's colours (`akzent`,
+  `tx_1`).
+- **Auftritt**, between normal and game mode, both ways: the game's logo and
+  name, the words "SPIELMODUS" / "SPIEL BEENDET", and a light run near the end.
+  It needs **parameters from the caller**.
+- The card change inside Studio (0.6 s) and the clock digits roll (0.42 s)
+  stay inside the screen.
+
+For the API this means:
+- `Transition.frame(old, new, t)` needs the `context` (palette, fonts) and
+  **caller parameters**, for example
+  `show_theme(name, transition=("spur.auftritt", {"game": …, "logo": img}))`.
+- `set_mode(name, transition=None)` needs the same, because the Auftritt runs
+  on the mode change.
+- A screen change that happens during an Auftritt (the round report one
+  second after the game ends) must not cut the Auftritt short.
+- Toasts wait until an Auftritt has finished.
+
+**4 — Toasts.** Yes, SPUR's toasts need their own look, drawn **on top of any
+screen**:
+- A full-width band with an app badge: for music the cover, title and
+  artist; also a volume bar, device plugged/unplugged, and warnings (CPU/GPU
+  temperature, hotspot, VRAM) with a threshold-coloured progress.
+- Roll-in 0.26 s. A higher rank replaces a lower one; the others queue. The
+  hold time comes from the theme.
+- **Every toast has a kind**, which the theme can switch off. **A screen can
+  opt out of kinds it shows permanently:** Studio shows the music itself, so
+  no music toast there.
+
+So I'd need, in addition to `notify`:
+- a toast renderer hook (e.g. `libre_panel.toasts`, or chosen by the theme),
+- `notify(kind=…, rank=…, payload={image, progress, colour})`,
+- a screen attribute like `suppresses = {"music"}`.
+
+Your built-in card stays the default for everyone else.
+
+**6 — Game mode beyond fps.**
+- **Game variant of the screen.** Header with the game's logo, FPS and 1 %
+  low. The NET box becomes FRAMES: who limits (CPU/GPU/CAP), latency, volume,
+  and the frame-time history. Same geometry, other readings; for us that is a
+  theme with a screen option. `[modes.game] theme = …` fits.
+- **Transitions:** the Auftritt on start and end (see 3).
+- **Round report:** a report screen for a while after the game ends
+  (`show_theme` + `restore_theme` from the service).
+- **Autopilot** rests while the mode is active.
+- **Data from PresentMon:** FPS, 1 % low, frame times **per frame** (the graph
+  holds up to 1024 points). `publish` with history per snapshot may be too
+  coarse. I'll tell you once the mod runs whether a series (`publish_series`
+  or `publish(key, list)`) is needed.
+
+Next: the long run, the shutdown test, then the mod against `mod-base`. I
+will report what does not fit.
+
 ## 4 — The hidden strip must not move the SPUR screens, 2026-09-27
 
 A decision by the user, relevant to B1 (code-rendered screens): SPUR II's
