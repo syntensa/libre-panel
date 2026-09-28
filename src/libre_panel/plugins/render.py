@@ -41,6 +41,17 @@ class RenderContext:
         return self._renderer.fps
 
     @property
+    def continuous(self) -> bool:
+        """True in video mode: every frame reaches the panel, so motion shows
+        between readings (the built-in graphs scroll on every frame)."""
+        return self._renderer.continuous
+
+    def progress(self, now: float) -> float:
+        """How far ``now`` is from the last reading to the next, 0 to 1: move a
+        curve by this part of a sample width to scroll it between readings."""
+        return self._renderer.progress(now)
+
+    @property
     def language(self) -> str:
         return i18n.language()
 

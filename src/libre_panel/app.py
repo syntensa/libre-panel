@@ -347,12 +347,15 @@ def run(
                 if host is not None:
                     snapshot.images = host.images()
                     host.latest = snapshot
-                next_sample = started + (config.refresh_ms or theme.refresh_ms) / 1000
+                every = (config.refresh_ms or theme.refresh_ms) / 1000
+                next_sample = started + every
+                renderer.new_sample(started, every)
             was_connected = link.connected
             if link.ensure(started):
                 streaming = display.streaming
                 # a slow piece (a new background) must not stall a video
                 renderer.background_builds = streaming
+                renderer.continuous = streaming  # graphs scroll, values glide on
                 renderer.fps = _fps(config, host, display)  # screens may pace animations by it
                 snapshot.now = datetime.now()  # the clock ticks between readings too
                 frame, _ = renderer.render(snapshot, started)

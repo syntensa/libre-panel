@@ -48,7 +48,10 @@ to write or review themes by hand.
   `builtin:JetBrainsMono-Medium`, `-Bold` ship with Libre Panel (SIL OFL), or
   use a `.ttf`/`.otf` inside the theme folder.
 - `refresh_ms` is how often sensors are read; `animation.smoothing_ms` is how
-  long bars and rings glide to a new value (0 = jump).
+  long bars and rings glide to a new value (0 = jump). In video mode values
+  glide until the next reading and graphs scroll on every frame (they show
+  the readings one interval late, smooth curves two), so the 50 fps show
+  even when readings come once a second.
 - Widgets are drawn in list order: later ones are on top.
 - Unknown fields are ignored with a warning, so newer themes still load.
 - Optional: `"toast": {"anchor": "bottom-right"}` places messages from

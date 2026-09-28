@@ -16,7 +16,8 @@ First preview of Libre Panel.
   default driver a panel that appears later is picked up without a restart
 - Video mode for TURZX USB panels: frames go to the panel's H.264 decoder at
   up to 50 fps (needs ffmpeg), with flow control, ffmpeg restarts, reconnects
-  and hung-decoder detection; it saves nothing on the panel
+  and hung-decoder detection; it saves nothing on the panel. There, values
+  glide until the next reading and graphs scroll on every frame
 
 **Themes and rendering**
 - Theme format `libre-panel-theme/1`: text, metric, bar, gauge, graph, clock,

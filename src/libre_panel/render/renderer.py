@@ -201,7 +201,13 @@ class Renderer:
         self._digit_width: dict[int, float] = {}
         self._images: dict[tuple[str, int, int], Image.Image | None] = {}
         self._gauge_parts: dict[tuple[Any, ...], Image.Image] = {}  # static rings, colour fields
-        self._anim: dict[str, tuple[float, float]] = {}
+        self._anim: dict[str, tuple[float, float, float]] = {}  # value, speed, time
+        # Video mode (the main loop sets these): every frame goes out, so graphs
+        # scroll between readings and values glide until the next one.
+        self.continuous = False
+        self.sample: tuple[float, float] = (0.0, 1.0)  # (when, seconds to the next)
+        self._sample_no = 0
+        self._strips: dict[str, Any] = {}  # graph id -> ready strip, strip being built
         self._cache: dict[str, tuple[Any, Piece]] = {}
         self._keys = {w["id"]: json.dumps(w, sort_keys=True) for w in theme.widgets}
         self._background = self._load_background()
@@ -284,8 +290,23 @@ class Renderer:
 
     # -- animation ---------------------------------------------------------
 
+    def new_sample(self, at: float, interval: float) -> None:
+        """The main loop took fresh readings at ``at``; the next follow after ``interval`` s."""
+        self.sample = (at, max(0.001, interval))
+        self._sample_no += 1
+
+    def progress(self, now: float, delay: float = 0.0) -> float:
+        """How far ``now`` is from the last reading to the next, 0 to 1."""
+        at, interval = self.sample
+        return min(1.0, max(0.0, (now - at - delay) / interval))
+
     def _eased(self, widget: dict[str, Any], target: float | None, now: float) -> float | None:
-        """Glide towards new values instead of jumping (theme animation.smoothing_ms)."""
+        """Glide towards new values instead of jumping (theme animation.smoothing_ms).
+
+        A critically damped spring: it starts gently and a new reading changes
+        its course without a kink. In video mode the glide lasts until the next
+        reading, so values never stand still between readings.
+        """
         wid = widget["id"]
         if (
             target is None
@@ -294,32 +315,49 @@ class Renderer:
             or self.theme.smoothing_ms <= 0
         ):
             if target is not None:
-                self._anim[wid] = (target, now)
+                self._anim[wid] = (target, 0.0, now)
             return target
         previous = self._anim.get(wid)
         if previous is None:
-            self._anim[wid] = (target, now)
+            self._anim[wid] = (target, 0.0, now)
             return target
-        value, then = previous
-        tau = self.theme.smoothing_ms / 1000 / 3  # ~95 % of the way after smoothing_ms
-        value += (target - value) * (1 - math.exp(-max(0.0, now - then) / tau))
+        value, speed, then = previous
+        glide = self.theme.smoothing_ms / 1000
+        if self.continuous:
+            glide = max(glide, self.sample[1])
+        omega = 4.74 / glide  # 95 % of a step after ``glide`` seconds
+        dt = max(0.0, now - then)
+        decay = math.exp(-omega * dt)
+        error = value - target
+        curve = speed + omega * error
+        value = target + (error + curve * dt) * decay
+        speed = (speed - omega * curve * dt) * decay
         span = abs(widget.get("max", 100) - widget.get("min", 0)) or 1.0
-        if abs(target - value) < span * 0.002:
-            value = target
+        if abs(target - value) < span * 0.002 and abs(speed) * glide < span * 0.002:
+            value, speed = target, 0.0
         else:
             self.moving = True
-        self._anim[wid] = (value, now)
+        self._anim[wid] = (value, speed, now)
         return value
 
     # -- effects and compositing ------------------------------------------
 
     def _effects(self, widget: dict[str, Any], piece: Piece) -> Piece:
         layer = _scale_alpha(piece.layer, widget.get("opacity", 1.0))
+        box = piece.box or [piece.x, piece.y, piece.layer.width, piece.layer.height]
+        out, pad = self._halo(widget, layer)
+        if out is None:
+            return Piece(layer, piece.x, piece.y, box, piece.backdrop, piece.backdrop_radius)
+        out.alpha_composite(layer, (pad, pad))
+        return Piece(out, piece.x - pad, piece.y - pad, box, piece.backdrop, piece.backdrop_radius)
+
+    def _halo(self, widget: dict[str, Any], layer: Image.Image) -> tuple[Image.Image | None, int]:
+        """Shadow and glow of ``layer`` (without the layer), ``pad`` pixels larger
+        on every side; None without effects."""
         glow = widget.get("glow", 0.0)
         shadow = widget.get("shadow")
-        box = piece.box or [piece.x, piece.y, piece.layer.width, piece.layer.height]
         if not glow and not shadow:
-            return Piece(layer, piece.x, piece.y, box, piece.backdrop, piece.backdrop_radius)
+            return None, 0
         pad = 0
         if glow:
             pad = max(pad, widget.get("glow_radius", 10) * 2)
@@ -342,8 +380,7 @@ class Renderer:
             boost = 1.0 + glow * 2.5  # light spills: brighter than the shape's own alpha
             halo.putalpha(halo.getchannel("A").point(lambda a: min(255, int(a * boost * glow))))
             out.alpha_composite(halo)
-        out.alpha_composite(layer, (pad, pad))
-        return Piece(out, piece.x - pad, piece.y - pad, box, piece.backdrop, piece.backdrop_radius)
+        return out, pad
 
     @staticmethod
     def _paste(canvas: Image.Image, layer: Image.Image, x: int, y: int) -> None:
@@ -1055,15 +1092,101 @@ class Renderer:
 
     def _draw_graph(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         slots = max(2, widget["history"])
+        if self.continuous:
+            return self._scrolling_graph(widget, snapshot, now, slots)
         values = snapshot.history.get(widget["sensor"], [])[-slots:]
         key = (len(values), tuple(values[-3:]), values[0] if values else None)
         return self._cached(widget, key, lambda: self._graph_piece(widget, values, slots))
 
     def _graph_piece(self, widget: dict[str, Any], values: list[float], slots: int) -> Piece:
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
+        layer = self._graph_layer(widget, values, slots, w, slots - len(values))
+        return Piece(self._down(layer, w, h), x, y, [x, y, w, h])
+
+    # Video mode: a strip may take this long to draw before the graph needs it
+    # (it is drawn in the helper thread while the previous one keeps scrolling).
+    STRIP_DELAY_S = 0.1
+
+    def _scrolling_graph(
+        self, widget: dict[str, Any], snapshot: Snapshot, now: float, slots: int
+    ) -> Piece | None:
+        """The curve moves on every frame instead of jumping once per reading.
+
+        Once per reading the curve is drawn onto a strip two sample widths wider
+        than the graph; every frame shows a window into it that travels one
+        sample width until the next reading. The newest segment enters at the
+        right edge, so the curve runs one reading (smooth curves: two) plus
+        ``STRIP_DELAY_S`` behind the numbers.
+        """
+        wid = widget["id"]
+        ready, building = self._strips.get(wid, ([], None))
+        if building is not None and building[1].done():
+            try:
+                ready = [*ready, building[1].result()][-2:]
+            except Exception as exc:  # one broken widget must not blank the panel
+                self._warn(f"widget {wid!r} failed: {exc}")
+            building = None
+        if (not ready or ready[-1][0] != self._sample_no) and building is None:
+            lag = 2 if widget["smooth"] else 1
+            values = snapshot.history.get(widget["sensor"], [])[-(slots + lag + 1) :]
+            number, at = self._sample_no, self.sample[0]
+
+            def job() -> tuple[Any, ...]:
+                return (number, at, *self._graph_strip(widget, values, slots, lag))
+
+            if ready and self.background_builds:
+                if self._builder is None:
+                    self._builder = _Builder()
+                building = (number, self._builder.submit(job))
+            else:
+                ready = [*ready, job()][-2:]
+        self._strips[wid] = (ready, building)
+        if not ready:
+            return None
+        # the newest strip that is due; before that, the one that is still travelling
+        strip = next((s for s in reversed(ready) if now >= s[1] + self.STRIP_DELAY_S), ready[0])
+        number, _at, halo, line, pad, step = strip
+        travelled = (now - strip[1] - self.STRIP_DELAY_S) / self.sample[1]
+        off = round((1 + min(1.0, max(0.0, travelled))) * step)
+        self.moving = True
+        content = ("scroll", number, off)
+        hit = self._cache.get(wid)
+        if hit is not None and hit[0] == content:
+            return hit[1]
+        x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
+        window = line.crop((off, 0, off + w, h))
+        if halo is None:
+            piece = Piece(window, x, y, [x, y, w, h])
+        else:
+            layer = halo.crop((off, 0, off + w + 2 * pad, h + 2 * pad))
+            layer.alpha_composite(window, (pad, pad))
+            piece = Piece(layer, x - pad, y - pad, [x, y, w, h])
+        self._cache[wid] = (content, piece)
+        return piece
+
+    def _graph_strip(
+        self, widget: dict[str, Any], values: list[float], slots: int, lag: int
+    ) -> tuple[Image.Image | None, Image.Image, int, float]:
+        """The curve on a strip for :meth:`_scrolling_graph`, with its effects:
+        (halo or None, line, halo padding, sample width in pixels)."""
+        w, h = widget["w"], widget["h"]
+        step = (w * SUPERSAMPLE - 1) / (slots - 1) / SUPERSAMPLE
+        width = w + math.ceil(2 * step) + 1
+        # value i at strip x = graph width + (i - (last - lag) + 1) sample widths
+        layer = self._graph_layer(widget, values, slots, width, slots + lag + 1 - len(values))
+        line = _scale_alpha(self._down(layer, width, h), widget.get("opacity", 1.0))
+        halo, pad = self._halo(widget, line)
+        return halo, line, pad, step
+
+    def _graph_layer(
+        self, widget: dict[str, Any], values: list[float], slots: int, width: int, first: int
+    ) -> Image.Image:
+        """The graph, supersampled, on a canvas ``width`` px wide: value ``i`` sits
+        at sample position ``first + i`` of the widget's ``slots``."""
         s = SUPERSAMPLE
-        W, H = w * s, h * s
-        layer, draw = self._canvas(w, h)
+        W, H = width * s, widget["h"] * s
+        step = (widget["w"] * s - 1) / (slots - 1)
+        layer, draw = self._canvas(width, widget["h"])
         if widget["background"]:
             draw.rectangle([0, 0, W - 1, H - 1], fill=self.color(widget["background"]))
         if widget["grid"] > 0 and widget["grid_color"]:
@@ -1077,10 +1200,9 @@ class Renderer:
             if hi == lo:
                 hi = lo + 1
             pad = widget["line_width"] * s
-            offset = slots - len(values)
             points = [
                 (
-                    (offset + i) * (W - 1) / (slots - 1),
+                    (first + i) * step,
                     pad
                     + (H - 1 - 2 * pad) * (1 - _fraction(v, lo, hi, widget.get("scale", "linear"))),
                 )
@@ -1106,4 +1228,4 @@ class Renderer:
                 tint.putalpha(ImageChops.multiply(alpha, Image.new("L", layer.size, color[3])))
                 layer.alpha_composite(tint)
             draw.line(points, fill=color, width=widget["line_width"] * s, joint="curve")
-        return Piece(self._down(layer, w, h), x, y, [x, y, w, h])
+        return layer
