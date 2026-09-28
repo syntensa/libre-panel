@@ -282,9 +282,7 @@ class ServiceManager:
 
     def apply(self, config: Any) -> None:
         """Start, stop or restart services so they match ``config.services``."""
-        wanted = {
-            name: config.services.options.get(name, {}) for name in config.services.enabled
-        }
+        wanted = {name: config.services.options.get(name, {}) for name in config.services.enabled}
         with self._lock:
             for name in [n for n in self.running if n not in wanted]:
                 self._stop(name)
