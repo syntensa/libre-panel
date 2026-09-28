@@ -98,10 +98,11 @@ writes `libre-panel-doctor-<model>.txt`. The report contains no serial numbers
 or personal paths.
 
 Some panels hide a few pixels behind the bezel. `doctor` measures that with a
-ruler card: yellow lines every 2 pixels along each edge, numbered by their
-distance from the edge. Enter the smallest number whose line you can still
-see (0 when every line is visible); the report lists the hidden pixels per
-edge, so layouts can keep clear of them.
+ruler card: yellow bars along each edge, each starting at the edge and as
+many pixels deep as its number (2, 4, … 40). Enter the smallest number whose
+bar you can still see; the report lists the hidden pixels per edge (that
+number minus 2), so layouts can keep clear of them. Before the brightness
+check `doctor` waits for Enter, so you are watching the panel when it dims.
 
 Known so far: the 9.2" hides 18 px at the top in landscape (on the left in
 portrait). The editor shows such a strip as a hatched guide and snaps to its

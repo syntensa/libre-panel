@@ -149,56 +149,72 @@ def test_card(
 RULER_EDGES = ("top", "bottom", "left", "right")
 
 
-def ruler_card(width: int, height: int, step: int = 2, depth: int = 40) -> Image.Image:
-    """Numbered lines at exact distances from each edge.
+RULER_COLOR = (255, 212, 0)
 
-    For every edge a row of short yellow lines runs parallel to it, the line
-    labelled ``k`` exactly ``k`` pixels in from the edge. The smallest number
-    whose line is still visible is the width of the strip the glass hides.
+
+def ruler_card(width: int, height: int, step: int = 2, depth: int = 40) -> Image.Image:
+    """Numbered bars that start at each edge, each as deep as its number.
+
+    Bar ``k`` covers the ``k`` pixels next to the edge, so glass that hides
+    ``k`` pixels or more hides it completely: the smallest number whose bar
+    shows is one step more than the hidden strip. The numbers sit well inside
+    the card, big enough to read at arm's length.
     """
     img = Image.new("RGB", (width, height), "black")
     d = ImageDraw.Draw(img)
-    font = _font(11)
-    marks = list(range(0, depth + 1, step))
-    length = 12
+    size = max(12, min(20, min(width, height) // 20))
+    font = _font(size)
+    inset = max(45, depth + 12)  # where the numbers start
+    thick = max(4, size // 3)  # of a bar, along the edge
+    shifts = {True: round(size * 1.2), False: round(size * 1.8)}  # to a second row of numbers
+    # keep clear of the numbers of the rulers across (two rows at most)
+    clear = {
+        True: inset + shifts[False] + round(size * 1.6) + size // 2,
+        False: inset + shifts[True] + size + size // 2,
+    }
     for edge in RULER_EDGES:
         horizontal = edge in ("top", "bottom")
         along = width if horizontal else height
-        margin = depth + 30  # keep clear of the corners and the other rulers
-        spacing = (along - 2 * margin) / len(marks)
+        margin = min(clear[horizontal], along // 4)
+        need = size * 1.6 if horizontal else size * 1.1  # a number's width or height
+        marks = list(range(step, depth + 1, step))
+        while True:  # one row of numbers, two staggered rows, or fewer bars
+            room = (along - 2 * margin) / len(marks)
+            rows = 1 if room >= need else 2
+            if room * rows >= need or len(marks) <= 2:
+                break
+            marks = marks[1::2]
+        shift = shifts[horizontal]
         for i, k in enumerate(marks):
-            pos = round(margin + i * spacing)
+            pos = round(margin + (i + 0.5) * room)
+            a, b = pos - thick // 2, pos - thick // 2 + thick - 1
+            label = inset + (i % rows) * shift
             if edge == "top":
-                d.line([(pos, k), (pos + length, k)], fill="#ffd400")
-                d.text((pos, k + 3), str(k), font=font, fill="white", anchor="la")
+                d.rectangle([a, 0, b, k - 1], fill=RULER_COLOR)
+                d.text((pos, label), str(k), font=font, fill="white", anchor="ma")
             elif edge == "bottom":
-                y = height - 1 - k
-                d.line([(pos, y), (pos + length, y)], fill="#ffd400")
-                d.text((pos, y - 3), str(k), font=font, fill="white", anchor="ld")
+                d.rectangle([a, height - k, b, height - 1], fill=RULER_COLOR)
+                d.text((pos, height - label), str(k), font=font, fill="white", anchor="md")
             elif edge == "left":
-                d.line([(k, pos), (k, pos + length)], fill="#ffd400")
-                d.text((k + 3, pos), str(k), font=font, fill="white", anchor="la")
+                d.rectangle([0, a, k - 1, b], fill=RULER_COLOR)
+                d.text((label, pos), str(k), font=font, fill="white", anchor="lm")
             else:
-                x = width - 1 - k
-                d.line([(x, pos), (x, pos + length)], fill="#ffd400")
-                d.text((x - 3, pos), str(k), font=font, fill="white", anchor="ra")
+                d.rectangle([width - k, a, width - 1, b], fill=RULER_COLOR)
+                d.text((width - label, pos), str(k), font=font, fill="white", anchor="rm")
+    # The title and hint go between the side rulers' numbers, where they fit
+    # (the terminal asks the same question).
+    free = width - 2 * (inset + round(size * 1.8) + 2 * size)
     cx, cy = width // 2, height // 2
-    d.text((cx, cy - 12), "RULER", font=_font(22), fill="white", anchor="mm")
-    d.text(
-        (cx, cy + 14),
-        "at each edge: the smallest number whose yellow line you can see",
-        font=_font(12),
-        fill="#cbd5e1",
-        anchor="mm",
-    )
+    hint = "at each edge: the smallest number whose yellow bar you can see"
+    for text, big, y, fill in (
+        ("RULER", size * 3 // 2, cy - size, "white"),
+        (hint, size, cy + size, "#cbd5e1"),
+    ):
+        for points in range(big, 9, -1):
+            if d.textlength(text, font=_font(points)) <= free:
+                d.text((cx, y), text, font=_font(points), fill=fill, anchor="mm")
+                break
     return img
-
-
-def _printable(data: bytes) -> str:
-    """ASCII if the bytes are text, hex otherwise (real panels answer with binary)."""
-    if data and all(32 <= b < 127 for b in data):
-        return repr(data.decode("ascii"))
-    return data.hex(" ") or "(empty)"
 
 
 def _versions() -> str:
@@ -312,10 +328,10 @@ class Doctor:
                     "the driver for serial panels is not available yet",
                 )
 
-    def _ruler(self, model) -> None:
+    def _ruler(self, model, step: int = 2) -> None:
         """Measure the strip the glass hides at each edge (landscape)."""
         w, h = model.size("landscape")
-        self._send(ruler_card(w, h))
+        self._send(ruler_card(w, h, step=step))
         self.say("\nThe panel should now show the RULER card (landscape).")
         if self.ask is None:
             self.pause(self.seconds_per_card)
@@ -324,10 +340,11 @@ class Doctor:
         hidden = {}
         for edge in RULER_EDGES:
             answer = self.ask(
-                f"{edge.capitalize()} edge: smallest number whose yellow line you can see "
-                "(0 = all, Enter = cannot tell)? "
+                f"{edge.capitalize()} edge: smallest number whose yellow bar you can see "
+                "(Enter = cannot tell)? "
             ).strip()
-            hidden[edge] = int(answer) if answer.isdigit() else None
+            # bar k shows, bar k - step does not: the glass hides k - step pixels (up to k - 1)
+            hidden[edge] = max(0, int(answer) - step) if answer.isdigit() else None
         parts = [f"{edge} {'?' if v is None else f'{v} px'}" for edge, v in hidden.items()]
         self.report.hidden = hidden
         self._step("hidden edges (ruler)", "info", "hidden: " + ", ".join(parts))
@@ -338,8 +355,8 @@ class Doctor:
         transport = self.transport
         dropped = transport.drain()
         reply = transport.sync()
-        ident = reply[2:10].split(b"\x00")[0]
-        detail = f"reply {reply[:2].hex(' ')}, then {_printable(ident)}"
+        # (the bytes after the first two change with every connection)
+        detail = f"reply {reply[:2].hex(' ')}"
         if dropped:
             detail += f", cleared {dropped} stale replies"
         self._step("handshake (command 10)", "ok", detail)
@@ -364,6 +381,8 @@ class Doctor:
         if not round_panel:
             self._ruler(model)
 
+        if self.ask is not None:
+            self.ask("\nBrightness: the panel goes dark, then bright. Watch it and press Enter. ")
         for percent in (10, 100):
             transport.command(CMD_BRIGHTNESS, bytes([brightness_arg(percent)]))
             self.pause(1.5)
