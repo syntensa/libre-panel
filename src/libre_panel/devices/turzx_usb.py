@@ -331,8 +331,8 @@ class UsbTransport:
 class TurzxUsbDisplay(Display):
     """Bitmap path: every frame is sent as a full RGBA PNG (about 9 fps on 9.2").
 
-    The smooth 25-50 fps path (H.264 background layer, command 110 + 121)
-    is documented in docs/protocol/turzx-usb.md and not wired in yet.
+    The smooth 25-50 fps path (H.264 background layer, command 110 + 121) is
+    :class:`~libre_panel.devices.turzx_video.TurzxVideoDisplay`.
     """
 
     name = "turzx-usb"
@@ -342,22 +342,21 @@ class TurzxUsbDisplay(Display):
         self.model = model
         self.transport: UsbTransport | None = None
         self.brightness: int | None = None
-        self.firmware_id = ""
 
     def open(self) -> None:
         pid = self.model.usb_ids[0][1] if self.model and self.model.usb_ids else None
         self.transport = UsbTransport.open(pid)
         self.model = self.model or USB_PIDS.get(self.transport.pid)
         try:
-            reply = self.transport.sync()
+            self.transport.sync()
         except DeviceError:
             self.close()
             raise
-        self.firmware_id = reply[2:10].split(b"\x00")[0].decode("ascii", "replace")
+        # (The bytes after the handshake reply's first two change with every
+        # connection: no identifier worth logging.)
         log.info(
-            "connected to %s (%s)",
+            "connected to %s",
             self.model.label if self.model else f"PID {self.transport.pid:04x}",
-            self.firmware_id,
         )
 
     def describe(self) -> str:

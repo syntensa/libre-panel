@@ -335,6 +335,25 @@ _HEADER = re.compile(r"^[ \t]*\[", re.MULTILINE)
 _TABLE = re.compile(r"^[ \t]*\[[ \t]*([A-Za-z0-9_-]+)[ \t]*\][ \t]*(?:#.*)?$", re.MULTILINE)
 
 
+def _trailing_comment(line: str) -> str:
+    """The ``  # ...`` after a ``key = value`` line's value, or ""."""
+    quote = None
+    i = line.index("=") + 1
+    while i < len(line):
+        char = line[i]
+        if quote:
+            if char == "\\" and quote == '"':
+                i += 1  # an escaped character, maybe a quote
+            elif char == quote:
+                quote = None
+        elif char in "\"'":
+            quote = char
+        elif char == "#":
+            return line[len(line[:i].rstrip()) :]
+        i += 1
+    return ""
+
+
 def _with_key(text: str, table: str | None, key: str, literal: str) -> str:
     line = f"{key} = {literal}"
     if table is None:  # top-level keys come before the first [table] header
@@ -348,8 +367,10 @@ def _with_key(text: str, table: str | None, key: str, literal: str) -> str:
         following = _HEADER.search(text, start)
         end = following.start() if following else len(text)
     body = text[start:end]
-    pattern = re.compile(rf"^[ \t]*{re.escape(key)}[ \t]*=.*$", re.MULTILINE)
-    body, count = pattern.subn(line, body, count=1)
+    pattern = re.compile(rf"^([ \t]*){re.escape(key)}[ \t]*=.*$", re.MULTILINE)
+    body, count = pattern.subn(
+        lambda m: m.group(1) + line + _trailing_comment(m.group(0)), body, count=1
+    )
     if not count:
         body = line + "\n" + body
     return text[:start] + body + text[end:]
