@@ -276,6 +276,7 @@ def run(
                 next_sample = started + (config.refresh_ms or theme.refresh_ms) / 1000
             was_connected = link.connected
             if link.ensure(started):
+                renderer.fps = _fps(config, host)  # screens may pace animations by it
                 snapshot.now = datetime.now()  # the clock ticks between readings too
                 frame, _ = renderer.render(snapshot, started)
                 frame = fit_frame(frame, size, theme.background_color)

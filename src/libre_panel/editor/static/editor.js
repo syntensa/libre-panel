@@ -95,7 +95,7 @@ function t(text, vars = {}) {
   return message.replace(/\{(\w+)\}/g, (all, name) => (name in vars ? String(vars[name]) : all));
 }
 const fieldLabel = (key) => state.i18n?.fields?.[key] ?? key.replace(/_/g, " ");
-const widgetLabel = (type) => state.i18n?.widgets?.[type] ?? type;
+const widgetLabel = (type) => state.specs?.widget_labels?.[type] ?? state.i18n?.widgets?.[type] ?? type;
 const enumLabel = (value) => state.i18n?.enums?.[value] ?? value;
 const iconLabel = (name) => state.i18n?.icons?.[name] ?? name;
 
@@ -1151,12 +1151,47 @@ function buildThemeProps(form) {
     field(fieldLabel("font"), fontInput(theme.font === state.specs.default_font ? "" : theme.font, set("font", (v) => (theme.font = v || state.specs.default_font)), t("Default (Barlow Medium)")), t("used by every text widget without its own font")),
     field(fieldLabel("background"), colorInput(theme.background.color, set("bg", (v) => (theme.background.color = v)), false)),
     field(t("background image"), assetInput(theme.background.image, set("bgimg", (v) => (theme.background.image = v || null)))),
+    ...buildScreenFields(),
     el("h2", { class: "section-title", text: t("Palette") }),
     buildPaletteEditor(),
     el("h2", { class: "section-title", text: t("Timing") }),
     field(t("sensor refresh (ms)"), numberInput(theme.refresh_ms, set("refresh", (v) => (theme.refresh_ms = Math.max(100, v || 1000))))),
     field(t("smoothing (ms)"), numberInput(theme.animation.smoothing_ms, set("smooth", (v) => (theme.animation.smoothing_ms = Math.max(0, Math.min(5000, v ?? 0))))), t("how long bars and rings take to glide to a new value; 0 = jump")),
   );
+}
+
+// A screen from a plugin draws the whole frame under the widgets.
+function buildScreenFields() {
+  const screens = state.specs.screens || {};
+  const theme = state.theme;
+  const current = theme.screen?.name || "";
+  if (!Object.keys(screens).length && !current) return [];
+  const choices = [el("option", { value: "", text: t("none"), selected: !current })];
+  for (const [name, info] of Object.entries(screens)) choices.push(el("option", { value: name, text: info.label, selected: name === current }));
+  if (current && !screens[current]) choices.push(el("option", { value: current, text: t("{name} (not installed)", { name: current }), selected: true }));
+  const select = el("select", {
+    onchange: (event) => {
+      commit("theme:screen");
+      const name = event.target.value;
+      if (name) {
+        const spec = screens[name]?.options || {};
+        theme.screen = { name, options: Object.fromEntries(Object.entries(spec).map(([k, [, d]]) => [k, clone(d)])) };
+      } else delete theme.screen;
+      buildProps();
+      scheduleRender();
+    },
+  }, ...choices);
+  const fields = [field(t("screen"), select, t("drawn by a plugin, under the widgets"))];
+  for (const [key, [kind, fallback]] of Object.entries(screens[current]?.options || {})) {
+    const value = theme.screen.options?.[key] ?? fallback;
+    const onChange = (v) => {
+      commit(`screen:${key}`);
+      theme.screen.options = { ...theme.screen.options, [key]: v };
+      scheduleRender();
+    };
+    fields.push(field(fieldLabel(key), controlFor(key, kind, value, onChange)));
+  }
+  return fields;
 }
 
 function replaceReferences(from, to) {

@@ -216,6 +216,12 @@ class Renderer:
         self.background_builds = False
         self._builder: _Builder | None = None
         self._pending: dict[str, tuple[Any, Future]] = {}
+        # Plugins (docs/PLUGINS.md): a screen draws the frame under the widgets,
+        # plugin widget types draw themselves.
+        self.fps = 0  # the panel's frame rate, for screens (set by the main loop)
+        self._plugin_types: dict[str, Any] = {}
+        self._screen_last: tuple[Any, Piece] | None = None
+        self.screen = self._make_screen()
 
     # -- resources ---------------------------------------------------------
 
@@ -536,10 +542,79 @@ class Renderer:
         return hit[1]
 
     def close(self) -> None:
-        """Stop the helper thread (a replaced renderer should call this)."""
+        """Stop the helper thread and the screen (a replaced renderer should call this)."""
         if self._builder is not None:
             self._builder.close()
             self._builder = None
+        if self.screen is not None:
+            try:
+                self.screen.close()
+            except Exception as exc:
+                log.warning("screen %s: %s", self.theme.screen["name"], exc)
+            self.screen = None
+
+    # -- plugins -----------------------------------------------------------
+
+    def _make_screen(self) -> Any:
+        if self.theme.screen is None:
+            return None
+        from libre_panel.plugins.loader import registry
+        from libre_panel.plugins.render import RenderContext
+
+        name = self.theme.screen["name"]
+        cls = registry().get("screens", name)
+        if cls is None:
+            return None  # the theme loader has warned
+        try:
+            return cls(RenderContext(self, cls), dict(self.theme.screen["options"]))
+        except Exception as exc:  # a broken screen must not blank the panel
+            self._warn(f"screen {name!r} failed to start: {exc}")
+            return None
+
+    def _screen_piece(self, snapshot: Snapshot, now: float) -> Piece | None:
+        name = self.theme.screen["name"]
+        try:
+            image = self.screen.render(snapshot, now)
+        except Exception as exc:
+            self._warn(f"screen {name!r} failed: {exc}")
+            return None
+        if getattr(self.screen, "moving", False):
+            self.moving = True
+        if image is None:
+            return None
+        if self._screen_last is not None and self._screen_last[0] is image:
+            return self._screen_last[1]  # the same picture: nothing to compose again
+        size = (self.theme.width, self.theme.height)
+        layer = image if image.mode == "RGBA" else image.convert("RGBA")
+        if layer.size != size:
+            self._warn(f"screen {name!r} draws {layer.size[0]}x{layer.size[1]}, not {size}")
+            layer = layer.resize(size)
+        piece = Piece(layer, 0, 0)
+        self._screen_last = (image, piece)
+        return piece
+
+    def _draw_plugin(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        wtype = widget["type"]
+        if wtype not in self._plugin_types:
+            from libre_panel.plugins.loader import registry
+            from libre_panel.plugins.render import RenderContext
+
+            cls = registry().get("widgets", wtype)
+            self._plugin_types[wtype] = (cls(), RenderContext(self, cls)) if cls else None
+        entry = self._plugin_types[wtype]
+        if entry is None:
+            return None  # not installed; the theme loader has warned
+        kind, ctx = entry
+
+        def build() -> Piece | None:
+            result = kind.draw(widget, ctx, snapshot, now)
+            if result is None:
+                return None
+            at = (widget["x"], widget["y"])
+            image, (x, y) = result if isinstance(result, tuple) else (result, at)
+            return Piece(image if image.mode == "RGBA" else image.convert("RGBA"), int(x), int(y))
+
+        return self._cached(widget, ("plugin", kind.key(widget, snapshot, now)), build)
 
     # -- rendering ---------------------------------------------------------
 
@@ -551,10 +626,14 @@ class Renderer:
         self.moving = False
         boxes: dict[str, Box] = {}
         pieces: list[tuple[str, Piece]] = []
+        if self.screen is not None:
+            screen = self._screen_piece(snapshot, now)
+            if screen is not None:
+                pieces.append(("\0screen", screen))  # not a widget id: ids are never empty
         for widget in theme.widgets:
             if not widget.get("visible", True) or self._missing(widget, snapshot):
                 continue
-            draw = getattr(self, f"_draw_{widget['type']}")
+            draw = getattr(self, f"_draw_{widget['type']}", None) or self._draw_plugin
             try:
                 piece = draw(widget, snapshot, now)
             except Exception as exc:  # one broken widget must not blank the panel

@@ -70,6 +70,10 @@ First preview of Libre Panel.
   events; `[services]` in config.toml, applied while running
 - Modes (`[modes.<name>]`) with their own frame rate and theme, e.g. fewer
   frames while a game runs; tray and editor show the active mode
+- Screens: a theme can name a plugin screen that draws the whole frame in
+  code, with the theme's widgets on top; chosen in the editor with its options
+- Widget types from plugins: placed and edited in the editor like built-in
+  widgets (fields, building blocks, effects), checked when a theme loads
 
 **Sensors**
 - psutil, LibreHardwareMonitor (checked against real output), demo;

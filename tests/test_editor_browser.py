@@ -141,6 +141,25 @@ def test_hidden_strip_is_shown_and_snaps(page):
     assert js(page, "hiddenEdges().top") == 18
 
 
+@pytest.fixture
+def drawing_plugin(plugin_folder):
+    """A plugin with a screen and a widget type, installed before the editor starts."""
+    from test_plugins import DRAWING, DRAWING_PARTS
+
+    return plugin_folder(DRAWING, DRAWING_PARTS)
+
+
+def test_plugin_screen_and_widget_in_the_editor(drawing_plugin, page):
+    assert page.locator("#add-type option[value='demo.bar']").inner_text() == "Demo bar"
+    select = page.locator("label.field", has_text="screen").locator("select")
+    select.select_option("tint")
+    page.wait_for_function("state.theme.screen && state.theme.screen.name === 'tint'")
+    page.locator("label.field", has_text="color").first.wait_for()
+    page.wait_for_timeout(500)  # the preview renders with the screen
+    select.select_option("")
+    page.wait_for_function("!state.theme.screen")
+
+
 def test_plain_editor_hides_the_panel_controls(page):
     page.wait_for_timeout(300)
     assert page.locator("#app-chip").is_hidden()

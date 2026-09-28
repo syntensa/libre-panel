@@ -31,7 +31,11 @@ PLUGINS_DIRNAME = "plugins"
 PLUGIN_FILENAME = "plugin.toml"
 
 # kind -> entry point group
-GROUPS = {"services": "libre_panel.services"}
+GROUPS = {
+    "services": "libre_panel.services",
+    "screens": "libre_panel.screens",
+    "widgets": "libre_panel.widgets",
+}
 
 
 class PluginError(ValueError):
@@ -88,8 +92,9 @@ class Registry:
 
 def _base_class(kind: str) -> type:
     from libre_panel.plugins.host import Service
+    from libre_panel.plugins.render import Screen, WidgetType
 
-    return {"services": Service}[kind]
+    return {"services": Service, "screens": Screen, "widgets": WidgetType}[kind]
 
 
 def _load(found: Found) -> Any:
@@ -108,6 +113,18 @@ def _load(found: Found) -> Any:
         raise PluginError(
             f"{found.target} is written for plugin API {api}; "
             f"this Libre Panel has API {API_VERSION}"
+        )
+    fields = {"widgets": "spec", "screens": "options"}.get(found.kind)
+    if fields:
+        from libre_panel.theme.model import valid_kind
+
+        for key, declared in getattr(obj, fields).items():
+            if not (isinstance(declared, tuple) and len(declared) == 2 and valid_kind(declared[0])):
+                raise PluginError(f"{found.target}.{fields}[{key!r}]: unknown field kind")
+    if found.kind == "widgets" and "." not in found.name:
+        raise PluginError(
+            f"widget type {found.name!r} needs a dot (e.g. 'myplugin.ring'), "
+            "so it never clashes with a built-in widget"
         )
     return obj
 

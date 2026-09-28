@@ -2,7 +2,6 @@
 
 import itertools
 import sys
-import textwrap
 import threading
 import time
 
@@ -48,37 +47,9 @@ class Broken(Service):
         raise RuntimeError("cannot reach the game")
 """
 
-
-@pytest.fixture
-def plugin_folder(isolated_home):
-    """A plugin installed as a folder, as in the Windows setup."""
-    created = []
-
-    def make(source=SERVICE, api=API_VERSION, parts=None):
-        package = f"lp_test_plugin_{next(_names)}"
-        folder = isolated_home / "plugins" / package
-        (folder / package).mkdir(parents=True)
-        (folder / package / "__init__.py").write_text(textwrap.dedent(source), encoding="utf-8")
-        parts = parts or {
-            "counter": f"{package}:Counter",
-            "no-api": f"{package}:NoApi",
-            "broken": f"{package}:Broken",
-        }
-        table = "\n".join(f'"{name}" = "{target}"' for name, target in parts.items())
-        (folder / "plugin.toml").write_text(
-            f'name = "{package}"\napi = {api}\n\n[entry-points."libre_panel.services"]\n{table}\n',
-            encoding="utf-8",
-        )
-        created.append((package, folder))
-        reset_registry()
-        return package
-
-    yield make
-    for package, folder in created:
-        sys.modules.pop(package, None)
-        if str(folder) in sys.path:
-            sys.path.remove(str(folder))
-    reset_registry()
+SERVICE_PARTS = {
+    "libre_panel.services": {"counter": "Counter", "no-api": "NoApi", "broken": "Broken"}
+}
 
 
 def events_of(package):
@@ -95,7 +66,7 @@ def wait_for(predicate, timeout=10.0):
 
 
 def test_folder_plugins_are_found_and_checked(plugin_folder, capsys):
-    package = plugin_folder()
+    package = plugin_folder(SERVICE, parts=SERVICE_PARTS)
     registry = discover()
     assert registry.names("services") == ["broken", "counter", "no-api"]
     assert registry.get("services", "counter").__name__ == "Counter"
@@ -110,14 +81,14 @@ def test_folder_plugins_are_found_and_checked(plugin_folder, capsys):
 
 
 def test_plugins_for_another_api_are_refused(plugin_folder):
-    plugin_folder(api=API_VERSION + 1)
+    plugin_folder(SERVICE, api=API_VERSION + 1, parts=SERVICE_PARTS)
     registry = discover()
     assert registry.names("services") == []
     assert "written for plugin API 2" in registry.errors[0]
 
 
 def test_a_plugin_that_does_not_import_is_reported(plugin_folder):
-    plugin_folder(source="raise ImportError('needs pypresentmon')\n")
+    plugin_folder("raise ImportError('needs pypresentmon')\n", parts=SERVICE_PARTS)
     registry = discover()
     assert registry.get("services", "counter") is None
     assert "needs pypresentmon" in registry.parts["services"]["counter"].error
@@ -128,7 +99,7 @@ def services_config(enabled, **options):
 
 
 def test_services_follow_the_config(plugin_folder):
-    package = plugin_folder()
+    package = plugin_folder(SERVICE, parts=SERVICE_PARTS)
     host = PluginHost()
     manager = ServiceManager(host, discover())
     manager.apply(services_config(["counter", "broken", "missing"], counter={"step": 5}))
@@ -175,7 +146,7 @@ def test_modes_in_config():
 
 
 def test_services_steer_the_main_loop(plugin_folder, isolated_home):
-    package = plugin_folder()
+    package = plugin_folder(SERVICE, parts=SERVICE_PARTS)
     host = PluginHost()
     manager = ServiceManager(host, discover())
     config = Config(
@@ -228,7 +199,7 @@ def test_background_app_runs_and_updates_services(plugin_folder, isolated_home):
     from libre_panel.autostart import Autostart
     from libre_panel.service import BackgroundApp
 
-    package = plugin_folder()
+    package = plugin_folder(SERVICE, parts=SERVICE_PARTS)
     write_config(isolated_home)
     config_file = isolated_home / "config.toml"
     config_file.write_text(
@@ -248,3 +219,219 @@ def test_background_app_runs_and_updates_services(plugin_folder, isolated_home):
     finally:
         background.quit()
         background.shutdown()
+
+
+# -- screens and widget types ------------------------------------------------------
+
+DRAWING = """
+from PIL import Image, ImageDraw
+
+from libre_panel.plugins import Screen, WidgetType
+
+calls = {"screen": 0, "bar": 0, "closed": 0}
+
+
+class Tint(Screen):
+    name = "tint"
+    api = 1
+    label = {"en": "Tint", "de": "Tönung"}
+    options = {"color": ("color", "#203040"), "animate": ("bool", False)}
+
+    def __init__(self, context, options):
+        super().__init__(context, options)
+        self.moving = options["animate"]
+        self._frame = Image.new("RGB", context.size, context.color(options["color"])[:3])
+
+    def render(self, snapshot, now):
+        calls["screen"] += 1
+        return self._frame  # the same picture every time: nothing to compose again
+
+    def close(self):
+        calls["closed"] += 1
+
+
+class Bar(WidgetType):
+    type = "demo.bar"
+    api = 1
+    label = {"en": "Demo bar"}
+    spec = {"w": ("int", 100), "h": ("int", 10), "sensor": ("sensor", "")}
+    spec["color"] = ("color", "#ff0000")
+    presets = [{"label": {"en": "CPU bar"}, "widget": {"sensor": "cpu.load", "w": 80}}]
+
+    def draw(self, widget, ctx, snapshot, now):
+        calls["bar"] += 1
+        value = snapshot.value(widget["sensor"]) or 0
+        image = Image.new("RGBA", (widget["w"], widget["h"]), (0, 0, 0, 0))
+        filled = round(widget["w"] * min(max(value, 0), 100) / 100)
+        box = [0, 0, filled - 1, widget["h"] - 1]
+        ImageDraw.Draw(image).rectangle(box, fill=ctx.color(widget["color"]))
+        return image
+
+
+class Failing(Screen):
+    name = "failing"
+    api = 1
+
+    def render(self, snapshot, now):
+        raise RuntimeError("no light layers")
+
+
+class NoDot(WidgetType):
+    type = "bar"
+    api = 1
+
+
+class BadKind(WidgetType):
+    type = "demo.bad"
+    api = 1
+    spec = {"size": ("float", 1.0)}
+
+
+class Pathy(WidgetType):
+    type = "demo.pathy"
+    api = 1
+    spec = {"picture": ("asset", "")}
+
+    def draw(self, widget, ctx, snapshot, now):
+        return None
+"""
+
+DRAWING_PARTS = {
+    "libre_panel.screens": {"tint": "Tint", "failing": "Failing"},
+    "libre_panel.widgets": {
+        "demo.bar": "Bar",
+        "bar": "NoDot",
+        "demo.bad": "BadKind",
+        "demo.pathy": "Pathy",
+    },
+}
+
+
+def theme_data(screen=None, widgets=()):
+    data = {
+        "format": "libre-panel-theme/1",
+        "name": "plugin test",
+        "display": {"model": "custom", "width": 200, "height": 100},
+        "background": {"color": "#000000"},
+        "widgets": list(widgets),
+    }
+    if screen is not None:
+        data["screen"] = screen
+    return data
+
+
+def bar(**fields):
+    return {"type": "demo.bar", "id": "bar", "x": 10, "y": 20, "sensor": "cpu.load", **fields}
+
+
+def snapshot(load=50.0):
+    from libre_panel.sensors.base import Reading, Snapshot
+
+    return Snapshot(readings={"cpu.load": Reading("cpu.load", load, "%")})
+
+
+def test_screen_and_plugin_widget_are_drawn(plugin_folder):
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.theme.model import parse_theme
+
+    package = plugin_folder(DRAWING, parts=DRAWING_PARTS)
+    theme = parse_theme(theme_data({"name": "tint", "options": {"color": "#102030"}}, [bar()]))
+    assert theme.screen == {"name": "tint", "options": {"color": "#102030", "animate": False}}
+    renderer = Renderer(theme)
+    frame, boxes = renderer.render(snapshot(50), 0.0)
+    assert frame.getpixel((150, 80)) == (16, 32, 48)  # the screen under everything
+    assert frame.getpixel((12, 22)) == (255, 0, 0)  # half of the 100 px bar is filled
+    assert frame.getpixel((70, 22)) == (16, 32, 48)
+    assert boxes == {"bar": [10, 20, 100, 10]}  # the screen is not a widget
+    calls = sys.modules[package].calls
+    renderer.render(snapshot(50), 0.1)
+    assert calls["bar"] == 1  # same value: the finished picture is reused
+    frame, _ = renderer.render(snapshot(100), 0.2)
+    assert calls["bar"] == 2 and frame.getpixel((105, 22)) == (255, 0, 0)
+    renderer.close()
+    assert calls["closed"] == 1
+
+
+def test_plugin_widgets_get_the_common_effects(plugin_folder):
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.theme.model import parse_theme
+
+    plugin_folder(DRAWING, parts=DRAWING_PARTS)
+    half = Renderer(parse_theme(theme_data(widgets=[bar(opacity=0.5)])))
+    assert 120 < half.render(snapshot(100), 0.0)[0].getpixel((50, 25))[0] < 136  # over black
+    glowing = Renderer(parse_theme(theme_data(widgets=[bar(glow=0.8)])))
+    assert glowing.render(snapshot(100), 0.0)[0].getpixel((50, 34))[0] > 0  # below the bar
+
+
+def test_themes_check_plugin_fields(plugin_folder, tmp_path):
+    from libre_panel.theme.model import ThemeError, parse_theme
+
+    plugin_folder(DRAWING, parts=DRAWING_PARTS)
+    with pytest.raises(ThemeError, match="screen.options.color"):
+        parse_theme(theme_data({"name": "tint", "options": {"color": "red-ish"}}))
+    with pytest.raises(ThemeError, match="widgets\\[0\\].w: expected an integer"):
+        parse_theme(theme_data(widgets=[bar(w="wide")]))
+    with pytest.raises(ThemeError, match="leaves the theme folder"):
+        pathy = {"type": "demo.pathy", "id": "p", "picture": "../../secret.png"}
+        parse_theme(theme_data(widgets=[pathy]), root=tmp_path)
+    theme = parse_theme(theme_data({"name": "tint", "options": {"shine": 1}}))
+    assert "ignoring unknown option 'shine'" in theme.warnings[0]
+
+
+def test_missing_plugins_keep_the_theme_intact(isolated_home):
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.theme.model import parse_theme
+
+    reset_registry()
+    data = theme_data({"name": "tint", "options": {"x": 1}}, [bar(extra={"kept": True})])
+    theme = parse_theme(data)
+    assert any("screen 'tint' needs a plugin" in w for w in theme.warnings)
+    assert any("'demo.bar' needs a plugin" in w for w in theme.warnings)
+    saved = theme.to_dict()  # saving in the editor loses nothing
+    assert saved["screen"] == {"name": "tint", "options": {"x": 1}}
+    assert saved["widgets"][0]["extra"] == {"kept": True}
+    frame, boxes = Renderer(theme).render(snapshot(), 0.0)
+    assert boxes == {} and frame.getpixel((5, 5)) == (0, 0, 0)
+
+
+def test_broken_screens_and_widget_types(plugin_folder):
+    from libre_panel.plugins import discover
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.theme.model import parse_theme
+
+    plugin_folder(DRAWING, parts=DRAWING_PARTS)
+    registry = discover()
+    assert registry.get("widgets", "bar") is None
+    assert "needs a dot" in registry.parts["widgets"]["bar"].error
+    assert registry.get("widgets", "demo.bad") is None
+    assert "unknown field kind" in registry.parts["widgets"]["demo.bad"].error
+    renderer = Renderer(parse_theme(theme_data({"name": "failing"}, [bar()])))
+    frame, boxes = renderer.render(snapshot(100), 0.0)  # the widgets still show
+    assert frame.getpixel((12, 22)) == (255, 0, 0)
+    assert any("no light layers" in w for w in renderer.warnings)
+
+
+def test_editor_offers_plugin_widgets_and_screens(plugin_folder):
+    from test_editor_server import request
+
+    from libre_panel.editor.server import make_server
+
+    package = plugin_folder(DRAWING, parts=DRAWING_PARTS)
+    server = make_server(port=0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    port = server.server_address[1]
+    try:
+        status, specs = request(port, "GET", "/api/specs")
+        assert specs["widgets"]["demo.bar"]["w"] == ["int", 100]
+        assert specs["widget_labels"]["demo.bar"] == "Demo bar"
+        assert specs["screens"]["tint"]["options"]["color"] == ["color", "#203040"]
+        preset = next(p for p in specs["presets"] if p["id"] == "demo.bar-1")
+        assert preset["name"] == "CPU bar" and preset["widgets"][0]["w"] == 80
+        body = {"theme": theme_data({"name": "tint"}, [bar()])}
+        status, rendered = request(port, "POST", "/api/render", body)
+        assert status == 200 and rendered["boxes"] == {"bar": [10, 20, 100, 10]}
+        assert sys.modules[package].calls["closed"] == 1  # the preview's screen ended with it
+    finally:
+        server.shutdown()
+        server.server_close()
+        server.editor_state.close()

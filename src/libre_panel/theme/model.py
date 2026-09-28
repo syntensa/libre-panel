@@ -177,6 +177,7 @@ class Theme:
     palette: dict[str, str] = field(default_factory=dict)
     font: str = DEFAULT_FONT
     smoothing_ms: int = 400
+    screen: dict[str, Any] | None = None  # {"name": ..., "options": {...}}: a plugin draws
     root: Path | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -185,7 +186,7 @@ class Theme:
         return orientation_of(self.width, self.height)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "format": THEME_FORMAT,
             "name": self.name,
             "author": self.author,
@@ -204,6 +205,9 @@ class Theme:
             "animation": {"smoothing_ms": self.smoothing_ms},
             "widgets": deepcopy(self.widgets),
         }
+        if self.screen is not None:
+            data["screen"] = deepcopy(self.screen)
+        return data
 
 
 def builtin_themes_dir() -> Path:
@@ -305,16 +309,57 @@ def _coerce(kind: str, value: Any, where: str, palette: dict[str, str] | None = 
     return value
 
 
+_BASE_KINDS = {
+    "int", "number", "bool", "color", "icon", "rules",
+    "string", "text", "sensor", "format", "font", "asset",
+}  # fmt: skip
+
+
+def valid_kind(kind: Any) -> bool:
+    """A field kind the loader and the editor know (plugins declare their fields with these)."""
+    if not isinstance(kind, str):
+        return False
+    base = kind.rstrip("?")
+    return base in _BASE_KINDS or (base.startswith("enum:") and len(base) > 5)
+
+
+def _plugin(kind: str, name: str) -> Any:
+    from libre_panel.plugins.loader import registry
+
+    return registry().get(kind, name)
+
+
+def _check_paths(
+    spec: dict[str, tuple[str, Any]], values: dict[str, Any], where: str, root: Path | None
+) -> None:
+    """Fonts and assets named in plugin fields stay inside the theme folder too."""
+    for key, (kind, _default) in spec.items():
+        value = values.get(key)
+        if not value or not isinstance(value, str):
+            continue
+        if kind.rstrip("?") == "font":
+            _check_font(value, f"{where}.{key}", root)
+        elif kind.rstrip("?") == "asset" and root is not None:
+            resolve_asset(root, value)
+
+
 def normalize_widget(
-    raw: Any, index: int, palette: dict[str, str] | None = None
+    raw: Any, index: int, palette: dict[str, str] | None = None, root: Path | None = None
 ) -> tuple[dict[str, Any], list[str]]:
     where = f"widgets[{index}]"
     if not isinstance(raw, dict):
         raise ThemeError(f"{where}: expected an object")
     wtype = raw.get("type")
-    if wtype not in WIDGET_SPECS:
+    plugin = None
+    if wtype in WIDGET_SPECS:
+        spec = {**_COMMON, **WIDGET_SPECS[wtype]}
+    elif isinstance(wtype, str) and "." in wtype:  # a plugin's widget type
+        plugin = _plugin("widgets", wtype)
+        if plugin is None:
+            return _missing_plugin_widget(raw, wtype, index, where, palette)
+        spec = {**_COMMON, **plugin.spec}
+    else:
         raise ThemeError(f"{where}: unknown widget type {wtype!r}")
-    spec = {**_COMMON, **WIDGET_SPECS[wtype]}
     widget: dict[str, Any] = {"type": wtype}
     for key, (kind, default) in spec.items():
         value = raw.get(key, deepcopy(default))
@@ -328,9 +373,52 @@ def normalize_widget(
             raise ThemeError(f"{where}.{key}: must be between 0 and 64")
     if not widget["id"]:
         widget["id"] = f"{wtype}-{index + 1}"
+    if plugin is not None:
+        _check_paths(plugin.spec, widget, where, root)
     unknown = sorted(set(raw) - set(spec) - {"type"})
     warnings = [f"{where}: ignoring unknown field {k!r}" for k in unknown]
     return widget, warnings
+
+
+def _missing_plugin_widget(
+    raw: dict[str, Any], wtype: str, index: int, where: str, palette: dict[str, str] | None
+) -> tuple[dict[str, Any], list[str]]:
+    """Kept as it is, so saving the theme loses nothing; it is not drawn."""
+    widget = deepcopy(raw)
+    for key, (kind, default) in _COMMON.items():
+        widget[key] = _coerce(kind, raw.get(key, deepcopy(default)), f"{where}.{key}", palette)
+    if not widget["id"]:
+        widget["id"] = f"{wtype}-{index + 1}"
+    return widget, [f"{where}: widget type {wtype!r} needs a plugin that is not installed"]
+
+
+def _parse_screen(
+    raw: Any, palette: dict[str, str], root: Path | None, warnings: list[str]
+) -> dict[str, Any] | None:
+    """``"screen": {"name": ..., "options": {...}}``: a plugin draws the whole frame."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ThemeError("screen must be an object with a name")
+    name = _coerce("string", raw.get("name", ""), "screen.name")
+    if not name:
+        raise ThemeError("screen.name: missing")
+    given = raw.get("options", {}) or {}
+    if not isinstance(given, dict):
+        raise ThemeError("screen.options must be an object")
+    plugin = _plugin("screens", name)
+    if plugin is None:
+        warnings.append(f"screen {name!r} needs a plugin that is not installed")
+        return {"name": name, "options": deepcopy(given)}
+    options = {
+        key: _coerce(kind, given.get(key, deepcopy(default)), f"screen.options.{key}", palette)
+        for key, (kind, default) in plugin.options.items()
+    }
+    _check_paths(plugin.options, options, "screen.options", root)
+    warnings.extend(
+        f"screen.options: ignoring unknown option {k!r}" for k in sorted(set(given) - set(options))
+    )
+    return {"name": name, "options": options}
 
 
 def parse_theme(data: Any, root: Path | None = None) -> Theme:
@@ -396,7 +484,7 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         raise ThemeError("widgets must be a list")
     widgets, warnings, seen = [], [], set()
     for i, raw in enumerate(raw_widgets):
-        widget, w = normalize_widget(raw, i, palette)
+        widget, w = normalize_widget(raw, i, palette, root)
         if widget["id"] in seen:
             raise ThemeError(f"widgets[{i}]: duplicate id {widget['id']!r}")
         seen.add(widget["id"])
@@ -422,6 +510,7 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         font=font,
         smoothing_ms=smoothing_ms,
         widgets=widgets,
+        screen=_parse_screen(data.get("screen"), palette, root, warnings),
         root=root,
         warnings=warnings,
     )

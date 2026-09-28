@@ -6,6 +6,8 @@ as a plugin: a Python package that registers parts of these kinds.
 | Kind | Entry point group | What it is |
 |---|---|---|
 | Service | `libre_panel.services` | a long-running helper: game mode, autopilot, a database |
+| Screen | `libre_panel.screens` | draws the whole frame in code; a theme selects it by name |
+| Widget type | `libre_panel.widgets` | a widget the editor can place, drawn by plugin code |
 | Sensor source | `libre_panel.sensors` | readings (see [Architecture](ARCHITECTURE.md#plugins)) |
 | Display driver | `libre_panel.devices` | another kind of panel |
 
@@ -114,6 +116,101 @@ All calls are thread-safe. Which theme is shown: one a service asked for,
 else the active mode's theme, else the one in `config.toml`. A theme that
 does not exist is refused once with a warning; the panel keeps the current
 one.
+
+## Screens
+
+A screen draws the whole frame in code. Themes stay data: a theme names the
+screen, and its widgets are drawn on top (a screen can be a backdrop for
+editor-placed widgets, or everything with `"widgets": []`).
+
+```json
+{
+  "format": "libre-panel-theme/1",
+  "name": "Studio",
+  "display": {"model": "turing-9.2-usb", "orientation": "landscape"},
+  "screen": {"name": "studio", "options": {"seconds": true}},
+  "widgets": []
+}
+```
+
+```python
+from PIL import Image
+
+from libre_panel.plugins import Screen
+
+
+class Studio(Screen):
+    name = "studio"
+    api = 1
+    label = {"en": "Studio", "de": "Studio"}
+    options = {"seconds": ("bool", True), "accent": ("color", "#13E5D7")}
+
+    def __init__(self, context, options):
+        super().__init__(context, options)
+        self.moving = True  # animates: the PNG path draws at full rate too
+
+    def render(self, snapshot, now):
+        frame = Image.new("RGB", self.context.size)
+        ...
+        return frame
+```
+
+- `render(snapshot, now)` returns an RGB or RGBA image of `context.size`
+  (the full frame, 1920×480 on the 9.2"). It runs on the render thread at
+  up to 50 fps; returning the same image object again costs nothing.
+- `snapshot.readings`, `snapshot.history` and `snapshot.images` (from
+  services) are there; `now` is a monotonic time for animations.
+- `context` has `size`, `orientation`, `palette`, `model`,
+  `hidden_edges()` (pixels the bezel hides, as data: nothing is cropped),
+  `font(ref, size)`, `color(value)`, `fps`, `language`, `t(text)`,
+  `supersample`/`downsample()` and `assets`, the plugin's own folder for
+  pre-rendered files.
+- `__init__` also runs for every preview in the editor, which then calls
+  `close()`: keep expensive loading in a module-level cache.
+- The theme editor offers installed screens under *Theme → Look*, with their
+  options.
+
+## Widget types
+
+```python
+from PIL import Image, ImageDraw
+
+from libre_panel.plugins import WidgetType
+
+
+class LightRing(WidgetType):
+    type = "myplugin.light-ring"  # with a dot: never clashes with a built-in
+    api = 1
+    label = {"en": "Light ring", "de": "Lichtring"}
+    spec = {"w": ("int", 120), "h": ("int", 120), "sensor": ("sensor", "cpu.load"),
+            "color": ("color", "#13E5D7")}
+    presets = [{"label": {"en": "CPU ring"}, "widget": {"sensor": "cpu.load"}}]
+
+    def key(self, widget, snapshot, now):
+        return round(snapshot.value(widget["sensor"]) or 0, 1)
+
+    def draw(self, widget, ctx, snapshot, now):
+        image = Image.new("RGBA", (widget["w"], widget["h"]))
+        ...
+        return image  # placed at x, y; or return (image, (x, y))
+```
+
+- `spec` declares the widget's fields with the kinds built-in widgets use:
+  `int`, `number`, `bool`, `string`, `text`, `color` (`color?` may be
+  empty), `font`, `asset`, `sensor`, `format`, `icon`, `enum:a|b`. Themes are
+  checked against it like built-in widgets (fonts and assets must stay in the
+  theme folder), and the editor's inspector edits these fields. `x`, `y`,
+  `id`, `opacity`, `glow`, `shadow` and the other common fields come
+  automatically, and their effects are applied to what `draw` returns.
+- `key` says what the picture depends on; while it stays the same, the last
+  picture is reused. The default is the value of the `sensor` field.
+- In video mode `draw` may run in a helper thread while the previous picture
+  stays on the panel.
+- `presets` appear under *Building blocks*. When a theme moves to another
+  panel, `x`, `y`, `w`, `h` and the usual size fields (`font_size`,
+  `thickness`, `radius`, `line_width`) are scaled.
+- A theme that uses a widget type or screen that is not installed still
+  loads: those parts are not drawn, the editor warns, and saving keeps them.
 
 ## Modes
 

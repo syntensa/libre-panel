@@ -68,6 +68,42 @@ _CONTENT_TYPES = {
 }
 
 
+def _plugin_specs() -> dict[str, Any]:
+    """Installed plugin widget types and screens, for the inspector and the building blocks."""
+    from libre_panel.plugins.loader import registry
+    from libre_panel.plugins.render import label_for
+
+    installed = registry()
+    widgets: dict[str, Any] = {}
+    labels: dict[str, str] = {}
+    presets: list[dict[str, Any]] = []
+    for name in installed.names("widgets"):
+        cls = installed.get("widgets", name)
+        if cls is None:
+            continue
+        widgets[name] = {k: list(v) for k, v in cls.spec.items()}
+        labels[name] = label_for(cls)
+        defaults = {k: v[1] for k, v in cls.spec.items()}
+        for i, preset in enumerate(cls.presets):
+            widget = {"type": name, "id": "part", "x": 0, "y": 0, **defaults, **preset["widget"]}
+            text = preset.get("label", {})
+            presets.append(
+                {
+                    "id": f"{name}-{i + 1}",
+                    "name": text.get(i18n.language()) or text.get("en") or labels[name],
+                    "size": [widget.get("w", 100), widget.get("h", 100)],
+                    "widgets": [widget],
+                }
+            )
+    screens = {}
+    for name in installed.names("screens"):
+        cls = installed.get("screens", name)
+        if cls is not None:
+            options = {k: list(v) for k, v in cls.options.items()}
+            screens[name] = {"label": label_for(cls), "options": options}
+    return {"widgets": widgets, "widget_labels": labels, "presets": presets, "screens": screens}
+
+
 class EditorState:
     def __init__(self, config_path: Path | None = None) -> None:
         self.config_path = config_path
@@ -229,11 +265,15 @@ class EditorHandler(BaseHTTPRequestHandler):
         for model in models:
             if model.get("notes"):
                 model["notes"] = i18n.t(model["notes"])
+        widgets = {t: {k: list(v) for k, v in spec.items()} for t, spec in WIDGET_SPECS.items()}
+        plugins = _plugin_specs()
+        widgets.update(plugins["widgets"])
+        presets["presets"] += plugins["presets"]
         return {
             "version": __version__,
-            "widgets": {
-                t: {k: list(v) for k, v in spec.items()} for t, spec in WIDGET_SPECS.items()
-            },
+            "widgets": widgets,
+            "widget_labels": plugins["widget_labels"],
+            "screens": plugins["screens"],
             "common": {k: list(v) for k, v in COMMON_FIELDS.items()},
             "effect_fields": list(EFFECT_FIELDS),
             "models": models,
@@ -359,7 +399,10 @@ class EditorHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 log.warning("live sensors unavailable: %s", exc)
         renderer = Renderer(theme)
-        frame, boxes = renderer.render(snapshot)
+        try:
+            frame, boxes = renderer.render(snapshot)
+        finally:
+            renderer.close()  # plugin screens end with the preview
         buffer = io.BytesIO()
         frame.save(buffer, format="PNG")
         self._json(
