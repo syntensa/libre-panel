@@ -17,6 +17,7 @@ from libre_panel import i18n
 from libre_panel.config import Config, ConfigError, load_config
 from libre_panel.devices.base import DeviceError, Display, FrameError, create_display
 from libre_panel.devices.models import find_model
+from libre_panel.render.overlays import ToastLayer, transition
 from libre_panel.render.renderer import Renderer, changed_region
 from libre_panel.sensors.base import SensorHub, SensorProvider, create_provider
 from libre_panel.theme.model import THEME_FILENAME, Theme, ThemeError, find_theme, load_theme
@@ -71,9 +72,10 @@ class _Watcher:
     Saving in the editor (or any text editor) updates the panel without a restart.
     """
 
-    def __init__(self, *paths: Path | None) -> None:
+    def __init__(self, *paths: Path | None, known: dict[Path, int | None] | None = None) -> None:
         self.paths = [p for p in paths if p is not None]
-        self.stamps = [self._stamp(p) for p in self.paths]
+        known = known or {}
+        self.stamps = [known[p] if p in known else self._stamp(p) for p in self.paths]
 
     @staticmethod
     def _stamp(path: Path) -> int | None:
@@ -227,8 +229,12 @@ def run(
         hub.providers.append(host.provider())
     display = create_display(config.device)
     size = target_size(config, theme)
-    watcher = _Watcher(config.path, _theme_file(theme))
+    known = {config.path: config.stamp} if config.path and config.stamp else None
+    watcher = _Watcher(config.path, _theme_file(theme), known=known)
     link = _Link(display, config.device.brightness, status)
+    toasts = ToastLayer(theme, theme.toast_anchor)
+    blend: tuple[Any, Image.Image, float] | None = None  # a transition under way
+    last_frame: Image.Image | None = None
     previous = None
     snapshot = None
     next_sample = 0.0
@@ -258,16 +264,26 @@ def run(
                         device.brightness = fresh.device.brightness
                     fresh.device, config = device, fresh
                     i18n.set_language(config.language)
+                    renderer.close()
                     theme, renderer = new_theme, Renderer(new_theme, animate=config.fps > 1)
                     size, previous, next_sample = target_size(config, theme), None, 0.0
-                    watcher = _Watcher(config.path, _theme_file(theme))
-                    if wanted != shown and host is not None:
-                        host.emit("theme-changed", theme=wanted)
+                    known = {config.path: config.stamp} if config.path and config.stamp else None
+                    watcher = _Watcher(config.path, _theme_file(theme), known=known)
+                    toasts.set_theme(theme, theme.toast_anchor)
+                    if wanted != shown:
+                        chosen = host.transition if host is not None and host.transition else None
+                        kind = transition(chosen or config.transition)
+                        if kind is not None and last_frame is not None:
+                            blend = (kind, last_frame, started)
+                        if host is not None:
+                            host.emit("theme-changed", theme=wanted)
                     shown, refused, status.theme = wanted, None, wanted
                     log.info("showing theme %r", shown)
                     if changed and on_config is not None:
                         on_config(config)
             status.mode = host.mode if host is not None else None
+            if host is not None:
+                toasts.add(host.take_toasts())
             if started >= next_sample or snapshot is None:
                 snapshot = hub.snapshot()
                 if host is not None:
@@ -280,6 +296,15 @@ def run(
                 snapshot.now = datetime.now()  # the clock ticks between readings too
                 frame, _ = renderer.render(snapshot, started)
                 frame = fit_frame(frame, size, theme.background_color)
+                if blend is not None:
+                    kind, old, began = blend
+                    progress = (started - began) / kind.duration if kind.duration else 1.0
+                    if progress >= 1 or old.size != frame.size:
+                        blend = None
+                    else:
+                        frame = kind.frame(old, frame, progress)
+                last_frame = frame
+                frame = toasts.apply(frame, started)
                 region = changed_region(previous, frame)
                 if region is not None:
                     previous = frame if link.show(frame, region, started) else None
@@ -290,9 +315,10 @@ def run(
             # While something glides, draw at full fps; otherwise wake for the next
             # reading, but at least twice a second so a seconds clock never skips.
             interval = 1 / _fps(config, host)
-            if not renderer.moving:
+            if not (renderer.moving or blend is not None or toasts.active):
                 interval = max(interval, min(0.5, next_sample - started))
             stop.wait(max(0.0, interval - (time.monotonic() - started)))
     finally:
         display.close()
+        renderer.close()
         hub.close()

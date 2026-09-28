@@ -51,6 +51,14 @@ to write or review themes by hand.
   long bars and rings glide to a new value (0 = jump).
 - Widgets are drawn in list order: later ones are on top.
 - Unknown fields are ignored with a warning, so newer themes still load.
+- Optional: `"toast": {"anchor": "bottom-right"}` places messages from
+  services (`top-right` by default; also `top-left`, `bottom-left`, `top`,
+  `bottom`). They keep clear of the strip a panel's bezel hides.
+- Optional: `"screen": {"name": "...", "options": {...}}` lets an installed
+  plugin draw the whole frame; the widgets are drawn on top. Widget types
+  with a dot in the name (`"myplugin.ring"`) also come from plugins. A theme
+  that needs a plugin you do not have still loads; those parts are not drawn.
+  See [Plugins](PLUGINS.md).
 
 ## Widgets
 

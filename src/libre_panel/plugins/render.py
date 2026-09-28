@@ -130,6 +130,21 @@ class WidgetType:
         raise NotImplementedError
 
 
+class Transition:
+    """A way to go from one theme to the next (built in: cut, fade, slide).
+
+    Set ``name``, ``api = 1`` and ``duration`` in seconds. ``frame`` gets the
+    last frame of the old theme, the current frame of the new one (same size,
+    RGB) and ``t`` from 0 to 1, and returns the frame to show.
+    """
+
+    name = ""
+    duration = 0.4
+
+    def frame(self, old: Image.Image, new: Image.Image, t: float) -> Image.Image:
+        raise NotImplementedError
+
+
 def label_for(cls: type) -> str:
     """The plugin's label in the current language (English, else its name)."""
     labels = getattr(cls, "label", {}) or {}

@@ -115,12 +115,14 @@ class ServiceHost:
         """An image for screens and widgets (e.g. ``media.cover``); None removes it."""
         self._hub.publish_image(key, image, owner=self.name)
 
-    def show_theme(self, name: str) -> None:
-        """Show another theme until :meth:`restore_theme` (config.toml is not changed)."""
-        self._hub.request_theme(name, by=self.name)
+    def show_theme(self, name: str, transition: str | None = None) -> None:
+        """Show another theme until :meth:`restore_theme` (config.toml is not changed).
+        ``transition``: ``cut``, ``fade``, ``slide`` or one from a plugin; the
+        default is ``transition`` in config.toml."""
+        self._hub.request_theme(name, by=self.name, transition=transition)
 
-    def restore_theme(self) -> None:
-        self._hub.request_theme(None, by=self.name)
+    def restore_theme(self, transition: str | None = None) -> None:
+        self._hub.request_theme(None, by=self.name, transition=transition)
 
     @property
     def mode(self) -> str | None:
@@ -164,6 +166,7 @@ class PluginHost:
         self._images: dict[str, tuple[Image.Image, str | None]] = {}
         self.latest: Snapshot | None = None
         self._theme: tuple[str, str] | None = None  # (theme, service)
+        self.transition: str | None = None  # for the next theme change, if a service chose one
         self._mode: tuple[str, str | None] | None = None  # (mode, service)
         self._toasts: deque[Toast] = deque(maxlen=self.MAX_TOASTS)
         self._listeners: dict[str, list[tuple[str | None, Callable[..., None]]]] = {}
@@ -187,9 +190,10 @@ class PluginHost:
             else:
                 self._images[key] = (image.copy(), owner)
 
-    def request_theme(self, name: str | None, by: str) -> None:
+    def request_theme(self, name: str | None, by: str, transition: str | None = None) -> None:
         with self._lock:
             self._theme = (name, by) if name else None
+            self.transition = transition
         log.info("service %s: %s", by, f"shows theme {name!r}" if name else "restores the theme")
 
     def set_mode(self, name: str | None, by: str | None = None) -> None:

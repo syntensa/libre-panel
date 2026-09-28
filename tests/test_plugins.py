@@ -468,3 +468,169 @@ def test_editor_offers_plugin_widgets_and_screens(plugin_folder):
         server.shutdown()
         server.server_close()
         server.editor_state.close()
+
+
+def test_a_config_change_during_startup_is_not_missed(isolated_home):
+    """The main loop compares with config.toml as it was read, not as it is later."""
+    import os
+
+    from libre_panel.config import load_config
+
+    path = isolated_home / "config.toml"
+    isolated_home.mkdir(parents=True, exist_ok=True)
+    path.write_text('theme = "slate"\n', encoding="utf-8")
+    config = load_config(path)
+    path.write_text('theme = "column"\n', encoding="utf-8")  # edited while starting up
+    os.utime(path, ns=(config.stamp + 10**9, config.stamp + 10**9))
+    watcher = app._Watcher(path, known={path: config.stamp})
+    assert watcher.changed()
+
+
+# -- toasts and transitions -----------------------------------------------------------
+
+
+def test_toasts_show_one_after_the_other():
+    from PIL import Image
+
+    from libre_panel.plugins import Toast
+    from libre_panel.render.overlays import ToastLayer
+    from libre_panel.theme.model import find_theme, load_theme
+
+    theme = load_theme(find_theme("spur-ii"))  # the 9.2": 18 px hidden at the top
+    layer = ToastLayer(theme)
+    frame = Image.new("RGB", (1920, 480), "black")
+    layer.add([Toast("first", "gpu", "info", 1.0), Toast("second", None, "error", 1.0)])
+    assert layer.apply(frame, 0.0).tobytes() == frame.tobytes()  # fades in from nothing
+    shown = layer.apply(frame, 0.5)
+    box = Image.frombytes("RGB", shown.size, shown.tobytes()).getbbox()
+    assert box is not None and box[1] >= 18 and box[2] <= 1920  # clear of the hidden strip
+    assert layer.current[0].text == "first"
+    layer.apply(frame, 1.3)  # first is gone: the second starts
+    assert layer.current[0].text == "second"
+    layer.apply(frame, 1.4)
+    layer.apply(frame, 2.8)
+    assert not layer.active
+    assert layer.apply(frame, 2.9).tobytes() == frame.tobytes()
+
+
+def test_toast_anchor_in_the_theme():
+    from libre_panel.theme.model import ThemeError, parse_theme
+
+    data = theme_data()
+    data["toast"] = {"anchor": "bottom-left"}
+    theme = parse_theme(data)
+    assert theme.toast_anchor == "bottom-left" and theme.to_dict()["toast"] == data["toast"]
+    data["toast"] = {"anchor": "middle"}
+    with pytest.raises(ThemeError, match="toast.anchor"):
+        parse_theme(data)
+
+
+def test_transitions():
+    from PIL import Image
+
+    from libre_panel.render.overlays import transition
+
+    old, new = Image.new("RGB", (100, 10), "black"), Image.new("RGB", (100, 10), "white")
+    fade = transition("fade")
+    assert fade.frame(old, new, 0.5).getpixel((50, 5)) == (127, 127, 127)
+    slide = transition("slide").frame(old, new, 0.5)
+    assert slide.getpixel((5, 5)) == (0, 0, 0) and slide.getpixel((95, 5)) == (255, 255, 255)
+    assert transition("cut") is None and transition(None) is None
+    assert transition("nonexistent") is None  # warned, switches without one
+
+
+PLUGIN_TRANSITION = """
+from libre_panel.plugins import Transition
+
+
+class Wipe(Transition):
+    name = "wipe"
+    api = 1
+    duration = 0.3
+
+    def frame(self, old, new, t):
+        out = old.copy()
+        width = round(new.width * t)
+        out.paste(new.crop((0, 0, width, new.height)), (0, 0))
+        return out
+"""
+
+
+def test_plugin_transition(plugin_folder):
+    from libre_panel.render.overlays import transition
+
+    plugin_folder(PLUGIN_TRANSITION, {"libre_panel.transitions": {"wipe": "Wipe"}})
+    assert transition("wipe").duration == 0.3
+
+
+class Capture:
+    """A display that keeps every frame."""
+
+    frames = []
+
+    def __init__(self, config):
+        self.config = config
+        Capture.frames = []
+
+    def open(self):
+        pass
+
+    def close(self):
+        pass
+
+    def set_brightness(self, percent):
+        pass
+
+    def describe(self):
+        return "capture"
+
+    def show(self, frame, region=None):
+        Capture.frames.append(frame.copy())
+
+
+def test_main_loop_shows_toasts_and_fades_between_themes(monkeypatch, isolated_home):
+    import json
+
+    from PIL import ImageStat
+
+    from libre_panel.plugins import Toast
+    from libre_panel.theme.model import find_theme
+
+    # a theme of the same size, plain white, to fade to
+    data = json.loads((find_theme("libre-default") / "theme.json").read_text(encoding="utf-8"))
+    data.update(name="white", widgets=[], background={"color": "#ffffff"})
+    folder = isolated_home / "themes" / "white"
+    folder.mkdir(parents=True)
+    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+
+    monkeypatch.setattr(app, "create_display", Capture)
+    host = PluginHost()
+    config = Config(theme="libre-default", fps=20, sensors=SensorsConfig(providers=["demo"]))
+    status = app.RunStatus()
+    stop = threading.Event()
+    options = {"stop": stop, "status": status, "host": host}
+    thread = threading.Thread(target=app.run, args=(config,), kwargs=options)
+    thread.start()
+    try:
+        assert wait_for(lambda: len(Capture.frames) > 2)
+        plain = Capture.frames[-1]
+        host.notify(Toast("hello from a service", None, "info", 0.6))
+        assert wait_for(lambda: _differs(Capture.frames[-1], plain))  # the toast is drawn
+        time.sleep(1.0)  # it is gone again
+        count = len(Capture.frames)
+        host.request_theme("white", by="test", transition="fade")
+        assert wait_for(lambda: status.theme == "white")
+        time.sleep(0.8)
+    finally:
+        stop.set()
+        thread.join(10)
+        host.close()
+    brightness = [ImageStat.Stat(f.convert("L")).mean[0] for f in Capture.frames[count:]]
+    assert brightness[-1] > 250  # white in the end
+    assert any(60 < b < 200 for b in brightness)  # and a frame in between: it faded
+
+
+def _differs(a, b):
+    from PIL import ImageChops
+
+    return a.size == b.size and ImageChops.difference(a, b).getbbox() is not None

@@ -178,6 +178,7 @@ class Theme:
     font: str = DEFAULT_FONT
     smoothing_ms: int = 400
     screen: dict[str, Any] | None = None  # {"name": ..., "options": {...}}: a plugin draws
+    toast_anchor: str = "top-right"  # where messages from services appear
     root: Path | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -207,6 +208,8 @@ class Theme:
         }
         if self.screen is not None:
             data["screen"] = deepcopy(self.screen)
+        if self.toast_anchor != "top-right":
+            data["toast"] = {"anchor": self.toast_anchor}
         return data
 
 
@@ -392,6 +395,19 @@ def _missing_plugin_widget(
     return widget, [f"{where}: widget type {wtype!r} needs a plugin that is not installed"]
 
 
+TOAST_ANCHORS = ("top-right", "top-left", "bottom-right", "bottom-left", "top", "bottom")
+
+
+def _parse_toast(raw: Any) -> str:
+    """``"toast": {"anchor": "bottom-right"}``: where messages from services appear."""
+    if raw is None:
+        return "top-right"
+    if not isinstance(raw, dict):
+        raise ThemeError("toast must be an object")
+    anchors = "enum:" + "|".join(TOAST_ANCHORS)
+    return _coerce(anchors, raw.get("anchor", "top-right"), "toast.anchor")
+
+
 def _parse_screen(
     raw: Any, palette: dict[str, str], root: Path | None, warnings: list[str]
 ) -> dict[str, Any] | None:
@@ -511,6 +527,7 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         smoothing_ms=smoothing_ms,
         widgets=widgets,
         screen=_parse_screen(data.get("screen"), palette, root, warnings),
+        toast_anchor=_parse_toast(data.get("toast")),
         root=root,
         warnings=warnings,
     )

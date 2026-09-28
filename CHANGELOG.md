@@ -74,6 +74,9 @@ First preview of Libre Panel.
   code, with the theme's widgets on top; chosen in the editor with its options
 - Widget types from plugins: placed and edited in the editor like built-in
   widgets (fields, building blocks, effects), checked when a theme loads
+- Toasts: short messages from services on the panel, in the theme's colours,
+  one after the other; the theme picks the corner
+- Transitions between themes: fade (default), slide, cut, or from a plugin
 
 **Sensors**
 - psutil, LibreHardwareMonitor (checked against real output), demo;

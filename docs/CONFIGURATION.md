@@ -24,6 +24,7 @@ theme = "libre-default"        # built-in or user theme
 language = "auto"              # "auto" (system language), "en" or "de"
 # refresh_ms = 1000            # override the theme's refresh interval
 fps = 10                       # 1-60; values glide between readings
+transition = "fade"            # between themes: "cut", "fade", "slide" or from a plugin
 
 [device]
 model = "auto"                 # or an id from `libre-panel models`

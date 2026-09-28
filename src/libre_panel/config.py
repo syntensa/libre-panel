@@ -142,12 +142,16 @@ class Config:
     language: str = "auto"
     refresh_ms: int | None = None
     fps: int = 10
+    transition: str = "fade"  # between themes: cut, fade, slide, or one from a plugin
     device: DeviceConfig = field(default_factory=DeviceConfig)
     sensors: SensorsConfig = field(default_factory=SensorsConfig)
     weather: WeatherConfig = field(default_factory=WeatherConfig)
     services: ServicesConfig = field(default_factory=ServicesConfig)
     modes: dict[str, ModeConfig] = field(default_factory=dict)
     path: Path | None = None
+    # config.toml's modification time when it was read: a change made while
+    # the program starts up is noticed too.
+    stamp: int | None = None
 
 
 def _expect(value: Any, kind: type | tuple[type, ...], name: str) -> Any:
@@ -171,6 +175,8 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         cfg.fps = _expect(data["fps"], int, "fps")
         if not 1 <= cfg.fps <= 60:
             raise ConfigError("fps: must be between 1 and 60")
+    if "transition" in data:
+        cfg.transition = _expect(data["transition"], str, "transition")
     if "refresh_ms" in data:
         cfg.refresh_ms = _expect(data["refresh_ms"], int, "refresh_ms")
         if cfg.refresh_ms < 100:
@@ -235,13 +241,17 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
 def load_config(path: Path | None = None) -> Config:
     """Load config.toml; a missing file means all defaults."""
     path = path or config_dir() / CONFIG_FILENAME
-    if not path.exists():
+    try:
+        stamp = path.stat().st_mtime_ns  # before reading: a later change is newer
+    except OSError:
         return Config(path=path)
     try:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"{path}: {exc}") from exc
-    return parse_config(data, path)
+    config = parse_config(data, path)
+    config.stamp = stamp
+    return config
 
 
 def write_default_config(path: Path | None = None, overwrite: bool = False) -> Path:

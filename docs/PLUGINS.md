@@ -8,6 +8,7 @@ as a plugin: a Python package that registers parts of these kinds.
 | Service | `libre_panel.services` | a long-running helper: game mode, autopilot, a database |
 | Screen | `libre_panel.screens` | draws the whole frame in code; a theme selects it by name |
 | Widget type | `libre_panel.widgets` | a widget the editor can place, drawn by plugin code |
+| Transition | `libre_panel.transitions` | how the panel goes from one theme to the next |
 | Sensor source | `libre_panel.sensors` | readings (see [Architecture](ARCHITECTURE.md#plugins)) |
 | Display driver | `libre_panel.devices` | another kind of panel |
 
@@ -105,9 +106,9 @@ while Libre Panel runs.
 | `host.publish(key, value, unit="", label="")` | a reading, shown by themes like any sensor (graphs keep its history); `host.unpublish(key)` |
 | `host.publish_image(key, image)` | an image (PIL) for screens and widgets, e.g. `media.cover`; `None` removes it |
 | `host.snapshot()` | the readings and history the panel was last drawn from |
-| `host.show_theme(name)` / `host.restore_theme()` | show another theme for a while; `config.toml` stays as it is |
+| `host.show_theme(name, transition=None)` / `host.restore_theme(transition=None)` | show another theme for a while; `config.toml` stays as it is. `transition`: `cut`, `fade`, `slide` or a plugin's; default from `config.toml` |
 | `host.set_mode(name)` / `host.mode` | switch to a mode from `[modes.<name>]`; `None` ends it |
-| `host.notify(text, icon=None, level="info", seconds=4)` | a short message for the panel |
+| `host.notify(text, icon=None, level="info", seconds=4)` | a short message on the panel (see *Toasts*) |
 | `host.on(event, callback)` | `panel-connected`, `panel-lost`, `theme-changed` (`theme=`), `mode-changed` (`mode=`), `quit`; callbacks run in an event thread |
 | `host.data_dir` | `<settings>/plugins-data/<service>/` for the service's files |
 | `host.log` | a logger named after the service |
@@ -220,6 +221,42 @@ class LightRing(WidgetType):
   `thickness`, `radius`, `line_width`) are scaled.
 - A theme that uses a widget type or screen that is not installed still
   loads: those parts are not drawn, the editor warns, and saving keeps them.
+
+## Toasts
+
+`host.notify` shows a short message on the panel: a card in the theme's
+colours with a coloured edge for the level (`info`, `warning`, `error`) and
+one of the built-in icons (`cpu`, `gpu`, `temperature`, `fan`, …) if named.
+Messages show one after the other, each for its `seconds`, fading in and
+out. The theme decides the corner (`"toast": {"anchor": "bottom-right"}`);
+the card keeps clear of what the bezel hides. Toasts are part of the frame,
+also in video mode (a separate overlay would make the video judder).
+
+## Transitions
+
+When the theme changes (a service's `show_theme`, a mode, the editor, the
+tray), the panel blends from the old frame to the new one. `transition`
+in `config.toml` chooses how (`fade` by default; `cut`, `slide`), and a
+service can choose per change. A plugin can add its own:
+
+```python
+from libre_panel.plugins import Transition
+
+
+class Wipe(Transition):
+    name = "wipe"
+    api = 1
+    duration = 0.3  # seconds
+
+    def frame(self, old, new, t):  # t from 0 to 1; old and new are the same size
+        out = old.copy()
+        width = round(new.width * t)
+        out.paste(new.crop((0, 0, width, new.height)), (0, 0))
+        return out
+```
+
+Between themes of different sizes (landscape to portrait) the panel switches
+without a transition.
 
 ## Modes
 
