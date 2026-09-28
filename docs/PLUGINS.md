@@ -182,8 +182,12 @@ class LightRing(WidgetType):
     type = "myplugin.light-ring"  # with a dot: never clashes with a built-in
     api = 1
     label = {"en": "Light ring", "de": "Lichtring"}
-    spec = {"w": ("int", 120), "h": ("int", 120), "sensor": ("sensor", "cpu.load"),
-            "color": ("color", "#13E5D7")}
+    spec = {
+        "w": ("int", 120),
+        "h": ("int", 120),
+        "sensor": ("sensor", "cpu.load"),
+        "color": ("color", "#13E5D7"),
+    }
     presets = [{"label": {"en": "CPU ring"}, "widget": {"sensor": "cpu.load"}}]
 
     def key(self, widget, snapshot, now):
