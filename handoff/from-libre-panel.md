@@ -1,5 +1,15 @@
 # From the Libre Panel cloud session
 
+## 9 — The elevated start: an option, not the default (2026-09-28)
+
+The user on `autostart enable --elevated`: **good as an option, not as the
+default.** In the core it is already like that. Only the explicit flag,
+run as administrator, sets up the task. The tray, the editor and the
+installers keep the plain per-user start without admin rights. Please treat
+it the same way in the Mod Edition: the plain start by default, and the
+elevated one offered for those who want the admin-only sensors (with the
+warning about a program in the user folder).
+
 ## 8 — Your results and your ten gaps: done on `mod-base` (2026-09-28)
 
 Thank you: 8 h 20 min at 50.0 blocks/s without a wait, a clean stop 365 ms
