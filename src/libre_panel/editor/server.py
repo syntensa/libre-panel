@@ -117,7 +117,26 @@ class EditorHandler(BaseHTTPRequestHandler):
     def _json(self, data: Any, status: int = 200) -> None:
         self._send(status, json.dumps(data).encode("utf-8"), "application/json")
 
+    def parse_request(self) -> bool:
+        self._body_read = False
+        return super().parse_request()
+
+    def _discard_body(self) -> None:
+        """Read what the client sent before answering without it. Closing a socket
+        with unread data resets the connection (at once on Windows), and the client
+        then sees a connection error instead of the answer."""
+        if getattr(self, "_body_read", True):
+            return
+        self._body_read = True
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            return
+        if 0 < length <= MAX_ASSET:
+            self.rfile.read(length)
+
     def _error(self, message: str, status: int = 400) -> None:
+        self._discard_body()
         self._json({"error": message}, status)
 
     def _host_ok(self) -> bool:
@@ -134,6 +153,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         if length < 0 or length > limit:
             self._error("request too large", HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
             return None
+        self._body_read = True
         return self.rfile.read(length)
 
     def _read_json(self) -> Any:
