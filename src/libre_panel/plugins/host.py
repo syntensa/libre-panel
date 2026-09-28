@@ -104,15 +104,16 @@ class ServiceHost:
         return self._hub.latest
 
     def publish(self, key: str, value: float | str | None, unit: str = "", label: str = "") -> None:
-        """A reading themes can show like any sensor (e.g. ``game.fps``)."""
-        self._hub.publish(Reading(key, value, unit, label))
+        """A reading themes can show like any sensor (e.g. ``game.fps``). It goes
+        away when the service stops."""
+        self._hub.publish(Reading(key, value, unit, label), owner=self.name)
 
     def unpublish(self, key: str) -> None:
         self._hub.unpublish(key)
 
     def publish_image(self, key: str, image: Image.Image | None) -> None:
         """An image for screens and widgets (e.g. ``media.cover``); None removes it."""
-        self._hub.publish_image(key, image)
+        self._hub.publish_image(key, image, owner=self.name)
 
     def show_theme(self, name: str) -> None:
         """Show another theme until :meth:`restore_theme` (config.toml is not changed)."""
@@ -126,8 +127,9 @@ class ServiceHost:
         return self._hub.mode
 
     def set_mode(self, name: str | None) -> None:
-        """Switch to a mode from ``[modes.<name>]`` (frame rate, theme); None ends it."""
-        self._hub.set_mode(name)
+        """Switch to a mode from ``[modes.<name>]`` (frame rate, theme); None ends it.
+        A mode (and a theme) a service set ends when the service stops."""
+        self._hub.set_mode(name, by=self.name)
 
     def notify(self, text: str, icon: str | None = None, level: str = "info", seconds=4.0):
         """A short message on the panel."""
@@ -136,7 +138,7 @@ class ServiceHost:
     def on(self, event: str, callback: Callable[..., None]) -> None:
         """Hear about ``panel-connected``, ``panel-lost``, ``theme-changed``,
         ``mode-changed`` and ``quit``. Callbacks run in an event thread."""
-        self._hub.listen(event, callback)
+        self._hub.listen(event, callback, owner=self.name)
 
 
 class _HostProvider(SensorProvider):
@@ -157,55 +159,71 @@ class PluginHost:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._published: dict[str, Reading] = {}
-        self._images: dict[str, Image.Image] = {}
+        # value and the service that owns it: a stopped service leaves nothing behind
+        self._published: dict[str, tuple[Reading, str | None]] = {}
+        self._images: dict[str, tuple[Image.Image, str | None]] = {}
         self.latest: Snapshot | None = None
-        self._theme: str | None = None
-        self._mode: str | None = None
+        self._theme: tuple[str, str] | None = None  # (theme, service)
+        self._mode: tuple[str, str | None] | None = None  # (mode, service)
         self._toasts: deque[Toast] = deque(maxlen=self.MAX_TOASTS)
-        self._listeners: dict[str, list[Callable[..., None]]] = {}
+        self._listeners: dict[str, list[tuple[str | None, Callable[..., None]]]] = {}
         self._events: queue.Queue[tuple[str, dict[str, Any]] | None] = queue.Queue()
         self._dispatcher: threading.Thread | None = None
 
     # -- for services ------------------------------------------------------
 
-    def publish(self, reading: Reading) -> None:
+    def publish(self, reading: Reading, owner: str | None = None) -> None:
         with self._lock:
-            self._published[reading.key] = reading
+            self._published[reading.key] = (reading, owner)
 
     def unpublish(self, key: str) -> None:
         with self._lock:
             self._published.pop(key, None)
 
-    def publish_image(self, key: str, image: Image.Image | None) -> None:
+    def publish_image(self, key: str, image: Image.Image | None, owner: str | None = None):
         with self._lock:
             if image is None:
                 self._images.pop(key, None)
             else:
-                self._images[key] = image.copy()
+                self._images[key] = (image.copy(), owner)
 
     def request_theme(self, name: str | None, by: str) -> None:
         with self._lock:
-            self._theme = name
+            self._theme = (name, by) if name else None
         log.info("service %s: %s", by, f"shows theme {name!r}" if name else "restores the theme")
 
-    def set_mode(self, name: str | None) -> None:
+    def set_mode(self, name: str | None, by: str | None = None) -> None:
         with self._lock:
-            if name == self._mode:
+            if name == self.mode:
                 return
-            self._mode = name
+            self._mode = (name, by) if name else None
         log.info("mode: %s", name or "normal")
         self.emit("mode-changed", mode=name)
+
+    def forget(self, owner: str) -> None:
+        """A service stopped: its readings, images, listeners, theme and mode go too."""
+        with self._lock:
+            self._published = {k: v for k, v in self._published.items() if v[1] != owner}
+            self._images = {k: v for k, v in self._images.items() if v[1] != owner}
+            for event, listeners in self._listeners.items():
+                self._listeners[event] = [(o, cb) for o, cb in listeners if o != owner]
+            if self._theme is not None and self._theme[1] == owner:
+                self._theme = None
+            mode_ended = self._mode is not None and self._mode[1] == owner
+            if mode_ended:
+                self._mode = None
+        if mode_ended:
+            self.emit("mode-changed", mode=None)
 
     def notify(self, toast: Toast) -> None:
         with self._lock:
             self._toasts.append(toast)
 
-    def listen(self, event: str, callback: Callable[..., None]) -> None:
+    def listen(self, event: str, callback: Callable[..., None], owner: str | None = None) -> None:
         if event not in EVENTS:
             raise ValueError(f"unknown event {event!r} (known: {', '.join(EVENTS)})")
         with self._lock:
-            self._listeners.setdefault(event, []).append(callback)
+            self._listeners.setdefault(event, []).append((owner, callback))
             if self._dispatcher is None:
                 self._dispatcher = threading.Thread(
                     target=self._dispatch, name="plugin-events", daemon=True
@@ -220,20 +238,22 @@ class PluginHost:
 
     def published(self) -> dict[str, Reading]:
         with self._lock:
-            return dict(self._published)
+            return {key: reading for key, (reading, _owner) in self._published.items()}
 
     def images(self) -> dict[str, Image.Image]:
         with self._lock:
-            return dict(self._images)
+            return {key: image for key, (image, _owner) in self._images.items()}
 
     @property
     def theme(self) -> str | None:
         """The theme a service asked for, if any."""
-        return self._theme
+        request = self._theme
+        return request[0] if request else None
 
     @property
     def mode(self) -> str | None:
-        return self._mode
+        mode = self._mode
+        return mode[0] if mode else None
 
     def take_toasts(self) -> list[Toast]:
         with self._lock:
@@ -241,23 +261,30 @@ class PluginHost:
             self._toasts.clear()
         return toasts
 
-    def emit(self, event: str, **data: Any) -> None:
-        if self._listeners.get(event):
+    def emit(self, event: str, wait: bool = False, **data: Any) -> None:
+        """Tell the listeners, in the event thread (or here, with ``wait``)."""
+        if not self._listeners.get(event):
+            return
+        if wait:
+            self._deliver(event, data)
+        else:
             self._events.put((event, data))
+
+    def _deliver(self, event: str, data: dict[str, Any]) -> None:
+        with self._lock:
+            callbacks = [callback for _owner, callback in self._listeners.get(event, [])]
+        for callback in callbacks:
+            try:
+                callback(**data)
+            except Exception:
+                log.exception("a %s listener failed", event)
 
     def _dispatch(self) -> None:
         while True:
             item = self._events.get()
             if item is None:
                 return
-            event, data = item
-            with self._lock:
-                callbacks = list(self._listeners.get(event, []))
-            for callback in callbacks:
-                try:
-                    callback(**data)
-                except Exception:
-                    log.exception("a %s listener failed", event)
+            self._deliver(*item)
 
     def close(self) -> None:
         if self._dispatcher is not None:
@@ -327,6 +354,7 @@ class ServiceManager:
         worker.join(self.STOP_S)
         if worker.is_alive():
             log.warning("service %r did not stop within %.0f s", name, self.STOP_S)
+        self.host.forget(name)
         self.state[name] = "stopped"
 
     @staticmethod
@@ -337,7 +365,7 @@ class ServiceManager:
             log.exception("service %r failed while stopping", name)
 
     def stop(self) -> None:
-        self.host.emit("quit")
+        self.host.emit("quit", wait=True)  # before the services stop and lose their listeners
         with self._lock:
             for name in list(reversed(self.running)):
                 self._stop(name)

@@ -121,6 +121,38 @@ def test_services_follow_the_config(plugin_folder):
     host.close()
 
 
+def test_a_stopped_service_leaves_nothing_behind(plugin_folder):
+    from PIL import Image
+
+    from libre_panel.sensors.base import Reading
+
+    package = plugin_folder(SERVICE, parts=SERVICE_PARTS)
+    host = PluginHost()
+    manager = ServiceManager(host, discover())
+    manager.apply(services_config(["counter"]))
+    service = manager.running["counter"][0]
+    quits = []
+    service.host.on("quit", lambda: quits.append(len(manager.running)))
+    service.host.set_mode("game")
+    service.host.show_theme("slate")
+    service.host.publish_image("demo.cover", Image.new("RGB", (2, 2)))
+    host.publish(Reading("x.y", 1), owner="another")  # someone else's reading stays
+
+    manager.apply(services_config([]))
+    assert host.mode is None and host.theme is None  # a game mode must not outlive its service
+    assert "demo.count" not in host.published() and host.images() == {}
+    assert "x.y" in host.published()
+    before = list(events_of(package))
+    host.emit("panel-connected", wait=True)
+    assert events_of(package) == before  # no more events for a stopped service
+
+    manager.apply(services_config(["counter"]))
+    manager.running["counter"][0].host.on("quit", lambda: quits.append(len(manager.running)))
+    manager.stop()
+    assert quits == [1]  # "quit" arrives while the service still runs
+    host.close()
+
+
 def test_option_types():
     from libre_panel.plugins.host import apply_options
     from libre_panel.plugins.loader import PluginError
@@ -215,7 +247,8 @@ def test_background_app_runs_and_updates_services(plugin_folder, isolated_home):
             encoding="utf-8",
         )
         assert wait_for(lambda: not background.services.running)  # stopped by the edit
-        assert events_of(package)[-1] == ("stop",)
+        assert ("stop",) in events_of(package)
+        assert "demo.count" not in background.plugin_host.published()
     finally:
         background.quit()
         background.shutdown()

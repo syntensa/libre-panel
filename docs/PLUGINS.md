@@ -117,6 +117,11 @@ else the active mode's theme, else the one in `config.toml`. A theme that
 does not exist is refused once with a warning; the panel keeps the current
 one.
 
+When a service stops (Quit, or it was removed from `[services]`), what it
+left goes too: its readings and images disappear, a theme or mode it set
+ends, and its listeners hear nothing more. `quit` arrives before the
+services stop.
+
 ## Screens
 
 A screen draws the whole frame in code. Themes stay data: a theme names the
