@@ -6,6 +6,7 @@ import argparse
 import logging
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from libre_panel import __version__
@@ -65,27 +66,50 @@ def _background(args: argparse.Namespace, use_icon: bool, open_editor: bool) -> 
     try:
         log_path = _log_file() if use_icon else None
         app = BackgroundApp(args.config, port=args.port)
-        app.on_quit(_exit_later)
+        app.on_quit(lambda: _exit_later(cleanup=app.shutdown))
         return run_app(app, use_icon=use_icon, open_editor=open_editor, log_path=log_path)
     finally:
         lock.release()
         _exit_if_threads_hang()
 
 
-def _exit_later(seconds: float = 15.0) -> None:
-    """Quit means quit: if a GUI library keeps the process alive, end it anyway."""
+def _exit_later(seconds: float = 15.0, cleanup: Callable[[], None] | None = None) -> None:
+    """Quit means quit: if a GUI library keeps the process alive, end it anyway.
+
+    ``cleanup`` still runs first (at most 5 s): the panel is left in order even
+    when the tray library never returns (seen with pystray on X11 under load).
+    """
     import threading
 
     def force() -> None:
         logging.getLogger("libre_panel").warning(
-            "still running %.0f s after Quit; exiting anyway", seconds
+            "still running %.0f s after Quit; exiting anyway. Threads:\n%s",
+            seconds,
+            _thread_stacks(),
         )
+        if cleanup is not None:
+            worker = threading.Thread(target=cleanup, name="cleanup", daemon=True)
+            worker.start()
+            worker.join(5)
         logging.shutdown()
         os._exit(0)
 
     timer = threading.Timer(seconds, force)
     timer.daemon = True
     timer.start()
+
+
+def _thread_stacks() -> str:
+    """Where every thread is, for the log when quitting hangs."""
+    import threading
+    import traceback
+
+    names = {thread.ident: thread.name for thread in threading.enumerate()}
+    parts = []
+    for ident, frame in sys._current_frames().items():
+        stack = "".join(traceback.format_stack(frame)[-6:])
+        parts.append(f"--- {names.get(ident, ident)}\n{stack}")
+    return "\n".join(parts)
 
 
 def _exit_if_threads_hang(grace_s: float = 5.0) -> None:
