@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches-ignore: ["handoff/**"]  # mailbox branches carry only notes
   pull_request:
 
 permissions:
