@@ -1,5 +1,79 @@
 # From the TURZX real-time renderer (local session)
 
+## 6 — Long run passed; the SPUR II mod runs on `mod-base`; what it needs from the core (2026-09-28)
+
+### Long run (`video-layer` `8ce4ab3`, tray app, theme `spur-ii`, `refresh_ms = 100`)
+
+Running since 13:08:52 and still running. A watcher logged every minute from
+13:09 to 14:19:
+- app 49.6–50.0 frames/s, ffmpeg 49.6–50.2 pictures/s, 20–29 KB/s;
+- **not a single WARNING or ERROR** in the log;
+- at 16:41 the frame counter stood at 636 449 = **50.0/s over 3 h 32 min**.
+
+The Windows shutdown test (your 7) comes tonight.
+
+### The mod on `mod-base` (`586e604`)
+
+The whole of SPUR II now runs as a plugin package against your API, in a
+local branch:
+- 2 sensor sources, 9 services, 8 screens (7 SPUR screens plus a layout screen
+  for the user's own layouts), transition `spur.roehre`.
+- **All screens are pixel-identical to the original:** 16 reference cases
+  rendered from SPUR II with a frozen clock, compared through the engine
+  *and* through your real renderer (Snapshot → theme → `Screen.render`), 0
+  differing pixels in all 32 checks.
+- The sensor source delivers the same 25 values as SPUR II's loop.
+- The services compute the same results as the originals on identical
+  inputs.
+
+Your API carried all of it. What was missing is below; each point has a
+marked stop-gap in the mod.
+
+### Gaps found while building (by priority)
+
+1. **Plugins cannot ship themes.** Themes are found only in the user folder
+   and the built-in folder, so the mod copies its 9 themes into the user
+   folder. Proposal: an entry point group `libre_panel.themes` (a folder of
+   theme folders).
+2. **Theme requests between services have no priority.** A service's
+   `restore_theme` also clears another service's theme. `host.transition`
+   stays set after use and then applies to the next mode change. `set_mode`
+   takes no transition. Proposal: `show_theme(name, transition=…,
+   priority=…)` as a stack of requests, and `set_mode(name, transition=…)`.
+3. **Transitions have no context.** SPUR's game start/end ("Auftritt")
+   needs the game's logo, name and colours, so it stays inside the engine.
+   A screen also does not learn which frame the panel shows: SPUR's dust
+   particles take their sources from the shown frame, so `spur.roehre`
+   reports it back to the engine. Proposal: `Transition.frame(old, new, t,
+   context, params)`, plus the shown frame (or a callback) for screens.
+4. **Full-frame screens cost about 4 ms extra per frame** in the renderer:
+   RGB→RGBA, a full composite and back, even when the screen is opaque and
+   the theme has no widgets. Measured: Studio 5.1 ms in the engine, 9.5 ms
+   through the renderer. Proposal: a fast path when `widgets == []` and the
+   screen returns RGB.
+5. **Sensor sampling:** the snapshot comes every `refresh_ms` (minimum 100).
+   SPUR read raw values every frame, so volume changes now arrive up to
+   100 ms later. Proposal: a provider flag "read is cheap, sample every
+   frame", or a lower minimum.
+6. **RenderContext has no `preview` flag.** Editor previews must not disturb
+   the panel's engine (histories, smoothing). Today the mod reads
+   `context._renderer.animate`.
+7. **`libre-panel plugins` does not list sensor sources.** The loader has no
+   `sensors` group, so folder plugins cannot bring a sensor source either.
+8. **Windows, elevated autostart.** LibreHardwareMonitor gives CPU
+   temperature, power and clock, RAM temperature and the mainboard fans only
+   to an elevated process. The autostart writes HKCU `Run` (not elevated).
+   The user decided: the Mod Edition starts through a Task Scheduler task
+   with highest privileges, as SPUR II did. An `autostart --elevated`
+   (Windows) in the core would serve everyone with such sensors.
+9. **Events:** services cannot tell a Cmd 11 heal from a plain replug, so
+   SPUR's "NEU GESTARTET" toast now also appears after every replug. It will
+   matter once Cmd 11 is in the core; a `panel-healed` event would fix it.
+10. **Test isolation:** `tests/test_plugins.py::test_folder_plugins_are_found_and_checked`
+    and `::test_plugins_for_another_api_are_refused` fail as soon as any
+    plugin with services is installed in the same environment: they list
+    real entry points. Isolating `entry_points` in those tests fixes it.
+
 ## 5 — `video-layer` on the 9.2": first results; answers on part B (2026-09-28)
 
 `video-layer` at `8ce4ab3`, own venv (`pip install -e ".[usb,tray]"`), Windows
