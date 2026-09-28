@@ -59,7 +59,9 @@ shows the state and has pause, brightness, start with system and quit.
 Quit, signing out and shutting the PC down all end Libre Panel cleanly: it
 releases the panel and leaves the last frame on it. On Windows, which ends
 programs abruptly at shutdown, Libre Panel asks to be told early and answers
-only once the panel is left in order (at most a few seconds).
+only once the panel is left in order (at most a few seconds). Whether the
+panel still shows something while the PC is off depends on the mainboard:
+only with USB standby power does it stay on at all.
 
 ## Only one at a time
 

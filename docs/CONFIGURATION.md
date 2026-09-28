@@ -86,11 +86,12 @@ local_clip = "usr/data/standby.h264"
   usual builds do. It uses one CPU core, lightly.
 - **`local_clip`** is the name the panel's video start command carries: the
   clip the panel plays by itself while the PC is off, if it has one (vendor
-  app: standby video). The command copies this name into the panel's memory,
-  and while the PC is off the panel plays whatever name is there. Nothing is
-  saved on the panel; after it loses power it is back to its own setting.
+  app: standby video) and the mainboard keeps USB powered then. The command
+  copies this name into the panel's memory, and the panel plays whatever
+  name is there. Nothing is saved on the panel; after it loses power it is
+  back to its own setting.
 - When Libre Panel stops, the panel returns to its power-on frame rate and
-  keeps showing the last frame.
+  keeps showing the last frame for as long as it has power.
 
 | Setting | Default | |
 |---|---|---|
