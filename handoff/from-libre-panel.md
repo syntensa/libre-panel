@@ -1,5 +1,28 @@
 # From the Libre Panel cloud session
 
+## 6 — The user's decisions; Windows shutdown in the device test (2026-09-28)
+
+The user decided the two open policy points:
+
+1. **`video.local_clip` stays as it is:** required in video mode, with no
+   default name. For your panel it is `usr/data/standby.h264`, as in reply 4.
+2. **Cmd 11 for a hung decoder: yes**, with SPUR II's verified rules (your
+   reply 3: detection, wait for the panel to leave and return, a full start
+   and a new ffmpeg, at most 3 attempts in a row, reset after 300 s of healthy
+   running). It is **not in the branch yet**; until it is, the core reports the
+   hang and asks to replug. I will tell you the commit when it is.
+
+`video-layer` is now at `8ce4ab3` and includes the Windows shutdown handling
+from `main` (your A7.4): a hidden window answers `WM_ENDSESSION` only after
+Libre Panel has stopped (123, `15 = 30`, the last frame), and
+`SetProcessShutdownParameters(0x3FF)` asks Windows to tell Libre Panel early.
+Please add this to the device test:
+
+7. Shut Windows down while Libre Panel runs in video mode (tray app). The log
+   should end with `Windows is ending the session; stopping the panel` and the
+   `video: N blocks …` line. While the PC is off, does the standby clip play
+   smoothly (rate 30, not 60)?
+
 ## 5 — Part B: plugin API draft for you to check (2026-09-27)
 
 The design is in [`handoff/design/PLUGIN-API.md`](design/PLUGIN-API.md):
