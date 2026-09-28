@@ -63,8 +63,16 @@ class SessionEndWatcher:
     def stop(self) -> None:
         if self.hwnd and self._thread.is_alive():
             import ctypes
+            from ctypes import wintypes
 
-            ctypes.windll.user32.PostMessageW(self.hwnd, WM_CLOSE, 0, 0)
+            user32 = ctypes.WinDLL("user32", use_last_error=True)
+            user32.PostMessageW.argtypes = [
+                wintypes.HWND,
+                wintypes.UINT,
+                wintypes.WPARAM,
+                wintypes.LPARAM,
+            ]
+            user32.PostMessageW(self.hwnd, WM_CLOSE, 0, 0)
             self._thread.join(5)
 
     def _end(self) -> None:
@@ -123,6 +131,15 @@ class SessionEndWatcher:
             wintypes.LPVOID,
         ]
         user32.CreateWindowExW.restype = wintypes.HWND
+        # 64-bit handles: without argtypes ctypes passes them as 32-bit ints
+        user32.UnregisterClassW.argtypes = [wintypes.LPCWSTR, wintypes.HINSTANCE]
+        user32.GetMessageW.argtypes = [
+            ctypes.POINTER(wintypes.MSG),
+            wintypes.HWND,
+            wintypes.UINT,
+            wintypes.UINT,
+        ]
+        kernel32.GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
         kernel32.GetModuleHandleW.restype = wintypes.HMODULE
 
         def procedure(hwnd, message, wparam, lparam):

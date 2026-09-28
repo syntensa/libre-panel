@@ -70,6 +70,17 @@ def test_protections(server):
     assert request(server, "POST", "/api/themes/..%2Fx", {"theme": theme_dict()})[0] == 400
 
 
+def test_refused_requests_get_their_answer(server):
+    """A request refused before its body is read must still get the answer, not a
+    reset connection (Windows resets a socket closed with unread data)."""
+    port = server
+    body = {"theme": "x" * 1_900_000}
+    for _ in range(10):
+        no_header = request(port, "POST", "/api/render", body, headers={"X-Libre-Panel": ""})
+        assert no_header[0] == 403
+        assert request(port, "POST", "/api/nothing", body)[0] == 404
+
+
 def test_save_upload_and_adapt(server, isolated_home):
     status, data = request(
         server, "POST", "/api/themes/mine", {"theme": theme_dict(), "source": "libre-default"}
