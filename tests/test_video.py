@@ -513,7 +513,12 @@ def test_device_changes_open_the_panel_again():
 
 
 def test_a_mode_sets_the_stream_rate(monkeypatch):
-    """Game mode at 30 fps while the video runs at 50 (SPUR II's game mode)."""
+    """A mode's fps replaces the display's 50 (SPUR II runs slower in game mode).
+
+    10 fps, not a realistic 25-30: virtual macOS runners coalesce short sleeps,
+    so "50" may come out near 30 there, while 10 is far from both 50 and
+    config.fps = 5 on any machine.
+    """
     from libre_panel.config import ModeConfig
     from libre_panel.plugins import PluginHost
 
@@ -526,7 +531,7 @@ def test_a_mode_sets_the_stream_rate(monkeypatch):
         theme="slate",
         fps=5,
         sensors=SensorsConfig(providers=["demo"]),
-        modes={"game": ModeConfig(fps=25)},
+        modes={"game": ModeConfig(fps=10)},
     )
     stop = threading.Event()
     thread = threading.Thread(target=app.run, args=(config,), kwargs={"stop": stop, "host": host})
@@ -543,10 +548,10 @@ def test_a_mode_sets_the_stream_rate(monkeypatch):
         normal = rate(1.0)
         host.set_mode("game")
         time.sleep(0.2)
-        game = rate(1.0)
+        game = rate(1.5)
     finally:
         stop.set()
         thread.join(10)
         host.close()
-    assert game < normal * 0.7, (normal, game)  # 25 against 50
-    assert 20 < game < 28, game
+    assert 8 < game < 12, (normal, game)
+    assert game < normal * 0.6, (normal, game)
