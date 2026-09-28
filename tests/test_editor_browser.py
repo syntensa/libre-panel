@@ -161,6 +161,40 @@ def test_plugin_screen_and_widget_in_the_editor(drawing_plugin, page):
 
 
 @pytest.fixture
+def toast_plugin(plugin_folder):
+    from test_plugins import TOAST_PARTS, TOAST_STYLE
+
+    return plugin_folder(TOAST_STYLE, TOAST_PARTS)
+
+
+def test_toast_settings_in_the_editor(toast_plugin, page, isolated_home):
+    """Theme → Messages: position, time, hidden kinds and a plugin's style with its options."""
+    messages = page.locator("#props")
+    messages.locator("label.field", has_text="position").locator("select").select_option(
+        "bottom-left"
+    )
+    messages.locator("label.field", has_text="hidden kinds").locator("input").fill("music, volume")
+    messages.locator("label.field", has_text="style").locator("select").select_option("demo.band")
+    height = messages.locator("label.field", has_text="height").locator("input")
+    height.fill("55")
+    height.press("Tab")
+    toast = js(page, "state.theme.toast")
+    assert toast == {
+        "anchor": "bottom-left",
+        "off": ["music", "volume"],
+        "style": "demo.band",
+        "options": {"height": 55},
+    }
+    page.click("#btn-save")  # built-in theme: asks for a new name ("my-test")
+    page.wait_for_function("document.querySelector('#status').textContent.includes('my-test')")
+    from libre_panel.theme.model import load_theme
+
+    saved = load_theme(isolated_home / "themes" / "my-test")
+    assert saved.toast["style"] == "demo.band" and saved.toast["options"] == {"height": 55}
+    assert saved.toast_anchor == "bottom-left" and saved.toast["off"] == ["music", "volume"]
+
+
+@pytest.fixture
 def page_plugin(plugin_folder):
     from test_plugins import PAGE, PAGE_FILES, PAGE_PARTS
 

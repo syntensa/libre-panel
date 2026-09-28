@@ -17,6 +17,7 @@ from libre_panel import i18n
 from libre_panel.config import Config, ConfigError, load_config
 from libre_panel.devices.base import DeviceError, Display, FrameError, create_display
 from libre_panel.devices.models import find_model
+from libre_panel.plugins.render import RenderContext
 from libre_panel.render.overlays import ToastLayer, transition
 from libre_panel.render.renderer import Renderer, changed_region
 from libre_panel.sensors.base import SensorHub, SensorProvider, create_provider
@@ -236,6 +237,24 @@ class _Pacer:
             self.reanchored += 1
 
 
+def _blend(
+    blend: tuple[Any, Image.Image, float], frame: Image.Image, now: float
+) -> tuple[Image.Image, tuple[Any, Image.Image, float] | None]:
+    """The frame a transition shows now, and the transition if it goes on."""
+    kind, old, began = blend
+    progress = (now - began) / kind.duration if kind.duration else 1.0
+    if progress >= 1 or old.size != frame.size:
+        return frame, None
+    try:
+        out = kind.frame(old, frame, progress)
+        if out.size != frame.size:
+            raise ValueError(f"drew {out.size[0]}x{out.size[1]}, not {frame.width}x{frame.height}")
+    except Exception:  # a broken transition must not blank the panel
+        log.exception("transition %r failed", getattr(kind, "name", kind))
+        return frame, None
+    return out if out.mode == frame.mode else out.convert(frame.mode), blend
+
+
 def _same_device(a, b) -> bool:
     """Brightness changes on the open panel; anything else needs it opened again."""
     return replace(a, brightness=0) == replace(b, brightness=0)
@@ -283,8 +302,9 @@ def run(
     known = {config.path: config.stamp} if config.path and config.stamp else None
     watcher = _Watcher(config.path, _theme_file(theme), known=known)
     link = _Link(display, config.device.brightness, status)
-    toasts = ToastLayer(theme, theme.toast_anchor)
+    toasts = ToastLayer(renderer)
     blend: tuple[Any, Image.Image, float] | None = None  # a transition under way
+    switches = host.switches if host is not None else 0  # mode changes with a transition
     last_frame: Image.Image | None = None
     pacer = _Pacer()
     previous = None
@@ -299,9 +319,10 @@ def run(
             return
         while not stop.is_set():
             started = time.monotonic()
-            changed = watcher.changed()
+            # While a transition plays, switches wait: they must not cut it short.
+            changed = watcher.changed() if blend is None else False
             wanted = _theme_name(config, host)
-            if changed or (wanted != shown and wanted != refused):
+            if blend is None and (changed or (wanted != shown and wanted != refused)):
                 try:
                     fresh = load_config(config.path) if changed and config.path else config
                     wanted = _theme_name(fresh, host)
@@ -327,18 +348,24 @@ def run(
                     size, previous, next_sample = target_size(config, theme), None, 0.0
                     known = {config.path: config.stamp} if config.path and config.stamp else None
                     watcher = _Watcher(config.path, _theme_file(theme), known=known)
-                    toasts.set_theme(theme, theme.toast_anchor)
+                    toasts.set_renderer(renderer)
                     if wanted != shown:
-                        chosen = host.transition if host is not None and host.transition else None
-                        kind = transition(chosen or config.transition)
+                        chosen = host.take_transition() if host is not None else None
+                        kind = transition(chosen or config.transition, RenderContext(renderer))
                         if kind is not None and last_frame is not None:
                             blend = (kind, last_frame, started)
                         if host is not None:
+                            switches = host.switches  # this was the switch
                             host.emit("theme-changed", theme=wanted)
                     shown, refused, status.theme = wanted, None, wanted
                     log.info("showing theme %r", shown)
                     if changed and on_config is not None:
                         on_config(config)
+            if host is not None and host.switches != switches and blend is None:
+                switches = host.switches  # a mode change that keeps the theme, with a transition
+                kind = transition(host.take_transition(), RenderContext(renderer))
+                if kind is not None and last_frame is not None:
+                    blend = (kind, last_frame, started)
             status.mode = host.mode if host is not None else None
             if host is not None:
                 toasts.add(host.take_toasts())
@@ -361,14 +388,9 @@ def run(
                 frame, _ = renderer.render(snapshot, started)
                 frame = fit_frame(frame, size, theme.background_color)
                 if blend is not None:
-                    kind, old, began = blend
-                    progress = (started - began) / kind.duration if kind.duration else 1.0
-                    if progress >= 1 or old.size != frame.size:
-                        blend = None
-                    else:
-                        frame = kind.frame(old, frame, progress)
+                    frame, blend = _blend(blend, frame, started)
                 last_frame = frame
-                frame = toasts.apply(frame, started)
+                frame = toasts.apply(frame, started, hold=blend is not None)
                 if streaming:
                     link.show(frame, None, started)
                     previous = None
@@ -392,5 +414,6 @@ def run(
             stop.wait(max(0.0, interval - (time.monotonic() - started)))
     finally:
         display.close()
+        toasts.close()
         renderer.close()
         hub.close()

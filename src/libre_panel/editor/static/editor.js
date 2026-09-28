@@ -1157,7 +1157,55 @@ function buildThemeProps(form) {
     el("h2", { class: "section-title", text: t("Timing") }),
     field(t("sensor refresh (ms)"), numberInput(theme.refresh_ms, set("refresh", (v) => (theme.refresh_ms = Math.max(100, v || 1000))))),
     field(t("smoothing (ms)"), numberInput(theme.animation.smoothing_ms, set("smooth", (v) => (theme.animation.smoothing_ms = Math.max(0, Math.min(5000, v ?? 0))))), t("how long bars and rings take to glide to a new value; 0 = jump")),
+    ...buildToastFields(),
   );
+}
+
+// Messages from services (toasts): where, how long, which kinds not, and their look.
+function buildToastFields() {
+  const toast = (state.theme.toast = state.theme.toast || {});
+  const set = (key, apply) => (value) => {
+    commit(`toast:${key}`);
+    apply(value);
+  };
+  const styles = state.specs.toasts || {};
+  const current = toast.style || "";
+  const choices = [el("option", { value: "", text: t("card (built in)"), selected: !current })];
+  for (const [name, info] of Object.entries(styles)) choices.push(el("option", { value: name, text: info.label, selected: name === current }));
+  if (current && !styles[current]) choices.push(el("option", { value: current, text: t("{name} (not installed)", { name: current }), selected: true }));
+  const style = el("select", {
+    onchange: (event) => {
+      commit("toast:style");
+      const name = event.target.value;
+      if (name) {
+        const spec = styles[name]?.options || {};
+        toast.style = name;
+        toast.options = Object.fromEntries(Object.entries(spec).map(([k, [, d]]) => [k, clone(d)]));
+      } else {
+        delete toast.style;
+        delete toast.options;
+      }
+      buildProps();
+    },
+  }, ...choices);
+  const anchors = `enum:${(state.specs.toast_anchors || ["top-right"]).join("|")}`;
+  const kinds = el("input", {
+    type: "text",
+    value: (toast.off || []).join(", "),
+    oninput: (event) => set("off", (v) => (toast.off = v))(event.target.value.split(",").map((k) => k.trim()).filter(Boolean)),
+  });
+  const fields = [
+    el("h2", { class: "section-title", text: t("Messages") }),
+    field(t("position"), controlFor("anchor", anchors, toast.anchor || "top-right", set("anchor", (v) => (toast.anchor = v))), t("where messages from services appear")),
+    field(t("seconds shown"), numberInput(toast.seconds ?? 4, set("seconds", (v) => (toast.seconds = Math.max(0.5, Math.min(60, v || 4)))), { step: "0.5", min: 0.5, max: 60 })),
+    field(t("hidden kinds"), kinds, t("kinds of messages this theme does not show, e.g. music")),
+    field(t("style"), style, t("how messages look; plugins can bring more")),
+  ];
+  for (const [key, [kind, fallback]] of Object.entries(styles[current]?.options || {})) {
+    const value = toast.options?.[key] ?? fallback;
+    fields.push(field(fieldLabel(key), controlFor(key, kind, value, set(key, (v) => (toast.options = { ...toast.options, [key]: v })))));
+  }
+  return fields;
 }
 
 // A screen from a plugin draws the whole frame under the widgets.

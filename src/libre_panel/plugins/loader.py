@@ -36,6 +36,7 @@ GROUPS = {
     "screens": "libre_panel.screens",
     "widgets": "libre_panel.widgets",
     "transitions": "libre_panel.transitions",
+    "toasts": "libre_panel.toasts",
     "editor_pages": "libre_panel.editor_pages",
 }
 
@@ -95,10 +96,11 @@ class Registry:
 def _base_class(kind: str) -> type:
     from libre_panel.plugins.host import Service
     from libre_panel.plugins.pages import EditorPage
-    from libre_panel.plugins.render import Screen, Transition, WidgetType
+    from libre_panel.plugins.render import Screen, ToastStyle, Transition, WidgetType
 
     bases = {"services": Service, "screens": Screen, "widgets": WidgetType}
-    return {**bases, "transitions": Transition, "editor_pages": EditorPage}[kind]
+    drawn = {"transitions": Transition, "toasts": ToastStyle}
+    return {**bases, **drawn, "editor_pages": EditorPage}[kind]
 
 
 def _load(found: Found) -> Any:
@@ -118,7 +120,7 @@ def _load(found: Found) -> Any:
             f"{found.target} is written for plugin API {api}; "
             f"this Libre Panel has API {API_VERSION}"
         )
-    fields = {"widgets": "spec", "screens": "options"}.get(found.kind)
+    fields = {"widgets": "spec", "screens": "options", "toasts": "options"}.get(found.kind)
     if fields:
         from libre_panel.theme.model import valid_kind
 

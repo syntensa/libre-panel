@@ -9,12 +9,13 @@ service is guarded: a failing service is logged and the panel keeps going.
 
 from __future__ import annotations
 
+import itertools
 import logging
 import queue
 import threading
 from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -53,12 +54,30 @@ def apply_options(schema: dict[str, tuple[str, Any]], given: dict[str, Any], whe
     return result
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class Toast:
+    """A short message on the panel (``ServiceHost.notify``).
+
+    ``kind`` names what it is about (``"music"``, ``"volume"``, ...): a theme
+    can switch kinds off and a screen can leave out those it shows anyway.
+    A higher ``rank`` replaces a lower one on the panel; the others wait.
+    ``payload`` carries what a toast style draws besides the text (e.g.
+    ``{"image": cover, "progress": 0.4, "color": "#ff0000"}``). ``seconds``
+    None means the theme's hold time.
+    """
+
     text: str
     icon: str | None = None
     level: str = "info"  # info | warning | error
-    seconds: float = 4.0
+    seconds: float | None = None
+    kind: str = ""
+    rank: int = 0
+    payload: dict[str, Any] = field(default_factory=dict)
+    service: str = ""  # who sent it
+
+
+TransitionSpec = str | tuple[str, dict[str, Any]] | None
+"""A transition: a name, (name, parameters for it) or None for config.toml's."""
 
 
 class Service:
@@ -115,27 +134,46 @@ class ServiceHost:
         """An image for screens and widgets (e.g. ``media.cover``); None removes it."""
         self._hub.publish_image(key, image, owner=self.name)
 
-    def show_theme(self, name: str, transition: str | None = None) -> None:
+    def show_theme(self, name: str, transition: TransitionSpec = None, priority: int = 0) -> None:
         """Show another theme until :meth:`restore_theme` (config.toml is not changed).
-        ``transition``: ``cut``, ``fade``, ``slide`` or one from a plugin; the
-        default is ``transition`` in config.toml."""
-        self._hub.request_theme(name, by=self.name, transition=transition)
 
-    def restore_theme(self, transition: str | None = None) -> None:
+        ``transition``: ``"cut"``, ``"fade"``, ``"slide"`` or one from a plugin,
+        or ``(name, {parameters})`` for a plugin transition that takes some;
+        the default is ``transition`` in config.toml. When several services ask
+        for a theme, the highest ``priority`` wins, and among equals the last
+        to ask. A service's theme wins over a mode's.
+        """
+        self._hub.request_theme(name, by=self.name, transition=transition, priority=priority)
+
+    def restore_theme(self, transition: TransitionSpec = None) -> None:
+        """Take back this service's :meth:`show_theme` (another service's may show then)."""
         self._hub.request_theme(None, by=self.name, transition=transition)
 
     @property
     def mode(self) -> str | None:
         return self._hub.mode
 
-    def set_mode(self, name: str | None) -> None:
+    def set_mode(self, name: str | None, transition: TransitionSpec = None) -> None:
         """Switch to a mode from ``[modes.<name>]`` (frame rate, theme); None ends it.
+        ``transition`` plays on the switch, also when the theme stays the same.
         A mode (and a theme) a service set ends when the service stops."""
-        self._hub.set_mode(name, by=self.name)
+        self._hub.set_mode(name, by=self.name, transition=transition)
 
-    def notify(self, text: str, icon: str | None = None, level: str = "info", seconds=4.0):
-        """A short message on the panel."""
-        self._hub.notify(Toast(text, icon, level, float(seconds)))
+    def notify(
+        self,
+        text: str,
+        icon: str | None = None,
+        level: str = "info",
+        seconds: float | None = None,
+        kind: str = "",
+        rank: int = 0,
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        """A short message on the panel (see :class:`Toast`). It waits while a
+        transition plays."""
+        hold = None if seconds is None else float(seconds)
+        toast = Toast(text, icon, level, hold, kind, int(rank), dict(payload or {}), self.name)
+        self._hub.notify(toast)
 
     def on(self, event: str, callback: Callable[..., None]) -> None:
         """Hear about ``panel-connected``, ``panel-lost``, ``theme-changed``,
@@ -165,8 +203,14 @@ class PluginHost:
         self._published: dict[str, tuple[Reading, str | None]] = {}
         self._images: dict[str, tuple[Image.Image, str | None]] = {}
         self.latest: Snapshot | None = None
-        self._theme: tuple[str, str] | None = None  # (theme, service)
-        self.transition: str | None = None  # for the next theme change, if a service chose one
+        # theme requests by service: (theme, priority, order of asking)
+        self._themes: dict[str, tuple[str, int, int]] = {}
+        self._asked = itertools.count()
+        # the transition for the next switch, and a count of switches the main
+        # loop has not seen yet (a mode change with a transition is one even
+        # when the theme stays)
+        self._transition: TransitionSpec = None
+        self.switches = 0
         self._mode: tuple[str, str | None] | None = None  # (mode, service)
         self._toasts: deque[Toast] = deque(maxlen=self.MAX_TOASTS)
         self._listeners: dict[str, list[tuple[str | None, Callable[..., None]]]] = {}
@@ -190,19 +234,37 @@ class PluginHost:
             else:
                 self._images[key] = (image.copy(), owner)
 
-    def request_theme(self, name: str | None, by: str, transition: str | None = None) -> None:
+    def request_theme(
+        self, name: str | None, by: str, transition: TransitionSpec = None, priority: int = 0
+    ) -> None:
         with self._lock:
-            self._theme = (name, by) if name else None
-            self.transition = transition
+            before = self._top_theme()
+            if name:
+                self._themes[by] = (name, int(priority), next(self._asked))
+            else:
+                self._themes.pop(by, None)
+            if self._top_theme() != before:  # a request that shows nothing new plays nothing
+                self._transition = transition
         log.info("service %s: %s", by, f"shows theme {name!r}" if name else "restores the theme")
 
-    def set_mode(self, name: str | None, by: str | None = None) -> None:
+    def set_mode(
+        self, name: str | None, by: str | None = None, transition: TransitionSpec = None
+    ) -> None:
         with self._lock:
             if name == self.mode:
                 return
             self._mode = (name, by) if name else None
+            if transition is not None:  # else a theme request's own transition stays
+                self._transition = transition
+                self.switches += 1
         log.info("mode: %s", name or "normal")
         self.emit("mode-changed", mode=name)
+
+    def take_transition(self) -> TransitionSpec:
+        """The transition a service chose for the switch under way (once)."""
+        with self._lock:
+            chosen, self._transition = self._transition, None
+        return chosen
 
     def forget(self, owner: str) -> None:
         """A service stopped: its readings, images, listeners, theme and mode go too."""
@@ -211,8 +273,7 @@ class PluginHost:
             self._images = {k: v for k, v in self._images.items() if v[1] != owner}
             for event, listeners in self._listeners.items():
                 self._listeners[event] = [(o, cb) for o, cb in listeners if o != owner]
-            if self._theme is not None and self._theme[1] == owner:
-                self._theme = None
+            self._themes.pop(owner, None)
             mode_ended = self._mode is not None and self._mode[1] == owner
             if mode_ended:
                 self._mode = None
@@ -250,9 +311,13 @@ class PluginHost:
 
     @property
     def theme(self) -> str | None:
-        """The theme a service asked for, if any."""
-        request = self._theme
-        return request[0] if request else None
+        """The theme services asked for, if any: the highest priority, then the latest."""
+        with self._lock:
+            return self._top_theme()
+
+    def _top_theme(self) -> str | None:
+        requests = self._themes.values()
+        return max(requests, key=lambda r: (r[1], r[2]))[0] if requests else None
 
     @property
     def mode(self) -> str | None:

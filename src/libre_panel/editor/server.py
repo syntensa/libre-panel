@@ -40,6 +40,7 @@ from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import (
     COMMON_FIELDS,
     EFFECT_FIELDS,
+    TOAST_ANCHORS,
     WIDGET_SPECS,
     ThemeError,
     find_theme,
@@ -110,7 +111,19 @@ def _plugin_specs() -> dict[str, Any]:
         if cls is not None:
             options = {k: list(v) for k, v in cls.options.items()}
             screens[name] = {"label": label_for(cls), "options": options}
-    return {"widgets": widgets, "widget_labels": labels, "presets": presets, "screens": screens}
+    toasts = {}
+    for name in installed.names("toasts"):
+        cls = installed.get("toasts", name)
+        if cls is not None:
+            options = {k: list(v) for k, v in cls.options.items()}
+            toasts[name] = {"label": label_for(cls), "options": options}
+    return {
+        "widgets": widgets,
+        "widget_labels": labels,
+        "presets": presets,
+        "screens": screens,
+        "toasts": toasts,
+    }
 
 
 class EditorState:
@@ -342,6 +355,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             "widgets": widgets,
             "widget_labels": plugins["widget_labels"],
             "screens": plugins["screens"],
+            "toasts": plugins["toasts"],
+            "toast_anchors": list(TOAST_ANCHORS),
             "common": {k: list(v) for k, v in COMMON_FIELDS.items()},
             "effect_fields": list(EFFECT_FIELDS),
             "models": models,

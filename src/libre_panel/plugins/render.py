@@ -1,4 +1,4 @@
-"""Screens (B1) and widget types (B2): plugin code that draws.
+"""Screens, widget types, transitions and toast styles: plugin code that draws.
 
 Themes stay data: a theme names a screen or a widget type, the code comes
 from an installed plugin. Options and widget fields are declared with the
@@ -102,6 +102,7 @@ class Screen:
     label: dict[str, str] = {}
     options: dict[str, tuple[str, Any]] = {}
     moving = False  # True while it animates (the PNG path then draws at full fps)
+    suppresses: frozenset[str] = frozenset()  # toast kinds it shows anyway, e.g. {"music"}
 
     def __init__(self, context: RenderContext, options: dict[str, Any]) -> None:
         self.context = context
@@ -142,18 +143,57 @@ class WidgetType:
 
 
 class Transition:
-    """A way to go from one theme to the next (built in: cut, fade, slide).
+    """A way from one theme (or mode) to the next (built in: cut, fade, slide).
 
-    Set ``name``, ``api = 1`` and ``duration`` in seconds. ``frame`` gets the
-    last frame of the old theme, the current frame of the new one (same size,
-    RGB) and ``t`` from 0 to 1, and returns the frame to show.
+    Set ``name``, ``api = 1`` and ``duration`` in seconds. A new instance is
+    made for every switch, with the new theme's ``context`` (palette, fonts,
+    size) and the ``params`` the service passed (``show_theme(name,
+    transition=("myplugin.entrance", {...}))``, ``{}`` otherwise); set
+    ``self.duration`` in ``__init__`` if it depends on them. ``frame`` gets
+    the last frame of the old theme, the current frame of the new one (same
+    size, RGB) and ``t`` from 0 to 1, and returns the frame to show. While it
+    plays, further switches and new toasts wait.
     """
 
     name = ""
     duration = 0.4
 
+    def __init__(
+        self, context: RenderContext | None = None, params: dict[str, Any] | None = None
+    ) -> None:
+        self.context = context
+        self.params = dict(params or {})
+
     def frame(self, old: Image.Image, new: Image.Image, t: float) -> Image.Image:
         raise NotImplementedError
+
+
+class ToastStyle:
+    """How toasts look; a theme picks one with ``"toast": {"style": name}``.
+
+    Set ``name``, ``api = 1``, optionally ``label``, ``options`` ({key: (field
+    kind, default)}, set in the theme's ``toast.options``) and ``leave_s``,
+    the time a toast takes to leave after its hold time. ``draw`` puts one
+    toast (:class:`~libre_panel.plugins.Toast`: text, icon, level, kind,
+    payload, ...) on the finished frame and returns it; ``age`` runs from 0,
+    when it arrives, to ``toast.seconds + leave_s``. It runs at up to 50 fps:
+    keep what does not change in ``self``.
+    """
+
+    name = ""
+    label: dict[str, str] = {}
+    options: dict[str, tuple[str, Any]] = {}
+    leave_s = 0.25
+
+    def __init__(self, context: RenderContext, options: dict[str, Any]) -> None:
+        self.context = context
+        self.options = options
+
+    def draw(self, frame: Image.Image, toast: Any, age: float) -> Image.Image:
+        raise NotImplementedError
+
+    def close(self) -> None:
+        pass
 
 
 def label_for(cls: type) -> str:

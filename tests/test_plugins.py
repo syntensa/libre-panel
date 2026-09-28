@@ -10,7 +10,7 @@ import pytest
 from libre_panel import app, cli
 from libre_panel.config import Config, ModeConfig, SensorsConfig, ServicesConfig, parse_config
 from libre_panel.devices.base import Display
-from libre_panel.plugins import PluginHost, ServiceManager, discover
+from libre_panel.plugins import PluginHost, ServiceManager, Toast, discover
 from libre_panel.plugins.loader import API_VERSION, reset_registry
 
 _names = itertools.count()
@@ -270,6 +270,7 @@ class Tint(Screen):
     api = 1
     label = {"en": "Tint", "de": "Tönung"}
     options = {"color": ("color", "#203040"), "animate": ("bool", False)}
+    suppresses = {"music"}  # it shows what plays itself
 
     def __init__(self, context, options):
         super().__init__(context, options)
@@ -495,10 +496,11 @@ def test_toasts_show_one_after_the_other():
 
     from libre_panel.plugins import Toast
     from libre_panel.render.overlays import ToastLayer
+    from libre_panel.render.renderer import Renderer
     from libre_panel.theme.model import find_theme, load_theme
 
     theme = load_theme(find_theme("spur-ii"))  # the 9.2": 18 px hidden at the top
-    layer = ToastLayer(theme)
+    layer = ToastLayer(Renderer(theme))
     frame = Image.new("RGB", (1920, 480), "black")
     layer.add([Toast("first", "gpu", "info", 1.0), Toast("second", None, "error", 1.0)])
     assert layer.apply(frame, 0.0).tobytes() == frame.tobytes()  # fades in from nothing
@@ -514,16 +516,131 @@ def test_toasts_show_one_after_the_other():
     assert layer.apply(frame, 2.9).tobytes() == frame.tobytes()
 
 
-def test_toast_anchor_in_the_theme():
+def test_toast_settings_in_the_theme():
     from libre_panel.theme.model import ThemeError, parse_theme
 
     data = theme_data()
-    data["toast"] = {"anchor": "bottom-left"}
+    assert "toast" not in parse_theme(data).to_dict()  # all defaults: nothing written
+    data["toast"] = {"anchor": "bottom-left", "seconds": 6, "off": ["music"]}
     theme = parse_theme(data)
-    assert theme.toast_anchor == "bottom-left" and theme.to_dict()["toast"] == data["toast"]
-    data["toast"] = {"anchor": "middle"}
-    with pytest.raises(ThemeError, match="toast.anchor"):
-        parse_theme(data)
+    assert theme.toast_anchor == "bottom-left" and theme.toast["off"] == ["music"]
+    assert theme.to_dict()["toast"] == data["toast"]
+    data["toast"] = {"style": "nobody.band", "options": {"size": 3}}
+    theme = parse_theme(data)  # a style that is not installed: kept, and the card is drawn
+    assert theme.to_dict()["toast"] == data["toast"] and "not installed" in theme.warnings[0]
+    for bad, message in (
+        ({"anchor": "middle"}, "toast.anchor"),
+        ({"seconds": 0}, "toast.seconds"),
+        ({"off": "music"}, "toast.off"),
+    ):
+        data["toast"] = bad
+        with pytest.raises(ThemeError, match=message):
+            parse_theme(data)
+
+
+def toast_layer(**toast):
+    from libre_panel.render.overlays import ToastLayer
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.theme.model import parse_theme
+
+    data = theme_data()
+    data["toast"] = toast
+    return ToastLayer(Renderer(parse_theme(data)))
+
+
+def test_toasts_by_rank_and_kind():
+    from PIL import Image
+
+    from libre_panel.plugins import Toast
+
+    frame = Image.new("RGB", (320, 240), "black")
+    layer = toast_layer(seconds=2, off=["music"])
+    layer.add([Toast("low"), Toast("song", kind="music"), Toast("also low")])
+    layer.apply(frame, 0.0)
+    assert layer.current[0].text == "low" and layer.current[0].seconds == 2  # the theme's time
+    layer.add([Toast("hot!", level="warning", rank=5)])
+    layer.apply(frame, 0.5)
+    assert layer.current[0].text == "hot!"  # a higher rank takes over at once
+    layer.apply(frame, 2.8)  # hot! is gone; the music toast is switched off in this theme
+    assert layer.current[0].text == "also low" and not layer.queue
+    # while a transition plays no new toast starts; the one on show stays
+    layer.add([Toast("later", seconds=1)])
+    layer.apply(frame, 5.0, hold=True)
+    assert layer.current[0].text == "also low"  # until 2.8 + 2 + 0.25 s
+    layer.apply(frame, 5.1, hold=True)
+    assert layer.current is None and layer.queue
+    assert layer.apply(frame, 5.2, hold=True) is frame
+    layer.apply(frame, 5.3)
+    assert layer.current[0].text == "later"
+
+
+def test_a_screen_leaves_out_the_toasts_it_shows_anyway(plugin_folder):
+    from PIL import Image
+
+    from libre_panel.plugins import Toast
+    from libre_panel.render.overlays import ToastLayer
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.theme.model import parse_theme
+
+    plugin_folder(DRAWING, DRAWING_PARTS)
+    data = theme_data()
+    data["screen"] = {"name": "tint"}
+    layer = ToastLayer(Renderer(parse_theme(data)))
+    assert layer.suppressed == {"music"}
+    layer.add([Toast("song", kind="music"), Toast("mail", kind="mail")])
+    layer.apply(Image.new("RGB", (320, 240)), 0.0)
+    assert layer.current[0].text == "mail"
+
+
+TOAST_STYLE = """
+from PIL import ImageDraw
+
+from libre_panel.plugins import ToastStyle
+
+
+class Band(ToastStyle):
+    name = "demo.band"
+    api = 1
+    options = {"height": ("int", 40)}
+    leave_s = 0.1
+
+    def draw(self, frame, toast, age):
+        out = frame.copy()
+        color = toast.payload.get("color") or self.context.color("@accent")
+        height = self.options["height"]
+        ImageDraw.Draw(out).rectangle([0, 0, out.width - 1, height - 1], fill=color[:3])
+        return out
+
+
+class Broken(ToastStyle):
+    name = "demo.broken"
+    api = 1
+
+    def draw(self, frame, toast, age):
+        raise RuntimeError("no cover art")
+"""
+
+TOAST_PARTS = {"libre_panel.toasts": {"demo.band": "Band", "demo.broken": "Broken"}}
+
+
+def test_toast_styles_from_plugins(plugin_folder):
+    from PIL import Image
+
+    from libre_panel.plugins import Toast
+
+    plugin_folder(TOAST_STYLE, TOAST_PARTS)
+    frame = Image.new("RGB", (320, 240), "black")
+    layer = toast_layer(style="demo.band", options={"height": 30})
+    layer.add([Toast("now playing", kind="music", payload={"color": (255, 0, 0, 255)})])
+    shown = layer.apply(frame, 0.0)
+    assert shown.getpixel((5, 29)) == (255, 0, 0) and shown.getpixel((5, 30)) == (0, 0, 0)
+    layer.apply(frame, 4.05)
+    assert layer.current is not None  # the style's own leave_s: 4 + 0.1 s
+    layer.apply(frame, 4.2)
+    assert layer.current is None
+    broken = toast_layer(style="demo.broken")
+    broken.add([Toast("x")])
+    assert broken.apply(frame, 0.0) is frame  # a failing style leaves the frame as it is
 
 
 def test_transitions():
@@ -557,11 +674,64 @@ class Wipe(Transition):
 """
 
 
+PLUGIN_ENTRANCE = """
+from PIL import Image
+
+from libre_panel.plugins import Transition
+
+
+class Entrance(Transition):
+    name = "demo.entrance"
+    api = 1
+
+    def __init__(self, context=None, params=None):
+        super().__init__(context, params)
+        self.duration = self.params.get("seconds", 0.5)
+
+    def frame(self, old, new, t):
+        color = self.params.get("color") or self.context.color("@accent")[:3]
+        return Image.new("RGB", new.size, tuple(color))
+"""
+
+
 def test_plugin_transition(plugin_folder):
+    from PIL import Image
+
+    from libre_panel.plugins import RenderContext
     from libre_panel.render.overlays import transition
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.theme.model import parse_theme
 
     plugin_folder(PLUGIN_TRANSITION, {"libre_panel.transitions": {"wipe": "Wipe"}})
     assert transition("wipe").duration == 0.3
+    plugin_folder(PLUGIN_ENTRANCE, {"libre_panel.transitions": {"demo.entrance": "Entrance"}})
+    data = theme_data()
+    data["palette"] = {"accent": "#00ff00"}
+    context = RenderContext(Renderer(parse_theme(data)))
+    entrance = transition(("demo.entrance", {"seconds": 2.5, "game": "Doom"}), context)
+    assert entrance.duration == 2.5 and entrance.params["game"] == "Doom"
+    frame = Image.new("RGB", (4, 4))
+    assert entrance.frame(frame, frame, 0.5).getpixel((0, 0)) == (0, 255, 0)  # theme colours
+
+
+def test_theme_requests_by_priority():
+    host = PluginHost()
+    host.request_theme("a", by="autopilot", transition="slide")
+    assert host.theme == "a" and host.take_transition() == "slide"
+    assert host.take_transition() is None  # once
+    host.request_theme("report", by="game", priority=10)
+    host.request_theme("b", by="autopilot", transition="fade")  # below the report: nothing new
+    assert host.theme == "report" and host.take_transition() is None
+    host.request_theme("c", by="clock")  # same priority as the autopilot, asked later
+    host.request_theme(None, by="game", transition=("demo.entrance", {"x": 1}))
+    assert host.theme == "c" and host.take_transition() == ("demo.entrance", {"x": 1})
+    host.forget("clock")
+    assert host.theme == "b"
+    before = host.switches
+    host.set_mode("game", by="game", transition="demo.entrance")
+    assert host.switches == before + 1 and host.take_transition() == "demo.entrance"
+    host.set_mode(None, by="game")  # without a transition: not a switch of its own
+    assert host.switches == before + 1
 
 
 class Capture(Display):
@@ -596,6 +766,7 @@ def test_main_loop_shows_toasts_and_fades_between_themes(monkeypatch, isolated_h
     (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
 
     monkeypatch.setattr(app, "create_display", Capture)
+    Capture.frames = []  # not the last test's frames while the display is not open yet
     host = PluginHost()
     config = Config(theme="libre-default", fps=20, sensors=SensorsConfig(providers=["demo"]))
     status = app.RunStatus()
@@ -620,6 +791,66 @@ def test_main_loop_shows_toasts_and_fades_between_themes(monkeypatch, isolated_h
     brightness = [ImageStat.Stat(f.convert("L")).mean[0] for f in Capture.frames[count:]]
     assert brightness[-1] > 250  # white in the end
     assert any(60 < b < 200 for b in brightness)  # and a frame in between: it faded
+
+
+def test_a_transition_plays_to_the_end(plugin_folder, monkeypatch, isolated_home):
+    """A mode change plays its transition although the theme stays; a theme
+    switch and a toast that come meanwhile wait until it is over."""
+    import json
+
+    from libre_panel.theme.model import find_theme
+
+    plugin_folder(PLUGIN_ENTRANCE, {"libre_panel.transitions": {"demo.entrance": "Entrance"}})
+    data = json.loads((find_theme("libre-default") / "theme.json").read_text(encoding="utf-8"))
+    data.update(name="white", widgets=[], background={"color": "#ffffff"})
+    folder = isolated_home / "themes" / "white"
+    folder.mkdir(parents=True)
+    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+
+    monkeypatch.setattr(app, "create_display", Capture)
+    Capture.frames = []  # not the last test's frames while the display is not open yet
+    host = PluginHost()
+    config = Config(
+        theme="libre-default",
+        fps=20,
+        sensors=SensorsConfig(providers=["demo"]),
+        modes={"game": ModeConfig(fps=20)},
+        transition="cut",
+    )
+    status = app.RunStatus()
+    stop = threading.Event()
+    options = {"stop": stop, "status": status, "host": host}
+    thread = threading.Thread(target=app.run, args=(config,), kwargs=options)
+    thread.start()
+    magenta = (255, 0, 255)
+    seen = []  # (pure magenta?, theme) while the transition plays
+    try:
+        assert wait_for(lambda: len(Capture.frames) > 2)
+        entrance = ("demo.entrance", {"seconds": 1.0, "color": magenta})
+        host.set_mode("game", by="test", transition=entrance)
+        assert wait_for(lambda: Capture.frames[-1].getpixel((5, 5)) == magenta)
+        host.request_theme("white", by="test")
+        host.notify(Toast("GG", seconds=2))
+        end = time.monotonic() + 3
+        while time.monotonic() < end and status.theme != "white":
+            frame = Capture.frames[-1]
+            if frame.getpixel((5, 5)) == magenta:
+                seen.append((frame.getextrema() == ((255, 255), (0, 0), (255, 255)), status.theme))
+            time.sleep(0.02)
+        assert status.theme == "white" and status.mode == "game"
+        assert wait_for(lambda: _differs(Capture.frames[-1], _white(Capture.frames[-1])))
+    finally:
+        stop.set()
+        thread.join(10)
+        host.close()
+    assert len(seen) > 10  # about a second of it
+    assert all(pure and theme == "libre-default" for pure, theme in seen), seen[:5]
+
+
+def _white(frame):
+    from PIL import Image
+
+    return Image.new(frame.mode, frame.size, "white")
 
 
 def _differs(a, b):

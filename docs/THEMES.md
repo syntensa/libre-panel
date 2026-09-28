@@ -54,9 +54,13 @@ to write or review themes by hand.
   even when readings come once a second.
 - Widgets are drawn in list order: later ones are on top.
 - Unknown fields are ignored with a warning, so newer themes still load.
-- Optional: `"toast": {"anchor": "bottom-right"}` places messages from
-  services (`top-right` by default; also `top-left`, `bottom-left`, `top`,
-  `bottom`). They keep clear of the strip a panel's bezel hides.
+- Optional: `"toast"` sets how messages from services show (editor:
+  *Theme → Messages*): `"anchor"` places them (`top-right` by default; also
+  `top-left`, `bottom-right`, `bottom-left`, `top`, `bottom`; they keep
+  clear of the strip a panel's bezel hides), `"seconds"` is how long each
+  stays (4), `"off"` lists kinds the theme does not show (`["music"]`), and
+  `"style"` with `"options"` names a toast style from a plugin (the
+  built-in card otherwise).
 - Optional: `"screen": {"name": "...", "options": {...}}` lets an installed
   plugin draw the whole frame; the widgets are drawn on top. Widget types
   with a dot in the name (`"myplugin.ring"`) also come from plugins. A theme

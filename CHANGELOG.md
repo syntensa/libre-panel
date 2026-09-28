@@ -70,8 +70,9 @@ First preview of Libre Panel.
   or as a folder in the settings folder (for the downloads); `libre-panel
   plugins` shows what loads
 - Services: long-running plugins that publish readings and images, show
-  another theme for a while, switch modes, post messages and hear about
-  events; `[services]` in config.toml, applied while running
+  another theme for a while (with a priority when several ask), switch
+  modes, post messages and hear about events; `[services]` in config.toml,
+  applied while running
 - Modes (`[modes.<name>]`) with their own frame rate and theme, e.g. fewer
   frames while a game runs; tray and editor show the active mode
 - Screens: a theme can name a plugin screen that draws the whole frame in
@@ -79,8 +80,13 @@ First preview of Libre Panel.
 - Widget types from plugins: placed and edited in the editor like built-in
   widgets (fields, building blocks, effects), checked when a theme loads
 - Toasts: short messages from services on the panel, in the theme's colours,
-  one after the other; the theme picks the corner
-- Transitions between themes: fade (default), slide, cut, or from a plugin
+  one after the other; a higher rank takes over, and themes and screens
+  leave out kinds they do not want. The theme picks the corner, the hold
+  time and the style (the built-in card or a plugin's); the editor has it
+  under *Theme → Messages*
+- Transitions between themes and modes: fade (default), slide, cut, or from
+  a plugin, which can take parameters from the service and the theme's
+  colours; switches and toasts wait until a transition is over
 - Editor pages: a plugin's own page in the theme editor (under *Pages*),
   with its API and the editor's look (`/static/kit.js`)
 

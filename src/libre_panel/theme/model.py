@@ -178,13 +178,18 @@ class Theme:
     font: str = DEFAULT_FONT
     smoothing_ms: int = 400
     screen: dict[str, Any] | None = None  # {"name": ..., "options": {...}}: a plugin draws
-    toast_anchor: str = "top-right"  # where messages from services appear
+    # messages from services: where, how long, which kinds not, and a plugin style
+    toast: dict[str, Any] = field(default_factory=lambda: dict(TOAST_DEFAULTS))
     root: Path | None = None
     warnings: list[str] = field(default_factory=list)
 
     @property
     def orientation(self) -> str:
         return orientation_of(self.width, self.height)
+
+    @property
+    def toast_anchor(self) -> str:
+        return self.toast["anchor"]
 
     def to_dict(self) -> dict[str, Any]:
         data = {
@@ -208,8 +213,9 @@ class Theme:
         }
         if self.screen is not None:
             data["screen"] = deepcopy(self.screen)
-        if self.toast_anchor != "top-right":
-            data["toast"] = {"anchor": self.toast_anchor}
+        toast = {k: deepcopy(v) for k, v in self.toast.items() if v != TOAST_DEFAULTS[k]}
+        if toast:
+            data["toast"] = toast
         return data
 
 
@@ -398,14 +404,69 @@ def _missing_plugin_widget(
 TOAST_ANCHORS = ("top-right", "top-left", "bottom-right", "bottom-left", "top", "bottom")
 
 
-def _parse_toast(raw: Any) -> str:
-    """``"toast": {"anchor": "bottom-right"}``: where messages from services appear."""
+TOAST_DEFAULTS: dict[str, Any] = {
+    "anchor": "top-right",
+    "seconds": 4.0,
+    "off": [],
+    "style": "",
+    "options": {},
+}
+
+
+def _parse_toast(
+    raw: Any, palette: dict[str, str], root: Path | None, warnings: list[str]
+) -> dict[str, Any]:
+    """``"toast": {"anchor": "bottom-right", "seconds": 5, "off": ["music"],
+    "style": "myplugin.band", "options": {...}}``: messages from services."""
+    toast = deepcopy(TOAST_DEFAULTS)
     if raw is None:
-        return "top-right"
+        return toast
     if not isinstance(raw, dict):
         raise ThemeError("toast must be an object")
     anchors = "enum:" + "|".join(TOAST_ANCHORS)
-    return _coerce(anchors, raw.get("anchor", "top-right"), "toast.anchor")
+    toast["anchor"] = _coerce(anchors, raw.get("anchor", "top-right"), "toast.anchor")
+    seconds = _coerce("number", raw.get("seconds", 4.0), "toast.seconds")
+    if not 0.5 <= seconds <= 60:
+        raise ThemeError("toast.seconds: must be between 0.5 and 60")
+    toast["seconds"] = seconds
+    off = raw.get("off", [])
+    if not isinstance(off, list) or not all(isinstance(kind, str) for kind in off):
+        raise ThemeError('toast.off: expected a list of kinds, e.g. ["music"]')
+    toast["off"] = list(off)
+    toast["style"] = _coerce("string", raw.get("style", ""), "toast.style")
+    if toast["style"]:
+        given = raw.get("options", {}) or {}
+        toast["options"] = _plugin_options(
+            "toasts", toast["style"], given, "toast", palette, root, warnings
+        )
+    return toast
+
+
+def _plugin_options(
+    kind: str,
+    name: str,
+    given: Any,
+    where: str,
+    palette: dict[str, str],
+    root: Path | None,
+    warnings: list[str],
+) -> dict[str, Any]:
+    """A plugin's options with its defaults, checked against its schema."""
+    if not isinstance(given, dict):
+        raise ThemeError(f"{where}.options must be an object")
+    plugin = _plugin(kind, name)
+    if plugin is None:
+        warnings.append(f"{where} {name!r} needs a plugin that is not installed")
+        return deepcopy(given)
+    options = {
+        key: _coerce(kind_of, given.get(key, deepcopy(default)), f"{where}.options.{key}", palette)
+        for key, (kind_of, default) in plugin.options.items()
+    }
+    _check_paths(plugin.options, options, f"{where}.options", root)
+    warnings.extend(
+        f"{where}.options: ignoring unknown option {k!r}" for k in sorted(set(given) - set(options))
+    )
+    return options
 
 
 def _parse_screen(
@@ -420,20 +481,7 @@ def _parse_screen(
     if not name:
         raise ThemeError("screen.name: missing")
     given = raw.get("options", {}) or {}
-    if not isinstance(given, dict):
-        raise ThemeError("screen.options must be an object")
-    plugin = _plugin("screens", name)
-    if plugin is None:
-        warnings.append(f"screen {name!r} needs a plugin that is not installed")
-        return {"name": name, "options": deepcopy(given)}
-    options = {
-        key: _coerce(kind, given.get(key, deepcopy(default)), f"screen.options.{key}", palette)
-        for key, (kind, default) in plugin.options.items()
-    }
-    _check_paths(plugin.options, options, "screen.options", root)
-    warnings.extend(
-        f"screen.options: ignoring unknown option {k!r}" for k in sorted(set(given) - set(options))
-    )
+    options = _plugin_options("screens", name, given, "screen", palette, root, warnings)
     return {"name": name, "options": options}
 
 
@@ -527,7 +575,7 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         smoothing_ms=smoothing_ms,
         widgets=widgets,
         screen=_parse_screen(data.get("screen"), palette, root, warnings),
-        toast_anchor=_parse_toast(data.get("toast")),
+        toast=_parse_toast(data.get("toast"), palette, root, warnings),
         root=root,
         warnings=warnings,
     )

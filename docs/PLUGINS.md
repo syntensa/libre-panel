@@ -8,7 +8,8 @@ as a plugin: a Python package that registers parts of these kinds.
 | Service | `libre_panel.services` | a long-running helper: game mode, autopilot, a database |
 | Screen | `libre_panel.screens` | draws the whole frame in code; a theme selects it by name |
 | Widget type | `libre_panel.widgets` | a widget the editor can place, drawn by plugin code |
-| Transition | `libre_panel.transitions` | how the panel goes from one theme to the next |
+| Transition | `libre_panel.transitions` | how the panel goes from one theme (or mode) to the next |
+| Toast style | `libre_panel.toasts` | how messages from services look; a theme selects it by name |
 | Editor page | `libre_panel.editor_pages` | a page of the plugin's own in the theme editor |
 | Sensor source | `libre_panel.sensors` | readings (see [Architecture](ARCHITECTURE.md#plugins)) |
 | Display driver | `libre_panel.devices` | another kind of panel |
@@ -107,17 +108,20 @@ while Libre Panel runs.
 | `host.publish(key, value, unit="", label="")` | a reading, shown by themes like any sensor (graphs keep its history); `host.unpublish(key)` |
 | `host.publish_image(key, image)` | an image (PIL) for screens and widgets, e.g. `media.cover`; `None` removes it |
 | `host.snapshot()` | the readings and history the panel was last drawn from |
-| `host.show_theme(name, transition=None)` / `host.restore_theme(transition=None)` | show another theme for a while; `config.toml` stays as it is. `transition`: `cut`, `fade`, `slide` or a plugin's; default from `config.toml` |
-| `host.set_mode(name)` / `host.mode` | switch to a mode from `[modes.<name>]`; `None` ends it |
-| `host.notify(text, icon=None, level="info", seconds=4)` | a short message on the panel (see *Toasts*) |
+| `host.show_theme(name, transition=None, priority=0)` / `host.restore_theme(transition=None)` | show another theme for a while; `config.toml` stays as it is. `transition`: `cut`, `fade`, `slide`, a plugin's, or `(name, {parameters})`; default from `config.toml` |
+| `host.set_mode(name, transition=None)` / `host.mode` | switch to a mode from `[modes.<name>]`; `None` ends it. A transition plays also when the theme stays |
+| `host.notify(text, icon=None, level="info", seconds=None, kind="", rank=0, payload=None)` | a short message on the panel (see *Toasts*) |
 | `host.on(event, callback)` | `panel-connected`, `panel-lost`, `theme-changed` (`theme=`), `mode-changed` (`mode=`), `quit`; callbacks run in an event thread |
 | `host.data_dir` | `<settings>/plugins-data/<service>/` for the service's files |
 | `host.log` | a logger named after the service |
 
 All calls are thread-safe. Which theme is shown: one a service asked for,
-else the active mode's theme, else the one in `config.toml`. A theme that
-does not exist is refused once with a warning; the panel keeps the current
-one.
+else the active mode's theme, else the one in `config.toml`. When several
+services ask, the highest `priority` wins, and among equals the last to ask;
+`restore_theme` takes back only the caller's own request, so the one below
+shows again (a round report at priority 10 over an autopilot at 0). A theme
+that does not exist is refused once with a warning; the panel keeps the
+current one.
 
 When a service stops (Quit, or it was removed from `[services]`), what it
 left goes too: its readings and images disappear, a theme or mode it set
@@ -172,6 +176,8 @@ class Studio(Screen):
   `font(ref, size)`, `color(value)`, `fps`, `language`, `t(text)`,
   `supersample`/`downsample()` and `assets`, the plugin's own folder for
   pre-rendered files.
+- `suppresses = {"music"}` names toast kinds the screen shows anyway: those
+  toasts are left out while it is on.
 - `context.continuous` is true in video mode, where every frame reaches the
   panel; `context.progress(now)` says how far `now` is from the last reading
   to the next (0 to 1). Move a curve by that part of a sample width and it
@@ -229,20 +235,57 @@ class LightRing(WidgetType):
 
 ## Toasts
 
-`host.notify` shows a short message on the panel: a card in the theme's
-colours with a coloured edge for the level (`info`, `warning`, `error`) and
-one of the built-in icons (`cpu`, `gpu`, `temperature`, `fan`, …) if named.
-Messages show one after the other, each for its `seconds`, fading in and
-out. The theme decides the corner (`"toast": {"anchor": "bottom-right"}`);
-the card keeps clear of what the bezel hides. Toasts are part of the frame,
-also in video mode (a separate overlay would make the video judder).
+`host.notify` shows a short message on the panel. Built in is a card in the
+theme's colours with a coloured edge for the level (`info`, `warning`,
+`error`, or `payload["color"]`) and one of the built-in icons (`cpu`, `gpu`,
+`temperature`, `fan`, …) if named, keeping clear of what the bezel hides.
+Toasts are part of the frame, also in video mode (a separate overlay would
+make the video judder).
+
+- Messages show one after the other, each for its `seconds` (None: the
+  theme's hold time). A higher `rank` replaces the one on show at once; the
+  others wait, by rank and then in order.
+- `kind` says what a message is about (`"music"`, `"volume"`, `"device"`,
+  …). A theme switches kinds off with `"toast": {"off": ["music"]}`, and a
+  screen leaves out those it shows anyway with `suppresses = {"music"}`.
+- `payload` carries what a style draws besides the text, for example
+  `{"image": cover, "progress": 0.4, "color": "#EF4444"}`.
+- While a transition plays, new toasts wait.
+
+The theme decides the rest (`"toast": {"anchor": "bottom-right",
+"seconds": 5, "style": "myplugin.band", "options": {...}}`; the editor has
+it under *Theme → Messages*). A toast style draws them its own way:
+
+```python
+from libre_panel.plugins import ToastStyle
+
+
+class Band(ToastStyle):
+    name = "myplugin.band"
+    api = 1
+    label = {"en": "Band", "de": "Band"}
+    options = {"height": ("int", 96)}  # field kinds as for screens
+    leave_s = 0.26  # seconds to leave after the hold time
+
+    def draw(self, frame, toast, age):
+        # age: 0 when it arrives ... toast.seconds + leave_s when it is gone
+        out = frame.copy()
+        ...  # roll in, draw toast.text, toast.payload.get("image"), ...
+        return out
+```
+
+`self.context` is the theme's render context (palette, fonts, size,
+`hidden_edges()`), `self.anchor` the theme's toast position. `draw` runs at
+up to 50 fps: keep what does not change. A style that fails leaves the
+frame as it is; one that is not installed falls back to the card.
 
 ## Transitions
 
 When the theme changes (a service's `show_theme`, a mode, the editor, the
 tray), the panel blends from the old frame to the new one. `transition`
 in `config.toml` chooses how (`fade` by default; `cut`, `slide`), and a
-service can choose per change. A plugin can add its own:
+service can choose per change, also for a mode change that keeps the theme
+(`set_mode("game", transition=...)`). A plugin can add its own:
 
 ```python
 from libre_panel.plugins import Transition
@@ -260,8 +303,31 @@ class Wipe(Transition):
         return out
 ```
 
-Between themes of different sizes (landscape to portrait) the panel switches
-without a transition.
+A transition can take parameters from the service and draw with the new
+theme's colours and fonts:
+
+```python
+class Entrance(Transition):
+    name = "myplugin.entrance"
+    api = 1
+
+    def __init__(self, context=None, params=None):
+        super().__init__(context, params)  # self.context, self.params
+        self.duration = 2.4 if self.params.get("logo") else 0.9
+
+    def frame(self, old, new, t):
+        accent = self.context.color("@accent")
+        ...  # self.params["game"], self.params["logo"] (a PIL image), ...
+
+
+# in a service:
+self.host.set_mode("game", transition=("myplugin.entrance", {"game": name, "logo": logo}))
+```
+
+While a transition plays, further switches wait until it is over (a report
+screen that follows a game's end does not cut the entrance short), and so
+do new toasts. Between themes of different sizes (landscape to portrait)
+the panel switches without a transition.
 
 ## Editor pages
 
@@ -334,5 +400,5 @@ fps = 30          # frames per second while the mode is active
 theme = "slate"   # optional: another theme
 ```
 
-Services switch modes with `host.set_mode("game")`; the tray and the editor
-show the active mode.
+Services switch modes with `host.set_mode("game")`, optionally with a
+transition; the tray and the editor show the active mode.
