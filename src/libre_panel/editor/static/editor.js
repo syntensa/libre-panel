@@ -1464,6 +1464,8 @@ function renderApp(app) {
   $("#app-detail").hidden = !panel.detail;
   $("#app-target").textContent = panel.target || "–";
   $("#app-theme").textContent = panel.theme || "–";
+  $("#app-mode").textContent = panel.mode || "";
+  $("#app-mode").hidden = $("#app-mode-label").hidden = !panel.mode;
   const slider = $("#app-brightness");
   if (document.activeElement !== slider && app.brightness !== null) slider.value = app.brightness;
   slider.disabled = app.brightness === null;

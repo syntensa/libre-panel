@@ -134,6 +134,7 @@ def test_texts():
     assert headline(state) == "Libre Panel: waiting for the panel"
     assert len(tooltip(state)) <= 120
     assert headline({"state": "showing", "target": 'TURZX 9.2"'}).endswith('TURZX 9.2"')
+    assert headline({"state": "showing", "target": "P", "mode": "game"}).endswith("P (game)")
 
 
 def test_run_app_without_icon(isolated_home):

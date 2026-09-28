@@ -121,6 +121,22 @@ class WeatherConfig:
 
 
 @dataclass
+class ServicesConfig:
+    """Service plugins to run, and their options ([services.<name>])."""
+
+    enabled: list[str] = field(default_factory=list)
+    options: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+
+@dataclass
+class ModeConfig:
+    """A mode a service can switch to, e.g. [modes.game] with fewer frames."""
+
+    fps: int | None = None
+    theme: str | None = None
+
+
+@dataclass
 class Config:
     theme: str = "libre-default"
     language: str = "auto"
@@ -129,6 +145,8 @@ class Config:
     device: DeviceConfig = field(default_factory=DeviceConfig)
     sensors: SensorsConfig = field(default_factory=SensorsConfig)
     weather: WeatherConfig = field(default_factory=WeatherConfig)
+    services: ServicesConfig = field(default_factory=ServicesConfig)
+    modes: dict[str, ModeConfig] = field(default_factory=dict)
     path: Path | None = None
 
 
@@ -190,6 +208,22 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     if cfg.weather.units not in ("metric", "imperial"):
         raise ConfigError('weather.units: must be "metric" or "imperial"')
     cfg.weather.update_minutes = _expect(w.get("update_minutes", 15), int, "weather.update_minutes")
+    services = dict(_expect(data.get("services", {}), dict, "services"))
+    enabled = _expect(services.pop("enabled", []), list, "services.enabled")
+    cfg.services.enabled = [_expect(name, str, "services.enabled[]") for name in enabled]
+    cfg.services.options = {k: v for k, v in services.items() if isinstance(v, dict)}
+
+    for name, table in _expect(data.get("modes", {}), dict, "modes").items():
+        table = _expect(table, dict, f"modes.{name}")
+        mode = ModeConfig()
+        if "fps" in table:
+            mode.fps = _expect(table["fps"], int, f"modes.{name}.fps")
+            if not 1 <= mode.fps <= 60:
+                raise ConfigError(f"modes.{name}.fps: must be between 1 and 60")
+        if "theme" in table:
+            mode.theme = _expect(table["theme"], str, f"modes.{name}.theme")
+        cfg.modes[name] = mode
+
     if cfg.weather.enabled and (cfg.weather.latitude is None or cfg.weather.longitude is None):
         raise ConfigError(
             "weather is enabled but no location is set: add weather.latitude and "

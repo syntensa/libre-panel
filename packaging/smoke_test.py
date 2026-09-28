@@ -1,5 +1,8 @@
 """Smoke test for a release build: start the background app, talk to it, quit it.
 
+A plugin folder with a service that uses sqlite3 checks that folder plugins
+load on the bundled Python.
+
 python packaging/smoke_test.py dist/libre-panel/libre-panel tray --background
 """
 
@@ -37,12 +40,38 @@ def api(url, action=None):
         return json.loads(response.read())
 
 
+PLUGIN = """
+import sqlite3
+
+from libre_panel.plugins import Service
+
+
+class Smoke(Service):
+    name = "smoke"
+    api = 1
+
+    def start(self):
+        with sqlite3.connect(self.host.data_dir / "smoke.db") as db:
+            db.execute("create table if not exists runs (at text)")
+        (self.host.data_dir / "started").write_text("ok")
+"""
+
+
 def main(command):
     with tempfile.TemporaryDirectory() as folder:
         home = Path(folder)
         frame = home / "frame.png"
         (home / "config.toml").write_text(
-            f'theme = "spur-ii"\n\n[device]\ndriver = "virtual"\noutput = "{frame.as_posix()}"\n',
+            f'theme = "spur-ii"\n\n[device]\ndriver = "virtual"\noutput = "{frame.as_posix()}"\n'
+            '\n[services]\nenabled = ["smoke"]\n',
+            encoding="utf-8",
+        )
+        plugin = home / "plugins" / "smoke"
+        (plugin / "smoke_plugin").mkdir(parents=True)
+        (plugin / "smoke_plugin" / "__init__.py").write_text(PLUGIN, encoding="utf-8")
+        (plugin / "plugin.toml").write_text(
+            'name = "smoke"\napi = 1\n\n[entry-points."libre_panel.services"]\n'
+            'smoke = "smoke_plugin:Smoke"\n',
             encoding="utf-8",
         )
         env = dict(os.environ, LIBRE_PANEL_HOME=str(home))
@@ -55,6 +84,7 @@ def main(command):
             state = wait(lambda: api(url)["panel"]["state"] == "showing" and api(url), 60, "frames")
             print("panel:", state["panel"])
             wait(frame.exists, 10, "frame file")
+            wait((home / "plugins-data" / "smoke" / "started").exists, 10, "folder plugin")
             api(url, "quit")
             code = proc.wait(30)
             if code != 0:

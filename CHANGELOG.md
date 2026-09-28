@@ -61,6 +61,16 @@ First preview of Libre Panel.
   weekday and month names ("Sonntag, 27. September") and weather
   descriptions; `language = "auto"` follows the system, switch in the editor
 
+**Plugins**
+- Plugin API 1 ([docs/PLUGINS.md](docs/PLUGINS.md)): plugins install with pip
+  or as a folder in the settings folder (for the downloads); `libre-panel
+  plugins` shows what loads
+- Services: long-running plugins that publish readings and images, show
+  another theme for a while, switch modes, post messages and hear about
+  events; `[services]` in config.toml, applied while running
+- Modes (`[modes.<name>]`) with their own frame rate and theme, e.g. fewer
+  frames while a game runs; tray and editor show the active mode
+
 **Sensors**
 - psutil, LibreHardwareMonitor (checked against real output), demo;
   Open-Meteo weather (off by default)

@@ -1,0 +1,345 @@
+"""Services (B3) and what they may do: the host between plugins and the main loop.
+
+A service runs in the background app (tray, ``start``) and in ``libre-panel
+run``. It talks to the panel only through its :class:`ServiceHost`: publish
+readings and images, show another theme for a while, switch the mode (with
+its own frame rate), show a toast, and hear about events. Every call into a
+service is guarded: a failing service is logged and the panel keeps going.
+"""
+
+from __future__ import annotations
+
+import logging
+import queue
+import threading
+from collections import deque
+from collections.abc import Callable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from PIL import Image
+
+from libre_panel.config import config_dir
+from libre_panel.sensors.base import Reading, SensorProvider, Snapshot
+
+log = logging.getLogger(__name__)
+
+EVENTS = ("panel-connected", "panel-lost", "theme-changed", "mode-changed", "quit")
+OPTION_TYPES = {
+    "int": int,
+    "number": (int, float),
+    "bool": bool,
+    "string": str,
+    "list": list,
+}
+
+
+def apply_options(schema: dict[str, tuple[str, Any]], given: dict[str, Any], where: str) -> dict:
+    """The plugin's defaults, overridden by what config.toml sets (types checked)."""
+    from libre_panel.plugins.loader import PluginError
+
+    result = {key: default for key, (_kind, default) in schema.items()}
+    for key, value in given.items():
+        if key not in schema:
+            log.warning("%s: unknown option %r ignored", where, key)
+            continue
+        kind = schema[key][0]
+        expected = OPTION_TYPES.get(kind)
+        wrong_bool = isinstance(value, bool) and kind in ("int", "number")
+        if expected is None or wrong_bool or not isinstance(value, expected):
+            raise PluginError(f"{where}.{key}: expected {kind}, got {value!r}")
+        result[key] = value
+    return result
+
+
+@dataclass(frozen=True)
+class Toast:
+    text: str
+    icon: str | None = None
+    level: str = "info"  # info | warning | error
+    seconds: float = 4.0
+
+
+class Service:
+    """Base class for services: long-running helpers such as a game mode.
+
+    Set ``name``, ``api = 1`` and optionally an ``options`` schema
+    ({key: (type, default)}; types int, number, bool, string, list). ``start``
+    must return quickly (start your own threads); ``stop`` must end them
+    within a few seconds.
+    """
+
+    name = ""
+    options: dict[str, tuple[str, Any]] = {}
+
+    def __init__(self, host: ServiceHost, options: dict[str, Any]) -> None:
+        self.host = host
+        self.options = options
+
+    def start(self) -> None:
+        pass
+
+    def stop(self) -> None:
+        pass
+
+
+class ServiceHost:
+    """What one service may do. Thread-safe; call it from any thread."""
+
+    def __init__(self, hub: PluginHost, name: str) -> None:
+        self._hub = hub
+        self.name = name
+        self.log = logging.getLogger(f"libre_panel.service.{name}")
+
+    @property
+    def data_dir(self) -> Path:
+        """``<settings>/plugins-data/<service>/``: the service's own files."""
+        path = config_dir() / "plugins-data" / self.name
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    def snapshot(self) -> Snapshot | None:
+        """The latest readings and history the panel was drawn from."""
+        return self._hub.latest
+
+    def publish(self, key: str, value: float | str | None, unit: str = "", label: str = "") -> None:
+        """A reading themes can show like any sensor (e.g. ``game.fps``)."""
+        self._hub.publish(Reading(key, value, unit, label))
+
+    def unpublish(self, key: str) -> None:
+        self._hub.unpublish(key)
+
+    def publish_image(self, key: str, image: Image.Image | None) -> None:
+        """An image for screens and widgets (e.g. ``media.cover``); None removes it."""
+        self._hub.publish_image(key, image)
+
+    def show_theme(self, name: str) -> None:
+        """Show another theme until :meth:`restore_theme` (config.toml is not changed)."""
+        self._hub.request_theme(name, by=self.name)
+
+    def restore_theme(self) -> None:
+        self._hub.request_theme(None, by=self.name)
+
+    @property
+    def mode(self) -> str | None:
+        return self._hub.mode
+
+    def set_mode(self, name: str | None) -> None:
+        """Switch to a mode from ``[modes.<name>]`` (frame rate, theme); None ends it."""
+        self._hub.set_mode(name)
+
+    def notify(self, text: str, icon: str | None = None, level: str = "info", seconds=4.0):
+        """A short message on the panel."""
+        self._hub.notify(Toast(text, icon, level, float(seconds)))
+
+    def on(self, event: str, callback: Callable[..., None]) -> None:
+        """Hear about ``panel-connected``, ``panel-lost``, ``theme-changed``,
+        ``mode-changed`` and ``quit``. Callbacks run in an event thread."""
+        self._hub.listen(event, callback)
+
+
+class _HostProvider(SensorProvider):
+    name = "services"
+
+    def __init__(self, hub: PluginHost) -> None:
+        super().__init__()
+        self.hub = hub
+
+    def read(self) -> dict[str, Reading]:
+        return self.hub.published()
+
+
+class PluginHost:
+    """Shared by all services and the main loop."""
+
+    MAX_TOASTS = 20
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._published: dict[str, Reading] = {}
+        self._images: dict[str, Image.Image] = {}
+        self.latest: Snapshot | None = None
+        self._theme: str | None = None
+        self._mode: str | None = None
+        self._toasts: deque[Toast] = deque(maxlen=self.MAX_TOASTS)
+        self._listeners: dict[str, list[Callable[..., None]]] = {}
+        self._events: queue.Queue[tuple[str, dict[str, Any]] | None] = queue.Queue()
+        self._dispatcher: threading.Thread | None = None
+
+    # -- for services ------------------------------------------------------
+
+    def publish(self, reading: Reading) -> None:
+        with self._lock:
+            self._published[reading.key] = reading
+
+    def unpublish(self, key: str) -> None:
+        with self._lock:
+            self._published.pop(key, None)
+
+    def publish_image(self, key: str, image: Image.Image | None) -> None:
+        with self._lock:
+            if image is None:
+                self._images.pop(key, None)
+            else:
+                self._images[key] = image.copy()
+
+    def request_theme(self, name: str | None, by: str) -> None:
+        with self._lock:
+            self._theme = name
+        log.info("service %s: %s", by, f"shows theme {name!r}" if name else "restores the theme")
+
+    def set_mode(self, name: str | None) -> None:
+        with self._lock:
+            if name == self._mode:
+                return
+            self._mode = name
+        log.info("mode: %s", name or "normal")
+        self.emit("mode-changed", mode=name)
+
+    def notify(self, toast: Toast) -> None:
+        with self._lock:
+            self._toasts.append(toast)
+
+    def listen(self, event: str, callback: Callable[..., None]) -> None:
+        if event not in EVENTS:
+            raise ValueError(f"unknown event {event!r} (known: {', '.join(EVENTS)})")
+        with self._lock:
+            self._listeners.setdefault(event, []).append(callback)
+            if self._dispatcher is None:
+                self._dispatcher = threading.Thread(
+                    target=self._dispatch, name="plugin-events", daemon=True
+                )
+                self._dispatcher.start()
+
+    # -- for the main loop -------------------------------------------------
+
+    def provider(self) -> SensorProvider:
+        """Published readings, merged into the snapshot like any sensor source."""
+        return _HostProvider(self)
+
+    def published(self) -> dict[str, Reading]:
+        with self._lock:
+            return dict(self._published)
+
+    def images(self) -> dict[str, Image.Image]:
+        with self._lock:
+            return dict(self._images)
+
+    @property
+    def theme(self) -> str | None:
+        """The theme a service asked for, if any."""
+        return self._theme
+
+    @property
+    def mode(self) -> str | None:
+        return self._mode
+
+    def take_toasts(self) -> list[Toast]:
+        with self._lock:
+            toasts = list(self._toasts)
+            self._toasts.clear()
+        return toasts
+
+    def emit(self, event: str, **data: Any) -> None:
+        if self._listeners.get(event):
+            self._events.put((event, data))
+
+    def _dispatch(self) -> None:
+        while True:
+            item = self._events.get()
+            if item is None:
+                return
+            event, data = item
+            with self._lock:
+                callbacks = list(self._listeners.get(event, []))
+            for callback in callbacks:
+                try:
+                    callback(**data)
+                except Exception:
+                    log.exception("a %s listener failed", event)
+
+    def close(self) -> None:
+        if self._dispatcher is not None:
+            self._events.put(None)
+            self._dispatcher.join(5)
+            self._dispatcher = None
+
+
+class ServiceManager:
+    """Starts the services enabled in config.toml, and keeps them in step with it."""
+
+    STOP_S = 5.0
+
+    def __init__(self, host: PluginHost, registry: Any = None) -> None:
+        from libre_panel.plugins.loader import registry as installed
+
+        self.host = host
+        self.registry = registry or installed()
+        self.running: dict[str, tuple[Service, dict[str, Any]]] = {}
+        self.state: dict[str, str] = {}
+        self._lock = threading.Lock()
+
+    def apply(self, config: Any) -> None:
+        """Start, stop or restart services so they match ``config.services``."""
+        wanted = {
+            name: config.services.options.get(name, {}) for name in config.services.enabled
+        }
+        with self._lock:
+            for name in [n for n in self.running if n not in wanted]:
+                self._stop(name)
+            for name, given in wanted.items():
+                if name in self.running:
+                    if self.running[name][1] == given:
+                        continue
+                    self._stop(name)  # its options changed
+                self._start(name, given)
+            for name in [n for n in self.state if n not in wanted]:
+                del self.state[name]
+
+    def _start(self, name: str, given: dict[str, Any]) -> None:
+        from libre_panel.plugins.loader import PluginError
+
+        cls = self.registry.get("services", name)
+        if cls is None:
+            found = self.registry.parts.get("services", {}).get(name)
+            self.state[name] = f"failed: {found.error}" if found else "not installed"
+            log.error("service %r: %s", name, self.state[name])
+            return
+        try:
+            options = apply_options(cls.options, given, f"services.{name}")
+            service = cls(ServiceHost(self.host, name), options)
+            service.start()
+        except PluginError as exc:
+            self.state[name] = f"failed: {exc}"
+            log.error("service %r not started: %s", name, exc)
+            return
+        except Exception as exc:
+            self.state[name] = f"failed: {type(exc).__name__}: {exc}"
+            log.exception("service %r failed to start", name)
+            return
+        self.running[name] = (service, dict(given))
+        self.state[name] = "running"
+        log.info("service %r started", name)
+
+    def _stop(self, name: str) -> None:
+        service, _ = self.running.pop(name)
+        worker = threading.Thread(target=self._stop_one, args=(name, service), daemon=True)
+        worker.start()
+        worker.join(self.STOP_S)
+        if worker.is_alive():
+            log.warning("service %r did not stop within %.0f s", name, self.STOP_S)
+        self.state[name] = "stopped"
+
+    @staticmethod
+    def _stop_one(name: str, service: Service) -> None:
+        try:
+            service.stop()
+        except Exception:
+            log.exception("service %r failed while stopping", name)
+
+    def stop(self) -> None:
+        self.host.emit("quit")
+        with self._lock:
+            for name in list(reversed(self.running)):
+                self._stop(name)

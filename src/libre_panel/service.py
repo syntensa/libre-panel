@@ -46,9 +46,17 @@ class PanelService:
 
     RETRY_S = 30.0
 
-    def __init__(self, config_path: Path | None = None, restart_delay: float = 5.0) -> None:
+    def __init__(
+        self,
+        config_path: Path | None = None,
+        restart_delay: float = 5.0,
+        host: Any = None,
+        on_config: Callable[[Any], None] | None = None,
+    ) -> None:
         self.config_path = config_path
         self.restart_delay = restart_delay
+        self.host = host  # services' PluginHost
+        self.on_config = on_config
         self.status = RunStatus()
         self.error = ""
         self._paused = False
@@ -112,7 +120,7 @@ class PanelService:
             try:
                 config = load_config(self.config_path)
                 self.error = ""
-                run(config, stop=stop, status=status)
+                run(config, stop=stop, status=status, host=self.host, on_config=self.on_config)
             except (ConfigError, ThemeError, DeviceError) as exc:
                 self.error = str(exc)
                 log.error("panel stopped: %s (waiting for the config or theme to change)", exc)
@@ -141,6 +149,7 @@ class PanelService:
             "target": status.target,
             "theme": status.theme,
             "frames": status.frames,
+            "mode": status.mode,
         }
 
 
@@ -218,8 +227,12 @@ class BackgroundApp:
         autostart: Autostart | None = None,
         autostart_command: list[str] | None = None,
     ) -> None:
+        from libre_panel.plugins import PluginHost, ServiceManager
+
         self.config_path = config_path
-        self.panel = PanelService(config_path)
+        self.plugin_host = PluginHost()
+        self.services = ServiceManager(self.plugin_host)
+        self.panel = PanelService(config_path, host=self.plugin_host, on_config=self._config_loaded)
         self.editor = EditorService(config_path, port, controls=self)
         self.autostart = autostart or Autostart()
         self.autostart_command = autostart_command or launch_command(config_path)
@@ -230,6 +243,10 @@ class BackgroundApp:
     # -- lifecycle -----------------------------------------------------------
 
     def start(self) -> str:
+        try:
+            self.services.apply(load_config(self.config_path))
+        except ConfigError as exc:
+            log.error("services not started: %s", exc)  # they start once the config is fixed
         self.panel.start()
         url = self.editor.start()
         self._write_instance(url)
@@ -248,9 +265,18 @@ class BackgroundApp:
             except Exception:
                 log.exception("while quitting")
 
+    def _config_loaded(self, config: Any) -> None:
+        """config.toml changed: bring the services in line (in the background, so
+        starting or stopping one never stalls the panel)."""
+        threading.Thread(
+            target=self.services.apply, args=(config,), name="services", daemon=True
+        ).start()
+
     def shutdown(self) -> None:
+        self.services.stop()
         self.panel.stop()
         self.editor.stop()
+        self.plugin_host.close()
         try:
             data = running_instance()
             if data and data.get("pid") == os.getpid():

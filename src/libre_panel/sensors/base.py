@@ -29,6 +29,7 @@ class Snapshot:
     readings: dict[str, Reading] = field(default_factory=dict)
     history: dict[str, list[float]] = field(default_factory=dict)
     now: datetime = field(default_factory=datetime.now)
+    images: dict[str, Any] = field(default_factory=dict)  # published by services
 
     def value(self, key: str) -> Any:
         reading = self.readings.get(key)

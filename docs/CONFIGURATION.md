@@ -47,6 +47,25 @@ units = "metric"               # or "imperial"
 update_minutes = 15
 ```
 
+## Services and modes
+
+Plugins can add services (a game mode, an autopilot, …). They are off until
+you list them; each can have its own options table. A mode changes the frame
+rate and optionally the theme while a service keeps it switched on. Details
+are in [Plugins](PLUGINS.md).
+
+```toml
+[services]
+enabled = ["gamemode"]
+
+[services.gamemode]
+poll_s = 1.0
+
+[modes.game]
+fps = 30
+theme = "slate"
+```
+
 ## Language
 
 Libre Panel speaks English and German. `language = "auto"` follows the

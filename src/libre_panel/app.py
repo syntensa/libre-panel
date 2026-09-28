@@ -5,9 +5,11 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from PIL import Image, ImageOps
 
@@ -102,6 +104,7 @@ class RunStatus:
     theme: str = ""
     detail: str = ""  # why the panel is not available
     frames: int = 0
+    mode: str | None = None  # set by a service, e.g. "game"
 
 
 class _Link:
@@ -170,27 +173,58 @@ class _Link:
         self.retry_at = now + delay
 
 
+def _theme_name(config: Config, host: Any) -> str:
+    """A theme a service shows, else the active mode's theme, else config.toml's."""
+    if host is not None:
+        if host.theme:
+            return host.theme
+        mode = config.modes.get(host.mode or "")
+        if mode is not None and mode.theme:
+            return mode.theme
+    return config.theme
+
+
+def _fps(config: Config, host: Any) -> int:
+    mode = config.modes.get(host.mode or "") if host is not None else None
+    return mode.fps if mode is not None and mode.fps else config.fps
+
+
 def run(
     config: Config,
     once: bool = False,
     stop: threading.Event | None = None,
     status: RunStatus | None = None,
+    host: Any = None,
+    on_config: Callable[[Config], None] | None = None,
 ) -> None:
     """Main loop: read sensors at the theme's rate, render at ``config.fps`` so
     values glide between readings, and send only frames that changed.
 
     With ``once`` a single frame is sent and any device error is raised.
-    ``status`` is kept up to date for status displays.
+    ``status`` is kept up to date for status displays. ``host`` connects the
+    services (a :class:`~libre_panel.plugins.PluginHost`); ``on_config`` hears
+    about every config.toml that was loaded.
     """
     stop = stop or threading.Event()
     status = status or RunStatus()
     i18n.set_language(config.language)
-    theme = load_configured_theme(config)
-    status.theme = config.theme
+    shown = _theme_name(config, host) if not once else config.theme
+    try:
+        theme = load_theme(find_theme(shown))
+    except ThemeError:
+        if shown == config.theme:
+            raise
+        log.warning("theme %r not found; showing %r", shown, config.theme)
+        shown = config.theme
+        theme = load_configured_theme(config)
+    refused: str | None = None  # a requested theme that failed to load
+    status.theme = shown
     for warning in theme.warnings:
-        log.warning("theme %s: %s", config.theme, warning)
+        log.warning("theme %s: %s", shown, warning)
     renderer = Renderer(theme, animate=config.fps > 1)
     hub = build_hub(config)
+    if host is not None and not once:
+        hub.providers.append(host.provider())
     display = create_display(config.device)
     size = target_size(config, theme)
     watcher = _Watcher(config.path, _theme_file(theme))
@@ -207,12 +241,16 @@ def run(
             return
         while not stop.is_set():
             started = time.monotonic()
-            if watcher.changed():
+            changed = watcher.changed()
+            wanted = _theme_name(config, host)
+            if changed or (wanted != shown and wanted != refused):
                 try:
-                    fresh = load_config(config.path) if config.path else config
-                    new_theme = load_configured_theme(fresh)
+                    fresh = load_config(config.path) if changed and config.path else config
+                    wanted = _theme_name(fresh, host)
+                    new_theme = load_theme(find_theme(wanted))
                 except (ConfigError, ThemeError) as exc:
-                    log.warning("keeping the current theme: %s", exc)  # e.g. half-written file
+                    log.warning("keeping theme %r: %s", shown, exc)  # e.g. half-written file
+                    refused = wanted
                 else:
                     device = config.device  # the open device stays as it is
                     if fresh.device.brightness != device.brightness:
@@ -223,11 +261,20 @@ def run(
                     theme, renderer = new_theme, Renderer(new_theme, animate=config.fps > 1)
                     size, previous, next_sample = target_size(config, theme), None, 0.0
                     watcher = _Watcher(config.path, _theme_file(theme))
-                    status.theme = config.theme
-                    log.info("reloaded theme %r", config.theme)
+                    if wanted != shown and host is not None:
+                        host.emit("theme-changed", theme=wanted)
+                    shown, refused, status.theme = wanted, None, wanted
+                    log.info("showing theme %r", shown)
+                    if changed and on_config is not None:
+                        on_config(config)
+            status.mode = host.mode if host is not None else None
             if started >= next_sample or snapshot is None:
                 snapshot = hub.snapshot()
+                if host is not None:
+                    snapshot.images = host.images()
+                    host.latest = snapshot
                 next_sample = started + (config.refresh_ms or theme.refresh_ms) / 1000
+            was_connected = link.connected
             if link.ensure(started):
                 snapshot.now = datetime.now()  # the clock ticks between readings too
                 frame, _ = renderer.render(snapshot, started)
@@ -237,9 +284,11 @@ def run(
                     previous = frame if link.show(frame, region, started) else None
             else:
                 previous = None  # send a full frame after reconnecting
+            if host is not None and link.connected != was_connected:
+                host.emit("panel-connected" if link.connected else "panel-lost")
             # While something glides, draw at full fps; otherwise wake for the next
             # reading, but at least twice a second so a seconds clock never skips.
-            interval = 1 / config.fps
+            interval = 1 / _fps(config, host)
             if not renderer.moving:
                 interval = max(interval, min(0.5, next_sample - started))
             stop.wait(max(0.0, interval - (time.monotonic() - started)))

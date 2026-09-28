@@ -20,6 +20,7 @@
 | `sensors` | `SensorProvider` plugins merged by `SensorHub` (priority, history for graphs). |
 | `weather` | Open-Meteo provider, background polling, off by default. |
 | `devices` | Panel catalog (`models`), `Display` drivers, USB/serial discovery. |
+| `plugins` | Plugin API: finding plugins (entry points, plugin folders), services and the host they talk to the panel through, modes. See [Plugins](PLUGINS.md). |
 | `editor` | Local HTTP server (127.0.0.1 only) + vanilla JS editor, no build step. |
 | `app` | Main loop: sample → render → diff → send; reloads config/theme on change; reports its state (`RunStatus`). |
 | `service` | Background app: the main loop in a thread (pause/resume, restarts after a broken config is fixed), the editor server, and the controls shared by tray and editor. |
@@ -41,7 +42,8 @@
   logged and skipped.
 - **Optional features are plugins.** Anything that serves one setup (special
   fan analysis, game statistics, media players) belongs in a separate package
-  registered under the `libre_panel.sensors` / `libre_panel.devices` entry points.
+  registered under the `libre_panel.services`, `libre_panel.sensors` or
+  `libre_panel.devices` entry points ([Plugins](PLUGINS.md)).
 
 ## Plugins
 
