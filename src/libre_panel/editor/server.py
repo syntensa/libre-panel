@@ -66,6 +66,15 @@ _CONTENT_TYPES = {
     ".svg": "image/svg+xml; charset=utf-8",
     ".png": "image/png",
 }
+# What a plugin's editor page may serve from its folder.
+_PAGE_TYPES = {
+    **_CONTENT_TYPES,
+    ".json": "application/json",
+    ".jpg": "image/jpeg",
+    ".webp": "image/webp",
+    ".woff2": "font/woff2",
+    ".ttf": "font/ttf",
+}
 
 
 def _plugin_specs() -> dict[str, Any]:
@@ -109,6 +118,7 @@ class EditorState:
         self.config_path = config_path
         self._hub: SensorHub | None = None
         self._lock = threading.Lock()
+        self.pages: dict[str, Any] = {}  # plugin editor pages, created on first use
 
     def live_snapshot(self):
         from libre_panel.app import build_hub
@@ -234,7 +244,65 @@ class EditorHandler(BaseHTTPRequestHandler):
             if self.controls is None:
                 return self._json({"available": False})
             return self._json({"available": True, **self.controls.snapshot()})
+        if path == "/api/plugins/pages":
+            return self._json(self._pages())
+        match = re.fullmatch(r"/plugins/([^/]+)/(.*)", path)
+        if match:
+            return self._page_file(match.group(1), match.group(2) or "index.html")
+        match = re.fullmatch(r"/api/plugins/([^/]+)/(.*)", path)
+        if match:
+            query = parse_qs(urlparse(self.path).query)
+            return self._page_api("GET", match.group(1), match.group(2), query, None)
         self._error("not found", HTTPStatus.NOT_FOUND)
+
+    # -- plugin editor pages ---------------------------------------------------
+
+    def _page_class(self, page_id: str) -> Any:
+        from libre_panel.plugins.loader import registry
+
+        return registry().get("editor_pages", page_id)
+
+    def _pages(self) -> list[dict[str, str]]:
+        from libre_panel.plugins.loader import registry
+
+        pages = []
+        for page_id in registry().names("editor_pages"):
+            cls = self._page_class(page_id)
+            folder = cls.folder() if cls is not None else None
+            if folder is None or not (folder / "index.html").is_file():
+                continue
+            title = cls.title.get(i18n.language()) or cls.title.get("en") or page_id
+            pages.append({"id": page_id, "title": title, "icon": cls.icon})
+        return pages
+
+    def _page_file(self, page_id: str, name: str) -> None:
+        cls = self._page_class(page_id)
+        folder = cls.folder() if cls is not None else None
+        content_type = _PAGE_TYPES.get(Path(name).suffix.lower())
+        if folder is None or content_type is None:
+            return self._error("not found", HTTPStatus.NOT_FOUND)
+        base = folder.resolve()
+        file = (base / name).resolve()
+        if not file.is_relative_to(base) or not file.is_file():
+            return self._error("not found", HTTPStatus.NOT_FOUND)
+        self._send(200, file.read_bytes(), content_type)
+
+    def _page_api(self, method: str, page_id: str, path: str, query: dict, body: Any) -> None:
+        from libre_panel.plugins.pages import PageContext
+
+        cls = self._page_class(page_id)
+        if cls is None:
+            return self._error("not found", HTTPStatus.NOT_FOUND)
+        pages = self.state.pages
+        if page_id not in pages:
+            pages[page_id] = cls(PageContext(self.controls))
+        try:
+            status, data = pages[page_id].handle(method, path, query, body)
+            payload = json.dumps(data).encode("utf-8")
+        except Exception as exc:  # a broken page must not take the editor down
+            log.exception("editor page %s failed", page_id)
+            return self._error(f"{page_id}: {exc}", HTTPStatus.INTERNAL_SERVER_ERROR)
+        self._send(int(status), payload, "application/json")
 
     def _static(self, name: str) -> None:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", name) or name.startswith("."):
@@ -339,6 +407,13 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._app_action()
         if path == "/api/language":
             return self._set_language()
+        match = re.fullmatch(r"/api/plugins/([^/]+)/(.*)", path)
+        if match:
+            body = self._read_json()
+            if body is None:
+                return None
+            query = parse_qs(url.query)
+            return self._page_api("POST", match.group(1), match.group(2), query, body)
         match = re.fullmatch(r"/api/themes/([^/]+)/assets", path)
         if match:
             return self._upload_asset(match.group(1), parse_qs(url.query))

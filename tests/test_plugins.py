@@ -634,3 +634,107 @@ def _differs(a, b):
     from PIL import ImageChops
 
     return a.size == b.size and ImageChops.difference(a, b).getbbox() is not None
+
+
+# -- editor pages ----------------------------------------------------------------------
+
+PAGE = """
+from libre_panel.plugins import EditorPage
+
+
+class Cooling(EditorPage):
+    api = 1
+    title = {"en": "Cooling", "de": "Kühlung"}
+    icon = "fan"
+
+    def handle(self, method, path, query, body):
+        if path == "status":
+            service = self.context.service("counter")
+            return 200, {"running": service is not None, "q": query.get("x", [""])[0]}
+        if path == "echo" and method == "POST":
+            return 201, {"got": body}
+        if path == "boom":
+            raise RuntimeError("the analysis failed")
+        return 404, {"error": "no such thing"}
+"""
+
+PAGE_FILES = {
+    "page/index.html": (
+        '<!doctype html><html><head><link rel="stylesheet" href="/static/editor.css">'
+        '<script type="module" src="app.js"></script></head>'
+        '<body><h1 id="title">Cooling</h1><p id="out">…</p></body></html>'
+    ),
+    "page/app.js": (
+        'import { api, loadTexts } from "/static/kit.js";\n'
+        "await loadTexts();\n"
+        'const status = await api("status?x=1");\n'
+        'const echo = await api("echo", { method: "POST", body: { fan: 3 } });\n'
+        'document.getElementById("out").textContent = `${status.q} ${echo.got.fan}`;\n'
+    ),
+    "page/secret.py": "print('not served')\n",
+}
+
+PAGE_PARTS = {"libre_panel.editor_pages": {"cooling": "Cooling"}}
+
+
+@pytest.fixture
+def editor(plugin_folder):
+    from libre_panel.editor.server import make_server
+
+    plugin_folder(PAGE, PAGE_PARTS, files=PAGE_FILES)
+    server = make_server(port=0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    yield server.server_address[1]
+    server.shutdown()
+    server.server_close()
+    server.editor_state.close()
+
+
+def test_editor_pages_are_served(editor):
+    from test_editor_server import request
+
+    status, pages = request(editor, "GET", "/api/plugins/pages")
+    assert pages == [{"id": "cooling", "title": "Cooling", "icon": "fan"}]
+    status, html = request(editor, "GET", "/plugins/cooling/")
+    assert status == 200 and b"Cooling" in html
+    assert request(editor, "GET", "/plugins/cooling/app.js")[0] == 200
+    assert request(editor, "GET", "/plugins/cooling/secret.py")[0] == 404  # not a page file
+    assert request(editor, "GET", "/plugins/cooling/../../plugin.toml")[0] == 404
+    assert request(editor, "GET", "/plugins/nothing/")[0] == 404
+
+
+def test_editor_page_api(editor):
+    from test_editor_server import request
+
+    assert request(editor, "GET", "/api/plugins/cooling/status?x=7") == (
+        200,
+        {"running": False, "q": "7"},  # a plain `libre-panel editor` runs no services
+    )
+    assert request(editor, "POST", "/api/plugins/cooling/echo", {"a": 1}) == (
+        201,
+        {"got": {"a": 1}},
+    )
+    no_header = request(
+        editor, "POST", "/api/plugins/cooling/echo", {}, headers={"X-Libre-Panel": ""}
+    )
+    assert no_header[0] == 403
+    status, data = request(editor, "GET", "/api/plugins/cooling/boom")
+    assert status == 500 and "the analysis failed" in data["error"]
+    assert request(editor, "GET", "/api/plugins/pages")[0] == 200  # the editor keeps going
+
+
+def test_page_context_finds_running_services(plugin_folder):
+    from libre_panel.plugins import PageContext
+
+    plugin_folder(SERVICE, parts=SERVICE_PARTS)
+    host = PluginHost()
+    manager = ServiceManager(host, discover())
+    manager.apply(services_config(["counter"]))
+
+    class Controls:
+        services = manager
+
+    assert PageContext(Controls()).service("counter") is manager.running["counter"][0]
+    assert PageContext(None).service("counter") is None
+    manager.stop()
+    host.close()

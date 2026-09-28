@@ -9,6 +9,7 @@ as a plugin: a Python package that registers parts of these kinds.
 | Screen | `libre_panel.screens` | draws the whole frame in code; a theme selects it by name |
 | Widget type | `libre_panel.widgets` | a widget the editor can place, drawn by plugin code |
 | Transition | `libre_panel.transitions` | how the panel goes from one theme to the next |
+| Editor page | `libre_panel.editor_pages` | a page of the plugin's own in the theme editor |
 | Sensor source | `libre_panel.sensors` | readings (see [Architecture](ARCHITECTURE.md#plugins)) |
 | Display driver | `libre_panel.devices` | another kind of panel |
 
@@ -257,6 +258,66 @@ class Wipe(Transition):
 
 Between themes of different sizes (landscape to portrait) the panel switches
 without a transition.
+
+## Editor pages
+
+A plugin can bring its own page into the theme editor, for settings or an
+analysis. It appears under *Pages* in the editor's top bar and replaces the
+editing area until *Theme editor* goes back.
+
+```python
+from libre_panel.plugins import EditorPage
+
+
+class Cooling(EditorPage):
+    api = 1
+    title = {"en": "Cooling", "de": "Kühlung"}
+    static = "page"  # folder next to this module, with index.html
+
+    def handle(self, method, path, query, body):
+        if path == "curve" and method == "GET":
+            return 200, {"points": self.load_curve()}
+        if path == "curve" and method == "POST":
+            self.save_curve(body["points"])
+            return 200, {"saved": True}
+        return 404, {"error": "not found"}
+```
+
+```html
+<!-- page/index.html -->
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="/static/editor.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body><h1>Cooling</h1><div id="curve"></div></body>
+</html>
+```
+
+```js
+// page/app.js
+import { api, loadTexts, el, field, button } from "/static/kit.js";
+
+await loadTexts();
+const { points } = await api("curve");
+// ... build the page with el(), field(), button() like the editor does
+await api("curve", { method: "POST", body: { points } });
+```
+
+- Files come from `/plugins/<id>/` (`.html`, `.js`, `.css`, images, fonts,
+  `.json`; nothing outside the folder). Scripts must be files: the editor's
+  security policy allows no inline scripts.
+- `handle(method, path, query, body)` answers `/api/plugins/<id>/<path>` and
+  returns `(status, data)`; `data` is sent as JSON. GET must not change
+  anything: changes go through POST, which needs the editor's header
+  (`kit.js`'s `api()` sends it). The editor listens on 127.0.0.1 only.
+- `self.context.service(name)` is the running service of that name when the
+  editor belongs to the background app (tray), else `None`;
+  `self.context.data_dir(name)` is that service's data folder.
+- `kit.js` exports `api`, `loadTexts`, `t`, `language`, `el`, `field`,
+  `button` and `setStatus`; with `editor.css` the page looks like the editor.
 
 ## Modes
 

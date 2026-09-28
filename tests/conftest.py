@@ -32,12 +32,16 @@ def plugin_folder(isolated_home):
     """A plugin installed as a folder, as in the Windows setup."""
     created = []
 
-    def make(source, parts, api=1):
-        """``parts``: {group: {name: "attribute"}}; attributes are in the new package."""
+    def make(source, parts, api=1, files=None):
+        """``parts``: {group: {name: "attribute"}}; attributes are in the new package.
+        ``files``: more files in the package folder, {relative path: text}."""
         package = f"lp_test_plugin_{next(_plugin_names)}"
         folder = isolated_home / "plugins" / package
         (folder / package).mkdir(parents=True)
         (folder / package / "__init__.py").write_text(textwrap.dedent(source), encoding="utf-8")
+        for name, text in (files or {}).items():
+            (folder / package / name).parent.mkdir(parents=True, exist_ok=True)
+            (folder / package / name).write_text(text, encoding="utf-8")
         tables = "".join(
             f'\n[entry-points."{group}"]\n'
             + "".join(f'"{name}" = "{package}:{attr}"\n' for name, attr in names.items())

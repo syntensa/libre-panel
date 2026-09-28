@@ -2,7 +2,8 @@
 
 See docs/PLUGINS.md. Kinds: services (``libre_panel.services``), screens
 (``libre_panel.screens``), widget types (``libre_panel.widgets``) and
-transitions (``libre_panel.transitions``); sensor
+transitions (``libre_panel.transitions``) and editor pages
+(``libre_panel.editor_pages``); sensor
 sources and display drivers have their own entry point groups
 (``libre_panel.sensors``, ``libre_panel.devices``).
 """
@@ -16,11 +17,14 @@ from libre_panel.plugins.host import (
     Toast,
 )
 from libre_panel.plugins.loader import API_VERSION, PluginError, discover, registry
+from libre_panel.plugins.pages import EditorPage, PageContext
 from libre_panel.plugins.render import RenderContext, Screen, Transition, WidgetType
 
 __all__ = [
     "API_VERSION",
     "EVENTS",
+    "EditorPage",
+    "PageContext",
     "PluginError",
     "PluginHost",
     "RenderContext",

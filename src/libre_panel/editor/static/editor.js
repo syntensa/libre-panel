@@ -1541,6 +1541,39 @@ function toggleAppPopover(open = $("#app-popover").hidden) {
   if (open) pollApp();
 }
 
+// ---------------------------------------------------------------- plugin pages
+
+async function loadPages() {
+  const pages = await api("GET", "/api/plugins/pages");
+  $("#pages-wrap").hidden = !pages.length;
+  $("#pages-menu").replaceChildren(
+    ...pages.map((page) => el("button", { type: "button", role: "menuitem", text: page.title, onclick: () => openPage(page) })),
+  );
+}
+
+function togglePagesMenu(open = $("#pages-menu").hidden) {
+  $("#pages-menu").hidden = !open;
+  $("#pages-button").setAttribute("aria-expanded", String(open));
+}
+
+function openPage(page) {
+  togglePagesMenu(false);
+  $("#plugin-title").textContent = page.title;
+  $("#plugin-frame").src = `/plugins/${encodeURIComponent(page.id)}/`;
+  $("main.layout").hidden = $(".panelbar").hidden = true;
+  $("#plugin-view").hidden = false;
+  document.body.classList.add("showing-page");
+}
+
+function closePage() {
+  $("#plugin-view").hidden = true;
+  $("#plugin-frame").src = "about:blank";
+  $("main.layout").hidden = $(".panelbar").hidden = false;
+  document.body.classList.remove("showing-page");
+  layoutStage();
+  drawOverlay();
+}
+
 async function quitApp() {
   if (!confirm(t("Quit Libre Panel? The panel stops updating until you start it again."))) return;
   if (!(await appAction("quit"))) return;
@@ -1665,6 +1698,12 @@ async function init() {
     importTheme(event.target.files[0]);
     event.target.value = "";
   });
+  $("#pages-button").addEventListener("click", () => togglePagesMenu());
+  $("#plugin-back").addEventListener("click", closePage);
+  document.addEventListener("click", (event) => {
+    if (!$("#pages-menu").hidden && !event.target.closest(".pages-wrap")) togglePagesMenu(false);
+  });
+  loadPages().catch((error) => setStatus(error.message, "error"));
   $("#btn-undo").addEventListener("click", undo);
   $("#btn-redo").addEventListener("click", redo);
   $("#btn-add").addEventListener("click", addWidget);

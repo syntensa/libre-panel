@@ -77,6 +77,8 @@ First preview of Libre Panel.
 - Toasts: short messages from services on the panel, in the theme's colours,
   one after the other; the theme picks the corner
 - Transitions between themes: fade (default), slide, cut, or from a plugin
+- Editor pages: a plugin's own page in the theme editor (under *Pages*),
+  with its API and the editor's look (`/static/kit.js`)
 
 **Sensors**
 - psutil, LibreHardwareMonitor (checked against real output), demo;

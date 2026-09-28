@@ -225,6 +225,21 @@ details > .fields { display: grid; gap: 10px; margin-top: 8px; }
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55);
 }
 .popover[hidden] { display: none; }
+/* Plugin pages: a menu in the top bar, and a view in place of the editor. */
+.pages-wrap { position: relative; }
+.pages-wrap[hidden] { display: none; }
+.popover.menu { min-width: 200px; padding: 6px; gap: 2px; }
+.popover.menu button { text-align: left; border-color: transparent; background: transparent; }
+.popover.menu button:hover { background: var(--panel-3); border-color: var(--line); }
+.layout[hidden], .plugin-view[hidden], .panelbar[hidden] { display: none; }
+/* A plugin's own page (kit.js sets the class): editor colours, no editor grid. */
+body.plugin-page { display: block; height: auto; min-height: 100vh; padding: 20px 28px; }
+body.plugin-page h1 { font-size: 20px; margin: 0 0 16px; }
+body.plugin-page h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 22px 0 10px; }
+body.showing-page { grid-template-rows: auto 1fr auto; }  /* top bar, page, status bar */
+.plugin-view { display: flex; flex-direction: column; min-height: 0; }
+.plugin-bar { display: flex; align-items: center; gap: 14px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel); }
+#plugin-frame { flex: 1; width: 100%; border: 0; background: transparent; }
 .popover.from-left { right: auto; left: 0; }
 .pop-head { display: flex; align-items: center; gap: 8px; }
 .pop-detail { margin: 0; color: var(--warn); font-size: 12px; overflow-wrap: anywhere; }

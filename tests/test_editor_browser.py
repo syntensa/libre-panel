@@ -160,6 +160,23 @@ def test_plugin_screen_and_widget_in_the_editor(drawing_plugin, page):
     page.wait_for_function("!state.theme.screen")
 
 
+@pytest.fixture
+def page_plugin(plugin_folder):
+    from test_plugins import PAGE, PAGE_FILES, PAGE_PARTS
+
+    return plugin_folder(PAGE, PAGE_PARTS, files=PAGE_FILES)
+
+
+def test_plugin_page_opens_in_the_editor(page_plugin, page):
+    page.click("#pages-button")
+    page.get_by_role("menuitem", name="Cooling").click()
+    frame = page.frame_locator("#plugin-frame")
+    frame.locator("#out", has_text="1 3").wait_for()  # kit.js reached the page's own API
+    assert page.locator("main.layout").is_hidden()
+    page.click("#plugin-back")
+    assert page.locator("main.layout").is_visible() and page.locator("#plugin-view").is_hidden()
+
+
 def test_plain_editor_hides_the_panel_controls(page):
     page.wait_for_timeout(300)
     assert page.locator("#app-chip").is_hidden()

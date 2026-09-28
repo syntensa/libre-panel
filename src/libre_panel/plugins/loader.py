@@ -36,6 +36,7 @@ GROUPS = {
     "screens": "libre_panel.screens",
     "widgets": "libre_panel.widgets",
     "transitions": "libre_panel.transitions",
+    "editor_pages": "libre_panel.editor_pages",
 }
 
 
@@ -93,10 +94,11 @@ class Registry:
 
 def _base_class(kind: str) -> type:
     from libre_panel.plugins.host import Service
+    from libre_panel.plugins.pages import EditorPage
     from libre_panel.plugins.render import Screen, Transition, WidgetType
 
     bases = {"services": Service, "screens": Screen, "widgets": WidgetType}
-    return {**bases, "transitions": Transition}[kind]
+    return {**bases, "transitions": Transition, "editor_pages": EditorPage}[kind]
 
 
 def _load(found: Found) -> Any:
