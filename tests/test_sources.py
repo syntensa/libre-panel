@@ -36,6 +36,25 @@ def test_hub_priority_history_and_resilience():
     assert hub.snapshot().history["cpu.temp"] == [60.0, 60.0, 60.0]
 
 
+def test_every_frame_providers_follow_between_snapshots():
+    class Volume(Fixed):
+        every_frame = True
+
+    slow = Fixed({"cpu.temp": 60.0, "audio.volume": 10.0})  # first: its volume wins
+    volume = Volume({"audio.volume": 50.0, "audio.muted": 0.0, "cpu.load": 5.0})
+    hub = SensorHub([slow, volume])
+    assert hub.every_frame and not SensorHub([slow]).every_frame
+    snap = hub.snapshot()
+    volume.values.update({"audio.volume": 80.0, "audio.muted": 1.0, "cpu.load": 7.0})
+    slow.values["cpu.temp"] = 70.0
+    fresh = hub.fresh()
+    assert fresh == {"audio.muted": fresh["audio.muted"], "cpu.load": fresh["cpu.load"]}
+    assert fresh["audio.muted"].value == 1.0  # its own keys follow at once
+    assert "audio.volume" not in fresh  # the earlier provider's key stays its own
+    assert snap.history["cpu.load"] == [5.0]  # no history between snapshots
+    assert hub.snapshot().history["cpu.load"] == [5.0, 7.0]
+
+
 def test_psutil_provider_reads_basics():
     provider = PsutilProvider()
     provider.read()

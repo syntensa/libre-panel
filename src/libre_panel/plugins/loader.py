@@ -14,9 +14,12 @@ Libre Panel never downloads or installs code itself.
 
 from __future__ import annotations
 
+import importlib.util
 import logging
+import re
 import sys
 import tomllib
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from importlib.metadata import entry_points
 from pathlib import Path
@@ -38,7 +41,10 @@ GROUPS = {
     "transitions": "libre_panel.transitions",
     "toasts": "libre_panel.toasts",
     "editor_pages": "libre_panel.editor_pages",
+    "sensors": "libre_panel.sensors",
+    "themes": "libre_panel.themes",  # a package whose folder holds theme folders
 }
+OWN_DISTRIBUTION = "libre-panel"  # its built-in sensors and drivers are no plugins
 
 
 class PluginError(ValueError):
@@ -80,7 +86,8 @@ class Registry:
         return [found for kind in sorted(self.parts) for found in self.parts[kind].values()]
 
     def get(self, kind: str, name: str) -> Any:
-        """The plugin class, or None when it is missing or broken (the reason is logged)."""
+        """The plugin class (for themes: the folder), or None when it is missing or
+        broken (the reason is logged)."""
         found = self.parts.get(kind, {}).get(name)
         if found is None:
             return None
@@ -97,15 +104,29 @@ def _base_class(kind: str) -> type:
     from libre_panel.plugins.host import Service
     from libre_panel.plugins.pages import EditorPage
     from libre_panel.plugins.render import Screen, ToastStyle, Transition, WidgetType
+    from libre_panel.sensors.base import SensorProvider
 
     bases = {"services": Service, "screens": Screen, "widgets": WidgetType}
     drawn = {"transitions": Transition, "toasts": ToastStyle}
-    return {**bases, **drawn, "editor_pages": EditorPage}[kind]
+    return {**bases, **drawn, "editor_pages": EditorPage, "sensors": SensorProvider}[kind]
+
+
+def _theme_folder(found: Found) -> Path:
+    """``themes`` parts name a package; its folder holds theme folders."""
+    if ":" in found.target:
+        raise PluginError(f"{found.target!r}: themes name a package, not 'module:attribute'")
+    spec = importlib.util.find_spec(found.target)
+    locations = list(spec.submodule_search_locations or []) if spec else []
+    if not locations:
+        raise PluginError(f"{found.target!r} is not a package with theme folders")
+    return Path(locations[0]).resolve()
 
 
 def _load(found: Found) -> Any:
     if found.folder is not None and str(found.folder) not in sys.path:
         sys.path.insert(0, str(found.folder))
+    if found.kind == "themes":
+        return _theme_folder(found)
     module_name, _, attribute = found.target.partition(":")
     if not module_name or not attribute:
         raise PluginError(f"{found.target!r} is not 'module:attribute'")
@@ -143,7 +164,7 @@ def discover(folder: Path | None = None) -> Registry:
     """Everything installed, without importing any plugin code yet."""
     registry = Registry()
     for kind, group in GROUPS.items():
-        for entry in entry_points(group=group):
+        for entry in _installed(group):
             dist = entry.dist
             source = f"package {dist.name} {dist.version}" if dist else "package"
             registry.add(Found(kind, entry.name, entry.value, source))
@@ -154,6 +175,15 @@ def discover(folder: Path | None = None) -> Registry:
     for error in registry.errors:
         log.error("plugins: %s", error)
     return registry
+
+
+def _installed(group: str) -> Iterator[Any]:
+    """Entry points of installed packages, Libre Panel's own aside."""
+    for entry in entry_points(group=group):
+        dist = entry.dist
+        if dist is not None and re.sub(r"[-_.]+", "-", dist.name).lower() == OWN_DISTRIBUTION:
+            continue
+        yield entry
 
 
 def _read_folder(folder: Path, registry: Registry) -> None:

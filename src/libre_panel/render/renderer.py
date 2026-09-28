@@ -192,9 +192,11 @@ def _catmull_rom(points: list[tuple[float, float]], samples: int = 6) -> list[tu
 
 
 class Renderer:
-    def __init__(self, theme: Theme, animate: bool = False) -> None:
+    def __init__(self, theme: Theme, animate: bool = False, preview: bool = False) -> None:
         self.theme = theme
         self.animate = animate
+        self.preview = preview  # an editor preview or a picture, not the panel
+        self.shown: Image.Image | None = None  # the frame the panel shows (set by the loop)
         self.warnings: list[str] = []
         self.moving = False  # True while an animation has not settled yet
         self._fonts: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
@@ -608,17 +610,18 @@ class Renderer:
             self._warn(f"screen {name!r} failed to start: {exc}")
             return None
 
-    def _screen_piece(self, snapshot: Snapshot, now: float) -> Piece | None:
-        name = self.theme.screen["name"]
+    def _screen_image(self, snapshot: Snapshot, now: float) -> Image.Image | None:
         try:
             image = self.screen.render(snapshot, now)
         except Exception as exc:
-            self._warn(f"screen {name!r} failed: {exc}")
+            self._warn(f"screen {self.theme.screen['name']!r} failed: {exc}")
             return None
         if getattr(self.screen, "moving", False):
             self.moving = True
-        if image is None:
-            return None
+        return image
+
+    def _screen_piece(self, image: Image.Image) -> Piece:
+        name = self.theme.screen["name"]
         if self._screen_last is not None and self._screen_last[0] is image:
             return self._screen_last[1]  # the same picture: nothing to compose again
         size = (self.theme.width, self.theme.height)
@@ -663,10 +666,7 @@ class Renderer:
         self.moving = False
         boxes: dict[str, Box] = {}
         pieces: list[tuple[str, Piece]] = []
-        if self.screen is not None:
-            screen = self._screen_piece(snapshot, now)
-            if screen is not None:
-                pieces.append(("\0screen", screen))  # not a widget id: ids are never empty
+        screen = self._screen_image(snapshot, now) if self.screen is not None else None
         for widget in theme.widgets:
             if not widget.get("visible", True) or self._missing(widget, snapshot):
                 continue
@@ -685,6 +685,12 @@ class Renderer:
                 piece.layer.width,
                 piece.layer.height,
             ]
+        if screen is not None:
+            if not pieces and screen.mode == "RGB" and screen.size == (theme.width, theme.height):
+                # an opaque screen alone is the frame: nothing to compose
+                self._last = None
+                return screen, boxes
+            pieces.insert(0, ("\0screen", self._screen_piece(screen)))  # ids are never empty
         return self._compose(pieces).convert("RGB"), boxes
 
     @staticmethod

@@ -488,7 +488,7 @@ class EditorHandler(BaseHTTPRequestHandler):
                 snapshot.history.update({k: v for k, v in live.history.items() if len(v) > 1})
             except Exception as exc:
                 log.warning("live sensors unavailable: %s", exc)
-        renderer = Renderer(theme)
+        renderer = Renderer(theme, preview=True)
         try:
             frame, boxes = renderer.render(snapshot)
         finally:

@@ -11,6 +11,7 @@ as a plugin: a Python package that registers parts of these kinds.
 | Transition | `libre_panel.transitions` | how the panel goes from one theme (or mode) to the next |
 | Toast style | `libre_panel.toasts` | how messages from services look; a theme selects it by name |
 | Editor page | `libre_panel.editor_pages` | a page of the plugin's own in the theme editor |
+| Themes | `libre_panel.themes` | a package whose folder holds theme folders |
 | Sensor source | `libre_panel.sensors` | readings (see [Architecture](ARCHITECTURE.md#plugins)) |
 | Display driver | `libre_panel.devices` | another kind of panel |
 
@@ -61,6 +62,21 @@ gamemode = "my_plugin.gamemode:GameMode"
 Everything a plugin needs is imported from `libre_panel.plugins`. A plugin
 that fails to import, raises, or was written for another API version is
 reported (log, `libre-panel plugins`) and skipped; the panel keeps running.
+
+## Themes
+
+A plugin brings its themes as a package of theme folders; the entry point
+names the package, not a class:
+
+```toml
+[entry-points."libre_panel.themes"]
+spur = "my_plugin.themes"   # my_plugin/themes/<theme>/theme.json, with its assets
+```
+
+They show up in the editor and the tray as "(plugin)" and are read-only
+like the built-in ones: saving makes a copy in the user folder, which then
+wins over the plugin's theme of that name (a plugin's wins over a built-in
+one).
 
 ## Services
 
@@ -178,6 +194,14 @@ class Studio(Screen):
   pre-rendered files.
 - `suppresses = {"music"}` names toast kinds the screen shows anyway: those
   toasts are left out while it is on.
+- Do not change an image after returning it; return the same object when
+  nothing changed. An RGB image with no widgets on top goes to the panel as
+  it is, without compositing (about 4 ms less per frame at 1920×480).
+- `context.preview` is true in an editor preview (and `libre-panel
+  render`): leave what the panel's drawing keeps between frames (histories,
+  smoothing) alone. `context.shown` is the frame the panel showed last,
+  after transitions and toasts, e.g. for particles that start from what is
+  on it.
 - `context.continuous` is true in video mode, where every frame reaches the
   panel; `context.progress(now)` says how far `now` is from the last reading
   to the next (0 to 1). Move a curve by that part of a sample width and it

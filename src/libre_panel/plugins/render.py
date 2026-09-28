@@ -41,6 +41,18 @@ class RenderContext:
         return self._renderer.fps
 
     @property
+    def preview(self) -> bool:
+        """True in an editor preview (or ``libre-panel render``): not the panel. Leave
+        what the panel's drawing keeps between frames (histories, smoothing) alone."""
+        return self._renderer.preview
+
+    @property
+    def shown(self) -> Image.Image | None:
+        """The frame the panel showed last, after transitions and toasts (in the
+        panel's size), or None; e.g. for particles that start from what is on it."""
+        return self._renderer.shown
+
+    @property
     def continuous(self) -> bool:
         """True in video mode: every frame reaches the panel, so motion shows
         between readings (the built-in graphs scroll on every frame)."""
@@ -93,9 +105,11 @@ class Screen:
 
     Set ``name``, ``api = 1``, optionally ``label`` ({"en": ..., "de": ...}) and
     ``options`` ({key: (field kind, default)}). ``render`` runs on the render
-    thread at up to 50 fps and returns an RGB or RGBA image of ``context.size``.
-    ``__init__`` also runs for every preview in the editor: keep expensive
-    preparation in a module-level cache.
+    thread at up to 50 fps and returns an RGB or RGBA image of ``context.size``;
+    do not change an image after returning it (return the same object again
+    when nothing changed). An RGB image with no widgets on top goes to the
+    panel as it is. ``__init__`` also runs for every preview in the editor
+    (``context.preview``): keep expensive preparation in a module-level cache.
     """
 
     name = ""

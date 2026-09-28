@@ -592,9 +592,19 @@ def load_theme(folder: Path) -> Theme:
     return parse_theme(data, root=folder)
 
 
+def plugin_theme_dirs() -> list[Path]:
+    """Folders of themes that plugins bring (``libre_panel.themes``)."""
+    from libre_panel.plugins.loader import registry
+
+    installed = registry()
+    folders = (installed.get("themes", name) for name in installed.names("themes"))
+    return [folder for folder in folders if folder is not None and folder.is_dir()]
+
+
 def _search_dirs() -> list[Path]:
-    # User themes first so a user can shadow a built-in theme of the same name.
-    return [user_themes_dir(), builtin_themes_dir()]
+    # User themes first so a user can shadow a plugin's or a built-in theme of
+    # the same name; a plugin's shadows a built-in one.
+    return [user_themes_dir(), *plugin_theme_dirs(), builtin_themes_dir()]
 
 
 def find_theme(name: str) -> Path:
@@ -614,9 +624,11 @@ def list_themes() -> list[dict[str, Any]]:
             continue
         for folder in sorted(base.iterdir()):
             if (folder / THEME_FILENAME).is_file() and valid_theme_name(folder.name):
+                source = "user" if base == user_themes_dir() else "plugin"
                 found[folder.name] = {
                     "id": folder.name,
-                    "builtin": base == builtin_themes_dir(),
+                    "builtin": source != "user",  # read-only: saved as a copy
+                    "source": "built-in" if base == builtin_themes_dir() else source,
                     "path": str(folder),
                 }
     return sorted(found.values(), key=lambda t: t["id"])

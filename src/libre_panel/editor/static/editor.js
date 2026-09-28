@@ -1377,7 +1377,11 @@ async function onPanelChange() {
 async function refreshThemeList(selectId) {
   state.themes = await api("GET", "/api/themes");
   const select = $("#theme-select");
-  select.replaceChildren(...state.themes.map((theme) => el("option", { value: theme.id, text: theme.builtin ? t("{id} (built-in)", { id: theme.id }) : theme.id })));
+  const label = (theme) => {
+    if (theme.source === "plugin") return t("{id} (plugin)", { id: theme.id });
+    return theme.builtin ? t("{id} (built-in)", { id: theme.id }) : theme.id;
+  };
+  select.replaceChildren(...state.themes.map((theme) => el("option", { value: theme.id, text: label(theme) })));
   if (!state.themeId) select.append(el("option", { value: "", text: t("(unsaved)") }));
   select.value = selectId ?? state.themeId ?? "";
 }

@@ -215,18 +215,40 @@ def _cmd_udev_rules(args: argparse.Namespace) -> int:
 
 
 def _cmd_autostart(args: argparse.Namespace) -> int:
-    from libre_panel.autostart import Autostart, launch_command
+    from libre_panel.autostart import (
+        Autostart,
+        AutostartError,
+        launch_command,
+        writable_by_user,
+    )
 
     autostart = Autostart()
-    if args.action == "enable":
-        where = autostart.enable(launch_command(args.config))
-        print(t("Libre Panel starts in the background when you log in ({where}).", where=where))
-    elif args.action == "disable":
-        print(t("Autostart removed.") if autostart.disable() else t("Autostart was not enabled."))
-    elif autostart.is_enabled():
-        print(t("Autostart is enabled ({where}).", where=autostart.location()))
-    else:
-        print(t("Autostart is disabled."))
+    try:
+        if args.action == "enable":
+            command = launch_command(args.config)
+            if args.elevated and writable_by_user(Path(command[0]), Path.home()):
+                print(
+                    t(
+                        "Warning: {program} is in your user folder, where any program you "
+                        "run could replace it and so get administrator rights at the next "
+                        "login. Safer: install Libre Panel under Program Files.",
+                        program=command[0],
+                    ),
+                    file=sys.stderr,
+                )
+            where = autostart.enable(command, elevated=args.elevated)
+            print(t("Libre Panel starts in the background when you log in ({where}).", where=where))
+        elif args.action == "disable":
+            print(
+                t("Autostart removed.") if autostart.disable() else t("Autostart was not enabled.")
+            )
+        elif autostart.is_enabled():
+            print(t("Autostart is enabled ({where}).", where=autostart.location()))
+        else:
+            print(t("Autostart is disabled."))
+    except AutostartError as exc:
+        print(exc, file=sys.stderr)
+        return 1
     return 0
 
 
@@ -247,8 +269,9 @@ def _cmd_preview(args: argparse.Namespace) -> int:
             hub.close()
     else:
         snapshot = demo_snapshot()
-    renderer = Renderer(theme)
+    renderer = Renderer(theme, preview=True)
     frame, _ = renderer.render(snapshot)
+    renderer.close()
     frame.save(args.output)
     for warning in theme.warnings + renderer.warnings:
         print(f"warning: {warning}", file=sys.stderr)
@@ -280,7 +303,7 @@ def _cmd_themes(args: argparse.Namespace) -> int:
     from libre_panel.theme.model import list_themes
 
     for theme in list_themes():
-        origin = "built-in" if theme["builtin"] else "user"
+        origin = theme["source"]
         print(f"{theme['id']:<24} {origin:<9} {theme['path']}")
     return 0
 
@@ -436,6 +459,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("autostart", help="start Libre Panel when you log in")
     p.add_argument("action", choices=["enable", "disable", "status"])
+    p.add_argument(
+        "--elevated",
+        action="store_true",
+        help="Windows: start with the highest rights (Task Scheduler), for sensor "
+        "plugins that read the hardware themselves; run as administrator",
+    )
     p.set_defaults(func=_cmd_autostart)
 
     p = sub.add_parser("quit", help="quit the running background app")

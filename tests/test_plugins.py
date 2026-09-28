@@ -95,6 +95,92 @@ def test_a_plugin_that_does_not_import_is_reported(plugin_folder):
     assert "needs pypresentmon" in registry.parts["services"]["counter"].error
 
 
+SENSOR = """
+from libre_panel.sensors import Reading, SensorProvider
+
+
+class Fans(SensorProvider):
+    name = "demo.fans"
+    api = 1
+
+    def read(self):
+        return {"fan.front": Reading("fan.front", 1200.0, "RPM", "Front fan")}
+
+
+class Old(SensorProvider):
+    name = "demo.old"  # no api: written before plugin API 1
+
+
+class Volume(SensorProvider):
+    name = "demo.volume"
+    api = 1
+    every_frame = True
+    reads = 0
+
+    def read(self):
+        Volume.reads += 1
+        return {"audio.volume": Reading("audio.volume", float(Volume.reads), "%")}
+"""
+
+SENSOR_PARTS = {
+    "libre_panel.sensors": {"demo.fans": "Fans", "demo.old": "Old", "demo.volume": "Volume"},
+    "libre_panel.themes": {"demo": "{package}.themes"},
+}
+
+
+def test_plugins_bring_sensor_sources_and_themes(plugin_folder, capsys):
+    import json
+
+    from libre_panel.sensors import available_providers, create_provider
+    from libre_panel.theme.model import find_theme, list_themes, load_theme, save_theme
+
+    data = theme_data()
+    data["name"] = "Demo dash"
+    files = {"themes/__init__.py": "", "themes/demo-dash/theme.json": json.dumps(data)}
+    plugin_folder(SENSOR, SENSOR_PARTS, files=files)
+
+    assert create_provider("demo.fans").read()["fan.front"].value == 1200.0
+    assert available_providers()["demo.fans"].startswith("folder ")
+    assert available_providers()["psutil"] == "built in"
+    with pytest.raises(ValueError, match="did not load: .*plugin API None"):
+        create_provider("demo.old")
+
+    folder = find_theme("demo-dash")
+    assert load_theme(folder).name == "Demo dash" and folder.parent.name == "themes"
+    listed = {theme["id"]: theme for theme in list_themes()}
+    assert listed["demo-dash"]["source"] == "plugin" and listed["demo-dash"]["builtin"]
+    assert listed["slate"]["source"] == "built-in"
+    save_theme("demo-dash", data)  # the user's copy wins over the plugin's
+    assert find_theme("demo-dash").parent.parent.name == "home"
+
+    assert cli.main(["plugins"]) == 1  # demo.old does not load
+    out = capsys.readouterr().out
+    assert "sensors    demo.fans" in out and "themes     demo" in out
+    assert cli.main(["themes"]) == 0
+    assert "demo-dash" in capsys.readouterr().out
+
+
+def test_every_frame_sources_reach_each_frame(plugin_folder, monkeypatch):
+    package = plugin_folder(SENSOR, {"libre_panel.sensors": {"demo.volume": "Volume"}})
+    monkeypatch.setattr(app, "create_display", Capture)
+    Capture.frames = []
+    host = PluginHost()
+    config = Config(theme="libre-default", fps=20, sensors=SensorsConfig(providers=["demo.volume"]))
+    config.refresh_ms = 5000  # one snapshot in the test's time
+    stop = threading.Event()
+    thread = threading.Thread(target=app.run, args=(config,), kwargs={"stop": stop, "host": host})
+    thread.start()
+    try:
+        reads = lambda: sys.modules[package].Volume.reads if package in sys.modules else 0  # noqa: E731
+        assert wait_for(lambda: reads() > 5, timeout=5)
+        assert wait_for(lambda: host.latest.value("audio.volume") > 5, timeout=5)
+    finally:
+        stop.set()
+        thread.join(10)
+        host.close()
+    assert len(host.latest.history["audio.volume"]) == 1  # graphs: once per refresh_ms
+
+
 def services_config(enabled, **options):
     return Config(services=ServicesConfig(enabled=list(enabled), options=options))
 
@@ -303,6 +389,22 @@ class Bar(WidgetType):
         return image
 
 
+class Echo(Screen):
+    # opaque, alone on the frame; notes what its context says
+    name = "echo"
+    api = 1
+    seen = []
+
+    def __init__(self, context, options):
+        super().__init__(context, options)
+        self._frame = Image.new("RGB", context.size, "#123456")
+
+    def render(self, snapshot, now):
+        shown = self.context.shown
+        Echo.seen.append((self.context.preview, shown.size if shown is not None else None))
+        return self._frame
+
+
 class Failing(Screen):
     name = "failing"
     api = 1
@@ -332,7 +434,7 @@ class Pathy(WidgetType):
 """
 
 DRAWING_PARTS = {
-    "libre_panel.screens": {"tint": "Tint", "failing": "Failing"},
+    "libre_panel.screens": {"tint": "Tint", "echo": "Echo", "failing": "Failing"},
     "libre_panel.widgets": {
         "demo.bar": "Bar",
         "bar": "NoDot",
@@ -385,6 +487,45 @@ def test_screen_and_plugin_widget_are_drawn(plugin_folder):
     assert calls["bar"] == 2 and frame.getpixel((105, 22)) == (255, 0, 0)
     renderer.close()
     assert calls["closed"] == 1
+
+
+def test_an_opaque_screen_alone_is_the_frame(plugin_folder, monkeypatch, isolated_home):
+    import json
+
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.theme.model import parse_theme
+
+    plugin_folder(DRAWING, DRAWING_PARTS)
+    theme = parse_theme(theme_data(screen={"name": "echo"}))
+    renderer = Renderer(theme)
+    frame, _ = renderer.render(snapshot())
+    echo = renderer.screen.__class__
+    assert frame is renderer.screen._frame  # nothing composed, nothing converted
+    assert echo.seen[-1] == (False, None)
+    preview = Renderer(theme, preview=True)
+    preview.render(snapshot())
+    assert echo.seen[-1] == (True, None)
+    with_widget = Renderer(parse_theme(theme_data({"name": "echo"}, [bar()])))
+    assert with_widget.render(snapshot())[0] is not with_widget.screen._frame
+
+    # in the main loop the screen sees the frame the panel shows
+    folder = isolated_home / "themes" / "echo-theme"
+    folder.mkdir(parents=True)
+    data = theme_data(screen={"name": "echo"})
+    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+    monkeypatch.setattr(app, "create_display", Capture)
+    Capture.frames = []
+    echo.seen.clear()
+    stop = threading.Event()
+    config = Config(theme="echo-theme", fps=20, sensors=SensorsConfig(providers=["demo"]))
+    thread = threading.Thread(target=app.run, args=(config,), kwargs={"stop": stop})
+    thread.start()
+    try:
+        assert wait_for(lambda: any(shown for _, shown in echo.seen))
+    finally:
+        stop.set()
+        thread.join(10)
+    assert (False, Capture.frames[0].size) in echo.seen
 
 
 def test_plugin_widgets_get_the_common_effects(plugin_folder):

@@ -377,6 +377,8 @@ def run(
                 every = (config.refresh_ms or theme.refresh_ms) / 1000
                 next_sample = started + every
                 renderer.new_sample(started, every)
+            elif hub.every_frame:  # cheap sources follow on every frame (a new dict:
+                snapshot.readings = {**snapshot.readings, **hub.fresh()}  # helpers may read)
             was_connected = link.connected
             if link.ensure(started):
                 streaming = display.streaming
@@ -391,6 +393,7 @@ def run(
                     frame, blend = _blend(blend, frame, started)
                 last_frame = frame
                 frame = toasts.apply(frame, started, hold=blend is not None)
+                renderer.shown = frame
                 if streaming:
                     link.show(frame, None, started)
                     previous = None

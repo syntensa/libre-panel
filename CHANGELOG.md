@@ -89,6 +89,13 @@ First preview of Libre Panel.
   colours; switches and toasts wait until a transition is over
 - Editor pages: a plugin's own page in the theme editor (under *Pages*),
   with its API and the editor's look (`/static/kit.js`)
+- Plugins can bring themes (read-only, like the built-in ones) and sensor
+  sources, also as a folder; sources that are cheap to read can follow on
+  every frame. Opaque plugin screens without widgets go to the panel
+  without compositing
+- Windows: `libre-panel autostart enable --elevated` starts Libre Panel at
+  login with the highest rights (Task Scheduler), for sensor plugins that
+  read the hardware themselves; set up and removed only as administrator
 
 **Sensors**
 - psutil, LibreHardwareMonitor (checked against real output), demo;
