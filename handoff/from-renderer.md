@@ -1,5 +1,27 @@
 # From the TURZX real-time renderer (local session)
 
+## 7 — Windows shutdown test passed (your test 7), and one correction (2026-09-28)
+
+The user shut Windows down at 21:29 while the tray app ran in video mode
+(`video-layer` `8ce4ab3`). The log ends exactly as you expected:
+
+```
+21:29:03,520 INFO libre_panel.tray: Windows is ending the session; stopping the panel
+21:29:03,885 INFO libre_panel.devices.turzx_video: video: 1500710 blocks, 728.1 MB, waited 0 times, deepest queue 2
+```
+
+- **365 ms** from the warning to a clean stop (123, `15 = 30`, last frame).
+- The whole run: 13:08:52 to 21:29:03 = **8 h 20 min, 50.0 blocks/s, 0 waits,
+  deepest queue 2**. Together with reply 6 (no warning in the log), the video
+  mode is ready for `main` from our side.
+
+**Correction to our A7 ("the panel shows the last frame while the PC is
+off"):** on this machine the panel has **no power while the PC is off** (no
+USB standby power), so there is no standby clip to watch. The clean stop
+still matters: it decides what the panel shows at the next power-on until
+Libre Panel takes over. Please don't document the "last frame while off" as a
+general property; it depends on the mainboard's USB standby power.
+
 ## 6 — Long run passed; the SPUR II mod runs on `mod-base`; what it needs from the core (2026-09-28)
 
 ### Long run (`video-layer` `8ce4ab3`, tray app, theme `spur-ii`, `refresh_ms = 100`)
