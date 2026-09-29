@@ -417,12 +417,13 @@ class ServiceManager:
         log.info("service %r started", name)
 
     def _stop(self, name: str) -> None:
-        service, _ = self.running.pop(name)
+        service, _ = self.running[name]  # "running" until its stop() has returned
         worker = threading.Thread(target=self._stop_one, args=(name, service), daemon=True)
         worker.start()
         worker.join(self.STOP_S)
         if worker.is_alive():
             log.warning("service %r did not stop within %.0f s", name, self.STOP_S)
+        del self.running[name]
         self.host.forget(name)
         self.state[name] = "stopped"
 

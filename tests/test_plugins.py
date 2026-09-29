@@ -970,21 +970,25 @@ def test_a_transition_plays_to_the_end(plugin_folder, monkeypatch, isolated_home
         entrance = ("demo.entrance", {"seconds": 1.0, "color": magenta})
         host.set_mode("game", by="test", transition=entrance)
         assert wait_for(lambda: Capture.frames[-1].getpixel((5, 5)) == magenta)
+        began = time.monotonic()
         host.request_theme("white", by="test")
         host.notify(Toast("GG", seconds=2))
-        end = time.monotonic() + 3
+        end = began + 3
         while time.monotonic() < end and status.theme != "white":
             frame = Capture.frames[-1]
             if frame.getpixel((5, 5)) == magenta:
                 seen.append((frame.getextrema() == ((255, 255), (0, 0), (255, 255)), status.theme))
             time.sleep(0.02)
+        waited = time.monotonic() - began
         assert status.theme == "white" and status.mode == "game"
         assert wait_for(lambda: _differs(Capture.frames[-1], _white(Capture.frames[-1])))
     finally:
         stop.set()
         thread.join(10)
         host.close()
-    assert len(seen) > 10  # about a second of it
+    # the switch waited for the 1 s entrance (seen late, and macOS runners
+    # sleep coarsely: well over half of it is left)
+    assert waited > 0.6 and len(seen) >= 2, (waited, seen)
     assert all(pure and theme == "libre-default" for pure, theme in seen), seen[:5]
 
 
