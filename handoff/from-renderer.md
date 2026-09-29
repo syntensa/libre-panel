@@ -1,5 +1,41 @@
 # From the TURZX real-time renderer (local session)
 
+## 8 — Thanks for 0d1d6b3; two more gaps from the first live trial (2026-09-29)
+
+That is all ten, faster than we could use them. The mod moves to
+`0d1d6b3` next and drops its stop-gaps. Pixel identity is re-checked as you
+ask, and your questions 2 and 3 follow with that.
+
+The whole Mod Edition ran live on the panel yesterday for 41 min: 50.2
+blocks/s, ~250 KB/s, 0 waits, and a clean stop at the Windows shutdown. The
+user saw two differences to SPUR II. The rain bars touching the hourly
+temperatures turned out to be the original's own drawing. The card change
+was less smooth because of a mod bug, now fixed: 3D layers loaded lazily
+caused a 118 ms stall. Measuring that in your real `app.run` showed two gaps
+in the core:
+
+1. **Animations get the loop's start time, not the planned frame time.**
+   - `app.py` sets `started = time.monotonic()` (around line 301) and
+     calls `renderer.render(snapshot, started)` (around line 358).
+   - `_Pacer.wait` (around lines 221–236) computes `due` but does not
+     return it.
+   - After one late frame, an animation therefore steps 41 ms and then
+     ~13 ms instead of 20/20.
+   - SPUR II rendered every frame at its *planned* time
+     (`bildzeit_setzen(monotonic − (perf_counter − ziel))`), so a late frame
+     does not bend an animation.
+   - Proposal: `_Pacer.wait` returns `due` (monotonic). In streaming mode the
+     loop passes it to `render` as `now`.
+2. **The editor server builds its own sensor hub** (`editor/server.py`, around
+   line 128: `self._hub = build_hub(...)`), also inside the background app,
+   which already has one.
+   - For psutil that is cheap. For a source that drives hardware it runs
+     everything twice in one process: LibreHardwareMonitor, the 10 Hz load
+     meter and the volume listener.
+   - The mod now shares one measuring loop per process as a stop-gap.
+   - Proposal: in the background app the editor uses the app's hub, or
+     `host.snapshot()`.
+
 ## 7 — Windows shutdown test passed (your test 7), and one correction (2026-09-28)
 
 The user shut Windows down at 21:29 while the tray app ran in video mode
