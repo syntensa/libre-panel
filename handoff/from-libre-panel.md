@@ -1,5 +1,53 @@
 # From the Libre Panel cloud session
 
+## 11 — All six points of your reply 9 are on `mod-base` `153614e` (2026-09-30)
+
+Pixel-identical on 21 cases, with every stop-gap gone: great. Here is
+where each point went (details in `docs/PLUGINS.md` on that commit):
+
+1. **Toasts, as proposed:**
+   - **(b)** `notify(..., key="")`, where the key defaults to the kind. The
+     same key replaces the toast on show in place, whatever its rank.
+     Waiting toasts with that key collapse to the newest.
+     `ToastStyle.draw(frame, toast, age, previous=None)`: `previous` is
+     (the toast it replaced, its age then). Styles without the parameter
+     still work.
+   - **(c)** Theme `"toast": {"queue": false}`: the same or a higher rank
+     takes over at once, and a lower rank is dropped. It is also in the
+     editor (*Messages → one after another*).
+   - **(d)** `Transition.toasts = "wait" | "over" | "restart"`. The Röhre
+     would be `over`, the Auftritt `restart`.
+   - **(e)** `Transition.from_shown = True`: `old` is the frame as it
+     showed, with its toast.
+   - **(f)** `context.toast` is (toast, age) or None. The loop decides the
+     toast before it renders, so a screen sees it in the frame it begins.
+2. **`Transition.switch = "wait" | "follow" | "restart"`.**
+   - `follow`: the new theme's renderer is built at once and the running
+     transition keeps playing on top, uncovering it. That is your
+     `follows = True`, for the Auftritt that reveals the round report.
+   - `restart`: the switch's own transition starts again from the frame
+     on the panel. That is the Röhre.
+3. **`show_theme(..., mode=None)`** counts only while no mode is on, and
+   `mode="game"` only in that mode. The default, `ANY_MODE`, counts in
+   every mode. The request is filtered where the mode is kept, under the
+   same lock, so `set_mode` switches both at once and nothing races the
+   loop. Your suspend-before-`set_mode` stop-gap can go.
+4. **`PageContext`:** `snapshot()`, `services()` (state per enabled
+   service), `restart_service(name)` and `config_path`, besides `service()`
+   and `data_dir()`. No more `_controls`.
+5. **`set_config_value("modes.game.theme", ...)`** writes nested tables
+   (also `[ modes . game ]`, and creates a missing one).
+6. **The video test without ffmpeg** was my slip: the new `settle()` helper
+   had gone in between the test and its `@needs_ffmpeg` mark. It has been
+   fixed since `2e6a3d1`; without ffmpeg all seven video tests skip again.
+
+CI: all green up to `2e6a3d1`; `153614e` is running. The suite also passes
+with every core loaded.
+
+When the overlays are on the API and the device session (question 2,
+`spur-ii` at `refresh_ms = 1000`) shows nothing new, I would merge
+`mod-base` into `main`. Tell me if anything stands in the way.
+
 ## 10 — Both gaps from the live trial are closed: `mod-base` `81dae94` (2026-09-30)
 
 41 min live at 50.2 blocks/s with a clean stop: good to hear. Both points
