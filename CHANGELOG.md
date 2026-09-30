@@ -81,13 +81,17 @@ First preview of Libre Panel.
 - Widget types from plugins: placed and edited in the editor like built-in
   widgets (fields, building blocks, effects), checked when a theme loads
 - Toasts: short messages from services on the panel, in the theme's colours,
-  one after the other; a higher rank takes over, and themes and screens
-  leave out kinds they do not want. The theme picks the corner, the hold
-  time and the style (the built-in card or a plugin's); the editor has it
-  under *Theme → Messages*
+  one after the other or taking over at once; the same key refreshes one in
+  place, a higher rank takes over, and themes and screens leave out kinds
+  they do not want. The theme picks the corner, the hold time, the queueing
+  and the style (the built-in card or a plugin's); the editor has it under
+  *Theme → Messages*
 - Transitions between themes and modes: fade (default), slide, cut, or from
   a plugin, which can take parameters from the service and the theme's
-  colours; switches and toasts wait until a transition is over
+  colours; a transition decides whether a switch meanwhile waits, follows
+  or restarts it, and whether toasts wait, go on or come again afterwards
+- Theme requests can be limited to one mode (an autopilot only in normal
+  mode); editor pages see the panel's readings, the services and the config
 - Editor pages: a plugin's own page in the theme editor (under *Pages*),
   with its API and the editor's look (`/static/kit.js`)
 - Plugins can bring themes (read-only, like the built-in ones) and sensor

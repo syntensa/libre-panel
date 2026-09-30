@@ -95,6 +95,24 @@ def test_set_config_value_keeps_a_comment_after_the_value(isolated_home):
     assert load_config().device.brightness == 55
 
 
+def test_set_config_value_in_nested_tables(isolated_home):
+    from libre_panel.config import set_config_value
+
+    path = config_dir() / "config.toml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        'theme = "slate"\n\n[ modes . game ]  # while a game runs\nfps = 30\n\n[weather]\n',
+        encoding="utf-8",
+    )
+    set_config_value("modes.game.theme", "column")
+    set_config_value("modes.work.fps", 20)  # a table that is not there yet
+    text = path.read_text(encoding="utf-8")
+    assert '[ modes . game ]  # while a game runs\ntheme = "column"\nfps = 30' in text
+    config = load_config()
+    assert config.modes["game"].theme == "column" and config.modes["game"].fps == 30
+    assert config.modes["work"].fps == 20
+
+
 def test_set_config_value_adds_missing_keys_and_tables(isolated_home):
     from libre_panel.config import set_brightness
 

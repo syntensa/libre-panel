@@ -53,6 +53,12 @@ class RenderContext:
         return self._renderer.shown
 
     @property
+    def toast(self) -> tuple[Any, float] | None:
+        """The toast on the panel and its age in seconds, or None (screens can
+        react the moment one begins)."""
+        return self._renderer.toast
+
+    @property
     def continuous(self) -> bool:
         """True in video mode: every frame reaches the panel, so motion shows
         between readings (the built-in graphs scroll on every frame)."""
@@ -165,12 +171,26 @@ class Transition:
     transition=("myplugin.entrance", {...}))``, ``{}`` otherwise); set
     ``self.duration`` in ``__init__`` if it depends on them. ``frame`` gets
     the last frame of the old theme, the current frame of the new one (same
-    size, RGB) and ``t`` from 0 to 1, and returns the frame to show. While it
-    plays, further switches and new toasts wait.
+    size, RGB) and ``t`` from 0 to 1, and returns the frame to show.
+
+    ``switch`` says what a switch that comes while it plays does: ``"wait"``
+    (the default) holds it until the end; ``"follow"`` shows the new theme at
+    once and this transition keeps playing, uncovering it (an entrance that
+    reveals the screen asked for meanwhile); ``"restart"`` starts the new
+    switch's transition from the frame that shows now.
+
+    ``toasts`` says what toasts do meanwhile: ``"wait"`` (the default) lets
+    the one on show stay and new ones wait; ``"over"`` lets them go on over
+    the transition; ``"restart"`` makes the one on show leave and come again
+    afterwards. ``from_shown = True`` hands the old frame over as it showed,
+    with its toast.
     """
 
     name = ""
     duration = 0.4
+    switch = "wait"
+    toasts = "wait"  # "wait": new ones wait; "over": they go on; "restart": leave, come again
+    from_shown = False  # True: the old frame with the toast on it, as it showed
 
     def __init__(
         self, context: RenderContext | None = None, params: dict[str, Any] | None = None
@@ -190,8 +210,11 @@ class ToastStyle:
     the time a toast takes to leave after its hold time. ``draw`` puts one
     toast (:class:`~libre_panel.plugins.Toast`: text, icon, level, kind,
     payload, ...) on the finished frame and returns it; ``age`` runs from 0,
-    when it arrives, to ``toast.seconds + leave_s``. It runs at up to 50 fps:
-    keep what does not change in ``self``.
+    when it arrives, to ``toast.seconds + leave_s``. ``previous`` is the toast
+    this one replaced at once (the same key again, or one it took over from)
+    and that one's age then, or None: change the content in place instead of
+    rolling in again. It runs at up to 50 fps: keep what does not change in
+    ``self``. ``self.anchor`` is the theme's toast position.
     """
 
     name = ""
@@ -203,7 +226,7 @@ class ToastStyle:
         self.context = context
         self.options = options
 
-    def draw(self, frame: Image.Image, toast: Any, age: float) -> Image.Image:
+    def draw(self, frame: Image.Image, toast: Any, age: float, previous: Any = None) -> Image.Image:
         raise NotImplementedError
 
     def close(self) -> None:

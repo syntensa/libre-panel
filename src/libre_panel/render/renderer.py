@@ -197,6 +197,7 @@ class Renderer:
         self.animate = animate
         self.preview = preview  # an editor preview or a picture, not the panel
         self.shown: Image.Image | None = None  # the frame the panel shows (set by the loop)
+        self.toast: tuple[Any, float] | None = None  # the toast on show, its age (the loop)
         self.warnings: list[str] = []
         self.moving = False  # True while an animation has not settled yet
         self._fonts: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}

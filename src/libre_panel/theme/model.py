@@ -407,6 +407,7 @@ TOAST_ANCHORS = ("top-right", "top-left", "bottom-right", "bottom-left", "top", 
 TOAST_DEFAULTS: dict[str, Any] = {
     "anchor": "top-right",
     "seconds": 4.0,
+    "queue": True,  # false: the same or a higher rank takes over, a lower one is dropped
     "off": [],
     "style": "",
     "options": {},
@@ -429,6 +430,7 @@ def _parse_toast(
     if not 0.5 <= seconds <= 60:
         raise ThemeError("toast.seconds: must be between 0.5 and 60")
     toast["seconds"] = seconds
+    toast["queue"] = _coerce("bool", raw.get("queue", True), "toast.queue")
     off = raw.get("off", [])
     if not isinstance(off, list) or not all(isinstance(kind, str) for kind in off):
         raise ThemeError('toast.off: expected a list of kinds, e.g. ["music"]')

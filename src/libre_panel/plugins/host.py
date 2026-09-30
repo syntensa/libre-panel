@@ -60,7 +60,9 @@ class Toast:
 
     ``kind`` names what it is about (``"music"``, ``"volume"``, ...): a theme
     can switch kinds off and a screen can leave out those it shows anyway.
-    A higher ``rank`` replaces a lower one on the panel; the others wait.
+    A toast with the ``key`` of the one on show (default: its kind) replaces
+    it in place (the volume while it turns). A higher ``rank`` replaces a
+    lower one on the panel; the others wait (see the theme's ``toast.queue``).
     ``payload`` carries what a toast style draws besides the text (e.g.
     ``{"image": cover, "progress": 0.4, "color": "#ff0000"}``). ``seconds``
     None means the theme's hold time.
@@ -74,10 +76,13 @@ class Toast:
     rank: int = 0
     payload: dict[str, Any] = field(default_factory=dict)
     service: str = ""  # who sent it
+    key: str = ""  # the same key replaces the one on show; empty: the kind
 
 
 TransitionSpec = str | tuple[str, dict[str, Any]] | None
 """A transition: a name, (name, parameters for it) or None for config.toml's."""
+
+ANY_MODE = "*"  # a theme request that counts in every mode
 
 
 class Service:
@@ -134,16 +139,27 @@ class ServiceHost:
         """An image for screens and widgets (e.g. ``media.cover``); None removes it."""
         self._hub.publish_image(key, image, owner=self.name)
 
-    def show_theme(self, name: str, transition: TransitionSpec = None, priority: int = 0) -> None:
+    def show_theme(
+        self,
+        name: str,
+        transition: TransitionSpec = None,
+        priority: int = 0,
+        mode: str | None = ANY_MODE,
+    ) -> None:
         """Show another theme until :meth:`restore_theme` (config.toml is not changed).
 
         ``transition``: ``"cut"``, ``"fade"``, ``"slide"`` or one from a plugin,
         or ``(name, {parameters})`` for a plugin transition that takes some;
         the default is ``transition`` in config.toml. When several services ask
         for a theme, the highest ``priority`` wins, and among equals the last
-        to ask. A service's theme wins over a mode's.
+        to ask. A service's theme wins over a mode's. ``mode`` limits the
+        request to one mode: ``None`` = only while no mode is on (an autopilot),
+        ``"game"`` = only in game mode; by default it counts in every mode.
+        The request stays and counts again when its mode comes back.
         """
-        self._hub.request_theme(name, by=self.name, transition=transition, priority=priority)
+        self._hub.request_theme(
+            name, by=self.name, transition=transition, priority=priority, mode=mode
+        )
 
     def restore_theme(self, transition: TransitionSpec = None) -> None:
         """Take back this service's :meth:`show_theme` (another service's may show then)."""
@@ -168,11 +184,11 @@ class ServiceHost:
         kind: str = "",
         rank: int = 0,
         payload: dict[str, Any] | None = None,
+        key: str = "",
     ) -> None:
-        """A short message on the panel (see :class:`Toast`). It waits while a
-        transition plays."""
+        """A short message on the panel (see :class:`Toast`)."""
         hold = None if seconds is None else float(seconds)
-        toast = Toast(text, icon, level, hold, kind, int(rank), dict(payload or {}), self.name)
+        toast = Toast(text, icon, level, hold, kind, int(rank), dict(payload or {}), self.name, key)
         self._hub.notify(toast)
 
     def on(self, event: str, callback: Callable[..., None]) -> None:
@@ -203,8 +219,8 @@ class PluginHost:
         self._published: dict[str, tuple[Reading, str | None]] = {}
         self._images: dict[str, tuple[Image.Image, str | None]] = {}
         self.latest: Snapshot | None = None
-        # theme requests by service: (theme, priority, order of asking)
-        self._themes: dict[str, tuple[str, int, int]] = {}
+        # theme requests by service: (theme, priority, order of asking, mode it counts in)
+        self._themes: dict[str, tuple[str, int, int, str | None]] = {}
         self._asked = itertools.count()
         # the transition for the next switch, and a count of switches the main
         # loop has not seen yet (a mode change with a transition is one even
@@ -235,12 +251,17 @@ class PluginHost:
                 self._images[key] = (image.copy(), owner)
 
     def request_theme(
-        self, name: str | None, by: str, transition: TransitionSpec = None, priority: int = 0
+        self,
+        name: str | None,
+        by: str,
+        transition: TransitionSpec = None,
+        priority: int = 0,
+        mode: str | None = ANY_MODE,
     ) -> None:
         with self._lock:
             before = self._top_theme()
             if name:
-                self._themes[by] = (name, int(priority), next(self._asked))
+                self._themes[by] = (name, int(priority), next(self._asked), mode)
             else:
                 self._themes.pop(by, None)
             if self._top_theme() != before:  # a request that shows nothing new plays nothing
@@ -316,7 +337,8 @@ class PluginHost:
             return self._top_theme()
 
     def _top_theme(self) -> str | None:
-        requests = self._themes.values()
+        mode = self._mode[0] if self._mode else None
+        requests = [r for r in self._themes.values() if r[3] == ANY_MODE or r[3] == mode]
         return max(requests, key=lambda r: (r[1], r[2]))[0] if requests else None
 
     @property
@@ -374,12 +396,14 @@ class ServiceManager:
         self.registry = registry or installed()
         self.running: dict[str, tuple[Service, dict[str, Any]]] = {}
         self.state: dict[str, str] = {}
+        self._wanted: dict[str, dict[str, Any]] = {}  # enabled services and their options
         self._lock = threading.Lock()
 
     def apply(self, config: Any) -> None:
         """Start, stop or restart services so they match ``config.services``."""
         wanted = {name: config.services.options.get(name, {}) for name in config.services.enabled}
         with self._lock:
+            self._wanted = dict(wanted)
             for name in [n for n in self.running if n not in wanted]:
                 self._stop(name)
             for name, given in wanted.items():
@@ -390,6 +414,16 @@ class ServiceManager:
                 self._start(name, given)
             for name in [n for n in self.state if n not in wanted]:
                 del self.state[name]
+
+    def restart(self, name: str) -> str:
+        """Stop an enabled service and start it again; returns its new state."""
+        with self._lock:
+            if name not in self._wanted:
+                raise LookupError(f"service {name!r} is not enabled in config.toml")
+            if name in self.running:
+                self._stop(name)
+            self._start(name, self._wanted[name])
+            return self.state[name]
 
     def _start(self, name: str, given: dict[str, Any]) -> None:
         from libre_panel.plugins.loader import PluginError

@@ -124,9 +124,9 @@ while Libre Panel runs.
 | `host.publish(key, value, unit="", label="")` | a reading, shown by themes like any sensor (graphs keep its history); `host.unpublish(key)` |
 | `host.publish_image(key, image)` | an image (PIL) for screens and widgets, e.g. `media.cover`; `None` removes it |
 | `host.snapshot()` | the readings and history the panel was last drawn from |
-| `host.show_theme(name, transition=None, priority=0)` / `host.restore_theme(transition=None)` | show another theme for a while; `config.toml` stays as it is. `transition`: `cut`, `fade`, `slide`, a plugin's, or `(name, {parameters})`; default from `config.toml` |
+| `host.show_theme(name, transition=None, priority=0, mode=ANY_MODE)` / `host.restore_theme(transition=None)` | show another theme for a while; `config.toml` stays as it is. `transition`: `cut`, `fade`, `slide`, a plugin's, or `(name, {parameters})`; default from `config.toml`. `mode=None`: only while no mode is on; `mode="game"`: only in that mode |
 | `host.set_mode(name, transition=None)` / `host.mode` | switch to a mode from `[modes.<name>]`; `None` ends it. A transition plays also when the theme stays |
-| `host.notify(text, icon=None, level="info", seconds=None, kind="", rank=0, payload=None)` | a short message on the panel (see *Toasts*) |
+| `host.notify(text, icon=None, level="info", seconds=None, kind="", rank=0, payload=None, key="")` | a short message on the panel (see *Toasts*) |
 | `host.on(event, callback)` | `panel-connected`, `panel-lost`, `theme-changed` (`theme=`), `mode-changed` (`mode=`), `quit`; callbacks run in an event thread |
 | `host.data_dir` | `<settings>/plugins-data/<service>/` for the service's files |
 | `host.log` | a logger named after the service |
@@ -135,9 +135,12 @@ All calls are thread-safe. Which theme is shown: one a service asked for,
 else the active mode's theme, else the one in `config.toml`. When several
 services ask, the highest `priority` wins, and among equals the last to ask;
 `restore_theme` takes back only the caller's own request, so the one below
-shows again (a round report at priority 10 over an autopilot at 0). A theme
-that does not exist is refused once with a warning; the panel keeps the
-current one.
+shows again (a round report at priority 10 over an autopilot at 0). A
+request made for one mode (`mode=None` for normal mode, as an autopilot's)
+rests while another mode is on and counts again when that mode comes back,
+without the service doing anything: nothing races the switch. A theme that
+does not exist is refused once with a warning; the panel keeps the current
+one.
 
 When a service stops (Quit, or it was removed from `[services]`), what it
 left goes too: its readings and images disappear, a theme or mode it set
@@ -203,7 +206,8 @@ class Studio(Screen):
   render`): leave what the panel's drawing keeps between frames (histories,
   smoothing) alone. `context.shown` is the frame the panel showed last,
   after transitions and toasts, e.g. for particles that start from what is
-  on it.
+  on it. `context.toast` is the toast on the panel and its age, or None: a
+  screen can react the moment one begins.
 - `context.continuous` is true in video mode, where every frame reaches the
   panel; `context.progress(now)` says how far `now` is from the last reading
   to the next (0 to 1). Move a curve by that part of a sample width and it
@@ -270,13 +274,18 @@ make the video judder).
 
 - Messages show one after the other, each for its `seconds` (None: the
   theme's hold time). A higher `rank` replaces the one on show at once; the
-  others wait, by rank and then in order.
+  others wait, by rank and then in order. With the theme's `"queue": false`
+  the same or a higher rank takes over at once and a lower one is dropped.
+- A message with the `key` of the one on show (default: its `kind`)
+  replaces it in place, whatever its rank: turning the volume from 30 to 34
+  refreshes one toast. Waiting ones with that key collapse to the newest.
 - `kind` says what a message is about (`"music"`, `"volume"`, `"device"`,
   …). A theme switches kinds off with `"toast": {"off": ["music"]}`, and a
   screen leaves out those it shows anyway with `suppresses = {"music"}`.
 - `payload` carries what a style draws besides the text, for example
   `{"image": cover, "progress": 0.4, "color": "#EF4444"}`.
-- While a transition plays, new toasts wait.
+- While a transition plays, new toasts wait, unless the transition says
+  otherwise (see *Transitions*).
 
 The theme decides the rest (`"toast": {"anchor": "bottom-right",
 "seconds": 5, "style": "myplugin.band", "options": {...}}`; the editor has
@@ -293,10 +302,11 @@ class Band(ToastStyle):
     options = {"height": ("int", 96)}  # field kinds as for screens
     leave_s = 0.26  # seconds to leave after the hold time
 
-    def draw(self, frame, toast, age):
-        # age: 0 when it arrives ... toast.seconds + leave_s when it is gone
+    def draw(self, frame, toast, age, previous=None):
+        # age: 0 when it arrives ... toast.seconds + leave_s when it is gone;
+        # previous: (the toast this one replaced at once, its age), or None
         out = frame.copy()
-        ...  # roll in, draw toast.text, toast.payload.get("image"), ...
+        ...  # roll in (or change the content in place), draw toast.text, ...
         return out
 ```
 
@@ -350,10 +360,16 @@ class Entrance(Transition):
 self.host.set_mode("game", transition=("myplugin.entrance", {"game": name, "logo": logo}))
 ```
 
-While a transition plays, further switches wait until it is over (a report
-screen that follows a game's end does not cut the entrance short), and so
-do new toasts. Between themes of different sizes (landscape to portrait)
-the panel switches without a transition.
+A transition says how it gets along with what happens while it plays:
+
+| Attribute | Values |
+|---|---|
+| `switch` | `"wait"` (default): a switch waits until it is over, so a report after a game's end does not cut the entrance short. `"follow"`: the new theme shows at once and the transition keeps playing, uncovering it. `"restart"`: the switch's transition starts again from the frame on the panel. |
+| `toasts` | `"wait"` (default): the toast on show stays, new ones wait. `"over"`: toasts go on over the transition. `"restart"`: the toast on show leaves and comes again afterwards. |
+| `from_shown` | `True`: `old` is the last frame as it showed, with its toast (the band belongs to the old screen). |
+
+Between themes of different sizes (landscape to portrait) the panel switches
+without a transition.
 
 ## Editor pages
 
@@ -409,9 +425,13 @@ await api("curve", { method: "POST", body: { points } });
   returns `(status, data)`; `data` is sent as JSON. GET must not change
   anything: changes go through POST, which needs the editor's header
   (`kit.js`'s `api()` sends it). The editor listens on 127.0.0.1 only.
-- `self.context.service(name)` is the running service of that name when the
-  editor belongs to the background app (tray), else `None`;
-  `self.context.data_dir(name)` is that service's data folder.
+- `self.context` gives what the page may need from the running app (in a
+  plain `libre-panel editor` there is none): `service(name)` (the running
+  service or None), `services()` (each enabled service and its state),
+  `restart_service(name)`, `snapshot()` (the readings the panel was drawn
+  from, or None), `config_path` (change one setting with
+  `libre_panel.config.set_config_value("modes.game.theme", ...)`) and
+  `data_dir(name)`, a service's data folder.
 - `kit.js` exports `api`, `loadTexts`, `t`, `language`, `el`, `field`,
   `button` and `setStatus`; with `editor.css` the page looks like the editor.
 

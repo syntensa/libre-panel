@@ -58,7 +58,9 @@ to write or review themes by hand.
   *Theme → Messages*): `"anchor"` places them (`top-right` by default; also
   `top-left`, `bottom-right`, `bottom-left`, `top`, `bottom`; they keep
   clear of the strip a panel's bezel hides), `"seconds"` is how long each
-  stays (4), `"off"` lists kinds the theme does not show (`["music"]`), and
+  stays (4), `"queue": false` lets a new message of the same or a higher
+  rank take over at once and drops lower ones (one after another by
+  default), `"off"` lists kinds the theme does not show (`["music"]`), and
   `"style"` with `"options"` names a toast style from a plugin (the
   built-in card otherwise).
 - Optional: `"screen": {"name": "...", "options": {...}}` lets an installed

@@ -1198,6 +1198,7 @@ function buildToastFields() {
     el("h2", { class: "section-title", text: t("Messages") }),
     field(t("position"), controlFor("anchor", anchors, toast.anchor || "top-right", set("anchor", (v) => (toast.anchor = v))), t("where messages from services appear")),
     field(t("seconds shown"), numberInput(toast.seconds ?? 4, set("seconds", (v) => (toast.seconds = Math.max(0.5, Math.min(60, v || 4)))), { step: "0.5", min: 0.5, max: 60 })),
+    field(t("one after another"), controlFor("queue", "bool", toast.queue ?? true, set("queue", (v) => (toast.queue = v))), t("off: a new message of the same or a higher rank takes over at once, a lower one is dropped")),
     field(t("hidden kinds"), kinds, t("kinds of messages this theme does not show, e.g. music")),
     field(t("style"), style, t("how messages look; plugins can bring more")),
   ];

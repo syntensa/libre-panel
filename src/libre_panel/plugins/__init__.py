@@ -9,6 +9,7 @@ sources and display drivers have their own entry point groups
 """
 
 from libre_panel.plugins.host import (
+    ANY_MODE,
     EVENTS,
     PluginHost,
     Service,
@@ -27,6 +28,7 @@ from libre_panel.plugins.render import (
 )
 
 __all__ = [
+    "ANY_MODE",
     "API_VERSION",
     "EVENTS",
     "EditorPage",

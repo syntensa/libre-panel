@@ -332,7 +332,11 @@ def _toml_literal(value: Any) -> str:
 
 
 _HEADER = re.compile(r"^[ \t]*\[", re.MULTILINE)
-_TABLE = re.compile(r"^[ \t]*\[[ \t]*([A-Za-z0-9_-]+)[ \t]*\][ \t]*(?:#.*)?$", re.MULTILINE)
+# [table] or [table.sub] (not [[array]]); the name comes back without spaces around dots
+_TABLE = re.compile(
+    r"^[ \t]*\[[ \t]*([A-Za-z0-9_-]+(?:[ \t]*\.[ \t]*[A-Za-z0-9_-]+)*)[ \t]*\][ \t]*(?:#.*)?$",
+    re.MULTILINE,
+)
 
 
 def _trailing_comment(line: str) -> str:
@@ -360,7 +364,9 @@ def _with_key(text: str, table: str | None, key: str, literal: str) -> str:
         first = _HEADER.search(text)
         start, end = 0, first.start() if first else len(text)
     else:
-        header = next((m for m in _TABLE.finditer(text) if m.group(1) == table), None)
+        header = next(
+            (m for m in _TABLE.finditer(text) if re.sub(r"[ \t]", "", m.group(1)) == table), None
+        )
         if header is None:
             return text.rstrip("\n") + f"\n\n[{table}]\n{line}\n"
         start = text.find("\n", header.end()) + 1 or len(text)
@@ -377,7 +383,8 @@ def _with_key(text: str, table: str | None, key: str, literal: str) -> str:
 
 
 def set_config_value(name: str, value: Any, path: Path | None = None) -> Path:
-    """Change one setting (``"theme"``, ``"device.brightness"``, ...) in config.toml.
+    """Change one setting (``"theme"``, ``"device.brightness"``,
+    ``"modes.game.theme"``, ...) in config.toml.
 
     The rest of the file, comments included, stays as it is. The new file is
     checked before it is written (atomically), so a mistake never leaves a
@@ -392,7 +399,9 @@ def set_config_value(name: str, value: Any, path: Path | None = None) -> Path:
         data = tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"{path}: could not set {name} ({exc}); please edit it by hand") from exc
-    written = data.get(table, {}) if table else data
+    written: Any = data
+    for part in table.split(".") if table else ():
+        written = written.get(part, {}) if isinstance(written, dict) else {}
     if not isinstance(written, dict) or written.get(key) != value:
         raise ConfigError(f"{path}: could not set {name}; please edit it by hand")
     parse_config(data, path)

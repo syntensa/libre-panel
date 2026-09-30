@@ -174,6 +174,7 @@ def test_toast_settings_in_the_editor(toast_plugin, page, isolated_home):
         "bottom-left"
     )
     messages.locator("label.field", has_text="hidden kinds").locator("input").fill("music, volume")
+    messages.locator("label.field", has_text="one after another").locator("input").uncheck()
     messages.locator("label.field", has_text="style").locator("select").select_option("demo.band")
     height = messages.locator("label.field", has_text="height").locator("input")
     height.fill("55")
@@ -181,6 +182,7 @@ def test_toast_settings_in_the_editor(toast_plugin, page, isolated_home):
     toast = js(page, "state.theme.toast")
     assert toast == {
         "anchor": "bottom-left",
+        "queue": False,
         "off": ["music", "volume"],
         "style": "demo.band",
         "options": {"height": 55},
@@ -192,6 +194,7 @@ def test_toast_settings_in_the_editor(toast_plugin, page, isolated_home):
     saved = load_theme(isolated_home / "themes" / "my-test")
     assert saved.toast["style"] == "demo.band" and saved.toast["options"] == {"height": 55}
     assert saved.toast_anchor == "bottom-left" and saved.toast["off"] == ["music", "volume"]
+    assert saved.toast["queue"] is False
 
 
 @pytest.fixture

@@ -7,6 +7,7 @@ more than about two overlays a second make the video judder.
 
 from __future__ import annotations
 
+import inspect
 import logging
 from dataclasses import replace
 from typing import Any
@@ -30,19 +31,32 @@ SS = 3  # supersampling for smooth corners
 
 
 class ToastLayer:
-    """Shows queued toasts one after the other, each for its own time, in the
-    theme's toast style (the built-in card unless the theme names a plugin's).
+    """Shows toasts in the theme's toast style (the built-in card unless the
+    theme names a plugin's).
 
-    A toast with a higher rank replaces the one on show; the others queue by
-    rank, then in order. Kinds the theme switches off (``toast.off``) or the
-    screen shows anyway (``Screen.suppresses``) are left out.
+    - A toast with the key of the one on show (``key``, else its ``kind``)
+      replaces it in place, whatever its rank: turning the volume refreshes
+      one toast instead of queueing three. Waiting ones with that key collapse
+      to the newest.
+    - With the theme's ``toast.queue`` on (the default) a higher rank takes
+      over at once and the others wait, by rank, then in order. With it off,
+      the same or a higher rank takes over at once and a lower one is dropped.
+    - Kinds the theme switches off (``toast.off``) or the screen shows anyway
+      (``Screen.suppresses``) are left out.
+    - While a transition plays (``hold``) no new toast starts; the one on show
+      stays, unless the transition set it aside to come again afterwards.
+
+    The style learns which toast one replaced (``previous``), so it can change
+    the content in place instead of rolling in again.
     """
 
     MAX_QUEUE = 20
 
     def __init__(self, renderer: Any) -> None:
+        self.inbox: list[Any] = []  # arrived, not yet sorted in
         self.queue: list[Any] = []
-        self.current: tuple[Any, float] | None = None  # (toast, when it arrived)
+        # (toast, when it began, (the toast it replaced, its age then) or None)
+        self.current: tuple[Any, float, tuple[Any, float] | None] | None = None
         self.style: Any = None
         self._failed: str | None = None
         self.set_renderer(renderer)
@@ -75,50 +89,107 @@ class ToastLayer:
             log.exception("toast style %r failed to start; using the built-in card", name)
             style = CardStyle(RenderContext(renderer, CardStyle), {})
         style.anchor = self.settings["anchor"]
+        try:  # styles written before ``previous`` existed still work
+            parameters = inspect.signature(style.draw).parameters.values()
+            self._previous = any(
+                p.name == "previous" or p.kind is p.VAR_KEYWORD for p in parameters
+            )
+        except (TypeError, ValueError):
+            self._previous = False
         return style
 
+    @staticmethod
+    def key_of(toast: Any) -> str:
+        return toast.key or toast.kind
+
     def add(self, toasts: list[Any]) -> None:
-        for toast in toasts:
-            # after those of the same or a higher rank
-            at = next((i for i, q in enumerate(self.queue) if q.rank < toast.rank), len(self.queue))
-            self.queue.insert(at, toast)
-        del self.queue[self.MAX_QUEUE :]  # the lowest ranks, newest first, go
+        self.inbox.extend(toasts)
 
     @property
     def active(self) -> bool:
         """True while a toast shows or waits: the frame keeps changing."""
-        return self.current is not None or bool(self.queue)
+        return self.current is not None or bool(self.queue) or bool(self.inbox)
 
-    def apply(self, frame: Image.Image, now: float, hold: bool = False) -> Image.Image:
-        """The frame with the current toast on it. With ``hold`` (a transition
-        plays) no new toast starts."""
-        waiting = next((q for q in self.queue if q.kind not in self.suppressed), None)
-        if self.current is not None and waiting is not None:
-            if waiting.rank > self.current[0].rank:
-                self.current = None  # a higher rank takes over at once
-        while True:
-            if self.current is None:
-                if hold or not self.queue:
-                    return frame
-                toast = self.queue.pop(0)
-                if toast.kind in self.suppressed:
-                    continue
-                if toast.seconds is None:
-                    toast = replace(toast, seconds=self.settings["seconds"])
-                self.current = (toast, now)
-            toast, began = self.current
-            age = now - began
-            if age < toast.seconds + self.style.leave_s:
-                break
+    def set_aside(self) -> None:
+        """A transition begins that the toast on show must not cover: it leaves
+        now and comes again, from the start, once the transition is over."""
+        if self.current is not None:
+            self.queue.insert(0, self.current[0])
             self.current = None
+
+    def showing(self, now: float) -> tuple[Any, float] | None:
+        """The toast on show and its age (for screens: ``context.toast``)."""
+        return (self.current[0], now - self.current[1]) if self.current is not None else None
+
+    def advance(self, now: float, hold: bool = False) -> None:
+        """Sort in what arrived and decide which toast shows at ``now``. With
+        ``hold`` (a transition plays) no new toast starts."""
+        for toast in self.inbox:
+            self._arrive(toast, now)
+        self.inbox.clear()
+        if self.current is not None:
+            toast, began, _previous = self.current
+            if now - began >= toast.seconds + self.style.leave_s:
+                self.current = None
+        if hold or not self.queue:
+            return
+        shown = self.current[0] if self.current is not None else None
+        if self.settings.get("queue", True):
+            if shown is None or self.queue[0].rank > shown.rank:
+                self._show(self.queue.pop(0), now)
+            return
+        # no queue: the newest of the highest rank, if it is not lower; the rest is dropped
+        best = max(reversed(self.queue), key=lambda q: q.rank)
+        self.queue.clear()
+        if shown is None or best.rank >= shown.rank:
+            self._show(best, now)
+
+    def _arrive(self, toast: Any, now: float) -> None:
+        if toast.kind in self.suppressed:
+            return
+        if toast.seconds is None:
+            toast = replace(toast, seconds=self.settings["seconds"])
+        key = self.key_of(toast)
+        if key and self.current is not None and self.key_of(self.current[0]) == key:
+            self._show(toast, now)  # the same thing again: in place, whatever its rank
+            return
+        if key:
+            same = [i for i, q in enumerate(self.queue) if self.key_of(q) == key]
+            if same:  # waiting ones with this key collapse to the newest
+                self.queue[same[0]] = toast
+                for i in reversed(same[1:]):
+                    del self.queue[i]
+                return
+        # after those of the same or a higher rank
+        at = next((i for i, q in enumerate(self.queue) if q.rank < toast.rank), len(self.queue))
+        self.queue.insert(at, toast)
+        del self.queue[self.MAX_QUEUE :]  # the lowest ranks, newest first, go
+
+    def _show(self, toast: Any, now: float) -> None:
+        current = self.current
+        previous = (current[0], now - current[1]) if current is not None else None
+        self.current = (toast, now, previous)
+
+    def draw(self, frame: Image.Image, now: float) -> Image.Image:
+        """The frame with the toast on show drawn on it."""
+        if self.current is None:
+            return frame
+        toast, began, previous = self.current
         try:
-            return self.style.draw(frame, toast, age)
+            if not self._previous:
+                return self.style.draw(frame, toast, now - began)
+            return self.style.draw(frame, toast, now - began, previous=previous)
         except Exception as exc:  # a broken style must not blank the panel
             message = f"{type(exc).__name__}: {exc}"
             if message != self._failed:
                 self._failed = message
                 log.exception("toast style %r failed", self.style.name)
             return frame
+
+    def apply(self, frame: Image.Image, now: float, hold: bool = False) -> Image.Image:
+        """:meth:`advance`, then :meth:`draw`."""
+        self.advance(now, hold)
+        return self.draw(frame, now)
 
     def close(self) -> None:
         if self.style is not None:
@@ -144,9 +215,10 @@ class CardStyle(ToastStyle):
         super().__init__(context, options)
         self._card: tuple[Any, Image.Image] | None = None
 
-    def draw(self, frame: Image.Image, toast: Any, age: float) -> Image.Image:
+    def draw(self, frame: Image.Image, toast: Any, age: float, previous: Any = None) -> Image.Image:
         leaving = (toast.seconds + self.leave_s - age) / self.leave_s
-        fade = max(0.0, min(1.0, age / self.FADE_IN_S, leaving))
+        arriving = 1.0 if previous is not None else age / self.FADE_IN_S  # replaced in place
+        fade = max(0.0, min(1.0, arriving, leaving))
         if self._card is None or self._card[0] is not toast:
             self._card = (toast, self._draw(toast, frame.size))
         card = self._card[1]

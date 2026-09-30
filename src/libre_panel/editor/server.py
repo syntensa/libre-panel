@@ -314,7 +314,7 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error("not found", HTTPStatus.NOT_FOUND)
         pages = self.state.pages
         if page_id not in pages:
-            pages[page_id] = cls(PageContext(self.controls))
+            pages[page_id] = cls(PageContext(self.controls, self.state.config_path))
         try:
             status, data = pages[page_id].handle(method, path, query, body)
             payload = json.dumps(data).encode("utf-8")
