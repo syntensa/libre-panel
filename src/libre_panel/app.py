@@ -219,8 +219,12 @@ class _Pacer:
     def reset(self) -> None:
         self.fps = 0
 
-    def wait(self, fps: int, stop: threading.Event) -> None:
-        """Wait until the next frame is due."""
+    def wait(self, fps: int, stop: threading.Event) -> float:
+        """Wait until the next frame is due; returns the time it is planned for.
+
+        Drawn at its planned time, a frame that starts a little late does not
+        bend an animation (SPUR II: 20 ms steps, not 41 and then 13).
+        """
         now = self.clock()
         if fps != self.fps:
             self.fps, self.anchor = fps, (now, self.frames)
@@ -235,6 +239,8 @@ class _Pacer:
         elif now - due > 1 / fps:
             self.anchor = (now, self.frames)
             self.reanchored += 1
+            return now
+        return due
 
 
 def _blend(
@@ -307,6 +313,7 @@ def run(
     switches = host.switches if host is not None else 0  # mode changes with a transition
     last_frame: Image.Image | None = None
     pacer = _Pacer()
+    planned: float | None = None  # when the pacer planned the next streaming frame
     previous = None
     snapshot = None
     next_sample = 0.0
@@ -318,7 +325,9 @@ def run(
             display.show(fit_frame(frame, size, theme.background_color), None)
             return
         while not stop.is_set():
-            started = time.monotonic()
+            started = time.perf_counter()  # fine-grained on every system (monotonic is not
+            # on Windows before Python 3.13); a streaming frame is drawn at its planned time
+            now, planned = (planned if planned is not None else started), None
             # While a transition plays, switches wait: they must not cut it short.
             changed = watcher.changed() if blend is None else False
             wanted = _theme_name(config, host)
@@ -353,7 +362,7 @@ def run(
                         chosen = host.take_transition() if host is not None else None
                         kind = transition(chosen or config.transition, RenderContext(renderer))
                         if kind is not None and last_frame is not None:
-                            blend = (kind, last_frame, started)
+                            blend = (kind, last_frame, now)
                         if host is not None:
                             switches = host.switches  # this was the switch
                             host.emit("theme-changed", theme=wanted)
@@ -365,7 +374,7 @@ def run(
                 switches = host.switches  # a mode change that keeps the theme, with a transition
                 kind = transition(host.take_transition(), RenderContext(renderer))
                 if kind is not None and last_frame is not None:
-                    blend = (kind, last_frame, started)
+                    blend = (kind, last_frame, now)
             status.mode = host.mode if host is not None else None
             if host is not None:
                 toasts.add(host.take_toasts())
@@ -376,7 +385,7 @@ def run(
                     host.latest = snapshot
                 every = (config.refresh_ms or theme.refresh_ms) / 1000
                 next_sample = started + every
-                renderer.new_sample(started, every)
+                renderer.new_sample(now, every)
             elif hub.every_frame:  # cheap sources follow on every frame (a new dict:
                 snapshot.readings = {**snapshot.readings, **hub.fresh()}  # helpers may read)
             was_connected = link.connected
@@ -387,12 +396,12 @@ def run(
                 renderer.continuous = streaming  # graphs scroll, values glide on
                 renderer.fps = _fps(config, host, display)  # screens may pace animations by it
                 snapshot.now = datetime.now()  # the clock ticks between readings too
-                frame, _ = renderer.render(snapshot, started)
+                frame, _ = renderer.render(snapshot, now)
                 frame = fit_frame(frame, size, theme.background_color)
                 if blend is not None:
-                    frame, blend = _blend(blend, frame, started)
+                    frame, blend = _blend(blend, frame, now)
                 last_frame = frame
-                frame = toasts.apply(frame, started, hold=blend is not None)
+                frame = toasts.apply(frame, now, hold=blend is not None)
                 renderer.shown = frame
                 if streaming:
                     link.show(frame, None, started)
@@ -406,7 +415,7 @@ def run(
             if host is not None and link.connected != was_connected:
                 host.emit("panel-connected" if link.connected else "panel-lost")
             if link.connected and display.streaming:
-                pacer.wait(_fps(config, host, display), stop)  # every frame, on a steady clock
+                planned = pacer.wait(_fps(config, host, display), stop)  # a steady clock
                 continue
             pacer.reset()
             # While something glides, draw at full fps; otherwise wake for the next
@@ -414,7 +423,7 @@ def run(
             interval = 1 / _fps(config, host)
             if not (renderer.moving or blend is not None or toasts.active):
                 interval = max(interval, min(0.5, next_sample - started))
-            stop.wait(max(0.0, interval - (time.monotonic() - started)))
+            stop.wait(max(0.0, interval - (time.perf_counter() - started)))
     finally:
         display.close()
         toasts.close()

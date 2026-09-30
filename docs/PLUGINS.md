@@ -186,7 +186,9 @@ class Studio(Screen):
   (the full frame, 1920×480 on the 9.2"). It runs on the render thread at
   up to 50 fps; returning the same image object again costs nothing.
 - `snapshot.readings`, `snapshot.history` and `snapshot.images` (from
-  services) are there; `now` is a monotonic time for animations.
+  services) are there; `now` is the frame's time in seconds for animations
+  (steady; in video mode the time the frame is planned for, so a frame that
+  starts a little late does not make an animation stutter).
 - `context` has `size`, `orientation`, `palette`, `model`,
   `hidden_edges()` (pixels the bezel hides, as data: nothing is cropped),
   `font(ref, size)`, `color(value)`, `fps`, `language`, `t(text)`,

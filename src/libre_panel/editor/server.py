@@ -34,7 +34,7 @@ from libre_panel.editor.presets import presets_for_editor
 from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_fonts
 from libre_panel.icons import ICON_NAMES
 from libre_panel.render.renderer import Renderer
-from libre_panel.sensors.base import SensorHub
+from libre_panel.sensors.base import SensorHub, Snapshot
 from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import (
@@ -127,15 +127,21 @@ def _plugin_specs() -> dict[str, Any]:
 
 
 class EditorState:
-    def __init__(self, config_path: Path | None = None) -> None:
+    def __init__(self, config_path: Path | None = None, controls: Any = None) -> None:
         self.config_path = config_path
+        self.controls = controls
         self._hub: SensorHub | None = None
         self._lock = threading.Lock()
         self.pages: dict[str, Any] = {}  # plugin editor pages, created on first use
 
     def live_snapshot(self):
+        """The readings for previews. In the background app they are the panel's
+        own: sources that drive hardware must not run twice in one process."""
         from libre_panel.app import build_hub
 
+        host = getattr(self.controls, "plugin_host", None)
+        if host is not None:
+            return host.latest or Snapshot()
         with self._lock:
             if self._hub is None:
                 self._hub = build_hub(load_config(self.config_path))
@@ -581,7 +587,7 @@ class EditorServer(ThreadingHTTPServer):
 def make_server(
     port: int = 8765, config_path: Path | None = None, controls: Any = None
 ) -> ThreadingHTTPServer:
-    state = EditorState(config_path)
+    state = EditorState(config_path, controls)
     handler = type(
         "Handler",
         (EditorHandler,),

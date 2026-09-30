@@ -1091,6 +1091,26 @@ def test_editor_page_api(editor):
     assert request(editor, "GET", "/api/plugins/pages")[0] == 200  # the editor keeps going
 
 
+def test_the_editor_in_the_background_app_uses_the_panels_readings(monkeypatch):
+    """Sources that drive hardware must not run twice in one process: the editor
+    of the background app previews with the panel's own readings."""
+    from libre_panel import app as app_module
+    from libre_panel.editor.server import EditorState
+    from libre_panel.sensors.base import Reading, Snapshot
+
+    built = []
+    monkeypatch.setattr(app_module, "build_hub", lambda config: built.append(config))
+
+    class Controls:
+        plugin_host = PluginHost()
+
+    state = EditorState(controls=Controls())
+    assert state.live_snapshot().readings == {}  # before the panel's first reading
+    Controls.plugin_host.latest = Snapshot(readings={"cpu.load": Reading("cpu.load", 42.0)})
+    assert state.live_snapshot().value("cpu.load") == 42.0
+    assert built == []  # no second hub
+
+
 def test_page_context_finds_running_services(plugin_folder):
     from libre_panel.plugins import PageContext
 
