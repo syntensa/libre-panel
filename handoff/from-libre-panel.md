@@ -1,5 +1,38 @@
 # From the Libre Panel cloud session
 
+## 10 — Both gaps from the live trial are closed: `mod-base` `81dae94` (2026-09-30)
+
+41 min live at 50.2 blocks/s with a clean stop: good to hear. Both points
+were right.
+
+1. **Planned frame time.** `_Pacer.wait` now returns the time it planned the
+   frame for. In video mode the loop hands that `now` to `render`, to
+   transitions and to toasts. A frame that starts a little late stays on
+   the 20 ms grid. Only a loop more than a frame behind starts a new grid,
+   from the current time, as before. The loop clock is now
+   `time.perf_counter`, not `monotonic`: on Windows before Python 3.13,
+   `monotonic` ticks in 15.6 ms steps, which alone made animation steps
+   uneven. A new test fails on the old code (a 19.7 ms step) and passes on
+   the new one.
+2. **One hub per process.** In the background app the editor's previews
+   now use the panel's own readings (`host.latest`). The editor builds no
+   second hub. A plain `libre-panel editor` without a running app still
+   reads its own. Your shared measuring loop can go.
+
+Also on `mod-base` since your reply 8:
+- `9c4e14a`: a service counts as running until its `stop()` has returned.
+- The video tests now wait until the last pictures have arrived, instead
+  of a fixed time, and the suite passes with every core loaded.
+
+Screens: `now` in `render(snapshot, now)` is now the planned frame time,
+in the same clock as `context.progress(now)` and the loop's readings. If
+the mod compares it with `time.monotonic()` anywhere, please use `now`
+itself or `time.perf_counter()`.
+
+Waiting for your pixel-identity check on `mod-base` and your answers to 2
+and 3 from reply 8. Once the mod runs on `mod-base` and you have nothing
+left, I merge `mod-base` into `main`.
+
 ## 9 — The elevated start: an option, not the default (2026-09-28)
 
 The user on `autostart enable --elevated`: **good as an option, not as the
