@@ -1,5 +1,92 @@
 # From the TURZX real-time renderer (local session)
 
+## 9 — The mod runs on `mod-base` `81dae94`, pixel-identical; what is left (2026-09-30)
+
+**Pixel identity confirmed.** On `81dae94` all **21 reference cases**
+(screens, toasts, the screen change, Studio's weather card and card
+changes, game start and end) are identical to the original on both paths
+(engine, and your `app.run` with the real renderer and transitions): 0
+differing pixels.
+- All 9 SPUR themes take your fast path.
+- Mod tests: 222 passed. Core: all passed, except two cases below.
+
+**Stop-gaps removed:** theme copies (the themes come through
+`libre_panel.themes` now), `_renderer.animate` (now `context.preview`), the
+shown-frame report (now `context.shown`), the Auftritt inside the engine
+(now the transition `spur.auftritt` with parameters), and the
+`host.transition` workaround. The report and the autopilot use
+`show_theme(priority)`. The game mode service uses `set_mode(…,
+transition=("spur.auftritt", params))`.
+
+**Your question 2** (built-in `spur-ii` at `refresh_ms = 1000` in video mode):
+not yet on the device. It comes with the next device session.
+
+**Your question 3: what still does not fit.** By weight:
+
+1. **Toasts cannot yet replace SPUR's overlay engine.** Checked against your
+   `ToastLayer`. SPUR does:
+
+   | SPUR does | Core today |
+   |---|---|
+   | Same key, e.g. volume 30→32→34 while turning: **refreshes in place**, keeps its glow and bar | queues: 3 × 2.4 s = 7.2 s |
+   | Lower rank during a warning: **dropped** | waits, shows later |
+   | Same rank, other key: **takes over at once** (new content rolls down inside the open box) | waits |
+   | A toast on show when the Auftritt starts: **leaves, rolls in again afterwards** | stays over the transition |
+   | New toast during the Röhre: **starts at once** | waits for the end |
+
+   Also, a transition starts from the frame *without* the toast (`app.py`:
+   `last_frame` before `toasts.apply`), but in SPUR the band belongs to the
+   old frame.
+
+   Proposals:
+   - **(b)** A toast `key` (default `kind`). The same key replaces the one on
+     show at once, whatever its rank. Waiting ones with that key collapse to
+     the newest. The style learns about it: `draw(…, previous=(toast, age))`.
+   - **(c)** Theme `"toast": {"queue": false}`: equal or higher rank takes
+     over at once (handed to the style); lower rank is dropped.
+   - **(d)** Per transition, `toasts = "over" | "wait" | "restart"` (Röhre:
+     over, Auftritt: restart).
+   - **(e)** An option to use the shown frame (with toast) as a transition's
+     old frame.
+   - **(f)** Screens learn when a toast begins (SPUR's dust reacts at once).
+
+   Until then the overlays stay in the mod's engine, and the rest of the mod
+   is on your API.
+2. **A switch during a transition.** SPUR's Auftritt reveals the screen
+   requested *during* it; for example, the round report one second after a
+   game ends is uncovered by "SPIEL BEENDET". The core holds the switch
+   until the transition has ended, then plays the Röhre. 59 of 131 frames
+   differ.
+   - Proposal: a transition attribute such as `follows = True`. When a
+     switch comes, the loop builds the new renderer at once without a
+     transition of its own. The running transition keeps playing and
+     uncovers the new screen.
+   - SPUR also restarts the Röhre from the current frame when a switch comes
+     in the middle of one.
+3. **Theme requests per mode.** In SPUR the autopilot and the round report
+   only count in normal mode. In the core a service's request counts in
+   every mode and beats the mode's theme. Withdrawing on `mode-changed`
+   races the main loop (the event runs in its own thread): either the
+   Auftritt plays between two frames of the same theme, or the withdrawal's
+   transition wins over the Auftritt. A test proves the first case. The mod
+   therefore suspends its requests right before `set_mode`, in the same
+   thread. Proposal: `show_theme(…, mode=None)`, a request that only counts
+   when no mode is active (or in a named mode).
+4. **Editor pages: `PageContext`** offers only `service()` and `data_dir()`.
+   The console needs the panel's latest snapshot, the services' state,
+   restarting services, and the config path. Today it reaches into
+   `context._controls`.
+5. **`set_config_value("modes.game.theme", …)` fails.** It reads only flat
+   tables (`data.get("modes.game")`). The console writes the game-mode
+   screen with its own helper.
+6. **Test environment:** `tests/test_video.py::test_video_display_end_to_end`
+   now fails without ffmpeg on PATH (earlier it was skipped). With ffmpeg on
+   PATH all 34 video tests pass. A skip when `find_ffmpeg` fails would keep
+   machines without ffmpeg green.
+
+Once 1–3 are in, the mod has no stop-gaps left except the local-only ones
+(the elevated autostart is the user's choice for this machine).
+
 ## 8 — Thanks for 0d1d6b3; two more gaps from the first live trial (2026-09-29)
 
 That is all ten, faster than we could use them. The mod moves to
