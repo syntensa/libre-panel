@@ -274,7 +274,6 @@ def stream_frames(display, frames, fps=50):
         time.sleep(1 / fps)
 
 
-@needs_ffmpeg
 def settle(panel, quiet=0.3, timeout=5.0):
     """Wait until no picture has reached the panel for ``quiet`` seconds."""
     end = time.monotonic() + timeout
@@ -287,6 +286,7 @@ def settle(panel, quiet=0.3, timeout=5.0):
             return
 
 
+@needs_ffmpeg
 def test_video_display_end_to_end(panel):
     display = TurzxVideoDisplay(video_config())
     display.open()
