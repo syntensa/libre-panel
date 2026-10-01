@@ -167,8 +167,16 @@ jobs:
         run: |
           flags=()
           case "${GITHUB_REF_NAME#v}" in *a*|*b*|*rc*|*dev*) flags+=(--prerelease) ;; esac
-          gh release create "$GITHUB_REF_NAME" artifacts/* --repo "$GITHUB_REPOSITORY" \
-            --verify-tag --title "Libre Panel $GITHUB_REF_NAME" --notes-file notes.md "${flags[@]}"
+          title="Libre Panel $GITHUB_REF_NAME"
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            # made on github.com together with its tag: fill it in
+            gh release upload "$GITHUB_REF_NAME" artifacts/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --title "$title" --notes-file notes.md "${flags[@]}"
+          else
+            gh release create "$GITHUB_REF_NAME" artifacts/* --repo "$GITHUB_REPOSITORY" \
+              --verify-tag --title "$title" --notes-file notes.md "${flags[@]}"
+          fi
 
   pypi:
     # Only once PyPI is set up (docs/RELEASING.md): repository variable PYPI_UPLOAD = true.

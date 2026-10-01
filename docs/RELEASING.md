@@ -37,6 +37,10 @@ git tag v0.1.0
 git push origin main v0.1.0
 ```
 
+Without git: on github.com, *Releases → Draft a new release*, tag `v0.1.0`
+(*Create new tag on publish*, target `main`), then *Publish release*; the
+workflow fills that release in.
+
 The tag starts `release.yml`: it checks that the tag matches the version and
 that CHANGELOG.md has its section, runs the tests, builds the PyInstaller
 bundles and tests each download. Only when all of that passed, it publishes
