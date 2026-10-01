@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 — 2026-10-01
 
-First preview of Libre Panel.
+The first release of Libre Panel.
 
 **Panels**
 - Panel catalog: all Turing/TURZX sizes from 2.1" to 12.3" plus compatible

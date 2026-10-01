@@ -8,12 +8,12 @@ vendor app.
 
 <p align="center"><img src="docs/images/gallery.png" alt="Built-in themes: SPUR II (1920x480), Libre Default (3.5 inch), Orbit (round), Slate (5 inch) and Column (3.5 inch portrait)" width="100%"></p>
 
-> **Status: pre-alpha.** The theme editor, renderer and sensors work today.
-> The driver for Turing/TURZX USB panels (4.6"–12.3", 2.8" round) is written
-> and tested against a protocol simulator; each size becomes "supported" once
-> `libre-panel doctor` has passed on real hardware — see
-> [supported panels](docs/HARDWARE.md). Serial panels follow. Without a
-> supported panel you can still design themes and preview them.
+> **Panels:** the driver for Turing/TURZX USB panels (4.6"–12.3", 2.8" round)
+> has run for hours on the 9.2", as still pictures and as 50 fps video; the
+> other sizes speak the same protocol. A size is listed as "supported" once
+> `libre-panel doctor` has passed on it — see
+> [supported panels](docs/HARDWARE.md). Serial panels follow. Without a panel
+> you can still design themes and preview them.
 
 ## Features
 
@@ -30,6 +30,9 @@ vendor app.
   history graphs, clock / date, images, weather, 21 line icons (with live
   weather symbols), cards with frosted glass — with glow, shadows, gradients,
   colour rules (e.g. turn red above 85 °C) and values that glide smoothly.
+- **Video mode** for TURZX USB panels: up to 50 frames per second through the
+  panel's own video decoder (needs ffmpeg), so values glide and graphs
+  scroll instead of jumping once a second.
 - **Sensors**: CPU, RAM, disk, network, temperatures and fans via `psutil`;
   on Windows also GPU, power and more through [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor).
 - **Weather** from [Open-Meteo](https://open-meteo.com) for *your* location —
@@ -43,7 +46,10 @@ vendor app.
 - **Runs quietly in the background**: tray icon with theme, brightness, pause
   and quit; starts with the system if you want (Windows, Linux, macOS); picks
   up the panel whenever it is plugged in.
-- **Pluggable**: sensor sources and display drivers are plugins, so optional
+- **Plugins** ([plugin API](docs/PLUGINS.md)): services that publish readings
+  and switch themes or modes, short messages on the panel, transitions,
+  screens drawn in code, widget types, sensor sources, display drivers,
+  themes and editor pages; installed with pip or as a folder, so optional
   extras never bloat the core.
 - Windows, Linux and macOS. GPL-3.0.
 
@@ -58,15 +64,18 @@ Download from the [releases](https://github.com/syntensa/libre-panel/releases)
 | macOS 11+ (Apple silicon) | `libre-panel-…-macos-arm64.dmg` | drag *Libre Panel* to *Applications*; lives in the menu bar |
 | Linux (x86-64) | `Libre_Panel-…-x86_64.AppImage` | make it executable and double-click; no installation |
 
-A portable Windows zip and a Linux tarball are there too. After the first
-start, the icon in the tray (menu bar) opens the theme editor; *Start with
+A portable Windows zip and a Linux tarball are there too. The downloads are
+not code-signed yet: Windows SmartScreen asks once (*More info → Run
+anyway*), and on macOS you open the app the first time with right-click →
+*Open* (on macOS 15: *System Settings → Privacy & Security → Open Anyway*).
+After the first start, the icon in the tray (menu bar) opens the theme editor; *Start with
 system* makes it start at every login. More in
 [Running in the background](docs/BACKGROUND.md).
 
 With Python instead:
 
 ```bash
-pipx install "libre-panel[usb,tray]"   # or: pip install "libre-panel[usb,tray]"
+pipx install "libre-panel[usb,tray] @ git+https://github.com/syntensa/libre-panel@v0.1.0"
 libre-panel tray                    # background app with tray icon; opens the editor
 libre-panel autostart enable        # start it whenever you log in
 ```
@@ -112,6 +121,7 @@ Themes are plain JSON plus images/fonts — see [docs/THEMES.md](docs/THEMES.md)
 - [Running in the background: tray, autostart](docs/BACKGROUND.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Theme format and sensor keys](docs/THEMES.md)
+- [Plugins](docs/PLUGINS.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [TURZX USB protocol notes](docs/protocol/turzx-usb.md)
 - [Roadmap](docs/ROADMAP.md)

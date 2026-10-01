@@ -14,7 +14,9 @@ Libre Panel ships three ways; one git tag produces all of them.
    this repository, workflow `release.yml`, environment `pypi`. No API token
    is stored in GitHub.
 2. **GitHub:** create the environment `pypi` (Settings → Environments), ideally
-   with a required reviewer so every upload is approved.
+   with a required reviewer so every upload is approved, and the repository
+   variable `PYPI_UPLOAD` = `true` (Settings → Secrets and variables →
+   Actions → Variables). Without it, releases skip PyPI.
 3. **Code signing (Windows, recommended):** unsigned `.exe` files trigger
    SmartScreen warnings. Free signing for open source is available through
    [SignPath Foundation](https://signpath.org); add the signing step to the
@@ -28,16 +30,19 @@ Libre Panel ships three ways; one git tag produces all of them.
 ## Cutting a release
 
 ```bash
-# 1. bump the version in pyproject.toml and src/libre_panel/__init__.py
-# 2. update CHANGELOG.md
+# 1. set the version in pyproject.toml and src/libre_panel/__init__.py
+# 2. CHANGELOG.md: a section "## 0.1.0 — <date>"
 git commit -am "Release 0.1.0"
 git tag v0.1.0
 git push origin main v0.1.0
 ```
 
-The tag starts `release.yml`: tests, build, PyInstaller bundles, a draft
-GitHub Release with all files attached, and the PyPI upload after approval.
-Review the draft release notes and publish.
+The tag starts `release.yml`: it checks that the tag matches the version and
+that CHANGELOG.md has its section, runs the tests, builds the PyInstaller
+bundles and tests each download. Only when all of that passed, it publishes
+the GitHub Release with all files, its notes taken from the CHANGELOG
+section; a version like `0.2.0rc1` is marked as a pre-release. Then the PyPI
+upload, after approval, if it is set up.
 
 Every download is tested on its own system before it is attached:
 

@@ -3,7 +3,7 @@
 Milestones are ordered by what makes Libre Panel useful to the most people
 first. Each hardware step needs a tester with the panel.
 
-## 0.1 — first public preview
+## 0.1 — first release
 
 - [x] Theme format, validation, safe sharing
 - [x] Renderer with text, metric, bar, gauge, graph, clock, image, weather, rect
@@ -13,15 +13,21 @@ first. Each hardware step needs a tester with the panel.
 - [x] TURZX V1.x USB driver, PNG path, with reconnect and simulator tests
 - [x] `libre-panel doctor`: hardware check with test cards and report
 - [x] Built-in themes: Libre Default, SPUR II, Orbit, Slate, Column
+- [x] H.264 video mode for V1.x USB panels (up to 50 fps, protocol documented in
+      [turzx-usb.md](protocol/turzx-usb.md)); needs `ffmpeg`
+- [x] Plugin API 1: services, modes, screens, widgets, toasts, transitions,
+      sensor sources, themes, editor pages ([PLUGINS.md](PLUGINS.md))
+- [x] Tray app with autostart; Windows setup, macOS disk image, Linux AppImage
+- [x] English and German
+- [x] First release: Windows/Linux/macOS downloads (see RELEASING.md)
+- [ ] PyPI
 - [ ] `doctor` passed on the 9.2" (then: status "supported") and at least one other V1.x size
-- [ ] First release: PyPI + Windows/Linux/macOS downloads (see RELEASING.md)
 
 ## 0.2 — smooth panels
 
-- [ ] H.264 video layer for V1.x USB panels (25–50 fps, protocol documented in
-      [turzx-usb.md](protocol/turzx-usb.md)); needs `ffmpeg`
 - [x] Animations: values glide between readings
-- [ ] Smooth scrolling graphs, rolling clock digits
+- [x] Smooth scrolling graphs (video mode)
+- [ ] Rolling clock digits
 - [x] Glow / soft-shadow style for widgets
 - [ ] Standby image when the PC shuts down
 
@@ -34,9 +40,9 @@ first. Each hardware step needs a tester with the panel.
 
 ## 0.4 — for everyone
 
-- [x] Tray app with autostart (Windows `Run` key, XDG autostart, LaunchAgent; systemd user service documented)
-- [ ] Installers: Windows setup, Flatpak / AppImage, Homebrew, winget
-- [ ] Editor and default labels in several languages
+- [ ] Signed downloads (Windows SignPath, macOS notarization)
+- [ ] Packages: Flatpak, Homebrew, winget
+- [ ] Editor and default labels in more languages
 - [ ] Theme gallery (import by link)
 
 ## Later / plugins

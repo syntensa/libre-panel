@@ -19,6 +19,15 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -e ".[dev,usb,tray]"
+      - name: The tag matches the version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version=$(python -c "from importlib.metadata import version; print(version('libre-panel'))")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME, but the package version is $version"
+            exit 1
+          fi
+          grep -q "^## $version" CHANGELOG.md || { echo "::error::CHANGELOG.md has no section $version"; exit 1; }
       - run: pytest -q
 
   python-package:
@@ -137,22 +146,35 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
-      - name: Draft release with all files
+      - name: Release notes from CHANGELOG.md
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          base="https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME"
+          awk -v v="$version" '
+            /^## / { if (found) exit; if (index($0, "## " v " ") == 1 || $0 == "## " v) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md | sed -E "s#\]\((docs/|[A-Z]+\.md)#](${base}/\1#g" > notes.md
+          test -s notes.md
+          printf '\n**Which file?** Windows: `…-setup.exe`, macOS: `….dmg`, Linux: `….AppImage`; see [Install](https://github.com/%s#install).\n' "$GITHUB_REPOSITORY" >> notes.md
+      - name: Publish the release with all files
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "$GITHUB_REF_NAME" artifacts/*
-          --repo "$GITHUB_REPOSITORY" --draft --generate-notes
-          --title "Libre Panel $GITHUB_REF_NAME"
+        run: |
+          flags=()
+          case "${GITHUB_REF_NAME#v}" in *a*|*b*|*rc*|*dev*) flags+=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" artifacts/* --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --title "Libre Panel $GITHUB_REF_NAME" --notes-file notes.md "${flags[@]}"
 
   pypi:
+    # Only once PyPI is set up (docs/RELEASING.md): repository variable PYPI_UPLOAD = true.
     timeout-minutes: 15
     needs: [python-package, standalone]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') && vars.PYPI_UPLOAD == 'true'
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
