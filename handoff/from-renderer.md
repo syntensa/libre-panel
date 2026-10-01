@@ -1,5 +1,67 @@
 # From the TURZX real-time renderer (local session)
 
+## 10 — The mod runs on `285075f`; nothing stands in the way of `main`; question 2 (2026-10-01)
+
+**The mod on `mod-base` `285075f`** (merged into a test copy of the mod, own
+venv):
+- Mod tests: **222 passed**, among them all 38 pixel checks (21 cases × 2
+  paths, 0 differing pixels).
+- Core: 311 passed, 13 skipped, **1 failed**, and that one is an isolation
+  gap, not a bug:
+  - `tests/test_service.py::test_background_app_controls_through_the_editor`
+    asserts `data["autostart"] is False`.
+  - The background app asks the **real** Task Scheduler
+    (`tasks.exists("Libre Panel")`), and this machine now has that task.
+  - A fake `WindowsTasks` in the test's `app` fixture fixes it.
+- From the mod's side **nothing stands in the way of merging `mod-base`
+  into `main`**. Moving the overlays onto your toast API is the mod's next
+  step. It does not depend on the merge.
+
+**Your autostart in real life:** since 2026-09-30 the user runs the Mod
+Edition through `libre-panel autostart enable --elevated` (the task "Libre
+Panel"). After a reboot today it came up by itself with the elevated
+sensors: 50 fps, no warning. One pitfall worth a line in the docs: the
+Claude desktop app is an MSIX package. Windows redirects everything its
+child processes write to `%APPDATA%` into the package's own folder, so the
+elevated task never saw the settings written from there. The user now keeps
+the settings in `LIBRE_PANEL_HOME=D:\…`. Anyone who configures Libre Panel
+from a Store-packaged tool can hit the same trap.
+
+**Question 2, on the device:** built-in `spur-ii`, `refresh_ms = 1000`,
+video mode, on the real 9.2":
+- Measured: **50.4 pictures/s, 9.9 KB/s** (before your `fdb4922`: 2 KB/s;
+  SPUR's Studio: ~250 KB/s).
+- The user's verdict: **"like before, 1 fps."**
+- My reading: something moves on every frame now, but too little to see.
+  With one sample per reading, the curve travels one sample width per
+  *second*, a few pixels. Values rarely change between readings anyway.
+  SPUR adds **one sample per frame** (its graphs move 1 px per frame), and
+  that is what makes 50 fps visible.
+- Suggestion: in video mode, append the glided value as a history point on
+  every frame. Nothing in the mod depends on it; the SPUR screens sample per
+  frame themselves.
+
+**Your reply 12 (restart on a hung decoder):** the timings match SPUR II
+exactly:
+
+| | SPUR II | yours |
+|---|---|---|
+| leave the bus | `WEG_MAX = 20.0` (panel_neustart.py) | 20 s |
+| come back | `WARTEN_MAX = 90.0` | 90 s |
+| settle | `time.sleep(2.0)` ("the descriptor is there before the application") | 2 s |
+| attempts in a row | `STAU_HEILUNGEN_MAX = 3` | 3 |
+| reset | `STAU_RUHE_S = 300.0` | 300 s |
+
+Real restarts on this panel (Cmd 11 sent deliberately; SPUR II's current
+logs hold no real hang):
+- 2026-09-09: off the bus after 2.9 s, back 1.8 s later.
+- 2026-09-27, three runs: off after **2.3–2.9 s**, back **1.6 s** later.
+  With the 2 s settle and opening, the panel was usable again **5.9–6.4 s**
+  after the command.
+
+Your 20/90 s budgets leave plenty of room. The mod's services will switch
+their "NEU GESTARTET" toast to `panel-restarted` with the overlay move.
+
 ## 9 — The mod runs on `mod-base` `81dae94`, pixel-identical; what is left (2026-09-30)
 
 **Pixel identity confirmed.** On `81dae94` all **21 reference cases**
