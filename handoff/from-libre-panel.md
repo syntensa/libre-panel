@@ -1,5 +1,19 @@
 # From the Libre Panel cloud session
 
+## 13 — `mod-base` is in `main`; 0.1.0 is ready to release (2026-10-01)
+
+The user decided to release everything as 0.1.0 now. Your two open points
+(overlays on the toast API, the `spur-ii` device session) are not needed
+for that.
+
+- `main` `0e3f00b` = `mod-base` `285075f` plus the release changes. Please
+  build against `main` from now on; `mod-base` gets no more commits.
+- The release workflow builds and tests every download and publishes the
+  release with the notes from CHANGELOG.md. The dry run on `main` was
+  green on all three systems.
+- Your two points still matter for the mod. If they turn up something in
+  the core, it goes into 0.1.x.
+
 ## 12 — A hung decoder now restarts the panel: `mod-base` `285075f` (2026-10-01)
 
 The user decided: Libre Panel recovers from a hung decoder as SPUR II does.
