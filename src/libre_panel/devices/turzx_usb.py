@@ -56,6 +56,9 @@ CMD_BRIGHTNESS = 14
 CMD_FRAME_RATE = 15
 CMD_UPLOAD_PNG = 102
 CMD_STOP_STREAM = 123
+# Restarts the panel (it is back after about 5 s). Sent only to clear a hung
+# video decoder, the one fault nothing else fixes but replugging (turzx_video).
+CMD_RESTART = 11
 
 USB_PIDS = {pid: m for m in MODELS if m.protocol == "usb-turing" for _vid, pid in m.usb_ids}
 
@@ -187,6 +190,18 @@ class UsbTransport:
         self.device, self.ep_out, self.ep_in, self.pid = device, ep_out, ep_in, pid
         self._lock = threading.RLock()
         self._late = 0  # replies to queries we stopped waiting for; skipped when they come
+
+    @staticmethod
+    def present(pid: int) -> bool:
+        """Whether the panel with this product id is on the bus (without opening it)."""
+        try:
+            import usb.core
+        except ImportError:
+            return False
+        try:
+            return usb.core.find(idVendor=VENDOR_ID, idProduct=pid, backend=_backend()) is not None
+        except usb.core.NoBackendError:
+            return False
 
     @classmethod
     def open(cls, pid: int | None = None) -> UsbTransport:
@@ -331,8 +346,8 @@ class UsbTransport:
 class TurzxUsbDisplay(Display):
     """Bitmap path: every frame is sent as a full RGBA PNG (about 9 fps on 9.2").
 
-    The smooth 25-50 fps path (H.264 background layer, command 110 + 121)
-    is documented in docs/protocol/turzx-usb.md and not wired in yet.
+    The smooth 25-50 fps path (H.264 background layer, command 110 + 121) is
+    :class:`~libre_panel.devices.turzx_video.TurzxVideoDisplay`.
     """
 
     name = "turzx-usb"
@@ -342,22 +357,21 @@ class TurzxUsbDisplay(Display):
         self.model = model
         self.transport: UsbTransport | None = None
         self.brightness: int | None = None
-        self.firmware_id = ""
 
     def open(self) -> None:
         pid = self.model.usb_ids[0][1] if self.model and self.model.usb_ids else None
         self.transport = UsbTransport.open(pid)
         self.model = self.model or USB_PIDS.get(self.transport.pid)
         try:
-            reply = self.transport.sync()
+            self.transport.sync()
         except DeviceError:
             self.close()
             raise
-        self.firmware_id = reply[2:10].split(b"\x00")[0].decode("ascii", "replace")
+        # (The bytes after the handshake reply's first two change with every
+        # connection: no identifier worth logging.)
         log.info(
-            "connected to %s (%s)",
+            "connected to %s",
             self.model.label if self.model else f"PID {self.transport.pid:04x}",
-            self.firmware_id,
         )
 
     def describe(self) -> str:

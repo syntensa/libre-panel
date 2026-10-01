@@ -98,9 +98,9 @@ def all_messages() -> set[str]:
 
 def tables() -> dict[str, set[str]]:
     from libre_panel.icons import ICON_NAMES
-    from libre_panel.theme.model import COMMON_FIELDS, WIDGET_SPECS
+    from libre_panel.theme.model import COMMON_FIELDS, TOAST_ANCHORS, WIDGET_SPECS
 
-    fields, enums = set(COMMON_FIELDS), set()
+    fields, enums = set(COMMON_FIELDS), set(TOAST_ANCHORS)  # the editor's toast position
     for spec in [COMMON_FIELDS, *WIDGET_SPECS.values()]:
         fields |= set(spec)
         for kind, _ in spec.values():

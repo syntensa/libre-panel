@@ -42,6 +42,10 @@ class TurzxDisplay(Display):
         return bool(self._impl and self._impl.streaming)
 
     @property
+    def restarted(self) -> bool:
+        return bool(self._impl and self._impl.restarted)
+
+    @property
     def stream_fps(self) -> int:
         return self._impl.stream_fps if self._impl else 0
 

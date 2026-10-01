@@ -27,7 +27,12 @@ driven the panel this way around the clock at 50 fps
   frame stays on the panel as a sharp PNG.
 - **A hung decoder** takes each block only after about 750 ms and its queue
   stands high without moving. Detected as SPUR II does it (see
-  :meth:`VideoSession.check_hang`).
+  :meth:`VideoSession.check_hang`). Nothing but a restart of the panel (11)
+  or replugging clears it, so Libre Panel restarts the panel as SPUR II
+  does: ``11``, wait until it leaves the bus (at most 20 s) and comes back
+  (at most 90 s), 2 s more, then a full start with a new ffmpeg. At most
+  three times in a row; after 300 s without a hang the count starts again.
+  After that it asks to replug the panel.
 
 This mode never sends commands that store anything on the panel: the start
 sequence without 13 (save settings), 125 and 42 shows the video, and after a
@@ -60,6 +65,7 @@ from libre_panel.devices.models import PanelModel, orientation_of
 from libre_panel.devices.turzx_usb import (
     CMD_BRIGHTNESS,
     CMD_FRAME_RATE,
+    CMD_RESTART,
     CMD_STOP_STREAM,
     CMD_UPLOAD_PNG,
     TurzxUsbDisplay,
@@ -94,6 +100,67 @@ def transparent_layer(size: tuple[int, int]) -> bytes:
 
 class DecoderHung(DeviceError):
     """The panel's decoder stopped taking pictures; reconnecting does not help."""
+
+
+class PanelRestarting(DeviceError):
+    """The panel restarts to clear a hung decoder; it is opened again once it is back."""
+
+    retry_s = 1.0  # the main loop looks again soon, not with its growing pauses
+
+
+class _Restart:
+    """A restart of the panel under way, and how many came in a row.
+
+    Kept per process, not per display object: the drivers make a new one each
+    time the main loop opens the panel again.
+    """
+
+    IN_A_ROW = 3  # then: replug
+    RESET_S = 300.0  # this long without a hang and the count starts again
+    LEAVE_S, RETURN_S, SETTLE_S = 20.0, 90.0, 2.0
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self.clock = clock
+        self.count = 0
+        self.last = -1e9
+        self.pid: int | None = None  # set while a restart is under way
+        self.sent = self.gone = self.back = None
+
+    def allowed(self) -> bool:
+        if self.clock() - self.last > self.RESET_S:
+            self.count = 0
+        return self.count < self.IN_A_ROW
+
+    def begin(self, pid: int) -> None:
+        self.count += 1
+        self.last = self.sent = self.clock()
+        self.pid, self.gone, self.back = pid, None, None
+
+    def wait(self, present: Callable[[int], bool]) -> None:
+        """Raise :class:`PanelRestarting` until the panel has left the bus, is back
+        and has settled; a :class:`DeviceError` when it does not come back."""
+        if self.pid is None:
+            return
+        now, here = self.clock(), present(self.pid)
+        if self.gone is None:
+            if here and now - self.sent < self.LEAVE_S:
+                raise PanelRestarting(t("the panel restarts to clear its hung video decoder"))
+            self.gone = now  # left the bus (or never seemed to: go on after 20 s)
+        if self.back is None:
+            if not here:
+                if now - self.gone < self.RETURN_S:
+                    raise PanelRestarting(t("the panel restarts to clear its hung video decoder"))
+                self.pid = None
+                raise DeviceError(
+                    t("the panel did not come back after its restart; replug it, please")
+                )
+            self.back = now
+        if now - self.back < self.SETTLE_S:
+            raise PanelRestarting(t("the panel restarts to clear its hung video decoder"))
+        self.pid = None  # back and settled: open it as usual
+
+
+RESTART = _Restart()
 
 
 class VideoSession:
@@ -253,19 +320,23 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self._error: Exception | None = None
         self._generation = 0
         self._restarts: list[float] = []
-        self._why_stopped = "no output"
         self._last_frame: Image.Image | None = None
 
     # -- connection ----------------------------------------------------------
 
     def open(self) -> None:
         self._ffmpeg = self._ffmpeg or find_ffmpeg(self.video.ffmpeg)  # before touching the panel
+        restarting = RESTART.pid is not None
+        RESTART.wait(UsbTransport.present)
         super().open()
         try:
             self._start_video()
         except Exception:
             self.close()
             raise
+        self.restarted = restarting  # the main loop tells the services (panel-restarted)
+        if restarting:
+            log.info("the panel is back after its restart")
 
     def describe(self) -> str:
         return t("{panel}, video {fps} fps", panel=super().describe(), fps=self.stream_fps)
@@ -315,10 +386,6 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
 
     def _start_encoder(self, size: tuple[int, int]) -> None:
         self._stop_encoder()
-        now = time.monotonic()
-        self._restarts = [t0 for t0 in self._restarts if now - t0 < 60] + [now]
-        if len(self._restarts) > self.RESTARTS_PER_MINUTE + 1:
-            raise DeviceError(t("ffmpeg keeps stopping: {reason}", reason=self._why_stopped))
         rotate = 270 if orientation_of(*size) == "landscape" else 180  # as to_native
         command = ffmpeg_command(self._ffmpeg, size, rotate, self.settings)
         self._generation += 1
@@ -348,7 +415,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         if self.transport is None or self.session is None:
             raise DeviceError("panel not open")
         if isinstance(self._error, DecoderHung):
-            raise self._error  # a new connection does not help; the main loop tries later
+            self._restart_panel(self._error)  # a new connection does not help
         if self._error is not None:
             self._heal(self._error)
         frame = frame.convert("RGB")
@@ -389,8 +456,33 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                     raise EncoderStopped(stalled) from None
 
     def _restarting(self, reason: str) -> None:
-        self._why_stopped = reason
+        """Count an ffmpeg that stopped by itself (not one closed for a reconnect)."""
+        now = time.monotonic()
+        self._restarts = [t0 for t0 in self._restarts if now - t0 < 60] + [now]
+        if len(self._restarts) > self.RESTARTS_PER_MINUTE:
+            raise DeviceError(t("ffmpeg keeps stopping: {reason}", reason=reason))
         log.warning("ffmpeg stopped (%s); starting it again", reason)
+
+    def _restart_panel(self, hung: DecoderHung) -> None:
+        """Restart the panel (11) to clear its hung decoder, as SPUR II does; the
+        main loop opens it again once it is back. Raises :class:`PanelRestarting`,
+        or ``hung`` itself when restarts did not help (then: replug)."""
+        if not RESTART.allowed():
+            raise hung
+        RESTART.begin(self.transport.pid)
+        log.warning(
+            "the panel's video decoder hangs; restarting the panel (%d of %d in a row)",
+            RESTART.count,
+            RESTART.IN_A_ROW,
+        )
+        self._stop_video()
+        try:
+            self.transport.query(CMD_RESTART, timeout_ms=200)  # it may be gone before it answers
+        except DeviceError:
+            pass
+        self.session, self._error = None, None
+        super().close()
+        raise PanelRestarting(t("the panel restarts to clear its hung video decoder"))
 
     def _heal(self, exc: Exception) -> None:
         """Reconnect after a USB error and start the video again (a full start)."""

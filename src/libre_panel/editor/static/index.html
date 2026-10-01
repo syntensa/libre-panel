@@ -20,6 +20,10 @@
     <button id="btn-import" type="button" data-i18n>Import</button>
     <button id="btn-export" type="button" data-i18n>Export</button>
     <input type="file" id="import-file" accept=".json,application/json" hidden>
+    <div class="pages-wrap" id="pages-wrap" hidden>
+      <button id="pages-button" type="button" aria-haspopup="menu" aria-expanded="false"><span data-i18n>Pages</span> ▾</button>
+      <div id="pages-menu" class="popover from-left menu" role="menu" hidden></div>
+    </div>
     <span class="spacer"></span>
     <button id="btn-undo" type="button" title="Undo (Ctrl+Z)" aria-label="Undo" data-i18n-attr="title aria-label">↶</button>
     <button id="btn-redo" type="button" title="Redo (Ctrl+Y)" aria-label="Redo" data-i18n-attr="title aria-label">↷</button>
@@ -33,6 +37,7 @@
         <dl class="pop-facts">
           <dt data-i18n>Output</dt><dd id="app-target">–</dd>
           <dt data-i18n>Theme</dt><dd id="app-theme">–</dd>
+          <dt data-i18n id="app-mode-label" hidden>Mode</dt><dd id="app-mode" hidden></dd>
         </dl>
         <label class="field"><span><span data-i18n>Brightness</span> <output id="app-brightness-value"></output></span>
           <input type="range" id="app-brightness" min="0" max="100" step="5">
@@ -113,6 +118,13 @@
     </aside>
   </main>
 
+  <section id="plugin-view" class="plugin-view" hidden>
+    <div class="plugin-bar">
+      <button id="plugin-back" type="button">← <span data-i18n>Theme editor</span></button>
+      <strong id="plugin-title"></strong>
+    </div>
+    <iframe id="plugin-frame" title="Plugin page" data-i18n-attr="title"></iframe>
+  </section>
   <footer class="statusbar">
     <span class="status" id="status" data-i18n>Loading…</span>
     <select id="lang-select" title="Language" aria-label="Language" data-i18n-attr="title aria-label">

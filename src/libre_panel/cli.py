@@ -25,10 +25,21 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if args.theme:
         config.theme = args.theme
     with InstanceLock():
+        if args.once:
+            run(config, once=True)
+            return 0
+        from libre_panel.plugins import PluginHost, ServiceManager
+
+        host = PluginHost()
+        services = ServiceManager(host)
+        services.apply(config)
         try:
-            run(config, once=args.once)
+            run(config, host=host, on_config=services.apply)
         except KeyboardInterrupt:
             pass
+        finally:
+            services.stop()
+            host.close()
     return 0
 
 
@@ -204,18 +215,40 @@ def _cmd_udev_rules(args: argparse.Namespace) -> int:
 
 
 def _cmd_autostart(args: argparse.Namespace) -> int:
-    from libre_panel.autostart import Autostart, launch_command
+    from libre_panel.autostart import (
+        Autostart,
+        AutostartError,
+        launch_command,
+        writable_by_user,
+    )
 
     autostart = Autostart()
-    if args.action == "enable":
-        where = autostart.enable(launch_command(args.config))
-        print(t("Libre Panel starts in the background when you log in ({where}).", where=where))
-    elif args.action == "disable":
-        print(t("Autostart removed.") if autostart.disable() else t("Autostart was not enabled."))
-    elif autostart.is_enabled():
-        print(t("Autostart is enabled ({where}).", where=autostart.location()))
-    else:
-        print(t("Autostart is disabled."))
+    try:
+        if args.action == "enable":
+            command = launch_command(args.config)
+            if args.elevated and writable_by_user(Path(command[0]), Path.home()):
+                print(
+                    t(
+                        "Warning: {program} is in your user folder, where any program you "
+                        "run could replace it and so get administrator rights at the next "
+                        "login. Safer: install Libre Panel under Program Files.",
+                        program=command[0],
+                    ),
+                    file=sys.stderr,
+                )
+            where = autostart.enable(command, elevated=args.elevated)
+            print(t("Libre Panel starts in the background when you log in ({where}).", where=where))
+        elif args.action == "disable":
+            print(
+                t("Autostart removed.") if autostart.disable() else t("Autostart was not enabled.")
+            )
+        elif autostart.is_enabled():
+            print(t("Autostart is enabled ({where}).", where=autostart.location()))
+        else:
+            print(t("Autostart is disabled."))
+    except AutostartError as exc:
+        print(exc, file=sys.stderr)
+        return 1
     return 0
 
 
@@ -236,8 +269,9 @@ def _cmd_preview(args: argparse.Namespace) -> int:
             hub.close()
     else:
         snapshot = demo_snapshot()
-    renderer = Renderer(theme)
+    renderer = Renderer(theme, preview=True)
     frame, _ = renderer.render(snapshot)
+    renderer.close()
     frame.save(args.output)
     for warning in theme.warnings + renderer.warnings:
         print(f"warning: {warning}", file=sys.stderr)
@@ -269,9 +303,26 @@ def _cmd_themes(args: argparse.Namespace) -> int:
     from libre_panel.theme.model import list_themes
 
     for theme in list_themes():
-        origin = "built-in" if theme["builtin"] else "user"
+        origin = theme["source"]
         print(f"{theme['id']:<24} {origin:<9} {theme['path']}")
     return 0
+
+
+def _cmd_plugins(args: argparse.Namespace) -> int:
+    from libre_panel.plugins.loader import API_VERSION, discover, plugins_dir
+
+    registry = discover()
+    print(f"plugin API {API_VERSION}; plugin folders go into {plugins_dir()}")
+    found = registry.all()
+    if not found:
+        print("no plugins installed")
+    for part in found:
+        registry.get(part.kind, part.name)  # load it, so errors show here
+        state = f"FAILED: {part.error}" if part.error else "ok"
+        print(f"{part.kind:<10} {part.name:<24} {state:<6} {part.source}")
+    for error in registry.errors:
+        print(f"error: {error}")
+    return 1 if registry.errors or any(part.error for part in found) else 0
 
 
 def _cmd_sensors(args: argparse.Namespace) -> int:
@@ -408,6 +459,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("autostart", help="start Libre Panel when you log in")
     p.add_argument("action", choices=["enable", "disable", "status"])
+    p.add_argument(
+        "--elevated",
+        action="store_true",
+        help="Windows: start with the highest rights (Task Scheduler), for sensor "
+        "plugins that read the hardware themselves; run as administrator",
+    )
     p.set_defaults(func=_cmd_autostart)
 
     p = sub.add_parser("quit", help="quit the running background app")
@@ -440,6 +497,9 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("sensors", help="list sensor keys and current values")
     p.add_argument("--demo", action="store_true")
     p.set_defaults(func=_cmd_sensors)
+
+    p = sub.add_parser("plugins", help="list installed plugins and whether they load")
+    p.set_defaults(func=_cmd_plugins)
 
     p = sub.add_parser("models", help="list known panel models and resolutions")
     p.set_defaults(func=_cmd_models)

@@ -40,6 +40,8 @@ def headline(state: dict[str, Any]) -> str:
         "error": t("needs attention"),
         "stopped": t("stopped"),
     }.get(state["state"], state["state"])
+    if state.get("mode") and state["state"] == "showing":
+        text += f" ({state['mode']})"  # set by a service, e.g. "game"
     return "Libre Panel: " + text
 
 
@@ -203,6 +205,7 @@ class Tray:
             state["state"],
             state["target"],
             state["detail"],
+            state.get("mode"),
             self.app.active_theme(),
             snapshot["brightness"],
             snapshot["autostart"],

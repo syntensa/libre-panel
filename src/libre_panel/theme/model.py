@@ -177,6 +177,9 @@ class Theme:
     palette: dict[str, str] = field(default_factory=dict)
     font: str = DEFAULT_FONT
     smoothing_ms: int = 400
+    screen: dict[str, Any] | None = None  # {"name": ..., "options": {...}}: a plugin draws
+    # messages from services: where, how long, which kinds not, and a plugin style
+    toast: dict[str, Any] = field(default_factory=lambda: dict(TOAST_DEFAULTS))
     root: Path | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -184,8 +187,12 @@ class Theme:
     def orientation(self) -> str:
         return orientation_of(self.width, self.height)
 
+    @property
+    def toast_anchor(self) -> str:
+        return self.toast["anchor"]
+
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "format": THEME_FORMAT,
             "name": self.name,
             "author": self.author,
@@ -204,6 +211,12 @@ class Theme:
             "animation": {"smoothing_ms": self.smoothing_ms},
             "widgets": deepcopy(self.widgets),
         }
+        if self.screen is not None:
+            data["screen"] = deepcopy(self.screen)
+        toast = {k: deepcopy(v) for k, v in self.toast.items() if v != TOAST_DEFAULTS[k]}
+        if toast:
+            data["toast"] = toast
+        return data
 
 
 def builtin_themes_dir() -> Path:
@@ -305,16 +318,57 @@ def _coerce(kind: str, value: Any, where: str, palette: dict[str, str] | None = 
     return value
 
 
+_BASE_KINDS = {
+    "int", "number", "bool", "color", "icon", "rules",
+    "string", "text", "sensor", "format", "font", "asset",
+}  # fmt: skip
+
+
+def valid_kind(kind: Any) -> bool:
+    """A field kind the loader and the editor know (plugins declare their fields with these)."""
+    if not isinstance(kind, str):
+        return False
+    base = kind.rstrip("?")
+    return base in _BASE_KINDS or (base.startswith("enum:") and len(base) > 5)
+
+
+def _plugin(kind: str, name: str) -> Any:
+    from libre_panel.plugins.loader import registry
+
+    return registry().get(kind, name)
+
+
+def _check_paths(
+    spec: dict[str, tuple[str, Any]], values: dict[str, Any], where: str, root: Path | None
+) -> None:
+    """Fonts and assets named in plugin fields stay inside the theme folder too."""
+    for key, (kind, _default) in spec.items():
+        value = values.get(key)
+        if not value or not isinstance(value, str):
+            continue
+        if kind.rstrip("?") == "font":
+            _check_font(value, f"{where}.{key}", root)
+        elif kind.rstrip("?") == "asset" and root is not None:
+            resolve_asset(root, value)
+
+
 def normalize_widget(
-    raw: Any, index: int, palette: dict[str, str] | None = None
+    raw: Any, index: int, palette: dict[str, str] | None = None, root: Path | None = None
 ) -> tuple[dict[str, Any], list[str]]:
     where = f"widgets[{index}]"
     if not isinstance(raw, dict):
         raise ThemeError(f"{where}: expected an object")
     wtype = raw.get("type")
-    if wtype not in WIDGET_SPECS:
+    plugin = None
+    if wtype in WIDGET_SPECS:
+        spec = {**_COMMON, **WIDGET_SPECS[wtype]}
+    elif isinstance(wtype, str) and "." in wtype:  # a plugin's widget type
+        plugin = _plugin("widgets", wtype)
+        if plugin is None:
+            return _missing_plugin_widget(raw, wtype, index, where, palette)
+        spec = {**_COMMON, **plugin.spec}
+    else:
         raise ThemeError(f"{where}: unknown widget type {wtype!r}")
-    spec = {**_COMMON, **WIDGET_SPECS[wtype]}
     widget: dict[str, Any] = {"type": wtype}
     for key, (kind, default) in spec.items():
         value = raw.get(key, deepcopy(default))
@@ -328,9 +382,109 @@ def normalize_widget(
             raise ThemeError(f"{where}.{key}: must be between 0 and 64")
     if not widget["id"]:
         widget["id"] = f"{wtype}-{index + 1}"
+    if plugin is not None:
+        _check_paths(plugin.spec, widget, where, root)
     unknown = sorted(set(raw) - set(spec) - {"type"})
     warnings = [f"{where}: ignoring unknown field {k!r}" for k in unknown]
     return widget, warnings
+
+
+def _missing_plugin_widget(
+    raw: dict[str, Any], wtype: str, index: int, where: str, palette: dict[str, str] | None
+) -> tuple[dict[str, Any], list[str]]:
+    """Kept as it is, so saving the theme loses nothing; it is not drawn."""
+    widget = deepcopy(raw)
+    for key, (kind, default) in _COMMON.items():
+        widget[key] = _coerce(kind, raw.get(key, deepcopy(default)), f"{where}.{key}", palette)
+    if not widget["id"]:
+        widget["id"] = f"{wtype}-{index + 1}"
+    return widget, [f"{where}: widget type {wtype!r} needs a plugin that is not installed"]
+
+
+TOAST_ANCHORS = ("top-right", "top-left", "bottom-right", "bottom-left", "top", "bottom")
+
+
+TOAST_DEFAULTS: dict[str, Any] = {
+    "anchor": "top-right",
+    "seconds": 4.0,
+    "queue": True,  # false: the same or a higher rank takes over, a lower one is dropped
+    "off": [],
+    "style": "",
+    "options": {},
+}
+
+
+def _parse_toast(
+    raw: Any, palette: dict[str, str], root: Path | None, warnings: list[str]
+) -> dict[str, Any]:
+    """``"toast": {"anchor": "bottom-right", "seconds": 5, "off": ["music"],
+    "style": "myplugin.band", "options": {...}}``: messages from services."""
+    toast = deepcopy(TOAST_DEFAULTS)
+    if raw is None:
+        return toast
+    if not isinstance(raw, dict):
+        raise ThemeError("toast must be an object")
+    anchors = "enum:" + "|".join(TOAST_ANCHORS)
+    toast["anchor"] = _coerce(anchors, raw.get("anchor", "top-right"), "toast.anchor")
+    seconds = _coerce("number", raw.get("seconds", 4.0), "toast.seconds")
+    if not 0.5 <= seconds <= 60:
+        raise ThemeError("toast.seconds: must be between 0.5 and 60")
+    toast["seconds"] = seconds
+    toast["queue"] = _coerce("bool", raw.get("queue", True), "toast.queue")
+    off = raw.get("off", [])
+    if not isinstance(off, list) or not all(isinstance(kind, str) for kind in off):
+        raise ThemeError('toast.off: expected a list of kinds, e.g. ["music"]')
+    toast["off"] = list(off)
+    toast["style"] = _coerce("string", raw.get("style", ""), "toast.style")
+    if toast["style"]:
+        given = raw.get("options", {}) or {}
+        toast["options"] = _plugin_options(
+            "toasts", toast["style"], given, "toast", palette, root, warnings
+        )
+    return toast
+
+
+def _plugin_options(
+    kind: str,
+    name: str,
+    given: Any,
+    where: str,
+    palette: dict[str, str],
+    root: Path | None,
+    warnings: list[str],
+) -> dict[str, Any]:
+    """A plugin's options with its defaults, checked against its schema."""
+    if not isinstance(given, dict):
+        raise ThemeError(f"{where}.options must be an object")
+    plugin = _plugin(kind, name)
+    if plugin is None:
+        warnings.append(f"{where} {name!r} needs a plugin that is not installed")
+        return deepcopy(given)
+    options = {
+        key: _coerce(kind_of, given.get(key, deepcopy(default)), f"{where}.options.{key}", palette)
+        for key, (kind_of, default) in plugin.options.items()
+    }
+    _check_paths(plugin.options, options, f"{where}.options", root)
+    warnings.extend(
+        f"{where}.options: ignoring unknown option {k!r}" for k in sorted(set(given) - set(options))
+    )
+    return options
+
+
+def _parse_screen(
+    raw: Any, palette: dict[str, str], root: Path | None, warnings: list[str]
+) -> dict[str, Any] | None:
+    """``"screen": {"name": ..., "options": {...}}``: a plugin draws the whole frame."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ThemeError("screen must be an object with a name")
+    name = _coerce("string", raw.get("name", ""), "screen.name")
+    if not name:
+        raise ThemeError("screen.name: missing")
+    given = raw.get("options", {}) or {}
+    options = _plugin_options("screens", name, given, "screen", palette, root, warnings)
+    return {"name": name, "options": options}
 
 
 def parse_theme(data: Any, root: Path | None = None) -> Theme:
@@ -396,7 +550,7 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         raise ThemeError("widgets must be a list")
     widgets, warnings, seen = [], [], set()
     for i, raw in enumerate(raw_widgets):
-        widget, w = normalize_widget(raw, i, palette)
+        widget, w = normalize_widget(raw, i, palette, root)
         if widget["id"] in seen:
             raise ThemeError(f"widgets[{i}]: duplicate id {widget['id']!r}")
         seen.add(widget["id"])
@@ -422,6 +576,8 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         font=font,
         smoothing_ms=smoothing_ms,
         widgets=widgets,
+        screen=_parse_screen(data.get("screen"), palette, root, warnings),
+        toast=_parse_toast(data.get("toast"), palette, root, warnings),
         root=root,
         warnings=warnings,
     )
@@ -438,9 +594,19 @@ def load_theme(folder: Path) -> Theme:
     return parse_theme(data, root=folder)
 
 
+def plugin_theme_dirs() -> list[Path]:
+    """Folders of themes that plugins bring (``libre_panel.themes``)."""
+    from libre_panel.plugins.loader import registry
+
+    installed = registry()
+    folders = (installed.get("themes", name) for name in installed.names("themes"))
+    return [folder for folder in folders if folder is not None and folder.is_dir()]
+
+
 def _search_dirs() -> list[Path]:
-    # User themes first so a user can shadow a built-in theme of the same name.
-    return [user_themes_dir(), builtin_themes_dir()]
+    # User themes first so a user can shadow a plugin's or a built-in theme of
+    # the same name; a plugin's shadows a built-in one.
+    return [user_themes_dir(), *plugin_theme_dirs(), builtin_themes_dir()]
 
 
 def find_theme(name: str) -> Path:
@@ -460,9 +626,11 @@ def list_themes() -> list[dict[str, Any]]:
             continue
         for folder in sorted(base.iterdir()):
             if (folder / THEME_FILENAME).is_file() and valid_theme_name(folder.name):
+                source = "user" if base == user_themes_dir() else "plugin"
                 found[folder.name] = {
                     "id": folder.name,
-                    "builtin": base == builtin_themes_dir(),
+                    "builtin": source != "user",  # read-only: saved as a copy
+                    "source": "built-in" if base == builtin_themes_dir() else source,
                     "path": str(folder),
                 }
     return sorted(found.values(), key=lambda t: t["id"])

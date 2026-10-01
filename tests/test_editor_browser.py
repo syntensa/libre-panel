@@ -141,6 +141,79 @@ def test_hidden_strip_is_shown_and_snaps(page):
     assert js(page, "hiddenEdges().top") == 18
 
 
+@pytest.fixture
+def drawing_plugin(plugin_folder):
+    """A plugin with a screen and a widget type, installed before the editor starts."""
+    from test_plugins import DRAWING, DRAWING_PARTS
+
+    return plugin_folder(DRAWING, DRAWING_PARTS)
+
+
+def test_plugin_screen_and_widget_in_the_editor(drawing_plugin, page):
+    assert page.locator("#add-type option[value='demo.bar']").inner_text() == "Demo bar"
+    select = page.locator("label.field", has_text="screen").locator("select")
+    select.select_option("tint")
+    page.wait_for_function("state.theme.screen && state.theme.screen.name === 'tint'")
+    page.locator("label.field", has_text="color").first.wait_for()
+    page.wait_for_timeout(500)  # the preview renders with the screen
+    select.select_option("")
+    page.wait_for_function("!state.theme.screen")
+
+
+@pytest.fixture
+def toast_plugin(plugin_folder):
+    from test_plugins import TOAST_PARTS, TOAST_STYLE
+
+    return plugin_folder(TOAST_STYLE, TOAST_PARTS)
+
+
+def test_toast_settings_in_the_editor(toast_plugin, page, isolated_home):
+    """Theme → Messages: position, time, hidden kinds and a plugin's style with its options."""
+    messages = page.locator("#props")
+    messages.locator("label.field", has_text="position").locator("select").select_option(
+        "bottom-left"
+    )
+    messages.locator("label.field", has_text="hidden kinds").locator("input").fill("music, volume")
+    messages.locator("label.field", has_text="one after another").locator("input").uncheck()
+    messages.locator("label.field", has_text="style").locator("select").select_option("demo.band")
+    height = messages.locator("label.field", has_text="height").locator("input")
+    height.fill("55")
+    height.press("Tab")
+    toast = js(page, "state.theme.toast")
+    assert toast == {
+        "anchor": "bottom-left",
+        "queue": False,
+        "off": ["music", "volume"],
+        "style": "demo.band",
+        "options": {"height": 55},
+    }
+    page.click("#btn-save")  # built-in theme: asks for a new name ("my-test")
+    page.wait_for_function("document.querySelector('#status').textContent.includes('my-test')")
+    from libre_panel.theme.model import load_theme
+
+    saved = load_theme(isolated_home / "themes" / "my-test")
+    assert saved.toast["style"] == "demo.band" and saved.toast["options"] == {"height": 55}
+    assert saved.toast_anchor == "bottom-left" and saved.toast["off"] == ["music", "volume"]
+    assert saved.toast["queue"] is False
+
+
+@pytest.fixture
+def page_plugin(plugin_folder):
+    from test_plugins import PAGE, PAGE_FILES, PAGE_PARTS
+
+    return plugin_folder(PAGE, PAGE_PARTS, files=PAGE_FILES)
+
+
+def test_plugin_page_opens_in_the_editor(page_plugin, page):
+    page.click("#pages-button")
+    page.get_by_role("menuitem", name="Cooling").click()
+    frame = page.frame_locator("#plugin-frame")
+    frame.locator("#out", has_text="1 3").wait_for()  # kit.js reached the page's own API
+    assert page.locator("main.layout").is_hidden()
+    page.click("#plugin-back")
+    assert page.locator("main.layout").is_visible() and page.locator("#plugin-view").is_hidden()
+
+
 def test_plain_editor_hides_the_panel_controls(page):
     page.wait_for_timeout(300)
     assert page.locator("#app-chip").is_hidden()

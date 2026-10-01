@@ -75,8 +75,9 @@ Commands that change what the panel keeps, and are **never sent by Libre
 Panel**: 13 (set rotation and save the settings), 125 (save settings: start
 mode, brightness), all storage and file commands (38–42, 98–100), firmware.
 11 restarts the panel (back after about 5 s; the only fix for a hung video
-decoder besides replugging); Libre Panel does not send it. 12 **halts** the
-panel until it loses power: never send it.
+decoder besides replugging); Libre Panel sends it for that and nothing else
+(see *A hung decoder*). 12 **halts** the panel until it loses power: never
+send it.
 
 ## Frames
 
@@ -183,4 +184,12 @@ Detection, as in SPUR II: when the median time of the last 40 blocks exceeds
 highest above 20 and all within 2 of each other, mean a hang (a high queue
 that moves drains by itself). A new connection and a full start do not help,
 not even a PC restart; restarting the panel (11) or replugging does.
-**verified** Libre Panel detects it this way and asks to replug the panel.
+**verified**
+
+Recovery, as in SPUR II: send 11 (nothing else to the hung decoder, not even
+123), wait until the panel has left the bus (up to 20 s) and is back (up to
+90 s), give it 2 s more, then connect and start as after power-on. At most
+three restarts in a row; the count starts again after 5 minutes without a
+hang. When restarts do not help, or the panel does not come back, Libre
+Panel asks to replug it. Plugins hear `panel-restarted` after
+`panel-connected` when the panel came back from such a restart.

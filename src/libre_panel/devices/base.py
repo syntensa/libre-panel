@@ -29,6 +29,9 @@ class Display:
     # changed or not; others get only frames that changed, at the configured fps.
     streaming = False
     stream_fps = 0
+    # True once open() brought the panel back after the driver restarted it
+    # (a hung video decoder): the main loop tells the services, unlike a replug.
+    restarted = False
 
     def __init__(self, config: DeviceConfig) -> None:
         self.config = config

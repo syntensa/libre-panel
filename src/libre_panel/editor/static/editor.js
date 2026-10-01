@@ -95,7 +95,7 @@ function t(text, vars = {}) {
   return message.replace(/\{(\w+)\}/g, (all, name) => (name in vars ? String(vars[name]) : all));
 }
 const fieldLabel = (key) => state.i18n?.fields?.[key] ?? key.replace(/_/g, " ");
-const widgetLabel = (type) => state.i18n?.widgets?.[type] ?? type;
+const widgetLabel = (type) => state.specs?.widget_labels?.[type] ?? state.i18n?.widgets?.[type] ?? type;
 const enumLabel = (value) => state.i18n?.enums?.[value] ?? value;
 const iconLabel = (name) => state.i18n?.icons?.[name] ?? name;
 
@@ -1151,12 +1151,96 @@ function buildThemeProps(form) {
     field(fieldLabel("font"), fontInput(theme.font === state.specs.default_font ? "" : theme.font, set("font", (v) => (theme.font = v || state.specs.default_font)), t("Default (Barlow Medium)")), t("used by every text widget without its own font")),
     field(fieldLabel("background"), colorInput(theme.background.color, set("bg", (v) => (theme.background.color = v)), false)),
     field(t("background image"), assetInput(theme.background.image, set("bgimg", (v) => (theme.background.image = v || null)))),
+    ...buildScreenFields(),
     el("h2", { class: "section-title", text: t("Palette") }),
     buildPaletteEditor(),
     el("h2", { class: "section-title", text: t("Timing") }),
     field(t("sensor refresh (ms)"), numberInput(theme.refresh_ms, set("refresh", (v) => (theme.refresh_ms = Math.max(100, v || 1000))))),
     field(t("smoothing (ms)"), numberInput(theme.animation.smoothing_ms, set("smooth", (v) => (theme.animation.smoothing_ms = Math.max(0, Math.min(5000, v ?? 0))))), t("how long bars and rings take to glide to a new value; 0 = jump")),
+    ...buildToastFields(),
   );
+}
+
+// Messages from services (toasts): where, how long, which kinds not, and their look.
+function buildToastFields() {
+  const toast = (state.theme.toast = state.theme.toast || {});
+  const set = (key, apply) => (value) => {
+    commit(`toast:${key}`);
+    apply(value);
+  };
+  const styles = state.specs.toasts || {};
+  const current = toast.style || "";
+  const choices = [el("option", { value: "", text: t("card (built in)"), selected: !current })];
+  for (const [name, info] of Object.entries(styles)) choices.push(el("option", { value: name, text: info.label, selected: name === current }));
+  if (current && !styles[current]) choices.push(el("option", { value: current, text: t("{name} (not installed)", { name: current }), selected: true }));
+  const style = el("select", {
+    onchange: (event) => {
+      commit("toast:style");
+      const name = event.target.value;
+      if (name) {
+        const spec = styles[name]?.options || {};
+        toast.style = name;
+        toast.options = Object.fromEntries(Object.entries(spec).map(([k, [, d]]) => [k, clone(d)]));
+      } else {
+        delete toast.style;
+        delete toast.options;
+      }
+      buildProps();
+    },
+  }, ...choices);
+  const anchors = `enum:${(state.specs.toast_anchors || ["top-right"]).join("|")}`;
+  const kinds = el("input", {
+    type: "text",
+    value: (toast.off || []).join(", "),
+    oninput: (event) => set("off", (v) => (toast.off = v))(event.target.value.split(",").map((k) => k.trim()).filter(Boolean)),
+  });
+  const fields = [
+    el("h2", { class: "section-title", text: t("Messages") }),
+    field(t("position"), controlFor("anchor", anchors, toast.anchor || "top-right", set("anchor", (v) => (toast.anchor = v))), t("where messages from services appear")),
+    field(t("seconds shown"), numberInput(toast.seconds ?? 4, set("seconds", (v) => (toast.seconds = Math.max(0.5, Math.min(60, v || 4)))), { step: "0.5", min: 0.5, max: 60 })),
+    field(t("one after another"), controlFor("queue", "bool", toast.queue ?? true, set("queue", (v) => (toast.queue = v))), t("off: a new message of the same or a higher rank takes over at once, a lower one is dropped")),
+    field(t("hidden kinds"), kinds, t("kinds of messages this theme does not show, e.g. music")),
+    field(t("style"), style, t("how messages look; plugins can bring more")),
+  ];
+  for (const [key, [kind, fallback]] of Object.entries(styles[current]?.options || {})) {
+    const value = toast.options?.[key] ?? fallback;
+    fields.push(field(fieldLabel(key), controlFor(key, kind, value, set(key, (v) => (toast.options = { ...toast.options, [key]: v })))));
+  }
+  return fields;
+}
+
+// A screen from a plugin draws the whole frame under the widgets.
+function buildScreenFields() {
+  const screens = state.specs.screens || {};
+  const theme = state.theme;
+  const current = theme.screen?.name || "";
+  if (!Object.keys(screens).length && !current) return [];
+  const choices = [el("option", { value: "", text: t("none"), selected: !current })];
+  for (const [name, info] of Object.entries(screens)) choices.push(el("option", { value: name, text: info.label, selected: name === current }));
+  if (current && !screens[current]) choices.push(el("option", { value: current, text: t("{name} (not installed)", { name: current }), selected: true }));
+  const select = el("select", {
+    onchange: (event) => {
+      commit("theme:screen");
+      const name = event.target.value;
+      if (name) {
+        const spec = screens[name]?.options || {};
+        theme.screen = { name, options: Object.fromEntries(Object.entries(spec).map(([k, [, d]]) => [k, clone(d)])) };
+      } else delete theme.screen;
+      buildProps();
+      scheduleRender();
+    },
+  }, ...choices);
+  const fields = [field(t("screen"), select, t("drawn by a plugin, under the widgets"))];
+  for (const [key, [kind, fallback]] of Object.entries(screens[current]?.options || {})) {
+    const value = theme.screen.options?.[key] ?? fallback;
+    const onChange = (v) => {
+      commit(`screen:${key}`);
+      theme.screen.options = { ...theme.screen.options, [key]: v };
+      scheduleRender();
+    };
+    fields.push(field(fieldLabel(key), controlFor(key, kind, value, onChange)));
+  }
+  return fields;
 }
 
 function replaceReferences(from, to) {
@@ -1294,7 +1378,11 @@ async function onPanelChange() {
 async function refreshThemeList(selectId) {
   state.themes = await api("GET", "/api/themes");
   const select = $("#theme-select");
-  select.replaceChildren(...state.themes.map((theme) => el("option", { value: theme.id, text: theme.builtin ? t("{id} (built-in)", { id: theme.id }) : theme.id })));
+  const label = (theme) => {
+    if (theme.source === "plugin") return t("{id} (plugin)", { id: theme.id });
+    return theme.builtin ? t("{id} (built-in)", { id: theme.id }) : theme.id;
+  };
+  select.replaceChildren(...state.themes.map((theme) => el("option", { value: theme.id, text: label(theme) })));
   if (!state.themeId) select.append(el("option", { value: "", text: t("(unsaved)") }));
   select.value = selectId ?? state.themeId ?? "";
 }
@@ -1464,6 +1552,8 @@ function renderApp(app) {
   $("#app-detail").hidden = !panel.detail;
   $("#app-target").textContent = panel.target || "–";
   $("#app-theme").textContent = panel.theme || "–";
+  $("#app-mode").textContent = panel.mode || "";
+  $("#app-mode").hidden = $("#app-mode-label").hidden = !panel.mode;
   const slider = $("#app-brightness");
   if (document.activeElement !== slider && app.brightness !== null) slider.value = app.brightness;
   slider.disabled = app.brightness === null;
@@ -1502,6 +1592,39 @@ function toggleAppPopover(open = $("#app-popover").hidden) {
   popover.hidden = !open;
   $("#app-chip").setAttribute("aria-expanded", String(open));
   if (open) pollApp();
+}
+
+// ---------------------------------------------------------------- plugin pages
+
+async function loadPages() {
+  const pages = await api("GET", "/api/plugins/pages");
+  $("#pages-wrap").hidden = !pages.length;
+  $("#pages-menu").replaceChildren(
+    ...pages.map((page) => el("button", { type: "button", role: "menuitem", text: page.title, onclick: () => openPage(page) })),
+  );
+}
+
+function togglePagesMenu(open = $("#pages-menu").hidden) {
+  $("#pages-menu").hidden = !open;
+  $("#pages-button").setAttribute("aria-expanded", String(open));
+}
+
+function openPage(page) {
+  togglePagesMenu(false);
+  $("#plugin-title").textContent = page.title;
+  $("#plugin-frame").src = `/plugins/${encodeURIComponent(page.id)}/`;
+  $("main.layout").hidden = $(".panelbar").hidden = true;
+  $("#plugin-view").hidden = false;
+  document.body.classList.add("showing-page");
+}
+
+function closePage() {
+  $("#plugin-view").hidden = true;
+  $("#plugin-frame").src = "about:blank";
+  $("main.layout").hidden = $(".panelbar").hidden = false;
+  document.body.classList.remove("showing-page");
+  layoutStage();
+  drawOverlay();
 }
 
 async function quitApp() {
@@ -1628,6 +1751,12 @@ async function init() {
     importTheme(event.target.files[0]);
     event.target.value = "";
   });
+  $("#pages-button").addEventListener("click", () => togglePagesMenu());
+  $("#plugin-back").addEventListener("click", closePage);
+  document.addEventListener("click", (event) => {
+    if (!$("#pages-menu").hidden && !event.target.closest(".pages-wrap")) togglePagesMenu(false);
+  });
+  loadPages().catch((error) => setStatus(error.message, "error"));
   $("#btn-undo").addEventListener("click", undo);
   $("#btn-redo").addEventListener("click", redo);
   $("#btn-add").addEventListener("click", addWidget);

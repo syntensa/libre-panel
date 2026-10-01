@@ -141,15 +141,37 @@ class WeatherConfig:
 
 
 @dataclass
+class ServicesConfig:
+    """Service plugins to run, and their options ([services.<name>])."""
+
+    enabled: list[str] = field(default_factory=list)
+    options: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+
+@dataclass
+class ModeConfig:
+    """A mode a service can switch to, e.g. [modes.game] with fewer frames."""
+
+    fps: int | None = None
+    theme: str | None = None
+
+
+@dataclass
 class Config:
     theme: str = "libre-default"
     language: str = "auto"
     refresh_ms: int | None = None
     fps: int = 10
+    transition: str = "fade"  # between themes: cut, fade, slide, or one from a plugin
     device: DeviceConfig = field(default_factory=DeviceConfig)
     sensors: SensorsConfig = field(default_factory=SensorsConfig)
     weather: WeatherConfig = field(default_factory=WeatherConfig)
+    services: ServicesConfig = field(default_factory=ServicesConfig)
+    modes: dict[str, ModeConfig] = field(default_factory=dict)
     path: Path | None = None
+    # config.toml's modification time when it was read: a change made while
+    # the program starts up is noticed too.
+    stamp: int | None = None
 
 
 def _expect(value: Any, kind: type | tuple[type, ...], name: str) -> Any:
@@ -173,6 +195,8 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         cfg.fps = _expect(data["fps"], int, "fps")
         if not 1 <= cfg.fps <= 60:
             raise ConfigError("fps: must be between 1 and 60")
+    if "transition" in data:
+        cfg.transition = _expect(data["transition"], str, "transition")
     if "refresh_ms" in data:
         cfg.refresh_ms = _expect(data["refresh_ms"], int, "refresh_ms")
         if cfg.refresh_ms < 100:
@@ -211,6 +235,22 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     if cfg.weather.units not in ("metric", "imperial"):
         raise ConfigError('weather.units: must be "metric" or "imperial"')
     cfg.weather.update_minutes = _expect(w.get("update_minutes", 15), int, "weather.update_minutes")
+    services = dict(_expect(data.get("services", {}), dict, "services"))
+    enabled = _expect(services.pop("enabled", []), list, "services.enabled")
+    cfg.services.enabled = [_expect(name, str, "services.enabled[]") for name in enabled]
+    cfg.services.options = {k: v for k, v in services.items() if isinstance(v, dict)}
+
+    for name, table in _expect(data.get("modes", {}), dict, "modes").items():
+        table = _expect(table, dict, f"modes.{name}")
+        mode = ModeConfig()
+        if "fps" in table:
+            mode.fps = _expect(table["fps"], int, f"modes.{name}.fps")
+            if not 1 <= mode.fps <= 60:
+                raise ConfigError(f"modes.{name}.fps: must be between 1 and 60")
+        if "theme" in table:
+            mode.theme = _expect(table["theme"], str, f"modes.{name}.theme")
+        cfg.modes[name] = mode
+
     if cfg.weather.enabled and (cfg.weather.latitude is None or cfg.weather.longitude is None):
         raise ConfigError(
             "weather is enabled but no location is set: add weather.latitude and "
@@ -259,13 +299,17 @@ def _parse_video(v: dict[str, Any]) -> VideoConfig:
 def load_config(path: Path | None = None) -> Config:
     """Load config.toml; a missing file means all defaults."""
     path = path or config_dir() / CONFIG_FILENAME
-    if not path.exists():
+    try:
+        stamp = path.stat().st_mtime_ns  # before reading: a later change is newer
+    except OSError:
         return Config(path=path)
     try:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"{path}: {exc}") from exc
-    return parse_config(data, path)
+    config = parse_config(data, path)
+    config.stamp = stamp
+    return config
 
 
 def write_default_config(path: Path | None = None, overwrite: bool = False) -> Path:
@@ -288,7 +332,30 @@ def _toml_literal(value: Any) -> str:
 
 
 _HEADER = re.compile(r"^[ \t]*\[", re.MULTILINE)
-_TABLE = re.compile(r"^[ \t]*\[[ \t]*([A-Za-z0-9_-]+)[ \t]*\][ \t]*(?:#.*)?$", re.MULTILINE)
+# [table] or [table.sub] (not [[array]]); the name comes back without spaces around dots
+_TABLE = re.compile(
+    r"^[ \t]*\[[ \t]*([A-Za-z0-9_-]+(?:[ \t]*\.[ \t]*[A-Za-z0-9_-]+)*)[ \t]*\][ \t]*(?:#.*)?$",
+    re.MULTILINE,
+)
+
+
+def _trailing_comment(line: str) -> str:
+    """The ``  # ...`` after a ``key = value`` line's value, or ""."""
+    quote = None
+    i = line.index("=") + 1
+    while i < len(line):
+        char = line[i]
+        if quote:
+            if char == "\\" and quote == '"':
+                i += 1  # an escaped character, maybe a quote
+            elif char == quote:
+                quote = None
+        elif char in "\"'":
+            quote = char
+        elif char == "#":
+            return line[len(line[:i].rstrip()) :]
+        i += 1
+    return ""
 
 
 def _with_key(text: str, table: str | None, key: str, literal: str) -> str:
@@ -297,22 +364,27 @@ def _with_key(text: str, table: str | None, key: str, literal: str) -> str:
         first = _HEADER.search(text)
         start, end = 0, first.start() if first else len(text)
     else:
-        header = next((m for m in _TABLE.finditer(text) if m.group(1) == table), None)
+        header = next(
+            (m for m in _TABLE.finditer(text) if re.sub(r"[ \t]", "", m.group(1)) == table), None
+        )
         if header is None:
             return text.rstrip("\n") + f"\n\n[{table}]\n{line}\n"
         start = text.find("\n", header.end()) + 1 or len(text)
         following = _HEADER.search(text, start)
         end = following.start() if following else len(text)
     body = text[start:end]
-    pattern = re.compile(rf"^[ \t]*{re.escape(key)}[ \t]*=.*$", re.MULTILINE)
-    body, count = pattern.subn(line, body, count=1)
+    pattern = re.compile(rf"^([ \t]*){re.escape(key)}[ \t]*=.*$", re.MULTILINE)
+    body, count = pattern.subn(
+        lambda m: m.group(1) + line + _trailing_comment(m.group(0)), body, count=1
+    )
     if not count:
         body = line + "\n" + body
     return text[:start] + body + text[end:]
 
 
 def set_config_value(name: str, value: Any, path: Path | None = None) -> Path:
-    """Change one setting (``"theme"``, ``"device.brightness"``, ...) in config.toml.
+    """Change one setting (``"theme"``, ``"device.brightness"``,
+    ``"modes.game.theme"``, ...) in config.toml.
 
     The rest of the file, comments included, stays as it is. The new file is
     checked before it is written (atomically), so a mistake never leaves a
@@ -327,7 +399,9 @@ def set_config_value(name: str, value: Any, path: Path | None = None) -> Path:
         data = tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"{path}: could not set {name} ({exc}); please edit it by hand") from exc
-    written = data.get(table, {}) if table else data
+    written: Any = data
+    for part in table.split(".") if table else ():
+        written = written.get(part, {}) if isinstance(written, dict) else {}
     if not isinstance(written, dict) or written.get(key) != value:
         raise ConfigError(f"{path}: could not set {name}; please edit it by hand")
     parse_config(data, path)

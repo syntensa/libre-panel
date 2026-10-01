@@ -143,9 +143,9 @@ def answers(*replies):
 
 
 def test_doctor_passes_on_a_working_panel(panel):
-    # two test cards, the ruler (top, bottom, left, right), brightness
+    # two test cards, the ruler (top, bottom, left, right), Enter, brightness
     doctor = Doctor(
-        ask=answers("y", "y", "18", "0", "0", "", "y"),
+        ask=answers("y", "y", "20", "2", "2", "", "", "y"),
         say=lambda s: None,
         pause=lambda s: None,
         frames=5,
@@ -153,7 +153,8 @@ def test_doctor_passes_on_a_working_panel(panel):
     report = doctor.run()
     assert report.passed, report.text()
     text = report.text()
-    assert "turing-9.2-usb" in text and "fps" in text and "turzx_00" in text
+    assert "turing-9.2-usb" in text and "fps" in text
+    assert "turzx_00" not in text  # the handshake's changing bytes are no identifier
     assert report.hidden == {"top": 18, "bottom": 0, "left": 0, "right": None}
     assert "hidden: top 18 px, bottom 0 px, left 0 px, right ?" in text
     assert panel.commands.count(102) == 2 + 1 + 5 + 1  # cards, ruler, speed test, final card
@@ -198,24 +199,29 @@ def test_doctor_report_has_no_personal_data(panel):
         assert private not in text
 
 
-def test_ruler_lines_sit_exactly_at_their_distance():
-    from libre_panel.doctor import ruler_card
+@pytest.mark.parametrize("size", [(1920, 480), (960, 320), (1280, 800)])
+def test_ruler_bars_are_exactly_as_deep_as_their_number(size):
+    from libre_panel.doctor import RULER_COLOR, ruler_card
 
-    card = ruler_card(1920, 480)
-    yellow = (255, 212, 0)
-    for k in (0, 2, 18, 40):
-        # the line labelled k runs somewhere along the edge, exactly k pixels in
-        top_row = [card.getpixel((x, k)) for x in range(card.width)]
-        bottom_row = [card.getpixel((x, card.height - 1 - k)) for x in range(card.width)]
-        left_col = [card.getpixel((k, y)) for y in range(card.height)]
-        right_col = [card.getpixel((card.width - 1 - k, y)) for y in range(card.height)]
-        for line in (top_row, bottom_row, left_col, right_col):
-            assert line.count(yellow) >= 12, k
+    card = ruler_card(*size)
+    w, h = card.size
 
+    def bars(line):  # yellow runs along a row or column of pixels
+        pixels = [card.getpixel(xy) == RULER_COLOR for xy in line]
+        return sum(1 for i, p in enumerate(pixels) if p and (i == 0 or not pixels[i - 1]))
 
-def test_handshake_bytes_are_shown_as_hex_when_binary():
-    from libre_panel.doctor import _printable
-
-    assert _printable(b"turzx_00") == "'turzx_00'"
-    assert _printable(b"\x9a\xf3\x01") == "9a f3 01"
-    assert _printable(b"") == "(empty)"
+    edges = {
+        "top": lambda d: [(x, d) for x in range(w)],
+        "bottom": lambda d: [(x, h - 1 - d) for x in range(w)],
+        "left": lambda d: [(d, y) for y in range(h)],
+        "right": lambda d: [(w - 1 - d, y) for y in range(h)],
+    }
+    for edge, line in edges.items():
+        counts = [bars(line(d)) for d in range(42)]
+        assert counts[0] >= 10, edge  # enough bars to read the strip off
+        # d pixels in, exactly the bars deeper than d are left: one fewer every 2 px
+        steps = [d for d in range(1, 42) if counts[d] < counts[d - 1]]
+        assert all(d % 2 == 0 for d in steps) and counts[40] == 0, (edge, counts)
+        if size == (1920, 480):  # every 2 px on the 9.2" (small panels have fewer bars)
+            assert steps == list(range(2, 41, 2)), (edge, counts)
+            assert counts[17] == counts[18] + 1, (edge, counts)  # bar 18 ends at row 17

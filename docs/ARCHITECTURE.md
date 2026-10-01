@@ -20,11 +20,12 @@
 | `sensors` | `SensorProvider` plugins merged by `SensorHub` (priority, history for graphs). |
 | `weather` | Open-Meteo provider, background polling, off by default. |
 | `devices` | Panel catalog (`models`), `Display` drivers, USB/serial discovery. |
+| `plugins` | Plugin API: finding plugins (entry points, plugin folders), services and the host they talk to the panel through, modes. See [Plugins](PLUGINS.md). |
 | `editor` | Local HTTP server (127.0.0.1 only) + vanilla JS editor, no build step. |
 | `app` | Main loop: sample → render → diff → send; reloads config/theme on change; reports its state (`RunStatus`). |
 | `service` | Background app: the main loop in a thread (pause/resume, restarts after a broken config is fixed), the editor server, and the controls shared by tray and editor. |
 | `tray` | Tray icon and menu (pystray); runs without an icon where there is no tray. |
-| `autostart` | Login start per system: Windows `Run` key, XDG autostart entry, macOS LaunchAgent. |
+| `autostart` | Login start per system: Windows `Run` key (or, asked for, a Task Scheduler task with the highest rights), XDG autostart entry, macOS LaunchAgent. |
 | `instance` | OS file lock so only one process drives the panel. |
 | `branding` | The logo, drawn in code (tray icon with status dot, app icons). |
 | `cli` | `libre-panel` command. |
@@ -41,7 +42,8 @@
   logged and skipped.
 - **Optional features are plugins.** Anything that serves one setup (special
   fan analysis, game statistics, media players) belongs in a separate package
-  registered under the `libre_panel.sensors` / `libre_panel.devices` entry points.
+  registered under the `libre_panel.services`, `libre_panel.sensors` or
+  `libre_panel.devices` entry points ([Plugins](PLUGINS.md)).
 
 ## Plugins
 
@@ -57,9 +59,15 @@ from libre_panel.sensors import Reading, SensorProvider
 
 class FanProvider(SensorProvider):
     name = "myfans"
+    api = 1  # the plugin API it is written for (docs/PLUGINS.md)
 
     def read(self):
         return {"fan.front": Reading("fan.front", 1200.0, "RPM", "Front fan")}
 ```
 
-Users enable it with `providers = ["myfans", "psutil"]`.
+Users enable it with `providers = ["myfans", "psutil"]`. A plugin folder can
+bring sensor sources too (`[entry-points."libre_panel.sensors"]` in its
+`plugin.toml`). A source whose `read` is cheap and whose values must follow
+at once (a volume) sets `every_frame = True`: it is then also read on every
+frame between the `refresh_ms` snapshots (graphs keep one value per
+snapshot).

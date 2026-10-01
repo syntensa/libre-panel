@@ -34,12 +34,13 @@ from libre_panel.editor.presets import presets_for_editor
 from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_fonts
 from libre_panel.icons import ICON_NAMES
 from libre_panel.render.renderer import Renderer
-from libre_panel.sensors.base import SensorHub
+from libre_panel.sensors.base import SensorHub, Snapshot
 from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import (
     COMMON_FIELDS,
     EFFECT_FIELDS,
+    TOAST_ANCHORS,
     WIDGET_SPECS,
     ThemeError,
     find_theme,
@@ -66,17 +67,81 @@ _CONTENT_TYPES = {
     ".svg": "image/svg+xml; charset=utf-8",
     ".png": "image/png",
 }
+# What a plugin's editor page may serve from its folder.
+_PAGE_TYPES = {
+    **_CONTENT_TYPES,
+    ".json": "application/json",
+    ".jpg": "image/jpeg",
+    ".webp": "image/webp",
+    ".woff2": "font/woff2",
+    ".ttf": "font/ttf",
+}
+
+
+def _plugin_specs() -> dict[str, Any]:
+    """Installed plugin widget types and screens, for the inspector and the building blocks."""
+    from libre_panel.plugins.loader import registry
+    from libre_panel.plugins.render import label_for
+
+    installed = registry()
+    widgets: dict[str, Any] = {}
+    labels: dict[str, str] = {}
+    presets: list[dict[str, Any]] = []
+    for name in installed.names("widgets"):
+        cls = installed.get("widgets", name)
+        if cls is None:
+            continue
+        widgets[name] = {k: list(v) for k, v in cls.spec.items()}
+        labels[name] = label_for(cls)
+        defaults = {k: v[1] for k, v in cls.spec.items()}
+        for i, preset in enumerate(cls.presets):
+            widget = {"type": name, "id": "part", "x": 0, "y": 0, **defaults, **preset["widget"]}
+            text = preset.get("label", {})
+            presets.append(
+                {
+                    "id": f"{name}-{i + 1}",
+                    "name": text.get(i18n.language()) or text.get("en") or labels[name],
+                    "size": [widget.get("w", 100), widget.get("h", 100)],
+                    "widgets": [widget],
+                }
+            )
+    screens = {}
+    for name in installed.names("screens"):
+        cls = installed.get("screens", name)
+        if cls is not None:
+            options = {k: list(v) for k, v in cls.options.items()}
+            screens[name] = {"label": label_for(cls), "options": options}
+    toasts = {}
+    for name in installed.names("toasts"):
+        cls = installed.get("toasts", name)
+        if cls is not None:
+            options = {k: list(v) for k, v in cls.options.items()}
+            toasts[name] = {"label": label_for(cls), "options": options}
+    return {
+        "widgets": widgets,
+        "widget_labels": labels,
+        "presets": presets,
+        "screens": screens,
+        "toasts": toasts,
+    }
 
 
 class EditorState:
-    def __init__(self, config_path: Path | None = None) -> None:
+    def __init__(self, config_path: Path | None = None, controls: Any = None) -> None:
         self.config_path = config_path
+        self.controls = controls
         self._hub: SensorHub | None = None
         self._lock = threading.Lock()
+        self.pages: dict[str, Any] = {}  # plugin editor pages, created on first use
 
     def live_snapshot(self):
+        """The readings for previews. In the background app they are the panel's
+        own: sources that drive hardware must not run twice in one process."""
         from libre_panel.app import build_hub
 
+        host = getattr(self.controls, "plugin_host", None)
+        if host is not None:
+            return host.latest or Snapshot()
         with self._lock:
             if self._hub is None:
                 self._hub = build_hub(load_config(self.config_path))
@@ -198,7 +263,65 @@ class EditorHandler(BaseHTTPRequestHandler):
             if self.controls is None:
                 return self._json({"available": False})
             return self._json({"available": True, **self.controls.snapshot()})
+        if path == "/api/plugins/pages":
+            return self._json(self._pages())
+        match = re.fullmatch(r"/plugins/([^/]+)/(.*)", path)
+        if match:
+            return self._page_file(match.group(1), match.group(2) or "index.html")
+        match = re.fullmatch(r"/api/plugins/([^/]+)/(.*)", path)
+        if match:
+            query = parse_qs(urlparse(self.path).query)
+            return self._page_api("GET", match.group(1), match.group(2), query, None)
         self._error("not found", HTTPStatus.NOT_FOUND)
+
+    # -- plugin editor pages ---------------------------------------------------
+
+    def _page_class(self, page_id: str) -> Any:
+        from libre_panel.plugins.loader import registry
+
+        return registry().get("editor_pages", page_id)
+
+    def _pages(self) -> list[dict[str, str]]:
+        from libre_panel.plugins.loader import registry
+
+        pages = []
+        for page_id in registry().names("editor_pages"):
+            cls = self._page_class(page_id)
+            folder = cls.folder() if cls is not None else None
+            if folder is None or not (folder / "index.html").is_file():
+                continue
+            title = cls.title.get(i18n.language()) or cls.title.get("en") or page_id
+            pages.append({"id": page_id, "title": title, "icon": cls.icon})
+        return pages
+
+    def _page_file(self, page_id: str, name: str) -> None:
+        cls = self._page_class(page_id)
+        folder = cls.folder() if cls is not None else None
+        content_type = _PAGE_TYPES.get(Path(name).suffix.lower())
+        if folder is None or content_type is None:
+            return self._error("not found", HTTPStatus.NOT_FOUND)
+        base = folder.resolve()
+        file = (base / name).resolve()
+        if not file.is_relative_to(base) or not file.is_file():
+            return self._error("not found", HTTPStatus.NOT_FOUND)
+        self._send(200, file.read_bytes(), content_type)
+
+    def _page_api(self, method: str, page_id: str, path: str, query: dict, body: Any) -> None:
+        from libre_panel.plugins.pages import PageContext
+
+        cls = self._page_class(page_id)
+        if cls is None:
+            return self._error("not found", HTTPStatus.NOT_FOUND)
+        pages = self.state.pages
+        if page_id not in pages:
+            pages[page_id] = cls(PageContext(self.controls, self.state.config_path))
+        try:
+            status, data = pages[page_id].handle(method, path, query, body)
+            payload = json.dumps(data).encode("utf-8")
+        except Exception as exc:  # a broken page must not take the editor down
+            log.exception("editor page %s failed", page_id)
+            return self._error(f"{page_id}: {exc}", HTTPStatus.INTERNAL_SERVER_ERROR)
+        self._send(int(status), payload, "application/json")
 
     def _static(self, name: str) -> None:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", name) or name.startswith("."):
@@ -229,11 +352,17 @@ class EditorHandler(BaseHTTPRequestHandler):
         for model in models:
             if model.get("notes"):
                 model["notes"] = i18n.t(model["notes"])
+        widgets = {t: {k: list(v) for k, v in spec.items()} for t, spec in WIDGET_SPECS.items()}
+        plugins = _plugin_specs()
+        widgets.update(plugins["widgets"])
+        presets["presets"] += plugins["presets"]
         return {
             "version": __version__,
-            "widgets": {
-                t: {k: list(v) for k, v in spec.items()} for t, spec in WIDGET_SPECS.items()
-            },
+            "widgets": widgets,
+            "widget_labels": plugins["widget_labels"],
+            "screens": plugins["screens"],
+            "toasts": plugins["toasts"],
+            "toast_anchors": list(TOAST_ANCHORS),
             "common": {k: list(v) for k, v in COMMON_FIELDS.items()},
             "effect_fields": list(EFFECT_FIELDS),
             "models": models,
@@ -299,6 +428,13 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._app_action()
         if path == "/api/language":
             return self._set_language()
+        match = re.fullmatch(r"/api/plugins/([^/]+)/(.*)", path)
+        if match:
+            body = self._read_json()
+            if body is None:
+                return None
+            query = parse_qs(url.query)
+            return self._page_api("POST", match.group(1), match.group(2), query, body)
         match = re.fullmatch(r"/api/themes/([^/]+)/assets", path)
         if match:
             return self._upload_asset(match.group(1), parse_qs(url.query))
@@ -358,8 +494,11 @@ class EditorHandler(BaseHTTPRequestHandler):
                 snapshot.history.update({k: v for k, v in live.history.items() if len(v) > 1})
             except Exception as exc:
                 log.warning("live sensors unavailable: %s", exc)
-        renderer = Renderer(theme)
-        frame, boxes = renderer.render(snapshot)
+        renderer = Renderer(theme, preview=True)
+        try:
+            frame, boxes = renderer.render(snapshot)
+        finally:
+            renderer.close()  # plugin screens end with the preview
         buffer = io.BytesIO()
         frame.save(buffer, format="PNG")
         self._json(
@@ -448,7 +587,7 @@ class EditorServer(ThreadingHTTPServer):
 def make_server(
     port: int = 8765, config_path: Path | None = None, controls: Any = None
 ) -> ThreadingHTTPServer:
-    state = EditorState(config_path)
+    state = EditorState(config_path, controls)
     handler = type(
         "Handler",
         (EditorHandler,),

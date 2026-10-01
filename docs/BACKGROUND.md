@@ -85,6 +85,27 @@ The entry starts `libre-panel tray --background`, which does not open the
 editor. If a panel is not ready yet at login (USB still starting), Libre
 Panel keeps looking for it and uses it as soon as it appears.
 
+### Windows: starting with the highest rights
+
+Some sensors (CPU temperature and power, RAM temperature, mainboard fans)
+can be read only with administrator rights. The built-in LibreHardwareMonitor
+source asks LibreHardwareMonitor's web server and needs none; a sensor
+plugin that reads the hardware itself does. For that, in a terminal opened
+with *Run as administrator*:
+
+```
+libre-panel autostart enable --elevated
+```
+
+This creates the Task Scheduler task `Libre Panel`, which starts Libre Panel
+at your login with the highest rights (without a UAC prompt), at normal
+priority and without a time limit; the `Run` value is removed, so it starts
+once. `libre-panel autostart disable`, again as administrator, removes the
+task. Only use it when Libre Panel is installed where only administrators
+can change it (under *Program Files*): a program in your user folder could
+be replaced by anything you run, which would then get those rights at the
+next login. `enable --elevated` warns about that.
+
 ### Linux desktops
 
 - **KDE Plasma, Xfce, Cinnamon, MATE, LXQt, Budgie:** the icon appears in

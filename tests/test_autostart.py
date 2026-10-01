@@ -1,5 +1,6 @@
 import plistlib
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -114,7 +115,7 @@ def test_macos_launch_agent(tmp_path):
 
 def test_windows_run_key_with_fake_registry():
     registry = FakeRegistry()
-    auto = Autostart("win32", registry=registry)
+    auto = Autostart("win32", registry=registry, tasks=FakeTasks())
     assert not auto.is_enabled()
     auto.enable([r"C:\Program Files\Libre Panel\LibrePanel.exe", "tray", "--background"])
     assert registry.values[APP_NAME] == (
@@ -123,6 +124,87 @@ def test_windows_run_key_with_fake_registry():
     assert auto.is_enabled()
     assert "CurrentVersion\\Run" in auto.location()
     assert auto.disable() is True and not auto.is_enabled()
+
+
+class FakeTasks:
+    def __init__(self, allowed=True):
+        self.tasks, self.allowed = {}, allowed
+
+    def exists(self, name):
+        return name in self.tasks
+
+    def create(self, name, xml):
+        self.tasks[name] = xml
+
+    def delete(self, name):
+        if not self.allowed:
+            raise autostart_module.AutostartError("Access is denied.")
+        self.tasks.pop(name, None)
+
+
+def test_windows_elevated_start_is_a_task_with_the_highest_rights():
+    import xml.etree.ElementTree as ET
+
+    from libre_panel.autostart import WINDOWS_TASK, AutostartError
+
+    registry, tasks = FakeRegistry(), FakeTasks()
+    environ = {"USERNAME": "gamer", "USERDOMAIN": "PC"}
+    command = [r"C:\Program Files\Libre Panel\LibrePanel.exe", "tray", "--background"]
+    user = Autostart("win32", environ=environ, registry=registry, tasks=tasks, admin=lambda: False)
+    with pytest.raises(AutostartError, match="administrator"):
+        user.enable(command, elevated=True)
+    assert not tasks.tasks
+
+    user.enable(command)  # the plain start first
+    admin = Autostart("win32", environ=environ, registry=registry, tasks=tasks, admin=lambda: True)
+    assert "highest rights" in admin.enable(command, elevated=True)
+    assert APP_NAME not in registry.values  # one start at login, not two
+    assert admin.is_enabled() and admin.elevated()
+    ns = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
+    task = ET.fromstring(tasks.tasks[WINDOWS_TASK].split("?>", 1)[1])
+    assert task.find("t:Principals/t:Principal/t:RunLevel", ns).text == "HighestAvailable"
+    assert task.find("t:Triggers/t:LogonTrigger/t:UserId", ns).text == "PC\\gamer"
+    assert task.find("t:Actions/t:Exec/t:Command", ns).text == command[0]
+    assert task.find("t:Actions/t:Exec/t:Arguments", ns).text == "tray --background"
+    assert task.find("t:Settings/t:ExecutionTimeLimit", ns).text == "PT0S"  # runs for good
+
+    with pytest.raises(AutostartError, match="disable"):
+        user.enable(command)  # a plain start next to the elevated one: refused
+    tasks.allowed = False
+    with pytest.raises(AutostartError, match="administrator"):
+        user.disable()
+    tasks.allowed = True
+    assert admin.disable() and not admin.is_enabled()
+    with pytest.raises(AutostartError, match="Windows only"):
+        Autostart("linux", home=Path("/tmp/x")).enable(command, elevated=True)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="needs the Task Scheduler")
+def test_windows_task_scheduler_takes_the_task_for_real():
+    import os
+    import uuid
+
+    from libre_panel.autostart import WindowsTasks, is_admin, task_xml
+
+    if not is_admin():
+        pytest.skip("creating a task with the highest rights needs an administrator")
+    tasks, name = WindowsTasks(), f"Libre Panel test {uuid.uuid4().hex[:8]}"
+    user = f"{os.environ['USERDOMAIN']}\\{os.environ['USERNAME']}"
+    command = [r"C:\Windows\System32\cmd.exe", "/c", "exit", "0"]
+    try:
+        tasks.create(name, task_xml(command, user))
+        assert tasks.exists(name)
+    finally:
+        tasks.delete(name)
+    assert not tasks.exists(name)
+
+
+def test_elevated_programs_in_the_user_folder_are_flagged(tmp_path):
+    from libre_panel.autostart import writable_by_user
+
+    home = tmp_path / "home"
+    assert writable_by_user(home / "venv" / "Scripts" / "pythonw.exe", home)
+    assert not writable_by_user(tmp_path / "Program Files" / "LibrePanel.exe", home)
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="needs the Windows registry")

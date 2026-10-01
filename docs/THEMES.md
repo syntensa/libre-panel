@@ -48,9 +48,26 @@ to write or review themes by hand.
   `builtin:JetBrainsMono-Medium`, `-Bold` ship with Libre Panel (SIL OFL), or
   use a `.ttf`/`.otf` inside the theme folder.
 - `refresh_ms` is how often sensors are read; `animation.smoothing_ms` is how
-  long bars and rings glide to a new value (0 = jump).
+  long bars and rings glide to a new value (0 = jump). In video mode values
+  glide until the next reading and graphs scroll on every frame (they show
+  the readings one interval late, smooth curves two), so the 50 fps show
+  even when readings come once a second.
 - Widgets are drawn in list order: later ones are on top.
 - Unknown fields are ignored with a warning, so newer themes still load.
+- Optional: `"toast"` sets how messages from services show (editor:
+  *Theme → Messages*): `"anchor"` places them (`top-right` by default; also
+  `top-left`, `bottom-right`, `bottom-left`, `top`, `bottom`; they keep
+  clear of the strip a panel's bezel hides), `"seconds"` is how long each
+  stays (4), `"queue": false` lets a new message of the same or a higher
+  rank take over at once and drops lower ones (one after another by
+  default), `"off"` lists kinds the theme does not show (`["music"]`), and
+  `"style"` with `"options"` names a toast style from a plugin (the
+  built-in card otherwise).
+- Optional: `"screen": {"name": "...", "options": {...}}` lets an installed
+  plugin draw the whole frame; the widgets are drawn on top. Widget types
+  with a dot in the name (`"myplugin.ring"`) also come from plugins. A theme
+  that needs a plugin you do not have still loads; those parts are not drawn.
+  See [Plugins](PLUGINS.md).
 
 ## Widgets
 

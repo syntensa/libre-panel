@@ -75,11 +75,11 @@ def test_panel_service_restarts_after_a_crash(isolated_home, monkeypatch):
     calls = []
     real_run = service_module.run
 
-    def flaky_run(config, stop, status):
+    def flaky_run(config, stop, status, **kwargs):
         calls.append(1)
         if len(calls) == 1:
             raise RuntimeError("boom")
-        real_run(config, stop=stop, status=status)
+        real_run(config, stop=stop, status=status, **kwargs)
 
     monkeypatch.setattr(service_module, "run", flaky_run)
     service = PanelService(restart_delay=0.1)

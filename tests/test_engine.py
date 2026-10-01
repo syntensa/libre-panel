@@ -160,6 +160,111 @@ def test_graph_options_render_cleanly():
     assert renderer.warnings == []
 
 
+def spike_graph(**kw):
+    return {"type": "graph", "id": "g", "x": 0, "y": 0, "w": 200, "h": 60, "sensor": "v",
+            "history": 11, "min": 0, "max": 100, "fill": False, "color": "#ffffff",
+            "line_width": 1, "smooth": False, **kw}  # fmt: skip
+
+
+def spike_x(frame):
+    """Where the curve comes nearest to the top: the spike's x on the panel."""
+    tops = {}
+    for x in range(frame.width):
+        rows = [y for y in range(frame.height) if frame.getpixel((x, y))[0] > 120]
+        if rows:
+            tops[x] = min(rows)
+    best = min(tops.values())
+    xs = [x for x, top in tops.items() if top == best]
+    return sum(xs) / len(xs)
+
+
+SPIKE = [10.0] * 8 + [90.0, 10.0, 10.0]  # the spike is the third reading from the end
+STEP = 599 / 30  # 11 samples on 200 px: 19.97 px apart
+
+
+def test_graphs_scroll_between_readings_in_video_mode():
+    renderer = Renderer(theme(spike_graph(), size=(200, 60)))
+    renderer.continuous = True
+    delay = renderer.STRIP_DELAY_S
+    renderer.new_sample(100.0, 1.0)
+    snap = Snapshot(history={"v": SPIKE})
+    at_start = spike_x(renderer.render(snap, 100.0 + delay)[0])
+    halfway = spike_x(renderer.render(snap, 100.5 + delay)[0])
+    at_end = spike_x(renderer.render(snap, 101.0 + delay)[0])
+    assert renderer.moving
+    # one reading late: the second reading from the end is at the right edge
+    assert abs(at_start - (199 - STEP)) <= 1.5, at_start
+    assert abs(at_start - halfway - STEP / 2) <= 1.5 and abs(at_start - at_end - STEP) <= 1.5
+    # the next reading takes over exactly where the last strip stopped
+    renderer.new_sample(101.0, 1.0)
+    snap = Snapshot(history={"v": [*SPIKE, 10.0]})
+    assert abs(spike_x(renderer.render(snap, 101.0 + delay)[0]) - at_end) <= 1
+    # without video mode the curve stands still between readings, the newest at the edge
+    still = Renderer(theme(spike_graph(), size=(200, 60)))
+    snap = Snapshot(history={"v": SPIKE})
+    first = spike_x(still.render(snap, 100.0)[0])
+    assert first == spike_x(still.render(snap, 100.7)[0])
+    assert abs(first - (199 - 2 * STEP)) <= 1.5, first
+
+
+def test_scrolling_graphs_draw_their_curve_once_per_reading(monkeypatch):
+    renderer = Renderer(theme(spike_graph(smooth=True, glow=0.6), size=(200, 60)))
+    renderer.continuous = True
+    calls = []
+    real = renderer._graph_layer
+    monkeypatch.setattr(renderer, "_graph_layer", lambda *a: calls.append(1) or real(*a))
+    snap = Snapshot(history={"v": [10.0, 50.0, 30.0, 90.0, 20.0]})
+    renderer.new_sample(0.0, 1.0)
+    for frame in range(50):  # a second of video: 50 windows into one strip
+        renderer.render(snap, frame / 50)
+    assert len(calls) == 1
+    assert renderer.warnings == []
+
+
+def test_a_late_strip_keeps_the_old_one_moving():
+    """Video mode draws a new strip in the helper thread; until it is due the
+    old strip keeps travelling, so the curve never jumps back."""
+    import time as clock
+
+    renderer = Renderer(theme(spike_graph(), size=(200, 60)))
+    renderer.continuous = renderer.background_builds = True
+    delay = renderer.STRIP_DELAY_S
+    renderer.new_sample(100.0, 1.0)
+    first = spike_x(renderer.render(Snapshot(history={"v": SPIKE}), 100.9)[0])  # 0.8 of the way
+    renderer.new_sample(101.0, 1.0)
+    snap = Snapshot(history={"v": [*SPIKE, 10.0]})
+    early = spike_x(renderer.render(snap, 101.0)[0])  # the new strip is not due yet
+    assert 1 <= first - early <= 3  # still the old strip, 0.9 of the way
+    deadline = clock.monotonic() + 5
+    while renderer._strips["g"][1] is not None and clock.monotonic() < deadline:
+        clock.sleep(0.01)
+        renderer.render(snap, 101.0)
+    due = spike_x(renderer.render(snap, 101.0 + delay)[0])  # the new strip, where the old ended
+    assert abs(due - (first - 0.2 * STEP)) <= 1.5, (first, early, due)
+    renderer.close()
+
+
+def test_values_glide_until_the_next_reading_in_video_mode():
+    t = theme(bar(smooth=True), animation={"smoothing_ms": 400})
+
+    def glide(continuous):
+        renderer = Renderer(t, animate=True)
+        renderer.continuous = continuous
+        renderer.new_sample(0.0, 2.0)  # readings every 2 s
+        renderer.render(Snapshot(readings={"v": Reading("v", 0.0)}), 0.0)
+        values = []
+        for i in range(1, 21):
+            renderer.render(Snapshot(readings={"v": Reading("v", 100.0)}), i / 10)
+            values.append(renderer._anim["b"][0])
+        return values
+
+    quick, slow = glide(False), glide(True)
+    assert quick[5] > 99 and slow[5] < 90  # 0.6 s in: there, still on its way
+    assert slow[-1] > 90  # nearly there when the next reading comes
+    speeds = [b - a for a, b in zip(slow, slow[1:], strict=False)]
+    assert speeds[0] < speeds[2]  # a spring starts gently: no kink when a reading comes
+
+
 def text(t, **kw):
     return {"type": "metric", "id": "m", "x": 0, "y": 0, "sensor": "v", "format": t,
             "font_size": 30, **kw}  # fmt: skip
@@ -272,9 +377,11 @@ def test_scales_keep_small_values_visible():
     assert frame.getpixel((35, 10))[0] > 200 and frame.getpixel((45, 10))[0] < 100
 
 
+@pytest.mark.parametrize("continuous", [False, True], ids=["png", "video"])
 @pytest.mark.parametrize("theme_id", ["spur-ii", "libre-default", "orbit", "slate", "column"])
-def test_incremental_frames_equal_full_renders(theme_id):
-    """Composing only changed regions gives exactly the frame a full render gives."""
+def test_incremental_frames_equal_full_renders(theme_id, continuous):
+    """Composing only changed regions gives exactly the frame a full render gives
+    (in video mode too, where graphs scroll on every frame)."""
     from datetime import datetime, timedelta
 
     from PIL import ImageChops
@@ -286,12 +393,15 @@ def test_incremental_frames_equal_full_renders(theme_id):
     theme = load_theme(find_theme(theme_id))
     fast, full = Renderer(theme, animate=True), Renderer(theme, animate=True)
     full.incremental = False
+    fast.continuous = full.continuous = continuous
     hub = SensorHub([DemoProvider({})])
     snapshot = hub.snapshot()
     start = datetime(2026, 9, 27, 23, 59, 58)
     for i in range(120):
         if i % 25 == 0:
             snapshot = hub.snapshot()  # new readings: bars glide, graphs move
+            for renderer in (fast, full):
+                renderer.new_sample(1000.0 + i / 25, 1.0)
         snapshot.now = start + timedelta(seconds=i / 25)  # seconds tick, the date changes
         now = 1000.0 + i / 25
         a, boxes_a = fast.render(snapshot, now)

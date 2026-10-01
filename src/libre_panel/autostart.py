@@ -6,6 +6,15 @@
 
 Everything is per user and needs no administrator rights. Turning it off
 removes exactly what turning it on created.
+
+On Windows some sensors (CPU temperature and power, RAM temperature,
+mainboard fans) can be read only by a process with administrator rights.
+The built-in LibreHardwareMonitor source asks LibreHardwareMonitor's web
+server and needs none, but a plugin that reads the hardware itself does.
+For that, ``enable(..., elevated=True)`` sets up a Task Scheduler task that
+starts Libre Panel at login with the highest rights, instead of the Run
+value. Setting it up and removing it needs an administrator; it is never
+done without being asked.
 """
 
 from __future__ import annotations
@@ -15,14 +24,20 @@ import plistlib
 import re
 import subprocess
 import sys
-from collections.abc import Mapping
+import tempfile
+import time
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Protocol
+from xml.sax.saxutils import escape
+
+from libre_panel.i18n import t
 
 APP_NAME = "Libre Panel"
 DESKTOP_FILE = "libre-panel.desktop"
 MAC_LABEL = "io.github.syntensa.libre-panel"
 WINDOWS_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+WINDOWS_TASK = "Libre Panel"  # the Task Scheduler task for an elevated start
 # The release build's program without a console window (Windows) or Dock icon (macOS).
 WINDOWED_EXE = {"win32": "LibrePanel.exe", "darwin": "LibrePanel"}
 
@@ -85,6 +100,99 @@ class WindowsRegistry:
             pass
 
 
+class AutostartError(OSError):
+    """Autostart could not be changed; the message says what to do."""
+
+
+class Tasks(Protocol):
+    def exists(self, name: str) -> bool: ...
+    def create(self, name: str, xml: str) -> None: ...
+    def delete(self, name: str) -> None: ...
+
+
+class WindowsTasks:
+    """Task Scheduler tasks, through schtasks.exe."""
+
+    @staticmethod
+    def _run(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["schtasks", *args],
+            capture_output=True,
+            text=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+
+    def exists(self, name: str) -> bool:
+        try:
+            return self._run("/Query", "/TN", name).returncode == 0
+        except OSError:  # no schtasks (not Windows)
+            return False
+
+    def create(self, name: str, xml: str) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "task.xml"
+            path.write_text(xml, encoding="utf-16")  # what the XML declares
+            result = self._run("/Create", "/TN", name, "/XML", str(path), "/F")
+        if result.returncode:
+            raise AutostartError((result.stderr or result.stdout).strip())
+
+    def delete(self, name: str) -> None:
+        result = self._run("/Delete", "/TN", name, "/F")
+        if result.returncode:
+            raise AutostartError((result.stderr or result.stdout).strip())
+
+
+def is_admin() -> bool:
+    """Whether this process runs with administrator rights (Windows)."""
+    try:
+        import ctypes
+
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except (AttributeError, OSError):
+        return False
+
+
+def task_xml(command: list[str], user: str) -> str:
+    """A task that starts ``command`` when ``user`` logs in, with the highest rights,
+    at normal priority and without a time limit."""
+    program, arguments = escape(command[0]), escape(subprocess.list2cmdline(command[1:]))
+    user = escape(user)
+    return f"""<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Starts {APP_NAME} at login with the rights its sensors need.</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>{user}</UserId>
+      <Delay>PT5S</Delay>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>{user}</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>HighestAvailable</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Priority>5</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>{program}</Command>
+      <Arguments>{arguments}</Arguments>
+    </Exec>
+  </Actions>
+</Task>
+"""
+
+
 # Desktop Entry spec: arguments with these characters must be quoted.
 _RESERVED = set(" \t\"'\\><~|&;$*?#()`")
 
@@ -106,6 +214,16 @@ def desktop_exec(args: list[str]) -> str:
     return " ".join(quoted).replace("\\", "\\\\")
 
 
+def writable_by_user(program: Path, home: Path) -> bool:
+    """Whether a program lies where the user (and so anything the user runs)
+    can replace it: then starting it with the highest rights hands those
+    rights to whatever replaced it."""
+    try:
+        return program.resolve().is_relative_to(home.resolve())
+    except OSError:
+        return True
+
+
 class Autostart:
     def __init__(
         self,
@@ -113,11 +231,16 @@ class Autostart:
         home: Path | None = None,
         environ: Mapping[str, str] | None = None,
         registry: Registry | None = None,
+        tasks: Tasks | None = None,
+        admin: Callable[[], bool] = is_admin,
     ) -> None:
         self.platform = platform
         self.home = home or Path.home()
         self.environ = os.environ if environ is None else environ
         self._registry = registry
+        self._tasks = tasks
+        self._admin = admin
+        self._elevated: tuple[float, bool] | None = None
 
     @property
     def kind(self) -> str:
@@ -133,6 +256,23 @@ class Autostart:
             self._registry = WindowsRegistry()
         return self._registry
 
+    @property
+    def tasks(self) -> Tasks:
+        if self._tasks is None:
+            self._tasks = WindowsTasks()
+        return self._tasks
+
+    def elevated(self, fresh: bool = False) -> bool:
+        """Whether Libre Panel starts through the elevated task (Windows). Asked
+        often (tray, editor): schtasks runs at most every few seconds, unless
+        ``fresh``."""
+        if self.kind != "windows":
+            return False
+        now = time.monotonic()
+        if fresh or self._elevated is None or now - self._elevated[0] > 5.0:
+            self._elevated = (now, self.tasks.exists(WINDOWS_TASK))
+        return self._elevated[1]
+
     def path(self) -> Path | None:
         if self.kind == "macos":
             return self.home / "Library" / "LaunchAgents" / f"{MAC_LABEL}.plist"
@@ -143,12 +283,14 @@ class Autostart:
 
     def location(self) -> str:
         if self.kind == "windows":
+            if self.elevated():
+                return t("Task Scheduler: {name}, with the highest rights", name=WINDOWS_TASK)
             return f"HKEY_CURRENT_USER\\{WINDOWS_RUN_KEY}\\{APP_NAME}"
         return str(self.path())
 
     def is_enabled(self) -> bool:
         if self.kind == "windows":
-            return self.registry.get(APP_NAME) is not None
+            return self.registry.get(APP_NAME) is not None or self.elevated()
         path = self.path()
         if not path.is_file():
             return False
@@ -157,8 +299,18 @@ class Autostart:
             return not re.search(r"^Hidden\s*=\s*true\s*$", text, re.MULTILINE | re.IGNORECASE)
         return True
 
-    def enable(self, command: list[str]) -> str:
+    def enable(self, command: list[str], elevated: bool = False) -> str:
+        """Start ``command`` at login; ``elevated`` (Windows): with the highest rights."""
+        if elevated:
+            return self._enable_elevated(command)
         if self.kind == "windows":
+            if self.elevated(fresh=True):
+                raise AutostartError(
+                    t(
+                        "Libre Panel already starts with the highest rights. To start it "
+                        "without, first run as administrator: libre-panel autostart disable"
+                    )
+                )
             self.registry.set(APP_NAME, subprocess.list2cmdline(command))
             return self.location()
         path = self.path()
@@ -195,11 +347,42 @@ class Autostart:
             path.write_text("\n".join(line for line in lines if line) + "\n", encoding="utf-8")
         return self.location()
 
+    def _enable_elevated(self, command: list[str]) -> str:
+        if self.kind != "windows":
+            raise AutostartError(t("Starting with the highest rights is for Windows only."))
+        if not self._admin():
+            raise AutostartError(
+                t(
+                    "Setting up a start with the highest rights needs an administrator: "
+                    "open a terminal with 'Run as administrator' and run the command there."
+                )
+            )
+        user = self.environ.get("USERNAME", "")
+        domain = self.environ.get("USERDOMAIN", "")
+        self.tasks.create(WINDOWS_TASK, task_xml(command, f"{domain}\\{user}" if domain else user))
+        self._elevated = None
+        self.registry.delete(APP_NAME)  # one start at login, not two
+        return self.location()
+
     def disable(self) -> bool:
         """Remove the entry; returns whether there was one."""
         if self.kind == "windows":
             existed = self.registry.get(APP_NAME) is not None
             self.registry.delete(APP_NAME)
+            if self.elevated(fresh=True):
+                try:
+                    self.tasks.delete(WINDOWS_TASK)
+                except AutostartError as exc:
+                    raise AutostartError(
+                        t(
+                            "The start with the highest rights can only be removed by an "
+                            "administrator ({reason}): open a terminal with 'Run as "
+                            "administrator' and run: libre-panel autostart disable",
+                            reason=exc,
+                        )
+                    ) from exc
+                self._elevated = None
+                existed = True
             return existed
         path = self.path()
         if path.exists():

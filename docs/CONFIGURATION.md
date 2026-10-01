@@ -24,6 +24,7 @@ theme = "libre-default"        # built-in or user theme
 language = "auto"              # "auto" (system language), "en" or "de"
 # refresh_ms = 1000            # override the theme's refresh interval
 fps = 10                       # 1-60; values glide between readings
+transition = "fade"            # between themes: "cut", "fade", "slide" or from a plugin
 
 [device]
 model = "auto"                 # or an id from `libre-panel models`
@@ -52,6 +53,25 @@ fps = 50                       # frames per second in video mode
 local_clip = ""                # required for "on", see below
 ```
 
+## Services and modes
+
+Plugins can add services (a game mode, an autopilot, …). They are off until
+you list them; each can have its own options table. A mode changes the frame
+rate and optionally the theme while a service keeps it switched on. Details
+are in [Plugins](PLUGINS.md).
+
+```toml
+[services]
+enabled = ["gamemode"]
+
+[services.gamemode]
+poll_s = 1.0
+
+[modes.game]
+fps = 30
+theme = "slate"
+```
+
 ## Language
 
 Libre Panel speaks English and German. `language = "auto"` follows the
@@ -72,7 +92,8 @@ English text; a test makes sure every text has one. To add a language, copy
 TURZX USB panels (VID 1CBE) have a hardware video decoder. In video mode
 Libre Panel sends every frame as H.264 video at up to 50 fps instead of one
 PNG image per frame, which the panel accepts only about 9 times a second.
-Moving things (gliding values, graphs, glow) run smoothly.
+Moving things run smoothly: values glide until the next reading and graphs
+scroll on every frame instead of jumping once per reading.
 
 ```toml
 [video]
@@ -92,6 +113,9 @@ local_clip = "usr/data/standby.h264"
   back to its own setting.
 - When Libre Panel stops, the panel returns to its power-on frame rate and
   keeps showing the last frame for as long as it has power.
+- Rarely the panel's video decoder hangs (the picture freezes). Libre Panel
+  then restarts the panel, which takes about 10 seconds, and carries on. If
+  that does not help three times in a row, it asks you to replug the panel.
 
 | Setting | Default | |
 |---|---|---|

@@ -22,6 +22,24 @@ binaries = []
 # Sensor sources and drivers are loaded by name (entry points), which the
 # import analysis cannot see.
 hiddenimports = collect_submodules("libre_panel")
+# Folder plugins (docs/PLUGINS.md) run on this bundled Python: include the
+# standard library parts plugins commonly need, even where Libre Panel does not.
+hiddenimports += [
+    "asyncio",
+    "concurrent.futures",
+    "csv",
+    "ctypes.wintypes",
+    "gzip",
+    "http.client",
+    "sqlite3",
+    "statistics",
+    "urllib.request",
+    "uuid",
+    "xml.etree.ElementTree",
+    "zipfile",
+]
+if sys.platform == "win32":
+    hiddenimports += ["winreg"]
 usb_datas, usb_binaries, usb_hidden = collect_all("libusb_package")
 datas += usb_datas
 binaries += usb_binaries
