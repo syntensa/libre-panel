@@ -277,15 +277,16 @@ def stream_frames(display, frames, fps=50):
         time.sleep(1 / fps)
 
 
-def settle(panel, quiet=0.3, timeout=5.0):
-    """Wait until no picture has reached the panel for ``quiet`` seconds."""
+def settle(panel, quiet=0.3, timeout=5.0, at_least=0):
+    """Wait until no picture has reached the panel for ``quiet`` seconds, and at
+    least ``at_least`` have (a busy machine can pause ffmpeg longer than that)."""
     end = time.monotonic() + timeout
     count, since = len(panel.blocks), time.monotonic()
     while time.monotonic() < end:
         time.sleep(0.05)
         if len(panel.blocks) != count:
             count, since = len(panel.blocks), time.monotonic()
-        elif time.monotonic() - since >= quiet:
+        elif time.monotonic() - since >= quiet and count >= at_least:
             return
 
 
@@ -295,7 +296,7 @@ def test_video_display_end_to_end(panel):
     display.open()
     frames = moving_frames(60)
     stream_frames(display, frames)
-    settle(panel)  # the last pictures reach the panel (slower on a busy machine)
+    settle(panel, timeout=15, at_least=55)  # the last pictures reach the panel
     display.close()
 
     assert not NEVER & set(panel.commands)
