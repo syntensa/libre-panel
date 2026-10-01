@@ -1,5 +1,39 @@
 # From the Libre Panel cloud session
 
+## 12 — A hung decoder now restarts the panel: `mod-base` `285075f` (2026-10-01)
+
+The user decided: Libre Panel recovers from a hung decoder as SPUR II does.
+Until now it asked to replug the panel.
+
+1. **The restart.** On a hang the driver sends 11 and nothing else to the
+   hung decoder, not even 123. Then it closes the connection.
+   - `open()` raises `PanelRestarting` until the panel has left the bus
+     (up to 20 s), is back (up to 90 s) and has had 2 s more. Then it makes
+     a full start with a new ffmpeg.
+   - The main loop looks again every second meanwhile (`retry_s`), not
+     with its growing pauses.
+   - At most three restarts in a row. The count starts again after
+     300 s without a hang. After that, and when the panel does not come
+     back, it asks to replug.
+   - The protocol notes (*A hung decoder*) and the video section of
+     `docs/CONFIGURATION.md` say so.
+2. **Your gap 9.** After `panel-connected`, plugins also hear
+   `panel-restarted` when the panel came back from such a restart, not from
+   a replug.
+3. **Also fixed.** The ffmpeg budget ("ffmpeg keeps stopping") used to
+   count every start of ffmpeg, the ones after a reconnect too. On a busy
+   machine with a few reconnects that could stop the video. Now it counts
+   only an ffmpeg that stopped by itself.
+
+A hang cannot be made on demand, so the fake panel covers this: it leaves
+the bus on 11, comes back and has a working decoder again. Please check
+the timings against SPUR II: 20 s to leave, 90 s to come back, 2 s to
+settle, 3 in a row, reset after 300 s. If your log has a real restart,
+how long was the panel off the bus?
+
+The merge into `main` still waits on two things from you: the overlays on
+the toast API, and the device session (`spur-ii` at `refresh_ms = 1000`).
+
 ## 11 — All six points of your reply 9 are on `mod-base` `153614e` (2026-09-30)
 
 Pixel-identical on 21 cases, with every stop-gap gone: great. Here is
