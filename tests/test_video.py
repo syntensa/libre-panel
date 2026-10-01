@@ -23,7 +23,7 @@ from libre_panel.config import (  # noqa: E402
     VideoConfig,
     parse_config,
 )
-from libre_panel.devices import turzx_usb  # noqa: E402
+from libre_panel.devices import turzx_usb, turzx_video  # noqa: E402
 from libre_panel.devices.base import DeviceError, Display  # noqa: E402
 from libre_panel.devices.h264 import (  # noqa: E402
     EncoderSettings,
@@ -35,6 +35,7 @@ from libre_panel.devices.h264 import (  # noqa: E402
 )
 from libre_panel.devices.turzx_video import (  # noqa: E402
     DecoderHung,
+    PanelRestarting,
     TurzxVideoDisplay,
     VideoSession,
     transparent_layer,
@@ -127,11 +128,13 @@ def panel(monkeypatch):
     fake = FakePanel()
 
     def open_transport(pid=None):
-        if fake.unplugged:
+        if not fake.present:
             raise DeviceError("no Turing/TURZX USB panel found")
         return transport_for(fake)
 
     monkeypatch.setattr(turzx_usb.UsbTransport, "open", staticmethod(open_transport))
+    monkeypatch.setattr(turzx_usb.UsbTransport, "present", staticmethod(lambda pid: fake.present))
+    monkeypatch.setattr(turzx_video, "RESTART", turzx_video._Restart())  # no count from before
     return fake
 
 
@@ -332,6 +335,30 @@ def test_video_display_restarts_a_stopped_ffmpeg(panel):
 
 
 @needs_ffmpeg
+def test_an_ffmpeg_that_keeps_stopping_gives_up_but_reconnects_do_not_count(panel):
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    try:
+        frames = moving_frames(10)
+        for _ in range(4):  # reconnecting starts ffmpeg again; that is no ffmpeg fault
+            stream_frames(display, frames[:3])
+            panel.fail_next_writes = 1
+            time.sleep(0.2)
+        stream_frames(display, frames[:3])
+        assert panel.commands.count(110) >= 4
+        for _ in range(display.RESTARTS_PER_MINUTE):
+            display.encoder.proc.kill()
+            display.encoder.proc.wait()
+            stream_frames(display, frames[:3])
+        display.encoder.proc.kill()
+        display.encoder.proc.wait()
+        with pytest.raises(DeviceError, match="ffmpeg keeps stopping"):
+            stream_frames(display, frames[:3])
+    finally:
+        display.close()
+
+
+@needs_ffmpeg
 def test_video_display_heals_after_a_usb_error(panel):
     display = TurzxVideoDisplay(video_config())
     display.open()
@@ -374,22 +401,116 @@ def test_a_slow_panel_slows_the_frames_down_instead_of_restarting_ffmpeg(panel):
 
 
 @needs_ffmpeg
-def test_a_hung_decoder_is_reported_not_reconnected_in_a_loop(panel, monkeypatch):
+def hang_quickly(monkeypatch):
     monkeypatch.setattr(VideoSession, "HANG_WINDOW", 4)
     monkeypatch.setattr(VideoSession, "HANG_MEDIAN_S", 0.0)  # every block counts as slow
     monkeypatch.setattr(VideoSession, "GIVE_UP_S", 0.1)
+    monkeypatch.setattr(turzx_video._Restart, "SETTLE_S", 0.05)
+
+
+def show_until(display, error):
+    with pytest.raises(error) as raised:
+        for frame in moving_frames(120):
+            display.show(frame)
+            time.sleep(0.02)
+    return raised.value
+
+
+@needs_ffmpeg
+def test_a_hung_decoder_restarts_the_panel(panel, monkeypatch):
+    """As SPUR II: 11, wait until the panel has gone and come back, a full start."""
+    hang_quickly(monkeypatch)
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    panel.hung_depths = itertools.repeat(24)
+    show_until(display, PanelRestarting)
+    display.close()  # as the main loop does
+    assert panel.commands.count(11) == 1 and panel.restarts == 1
+    assert 123 not in panel.commands  # nothing more is sent to a hung decoder
+
+    again = TurzxVideoDisplay(video_config())  # the main loop opens it again, soon
+    tries, deadline = 0, time.monotonic() + 10
+    while True:
+        tries += 1
+        try:
+            again.open()
+            break
+        except PanelRestarting:
+            assert time.monotonic() < deadline
+            time.sleep(0.05)
+    try:
+        assert tries > 1 and again.restarted  # it waited for the panel to go and come back
+        assert panel.commands.count(110) == 2  # a full start
+        stream_frames(again, moving_frames(20))
+        settle(panel)
+    finally:
+        again.close()
+    assert not (NEVER - {11}) & set(panel.commands)
+    assert panel.commands.count(11) == 1
+
+
+@needs_ffmpeg
+def test_after_three_restarts_in_a_row_it_asks_to_replug(panel, monkeypatch):
+    hang_quickly(monkeypatch)
+    for _ in range(3):
+        turzx_video.RESTART.begin(panel.pid)
+    turzx_video.RESTART.pid = None  # those are over
     display = TurzxVideoDisplay(video_config())
     display.open()
     try:
         panel.hung_depths = itertools.repeat(24)
-        with pytest.raises(DecoderHung):
-            for frame in moving_frames(60):
-                display.show(frame)
-                time.sleep(0.02)
-        assert panel.commands.count(110) == 1
+        error = show_until(display, DecoderHung)
+        assert "Unplug the panel" in str(error)
     finally:
         display.close()
-    assert 123 not in panel.commands  # nothing more is sent to a hung decoder
+    assert 11 not in panel.commands and 123 not in panel.commands
+
+
+def test_a_restart_waits_for_the_panel_to_go_come_back_and_settle():
+    clock = Clock2()
+    restart = turzx_video._Restart(clock=clock)
+    here = {"now": True}
+
+    def present(pid):
+        return here["now"]
+
+    assert restart.allowed()
+    restart.wait(present)  # nothing under way: nothing to wait for
+    restart.begin(0x0092)
+    with pytest.raises(PanelRestarting):
+        restart.wait(present)  # still on the bus
+    clock.now += 1
+    here["now"] = False
+    with pytest.raises(PanelRestarting):
+        restart.wait(present)  # gone
+    clock.now += 5
+    here["now"] = True
+    with pytest.raises(PanelRestarting):
+        restart.wait(present)  # back, settling
+    clock.now += 2.1
+    restart.wait(present)  # ready to open
+    assert restart.pid is None
+
+    restart.begin(0x0092)  # a panel that never seems to leave: go on after 20 s
+    clock.now += 21
+    with pytest.raises(PanelRestarting):
+        restart.wait(present)
+    clock.now += 2.1
+    restart.wait(present)
+
+    restart.begin(0x0092)  # three in a row; after 300 s healthy the count starts again
+    assert not restart.allowed()
+    clock.now += 301
+    assert restart.allowed()
+
+    restart.begin(0x0092)  # a panel that does not come back: replug
+    here["now"] = False
+    with pytest.raises(PanelRestarting):
+        restart.wait(present)
+    clock.now += 91
+    with pytest.raises(DeviceError, match="did not come back") as raised:
+        restart.wait(present)
+    assert not isinstance(raised.value, PanelRestarting)
 
 
 @needs_ffmpeg

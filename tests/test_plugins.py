@@ -990,6 +990,47 @@ class Capture(Display):
         Capture.frames.append(frame.copy())
 
 
+def test_the_main_loop_tells_services_when_the_panel_restarted(monkeypatch):
+    """A panel restarting (a hung decoder) is looked at again soon, not after the
+    growing pauses; once it is back the services hear panel-restarted."""
+    from libre_panel.devices.turzx_video import PanelRestarting
+
+    class Restarting(Display):
+        opens, shown = [], 0
+
+        def open(self):
+            Restarting.opens.append(time.monotonic())
+            if len(Restarting.opens) in (2, 3):
+                raise PanelRestarting("restarting")
+            self.restarted = len(Restarting.opens) > 1
+
+        def show(self, frame, region=None):
+            Restarting.shown += 1
+            if Restarting.shown == 2:
+                raise PanelRestarting("restarting")
+
+    monkeypatch.setattr(app, "create_display", Restarting)
+    monkeypatch.setattr(app._Link, "BACKOFF_S", (30.0,))
+    monkeypatch.setattr(PanelRestarting, "retry_s", 0.05)
+    host = PluginHost()
+    events = []
+    for event in ("panel-connected", "panel-lost", "panel-restarted"):
+        host.listen(event, lambda event=event: events.append(event))
+    config = Config(fps=20, sensors=SensorsConfig(providers=["demo"]))
+    stop = threading.Event()
+    options = {"stop": stop, "host": host}
+    thread = threading.Thread(target=app.run, args=(config,), kwargs=options)
+    thread.start()
+    try:
+        assert wait_for(lambda: "panel-restarted" in events, timeout=5)
+    finally:
+        stop.set()
+        thread.join(10)
+        host.close()
+    assert len(Restarting.opens) == 4
+    assert events[:4] == ["panel-connected", "panel-lost", "panel-connected", "panel-restarted"]
+
+
 def test_main_loop_shows_toasts_and_fades_between_themes(monkeypatch, isolated_home):
     import json
 

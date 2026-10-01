@@ -56,6 +56,9 @@ CMD_BRIGHTNESS = 14
 CMD_FRAME_RATE = 15
 CMD_UPLOAD_PNG = 102
 CMD_STOP_STREAM = 123
+# Restarts the panel (it is back after about 5 s). Sent only to clear a hung
+# video decoder, the one fault nothing else fixes but replugging (turzx_video).
+CMD_RESTART = 11
 
 USB_PIDS = {pid: m for m in MODELS if m.protocol == "usb-turing" for _vid, pid in m.usb_ids}
 
@@ -187,6 +190,18 @@ class UsbTransport:
         self.device, self.ep_out, self.ep_in, self.pid = device, ep_out, ep_in, pid
         self._lock = threading.RLock()
         self._late = 0  # replies to queries we stopped waiting for; skipped when they come
+
+    @staticmethod
+    def present(pid: int) -> bool:
+        """Whether the panel with this product id is on the bus (without opening it)."""
+        try:
+            import usb.core
+        except ImportError:
+            return False
+        try:
+            return usb.core.find(idVendor=VENDOR_ID, idProduct=pid, backend=_backend()) is not None
+        except usb.core.NoBackendError:
+            return False
 
     @classmethod
     def open(cls, pid: int | None = None) -> UsbTransport:

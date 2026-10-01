@@ -56,6 +56,23 @@ class FakePanel:
         self._late: list[bytes] = []
         self.hung_depths: Iterator[int] | None = None  # a hung decoder: fixed answers to 122
         self.block_delay = 0.0  # a slow panel: seconds each 121 block takes
+        # 11 restarts the panel: off the bus for ``restart_away_s``, then back as after power-on
+        self.restart_away_s = 0.3
+        self.restarts = 0
+        self.away_until = 0.0
+        self.recovers = True  # False: the restart does not clear the hung decoder
+
+    @property
+    def present(self) -> bool:
+        """On the bus (not unplugged, not in the middle of a restart)."""
+        return not self.unplugged and time.monotonic() >= self.away_until
+
+    def _restart(self) -> None:
+        self.restarts += 1
+        self.away_until = time.monotonic() + self.restart_away_s
+        self.fps, self.video_ready, self.queue, self.pending = 30, False, [], []
+        if self.recovers:
+            self.hung_depths = None
 
     def _play(self) -> None:
         """The panel's player: one block per frame, taken when the previous frame is done."""
@@ -78,7 +95,7 @@ class FakePanel:
     def write(self, data: bytes, timeout: int) -> None:
         import usb.core
 
-        if self.unplugged or self.fail_next_writes:
+        if not self.present or self.fail_next_writes:
             self.fail_next_writes = max(0, self.fail_next_writes - 1)
             raise usb.core.USBError("No such device (it may have been disconnected)", errno=19)
         data = bytes(data)
@@ -132,6 +149,9 @@ class FakePanel:
         if cmd == 123:
             self.queue.clear()
             self.video_ready = False
+        if cmd == 11:
+            self._restart()  # gone before it answers
+            return
         self.pending.append(bytes(reply))
 
     # endpoint IN
@@ -139,7 +159,7 @@ class FakePanel:
         import usb.core
 
         assert length >= READ_LEN, "read at least 1024 bytes or the ZLP stays in the pipe"
-        if self.unplugged or not self.pending:
+        if not self.present or not self.pending:
             raise usb.core.USBTimeoutError("Operation timed out")
         return self.pending.pop(0)
 

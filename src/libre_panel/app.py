@@ -172,6 +172,7 @@ class _Link:
         if self.failures == 0:
             log.warning("panel not available: %s (retrying in the background)", exc)
         delay = self.BACKOFF_S[min(self.failures, len(self.BACKOFF_S) - 1)]
+        delay = getattr(exc, "retry_s", None) or delay  # e.g. a panel restarting: soon
         self.failures += 1
         self.retry_at = now + delay
 
@@ -440,6 +441,8 @@ def run(
                 previous = None  # send a full frame after reconnecting
             if host is not None and link.connected != was_connected:
                 host.emit("panel-connected" if link.connected else "panel-lost")
+                if link.connected and display.restarted:
+                    host.emit("panel-restarted")  # back after a restart, not a replug
             if link.connected and display.streaming:
                 planned = pacer.wait(_fps(config, host, display), stop)  # a steady clock
                 continue

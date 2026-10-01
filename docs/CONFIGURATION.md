@@ -113,6 +113,9 @@ local_clip = "usr/data/standby.h264"
   back to its own setting.
 - When Libre Panel stops, the panel returns to its power-on frame rate and
   keeps showing the last frame for as long as it has power.
+- Rarely the panel's video decoder hangs (the picture freezes). Libre Panel
+  then restarts the panel, which takes about 10 seconds, and carries on. If
+  that does not help three times in a row, it asks you to replug the panel.
 
 | Setting | Default | |
 |---|---|---|

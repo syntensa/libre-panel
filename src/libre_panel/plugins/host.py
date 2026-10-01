@@ -26,7 +26,14 @@ from libre_panel.sensors.base import Reading, SensorProvider, Snapshot
 
 log = logging.getLogger(__name__)
 
-EVENTS = ("panel-connected", "panel-lost", "theme-changed", "mode-changed", "quit")
+EVENTS = (
+    "panel-connected",
+    "panel-lost",
+    "panel-restarted",  # back after the driver restarted it to clear a hung decoder
+    "theme-changed",
+    "mode-changed",
+    "quit",
+)
 OPTION_TYPES = {
     "int": int,
     "number": (int, float),
@@ -192,7 +199,9 @@ class ServiceHost:
         self._hub.notify(toast)
 
     def on(self, event: str, callback: Callable[..., None]) -> None:
-        """Hear about ``panel-connected``, ``panel-lost``, ``theme-changed``,
+        """Hear about ``panel-connected``, ``panel-lost``, ``panel-restarted``
+        (after ``panel-connected`` when the panel came back from a restart that
+        cleared a hung decoder, not from a replug), ``theme-changed``,
         ``mode-changed`` and ``quit``. Callbacks run in an event thread."""
         self._hub.listen(event, callback, owner=self.name)
 
