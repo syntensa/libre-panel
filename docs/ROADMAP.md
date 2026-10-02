@@ -28,6 +28,10 @@ first. Each hardware step needs a tester with the panel.
 - [x] Animations: values glide between readings
 - [x] Smooth scrolling graphs (video mode)
 - [ ] Rolling clock digits
+- [ ] Graphs with one history point per frame in video mode (as an option per
+      graph): a short window that scrolls a pixel per frame, so 50 fps shows
+      even when readings change once a second. Today a graph holds one point
+      per reading and moves a few pixels per second, smoothly but hard to see
 - [x] Glow / soft-shadow style for widgets
 - [ ] Standby image when the PC shuts down
 
