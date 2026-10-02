@@ -223,7 +223,11 @@ def test_real_tray_icon_on_x11(isolated_home):
     )
     try:
         log = isolated_home / "logs" / "libre-panel.log"
-        assert wait_for(lambda: log.exists() and "tray icon ready" in log.read_text(), 30)
+        if not wait_for(lambda: log.exists() and "tray icon ready" in log.read_text(), 30):
+            proc.kill()  # say what happened instead of a bare "assert False"
+            seen = log.read_text(errors="replace") if log.exists() else "(no log)"
+            output = proc.stdout.read().decode(errors="replace")
+            pytest.fail(f"no tray icon after 30 s\n--- log\n{seen}\n--- output\n{output}")
         url = running_instance()["editor"]
         import urllib.request
 

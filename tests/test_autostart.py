@@ -9,6 +9,7 @@ from libre_panel.autostart import (
     APP_NAME,
     MAC_LABEL,
     Autostart,
+    WindowsTasks,  # the real one: conftest swaps the module's for one without tasks
     desktop_exec,
     launch_command,
 )
@@ -184,7 +185,7 @@ def test_windows_task_scheduler_takes_the_task_for_real():
     import os
     import uuid
 
-    from libre_panel.autostart import WindowsTasks, is_admin, task_xml
+    from libre_panel.autostart import is_admin, task_xml
 
     if not is_admin():
         pytest.skip("creating a task with the highest rights needs an administrator")

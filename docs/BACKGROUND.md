@@ -106,6 +106,13 @@ can change it (under *Program Files*): a program in your user folder could
 be replaced by anything you run, which would then get those rights at the
 next login. `enable --elevated` warns about that.
 
+The task reads the settings from `%APPDATA%\LibrePanel` as usual. A program
+from the Microsoft Store or another MSIX package (some desktop apps and
+their terminals) does not write there: Windows redirects what it writes to
+`%APPDATA%` into the package's own folder, so settings changed through such
+a program never reach the task. Then keep the settings in a folder of your
+own and set the user environment variable `LIBRE_PANEL_HOME` to it.
+
 ### Linux desktops
 
 - **KDE Plasma, Xfce, Cinnamon, MATE, LXQt, Budgie:** the icon appears in

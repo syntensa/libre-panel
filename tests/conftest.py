@@ -27,6 +27,28 @@ def no_installed_plugins(monkeypatch):
     loader.reset_registry()
 
 
+class NoTasks:
+    """A Task Scheduler without tasks, for tests that do not bring their own."""
+
+    def exists(self, name):
+        return False
+
+    def create(self, name, xml):
+        raise AssertionError("a test created a real scheduled task")
+
+    def delete(self, name):
+        pass
+
+
+@pytest.fixture(autouse=True)
+def no_scheduled_tasks(monkeypatch):
+    """The machine's own Task Scheduler stays out of the tests (it may hold the
+    elevated "Libre Panel" task)."""
+    from libre_panel import autostart
+
+    monkeypatch.setattr(autostart, "WindowsTasks", NoTasks)
+
+
 @pytest.fixture(autouse=True)
 def english(monkeypatch):
     """Tests read English texts, whatever language the machine running them has."""
