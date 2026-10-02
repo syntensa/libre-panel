@@ -366,16 +366,27 @@ def test_an_ffmpeg_that_freezes_is_restarted(panel, monkeypatch):
     monkeypatch.setattr(TurzxVideoDisplay, "STALL_S", 0.5)
     display = TurzxVideoDisplay(video_config())
     display.open()
+    frozen = []
     try:
         frames = moving_frames(40)
         stream_frames(display, frames[:15])
         settle(panel, quiet=0.2)
-        psutil.Process(display.encoder.proc.pid).suspend()  # frozen, not dead
+        # frozen, not dead; the whole tree, as the ffmpeg of a package manager
+        # (a Chocolatey shim) starts the real one as a child
+        root = psutil.Process(display.encoder.proc.pid)
+        frozen = [root, *root.children(recursive=True)]
+        for process in frozen:
+            process.suspend()
         stream_frames(display, frames[15:])
         settle(panel, timeout=10, at_least=30)
         kinds = [kind for _, kind in nal_units(panel.stream())]
         assert kinds.count(5) == 2  # the new ffmpeg starts with a keyframe
     finally:
+        for process in frozen:  # nothing stays frozen after the test
+            try:
+                process.resume()
+            except psutil.Error:
+                pass
         display.close()
 
 
