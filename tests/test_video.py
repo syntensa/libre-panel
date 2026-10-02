@@ -336,6 +336,50 @@ def test_video_display_restarts_a_stopped_ffmpeg(panel):
 
 
 @needs_ffmpeg
+def test_an_ffmpeg_that_starts_slowly_is_waited_for(panel, monkeypatch):
+    """A cold start (a virus scanner, a busy machine) is no stall: restarting ffmpeg
+    would drop the frames already handed to it and start the wait again."""
+    import sys
+
+    real = turzx_video.ffmpeg_command
+    late = "import subprocess, sys, time; time.sleep(1.5); sys.exit(subprocess.call(sys.argv[1:]))"
+    monkeypatch.setattr(
+        turzx_video, "ffmpeg_command", lambda *a: [sys.executable, "-c", late, *real(*a)]
+    )
+    monkeypatch.setattr(TurzxVideoDisplay, "STALL_S", 0.5)
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    try:
+        stream_frames(display, moving_frames(30))
+        settle(panel, timeout=10, at_least=25)
+        kinds = [kind for _, kind in nal_units(panel.stream())]
+        assert kinds.count(5) == 1 and len(panel.blocks) >= 25  # one ffmpeg, no frames lost
+    finally:
+        display.close()
+
+
+@needs_ffmpeg
+def test_an_ffmpeg_that_freezes_is_restarted(panel, monkeypatch):
+    """Once it has produced pictures, an ffmpeg that takes no frames is stalled."""
+    import psutil
+
+    monkeypatch.setattr(TurzxVideoDisplay, "STALL_S", 0.5)
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    try:
+        frames = moving_frames(40)
+        stream_frames(display, frames[:15])
+        settle(panel, quiet=0.2)
+        psutil.Process(display.encoder.proc.pid).suspend()  # frozen, not dead
+        stream_frames(display, frames[15:])
+        settle(panel, timeout=10, at_least=30)
+        kinds = [kind for _, kind in nal_units(panel.stream())]
+        assert kinds.count(5) == 2  # the new ffmpeg starts with a keyframe
+    finally:
+        display.close()
+
+
+@needs_ffmpeg
 def test_an_ffmpeg_that_keeps_stopping_gives_up_but_reconnects_do_not_count(panel):
     display = TurzxVideoDisplay(video_config())
     display.open()
@@ -524,6 +568,9 @@ def test_main_loop_in_video_mode(panel, monkeypatch):
     thread = threading.Thread(target=app.run, args=(config,), kwargs=options)
     thread.start()
     time.sleep(2.0)
+    end = time.monotonic() + 30  # a busy machine needs longer for the same frames
+    while (status.frames <= 40 or len(panel.blocks) <= 30) and time.monotonic() < end:
+        time.sleep(0.1)
     stop.set()
     thread.join(20)
     assert not thread.is_alive()

@@ -299,6 +299,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
     streaming = True
     RESTARTS_PER_MINUTE = 3
     STALL_S = 2.0  # ffmpeg taking no frames this long, while the panel waits for pictures
+    START_S = 15.0  # the same until its first picture: a cold start (virus scanner, busy PC)
 
     def __init__(self, config, model: PanelModel | None = None) -> None:
         super().__init__(config, model)
@@ -438,7 +439,9 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
     def _feed(self, data: bytes) -> None:
         """Hand a frame to ffmpeg. Waiting is right while the panel sets the pace
         (the pictures queue is full; USB timeouts bound that); ffmpeg taking nothing
-        while the panel waits for pictures has stalled."""
+        while the panel waits for pictures has stalled. Before its first picture
+        ffmpeg may still be starting, which takes longer: restarting it then would
+        only drop the frames it already has."""
         idle = 0.0
         while True:
             try:
@@ -451,9 +454,9 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                     idle = 0.0
                     continue
                 idle += 0.25
-                if idle >= self.STALL_S:
-                    stalled = f"ffmpeg took no frames for {self.STALL_S:.0f} s"
-                    raise EncoderStopped(stalled) from None
+                limit = self.STALL_S if self.encoder.pictures else self.START_S
+                if idle >= limit:
+                    raise EncoderStopped(f"ffmpeg took no frames for {limit:g} s") from None
 
     def _restarting(self, reason: str) -> None:
         """Count an ffmpeg that stopped by itself (not one closed for a reconnect)."""
