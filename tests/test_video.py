@@ -391,17 +391,60 @@ def test_an_ffmpeg_that_freezes_is_restarted(panel, monkeypatch):
 
 
 @needs_ffmpeg
+def test_closing_ends_a_frozen_ffmpeg_behind_a_shim(panel, monkeypatch):
+    """ffmpeg from a package manager (Chocolatey, scoop) is a shim that starts the
+    real one as a child. Closing must end the child too: a frozen one would keep
+    the pipes open, and closing them while a thread reads from one blocks on Windows."""
+    import sys
+
+    import psutil
+
+    real = turzx_video.ffmpeg_command
+    shim = "import subprocess, sys; sys.exit(subprocess.call(sys.argv[1:]))"
+    monkeypatch.setattr(
+        turzx_video, "ffmpeg_command", lambda *a: [sys.executable, "-c", shim, *real(*a)]
+    )
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    children = []
+    try:
+        stream_frames(display, moving_frames(10))
+        children = psutil.Process(display.encoder.proc.pid).children(recursive=True)
+        assert children, "the shim started no child"
+        for child in children:
+            child.suspend()
+    finally:
+        started = time.monotonic()
+        display.close()
+        assert time.monotonic() - started < 15  # and it does not hang
+
+    def running(process):
+        try:
+            return process.status() != psutil.STATUS_ZOMBIE  # ended, not yet collected
+        except psutil.NoSuchProcess:
+            return False
+
+    end = time.monotonic() + 5
+    while any(running(child) for child in children) and time.monotonic() < end:
+        time.sleep(0.05)
+    alive = [child for child in children if running(child)]
+    for child in alive:  # do not leave it behind if the test fails
+        child.kill()
+    assert not alive, "a frozen ffmpeg survived the close"
+
+
+@needs_ffmpeg
 def test_an_ffmpeg_that_keeps_stopping_gives_up_but_reconnects_do_not_count(panel):
     display = TurzxVideoDisplay(video_config())
     display.open()
     try:
         frames = moving_frames(10)
-        for _ in range(4):  # reconnecting starts ffmpeg again; that is no ffmpeg fault
-            stream_frames(display, frames[:3])
+        for starts in range(2, 6):  # reconnecting starts ffmpeg again; that is no ffmpeg fault
             panel.fail_next_writes = 1
-            time.sleep(0.2)
-        stream_frames(display, frames[:3])
-        assert panel.commands.count(110) >= 4
+            end = time.monotonic() + 20
+            while panel.commands.count(110) < starts and time.monotonic() < end:
+                stream_frames(display, frames[:3])  # the block that fails, then the reconnect
+        assert panel.commands.count(110) == 5 and display._error is None
         for _ in range(display.RESTARTS_PER_MINUTE):
             display.encoder.proc.kill()
             display.encoder.proc.wait()

@@ -30,6 +30,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+import psutil
+
 from libre_panel.devices.base import DeviceError
 from libre_panel.i18n import t
 
@@ -346,6 +348,7 @@ class Encoder:
                 self._frames.put_nowait(None)
             except (queue.Empty, queue.Full):
                 pass
+        children = self._children()  # before the parent ends: they are found through it
         if self.proc.poll() is None:
             self.proc.terminate()
             try:
@@ -353,10 +356,26 @@ class Encoder:
             except subprocess.TimeoutExpired:
                 self.proc.kill()
                 self.proc.wait(timeout)
+        for child in children:
+            try:
+                child.kill()
+            except psutil.Error:
+                pass
         for thread in self._threads:
             thread.join(timeout)
+        if any(thread.is_alive() for thread in self._threads):
+            return  # a thread still reads a pipe; closing it under the thread can block
         for stream in (self.proc.stdout, self.proc.stderr):
             try:
                 stream.close()
             except OSError:
                 pass
+
+    def _children(self) -> list[psutil.Process]:
+        """What ffmpeg started. ffmpeg from a package manager (Chocolatey, scoop) is a
+        shim that starts the real one: ending the shim alone leaves that running, and
+        a frozen one keeps the pipes open for good."""
+        try:
+            return psutil.Process(self.proc.pid).children(recursive=True)
+        except (psutil.Error, AttributeError, TypeError, ValueError):
+            return []
