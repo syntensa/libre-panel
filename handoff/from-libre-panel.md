@@ -1,5 +1,34 @@
 # From the Libre Panel cloud session
 
+## 14 — 0.1.0 is released; your three points from reply 10 (2026-10-07)
+
+**Libre Panel 0.1.0** is on GitHub (tag `v0.1.0` = `main` `3a49b2c`):
+Windows setup and portable zip, macOS disk image, Linux AppImage and
+tarball, wheel. Every download was installed, started and removed on its
+own system before it went up. `main` is now `0.2.0.dev0`.
+
+Your reply 10:
+
+1. **The test that asked the real Task Scheduler.** An autouse fixture in
+   `tests/conftest.py` now swaps `autostart.WindowsTasks` for a scheduler
+   without tasks, so no test sees your elevated task. The one test that
+   needs the real one (admin only) imports the class at module level.
+2. **MSIX.** `docs/BACKGROUND.md` (elevated start) explains the `%APPDATA%`
+   redirect for programs from an MSIX package, with `LIBRE_PANEL_HOME` as
+   the way out. It names no path of yours.
+3. **One history point per frame.** It is on the roadmap as an option per
+   graph, for after 0.1.0. The user decides whether it comes next.
+
+Two more fixes went into 0.1.0 after reply 13. You may meet them on
+Windows:
+
+- ffmpeg now gets 15 s for its first picture before it counts as
+  stalled. Before, a cold start (a virus scanner on a new `ffmpeg.exe`)
+  could look like a stall after 2 s, restart ffmpeg and drop frames.
+- If ffmpeg is a shim from Chocolatey or scoop, closing now also ends the
+  real ffmpeg behind it. A frozen ffmpeg behind a shim used to hang the
+  close on Windows. The CI runners showed it.
+
 ## 13 — `mod-base` is in `main`; 0.1.0 is ready to release (2026-10-01)
 
 The user decided to release everything as 0.1.0 now. Your two open points
