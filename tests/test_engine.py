@@ -445,7 +445,7 @@ def test_scales_keep_small_values_visible():
 
 @pytest.mark.parametrize("mode", ["png", "video", "per-frame"])
 @pytest.mark.parametrize(
-    "theme_id", ["spur-ii", "libre-default", "orbit", "slate", "column", "pico"]
+    "theme_id", ["spur-ii", "studio", "libre-default", "orbit", "slate", "column", "pico"]
 )
 def test_incremental_frames_equal_full_renders(theme_id, mode):
     """Composing only changed regions gives exactly the frame a full render gives
@@ -532,3 +532,18 @@ def test_background_builds_keep_frames_coming():
         clock.sleep(0.02)
     assert ImageChops.difference(first, after).getbbox() is not None  # the new value arrived
     renderer.close()
+
+
+def test_needs_shows_a_widget_only_with_its_sensor():
+    """A card has no sensor of its own; needs ties it to one (! turns it round)."""
+    card = {"type": "rect", "id": "card", "x": 0, "y": 0, "w": 40, "h": 40,
+            "color": "#ff0000", "needs": "weather.temperature"}  # fmt: skip
+    other = {"type": "rect", "id": "other", "x": 50, "y": 0, "w": 40, "h": 40,
+             "color": "#00ff00", "needs": "!weather.temperature"}  # fmt: skip
+    t = theme(card, other, size=(100, 50))
+    off, boxes = Renderer(t).render(Snapshot())
+    assert set(boxes) == {"other"} and off.getpixel((20, 20))[:3] != (255, 0, 0)
+    on, boxes = Renderer(t).render(
+        Snapshot(readings={"weather.temperature": Reading("weather.temperature", 12.0)})
+    )
+    assert set(boxes) == {"card"} and on.getpixel((20, 20))[:3] == (255, 0, 0)

@@ -14,6 +14,14 @@
   are listed as "unverified"
 
 **Themes and rendering**
+- Built-in theme Studio for 8.8" and 9.2" bars, after SPUR II's Studio
+  screen: a large clock, a card with the weather of your location (a
+  calendar sheet while there is none), rings for CPU, memory and GPU and
+  the names of your own hardware
+- `needs` on any widget: show it only while a sensor has a value (or, with
+  `!`, while it has none), so a card, its labels and icons go with their
+  readings. Themes fit each PC without editing: no GPU readings, no GPU
+  section
 - Built-in theme Pico for tiny panels (160×80, WeAct 0.96"): CPU with
   temperature and memory
 - Graphs can move a pixel per frame in video mode (`per_frame`, editor:

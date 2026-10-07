@@ -786,6 +786,11 @@ class Renderer:
 
     @staticmethod
     def _missing(widget: dict[str, Any], snapshot: Snapshot) -> bool:
+        needs = (widget.get("needs") or "").strip()
+        if needs:
+            has = snapshot.value(needs.lstrip("!").strip()) is not None
+            if has == needs.startswith("!"):
+                return True
         if not widget.get("hide_if_missing"):
             return False
         if widget["type"] == "weather":

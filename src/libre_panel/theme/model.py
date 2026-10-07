@@ -43,6 +43,9 @@ _COMMON: dict[str, tuple[str, Any]] = {
     "visible": ("bool", True),
     "locked": ("bool", False),  # editor only: not draggable
     "hide_if_missing": ("bool", False),  # hide when its sensor has no value
+    # Show only while this sensor has a value ("!key": only while it has none),
+    # so a card, its labels and icons go with the readings they frame.
+    "needs": ("sensor", ""),
     "opacity": ("number", 1.0),
     "glow": ("number", 0.0),  # 0 = off, 1 = strong
     "glow_radius": ("int", 10),

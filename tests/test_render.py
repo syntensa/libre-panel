@@ -16,19 +16,24 @@ BUILTIN = sorted(p.parent.name for p in builtin_themes_dir().glob("*/theme.json"
 
 
 def test_all_themes_are_covered():
-    assert {"libre-default", "spur-ii", "orbit", "slate", "column", "pico"} <= set(BUILTIN)
+    assert {"libre-default", "spur-ii", "studio", "orbit", "slate", "column", "pico"} <= set(
+        BUILTIN
+    )
 
 
 @pytest.mark.parametrize("name", BUILTIN)
 def test_builtin_themes_render(name):
     theme = load_theme(find_theme(name))
     renderer = Renderer(theme)
-    frame, boxes = renderer.render(demo_snapshot(fixed_time=1_700_000_000))
+    snapshot = demo_snapshot(fixed_time=1_700_000_000)
+    frame, boxes = renderer.render(snapshot)
     assert frame.size == (theme.width, theme.height)
     assert frame.mode == "RGB"
     assert renderer.warnings == []
-    visible = {w["id"] for w in theme.widgets if w["visible"]}
-    assert set(boxes) == visible
+    # every visible widget, but those whose needs say "not now" (Studio's calendar sheet)
+    shown = {w["id"] for w in theme.widgets if w["visible"] and not Renderer._missing(w, snapshot)}
+    assert set(boxes) == shown
+    assert len(shown) >= 0.8 * len(theme.widgets)
 
 
 def test_rendering_is_deterministic_with_fixed_time():

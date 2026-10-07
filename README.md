@@ -105,6 +105,7 @@ Close the vendor app first; it keeps the panel to itself.
 | Theme | Panel | |
 |---|---|---|
 | `spur-ii` | 8.8" / 9.2" bar (1920×480) | the SPUR II layout: load charts, four sections, light on every value |
+| `studio` | 8.8" / 9.2" bar (1920×480) | after SPUR II's Studio screen: large clock, weather for your location (a calendar sheet without it), CPU, RAM and GPU rings named after your hardware |
 | `libre-default` | 3.5" (480×320) | two rings, temperature, disk, network and history |
 | `orbit` | round 2.1" / 2.8" (480×480) | three concentric rings around a large clock |
 | `slate` | 5" (800×480) | four cards: CPU, GPU, memory, network |

@@ -77,8 +77,14 @@ to write or review themes by hand.
 
 Every widget has `id` (unique), `type`, `x`, `y`, `visible`, `locked` (editor
 only), `hide_if_missing` (hide when its sensor has no value, e.g. weather
-switched off) and the effects `opacity` (0–1), `glow` (0–1) with
+switched off), `needs` and the effects `opacity` (0–1), `glow` (0–1) with
 `glow_radius`, and `shadow` (a colour) with `shadow_offset` and `shadow_blur`.
+
+`needs` shows a widget only while a sensor has a value, even a widget without
+a sensor of its own: `"needs": "gpu.load"` on a card, its label and its icon
+hides the whole GPU section on a PC that reports no GPU. With `!` in front it
+works the other way round: `"needs": "!weather.temperature"` shows something
+else while the weather is off. Themes that use it fit each PC without editing.
 
 Text-like widgets share `font` (empty = the theme font), `font_size`, `color`,
 `align` (`left`, `center`, `right`; `x` is the left edge, centre or right edge
