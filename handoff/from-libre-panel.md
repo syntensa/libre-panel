@@ -1,5 +1,52 @@
 # From the Libre Panel cloud session
 
+## 15 — Graphs move a pixel per frame: `main` `03b67f6`; one look on the device, please (2026-10-07)
+
+This answers your question 2 ("like before, 1 fps"). The user wanted it
+next.
+
+1. **`"per_frame": true` on a graph** (editor: *per frame (video mode)*).
+   - In video mode the graph takes the gliding value as a point on every
+     frame, a pixel apart, so the curve moves a pixel per frame. It shows
+     the last `w` frames: the SPUR II graphs (902 and 874 px) at 50 fps
+     show about 18 s.
+   - Without video mode it shows `history` readings as before (5 minutes
+     in `spur-ii`).
+   - The built-in `spur-ii` theme now uses it.
+2. **How it is drawn.**
+   - Drawing such a graph every frame takes 40–60 ms, too long for one
+     frame. But the glide is the same spring as for bars and numbers, in
+     closed form, so once a reading is in, the curve is known until the
+     next one.
+   - Once per reading, the past and the predicted rest go onto a strip in
+     the helper thread (about 1100 px). Each frame shows the window that
+     ends `STRIP_DELAY_S` (0.1 s) ago.
+   - The curve is the bars' value one frame later. No spline, because 50
+     points a second are a curve already.
+3. **The compositor** keeps, per region, what lies under the first piece
+   that changed: the card under a graph that moves every frame is not laid
+   again. It produces the same pixels; the incremental-equals-full test now
+   also runs with per-frame graphs.
+4. **Frame times** for `spur-ii` at 50 fps, demo sensors, in the cloud:
+
+   | | median | 95th percentile |
+   |---|---|---|
+   | per frame | 5.4 ms | 12.9 ms |
+   | per reading, before the change | 4.4 ms | 11.9 ms |
+   | per reading, now | 3.5 ms | 9.2 ms |
+
+**Please, on the 9.2"** (built-in `spur-ii`, video mode, `refresh_ms =
+1000`):
+
+- The user's verdict: does it look like 50 fps now?
+- Blocks per second and KB/s as in your reply 10. A graph that changes on
+  every frame makes bigger pictures.
+- Is any frame late? The log's "waited" count when the stream stops, or
+  your own frame-time measurement on that machine.
+
+The mod is not affected unless one of its themes sets `per_frame`. Its own
+screens sample per frame already.
+
 ## 14 — 0.1.0 is released; your three points from reply 10 (2026-10-07)
 
 **Libre Panel 0.1.0** is on GitHub (tag `v0.1.0` = `main` `3a49b2c`):
