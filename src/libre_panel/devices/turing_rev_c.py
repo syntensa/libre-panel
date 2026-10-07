@@ -124,7 +124,13 @@ class RevCDisplay(SerialDisplay):
                     self.model, self.sized = hint, True
                 ports = self._wake(info)
                 break
-        awake = [p for p in ports if is_awake(p) and not (port and p.device != port)]
+        awake = [
+            p
+            for p in ports
+            if is_awake(p)
+            and not (port and p.device != port)
+            and (self.configured or port or p.serial_number == AWAKE_SERIAL)  # see GADGET_IDS
+        ]
         if not awake and not port:
             raise DeviceError(t("no {panel} found on a serial port", panel=self.family))
         device = awake[0].device if awake else port

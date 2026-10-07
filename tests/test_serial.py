@@ -437,3 +437,15 @@ def test_rev_c_that_is_no_rev_c_is_not_driven(ports, no_waiting):
     ports(FakeRevC("turing-5", hello=b"something else"), **AWAKE)
     with pytest.raises(DeviceError, match="did not answer"):
         display(model="turing-5").open()
+
+
+def test_other_usb_gadgets_are_left_alone(ports, no_waiting):
+    """Awake rev. C panels use generic Linux gadget ids. Without a model in the
+    config, a port with those ids but not the panels' serial number is no panel."""
+    pi = ports(FakeRevC("turing-5"), vid=0x0525, pid=0xA4A7, serial_number="0123456789")
+    with pytest.raises(DeviceError):
+        display(model="auto").open()
+    assert pi.commands == []  # not a byte sent
+    with display(model="turing-5") as screen:  # chosen in the config: trusted
+        screen.show(picture((800, 480)))
+    assert pi.full_frames == 1

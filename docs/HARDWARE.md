@@ -90,6 +90,9 @@ The Turing 2.1", 5" and 8.8" (rev. C) sleep when no program uses them and
 then show up with other USB ids; Libre Panel wakes them the way the vendor
 app does. Their answer does not say their size reliably, so set
 `model = "turing-5"` (or `-2.1`, `-8.8`) if Libre Panel picks the wrong one.
+Awake, they use generic Linux USB gadget ids, which other devices use too (a
+Raspberry Pi as a USB gadget, say): with `model = "auto"` Libre Panel only
+talks to such a port when it has the panels' serial number.
 Unlike turing-smart-screen-python, Libre Panel does not send the rev. C
 `OPTIONS` command: it also stores the panel's start mode and sleep time. If
 a rev. C panel stays dark with Libre Panel, please report it with the

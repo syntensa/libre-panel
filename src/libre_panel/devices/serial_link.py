@@ -23,6 +23,15 @@ from libre_panel.i18n import t
 log = logging.getLogger(__name__)
 
 SERIAL_PROTOCOLS = ("serial-a", "serial-b", "serial-c", "serial-d", "serial-weact")
+# Generic Linux USB gadget serial ids, which awake rev. C panels use, and so do
+# other devices (a Raspberry Pi as a USB gadget, development boards). Without a
+# model in the config such a port counts only with the panels' serial number.
+GADGET_IDS = {(0x0525, 0xA4A7), (0x1D6B, 0x0121), (0x1D6B, 0x0106)}
+GADGET_SERIAL = "20080411"
+
+
+def _generic(info: Any) -> bool:
+    return (info.vid, info.pid) in GADGET_IDS and info.serial_number != GADGET_SERIAL
 
 
 @dataclass
@@ -51,6 +60,8 @@ def find_port(model: PanelModel | None = None, port: str = "") -> FoundPort | No
     for info in _ports():
         if port and info.device != port:
             continue
+        if model is None and not port and _generic(info):
+            continue  # some other gadget: never talked to unasked
         # a serial number that names a model settles it; else every model of the chip
         candidates = [
             m for m in models_for_usb(info.vid, info.pid, info.serial_number) if m in wanted
