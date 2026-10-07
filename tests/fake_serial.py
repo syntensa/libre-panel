@@ -301,3 +301,110 @@ class FakeWeAct(FakeScreen):
             elif command == 0x05:
                 x0, y0, x1, y1 = struct.unpack("<4H", packet[1:9])
                 self._bitmap = ((x0, y0, x1, y1), (x1 - x0 + 1) * (y1 - y0 + 1) * 2)
+
+
+class FakeRevC(FakeSerial):
+    """Turing rev. C: messages in 250-byte blocks, a framebuffer in the panel's
+    own orientation (5": landscape 800x480, 2.1": 480x480, 8.8": portrait
+    480x1920), rows written at their offsets."""
+
+    NATIVE = {"turing-5": (800, 480), "turing-2.1": (480, 480), "turing-8.8": (480, 1920)}
+    SIZE_CODE = {"turing-5": b"\x17\x70", "turing-2.1": b"\x0e\x10", "turing-8.8": b"\x38\x40"}
+
+    def __init__(self, model="turing-5", rom=87, hello=b"chs_5inch.dev1_rom1.") -> None:
+        super().__init__()
+        self.model, self.rom = model, rom
+        self.hello = hello + str(rom).encode()
+        self.screen = Image.new("RGB", self.NATIVE[model], "white")
+        self.commands: list[int] = []
+        self.brightness: list[int] = []
+        self.full_frames = self.boxes = 0
+        self.counts: list[int] = []
+        self.buffer = bytearray()
+        self._expect = None
+
+    def write(self, data: bytes) -> int:
+        self._check()
+        self.buffer += data
+        self._parse()
+        return len(data)
+
+    @staticmethod
+    def _uncut(data: bytes) -> bytes:
+        pieces = [data[i : i + 249] for i in range(0, len(data), 250)]
+        assert all(data[i] == 0 for i in range(249, len(data), 250)), "a piece not followed by 0x00"
+        return b"".join(pieces)
+
+    @staticmethod
+    def _cut_length(n: int) -> int:
+        return n + (n - 1) // 249 if n else 0
+
+    def _parse(self) -> None:
+        buffer = self.buffer
+        while True:
+            if self._expect is not None:
+                kind, n = self._expect
+                cut_n = self._cut_length(n) if kind == "full" or n > 250 else n
+                tail = 2 if kind == "box" else 0
+                total = cut_n + tail + (-(cut_n + tail) % 250)
+                if len(buffer) < total:
+                    return
+                data = bytes(buffer[:cut_n])
+                if kind == "box":
+                    assert buffer[cut_n : cut_n + 2] == b"\xef\x69", "box data must end with EF 69"
+                del buffer[:total]
+                data = self._uncut(data) if cut_n != n else data
+                self._expect = None
+                if kind == "full":
+                    self._full(data)
+                else:
+                    self._box(data)
+                continue
+            if len(buffer) < 250:
+                return
+            block = bytes(buffer[:250])
+            del buffer[:250]
+            opcode = block[0]
+            self.commands.append(opcode)
+            if opcode == 0x01:
+                self.answers += self.hello.ljust(23, b"\0")
+            elif opcode in (0x96, 0xCF):  # STOP_MEDIA, QUERY_STATUS: a status
+                self.answers += bytes(1024)
+            elif opcode == 0x7B:
+                self.brightness.append(block[10])
+            elif opcode == 0x2C:
+                assert block == bytes([0x2C]) * 250, "START_DISPLAY_BITMAP is padded with 0x2C"
+            elif opcode == 0xC8:
+                assert block[4:6] == self.SIZE_CODE[self.model], "DISPLAY_BITMAP of another size"
+                assert block[6:8] == (480 * 480 // 64).to_bytes(2, "big")
+                w, h = self.NATIVE[self.model]
+                self._expect = ("full", w * h * 4)
+            elif opcode == 0xCC:
+                size = int.from_bytes(block[4:7], "big")
+                self.counts.append(int.from_bytes(block[10:14], "big"))
+                self._expect = ("box", size - 2)
+
+    def _full(self, data: bytes) -> None:
+        b, g, r, _a = Image.frombytes("RGBA", self.screen.size, data).split()
+        self.screen = Image.merge("RGB", (r, g, b))
+        self.full_frames += 1
+        self.answers += bytes(1024)
+
+    def _box(self, rows: bytes) -> None:
+        four = self.model != "turing-2.1" and self.rom > 88
+        size = 4 if four else 3
+        stride = self.screen.width
+        i = 0
+        while i < len(rows):
+            offset = int.from_bytes(rows[i : i + 3], "big")
+            width = int.from_bytes(rows[i + 3 : i + 5], "big")
+            pixels = rows[i + 5 : i + 5 + width * size]
+            i += 5 + width * size
+            row, col = divmod(offset, stride)
+            assert col + width <= stride and row < self.screen.height, (row, col, width)
+            mode = "RGBA" if four else "RGB"
+            channels = Image.frombytes(mode, (width, 1), pixels).split()
+            self.screen.paste(
+                Image.merge("RGB", (channels[2], channels[1], channels[0])), (col, row)
+            )
+        self.boxes += 1

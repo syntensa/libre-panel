@@ -4,13 +4,21 @@ import threading
 import time
 
 import pytest
-from fake_serial import FakeRevA, FakeRevB, FakeRevD, FakeWeAct, port_info, quantized
+from fake_serial import FakeRevA, FakeRevB, FakeRevC, FakeRevD, FakeWeAct, port_info, quantized
 from PIL import Image, ImageChops, ImageDraw
 
 from libre_panel import app
 from libre_panel.config import Config, DeviceConfig, SensorsConfig, parse_config
-from libre_panel.devices import kipye_rev_d, serial_link, turing_rev_b, turzx_usb, weact
+from libre_panel.devices import (
+    kipye_rev_d,
+    serial_link,
+    turing_rev_b,
+    turing_rev_c,
+    turzx_usb,
+    weact,
+)
 from libre_panel.devices.base import DeviceError
+from libre_panel.devices.models import find_model
 from libre_panel.devices.turing_rev_a import NEVER, brightness_level, header
 from libre_panel.devices.turzx import TurzxDisplay
 
@@ -326,3 +334,106 @@ def test_weact_brightness_and_a_chosen_size(ports):
         screen.set_brightness(50)
         screen.show(picture((160, 80)))
     assert panel.brightness == [127] and panel.size == (160, 80)
+
+
+# -- rev. C (Turing 2.1", 5", 8.8") -----------------------------------------------
+
+AWAKE = {"vid": 0x0525, "pid": 0xA4A7, "serial_number": "20080411"}
+
+
+@pytest.fixture
+def no_waiting(monkeypatch):
+    waited = []
+    monkeypatch.setattr(turing_rev_c.RevCDisplay, "sleep", staticmethod(waited.append))
+    return waited
+
+
+def rev_c_frames(model, orientation):
+    w, h = find_model(model).size(orientation)
+    first = picture((w, h))
+    second = first.copy()
+    box = (w // 5, h // 3, w // 2, h // 2)
+    ImageDraw.Draw(second).rectangle([box[0], box[1], box[2] - 1, box[3] - 1], fill=(9, 200, 77))
+    return first, second, box
+
+
+@pytest.mark.parametrize("rom", [87, 90])
+@pytest.mark.parametrize(
+    "model, orientation",
+    [
+        ("turing-5", "landscape"),
+        ("turing-5", "portrait"),
+        ("turing-2.1", "portrait"),
+        ("turing-8.8", "landscape"),
+        ("turing-8.8", "portrait"),
+    ],  # fmt: skip
+)
+def test_rev_c_boxes_land_where_whole_frames_put_them(ports, no_waiting, model, orientation, rom):
+    """A box goes row by row to offsets in the panel's own framebuffer; it must
+    end up where the whole frame (simply turned) puts the same pixels."""
+    first, second, box = rev_c_frames(model, orientation)
+    panel = ports(FakeRevC(model, rom), **AWAKE)
+    with display(model=model) as screen:
+        screen.show(first)
+        screen.show(second, box)
+    assert panel.full_frames == 1 and panel.boxes == 1
+    whole = ports(FakeRevC(model, rom), **AWAKE)  # the same port, a fresh panel
+    with display(model=model) as screen:
+        screen.show(second)
+    assert ImageChops.difference(panel.screen, whole.screen).getbbox() is None
+
+
+def test_rev_c_whole_frames_as_the_reference_turns_them(ports, no_waiting):
+    panel = ports(FakeRevC("turing-5"), **AWAKE)
+    frame = picture((800, 480))
+    with display(model="turing-5") as screen:
+        screen.set_brightness(50)
+        screen.show(frame)  # landscape: the 5" framebuffer is landscape
+        assert ImageChops.difference(panel.screen, frame).getbbox() is None
+        tall = picture((480, 800), seed=30)
+        screen.show(tall)  # portrait: a quarter turn counter-clockwise
+        turned = tall.rotate(90, expand=True)
+        assert ImageChops.difference(panel.screen, turned).getbbox() is None
+    assert panel.commands[:3] == [0x01, 0x79, 0x96]  # HELLO, stop video, stop media
+    assert panel.brightness == [127]
+    assert not set(panel.commands) & turing_rev_c.NEVER  # no restart, no stored options
+    assert panel.counts == []  # whole frames only
+
+
+def test_rev_c_counts_its_boxes(ports, no_waiting):
+    panel = ports(FakeRevC("turing-5"), **AWAKE)
+    first, second, box = rev_c_frames("turing-5", "landscape")
+    with display(model="turing-5") as screen:
+        screen.show(first)
+        for _ in range(3):
+            screen.show(second, box)
+    assert panel.counts == [0, 1, 2]
+
+
+def test_rev_c_wakes_a_sleeping_panel(ports, no_waiting):
+    awake = FakeRevC("turing-5")
+
+    class Sleeping(FakeRevC):
+        def close(self):  # opened and closed: it comes back with other ids
+            ports(awake, device="/dev/ttyACM1", **AWAKE)
+
+    ports(Sleeping(), device="/dev/ttyACM0", vid=0x1A86, pid=0xCA21, serial_number="USB7INCH")
+    with display(model="auto") as screen:
+        assert screen.model.id == "turing-5"  # the sleeping panel's serial number said 5"
+        screen.show(picture((800, 480)))
+    assert awake.commands[:3] == [0x01, 0x79, 0x96] and awake.full_frames == 1
+    assert no_waiting  # it gave the panel a moment
+
+
+def test_rev_c_takes_its_size_from_the_frame(ports, no_waiting):
+    panel = ports(FakeRevC("turing-8.8"), **AWAKE)  # awake: no serial number names the size
+    with display(model="auto") as screen:
+        screen.show(picture((1920, 480)))
+        assert screen.model.id == "turing-8.8"
+    assert panel.full_frames == 1
+
+
+def test_rev_c_that_is_no_rev_c_is_not_driven(ports, no_waiting):
+    ports(FakeRevC("turing-5", hello=b"something else"), **AWAKE)
+    with pytest.raises(DeviceError, match="did not answer"):
+        display(model="turing-5").open()

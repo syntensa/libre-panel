@@ -21,6 +21,7 @@ log = logging.getLogger(__name__)
 SERIAL_DRIVERS = {
     "serial-a": "libre_panel.devices.turing_rev_a:RevADisplay",
     "serial-b": "libre_panel.devices.turing_rev_b:RevBDisplay",
+    "serial-c": "libre_panel.devices.turing_rev_c:RevCDisplay",
     "serial-d": "libre_panel.devices.kipye_rev_d:RevDDisplay",
     "serial-weact": "libre_panel.devices.weact:WeActDisplay",
 }
@@ -111,6 +112,7 @@ class TurzxDisplay(Display):
         if self._impl is None:
             raise DeviceError("panel not open")
         self._impl.show(frame, region)
+        self.model = self._impl.model  # a rev. C panel learns its size from the first frame
 
     def close(self) -> None:
         if self._impl is not None:

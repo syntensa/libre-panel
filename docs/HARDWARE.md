@@ -18,14 +18,14 @@
 
 | Model id | Size | Resolution (landscape) | Connection | Driver |
 |---|---|---|---|---|
-| `turing-2.1` | 2.1" round | 480×480 | serial, rev. C | planned |
+| `turing-2.1` | 2.1" round | 480×480 | serial, rev. C | unverified |
 | `turing-2.8-usb` | 2.8" round | 480×480 | USB, V1.x | unverified |
 | `turing-3.5` | 3.5" | 480×320 | serial, rev. A | unverified |
 | `turing-4.6-usb` | 4.6" | 960×320 | USB, V1.x | unverified |
-| `turing-5` | 5" | 800×480 | serial, rev. C | planned |
+| `turing-5` | 5" | 800×480 | serial, rev. C | unverified |
 | `turing-5.2-usb` | 5.2" | 1280×720 | USB, V1.x | unverified |
 | `turing-8-usb` | 8" | 1280×800 | USB, V1.x | unverified |
-| `turing-8.8` | 8.8" | 1920×480 | serial, rev. C (V0.x) | planned |
+| `turing-8.8` | 8.8" | 1920×480 | serial, rev. C (V0.x) | unverified |
 | `turing-8.8-usb` | 8.8" | 1920×480 | USB, V1.x | unverified |
 | `turing-9.2-usb` | 9.2" | 1920×480 | USB, V1.x | unverified — protocol proven on this panel by SPUR II |
 | `turing-12.3-usb` | 12.3" | 1920×720 | USB, V1.x | unverified |
@@ -79,12 +79,21 @@ sudo udevadm control --reload-rules
 Serial panels appear as `/dev/ttyACM*`; add yourself to the `dialout` (Debian,
 Ubuntu) or `uucp` (Arch) group.
 
-**Serial panels** (Turing 3.5", UsbPCMonitor, XuanFang, Kipye, WeAct) need
-no driver on Windows 10/11, Linux or macOS; they show up as a COM port, `/dev/ttyACM*` or
+**Serial panels** (Turing 2.1", 3.5", 5" and 8.8", UsbPCMonitor, XuanFang,
+Kipye, WeAct) need no driver on Windows 10/11, Linux or macOS; they show up as a COM port, `/dev/ttyACM*` or
 `/dev/cu.usbmodem*`. Libre Panel finds the port by the panel's USB ids
 (`libre-panel devices` lists what it sees). Only if several devices share
 those ids, name the port: `port = "COM5"` under `[device]`. Libre Panel sends
 display commands only: no reset, nothing the panel stores.
+
+The Turing 2.1", 5" and 8.8" (rev. C) sleep when no program uses them and
+then show up with other USB ids; Libre Panel wakes them the way the vendor
+app does. Their answer does not say their size reliably, so set
+`model = "turing-5"` (or `-2.1`, `-8.8`) if Libre Panel picks the wrong one.
+Unlike turing-smart-screen-python, Libre Panel does not send the rev. C
+`OPTIONS` command: it also stores the panel's start mode and sleep time. If
+a rev. C panel stays dark with Libre Panel, please report it with the
+`libre-panel doctor` result.
 
 **macOS:** nothing to install; libusb comes with Libre Panel (the release
 download and `pip install "libre-panel[usb]"` alike).
