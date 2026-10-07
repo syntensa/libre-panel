@@ -3,12 +3,14 @@
 ## Unreleased
 
 **Panels**
-- Driver for serial rev. A panels: Turing Smart Screen 3.5" and UsbPCMonitor
-  3.5", 5" and 7" (the UsbPCMonitor says its size). Found by its USB ids, or
-  name the port with `device.port`. Only the changed part of a frame is sent.
-  `libre-panel doctor` checks serial panels too. It follows the protocol of
-  turing-smart-screen-python and has not yet been tried on a panel, so it is
-  listed as "unverified"
+- Drivers for serial panels: Turing Smart Screen 3.5" and UsbPCMonitor 3.5",
+  5" and 7" (rev. A; the UsbPCMonitor says its size), XuanFang 3.5" and
+  flagship (rev. B), Kipye Qiye 3.5" (rev. D), WeAct Display FS V1 3.5" and
+  0.96". Found by their USB ids and serial numbers, or name the port with
+  `device.port`. Only the changed part of a frame is sent. `libre-panel
+  doctor` checks serial panels too. They follow the protocols of
+  turing-smart-screen-python and have not yet been tried on a panel, so they
+  are listed as "unverified"
 
 **Themes and rendering**
 - Graphs can move a pixel per frame in video mode (`per_frame`, editor:

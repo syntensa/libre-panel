@@ -41,9 +41,9 @@ Same electronics, different sticker:
 | Model id | Panel | Resolution | Protocol | Driver |
 |---|---|---|---|---|
 | `usbpcmonitor-3.5`, `usbpcmonitor-5`, `usbpcmonitor-7` | UsbPCMonitor | 480×320, 800×480, 1024×600 | Turing rev. A | unverified |
-| `xuanfang-3.5` | XuanFang rev. B / flagship | 480×320 | rev. B | planned |
-| `kipye-3.5` | Kipye Qiye | 480×320 | rev. D | planned |
-| `weact-3.5`, `weact-0.96` | WeAct Studio Display FS V1 | 480×320, 160×80 | WeAct | planned |
+| `xuanfang-3.5` | XuanFang rev. B / flagship | 480×320 | rev. B | unverified |
+| `kipye-3.5` | Kipye Qiye | 480×320 | rev. D | unverified |
+| `weact-3.5`, `weact-0.96` | WeAct Studio Display FS V1 | 480×320, 160×80 | WeAct | unverified |
 
 ## Lian Li and others
 
@@ -79,8 +79,8 @@ sudo udevadm control --reload-rules
 Serial panels appear as `/dev/ttyACM*`; add yourself to the `dialout` (Debian,
 Ubuntu) or `uucp` (Arch) group.
 
-**Serial panels** (rev. A: Turing 3.5", UsbPCMonitor) need no driver on
-Windows 10/11, Linux or macOS; they show up as a COM port, `/dev/ttyACM*` or
+**Serial panels** (Turing 3.5", UsbPCMonitor, XuanFang, Kipye, WeAct) need
+no driver on Windows 10/11, Linux or macOS; they show up as a COM port, `/dev/ttyACM*` or
 `/dev/cu.usbmodem*`. Libre Panel finds the port by the panel's USB ids
 (`libre-panel devices` lists what it sees). Only if several devices share
 those ids, name the port: `port = "COM5"` under `[device]`. Libre Panel sends

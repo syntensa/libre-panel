@@ -21,16 +21,12 @@ pixel itself and leaves the panel as it was.
 
 from __future__ import annotations
 
-import logging
+from PIL import Image
 
-from PIL import Image, ImageOps
-
-from libre_panel.devices.base import DeviceError, Display
-from libre_panel.devices.models import PanelModel, find_model, orientation_of
-from libre_panel.devices.serial_link import SerialLink, find_port, rgb565
+from libre_panel.devices.models import PanelModel, find_model
+from libre_panel.devices.serial_link import FoundPort, rgb565
+from libre_panel.devices.serial_panel import SerialDisplay
 from libre_panel.i18n import t
-
-log = logging.getLogger(__name__)
 
 CMD_HELLO = 69
 CMD_SET_BRIGHTNESS = 110
@@ -65,31 +61,14 @@ def brightness_level(percent: int) -> int:
     return int(255 - max(0, min(100, percent)) / 100 * 255)
 
 
-class RevADisplay(Display):
+class RevADisplay(SerialDisplay):
     name = "turing-rev-a"
 
-    def __init__(self, config, model: PanelModel | None = None, configured: bool = True) -> None:
-        super().__init__(config)
-        self.model = model
-        self.configured = configured and model is not None  # chosen, not detected
-        self.link: SerialLink | None = None
-        self.brightness: int | None = None
-        self.orientation: int | None = None  # set with the first frame
+    @property
+    def family(self) -> str:
+        return t("Turing rev. A panel")
 
-    def open(self) -> None:
-        found = find_port(self.model, getattr(self.config, "port", ""))
-        if found is None:
-            raise DeviceError(t("no Turing rev. A panel found on a serial port"))
-        self.link = SerialLink(found.device)
-        self.orientation = None
-        try:
-            self.model = self._ask_model(found.model, self.configured)
-        except DeviceError:
-            self.close()
-            raise
-        log.info("connected to %s on %s", self.model.label, found.device)
-
-    def _ask_model(self, model: PanelModel, configured: bool) -> PanelModel:
+    def identify(self, found: FoundPort) -> PanelModel:
         """UsbPCMonitor panels say their size; the Turing 3.5" stays silent. A
         model chosen in the config stays when the panel does not say."""
         self.link.drain_input()
@@ -99,52 +78,21 @@ class RevADisplay(Display):
         named = find_model(HELLO_ANSWERS.get(answer, ""))
         if named is not None:
             return named
-        if configured or answer:
-            return model
+        if self.configured or answer:
+            return found.model
         return find_model("turing-3.5")
 
-    def describe(self) -> str:
-        return self.model.label if self.model else t("Turing rev. A panel")
+    def send_brightness(self, percent: int) -> None:
+        self.link.write(header(CMD_SET_BRIGHTNESS, brightness_level(percent)))
 
-    def set_brightness(self, percent: int) -> None:
-        self.brightness = percent
-        if self.link:
-            self.link.write(header(CMD_SET_BRIGHTNESS, brightness_level(percent)))
-
-    def _orient(self, width: int, height: int) -> None:
-        orientation = LANDSCAPE if orientation_of(width, height) == "landscape" else PORTRAIT
-        if orientation == self.orientation:
-            return
+    def send_orientation(self, orientation: str, width: int, height: int) -> None:
         command = bytearray(16)
         command[:6] = header(CMD_SET_ORIENTATION)
-        command[6] = orientation + 100
+        command[6] = (LANDSCAPE if orientation == "landscape" else PORTRAIT) + 100
         command[7:11] = bytes([width >> 8, width & 255, height >> 8, height & 255])
         self.link.write(bytes(command))
-        self.orientation = orientation
 
-    def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
-        if self.link is None:
-            raise DeviceError("panel not open")
-        orientation = orientation_of(*frame.size)
-        size = self.model.size(orientation) if self.model else frame.size
-        if frame.size != size:  # a detected panel of another size than the theme
-            corner = frame.getpixel((0, 0))
-            frame = ImageOps.pad(frame, size, method=Image.Resampling.LANCZOS, color=corner)
-            region = None
-        width, height = size
-        if self.orientation != (LANDSCAPE if orientation == "landscape" else PORTRAIT):
-            region = None  # a new orientation needs the whole frame
-        self._orient(width, height)
-        x0, y0, x1, y1 = region or (0, 0, width, height)
-        if x1 <= x0 or y1 <= y0:
-            return
-        pixels = rgb565(frame.crop((x0, y0, x1, y1)), "little")
-        self.link.write(header(CMD_DISPLAY_BITMAP, x0, y0, x1 - 1, y1 - 1))
-        step = width * 8  # as the reference library sends it
-        for start in range(0, len(pixels), step):
-            self.link.write(pixels[start : start + step])
-
-    def close(self) -> None:
-        if self.link is not None:
-            self.link.close()
-            self.link = None
+    def send_bitmap(self, x0: int, y0: int, x1: int, y1: int, image: Image.Image) -> None:
+        self.link.write(header(CMD_DISPLAY_BITMAP, x0, y0, x1, y1))
+        width = self.model.size(self.orientation)[0]
+        self.write_chunks(rgb565(image, "little"), width * 8)  # as the reference library does

@@ -284,8 +284,11 @@ MODELS: tuple[PanelModel, ...] = (
     ),
 )
 
-# Drivers that exist so far (devices/turzx_usb.py, turing_rev_a.py); the rest is planned.
-_DRIVER_STATUS = {"usb-turing": "unverified", "serial-a": "unverified"}
+# Families with a driver (devices/turzx.py lists them); the rest is planned.
+_DRIVER_STATUS = {
+    protocol: "unverified"
+    for protocol in ("usb-turing", "serial-a", "serial-b", "serial-d", "serial-weact")
+}
 # Models confirmed with `libre-panel doctor`; add a model here only with a passing report.
 _CONFIRMED: set[str] = set()
 MODELS = tuple(

@@ -4,7 +4,8 @@
 contributors, GPL-3.0-or-later. <https://github.com/mathoudebine/turing-smart-screen-python>.
 The Turing/TURZX protocol knowledge (command packet format, DES key, command
 ids, USB ids, panel resolutions) comes from this project. The serial drivers
-follow its protocol implementations (`library/lcd/lcd_comm_rev_*.py`): command
+follow its protocol implementations (`library/lcd/lcd_comm_rev_*.py`,
+`lcd_comm_weact_*.py`): command
 numbers and layouts, the bitmap formats and the commands it never needs.
 Libre Panel's implementation is its own code, released under the same license.
 

@@ -20,6 +20,9 @@ log = logging.getLogger(__name__)
 
 SERIAL_DRIVERS = {
     "serial-a": "libre_panel.devices.turing_rev_a:RevADisplay",
+    "serial-b": "libre_panel.devices.turing_rev_b:RevBDisplay",
+    "serial-d": "libre_panel.devices.kipye_rev_d:RevDDisplay",
+    "serial-weact": "libre_panel.devices.weact:WeActDisplay",
 }
 
 

@@ -4,12 +4,12 @@ import threading
 import time
 
 import pytest
-from fake_serial import FakeRevA, port_info, quantized
+from fake_serial import FakeRevA, FakeRevB, FakeRevD, FakeWeAct, port_info, quantized
 from PIL import Image, ImageChops, ImageDraw
 
 from libre_panel import app
 from libre_panel.config import Config, DeviceConfig, SensorsConfig, parse_config
-from libre_panel.devices import serial_link, turzx_usb
+from libre_panel.devices import kipye_rev_d, serial_link, turing_rev_b, turzx_usb, weact
 from libre_panel.devices.base import DeviceError
 from libre_panel.devices.turing_rev_a import NEVER, brightness_level, header
 from libre_panel.devices.turzx import TurzxDisplay
@@ -223,3 +223,106 @@ def test_a_detected_panel_of_another_size_gets_the_frame_fitted(ports):
         screen.show(Image.new("RGB", (480, 320), (200, 40, 40)), (0, 0, 10, 10))
     assert panel.size == (800, 480) and panel.rects[-1] == (0, 0, 799, 479)
     assert panel.screen.getpixel((400, 240)) == (200, 40, 40)  # red, quantized exactly
+
+
+# -- rev. B (XuanFang), rev. D (Kipye), WeAct ------------------------------------
+
+FAMILIES = {
+    "xuanfang-3.5": (lambda: FakeRevB(), {"serial_number": "2017-2-25"}),
+    "kipye-3.5": (lambda: FakeRevD(), {"vid": 0x454D, "pid": 0x4E41}),
+    "weact-3.5": (lambda: FakeWeAct(), {"vid": 0x1A86, "pid": 0xFE0C, "serial_number": "AB0001"}),
+    "weact-0.96": (
+        lambda: FakeWeAct(native=(80, 160)),
+        {"vid": 0x1A86, "pid": 0xFE0C, "serial_number": "AD0001"},
+    ),
+}
+NEVER_SENT = {
+    "xuanfang-3.5": turing_rev_b.NEVER,
+    "kipye-3.5": kipye_rev_d.NEVER,
+    "weact-3.5": weact.NEVER,
+    "weact-0.96": weact.NEVER,
+}
+
+
+@pytest.fixture
+def cooldowns(monkeypatch):
+    waited = []
+    monkeypatch.setattr(turing_rev_b.RevBDisplay, "sleep", staticmethod(waited.append))
+    return waited
+
+
+def as_panel_shows(model, image):
+    """Rev. D knows only portrait: a landscape frame arrives turned."""
+    if model == "kipye-3.5" and image.width > image.height:
+        return image.transpose(Image.Transpose.ROTATE_270)
+    return image
+
+
+@pytest.mark.parametrize("model", list(FAMILIES))
+def test_serial_families_show_frames_pixel_for_pixel(ports, cooldowns, model):
+    make, info = FAMILIES[model]
+    panel = ports(make(), **info)
+    with display(model="auto") as screen:
+        assert screen.model.id == model  # found by its USB ids and serial number
+        w, h = screen.model.size("landscape")
+        wide = picture((w, h))
+        screen.show(wide)
+        assert same(as_panel_shows(model, wide), panel.screen)
+        changed = wide.copy()
+        box = (w // 4, h // 4, w // 2, h // 2)
+        ImageDraw.Draw(changed).rectangle([box[0], box[1], box[2] - 1, box[3] - 1], fill="lime")
+        screen.show(changed, box)
+        assert len(panel.rects) == 2 and panel.rects[-1] != panel.rects[0]  # only the box
+        assert same(as_panel_shows(model, changed), panel.screen)
+        tall = picture((h, w), seed=60)
+        screen.show(tall)
+        assert same(tall, panel.screen)
+    assert panel.closed
+    assert not set(panel.commands) & NEVER_SENT[model]
+
+
+def test_rev_b_brightness_by_sub_revision(ports, cooldowns):
+    full = ports(FakeRevB(sub_revision=0x12), serial_number="2017-2-25")
+    with display(model="xuanfang-3.5") as screen:
+        screen.set_brightness(50)
+        screen.set_brightness(100)
+    assert full.brightness == [127, 255]
+
+
+def test_rev_b_older_panels_only_switch_the_light(ports, cooldowns):
+    old = ports(FakeRevB(sub_revision=0x01), serial_number="2017-2-25")
+    with display(model="xuanfang-3.5") as screen:
+        for percent in (0, 40, 100):
+            screen.set_brightness(percent)
+        screen.show(picture((480, 320)))
+        screen.show(picture((480, 320), seed=9), (0, 0, 20, 20))
+    assert old.brightness == [1, 0, 0]  # 1 = off
+    assert cooldowns == [turing_rev_b.COOLDOWN_S] * 2  # a pause after every bitmap
+
+
+def test_rev_b_that_does_not_answer_is_not_driven(ports, cooldowns):
+    class Silent(FakeRevB):
+        def parse(self):
+            self.buffer.clear()
+
+    ports(Silent(), serial_number="2017-2-25")
+    with pytest.raises(DeviceError, match="did not answer"):
+        display(model="xuanfang-3.5").open()
+
+
+def test_rev_d_drops_the_acknowledgements_and_sends_brightness_twice(ports):
+    panel = ports(FakeRevD(), vid=0x454D, pid=0x4E41)
+    with display(model="kipye-3.5") as screen:
+        screen.set_brightness(50)
+        screen.show(picture((480, 320)))
+        assert panel.answers == b""  # nothing piles up on the line
+    assert panel.brightness == [250, 250]  # 0-500, twice: the panel sometimes misses one
+
+
+def test_weact_brightness_and_a_chosen_size(ports):
+    panel = ports(FakeWeAct(native=(80, 160)), vid=0x1A86, pid=0xFE0C, serial_number="XY")
+    with display(model="weact-0.96") as screen:
+        assert screen.model.id == "weact-0.96"  # chosen in the config; the serial says nothing
+        screen.set_brightness(50)
+        screen.show(picture((160, 80)))
+    assert panel.brightness == [127] and panel.size == (160, 80)
