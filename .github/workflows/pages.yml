@@ -1,0 +1,61 @@
+name: Website
+
+# Publishes site/ with the pictures from docs/images to GitHub Pages once
+# Pages is on (Settings → Pages → Source: GitHub Actions); until then the
+# build runs and the deploy is skipped.
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", "docs/images/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+    outputs:
+      enabled: ${{ steps.pages.outcome == 'success' }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Is GitHub Pages on?
+        id: pages
+        continue-on-error: true
+        uses: actions/configure-pages@v5
+      - name: Put the site together
+        run: |
+          mkdir -p _site/images _site/fonts
+          cp site/index.html _site/
+          cp docs/images/*.png _site/images/
+          cp src/libre_panel/assets/libre-panel.png _site/images/icon.png
+          cp src/libre_panel/fonts/Barlow-*.ttf src/libre_panel/fonts/JetBrainsMono-Medium.ttf \
+             src/libre_panel/fonts/OFL-*.txt _site/fonts/
+      - if: steps.pages.outcome == 'success'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.enabled == 'true'
+    timeout-minutes: 10
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

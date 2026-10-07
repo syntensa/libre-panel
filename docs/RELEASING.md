@@ -77,3 +77,11 @@ come from `packaging/make_icons.py` (the logo is drawn in
 [Semantic versioning](https://semver.org). The theme format has its own version
 (`libre-panel-theme/1`); only a breaking theme change bumps it, and older
 formats keep loading.
+
+## Website
+
+`site/index.html` is the project's page on GitHub Pages; `pages.yml`
+publishes it with the pictures from `docs/images` whenever either changes on
+`main`. It needs Pages turned on once: *Settings → Pages → Source: GitHub
+Actions*, then run the *Website* workflow (*Actions → Website → Run
+workflow*). The pictures come from `python tools/readme_images.py`.

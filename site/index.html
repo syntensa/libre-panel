@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Libre Panel — free software for USB system-monitor displays</title>
+<meta name="description" content="Free, open-source software for the small USB system-monitor displays sold as Turing Smart Screen, TURZX, WeAct, XuanFang and more: a visual theme editor, every panel size, smooth 50 fps video mode. Windows, Linux, macOS.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Libre Panel">
+<meta property="og:description" content="Free, open-source software for USB system-monitor displays: a visual theme editor, every panel size, Windows, Linux and macOS.">
+<meta property="og:image" content="https://syntensa.github.io/libre-panel/images/social-preview.png">
+<meta property="og:url" content="https://syntensa.github.io/libre-panel/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0A1119">
+<link rel="icon" type="image/png" href="images/icon.png">
+<style>
+  @font-face { font-family: Barlow; font-weight: 400; src: url("fonts/Barlow-Regular.ttf") format("truetype"); font-display: swap; }
+  @font-face { font-family: Barlow; font-weight: 500; src: url("fonts/Barlow-Medium.ttf") format("truetype"); font-display: swap; }
+  @font-face { font-family: Barlow; font-weight: 600; src: url("fonts/Barlow-SemiBold.ttf") format("truetype"); font-display: swap; }
+  @font-face { font-family: Barlow; font-weight: 700; src: url("fonts/Barlow-Bold.ttf") format("truetype"); font-display: swap; }
+  @font-face { font-family: "JetBrains Mono"; font-weight: 500; src: url("fonts/JetBrainsMono-Medium.ttf") format("truetype"); font-display: swap; }
+
+  :root {
+    --base: #0A1119; --base-low: #060A0F; --surf: #111B27; --surf-2: #17263A;
+    --rule: #1F3042; --tx-1: #EEF6FF; --tx-2: #B8CAE0; --tx-3: #8CA0B8;
+    --accent: #13E5D7; --accent-deep: #19746E; --mem: #E0A8FF; --gpu: #A3AEFF;
+    --net: #7EE8A6; --warn: #FFCB6B;
+    --radius: 14px; --wide: 1160px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; background: var(--base-low); color: var(--tx-2);
+    font: 18px/1.6 Barlow, system-ui, -apple-system, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  img { max-width: 100%; height: auto; display: block; }
+  code, pre { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.86em; }
+  .wrap { max-width: var(--wide); margin: 0 auto; padding: 0 24px; }
+
+  header.nav { position: sticky; top: 0; z-index: 5; background: rgba(6, 10, 15, 0.82);
+    backdrop-filter: blur(10px); border-bottom: 1px solid var(--rule); }
+  header.nav .wrap { display: flex; align-items: center; gap: 28px; height: 60px; }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--tx-1); font-weight: 600; font-size: 19px; }
+  .brand img { width: 28px; height: 28px; }
+  .brand:hover { text-decoration: none; }
+  header.nav nav { display: flex; gap: 22px; margin-left: auto; font-size: 16px; }
+  header.nav nav a { color: var(--tx-2); }
+  header.nav nav a:hover { color: var(--tx-1); text-decoration: none; }
+
+  .hero { padding: 72px 0 28px; text-align: center;
+    background: radial-gradient(ellipse 70% 60% at 50% 0%, rgba(19, 229, 215, 0.13), transparent 70%); }
+  .hero h1 { margin: 0; color: var(--tx-1); font-weight: 700; font-size: clamp(40px, 6.4vw, 76px);
+    line-height: 1.05; letter-spacing: -0.5px; }
+  .hero h1 em { font-style: normal; color: var(--accent); text-shadow: 0 0 28px rgba(19, 229, 215, 0.45); }
+  .hero p.lead { max-width: 760px; margin: 22px auto 0; font-size: clamp(18px, 2.1vw, 22px); color: var(--tx-2); }
+  .actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin: 34px 0 12px; }
+  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 13px 24px; border-radius: 10px;
+    font-weight: 600; font-size: 17px; border: 1px solid var(--rule); color: var(--tx-1); background: var(--surf); }
+  .btn:hover { text-decoration: none; border-color: var(--tx-3); }
+  .btn.primary { background: var(--accent); color: #04221F; border-color: var(--accent);
+    box-shadow: 0 8px 30px rgba(19, 229, 215, 0.25); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .fineprint { font-size: 15px; color: var(--tx-3); }
+  .shot { margin: 40px auto 0; }
+
+  section { padding: 76px 0; border-top: 1px solid var(--rule); }
+  .kicker { color: var(--accent); font-weight: 600; letter-spacing: 3px; text-transform: uppercase; font-size: 14px; }
+  h2 { margin: 6px 0 14px; color: var(--tx-1); font-weight: 600; font-size: clamp(28px, 3.6vw, 40px); line-height: 1.15; }
+  .intro { max-width: 760px; margin: 0 0 34px; }
+  h3 { margin: 0 0 6px; color: var(--tx-1); font-weight: 600; font-size: 20px; }
+
+  .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); }
+  .card { background: var(--surf); border: 1px solid var(--rule); border-radius: var(--radius); padding: 22px 22px 18px; }
+  .card p { margin: 0; font-size: 16.5px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 9px; vertical-align: 2px; }
+
+  .split { display: grid; grid-template-columns: 1fr 1.45fr; gap: 44px; align-items: center; }
+  .split ul { margin: 0; padding-left: 20px; }
+  .split li { margin: 6px 0; }
+  .framed { border-radius: 12px; border: 1px solid var(--rule); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 16.5px; }
+  th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { color: var(--tx-3); font-weight: 500; font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; }
+  td:first-child { color: var(--tx-1); font-weight: 500; }
+  .chip { display: inline-block; padding: 1px 10px; border-radius: 99px; font-size: 14px; font-weight: 600; white-space: nowrap; }
+  .chip.ok { color: #052119; background: var(--net); }
+  .chip.wait { color: #2A1D00; background: var(--warn); }
+  .note { margin-top: 18px; padding: 16px 20px; border-radius: 12px; background: rgba(19, 229, 215, 0.07);
+    border: 1px solid rgba(19, 229, 215, 0.25); }
+
+  .os { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); margin-bottom: 26px; }
+  .os .card a.btn { margin-top: 14px; }
+  pre { margin: 0; padding: 18px 20px; overflow-x: auto; background: var(--base); border: 1px solid var(--rule);
+    border-radius: 12px; color: var(--tx-1); line-height: 1.7; }
+  pre .c { color: var(--tx-3); }
+
+  footer { padding: 40px 0 56px; border-top: 1px solid var(--rule); font-size: 15px; color: var(--tx-3); }
+  footer p { margin: 6px 0; }
+
+  @media (max-width: 860px) {
+    .split { grid-template-columns: 1fr; gap: 26px; }
+    header.nav nav a.hide-sm { display: none; }
+    section { padding: 56px 0; }
+    .hero { padding-top: 48px; }
+  }
+  @media (max-width: 520px) {
+    .wrap { padding: 0 16px; }
+    header.nav nav { gap: 14px; font-size: 15px; }
+    th:nth-child(3), td:nth-child(3) { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="images/icon.png" alt="">Libre Panel</a>
+    <nav>
+      <a class="hide-sm" href="#themes">Themes</a>
+      <a class="hide-sm" href="#editor">Editor</a>
+      <a href="#panels">Panels</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/syntensa/libre-panel">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="hero">
+    <div class="wrap">
+      <h1>Your panel.<br><em>Your design.</em></h1>
+      <p class="lead">Free, open-source software for the small USB system-monitor
+        displays sold as Turing Smart Screen, TURZX, WeAct, XuanFang and under many
+        other names. Pick a theme or build your own, and see your PC at a glance.</p>
+      <div class="actions">
+        <a class="btn primary" href="https://github.com/syntensa/libre-panel/releases/latest">Download</a>
+        <a class="btn" href="https://github.com/syntensa/libre-panel">Source on GitHub</a>
+      </div>
+      <p class="fineprint">Windows · Linux · macOS — GPL-3.0 — no account, no cloud, no vendor app</p>
+      <img class="shot" src="images/hero.png" width="2000" height="628"
+        alt="The Studio theme on a 9.2 inch bar: a large clock, the local weather in a card, and rings for CPU, RAM and GPU">
+    </div>
+  </div>
+
+  <section>
+    <div class="wrap">
+      <div class="kicker">Fits your machine</div>
+      <h2>One theme, every PC</h2>
+      <p class="intro">Themes show the names your own CPU and GPU report, the
+        weather for the place in your config and dates in English or German. Where
+        a sensor is missing, its section steps aside: Studio shows a calendar sheet
+        when the weather is off, and the disk on a PC without GPU readings. No
+        editing needed.</p>
+      <img src="images/studio-adapts.png" width="1800" height="1150" loading="lazy"
+        alt="Studio without weather (a calendar sheet in the card) and without GPU readings (a disk ring in the third slot)">
+    </div>
+  </section>
+
+  <section id="themes">
+    <div class="wrap">
+      <div class="kicker">Built in</div>
+      <h2>Seven themes, from 0.96" to 9.2"</h2>
+      <p class="intro">Glow, soft gradients, smooth history graphs, 21 line icons
+        with live weather symbols, and values that glide instead of jumping. Every
+        theme moves to any other panel size in one click.</p>
+      <img src="images/gallery.png" width="2000" height="1062" loading="lazy"
+        alt="Built-in themes: SPUR II, Slate, Libre Default, Orbit, Column and Pico on their panels">
+    </div>
+  </section>
+
+  <section id="editor">
+    <div class="wrap split">
+      <div>
+        <div class="kicker">Theme editor</div>
+        <h2>Design it in your browser</h2>
+        <p>The editor renders with the same engine that drives the panel, so
+          what you see is what you get.</p>
+        <ul>
+          <li>Drag and drop with snapping and alignment guides</li>
+          <li>Multi-select, align, distribute, undo and redo</li>
+          <li>Building blocks: CPU card, rings, bar rows, clock, weather, network</li>
+          <li>Palettes, bundled fonts, glow, shadows, gradients, colour rules</li>
+          <li>Every panel from a menu, portrait or landscape</li>
+          <li><em>Show on panel</em> sends it there</li>
+        </ul>
+      </div>
+      <img class="framed" src="images/editor.png" width="2400" height="1350" loading="lazy"
+        alt="The theme editor with the Studio theme, the GPU ring selected">
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <div class="kicker">Under the hood</div>
+      <h2>Small screen, serious engine</h2>
+      <div class="grid" style="margin-top: 26px">
+        <div class="card"><h3><span class="dot" style="background: var(--accent)"></span>50 fps video mode</h3>
+          <p>On TURZX USB panels, frames go through the panel's own video decoder: graphs scroll and numbers glide.</p></div>
+        <div class="card"><h3><span class="dot" style="background: var(--gpu)"></span>Sensors</h3>
+          <p>CPU, RAM, disk, network, temperatures and fans everywhere; on Windows also GPU and power via LibreHardwareMonitor.</p></div>
+        <div class="card"><h3><span class="dot" style="background: var(--net)"></span>Weather</h3>
+          <p>From Open-Meteo for your location. Off by default, no API key.</p></div>
+        <div class="card"><h3><span class="dot" style="background: var(--mem)"></span>Runs in the tray</h3>
+          <p>Theme, brightness, pause and quit from the tray; starts with the system if you want; finds the panel when it is plugged in.</p></div>
+        <div class="card"><h3><span class="dot" style="background: var(--warn)"></span>Safe to share</h3>
+          <p>Themes are plain JSON plus images and fonts. They cannot run code or read files outside their folder.</p></div>
+        <div class="card"><h3><span class="dot" style="background: var(--tx-2)"></span>Plugins</h3>
+          <p>Sensor sources, widget types, display drivers, screens drawn in code and editor pages, installed with pip.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="panels">
+    <div class="wrap">
+      <div class="kicker">Hardware</div>
+      <h2>Panels</h2>
+      <table>
+        <thead><tr><th>Panel</th><th>Status</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>Turing / TURZX USB 4.6"–12.3", 2.8" round</td><td><span class="chip ok">runs on the 9.2"</span></td>
+            <td>hours of stills and 50 fps video; the other sizes speak the same protocol and wait for a report</td></tr>
+          <tr><td>Turing Smart Screen 2.1", 3.5", 5", 8.8" (serial)</td><td><span class="chip wait">unverified</span></td>
+            <td>driver written after turing-smart-screen-python</td></tr>
+          <tr><td>UsbPCMonitor 3.5", 5", 7"</td><td><span class="chip wait">unverified</span></td><td>rev. A protocol</td></tr>
+          <tr><td>XuanFang 3.5" and flagship</td><td><span class="chip wait">unverified</span></td><td>rev. B protocol</td></tr>
+          <tr><td>Kipye Qiye 3.5"</td><td><span class="chip wait">unverified</span></td><td>rev. D protocol</td></tr>
+          <tr><td>WeAct Display FS V1 3.5", 0.96"</td><td><span class="chip wait">unverified</span></td><td>WeAct protocol</td></tr>
+        </tbody>
+      </table>
+      <div class="note"><strong style="color: var(--tx-1)">Own one of these?</strong>
+        Run <code>libre-panel doctor</code>: it checks the panel end to end and writes a
+        report. Attach it to a <a href="https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml">panel report</a>
+        and your model becomes <em>supported</em> for everyone.
+        <a href="https://github.com/syntensa/libre-panel/blob/main/docs/HARDWARE.md">All panels</a></div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <div class="kicker">Get it</div>
+      <h2>Install</h2>
+      <div class="os">
+        <div class="card"><h3>Windows 10 / 11</h3>
+          <p>Setup for your user, no admin rights; optional start at login.</p>
+          <a class="btn" href="https://github.com/syntensa/libre-panel/releases/latest">Setup .exe</a></div>
+        <div class="card"><h3>macOS 11+</h3>
+          <p>Apple silicon. Drag to Applications; lives in the menu bar.</p>
+          <a class="btn" href="https://github.com/syntensa/libre-panel/releases/latest">Disk image .dmg</a></div>
+        <div class="card"><h3>Linux</h3>
+          <p>x86-64 AppImage: make it executable and start it. A tarball too.</p>
+          <a class="btn" href="https://github.com/syntensa/libre-panel/releases/latest">AppImage</a></div>
+      </div>
+<pre><span class="c"># or with Python</span>
+pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.2.0"
+libre-panel tray        <span class="c"># background app with tray icon; opens the editor</span>
+libre-panel doctor      <span class="c"># check your panel, write a report</span></pre>
+      <p class="fineprint" style="margin-top: 14px">The downloads are not code-signed yet:
+        Windows SmartScreen asks once (<em>More info → Run anyway</em>); on macOS open the
+        app the first time with right-click → <em>Open</em>. Close the vendor app first;
+        it keeps the panel to itself.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Libre Panel is free software under the GPL-3.0. It stands on the shoulders of
+      <a href="https://github.com/mathoudebine/turing-smart-screen-python">turing-smart-screen-python</a>,
+      whose reverse-engineering documents these panels, and of the SPUR II project, which
+      verified the USB protocol on real hardware.</p>
+    <p>"TURZX", "Turing Smart Screen" and other product names are trademarks of their owners.
+      Libre Panel is an independent project and not affiliated with them.</p>
+    <p><a href="https://github.com/syntensa/libre-panel">GitHub</a> ·
+      <a href="https://github.com/syntensa/libre-panel/releases">Releases</a> ·
+      <a href="https://github.com/syntensa/libre-panel/blob/main/docs/THEMES.md">Theme format</a> ·
+      <a href="https://github.com/syntensa/libre-panel/blob/main/CONTRIBUTING.md">Contributing</a></p>
+  </div>
+</footer>
+</body>
+</html>
