@@ -84,7 +84,8 @@ Kipye, WeAct) need no driver on Windows 10/11, Linux or macOS; they show up as a
 `/dev/cu.usbmodem*`. Libre Panel finds the port by the panel's USB ids
 (`libre-panel devices` lists what it sees). Only if several devices share
 those ids, name the port: `port = "COM5"` under `[device]`. Libre Panel sends
-display commands only: no reset, nothing the panel stores.
+display commands only: no reset, nothing the panel stores
+([serial protocols](protocol/serial.md)).
 
 The Turing 2.1", 5" and 8.8" (rev. C) sleep when no program uses them and
 then show up with other USB ids; Libre Panel wakes them the way the vendor
