@@ -13,18 +13,18 @@ body:
     id: doctor
     attributes:
       label: Report from `libre-panel doctor`
-      description: USB panels. Paste the contents of libre-panel-doctor-*.txt.
+      description: Paste the contents of libre-panel-doctor-*.txt (it says where it wrote it).
       render: text
   - type: textarea
     id: devices
     attributes:
       label: Output of `libre-panel devices`
-      description: Serial panels, or if doctor finds nothing. Install with `pip install "libre-panel[usb,serial]"` first; serial numbers can be removed.
+      description: If doctor finds no panel. Serial numbers can be removed.
       render: text
   - type: dropdown
     id: result
     attributes:
-      label: What happens with `libre-panel run --driver turzx`?
+      label: What happens with `libre-panel run`?
       options:
         - The panel shows the theme correctly
         - The panel shows something, but wrong (colors, rotation, cut off)
