@@ -39,7 +39,8 @@ class PanelModel:
     usb_ids: tuple[tuple[int, int], ...] = ()
     serial_numbers: tuple[str, ...] = ()
     # "supported": `libre-panel doctor` passed on this model.
-    # "unverified": driver exists, protocol proven on the family, this model not confirmed yet.
+    # "unverified": driver exists, protocol proven on hardware (SPUR II, or
+    # turing-smart-screen-python for serial panels), this model not confirmed yet.
     # "planned": no driver yet.
     driver: str = "planned"
     notes: str = ""
@@ -229,6 +230,16 @@ MODELS: tuple[PanelModel, ...] = (
         usb_ids=((0x1A86, 0x5722),),
     ),
     PanelModel(
+        "usbpcmonitor-7",
+        "UsbPCMonitor",
+        "UsbPCMonitor",
+        7,
+        600,
+        1024,
+        "serial-a",
+        usb_ids=((0x1A86, 0x5722),),
+    ),
+    PanelModel(
         "xuanfang-3.5",
         "XuanFang",
         "XuanFang rev. B / flagship",
@@ -273,8 +284,8 @@ MODELS: tuple[PanelModel, ...] = (
     ),
 )
 
-# Drivers that exist so far (see devices/turzx_usb.py); everything else is planned.
-_DRIVER_STATUS = {"usb-turing": "unverified"}
+# Drivers that exist so far (devices/turzx_usb.py, turing_rev_a.py); the rest is planned.
+_DRIVER_STATUS = {"usb-turing": "unverified", "serial-a": "unverified"}
 # Models confirmed with `libre-panel doctor`; add a model here only with a passing report.
 _CONFIRMED: set[str] = set()
 MODELS = tuple(

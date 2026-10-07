@@ -6,9 +6,11 @@
 **Driver status**
 
 - **supported** — `libre-panel doctor` passed on this model.
-- **unverified** — the driver exists and the protocol is proven on another size
-  of the same family, but nobody has confirmed this model yet. Please run
-  `libre-panel doctor` and report the result.
+- **unverified** — the driver exists and its protocol is proven on hardware
+  (USB panels: by SPUR II on the 9.2"; serial panels: by
+  [turing-smart-screen-python](https://github.com/mathoudebine/turing-smart-screen-python),
+  whose protocol Libre Panel follows), but nobody has confirmed this model with
+  Libre Panel yet. Please run `libre-panel doctor` and report the result.
 - **planned** — the panel is in the catalog (editor menu, sizes), the driver is
   not written yet. Design themes now; they will work once the driver lands.
 
@@ -18,7 +20,7 @@
 |---|---|---|---|---|
 | `turing-2.1` | 2.1" round | 480×480 | serial, rev. C | planned |
 | `turing-2.8-usb` | 2.8" round | 480×480 | USB, V1.x | unverified |
-| `turing-3.5` | 3.5" | 480×320 | serial, rev. A | planned |
+| `turing-3.5` | 3.5" | 480×320 | serial, rev. A | unverified |
 | `turing-4.6-usb` | 4.6" | 960×320 | USB, V1.x | unverified |
 | `turing-5` | 5" | 800×480 | serial, rev. C | planned |
 | `turing-5.2-usb` | 5.2" | 1280×720 | USB, V1.x | unverified |
@@ -38,7 +40,7 @@ Same electronics, different sticker:
 
 | Model id | Panel | Resolution | Protocol | Driver |
 |---|---|---|---|---|
-| `usbpcmonitor-3.5`, `usbpcmonitor-5` | UsbPCMonitor | 480×320, 800×480 | Turing rev. A | planned |
+| `usbpcmonitor-3.5`, `usbpcmonitor-5`, `usbpcmonitor-7` | UsbPCMonitor | 480×320, 800×480, 1024×600 | Turing rev. A | unverified |
 | `xuanfang-3.5` | XuanFang rev. B / flagship | 480×320 | rev. B | planned |
 | `kipye-3.5` | Kipye Qiye | 480×320 | rev. D | planned |
 | `weact-3.5`, `weact-0.96` | WeAct Studio Display FS V1 | 480×320, 160×80 | WeAct | planned |
@@ -76,6 +78,13 @@ sudo udevadm control --reload-rules
 
 Serial panels appear as `/dev/ttyACM*`; add yourself to the `dialout` (Debian,
 Ubuntu) or `uucp` (Arch) group.
+
+**Serial panels** (rev. A: Turing 3.5", UsbPCMonitor) need no driver on
+Windows 10/11, Linux or macOS; they show up as a COM port, `/dev/ttyACM*` or
+`/dev/cu.usbmodem*`. Libre Panel finds the port by the panel's USB ids
+(`libre-panel devices` lists what it sees). Only if several devices share
+those ids, name the port: `port = "COM5"` under `[device]`. Libre Panel sends
+display commands only: no reset, nothing the panel stores.
 
 **macOS:** nothing to install; libusb comes with Libre Panel (the release
 download and `pip install "libre-panel[usb]"` alike).

@@ -10,10 +10,11 @@ vendor app.
 
 > **Panels:** the driver for Turing/TURZX USB panels (4.6"–12.3", 2.8" round)
 > has run for hours on the 9.2", as still pictures and as 50 fps video; the
-> other sizes speak the same protocol. A size is listed as "supported" once
-> `libre-panel doctor` has passed on it — see
-> [supported panels](docs/HARDWARE.md). Serial panels follow. Without a panel
-> you can still design themes and preview them.
+> other sizes speak the same protocol. The serial Turing 3.5" and the
+> UsbPCMonitor panels (rev. A) have a driver too; the other serial panels
+> follow. A model is listed as "supported" once `libre-panel doctor` has
+> passed on it — see [supported panels](docs/HARDWARE.md). Without a panel you
+> can still design themes and preview them.
 
 ## Features
 

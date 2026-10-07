@@ -37,8 +37,8 @@ first. Each hardware step needs a tester with the panel.
 
 ## 0.3 — every Turing panel
 
-- [ ] Serial rev. A (3.5", UsbPCMonitor), rev. B (XuanFang), rev. C (2.1", 5",
-      8.8" V0.x), rev. D (Kipye), WeAct
+- [x] Serial rev. A (Turing 3.5", UsbPCMonitor 3.5"/5"/7"), with `doctor`
+- [ ] Serial rev. B (XuanFang), rev. C (2.1", 5", 8.8" V0.x), rev. D (Kipye), WeAct
 - [ ] Partial updates for serial panels (only changed rectangles)
 - [x] Automatic panel detection from USB ids (V1.x USB panels)
 

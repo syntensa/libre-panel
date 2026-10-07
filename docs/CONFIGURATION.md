@@ -32,6 +32,8 @@ driver = "auto"                # panel if connected, else PNG; "turzx" or "virtu
 brightness = 60                # 0-100
 output = "libre-panel-frame.png"   # frames go here when no panel is used;
                                    # a relative path is inside the settings folder
+port = ""                      # serial panels: found by their USB ids; only if that
+                               # picks the wrong port: "COM5", "/dev/ttyACM0"
 
 [sensors]
 providers = ["psutil"]         # order = priority; also "librehardwaremonitor", "demo", plugins

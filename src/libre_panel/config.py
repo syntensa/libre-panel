@@ -47,6 +47,9 @@ driver = "auto"
 brightness = 60
 # Where frames go when no panel is used (relative = in this settings folder).
 output = "libre-panel-frame.png"
+# Serial panels (3.5", 5", 2.1" ...) are found by their USB ids. Only if that
+# picks the wrong port, name it, e.g. "COM5" or "/dev/ttyACM0".
+port = ""
 
 [sensors]
 # Sensor sources, queried in this order. Available: psutil, librehardwaremonitor, demo,
@@ -120,6 +123,7 @@ class DeviceConfig:
     driver: str = "auto"
     brightness: int = 60
     output: str = "libre-panel-frame.png"
+    port: str = ""  # serial panels: the port; empty = found by its USB ids
     video: VideoConfig = field(default_factory=VideoConfig)
 
 
@@ -218,6 +222,7 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     if not 0 <= cfg.device.brightness <= 100:
         raise ConfigError("device.brightness: must be between 0 and 100")
     cfg.device.output = _expect(dev.get("output", cfg.device.output), str, "device.output")
+    cfg.device.port = _expect(dev.get("port", cfg.device.port), str, "device.port").strip()
     cfg.device.video = _parse_video(_expect(data.get("video", {}), dict, "video"))
 
     sensors = dict(data.get("sensors", {}))

@@ -227,6 +227,20 @@ def _versions() -> str:
     return ", ".join(parts)
 
 
+def open_serial_panel(port: str = ""):
+    """A connected serial panel with a driver, opened; None when there is none."""
+    from libre_panel.config import DeviceConfig
+    from libre_panel.devices.serial_link import find_port
+    from libre_panel.devices.turzx import SERIAL_DRIVERS, TurzxDisplay
+
+    found = find_port(None, port)
+    if found is None or found.model.protocol not in SERIAL_DRIVERS:
+        return None
+    display = TurzxDisplay(DeviceConfig(driver="turzx", model=found.model.id, port=found.device))
+    display.open()
+    return display
+
+
 class Doctor:
     def __init__(
         self,
@@ -237,6 +251,7 @@ class Doctor:
         seconds_per_card: float = 6.0,
         frames: int = 20,
         brightness: int = 60,
+        open_serial: Callable[[], object] = open_serial_panel,
     ) -> None:
         self.ask = ask
         self.brightness = brightness  # set again after the brightness check
@@ -249,7 +264,9 @@ class Doctor:
 
             open_transport = UsbTransport.open
         self.open_transport = open_transport
-        self.transport = None
+        self.open_serial = open_serial
+        self.transport = None  # a USB panel
+        self.display = None  # a serial panel, through its driver
         self.report = Report()
 
     # -- helpers -----------------------------------------------------------
@@ -272,6 +289,11 @@ class Doctor:
             self._step(name, "fail", note or "not as expected")
 
     def _send(self, image: Image.Image) -> tuple[float, int]:
+        """Show a whole frame; (seconds it took, bytes sent)."""
+        started = time.perf_counter()
+        if self.display is not None:
+            self.display.show(image)
+            return time.perf_counter() - started, image.width * image.height * 2  # RGB565
         from libre_panel.devices.turzx_usb import CMD_UPLOAD_PNG, encode_frame, to_native
 
         png = encode_frame(to_native(image))
@@ -279,34 +301,58 @@ class Doctor:
         self.transport.command(CMD_UPLOAD_PNG, struct.pack(">I", len(png)), png, timeout_ms=5000)
         return time.perf_counter() - started, len(png)
 
+    def _set_brightness(self, percent: int) -> None:
+        if self.display is not None:
+            self.display.set_brightness(percent)
+            return
+        from libre_panel.devices.turzx_usb import CMD_BRIGHTNESS, brightness_arg
+
+        self.transport.command(CMD_BRIGHTNESS, bytes([brightness_arg(percent)]))
+
     # -- the checks --------------------------------------------------------
 
     def run(self) -> Report:
         self._step("environment", "info", _versions())
         self.transport = self._find_and_open()
         if self.transport is None:
-            return self.report
+            self.display = self._find_serial()
+            if self.display is None:
+                return self.report
         try:
             self._checks()
         except DeviceError as exc:
             self._step("panel stopped answering", "fail", str(exc))
         finally:
-            if self.transport is not None:
-                self.transport.close()
+            for device in (self.transport, self.display):
+                if device is not None:
+                    device.close()
         return self.report
 
     def _find_and_open(self):
         try:
             transport = self.open_transport()
         except DeviceError as exc:
-            self._step("find and open a USB panel (VID 1CBE)", "fail", str(exc))
-            self._report_serial_ports()
+            self._step("find and open a USB panel (VID 1CBE)", "info", str(exc))
             return None
         matches = models_for_usb(0x1CBE, transport.pid)
         self.report.model = matches[0] if matches else None
         label = self.report.model.label if self.report.model else "unknown size"
         self._step("find and open a USB panel", "ok", f"1cbe:{transport.pid:04x} — {label}")
         return transport
+
+    def _find_serial(self):
+        try:
+            display = self.open_serial()
+        except DeviceError as exc:
+            self._step("open a serial panel", "fail", str(exc))
+            return None
+        if display is None:
+            self._step("find a panel", "fail", "no USB panel and no serial panel with a driver")
+            self._report_serial_ports()
+            return None
+        self.report.model = display.model
+        self._step("find and open a serial panel", "ok", display.model.label)
+        return display
 
     def _report_serial_ports(self) -> None:
         try:
@@ -325,7 +371,7 @@ class Doctor:
                     "serial panel found",
                     "info",
                     f"{port['device']} {port['vid']}:{port['pid']} — {names}; "
-                    "the driver for serial panels is not available yet",
+                    "its driver is not available yet",
                 )
 
     def _ruler(self, model, step: int = 2) -> None:
@@ -349,9 +395,7 @@ class Doctor:
         self.report.hidden = hidden
         self._step("hidden edges (ruler)", "info", "hidden: " + ", ".join(parts))
 
-    def _checks(self) -> None:
-        from libre_panel.devices.turzx_usb import CMD_BRIGHTNESS, brightness_arg
-
+    def _handshake(self) -> bool:
         transport = self.transport
         dropped = transport.drain()
         reply = transport.sync()
@@ -360,11 +404,16 @@ class Doctor:
         if dropped:
             detail += f", cleared {dropped} stale replies"
         self._step("handshake (command 10)", "ok", detail)
-
-        model = self.report.model
-        if model is None:
+        if self.report.model is None:
             self._step("panel size", "fail", f"unknown product id {transport.pid:04x}")
+            return False
+        return True
+
+    def _checks(self) -> None:
+        usb = self.display is None
+        if usb and not self._handshake():
             return
+        model = self.report.model
         round_panel = model.shape == "round"
         orientations = ["landscape"] if round_panel else ["landscape", "portrait"]
         for n, orientation in enumerate(orientations, 1):
@@ -384,10 +433,13 @@ class Doctor:
         if self.ask is not None:
             self.ask("\nBrightness: the panel goes dark, then bright. Watch it and press Enter. ")
         for percent in (10, 100):
-            transport.command(CMD_BRIGHTNESS, bytes([brightness_arg(percent)]))
+            self._set_brightness(percent)
             self.pause(1.5)
-        transport.command(CMD_BRIGHTNESS, bytes([brightness_arg(self.brightness)]))
-        self._question("brightness (command 14)", "Did the panel go dark and then bright?")
+        self._set_brightness(self.brightness)
+        self._question(
+            "brightness (command 14)" if usb else "brightness",
+            "Did the panel go dark and then bright?",
+        )
 
         w, h = model.size("landscape")
         cards = [
@@ -401,18 +453,23 @@ class Doctor:
             sizes.append(size)
         if times:
             avg = sum(times) / len(times)
+            kind = "PNG" if usb else "RGB565"
             self._step(
                 f"speed ({len(times)} full frames)",
                 "ok",
                 f"{avg * 1000:.0f} ms per frame = {1 / avg:.1f} fps, "
-                f"worst {max(times) * 1000:.0f} ms, PNG {sum(sizes) // len(sizes) // 1024} KB",
+                f"worst {max(times) * 1000:.0f} ms, {kind} {sum(sizes) // len(sizes) // 1024} KB",
             )
 
-        pid = transport.pid
-        transport.close()
-        self.transport = None
-        self.transport = self.open_transport(pid)
-        self.transport.sync()
+        if usb:
+            pid = self.transport.pid
+            self.transport.close()
+            self.transport = None
+            self.transport = self.open_transport(pid)
+            self.transport.sync()
+        else:
+            self.display.close()
+            self.display.open()
         self._step("close and reconnect", "ok")
         self._send(test_card(w, h, "Test finished", "you can close this window", round_panel))
 

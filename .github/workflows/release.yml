@@ -89,6 +89,12 @@ jobs:
       - name: Smoke test (render)
         shell: bash
         run: '"$CLI" preview spur-ii -o smoke.png'
+      - name: Smoke test (serial and USB libraries in the bundle)
+        shell: bash
+        run: |
+          out=$("$CLI" devices 2>&1)
+          echo "$out"
+          if grep -q "is not installed" <<<"$out"; then exit 1; fi
       - name: Smoke test (background app, started as at login)
         shell: bash
         run: python packaging/smoke_test.py "$GUI" tray --background
