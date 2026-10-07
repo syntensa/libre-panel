@@ -6,7 +6,9 @@ Thanks for helping! The most valuable contributions right now:
    report to a "panel support" issue — every passing report turns a model
    from *unverified* into *supported*.
 2. **Themes.** Build one in the editor and share it (with a license for any
-   fonts/images you include).
+   fonts/images you include). After changing a built-in theme,
+   `python tools/readme_images.py` renders the pictures in `docs/images`
+   again.
 3. **Drivers** for the families marked *planned* in [docs/HARDWARE.md](docs/HARDWARE.md).
 
 ## Development

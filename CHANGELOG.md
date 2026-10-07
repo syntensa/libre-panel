@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-10-07
+
+Studio, a second theme after SPUR II; themes that fit each PC by themselves;
+and drivers for the serial panels.
 
 **Panels**
 - Drivers for serial panels: Turing Smart Screen 3.5" and UsbPCMonitor 3.5",
@@ -16,8 +19,8 @@
 **Themes and rendering**
 - Built-in theme Studio for 8.8" and 9.2" bars, after SPUR II's Studio
   screen: a large clock, a card with the weather of your location (a
-  calendar sheet while there is none), rings for CPU, memory and GPU and
-  the names of your own hardware
+  calendar sheet while there is none), rings for CPU, memory and GPU (the
+  disk on a PC without GPU readings) and the names of your own hardware
 - `needs` on any widget: show it only while a sensor has a value (or, with
   `!`, while it has none), so a card, its labels and icons go with their
   readings. Themes fit each PC without editing: no GPU readings, no GPU
