@@ -444,7 +444,9 @@ def test_scales_keep_small_values_visible():
 
 
 @pytest.mark.parametrize("mode", ["png", "video", "per-frame"])
-@pytest.mark.parametrize("theme_id", ["spur-ii", "libre-default", "orbit", "slate", "column"])
+@pytest.mark.parametrize(
+    "theme_id", ["spur-ii", "libre-default", "orbit", "slate", "column", "pico"]
+)
 def test_incremental_frames_equal_full_renders(theme_id, mode):
     """Composing only changed regions gives exactly the frame a full render gives
     (in video mode too, where graphs scroll on every frame, also when the layers

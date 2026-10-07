@@ -16,7 +16,7 @@ BUILTIN = sorted(p.parent.name for p in builtin_themes_dir().glob("*/theme.json"
 
 
 def test_all_themes_are_covered():
-    assert {"libre-default", "spur-ii", "orbit", "slate", "column"} <= set(BUILTIN)
+    assert {"libre-default", "spur-ii", "orbit", "slate", "column", "pico"} <= set(BUILTIN)
 
 
 @pytest.mark.parametrize("name", BUILTIN)

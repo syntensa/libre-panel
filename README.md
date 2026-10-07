@@ -109,6 +109,7 @@ Close the vendor app first; it keeps the panel to itself.
 | `orbit` | round 2.1" / 2.8" (480×480) | three concentric rings around a large clock |
 | `slate` | 5" (800×480) | four cards: CPU, GPU, memory, network |
 | `column` | 3.5" portrait (320×480) | clock, resource rows and network |
+| `pico` | 0.96" (160×80) | CPU with temperature and memory, large numbers and slim bars |
 
 Every theme adapts to any other panel from the editor's panel menu. The engine
 behind them: bundled fonts (Barlow, JetBrains Mono), colour palettes, glow and

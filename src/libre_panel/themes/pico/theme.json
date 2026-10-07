@@ -1,0 +1,162 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "Pico",
+  "author": "Libre Panel contributors",
+  "license": "CC0-1.0",
+  "description": "For tiny panels (160x80, WeAct 0.96\"): CPU with temperature and memory, large numbers and slim bars.",
+  "display": {
+    "model": "weact-0.96",
+    "orientation": "landscape",
+    "width": 160,
+    "height": 80
+  },
+  "palette": {
+    "bg": "#05080D",
+    "bg2": "#0B111B",
+    "text": "#F1F5F9",
+    "muted": "#8793A6",
+    "track": "#ffffff14",
+    "cpu": "#22D3EE",
+    "cpu_deep": "#0B6C85",
+    "ram": "#C084FC",
+    "ram_deep": "#6B2FB3",
+    "warn": "#FBBF24",
+    "crit": "#F87171"
+  },
+  "font": "builtin:Barlow-Medium",
+  "background": {
+    "color": "@bg",
+    "image": null
+  },
+  "refresh_ms": 1000,
+  "animation": {
+    "smoothing_ms": 450
+  },
+  "widgets": [
+    {
+      "type": "rect",
+      "id": "backdrop",
+      "x": 0,
+      "y": 0,
+      "w": 160,
+      "h": 80,
+      "color": "@bg2",
+      "color2": "@bg",
+      "locked": true
+    },
+    {
+      "type": "text",
+      "id": "cpu-label",
+      "x": 6,
+      "y": 6,
+      "text": "CPU",
+      "font_size": 11,
+      "color": "@cpu",
+      "font": "builtin:Barlow-SemiBold",
+      "letter_spacing": 2
+    },
+    {
+      "type": "metric",
+      "id": "cpu-temp",
+      "x": 38,
+      "y": 6,
+      "sensor": "cpu.temp",
+      "format": "{value:.0f}°C",
+      "font_size": 11,
+      "color": "@muted",
+      "fallback": "",
+      "tabular": true,
+      "color_rules": [
+        {
+          "above": 75,
+          "color": "@warn"
+        },
+        {
+          "above": 88,
+          "color": "@crit"
+        }
+      ]
+    },
+    {
+      "type": "metric",
+      "id": "cpu-value",
+      "x": 154,
+      "y": 1,
+      "sensor": "cpu.load",
+      "format": "{value:.0f}%",
+      "font_size": 24,
+      "color": "@text",
+      "align": "right",
+      "font": "builtin:Barlow-SemiBold",
+      "tabular": true
+    },
+    {
+      "type": "bar",
+      "id": "cpu-bar",
+      "x": 6,
+      "y": 30,
+      "w": 148,
+      "h": 5,
+      "sensor": "cpu.load",
+      "color": "@cpu_deep",
+      "color2": "@cpu",
+      "background": "@track",
+      "radius": 2,
+      "glow": 0.5,
+      "glow_radius": 4,
+      "smooth": true,
+      "color_rules": [
+        {
+          "above": 90,
+          "color": "@crit"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "id": "ram-label",
+      "x": 6,
+      "y": 46,
+      "text": "RAM",
+      "font_size": 11,
+      "color": "@ram",
+      "font": "builtin:Barlow-SemiBold",
+      "letter_spacing": 2
+    },
+    {
+      "type": "metric",
+      "id": "ram-value",
+      "x": 154,
+      "y": 41,
+      "sensor": "mem.load",
+      "format": "{value:.0f}%",
+      "font_size": 24,
+      "color": "@text",
+      "align": "right",
+      "font": "builtin:Barlow-SemiBold",
+      "tabular": true
+    },
+    {
+      "type": "bar",
+      "id": "ram-bar",
+      "x": 6,
+      "y": 70,
+      "w": 148,
+      "h": 5,
+      "sensor": "mem.load",
+      "color": "@ram_deep",
+      "color2": "@ram",
+      "background": "@track",
+      "radius": 2,
+      "glow": 0.5,
+      "glow_radius": 4,
+      "smooth": true,
+      "color_rules": [
+        {
+          "above": 90,
+          "color": "@crit"
+        }
+      ]
+    }
+  ]
+}

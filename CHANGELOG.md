@@ -14,6 +14,8 @@
   are listed as "unverified"
 
 **Themes and rendering**
+- Built-in theme Pico for tiny panels (160×80, WeAct 0.96"): CPU with
+  temperature and memory
 - Graphs can move a pixel per frame in video mode (`per_frame`, editor:
   *per frame (video mode)*), as SPUR II draws them: every frame adds the
   gliding value as a point, so the curve moves visibly even when readings
