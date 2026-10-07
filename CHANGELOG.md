@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+**Themes and rendering**
+- Graphs can move a pixel per frame in video mode (`per_frame`, editor:
+  *per frame (video mode)*), as SPUR II draws them: every frame adds the
+  gliding value as a point, so the curve moves visibly even when readings
+  come once a second. The SPUR II theme uses it; its graphs show the last
+  18 s in video mode and 5 minutes otherwise
+- Frames where one widget changes every frame cost less: what lies under it
+  is kept per region instead of being laid again
+
 ## 0.1.0 — 2026-10-01
 
 The first release of Libre Panel.

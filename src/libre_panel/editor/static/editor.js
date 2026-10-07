@@ -1027,6 +1027,7 @@ function hintFor(widget, key, kind) {
   if (key === "format" && widget.type === "clock") return t("strftime, e.g. {examples}", { examples: "%H:%M · %H:%M:%S · %A %d %B" });
   if (key === "scale") return t("sqrt/log keep small values visible (network rates)");
   if (key === "hide_if_missing") return t("hide when the sensor has no value (e.g. weather off)");
+  if (key === "per_frame") return t("video mode: a point per frame, a pixel apart, so the curve moves visibly; it shows the last seconds (otherwise: history readings)");
   return null;
 }
 

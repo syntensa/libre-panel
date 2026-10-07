@@ -221,6 +221,72 @@ def test_scrolling_graphs_draw_their_curve_once_per_reading(monkeypatch):
     assert renderer.warnings == []
 
 
+def plateau_end(frame):
+    """The x where the curve comes down from a high plateau (its right end)."""
+    high = [x for x in range(frame.width) if frame.getpixel((x, 15))[0] > 120]
+    return max(high) if high else None
+
+
+def feed(renderer, readings, start=100.0, interval=1.0):
+    """Readings once per ``interval``, a frame rendered at each, as the main loop does."""
+    for i in range(1, len(readings) + 1):
+        at = start + (i - 1) * interval
+        renderer.new_sample(at, interval)
+        renderer.render(Snapshot(history={"v": readings[:i]}), at)
+    return Snapshot(history={"v": readings})
+
+
+def test_per_frame_graphs_move_a_pixel_per_frame():
+    """As SPUR II: one point per frame, so the curve moves 50 px a second, not a
+    few pixels per reading."""
+    renderer = Renderer(theme(spike_graph(per_frame=True, h=60), size=(200, 60)))
+    renderer.continuous, renderer.fps = True, 50
+    delay = renderer.STRIP_DELAY_S
+    snap = feed(renderer, [10.0, 90.0, 10.0])  # high from 101 to 102 (no glide)
+    ends = [plateau_end(renderer.render(snap, 102.0 + delay + k / 50)[0]) for k in range(11)]
+    assert abs(ends[0] - 199) <= 1.5, ends  # the fall at 102 enters at the right edge
+    assert all(1 - 0.6 <= a - b <= 1 + 0.6 for a, b in zip(ends, ends[1:], strict=False)), ends
+    assert abs(ends[0] - ends[-1] - 10) <= 1, ends
+    assert renderer.warnings == []
+    # without video mode it is an ordinary graph of the readings
+    still = Renderer(theme(spike_graph(per_frame=True), size=(200, 60)))
+    plain = Renderer(theme(spike_graph(), size=(200, 60)))
+    assert still.render(snap, 102.0)[0].tobytes() == plain.render(snap, 102.0)[0].tobytes()
+
+
+def test_per_frame_graphs_draw_their_curve_once_per_reading(monkeypatch):
+    renderer = Renderer(theme(spike_graph(per_frame=True, glow=0.6), size=(200, 60)))
+    renderer.continuous, renderer.fps = True, 50
+    calls = []
+    real = renderer._graph_layer
+    monkeypatch.setattr(renderer, "_graph_layer", lambda *a: calls.append(1) or real(*a))
+    snap = feed(renderer, [10.0, 50.0])
+    for frame in range(50):  # a second of video: windows into one strip
+        renderer.render(snap, 101.0 + frame / 50)
+    assert len(calls) == 2  # one strip per reading
+    assert renderer.warnings == []
+
+
+def test_a_per_frame_graph_follows_the_value_bars_and_numbers_glide_along():
+    graph = spike_graph(per_frame=True)
+    t = theme(graph, bar(smooth=True), animation={"smoothing_ms": 400}, size=(200, 60))
+    renderer = Renderer(t, animate=True)
+    renderer.continuous, renderer.fps = True, 50
+    shown = []
+    for i, value in enumerate([10.0, 80.0, 30.0]):
+        renderer.new_sample(100.0 + i, 1.0)
+        for k in range(50):
+            now = 100.0 + i + k / 50
+            reading = {"v": Reading("v", value)}
+            renderer.render(Snapshot(readings=reading, history={"v": [value]}), now)
+            shown.append((now, renderer._anim["b"][0]))
+    glide = renderer._glides["g"]
+    # The same spring: a bar takes a new reading from the frame before (it advances
+    # from its last frame), the graph from the reading's time, so one frame apart.
+    for now, value in shown[50:]:  # from the second reading on (the first one starts both)
+        assert abs(glide.at(now + 1 / 50) - value) < 0.01, (now, glide.at(now + 1 / 50), value)
+
+
 def test_a_late_strip_keeps_the_old_one_moving():
     """Video mode draws a new strip in the helper thread; until it is due the
     old strip keeps travelling, so the curve never jumps back."""
@@ -377,11 +443,12 @@ def test_scales_keep_small_values_visible():
     assert frame.getpixel((35, 10))[0] > 200 and frame.getpixel((45, 10))[0] < 100
 
 
-@pytest.mark.parametrize("continuous", [False, True], ids=["png", "video"])
+@pytest.mark.parametrize("mode", ["png", "video", "per-frame"])
 @pytest.mark.parametrize("theme_id", ["spur-ii", "libre-default", "orbit", "slate", "column"])
-def test_incremental_frames_equal_full_renders(theme_id, continuous):
+def test_incremental_frames_equal_full_renders(theme_id, mode):
     """Composing only changed regions gives exactly the frame a full render gives
-    (in video mode too, where graphs scroll on every frame)."""
+    (in video mode too, where graphs scroll on every frame, also when the layers
+    under a graph that moves per frame are kept)."""
     from datetime import datetime, timedelta
 
     from PIL import ImageChops
@@ -391,9 +458,14 @@ def test_incremental_frames_equal_full_renders(theme_id, continuous):
     from libre_panel.theme.model import find_theme, load_theme
 
     theme = load_theme(find_theme(theme_id))
+    if mode == "per-frame":
+        for widget in theme.widgets:
+            if widget["type"] == "graph":
+                widget["per_frame"] = True
     fast, full = Renderer(theme, animate=True), Renderer(theme, animate=True)
     full.incremental = False
-    fast.continuous = full.continuous = continuous
+    fast.continuous = full.continuous = mode != "png"
+    fast.fps = full.fps = 25
     hub = SensorHub([DemoProvider({})])
     snapshot = hub.snapshot()
     start = datetime(2026, 9, 27, 23, 59, 58)

@@ -134,6 +134,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "fill": ("bool", True),
         "fill_fade": ("bool", True),
         "smooth": ("bool", True),
+        "per_frame": ("bool", False),
         "line_width": ("int", 2),
         "grid": ("int", 0),
         "grid_color": ("color?", "#ffffff1f"),

@@ -51,7 +51,11 @@ to write or review themes by hand.
   long bars and rings glide to a new value (0 = jump). In video mode values
   glide until the next reading and graphs scroll on every frame (they show
   the readings one interval late, smooth curves two), so the 50 fps show
-  even when readings come once a second.
+  even when readings come once a second. A graph with `"per_frame": true`
+  goes further, as SPUR II does: in video mode it takes the gliding value as
+  a point on every frame, a pixel apart, so the curve moves a pixel per
+  frame and shows the last `w` frames (a 900 px graph at 50 fps: 18 s).
+  Without video mode it shows `history` readings as usual.
 - Widgets are drawn in list order: later ones are on top.
 - Unknown fields are ignored with a warning, so newer themes still load.
 - Optional: `"toast"` sets how messages from services show (editor:
@@ -87,7 +91,7 @@ accordingly; `y` is the top of the line), `letter_spacing` and `tabular`
 | `metric` | `sensor`, `format`, `fallback`, `color_rules` | a sensor value as text |
 | `bar` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `color`, `color2`, `background`, `radius`, `direction`, `segments`, `segment_gap`, `smooth`, `color_rules` | progress bar; `color2` makes a gradient along the track, `segments` an LED-style bar |
 | `gauge` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `start_angle`, `end_angle`, `thickness`, `color`, `color2`, `background`, `cap`, `ticks`, `tick_color`, `smooth`, `color_rules` | ring; angles clockwise from 3 o'clock, default 135→405; `cap` round or flat |
-| `graph` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `history`, `color`, `fill`, `fill_fade`, `smooth`, `line_width`, `grid`, `grid_color`, `background` | history; `min`/`max` `null` = automatic, `smooth` draws a curve |
+| `graph` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `history`, `color`, `fill`, `fill_fade`, `smooth`, `per_frame`, `line_width`, `grid`, `grid_color`, `background` | history; `min`/`max` `null` = automatic, `smooth` draws a curve, `per_frame` see below |
 | `clock` | `format` | date/time with [strftime codes](https://strftime.org), e.g. `%H:%M:%S`, `%A %d %B` |
 | `image` | `src`, `w`, `h` | a picture from the theme folder; `w`/`h` 0 = original size |
 | `weather` | `field`, `format`, `fallback` | `temperature`, `apparent_temperature`, `humidity`, `wind_speed`, `description`, `code` |
