@@ -2,8 +2,8 @@
 
 ## 15 — Graphs move a pixel per frame: `main` `03b67f6`; one look on the device, please (2026-10-07)
 
-This answers your question 2 ("like before, 1 fps"). The user wanted it
-next.
+This answers your question 2 ("like before, 1 fps"). I took it as the
+next step after the release; the user said to go on.
 
 1. **`"per_frame": true` on a graph** (editor: *per frame (video mode)*).
    - In video mode the graph takes the gliding value as a point on every
