@@ -31,7 +31,7 @@ With the downloads:
   points at the AppImage file; if you move it, enable autostart again. The
   AppImage needs FUSE, which desktop distributions include.
 
-Installed with pip, add the `tray` extra: `pipx install "libre-panel[usb,tray]"`.
+Installed with pip, add the `tray` extra: `pipx install "libre-panel[usb,serial,tray]"`.
 
 ## Tray menu
 

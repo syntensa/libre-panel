@@ -103,8 +103,18 @@ download and `pip install "libre-panel[usb]"` alike).
 
 ## Check your panel
 
+With a download, in a terminal:
+
 ```bash
-pip install "libre-panel[usb]"
+"%LOCALAPPDATA%\Programs\Libre Panel\libre-panel.exe" doctor     # Windows (cmd)
+"/Applications/Libre Panel.app/Contents/MacOS/libre-panel" doctor  # macOS
+./Libre_Panel-*-x86_64.AppImage doctor                             # Linux
+```
+
+With Python:
+
+```bash
+pipx install "libre-panel[usb,serial] @ git+https://github.com/syntensa/libre-panel"
 libre-panel doctor
 ```
 
