@@ -17,10 +17,11 @@ The first release of Libre Panel.
 - Video mode for TURZX USB panels: frames go to the panel's H.264 decoder at
   up to 50 fps (needs ffmpeg), with flow control, ffmpeg restarts, reconnects
   and recovery from a hung decoder (the panel is restarted, as SPUR II does;
-  after three restarts in a row it asks to replug); it saves nothing on the
-  panel. There, values
-  glide until the next reading, graphs scroll on every frame, and every
-  frame is drawn at its planned time, so animations run evenly
+  after three restarts in a row it asks to replug); a slow first start of
+  ffmpeg is waited for, and an ffmpeg behind a package manager's shim
+  (Chocolatey, scoop) is ended with it. It saves nothing on the panel.
+  There, values glide until the next reading, graphs scroll on every frame,
+  and every frame is drawn at its planned time, so animations run evenly
 
 **Themes and rendering**
 - Theme format `libre-panel-theme/1`: text, metric, bar, gauge, graph, clock,
