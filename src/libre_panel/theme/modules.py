@@ -16,9 +16,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Any
 
+from PIL import ImageFont
+
 from libre_panel.devices.models import find_model
+from libre_panel.fonts import builtin_font_path
 from libre_panel.i18n import t
 
 # -- looks -------------------------------------------------------------------
@@ -237,6 +241,15 @@ CAP = 0.70  # their height, per font size
 CLOCK_WIDTH = 2.65  # "00:00" in font sizes
 
 
+@lru_cache(maxsize=64)
+def _width_per_size(font: str, text: str) -> float:
+    """How wide ``text`` is in ``font``, per pixel of font size."""
+    path = builtin_font_path(font)
+    if path is None:  # a theme's own font: about as wide as Barlow
+        return CLOCK_WIDTH if text == "00:00" else len(text) * 0.55
+    return ImageFont.truetype(str(path), 100).getlength(text) / 100
+
+
 def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
 
@@ -414,7 +427,7 @@ def _detail_rows(b: _Build, src: Source, x: float, top: float, width: float, hei
     if count < 1:
         return
     row = min(room / count, b.u * 0.26)
-    value_size = min(row * 0.56, b.u * 0.17)
+    value_size = min(row * 0.56, b.u * 0.17, width * 0.2)
     for i, (sensor, fmt, text) in enumerate(src.details[:count]):
         base = y + i * row + (row - CAP * value_size) / 2
         b.label(
@@ -662,7 +675,8 @@ def build_clock(b: _Build, _src: Source) -> None:
         return
     seconds = a >= 2.2
     date_ratio = 0.2
-    size = min(b.ih / (1 + date_ratio * 2.2), b.iw / (CLOCK_WIDTH + (0.62 if seconds else 0)))
+    clock_width = _width_per_size(b.style["display_font"], "00:00")
+    size = min(b.ih / (1 + date_ratio * 2.2), b.iw / (clock_width + (0.62 if seconds else 0)))
     date_size = max(8, size * date_ratio)
     block = CAP * size + date_size * 1.1 + CAP * date_size
     top = b.iy + (b.ih - block) / 2
@@ -673,7 +687,7 @@ def build_clock(b: _Build, _src: Source) -> None:
     b.clock("time", "%H:%M", x, top, size, align=align, width=b.iw, glow=glow,
             glow_radius=max(2, round(size / 12)))  # fmt: skip
     if seconds:
-        sx = x + CLOCK_WIDTH * size + size * 0.08
+        sx = x + clock_width * size + size * 0.08
         b.clock("seconds", "%S", sx, top, size * 0.36, color=b.c("accent"),
                 glow=round(0.7 * b.glow, 2), glow_radius=max(2, round(size / 16)))  # fmt: skip
     fmt = "%A · %d %B" if b.iw > size * 4.2 else "%a %d %b"

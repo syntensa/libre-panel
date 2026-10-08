@@ -20,7 +20,7 @@
   <a href="#themes">Themes</a> ·
   <a href="#the-theme-editor">Theme editor</a> ·
   <a href="docs/HARDWARE.md">Supported panels</a> ·
-  <a href="docs/THEMES.md">Make your own theme</a>
+  <a href="#build-your-own-in-two-minutes">Build your own</a>
 </p>
 
 Plug in your panel, start Libre Panel, and it shows your PC's load,
@@ -34,8 +34,9 @@ No account, no cloud, no vendor app.
 - **Fits your machine without editing.** The names your own CPU and GPU
   report, the weather for the place in *your* config, dates in English or
   German, and sections that step aside where a sensor is missing.
-- **Design anything.** A visual editor in your browser, rendered by the
-  same engine that drives the panel: drag, snap, align, undo, done.
+- **Snap it together.** Drag modules onto your panel's grid; pull a corner
+  and a module shows more. Six looks restyle everything in one click, and a
+  free editor is there for every pixel.
 - **Smooth.** On TURZX USB panels, video mode plays up to 50 frames per
   second through the panel's own decoder, so graphs scroll and numbers glide.
 - **Yours.** GPL-3.0, plain JSON themes that cannot run code, everything
@@ -49,6 +50,36 @@ on a PC that reports no GPU readings. Any widget can do this with one field,
 `needs` (see [Theme format](docs/THEMES.md#widgets)).
 
 <p align="center"><img src="docs/images/studio-adapts.png" alt="Studio without weather (a calendar sheet in the card) and without GPU readings (a disk ring in the third slot)" width="100%"></p>
+
+## Build your own in two minutes
+
+<p align="center"><img src="docs/images/editor-new.png" alt="The New theme dialog: three starting layouts for the 9.2 inch panel and six looks" width="100%"></p>
+
+**1. Pick a layout and a look.** *New* offers starting layouts made for the
+panel you chose, in any of six looks.
+
+<p align="center"><img src="docs/images/editor-drag.png" alt="A History module is dragged from the library onto two free cells, which light up" width="100%"></p>
+
+**2. Drag modules onto the panel.** Clock, calendar, weather, rings, big
+numbers, history graphs, bars, network, system and titles. Free cells light
+up; drop a module on another one to swap them.
+
+<p align="center"><img src="docs/images/module-sizes.png" alt="A CPU ring module at 1x1, 2x1, 3x1, 2x2 and 4x2 cells, showing more the larger it is" width="100%"></p>
+
+**3. Pull a corner.** Modules work like widgets on a phone's home screen:
+the larger, the more they show. A CPU ring of one cell shows the load; two
+cells add the processor's name, temperature and power; three a history.
+
+<p align="center"><img src="docs/images/looks.png" alt="The same layout in the looks Arctic, Neon, Graphite, Paper, Sunset and Mono" width="100%"></p>
+
+**4. Try another look.** One click restyles colours, cards, corners, glow
+and fonts of every module.
+
+<p align="center"><img src="docs/images/module-layouts.png" alt="Module layouts on a 9.2 inch bar in Neon and Sunset, a 3.5 inch panel in Paper, a 5 inch panel in Graphite, a 3.5 inch portrait panel in Mono and a round 2.1 inch panel in Arctic" width="100%"></p>
+
+**On every panel.** The grid follows the panel (8 × 2 cells on a 9.2" bar,
+3 × 2 on a 3.5" panel) and keeps clear of edges the bezel hides; switch
+the panel and the modules move along.
 
 ## Themes
 
@@ -71,12 +102,15 @@ Made one you like? Share it in
 
 ## The theme editor
 
-<p align="center"><img src="docs/images/editor.png" alt="The theme editor with the Studio theme on a 9.2 inch panel, the GPU ring selected" width="100%"></p>
+<p align="center"><img src="docs/images/editor.png" alt="The theme editor: the module library on the left, a 9.2 inch panel with a selected ring module and its handles, the theme settings on the right" width="100%"></p>
 
-- Drag and drop with snapping and alignment guides, multi-select, align and
-  distribute, undo/redo, copy/paste, layers with lock and hide, zoom.
-- Ready-made building blocks: CPU card, ring, bar rows, clock, weather,
-  network and more; palette and font pickers.
+- **Modules** from a library with live pictures in your look, on a grid:
+  drag, drop, swap, resize at the edges. Their settings are plain choices:
+  what it shows, title, colour, what to show when readings are missing.
+  *Detach* turns a module into single widgets.
+- **Free editing** of every widget: drag and drop with snapping and
+  alignment guides, multi-select, align and distribute, undo/redo,
+  copy/paste, layers with lock and hide, zoom, palette and font pickers.
 - **Every panel size from a menu**: 0.96" up to 12.3", round ones too,
   portrait or landscape. Switching the panel rescales your layout.
 - What you see is what the panel shows: the editor renders with the panel's
@@ -85,6 +119,8 @@ Made one you like? Share it in
 
 ## Features
 
+- **Modules**: ten building blocks that lay themselves out for their size,
+  six looks, starting layouts for every panel size.
 - **Widgets**: text, sensor values, bars (also segmented), ring gauges,
   smooth history graphs, clock and date, images, weather, 21 line icons (with
   live weather symbols), cards with frosted glass; glow, shadows, gradients,
@@ -148,7 +184,7 @@ system* makes it start at every login. More in
 With Python instead:
 
 ```bash
-pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.2.0"
+pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.3.0"
 libre-panel tray                    # background app with tray icon; opens the editor
 libre-panel autostart enable        # start it whenever you log in
 ```

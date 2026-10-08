@@ -77,6 +77,11 @@
   .card p { margin: 0; font-size: 16.5px; }
   .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 9px; vertical-align: 2px; }
 
+  .steps { display: grid; gap: 22px; }
+  .step { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 14px; align-items: start; margin-top: 18px; }
+  .step .n { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--accent);
+    color: #04221F; font-weight: 700; font-size: 18px; }
+  .step p { margin: 2px 0 0; max-width: 70ch; }
   .split { display: grid; grid-template-columns: 1fr 1.45fr; gap: 44px; align-items: center; }
   .split ul { margin: 0; padding-left: 20px; }
   .split li { margin: 6px 0; }
@@ -120,6 +125,7 @@
   <div class="wrap">
     <a class="brand" href="#top"><img src="images/icon.png" alt="">Libre Panel</a>
     <nav>
+      <a class="hide-sm" href="#build">Build</a>
       <a class="hide-sm" href="#themes">Themes</a>
       <a class="hide-sm" href="#editor">Editor</a>
       <a href="#panels">Panels</a>
@@ -160,6 +166,40 @@
     </div>
   </section>
 
+  <section id="build">
+    <div class="wrap">
+      <div class="kicker">Modules</div>
+      <h2>Build your own in two minutes</h2>
+      <p class="intro">Snap a theme together from modules on your panel's grid. They
+        work like widgets on a phone's home screen: the larger, the more they show.</p>
+      <div class="steps">
+        <div class="step"><div class="n">1</div><div><h3>Pick a layout and a look</h3>
+          <p><em>New</em> offers starting layouts made for your panel, in six looks.</p></div></div>
+        <img class="framed" src="images/editor-new.png" width="1470" height="495" loading="lazy"
+        alt="The New theme dialog with three starting layouts and six looks">
+        <div class="step"><div class="n">2</div><div><h3>Drag modules onto the panel</h3>
+          <p>Clock, calendar, weather, rings, big numbers, history, bars, network, system
+            and titles. Free cells light up; drop a module on another to swap them.</p></div></div>
+        <img class="framed" src="images/editor-drag.png" width="2400" height="1350" loading="lazy"
+        alt="A History module dragged from the library onto two free cells">
+        <div class="step"><div class="n">3</div><div><h3>Pull a corner</h3>
+          <p>One cell shows the load; two add the processor's name, temperature and
+            power; three a history graph.</p></div></div>
+        <img src="images/module-sizes.png" width="1597" height="902" loading="lazy"
+        alt="A CPU ring module at five sizes, showing more the larger it is">
+        <div class="step"><div class="n">4</div><div><h3>Try another look</h3>
+          <p>Colours, cards, corners, glow and fonts of every module change in one click.</p></div></div>
+        <img src="images/looks.png" width="2042" height="1021" loading="lazy"
+        alt="The same layout in the looks Arctic, Neon, Graphite, Paper, Sunset and Mono">
+        <div class="step"><div class="n">5</div><div><h3>On every panel</h3>
+          <p>The grid follows the panel and keeps clear of edges the bezel hides. Switch
+            the panel and the modules move along.</p></div></div>
+        <img src="images/module-layouts.png" width="2056" height="781" loading="lazy"
+        alt="Module layouts on a 9.2 inch bar, 3.5 and 5 inch panels, a portrait panel and a round panel">
+      </div>
+    </div>
+  </section>
+
   <section id="themes">
     <div class="wrap">
       <div class="kicker">Built in</div>
@@ -180,16 +220,16 @@
         <p>The editor renders with the same engine that drives the panel, so
           what you see is what you get.</p>
         <ul>
-          <li>Drag and drop with snapping and alignment guides</li>
-          <li>Multi-select, align, distribute, undo and redo</li>
-          <li>Building blocks: CPU card, rings, bar rows, clock, weather, network</li>
-          <li>Palettes, bundled fonts, glow, shadows, gradients, colour rules</li>
+          <li>Module library with live pictures in your look</li>
+          <li>Drag, drop, swap and resize modules on the grid</li>
+          <li>Free editing of every widget, with snapping and alignment guides</li>
+          <li>Undo and redo, palettes, bundled fonts, glow, gradients, colour rules</li>
           <li>Every panel from a menu, portrait or landscape</li>
           <li><em>Show on panel</em> sends it there</li>
         </ul>
       </div>
       <img class="framed" src="images/editor.png" width="2400" height="1350" loading="lazy"
-        alt="The theme editor with the Studio theme, the GPU ring selected">
+        alt="The theme editor with the module library, a 9.2 inch panel and a selected ring module">
     </div>
   </section>
 
@@ -255,7 +295,7 @@
           <a class="btn" href="https://github.com/syntensa/libre-panel/releases/latest">AppImage</a></div>
       </div>
 <pre><span class="c"># or with Python</span>
-pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.2.0"
+pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.3.0"
 libre-panel tray        <span class="c"># background app with tray icon; opens the editor</span>
 libre-panel doctor      <span class="c"># check your panel, write a report</span></pre>
       <p class="fineprint" style="margin-top: 14px">The downloads are not code-signed yet:

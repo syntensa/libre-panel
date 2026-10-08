@@ -2,10 +2,10 @@
 
     python tools/readme_images.py [docs/images]
 
-Each theme as the panel shows it (<theme>.png), the README's hero, gallery and
-"fits your machine" pictures, and the 1280x640 social preview (upload it in
-the repository's settings). With Playwright installed, also the editor
-screenshot. Demo sensor values and a fixed time keep the pictures stable.
+Each theme as the panel shows it (<theme>.png), the README's hero, gallery,
+"fits your machine" and module pictures, and the 1280x640 social preview
+(upload it in the repository's settings). With Playwright installed, also
+the editor screenshots. Demo sensor values and a fixed time keep the pictures stable.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from libre_panel.sensors.base import Reading
 from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import find_theme, load_theme, parse_theme
+from libre_panel.theme.modules import LOOKS, look_theme_parts, make_grid, templates
 
 WHEN = datetime(2026, 10, 9, 10, 8, 24).timestamp()  # a Friday morning
 BG_TOP, BG_BOTTOM = (13, 20, 29), (6, 9, 13)
@@ -264,8 +265,165 @@ def adapts(variants: list[tuple[Image.Image, str, str]]) -> Image.Image:
     return img.convert("RGB")
 
 
-def editor(path: Path) -> None:
-    """The editor with Studio, its GPU ring selected (needs Playwright)."""
+def module_frame(model: str, look: str, modules: list[dict], orientation: str = "landscape"):
+    """A theme made of modules, rendered; and its module boxes."""
+    palette, style = look_theme_parts(look)
+    theme = parse_theme(
+        {
+            "format": "libre-panel-theme/1",
+            "display": {"model": model, "orientation": orientation},
+            "palette": palette,
+            "style": style,
+            "background": {"color": palette["bg"]},
+            "widgets": [{"type": "module", "id": f"m{i}", **m} for i, m in enumerate(modules)],
+        }
+    )
+    renderer = Renderer(theme, preview=True)
+    frame, _ = renderer.render(snapshot())
+    return frame.convert("RGB"), renderer.module_boxes
+
+
+def template(model: str, which: str, orientation: str = "landscape") -> list[dict]:
+    from libre_panel.devices.models import get_model
+
+    width, height = get_model(model).size(orientation)
+    grid = make_grid(width, height, None, model)
+    chosen = next(t for t in templates(grid.columns, grid.rows) if t["id"] == which)
+    return chosen["modules"]
+
+
+def module_sizes() -> Image.Image:
+    """One CPU ring module at five sizes: the larger, the more it shows."""
+    spans = [
+        ((1, 1), "1 × 1", "the load"),
+        ((2, 1), "2 × 1", "+ name, temperature, power"),
+        ((3, 1), "3 × 1", "+ history"),
+        ((2, 2), "2 × 2", "big: details over history"),
+        ((4, 2), "4 × 2", "everything, large"),
+    ]
+    crops = []
+    for (cols, rows), size, note in spans:
+        frame, boxes = module_frame(
+            "turing-9.2-usb",
+            "arctic",
+            [{"module": "ring", "source": "cpu", "cols": cols, "rows": rows}],
+        )
+        x, y, w, h = boxes["m0"]
+        crops.append((frame.crop((x - 12, y - 12, x + w + 12, y + h + 12)), size, note))
+    label, sub = font("Barlow-SemiBold", 30), font("Barlow-Regular", 24)
+    margin, gap, head = 44, 36, 70
+    rows = [crops[:3], crops[3:]]
+    width = max(sum(c.width for c, *_ in row) + gap * (len(row) - 1) for row in rows) + 2 * margin
+    height = margin + sum(max(c.height for c, *_ in row) + head for row in rows) + gap + margin // 2
+    img = background(width, height, glow=(0.5, 0.0))
+    draw = ImageDraw.Draw(img)
+    y = margin
+    for row in rows:
+        x = margin
+        for crop, size, note in row:
+            draw.text((x + 12, y), size, font=label, fill=TX_1)
+            draw.text(
+                (x + 12 + draw.textlength(size + "  ", font=label), y + 5),
+                note,
+                font=sub,
+                fill=TX_3,
+            )
+            img.paste(crop, (x, y + head - 12))
+            x += crop.width + gap
+        y += max(c.height for c, *_ in row) + head + gap
+    return img
+
+
+def looks() -> Image.Image:
+    """The same layout in every look."""
+    modules = template("turing-9.2-usb", "overview")
+    shots = [
+        (look["name"], module_frame("turing-9.2-usb", key, modules)[0])
+        for key, look in LOOKS.items()
+    ]
+    border, margin, gap, caption = 10, 44, 34, 52
+    label = font("Barlow-SemiBold", 30)
+    cell_w = 940
+    cell_h = cell_w // 4
+    m = shadow_margin(border)
+    width = 2 * margin + 2 * (cell_w + 2 * border) + gap
+    height = margin + 3 * (cell_h + 2 * border + caption) + 2 * gap // 2 + margin // 2
+    img = background(width, height, glow=(0.5, 0.0)).convert("RGBA")
+    draw = ImageDraw.Draw(img)
+    for i, (name, frame) in enumerate(shots):
+        col, row = i % 2, i // 2
+        x = margin + col * (cell_w + 2 * border + gap)
+        y = margin + row * (cell_h + 2 * border + caption + gap // 2)
+        dev = device(frame.resize((cell_w, cell_h), Image.LANCZOS), border)
+        img.alpha_composite(dev, (x - m, y - m))
+        draw.text((x + 4, y + cell_h + 2 * border + 10), name, font=label, fill=TX_1)
+    return img.convert("RGB")
+
+
+def module_layouts() -> Image.Image:
+    """Starting layouts on several panels, each in another look."""
+    bars = [
+        (
+            "Performance · Neon",
+            module_frame("turing-9.2-usb", "neon", template("turing-9.2-usb", "performance"))[0],
+        ),
+        (
+            "Calm · Sunset",
+            module_frame("turing-9.2-usb", "sunset", template("turing-9.2-usb", "calm"))[0],
+        ),
+    ]
+    specs = [
+        ('3.5" · Paper', "turing-3.5", "paper", "overview", "landscape"),
+        ('5" · Graphite', "turing-5", "graphite", "performance", "landscape"),
+        ('3.5" portrait · Mono', "turing-3.5", "mono", "overview", "portrait"),
+        ('2.1" round · Arctic', "turing-2.1", "arctic", "performance", "landscape"),
+    ]
+    small = [
+        (
+            name,
+            module_frame(model, look, template(model, which, side), side)[0],
+            model == "turing-2.1",
+        )
+        for name, model, look, which, side in specs
+    ]
+    border, margin, gap, caption = 12, 44, 40, 56
+    label = font("Barlow-SemiBold", 28)
+    m = shadow_margin(border)
+    bar_w = 940
+    hh = 300
+    sized = []
+    for name, frame, is_round in small:
+        sized.append(
+            (
+                name,
+                frame.resize((round(frame.width * hh / frame.height), hh), Image.LANCZOS),
+                is_round,
+            )
+        )
+    width = 2 * margin + 2 * (bar_w + 2 * border) + gap
+    row1 = bar_w // 4 + 2 * border
+    height = margin + row1 + caption + gap // 2 + hh + 2 * border + caption + margin // 2
+    img = background(width, height, glow=(0.5, 0.0)).convert("RGBA")
+    draw = ImageDraw.Draw(img)
+    for i, (name, frame) in enumerate(bars):
+        x = margin + i * (bar_w + 2 * border + gap)
+        dev = device(frame.resize((bar_w, bar_w // 4), Image.LANCZOS), border)
+        img.alpha_composite(dev, (x - m, margin - m))
+        draw.text((x + 4, margin + row1 + 10), name, font=label, fill=TX_1)
+    total = sum(f.width + 2 * border for _, f, _ in sized)
+    spacing = (width - 2 * margin - total) / (len(sized) - 1)
+    x = margin
+    y = margin + row1 + caption + gap // 2
+    for name, frame, is_round in sized:
+        dev = device(frame, border, round_panel=is_round)
+        img.alpha_composite(dev, (round(x) - m, y - m))
+        draw.text((x + 4, y + hh + 2 * border + 10), name, font=label, fill=TX_1)
+        x += frame.width + 2 * border + spacing
+    return img.convert("RGB")
+
+
+def editor_shots(out: Path) -> None:
+    """The editor: a new theme from a layout, dragging a module, resizing one."""
     from playwright.sync_api import sync_playwright
 
     os.environ["LIBRE_PANEL_HOME"] = tempfile.mkdtemp()  # no user themes or config
@@ -274,6 +432,9 @@ def editor(path: Path) -> None:
     server = make_server(port=0)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     rendered = "document.querySelector('#preview').src.startsWith('data:image/png')"
+    pictures = (
+        "[...document.querySelectorAll('#new-templates img')].every(i => i.src.startsWith('data:'))"
+    )
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch()
@@ -284,15 +445,39 @@ def editor(path: Path) -> None:
                 bypass_csp=True,  # for the waits below
             )
             page = context.new_page()
+            page.on("dialog", lambda d: d.accept())
             page.goto(f"http://127.0.0.1:{server.server_address[1]}/")
             page.wait_for_function(rendered)
-            page.evaluate("document.querySelector('#preview').src = ''")
-            page.select_option("#theme-select", "studio")
-            page.wait_for_function(rendered)
-            page.wait_for_timeout(800)
-            page.evaluate("setSelection(['gpu-ring'])")
-            page.wait_for_timeout(800)
-            page.screenshot(path=str(path))
+            page.select_option("#model-select", "turing-9.2-usb")
+            page.wait_for_function("state.size[0] === 1920")
+            page.click("#btn-new")
+            page.wait_for_selector("#new-dialog[open]")
+            page.wait_for_function(pictures)
+            page.wait_for_timeout(500)
+            page.locator("#new-dialog").screenshot(path=str(out / "editor-new.png"))
+            page.click("#new-create")
+            page.wait_for_function("state.theme.widgets.filter(isModule).length === 5")
+            page.wait_for_timeout(1200)
+            page.evaluate("setSelection(['ring-4'])")
+            page.wait_for_timeout(1000)
+            page.screenshot(path=str(out / "editor.png"))
+            # drag a module from the library onto free cells
+            page.evaluate("setSelection(['network-2'])")
+            page.keyboard.press("Delete")
+            page.wait_for_timeout(1000)
+            tile = page.locator(".module-tile[data-kind='graph']").bounding_box()
+            box = page.evaluate("cellBox(1, 1, 1, 1)")
+            zoom = page.evaluate("state.zoom")
+            wrap = page.locator("#canvas-wrap").bounding_box()
+            page.mouse.move(tile["x"] + 30, tile["y"] + 20)
+            page.mouse.down()
+            page.mouse.move(tile["x"] + 80, tile["y"] + 40, steps=4)
+            page.mouse.move(
+                wrap["x"] + (box[0] + 40) * zoom, wrap["y"] + (box[1] + 60) * zoom, steps=12
+            )
+            page.wait_for_timeout(300)
+            page.screenshot(path=str(out / "editor-drag.png"))
+            page.mouse.up()
             browser.close()
     finally:
         server.shutdown()
@@ -318,10 +503,13 @@ def main() -> None:
             (render("studio", 2, gpu), "No GPU sensor", "· the disk takes its ring"),
         ]
     ).save(out / "studio-adapts.png", optimize=True)
+    module_sizes().save(out / "module-sizes.png", optimize=True)
+    looks().save(out / "looks.png", optimize=True)
+    module_layouts().save(out / "module-layouts.png", optimize=True)
     try:
-        editor(out / "editor.png")
+        editor_shots(out)
     except ImportError:
-        print("Playwright is not installed: editor.png left as it is")
+        print("Playwright is not installed: the editor pictures are left as they are")
     print(f"wrote the images to {out}")
 
 

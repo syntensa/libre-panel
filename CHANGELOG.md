@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-10-08
+
+Modules: building blocks that snap onto a grid and show more the larger they
+are, six looks, and an editor where a theme takes two minutes.
 
 **Modules**
 - Building blocks that fill cells of a grid and lay themselves out for their
@@ -16,6 +19,21 @@
   of a GPU, a calendar sheet instead of the weather
 - Text can be held to a width (`max_width`): a smaller font or "…"
 - `needs` takes several conditions
+
+**Editor**
+- A module library with live pictures in the theme's look: drag a module
+  onto free cells (they light up) or click it to add it where there is room
+- Modules move by cells, swap places when dropped on each other, and grow or
+  shrink at their edges and corners, laid out again while dragging; the
+  arrow keys move them by a cell
+- Module settings as plain choices: what it shows, title, colour, what to
+  show when readings are missing, card, size; *Detach* turns a module into
+  single widgets
+- Six looks in one click; the theme settings get the grid and the module
+  style (cards, corners, glow, backdrop, fonts)
+- *New* starts from layouts for the chosen panel (overview, performance,
+  calm) in a chosen look, or from an empty grid or a free layout
+- Switching the panel moves modules onto the new grid without overlaps
 
 ## 0.2.0 — 2026-10-07
 

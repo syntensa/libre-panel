@@ -1906,8 +1906,8 @@ function startLibraryDrag(event, kind, image) {
       drag.ghost = el("div", { class: "module-ghost" }, el("img", { src: image.src || "", alt: "" }));
       document.body.append(drag.ghost);
     }
-    drag.ghost.style.left = `${e.clientX + 12}px`;
-    drag.ghost.style.top = `${e.clientY + 12}px`;
+    drag.ghost.style.left = `${e.clientX + 18}px`;
+    drag.ghost.style.top = `${e.clientY + 18}px`;
     drag.zone = zoneAt(e, span);
     drawOverlay();
   };
