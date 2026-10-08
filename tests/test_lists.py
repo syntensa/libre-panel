@@ -229,3 +229,11 @@ def test_librehardwaremonitor_names_every_temperature_and_fan():
     assert out["cpu.temp"].origin == out["temp.cpu.core_tctl_tdie"].origin != ""
     names = [i.key for i in lists.pick({"items": "cpu.temp = CPU\ntemp.cpu.*"}, out)]
     assert names[0] == "cpu.temp" and "temp.cpu.core_tctl_tdie" not in names
+
+
+def test_previews_do_not_wake_costly_sensors():
+    gc.collect()
+    before = set(base._WANTED)
+    preview = Renderer(list_theme(items="proc.cpu.*.value"), preview=True)
+    assert set(base._WANTED) == before  # the editor's pictures start no process scans
+    del preview

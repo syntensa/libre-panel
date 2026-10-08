@@ -319,7 +319,8 @@ class Renderer:
         self.widgets, self.module_boxes = expand_modules(theme)
         self._modules = {w["id"]: w for w in theme.widgets if w["type"] == "module"}
         self._keys = {w["id"]: json.dumps(w, sort_keys=True) for w in self.widgets}
-        want(self, _reads(self.widgets))  # costly sensors work only while shown
+        if not preview:  # costly sensors work only while a panel shows them
+            want(self, _reads(self.widgets))
         self._background = self._load_background()
         # Incremental compositing: the last frame and the pieces it was made of.
         # Only regions whose pieces changed are composed again, so a mostly
