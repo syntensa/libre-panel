@@ -128,6 +128,22 @@ topics = ["home/+/temperature", "zigbee2mqtt/#"]
 units = { "home/+/temperature" = "°C" }
 ```
 
+**Game frame rate** (`game.*`, Windows): Intel's
+[PresentMon](https://github.com/GameTechDev/PresentMon/releases) counts the
+frames of the game you play. Download its console version (MIT license) and
+name it; Libre Panel starts it only while a theme shows the frame rate and
+stops it a minute after. PresentMon needs administrator rights or your
+account in the "Performance Log Users" group (Computer Management → Local
+Users and Groups → Groups; sign out and in again).
+
+```toml
+[sensors]
+providers = ["librehardwaremonitor", "psutil", "presentmon"]
+
+[sensors.presentmon]
+path = "C:/Tools/PresentMon-2.3.0-x64.exe"
+```
+
 Show these readings with the Dashboard module (`ha.sensor.living_room_temperature
 = Living room`, one per line), a list, or any widget with a `sensor`.
 `libre-panel sensors` lists what is there.

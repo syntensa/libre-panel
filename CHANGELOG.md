@@ -26,6 +26,8 @@
 - Music: what is playing with its cover and progress (Windows media
   controls, MPRIS players on Linux, Spotify and Music on macOS)
 - Agenda: the next events of your calendars
+- Game FPS: the frame rate of the game being played, its 1% lows and frame
+  time, through Intel's PresentMon on Windows (not yet tried with real games)
 
 **Sensors**
 - Every core (`cpu.core.<n>.load`), every drive (`disk.<n>.*`), the busiest

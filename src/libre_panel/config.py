@@ -53,7 +53,7 @@ port = ""
 
 [sensors]
 # Sensor sources, queried in this order. Available: psutil, librehardwaremonitor,
-# calendar, homeassistant, mqtt, demo, plus any installed sensor plugin (see the
+# calendar, homeassistant, mqtt, presentmon, demo, plus any installed sensor plugin (see the
 # configuration guide for their settings). The sun, the moon and what is playing
 # come by themselves.
 providers = ["psutil"]

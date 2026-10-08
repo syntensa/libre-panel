@@ -104,6 +104,7 @@ _BUILTIN_PROVIDERS = {
     "homeassistant": "libre_panel.sensors.homeassistant:HomeAssistantProvider",
     "mqtt": "libre_panel.sensors.mqtt:MqttProvider",
     "sky": "libre_panel.sensors.sky:SkyProvider",
+    "presentmon": "libre_panel.sensors.presentmon:PresentMonProvider",
 }
 
 

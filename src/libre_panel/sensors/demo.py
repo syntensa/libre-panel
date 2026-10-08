@@ -41,6 +41,9 @@ _WAVES: dict[str, tuple[str, str, float, float, float]] = {
     "fan.cpu": ("CPU fan", "RPM", 1100, 250, 27),
     "battery.load": ("Battery", "%", 80, 0, 1),
     "net.ping": ("Ping", "ms", 16, 5, 23),
+    "game.fps": ("Frames per second", "fps", 141, 12, 7),
+    "game.frametime": ("Frame time", "ms", 7.1, 0.6, 7),
+    "game.low": ("1% low", "fps", 104, 4, 19),
     "temp.cpu.ccd1": ("CPU CCD1", "°C", 52, 12, 29),
     "temp.gpu.hot_spot": ("GPU Hot Spot", "°C", 71, 12, 31),
     "temp.nvme.composite": ("NVMe SSD", "°C", 41, 3, 61),
@@ -136,6 +139,7 @@ def demo_details(t: float, waves: dict[str, Reading]) -> dict[str, Reading]:
     out["battery.state"] = Reading("battery.state", "On battery", "", "Battery")
     out["battery.left"] = Reading("battery.left", 2 * 3600 + 40 * 60, "s", "Battery time left")
     out["net.ip"] = Reading("net.ip", "192.168.1.20", "", "IP address")
+    out["game.app"] = Reading("game.app", "Starfall", "", "Game")
     out["net.today.down"] = Reading("net.today.down", 3.42e9, "B", "Received today")
     out["net.today.up"] = Reading("net.today.up", 6.1e8, "B", "Sent today")
     return out

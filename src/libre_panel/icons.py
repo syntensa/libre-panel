@@ -49,6 +49,7 @@ ICON_NAMES = (
     "music",
     "calendar",
     "home",
+    "gamepad",
     "weather",
 )
 
@@ -334,6 +335,20 @@ def _home(pen: _Pen) -> None:
     pen.line((10, 21), (10, 15), (14, 15), (14, 21))
 
 
+def _gamepad(pen: _Pen) -> None:
+    pen.shape(
+        lambda d, p: (
+            d.rounded_rectangle([*p(3.5, 7), *p(20.5, 16)], radius=4.5 * pen.s, fill=255),
+            d.ellipse([*p(2, 9.5), *p(9.5, 19.5)], fill=255),
+            d.ellipse([*p(14.5, 9.5), *p(22, 19.5)], fill=255),
+        )
+    )
+    pen.line((8, 9.8), (8, 13.2))
+    pen.line((6.3, 11.5), (9.7, 11.5))
+    pen.circle(15.5, 10.5, 0.9, fill=True)
+    pen.circle(17.5, 12.6, 0.9, fill=True)
+
+
 def _cloud_icon(pen: _Pen) -> None:
     pen.shape(lambda d, p: _cloud(d, p))
 
@@ -419,6 +434,7 @@ _ICONS: dict[str, Callable[[_Pen], None]] = {
     "music": _music,
     "calendar": _calendar,
     "home": _home,
+    "gamepad": _gamepad,
 }
 
 

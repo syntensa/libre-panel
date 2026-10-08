@@ -57,6 +57,7 @@ calendar = "libre_panel.sensors.calendar:CalendarProvider"
 homeassistant = "libre_panel.sensors.homeassistant:HomeAssistantProvider"
 mqtt = "libre_panel.sensors.mqtt:MqttProvider"
 sky = "libre_panel.sensors.sky:SkyProvider"
+presentmon = "libre_panel.sensors.presentmon:PresentMonProvider"
 
 [project.entry-points."libre_panel.devices"]
 auto = "libre_panel.devices.auto:AutoDisplay"

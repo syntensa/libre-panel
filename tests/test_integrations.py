@@ -336,3 +336,67 @@ def test_demo_has_a_calendar_and_a_song():
     assert snap.readings["media.title"].value and "media.cover" in snap.images
     assert snap.readings["calendar.1.when"].value.startswith("Today")
     assert snap.now + timedelta(0) == datetime(2026, 10, 9, 10, 8)
+
+
+# -- game frame rate -----------------------------------------------------------------
+
+
+def test_frames_per_second_of_the_busiest_program():
+    from libre_panel.sensors.presentmon import FrameCounter, frame_column
+
+    counter = FrameCounter()
+    for i in range(120):  # a game at 125 fps, a spike of 25 ms now and then
+        counter.add("Game.exe", 25.0 if i % 50 == 0 else 8.0, 100 + i * 0.008)
+    for i in range(30):
+        counter.add("dwm.exe", 16.7, 100 + i * 0.0167)  # the desktop does not count
+        counter.add("Browser.exe", 16.7, 100 + i * 0.0167)
+    out = counter.readings(101.0)
+    assert out["game.app"].value == "Game" and 100 <= out["game.fps"].value <= 125
+    assert out["game.low"].value == 40.0 and out["game.frametime"].unit == "ms"
+    assert FrameCounter().readings(0) == {}
+    assert frame_column(["Application", "ProcessID", "MsBetweenPresents"]) == "MsBetweenPresents"
+    assert frame_column(["Application", "FrameTime"]) == "FrameTime"
+    assert frame_column(["Application"]) is None
+
+
+@pytest.mark.skipif(not hasattr(__import__("os"), "fork"), reason="needs a shell script")
+def test_presentmon_is_read_while_a_theme_shows_the_frame_rate(tmp_path, monkeypatch):
+    import sys
+
+    from libre_panel.sensors.presentmon import PresentMonProvider
+
+    fake = tmp_path / "PresentMon"
+    fake.write_text(
+        f"#!{sys.executable}\n"
+        "import sys, time\n"
+        "print('Application,ProcessID,MsBetweenPresents', flush=True)\n"
+        "for i in range(2000):\n"
+        "    print(f'Racer.exe,42,{8.0 if i % 2 else 9.0}', flush=True)\n"
+        "    time.sleep(0.002)\n",
+        encoding="utf-8",
+    )
+    fake.chmod(0o755)
+    gc.collect()
+    monkeypatch.setattr(base, "_WANTED", {})
+    provider = PresentMonProvider({"path": str(fake)})
+    assert provider.read() == {} and provider._thread is None
+    owner = type("Theme", (), {})()
+    want(owner, {"game.fps"})
+    found = {}
+    for _ in range(200):
+        found = provider.read()
+        if found:
+            break
+        threading.Event().wait(0.05)
+    provider.close()
+    assert found["game.app"].value == "Racer" and 100 < found["game.fps"].value < 130
+
+
+def test_game_module_waits_for_a_game():
+    from test_modules import shown, snapshot, theme
+
+    renderer = Renderer(theme({"module": "game", "cols": 3}), preview=True)
+    playing = shown(renderer, snapshot())
+    assert {"m0/fps", "m0/history", "m0/low"} <= set(playing) and "m0/idle" not in playing
+    quiet = shown(renderer, snapshot(drop=("game.",)))
+    assert "m0/idle" in quiet and "m0/fps" not in quiet

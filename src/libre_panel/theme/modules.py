@@ -1421,6 +1421,63 @@ def build_agenda(b: _Build, _src: Source) -> None:
     b.out[-1]["needs"] = "!calendar.events"
 
 
+def build_game(b: _Build, _src: Source) -> None:
+    """Frames per second of the game being played (``[sensors.presentmon]``)."""
+    b.card()
+    color = b.tint("gpu")
+    a = b.aspect
+    b.needs = "game.fps"
+    title = b.module["title"]
+    top = b.ts * 2.4
+    b.icon("icon", "gamepad", b.ix, b.iy - b.ts * 0.1, b.ts * 1.5, color)
+    if title:
+        b.label("title", title, b.ix + b.ts * 2.1, b.iy + b.ts * 0.15, b.ts * 1.05, color=color,
+                width=b.iw - b.ts * 2.1)  # fmt: skip
+    else:
+        b.value("title", "game.app", "{value}", b.ix + b.ts * 2.1, b.iy + b.ts * 0.15,
+                b.ts * 1.05, color=color, width=b.iw - b.ts * 2.1, font="text_font",
+                tabular=False, fallback="", fit="ellipsis")  # fmt: skip
+    x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
+    graph = b.large or a >= 3.0 or (a <= 0.72 and h > b.ts * 12)
+    stacked = b.large or a <= 0.72  # the history under the number
+    number_h = h * 0.55 if graph and stacked else h
+    number_w = w if not (graph and not stacked) else w * 0.45
+    size = min(number_h * 0.62, number_w * 0.34)
+    cap = y + (number_h - CAP * size) / 2 - (b.ts * 0.6 if number_h > b.ts * 6 else 0)
+    b.value("fps", "game.fps", "{value:.0f}", x, cap, size, width=number_w * 0.62,
+            glow=round(0.3 * b.glow, 2), glow_radius=max(2, round(size / 14)))  # fmt: skip
+    unit_x = x + number_w * 0.64
+    b.label("unit", "FPS", unit_x, cap + CAP * size - CAP * b.ts, b.ts, color=color,
+            width=number_w * 0.36)  # fmt: skip
+    if number_h > b.ts * 6.5:
+        rows = (("low", "game.low", "{value:.0f}", t("1% low")),
+                ("frametime", "game.frametime", "{value:.1f} ms", t("Frame time")))  # fmt: skip
+        for i, (name, key, fmt, text) in enumerate(rows):
+            line = cap + i * b.ts * 2.4
+            if line + CAP * b.ts * 1.2 > y + number_h:
+                break
+            b.label(f"{name}-label", text, unit_x, line, b.ts * 0.85, width=number_w * 0.36)
+            b.value(name, key, fmt, unit_x, line + b.ts * 1.1, b.ts * 1.05, color=b.c("text2"),
+                    width=number_w * 0.36, hide_if_missing=True)  # fmt: skip
+        b.out = [w_ for w_ in b.out if w_["id"] != "unit"]  # the rows say what it is
+        b.label("unit", "FPS", x, cap + CAP * size + b.ts * 0.8, b.ts, color=color,
+                width=number_w * 0.6)  # fmt: skip
+    if graph:
+        if stacked:
+            gx, gy, gw, gh = x, y + number_h + b.pad, w, h - number_h - b.pad
+        else:
+            gx = x + number_w + b.pad
+            gy, gw, gh = y, x + w - gx, h
+        b.graph("history", "game.fps", gx, gy, gw, gh, color, None, None)  # its own range
+    b.needs = "!game.fps"
+    icon = min(b.iw, b.ih) * 0.3
+    b.icon("idle-icon", "gamepad", b.ix + (b.iw - icon) / 2, b.iy + b.ih / 2 - icon * 0.8, icon,
+           b.c("text3"))  # fmt: skip
+    b.label("idle", t("No game running"), b.ix + b.iw / 2, b.iy + b.ih / 2 + icon * 0.45, b.ts,
+            align="center", width=b.iw)  # fmt: skip
+    b.needs = ""
+
+
 def build_text(b: _Build, _src: Source) -> None:
     """A title with the accent line under it."""
     b.card()
@@ -1686,13 +1743,14 @@ def kinds() -> dict[str, Kind]:
         "image": Kind(t("Picture"), build_image, span=(2, 2)),
         "music": Kind(t("Music"), build_music, span=(2, 1)),
         "agenda": Kind(t("Agenda"), build_agenda, span=(2, 2)),
+        "game": Kind(t("Game FPS"), build_game, span=(2, 1)),
     }
 
 
 MODULE_KINDS = (
     "clock", "date", "weather", "ring", "stat", "graph", "bars", "network", "system", "text",
     "temps", "cores", "drives", "processes", "netinfo", "battery", "values",
-    "sun", "analog", "world", "countdown", "image", "music", "agenda",
+    "sun", "analog", "world", "countdown", "image", "music", "agenda", "game",
 )  # fmt: skip
 MODULE_SOURCES = ("cpu", "gpu", "mem", "disk", "net", "sensor")
 MODULE_FALLBACKS = ("auto", "none", "cpu", "gpu", "mem", "disk")
