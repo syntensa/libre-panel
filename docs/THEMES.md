@@ -105,7 +105,8 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `clock` | `format` | date/time with [strftime codes](https://strftime.org), e.g. `%H:%M:%S`, `%A %d %B` |
 | `image` | `src`, `w`, `h` | a picture from the theme folder; `w`/`h` 0 = original size |
 | `weather` | `field`, `format`, `fallback` | `temperature`, `apparent_temperature`, `humidity`, `wind_speed`, `description`, `code` |
-| `icon` | `icon`, `size`, `color`, `stroke` | line icons: cpu, gpu, ram, disk, network, download, upload, temperature, fan, power, clock, sun, moon, cloud, partly, rain, snow, storm, fog, humidity, wind — and `weather`, which follows the live weather (day/night) |
+| `icon` | `icon`, `sensor`, `size`, `color`, `stroke` | line icons: cpu, gpu, ram, disk, network, download, upload, temperature, fan, power, clock, sun, moon, cloud, partly, rain, snow, storm, fog, humidity, wind — and `weather`, which follows the live weather, or the code in `sensor` (e.g. `weather.day.1.code`), by day or night |
+| `calendar` | `w`, `h`, `font`, `font_size`, `color`, `color2`, `muted`, `first_day` | the month as a grid of days, today marked in `color2`; weekday names in `muted` and the language; `first_day` `monday` or `sunday` |
 | `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur` | cards, frames, separators; `backdrop_blur` gives frosted glass |
 | `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card` | a building block on the grid, see [Modules](#modules) |
 
@@ -138,8 +139,8 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `module` | shows | `source` |
 |---|---|---|
 | `clock` | time, seconds when wide, date; hours over minutes when tall | |
-| `date` | a calendar sheet: day, weekday, month | |
-| `weather` | symbol, temperature, sky; feels-like, humidity and wind when large; a calendar sheet while the weather is off | |
+| `date` | a calendar sheet: day, weekday, month; the month's days beside or under it when large | |
+| `weather` | symbol, temperature, sky; feels-like, humidity and wind; a forecast when there is room: as columns when long (3 × 1) or big, as rows when tall; days and hours together on a big wide one (4 × 2); a calendar while the weather is off | |
 | `ring` | a ring with the load; details, the hardware's name and a history graph as it grows | `cpu`, `gpu`, `mem`, `disk` |
 | `stat` | a large number; a bar, a history graph and details as it grows | as `ring`, `net`, or `sensor` with `sensor` and `format` |
 | `graph` | a history graph under its name and value | as `stat` |
@@ -156,6 +157,9 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
   shows the disk instead of a missing GPU; `none` leaves the cells empty; or
   name a source.
 - `card`: `auto` (cards for all but clock and title), `on` or `off`.
+- `forecast` (weather): `auto` (days; days and hours on a big wide module),
+  `days`, `hours`, `both` or `off`; `step` is the hours between two hourly
+  columns (1–6, default 3).
 - Labels follow the language: "Temp" reads "Temp." in German.
 
 **The grid.** `"grid": {"columns": 0, "rows": 0, "gap": 0, "margin": 0}`; 0
@@ -210,10 +214,16 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `fan.<chip>.<name>`, `temp.<chip>.<name>` | RPM, °C | psutil (Linux) |
 | `battery.load`, `sys.uptime` | %, s | psutil |
 | `cpu.name`, `gpu.name` | text | LibreHardwareMonitor |
-| `weather.*` | | Open-Meteo, when enabled |
+| `weather.temperature`, `.apparent_temperature`, `.humidity`, `.wind_speed`, `.code`, `.description`, `.is_day` | °C, %, km/h | Open-Meteo, when enabled |
+| `weather.hour.<n>.temperature`, `.code`, `.rain`, `.day`, `.time` | °C, %, 1/0, "15:00" | the hour `n` hours ahead (1 = the next full hour, up to 24) |
+| `weather.day.<n>.high`, `.low`, `.code`, `.rain`, `.name` | °C, % | day `n` (0 = today, up to 6); `name` is "Today" or the short weekday |
 | `lhm:/<sensor id>` | | any LibreHardwareMonitor sensor |
 
 `gpu.power` is the whole board (TBP), like LibreHardwareMonitor's "GPU Package".
+
+The forecast keys are counted from the moment they are read, so "the next
+hour" stays true between two weather updates. `rain` is the chance of
+rain in percent.
 
 ## Sharing themes
 

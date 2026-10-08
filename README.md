@@ -70,6 +70,12 @@ up; drop a module on another one to swap them.
 the larger, the more they show. A CPU ring of one cell shows the load; two
 cells add the processor's name, temperature and power; three a history.
 
+<p align="center"><img src="docs/images/weather-sizes.png" alt="The weather module at 1x1, 3x1, 1x2, 2x2 and 4x2 cells: the weather now, then the days ahead, then days and hours" width="100%"></p>
+
+The weather does the same: given room, it adds the forecast of the next
+days or hours (you choose, or both), as columns when long or big and as
+rows when tall. A big calendar shows the month.
+
 <p align="center"><img src="docs/images/looks.png" alt="The same layout in the looks Arctic, Neon, Graphite, Paper, Sunset and Mono" width="100%"></p>
 
 **4. Try another look.** One click restyles colours, cards, corners, glow

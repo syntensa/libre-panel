@@ -164,3 +164,67 @@ def test_psutil_provider_without_cpu_freq(monkeypatch):
     monkeypatch.delattr(psutil, "cpu_freq", raising=False)
     values = PsutilProvider().read()
     assert "cpu.freq" not in values and "cpu.load" in values
+
+
+def _forecast_data():
+    hours = [f"2026-10-08T{h:02d}:00" for h in range(24)] + [
+        f"2026-10-09T{h:02d}:00" for h in range(24)
+    ]
+    return {
+        "utc_offset_seconds": 7200,
+        "hourly": {
+            "time": hours,
+            "temperature_2m": list(range(48)),
+            "weather_code": [61] * 48,
+            "precipitation_probability": [40] * 48,
+            "is_day": [0] * 7 + [1] * 12 + [0] * 29,
+        },
+        "hourly_units": {"temperature_2m": "°C", "precipitation_probability": "%"},
+        "daily": {
+            "time": ["2026-10-08", "2026-10-09"],
+            "temperature_2m_max": [17, 18],
+            "temperature_2m_min": [9, None],
+            "weather_code": [3, 0],
+            "precipitation_probability_max": [20, 0],
+        },
+        "daily_units": {"temperature_2m_max": "°C"},
+    }
+
+
+def test_weather_forecast_follows_the_clock():
+    from datetime import UTC, datetime
+
+    from libre_panel.weather.open_meteo import forecast_readings
+
+    params = build_params(WeatherConfig(enabled=True, latitude=1, longitude=2))
+    assert "temperature_2m" in params["hourly"] and "temperature_2m_max" in params["daily"]
+    data = _forecast_data()
+    at_1430 = datetime(2026, 10, 8, 12, 30, tzinfo=UTC).timestamp()  # 14:30 at the place
+    out = forecast_readings(data, at_1430)
+    assert out["weather.hour.1.time"].value == "15:00"
+    assert out["weather.hour.1.temperature"].value == 15
+    assert out["weather.hour.1.temperature"].unit == "°C"
+    assert out["weather.hour.5.day"].value == 0  # 19:00: night
+    assert out["weather.day.0.name"].value == "Today"
+    assert out["weather.day.1.high"].value == 18 and "weather.day.1.low" not in out
+    # an hour later the same answer says "in 1 hour" about 16:00
+    later = forecast_readings(data, at_1430 + 3600)
+    assert later["weather.hour.1.time"].value == "16:00"
+    # past the data: nothing left to say
+    assert forecast_readings(data, at_1430 + 3 * 86400) == {}
+    assert forecast_readings({}, at_1430) == {}
+
+
+def test_weather_forecast_day_names_in_german():
+    from datetime import UTC, datetime
+
+    from libre_panel import i18n
+    from libre_panel.weather.open_meteo import forecast_readings
+
+    i18n.set_language("de")
+    try:
+        out = forecast_readings(_forecast_data(), datetime(2026, 10, 8, 12, tzinfo=UTC).timestamp())
+    finally:
+        i18n.set_language("en")
+    assert out["weather.day.0.name"].value == "Heute"
+    assert out["weather.day.1.name"].value == "Fr"

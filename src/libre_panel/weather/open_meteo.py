@@ -10,12 +10,15 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 import urllib.parse
 import urllib.request
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from libre_panel import __version__
+from libre_panel import __version__, i18n
 from libre_panel.config import WeatherConfig
+from libre_panel.i18n import t
 from libre_panel.sensors.base import Reading, SensorProvider
 
 log = logging.getLogger(__name__)
@@ -29,7 +32,22 @@ _CURRENT_FIELDS = {
     "relative_humidity_2m": ("humidity", "Humidity"),
     "wind_speed_10m": ("wind_speed", "Wind"),
     "weather_code": ("code", "Weather code"),
+    "is_day": ("is_day", "Daylight"),
 }
+_HOURLY_FIELDS = {
+    "temperature_2m": "temperature",
+    "weather_code": "code",
+    "precipitation_probability": "rain",
+    "is_day": "day",
+}
+_DAILY_FIELDS = {
+    "temperature_2m_max": "high",
+    "temperature_2m_min": "low",
+    "weather_code": "code",
+    "precipitation_probability_max": "rain",
+}
+HOURS = 24  # weather.hour.1 ... weather.hour.24: the next hours
+DAYS = 7  # weather.day.0 (today) ... weather.day.6
 
 # WMO weather interpretation codes as used by Open-Meteo.
 _WMO = {
@@ -106,6 +124,9 @@ def build_params(cfg: WeatherConfig) -> dict[str, Any]:
         "latitude": cfg.latitude,
         "longitude": cfg.longitude,
         "current": ",".join(_CURRENT_FIELDS),
+        "hourly": ",".join(_HOURLY_FIELDS),
+        "daily": ",".join(_DAILY_FIELDS),
+        "forecast_days": DAYS,
         "timezone": "auto",
     }
     if cfg.units == "imperial":
@@ -130,6 +151,73 @@ def parse_current(data: dict[str, Any]) -> dict[str, Reading]:
     return out
 
 
+def forecast_readings(data: dict[str, Any], now: float | None = None) -> dict[str, Reading]:
+    """The forecast as readings relative to ``now``.
+
+    ``weather.hour.<n>.temperature|code|rain|day|time`` for the next hours
+    (1 = the coming full hour) and ``weather.day.<n>.high|low|code|rain|day|name``
+    for today (0) and the next days. Times and day names are local to the
+    weather's place; names follow the language.
+    """
+    out: dict[str, Reading] = {}
+    offset = timedelta(seconds=int(data.get("utc_offset_seconds") or 0))
+    now_utc = datetime.fromtimestamp(time.time() if now is None else now, UTC)
+    local_now = (now_utc + offset).replace(tzinfo=None)
+
+    hourly = data.get("hourly") or {}
+    hourly_units = data.get("hourly_units") or {}
+    times = hourly.get("time") or []
+    if times:
+        try:
+            first = datetime.fromisoformat(times[0])
+        except ValueError:
+            first = None
+        if first is not None:
+            current = int((local_now - first).total_seconds() // 3600)
+            for n in range(1, HOURS + 1):
+                index = current + n
+                if not 0 <= index < len(times):
+                    break
+                moment = first + timedelta(hours=index)
+                for api_key, name in _HOURLY_FIELDS.items():
+                    values = hourly.get(api_key) or []
+                    if index < len(values) and values[index] is not None:
+                        key = f"weather.hour.{n}.{name}"
+                        unit = (
+                            hourly_units.get(api_key, "") if name in ("temperature", "rain") else ""
+                        )
+                        out[key] = Reading(key, values[index], unit, f"+{n} h")
+                key = f"weather.hour.{n}.time"
+                out[key] = Reading(key, moment.strftime("%H:%M"), "", f"+{n} h")
+
+    daily = data.get("daily") or {}
+    daily_units = data.get("daily_units") or {}
+    days = daily.get("time") or []
+    today = local_now.date()
+    for index, day in enumerate(days):
+        try:
+            date = datetime.fromisoformat(day).date()
+        except ValueError:
+            continue
+        n = (date - today).days
+        if not 0 <= n < DAYS:
+            continue
+        for api_key, name in _DAILY_FIELDS.items():
+            values = daily.get(api_key) or []
+            if index < len(values) and values[index] is not None:
+                key = f"weather.day.{n}.{name}"
+                unit = daily_units.get(api_key, "") if name != "code" else ""
+                out[key] = Reading(key, values[index], unit, day)
+        out[f"weather.day.{n}.day"] = Reading(f"weather.day.{n}.day", 1, "", day)
+        label = (
+            t("Today")
+            if n == 0
+            else i18n.format_date(datetime.combine(date, datetime.min.time()), "%a")
+        )
+        out[f"weather.day.{n}.name"] = Reading(f"weather.day.{n}.name", label, "", day)
+    return out
+
+
 class OpenMeteoProvider(SensorProvider):
     """Fetches current weather in the background; ``read`` never blocks."""
 
@@ -141,6 +229,7 @@ class OpenMeteoProvider(SensorProvider):
             raise WeatherError("weather location is not configured")
         self.cfg = cfg
         self._latest: dict[str, Reading] = {}
+        self._data: dict[str, Any] = {}  # the last answer, for the forecast
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._loop, name="weather", daemon=True)
@@ -150,9 +239,11 @@ class OpenMeteoProvider(SensorProvider):
         interval = max(5, self.cfg.update_minutes) * 60
         while not self._stop.is_set():
             try:
-                readings = parse_current(_get_json(FORECAST_URL, build_params(self.cfg)))
+                data = _get_json(FORECAST_URL, build_params(self.cfg))
+                readings = parse_current(data)
                 with self._lock:
                     self._latest = readings
+                    self._data = data
                 wait = interval
             except WeatherError as exc:
                 log.warning("weather update failed: %s", exc)
@@ -161,7 +252,11 @@ class OpenMeteoProvider(SensorProvider):
 
     def read(self) -> dict[str, Reading]:
         with self._lock:
-            return dict(self._latest)
+            out = dict(self._latest)
+            data = self._data
+        if data:  # relative to now, so "in 1 hour" stays true between updates
+            out.update(forecast_readings(data))
+        return out
 
     def close(self) -> None:
         self._stop.set()

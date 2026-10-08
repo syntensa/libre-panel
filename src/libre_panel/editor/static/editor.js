@@ -2188,6 +2188,13 @@ function buildModuleProps(form, widget) {
       ),
     );
   }
+  if (widget.module === "weather") {
+    const forecasts = { auto: t("automatic"), days: t("days"), hours: t("hours"), both: t("days and hours"), off: t("off") };
+    form.append(block(t("Forecast"), chips("forecast", Object.keys(forecasts), (f) => forecasts[f]), t("shown when the module is large enough: wider or taller shows more")));
+    if (widget.forecast === "hours" || widget.forecast === "both" || widget.forecast === "auto") {
+      form.append(field(t("Hours between columns"), numberInput(widget.step, (v) => change("step")(Math.max(1, Math.min(6, Math.round(v || 3)))), { min: 1, max: 6 })));
+    }
+  }
   if (widget.module === "text") form.append(field(t("Text"), controlFor("text", "text", widget.text, change("text"))));
   const title = el("input", { type: "text", value: widget.title || "", placeholder: t("automatic"), oninput: (e) => change("title")(e.target.value) });
   if (widget.module !== "text" && widget.module !== "clock" && widget.module !== "date") form.append(field(t("Title"), title));

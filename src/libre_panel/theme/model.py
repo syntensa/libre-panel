@@ -167,9 +167,22 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
     },
     "icon": {
         "icon": ("icon", "cpu"),  # "weather" follows the current weather code
+        # icon "weather": the code it follows, e.g. weather.day.1.code (empty = now)
+        "sensor": ("sensor", ""),
         "size": ("int", 32),
         "color": ("color", "#ffffff"),
         "stroke": ("number", 2.0),
+    },
+    # The month as a grid of days, today marked.
+    "calendar": {
+        "w": ("int", 280),
+        "h": ("int", 200),
+        "font": ("font", ""),
+        "font_size": ("int", 16),
+        "color": ("color", "#ffffff"),  # the days
+        "color2": ("color", "#22d3ee"),  # today's mark
+        "muted": ("color", "#8a97a8"),  # the weekday names
+        "first_day": ("enum:monday|sunday", "monday"),
     },
     # A building block on the theme's grid; laid out for its size when drawn
     # (libre_panel.theme.modules). x and y are not used: the cells place it.
@@ -187,6 +200,10 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "color": ("color?", None),  # empty = the look's colour for the source
         "fallback": ("enum:" + "|".join(MODULE_FALLBACKS), "auto"),  # without readings
         "card": ("enum:auto|on|off", "auto"),
+        # weather: a forecast when there is room; "auto" = days, and hours too
+        # on a big module
+        "forecast": ("enum:auto|days|hours|both|off", "auto"),
+        "step": ("int", 3),  # hourly forecast: hours between two columns
     },
 }
 

@@ -296,3 +296,93 @@ def test_modules_move_onto_another_panel_without_overlapping(model):
                 for r in range(w["row"], w["row"] + w["rows"])}  # fmt: skip
         assert not mine & cells
         cells |= mine
+
+
+def parts(t, snap=None):
+    renderer = Renderer(t, preview=True)
+    return {pid.split("/", 1)[1] for pid in shown(renderer, snap or snapshot()) if "/" in pid}
+
+
+def test_weather_shows_a_forecast_when_there_is_room():
+    small = parts(theme({"module": "weather", "cols": 2}))
+    assert "temp" in small and not any(p.startswith("f0") for p in small)
+    days = parts(theme({"module": "weather", "cols": 4}))
+    assert {"f0-label", "f0-icon", "f0-high", "f0-low"} <= days
+    renderer = Renderer(theme({"module": "weather", "cols": 4}), preview=True)
+    icon = next(w for w in renderer.widgets if w["id"] == "m0/f1-icon")
+    assert icon["sensor"] == "weather.day.1.code"
+    hours = Renderer(
+        theme({"module": "weather", "cols": 4, "forecast": "hours", "step": 2}), preview=True
+    )
+    labels = [w["sensor"] for w in hours.widgets if w["id"].endswith("-label") and "/f" in w["id"]]
+    assert labels[:3] == ["weather.hour.2.time", "weather.hour.4.time", "weather.hour.6.time"]
+    off = parts(theme({"module": "weather", "cols": 4, "forecast": "off"}))
+    assert not any(p.startswith("f0") for p in off)
+
+
+def test_a_big_weather_module_shows_days_and_hours():
+    both = parts(theme({"module": "weather", "cols": 4, "rows": 2}))
+    assert "f0-high" in both and "h0-temp" in both
+    days_only = parts(theme({"module": "weather", "cols": 4, "rows": 2, "forecast": "days"}))
+    assert "f0-high" in days_only and "h0-temp" not in days_only
+
+
+def test_a_tall_weather_module_lists_the_forecast():
+    tall = Renderer(theme({"module": "weather", "rows": 2}), preview=True)
+    rows = [w for w in tall.widgets if w["id"].endswith("-temp") and "/f" in w["id"]]
+    assert len(rows) >= 3 and rows[0]["align"] == "right"
+
+
+def test_forecast_steps_aside_without_its_data():
+    snap = snapshot()
+    for key in [k for k in snap.readings if k.startswith("weather.day.")]:
+        del snap.readings[key]
+    drawn = parts(theme({"module": "weather", "cols": 4}), snap)
+    assert "temp" in drawn and not any(p.startswith("f0") for p in drawn)
+
+
+def test_large_calendars_show_the_month():
+    assert "calendar" not in parts(theme({"module": "date"}))
+    assert "calendar" in parts(theme({"module": "date", "cols": 2, "rows": 2}))
+    assert "calendar" in parts(theme({"module": "date", "cols": 4}))
+    # a big weather module without weather: the calendar with its month
+    big = theme({"module": "weather", "cols": 2, "rows": 2})
+    assert "calendar" in parts(big, snapshot(weather=False))
+
+
+@pytest.mark.parametrize("first_day", ["monday", "sunday"])
+def test_month_calendar_widget(first_day):
+    t = parse_theme(
+        {
+            "format": "libre-panel-theme/1",
+            "display": {"width": 300, "height": 220},
+            "widgets": [{"type": "calendar", "id": "c", "x": 5, "y": 5, "w": 280, "h": 200,
+                         "color2": "#ff0000", "first_day": first_day}],
+        }
+    )  # fmt: skip
+    frame, boxes = Renderer(t, preview=True).render(snapshot())
+    assert boxes["c"] == [5, 5, 280, 200]
+    data = frame.tobytes()
+    red = sum(
+        1 for i in range(0, len(data), 3) if data[i] > 200 and data[i + 1] < 60 and data[i + 2] < 60
+    )
+    assert red > 100  # today is marked
+
+
+def test_weather_icons_follow_their_reading_and_the_night():
+    from libre_panel.icons import weather_icon_name
+
+    snap = snapshot()
+    snap.readings["weather.hour.3.code"] = Reading("weather.hour.3.code", 0, "", "")
+    snap.readings["weather.hour.3.day"] = Reading("weather.hour.3.day", 0, "", "")
+    t = parse_theme(
+        {
+            "format": "libre-panel-theme/1",
+            "display": {"width": 100, "height": 100},
+            "widgets": [{"type": "icon", "id": "i", "icon": "weather", "size": 40,
+                         "sensor": "weather.hour.3.code"}],
+        }
+    )  # fmt: skip
+    renderer = Renderer(t, preview=True)
+    renderer.render(snap)
+    assert renderer._cache["i"][0][0] == weather_icon_name(0, night=True) == "moon"

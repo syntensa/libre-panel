@@ -696,9 +696,31 @@ def build_clock(b: _Build, _src: Source) -> None:
 
 
 def build_date(b: _Build, _src: Source) -> None:
-    """A calendar sheet: the day, the weekday, the month."""
+    """A calendar sheet: the day, the weekday, the month; the month's days when large."""
     b.card()
-    _sheet(b, b.ix, b.iy, b.iw, b.ih)
+    _date_layout(b)
+
+
+def _date_layout(b: _Build) -> None:
+    a = b.aspect
+    if (b.large and a >= 1.6) or a >= 3.0:  # the sheet beside the month
+        width = min(b.iw * 0.4, b.ih * 1.3)
+        _sheet(b, b.ix, b.iy, width, b.ih)
+        _month(b, b.ix + width + b.pad, b.iy, b.iw - width - b.pad, b.ih)
+    elif b.large or (a <= 0.72 and b.ih >= b.iw * 1.6):  # the sheet above the month
+        top = b.ih * (0.32 if b.large else 0.4)
+        _sheet(b, b.ix, b.iy, b.iw, top)
+        _month(b, b.ix, b.iy + top + b.pad * 0.5, b.iw, b.ih - top - b.pad * 0.5)
+    else:
+        _sheet(b, b.ix, b.iy, b.iw, b.ih)
+
+
+def _month(b: _Build, x: float, y: float, w: float, h: float) -> None:
+    b.add(
+        "calendar", "calendar", x=round(x), y=round(y), w=round(w), h=round(h),
+        font=b.style["text_font"], font_size=round(min(h / 7 * 0.6, w / 7 * 0.45)),
+        color=b.c("text2"), color2=b.tint("accent"), muted=b.c("text3"),
+    )  # fmt: skip
 
 
 def _sheet(b: _Build, x: float, y: float, w: float, h: float) -> None:
@@ -728,66 +750,164 @@ def _sheet(b: _Build, x: float, y: float, w: float, h: float) -> None:
 
 
 def build_weather(b: _Build, _src: Source) -> None:
-    """The weather of the configured place; a calendar sheet while there is none."""
+    """The weather of the configured place, with a forecast when there is room.
+
+    A calendar sheet stands in while there is no weather. The forecast shows
+    days or hours (``forecast``): as columns beside or under the weather now,
+    as rows in a tall module.
+    """
     b.card()
     start = len(b.out)
-    _sheet(b, b.ix, b.iy, b.iw, b.ih)
+    _date_layout(b)
     for widget in b.out[start:]:
         widget["needs"] = "!weather.temperature"
     start = len(b.out)
+    chosen = b.module["forecast"]
+    mode = {"auto": "days", "both": "days"}.get(chosen, chosen)
     a = b.aspect
+    if mode != "off" and a >= 3.0:  # long: now | forecast
+        width = min(b.iw * 0.4, b.ih * 2.0)
+        _weather_now(b, b.ix, b.iy, width, b.ih, details=False)
+        _forecast(b, b.ix + width + b.pad, b.iy, b.iw - width - b.pad, b.ih, mode)
+    elif mode != "off" and b.large and a >= 1.6:  # big and wide: now with details | forecast
+        width = b.iw * 0.4
+        _weather_now(b, b.ix, b.iy, width, b.ih, details=True)
+        x, w = b.ix + width + b.pad, b.iw - width - b.pad
+        both = chosen == "both" or (chosen == "auto" and b.ih >= b.ts * 14)
+        if both:  # days above, hours below
+            half = (b.ih - b.pad) / 2
+            _forecast(b, x, b.iy, w, half, "days")
+            _forecast(b, x, b.iy + half + b.pad, w, half, "hours", prefix="h")
+        else:
+            _forecast(b, x, b.iy, w, b.ih, mode)
+    elif mode != "off" and b.large:  # big: now above the forecast
+        top = b.ih * 0.5
+        _weather_now(b, b.ix, b.iy, b.iw, top, details=False)
+        _forecast(b, b.ix, b.iy + top + b.pad * 0.5, b.iw, b.ih - top - b.pad * 0.5, mode)
+    elif mode != "off" and a <= 0.72 and b.ih >= b.iw * 1.8:  # tall: the forecast as rows
+        top = b.ih * 0.42
+        _weather_now(b, b.ix, b.iy, b.iw, top, details=False)
+        _forecast(
+            b, b.ix, b.iy + top + b.pad * 0.5, b.iw, b.ih - top - b.pad * 0.5, mode, rows=True
+        )
+    else:
+        _weather_now(b, b.ix, b.iy, b.iw, b.ih, details=b.large or a >= 2.3)
+    for widget in b.out[start:]:
+        own = widget.get("needs", "")
+        widget["needs"] = f"weather.temperature,{own}" if own else "weather.temperature"
+
+
+def _weather_now(b: _Build, x: float, y: float, w: float, h: float, details: bool) -> None:
+    """Symbol, temperature and sky in a box; feels-like, humidity and wind if asked."""
     icon_color = b.tint("text")
     desc = b.ts * 1.25
+    a = w / max(1, h)
     if a <= 0.72:  # tall: icon, temperature, sky, then the details as rows
-        size = min(b.iw * 0.42, b.ih * 0.18)
-        b.icon("icon", "weather", b.ix, b.iy, size, icon_color)
-        temp_top = b.iy + size * 1.25
+        size = min(w * 0.42, h * 0.18)
+        b.icon("icon", "weather", x, y, size, icon_color)
+        temp_top = y + size * 1.25
         b.add("weather", "temp", field="temperature", format="{value:.0f}°",
-              **_temp_fields(b, b.ix, temp_top, size * 1.1, b.iw))  # fmt: skip
+              **_temp_fields(b, x, temp_top, size * 1.1, w))  # fmt: skip
         desc_top = temp_top + CAP * size * 1.1 + b.ts * 1.1
-        _weather_desc(b, desc_top, desc)
-        room = b.iy + b.ih - (desc_top + CAP * desc + b.ts * 1.4)
-        rows = min(3, int(room // (b.ts * 2.4)))
+        _weather_desc(b, x, desc_top, w, desc)
+        room = y + h - (desc_top + CAP * desc + b.ts * 1.4)
+        rows = min(3, int(room // (b.ts * 2.4))) if details or room > b.ts * 3 else 0
         for i, (field, icon, fmt) in enumerate(_WEATHER_DETAILS[:rows]):
-            y = b.iy + b.ih - (rows - i) * b.ts * 2.4 + b.ts * 0.6
-            b.icon(f"{field}-icon", icon, b.ix, y - b.ts * 0.25, b.ts * 1.3, b.c("text3"))
+            row_y = y + h - (rows - i) * b.ts * 2.4 + b.ts * 0.6
+            b.icon(f"{field}-icon", icon, x, row_y - b.ts * 0.25, b.ts * 1.3, b.c("text3"))
             b.add("weather", field, field=field, format=fmt,
-                  **b._text_fields(b.ts * 1.15, y, "text_font", x=round(b.ix + b.ts * 1.8),
-                                   color=b.c("text2"), max_width=round(b.iw - b.ts * 1.8),
+                  **b._text_fields(b.ts * 1.15, row_y, "text_font", x=round(x + b.ts * 1.8),
+                                   color=b.c("text2"), max_width=round(w - b.ts * 1.8),
                                    tabular=True))  # fmt: skip
+        return
+    details = details and h > b.ts * 7
+    main_h = h * (0.62 if details else 1.0)
+    if a >= 1.45:
+        size = min(main_h * 0.62, w * 0.22)
+        b.icon("icon", "weather", x, y + (main_h * 0.7 - size) / 2, size, icon_color)
+        b.add("weather", "temp", field="temperature", format="{value:.0f}°",
+              **_temp_fields(b, x + size * 1.2, y + (main_h * 0.7 - CAP * size) / 2, size,
+                             w - size * 1.2))  # fmt: skip
+        desc_top = y + main_h * 0.7 + b.ts * 0.2
     else:
-        details = (b.large or a >= 2.3) and b.ih > b.ts * 7
-        main_h = b.ih * (0.62 if details else 1.0)
-        if a >= 1.45 or b.large:
-            size = min(main_h * 0.62, b.iw * 0.22)
-            b.icon("icon", "weather", b.ix, b.iy + (main_h * 0.7 - size) / 2, size, icon_color)
-            b.add("weather", "temp", field="temperature", format="{value:.0f}°",
-                  **_temp_fields(b, b.ix + size * 1.2, b.iy + (main_h * 0.7 - CAP * size) / 2,
-                                 size, b.iw - size * 1.2))  # fmt: skip
-            desc_top = b.iy + main_h * 0.7 + b.ts * 0.2
+        size = min(h * 0.34, w * 0.36)
+        b.icon("icon", "weather", x, y, size, icon_color)
+        b.add("weather", "temp", field="temperature", format="{value:.0f}°",
+              **_temp_fields(b, x + w, y + size * 0.12, size, w * 0.6, "right"))  # fmt: skip
+        desc_top = y + size + b.ts * 1.2
+    _weather_desc(b, x, desc_top, w, desc)
+    if details:
+        row_y = y + h - CAP * b.ts * 1.1
+        b.add("rect", "rule", x=round(x), y=round(row_y - b.ts * 1.6), w=round(w), h=1,
+              color=b.c("line"))  # fmt: skip
+        count = 3 if w / 3 >= b.ts * 6.5 else 2
+        step = w / count
+        for i, (field, icon, fmt) in enumerate(_WEATHER_DETAILS[:count]):
+            col_x = x + i * step
+            b.icon(f"{field}-icon", icon, col_x, row_y - b.ts * 0.25, b.ts * 1.3, b.c("text3"))
+            b.add("weather", field, field=field, format=fmt,
+                  **b._text_fields(b.ts * 1.1, row_y, "text_font", x=round(col_x + b.ts * 1.7),
+                                   color=b.c("text2"), max_width=round(step - b.ts * 2),
+                                   tabular=True))  # fmt: skip
+
+
+def _forecast(b: _Build, x: float, y: float, w: float, h: float, mode: str,
+              rows: bool = False, prefix: str = "f") -> None:  # fmt: skip
+    """Days (today first) or hours (every ``step`` hours) as columns, or as rows."""
+    step = max(1, min(6, b.module["step"]))
+    limit = 7 if mode == "days" else 24 // step
+    if rows:
+        count = int(_clamp(h // (b.ts * 2.6), 1, limit))
+    else:
+        count = int(_clamp(w // max(b.ts * 5.0, h * 0.7), 1, limit))  # readable columns
+    slots = [i for i in range(count)] if mode == "days" else [step * (i + 1) for i in range(count)]
+    base = "weather.day" if mode == "days" else "weather.hour"
+    label = "name" if mode == "days" else "time"
+    for i, n in enumerate(slots):
+        key = f"{base}.{n}"
+        tag = f"{prefix}{i}"
+        first = len(b.out)
+        if rows:
+            row = h / count
+            mid = y + i * row + row / 2
+            size = min(row * 0.42, b.ts * 1.4)
+            b.value(f"{tag}-label", f"{key}.{label}", "{value}", x, mid - CAP * b.ts / 2, b.ts,
+                    color=b.c("text3"), width=w * 0.34, font="text_font", tabular=False,
+                    fallback="")  # fmt: skip
+            icon = min(row * 0.7, b.ts * 2.2)
+            b.icon(f"{tag}-icon", "weather", x + w * 0.36, mid - icon / 2, icon, b.tint("text"))
+            b.out[-1]["sensor"] = f"{key}.code"
+            first_temp = "high" if mode == "days" else "temperature"
+            b.value(f"{tag}-temp", f"{key}.{first_temp}", "{value:.0f}°", x + w,
+                    mid - CAP * size / 2, size, align="right", width=w * 0.3)  # fmt: skip
         else:
-            size = min(b.ih * 0.34, b.iw * 0.36)
-            b.icon("icon", "weather", b.ix, b.iy, size, icon_color)
-            b.add("weather", "temp", field="temperature", format="{value:.0f}°",
-                  **_temp_fields(b, b.ix + b.iw, b.iy + size * 0.12, size, b.iw * 0.6,
-                                 "right"))  # fmt: skip
-            desc_top = b.iy + size + b.ts * 1.2
-        _weather_desc(b, desc_top, desc)
-        if details:
-            y = b.iy + b.ih - CAP * b.ts * 1.1
-            b.add("rect", "rule", x=round(b.ix), y=round(y - b.ts * 1.6), w=round(b.iw), h=1,
-                  color=b.c("line"))  # fmt: skip
-            count = 3 if b.iw / 3 >= b.ts * 6.5 else 2
-            step = b.iw / count
-            for i, (field, icon, fmt) in enumerate(_WEATHER_DETAILS[:count]):
-                x = b.ix + i * step
-                b.icon(f"{field}-icon", icon, x, y - b.ts * 0.25, b.ts * 1.3, b.c("text3"))
-                b.add("weather", field, field=field, format=fmt,
-                      **b._text_fields(b.ts * 1.1, y, "text_font", x=round(x + b.ts * 1.7),
-                                       color=b.c("text2"), max_width=round(step - b.ts * 2),
-                                       tabular=True))  # fmt: skip
-    for widget in b.out[start:]:
-        widget["needs"] = "weather.temperature"
+            col = w / count
+            cx = x + col * i + col / 2
+            label_size = min(b.ts, col * 0.2)
+            b.value(f"{tag}-label", f"{key}.{label}", "{value}", cx, y + h * 0.04, label_size,
+                    color=b.c("text3"), align="center", width=col * 0.92, font="text_font",
+                    tabular=False, fallback="")  # fmt: skip
+            icon = min(col * 0.52, h * 0.3)
+            icon_y = y + h * 0.04 + CAP * label_size + h * 0.08
+            b.icon(f"{tag}-icon", "weather", cx - icon / 2, icon_y, icon, b.tint("text"))
+            b.out[-1]["sensor"] = f"{key}.code"
+            size = min(col * 0.26, h * 0.16)
+            temp_top = icon_y + icon + h * 0.07
+            if mode == "days":
+                b.value(f"{tag}-high", f"{key}.high", "{value:.0f}°", cx - col * 0.04, temp_top,
+                        size, align="right", width=col * 0.46)  # fmt: skip
+                b.value(f"{tag}-low", f"{key}.low", "{value:.0f}°", cx + col * 0.04, temp_top, size,
+                        color=b.c("text3"), width=col * 0.46)  # fmt: skip
+            else:
+                b.value(f"{tag}-temp", f"{key}.temperature", "{value:.0f}°", cx, temp_top, size,
+                        align="center", width=col * 0.9)  # fmt: skip
+            rain_top = temp_top + CAP * size + h * 0.08
+            if rain_top + CAP * label_size <= y + h:  # room for the chance of rain
+                b.value(f"{tag}-rain", f"{key}.rain", "{value:.0f}%", cx, rain_top, label_size,
+                        color=b.tint("net"), align="center", width=col * 0.9, font="text_font",
+                        hide_if_missing=True)  # fmt: skip
+        for widget in b.out[first:]:
+            widget["needs"] = f"{key}.code"
 
 
 _WEATHER_DETAILS = (
@@ -797,10 +917,10 @@ _WEATHER_DETAILS = (
 )
 
 
-def _weather_desc(b: _Build, top: float, size: float) -> None:
+def _weather_desc(b: _Build, x: float, top: float, w: float, size: float) -> None:
     b.add("weather", "desc", field="description", format="{value}", fallback="",
-          **b._text_fields(size, top, "text_font", x=round(b.ix), color=b.c("text2"),
-                           max_width=round(b.iw), fit="ellipsis", tabular=False))  # fmt: skip
+          **b._text_fields(size, top, "text_font", x=round(x), color=b.c("text2"),
+                           max_width=round(w), fit="ellipsis", tabular=False))  # fmt: skip
 
 
 def _temp_fields(b: _Build, x: float, cap_top: float, size: float, width: float,

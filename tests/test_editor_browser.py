@@ -372,3 +372,22 @@ def test_module_settings_and_detach(page):
     assert js(page, "state.selection.size") > 2
     page.keyboard.press("Control+z")
     assert js(page, f"widgetById('{ring}').source") == "disk"
+
+
+def test_weather_forecast_setting(page):
+    page.select_option("#model-select", "turing-9.2-usb")
+    page.wait_for_function("state.size[0] === 1920")
+    page.click("#btn-new")
+    page.wait_for_selector("#new-dialog[open]")
+    page.click("#new-create")
+    page.wait_for_function("state.theme.widgets.filter(isModule).length === 5")
+    weather = js(page, "state.theme.widgets.find(w => w.module === 'weather').id")
+    js(page, f"setSelection(['{weather}'])")
+    page.locator("#props .chip", has_text="hours").first.click()
+    assert js(page, f"widgetById('{weather}').forecast") == "hours"
+    hours = page.locator("#props label.field", has_text="Hours between columns").locator("input")
+    hours.fill("2")
+    hours.press("Tab")
+    assert js(page, f"widgetById('{weather}').step") == 2
+    page.locator("#props .chip").filter(has_text="off").first.click()  # the forecast comes first
+    assert js(page, f"widgetById('{weather}').forecast") == "off"

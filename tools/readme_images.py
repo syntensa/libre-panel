@@ -292,35 +292,30 @@ def template(model: str, which: str, orientation: str = "landscape") -> list[dic
     return chosen["modules"]
 
 
-def module_sizes() -> Image.Image:
-    """One CPU ring module at five sizes: the larger, the more it shows."""
-    spans = [
-        ((1, 1), "1 × 1", "the load"),
-        ((2, 1), "2 × 1", "+ name, temperature, power"),
-        ((3, 1), "3 × 1", "+ history"),
-        ((2, 2), "2 × 2", "big: details over history"),
-        ((4, 2), "4 × 2", "everything, large"),
-    ]
-    crops = []
-    for (cols, rows), size, note in spans:
-        frame, boxes = module_frame(
-            "turing-9.2-usb",
-            "arctic",
-            [{"module": "ring", "source": "cpu", "cols": cols, "rows": rows}],
-        )
-        x, y, w, h = boxes["m0"]
-        crops.append((frame.crop((x - 12, y - 12, x + w + 12, y + h + 12)), size, note))
+def sizes_picture(kind: str, options: dict, rows: list) -> Image.Image:
+    """One module at several sizes, in rows: [[((cols, rows), size, note), ...], ...]."""
+    shots = []
+    for row in rows:
+        line = []
+        for (cols, rows_), size, note in row:
+            module = {"module": kind, "cols": cols, "rows": rows_, **options}
+            frame, boxes = module_frame("turing-9.2-usb", "arctic", [module])
+            x, y, w, h = boxes["m0"]
+            line.append((frame.crop((x - 12, y - 12, x + w + 12, y + h + 12)), size, note))
+        shots.append(line)
     label, sub = font("Barlow-SemiBold", 30), font("Barlow-Regular", 24)
     margin, gap, head = 44, 36, 70
-    rows = [crops[:3], crops[3:]]
-    width = max(sum(c.width for c, *_ in row) + gap * (len(row) - 1) for row in rows) + 2 * margin
-    height = margin + sum(max(c.height for c, *_ in row) + head for row in rows) + gap + margin // 2
+    width = (
+        max(sum(c.width for c, *_ in line) + gap * (len(line) - 1) for line in shots) + 2 * margin
+    )
+    height = margin + sum(max(c.height for c, *_ in line) + head for line in shots)
+    height += gap * (len(shots) - 1) + margin // 2
     img = background(width, height, glow=(0.5, 0.0))
     draw = ImageDraw.Draw(img)
     y = margin
-    for row in rows:
+    for line in shots:
         x = margin
-        for crop, size, note in row:
+        for crop, size, note in line:
             draw.text((x + 12, y), size, font=label, fill=TX_1)
             draw.text(
                 (x + 12 + draw.textlength(size + "  ", font=label), y + 5),
@@ -330,8 +325,35 @@ def module_sizes() -> Image.Image:
             )
             img.paste(crop, (x, y + head - 12))
             x += crop.width + gap
-        y += max(c.height for c, *_ in row) + head + gap
+        y += max(c.height for c, *_ in line) + head + gap
     return img
+
+
+def module_sizes() -> Image.Image:
+    """One CPU ring module at five sizes: the larger, the more it shows."""
+    return sizes_picture(
+        "ring",
+        {"source": "cpu"},
+        [
+            [((1, 1), "1 × 1", "the load"), ((2, 1), "2 × 1", "+ name, temperature, power"),
+             ((3, 1), "3 × 1", "+ history")],
+            [((2, 2), "2 × 2", "big: details over history"),
+             ((4, 2), "4 × 2", "everything, large")],
+        ],
+    )  # fmt: skip
+
+
+def weather_sizes() -> Image.Image:
+    """The weather module at five sizes: the forecast comes with room."""
+    return sizes_picture(
+        "weather",
+        {},
+        [
+            [((1, 1), "1 × 1", "now"), ((3, 1), "3 × 1", "+ the days ahead")],
+            [((1, 2), "1 × 2", "+ days as rows"), ((2, 2), "2 × 2", "now over the days"),
+             ((4, 2), "4 × 2", "days and hours")],
+        ],
+    )  # fmt: skip
 
 
 def looks() -> Image.Image:
@@ -504,6 +526,7 @@ def main() -> None:
         ]
     ).save(out / "studio-adapts.png", optimize=True)
     module_sizes().save(out / "module-sizes.png", optimize=True)
+    weather_sizes().save(out / "weather-sizes.png", optimize=True)
     looks().save(out / "looks.png", optimize=True)
     module_layouts().save(out / "module-layouts.png", optimize=True)
     try:

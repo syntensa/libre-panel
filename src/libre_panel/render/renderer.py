@@ -11,6 +11,7 @@ where only a few values moved costs little.
 
 from __future__ import annotations
 
+import calendar
 import json
 import logging
 import math
@@ -20,6 +21,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Any
 
@@ -813,11 +815,11 @@ class Renderer:
         if widget["type"] == "weather":
             key = f"weather.{widget['field']}"
         elif widget["type"] == "icon" and widget["icon"] == "weather":
-            key = "weather.code"
+            key = widget.get("sensor") or "weather.code"
         elif widget["type"] == "graph":
             return len(snapshot.history.get(widget["sensor"], [])) < 2
         else:
-            key = widget.get("sensor")
+            key = widget.get("sensor") or None  # an icon has an empty one
         return key is not None and snapshot.value(key) is None
 
     # -- text --------------------------------------------------------------
@@ -950,8 +952,16 @@ class Renderer:
     def _draw_icon(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         name = widget["icon"]
         if name == "weather":
-            night = not 6 <= snapshot.now.hour < 20
-            name = weather_icon_name(snapshot.value("weather.code"), night)
+            key = widget.get("sensor") or "weather.code"
+            # day or night: the forecast says so for its hours (weather.hour.3.day),
+            # Open-Meteo for now (weather.is_day); else the clock decides
+            daylight = snapshot.value(
+                key[: -len(".code")] + ".day" if key.endswith(".code") else ""
+            )
+            if daylight is None and key == "weather.code":
+                daylight = snapshot.value("weather.is_day")
+            night = not 6 <= snapshot.now.hour < 20 if daylight is None else not daylight
+            name = weather_icon_name(snapshot.value(key), night)
         color = self.color(widget["color"])
 
         def build() -> Piece:
@@ -959,6 +969,57 @@ class Renderer:
             return Piece(icon, widget["x"], widget["y"])
 
         return self._cached(widget, (name, color), build)
+
+    def _draw_calendar(
+        self, widget: dict[str, Any], snapshot: Snapshot, now: float
+    ) -> Piece | None:
+        today = snapshot.now.date()
+        colors = (widget["color"], widget["color2"], widget["muted"])
+        language = i18n.language()
+        return self._cached(
+            widget, (today, colors, language), lambda: self._calendar_piece(widget, today)
+        )
+
+    def _calendar_piece(self, widget: dict[str, Any], today: Any) -> Piece:
+        w, h = max(14, widget["w"]), max(14, widget["h"])
+        first = today.replace(day=1)
+        start = 0 if widget["first_day"] == "monday" else 6  # weekday() of the first column
+        lead = (first.weekday() - start) % 7
+        days = calendar.monthrange(today.year, today.month)[1]
+        weeks = (lead + days + 6) // 7
+        cell_w, cell_h = w / 7, h / (weeks + 1)
+        size = max(6, min(widget["font_size"], int(cell_h * 0.62), int(cell_w * 0.5)))
+        font = self.font(widget.get("font", ""), size)
+        layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(layer)
+        fill, mark, muted = (
+            self.color(c) for c in (widget["color"], widget["color2"], widget["muted"])
+        )
+        monday = today - timedelta(days=today.weekday())
+        for column in range(7):
+            day = monday + timedelta(days=(start + column) % 7)
+            name = i18n.format_date(datetime.combine(day, datetime.min.time()), "%a")[:2]
+            draw.text(
+                ((column + 0.5) * cell_w, cell_h / 2), name, font=font, fill=muted, anchor="mm"
+            )
+        r, g, b, _a = mark
+        light = 0.299 * r + 0.587 * g + 0.114 * b > 150
+        for number in range(1, days + 1):
+            slot = lead + number - 1
+            cx = (slot % 7 + 0.5) * cell_w
+            cy = (slot // 7 + 1.5) * cell_h
+            color = fill
+            if number == today.day:  # a smooth dot: drawn larger, then reduced
+                radius = min(cell_w, cell_h) * 0.46
+                side = max(2, round(radius * 2))
+                dot = Image.new("L", (side * 4, side * 4), 0)
+                ImageDraw.Draw(dot).ellipse([0, 0, side * 4 - 1, side * 4 - 1], fill=255)
+                dot = dot.resize((side, side), Image.Resampling.LANCZOS)
+                corner = (round(cx - side / 2), round(cy - side / 2))
+                layer.paste(Image.new("RGBA", (side, side), mark), corner, dot)
+                color = (12, 16, 22, 255) if light else (255, 255, 255, 255)
+            draw.text((cx, cy), str(number), font=font, fill=color, anchor="mm")
+        return Piece(layer, widget["x"], widget["y"])
 
     # -- shapes ------------------------------------------------------------
 

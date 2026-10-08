@@ -3,7 +3,8 @@
 ## 0.3.0 — 2026-10-08
 
 Modules: building blocks that snap onto a grid and show more the larger they
-are, six looks, and an editor where a theme takes two minutes.
+are (a big weather module shows the days and hours ahead), six looks, and an
+editor where a theme takes two minutes.
 
 **Modules**
 - Building blocks that fill cells of a grid and lay themselves out for their
@@ -19,6 +20,18 @@ are, six looks, and an editor where a theme takes two minutes.
   of a GPU, a calendar sheet instead of the weather
 - Text can be held to a width (`max_width`): a smaller font or "…"
 - `needs` takes several conditions
+- The weather module shows a forecast when there is room: days or hours
+  (or both on a big one), as columns beside or under the weather now, or as
+  rows in a tall module. The editor sets it: automatic, days, hours, both,
+  off, and the hours between two columns
+- The calendar module shows the month's days when it is large; a big weather
+  module without weather does the same
+- The weather now comes with its forecast: `weather.hour.<n>.*` for the next
+  24 hours and `weather.day.<n>.*` for seven days, counted from the moment
+  they are read, with weekday names in the language
+- Widget type `calendar`: the month as a grid, today marked
+- A weather icon can follow any code (`sensor`, e.g. tomorrow's), at night
+  with the moon where the forecast says so
 
 **Editor**
 - A module library with live pictures in the theme's look: drag a module

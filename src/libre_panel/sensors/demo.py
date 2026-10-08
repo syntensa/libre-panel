@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from libre_panel.sensors.base import Reading, SensorProvider, Snapshot
@@ -69,7 +69,47 @@ class DemoProvider(SensorProvider):
         if self.include_weather:
             for key, (label, unit, value) in _WEATHER.items():
                 out[key] = Reading(key, value, unit, label)
+            out.update(demo_forecast(t))
         return out
+
+
+_DAILY = {  # high, low, code, rain: a week of autumn
+    "temperature_2m_max": [17, 15, 13, 16, 18, 19, 14],
+    "temperature_2m_min": [9, 8, 6, 7, 10, 11, 8],
+    "weather_code": [2, 61, 63, 3, 1, 0, 80],
+    "precipitation_probability_max": [10, 70, 80, 30, 10, 0, 60],
+}
+_HOURLY_CODES = [0, 0, 1, 1, 2, 2, 3, 3, 61, 61, 3, 2]
+
+
+def demo_forecast(t: float) -> dict[str, Reading]:
+    """A made-up forecast around ``t``, in the shape Open-Meteo sends."""
+    from libre_panel.weather.open_meteo import forecast_readings
+
+    local = datetime.fromtimestamp(t).astimezone()
+    offset = local.utcoffset()
+    midnight = local.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    hours = range(48)
+    data = {
+        "utc_offset_seconds": int(offset.total_seconds()) if offset else 0,
+        "hourly": {
+            "time": [(midnight + timedelta(hours=h)).strftime("%Y-%m-%dT%H:%M") for h in hours],
+            "temperature_2m": [
+                round(11 + 6 * math.sin(2 * math.pi * (h % 24 - 9) / 24), 1) for h in hours
+            ],
+            "weather_code": [_HOURLY_CODES[h % len(_HOURLY_CODES)] for h in hours],
+            "precipitation_probability": [(h * 7) % 60 for h in hours],
+            "is_day": [1 if 7 <= h % 24 < 19 else 0 for h in hours],
+        },
+        "hourly_units": {"temperature_2m": "°C", "precipitation_probability": "%"},
+        "daily": {
+            "time": [(midnight + timedelta(days=d)).strftime("%Y-%m-%d") for d in range(7)],
+            **_DAILY,
+        },
+        "daily_units": {"temperature_2m_max": "°C", "temperature_2m_min": "°C",
+                        "precipitation_probability_max": "%"},
+    }  # fmt: skip
+    return forecast_readings(data, t)
 
 
 def demo_snapshot(fixed_time: float | None = None, samples: int = 600) -> Snapshot:
