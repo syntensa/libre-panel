@@ -34,7 +34,7 @@ No account, no cloud, no vendor app.
 - **Fits your machine without editing.** The names your own CPU and GPU
   report, the weather for the place in *your* config, dates in English or
   German, and sections that step aside where a sensor is missing.
-- **24 modules.** Hardware down to every core, drive, fan and game frame,
+- **25 modules.** Hardware down to every core, drive, fan and game frame,
   clocks for any time zone, sunrise and the moon, what is playing, your
   calendar, Home Assistant and MQTT values, a slideshow.
 - **Snap it together.** Drag modules onto your panel's grid; pull a corner
@@ -63,7 +63,7 @@ panel you chose, in any of six looks.
 
 <p align="center"><img src="docs/images/editor-drag.png" alt="A History module is dragged from the library onto two free cells, which light up" width="100%"></p>
 
-**2. Drag modules onto the panel.** Pick from [24 modules](#24-modules):
+**2. Drag modules onto the panel.** Pick from [25 modules](#25-modules):
 hardware, clocks, weather, music, calendar and more. Free cells light up;
 drop a module on another one to swap them.
 
@@ -90,7 +90,7 @@ and fonts of every module.
 3 × 2 on a 3.5" panel) and keeps clear of edges the bezel hides; switch
 the panel and the modules move along.
 
-## 24 modules
+## 25 modules
 
 <p align="center"><img src="docs/images/module-catalog.png" alt="Every module at two cells: ring, big number, history, bars, temperatures, CPU cores, drives, processes, network, network details, battery, game FPS; time, calendar, analog clock, world clock, countdown, sun and moon, weather; music, agenda, dashboard, picture, system, title" width="100%"></p>
 
@@ -158,7 +158,7 @@ Made one you like? Share it in
 
 ## Features
 
-- **Modules**: 24 building blocks that lay themselves out for their size,
+- **Modules**: 25 building blocks that lay themselves out for their size,
   six looks, starting layouts for every panel size.
 - **Widgets**: text, sensor values, bars (also segmented), ring gauges,
   smooth history graphs, lists of readings (`temp.*`) as rows, bars,

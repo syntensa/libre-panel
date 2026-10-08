@@ -2,7 +2,7 @@
 
 ## 0.4.0 — 2026-10-08
 
-Fourteen new modules, 24 in all: every temperature, core, drive and the
+Fifteen new modules, 25 in all: every temperature, core, drive and the
 busiest programs; clocks for any time zone, the sun and the moon,
 countdowns; what is playing, your calendar, Home Assistant and MQTT values,
 slideshows and the frame rate of your game. Music on Windows and the game
