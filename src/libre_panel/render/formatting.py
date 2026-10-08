@@ -2,8 +2,9 @@
 
 Themes come from strangers, so ``str.format`` is locked down: only the named
 fields ``value``, ``unit`` and ``label`` exist, attribute/index access is
-refused and absurd widths are rejected. Two extra format specs exist:
-``{value:bytes}`` (1.2 MB) and ``{value:duration}`` (3d 5h).
+refused and absurd widths are rejected. Three extra format specs exist:
+``{value:bytes}`` (1.2 MB), ``{value:duration}`` (3d 5h) and ``{value:clock}``
+(3:07, a song's length).
 """
 
 from __future__ import annotations
@@ -42,6 +43,14 @@ def human_duration(seconds: float) -> str:
     return f"{minutes}m"
 
 
+def clock_duration(seconds: float) -> str:
+    """A length the way players show it: 3:07, 1:02:45."""
+    seconds = max(0, int(seconds))
+    hours, rest = divmod(seconds, 3600)
+    minutes, seconds = divmod(rest, 60)
+    return f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}"
+
+
 def auto_format(value: Any, unit: str = "") -> str:
     """A reading shown the usual way for its unit: 45%, 61°, 2.4 MB/s, 3h 5m."""
     if isinstance(value, str):
@@ -75,6 +84,8 @@ class _SafeFormatter(string.Formatter):
             return human_bytes(value)
         if format_spec == "duration":
             return human_duration(value)
+        if format_spec == "clock":
+            return clock_duration(value)
         return super().format_field(value, format_spec)
 
 

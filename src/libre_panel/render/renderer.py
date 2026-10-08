@@ -40,7 +40,7 @@ from libre_panel.theme.modules import expand as expand_modules
 log = logging.getLogger(__name__)
 
 # Sensor texts shown in the user's language on the panel.
-TRANSLATED_READINGS = {"weather.description", "battery.state", "moon.name"}
+TRANSLATED_READINGS = {"weather.description", "battery.state", "moon.name", "media.state"}
 
 # Shapes are drawn at this scale and downsampled for smooth edges.
 SUPERSAMPLE = 3
@@ -1091,6 +1091,8 @@ class Renderer:
             seconds = max(1, widget["seconds"])
             rel = pictures[int(snapshot.now.timestamp() // seconds) % len(pictures)]
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
+        if rel.startswith("@"):  # a picture a sensor source or service has (an album cover)
+            return self._live_image(widget, snapshot.images.get(rel[1:]))
 
         def build() -> Piece:
             image = self._asset_image(rel, w, h, widget["fit"])
@@ -1103,6 +1105,21 @@ class Renderer:
 
         return self._cached(widget, rel, build)
 
+    def _live_image(self, widget: dict[str, Any], image: Any) -> Piece | None:
+        if image is None:
+            return None
+        x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
+
+        def build() -> Piece:
+            picture = image.convert("RGBA")
+            if w > 0 and h > 0:
+                picture = _fitted(picture, w, h, widget["fit"])
+            if widget["radius"] > 0:
+                picture = _rounded(picture, widget["radius"])
+            return Piece(picture, x, y)
+
+        return self._cached(widget, id(image), build)
+
     def _slides(self, widget: dict[str, Any]) -> list[str]:
         """The picture and the slideshow's others, folders read every half minute."""
         key = widget["id"]
@@ -1113,9 +1130,11 @@ class Renderer:
         root = self.theme.root
         for line in (widget.get("slides") or "").splitlines():
             line = line.strip()
-            if not line or root is None:
+            if line.startswith("@"):
+                found.append(line)
+            elif not line or root is None:
                 continue
-            if any(ch in line for ch in "*?["):
+            elif any(ch in line for ch in "*?["):
                 matches = sorted(p for p in root.glob(line) if p.is_file())
                 for path in matches:
                     try:

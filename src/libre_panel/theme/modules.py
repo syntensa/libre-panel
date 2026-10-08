@@ -1291,6 +1291,136 @@ def build_image(b: _Build, _src: Source) -> None:
                 b.ts * 1.05, color=b.c("text"), width=b.w - b.pad * 4)  # fmt: skip
 
 
+# -- music and the calendar ----------------------------------------------------
+
+
+def build_music(b: _Build, _src: Source) -> None:
+    """What is playing: the cover, title, artist and how far it is."""
+    b.card()
+    color = b.tint("accent")
+    a = b.aspect
+    b.needs = "media.title"
+    if a >= 1.45:  # cover | words
+        d = b.ih
+        _cover(b, b.ix, b.iy, d)
+        _song(b, b.ix + d + b.pad * 1.4, b.iy, b.iw - d - b.pad * 1.4, b.ih, color)
+    elif (a <= 0.72 or b.large) and b.ih > b.ts * 12:  # cover over words
+        d = min(b.iw, b.ih * 0.55)
+        _cover(b, b.ix + (b.iw - d) / 2, b.iy, d)
+        _song(b, b.ix, b.iy + d + b.pad, b.iw, b.ih - d - b.pad, color)
+    else:
+        b.icon("icon", "music", b.ix, b.iy - b.ts * 0.1, b.ts * 1.5, color)
+        _song(b, b.ix, b.iy + b.ts * 2.2, b.iw, b.ih - b.ts * 2.2, color, state=False)
+    b.needs = "!media.title"
+    icon = min(b.iw, b.ih) * 0.3
+    b.icon("idle-icon", "music", b.ix + (b.iw - icon) / 2, b.iy + b.ih / 2 - icon * 0.8, icon,
+           b.c("text3"))  # fmt: skip
+    b.label("idle", t("Nothing playing"), b.ix + b.iw / 2, b.iy + b.ih / 2 + icon * 0.45, b.ts,
+            align="center", width=b.iw)  # fmt: skip
+    b.needs = ""
+
+
+def _cover(b: _Build, x: float, y: float, d: float) -> None:
+    radius = round(b.style["radius"] * d / 200)
+    b.add("rect", "cover-frame", x=round(x), y=round(y), w=round(d), h=round(d),
+          color=mix(b.c("track"), b.c("surface"), 0.3), radius=radius)  # fmt: skip
+    icon = d * 0.36
+    b.icon("cover-icon", "music", x + (d - icon) / 2, y + (d - icon) / 2, icon, b.c("text3"))
+    b.add("image", "cover", x=round(x), y=round(y), w=round(d), h=round(d), src="@media.cover",
+          fit="cover", radius=radius)  # fmt: skip
+
+
+def _song(b: _Build, x: float, y: float, w: float, h: float, color: str,
+          state: bool = True) -> None:  # fmt: skip
+    """Title, artist (album) and the progress, filling the height."""
+    title = min(b.ts * 1.9, h * 0.2, w * 0.12)
+    small = b.ts * 1.05
+    lines = [("title", "media.title", title, "text", "display_font"),
+             ("artist", "media.artist", small * 1.15, "text2", "text_font")]  # fmt: skip
+    if h > b.ts * 11:
+        lines.append(("album", "media.album", small, "text3", "text_font"))
+    bar_block = b.ts * 3.2 if h > b.ts * 6 else 0
+
+    def needed() -> float:
+        words = sum(CAP * size + b.ts * 0.9 for *_n, size, _c, _f in lines)
+        return words + bar_block + (CAP * b.ts + b.ts * 1.0 if state else 0)
+
+    if needed() > h and len(lines) > 2:
+        lines.pop()  # the album goes first
+    if needed() > h:
+        state = False
+    block = needed()
+    top = y + max(0.0, (h - block) / 2)
+    if state:
+        b.value("state", "media.state", "{value}", x, top, b.ts, color=color, width=w,
+                font="text_font", tabular=False, fallback="", hide_if_missing=True)  # fmt: skip
+        top += CAP * b.ts + b.ts * 1.0
+    for name, key, size, role, font in lines:
+        b.value(name, key, "{value}", x, top, size, color=b.c(role), width=w, font=font,
+                tabular=False, fallback="", fit="ellipsis", hide_if_missing=True)  # fmt: skip
+        top += CAP * size + b.ts * 0.9
+    if bar_block:
+        top += b.ts * 0.4
+        b.bar("progress", "media.progress", x, top, w, max(3, b.ts * 0.32), color, 0, 1)
+        b.out[-1]["hide_if_missing"] = True
+        times = top + b.ts * 0.9
+        b.value("position", "media.position", "{value:clock}", x, times, b.ts * 0.95,
+                color=b.c("text3"), width=w / 2, hide_if_missing=True)  # fmt: skip
+        b.value("length", "media.duration", "{value:clock}", x + w, times, b.ts * 0.95,
+                color=b.c("text3"), align="right", width=w / 2, hide_if_missing=True)  # fmt: skip
+
+
+def build_agenda(b: _Build, _src: Source) -> None:
+    """The next events of your calendars (``[sensors.calendar]``)."""
+    b.card()
+    color = b.tint("accent")
+    top = b.head("calendar", b.module["title"] or t("Agenda"), color)
+    x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
+    stacked = w < b.ts * 24  # the time above the title, else beside it
+    columns = 2 if not stacked and w > b.ts * 50 else 1
+    gap = b.pad * 2
+    column_w = (w - (columns - 1) * gap) / columns
+    row = b.ts * (3.4 if stacked else 2.3)
+    per_column = int(_clamp(h // row, 1, 12))
+    when_w = 0 if stacked else min(column_w * 0.36, b.ts * 11)
+    for i in range(per_column * columns):
+        key = f"calendar.{i + 1}"
+        col, line = divmod(i, per_column)
+        cx, cy = x + col * (column_w + gap), y + line * row
+        first = len(b.out)
+        mark = {"y": round(cy + b.ts * 0.15), "w": max(2, round(b.ts * 0.2)),
+                "h": round(row - b.ts * 0.9), "radius": max(1, round(b.ts * 0.1))}  # fmt: skip
+        b.add("rect", f"e{i}-mark", x=round(cx), color=b.c("line"), **mark)
+        b.add("rect", f"e{i}-now", x=round(cx), color=color, **mark)
+        b.out[-1]["needs"] = f"{key}.now"  # the one going on is marked
+        inset = b.ts * 0.8
+        if stacked:
+            b.value(f"e{i}-when", f"{key}.when", "{value}", cx + inset, cy + b.ts * 0.2,
+                    b.ts * 0.95, color=b.c("text3"), width=column_w - inset, font="text_font",
+                    tabular=False, fallback="", fit="ellipsis")  # fmt: skip
+            b.value(f"e{i}-title", f"{key}.title", "{value}", cx + inset, cy + b.ts * 1.55,
+                    b.ts * 1.25, color=b.c("text"), width=column_w - inset, font="text_font",
+                    tabular=False, fallback="", fit="ellipsis")  # fmt: skip
+        else:
+            mid = cy + row / 2 - b.ts * 0.45
+            b.value(f"e{i}-when", f"{key}.when", "{value}", cx + inset,
+                    mid - CAP * b.ts * 0.5 / 2, b.ts * 0.95, color=b.c("text3"),
+                    width=when_w - inset, font="text_font", tabular=False, fallback="",
+                    fit="ellipsis")  # fmt: skip
+            b.value(f"e{i}-title", f"{key}.title", "{value}", cx + when_w,
+                    mid - CAP * b.ts * 0.1, b.ts * 1.2, color=b.c("text"),
+                    width=column_w - when_w, font="text_font", tabular=False, fallback="",
+                    fit="ellipsis")  # fmt: skip
+        for widget in b.out[first:]:
+            own = widget.get("needs", "")
+            widget["needs"] = f"{key}.title,{own}" if own else f"{key}.title"
+    mid_y = y + h / 2 - CAP * b.ts / 2
+    b.label("none", t("No upcoming events"), x + w / 2, mid_y, b.ts, align="center", width=w)
+    b.out[-1]["needs"] = "calendar.events,!calendar.1.title"
+    b.label("setup", t("No calendar set up"), x + w / 2, mid_y, b.ts, align="center", width=w)
+    b.out[-1]["needs"] = "!calendar.events"
+
+
 def build_text(b: _Build, _src: Source) -> None:
     """A title with the accent line under it."""
     b.card()
@@ -1554,13 +1684,15 @@ def kinds() -> dict[str, Kind]:
         "world": Kind(t("World clock"), build_world, span=(2, 1)),
         "countdown": Kind(t("Countdown"), build_countdown, span=(2, 1)),
         "image": Kind(t("Picture"), build_image, span=(2, 2)),
+        "music": Kind(t("Music"), build_music, span=(2, 1)),
+        "agenda": Kind(t("Agenda"), build_agenda, span=(2, 2)),
     }
 
 
 MODULE_KINDS = (
     "clock", "date", "weather", "ring", "stat", "graph", "bars", "network", "system", "text",
     "temps", "cores", "drives", "processes", "netinfo", "battery", "values",
-    "sun", "analog", "world", "countdown", "image",
+    "sun", "analog", "world", "countdown", "image", "music", "agenda",
 )  # fmt: skip
 MODULE_SOURCES = ("cpu", "gpu", "mem", "disk", "net", "sensor")
 MODULE_FALLBACKS = ("auto", "none", "cpu", "gpu", "mem", "disk")

@@ -60,6 +60,78 @@ fps = 50                       # frames per second in video mode
 local_clip = ""                # required for "on", see below
 ```
 
+## More sensor sources
+
+Besides the hardware, Libre Panel reads a few things from your life. The sun,
+the moon and what is playing come by themselves; the others are listed in
+`[sensors] providers` and set up in their own table.
+
+**The sun and the moon** (`sun.*`, `moon.*`) are computed, no internet
+needed. Sunrise and sunset need your place: `latitude` and `longitude` in
+`[weather]` (also when the weather itself is off).
+
+**What is playing** (`media.*` and the cover) is read only while a theme
+shows it:
+
+- Windows: the media controls of Windows, whatever the volume pop-up shows
+  (Spotify, browsers, media players). The installer brings what it needs; a
+  pip install needs `pip install "libre-panel[media]"`.
+- Linux: any MPRIS player through `playerctl` (install it from your
+  distribution).
+- macOS: Spotify or Music.
+
+**Calendars** (`calendar.*`): the secret address of a calendar (Google:
+settings of the calendar → "Secret address in iCal format"; Outlook:
+calendar → share → publish → ICS; iCloud and Nextcloud: share as a link)
+or an `.ics` file. The address is a secret: it stays in your settings file
+and is never written to the log.
+
+```toml
+[sensors]
+providers = ["psutil", "calendar"]
+
+[sensors.calendar]
+sources = ["https://calendar.google.com/calendar/ical/.../basic.ics"]
+days = 14                      # how far ahead
+update_minutes = 15
+```
+
+**Home Assistant** (`ha.*`): every entity that matches `entities`, with its
+unit and name. Make a token in Home Assistant under your profile →
+Security → Long-lived access tokens.
+
+```toml
+[sensors]
+providers = ["psutil", "homeassistant"]
+
+[sensors.homeassistant]
+url = "http://homeassistant.local:8123"
+token = "eyJ..."
+entities = ["sensor.*", "binary_sensor.front_door", "climate.*"]
+poll_seconds = 10
+```
+
+**MQTT** (`mqtt.*`; `pip install "libre-panel[mqtt]"`, included in the
+installers): what your devices publish. A JSON object is taken apart into one
+reading per field.
+
+```toml
+[sensors]
+providers = ["psutil", "mqtt"]
+
+[sensors.mqtt]
+host = "192.168.1.10"
+port = 1883
+username = ""
+password = ""
+topics = ["home/+/temperature", "zigbee2mqtt/#"]
+units = { "home/+/temperature" = "°C" }
+```
+
+Show these readings with the Dashboard module (`ha.sensor.living_room_temperature
+= Living room`, one per line), a list, or any widget with a `sensor`.
+`libre-panel sensors` lists what is there.
+
 ## Services and modes
 
 Plugins can add services (a game mode, an autopilot, …). They are off until

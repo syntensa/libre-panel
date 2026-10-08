@@ -46,6 +46,9 @@ ICON_NAMES = (
     "hourglass",
     "image",
     "globe",
+    "music",
+    "calendar",
+    "home",
     "weather",
 )
 
@@ -310,6 +313,27 @@ def _globe(pen: _Pen) -> None:
     pen.line((4, 16.8), (20, 16.8))
 
 
+def _music(pen: _Pen) -> None:
+    pen.line((9, 18), (9, 4.5), (20, 2.5), (20, 16))
+    pen.line((9, 8.8), (20, 6.8))
+    pen.circle(6.3, 18, 2.7, fill=True)
+    pen.circle(17.3, 16, 2.7, fill=True)
+
+
+def _calendar(pen: _Pen) -> None:
+    pen.rect(3, 5, 21, 21, 2)
+    pen.line((3, 10), (21, 10))
+    pen.line((8, 2.5), (8, 6.5))
+    pen.line((16, 2.5), (16, 6.5))
+    for x, y in ((8, 14), (12, 14), (16, 14), (8, 17.5), (12, 17.5)):
+        pen.circle(x, y, 0.9, fill=True)
+
+
+def _home(pen: _Pen) -> None:
+    pen.polygon([(3, 11), (12, 3), (21, 11), (19, 11), (19, 21), (5, 21), (5, 11)])
+    pen.line((10, 21), (10, 15), (14, 15), (14, 21))
+
+
 def _cloud_icon(pen: _Pen) -> None:
     pen.shape(lambda d, p: _cloud(d, p))
 
@@ -392,6 +416,9 @@ _ICONS: dict[str, Callable[[_Pen], None]] = {
     "hourglass": _hourglass,
     "image": _image,
     "globe": _globe,
+    "music": _music,
+    "calendar": _calendar,
+    "home": _home,
 }
 
 

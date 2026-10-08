@@ -85,6 +85,11 @@ class SensorProvider:
     def read(self) -> dict[str, Reading]:
         raise NotImplementedError
 
+    def images(self) -> dict[str, Any]:
+        """Pictures this source has (an album cover), by name; image widgets
+        show one with ``"src": "@media.cover"``."""
+        return {}
+
     def close(self) -> None:
         pass
 
@@ -94,6 +99,11 @@ _BUILTIN_PROVIDERS = {
     "psutil": "libre_panel.sensors.psutil_provider:PsutilProvider",
     "librehardwaremonitor": "libre_panel.sensors.librehardwaremonitor:LibreHardwareMonitorProvider",
     "demo": "libre_panel.sensors.demo:DemoProvider",
+    "media": "libre_panel.sensors.media:MediaProvider",
+    "calendar": "libre_panel.sensors.calendar:CalendarProvider",
+    "homeassistant": "libre_panel.sensors.homeassistant:HomeAssistantProvider",
+    "mqtt": "libre_panel.sensors.mqtt:MqttProvider",
+    "sky": "libre_panel.sensors.sky:SkyProvider",
 }
 
 
@@ -168,7 +178,16 @@ class SensorHub:
                     float(reading.value)
                 )
         history = {k: list(v) for k, v in self._history.items()}
-        return Snapshot(readings=readings, history=history)
+        images: dict[str, Any] = {}
+        for provider in self.providers:
+            try:
+                found = provider.images() if hasattr(provider, "images") else {}
+            except Exception:  # a broken sensor must not stop the display
+                log.exception("sensor provider %s failed", provider.name)
+                found = {}
+            for key, image in (found or {}).items():
+                images.setdefault(key, image)
+        return Snapshot(readings=readings, history=history, images=images)
 
     def fresh(self) -> dict[str, Reading]:
         """Between snapshots: the latest values of ``every_frame`` providers, for

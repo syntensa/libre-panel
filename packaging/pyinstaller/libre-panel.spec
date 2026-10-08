@@ -41,6 +41,16 @@ hiddenimports += [
 if sys.platform == "win32":
     hiddenimports += ["winreg", "zoneinfo", "tzdata"]
     datas += collect_data_files("tzdata")  # the world clock's time zones
+    # what is playing: the media controls through the winrt packages, loaded on demand
+    for package in ("winrt",):
+        try:
+            winrt_datas, winrt_binaries, winrt_hidden = collect_all(package)
+        except Exception:  # not installed: the music module then says nothing plays
+            continue
+        datas += winrt_datas
+        binaries += winrt_binaries
+        hiddenimports += winrt_hidden
+hiddenimports += ["paho.mqtt.client"]  # MQTT readings, imported when configured
 usb_datas, usb_binaries, usb_hidden = collect_all("libusb_package")
 datas += usb_datas
 binaries += usb_binaries

@@ -35,11 +35,16 @@ def build_hub(config: Config, demo: bool = False) -> SensorHub:
         from libre_panel.weather.open_meteo import OpenMeteoProvider
 
         providers.append(OpenMeteoProvider(config.weather))
-    if not demo:  # the sun for the weather's place (if set), the moon everywhere
+    if not demo:
+        from libre_panel.sensors.media import MediaProvider
         from libre_panel.sensors.sky import SkyProvider
 
-        place = {"latitude": config.weather.latitude, "longitude": config.weather.longitude}
-        providers.append(SkyProvider(place))
+        given = {p.name for p in providers}
+        if "sky" not in given:  # the sun for the weather's place (if set), the moon everywhere
+            place = {"latitude": config.weather.latitude, "longitude": config.weather.longitude}
+            providers.append(SkyProvider(place))
+        if "media" not in given:  # idle until a theme shows what is playing
+            providers.append(MediaProvider(config.sensors.options.get("media", {})))
     return SensorHub(providers)
 
 
@@ -411,7 +416,7 @@ def run(
             if started >= next_sample or snapshot is None:
                 snapshot = hub.snapshot()
                 if host is not None:
-                    snapshot.images = host.images()
+                    snapshot.images = {**snapshot.images, **host.images()}
                     host.latest = snapshot
                 every = (config.refresh_ms or theme.refresh_ms) / 1000
                 next_sample = started + every

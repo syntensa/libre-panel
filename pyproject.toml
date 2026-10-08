@@ -33,6 +33,14 @@ dependencies = [
 serial = ["pyserial>=3.5"]
 usb = ["pyusb>=1.2", "pycryptodome>=3.19", "libusb-package>=1.0"]
 tray = ["pystray>=0.19.5"]
+# what is playing, on Windows (Linux uses playerctl, macOS osascript)
+media = [
+    "winrt-runtime>=2; sys_platform == 'win32'",
+    "winrt-Windows.Foundation>=2; sys_platform == 'win32'",
+    "winrt-Windows.Media.Control>=2; sys_platform == 'win32'",
+    "winrt-Windows.Storage.Streams>=2; sys_platform == 'win32'",
+]
+mqtt = ["paho-mqtt>=2"]
 dev = ["pytest>=8", "ruff==0.16.9", "pyserial>=3.5", "pycryptodome>=3.19"]
 
 [project.scripts]
@@ -44,6 +52,11 @@ libre-panel = "libre_panel.cli:main"
 psutil = "libre_panel.sensors.psutil_provider:PsutilProvider"
 librehardwaremonitor = "libre_panel.sensors.librehardwaremonitor:LibreHardwareMonitorProvider"
 demo = "libre_panel.sensors.demo:DemoProvider"
+media = "libre_panel.sensors.media:MediaProvider"
+calendar = "libre_panel.sensors.calendar:CalendarProvider"
+homeassistant = "libre_panel.sensors.homeassistant:HomeAssistantProvider"
+mqtt = "libre_panel.sensors.mqtt:MqttProvider"
+sky = "libre_panel.sensors.sky:SkyProvider"
 
 [project.entry-points."libre_panel.devices"]
 auto = "libre_panel.devices.auto:AutoDisplay"

@@ -733,8 +733,8 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         seen.add(widget["id"])
         if widget.get("font"):
             _check_font(widget["font"], f"widgets[{i}].font", root)
-        if root is not None and widget.get("src"):
-            resolve_asset(root, widget["src"])
+        if root is not None and widget.get("src") and not widget["src"].startswith("@"):
+            resolve_asset(root, widget["src"])  # "@media.cover": a picture a sensor has
         widgets.append(widget)
         warnings.extend(w)
 

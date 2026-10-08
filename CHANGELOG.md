@@ -23,6 +23,9 @@
   take turns; the editor adds them
 - Widget types `analog`, `countdown` and `moon`; pictures can `fit`
   (contain, cover), round their corners and take turns (`slides`)
+- Music: what is playing with its cover and progress (Windows media
+  controls, MPRIS players on Linux, Spotify and Music on macOS)
+- Agenda: the next events of your calendars
 
 **Sensors**
 - Every core (`cpu.core.<n>.load`), every drive (`disk.<n>.*`), the busiest
@@ -32,6 +35,10 @@
   (`temp.cpu.package`, `fan.gpu.gpu_fan_1`)
 - Costly readings (processes, ping) are only taken while a theme shows them
 - `sun.*` and `moon.*`: sunrise, sunset, daylight, the moon's phase
+- Calendars (`.ics` addresses and files, with repeating events), Home
+  Assistant and MQTT as sources; their readings work in every widget
+- Sensor sources can have pictures (`@media.cover` in an image widget)
+- `{value:clock}` shows a length as 3:07
 
 ## 0.3.0 — 2026-10-08
 

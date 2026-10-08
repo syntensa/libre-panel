@@ -8,6 +8,8 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Any
 
+from PIL import Image
+
 from libre_panel.sensors.base import Reading, SensorProvider, Snapshot
 from libre_panel.sensors.sky import sky_readings
 
@@ -80,6 +82,9 @@ _WEATHER = {
 class DemoProvider(SensorProvider):
     name = "demo"
 
+    def images(self) -> dict[str, Any]:
+        return {"media.cover": _cover()}
+
     def __init__(self, options: dict[str, Any] | None = None) -> None:
         super().__init__(options)
         # A fixed time gives identical frames, which tests and screenshots want.
@@ -97,6 +102,8 @@ class DemoProvider(SensorProvider):
         out["sys.uptime"] = Reading("sys.uptime", 3 * 86400 + 5 * 3600 + 42 * 60, "s", "Uptime")
         out.update(demo_details(t, out))
         out.update(sky_readings(t, *DEMO_PLACE))
+        out.update(demo_media(t))
+        out.update(demo_calendar(t))
         out["cpu.name"] = Reading("cpu.name", "8-Core Processor", "", "CPU")
         out["gpu.name"] = Reading("gpu.name", "Graphics Card", "", "GPU")
         if self.include_weather:
@@ -132,6 +139,57 @@ def demo_details(t: float, waves: dict[str, Reading]) -> dict[str, Reading]:
     out["net.today.down"] = Reading("net.today.down", 3.42e9, "B", "Received today")
     out["net.today.up"] = Reading("net.today.up", 6.1e8, "B", "Sent today")
     return out
+
+
+def demo_media(t: float) -> dict[str, Reading]:
+    """A song playing (made up)."""
+    from libre_panel.sensors.media import Track
+
+    track = Track("playing", "Midnight Drive", "The Night Owls", "Neon Roads", 83 + t % 60,
+                  227.0, None, "Music", at=0.0)  # fmt: skip
+    return track.readings(0.0)
+
+
+def demo_calendar(t: float) -> dict[str, Reading]:
+    """A few days of made-up appointments around ``t``."""
+    from libre_panel.sensors.calendar import Event, calendar_readings
+
+    now = datetime.fromtimestamp(t)
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    def at(days: int, hour: float, length: float) -> tuple[datetime, datetime]:
+        start = today + timedelta(days=days, hours=hour)
+        return start, start + timedelta(hours=length)
+
+    events = [
+        Event("Team meeting", *at(0, now.hour + 1, 1), location="Room 4"),
+        Event("Pick up parcel", *at(0, 17.5, 0.5)),
+        Event("Dentist", *at(1, 9.5, 1), location="Main Street 12"),
+        Event("Birthday: Sam", today + timedelta(days=2), today + timedelta(days=3), True),
+        Event("Football", *at(3, 18, 2)),
+        Event("Dinner with friends", *at(5, 19.5, 3)),
+    ]
+    return calendar_readings(events, now)
+
+
+def demo_cover(size: int = 320) -> Image.Image:
+    """An album cover for previews: soft light on a dark gradient."""
+    from PIL import ImageDraw, ImageFilter
+
+    cover = Image.new("RGB", (size, size))
+    draw = ImageDraw.Draw(cover)
+    for y in range(size):
+        k = y / size
+        draw.line([(0, y), (size, y)], fill=(int(40 + 90 * k), int(18 + 30 * k), int(90 - 40 * k)))
+    glow = Image.new("RGB", (size, size), (0, 0, 0))
+    ImageDraw.Draw(glow).ellipse([size * 0.18, size * 0.5, size * 0.82, size * 1.14],
+                                 fill=(255, 120, 90))  # fmt: skip
+    cover = Image.blend(cover, glow.filter(ImageFilter.GaussianBlur(size / 10)), 0.45)
+    draw = ImageDraw.Draw(cover)
+    for i in range(6):
+        y = size * (0.62 + i * 0.065)
+        draw.line([(0, y), (size, y)], fill=(255, 200, 170), width=max(1, size // 120))
+    return cover.convert("RGBA")
 
 
 _DAILY = {  # high, low, code, rain: a week of autumn
@@ -173,13 +231,22 @@ def demo_forecast(t: float) -> dict[str, Reading]:
     return forecast_readings(data, t)
 
 
+_COVER: list[Image.Image] = []
+
+
+def _cover() -> Image.Image:
+    if not _COVER:
+        _COVER.append(demo_cover())
+    return _COVER[0]
+
+
 def demo_snapshot(fixed_time: float | None = None, samples: int = 600) -> Snapshot:
     """A complete snapshot with filled graph history, for previews and the editor."""
     provider = DemoProvider({"fixed_time": fixed_time})
     readings = provider.read()
     history = {key: demo_history(provider, key, samples) for key in _WAVES}
     now = datetime.fromtimestamp(fixed_time) if fixed_time is not None else datetime.now()
-    return Snapshot(readings=readings, history=history, now=now)
+    return Snapshot(readings=readings, history=history, now=now, images=provider.images())
 
 
 def demo_history(provider: DemoProvider, key: str, samples: int, step: float = 1.0) -> list[float]:
