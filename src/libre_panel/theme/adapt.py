@@ -12,6 +12,7 @@ from typing import Any
 
 from libre_panel.devices.models import get_model
 from libre_panel.theme.model import parse_theme
+from libre_panel.theme.modules import Grid, make_grid
 
 # Sizes that should grow with the smaller scale factor (not stretched).
 _UNIFORM = (
@@ -60,6 +61,49 @@ def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any
     return out
 
 
+def _move_modules(widgets: list[dict[str, Any]], old: Grid, new: Grid) -> list[dict[str, Any]]:
+    """Modules onto another grid: the same share of it, without overlapping."""
+    if (old.columns, old.rows) == (new.columns, new.rows):
+        return widgets
+    sx, sy = new.columns / old.columns, new.rows / old.rows
+    taken: set[tuple[int, int]] = set()
+
+    def free(col: int, row: int, cols: int, rows: int) -> bool:
+        return all(
+            (c, r) not in taken for c in range(col, col + cols) for r in range(row, row + rows)
+        )
+
+    out = []
+    for widget in widgets:
+        if widget["type"] != "module":
+            out.append(widget)
+            continue
+        cols = max(1, min(new.columns, round(widget["cols"] * sx)))
+        rows = max(1, min(new.rows, round(widget["rows"] * sy)))
+        col = min(max(0, round(widget["col"] * sx)), new.columns - cols)
+        row = min(max(0, round(widget["row"] * sy)), new.rows - rows)
+        spot = None
+        # where it was, else the nearest free place, smaller if it must be
+        for c_, r_ in sorted(
+            {(c, r) for c in range(cols, 0, -1) for r in range(rows, 0, -1)},
+            key=lambda s: -s[0] * s[1],
+        ):
+            places = [(x, y) for y in range(new.rows - r_ + 1) for x in range(new.columns - c_ + 1)]
+            places.sort(key=lambda p: abs(p[0] - col) + abs(p[1] - row))
+            spot = next(((x, y, c_, r_) for x, y in places if free(x, y, c_, r_)), None)
+            if spot:
+                break
+        moved = dict(widget)
+        if spot is None:  # no room left: kept, but hidden
+            moved["visible"] = False
+        else:
+            col, row, cols, rows = spot
+            taken.update((c, r) for c in range(col, col + cols) for r in range(row, row + rows))
+            moved.update(col=col, row=row, cols=cols, rows=rows)
+        out.append(moved)
+    return out
+
+
 def adapt_theme(
     data: dict[str, Any],
     model: str,
@@ -89,8 +133,14 @@ def adapt_theme(
     }
     if mode == "scale":
         sx, sy = new_w / old_w, new_h / old_h
-        result["widgets"] = [_scale_widget(w, sx, sy) for w in theme.widgets]
+        result["widgets"] = [
+            w if w["type"] == "module" else _scale_widget(w, sx, sy) for w in theme.widgets
+        ]
     elif mode != "keep":
         raise ValueError('mode must be "scale" or "keep"')
+    if any(w["type"] == "module" for w in theme.widgets):  # modules follow the grid either way
+        old = make_grid(old_w, old_h, theme.grid, theme.model)
+        new = make_grid(new_w, new_h, theme.grid, model)
+        result["widgets"] = _move_modules(result["widgets"], old, new)
     parse_theme(deepcopy(result))  # the adapted theme must still be valid
     return result

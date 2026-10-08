@@ -50,6 +50,14 @@ from libre_panel.theme.model import (
     save_theme,
     valid_theme_name,
 )
+from libre_panel.theme.modules import (
+    MODULE_KINDS,
+    detach,
+    look_theme_parts,
+    make_grid,
+    module_info,
+    templates,
+)
 
 log = logging.getLogger(__name__)
 
@@ -370,6 +378,7 @@ class EditorHandler(BaseHTTPRequestHandler):
             "fonts": [BUILTIN_PREFIX + name for name in builtin_fonts()],
             "default_font": DEFAULT_FONT,
             "icons": list(ICON_NAMES),
+            "modules": module_info(),
             **presets,
         }
 
@@ -422,6 +431,12 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._render()
         if path == "/api/adapt":
             return self._adapt()
+        if path == "/api/module-previews":
+            return self._module_previews()
+        if path == "/api/templates":
+            return self._templates()
+        if path == "/api/detach":
+            return self._detach()
         if path == "/api/activate":
             return self._activate()
         if path == "/api/app":
@@ -501,6 +516,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             renderer.close()  # plugin screens end with the preview
         buffer = io.BytesIO()
         frame.save(buffer, format="PNG")
+        has_modules = any(w["type"] == "module" for w in theme.widgets)
+        grid = make_grid(theme.width, theme.height, theme.grid, theme.model)
         self._json(
             {
                 "png": base64.b64encode(buffer.getvalue()).decode("ascii"),
@@ -508,8 +525,72 @@ class EditorHandler(BaseHTTPRequestHandler):
                 "width": theme.width,
                 "height": theme.height,
                 "warnings": theme.warnings + renderer.warnings,
+                # the grid modules sit on (active once the theme has modules or a
+                # grid), and every module's cells, also of hidden ones
+                "grid": grid.to_dict(),
+                "grid_active": has_modules or theme.grid is not None,
+                "module_boxes": renderer.module_boxes,
             }
         )
+
+    def _module_previews(self) -> None:
+        """Each module kind in a 2x1 box with the given look, for the library."""
+        payload = self._read_json()
+        if payload is None:
+            return
+        palette = payload.get("palette") or look_theme_parts("arctic")[0]
+        style = payload.get("style") or look_theme_parts("arctic")[1]
+        sources = {"ring": "cpu", "stat": "gpu", "graph": "cpu"}
+        snapshot = demo_snapshot(fixed_time=1_700_000_000)
+        previews = {}
+        for kind in MODULE_KINDS:
+            try:
+                theme = parse_theme(
+                    {
+                        "format": "libre-panel-theme/1",
+                        "display": {"width": 460, "height": 220},
+                        "palette": palette,
+                        "style": style,
+                        "background": {"color": "#000000"},
+                        "grid": {"columns": 2, "rows": 1, "gap": 10, "margin": 10},
+                        "widgets": [
+                            {"type": "module", "id": "m", "module": kind, "cols": 2,
+                             "source": sources.get(kind, "cpu")}
+                        ],
+                    }
+                )  # fmt: skip
+            except ThemeError as exc:
+                return self._error(str(exc))
+            renderer = Renderer(theme, preview=True)
+            frame, _boxes = renderer.render(snapshot)
+            x, y, w, h = renderer.module_boxes["m"]
+            buffer = io.BytesIO()
+            frame.crop((x, y, x + w, y + h)).save(buffer, format="PNG")
+            previews[kind] = base64.b64encode(buffer.getvalue()).decode("ascii")
+        self._json({"previews": previews})
+
+    def _templates(self) -> None:
+        """Starting layouts of modules for a panel."""
+        payload = self._read_json()
+        if payload is None:
+            return
+        try:
+            width, height = int(payload["width"]), int(payload["height"])
+            grid = make_grid(width, height, None, str(payload.get("model", "custom")))
+        except (KeyError, TypeError, ValueError) as exc:
+            return self._error(f"bad size: {exc}")
+        self._json({"grid": grid.to_dict(), "templates": templates(grid.columns, grid.rows)})
+
+    def _detach(self) -> None:
+        """A module's parts as plain widgets."""
+        payload = self._read_json()
+        if payload is None:
+            return
+        try:
+            theme = parse_theme(payload.get("theme"), root=self._base_folder(payload.get("base")))
+        except ThemeError as exc:
+            return self._error(str(exc))
+        self._json({"widgets": detach(theme, str(payload.get("id", "")))})
 
     def _adapt(self) -> None:
         payload = self._read_json()

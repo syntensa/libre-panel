@@ -276,3 +276,23 @@ def test_text_is_made_to_fit(fit):
     free = width()
     assert free > 200
     assert width(max_width=150, fit=fit) <= 152
+
+
+@pytest.mark.parametrize("model", ["turing-3.5", "turing-12.3-usb", "turing-2.1"])
+def test_modules_move_onto_another_panel_without_overlapping(model):
+    from libre_panel.theme.adapt import adapt_theme
+    from libre_panel.theme.modules import templates
+
+    modules = templates(8, 2)[0]["modules"]
+    data = theme(*modules).to_dict()
+    adapted = parse_theme(adapt_theme(data, model, "landscape"))
+    grid = make_grid(adapted.width, adapted.height, adapted.grid, adapted.model)
+    shown = [w for w in adapted.widgets if w["type"] == "module" and w["visible"]]
+    assert shown
+    cells = set()
+    for w in shown:
+        assert w["col"] + w["cols"] <= grid.columns and w["row"] + w["rows"] <= grid.rows
+        mine = {(c, r) for c in range(w["col"], w["col"] + w["cols"])
+                for r in range(w["row"], w["row"] + w["rows"])}  # fmt: skip
+        assert not mine & cells
+        cells |= mine

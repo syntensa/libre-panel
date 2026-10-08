@@ -93,7 +93,11 @@
 
   <main class="layout">
     <aside class="left">
-      <h2 data-i18n>Add</h2>
+      <h2 data-i18n>Modules</h2>
+      <div id="looks" class="looks" role="group" aria-label="Look" data-i18n-attr="aria-label"></div>
+      <div id="module-library" class="module-library"></div>
+      <p class="hint" data-i18n>Drag a module onto the panel. Drag its edges to make it larger: it then shows more. Drop it on another module to swap them.</p>
+      <h2 class="section-title" data-i18n>Add</h2>
       <div class="add-row">
         <select id="add-type" aria-label="Widget type" data-i18n-attr="aria-label"></select>
         <button id="btn-add" type="button" data-i18n>Add</button>
@@ -117,6 +121,21 @@
       <form id="props" autocomplete="off"></form>
     </aside>
   </main>
+
+  <dialog id="new-dialog" class="new-dialog" aria-labelledby="new-title">
+    <h2 id="new-title" data-i18n>New theme</h2>
+    <p class="muted" data-i18n>Pick a starting layout and a look for the panel chosen above. Everything can be changed later.</p>
+    <h3 data-i18n>Layout</h3>
+    <div id="new-templates" class="templates"></div>
+    <h3 data-i18n>Look</h3>
+    <div id="new-looks" class="looks"></div>
+    <div class="dialog-actions">
+      <button id="new-free" type="button" data-i18n>Free layout without modules</button>
+      <span class="spacer"></span>
+      <button id="new-cancel" type="button" data-i18n>Cancel</button>
+      <button id="new-create" type="button" class="primary" data-i18n>Create</button>
+    </div>
+  </dialog>
 
   <section id="plugin-view" class="plugin-view" hidden>
     <div class="plugin-bar">

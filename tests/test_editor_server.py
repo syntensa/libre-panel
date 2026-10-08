@@ -127,3 +127,65 @@ def test_theme_assets_listing(server, isolated_home):
             {"Content-Type": "application/octet-stream"})  # fmt: skip
     status, files = request(server, "GET", "/api/themes/mine/assets")
     assert status == 200 and files == ["assets/logo.png"]
+
+
+def module_theme(*modules):
+    return {
+        "format": "libre-panel-theme/1",
+        "display": {"model": "turing-9.2-usb", "orientation": "landscape"},
+        "widgets": [{"type": "module", "id": f"m{i}", **m} for i, m in enumerate(modules)],
+    }
+
+
+def test_render_reports_the_grid_and_module_cells(server):
+    status, data = request(server, "POST", "/api/render", {"theme": theme_dict()})
+    assert status == 200 and data["grid_active"] is False and data["module_boxes"] == {}
+    theme = module_theme(
+        {"module": "ring", "cols": 2},
+        {"module": "ring", "col": 2, "source": "gpu", "fallback": "none"},
+    )
+    status, data = request(server, "POST", "/api/render", {"theme": theme})
+    assert data["grid_active"] is True
+    assert (data["grid"]["columns"], data["grid"]["rows"]) == (8, 2)
+    assert set(data["module_boxes"]) == {"m0", "m1"}
+    assert set(data["boxes"]) <= {"m0", "m1"}  # no parts, no backdrop
+
+
+def test_specs_carry_modules_and_looks(server):
+    _, specs = request(server, "GET", "/api/specs")
+    assert "module" in specs["widgets"]
+    assert specs["modules"]["kinds"]["ring"]["sources"] == ["cpu", "gpu", "mem", "disk"]
+    assert {"arctic", "paper", "mono"} <= set(specs["modules"]["looks"])
+
+
+def test_module_previews_follow_the_look(server):
+    from libre_panel.theme.modules import look_theme_parts
+
+    palette, style = look_theme_parts("paper")
+    status, data = request(
+        server, "POST", "/api/module-previews", {"palette": palette, "style": style}
+    )
+    assert status == 200 and len(data["previews"]) == 10
+    assert base64.b64decode(data["previews"]["ring"])[:4] == b"\x89PNG"
+
+
+def test_templates_fill_the_panel_grid(server):
+    status, data = request(
+        server, "POST", "/api/templates", {"width": 480, "height": 320, "model": "turing-3.5"}
+    )
+    assert status == 200 and (data["grid"]["columns"], data["grid"]["rows"]) == (3, 2)
+    assert [t["id"] for t in data["templates"]] == ["overview", "performance", "calm"]
+    status, _ = request(server, "POST", "/api/templates", {"width": "x"})
+    assert status == 400
+
+
+def test_detach_gives_plain_widgets(server):
+    status, data = request(
+        server,
+        "POST",
+        "/api/detach",
+        {"theme": module_theme({"module": "clock", "cols": 3}), "id": "m0"},
+    )
+    assert status == 200
+    ids = [w["id"] for w in data["widgets"]]
+    assert "m0-time" in ids and all("_module" not in w for w in data["widgets"])

@@ -39,6 +39,13 @@ const state = {
   clipboard: null,
   app: null, // the background app (tray/start) when it serves this editor
   appTimer: null,
+  grid: null, // the cells modules sit on (from the renderer)
+  gridActive: false,
+  moduleBoxes: {}, // every module's cells in pixels, also of hidden ones
+  previews: {}, // library pictures by module kind, in the theme's look
+  libDrag: null,
+  cellDrag: null,
+  cellResize: null,
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -277,6 +284,8 @@ function refreshAll() {
   syncPanelBar();
   buildList();
   buildProps();
+  buildLooks();
+  refreshPreviews();
   updateHistoryButtons();
   scheduleRender(0);
 }
@@ -299,6 +308,9 @@ async function render() {
     $("#preview").src = "data:image/png;base64," + data.png;
     state.boxes = data.boxes;
     state.size = [data.width, data.height];
+    state.grid = data.grid;
+    state.gridActive = data.grid_active;
+    state.moduleBoxes = data.module_boxes || {};
     layoutStage();
     drawOverlay();
     if (data.warnings.length) setStatus(t("Warning: {text}", { text: data.warnings.join(" · ") }), "warn");
@@ -364,11 +376,12 @@ function drawOverlay() {
       overlay.append(node);
     }
   }
+  drawModuleOverlay(overlay);
   for (const widget of state.theme.widgets) {
-    const box = state.boxes[widget.id];
+    const box = state.boxes[widget.id] || (isModule(widget) && state.grid ? cellBox(...placed(widget)) : null);
     if (!box) continue;
     const node = el("div", {
-      class: ["box", state.selection.has(widget.id) ? "selected" : "", widget.locked ? "locked" : ""].join(" "),
+      class: ["box", isModule(widget) ? "module" : "", state.selection.has(widget.id) ? "selected" : "", widget.locked ? "locked" : ""].join(" "),
       title: `${widget.id} (${widgetLabel(widget.type)})${widget.locked ? " — " + t("locked") : ""}`,
     });
     node.dataset.id = widget.id;
@@ -376,6 +389,7 @@ function drawOverlay() {
     node.addEventListener("pointerdown", startDrag);
     overlay.append(node);
   }
+  drawModuleExtras(overlay);
   for (const guide of state.drag?.guides || []) {
     const line = el("div", { class: `guide ${guide.axis}` });
     if (guide.axis === "v") line.style.left = `${guide.at * state.zoom}px`;
@@ -397,6 +411,7 @@ function setSelection(ids) {
   for (const node of document.querySelectorAll("#overlay .box")) {
     node.classList.toggle("selected", state.selection.has(node.dataset.id));
   }
+  if (state.theme?.widgets.some(isModule)) drawOverlay(); // the handles follow the selection
   buildList();
   buildProps();
 }
@@ -438,6 +453,7 @@ function startDrag(event) {
     toggleSelection(id, true);
     return;
   }
+  if (isModule(widgetById(id))) return startModuleDrag(event, widgetById(id));
   if (!state.selection.has(id)) setSelection([id]);
   const movers = selectedWidgets().filter((w) => !w.locked);
   if (!movers.length) return; // everything selected is locked
@@ -666,6 +682,14 @@ function duplicateSelection() {
     copy.x += 10;
     copy.y += 10;
     copy.locked = false;
+    if (isModule(copy)) {
+      const spot = state.grid && freeSpot(copy.cols, copy.rows);
+      if (!spot) {
+        setStatus(t("No free cells left: make a module smaller or remove one"), "warn");
+        continue;
+      }
+      [copy.col, copy.row, copy.cols, copy.rows] = spot;
+    }
     const index = state.theme.widgets.indexOf(original);
     state.theme.widgets.splice(index + 1, 0, copy);
     ids.push(copy.id);
@@ -697,6 +721,11 @@ function paste() {
     raw.id = uniqueId(raw.id);
     raw.x += 12;
     raw.y += 12;
+    if (isModule(raw)) {
+      const spot = state.grid && freeSpot(raw.cols, raw.rows);
+      if (!spot) continue;
+      [raw.col, raw.row, raw.cols, raw.rows] = spot;
+    }
     state.theme.widgets.push(raw);
     ids.push(raw.id);
   }
@@ -787,7 +816,7 @@ function buildList() {
           class: [state.selection.has(widget.id) ? "selected" : "", visible ? "" : "hidden-widget"].join(" "),
           onclick: (event) => toggleSelection(widget.id, event.shiftKey || event.ctrlKey || event.metaKey),
         },
-        el("span", { class: "type", text: widgetLabel(widget.type), title: widget.type }),
+        el("span", { class: "type", text: isModule(widget) ? kindName(widget.module) : widgetLabel(widget.type), title: widget.type }),
         el("span", { class: "wid", text: widget.id }),
         el(
           "span",
@@ -1041,6 +1070,7 @@ function buildProps() {
   if (state.selection.size > 1) return buildMultiProps(form);
   const widget = single();
   if (!widget) return buildThemeProps(form);
+  if (isModule(widget)) return buildModuleProps(form, widget);
   $("#props-title").textContent = t("{type} widget", { type: widgetLabel(widget.type) });
   const spec = { ...state.specs.common, ...state.specs.widgets[widget.type] };
   const change = (key) => (value) => {
@@ -1154,6 +1184,7 @@ function buildThemeProps(form) {
     field(fieldLabel("background"), colorInput(theme.background.color, set("bg", (v) => (theme.background.color = v)), false)),
     field(t("background image"), assetInput(theme.background.image, set("bgimg", (v) => (theme.background.image = v || null)))),
     ...buildScreenFields(),
+    ...buildModuleThemeFields(),
     el("h2", { class: "section-title", text: t("Palette") }),
     buildPaletteEditor(),
     el("h2", { class: "section-title", text: t("Timing") }),
@@ -1161,6 +1192,47 @@ function buildThemeProps(form) {
     field(t("smoothing (ms)"), numberInput(theme.animation.smoothing_ms, set("smooth", (v) => (theme.animation.smoothing_ms = Math.max(0, Math.min(5000, v ?? 0))))), t("how long bars and rings take to glide to a new value; 0 = jump")),
     ...buildToastFields(),
   );
+}
+
+// The grid and the style of a theme with modules.
+function buildModuleThemeFields() {
+  const theme = state.theme;
+  if (!theme.grid && !theme.style && !theme.widgets.some(isModule)) return [];
+  theme.grid = theme.grid || { columns: 0, rows: 0, gap: 0, margin: 0 };
+  const style = { ...state.specs.modules.style, ...(theme.style || {}) };
+  const setGrid = (key) => (value) => {
+    commit(`grid:${key}`);
+    theme.grid[key] = Math.max(0, Math.round(value || 0));
+    scheduleRender();
+  };
+  const setStyle = (key) => (value) => {
+    commit(`style:${key}`);
+    theme.style = { ...style, ...(theme.style || {}), [key]: value };
+    refreshPreviews();
+    scheduleRender();
+  };
+  const g = state.grid;
+  const select = (key, options) =>
+    el("select", { onchange: (e) => setStyle(key)(e.target.value) }, ...options.map(([v, label]) => el("option", { value: v, text: label, selected: v === style[key] })));
+  return [
+    el("h2", { class: "section-title", text: t("Grid") }),
+    el(
+      "div",
+      { class: "quad" },
+      field(t("columns"), numberInput(theme.grid.columns, setGrid("columns"), { min: 0, max: 48 })),
+      field(t("rows"), numberInput(theme.grid.rows, setGrid("rows"), { min: 0, max: 48 })),
+      field(t("gap"), numberInput(theme.grid.gap, setGrid("gap"), { min: 0 })),
+      field(t("margin"), numberInput(theme.grid.margin, setGrid("margin"), { min: 0 })),
+    ),
+    el("small", { class: "muted", text: t("0 = automatic; now {cols} × {rows} cells", { cols: g?.columns ?? "?", rows: g?.rows ?? "?" }) }),
+    el("h2", { class: "section-title", text: t("Module style") }),
+    field(t("cards"), select("card", [["glass", t("glass")], ["flat", t("flat")], ["outline", t("outline")], ["none", t("none")]])),
+    field(t("corners"), numberInput(style.radius, (v) => setStyle("radius")(Math.max(0, Math.min(100, Math.round(v || 0)))), { min: 0, max: 100 })),
+    field(fieldLabel("glow"), numberInput(style.glow, (v) => setStyle("glow")(Math.max(0, Math.min(1, v ?? 0))), { step: "0.05", min: 0, max: 1 })),
+    field(t("backdrop"), select("backdrop", [["gradient", t("gradient")], ["flat", t("plain colour")]])),
+    field(t("numbers font"), fontInput(style.display_font, setStyle("display_font"))),
+    field(t("labels font"), fontInput(style.text_font, setStyle("text_font"))),
+  ];
 }
 
 // Messages from services (toasts): where, how long, which kinds not, and their look.
@@ -1458,8 +1530,8 @@ async function activate() {
   }
 }
 
-function newTheme() {
-  if (!confirmDiscard()) return;
+function newTheme(confirmed = false) {
+  if (confirmed !== true && !confirmDiscard()) return;
   const model = state.models.find((m) => m.id === $("#model-select").value) || state.models[0];
   const orientation = $("#orientation-select").value;
   const [width, height] = model[orientation];
@@ -1665,6 +1737,605 @@ function setLive(on) {
   scheduleRender(0);
 }
 
+// ---------------------------------------------------------------- modules
+
+// Modules sit on the theme's grid: they are dragged from the library onto
+// free cells, moved and swapped by cells and resized at their edges. The
+// renderer lays each one out for its size, so a larger module shows more.
+
+const isModule = (widget) => widget?.type === "module";
+const moduleKinds = () => state.specs?.modules?.kinds || {};
+const kindName = (kind) => moduleKinds()[kind]?.name ?? kind;
+const SOURCE_LABELS = () => ({
+  cpu: "CPU",
+  gpu: "GPU",
+  mem: t("Memory"),
+  disk: t("Disk"),
+  net: t("Network"),
+  sensor: t("Any sensor"),
+});
+const RESIZE_EDGES = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
+
+function gridShown() {
+  return !!state.grid && (state.gridActive || state.theme.widgets.some(isModule) || !!state.libDrag);
+}
+
+function cellBox(col, row, cols = 1, rows = 1) {
+  const g = state.grid;
+  const x0 = g.x + col * (g.cell_w + g.gap);
+  const y0 = g.y + row * (g.cell_h + g.gap);
+  const x1 = x0 + cols * g.cell_w + (cols - 1) * g.gap;
+  const y1 = y0 + rows * g.cell_h + (rows - 1) * g.gap;
+  return [Math.round(x0), Math.round(y0), Math.round(x1) - Math.round(x0), Math.round(y1) - Math.round(y0)];
+}
+
+function cellAt(x, y) {
+  const g = state.grid;
+  const col = Math.floor((x - g.x + g.gap / 2) / (g.cell_w + g.gap));
+  const row = Math.floor((y - g.y + g.gap / 2) / (g.cell_h + g.gap));
+  return [Math.max(0, Math.min(g.columns - 1, col)), Math.max(0, Math.min(g.rows - 1, row))];
+}
+
+// A module's cells, moved into the grid the way the renderer does it.
+function placed(widget) {
+  const g = state.grid;
+  const col = Math.min(Math.max(0, widget.col), g.columns - 1);
+  const row = Math.min(Math.max(0, widget.row), g.rows - 1);
+  return [col, row, Math.min(Math.max(1, widget.cols), g.columns - col), Math.min(Math.max(1, widget.rows), g.rows - row)];
+}
+
+const overlaps = (a, b) => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
+
+function blockers(area, ...except) {
+  return state.theme.widgets.filter((w) => isModule(w) && !except.includes(w.id) && overlaps(placed(w), area));
+}
+
+// The largest free area up to cols x rows: at (or around) a preferred cell, or anywhere.
+function freeSpot(cols, rows, prefer = null, exceptId = null) {
+  const g = state.grid;
+  const sizes = [];
+  for (let c = Math.min(cols, g.columns); c >= 1; c--) for (let r = Math.min(rows, g.rows); r >= 1; r--) sizes.push([c, r]);
+  sizes.sort((a, b) => b[0] * b[1] - a[0] * a[1]);
+  for (const [c, r] of sizes) {
+    const candidates = [];
+    if (prefer) {
+      for (let dr = 0; dr < r; dr++) for (let dc = 0; dc < c; dc++) candidates.push([prefer[0] - dc, prefer[1] - dr]);
+    } else {
+      for (let row = 0; row + r <= g.rows; row++) for (let col = 0; col + c <= g.columns; col++) candidates.push([col, row]);
+    }
+    for (const [col, row] of candidates) {
+      if (col < 0 || row < 0 || col + c > g.columns || row + r > g.rows) continue;
+      if (!blockers([col, row, c, r], exceptId).length) return [col, row, c, r];
+    }
+  }
+  return null;
+}
+
+function setModuleArea(widget, [col, row, cols, rows]) {
+  Object.assign(widget, { col, row, cols, rows });
+  const box = cellBox(col, row, cols, rows);
+  state.moduleBoxes[widget.id] = box;
+  if (state.boxes[widget.id]) state.boxes[widget.id] = box;
+}
+
+function newModule(kind, area) {
+  const spec = { ...state.specs.common, ...state.specs.widgets.module };
+  const widget = { type: "module", id: uniqueId(kind) };
+  for (const [key, [, fallback]] of Object.entries(spec)) if (key !== "id") widget[key] = clone(fallback);
+  widget.module = kind;
+  widget.source = moduleKinds()[kind]?.sources?.[0] || "cpu";
+  [widget.col, widget.row, widget.cols, widget.rows] = area;
+  return widget;
+}
+
+function addModule(kind, area) {
+  if (!area) {
+    setStatus(t("No free cells left: make a module smaller or remove one"), "warn");
+    return;
+  }
+  commit();
+  if (!state.theme.grid) state.theme.grid = { columns: 0, rows: 0, gap: 0, margin: 0 };
+  const widget = newModule(kind, area);
+  state.theme.widgets.push(widget);
+  setModuleArea(widget, area);
+  setSelection([widget.id]);
+  scheduleRender(0);
+  setStatus(t('Added "{name}": drag its corners to make it larger', { name: kindName(kind) }));
+}
+
+// ---- library
+
+function buildLibrary() {
+  const library = $("#module-library");
+  if (!library) return;
+  library.replaceChildren(
+    ...Object.entries(moduleKinds()).map(([kind, info]) => {
+      const image = el("img", { alt: "", draggable: "false" });
+      if (state.previews[kind]) image.src = "data:image/png;base64," + state.previews[kind];
+      const tile = el(
+        "button",
+        { type: "button", class: "module-tile", title: t("Drag onto the panel, or click to add"), "data-kind": kind },
+        el("span", { class: "thumb" }, image),
+        el("span", { class: "name", text: info.name }),
+      );
+      tile.addEventListener("pointerdown", (event) => startLibraryDrag(event, kind, image));
+      return tile;
+    }),
+  );
+}
+
+let previewKey = null;
+
+async function refreshPreviews() {
+  if (!state.theme || !state.specs?.modules) return;
+  const key = JSON.stringify([state.theme.palette || {}, state.theme.style || null]);
+  if (key === previewKey) return;
+  previewKey = key;
+  try {
+    const data = await api("POST", "/api/module-previews", { palette: state.theme.palette || {}, style: state.theme.style || null });
+    if (key !== previewKey) return;
+    state.previews = data.previews;
+    for (const tile of document.querySelectorAll(".module-tile")) {
+      const png = state.previews[tile.dataset.kind];
+      if (png) tile.querySelector("img").src = "data:image/png;base64," + png;
+    }
+  } catch (error) {
+    previewKey = null;
+    setStatus(error.message, "error");
+  }
+}
+
+function zoneAt(event, span, exceptId = null) {
+  const rect = $("#canvas-wrap").getBoundingClientRect();
+  if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) return null;
+  const [x, y] = canvasPoint(event);
+  const cell = cellAt(x, y);
+  const spot = freeSpot(span[0], span[1], cell, exceptId);
+  return spot ? { area: spot, ok: true } : { area: [cell[0], cell[1], 1, 1], ok: false };
+}
+
+function startLibraryDrag(event, kind, image) {
+  if (event.button !== 0 || !state.theme || !state.grid) return;
+  event.preventDefault();
+  const span = moduleKinds()[kind]?.span || [1, 1];
+  const drag = (state.libDrag = { kind, span, x0: event.clientX, y0: event.clientY, moved: false, ghost: null, zone: null });
+  const move = (e) => {
+    if (!drag.moved) {
+      if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 5) return;
+      drag.moved = true;
+      drag.ghost = el("div", { class: "module-ghost" }, el("img", { src: image.src || "", alt: "" }));
+      document.body.append(drag.ghost);
+    }
+    drag.ghost.style.left = `${e.clientX + 12}px`;
+    drag.ghost.style.top = `${e.clientY + 12}px`;
+    drag.zone = zoneAt(e, span);
+    drawOverlay();
+  };
+  const end = (e) => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", end);
+    window.removeEventListener("pointercancel", end);
+    drag.ghost?.remove();
+    state.libDrag = null;
+    if (!drag.moved) addModule(kind, freeSpot(span[0], span[1]));
+    else if (e.type === "pointerup" && drag.zone?.ok) addModule(kind, drag.zone.area);
+    drawOverlay();
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
+}
+
+// ---- moving, swapping and resizing on the grid
+
+function startModuleDrag(event, widget) {
+  if (state.selection.size !== 1 || !state.selection.has(widget.id)) setSelection([widget.id]);
+  if (widget.locked || !state.grid) return;
+  const start = placed(widget);
+  const grab = cellAt(...canvasPoint(event));
+  const drag = (state.cellDrag = { id: widget.id, start, offset: [grab[0] - start[0], grab[1] - start[1]], zone: null, moved: false });
+  const target = $("#overlay");
+  target.setPointerCapture(event.pointerId);
+  const move = (e) => {
+    const g = state.grid;
+    const [c, r] = cellAt(...canvasPoint(e));
+    const col = Math.max(0, Math.min(g.columns - start[2], c - drag.offset[0]));
+    const row = Math.max(0, Math.min(g.rows - start[3], r - drag.offset[1]));
+    if (col === start[0] && row === start[1]) {
+      drag.zone = null;
+    } else {
+      drag.moved = true;
+      const area = [col, row, start[2], start[3]];
+      const others = blockers(area, widget.id);
+      if (!others.length) drag.zone = { area, ok: true };
+      else if (others.length === 1) {
+        // swap: the other module goes where this one was, at its own size
+        const other = others[0];
+        const [, , oc, or] = placed(other);
+        const there = [start[0], start[1], Math.min(oc, g.columns - start[0]), Math.min(or, g.rows - start[1])];
+        const ok = !overlaps(there, area) && !blockers(there, widget.id, other.id).length && !blockers(area, widget.id, other.id).length;
+        drag.zone = { area, ok, swap: ok ? { other, there } : null };
+      } else drag.zone = { area, ok: false };
+    }
+    drawOverlay();
+  };
+  const end = () => {
+    target.removeEventListener("pointermove", move);
+    state.cellDrag = null;
+    const zone = drag.zone;
+    if (drag.moved && zone?.ok) {
+      commit();
+      setModuleArea(widget, zone.area);
+      if (zone.swap) setModuleArea(zone.swap.other, zone.swap.there);
+      buildProps();
+      scheduleRender(0);
+    }
+    drawOverlay();
+  };
+  target.addEventListener("pointermove", move);
+  target.addEventListener("pointerup", end, { once: true });
+  target.addEventListener("pointercancel", end, { once: true });
+}
+
+function startModuleResize(event, widget, edge) {
+  if (event.button !== 0 || widget.locked) return;
+  event.stopPropagation();
+  event.preventDefault();
+  const start = placed(widget);
+  let committed = false;
+  const target = $("#overlay");
+  target.setPointerCapture(event.pointerId);
+  state.cellResize = { id: widget.id };
+  const move = (e) => {
+    const [c, r] = cellAt(...canvasPoint(e));
+    let [col, row, cols, rows] = start;
+    let right = col + cols - 1;
+    let bottom = row + rows - 1;
+    if (edge.includes("e")) right = Math.max(col, c);
+    if (edge.includes("w")) col = Math.min(c, right);
+    if (edge.includes("s")) bottom = Math.max(row, r);
+    if (edge.includes("n")) row = Math.min(r, bottom);
+    const area = [col, row, right - col + 1, bottom - row + 1];
+    const now = placed(widget);
+    if (area.every((v, i) => v === now[i]) || blockers(area, widget.id).length) return;
+    if (!committed) {
+      commit();
+      committed = true;
+    }
+    setModuleArea(widget, area);
+    drawOverlay();
+    syncModuleSize(widget);
+    scheduleRender(60);
+  };
+  const end = () => {
+    target.removeEventListener("pointermove", move);
+    state.cellResize = null;
+    drawOverlay();
+    if (committed) scheduleRender(0);
+  };
+  target.addEventListener("pointermove", move);
+  target.addEventListener("pointerup", end, { once: true });
+  target.addEventListener("pointercancel", end, { once: true });
+}
+
+function resizeModuleBy(widget, dcols, drows) {
+  const [col, row, cols, rows] = placed(widget);
+  const g = state.grid;
+  const area = [col, row, Math.max(1, Math.min(g.columns - col, cols + dcols)), Math.max(1, Math.min(g.rows - row, rows + drows))];
+  if (blockers(area, widget.id).length) {
+    setStatus(t("Another module is in the way"), "warn");
+    return;
+  }
+  commit();
+  setModuleArea(widget, area);
+  drawOverlay();
+  buildProps();
+  scheduleRender(0);
+}
+
+function moveModuleBy(widget, dcol, drow) {
+  const [col, row, cols, rows] = placed(widget);
+  const g = state.grid;
+  const area = [Math.max(0, Math.min(g.columns - cols, col + dcol)), Math.max(0, Math.min(g.rows - rows, row + drow)), cols, rows];
+  if (blockers(area, widget.id).length) return;
+  commit("nudge");
+  setModuleArea(widget, area);
+  drawOverlay();
+  scheduleRender(60);
+}
+
+function syncModuleSize(widget) {
+  const label = document.querySelector("#props [data-size]");
+  if (label) label.textContent = `${widget.cols} × ${widget.rows}`;
+}
+
+function drawModuleOverlay(overlay) {
+  if (!gridShown()) return;
+  const g = state.grid;
+  const busy = state.libDrag || state.cellDrag || state.cellResize; // then every cell shows
+  for (let row = 0; row < g.rows; row++) {
+    for (let col = 0; col < g.columns; col++) {
+      if (!busy && blockers([col, row, 1, 1]).length) continue;
+      const node = el("div", { class: "cell" });
+      placeBox(node, cellBox(col, row));
+      overlay.append(node);
+    }
+  }
+}
+
+function drawModuleExtras(overlay) {
+  const zone = state.libDrag?.zone || state.cellDrag?.zone;
+  if (zone) {
+    const node = el("div", { class: `drop${zone.ok ? "" : " blocked"}${zone.swap ? " swap" : ""}` });
+    const [, , cols, rows] = zone.area;
+    const kind = state.libDrag?.kind || widgetById(state.cellDrag?.id)?.module;
+    node.append(el("span", { text: zone.swap ? t("Swap") : `${kindName(kind)} · ${cols} × ${rows}` }));
+    placeBox(node, cellBox(...zone.area));
+    overlay.append(node);
+    if (zone.swap) {
+      const other = el("div", { class: "drop swap" });
+      placeBox(other, cellBox(...zone.swap.there));
+      overlay.append(other);
+    }
+  }
+  const widget = single();
+  if (!isModule(widget) || widget.locked || state.cellDrag || !state.grid) return;
+  const box = cellBox(...placed(widget));
+  const z = state.zoom;
+  for (const edge of RESIZE_EDGES) {
+    const handle = el("div", { class: `handle ${edge}`, title: t("Drag to change the size") });
+    const x = box[0] + (edge.includes("w") ? 0 : edge.includes("e") ? box[2] : box[2] / 2);
+    const y = box[1] + (edge.includes("n") ? 0 : edge.includes("s") ? box[3] : box[3] / 2);
+    handle.style.left = `${x * z}px`;
+    handle.style.top = `${y * z}px`;
+    handle.addEventListener("pointerdown", (event) => startModuleResize(event, widget, edge));
+    overlay.append(handle);
+  }
+  const badge = el("div", { class: "size-badge", text: `${widget.cols} × ${widget.rows}` });
+  badge.style.left = `${(box[0] + box[2]) * z}px`;
+  badge.style.top = `${box[1] * z}px`;
+  overlay.append(badge);
+}
+
+// ---- looks
+
+function activeLook() {
+  const palette = state.theme?.palette || {};
+  const style = state.theme?.style || {};
+  for (const [key, look] of Object.entries(state.specs?.modules?.looks || {})) {
+    if (look.palette.bg === palette.bg && look.palette.accent === palette.accent && look.style.card === style.card) return key;
+  }
+  return null;
+}
+
+function buildLooks() {
+  const row = $("#looks");
+  if (!row) return;
+  const active = activeLook();
+  row.replaceChildren(
+    ...Object.entries(state.specs.modules.looks).map(([key, look]) => {
+      const p = look.palette;
+      const swatch = el("i", { class: "swatch" });
+      swatch.style.background = `linear-gradient(135deg, ${p.bg} 0 45%, ${p.accent} 45% 62%, ${p.mem} 62% 80%, ${p.surface} 80%)`;
+      return el("button", { type: "button", class: `look${key === active ? " on" : ""}`, title: t("Use the {name} look", { name: look.name }), onclick: () => applyLook(key) }, swatch, el("span", { text: look.name }));
+    }),
+  );
+}
+
+function applyLook(key) {
+  const look = state.specs.modules.looks[key];
+  if (!look || !state.theme) return;
+  commit();
+  state.theme.palette = { ...(state.theme.palette || {}), ...look.palette };
+  state.theme.style = clone(look.style);
+  state.theme.background = { ...(state.theme.background || {}), color: "@bg" };
+  buildLooks();
+  buildProps();
+  refreshPreviews();
+  scheduleRender(0);
+  setStatus(t("Look: {name}", { name: look.name }));
+}
+
+// ---- the module's settings
+
+// A labelled block that is not a <label>: clicking its text must not press its first button.
+const block = (label, control, hint) =>
+  el("div", { class: "field" }, el("span", { text: label }), control, hint ? el("small", { text: hint }) : null);
+
+function buildModuleProps(form, widget) {
+  const info = moduleKinds()[widget.module] || { sources: [] };
+  $("#props-title").textContent = kindName(widget.module);
+  const change = (key, rebuild = false) => (value) => {
+    commit(`prop:${widget.id}:${key}`);
+    widget[key] = value;
+    if (rebuild) buildProps();
+    if (key === "visible" || key === "locked") {
+      buildList();
+      drawOverlay();
+    }
+    scheduleRender();
+  };
+  const chips = (key, options, labelOf) =>
+    el(
+      "div",
+      { class: "chips" },
+      ...options.map((option) =>
+        el("button", { type: "button", class: `chip${widget[key] === option ? " on" : ""}`, text: labelOf(option), onclick: () => change(key, true)(option) }),
+      ),
+    );
+  const kinds = el(
+    "select",
+    { onchange: (e) => change("module", true)(e.target.value) },
+    ...Object.entries(moduleKinds()).map(([kind, k]) => el("option", { value: kind, text: k.name, selected: kind === widget.module })),
+  );
+  form.append(field(t("Module"), kinds));
+  const sources = SOURCE_LABELS();
+  if (info.sources.length) {
+    if (!info.sources.includes(widget.source)) widget.source = info.sources[0];
+    form.append(block(t("Shows"), chips("source", info.sources, (s) => sources[s] ?? s)));
+    if (widget.source === "sensor") {
+      form.append(
+        field(fieldLabel("sensor"), controlFor("sensor", "sensor", widget.sensor, change("sensor"))),
+        field(fieldLabel("format"), controlFor("format", "format", widget.format, change("format")), FORMAT_HINT),
+      );
+    }
+    const fallbacks = { auto: t("automatic (the disk for a missing GPU)"), none: t("leave the cells empty") };
+    for (const s of ["cpu", "gpu", "mem", "disk"]) fallbacks[s] = t("show {source}", { source: sources[s] });
+    form.append(
+      field(
+        t("When its readings are missing"),
+        el("select", { onchange: (e) => change("fallback")(e.target.value) }, ...Object.entries(fallbacks).map(([v, label]) => el("option", { value: v, text: label, selected: v === widget.fallback }))),
+      ),
+    );
+  }
+  if (widget.module === "text") form.append(field(t("Text"), controlFor("text", "text", widget.text, change("text"))));
+  const title = el("input", { type: "text", value: widget.title || "", placeholder: t("automatic"), oninput: (e) => change("title")(e.target.value) });
+  if (widget.module !== "text" && widget.module !== "clock" && widget.module !== "date") form.append(field(t("Title"), title));
+  form.append(
+    field(t("Colour"), colorInput(widget.color, change("color"), true), t("empty: the look's colour")),
+    block(t("Card"), chips("card", ["auto", "on", "off"], enumLabel)),
+  );
+  const step = (label, title, action) => el("button", { type: "button", text: label, title, onclick: action });
+  form.append(
+    block(
+      t("Size"),
+      el(
+        "div",
+        { class: "size-row" },
+        step("−", t("Narrower"), () => resizeModuleBy(widget, -1, 0)),
+        step("+", t("Wider"), () => resizeModuleBy(widget, 1, 0)),
+        el("strong", { "data-size": "", text: `${widget.cols} × ${widget.rows}` }),
+        step("−", t("Lower"), () => resizeModuleBy(widget, 0, -1)),
+        step("+", t("Taller"), () => resizeModuleBy(widget, 0, 1)),
+      ),
+      t("Or drag its edges on the panel: a larger module shows more."),
+    ),
+    el(
+      "div",
+      { class: "align-grid" },
+      step(t("Detach"), t("Turn it into single widgets to edit each one"), () => detachModule(widget)),
+      step(t("Duplicate"), "Ctrl+D", duplicateSelection),
+    ),
+    el("button", { type: "button", class: "danger", text: t("Delete"), onclick: deleteSelection }),
+  );
+  const advanced = ["id", "visible", "locked", "needs"].map((key) => {
+    const kind = state.specs.common[key][0];
+    return field(fieldLabel(key), controlFor(key, kind, widget[key], key === "id" ? (v) => renameWidget(widget, v) : change(key)), hintFor(widget, key, kind));
+  });
+  form.append(el("details", {}, el("summary", { text: t("Advanced") }), el("div", { class: "fields" }, ...advanced)));
+}
+
+async function detachModule(widget) {
+  try {
+    const data = await api("POST", "/api/detach", { theme: state.theme, base: state.themeId, id: widget.id });
+    commit();
+    const parts = [];
+    for (const part of data.widgets) {
+      part.id = uniqueId(part.id);
+      parts.push(part);
+      state.theme.widgets.splice(state.theme.widgets.indexOf(widget) + parts.length, 0, part);
+    }
+    state.theme.widgets.splice(state.theme.widgets.indexOf(widget), 1);
+    setSelection(parts.map((p) => p.id));
+    scheduleRender(0);
+    setStatus(t("Detached into {count} widgets", { count: parts.length }));
+  } catch (error) {
+    setStatus(error.message, "error");
+  }
+}
+
+// ---- a new theme from a starting layout
+
+async function openNewDialog() {
+  if (!confirmDiscard()) return;
+  const dialog = $("#new-dialog");
+  const model = state.models.find((m) => m.id === $("#model-select").value) || state.models[0];
+  const orientation = $("#orientation-select").value;
+  const [width, height] = model.id === "custom" ? [Number($("#custom-w").value) || 480, Number($("#custom-h").value) || 320] : model[orientation];
+  const choice = { template: null, look: "arctic" };
+  let data;
+  try {
+    data = await api("POST", "/api/templates", { width, height, model: model.id });
+  } catch (error) {
+    setStatus(error.message, "error");
+    return;
+  }
+  const build = (template, look) => {
+    const parts = state.specs.modules.looks[look];
+    return {
+      format: "libre-panel-theme/1",
+      name: t("My theme"),
+      author: "",
+      license: "CC-BY-4.0",
+      description: "",
+      display: { model: model.id, orientation, width, height },
+      palette: clone(parts.palette),
+      style: clone(parts.style),
+      grid: { columns: 0, rows: 0, gap: 0, margin: 0 },
+      font: state.specs.default_font,
+      background: { color: "@bg", image: null },
+      refresh_ms: 1000,
+      animation: { smoothing_ms: 400 },
+      widgets: (template?.modules || []).map((m, i) => ({ type: "module", id: `${m.module}-${i + 1}`, ...m })),
+    };
+  };
+  const cards = $("#new-templates");
+  const looks = $("#new-looks");
+  const paint = async () => {
+    looks.replaceChildren(
+      ...Object.entries(state.specs.modules.looks).map(([key, look]) => {
+        const p = look.palette;
+        const swatch = el("i", { class: "swatch" });
+        swatch.style.background = `linear-gradient(135deg, ${p.bg} 0 45%, ${p.accent} 45% 62%, ${p.mem} 62% 80%, ${p.surface} 80%)`;
+        return el("button", { type: "button", class: `look${key === choice.look ? " on" : ""}`, onclick: () => ((choice.look = key), paint()) }, swatch, el("span", { text: look.name }));
+      }),
+    );
+    const options = [...data.templates, { id: "blank", name: t("Empty grid"), modules: [] }];
+    cards.replaceChildren(
+      ...options.map((template) => {
+        const image = el("img", { alt: "" });
+        const card = el(
+          "button",
+          { type: "button", class: `template${choice.template === template.id ? " on" : ""}`, onclick: () => ((choice.template = template.id), paint()) },
+          image,
+          el("span", { text: template.name }),
+        );
+        api("POST", "/api/render", { theme: build(template, choice.look) })
+          .then((r) => (image.src = "data:image/png;base64," + r.png))
+          .catch(() => {});
+        return card;
+      }),
+    );
+    $("#new-create").disabled = !choice.template;
+  };
+  choice.template = data.templates[0]?.id ?? "blank";
+  await paint();
+  $("#new-create").onclick = () => {
+    const template = data.templates.find((x) => x.id === choice.template) || null;
+    dialog.close();
+    startTheme(build(template, choice.look));
+  };
+  $("#new-free").onclick = () => {
+    dialog.close();
+    newTheme(true);
+  };
+  $("#new-cancel").onclick = () => dialog.close();
+  dialog.showModal();
+}
+
+function startTheme(theme) {
+  state.theme = theme;
+  state.themeId = null;
+  state.builtin = false;
+  state.selection = new Set();
+  state.assets = [];
+  state.size = [theme.display.width, theme.display.height];
+  resetHistory();
+  markDirty();
+  refreshThemeList("");
+  refreshAll();
+}
+
 function onKey(event) {
   const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName);
   const mod = event.ctrlKey || event.metaKey;
@@ -1683,7 +2354,10 @@ function onKey(event) {
   if (mod && key === "d") return event.preventDefault(), duplicateSelection();
   const step = event.shiftKey ? 10 : 1;
   const moves = { arrowleft: [-step, 0], arrowright: [step, 0], arrowup: [0, -step], arrowdown: [0, step] };
-  if (moves[key] && state.selection.size) {
+  if (moves[key] && isModule(single())) {
+    event.preventDefault();
+    moveModuleBy(single(), Math.sign(moves[key][0]), Math.sign(moves[key][1]));
+  } else if (moves[key] && state.selection.size) {
     event.preventDefault();
     nudge(...moves[key]);
   } else if ((key === "delete" || key === "backspace") && state.selection.size) {
@@ -1707,6 +2381,7 @@ async function init() {
       ...state.specs.presets.map((p) => el("button", { type: "button", text: p.name, title: t('Insert "{name}"', { name: p.name }), onclick: () => insertPreset(p) })),
     );
     buildModelMenu();
+    buildLibrary();
     api("GET", "/api/sensors")
       .then((sensors) => {
         const list = el("datalist", { id: "sensor-keys" });
@@ -1743,7 +2418,7 @@ async function init() {
     }
   });
   $("#lang-select").addEventListener("change", (event) => setLanguage(event.target.value));
-  $("#btn-new").addEventListener("click", newTheme);
+  $("#btn-new").addEventListener("click", openNewDialog);
   $("#btn-save").addEventListener("click", save);
   $("#btn-save-as").addEventListener("click", saveAs);
   $("#btn-activate").addEventListener("click", activate);

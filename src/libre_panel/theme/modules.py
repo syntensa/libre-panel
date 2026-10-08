@@ -971,3 +971,125 @@ def module_info() -> dict[str, Any]:
         "grid": dict(GRID_DEFAULTS),
         "style": dict(STYLE_DEFAULTS),
     }
+
+
+# -- starting layouts and detaching ------------------------------------------
+
+
+def _m(kind: str, col: int, row: int, cols: int = 1, rows: int = 1, **options: Any) -> dict:
+    return {"module": kind, "col": col, "row": row, "cols": cols, "rows": rows, **options}
+
+
+_TEMPLATES: dict[tuple[int, int], list[tuple[str, list[dict[str, Any]]]]] = {
+    (8, 2): [
+        ("overview", [_m("clock", 0, 0, 3), _m("network", 0, 1, 3), _m("weather", 3, 0, 2, 2),
+                      _m("ring", 5, 0, 3, source="cpu"), _m("ring", 5, 1, 3, source="gpu")]),
+        ("performance", [_m("stat", 0, 0, 2, 2, source="cpu"), _m("ring", 2, 0, 2, source="gpu"),
+                         _m("ring", 2, 1, 2, source="mem"), _m("bars", 4, 0, 1, 2),
+                         _m("clock", 5, 0, 3), _m("graph", 5, 1, 3, source="net")]),
+        ("calm", [_m("clock", 0, 0, 4, 2), _m("weather", 4, 0, 4), _m("date", 4, 1, 2),
+                  _m("system", 6, 1, 2)]),
+    ],
+    (3, 2): [
+        ("overview", [_m("clock", 0, 0, 2), _m("weather", 2, 0), _m("ring", 0, 1, source="cpu"),
+                      _m("ring", 1, 1, source="mem"), _m("network", 2, 1)]),
+        ("performance", [_m("ring", 0, 0, 1, 2, source="cpu"), _m("stat", 1, 0, 2, source="gpu"),
+                         _m("bars", 1, 1), _m("date", 2, 1)]),
+        ("calm", [_m("clock", 0, 0, 3), _m("weather", 0, 1, 2), _m("date", 2, 1)]),
+    ],
+    (2, 2): [
+        ("overview", [_m("clock", 0, 0, 2), _m("ring", 0, 1, source="cpu"),
+                      _m("ring", 1, 1, source="mem")]),
+        ("performance", [_m("ring", 0, 0, source="cpu"), _m("ring", 1, 0, source="gpu"),
+                         _m("ring", 0, 1, source="mem"), _m("ring", 1, 1, source="disk")]),
+        ("calm", [_m("clock", 0, 0, 2), _m("weather", 0, 1, 2)]),
+    ],
+    (2, 1): [
+        ("overview", [_m("stat", 0, 0, source="cpu"), _m("stat", 1, 0, source="mem")]),
+        ("performance", [_m("ring", 0, 0, source="cpu"), _m("ring", 1, 0, source="gpu")]),
+        ("calm", [_m("clock", 0, 0, 2)]),
+    ],
+    (2, 3): [
+        ("overview", [_m("clock", 0, 0, 2), _m("stat", 0, 1, source="cpu"),
+                      _m("stat", 1, 1, source="mem"), _m("graph", 0, 2, 2, source="cpu")]),
+        ("performance", [_m("ring", 0, 0, source="cpu"), _m("ring", 1, 0, source="gpu"),
+                         _m("ring", 0, 1, source="mem"), _m("ring", 1, 1, source="disk"),
+                         _m("network", 0, 2, 2)]),
+        ("calm", [_m("clock", 0, 0, 2), _m("weather", 0, 1, 2), _m("date", 0, 2, 2)]),
+    ],
+}  # fmt: skip
+
+# Wishes for other grids: (kind, options, cols, rows), placed where they fit.
+_WISHES: dict[str, list[tuple[str, dict[str, Any], int, int]]] = {
+    "overview": [("clock", {}, 3, 1), ("weather", {}, 2, 2), ("ring", {"source": "cpu"}, 3, 1),
+                 ("ring", {"source": "gpu"}, 3, 1), ("network", {}, 3, 1),
+                 ("ring", {"source": "mem"}, 1, 1), ("bars", {}, 1, 1)],
+    "performance": [("stat", {"source": "cpu"}, 2, 2), ("ring", {"source": "gpu"}, 2, 1),
+                    ("ring", {"source": "mem"}, 2, 1), ("bars", {}, 1, 2),
+                    ("clock", {}, 3, 1), ("graph", {"source": "net"}, 3, 1),
+                    ("ring", {"source": "disk"}, 1, 1)],
+    "calm": [("clock", {}, 4, 2), ("weather", {}, 4, 1), ("date", {}, 2, 1),
+             ("system", {}, 2, 1)],
+}  # fmt: skip
+
+
+def _pack(columns: int, rows: int, wishes: list[tuple[str, dict[str, Any], int, int]]) -> list:
+    """Place each wish at the first free spot, smaller if it must be."""
+    free = [[True] * columns for _ in range(rows)]
+    placed = []
+
+    def fits(col: int, row: int, cols: int, rows_: int) -> bool:
+        return all(
+            free[r][c] for r in range(row, row + rows_) for c in range(col, col + cols)
+        )  # fmt: skip
+
+    for kind, options, want_cols, want_rows in wishes:
+        spot = None
+        sizes = sorted(
+            {(min(c, columns), min(r, rows)) for c in range(want_cols, 0, -1)
+             for r in range(want_rows, 0, -1)},
+            key=lambda s: -s[0] * s[1],
+        )  # fmt: skip
+        for cols, rows_ in sizes:
+            for row in range(rows - rows_ + 1):
+                for col in range(columns - cols + 1):
+                    if fits(col, row, cols, rows_):
+                        spot = (col, row, cols, rows_)
+                        break
+                if spot:
+                    break
+            if spot:
+                break
+        if spot is None:
+            continue
+        col, row, cols, rows_ = spot
+        for r in range(row, row + rows_):
+            for c in range(col, col + cols):
+                free[r][c] = False
+        placed.append(_m(kind, col, row, cols, rows_, **options))
+    return placed
+
+
+def templates(columns: int, rows: int) -> list[dict[str, Any]]:
+    """Starting layouts for a grid of ``columns`` x ``rows`` cells."""
+    names = {"overview": t("Overview"), "performance": t("Performance"), "calm": t("Calm")}
+    chosen = _TEMPLATES.get((columns, rows))
+    if chosen is None:
+        chosen = [(key, _pack(columns, rows, wishes)) for key, wishes in _WISHES.items()]
+    return [
+        {"id": key, "name": names[key], "modules": [dict(m) for m in modules]}
+        for key, modules in chosen
+    ]
+
+
+def detach(theme: Any, module_id: str) -> list[dict[str, Any]]:
+    """The parts of one module as plain widgets, to edit them one by one."""
+    widgets, _boxes = expand(theme)
+    parts = []
+    for widget in widgets:
+        if widget.get("_module") != module_id:
+            continue
+        part = {k: v for k, v in widget.items() if k != "_module"}
+        part["id"] = part["id"].replace("/", "-")
+        parts.append(part)
+    return parts

@@ -781,6 +781,8 @@ class Renderer:
             if module is not None:
                 boxes[module["id"]] = self.module_boxes[module["id"]]
                 continue
+            if widget["id"].startswith("\0"):  # drawn for the theme (the modules' backdrop)
+                continue
             boxes[widget["id"]] = piece.box or [
                 piece.x,
                 piece.y,
