@@ -284,10 +284,10 @@ def load_cover(cover: str | bytes | None) -> Image.Image | None:
                 data = response.read(MAX_COVER + 1)
             if len(data) > MAX_COVER:
                 return None
-        else:
-            path = (
-                urllib.parse.unquote(urllib.parse.urlparse(cover).path) if "://" in cover else cover
-            )
+        else:  # a path, or a file:// address (file:///C:/... on Windows)
+            path = cover
+            if cover.startswith("file://"):
+                path = urllib.request.url2pathname(urllib.parse.urlparse(cover).path)
             file = Path(path)
             if not file.is_file() or file.stat().st_size > MAX_COVER:
                 return None

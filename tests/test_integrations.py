@@ -49,7 +49,7 @@ def test_players_on_linux_and_macos():
 
 def test_covers_from_files(tmp_path):
     Image.new("RGB", (900, 900), "red").save(tmp_path / "cover.png")
-    cover = load_cover(f"file://{tmp_path / 'cover.png'}")
+    cover = load_cover((tmp_path / "cover.png").as_uri())
     assert cover.size == (512, 512) and cover.mode == "RGBA"
     with open(tmp_path / "cover.png", "rb") as file:
         assert load_cover(file.read()).size == (512, 512)
