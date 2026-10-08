@@ -229,7 +229,7 @@ system* makes it start at every login. More in
 With Python instead:
 
 ```bash
-pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.3.0"
+pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.4.0"
 libre-panel tray                    # background app with tray icon; opens the editor
 libre-panel autostart enable        # start it whenever you log in
 ```

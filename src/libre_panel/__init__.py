@@ -1,3 +1,3 @@
 """Libre Panel: free software for USB system-monitor displays."""
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

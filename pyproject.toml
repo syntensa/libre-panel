@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "libre-panel"
-version = "0.3.0"
+version = "0.4.0"
 description = "Free software for USB system-monitor displays (TURZX / Turing Smart Screen and compatibles) with a visual theme editor."
 readme = "README.md"
 license = "GPL-3.0-or-later"

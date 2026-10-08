@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-10-08
+
+Fourteen new modules, 24 in all: every temperature, core, drive and the
+busiest programs; clocks for any time zone, the sun and the moon,
+countdowns; what is playing, your calendar, Home Assistant and MQTT values,
+slideshows and the frame rate of your game. Music on Windows and the game
+frame rate (PresentMon) have not yet run on a real machine: reports welcome.
 
 **More modules**
 - Temperatures and fans: every sensor as a bar, CPU and GPU first, warm and
