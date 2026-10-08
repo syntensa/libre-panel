@@ -172,7 +172,8 @@ def test_every_frame_sources_reach_each_frame(plugin_folder, monkeypatch):
     thread = threading.Thread(target=app.run, args=(config,), kwargs={"stop": stop, "host": host})
     thread.start()
     try:
-        reads = lambda: sys.modules[package].Volume.reads if package in sys.modules else 0  # noqa: E731
+        # the plugin may still be importing in the panel's thread: no Volume yet
+        reads = lambda: getattr(getattr(sys.modules.get(package), "Volume", None), "reads", 0)  # noqa: E731
         assert wait_for(lambda: reads() > 5, timeout=5)
         assert wait_for(lambda: host.latest.value("audio.volume") > 5, timeout=5)
     finally:
