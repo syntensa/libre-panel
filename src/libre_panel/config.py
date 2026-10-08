@@ -60,6 +60,10 @@ providers = ["psutil"]
 # Windows: enable "Remote Web Server" in LibreHardwareMonitor.
 url = "http://127.0.0.1:8085/data.json"
 
+[sensors.psutil]
+# What a theme's ping connects to (host:port); only while a theme shows the ping.
+# ping = "1.1.1.1:443"
+
 [weather]
 # Weather is off by default. Turn it on and set your own location.
 enabled = false

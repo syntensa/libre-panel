@@ -143,7 +143,7 @@ def readings_from_tree(tree: dict[str, Any], gpu: str | None = None) -> dict[str
         for alias, (sensor_type, names) in aliases.items():
             src = device.get(sensor_type, names)
             if src is not None:
-                out[alias] = Reading(alias, src.value, src.unit, src.label)
+                out[alias] = Reading(alias, src.value, src.unit, src.label, src.key)
     if cpus and "cpu.freq" not in out:
         # Older LibreHardwareMonitor versions have no average: use the mean of the cores.
         clocks = [
@@ -157,7 +157,38 @@ def readings_from_tree(tree: dict[str, Any], gpu: str | None = None) -> dict[str
         out["cpu.name"] = Reading("cpu.name", cpus[0].name, "", "CPU")
     if gpus:
         out["gpu.name"] = Reading("gpu.name", gpus[0].name, "", "GPU")
+    _temperatures_and_fans(list(devices.values()), out)
     return out
+
+
+_STORAGE = ("nvme", "hdd", "ssd", "storage")
+
+
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", text.lower()).strip("_")
+
+
+def _temperatures_and_fans(devices: list[_Device], out: dict[str, Reading]) -> None:
+    """Every temperature and fan as temp.<device>.<name> and fan.<device>.<name>."""
+    count: dict[str, int] = {}
+    for device in devices:
+        count[device.kind] = count.get(device.kind, 0) + 1
+    seen: dict[str, int] = {}
+    for device in devices:
+        seen[device.kind] = seen.get(device.kind, 0) + 1
+        place = _slug(device.kind) + (str(seen[device.kind]) if count[device.kind] > 1 else "")
+        for (sensor_type, label), reading in device.sensors.items():
+            prefix = {"temperature": "temp", "fan": "fan"}.get(sensor_type)
+            if prefix is None:
+                continue
+            key = f"{prefix}.{place}.{_slug(label)}"
+            if device.kind in _STORAGE:
+                name = device.name
+            elif device.kind in ("cpu", "gpu") and not label.lower().startswith(device.kind):
+                name = f"{device.kind.upper()} {label}"
+            else:
+                name = label
+            out.setdefault(key, Reading(key, reading.value, reading.unit, name, reading.key))
 
 
 class LibreHardwareMonitorProvider(SensorProvider):

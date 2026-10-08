@@ -399,6 +399,25 @@ class _Build:
             stroke=round(_clamp(size / 14, 1.5, 3.5), 1),
         )  # fmt: skip
 
+    def listing(self, name: str, items: str, x: float, y: float, w: float, h: float,
+                color: str, style: str = "bars", size: float = 0, **kw: Any) -> None:  # fmt: skip
+        """A list of readings (temperatures, drives, cores ...), as many as fit."""
+        self.add(
+            "list", name, x=round(x), y=round(y), w=max(4, round(w)), h=max(4, round(h)),
+            items=items, style=style, font=self.style["display_font"],
+            label_font=self.style["text_font"], font_size=max(7, round(size or self.ts * 1.3)),
+            color=self.c("text"), muted=self.c("text3"), color2=color,
+            **{"background": self.c("track"), **kw},
+        )  # fmt: skip
+
+    def head(self, icon: str, title: str, color: str, room: float = 0) -> float:
+        """Icon and title at the top (``room`` kept free on the right); returns
+        the height they take."""
+        self.icon("icon", icon, self.ix, self.iy - self.ts * 0.1, self.ts * 1.5, color)
+        self.label("title", title, self.ix + self.ts * 2.1, self.iy + self.ts * 0.15,
+                   self.ts * 1.05, color=color, width=self.iw - self.ts * 2.1 - room)  # fmt: skip
+        return self.ts * 2.4
+
     # shapes of the box
     @property
     def aspect(self) -> float:
@@ -963,6 +982,219 @@ def build_text(b: _Build, _src: Source) -> None:
           glow=round(0.7 * b.glow, 2), glow_radius=max(2, line * 3))  # fmt: skip
 
 
+# -- lists of readings ---------------------------------------------------------
+
+
+def default_items(kind: str) -> str:
+    """What a list module shows while its ``items`` are empty."""
+    return {
+        "temps": "cpu.temp = CPU\ngpu.temp = GPU\ntemp.*",
+        "drives": "disk.*.load",
+        "values": f"cpu.load = CPU\ngpu.load = GPU\nmem.load = {t('RAM')}\n"
+        f"cpu.temp = {t('CPU temp')}\ngpu.temp = {t('GPU temp')}\nnet.down = {t('Download')}",
+    }.get(kind, "")
+
+
+def _heat_rules(b: _Build, warn: float = 75, crit: float = 88) -> list[dict[str, Any]]:
+    return [{"above": warn, "color": b.c("warn")}, {"above": crit, "color": b.c("crit")}]
+
+
+def build_temps(b: _Build, _src: Source) -> None:
+    """Every temperature as a bar, CPU and GPU first; the fans too when there is room."""
+    b.card()
+    color = b.tint("accent")
+    top = b.head("temperature", b.module["title"] or t("Temperatures"), color)
+    items = b.module["items"] or default_items("temps")
+    fans = "fan.*\ngpu.fan"
+    x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
+    temps = {"min": 20, "max": 100, "color_rules": _heat_rules(b), "format": "{value:.0f}°C",
+             "empty": t("No temperature readings")}  # fmt: skip
+    fan_list = {"format": "{value:.0f} RPM", "empty": t("No fan readings"), "uppercase": True}
+    if b.aspect >= 3.0 and b.iw > b.ts * 40:  # long: temperatures | fans
+        width = (w - b.pad) * 0.6
+        b.listing("temps", items, x, y, width, h, color, **temps)
+        b.listing("fans", fans, x + width + b.pad, y, w - width - b.pad, h, color, "rows",
+                  **fan_list)  # fmt: skip
+    elif (b.large or b.aspect <= 0.72) and h > b.ts * 11:  # big: the fans as tiles below
+        fan_h = _clamp(h * 0.3, b.ts * 4.4, b.ts * 7)
+        b.listing("temps", items, x, y, w, h - fan_h - b.pad, color, **temps)
+        b.listing("fans", fans, x, y + h - fan_h, w, fan_h, color, "cells", b.ts * 1.2,
+                  levels=False, background=mix(b.c("track"), b.c("surface"), 0.35),
+                  max_items=max(1, int(w // (b.ts * 5.5))), columns=0, **fan_list)  # fmt: skip
+    else:
+        b.listing("temps", items, x, y, w, h, color, "bars" if h > b.ts * 4.5 else "rows", **temps)
+
+
+def build_cores(b: _Build, _src: Source) -> None:
+    """The load of every core: columns side by side, or tiles; the history when big."""
+    b.card()
+    color = b.tint("cpu")
+    top = b.head("cpu", b.module["title"] or t("CPU cores"), color, b.ts * 3.6)
+    b.value("value", "cpu.load", "{value:.0f}%", b.ix + b.iw, b.iy, b.ts * 1.6, align="right",
+            width=b.iw * 0.3)  # fmt: skip
+    x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
+    items = "cpu.core.*.load"
+    if b.large and h > b.ts * 12:
+        cores_h = h * 0.6
+        b.listing("cores", items, x, y, w, cores_h, color, "columns", b.ts * 1.1)
+        gy = y + cores_h + b.pad
+        b.graph("history", "cpu.load", x, gy, w, b.iy + b.ih - gy, color)
+    elif b.aspect >= 1.45:
+        b.listing("cores", items, x, y, w, h, color, "columns", b.ts * 1.1)
+    else:
+        b.listing("cores", items, x, y, w, h, color, "cells", b.ts * 1.4)
+
+
+def build_drives(b: _Build, _src: Source) -> None:
+    """Every drive: how full, how much is free; reading and writing when big."""
+    b.card()
+    color = b.tint("disk")
+    top = b.head("disk", b.module["title"] or t("Drives"), color)
+    x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
+    rates = b.large and h > b.ts * 12
+    if rates:
+        h -= b.ts * 3.4
+    b.listing("drives", b.module["items"] or default_items("drives"), x, y, w, h, color,
+              detail="free", detail_format=t("{value:.0f} GB free"), format="{value:.0f}%",
+              color_rules=_heat_rules(b, 85, 95), uppercase=False)  # fmt: skip
+    if rates:
+        cap = b.iy + b.ih - CAP * b.ts * 1.3
+        half = w / 2
+        for i, (key, icon, name) in enumerate((("disk.read", "download", "read"),
+                                               ("disk.write", "upload", "write"))):  # fmt: skip
+            cx = x + i * half
+            b.icon(f"{name}-icon", icon, cx, cap + CAP * b.ts * 0.65 - b.ts * 0.7, b.ts * 1.4,
+                   b.c("text3"))  # fmt: skip
+            b.value(name, key, "{value:bytes}/s", cx + b.ts * 1.9, cap, b.ts * 1.3,
+                    width=half - b.ts * 2.2, hide_if_missing=True)  # fmt: skip
+
+
+def build_processes(b: _Build, _src: Source) -> None:
+    """The programs that use the most processor time (or memory)."""
+    b.card()
+    memory = b.module["sort"] == "memory"
+    color = b.tint("mem" if memory else "cpu")
+    top = b.head("list", b.module["title"] or t("Processes"), color, b.ts * 3.4)
+    b.label("sort", "RAM" if memory else "CPU", b.ix + b.iw, b.iy + b.ts * 0.15, b.ts,
+            color=b.c("text3"), align="right")  # fmt: skip
+    x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
+    bars = (b.large or b.aspect <= 0.72) and h > b.ts * 10
+    b.listing("processes", "proc.mem.*.value" if memory else "proc.cpu.*.value", x, y, w, h,
+              color, "bars" if bars else "rows", format="{value:.1f}%", min=0, max=0,
+              uppercase=False, empty=t("Waiting for the first count …"))  # fmt: skip
+
+
+def build_values(b: _Build, _src: Source) -> None:
+    """Readings of your choice as tiles: a small dashboard."""
+    b.card()
+    color = b.tint("accent")
+    y, h = b.iy, b.ih
+    if b.module["title"]:
+        top = b.head("grid", b.module["title"], color)
+        y, h = y + top, h - top
+    items = b.module["items"] or default_items("values")
+    tiles = "cells" if b.aspect < 3.0 or b.ih > b.ts * 6 else "rows"
+    b.listing("values", items, b.ix, y, b.iw, h, color, tiles, b.ts * 2.4, levels=False,
+              background=mix(b.c("track"), b.c("surface"), 0.35), format="auto",
+              empty=t("Add readings in the settings"))  # fmt: skip
+
+
+def build_netinfo(b: _Build, _src: Source) -> None:
+    """Address, ping and today's traffic; the ping's history when big."""
+    b.card()
+    color = b.tint("net")
+    top = b.head("network", b.module["title"] or t("Network"), color)
+    items = "\n".join(
+        f"{key} = {name}"
+        for key, name in (
+            ("net.ip", t("IP address")), ("net.ping", t("Ping")),
+            ("net.down", t("Download")), ("net.up", t("Upload")),
+            ("net.today.down", t("Received today")), ("net.today.up", t("Sent today")),
+        )
+    )  # fmt: skip
+    x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
+    graph = (b.large or b.aspect <= 0.72) and h > b.ts * 14
+    rows_h = h * 0.62 if graph else h
+    b.listing("details", items, x, y, w, rows_h, color, "rows", b.ts * 1.25, format="auto")
+    if graph:
+        gy = y + rows_h + b.pad
+        b.label("ping-title", t("Ping"), x, gy, b.ts * 0.9, width=w * 0.5)
+        gy += b.ts * 1.6
+        b.graph("ping-history", "net.ping", x, gy, w, b.iy + b.ih - gy, color, 0, None)
+        b.out[-1]["needs"] = "net.ping"
+
+
+def build_battery(b: _Build, _src: Source) -> None:
+    """The battery's charge, whether it charges and the time left; its history when big."""
+    b.card()
+    start = len(b.out)
+    color = b.tint("net")
+    a = b.aspect
+    below = (b.large or a <= 0.72) and b.ih > b.ts * 14  # the history under the battery
+    beside = not below and a >= 3.4  # the history on the right
+    main_h = b.ih * 0.55 if below else b.ih
+    main_w = b.iw * 0.45 if beside else b.iw
+    if (main_w / main_h >= 1.45 and not (below and a <= 0.72)) or beside:  # numbers beside
+        bh = min(main_h * 0.5, main_w * 0.2)
+        bw = bh * 1.9
+        _battery_shape(b, b.ix, b.iy + (main_h - bh) / 2, bw, bh, color)
+        tx = b.ix + bw + b.pad * 1.6
+        size = min(main_h * 0.36, (main_w - bw - b.pad * 1.6) * 0.3)
+        cap = b.iy + (main_h - (CAP * size + b.ts * 1.0 + CAP * b.ts * 1.1)) / 2
+        b.value("value", "battery.load", "{value:.0f}%", tx, cap, size, width=b.ix + main_w - tx)
+        _battery_state(b, tx, cap + CAP * size + b.ts * 1.0, b.ix + main_w - tx)
+    else:  # the battery above the numbers
+        bw = min(main_w * 0.62, main_h * 0.7)
+        bh = bw / 1.9
+        size = min(main_h * 0.26, main_w * 0.3)
+        block = bh + b.ts * 0.9 + CAP * size + b.ts * 0.9 + CAP * b.ts * 1.1
+        y = b.iy + (main_h - block) / 2
+        cx = b.ix + main_w / 2
+        _battery_shape(b, cx - bw / 2, y, bw, bh, color)
+        y += bh + b.ts * 0.9
+        b.value("value", "battery.load", "{value:.0f}%", cx, y, size, align="center", width=main_w)
+        _battery_state(b, cx, y + CAP * size + b.ts * 0.9, main_w, "center")
+    if below:
+        gy = b.iy + main_h + b.pad
+        b.graph("history", "battery.load", b.ix, gy, b.iw, b.iy + b.ih - gy, color)
+    elif beside:
+        gx = b.ix + main_w + b.pad
+        b.graph("history", "battery.load", gx, b.iy + b.ih * 0.12, b.ix + b.iw - gx, b.ih * 0.76,
+                color)  # fmt: skip
+    for widget in b.out[start:]:
+        widget["needs"] = "battery.load"
+    b.label("none", t("No battery"), b.ix + b.iw / 2, b.iy + b.ih / 2 - CAP * b.ts / 2, b.ts,
+            align="center", width=b.iw)  # fmt: skip
+    b.out[-1]["needs"] = "!battery.load"
+
+
+def _battery_shape(b: _Build, x: float, y: float, w: float, h: float, color: str) -> None:
+    line = max(2, round(h * 0.07))
+    nub = max(3, round(w * 0.06))
+    body = w - nub - line
+    b.add("rect", "battery", x=round(x), y=round(y), w=round(body), h=round(h), color=None,
+          outline=b.c("text2"), outline_width=line, radius=round(h * 0.18))  # fmt: skip
+    b.add("rect", "battery-nub", x=round(x + body + line * 0.6), y=round(y + h * 0.32),
+          w=nub, h=round(h * 0.36), color=b.c("text2"), radius=max(1, nub // 2))  # fmt: skip
+    inset = line * 2.2
+    rules = [{"above": 20, "color": b.c("warn")}, {"above": 40, "color": color}]
+    b.add(
+        "bar", "charge", x=round(x + inset), y=round(y + inset), w=round(body - 2 * inset),
+        h=round(h - 2 * inset), sensor="battery.load", min=0, max=100, color=b.c("crit"),
+        color2=None, background=None, radius=round(h * 0.08), color_rules=rules,
+        glow=round(0.3 * b.glow, 2), glow_radius=max(2, round(h * 0.1)),
+    )  # fmt: skip
+
+
+def _battery_state(b: _Build, x: float, cap: float, width: float, align: str = "left") -> None:
+    b.value("state", "battery.state", "{value}", x, cap, b.ts * 1.1, color=b.c("text2"),
+            align=align, width=width, font="text_font", tabular=False, fallback="",
+            hide_if_missing=True)  # fmt: skip
+    b.value("left", "battery.left", "{value:duration}", x, cap + b.ts * 2.0, b.ts * 1.1,
+            color=b.c("text3"), align=align, width=width, font="text_font",
+            hide_if_missing=True)  # fmt: skip
+
+
 @dataclass(frozen=True)
 class Kind:
     name: str
@@ -984,11 +1216,19 @@ def kinds() -> dict[str, Kind]:
         "network": Kind(t("Network"), build_network, span=(2, 1)),
         "system": Kind(t("System"), build_system),
         "text": Kind(t("Title"), build_text, span=(2, 1)),
+        "temps": Kind(t("Temperatures"), build_temps, span=(1, 2)),
+        "cores": Kind(t("CPU cores"), build_cores, span=(2, 1)),
+        "drives": Kind(t("Drives"), build_drives, span=(2, 1)),
+        "processes": Kind(t("Processes"), build_processes, span=(1, 2)),
+        "netinfo": Kind(t("Network details"), build_netinfo, span=(2, 1)),
+        "battery": Kind(t("Battery"), build_battery),
+        "values": Kind(t("Dashboard"), build_values, span=(2, 1)),
     }
 
 
 MODULE_KINDS = (
     "clock", "date", "weather", "ring", "stat", "graph", "bars", "network", "system", "text",
+    "temps", "cores", "drives", "processes", "netinfo", "battery", "values",
 )  # fmt: skip
 MODULE_SOURCES = ("cpu", "gpu", "mem", "disk", "net", "sensor")
 MODULE_FALLBACKS = ("auto", "none", "cpu", "gpu", "mem", "disk")
@@ -1091,7 +1331,12 @@ def module_info() -> dict[str, Any]:
     """What the editor needs: the kinds, their sources and sizes, the looks."""
     return {
         "kinds": {
-            key: {"name": kind.name, "sources": list(kind.sources), "span": list(kind.span)}
+            key: {
+                "name": kind.name,
+                "sources": list(kind.sources),
+                "span": list(kind.span),
+                "items": default_items(key),
+            }
             for key, kind in kinds().items()
         },
         "looks": {

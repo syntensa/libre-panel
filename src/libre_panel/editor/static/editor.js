@@ -2195,6 +2195,14 @@ function buildModuleProps(form, widget) {
       form.append(field(t("Hours between columns"), numberInput(widget.step, (v) => change("step")(Math.max(1, Math.min(6, Math.round(v || 3)))), { min: 1, max: 6 })));
     }
   }
+  if (widget.module === "processes") {
+    const sorts = { cpu: t("processor time"), memory: t("memory") };
+    form.append(block(t("Sorted by"), chips("sort", Object.keys(sorts), (s) => sorts[s])));
+  }
+  if (info.items) {
+    const items = el("textarea", { placeholder: info.items, rows: 5, oninput: (e) => change("items")(e.target.value) }, widget.items || "");
+    form.append(field(t("Readings"), items, t('one per line: a sensor ("cpu.temp"), a pattern ("temp.*") and a name if you like ("cpu.temp = CPU"); empty: as shown')));
+  }
   if (widget.module === "text") form.append(field(t("Text"), controlFor("text", "text", widget.text, change("text"))));
   const title = el("input", { type: "text", value: widget.title || "", placeholder: t("automatic"), oninput: (e) => change("title")(e.target.value) });
   if (widget.module !== "text" && widget.module !== "clock" && widget.module !== "date") form.append(field(t("Title"), title));

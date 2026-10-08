@@ -30,15 +30,16 @@ from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont
 from libre_panel import i18n
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
 from libre_panel.icons import draw_icon, weather_icon_name
-from libre_panel.render.formatting import FormatError, safe_format
-from libre_panel.sensors.base import Snapshot
+from libre_panel.render import lists
+from libre_panel.render.formatting import FormatError, auto_format, safe_format
+from libre_panel.sensors.base import Snapshot, want
 from libre_panel.theme.model import Theme, ThemeError, resolve_asset
 from libre_panel.theme.modules import expand as expand_modules
 
 log = logging.getLogger(__name__)
 
 # Sensor texts shown in the user's language on the panel.
-TRANSLATED_READINGS = {"weather.description"}
+TRANSLATED_READINGS = {"weather.description", "battery.state"}
 
 # Shapes are drawn at this scale and downsampled for smooth edges.
 SUPERSAMPLE = 3
@@ -246,6 +247,23 @@ def _catmull_rom(points: list[tuple[float, float]], samples: int = 6) -> list[tu
     return out
 
 
+def _reads(widgets: list[dict[str, Any]]) -> set[str]:
+    """The sensor keys (and patterns) the widgets read."""
+    keys: set[str] = set()
+    for widget in widgets:
+        if widget.get("sensor"):
+            keys.add(widget["sensor"])
+        for need in (widget.get("needs") or "").split(","):
+            need = need.strip().lstrip("!").strip()
+            if need:
+                keys.add(need)
+        if widget["type"] == "weather":
+            keys.add(f"weather.{widget['field']}")
+        elif widget["type"] == "list":
+            keys |= lists.read_keys(widget["items"])
+    return keys
+
+
 class Renderer:
     def __init__(self, theme: Theme, animate: bool = False, preview: bool = False) -> None:
         self.theme = theme
@@ -274,6 +292,7 @@ class Renderer:
         self.widgets, self.module_boxes = expand_modules(theme)
         self._modules = {w["id"]: w for w in theme.widgets if w["type"] == "module"}
         self._keys = {w["id"]: json.dumps(w, sort_keys=True) for w in self.widgets}
+        want(self, _reads(self.widgets))  # costly sensors work only while shown
         self._background = self._load_background()
         # Incremental compositing: the last frame and the pieces it was made of.
         # Only regions whose pieces changed are composed again, so a mostly
@@ -1020,6 +1039,260 @@ class Renderer:
                 color = (12, 16, 22, 255) if light else (255, 255, 255, 255)
             draw.text((cx, cy), str(number), font=font, fill=color, anchor="mm")
         return Piece(layer, widget["x"], widget["y"])
+
+    # -- lists -------------------------------------------------------------
+
+    def _draw_list(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        items = lists.pick(widget, snapshot.readings)
+        items = items[: self._list_room(widget, len(items))]
+        lo, hi = widget["min"], widget["max"]
+        if hi <= lo:  # the largest value shown fills the bar
+            hi = max([lo + 1e-9] + [i.number for i in items if i.number is not None])
+        rows = []
+        for item in items:
+            reading = item.reading
+            try:
+                if widget["format"] in ("", "auto"):
+                    text = auto_format(reading.value, reading.unit)
+                else:
+                    text = safe_format(widget["format"], reading.value, reading.unit, item.name)
+            except FormatError:
+                text = reading.value if isinstance(reading.value, str) else "--"
+            detail = ""
+            if item.detail is not None and item.detail.value is not None:
+                try:
+                    detail = safe_format(
+                        widget["detail_format"], item.detail.value, item.detail.unit, item.name
+                    )
+                except FormatError:
+                    detail = ""
+            frac = _fraction(item.number, lo, hi, widget["scale"])
+            rows.append((item.name, detail, text, round(frac, 3), _rule_color(widget, item.number)))
+        content = tuple(rows)
+        return self._cached(widget, content, lambda: self._list_piece(widget, rows))
+
+    def _list_room(self, widget: dict[str, Any], count: int) -> int:
+        """How many items fit."""
+        w, h, fs = max(1, widget["w"]), max(1, widget["h"]), max(6, widget["font_size"])
+        limit = widget["max_items"] or lists.MAX_ITEMS
+        style = widget["style"]
+        if style == "columns":
+            room = int(w // max(4, fs * 0.45))
+        elif style == "cells":
+            room = int((w // 12) * (h // 12))
+        else:
+            columns, _w, per_column, _h, _beside = self._list_layout(widget, count)
+            room = columns * per_column
+        return max(0, min(count, limit, room))
+
+    @staticmethod
+    def _list_layout(widget: dict[str, Any], count: int) -> tuple[int, float, int, float, bool]:
+        """Rows and bars: columns, their width, rows per column, row height and
+        whether bars stand beside the names (else below them)."""
+        w, h, fs = max(1, widget["w"]), max(1, widget["h"]), max(6, widget["font_size"])
+        gap = fs * 1.2
+        bars = widget["style"] == "bars" and widget["levels"]
+        if widget["columns"] > 0:
+            choices = [widget["columns"]]
+        else:  # as few as hold them all, each at least ten font sizes wide
+            choices = list(range(1, max(1, int((w + gap) // (fs * 10 + gap))) + 1))
+        for columns in choices:
+            column_w = (w - (columns - 1) * gap) / columns
+            beside = bars and not widget["detail"] and column_w >= fs * 15
+            row_h = fs * (1.8 if beside else 2.5 if bars else 1.75)
+            per_column = int(h // row_h)
+            if per_column * columns >= count or columns == choices[-1]:
+                break
+        return columns, column_w, per_column, row_h, beside
+
+    def _list_text(self, layer: Image.Image, text: str, x: float, cap_top: float, size: float,
+                   color: str, font: str, align: str = "left", width: float = 0,
+                   label: bool = False) -> None:  # fmt: skip
+        """Text on a list's layer, its capitals' top at ``cap_top``."""
+        if not text:
+            return
+        size = max(6, round(size))
+        part = {
+            "x": round(x), "y": round(cap_top - 0.3 * size), "font": font, "font_size": size,
+            "align": align, "max_width": max(0, round(width)), "fit": "ellipsis",
+            "letter_spacing": max(1, round(size * 0.12)) if label else 0, "tabular": not label,
+        }  # fmt: skip
+        piece = self._text_piece(part, text, color)
+        self._paste(layer, piece.layer, piece.x, piece.y)
+
+    def _list_bar(self, layer: Image.Image, widget: dict[str, Any], frac: float,
+                  rule: str | None, box: tuple[float, float, float, float],
+                  direction: str = "right") -> None:  # fmt: skip
+        x, y, w, h = (round(v) for v in box)
+        if w < 2 or h < 2:
+            return
+        accent = self.color(widget["color2"])
+        track = self.color(widget["background"])
+        deep = _lerp(accent, track, 0.55) if track else accent
+        bar = {
+            "radius": min(w, h) // 2, "direction": direction, "segments": 0, "segment_gap": 0,
+            "color": "#{:02x}{:02x}{:02x}{:02x}".format(*deep), "color2": widget["color2"],
+            "background": widget["background"],
+        }  # fmt: skip
+        piece = self._bar_piece(bar, frac, rule, x, y, w, h)
+        self._paste(layer, piece.layer, x, y)
+
+    def _list_piece(self, widget: dict[str, Any], rows: list[tuple]) -> Piece:
+        w, h = max(1, widget["w"]), max(1, widget["h"])
+        margin = max(2, widget["font_size"] // 3)  # room for glyphs that overhang
+        layer = Image.new("RGBA", (w + 2 * margin, h + 2 * margin), (0, 0, 0, 0))
+        inner = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        if not rows:
+            if widget["empty"]:
+                size = max(7, widget["font_size"] * 0.7)
+                self._list_text(inner, widget["empty"], w / 2, h / 2 - 0.35 * size, size,
+                                widget["muted"], widget["label_font"], "center", w)  # fmt: skip
+        elif widget["style"] == "columns":
+            self._list_columns(inner, widget, rows)
+        elif widget["style"] == "cells":
+            self._list_cells(inner, widget, rows)
+        else:
+            self._list_rows(inner, widget, rows)
+        layer.alpha_composite(inner, (margin, margin))
+        x, y = widget["x"], widget["y"]
+        return Piece(layer, x - margin, y - margin, [x, y, w, h])
+
+    def _list_name(self, widget: dict[str, Any], name: str) -> str:
+        return name.upper() if widget["uppercase"] else name
+
+    def _list_rows(self, layer: Image.Image, widget: dict[str, Any], rows: list[tuple]) -> None:
+        h, fs = widget["h"], max(6, widget["font_size"])
+        columns, column_w, _per, row_h, beside = self._list_layout(widget, len(rows))
+        columns = max(1, min(columns, len(rows)))
+        gap = fs * 1.2
+        if widget["columns"] <= 0:  # automatic: the columns share the width
+            column_w = (widget["w"] - (columns - 1) * gap) / columns
+        per_column = -(-len(rows) // columns)
+        pitch = min(h / per_column, row_h * 1.45)
+        ls = max(7, fs * 0.62)  # names
+        bars = widget["style"] == "bars" and widget["levels"]
+        bar_h = max(3, round(fs * 0.26))
+        font = self.font(widget["font"], fs)
+        cell = self._digit_cell(font)
+        widest = max(
+            sum(cell if ch in _DIGITS else font.getlength(ch) for ch in row[2]) for row in rows
+        )
+        value_w = min(widest + fs * 0.2, column_w * (0.5 if bars else 0.62))
+        for i, (name, detail, text, frac, rule) in enumerate(rows):
+            col, row = divmod(i, per_column)
+            x0 = col * (column_w + gap)
+            top = row * pitch + (pitch - row_h) / 2
+            color = rule or widget["color"]
+            if beside:  # name | bar | value
+                mid = top + row_h / 2
+                name_w = column_w * 0.3
+                self._list_text(layer, self._list_name(widget, name), x0, mid - 0.35 * ls, ls,
+                                widget["muted"], widget["label_font"], width=name_w - fs * 0.4,
+                                label=widget["uppercase"])  # fmt: skip
+                self._list_bar(layer, widget, frac, rule,
+                               (x0 + name_w, mid - bar_h / 2,
+                                column_w - name_w - value_w - fs * 0.5, bar_h))  # fmt: skip
+                self._list_text(layer, text, x0 + column_w, mid - 0.35 * fs, fs, color,
+                                widget["font"], "right", value_w)  # fmt: skip
+                continue
+            cap = top + (row_h - (0.7 * fs + (fs * 0.45 + bar_h if bars else 0))) / 2
+            name_text = self._list_name(widget, name)
+            name_w = column_w - value_w - fs * 0.6
+            name_cap = cap + 0.35 * (fs - ls)
+            muted, label_font = widget["muted"], widget["label_font"]
+            self._list_text(layer, name_text, x0, name_cap, ls, muted, label_font, width=name_w,
+                            label=widget["uppercase"])  # fmt: skip
+            if detail:
+                font = self.font(widget["label_font"], round(ls))
+                spacing = max(1, round(ls * 0.12)) if widget["uppercase"] else 0
+                used = font.getlength(name_text) + spacing * len(name_text) + ls * 0.7
+                if used < name_w - ls * 3:
+                    self._list_text(layer, detail, x0 + used, name_cap, ls,
+                                    widget["muted"], widget["label_font"],
+                                    width=name_w - used)  # fmt: skip
+            self._list_text(layer, text, x0 + column_w, cap, fs, color, widget["font"], "right",
+                            column_w * 0.6)  # fmt: skip
+            if bars:
+                self._list_bar(layer, widget, frac, rule,
+                               (x0, cap + 0.7 * fs + fs * 0.45, column_w, bar_h))  # fmt: skip
+
+    def _list_columns(self, layer: Image.Image, widget: dict[str, Any], rows: list[tuple]) -> None:
+        """Upright bars side by side (the cores of a processor)."""
+        w, h, fs = widget["w"], widget["h"], max(6, widget["font_size"])
+        slot = w / len(rows)
+        ls = max(6, min(fs * 0.62, slot * 0.5))
+        names = lists.short_names([r[0] for r in rows])
+        show_names = slot >= ls * 1.4 and max(len(n) for n in names) * ls * 0.62 <= slot
+        vs = min(fs, slot / 2.3)  # the values over the columns
+        show_values = vs >= 7
+        top = vs * 0.7 + vs * 0.6 if show_values else 0
+        bottom = h - (ls * 0.7 + ls * 0.6 if show_names else 0)
+        bar_w = max(2, min(slot * 0.62, slot - 2, fs * 1.3))
+        for i, (_name, _detail, text, frac, rule) in enumerate(rows):
+            cx = slot * i + slot / 2
+            self._list_bar(layer, widget, frac, rule,
+                           (cx - bar_w / 2, top, bar_w, bottom - top), "up")  # fmt: skip
+            if show_values:
+                self._list_text(layer, text, cx, 0, vs, rule or widget["color"], widget["font"],
+                                "center", slot)  # fmt: skip
+            if show_names:
+                self._list_text(layer, names[i], cx, h - ls * 0.7, ls, widget["muted"],
+                                widget["label_font"], "center", slot)  # fmt: skip
+
+    def _list_cells(self, layer: Image.Image, widget: dict[str, Any], rows: list[tuple]) -> None:
+        """A grid of tiles, each filled as high as its value (or just its number)."""
+        w, h, fs = widget["w"], widget["h"], max(6, widget["font_size"])
+        n = len(rows)
+        gap = max(2, round(min(w, h) * 0.03))
+        best = (0.0, 1, n)
+        for columns in range(1, n + 1) if widget["columns"] <= 0 else [widget["columns"]]:
+            lines = -(-n // columns)
+            cell_w = (w - (columns - 1) * gap) / columns
+            cell_h = (h - (lines - 1) * gap) / lines
+            size = min(cell_w, cell_h * 1.6)  # wide tiles read better than tall ones
+            if size > best[0]:
+                best = (size, columns, lines)
+        _size, columns, lines = best
+        cell_w = (w - (columns - 1) * gap) / columns
+        cell_h = (h - (lines - 1) * gap) / lines
+        s = SUPERSAMPLE
+        track = self.color(widget["background"])
+        accent = self.color(widget["color2"])
+        names = [r[0] for r in rows]
+        if widget["levels"]:
+            names = lists.short_names(names)
+        for i, (_name, _detail, text, frac, rule) in enumerate(rows):
+            row, col = divmod(i, columns)
+            x0, y0 = col * (cell_w + gap), row * (cell_h + gap)
+            cw, ch = round(x0 + cell_w) - round(x0), round(y0 + cell_h) - round(y0)
+            radius = min(cw, ch) * 0.16
+            tile, draw = self._canvas(cw, ch)
+            box = [0, 0, cw * s - 1, ch * s - 1]
+            if track:
+                draw.rounded_rectangle(box, radius=radius * s, fill=track)
+            if widget["levels"] and frac > 0:
+                fill = self.color(rule) if rule else accent
+                mask = Image.new("L", tile.size, 0)
+                ImageDraw.Draw(mask).rounded_rectangle(box, radius=radius * s, fill=255)
+                cut = Image.new("L", tile.size, 0)
+                ImageDraw.Draw(cut).rectangle([0, (1 - frac) * ch * s, cw * s, ch * s], fill=170)
+                mask = ImageChops.multiply(mask, cut)
+                tile.paste(Image.new("RGBA", tile.size, fill), (0, 0), mask)
+            tile = self._down(tile, cw, ch)
+            self._paste(layer, tile, round(x0), round(y0))
+            vs = min(fs, ch * 0.34, cw / max(2.2, len(text) * 0.62))
+            ls = max(6, min(vs * 0.62, ch * 0.2))
+            with_name = ch >= vs * 0.7 + ls * 0.7 + ls * 1.6 and cw >= ls * 2 and ls >= 7.5
+            block = 0.7 * vs + (ls * 0.7 + ls * 0.7 if with_name else 0)
+            cap = y0 + (ch - block) / 2
+            cx = x0 + cw / 2
+            if with_name:
+                self._list_text(layer, self._list_name(widget, names[i]), cx, cap, ls,
+                                widget["muted"], widget["label_font"], "center", cw * 0.9,
+                                label=widget["uppercase"])  # fmt: skip
+                cap += ls * 0.7 + ls * 0.7
+            self._list_text(layer, text, cx, cap, vs, rule or widget["color"], widget["font"],
+                            "center", cw * 0.9)  # fmt: skip
 
     # -- shapes ------------------------------------------------------------
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import time
+from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -34,7 +35,34 @@ _WAVES: dict[str, tuple[str, str, float, float, float]] = {
     "net.up": ("Network upload", "B/s", 3.1e5, 2.9e5, 12),
     "fan.cpu": ("CPU fan", "RPM", 1100, 250, 27),
     "battery.load": ("Battery", "%", 80, 0, 1),
+    "net.ping": ("Ping", "ms", 16, 5, 23),
+    "temp.cpu.ccd1": ("CPU CCD1", "°C", 52, 12, 29),
+    "temp.gpu.hot_spot": ("GPU Hot Spot", "°C", 71, 12, 31),
+    "temp.nvme.composite": ("NVMe SSD", "°C", 41, 3, 61),
+    "temp.board.system": ("Motherboard", "°C", 34, 2, 71),
+    "fan.board.case_1": ("Case fan 1", "RPM", 820, 120, 47),
+    "fan.board.case_2": ("Case fan 2", "RPM", 760, 90, 53),
+    "fan.board.pump": ("Pump", "RPM", 2100, 150, 59),
 }
+# Eight cores, each busy in its own rhythm.
+for _n, (_base, _amp, _period) in enumerate(
+    ((62, 30, 7), (35, 25, 11), (48, 30, 13), (20, 15, 17),
+     (71, 22, 5), (28, 20, 19), (40, 35, 9), (15, 12, 23)), start=1,
+):  # fmt: skip
+    _WAVES[f"cpu.core.{_n}.load"] = (f"Core {_n}", "%", _base, _amp, _period)
+
+# Copies under friendlier names: the reading they repeat (Reading.origin).
+_COPIES = {
+    "temp.cpu.package": ("cpu.temp", "CPU Package"),
+    "temp.gpu.core": ("gpu.temp", "GPU Core"),
+    "fan.gpu.fan_1": ("gpu.fan", "GPU Fan"),
+    "fan.cpu.fan": ("fan.cpu", "CPU Fan"),
+}
+_DRIVES = (("C:", 953.0, 0.63), ("D:", 1863.0, 0.41), ("E:", 931.0, 0.87))  # name, GiB, used
+_PROGRAMS = (  # name, CPU %, memory %
+    ("blender", 18.4, 9.1), ("firefox", 6.2, 7.4), ("code", 3.1, 4.2), ("obs64", 2.6, 2.1),
+    ("steam", 1.2, 1.9), ("discord", 0.9, 2.6), ("explorer", 0.6, 0.8), ("python", 0.4, 1.1),
+)  # fmt: skip
 
 _WEATHER = {
     "weather.temperature": ("Temperature", "°C", 14.0),
@@ -64,6 +92,7 @@ class DemoProvider(SensorProvider):
                 value = min(100.0, max(0.0, value))
             out[key] = Reading(key, value, unit, label)
         out["sys.uptime"] = Reading("sys.uptime", 3 * 86400 + 5 * 3600 + 42 * 60, "s", "Uptime")
+        out.update(demo_details(t, out))
         out["cpu.name"] = Reading("cpu.name", "8-Core Processor", "", "CPU")
         out["gpu.name"] = Reading("gpu.name", "Graphics Card", "", "GPU")
         if self.include_weather:
@@ -71,6 +100,34 @@ class DemoProvider(SensorProvider):
                 out[key] = Reading(key, value, unit, label)
             out.update(demo_forecast(t))
         return out
+
+
+def demo_details(t: float, waves: dict[str, Reading]) -> dict[str, Reading]:
+    """Drives, processes, battery and network details, made up."""
+    out: dict[str, Reading] = {}
+    for key, (alias, label) in _COPIES.items():
+        source = waves[alias]
+        out[key] = Reading(key, source.value, source.unit, label)
+        out[alias] = replace(source, origin=key)
+    for n, (name, total, used) in enumerate(_DRIVES, start=1):
+        values = {"name": (name, ""), "load": (used * 100, "%"), "used": (total * used, "GiB"),
+                  "free": (total * (1 - used), "GiB"), "total": (total, "GiB")}  # fmt: skip
+        for field, (value, unit) in values.items():
+            out[f"disk.{n}.{field}"] = Reading(f"disk.{n}.{field}", value, unit, name)
+    wobble = math.sin(2 * math.pi * t / 13)
+    for sort, index in (("cpu", 1), ("mem", 2)):
+        ranked = sorted(_PROGRAMS, key=lambda p: p[index], reverse=True)
+        for n, program in enumerate(ranked, start=1):
+            value = round(program[index] * (1 + 0.15 * wobble), 1)
+            out[f"proc.{sort}.{n}.name"] = Reading(f"proc.{sort}.{n}.name", program[0], "", "")
+            out[f"proc.{sort}.{n}.value"] = Reading(f"proc.{sort}.{n}.value", value, "%", "")
+    out["battery.plugged"] = Reading("battery.plugged", 0, "", "Plugged in")
+    out["battery.state"] = Reading("battery.state", "On battery", "", "Battery")
+    out["battery.left"] = Reading("battery.left", 2 * 3600 + 40 * 60, "s", "Battery time left")
+    out["net.ip"] = Reading("net.ip", "192.168.1.20", "", "IP address")
+    out["net.today.down"] = Reading("net.today.down", 3.42e9, "B", "Received today")
+    out["net.today.up"] = Reading("net.today.up", 6.1e8, "B", "Sent today")
+    return out
 
 
 _DAILY = {  # high, low, code, rain: a week of autumn

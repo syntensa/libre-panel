@@ -386,3 +386,59 @@ def test_weather_icons_follow_their_reading_and_the_night():
     renderer = Renderer(t, preview=True)
     renderer.render(snap)
     assert renderer._cache["i"][0][0] == weather_icon_name(0, night=True) == "moon"
+
+
+def test_list_modules_stay_in_their_cells():
+    t = theme(
+        {"module": "temps", "cols": 1, "rows": 2},
+        {"module": "cores", "col": 1, "cols": 2},
+        {"module": "drives", "col": 1, "row": 1, "cols": 2},
+        {"module": "processes", "col": 3, "cols": 1, "rows": 2},
+        {"module": "netinfo", "col": 4, "cols": 2, "rows": 2},
+        {"module": "battery", "col": 6},
+        {"module": "values", "col": 6, "row": 1, "cols": 2},
+    )
+    renderer = Renderer(t, preview=True)
+    renderer.render(snapshot())
+    assert renderer.warnings == [] and t.warnings == []
+    for part in renderer.widgets:
+        module = part.get("_module")
+        if not module or "w" not in part:
+            continue
+        x, y, w, h = renderer.module_boxes[module]
+        assert x <= part["x"] and part["x"] + part["w"] <= x + w + 1, part["id"]
+        assert y <= part["y"] and part["y"] + part["h"] <= y + h + 1, part["id"]
+
+
+def test_without_a_battery_the_module_says_so():
+    renderer = Renderer(theme({"module": "battery", "cols": 2}), preview=True)
+    with_one = shown(renderer, snapshot())
+    assert {"m0/value", "m0/charge", "m0/state"} <= set(with_one) and "m0/none" not in with_one
+    without = shown(renderer, snapshot(drop=("battery.",)))
+    assert "m0/none" in without and "m0/value" not in without and "m0/card" in without
+
+
+def test_list_modules_take_their_readings_and_sorting():
+    def lists_of(**module):
+        renderer = Renderer(theme({"cols": 2, "rows": 2, **module}), preview=True)
+        return {w["id"]: w for w in renderer.widgets if w["type"] == "list"}
+
+    assert lists_of(module="processes")["m0/processes"]["items"] == "proc.cpu.*.value"
+    assert lists_of(module="processes", sort="memory")["m0/processes"]["items"] == (
+        "proc.mem.*.value"
+    )
+    temps = lists_of(module="temps")
+    assert temps["m0/temps"]["items"].startswith("cpu.temp") and "m0/fans" in temps
+    assert temps["m0/fans"]["style"] == "cells"
+    mine = lists_of(module="values", items="cpu.load = CPU\nfan.*")
+    assert mine["m0/values"]["items"] == "cpu.load = CPU\nfan.*"
+    assert module_info()["kinds"]["drives"]["items"] == "disk.*.load"
+    assert module_info()["kinds"]["ring"]["items"] == ""
+
+
+@pytest.mark.parametrize("span", [(1, 1), (2, 1), (2, 2)])
+def test_cores_show_every_core(span):
+    renderer = Renderer(theme({"module": "cores", "cols": span[0], "rows": span[1]}), preview=True)
+    (cores,) = [w for w in renderer.widgets if w["id"] == "m0/cores"]
+    assert cores["style"] == ("cells" if span == (1, 1) else "columns")
+    assert renderer._list_room(cores, 8) == 8

@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+**More modules**
+- Temperatures and fans: every sensor as a bar, CPU and GPU first, warm and
+  hot in the look's warning colours; the fans beside them or as tiles below
+- CPU cores: the load of every core as tiles or columns, the history when big
+- Drives: every drive, how full and how much is free; reading and writing
+- Processes: the busiest programs by processor time or memory
+- Network details: IP address, ping, rates and today's traffic
+- Battery: charge, charging or not, time left; "No battery" on a desktop
+- Dashboard: readings of your choice as tiles
+- Widget type `list`: readings by name or pattern (`temp.*`), as rows, bars,
+  columns or tiles, as many as fit; a reading under two names is shown once
+
+**Sensors**
+- Every core (`cpu.core.<n>.load`), every drive (`disk.<n>.*`), the busiest
+  programs (`proc.cpu.<n>.*`, `proc.mem.<n>.*`), IP address, ping and
+  today's traffic, battery state and time left
+- LibreHardwareMonitor: every temperature and fan under a friendly key
+  (`temp.cpu.package`, `fan.gpu.gpu_fan_1`)
+- Costly readings (processes, ping) are only taken while a theme shows them
+
 ## 0.3.0 — 2026-10-08
 
 Modules: building blocks that snap onto a grid and show more the larger they

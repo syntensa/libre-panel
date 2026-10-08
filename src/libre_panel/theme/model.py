@@ -184,6 +184,37 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "muted": ("color", "#8a97a8"),  # the weekday names
         "first_day": ("enum:monday|sunday", "monday"),
     },
+    # Readings found by name or pattern, as many as fit: temperatures, fans,
+    # drives, cores, processes. One per line: "cpu.temp", "temp.*" (all of
+    # them), "!temp.acpi*" (left out), "cpu.temp = CPU" (with a name). Without
+    # one the name comes from a reading beside it ("disk.1.name" for
+    # "disk.1.load") or the sensor's own label.
+    "list": {
+        "w": ("int", 240),
+        "h": ("int", 160),
+        "items": ("text", "cpu.temp = CPU\ngpu.temp = GPU\nfan.*"),
+        "style": ("enum:rows|bars|columns|cells", "bars"),
+        "columns": ("int", 0),  # side by side; 0 = automatic
+        "max_items": ("int", 0),  # 0 = as many as fit
+        "sort": ("enum:none|high|low|name", "none"),
+        "format": ("format", "auto"),  # auto: as usual for the unit (45%, 2.4 MB/s)
+        "detail": ("string", ""),  # a reading beside each one to show too, e.g. "free"
+        "detail_format": ("format", "{value:.0f} {unit}"),
+        "min": ("number", 0),
+        "max": ("number", 100),  # at or below min: the largest value shown
+        "scale": ("enum:linear|sqrt|log", "linear"),
+        "levels": ("bool", True),  # bars and filled cells; off: numbers only
+        "font": ("font", ""),  # the values
+        "font_size": ("int", 18),
+        "label_font": ("font", ""),
+        "uppercase": ("bool", True),  # names in capitals
+        "color": ("color", "#ffffff"),  # the values
+        "muted": ("color", "#8a97a8"),  # the names
+        "color2": ("color", "#22d3ee"),  # bars and cells
+        "background": ("color?", "#1f2937"),  # their tracks
+        "empty": ("string", ""),  # shown when nothing is found
+        "color_rules": ("rules", []),
+    },
     # A building block on the theme's grid; laid out for its size when drawn
     # (libre_panel.theme.modules). x and y are not used: the cells place it.
     "module": {
@@ -204,6 +235,9 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         # on a big module
         "forecast": ("enum:auto|days|hours|both|off", "auto"),
         "step": ("int", 3),  # hourly forecast: hours between two columns
+        # temps, drives, dashboard: the readings to show, one per line ("cpu.temp = CPU")
+        "items": ("text", ""),
+        "sort": ("enum:cpu|memory", "cpu"),  # processes: by processor time or memory
     },
 }
 

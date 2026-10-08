@@ -391,3 +391,23 @@ def test_weather_forecast_setting(page):
     assert js(page, f"widgetById('{weather}').step") == 2
     page.locator("#props .chip").filter(has_text="off").first.click()  # the forecast comes first
     assert js(page, f"widgetById('{weather}').forecast") == "off"
+
+
+def test_list_module_settings(page):
+    page.select_option("#model-select", "turing-9.2-usb")
+    page.wait_for_function("state.size[0] === 1920")
+    page.click("#btn-new")
+    page.wait_for_selector("#new-dialog[open]")
+    page.click("#new-create")
+    page.wait_for_function("state.theme.widgets.filter(isModule).length === 5")
+    first = js(page, "state.theme.widgets.find(isModule).id")
+    js(page, f"setSelection(['{first}'])")
+    page.locator("#props select").first.select_option("processes")
+    assert js(page, f"widgetById('{first}').module") == "processes"
+    page.locator("#props .chip", has_text="memory").first.click()
+    assert js(page, f"widgetById('{first}').sort") == "memory"
+    page.locator("#props select").first.select_option("values")
+    readings = page.locator("#props label.field", has_text="Readings").locator("textarea")
+    assert "cpu.load = CPU" in readings.get_attribute("placeholder")
+    readings.fill("cpu.load = CPU\nfan.*")
+    page.wait_for_function(f"widgetById('{first}').items === 'cpu.load = CPU\\nfan.*'")

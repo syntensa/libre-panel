@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -11,6 +12,33 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 HISTORY_LENGTH = 600
+
+# Sensor keys the themes on show read, by whoever shows them (a renderer).
+# Providers ask ``wanted("proc.")`` before costly work nobody looks at.
+_WANTED: dict[int, frozenset[str]] = {}
+
+
+def want(owner: object, keys: set[str] | frozenset[str]) -> None:
+    """Record the keys ``owner`` reads (globs allowed); forgotten with ``owner``."""
+    import weakref
+
+    ident = id(owner)
+    if ident not in _WANTED:
+        weakref.finalize(owner, _WANTED.pop, ident, None)
+    _WANTED[ident] = frozenset(keys)
+
+
+def wanted(prefix: str) -> bool:
+    """Whether a theme on show reads a key starting with ``prefix`` (or a
+    pattern such as ``net.*`` that takes it in)."""
+    for keys in list(_WANTED.values()):
+        for key in keys:
+            if key.startswith(prefix):
+                return True
+            head = re.split(r"[*?\[]", key, maxsplit=1)[0]
+            if head != key and prefix.startswith(head):
+                return True
+    return False
 
 
 @dataclass(frozen=True)
@@ -21,6 +49,9 @@ class Reading:
     value: float | str | None
     unit: str = ""
     label: str = ""
+    # The key of the reading this one repeats under a friendlier name
+    # (cpu.temp is one of the temp.* readings), so lists show it once.
+    origin: str = ""
 
 
 @dataclass

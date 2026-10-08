@@ -42,6 +42,26 @@ def human_duration(seconds: float) -> str:
     return f"{minutes}m"
 
 
+def auto_format(value: Any, unit: str = "") -> str:
+    """A reading shown the usual way for its unit: 45%, 61°, 2.4 MB/s, 3h 5m."""
+    if isinstance(value, str):
+        return value
+    if value is None or isinstance(value, bool):
+        return "--"
+    if unit == "B/s":
+        return human_bytes(value) + "/s"
+    if unit == "B":
+        return human_bytes(value)
+    if unit == "s":
+        return human_duration(value)
+    if unit in ("GiB", "GB"):
+        return f"{value:.1f} GB" if value < 100 else f"{value:.0f} GB"
+    if unit in ("%", "°C", "°F", "°"):
+        return f"{value:.0f}{unit}"
+    number = f"{value:.1f}" if abs(value) < 10 and value != int(value) else f"{value:.0f}"
+    return f"{number} {unit}" if unit else number
+
+
 class _SafeFormatter(string.Formatter):
     def get_field(self, field_name: str, args: Any, kwargs: dict[str, Any]) -> Any:
         if field_name not in _ALLOWED_FIELDS:

@@ -105,10 +105,11 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `clock` | `format` | date/time with [strftime codes](https://strftime.org), e.g. `%H:%M:%S`, `%A %d %B` |
 | `image` | `src`, `w`, `h` | a picture from the theme folder; `w`/`h` 0 = original size |
 | `weather` | `field`, `format`, `fallback` | `temperature`, `apparent_temperature`, `humidity`, `wind_speed`, `description`, `code` |
-| `icon` | `icon`, `sensor`, `size`, `color`, `stroke` | line icons: cpu, gpu, ram, disk, network, download, upload, temperature, fan, power, clock, sun, moon, cloud, partly, rain, snow, storm, fog, humidity, wind — and `weather`, which follows the live weather, or the code in `sensor` (e.g. `weather.day.1.code`), by day or night |
+| `icon` | `icon`, `sensor`, `size`, `color`, `stroke` | line icons: cpu, gpu, ram, disk, network, download, upload, temperature, fan, power, clock, sun, moon, cloud, partly, rain, snow, storm, fog, humidity, wind, battery, plug, list, grid, signal — and `weather`, which follows the live weather, or the code in `sensor` (e.g. `weather.day.1.code`), by day or night |
 | `calendar` | `w`, `h`, `font`, `font_size`, `color`, `color2`, `muted`, `first_day` | the month as a grid of days, today marked in `color2`; weekday names in `muted` and the language; `first_day` `monday` or `sunday` |
+| `list` | `w`, `h`, `items`, `style`, `columns`, `max_items`, `sort`, `format`, `detail`, `detail_format`, `min`, `max`, `scale`, `levels`, `font`, `font_size`, `label_font`, `uppercase`, `color`, `muted`, `color2`, `background`, `empty`, `color_rules` | readings found by name or pattern, as many as fit, see [Lists](#lists) |
 | `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur` | cards, frames, separators; `backdrop_blur` gives frosted glass |
-| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card` | a building block on the grid, see [Modules](#modules) |
+| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort` | a building block on the grid, see [Modules](#modules) |
 
 `scale` is `linear`, `sqrt` or `log`: the latter two keep small values visible
 on huge ranges such as network rates.
@@ -119,6 +120,36 @@ on huge ranges such as network rates.
 ```json
 "color_rules": [{ "above": 70, "color": "@warn" }, { "above": 85, "color": "@crit" }]
 ```
+
+### Lists
+
+A `list` shows readings whose number is not known beforehand: every
+temperature sensor, every drive, every core, the busiest programs. `items`
+holds one entry per line:
+
+```text
+cpu.temp = CPU      a reading, with the name to show
+temp.*              every reading that matches, in natural order (core 2 before core 10)
+!temp.acpitz.*      none of these
+```
+
+A reading that repeats another under a friendlier key (`cpu.temp` is one of
+the `temp.*` readings) is shown once. Without a name on its line, the name
+comes from a reading beside it (`disk.1.name` for `disk.1.load`), else from
+the sensor's label.
+
+- `style`: `rows` (name and value), `bars` (with a bar below, or beside the
+  name when a row is wide), `columns` (upright bars side by side, the cores
+  of a processor) or `cells` (tiles, filled as high as their value)
+- `columns` 0 lays rows out side by side when they do not fit one under the
+  other; `max_items` 0 shows as many as fit
+- `sort`: `none` (as listed), `high`, `low` or `name`
+- `format` `auto` shows a value the usual way for its unit (`45%`, `61°C`,
+  `2.4 MB/s`, `3h 5m`); `detail` names a reading beside each one to show
+  after its name (`free` for `disk.1.free`) with `detail_format`
+- `min`/`max` give the bars' range; `max` at or below `min` lets the largest
+  value fill its bar. `levels` off shows numbers only
+- `empty`: a text while nothing is found
 
 ## Modules
 
@@ -148,6 +179,13 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `network` | download and upload; graphs when wide or large | |
 | `system` | names of processor and graphics card, uptime | |
 | `text` | a title (`text`) with an accent line | |
+| `temps` | every temperature as a bar, CPU and GPU first, warm and hot in `warn` and `crit`; the fans beside them when long, as tiles below when big | `items` |
+| `cores` | the load of every core: tiles when small, columns when wide; the history when big | |
+| `drives` | every drive: how full and how much is free; reading and writing when big | `items` |
+| `processes` | the programs that use the most processor time, or memory (`sort`: `cpu` or `memory`); a program's processes count once | |
+| `netinfo` | IP address, ping, download, upload, today's traffic, as many as fit; the ping's history when big | |
+| `battery` | a battery filled to its charge, charging or not, the time left; its history when wide or big; "No battery" on a desktop | |
+| `values` | readings of your choice as tiles: a small dashboard (`items`, default CPU, GPU, RAM, temperatures, download) | `items` |
 
 - `col`, `row` place the module, `cols`, `rows` give its size in cells. A
   module that would reach past the grid is moved in.
@@ -160,6 +198,8 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 - `forecast` (weather): `auto` (days; days and hours on a big wide module),
   `days`, `hours`, `both` or `off`; `step` is the hours between two hourly
   columns (1–6, default 3).
+- `items` (temps, drives, values): the readings to show, written as for a
+  [list](#lists); empty shows the module's own.
 - Labels follow the language: "Temp" reads "Temp." in German.
 
 **The grid.** `"grid": {"columns": 0, "rows": 0, "gap": 0, "margin": 0}`; 0
@@ -211,8 +251,12 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `mem.load`, `mem.used`, `mem.total`, `swap.load` | %, GiB | psutil |
 | `disk.load`, `disk.used`, `disk.total`, `disk.read`, `disk.write` | %, GiB, B/s | psutil |
 | `net.down`, `net.up` | B/s | psutil |
-| `fan.<chip>.<name>`, `temp.<chip>.<name>` | RPM, °C | psutil (Linux) |
-| `battery.load`, `sys.uptime` | %, s | psutil |
+| `fan.<device>.<name>`, `temp.<device>.<name>` | RPM, °C | every fan and temperature: psutil (Linux), LibreHardwareMonitor (e.g. `temp.cpu.package`, `fan.gpu.gpu_fan_1`) |
+| `cpu.core.<n>.load` | % | each core (thread), from 1 |
+| `disk.<n>.name`, `.load`, `.used`, `.free`, `.total` | text, %, GiB | each drive, the system drive first |
+| `proc.cpu.<n>.name`, `.value`; `proc.mem.<n>.name`, `.value` | text, % | the eight busiest programs by processor time (of the whole processor) and by memory; counted only while a theme shows them |
+| `net.ip`, `net.ping`, `net.today.down`, `net.today.up` | text, ms, B | the address towards the internet; ping (a connection to `ping`, see the configuration; only while shown); traffic since midnight or since Libre Panel started |
+| `battery.load`, `battery.state`, `battery.left`, `battery.plugged`, `sys.uptime` | %, text, s, 1/0, s | psutil; `state` is "On battery", "Charging" or "Charged" in the language |
 | `cpu.name`, `gpu.name` | text | LibreHardwareMonitor |
 | `weather.temperature`, `.apparent_temperature`, `.humidity`, `.wind_speed`, `.code`, `.description`, `.is_day` | °C, %, km/h | Open-Meteo, when enabled |
 | `weather.hour.<n>.temperature`, `.code`, `.rain`, `.day`, `.time` | °C, %, 1/0, "15:00" | the hour `n` hours ahead (1 = the next full hour, up to 24) |

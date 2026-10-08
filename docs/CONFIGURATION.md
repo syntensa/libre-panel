@@ -41,6 +41,11 @@ providers = ["psutil"]         # order = priority; also "librehardwaremonitor", 
 [sensors.librehardwaremonitor]
 url = "http://127.0.0.1:8085/data.json"
 
+[sensors.psutil]
+# disk = "C:\\"                # the drive behind disk.load (default: the system drive)
+# ping = "1.1.1.1:443"         # what net.ping connects to (host:port), only while a
+                               # theme shows the ping
+
 [weather]
 enabled = false                # off unless you turn it on
 provider = "open-meteo"

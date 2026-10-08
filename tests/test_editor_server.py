@@ -7,6 +7,7 @@ import pytest
 
 from libre_panel.editor.server import make_server
 from libre_panel.theme.model import find_theme, load_theme
+from libre_panel.theme.modules import MODULE_KINDS
 
 
 @pytest.fixture
@@ -165,7 +166,7 @@ def test_module_previews_follow_the_look(server):
     status, data = request(
         server, "POST", "/api/module-previews", {"palette": palette, "style": style}
     )
-    assert status == 200 and len(data["previews"]) == 10
+    assert status == 200 and len(data["previews"]) == len(MODULE_KINDS)
     assert base64.b64decode(data["previews"]["ring"])[:4] == b"\x89PNG"
 
 

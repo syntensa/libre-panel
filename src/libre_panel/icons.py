@@ -36,6 +36,11 @@ ICON_NAMES = (
     "fog",
     "humidity",
     "wind",
+    "battery",
+    "plug",
+    "list",
+    "grid",
+    "signal",
     "weather",
 )
 
@@ -227,6 +232,37 @@ def _moon(pen: _Pen) -> None:
     )
 
 
+def _battery(pen: _Pen) -> None:
+    pen.rect(2, 7, 19.5, 17, 2)
+    pen.line((22, 10.5), (22, 13.5))
+    pen.draw.rounded_rectangle([*pen.p(5, 10), *pen.p(12, 14)], radius=pen.s, fill=pen.color)
+
+
+def _plug(pen: _Pen) -> None:
+    pen.line((9, 2.5), (9, 7))
+    pen.line((15, 2.5), (15, 7))
+    pen.shape(
+        lambda d, p: d.rounded_rectangle([*p(5.5, 7), *p(18.5, 15.5)], radius=4 * pen.s, fill=255)
+    )
+    pen.line((12, 15.5), (12, 21.5))
+
+
+def _list(pen: _Pen) -> None:
+    for y in (6, 12, 18):
+        pen.circle(4.5, y, 1.4, fill=True)
+        pen.line((9, y), (20, y))
+
+
+def _grid(pen: _Pen) -> None:
+    for x, y in ((3, 3), (13.5, 3), (3, 13.5), (13.5, 13.5)):
+        pen.rect(x, y, x + 7.5, y + 7.5, 1.5)
+
+
+def _signal(pen: _Pen) -> None:
+    for i, x in enumerate((5, 10, 15, 20)):
+        pen.line((x, 20), (x, 16 - i * 4))
+
+
 def _cloud_icon(pen: _Pen) -> None:
     pen.shape(lambda d, p: _cloud(d, p))
 
@@ -299,6 +335,11 @@ _ICONS: dict[str, Callable[[_Pen], None]] = {
     "fog": _fog,
     "humidity": _humidity,
     "wind": _wind,
+    "battery": _battery,
+    "plug": _plug,
+    "list": _list,
+    "grid": _grid,
+    "signal": _signal,
 }
 
 
