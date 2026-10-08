@@ -31,6 +31,7 @@ from libre_panel.icons import draw_icon, weather_icon_name
 from libre_panel.render.formatting import FormatError, safe_format
 from libre_panel.sensors.base import Snapshot
 from libre_panel.theme.model import Theme, ThemeError, resolve_asset
+from libre_panel.theme.modules import expand as expand_modules
 
 log = logging.getLogger(__name__)
 
@@ -266,7 +267,11 @@ class Renderer:
         self._frame_strips: dict[str, Any] = {}  # the same for graphs that move per frame
         self._glides: dict[str, _Glide] = {}  # graph id -> the value its curve follows
         self._cache: dict[str, tuple[Any, Piece]] = {}
-        self._keys = {w["id"]: json.dumps(w, sort_keys=True) for w in theme.widgets}
+        # Modules become plain widgets laid out for their cells; the editor
+        # gets one box per module.
+        self.widgets, self.module_boxes = expand_modules(theme)
+        self._modules = {w["id"]: w for w in theme.widgets if w["type"] == "module"}
+        self._keys = {w["id"]: json.dumps(w, sort_keys=True) for w in self.widgets}
         self._background = self._load_background()
         # Incremental compositing: the last frame and the pieces it was made of.
         # Only regions whose pieces changed are composed again, so a mostly
@@ -758,8 +763,11 @@ class Renderer:
         boxes: dict[str, Box] = {}
         pieces: list[tuple[str, Piece]] = []
         screen = self._screen_image(snapshot, now) if self.screen is not None else None
-        for widget in theme.widgets:
+        for widget in self.widgets:
             if not widget.get("visible", True) or self._missing(widget, snapshot):
+                continue
+            module = self._modules.get(widget.get("_module", ""))
+            if module is not None and (not module["visible"] or self._missing(module, snapshot)):
                 continue
             draw = getattr(self, f"_draw_{widget['type']}", None) or self._draw_plugin
             try:
@@ -770,6 +778,9 @@ class Renderer:
             if piece is None:
                 continue
             pieces.append((widget["id"], piece))
+            if module is not None:
+                boxes[module["id"]] = self.module_boxes[module["id"]]
+                continue
             boxes[widget["id"]] = piece.box or [
                 piece.x,
                 piece.y,
@@ -786,11 +797,15 @@ class Renderer:
 
     @staticmethod
     def _missing(widget: dict[str, Any], snapshot: Snapshot) -> bool:
-        needs = (widget.get("needs") or "").strip()
-        if needs:
-            has = snapshot.value(needs.lstrip("!").strip()) is not None
-            if has == needs.startswith("!"):
+        for need in (widget.get("needs") or "").split(","):  # all of them must hold
+            need = need.strip()
+            if not need:
+                continue
+            has = snapshot.value(need.lstrip("!").strip()) is not None
+            if has == need.startswith("!"):
                 return True
+        if widget["type"] == "module":
+            return False
         if not widget.get("hide_if_missing"):
             return False
         if widget["type"] == "weather":
@@ -811,8 +826,37 @@ class Renderer:
             self._digit_width[key] = max(font.getlength(d) for d in _DIGITS)
         return self._digit_width[key]
 
+    def _fit(self, widget: dict[str, Any], text: str) -> tuple[str, int]:
+        """The text and font size that keep within ``max_width``."""
+        size = widget.get("font_size", 24)
+        limit = widget.get("max_width", 0)
+        if limit <= 0 or not text or "\n" in text:
+            return text, size
+        spacing = widget.get("letter_spacing", 0)
+        tabular = widget.get("tabular", False)
+
+        def width(candidate: str, font: Any) -> float:
+            cell = self._digit_cell(font) if tabular else 0
+            advances = [
+                cell if tabular and ch in _DIGITS else font.getlength(ch) for ch in candidate
+            ]
+            return sum(advances) + spacing * max(0, len(candidate) - 1)
+
+        font = self.font(widget.get("font", ""), size)
+        measured = width(text, font)
+        if measured <= limit:
+            return text, size
+        if widget.get("fit") == "ellipsis":
+            while len(text) > 1 and width(text.rstrip() + "…", font) > limit:
+                text = text[:-1]
+            return text.rstrip() + "…", size
+        return text, max(6, int(size * limit / measured))
+
     def _text_piece(self, widget: dict[str, Any], text: str, color: str) -> Piece:
-        font = self.font(widget.get("font", ""), widget.get("font_size", 24))
+        text, size = self._fit(widget, text)
+        if size != widget.get("font_size", 24):
+            widget = {**widget, "font_size": size}
+        font = self.font(widget.get("font", ""), size)
         fill = self.color(color)
         x, y = widget["x"], widget["y"]
         align = widget.get("align", "left")

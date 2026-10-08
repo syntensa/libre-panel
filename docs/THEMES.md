@@ -84,12 +84,16 @@ switched off), `needs` and the effects `opacity` (0–1), `glow` (0–1) with
 a sensor of its own: `"needs": "gpu.load"` on a card, its label and its icon
 hides the whole GPU section on a PC that reports no GPU. With `!` in front it
 works the other way round: `"needs": "!weather.temperature"` shows something
-else while the weather is off. Themes that use it fit each PC without editing.
+else while the weather is off. Several conditions, separated by commas, must
+all hold: `"needs": "cpu.load, !gpu.load"`. Themes that use it fit each PC
+without editing.
 
 Text-like widgets share `font` (empty = the theme font), `font_size`, `color`,
 `align` (`left`, `center`, `right`; `x` is the left edge, centre or right edge
 accordingly; `y` is the top of the line), `letter_spacing` and `tabular`
 (equal-width digits so numbers do not jitter; on by default for values).
+`max_width` (0 = any) keeps text within so many pixels: `fit` `shrink` makes
+the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 
 | Type | Fields | |
 |---|---|---|
@@ -103,6 +107,7 @@ accordingly; `y` is the top of the line), `letter_spacing` and `tabular`
 | `weather` | `field`, `format`, `fallback` | `temperature`, `apparent_temperature`, `humidity`, `wind_speed`, `description`, `code` |
 | `icon` | `icon`, `size`, `color`, `stroke` | line icons: cpu, gpu, ram, disk, network, download, upload, temperature, fan, power, clock, sun, moon, cloud, partly, rain, snow, storm, fog, humidity, wind — and `weather`, which follows the live weather (day/night) |
 | `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur` | cards, frames, separators; `backdrop_blur` gives frosted glass |
+| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card` | a building block on the grid, see [Modules](#modules) |
 
 `scale` is `linear`, `sqrt` or `log`: the latter two keep small values visible
 on huge ranges such as network rates.
@@ -113,6 +118,67 @@ on huge ranges such as network rates.
 ```json
 "color_rules": [{ "above": 70, "color": "@warn" }, { "above": 85, "color": "@crit" }]
 ```
+
+## Modules
+
+A module is a building block that fills cells of the theme's grid and lays
+itself out for its size, the way home-screen widgets do: the larger it is,
+the more it shows. A CPU ring of 1×1 cells shows the load; 2×1 adds the
+processor's name, temperature and power; 3×1 or 2×2 a history graph.
+
+```json
+"grid": { "columns": 8, "rows": 2 },
+"widgets": [
+  { "type": "module", "id": "clock", "module": "clock", "col": 0, "row": 0, "cols": 3 },
+  { "type": "module", "id": "cpu", "module": "ring", "source": "cpu", "col": 5, "row": 0, "cols": 3 },
+  { "type": "module", "id": "gpu", "module": "ring", "source": "gpu", "col": 5, "row": 1, "cols": 3 }
+]
+```
+
+| `module` | shows | `source` |
+|---|---|---|
+| `clock` | time, seconds when wide, date; hours over minutes when tall | |
+| `date` | a calendar sheet: day, weekday, month | |
+| `weather` | symbol, temperature, sky; feels-like, humidity and wind when large; a calendar sheet while the weather is off | |
+| `ring` | a ring with the load; details, the hardware's name and a history graph as it grows | `cpu`, `gpu`, `mem`, `disk` |
+| `stat` | a large number; a bar, a history graph and details as it grows | as `ring`, `net`, or `sensor` with `sensor` and `format` |
+| `graph` | a history graph under its name and value | as `stat` |
+| `bars` | rows with bars for CPU, RAM, disk and GPU, as many as fit | |
+| `network` | download and upload; graphs when wide or large | |
+| `system` | names of processor and graphics card, uptime | |
+| `text` | a title (`text`) with an accent line | |
+
+- `col`, `row` place the module, `cols`, `rows` give its size in cells. A
+  module that would reach past the grid is moved in.
+- `title` replaces the module's own name, `color` (a colour or `@palette`
+  entry) the look's colour for its source.
+- `fallback`: what a module shows when its source has no readings. `auto`
+  shows the disk instead of a missing GPU; `none` leaves the cells empty; or
+  name a source.
+- `card`: `auto` (cards for all but clock and title), `on` or `off`.
+- Labels follow the language: "Temp" reads "Temp." in German.
+
+**The grid.** `"grid": {"columns": 0, "rows": 0, "gap": 0, "margin": 0}`; 0
+means automatic: cells of about half the panel's short side (8×2 on a 9.2"
+bar, 3×2 on a 3.5" panel) that keep clear of strips the bezel hides.
+
+**The look.** Modules paint with palette roles: `bg`, `bg2` (the backdrop's
+gradient), `surface`, `line`, `track`, `text`, `text2`, `text3`, `accent`,
+`cpu`, `gpu`, `mem`, `disk`, `net`, `warn`, `crit`; missing roles come from
+the Arctic look. `"style"` sets the rest:
+
+```json
+"style": { "card": "glass", "radius": 18, "glow": 0.6, "backdrop": "gradient",
+           "display_font": "builtin:Barlow-SemiBold", "text_font": "builtin:Barlow-Medium" }
+```
+
+`card` is `glass`, `flat`, `outline` or `none`; `radius` is the corner of a
+card 200 px tall (smaller cards get smaller corners); `glow` 0–1 scales the
+light on rings, graphs and the clock. The editor's looks (Arctic, Neon,
+Graphite, Paper, Sunset, Mono) set palette and style in one go.
+
+Modules and plain widgets mix: plain widgets are drawn in their order, a
+module's parts where the module is in the list.
 
 ## Format strings
 

@@ -22,6 +22,15 @@ from libre_panel.config import user_themes_dir
 from libre_panel.devices.models import find_model, orientation_of
 from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_font_path, builtin_fonts
 from libre_panel.icons import ICON_NAMES
+from libre_panel.theme.modules import (
+    BACKDROPS,
+    CARDS,
+    GRID_DEFAULTS,
+    MODULE_FALLBACKS,
+    MODULE_KINDS,
+    MODULE_SOURCES,
+    STYLE_DEFAULTS,
+)
 
 THEME_FORMAT = "libre-panel-theme/1"
 THEME_FILENAME = "theme.json"
@@ -66,6 +75,8 @@ def _text_style(tabular: bool) -> dict[str, tuple[str, Any]]:
         "align": ("enum:left|center|right", "left"),
         "letter_spacing": ("int", 0),
         "tabular": ("bool", tabular),  # equal-width digits: numbers do not jitter
+        "max_width": ("int", 0),  # 0 = any width; wider text is made to fit
+        "fit": ("enum:shrink|ellipsis", "shrink"),  # how: a smaller font, or cut with …
     }
 
 
@@ -160,6 +171,23 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "color": ("color", "#ffffff"),
         "stroke": ("number", 2.0),
     },
+    # A building block on the theme's grid; laid out for its size when drawn
+    # (libre_panel.theme.modules). x and y are not used: the cells place it.
+    "module": {
+        "module": ("enum:" + "|".join(MODULE_KINDS), "ring"),
+        "col": ("int", 0),
+        "row": ("int", 0),
+        "cols": ("int", 1),
+        "rows": ("int", 1),
+        "source": ("enum:" + "|".join(MODULE_SOURCES), "cpu"),
+        "sensor": ("sensor", ""),  # source "sensor": any reading
+        "format": ("format", ""),  # source "sensor": empty = "{value:.0f}{unit}"
+        "title": ("string", ""),  # empty = the module's own
+        "text": ("text", ""),  # the title module's text
+        "color": ("color?", None),  # empty = the look's colour for the source
+        "fallback": ("enum:" + "|".join(MODULE_FALLBACKS), "auto"),  # without readings
+        "card": ("enum:auto|on|off", "auto"),
+    },
 }
 
 _PALETTE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
@@ -184,6 +212,10 @@ class Theme:
     screen: dict[str, Any] | None = None  # {"name": ..., "options": {...}}: a plugin draws
     # messages from services: where, how long, which kinds not, and a plugin style
     toast: dict[str, Any] = field(default_factory=lambda: dict(TOAST_DEFAULTS))
+    # The grid modules sit on ({} = automatic) and the look's style (cards,
+    # corners, glow, fonts); None = not set in the theme.
+    grid: dict[str, int] | None = None
+    style: dict[str, Any] | None = None
     root: Path | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -215,6 +247,10 @@ class Theme:
             "animation": {"smoothing_ms": self.smoothing_ms},
             "widgets": deepcopy(self.widgets),
         }
+        if self.grid is not None:
+            data["grid"] = dict(self.grid)
+        if self.style is not None:
+            data["style"] = dict(self.style)
         if self.screen is not None:
             data["screen"] = deepcopy(self.screen)
         toast = {k: deepcopy(v) for k, v in self.toast.items() if v != TOAST_DEFAULTS[k]}
@@ -491,6 +527,47 @@ def _parse_screen(
     return {"name": name, "options": options}
 
 
+def _parse_grid(raw: Any) -> dict[str, int] | None:
+    """``"grid": {"columns": 8, "rows": 2, "gap": 16, "margin": 24}`` (0 = automatic)."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ThemeError("grid must be an object")
+    grid = {}
+    for key, default in GRID_DEFAULTS.items():
+        value = _coerce("int", raw.get(key, default), f"grid.{key}")
+        if not 0 <= value <= (48 if key in ("columns", "rows") else 200):
+            raise ThemeError(f"grid.{key}: out of range")
+        grid[key] = value
+    return grid
+
+
+def _parse_style(raw: Any, root: Path | None) -> dict[str, Any] | None:
+    """``"style"``: how modules look (cards, corners, glow, fonts)."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ThemeError("style must be an object")
+    style = {}
+    kinds = {
+        "card": "enum:" + "|".join(CARDS),
+        "radius": "int",
+        "glow": "number",
+        "backdrop": "enum:" + "|".join(BACKDROPS),
+        "display_font": "string",
+        "text_font": "string",
+    }
+    for key, kind in kinds.items():
+        style[key] = _coerce(kind, raw.get(key, STYLE_DEFAULTS[key]), f"style.{key}")
+    if not 0 <= style["glow"] <= 1:
+        raise ThemeError("style.glow: must be between 0 and 1")
+    if not 0 <= style["radius"] <= 100:
+        raise ThemeError("style.radius: must be between 0 and 100")
+    for key in ("display_font", "text_font"):
+        style[key] = _check_font(style[key] or DEFAULT_FONT, f"style.{key}", root)
+    return style
+
+
 def parse_theme(data: Any, root: Path | None = None) -> Theme:
     if not isinstance(data, dict):
         raise ThemeError("theme.json must contain an object")
@@ -580,6 +657,8 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         font=font,
         smoothing_ms=smoothing_ms,
         widgets=widgets,
+        grid=_parse_grid(data.get("grid")),
+        style=_parse_style(data.get("style"), root),
         screen=_parse_screen(data.get("screen"), palette, root, warnings),
         toast=_parse_toast(data.get("toast"), palette, root, warnings),
         root=root,

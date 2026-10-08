@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+**Modules**
+- Building blocks that fill cells of a grid and lay themselves out for their
+  size, like home-screen widgets: clock, calendar, weather, ring, big number,
+  history, bars, network, system and title. The larger a module, the more it
+  shows: a CPU ring of one cell shows the load, two cells add the
+  processor's name, temperature and power, three a history graph
+- A theme's `grid` (automatic by default: 8×2 on a 9.2" bar, 3×2 on a 3.5"
+  panel, clear of strips the bezel hides) and its `style`: cards (glass,
+  flat, outline, none), corners, glow, backdrop and fonts. Six looks set
+  palette and style at once: Arctic, Neon, Graphite, Paper, Sunset, Mono
+- A module whose readings are missing shows something else: the disk instead
+  of a GPU, a calendar sheet instead of the weather
+- Text can be held to a width (`max_width`): a smaller font or "…"
+- `needs` takes several conditions
+
 ## 0.2.0 — 2026-10-07
 
 Studio, a second theme after SPUR II; themes that fit each PC by themselves;
