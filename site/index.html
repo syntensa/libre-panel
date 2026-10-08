@@ -126,6 +126,7 @@
     <a class="brand" href="#top"><img src="images/icon.png" alt="">Libre Panel</a>
     <nav>
       <a class="hide-sm" href="#build">Build</a>
+      <a class="hide-sm" href="#modules">Modules</a>
       <a class="hide-sm" href="#themes">Themes</a>
       <a class="hide-sm" href="#editor">Editor</a>
       <a href="#panels">Panels</a>
@@ -178,8 +179,8 @@
         <img class="framed" src="images/editor-new.png" width="1470" height="495" loading="lazy"
         alt="The New theme dialog with three starting layouts and six looks">
         <div class="step"><div class="n">2</div><div><h3>Drag modules onto the panel</h3>
-          <p>Clock, calendar, weather, rings, big numbers, history, bars, network, system
-            and titles. Free cells light up; drop a module on another to swap them.</p></div></div>
+          <p>Pick from 24 modules: hardware, clocks, weather, music, your calendar and
+            more. Free cells light up; drop a module on another to swap them.</p></div></div>
         <img class="framed" src="images/editor-drag.png" width="2400" height="1350" loading="lazy"
         alt="A History module dragged from the library onto two free cells">
         <div class="step"><div class="n">3</div><div><h3>Pull a corner</h3>
@@ -204,11 +205,38 @@
     </div>
   </section>
 
+  <section id="modules">
+    <div class="wrap">
+      <div class="kicker">24 modules</div>
+      <h2>From every core to your next appointment</h2>
+      <p class="intro">Each module shows more the larger it is, steps aside when its
+        readings are missing, and costs nothing while it is not on the panel.</p>
+      <img src="images/module-catalog.png" width="2072" height="2210" loading="lazy"
+        alt="Every module: ring, big number, history, bars, temperatures, CPU cores, drives, processes, network, network details, battery, game FPS, time, calendar, analog clock, world clock, countdown, sun and moon, weather, music, agenda, dashboard, picture, system and title">
+      <div class="grid" style="margin-top: 26px">
+        <div class="card"><h3><span class="dot" style="background: var(--accent)"></span>Hardware</h3>
+          <p>Every temperature and fan, the load of every core, every drive with its free
+            space, the busiest programs, IP address and ping, the battery, and your
+            game's frame rate with its 1% lows (PresentMon, Windows).</p></div>
+        <div class="card"><h3><span class="dot" style="background: var(--warn)"></span>Time and the sky</h3>
+          <p>Digital and analog clocks for any time zone, a world clock, countdowns to
+            any day, sunrise, sunset and the moon's phase, computed offline for your
+            place.</p></div>
+        <div class="card"><h3><span class="dot" style="background: var(--mem)"></span>Your things</h3>
+          <p>What is playing with its cover, the next events of your calendars, Home
+            Assistant and MQTT values on a dashboard, and your pictures as a
+            slideshow.</p></div>
+      </div>
+      <img src="images/module-layouts-more.png" width="2056" height="781" loading="lazy" style="margin-top: 34px"
+        alt="An everyday bar with music, world clock, agenda, sun and moon and a countdown; a hardware bar with cores, temperatures, game FPS, processes and drives; three smaller panels">
+    </div>
+  </section>
+
   <section id="themes">
     <div class="wrap">
       <div class="kicker">Built in</div>
       <h2>Seven themes, from 0.96" to 9.2"</h2>
-      <p class="intro">Glow, soft gradients, smooth history graphs, 21 line icons
+      <p class="intro">Glow, soft gradients, smooth history graphs, 35 line icons
         with live weather symbols, and values that glide instead of jumping. Every
         theme moves to any other panel size in one click.</p>
       <img src="images/gallery.png" width="2000" height="1062" loading="lazy"
@@ -245,7 +273,7 @@
         <div class="card"><h3><span class="dot" style="background: var(--accent)"></span>50 fps video mode</h3>
           <p>On TURZX USB panels, frames go through the panel's own video decoder: graphs scroll and numbers glide.</p></div>
         <div class="card"><h3><span class="dot" style="background: var(--gpu)"></span>Sensors</h3>
-          <p>CPU, RAM, disk, network, temperatures and fans everywhere; on Windows also GPU and power via LibreHardwareMonitor.</p></div>
+          <p>Every core, drive, temperature and fan, network and battery everywhere; on Windows also GPU and power via LibreHardwareMonitor. Calendars, Home Assistant and MQTT too.</p></div>
         <div class="card"><h3><span class="dot" style="background: var(--net)"></span>Weather</h3>
           <p>From Open-Meteo for your location. Off by default, no API key.</p></div>
         <div class="card"><h3><span class="dot" style="background: var(--mem)"></span>Runs in the tray</h3>

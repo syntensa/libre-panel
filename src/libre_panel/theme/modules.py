@@ -1032,6 +1032,10 @@ def _sun(b: _Build, x: float, y: float, w: float, h: float, details: bool = Fals
     # the times under the arc's ends (not further out than a little)
     left = max(x, cx - d / 2 - mark * 0.6)
     right = min(x + w, cx + d / 2 + mark * 0.6)
+    needed = 2 * (mark * 1.2 + size * 2.7) + b.ts
+    if right - left < needed:  # a small arc: the times use the whole width
+        left, right = x, x + w
+        size = min(size, max(7.0, (w - b.ts - 2 * mark * 1.2) / 5.4))
     half = (right - left) / 2
     b.icon("rise-icon", "sunrise", left, cap + CAP * size / 2 - mark / 2, mark, b.c("text3"))
     b.value("rise", "sun.rise", "{value}", left + mark * 1.2, cap, size, width=half - mark * 1.2)

@@ -44,6 +44,13 @@ def snapshot():
     }
     for key, (label, unit, value) in weather.items():
         snap.readings[key] = Reading(key, value, unit, label)
+    # a moon worth looking at (the day of these pictures has a new one)
+    moon = {
+        "moon.phase": (0.36, "", "Moon phase"), "moon.illumination": (79.0, "%", "Moon lit"),
+        "moon.name": ("Waxing gibbous", "", "Moon"), "moon.full_in": (4.1, "d", "Full moon in"),
+    }  # fmt: skip
+    for key, (value, unit, label) in moon.items():
+        snap.readings[key] = Reading(key, value, unit, label)
     return snap
 
 
@@ -444,6 +451,117 @@ def module_layouts() -> Image.Image:
     return img.convert("RGB")
 
 
+CATALOG = [  # (section, [(kind, options, cols, rows)])
+    ("Hardware", [
+        ("ring", {"source": "cpu"}, 2, 1), ("stat", {"source": "gpu"}, 2, 1),
+        ("graph", {"source": "net"}, 2, 1), ("bars", {}, 2, 1),
+        ("temps", {}, 2, 1), ("cores", {}, 2, 1), ("drives", {}, 2, 1),
+        ("processes", {}, 2, 1), ("network", {}, 2, 1), ("netinfo", {}, 2, 1),
+        ("battery", {}, 2, 1), ("game", {}, 2, 1),
+    ]),
+    ("Time and the sky", [
+        ("clock", {}, 2, 1), ("date", {}, 2, 1), ("analog", {}, 2, 1),
+        ("world", {}, 2, 1), ("countdown", {"target": "12-24", "title": "Christmas"}, 2, 1),
+        ("sun", {}, 2, 1), ("weather", {}, 2, 1),
+    ]),
+    ("Your things", [
+        ("music", {}, 2, 1), ("agenda", {}, 2, 1), ("values", {}, 2, 1),
+        ("image", {}, 2, 1), ("system", {}, 2, 1), ("text", {"text": "Libre Panel"}, 2, 1),
+    ]),
+]  # fmt: skip
+
+
+def module_catalog() -> Image.Image:
+    """Every module, at two cells of a 9.2\" bar, named, in groups."""
+    from libre_panel.theme.modules import kinds
+
+    names = {key: kind.name for key, kind in kinds().items()}
+    columns, gap, margin, head, caption = 4, 28, 44, 64, 44
+    tiles = []
+    for section, modules in CATALOG:
+        row = []
+        for kind, options, cols, rows in modules:
+            module = {"module": kind, "cols": cols, "rows": rows, **options}
+            frame, boxes = module_frame("turing-9.2-usb", "arctic", [module])
+            x, y, w, h = boxes["m0"]
+            row.append((names[kind], frame.crop((x - 10, y - 10, x + w + 10, y + h + 10))))
+        tiles.append((section, row))
+    tile_w, tile_h = tiles[0][1][0][1].size
+    height = margin
+    for _section, row in tiles:
+        lines = -(-len(row) // columns)
+        height += head + lines * (tile_h + caption) + (lines - 1) * gap // 2 + gap
+    width = 2 * margin + columns * tile_w + (columns - 1) * gap
+    img = background(width, height, glow=(0.5, 0.0))
+    draw = ImageDraw.Draw(img)
+    title, label = font("Barlow-SemiBold", 36), font("Barlow-Medium", 26)
+    y = margin
+    for section, row in tiles:
+        draw.text((margin, y), section, font=title, fill=ACCENT)
+        y += head
+        for i, (name, crop) in enumerate(row):
+            col, line = i % columns, i // columns
+            x = margin + col * (tile_w + gap)
+            ty = y + line * (tile_h + caption + gap // 2)
+            img.paste(crop, (x, ty))
+            draw.text((x + 12, ty + tile_h + 6), name, font=label, fill=TX_1)
+        lines = -(-len(row) // columns)
+        y += lines * (tile_h + caption) + (lines - 1) * gap // 2 + gap
+    return img
+
+
+def _m(kind: str, col: int, row: int, cols: int = 1, rows: int = 1, **options) -> dict:
+    return {"module": kind, "col": col, "row": row, "cols": cols, "rows": rows, **options}
+
+
+def new_module_layouts() -> Image.Image:
+    """The newer modules on panels: an everyday bar, a hardware bar, two small panels."""
+    everyday = [_m("music", 0, 0, 3), _m("world", 0, 1, 3), _m("agenda", 3, 0, 2, 2),
+                _m("sun", 5, 0, 3), _m("countdown", 5, 1, 2, target="12-24", title="Christmas"),
+                _m("analog", 7, 1)]  # fmt: skip
+    hardware = [_m("cores", 0, 0, 3), _m("temps", 0, 1, 3), _m("game", 3, 0, 3),
+                _m("processes", 3, 1, 3), _m("drives", 6, 0, 2), _m("values", 6, 1, 2)]  # fmt: skip
+    bars = [
+        ("Everyday · Sunset", module_frame("turing-9.2-usb", "sunset", everyday)[0]),
+        ("Hardware · Neon", module_frame("turing-9.2-usb", "neon", hardware)[0]),
+    ]
+    small_specs = [
+        ('3.5" · Paper', "turing-3.5", "paper",
+         [_m("music", 0, 0, 2), _m("analog", 2, 0), _m("agenda", 0, 1, 2), _m("battery", 2, 1)]),
+        ('5" · Graphite', "turing-5", "graphite",
+         [_m("game", 0, 0, 2), _m("temps", 2, 0, 1, 2), _m("cores", 0, 1, 2)]),
+        ('3.5" portrait · Arctic', "turing-3.5", "arctic",
+         [_m("sun", 0, 0, 2), _m("world", 0, 1, 2), _m("netinfo", 0, 2, 2)]),
+    ]  # fmt: skip
+    small = []
+    for name, model, look, modules in small_specs:
+        side = "portrait" if "portrait" in name else "landscape"
+        small.append((name, module_frame(model, look, modules, side)[0]))
+    border, margin, gap, caption = 12, 44, 40, 56
+    label = font("Barlow-SemiBold", 28)
+    m = shadow_margin(border)
+    bar_w, hh = 940, 300
+    width = 2 * margin + 2 * (bar_w + 2 * border) + gap
+    row1 = bar_w // 4 + 2 * border
+    height = margin + row1 + caption + gap // 2 + hh + 2 * border + caption + margin // 2
+    img = background(width, height, glow=(0.5, 0.0)).convert("RGBA")
+    draw = ImageDraw.Draw(img)
+    for i, (name, frame) in enumerate(bars):
+        x = margin + i * (bar_w + 2 * border + gap)
+        dev = device(frame.resize((bar_w, bar_w // 4), Image.LANCZOS), border)
+        img.alpha_composite(dev, (x - m, margin - m))
+        draw.text((x + 4, margin + row1 + 10), name, font=label, fill=TX_1)
+    sized = [(n, f.resize((round(f.width * hh / f.height), hh), Image.LANCZOS)) for n, f in small]
+    total = sum(f.width + 2 * border for _, f in sized)
+    spacing = (width - 2 * margin - total) / (len(sized) - 1)
+    x, y = margin, margin + row1 + caption + gap // 2
+    for name, frame in sized:
+        img.alpha_composite(device(frame, border), (round(x) - m, y - m))
+        draw.text((x + 4, y + hh + 2 * border + 10), name, font=label, fill=TX_1)
+        x += frame.width + 2 * border + spacing
+    return img.convert("RGB")
+
+
 def editor_shots(out: Path) -> None:
     """The editor: a new theme from a layout, dragging a module, resizing one."""
     from playwright.sync_api import sync_playwright
@@ -529,6 +647,8 @@ def main() -> None:
     weather_sizes().save(out / "weather-sizes.png", optimize=True)
     looks().save(out / "looks.png", optimize=True)
     module_layouts().save(out / "module-layouts.png", optimize=True)
+    module_catalog().save(out / "module-catalog.png", optimize=True)
+    new_module_layouts().save(out / "module-layouts-more.png", optimize=True)
     try:
         editor_shots(out)
     except ImportError:

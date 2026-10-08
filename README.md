@@ -34,6 +34,9 @@ No account, no cloud, no vendor app.
 - **Fits your machine without editing.** The names your own CPU and GPU
   report, the weather for the place in *your* config, dates in English or
   German, and sections that step aside where a sensor is missing.
+- **24 modules.** Hardware down to every core, drive, fan and game frame,
+  clocks for any time zone, sunrise and the moon, what is playing, your
+  calendar, Home Assistant and MQTT values, a slideshow.
 - **Snap it together.** Drag modules onto your panel's grid; pull a corner
   and a module shows more. Six looks restyle everything in one click, and a
   free editor is there for every pixel.
@@ -60,9 +63,9 @@ panel you chose, in any of six looks.
 
 <p align="center"><img src="docs/images/editor-drag.png" alt="A History module is dragged from the library onto two free cells, which light up" width="100%"></p>
 
-**2. Drag modules onto the panel.** Clock, calendar, weather, rings, big
-numbers, history graphs, bars, network, system and titles. Free cells light
-up; drop a module on another one to swap them.
+**2. Drag modules onto the panel.** Pick from [24 modules](#24-modules):
+hardware, clocks, weather, music, calendar and more. Free cells light up;
+drop a module on another one to swap them.
 
 <p align="center"><img src="docs/images/module-sizes.png" alt="A CPU ring module at 1x1, 2x1, 3x1, 2x2 and 4x2 cells, showing more the larger it is" width="100%"></p>
 
@@ -86,6 +89,36 @@ and fonts of every module.
 **On every panel.** The grid follows the panel (8 × 2 cells on a 9.2" bar,
 3 × 2 on a 3.5" panel) and keeps clear of edges the bezel hides; switch
 the panel and the modules move along.
+
+## 24 modules
+
+<p align="center"><img src="docs/images/module-catalog.png" alt="Every module at two cells: ring, big number, history, bars, temperatures, CPU cores, drives, processes, network, network details, battery, game FPS; time, calendar, analog clock, world clock, countdown, sun and moon, weather; music, agenda, dashboard, picture, system, title" width="100%"></p>
+
+- **Hardware.** Rings, big numbers, history graphs and bars; every
+  temperature and fan, CPU and GPU first; the load of every core; every
+  drive with its free space; the busiest programs; IP address, ping and
+  today's traffic; the battery; the frame rate of your game, with its 1%
+  lows (through Intel's PresentMon on Windows).
+- **Time and the sky.** Digital and analog clocks, also for other time
+  zones and as a world clock; a calendar sheet with the month; a countdown
+  to any day (every year with "12-24"); sunrise, sunset and the moon's
+  phase, computed for your place without the internet; the weather with
+  its forecast.
+- **Your things.** What is playing, with the cover (Windows media controls,
+  Spotify, browsers, MPRIS players on Linux, Music on macOS); the next
+  events of your calendars (Google, Outlook, iCloud, Nextcloud, any .ics);
+  a dashboard of any readings, Home Assistant and MQTT included; pictures
+  from the theme folder as a slideshow.
+
+Like the others, each new module shows more the larger it is, steps aside
+when its readings are missing ("Nothing playing", "No battery"), and costs
+nothing while no theme shows it: processes, ping, music and the game's
+frame rate are only read while they are on the panel.
+
+<p align="center"><img src="docs/images/module-layouts-more.png" alt="An everyday bar in Sunset with music, world clock, agenda, sun and moon, countdown and an analog clock; a hardware bar in Neon with CPU cores, temperatures, game FPS, processes, drives and a dashboard; a 3.5 inch panel in Paper, a 5 inch panel in Graphite and a 3.5 inch portrait panel in Arctic" width="100%"></p>
+
+Calendars, Home Assistant, MQTT and PresentMon are set up in the
+[configuration](docs/CONFIGURATION.md#more-sensor-sources).
 
 ## Themes
 
@@ -125,17 +158,23 @@ Made one you like? Share it in
 
 ## Features
 
-- **Modules**: ten building blocks that lay themselves out for their size,
+- **Modules**: 24 building blocks that lay themselves out for their size,
   six looks, starting layouts for every panel size.
 - **Widgets**: text, sensor values, bars (also segmented), ring gauges,
-  smooth history graphs, clock and date, images, weather, 21 line icons (with
+  smooth history graphs, lists of readings (`temp.*`) as rows, bars,
+  columns or tiles, clocks (digital and analog, any time zone), countdowns,
+  the month, the moon, images and slideshows, weather, 35 line icons (with
   live weather symbols), cards with frosted glass; glow, shadows, gradients,
   colour rules (e.g. turn red above 85 °C) and values that glide.
 - **Video mode** for TURZX USB panels: up to 50 frames per second through
   the panel's own video decoder (needs ffmpeg).
-- **Sensors**: CPU, RAM, disk, network, temperatures and fans via `psutil`;
-  on Windows also GPU, power and more through
+- **Sensors**: CPU (every core), RAM, every drive, network, temperatures,
+  fans, battery and the busiest programs via `psutil`; on Windows also GPU,
+  power, every temperature and fan through
   [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor).
+- **From your life**: what is playing, calendars (.ics), Home Assistant,
+  MQTT, sunrise, sunset and the moon, and the frame rate of games
+  ([PresentMon](https://github.com/GameTechDev/PresentMon), Windows).
 - **Weather** from [Open-Meteo](https://open-meteo.com) for your location:
   off by default, no API key.
 - **Nothing hard-coded**: location, units, sensors and panel live in one
