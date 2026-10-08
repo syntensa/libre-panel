@@ -83,11 +83,13 @@ def dynamic_messages() -> set[str]:
     from libre_panel.devices.models import MODELS
     from libre_panel.editor.presets import PRESETS
     from libre_panel.sensors.psutil_provider import BATTERY_STATES
+    from libre_panel.sensors.sky import MOON_PHASES
     from libre_panel.weather.open_meteo import _WMO
 
     return (
         set(_WMO.values())
         | set(BATTERY_STATES)
+        | set(MOON_PHASES)
         | {"Unknown"}
         | {p["name"] for p in PRESETS}
         | {m.notes for m in MODELS if m.notes}

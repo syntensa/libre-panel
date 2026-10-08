@@ -39,7 +39,8 @@ hiddenimports += [
     "zipfile",
 ]
 if sys.platform == "win32":
-    hiddenimports += ["winreg"]
+    hiddenimports += ["winreg", "zoneinfo", "tzdata"]
+    datas += collect_data_files("tzdata")  # the world clock's time zones
 usb_datas, usb_binaries, usb_hidden = collect_all("libusb_package")
 datas += usb_datas
 binaries += usb_binaries

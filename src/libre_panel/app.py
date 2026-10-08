@@ -35,6 +35,11 @@ def build_hub(config: Config, demo: bool = False) -> SensorHub:
         from libre_panel.weather.open_meteo import OpenMeteoProvider
 
         providers.append(OpenMeteoProvider(config.weather))
+    if not demo:  # the sun for the weather's place (if set), the moon everywhere
+        from libre_panel.sensors.sky import SkyProvider
+
+        place = {"latitude": config.weather.latitude, "longitude": config.weather.longitude}
+        providers.append(SkyProvider(place))
     return SensorHub(providers)
 
 

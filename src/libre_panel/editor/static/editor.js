@@ -2199,9 +2199,38 @@ function buildModuleProps(form, widget) {
     const sorts = { cpu: t("processor time"), memory: t("memory") };
     form.append(block(t("Sorted by"), chips("sort", Object.keys(sorts), (s) => sorts[s])));
   }
-  if (info.items) {
+  if (info.items && widget.module === "world") {
+    const items = el("textarea", { placeholder: info.items, rows: 5, oninput: (e) => change("items")(e.target.value) }, widget.items || "");
+    form.append(field(t("Places"), items, t('one per line: a time zone and a name if you like ("Asia/Tokyo = Tokyo"); empty: as shown')));
+  } else if (info.items) {
     const items = el("textarea", { placeholder: info.items, rows: 5, oninput: (e) => change("items")(e.target.value) }, widget.items || "");
     form.append(field(t("Readings"), items, t('one per line: a sensor ("cpu.temp"), a pattern ("temp.*") and a name if you like ("cpu.temp = CPU"); empty: as shown')));
+  }
+  if (widget.module === "analog") {
+    const zone = el("input", { type: "text", value: widget.timezone || "", placeholder: t("this computer's"), oninput: (e) => change("timezone")(e.target.value.trim()) });
+    form.append(field(t("Time zone"), zone, t('e.g. "Asia/Tokyo" or "America/New_York"')));
+  }
+  if (widget.module === "countdown") {
+    const target = el("input", { type: "text", value: widget.target || "", placeholder: "01-01", oninput: (e) => change("target")(e.target.value.trim()) });
+    form.append(field(t("Counts down to"), target, t('"2026-12-24", "2026-12-24 18:00", or "12-24" for every year; the title names it')));
+  }
+  if (widget.module === "image") {
+    const examples = ["assets/photo.jpg", "assets/*.jpg"].join("\n"); // file names, not words
+    const pictures = el("textarea", { placeholder: examples, rows: 4, oninput: (e) => change("items")(e.target.value) }, widget.items || "");
+    const add = el("button", {
+      type: "button",
+      text: t("Add a picture…"),
+      onclick: async () => {
+        const path = await uploadAsset(".png,.jpg,.jpeg,.gif,.webp");
+        if (!path) return;
+        change("items", true)([widget.items, path].filter(Boolean).join("\n"));
+      },
+    });
+    form.append(
+      field(t("Pictures"), pictures, t('one per line, from the theme folder; "assets/*.jpg" takes them all; several take turns')),
+      el("div", { class: "row" }, add),
+      field(t("Seconds per picture"), numberInput(widget.seconds, (v) => change("seconds")(Math.max(1, Math.min(3600, Math.round(v || 10)))), { min: 1, max: 3600 })),
+    );
   }
   if (widget.module === "text") form.append(field(t("Text"), controlFor("text", "text", widget.text, change("text"))));
   const title = el("input", { type: "text", value: widget.title || "", placeholder: t("automatic"), oninput: (e) => change("title")(e.target.value) });

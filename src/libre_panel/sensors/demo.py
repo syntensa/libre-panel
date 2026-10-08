@@ -9,6 +9,9 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from libre_panel.sensors.base import Reading, SensorProvider, Snapshot
+from libre_panel.sensors.sky import sky_readings
+
+DEMO_PLACE = (50.0, 10.0)  # somewhere in the middle of Europe, for the sun's times
 
 # key: (label, unit, base, amplitude, period in seconds)
 _WAVES: dict[str, tuple[str, str, float, float, float]] = {
@@ -93,6 +96,7 @@ class DemoProvider(SensorProvider):
             out[key] = Reading(key, value, unit, label)
         out["sys.uptime"] = Reading("sys.uptime", 3 * 86400 + 5 * 3600 + 42 * 60, "s", "Uptime")
         out.update(demo_details(t, out))
+        out.update(sky_readings(t, *DEMO_PLACE))
         out["cpu.name"] = Reading("cpu.name", "8-Core Processor", "", "CPU")
         out["gpu.name"] = Reading("gpu.name", "Graphics Card", "", "GPU")
         if self.include_weather:

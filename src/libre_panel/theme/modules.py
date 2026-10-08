@@ -14,6 +14,7 @@ them gets the "arctic" look of SPUR II. Labels are in the user's language.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
@@ -21,6 +22,7 @@ from typing import Any
 
 from PIL import ImageFont
 
+from libre_panel import timezones
 from libre_panel.devices.models import find_model
 from libre_panel.fonts import builtin_font_path
 from libre_panel.i18n import t
@@ -265,6 +267,9 @@ def mix(a: str, b: str, amount: float) -> str:
     return "#" + "".join(f"{round(x + (y - x) * amount):02X}" for x, y in zip(ca, cb, strict=True))
 
 
+_CARDLESS = ("clock", "text", "analog", "image")  # kinds without a card unless asked
+
+
 class _Build:
     """Collects the widgets of one module, laid out in its box."""
 
@@ -282,7 +287,7 @@ class _Build:
         self.style = style
         self.u = min(self.w, self.h)
         self.card_on = module["card"] == "on" or (
-            module["card"] == "auto" and module["module"] not in ("clock", "text")
+            module["card"] == "auto" and module["module"] not in _CARDLESS
         )
         self.card_on = self.card_on and style["card"] != "none"
         self.pad = round(_clamp(self.u * 0.1, 6, 26)) if self.card_on else round(self.u * 0.04)
@@ -967,6 +972,325 @@ def build_system(b: _Build, _src: Source) -> None:
                 fallback="", tabular=False, fit="ellipsis")  # fmt: skip
 
 
+# -- time and the sky ----------------------------------------------------------
+
+
+def build_sun(b: _Build, _src: Source) -> None:
+    """Sunrise and sunset under the day's arc; the moon's phase beside or below.
+
+    Without a place (``[weather]`` latitude and longitude) only the moon shows.
+    """
+    b.card()
+    a = b.aspect
+    start = len(b.out)
+    b.needs = "sun.rise"
+    if b.large and a < 1.6:
+        top = b.ih * 0.58
+        _sun(b, b.ix, b.iy, b.iw, top, details=True)
+        _moon(b, b.ix, b.iy + top + b.pad, b.iw, b.ih - top - b.pad, details=True)
+    elif a >= 1.45:
+        width = (b.iw - b.pad * 2) * 0.5
+        _sun(b, b.ix, b.iy, width, b.ih, details=b.large)
+        _moon(b, b.ix + width + b.pad * 2, b.iy, b.iw - width - b.pad * 2, b.ih,
+              details=b.large)  # fmt: skip
+    elif a <= 0.72 and b.ih > b.iw * 1.5:
+        top = b.ih * 0.55
+        _sun(b, b.ix, b.iy, b.iw, top)
+        _moon(b, b.ix, b.iy + top + b.pad, b.iw, b.ih - top - b.pad)
+    else:
+        _sun(b, b.ix, b.iy, b.iw, b.ih)
+    first = len(b.out)
+    b.needs = "!sun.rise"
+    _moon(b, b.ix, b.iy, b.iw, b.ih, details=b.large or a >= 1.45)
+    for widget in b.out[first:]:
+        widget["id"] = "only-" + widget["id"]
+    b.needs = ""
+    del start
+
+
+def _sun(b: _Build, x: float, y: float, w: float, h: float, details: bool = False) -> None:
+    color = b.tint("warn")
+    text_h = b.ts * (4.6 if details else 2.4)
+    d = min(w, (h - text_h) * 2)
+    cx = x + w / 2
+    base = y + d / 2  # the horizon: the arc's ends
+    b.add(
+        "gauge", "arc", x=round(cx - d / 2), y=round(y), w=round(d), h=round(d),
+        sensor="sun.progress", min=0, max=1, start_angle=180, end_angle=360,
+        thickness=max(3, round(d * 0.055)), color=b.deep(color), color2=color,
+        background=b.c("track"), cap="round", glow=round(0.45 * b.glow, 2),
+        glow_radius=max(2, round(d * 0.04)), smooth=True,
+    )  # fmt: skip
+    icon = d * 0.26
+    b.icon("sun-icon", "sun", cx - icon / 2, base - icon - d * 0.04, icon, color)
+    b.out[-1]["needs"] = "sun.progress"
+    b.icon("night-icon", "moon", cx - icon / 2, base - icon - d * 0.04, icon, b.c("text2"))
+    b.out[-1]["needs"] = "!sun.progress"
+    size = b.ts * 1.3
+    cap = base + b.ts * 0.7
+    mark = b.ts * 1.5
+    # the times under the arc's ends (not further out than a little)
+    left = max(x, cx - d / 2 - mark * 0.6)
+    right = min(x + w, cx + d / 2 + mark * 0.6)
+    half = (right - left) / 2
+    b.icon("rise-icon", "sunrise", left, cap + CAP * size / 2 - mark / 2, mark, b.c("text3"))
+    b.value("rise", "sun.rise", "{value}", left + mark * 1.2, cap, size, width=half - mark * 1.2)
+    b.icon("set-icon", "sunset", right - mark, cap + CAP * size / 2 - mark / 2, mark,
+           b.c("text3"))  # fmt: skip
+    b.value("set", "sun.set", "{value}", right - mark * 1.2, cap, size, align="right",
+            width=half - mark * 1.2)  # fmt: skip
+    if details:
+        line = cap + CAP * size + b.ts * 1.3
+        b.label("daylight-label", t("Daylight"), left, line, b.ts * 0.9, width=half)
+        b.value("daylight", "sun.daylight", "{value:duration}", right, line - b.ts * 0.05,
+                b.ts * 1.05, align="right", width=half, font="text_font",
+                color=b.c("text2"))  # fmt: skip
+
+
+def _moon(b: _Build, x: float, y: float, w: float, h: float, details: bool = False) -> None:
+    beside = w / max(1, h) >= 1.2 and w >= b.ts * 14
+    lines = [("name", "moon.name", "{value}", 1.25, "text"),
+             ("lit", "moon.illumination", t("{value:.0f}% lit"), 1.0, "text2")]  # fmt: skip
+    if details:
+        lines.append(("full", "moon.full_in", t("Full moon in {value:.0f} days"), 0.95, "text3"))
+    block = sum(CAP * b.ts * scale for *_rest, scale, _c in lines) + b.ts * 0.9 * (len(lines) - 1)
+    if beside:
+        disc = min(h * 0.82, w * 0.38)
+        dx, dy = x, y + (h - disc) / 2
+        tx, align, width = x + disc + b.pad * 1.2, "left", w - disc - b.pad * 1.2
+        top = y + (h - block) / 2
+    else:
+        disc = min(w * 0.5, h * 0.55, h - block - b.ts * 1.2)
+        dx, dy = x + (w - disc) / 2, y + (h - disc - block - b.ts * 1.2) / 2
+        tx, align, width = x + w / 2, "center", w
+        top = dy + disc + b.ts * 1.2
+    if disc < 8:
+        return
+    b.add("moon", "moon", x=round(dx), y=round(dy), size=round(disc), sensor="moon.phase",
+          color=b.c("text"), color2=mix(b.c("track"), b.c("text3"), 0.22),
+          glow=round(0.25 * b.glow, 2),
+          glow_radius=max(2, round(disc * 0.08)))  # fmt: skip
+    for name, key, fmt, scale, role in lines:
+        size = b.ts * scale
+        b.value(name, key, fmt, tx, top, size, color=b.c(role), align=align, width=width,
+                font="text_font", tabular=False, fallback="", fit="ellipsis",
+                hide_if_missing=True)  # fmt: skip
+        top += CAP * size + b.ts * 0.9
+
+
+def _face(b: _Build, name: str, x: float, y: float, d: float, zone: str = "") -> None:
+    b.add(
+        "analog", name, x=round(x), y=round(y), w=round(d), h=round(d), timezone=zone,
+        color=b.c("text"), color2=b.c("accent") if not b.module.get("color") else b.tint("accent"),
+        face=mix(b.c("surface"), b.c("track"), 0.7) if b.card_on else b.c("surface"),
+        marks=b.c("text3"), seconds=d >= 90,
+        glow=round(0.15 * b.glow, 2), glow_radius=max(2, round(d * 0.03)),
+    )  # fmt: skip
+
+
+def build_analog(b: _Build, _src: Source) -> None:
+    """A clock face; the time and the date beside or under it when there is room."""
+    b.card()
+    zone = b.module["timezone"]
+    a = b.aspect
+    if a >= 1.6:  # face | time and date
+        d = b.ih
+        _face(b, "face", b.ix, b.iy, d, zone)
+        x = b.ix + d + b.pad * 1.6
+        w = b.ix + b.iw - x
+        size = min(b.ih * 0.3, w / 3.0)
+        date_size = max(8, size * 0.32)
+        block = CAP * size + date_size * 1.2 + CAP * date_size
+        top = b.iy + (b.ih - block) / 2
+        b.clock("time", "%H:%M", x, top, size, width=w, timezone=zone)
+        fmt = "%A · %d %B" if w > size * 4.2 else "%a %d %b"
+        b.clock("date", fmt, x, top + CAP * size + date_size * 1.2, date_size,
+                color=b.c("text2"), width=w, font="text_font", tabular=False,
+                timezone=zone)  # fmt: skip
+        if b.module["title"]:
+            b.label("title", b.module["title"], x, top - b.ts * 1.6, b.ts, width=w)
+        return
+    tall = a <= 0.72 and b.ih > b.iw * 1.3
+    label = b.module["title"]
+    room = b.ts * 2.4 if (tall or label) else 0
+    d = min(b.iw, b.ih - room)
+    x, y = b.ix + (b.iw - d) / 2, b.iy + (b.ih - d - room) / 2
+    _face(b, "face", x, y, d, zone)
+    if tall and not label:
+        b.clock("date", "%a %d %b", b.ix + b.iw / 2, y + d + b.ts * 1.0, b.ts * 1.2,
+                color=b.c("text2"), align="center", width=b.iw, font="text_font",
+                tabular=False, timezone=zone)  # fmt: skip
+    elif label:
+        b.label("title", label, b.ix + b.iw / 2, y + d + b.ts * 1.0, b.ts, align="center",
+                width=b.iw)  # fmt: skip
+
+
+def _cities(b: _Build) -> list[tuple[str, str]]:
+    found = []
+    for line in (b.module["items"] or default_items("world")).splitlines():
+        zone, _, name = line.partition("=")
+        zone = zone.strip()
+        if not zone or zone.startswith("#") or timezones.zone(zone) is None:
+            continue
+        found.append((zone, name.strip() or zone.rsplit("/", 1)[-1].replace("_", " ")))
+    return found
+
+
+def build_world(b: _Build, _src: Source) -> None:
+    """The time in other places: rows of cities, clock faces when big."""
+    b.card()
+    cities = _cities(b)
+    if not cities:
+        b.label("none", t("Add places in the settings"), b.ix + b.iw / 2,
+                b.iy + b.ih / 2 - CAP * b.ts / 2, b.ts, align="center", width=b.iw)  # fmt: skip
+        return
+    top = 0.0
+    if b.module["title"]:
+        top = b.head("globe", b.module["title"], b.tint("accent"))
+    x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
+    if b.large and h > b.ts * 9:  # faces in a grid
+        n = len(cities)
+        best = (0.0, 1)
+        for columns in range(1, n + 1):
+            lines = -(-n // columns)
+            cell_w = (w - (columns - 1) * b.pad) / columns
+            cell_h = (h - (lines - 1) * b.pad) / lines
+            size = min(cell_w, cell_h - b.ts * 3.2)
+            if size > best[0]:
+                best = (size, columns)
+        d, columns = best
+        d *= 0.92
+        lines = -(-n // columns)
+        cell_w = (w - (columns - 1) * b.pad) / columns
+        cell_h = (h - (lines - 1) * b.pad) / lines
+        for i, (zone, name) in enumerate(cities):
+            row, col = divmod(i, columns)
+            cx = x + col * (cell_w + b.pad) + cell_w / 2
+            cy = y + row * (cell_h + b.pad) + (cell_h - d - b.ts * 3.2) / 2
+            _face(b, f"c{i}-face", cx - d / 2, cy, d, zone)
+            b.label(f"c{i}-name", name, cx, cy + d + b.ts * 0.8, b.ts * 0.95, align="center",
+                    width=cell_w)  # fmt: skip
+            b.clock(f"c{i}-time", "%a %H:%M", cx, cy + d + b.ts * 2.2, b.ts, color=b.c("text3"),
+                    align="center", width=cell_w, font="text_font", timezone=zone)  # fmt: skip
+        return
+    n = len(cities)
+    best: tuple[float, int] = (1e9, 1)
+    for columns in range(1, n + 1):  # cells close to 3.5:1, the shape of a row
+        lines = -(-n // columns)
+        cell_w, cell_h = w / columns, h / lines
+        if cell_h < b.ts * 2.2 and columns < n:
+            continue
+        score = abs(math.log(max(1e-3, cell_w / max(1.0, cell_h)) / 3.5))
+        if score < best[0]:
+            best = (score, columns)
+    columns = best[1]
+    lines = -(-n // columns)
+    gap = b.pad * 1.5
+    cell_w = (w - (columns - 1) * gap) / columns
+    cell_h = h / lines
+    stacked = cell_h >= b.ts * 4.6 and cell_w < b.ts * 16
+    for i, (zone, name) in enumerate(cities):
+        line, col = divmod(i, columns)
+        cx = x + col * (cell_w + gap)
+        cy = y + line * cell_h
+        if stacked:  # name, time, weekday, centred
+            size = min(cell_h * 0.32, cell_w * 0.3)
+            block = CAP * b.ts + b.ts * 0.9 + CAP * size + b.ts * 0.8 + CAP * b.ts * 0.9
+            top = cy + (cell_h - block) / 2
+            mid = cx + cell_w / 2
+            b.label(f"c{i}-name", name, mid, top, b.ts, color=b.c("text2"), align="center",
+                    width=cell_w)  # fmt: skip
+            top += CAP * b.ts + b.ts * 0.9
+            b.clock(f"c{i}-time", "%H:%M", mid, top, size, align="center", width=cell_w,
+                    timezone=zone)  # fmt: skip
+            b.clock(f"c{i}-day", "%a", mid, top + CAP * size + b.ts * 0.8, b.ts * 0.9,
+                    color=b.c("text3"), align="center", width=cell_w, font="text_font",
+                    tabular=False, timezone=zone)  # fmt: skip
+            continue
+        mid = cy + cell_h / 2
+        size = min(cell_h * 0.5, b.ts * 2.2, cell_w * 0.16)
+        day = cell_h >= b.ts * 3.4
+        name_top = mid - (CAP * b.ts + (b.ts * 0.8 + CAP * b.ts * 0.9 if day else 0)) / 2
+        b.label(f"c{i}-name", name, cx, name_top, b.ts, color=b.c("text2"),
+                width=cell_w * 0.55)  # fmt: skip
+        if day:
+            b.clock(f"c{i}-day", "%a", cx, name_top + CAP * b.ts + b.ts * 0.8, b.ts * 0.9,
+                    color=b.c("text3"), width=cell_w * 0.5, font="text_font",
+                    tabular=False, timezone=zone)  # fmt: skip
+        b.clock(f"c{i}-time", "%H:%M", cx + cell_w, mid - CAP * size / 2, size, align="right",
+                width=cell_w * 0.45, timezone=zone)  # fmt: skip
+
+
+def build_countdown(b: _Build, _src: Source) -> None:
+    """The days (or hours) left until a day you choose; every year with "12-24"."""
+    from libre_panel.render.countdown import parse_target
+
+    b.card()
+    target = b.module["target"] or "01-01"
+    parsed = parse_target(target)
+    timed = parsed is not None and parsed[3] is not None
+    color = b.tint("accent")
+    title = b.module["title"] or (t("New Year") if not b.module["target"] else t("Countdown"))
+    top = b.head("hourglass", title, color)
+    x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
+    fields = {"target": target}
+    wide = w / max(1, h) >= 2.2
+    number_w = w * (0.45 if wide else 1.0)
+    size = min(h * (0.5 if not b.large else 0.42), number_w * 0.42)
+    unit = b.ts * 1.1
+    block = CAP * size + b.ts * 0.9 + CAP * unit
+    cap = y + (h - block) / 2 if wide or not b.large else y + h * 0.08
+    b.add("countdown", "number", part="number", **fields,
+          **b._text_fields(size, cap, "display_font", x=round(x), color=b.c("text"),
+                           max_width=round(number_w), tabular=True, glow=round(0.3 * b.glow, 2),
+                           glow_radius=max(2, round(size / 14))))  # fmt: skip
+    b.add("countdown", "unit", part="unit", **fields,
+          **b._text_fields(unit, cap + CAP * size + b.ts * 0.9, "text_font", x=round(x),
+                           color=color, max_width=round(number_w), tabular=False))  # fmt: skip
+    rest_x, rest_y, rest_w = x, cap + block + b.ts * 1.6, w
+    if wide:
+        rest_x, rest_w = x + w * 0.5, w * 0.5
+        rest_y = y + (h - (CAP * b.ts * 1.3 + (b.ts * 1.8 if timed else 0))) / 2
+    lines = []
+    if timed:
+        lines.append(("clock", b.ts * 1.3, b.c("text2"), "display_font"))
+    if wide or b.large:
+        lines.append(("date", b.ts, b.c("text3"), "text_font"))
+    for part, line_size, line_color, font in lines:
+        if rest_y + CAP * line_size > b.iy + b.ih:
+            break
+        b.add("countdown", part, part=part, **fields,
+              **b._text_fields(line_size, rest_y, font, x=round(rest_x), color=line_color,
+                               max_width=round(rest_w), tabular=part == "clock",
+                               fit="ellipsis"))  # fmt: skip
+        rest_y += CAP * line_size + b.ts * 1.0
+
+
+def build_image(b: _Build, _src: Source) -> None:
+    """A picture, or several in turn (``items``: one per line, "photos/*.jpg" a folder)."""
+    b.card()
+    pictures = [line.strip() for line in b.module["items"].splitlines() if line.strip()]
+    radius = round(b.style["radius"] * b.u / 200) if b.style["card"] != "none" else 0
+    if not pictures:
+        b.add("rect", "frame", x=b.x, y=b.y, w=b.w, h=b.h, color=b.c("surface"),
+              outline=b.c("line"), radius=radius)  # fmt: skip
+        icon = min(b.w, b.h) * 0.28
+        b.icon("icon", "image", b.x + (b.w - icon) / 2, b.y + b.h / 2 - icon * 0.75, icon,
+               b.c("text3"))  # fmt: skip
+        b.label("hint", t("Add pictures in the settings"), b.x + b.w / 2,
+                b.y + b.h / 2 + icon * 0.45, b.ts * 0.9, align="center",
+                width=b.w * 0.9)  # fmt: skip
+        return
+    b.add("image", "picture", x=b.x, y=b.y, w=b.w, h=b.h, src="", slides="\n".join(pictures),
+          seconds=max(1, b.module["seconds"]), fit="cover", radius=radius)  # fmt: skip
+    if b.module["title"]:
+        shade = round(b.h * 0.4)
+        b.add("rect", "shade", x=b.x, y=b.y + b.h - shade, w=b.w, h=shade, color="#00000000",
+              color2=b.c("bg2") + "CC", radius=radius)  # fmt: skip
+        b.label("title", b.module["title"], b.x + b.pad * 2, b.y + b.h - b.pad * 2 - CAP * b.ts,
+                b.ts * 1.05, color=b.c("text"), width=b.w - b.pad * 4)  # fmt: skip
+
+
 def build_text(b: _Build, _src: Source) -> None:
     """A title with the accent line under it."""
     b.card()
@@ -990,6 +1314,8 @@ def default_items(kind: str) -> str:
     return {
         "temps": "cpu.temp = CPU\ngpu.temp = GPU\ntemp.*",
         "drives": "disk.*.load",
+        "world": "America/New_York = New York\nEurope/London = London\nAsia/Tokyo = Tokyo\n"
+        "Australia/Sydney = Sydney",
         "values": f"cpu.load = CPU\ngpu.load = GPU\nmem.load = {t('RAM')}\n"
         f"cpu.temp = {t('CPU temp')}\ngpu.temp = {t('GPU temp')}\nnet.down = {t('Download')}",
     }.get(kind, "")
@@ -1223,12 +1549,18 @@ def kinds() -> dict[str, Kind]:
         "netinfo": Kind(t("Network details"), build_netinfo, span=(2, 1)),
         "battery": Kind(t("Battery"), build_battery),
         "values": Kind(t("Dashboard"), build_values, span=(2, 1)),
+        "sun": Kind(t("Sun & moon"), build_sun, span=(2, 1)),
+        "analog": Kind(t("Analog clock"), build_analog),
+        "world": Kind(t("World clock"), build_world, span=(2, 1)),
+        "countdown": Kind(t("Countdown"), build_countdown, span=(2, 1)),
+        "image": Kind(t("Picture"), build_image, span=(2, 2)),
     }
 
 
 MODULE_KINDS = (
     "clock", "date", "weather", "ring", "stat", "graph", "bars", "network", "system", "text",
     "temps", "cores", "drives", "processes", "netinfo", "battery", "values",
+    "sun", "analog", "world", "countdown", "image",
 )  # fmt: skip
 MODULE_SOURCES = ("cpu", "gpu", "mem", "disk", "net", "sensor")
 MODULE_FALLBACKS = ("auto", "none", "cpu", "gpu", "mem", "disk")

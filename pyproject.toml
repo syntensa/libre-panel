@@ -26,6 +26,7 @@ classifiers = [
 dependencies = [
     "pillow>=10.1",
     "psutil>=5.9",
+    "tzdata; sys_platform == 'win32'",  # time zones for the world clock (Windows has none)
 ]
 
 [project.optional-dependencies]

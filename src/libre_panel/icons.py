@@ -41,6 +41,11 @@ ICON_NAMES = (
     "list",
     "grid",
     "signal",
+    "sunrise",
+    "sunset",
+    "hourglass",
+    "image",
+    "globe",
     "weather",
 )
 
@@ -263,6 +268,48 @@ def _signal(pen: _Pen) -> None:
         pen.line((x, 20), (x, 16 - i * 4))
 
 
+def _horizon_sun(pen: _Pen) -> None:
+    pen.arc(12, 16, 5, 180, 360)
+    for a in (180, 225, 270, 315, 360):
+        r = math.radians(a)
+        pen.line((12 + 7.5 * math.cos(r), 16 + 7.5 * math.sin(r)),
+                 (12 + 9.5 * math.cos(r), 16 + 9.5 * math.sin(r)))  # fmt: skip
+    pen.line((2, 16), (22, 16))
+
+
+def _sunrise(pen: _Pen) -> None:
+    _horizon_sun(pen)
+    pen.line((12, 23), (12, 19.5))
+    pen.line((10, 21.2), (12, 19.5), (14, 21.2))
+
+
+def _sunset(pen: _Pen) -> None:
+    _horizon_sun(pen)
+    pen.line((12, 19.5), (12, 23))
+    pen.line((10, 21.3), (12, 23), (14, 21.3))
+
+
+def _hourglass(pen: _Pen) -> None:
+    pen.line((6, 2.5), (18, 2.5))
+    pen.line((6, 21.5), (18, 21.5))
+    pen.polygon([(7.5, 2.5), (16.5, 2.5), (12, 12)])
+    pen.polygon([(12, 12), (16.5, 21.5), (7.5, 21.5)])
+
+
+def _image(pen: _Pen) -> None:
+    pen.rect(2.5, 4, 21.5, 20, 2)
+    pen.circle(8, 9.5, 1.8)
+    pen.line((3.5, 18), (9.5, 12.5), (13, 16), (16, 13), (20.5, 17.5))
+
+
+def _globe(pen: _Pen) -> None:
+    pen.circle(12, 12, 9.5)
+    pen.line((2.5, 12), (21.5, 12))
+    pen.draw.ellipse([*pen.p(7.5, 2.5), *pen.p(16.5, 21.5)], outline=pen.color, width=pen.w)
+    pen.line((4, 7.2), (20, 7.2))
+    pen.line((4, 16.8), (20, 16.8))
+
+
 def _cloud_icon(pen: _Pen) -> None:
     pen.shape(lambda d, p: _cloud(d, p))
 
@@ -340,6 +387,11 @@ _ICONS: dict[str, Callable[[_Pen], None]] = {
     "list": _list,
     "grid": _grid,
     "signal": _signal,
+    "sunrise": _sunrise,
+    "sunset": _sunset,
+    "hourglass": _hourglass,
+    "image": _image,
+    "globe": _globe,
 }
 
 

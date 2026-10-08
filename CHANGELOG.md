@@ -13,6 +13,16 @@
 - Dashboard: readings of your choice as tiles
 - Widget type `list`: readings by name or pattern (`temp.*`), as rows, bars,
   columns or tiles, as many as fit; a reading under two names is shown once
+- Sun & moon: sunrise and sunset under the day's arc, the moon's phase,
+  daylight and the next full moon; computed for the place in `[weather]`,
+  no internet needed
+- Analog clock, world clock (rows, tiles or clock faces) and clocks in any
+  time zone (`timezone`)
+- Countdown to a day or a moment, every year with "12-24"
+- Picture and slideshow: pictures from the theme folder fill the module and
+  take turns; the editor adds them
+- Widget types `analog`, `countdown` and `moon`; pictures can `fit`
+  (contain, cover), round their corners and take turns (`slides`)
 
 **Sensors**
 - Every core (`cpu.core.<n>.load`), every drive (`disk.<n>.*`), the busiest
@@ -21,6 +31,7 @@
 - LibreHardwareMonitor: every temperature and fan under a friendly key
   (`temp.cpu.package`, `fan.gpu.gpu_fan_1`)
 - Costly readings (processes, ping) are only taken while a theme shows them
+- `sun.*` and `moon.*`: sunrise, sunset, daylight, the moon's phase
 
 ## 0.3.0 — 2026-10-08
 

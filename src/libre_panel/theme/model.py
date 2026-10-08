@@ -154,8 +154,50 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "grid_color": ("color?", "#ffffff1f"),
         "background": ("color?", None),
     },
-    "clock": {"format": ("string", "%H:%M"), **_text_style(True)},
-    "image": {"src": ("asset", ""), "w": ("int", 0), "h": ("int", 0)},
+    "clock": {
+        "format": ("string", "%H:%M"),
+        "timezone": ("string", ""),  # e.g. "Asia/Tokyo"; empty = this computer's
+        **_text_style(True),
+    },
+    # A clock face with hands.
+    "analog": {
+        "w": ("int", 160),
+        "h": ("int", 160),
+        "timezone": ("string", ""),
+        "color": ("color", "#ffffff"),  # hour and minute hands
+        "color2": ("color", "#22d3ee"),  # second hand and centre
+        "face": ("color?", "#1f2937"),
+        "marks": ("color?", "#8a97a8"),
+        "seconds": ("bool", True),
+    },
+    # The days, hours or minutes until a date: "2026-12-24", "2026-12-24 18:00",
+    # or "12-24" for every year.
+    "countdown": {
+        "target": ("string", "12-24"),
+        # number: 76 / 5:12 / 12:33; unit: days / hours / minutes; clock: 05:12:33
+        # left in the day; text: "76 days"; days; date: the day it counts to
+        "part": ("enum:number|unit|clock|text|days|date", "text"),
+        "done": ("string", ""),  # shown once it is there (empty: "Today" / "Now")
+        **_text_style(True),
+    },
+    # The moon as it is lit tonight.
+    "moon": {
+        "size": ("int", 64),
+        "sensor": ("sensor", "moon.phase"),
+        "color": ("color", "#f2efe6"),  # the lit part
+        "color2": ("color?", "#2b3242"),  # the dark part
+        "mirror": ("bool", False),  # as seen south of the equator
+    },
+    "image": {
+        "src": ("asset", ""),
+        "w": ("int", 0),
+        "h": ("int", 0),
+        "fit": ("enum:stretch|contain|cover", "stretch"),  # into w x h
+        "radius": ("int", 0),
+        # more pictures for a slideshow, one per line ("photos/*.jpg" takes a folder)
+        "slides": ("text", ""),
+        "seconds": ("int", 10),  # per picture
+    },
     "weather": {
         "field": (
             "enum:temperature|apparent_temperature|humidity|wind_speed|description|code",
@@ -238,6 +280,9 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         # temps, drives, dashboard: the readings to show, one per line ("cpu.temp = CPU")
         "items": ("text", ""),
         "sort": ("enum:cpu|memory", "cpu"),  # processes: by processor time or memory
+        "timezone": ("string", ""),  # analog clock: e.g. "Asia/Tokyo"
+        "target": ("string", ""),  # countdown: "2026-12-24", "2026-12-24 18:00", "12-24"
+        "seconds": ("int", 10),  # picture: seconds per picture in a slideshow
     },
 }
 

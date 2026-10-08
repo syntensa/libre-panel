@@ -102,8 +102,11 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `bar` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `color`, `color2`, `background`, `radius`, `direction`, `segments`, `segment_gap`, `smooth`, `color_rules` | progress bar; `color2` makes a gradient along the track, `segments` an LED-style bar |
 | `gauge` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `start_angle`, `end_angle`, `thickness`, `color`, `color2`, `background`, `cap`, `ticks`, `tick_color`, `smooth`, `color_rules` | ring; angles clockwise from 3 o'clock, default 135→405; `cap` round or flat |
 | `graph` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `history`, `color`, `fill`, `fill_fade`, `smooth`, `per_frame`, `line_width`, `grid`, `grid_color`, `background` | history; `min`/`max` `null` = automatic, `smooth` draws a curve, `per_frame` see below |
-| `clock` | `format` | date/time with [strftime codes](https://strftime.org), e.g. `%H:%M:%S`, `%A %d %B` |
-| `image` | `src`, `w`, `h` | a picture from the theme folder; `w`/`h` 0 = original size |
+| `clock` | `format`, `timezone` | date/time with [strftime codes](https://strftime.org), e.g. `%H:%M:%S`, `%A %d %B`; `timezone` e.g. `Asia/Tokyo` (empty: this computer's) |
+| `analog` | `w`, `h`, `timezone`, `color`, `color2`, `face`, `marks`, `seconds` | a clock face with hands; `color2` the second hand |
+| `countdown` | `target`, `part`, `done` | the time left until `target` (`2026-12-24`, `2026-12-24 18:00`, or `12-24` for every year); `part`: `number` (76, 5:12, 12:33), `unit` (days, hours, minutes), `clock` (05:12:33 left in the day), `text` ("76 days"), `days`, `date`; `done` is shown once it is there ("Today", "Now") |
+| `moon` | `size`, `sensor`, `color`, `color2`, `mirror` | the moon as it is lit (`moon.phase`); `mirror` as seen south of the equator |
+| `image` | `src`, `w`, `h`, `fit`, `radius`, `slides`, `seconds` | a picture from the theme folder; `w`/`h` 0 = original size; `fit` `stretch`, `contain` or `cover`; `slides`: more pictures, one per line (`photos/*.jpg` takes a folder), each shown `seconds` |
 | `weather` | `field`, `format`, `fallback` | `temperature`, `apparent_temperature`, `humidity`, `wind_speed`, `description`, `code` |
 | `icon` | `icon`, `sensor`, `size`, `color`, `stroke` | line icons: cpu, gpu, ram, disk, network, download, upload, temperature, fan, power, clock, sun, moon, cloud, partly, rain, snow, storm, fog, humidity, wind, battery, plug, list, grid, signal — and `weather`, which follows the live weather, or the code in `sensor` (e.g. `weather.day.1.code`), by day or night |
 | `calendar` | `w`, `h`, `font`, `font_size`, `color`, `color2`, `muted`, `first_day` | the month as a grid of days, today marked in `color2`; weekday names in `muted` and the language; `first_day` `monday` or `sunday` |
@@ -186,6 +189,11 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `netinfo` | IP address, ping, download, upload, today's traffic, as many as fit; the ping's history when big | |
 | `battery` | a battery filled to its charge, charging or not, the time left; its history when wide or big; "No battery" on a desktop | |
 | `values` | readings of your choice as tiles: a small dashboard (`items`, default CPU, GPU, RAM, temperatures, download) | `items` |
+| `sun` | sunrise and sunset under the day's arc, the moon's phase beside or below; daylight and the next full moon when big. Needs the place in `[weather]` (latitude, longitude) for the sun; without it the moon alone | |
+| `analog` | a clock face; time and date beside it when wide (`timezone` for another place's time) | |
+| `world` | the time in other places: rows, tiles, or clock faces when big (`items`: `Asia/Tokyo = Tokyo`, one per line) | `items` |
+| `countdown` | the days, hours or minutes until `target`; the time left in the day for a time, the date when there is room. The `title` names it | |
+| `image` | a picture filling the cells, or several in turn (`items`: one per line from the theme folder, `assets/*.jpg` takes a folder; `seconds` each); the `title` as a caption | |
 
 - `col`, `row` place the module, `cols`, `rows` give its size in cells. A
   module that would reach past the grid is moved in.
@@ -199,7 +207,9 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
   `days`, `hours`, `both` or `off`; `step` is the hours between two hourly
   columns (1–6, default 3).
 - `items` (temps, drives, values): the readings to show, written as for a
-  [list](#lists); empty shows the module's own.
+  [list](#lists); empty shows the module's own. For `world` the places, for
+  `image` the pictures.
+- `timezone` (analog), `target` (countdown), `seconds` (image): see the table.
 - Labels follow the language: "Temp" reads "Temp." in German.
 
 **The grid.** `"grid": {"columns": 0, "rows": 0, "gap": 0, "margin": 0}`; 0
@@ -257,6 +267,8 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `proc.cpu.<n>.name`, `.value`; `proc.mem.<n>.name`, `.value` | text, % | the eight busiest programs by processor time (of the whole processor) and by memory; counted only while a theme shows them |
 | `net.ip`, `net.ping`, `net.today.down`, `net.today.up` | text, ms, B | the address towards the internet; ping (a connection to `ping`, see the configuration; only while shown); traffic since midnight or since Libre Panel started |
 | `battery.load`, `battery.state`, `battery.left`, `battery.plugged`, `sys.uptime` | %, text, s, 1/0, s | psutil; `state` is "On battery", "Charging" or "Charged" in the language |
+| `sun.rise`, `sun.set`, `sun.noon`, `sun.next_rise`, `sun.daylight`, `sun.up`, `sun.progress`, `sun.elevation` | "07:42", s, 1/0, 0–1, ° | computed for the place in `[weather]` (no internet needed); `progress` is how much of the day has passed, empty at night |
+| `moon.phase`, `moon.illumination`, `moon.name`, `moon.age`, `moon.full_in`, `moon.new_in` | 0–1, %, text, days | computed; `phase` 0 new, 0.5 full; `name` in the language |
 | `cpu.name`, `gpu.name` | text | LibreHardwareMonitor |
 | `weather.temperature`, `.apparent_temperature`, `.humidity`, `.wind_speed`, `.code`, `.description`, `.is_day` | °C, %, km/h | Open-Meteo, when enabled |
 | `weather.hour.<n>.temperature`, `.code`, `.rain`, `.day`, `.time` | °C, %, 1/0, "15:00" | the hour `n` hours ahead (1 = the next full hour, up to 24) |

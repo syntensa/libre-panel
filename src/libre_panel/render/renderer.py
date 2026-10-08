@@ -27,10 +27,11 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont, ImageOps
 
-from libre_panel import i18n
+from libre_panel import i18n, timezones
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
 from libre_panel.icons import draw_icon, weather_icon_name
 from libre_panel.render import lists
+from libre_panel.render.countdown import countdown_text
 from libre_panel.render.formatting import FormatError, auto_format, safe_format
 from libre_panel.sensors.base import Snapshot, want
 from libre_panel.theme.model import Theme, ThemeError, resolve_asset
@@ -39,7 +40,7 @@ from libre_panel.theme.modules import expand as expand_modules
 log = logging.getLogger(__name__)
 
 # Sensor texts shown in the user's language on the panel.
-TRANSLATED_READINGS = {"weather.description", "battery.state"}
+TRANSLATED_READINGS = {"weather.description", "battery.state", "moon.name"}
 
 # Shapes are drawn at this scale and downsampled for smooth edges.
 SUPERSAMPLE = 3
@@ -221,6 +222,31 @@ def _gradient(size: tuple[int, int], a: RGBA, b: RGBA, horizontal: bool) -> Imag
     return strip.resize(size, Image.NEAREST)
 
 
+def _fitted(image: Image.Image, w: int, h: int, fit: str) -> Image.Image:
+    """``image`` at w x h: stretched, inside with room left (contain) or filling it (cover)."""
+    if fit == "cover":
+        return ImageOps.fit(image, (w, h), Image.Resampling.LANCZOS)
+    if fit == "contain":
+        inner = ImageOps.contain(image, (w, h), Image.Resampling.LANCZOS)
+        out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        out.paste(inner, ((w - inner.width) // 2, (h - inner.height) // 2))
+        return out
+    return image.resize((w, h), Image.Resampling.LANCZOS)
+
+
+def _rounded(image: Image.Image, radius: int) -> Image.Image:
+    """``image`` with round corners (drawn larger, then reduced: smooth edges)."""
+    w, h = image.size
+    mask = Image.new("L", (w * SUPERSAMPLE, h * SUPERSAMPLE), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        [0, 0, w * SUPERSAMPLE - 1, h * SUPERSAMPLE - 1], radius=radius * SUPERSAMPLE, fill=255
+    )
+    mask = mask.resize((w, h), Image.Resampling.LANCZOS)
+    out = image.copy()
+    out.putalpha(ImageChops.multiply(image.getchannel("A"), mask))
+    return out
+
+
 def _catmull_rom(points: list[tuple[float, float]], samples: int = 6) -> list[tuple[float, float]]:
     """Smooth curve through all points (centripetal-free, uniform Catmull-Rom)."""
     if len(points) < 3:
@@ -275,7 +301,8 @@ class Renderer:
         self.moving = False  # True while an animation has not settled yet
         self._fonts: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
         self._digit_width: dict[int, float] = {}
-        self._images: dict[tuple[str, int, int], Image.Image | None] = {}
+        self._images: dict[tuple[str, int, int, str], Image.Image | None] = {}
+        self._slide_lists: dict[str, tuple[float, list[str]]] = {}  # widget id -> pictures
         self._gauge_parts: dict[tuple[Any, ...], Image.Image] = {}  # static rings, colour fields
         self._anim: dict[str, tuple[float, float, float]] = {}  # value, speed, time
         # Video mode (the main loop sets these): every frame goes out, so graphs
@@ -350,16 +377,16 @@ class Renderer:
             self._fonts[key] = font or ImageFont.load_default(size)
         return self._fonts[key]
 
-    def _asset_image(self, rel: str, w: int, h: int) -> Image.Image | None:
-        key = (rel, w, h)
+    def _asset_image(self, rel: str, w: int, h: int, fit: str = "stretch") -> Image.Image | None:
+        key = (rel, w, h, fit)
         if key not in self._images:
             image = None
             if rel and self.theme.root is not None:
                 try:
                     with Image.open(resolve_asset(self.theme.root, rel)) as src:
-                        image = src.convert("RGBA")
+                        image = ImageOps.exif_transpose(src).convert("RGBA")
                     if w > 0 and h > 0:
-                        image = image.resize((w, h), Image.Resampling.LANCZOS)
+                        image = _fitted(image, w, h, fit)
                 except (OSError, ThemeError) as exc:
                     self._warn(f"image {rel!r} could not be loaded ({exc})")
             self._images[key] = image
@@ -951,22 +978,156 @@ class Renderer:
 
     def _draw_clock(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         try:
-            text = i18n.format_date(snapshot.now, widget["format"])[:100]
+            text = i18n.format_date(self._time(widget, snapshot), widget["format"])[:100]
         except ValueError:
             text = "--:--"
         return self._text_widget(widget, text, widget["color"])
 
+    def _time(self, widget: dict[str, Any], snapshot: Snapshot) -> datetime:
+        """The time in the widget's time zone (empty: the computer's)."""
+        name = widget.get("timezone") or ""
+        if not name:
+            return snapshot.now
+        zone = timezones.zone(name)
+        if zone is None:
+            self._warn(f"unknown time zone {name!r} (widget {widget['id']!r})")
+            return snapshot.now
+        return snapshot.now.astimezone(zone).replace(tzinfo=None)
+
+    def _draw_countdown(
+        self, widget: dict[str, Any], snapshot: Snapshot, now: float
+    ) -> Piece | None:
+        text = countdown_text(widget["target"], widget["part"], snapshot.now, widget["done"])
+        return self._text_widget(widget, text, widget["color"])
+
+    def _draw_analog(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        moment = self._time(widget, snapshot)
+        hands = (moment.hour % 12, moment.minute, moment.second if widget["seconds"] else -1)
+        return self._cached(widget, hands, lambda: self._analog_piece(widget, *hands))
+
+    def _analog_piece(self, widget: dict[str, Any], hour: int, minute: int, second: int) -> Piece:
+        x, y, w, h = widget["x"], widget["y"], max(8, widget["w"]), max(8, widget["h"])
+        s = SUPERSAMPLE
+        layer, draw = self._canvas(w, h)
+        r = min(w, h) * s / 2
+        cx, cy = w * s / 2, h * s / 2
+
+        def at(angle: float, length: float) -> tuple[float, float]:
+            a = math.radians(angle - 90)
+            return cx + length * math.cos(a), cy + length * math.sin(a)
+
+        def hand(angle: float, length: float, width: float, color: RGBA, tail: float = 0) -> None:
+            start, end = at(angle + 180, tail), at(angle, length)
+            draw.line([start, end], fill=color, width=max(1, round(width)))
+            for px, py in (start, end):
+                draw.ellipse([px - width / 2, py - width / 2, px + width / 2, py + width / 2],
+                             fill=color)  # fmt: skip
+
+        if widget["face"]:
+            draw.ellipse([cx - r, cy - r, cx + r - 1, cy + r - 1], fill=self.color(widget["face"]))
+        if widget["marks"]:
+            marks = self.color(widget["marks"])
+            fine = min(w, h) >= 110
+            for tick in range(60):
+                hourly = tick % 5 == 0
+                if not hourly and not fine:
+                    continue
+                inner = r * (0.8 if tick % 15 == 0 else 0.84 if hourly else 0.9)
+                width = r * (0.055 if tick % 15 == 0 else 0.04 if hourly else 0.014)
+                hand(tick * 6, r * 0.93, width, marks, -inner)
+        color = self.color(widget["color"])
+        accent = self.color(widget["color2"])
+        hand((hour + minute / 60) * 30, r * 0.5, r * 0.085, color, r * 0.08)
+        hand((minute + max(0, second) / 60) * 6, r * 0.76, r * 0.055, color, r * 0.08)
+        if second >= 0:
+            hand(second * 6, r * 0.84, r * 0.022, accent, r * 0.18)
+        dot = r * 0.065
+        draw.ellipse([cx - dot, cy - dot, cx + dot, cy + dot], fill=accent)
+        return Piece(self._down(layer, w, h), x, y, [x, y, w, h])
+
+    def _draw_moon(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        phase = _number(snapshot.value(widget["sensor"]))
+        if phase is None:
+            return None
+        phase = round(phase % 1.0, 3)
+        return self._cached(widget, phase, lambda: self._moon_piece(widget, phase))
+
+    def _moon_piece(self, widget: dict[str, Any], phase: float) -> Piece:
+        """The moon lit as at ``phase`` (0 new, 0.5 full): a disc, its lit side
+        bounded by the terminator, an ellipse."""
+        size = max(8, widget["size"])
+        s = SUPERSAMPLE
+        layer, draw = self._canvas(size, size)
+        r = size * s / 2 - s
+        c = size * s / 2
+        if widget["color2"]:
+            draw.ellipse([c - r, c - r, c + r, c + r], fill=self.color(widget["color2"]))
+        turn = math.cos(2 * math.pi * phase)
+        waxing = phase <= 0.5
+        if widget["mirror"]:
+            waxing = not waxing
+        right, left = [], []
+        steps = 90
+        for i in range(steps + 1):
+            dy = -r + 2 * r * i / steps
+            half = math.sqrt(max(0.0, r * r - dy * dy))
+            if waxing:  # lit on the right, from the terminator to the edge
+                right.append((c + half, c + dy))
+                left.append((c + half * turn, c + dy))
+            else:
+                left.append((c - half, c + dy))
+                right.append((c - half * turn, c + dy))
+        if 0.004 < phase < 0.996:
+            draw.polygon(right + left[::-1], fill=self.color(widget["color"]))
+        x, y = widget["x"], widget["y"]
+        return Piece(self._down(layer, size, size), x, y, [x, y, size, size])
+
     # -- pictures ----------------------------------------------------------
 
     def _draw_image(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
-        def build() -> Piece:
-            image = self._asset_image(widget["src"], widget["w"], widget["h"])
-            if image is None:
-                empty = Image.new("RGBA", (max(widget["w"], 1), max(widget["h"], 1)), (0, 0, 0, 0))
-                return Piece(empty, widget["x"], widget["y"])
-            return Piece(image, widget["x"], widget["y"])
+        pictures = self._slides(widget)
+        rel = ""
+        if pictures:
+            seconds = max(1, widget["seconds"])
+            rel = pictures[int(snapshot.now.timestamp() // seconds) % len(pictures)]
+        x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
 
-        return self._cached(widget, None, build)
+        def build() -> Piece:
+            image = self._asset_image(rel, w, h, widget["fit"])
+            if image is None:
+                empty = Image.new("RGBA", (max(w, 1), max(h, 1)), (0, 0, 0, 0))
+                return Piece(empty, x, y)
+            if widget["radius"] > 0:
+                image = _rounded(image, widget["radius"])
+            return Piece(image, x, y)
+
+        return self._cached(widget, rel, build)
+
+    def _slides(self, widget: dict[str, Any]) -> list[str]:
+        """The picture and the slideshow's others, folders read every half minute."""
+        key = widget["id"]
+        hit = self._slide_lists.get(key)
+        if hit is not None and time.monotonic() - hit[0] < 30:
+            return hit[1]
+        found = [widget["src"]] if widget["src"] else []
+        root = self.theme.root
+        for line in (widget.get("slides") or "").splitlines():
+            line = line.strip()
+            if not line or root is None:
+                continue
+            if any(ch in line for ch in "*?["):
+                matches = sorted(p for p in root.glob(line) if p.is_file())
+                for path in matches:
+                    try:
+                        resolve_asset(root, path.relative_to(root).as_posix())
+                    except (ThemeError, ValueError):
+                        continue  # nothing outside the theme folder
+                    if path.suffix.lower() in (".png", ".jpg", ".jpeg", ".gif", ".webp"):
+                        found.append(path.relative_to(root).as_posix())
+            else:
+                found.append(line)
+        self._slide_lists[key] = (time.monotonic(), found)
+        return found
 
     def _draw_icon(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         name = widget["icon"]
