@@ -383,14 +383,18 @@ class Doctor:
         try:
             display = self.open_serial()
         except DeviceError as exc:
-            self._step("open a serial panel", "fail", str(exc))
+            self._step("open a USB serial panel (virtual COM port)", "fail", str(exc))
             return None
         if display is None:
-            self._step("find a panel", "fail", "no USB panel and no serial panel with a driver")
+            self._step(
+                "find a panel",
+                "fail",
+                "no USB panel and no USB serial panel (virtual COM port) with a driver",
+            )
             self._report_serial_ports()
             return None
         self.report.model = display.model
-        self._step("find and open a serial panel", "ok", display.model.label)
+        self._step("find and open a USB serial panel (virtual COM port)", "ok", display.model.label)
         return display
 
     def _report_serial_ports(self) -> None:
@@ -407,7 +411,7 @@ class Doctor:
             if models:
                 names = ", ".join(m.id for m in models)
                 self._step(
-                    "serial panel found",
+                    "USB serial panel found",
                     "info",
                     f"{port['device']} {port['vid']}:{port['pid']} — {names}; "
                     "its driver is not available yet",

@@ -13,6 +13,11 @@
 - Waking a rev. C panel works with `port` set to its sleeping port
 - CI also runs on Python 3.14
 
+**Changes**
+- Serial panels are now called "USB serial panels (virtual COM port)" in the
+  docs, `libre-panel models` and `doctor`: they plug in with USB(-C) like the
+  others and only show up as a COM port
+
 ## 0.4.0 — 2026-10-08
 
 Fifteen new modules, 25 in all: every temperature, core, drive and the

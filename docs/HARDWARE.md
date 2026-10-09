@@ -3,11 +3,23 @@
 `libre-panel models` prints this list from the code
 (`src/libre_panel/devices/models.py`), which is the source of truth.
 
+**USB or USB serial?** Every panel here plugs in with a USB cable, often
+USB-C. They differ in how they show up on the computer:
+
+- **USB panels** (Turing/TURZX V1.x, USB id `1cbe:…`) are a USB device of their
+  own; Libre Panel talks to them directly.
+- **USB serial panels** (Turing rev. A–D, UsbPCMonitor, XuanFang, Kipye,
+  WeAct) have a USB-to-serial chip inside and show up as a virtual COM port
+  (USB CDC): `COM3` on Windows, `/dev/ttyACM0` on Linux,
+  `/dev/cu.usbmodem…` on macOS. "Serial" means this, not an RS-232 cable.
+
+`libre-panel devices` lists both kinds.
+
 **Driver status**
 
 - **supported** — `libre-panel doctor` passed on this model.
 - **unverified** — the driver exists and its protocol is proven on hardware
-  (USB panels: by SPUR II on the 9.2"; serial panels: by
+  (USB panels: by SPUR II on the 9.2"; USB serial panels: by
   [turing-smart-screen-python](https://github.com/mathoudebine/turing-smart-screen-python),
   whose protocol Libre Panel follows), but nobody has confirmed this model with
   Libre Panel yet. Please run `libre-panel doctor` and report the result.
@@ -18,14 +30,14 @@
 
 | Model id | Size | Resolution (landscape) | Connection | Driver |
 |---|---|---|---|---|
-| `turing-2.1` | 2.1" round | 480×480 | serial, rev. C | unverified |
+| `turing-2.1` | 2.1" round | 480×480 | USB serial, rev. C | unverified |
 | `turing-2.8-usb` | 2.8" round | 480×480 | USB, V1.x | unverified |
-| `turing-3.5` | 3.5" | 480×320 | serial, rev. A | unverified |
+| `turing-3.5` | 3.5" | 480×320 | USB serial, rev. A | unverified |
 | `turing-4.6-usb` | 4.6" | 960×320 | USB, V1.x | unverified |
-| `turing-5` | 5" | 800×480 | serial, rev. C | unverified |
+| `turing-5` | 5" | 800×480 | USB serial, rev. C | unverified |
 | `turing-5.2-usb` | 5.2" | 1280×720 | USB, V1.x | unverified |
 | `turing-8-usb` | 8" | 1280×800 | USB, V1.x | unverified |
-| `turing-8.8` | 8.8" | 1920×480 | serial, rev. C (V0.x) | unverified |
+| `turing-8.8` | 8.8" | 1920×480 | USB serial, rev. C (V0.x) | unverified |
 | `turing-8.8-usb` | 8.8" | 1920×480 | USB, V1.x | unverified |
 | `turing-9.2-usb` | 9.2" | 1920×480 | USB, V1.x | unverified — protocol proven on this panel by SPUR II |
 | `turing-12.3-usb` | 12.3" | 1920×720 | USB, V1.x | unverified |
@@ -76,12 +88,12 @@ sudo udevadm control --reload-rules
 
 (With the AppImage: `./Libre_Panel-x86_64.AppImage udev-rules | sudo tee …`.)
 
-Serial panels appear as `/dev/ttyACM*`; add yourself to the `dialout` (Debian,
+USB serial panels appear as `/dev/ttyACM*`; add yourself to the `dialout` (Debian,
 Ubuntu) or `uucp` (Arch) group.
 
-**Serial panels** (Turing 2.1", 3.5", 5" and 8.8", UsbPCMonitor, XuanFang,
-Kipye, WeAct) need no driver on Windows 10/11, Linux or macOS; they show up as a COM port, `/dev/ttyACM*` or
-`/dev/cu.usbmodem*`. Libre Panel finds the port by the panel's USB ids
+**USB serial panels** (Turing 2.1", 3.5", 5" and 8.8", UsbPCMonitor, XuanFang,
+Kipye, WeAct) need no driver on Windows 10/11, Linux or macOS; they show up as
+a virtual COM port, `/dev/ttyACM*` or `/dev/cu.usbmodem*`. Libre Panel finds the port by the panel's USB ids
 (`libre-panel devices` lists what it sees). Only if several devices share
 those ids, name the port: `port = "COM5"` under `[device]`. Libre Panel sends
 display commands only: no reset, nothing the panel stores

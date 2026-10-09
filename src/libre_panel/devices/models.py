@@ -15,13 +15,15 @@ TURING = "Turing Smart Screen / TURZX"
 
 EDGES = ("top", "right", "bottom", "left")
 
-# Protocol families. Panels in one family share a driver.
+# Protocol families. Panels in one family share a driver. All plug in with a USB
+# cable; "USB serial" panels show up as a virtual COM port (USB CDC), the
+# others as a USB device of their own.
 PROTOCOLS = {
-    "serial-a": "Serial (CH552T), Turing rev. A",
-    "serial-b": "Serial (CH552T), XuanFang rev. B",
-    "serial-c": "Serial, Turing rev. C",
-    "serial-d": "Serial, Kipye rev. D",
-    "serial-weact": "Serial, WeAct Studio",
+    "serial-a": "USB serial (CH552T), Turing rev. A",
+    "serial-b": "USB serial (CH552T), XuanFang rev. B",
+    "serial-c": "USB serial, Turing rev. C",
+    "serial-d": "USB serial, Kipye rev. D",
+    "serial-weact": "USB serial, WeAct Studio",
     "usb-turing": "USB bulk (VID 0x1CBE), Turing V1.x hardware",
 }
 

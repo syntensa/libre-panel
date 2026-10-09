@@ -216,7 +216,7 @@ def test_doctor_checks_a_rev_a_panel(ports):
     assert report.passed, report.text()
     assert report.model.id == "turing-3.5"
     text = report.text()
-    assert "find and open a serial panel" in text and "RGB565 300 KB" in text
+    assert "find and open a USB serial panel" in text and "RGB565 300 KB" in text
     assert "hidden: top 2 px, bottom 0 px, left 0 px, right 0 px" in text
     assert panel.brightness == [brightness_level(p) for p in (10, 100, 60)]
     assert not NEVER & set(panel.commands)

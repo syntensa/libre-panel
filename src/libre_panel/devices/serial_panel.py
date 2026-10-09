@@ -38,7 +38,7 @@ class SerialDisplay(Display):
     @property
     def family(self) -> str:
         """The family's name for messages, e.g. "Turing rev. A panel"."""
-        return t("serial panel")
+        return t("USB serial panel")
 
     def identify(self, found: FoundPort) -> PanelModel:
         """The model on the port; drivers whose panels say it ask here."""
