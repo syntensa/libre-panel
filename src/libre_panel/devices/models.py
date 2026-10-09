@@ -139,7 +139,9 @@ MODELS: tuple[PanelModel, ...] = (
         800,
         "serial-c",
         usb_ids=_REV_C_IDS,
-        serial_numbers=("USB7INCH", "20080411"),
+        # Some are sold as "UsbPCMonitor 5"" and sleep as CT21INCH, like the 2.1".
+        serial_numbers=("USB7INCH", "CT21INCH", "20080411"),
+        notes='also sold as UsbPCMonitor 5"',
     ),
     PanelModel(
         "turing-5.2-usb",
@@ -228,6 +230,7 @@ MODELS: tuple[PanelModel, ...] = (
         800,
         "serial-a",
         usb_ids=((0x1A86, 0x5722),),
+        notes='USB id 1a86:5722; one with serial number CT21INCH is "turing-5"',
     ),
     PanelModel(
         "usbpcmonitor-7",

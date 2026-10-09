@@ -39,6 +39,13 @@ class FoundPort:
     device: str  # "COM3", "/dev/ttyACM0"
     model: PanelModel
     serial_number: str | None
+    # every model the port's ids and serial number fit; more than one: the size
+    # is not known from them (the driver, the frame or the user decide)
+    candidates: tuple[PanelModel, ...] = ()
+
+    @property
+    def sure(self) -> bool:
+        return len(self.candidates) <= 1
 
 
 def _ports() -> list[Any]:
@@ -63,16 +70,30 @@ def find_port(model: PanelModel | None = None, port: str = "") -> FoundPort | No
         if model is None and not port and _generic(info):
             continue  # some other gadget: never talked to unasked
         # a serial number that names a model settles it; else every model of the chip
-        candidates = [
-            m for m in models_for_usb(info.vid, info.pid, info.serial_number) if m in wanted
-        ]
+        known = models_for_usb(info.vid, info.pid, info.serial_number)
+        candidates = [m for m in known if m in wanted]
         if candidates:
-            return FoundPort(info.device, candidates[0], info.serial_number)
+            return FoundPort(info.device, candidates[0], info.serial_number, tuple(candidates))
+        if port and model is not None and known and not _generic(info):
+            raise DeviceError(_another_kind(port, model, known))
     if port:
         if model is None:
             raise DeviceError(t("device.port {port}: set device.model as well", port=port))
         return FoundPort(port, model, None)
     return None
+
+
+def _another_kind(port: str, model: PanelModel, known: list[PanelModel]) -> str:
+    """Why ``model`` cannot be on ``port``, and which models can."""
+    from libre_panel.devices.models import PROTOCOLS
+
+    family = PROTOCOLS.get(known[0].protocol, known[0].protocol)
+    return t(
+        "{port} is a panel of another kind ({family}), not {model}: set device.model "
+        "to {ids}",
+        port=port, family=family, model=model.label,
+        ids=" or ".join(f'"{m.id}"' for m in known),
+    )  # fmt: skip
 
 
 class SerialLink:

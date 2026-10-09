@@ -227,16 +227,30 @@ def _versions() -> str:
     return ", ".join(parts)
 
 
-def open_serial_panel(port: str = ""):
-    """A connected serial panel with a driver, opened; None when there is none."""
+def open_serial_panel(
+    port: str = "",
+    choose: Callable[[list], object] | None = None,
+    model_id: str = "",
+):
+    """A connected serial panel with a driver, opened; None when there is none.
+
+    ``model_id`` (device.model) names the panel; else it is found by its USB ids,
+    and where those fit several sizes ``choose`` picks one of them."""
     from libre_panel.config import DeviceConfig
+    from libre_panel.devices.models import find_model
     from libre_panel.devices.serial_link import find_port
     from libre_panel.devices.turzx import SERIAL_DRIVERS, TurzxDisplay
 
-    found = find_port(None, port)
-    if found is None or found.model.protocol not in SERIAL_DRIVERS:
-        return None
-    display = TurzxDisplay(DeviceConfig(driver="turzx", model=found.model.id, port=found.device))
+    model = find_model(model_id)
+    if model is None or model.protocol not in SERIAL_DRIVERS:
+        found = find_port(None, port)
+        if found is None or found.model.protocol not in SERIAL_DRIVERS:
+            return None
+        model, port = found.model, found.device
+        unsure = {m.protocol for m in found.candidates} == {"serial-c"} and not found.sure
+        if unsure and choose is not None:  # rev. C panels cannot say their size
+            model = choose(list(found.candidates))
+    display = TurzxDisplay(DeviceConfig(driver="turzx", model=model.id, port=port))
     display.open()
     return display
 
@@ -251,7 +265,9 @@ class Doctor:
         seconds_per_card: float = 6.0,
         frames: int = 20,
         brightness: int = 60,
-        open_serial: Callable[[], object] = open_serial_panel,
+        open_serial: Callable[[], object] | None = None,
+        model_id: str = "",
+        port: str = "",
     ) -> None:
         self.ask = ask
         self.brightness = brightness  # set again after the brightness check
@@ -264,6 +280,11 @@ class Doctor:
 
             open_transport = UsbTransport.open
         self.open_transport = open_transport
+        if open_serial is None:  # the panel in the config, else what is found (asking its size)
+
+            def open_serial() -> object:
+                return open_serial_panel(port, self._choose_size, model_id)
+
         self.open_serial = open_serial
         self.transport = None  # a USB panel
         self.display = None  # a serial panel, through its driver
@@ -287,6 +308,24 @@ class Doctor:
         else:
             note = self.ask("What do you see instead? (Enter to skip) ").strip()
             self._step(name, "fail", note or "not as expected")
+
+    def _choose_size(self, candidates: list) -> object:
+        """Which of several panels with the same USB ids this one is."""
+        labels = ", ".join(m.label for m in candidates)
+        default = next((m for m in candidates if m.shape == "rect"), candidates[0])
+        if self.ask is None:
+            self._step("panel size", "info", f"{default.label} assumed (its USB ids fit {labels}); "
+                       "set device.model if it is another")  # fmt: skip
+            return default
+        self.say("Its USB ids fit several panels:")
+        for number, model in enumerate(candidates, start=1):
+            self.say(f"  {number}) {model.label}")
+        answer = self.ask(f"Which one is it? [1-{len(candidates)}] ").strip()
+        chosen = default
+        if answer.isdigit() and 1 <= int(answer) <= len(candidates):
+            chosen = candidates[int(answer) - 1]
+        self._step("panel size", "info", f"{chosen.label}, as chosen (USB ids fit {labels})")
+        return chosen
 
     def _send(self, image: Image.Image) -> tuple[float, int]:
         """Show a whole frame; (seconds it took, bytes sent)."""
@@ -483,10 +522,13 @@ def run_doctor(
     ask = input if ask_questions and sys.stdin.isatty() else None
     print("Libre Panel doctor — close the TURZX app before starting.\n")
     try:
-        brightness = load_config(config_path).device.brightness
+        device = load_config(config_path).device
+        brightness, model_id, port = device.brightness, device.model, device.port
     except ConfigError:
-        brightness = 60
-    doctor = Doctor(ask=ask, frames=frames, brightness=brightness)
+        brightness, model_id, port = 60, "", ""
+    if model_id == "auto":
+        model_id = ""
+    doctor = Doctor(ask=ask, frames=frames, brightness=brightness, model_id=model_id, port=port)
     report = doctor.run()
     path = report_path or Path(
         f"libre-panel-doctor-{report.model.id if report.model else 'no-panel'}.txt"

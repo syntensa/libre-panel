@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+**Fixes**
+- A 5" rev. C panel sold as UsbPCMonitor 5" was taken for the round 2.1": its
+  USB serial number (CT21INCH asleep, 20080411 awake) fits several sizes. The
+  theme's size now decides, failing that the 5", and `libre-panel doctor`
+  asks which panel it is (#3)
+- `libre-panel doctor` uses the panel and port set in the configuration
+- A panel set up as the wrong kind (a rev. A model on a rev. C panel's port)
+  no longer stays dark without a word: Libre Panel names the models that fit
+- Waking a rev. C panel works with `port` set to its sleeping port
+- CI also runs on Python 3.14
+
 ## 0.4.0 — 2026-10-08
 
 Fifteen new modules, 25 in all: every temperature, core, drive and the

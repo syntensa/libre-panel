@@ -40,7 +40,7 @@ Same electronics, different sticker:
 
 | Model id | Panel | Resolution | Protocol | Driver |
 |---|---|---|---|---|
-| `usbpcmonitor-3.5`, `usbpcmonitor-5`, `usbpcmonitor-7` | UsbPCMonitor | 480×320, 800×480, 1024×600 | Turing rev. A | unverified |
+| `usbpcmonitor-3.5`, `usbpcmonitor-5`, `usbpcmonitor-7` | UsbPCMonitor | 480×320, 800×480, 1024×600 | Turing rev. A (USB id 1a86:5722) | unverified; a UsbPCMonitor 5" with the serial number CT21INCH is a rev. C panel: `turing-5` |
 | `xuanfang-3.5` | XuanFang rev. B / flagship | 480×320 | rev. B | unverified |
 | `kipye-3.5` | Kipye Qiye | 480×320 | rev. D | unverified |
 | `weact-3.5`, `weact-0.96` | WeAct Studio Display FS V1 | 480×320, 160×80 | WeAct | unverified |
@@ -89,8 +89,11 @@ display commands only: no reset, nothing the panel stores
 
 The Turing 2.1", 5" and 8.8" (rev. C) sleep when no program uses them and
 then show up with other USB ids; Libre Panel wakes them the way the vendor
-app does. Their answer does not say their size reliably, so set
-`model = "turing-5"` (or `-2.1`, `-8.8`) if Libre Panel picks the wrong one.
+app does. Their answer does not say their size reliably. Asleep, a 5" may
+call itself `USB7INCH` and an 8.8" `CT88INCH`, which settles it; `CT21INCH`
+is the round 2.1" or a 5" sold as UsbPCMonitor 5". Then the theme's size
+decides (and failing that, the 5"), and `libre-panel doctor` asks which panel
+it is. Set `model = "turing-5"` (or `-2.1`, `-8.8`) to be sure.
 Awake, they use generic Linux USB gadget ids, which other devices use too (a
 Raspberry Pi as a USB gadget, say): with `model = "auto"` Libre Panel only
 talks to such a port when it has the panels' serial number.

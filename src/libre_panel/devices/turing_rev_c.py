@@ -10,9 +10,10 @@ uses it on these panels:
   "CT21INCH", "USB7INCH" or "CT88INCH"). Opening its port wakes it; it comes
   back as 0525:a4a7 or 1d6b:0121/0106 (serial number "20080411").
 - HELLO answers 23 bytes, "chs_..." and the ROM version ("...rom1.87"). The
-  size in the answer is not reliable (a 2.1" says 5inch): the model comes
-  from the config, from the sleeping panel's serial number or from the
-  frame size.
+  size in the answer is not reliable (a 2.1" says 5inch), and neither is
+  "CT21INCH" (a 5" sold as UsbPCMonitor sleeps with it too): the model comes
+  from the config, from the serial numbers "USB7INCH" and "CT88INCH", or from
+  the frame size; failing all of them, the 5".
 - STOP_VIDEO and STOP_MEDIA stop what the panel plays by itself.
 - A whole frame: PRE_UPDATE_BITMAP, START_DISPLAY_BITMAP, DISPLAY_BITMAP
   (per size), then the pixels as BGRA in the panel's own orientation, and a
@@ -61,7 +62,8 @@ DISPLAY_BITMAP = {  # per size
 NEVER = frozenset({0x84, 0x83, 0x7D})  # RESTART, TURNOFF/TURNON, OPTIONS (first byte)
 STATUS_SIZE = 1024
 
-ASLEEP_SERIALS = {"CT21INCH": "turing-2.1", "USB7INCH": "turing-5", "CT88INCH": "turing-8.8"}
+ASLEEP_SERIALS = {"CT21INCH", "USB7INCH", "CT88INCH"}
+SIZE_SERIALS = {"USB7INCH": "turing-5", "CT88INCH": "turing-8.8"}  # CT21INCH: 2.1" or 5"
 ASLEEP_IDS = {(0x1A86, 0xCA21)}
 AWAKE_IDS = {(0x0525, 0xA4A7), (0x1D6B, 0x0121), (0x1D6B, 0x0106)}
 AWAKE_SERIAL = "20080411"
@@ -106,6 +108,8 @@ class RevCDisplay(SerialDisplay):
 
     def __init__(self, config, model: PanelModel | None = None, configured: bool = True) -> None:
         super().__init__(config, model, configured)
+        if not self.configured:  # its ids do not say the size: the 5" until we know better
+            self.model = None
         self.sized = self.configured  # is the model's size known (else: from the first frame)
         self.rom = 87
         self.count = 0
@@ -119,10 +123,11 @@ class RevCDisplay(SerialDisplay):
         ports = serial_link._ports()
         for info in ports:
             if is_asleep(info) and not (port and info.device != port):
-                hint = find_model(ASLEEP_SERIALS.get(info.serial_number or "", ""))
+                hint = find_model(SIZE_SERIALS.get(info.serial_number or "", ""))
                 if hint is not None and not self.configured:
                     self.model, self.sized = hint, True
                 ports = self._wake(info)
+                port = ""  # the port named the sleeping panel; awake, it has another
                 break
         awake = [
             p

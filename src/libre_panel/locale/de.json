@@ -293,6 +293,7 @@
     "Turing rev. A panel": "Turing-Panel rev. A",
     "Turing rev. C panel": "Turing-Panel rev. C",
     "Turn it into single widgets to edit each one": "In Einzelelemente zerlegen, um jedes einzeln zu bearbeiten",
+    "USB id 1a86:5722; one with serial number CT21INCH is \"turing-5\"": "USB-ID 1a86:5722; eines mit der Seriennummer CT21INCH ist „turing-5“",
     "Undo": "Rückgängig",
     "Undo (Ctrl+Z)": "Rückgängig (Strg+Z)",
     "Undone": "Rückgängig gemacht",
@@ -329,6 +330,7 @@
     "Zoom in": "Vergrößern",
     "Zoom out": "Verkleinern",
     "above": "ab",
+    "also sold as UsbPCMonitor 5\"": "auch als UsbPCMonitor 5\" verkauft",
     "any size, e.g. for panels not in the list yet": "beliebige Größe, z. B. für Panels, die noch nicht in der Liste stehen",
     "author": "Autor",
     "auto": "automatisch",
@@ -443,6 +445,7 @@
     "{id} (plugin)": "{id} (Plugin)",
     "{name} (not installed)": "{name} (nicht installiert)",
     "{panel}, video {fps} fps": "{panel}, Video {fps} fps",
+    "{port} is a panel of another kind ({family}), not {model}: set device.model to {ids}": "{port} ist ein Panel anderer Art ({family}), kein {model}: device.model auf {ids} setzen",
     "{type} widget": "Element: {type}",
     "{value:.0f} GB free": "{value:.0f} GB frei",
     "{value:.0f}% lit": "{value:.0f} % beleuchtet"

@@ -449,3 +449,81 @@ def test_other_usb_gadgets_are_left_alone(ports, no_waiting):
     with display(model="turing-5") as screen:  # chosen in the config: trusted
         screen.show(picture((800, 480)))
     assert pi.full_frames == 1
+
+
+def sleeping_rev_c(ports, awake, serial_number="CT21INCH", device="/dev/ttyACM1"):
+    """A rev. C panel asleep on ``device``; opened, it comes back awake on ttyACM3."""
+
+    class Sleeping(FakeRevC):
+        def close(self):
+            ports(awake, device="/dev/ttyACM3", vid=0x1D6B, pid=0x0121, serial_number="20080411")
+
+    ports(Sleeping(), device=device, vid=0x1A86, pid=0xCA21, serial_number=serial_number)
+
+
+@pytest.mark.parametrize(
+    ("frame", "model"),
+    [((800, 480), "turing-5"), ((480, 480), "turing-2.1"), ((480, 320), "turing-5")],
+)
+def test_ct21inch_does_not_say_the_size(ports, no_waiting, frame, model):
+    """A 5" sold as UsbPCMonitor sleeps as CT21INCH, like the round 2.1": the
+    frame decides, and failing that the 5" (a reported panel)."""
+    awake = FakeRevC(model)
+    sleeping_rev_c(ports, awake)
+    with display(model="auto") as screen:
+        screen.show(picture(frame))
+        assert screen.model.id == model
+    assert awake.full_frames == 1
+
+
+def test_awake_rev_c_ids_fit_every_size(ports, no_waiting):
+    from libre_panel.devices.serial_link import find_port
+
+    ports(FakeRevC("turing-5"), device="/dev/ttyACM3", **AWAKE)
+    found = find_port()
+    assert not found.sure
+    assert [m.id for m in found.candidates] == ["turing-2.1", "turing-5", "turing-8.8"]
+
+
+def test_doctor_asks_which_panel_it_is(ports, no_waiting):
+    from libre_panel.doctor import Doctor
+
+    awake = FakeRevC("turing-5")
+    sleeping_rev_c(ports, awake)
+    asked, said = [], []
+
+    def ask(question):
+        asked.append(question)
+        return "2" if "Which one" in question else "n"
+
+    doctor = Doctor(ask=ask, say=said.append, pause=lambda s: None, frames=2)
+    display_ = doctor.open_serial()
+    try:
+        assert display_.model.id == "turing-5"
+    finally:
+        display_.close()
+    assert any("Which one is it? [1-2]" in q for q in asked)
+    assert '1) Turing 2.1" round' in said[-3] and '2) Turing 5"' in said[-2]
+    quiet = Doctor(ask=None, say=said.append, pause=lambda s: None)
+    assert quiet._choose_size([find_model("turing-2.1"), find_model("turing-5")]).id == "turing-5"
+    assert "turing-5" not in said[-1] and "assumed" in said[-1]
+
+
+def test_doctor_uses_the_panel_in_the_config(ports, no_waiting):
+    from libre_panel.doctor import Doctor
+
+    awake = FakeRevC("turing-5")
+    sleeping_rev_c(ports, awake)
+    doctor = Doctor(ask=None, say=lambda text: None, pause=lambda s: None, model_id="turing-5")
+    screen = doctor.open_serial()
+    try:
+        assert screen.model.id == "turing-5"
+    finally:
+        screen.close()
+
+
+def test_a_model_of_another_kind_names_the_right_one(ports, no_waiting):
+    """A rev. C panel set up as UsbPCMonitor 5" (rev. A) stayed black: now it says so."""
+    sleeping_rev_c(ports, FakeRevC("turing-5"))
+    with pytest.raises(DeviceError, match='rev. C.*"turing-2.1" or "turing-5"'):
+        display(model="usbpcmonitor-5", port="/dev/ttyACM1").open()
