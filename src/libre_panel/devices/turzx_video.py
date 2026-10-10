@@ -53,6 +53,7 @@ from collections.abc import Callable
 
 from PIL import Image
 
+from libre_panel import timing
 from libre_panel.devices.base import DeviceError, FrameError
 from libre_panel.devices.h264 import (
     Encoder,
@@ -372,6 +373,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             self._pictures.get_nowait()
 
     def _send_loop(self, session: VideoSession, stop: threading.Event) -> None:
+        timing.raise_priority()  # a busy PC must not starve the panel (SPUR II)
         while not stop.is_set():
             try:
                 picture = self._pictures.get(timeout=0.2)
@@ -391,8 +393,13 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         command = ffmpeg_command(self._ffmpeg, size, rotate, self.settings)
         self._generation += 1
         generation = self._generation
+        raised = False
 
         def deliver(picture: bytes) -> None:
+            nonlocal raised
+            if not raised:  # ffmpeg's reader thread, forwarding the pictures: above normal too
+                raised = True
+                timing.raise_priority()
             while generation == self._generation and self._error is None:
                 try:
                     self._pictures.put(picture, timeout=0.2)

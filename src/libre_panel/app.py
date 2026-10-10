@@ -14,7 +14,7 @@ from typing import Any
 from PIL import Image, ImageOps
 
 from libre_panel import clock as loop_clock
-from libre_panel import i18n
+from libre_panel import i18n, timing
 from libre_panel.config import Config, ConfigError, load_config
 from libre_panel.devices.base import DeviceError, Display, FrameError, create_display
 from libre_panel.devices.models import find_model
@@ -713,12 +713,15 @@ def run(
     loop = MainLoop(config, once=once, status=status, host=host, on_config=on_config)
     pacer = _Pacer()
     planned: float | None = None  # when the pacer planned the next streaming frame
+    guards = timing.Guards()  # SPUR II's, while this drives the panel
     try:
         if once:
             loop.once()
             return
+        guards.start()
         while not stop.is_set():
             loop.step(planned)
+            guards.settled()  # after the first frame
             if loop.streaming:
                 planned = pacer.wait(loop.fps, stop)  # a steady clock
                 continue
@@ -726,4 +729,5 @@ def run(
             pacer.reset()
             stop.wait(loop.pause())
     finally:
+        guards.stop()
         loop.close()

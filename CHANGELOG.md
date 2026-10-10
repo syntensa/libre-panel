@@ -39,6 +39,10 @@
   second. The graphs of Slate, Libre Default and Column have a window in
   seconds for video mode too; on the serial panels these themes run on
   nothing changes
+- While it drives a panel, Libre Panel keeps its frames on time as SPUR II
+  did when the PC is busy: Windows' timer at 1 ms, fewer and shorter pauses
+  for garbage collection, and the threads that feed a video panel above
+  normal priority (Windows)
 - Drawing is faster: cards about five times (only their round corners are
   drawn three times larger), so a theme's first frame takes half as long;
   numbers that change a digit at a time about six times (each digit is drawn
