@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+**New**
+- What moves on the panel goes on from theme to theme: a value gliding when
+  the theme switches glides on in the next one instead of starting over
+  (the main loop keeps it; the editor's previews have their own)
+
 **Fixes**
 - Video mode: graphs that move a pixel per frame (`per_frame`) stood still
   about three seconds after the start and after every theme switch, while

@@ -279,7 +279,7 @@ def test_a_per_frame_graph_follows_the_value_bars_and_numbers_glide_along():
             now = 100.0 + i + k / 50
             reading = {"v": Reading("v", value)}
             renderer.render(Snapshot(readings=reading, history={"v": [value]}), now)
-            shown.append((now, renderer._anim["b"][0]))
+            shown.append((now, renderer.motion.value("v", now)))
     glide = renderer._glides["g"]
     # The same spring: a bar takes a new reading from the frame before (it advances
     # from its last frame), the graph from the reading's time, so one frame apart.
@@ -373,7 +373,7 @@ def test_values_glide_until_the_next_reading_in_video_mode():
         values = []
         for i in range(1, 21):
             renderer.render(Snapshot(readings={"v": Reading("v", 100.0)}), i / 10)
-            values.append(renderer._anim["b"][0])
+            values.append(renderer.motion.value("v", i / 10))
         return values
 
     quick, slow = glide(False), glide(True)

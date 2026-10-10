@@ -33,6 +33,7 @@ from libre_panel.icons import draw_icon, weather_icon_name
 from libre_panel.render import lists
 from libre_panel.render.countdown import countdown_text
 from libre_panel.render.formatting import FormatError, auto_format, safe_format
+from libre_panel.render.motion import Motion
 from libre_panel.sensors.base import Snapshot, want
 from libre_panel.theme.model import Theme, ThemeError, resolve_asset
 from libre_panel.theme.modules import expand as expand_modules
@@ -291,10 +292,19 @@ def _reads(widgets: list[dict[str, Any]]) -> set[str]:
 
 
 class Renderer:
-    def __init__(self, theme: Theme, animate: bool = False, preview: bool = False) -> None:
+    def __init__(
+        self,
+        theme: Theme,
+        animate: bool = False,
+        preview: bool = False,
+        motion: Motion | None = None,
+    ) -> None:
         self.theme = theme
         self.animate = animate
         self.preview = preview  # an editor preview or a picture, not the panel
+        # Gliding values, fading colours and graph histories: the main loop's,
+        # kept from theme to theme, or this renderer's own (a preview).
+        self.motion = motion if motion is not None else Motion()
         self.shown: Image.Image | None = None  # the frame the panel shows (set by the loop)
         self.toast: tuple[Any, float] | None = None  # the toast on show, its age (the loop)
         self.warnings: list[str] = []
@@ -304,7 +314,6 @@ class Renderer:
         self._images: dict[tuple[str, int, int, str], Image.Image | None] = {}
         self._slide_lists: dict[str, tuple[float, list[str]]] = {}  # widget id -> pictures
         self._gauge_parts: dict[tuple[Any, ...], Image.Image] = {}  # static rings, colour fields
-        self._anim: dict[str, tuple[float, float, float]] = {}  # value, speed, time
         # Video mode (the main loop sets these): every frame goes out, so graphs
         # scroll between readings and values glide until the next one.
         self.continuous = False
@@ -414,44 +423,37 @@ class Renderer:
         at, interval = self.sample
         return min(1.0, max(0.0, (now - at - delay) / interval))
 
-    def _eased(self, widget: dict[str, Any], target: float | None, now: float) -> float | None:
-        """Glide towards new values instead of jumping (theme animation.smoothing_ms).
-
-        A critically damped spring: it starts gently and a new reading changes
-        its course without a kink. In video mode the glide lasts until the next
-        reading, so values never stand still between readings.
-        """
-        wid = widget["id"]
-        if (
-            target is None
-            or not self.animate
-            or not widget.get("smooth", False)
-            or self.theme.smoothing_ms <= 0
-        ):
-            if target is not None:
-                self._anim[wid] = (target, 0.0, now)
-            return target
-        previous = self._anim.get(wid)
-        if previous is None:
-            self._anim[wid] = (target, 0.0, now)
-            return target
-        value, speed, then = previous
+    def _glide_s(self) -> float:
+        """How long a value takes to a new reading (theme animation.smoothing_ms;
+        0: it jumps). In video mode the glide lasts until the next reading, so
+        values never stand still between readings."""
+        if not self.animate or self.theme.smoothing_ms <= 0:
+            return 0.0
         glide = self.theme.smoothing_ms / 1000
-        if self.continuous:
-            glide = max(glide, self.sample[1])
-        omega = 4.74 / glide  # 95 % of a step after ``glide`` seconds
-        dt = max(0.0, now - then)
-        decay = math.exp(-omega * dt)
-        error = value - target
-        curve = speed + omega * error
-        value = target + (error + curve * dt) * decay
-        speed = (speed - omega * curve * dt) * decay
+        return max(glide, self.sample[1]) if self.continuous else glide
+
+    def _lead(self) -> float:
+        """The time between two planned frames (0: not known)."""
+        return 1 / self.fps if self.fps > 0 else 0.0
+
+    def _eased(self, widget: dict[str, Any], target: float | None, now: float) -> float | None:
+        """Glide towards new values instead of jumping (widgets with ``smooth``).
+
+        A critically damped spring per sensor (:class:`~libre_panel.render.motion.Motion`):
+        it starts gently, a new reading changes its course without a kink, and
+        all widgets of a sensor glide together, also into the next theme.
+        """
+        glide = self._glide_s()
+        if glide <= 0 or not widget.get("smooth", False):
+            return target
+        state = self.motion.glide(widget["sensor"], target, now, glide, self._lead())
+        if state is None or target is None:
+            return target
+        value, speed = state
         span = abs(widget.get("max", 100) - widget.get("min", 0)) or 1.0
         if abs(target - value) < span * 0.002 and abs(speed) * glide < span * 0.002:
-            value, speed = target, 0.0
-        else:
-            self.moving = True
-        self._anim[wid] = (value, speed, now)
+            return target
+        self.moving = True
         return value
 
     # -- effects and compositing ------------------------------------------
@@ -809,6 +811,7 @@ class Renderer:
         now = time.monotonic() if now is None else now
         theme = self.theme
         self.moving = False
+        self.motion.begin(snapshot.readings, now, self._glide_s(), self._lead())
         boxes: dict[str, Box] = {}
         pieces: list[tuple[str, Piece]] = []
         screen = self._screen_image(snapshot, now) if self.screen is not None else None

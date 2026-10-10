@@ -16,13 +16,13 @@
 |---|---|
 | `config` | `config.toml`: panel, sensors, weather, plugins. No defaults that point at a person or place. |
 | `theme` | Theme format, validation, safe asset paths, saving; `adapt` rescales a theme to another panel. |
-| `render` | Pillow renderer; the same code serves the panel and the editor preview. Safe format strings. |
+| `render` | Pillow renderer; the same code serves the panel and the editor preview. Safe format strings. `motion` keeps what moves (gliding values, fading colours, graph histories) from frame to frame and theme to theme. |
 | `sensors` | `SensorProvider` plugins merged by `SensorHub` (priority, history for graphs). |
 | `weather` | Open-Meteo provider, background polling, off by default. |
 | `devices` | Panel catalog (`models`), `Display` drivers, USB/serial discovery. |
 | `plugins` | Plugin API: finding plugins (entry points, plugin folders), services and the host they talk to the panel through, modes. See [Plugins](PLUGINS.md). |
 | `editor` | Local HTTP server (127.0.0.1 only) + vanilla JS editor, no build step. |
-| `app` | Main loop: sample → render → diff → send; reloads config/theme on change; reports its state (`RunStatus`). |
+| `app` | Main loop (`MainLoop.step`, one frame at a time): sample → render → diff → send; reloads config/theme on change; reports its state (`RunStatus`). |
 | `service` | Background app: the main loop in a thread (pause/resume, restarts after a broken config is fixed), the editor server, and the controls shared by tray and editor. |
 | `tray` | Tray icon and menu (pystray); runs without an icon where there is no tray. |
 | `autostart` | Login start per system: Windows `Run` key (or, asked for, a Task Scheduler task with the highest rights), XDG autostart entry, macOS LaunchAgent. |

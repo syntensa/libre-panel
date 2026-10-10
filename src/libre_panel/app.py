@@ -19,6 +19,7 @@ from libre_panel.devices.base import DeviceError, Display, FrameError, create_di
 from libre_panel.devices.models import find_model
 from libre_panel.devices.virtual import VirtualDisplay
 from libre_panel.plugins.render import RenderContext
+from libre_panel.render.motion import Motion
 from libre_panel.render.overlays import ToastLayer, transition
 from libre_panel.render.renderer import Renderer, changed_region
 from libre_panel.sensors.base import SensorHub, SensorProvider, Snapshot, create_provider
@@ -361,7 +362,10 @@ class MainLoop:
         status.theme = shown
         for warning in theme.warnings:
             log.warning("theme %s: %s", shown, warning)
-        self.renderer = renderer = Renderer(theme, animate=config.fps > 1)
+        # What moves on the panel goes on from theme to theme: every renderer
+        # gets this one (gliding values, graph histories).
+        self.motion = Motion()
+        self.renderer = renderer = self._renderer(theme, config)
         self.hub = hub if hub is not None else build_hub(config)
         if host is not None and not once:
             self.hub.providers.append(host.provider())
@@ -381,6 +385,9 @@ class MainLoop:
         self.snapshot: Snapshot | None = None
         self.next_sample = 0.0
         self.started = 0.0  # when the last step began, on the clock
+
+    def _renderer(self, theme: Theme, config: Config) -> Renderer:
+        return Renderer(theme, animate=config.fps > 1, motion=self.motion)
 
     @property
     def streaming(self) -> bool:
@@ -455,7 +462,7 @@ class MainLoop:
                     fresh.device, config = device, fresh
                     i18n.set_language(config.language)
                     renderer.close()
-                    theme, renderer = new_theme, Renderer(new_theme, animate=config.fps > 1)
+                    theme, renderer = new_theme, self._renderer(new_theme, config)
                     size, previous, next_sample = target_size(config, theme), None, 0.0
                     known = {config.path: config.stamp} if config.path and config.stamp else None
                     watcher = _Watcher(config.path, _theme_file(theme), known=known)
