@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.4.2 — 2026-10-10
+
+A fix for video mode (the 9.2" panel with `[video] mode = "on"`): graphs no
+longer stop moving a few seconds after the start.
 
 **Fixes**
 - Video mode: graphs that move a pixel per frame (`per_frame`) stood still
