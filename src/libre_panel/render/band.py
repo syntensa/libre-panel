@@ -317,7 +317,6 @@ class BandStyle(ToastStyle):
             draw.rectangle(box, fill=mix(accent, ground, 0.73))
             lit_draw.rectangle(box, fill=accent)
         band = ImageChops.add(band, bloom(lit, 2.0 * u, GLOW))
-        draw = ImageDraw.Draw(band)
         if label:
             self._title(band, label, layout, accent, ground)
         tile = self._tile(band, image, badge, icon, layout, accent, ground)
