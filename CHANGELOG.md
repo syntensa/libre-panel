@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+**New**
+- `load`, a sensor source for the CPU and GPU load ten times a second: bars
+  and graphs follow the load as it happens instead of once a second. The GPU
+  load (Windows, any vendor, no administrator rights) is the one Task Manager
+  shows. It runs only while a theme shows `cpu.load` or `gpu.load`; put it
+  before the other sources in `[sensors] providers`
+
 **Fixes**
 - Video mode: graphs that move a pixel per frame (`per_frame`) stood still
   about three seconds after the start and after every theme switch, while

@@ -98,6 +98,7 @@ class SensorProvider:
 _BUILTIN_PROVIDERS = {
     "psutil": "libre_panel.sensors.psutil_provider:PsutilProvider",
     "librehardwaremonitor": "libre_panel.sensors.librehardwaremonitor:LibreHardwareMonitorProvider",
+    "load": "libre_panel.sensors.load:LoadProvider",
     "demo": "libre_panel.sensors.demo:DemoProvider",
     "media": "libre_panel.sensors.media:MediaProvider",
     "calendar": "libre_panel.sensors.calendar:CalendarProvider",

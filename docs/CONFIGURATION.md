@@ -65,6 +65,36 @@ fps = 50                       # frames per second in video mode
 local_clip = ""                # required for "on", see below
 ```
 
+## Sensor sources and their order
+
+`[sensors] providers` lists the sources in order of priority: when two of them
+have a value for the same key, the earlier one wins. A quicker or better source
+goes first.
+
+| Source | Gives | Where |
+|---|---|---|
+| `load` | `cpu.load` and `gpu.load`, measured ten times a second | CPU everywhere, GPU on Windows (any vendor) |
+| `psutil` | CPU, memory, drives, network, battery, the busiest programs; temperatures and fans where the system has them | everywhere |
+| `librehardwaremonitor` | temperatures, power, clocks and fans of CPU, GPU and mainboard | Windows, see [below](#windows-sensors-gpu-power-fans) |
+
+**Fast load** (`load`): `cpu.load` and, on Windows, `gpu.load` are measured in
+a background thread ten times a second and read on every frame, so bars and
+graphs follow the load as it happens. The other sources give it only once per
+reading (`refresh_ms`) or once a second. It needs no other program and no
+administrator rights.
+
+- The processor load comes from `GetSystemTimes` on Windows and from psutil
+  elsewhere.
+- The GPU load is what Task Manager shows, read from Windows' performance
+  counters, for any vendor: the busiest 3D engine of the graphics card that
+  has the most memory in use of its own (chosen again every minute). Where
+  the counters are missing (some virtual machines), `gpu.load` is simply not
+  there and the next source supplies it; the log says so.
+- It runs only while a theme on the panel shows `cpu.load` or `gpu.load`.
+- Put it before the sources whose load it replaces, e.g.
+  `providers = ["load", "librehardwaremonitor", "psutil"]`; behind
+  LibreHardwareMonitor its readings would never be used.
+
 ## More sensor sources
 
 Besides the hardware, Libre Panel reads a few things from your life. The sun,
