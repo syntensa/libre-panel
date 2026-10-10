@@ -3,7 +3,9 @@
 Runs only display commands (sync, brightness, frames): the same ones normal
 operation uses. Shows test cards for both orientations, asks what the panel
 shows, measures speed and writes a report without personal data (no serial
-numbers, user names or paths) that can be attached to an issue.
+numbers, user names or paths) that can be attached to an issue. On Windows it
+also asks LibreHardwareMonitor's web server once, to say whether the
+temperatures and power that only it gives arrive.
 """
 
 from __future__ import annotations

@@ -16,7 +16,8 @@ every frame (``every_frame``). Put it before the other sources in
 
 The thread runs only while a theme on show reads one of the keys, and ends
 when the provider closes. Where a source cannot measure (no counters, a
-virtual machine) the key is simply missing and the next source supplies it.
+virtual machine) the key is simply missing and the next source supplies it; the
+log says so once, and the thread tries again every minute.
 """
 
 from __future__ import annotations
@@ -37,9 +38,14 @@ SAMPLE_SECONDS = 0.1  # ten samples a second
 ADAPTER_SECONDS = 60.0  # the graphics card is chosen again every minute
 STALE_SECONDS = 2.0  # a reading older than this is dropped, not shown frozen
 IDLE_SECONDS = 60.0  # nobody looked for this long: the thread ends, and starts on demand
+RETRY_SECONDS = 60.0  # a sampler that could not be made is tried again after this long
 
 # The labels PsutilProvider gives cpu.load, so lists and themes look the same.
 _LABELS = {"cpu.load": "CPU load", "gpu.load": "GPU load"}
+_NO_SAMPLER = {
+    "cpu.load": "no CPU load from psutil",
+    "gpu.load": "no GPU load from the performance counters",
+}
 
 _ENGINE_COUNTER = r"\GPU Engine(*engtype_3D)\Utilization Percentage"
 _MEMORY_COUNTER = r"\GPU Adapter Memory(*)\Dedicated Usage"
@@ -225,18 +231,14 @@ class _PdhGpu:
             self._query = None
 
 
-def _cpu_sampler(platform: str = sys.platform) -> _Sampler | None:
-    """The CPU sampler of this machine."""
+def _cpu_sampler(platform: str = sys.platform) -> _Sampler:
+    """The CPU sampler of this machine; raises if it has none."""
     if platform == "win32":
         try:
             return _WindowsCpu(ctypes.WinDLL("kernel32"))
         except Exception as exc:  # noqa: BLE001 - psutil does it as well, a little slower
             log.debug("load: GetSystemTimes is not available (%s)", exc)
-    try:
-        return _PsutilCpu()
-    except Exception as exc:  # noqa: BLE001 - no load from here; the next source has it
-        log.info("load: no CPU load from psutil (%s)", exc)
-        return None
+    return _PsutilCpu()
 
 
 def _load_pdh() -> Any:
@@ -253,14 +255,11 @@ def _load_pdh() -> Any:
 
 
 def _gpu_sampler(platform: str = sys.platform) -> _Sampler | None:
-    """The GPU sampler of this machine; only Windows has the counters."""
+    """The GPU sampler of this machine. None where it cannot have one (only Windows
+    has the counters); raises where it should and does not (no counters yet)."""
     if platform != "win32":
         return None
-    try:
-        return _PdhGpu(_load_pdh())
-    except Exception as exc:  # noqa: BLE001 - no GPU load from here; the next source has it
-        log.info("load: no GPU load from the performance counters (%s)", exc)
-        return None
+    return _PdhGpu(_load_pdh())
 
 
 def _open(key: str) -> _Sampler | None:
@@ -288,6 +287,7 @@ class LoadProvider(SensorProvider):
     def __init__(self, options: dict[str, Any] | None = None) -> None:
         super().__init__(options)
         self._values: dict[str, tuple[float, Reading]] = {}  # key -> (when measured, reading)
+        self._said: set[str] = set()  # keys that were said to have no sampler
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -303,9 +303,22 @@ class LoadProvider(SensorProvider):
         with self._lock:
             self._values[key] = (at, Reading(key, value, "%", _LABELS[key]))
 
+    def _make(self, key: str) -> _Sampler | None:
+        """A new sampler for ``key``; None if this machine has none (said once)."""
+        try:
+            return _open(key)
+        except Exception as exc:  # noqa: BLE001 - never raise
+            what = _NO_SAMPLER[key]
+            if key in self._said:
+                log.debug("load: %s (%s)", what, exc)
+            else:
+                self._said.add(key)
+                log.info("load: %s (%s)", what, exc)
+            return None
+
     def _run(self) -> None:
         samplers: dict[str, _Sampler] = {}
-        missing: set[str] = set()  # keys this machine cannot measure
+        retry_at: dict[str, float] = {}  # keys without a sampler, and when to try again
         looked = time.monotonic()
         try:
             while not self._stop.is_set():
@@ -316,16 +329,13 @@ class LoadProvider(SensorProvider):
                 elif now - looked > IDLE_SECONDS:
                     return
                 for key in shown:
-                    if key in missing:
+                    if now < retry_at.get(key, 0.0):
                         continue
                     sampler = samplers.get(key)
                     if sampler is None:
-                        try:
-                            sampler = _open(key)
-                        except Exception:  # noqa: BLE001 - never raise
-                            log.debug("load: %s could not be opened", key, exc_info=True)
+                        sampler = self._make(key)
                         if sampler is None:
-                            missing.add(key)
+                            retry_at[key] = now + RETRY_SECONDS
                         else:
                             samplers[key] = sampler  # it has nothing to compare with yet
                         continue

@@ -294,7 +294,7 @@ On Windows the temperatures and power of the processor and the graphics card,
 and the fans, come from
 [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor);
 psutil has none of them there. New configurations list it, and Libre Panel
-finds it by itself, within half a minute of its start or of yours:
+finds it by itself, at the latest half a minute after it is running:
 
 1. Install LibreHardwareMonitor and run it **as administrator** (CPU
    temperatures and power need its driver).

@@ -4,11 +4,12 @@ the readings that need LibreHardwareMonitor do not arrive on Windows."""
 import gc
 import json
 import sys
+import time
 import tomllib
 from pathlib import Path
 
 import pytest
-from fake_sensors import FakeSource, Scripted
+from fake_sensors import FakeSource, Scripted, wait_for
 
 from libre_panel import cli, config, doctor
 from libre_panel.app import build_hub
@@ -123,7 +124,7 @@ def quick_sensors(monkeypatch):
     """The `sensors` command without its second of waiting, and with no real sound."""
     gc.collect()
     monkeypatch.setattr(base, "_WANTED", {})
-    monkeypatch.setattr(cli, "SENSORS_SETTLE_SECONDS", 0.25)
+    monkeypatch.setattr(cli, "SENSORS_SETTLE_SECONDS", 0)
     monkeypatch.setattr(load, "SAMPLE_SECONDS", 0.005)
 
 
@@ -138,18 +139,32 @@ def test_sensors_lists_the_load_and_the_volume_too(
     isolated_home, quick_sensors, monkeypatch, capsys
 ):
     """They read only while a theme shows them: the command asks for them like a theme."""
-    monkeypatch.setattr(load, "_cpu_sampler", lambda: Scripted(42.0))
+    cpu, volume = Scripted(42.0), FakeSource((37.0, False))
+    monkeypatch.setattr(load, "_cpu_sampler", lambda: cpu)
     monkeypatch.setattr(load, "_gpu_sampler", lambda: None)
-    monkeypatch.setattr(audio, "_open_source", lambda on_change: FakeSource((37.0, False)))
+    monkeypatch.setattr(audio, "_open_source", lambda on_change: volume)
+
+    def settle(seconds):  # the second the command waits, as long as the sources need
+        assert wait_for(lambda: cpu.reads >= 2 and "audio.volume" in audio_provider.read())
+
     path = write_providers(isolated_home, ["load", "audio"])
+    audio_provider = None
+
+    real_build_hub = build_hub
+
+    def build(config, demo=False):
+        nonlocal audio_provider
+        hub = real_build_hub(config, demo)
+        audio_provider = next(p for p in hub.providers if p.name == "audio")
+        return hub
+
+    monkeypatch.setattr("libre_panel.app.build_hub", build)
+    monkeypatch.setattr(time, "sleep", settle)
     before = set(base._WANTED)
     assert cli.main(["--config", str(path), "sensors"]) == 0
     lines = {line.split()[0]: line for line in capsys.readouterr().out.splitlines()}
-    assert (
-        "42.00" in lines["cpu.load"]
-        and "%" in lines["cpu.load"]
-        and "CPU load" in lines["cpu.load"]
-    )
+    cpu_line = lines["cpu.load"]
+    assert "42.00" in cpu_line and "%" in cpu_line and "CPU load" in cpu_line
     assert "37.00" in lines["audio.volume"] and "Volume" in lines["audio.volume"]
     assert lines["audio.muted"].split()[1] == "0"
     assert set(base._WANTED) == before  # nothing stays asked for

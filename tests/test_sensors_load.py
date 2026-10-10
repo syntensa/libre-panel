@@ -271,23 +271,72 @@ def test_missing_counters_raise_after_closing_the_query():
     assert pdh.closed == [1000]  # the query is not left open
 
 
-def test_a_machine_without_the_counters_has_no_gpu_load_and_says_so_once(monkeypatch, caplog):
-    caplog.set_level(logging.INFO, logger=load.__name__)
+def test_only_windows_has_the_gpu_counters(monkeypatch):
     assert load._gpu_sampler("linux") is None and load._gpu_sampler("darwin") is None
-    assert not caplog.records  # nothing to say where there never were counters
 
+
+def test_windows_without_the_counters_fails_loudly_for_the_provider_to_say(monkeypatch):
     pdh = FakePdh(*gpu_tables())
     pdh.no_counter = "GPU Engine"
     monkeypatch.setattr(load, "_load_pdh", lambda: pdh)
-    assert load._gpu_sampler("win32") is None
-    assert [r.levelno for r in caplog.records] == [logging.INFO]
-    assert "no GPU load" in caplog.records[0].getMessage()
+    with pytest.raises(OSError, match="GPU Engine"):
+        load._gpu_sampler("win32")
+    assert pdh.closed == [1000]  # and the query is not left open
 
     def no_pdh():
         raise OSError("pdh.dll")
 
     monkeypatch.setattr(load, "_load_pdh", no_pdh)
-    assert load._gpu_sampler("win32") is None  # never raises
+    with pytest.raises(OSError, match="pdh.dll"):
+        load._gpu_sampler("win32")
+
+
+def test_a_machine_without_the_counters_says_so_once_and_tries_again(monkeypatch, caplog):
+    caplog.set_level(logging.INFO, logger=load.__name__)
+    monkeypatch.setattr(load, "RETRY_SECONDS", 0.005)
+    attempts, gpu = [], Scripted(55.5)
+
+    def gpu_sampler():
+        attempts.append(1)
+        if len(attempts) < 3:
+            return None  # not on this machine
+        if len(attempts) < 5:
+            raise OSError("no counters yet")  # the counters are not ready, right after login
+        return gpu
+
+    monkeypatch.setattr(load, "_cpu_sampler", lambda: Scripted(30.0))
+    monkeypatch.setattr(load, "_gpu_sampler", gpu_sampler)
+    theme = show("gpu.load")
+    provider = load.LoadProvider()
+    try:
+        provider.read()
+        assert wait_for(lambda: "gpu.load" in provider.read())  # the fifth try worked
+        assert len(attempts) == 5 and provider.read()["gpu.load"].value == 55.5
+    finally:
+        provider.close()
+    said = [r.getMessage() for r in caplog.records if r.levelno >= logging.INFO]
+    assert said == ["load: no GPU load from the performance counters (no counters yet)"]
+    del theme
+
+
+def test_what_is_missing_is_said_once_for_the_provider_not_for_each_thread(monkeypatch, caplog):
+    caplog.set_level(logging.DEBUG, logger=load.__name__)
+
+    def no_counters():
+        raise OSError("no counters")
+
+    monkeypatch.setattr(load, "_gpu_sampler", no_counters)
+    provider = load.LoadProvider()
+    assert provider._make("gpu.load") is None and provider._make("gpu.load") is None
+    levels = [r.levelno for r in caplog.records]
+    assert levels == [logging.INFO, logging.DEBUG]
+
+    def no_psutil():
+        raise RuntimeError("no psutil")
+
+    monkeypatch.setattr(load, "_cpu_sampler", no_psutil)
+    assert provider._make("cpu.load") is None  # the other key has its own line
+    assert "no CPU load from psutil" in caplog.records[-1].getMessage()
 
 
 def test_windows_gets_its_gpu_sampler(monkeypatch):
@@ -367,7 +416,9 @@ def test_only_what_a_theme_reads_is_measured(monkeypatch):
     del theme
 
 
-def test_where_there_is_no_gpu_source_the_key_is_missing_and_not_asked_again(monkeypatch):
+def test_where_there_is_no_gpu_source_the_key_is_missing_and_asked_for_only_now_and_then(
+    monkeypatch,
+):
     cpu = Scripted(30.0)
     asked = install(monkeypatch, cpu, None)
     theme = show("cpu.load", "gpu.load")
@@ -431,7 +482,7 @@ def test_values_are_kept_to_the_range(monkeypatch):
     del theme
 
 
-def test_a_sampler_that_cannot_be_made_is_given_up_quietly(monkeypatch):
+def test_a_sampler_that_cannot_be_made_is_tried_again_only_now_and_then(monkeypatch):
     tries = []
 
     def broken():

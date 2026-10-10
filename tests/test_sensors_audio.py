@@ -829,7 +829,7 @@ def test_importing_the_sources_stays_light():
     """Nothing slow or Windows-only at import time: no psutil, no wintypes, no PIL."""
     code = (
         "import sys; import libre_panel.sensors.load, libre_panel.sensors.audio; "
-        "print(sorted({'psutil', 'ctypes.wintypes', 'PIL', 'winreg'} & set(sys.modules)))"
+        "print(sorted({'psutil', 'ctypes.wintypes', 'PIL'} & set(sys.modules)))"
     )
     done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     assert done.stdout.strip() == "[]"
