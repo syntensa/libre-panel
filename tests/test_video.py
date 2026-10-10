@@ -835,5 +835,7 @@ def test_a_mode_sets_the_stream_rate(monkeypatch):
         stop.set()
         thread.join(10)
         host.close()
-    assert 8 < game < 12, (normal, game)
-    assert game < normal * 0.6, (normal, game)
+    assert 8 < game < 12, (normal, game)  # the mode's 10
+    # and before it, faster than 12: neither the mode's rate nor config.fps (a
+    # loaded macOS runner managed only 15 of the display's 50)
+    assert normal > 12, (normal, game)
