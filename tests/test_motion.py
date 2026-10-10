@@ -275,3 +275,163 @@ def test_a_new_theme_shows_its_graphs_full_at_once():
     assert curve_rows(again.render(snapshot, 110.02)[0])[:190] == pytest.approx(
         curve_rows(after.render(snapshot, 110.02)[0])[:190], abs=1
     )
+
+
+# -- warming up the next theme ---------------------------------------------------
+
+PREPARED = """
+import threading
+
+from PIL import Image
+
+from libre_panel.plugins import Screen
+
+events = []
+
+
+class Layers(Screen):
+    name = "layers"
+    api = 1
+
+    def prepare(self):
+        events.append(("prepare", threading.current_thread().name))
+
+    def render(self, snapshot, now):
+        events.append(("render", threading.current_thread().name))
+        return Image.new("RGB", self.context.size, "#203040")
+"""
+
+
+class Clock:
+    def __init__(self, now):
+        self.now = now
+
+    def __call__(self):
+        return self.now
+
+
+class Stream:
+    """A streaming display in memory."""
+
+    streaming = True
+    stream_fps = 50
+    restarted = False
+
+    def __init__(self):
+        self.frames = []
+
+    def open(self):
+        pass
+
+    def set_brightness(self, percent):
+        pass
+
+    def describe(self):
+        return "memory"
+
+    def show(self, frame, region=None):
+        self.frames.append(frame)
+
+    def close(self):
+        pass
+
+
+def steps(loop, clock, until, limit=200):
+    """Frames 20 ms apart until ``until()`` holds; the warm-up works in between."""
+    import time
+
+    for _ in range(limit):
+        clock.now += 0.02
+        loop.step(clock.now)
+        if until():
+            return True
+        time.sleep(0.002)
+    return False
+
+
+def layered_theme(home):
+    import json
+
+    folder = home / "themes" / "layered"
+    folder.mkdir(parents=True)
+    data = {"format": "libre-panel-theme/1", "name": "layered",
+            "display": {"model": "custom", "width": 160, "height": 80},
+            "screen": {"name": "layers"}, "widgets": []}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+
+
+def loop_for(theme_name, clock, host=None):
+    from libre_panel.app import MainLoop
+    from libre_panel.config import Config, SensorsConfig
+    from libre_panel.sensors.base import SensorHub
+    from libre_panel.sensors.demo import DemoProvider
+
+    config = Config(theme=theme_name, sensors=SensorsConfig(providers=["demo"]))
+    hub = SensorHub([DemoProvider({"fixed_time": 1_700_000_000})])
+    return MainLoop(config, host=host, hub=hub, display=Stream(), clock=clock)
+
+
+def test_a_screen_prepares_in_a_thread_of_its_own_before_its_first_frame(
+    plugin_folder, isolated_home
+):
+    import sys
+    import threading
+
+    from libre_panel.plugins import PluginHost
+
+    package = plugin_folder(PREPARED, {"libre_panel.screens": {"layers": "Layers"}})
+    layered_theme(isolated_home)
+    clock = Clock(1000.0)
+    loop = loop_for("layered", clock)  # at start
+    try:
+        loop.step(clock.now)
+    finally:
+        loop.close()
+    events = sys.modules[package].events
+    here = threading.current_thread().name
+    assert events[0][0] == "prepare" and events[0][1] != here and events[1] == ("render", here)
+
+    events.clear()
+    host = PluginHost()
+    loop = loop_for("pico", clock, host)  # at a switch
+    try:
+        loop.step(clock.now)
+        host.request_theme("layered", by="test", transition="cut")
+        assert steps(loop, clock, lambda: loop.status.theme == "layered")
+    finally:
+        loop.close()
+        host.close()
+    assert events[0][0] == "prepare" and events[0][1] != here
+    assert ("render", here) in events and all(
+        name == here for kind, name in events if kind == "render"
+    )
+
+
+def test_a_theme_comes_on_warmed_up(monkeypatch):
+    """The next theme is built and drawn once off the render thread while the
+    current one goes on; its first frame on the panel builds no cards."""
+    import threading
+
+    from libre_panel.plugins import PluginHost
+
+    built = []
+    real = Renderer._card
+
+    def card(self, *args):
+        built.append(threading.current_thread().name)
+        return real(self, *args)
+
+    monkeypatch.setattr(Renderer, "_card", card)
+    clock, host = Clock(1000.0), PluginHost()
+    loop = loop_for("pico", clock, host)
+    here = threading.current_thread().name
+    try:
+        loop.step(clock.now)
+        built.clear()
+        host.request_theme("spur-ii", by="test", transition="cut")
+        assert steps(loop, clock, lambda: loop.status.theme == "spur-ii")
+        assert loop.display.frames[-1].size == (1920, 480)
+        assert built and here not in built  # the cards were drawn in the warm-up
+    finally:
+        loop.close()
+        host.close()

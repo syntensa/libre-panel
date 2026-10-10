@@ -129,6 +129,10 @@ class _Watcher:
         changed, self.stamps = stamps != self.stamps, stamps
         return changed
 
+    def pending(self) -> bool:
+        """Whether :meth:`changed` would say so, without taking the change."""
+        return [self._stamp(p) for p in self.paths] != self.stamps
+
 
 def _theme_file(theme: Theme) -> Path | None:
     return theme.root / THEME_FILENAME if theme.root else None
@@ -320,6 +324,61 @@ def _begin(
     return (kind, old, now)
 
 
+class _Warmup:
+    """The next theme's renderer, built in a thread of its own while the panel
+    goes on showing the current theme (SPUR II preloads the same way): its
+    screen's ``prepare()`` and one frame of its widgets (cards, texts, graph
+    strips) are done when it comes on, so the switch does not stall a video."""
+
+    LIMIT_S = 2.0  # a switch waits at most this long, then builds it itself
+
+    def __init__(self) -> None:
+        self.key: Any = None
+        self.started = 0.0
+        self.thread: threading.Thread | None = None
+        self.result: tuple[Renderer, Motion] | None = None
+
+    @property
+    def busy(self) -> bool:
+        return self.thread is not None and self.thread.is_alive()
+
+    def ready(self, key: Any, now: float) -> bool:
+        """Whether a switch to ``key`` may go ahead: warmed up, or waited enough."""
+        return self.key == key and (not self.busy or now - self.started > self.LIMIT_S)
+
+    def start(self, key: Any, build: Callable[[], tuple[Renderer, Motion]], now: float) -> None:
+        self.discard()
+        self.key, self.started = key, now
+
+        def work() -> None:
+            try:
+                self.result = build()
+            except Exception:  # the switch builds it itself and reports what fails
+                log.exception("warming up the next theme failed")
+
+        self.thread = threading.Thread(target=work, name="theme-warmup", daemon=True)
+        self.thread.start()
+
+    def take(self, key: Any) -> tuple[Renderer, Motion] | None:
+        """The renderer warmed up for ``key``, once, if it is done."""
+        if self.key != key or self.busy or self.result is None:
+            return None
+        result, self.result, self.key = self.result, None, None
+        return result
+
+    def discard(self) -> None:
+        """Close a warmed-up renderer nobody took."""
+        if self.result is not None and not self.busy:
+            self.result[0].close()
+            self.result = None
+        self.key = None
+
+    def close(self) -> None:
+        if self.thread is not None:
+            self.thread.join(5)
+        self.discard()
+
+
 def _same_device(a, b) -> bool:
     """Brightness and the picture's turn change on the open panel; anything else
     needs it opened again."""
@@ -349,6 +408,8 @@ class MainLoop:
     ) -> None:
         self.status = status = status or RunStatus()
         self.host, self.on_config, self.clock = host, on_config, clock
+        self.warmup = _Warmup()  # the next theme, built while this one shows
+        self.idle = threading.Event()  # set between frames: the warm-up works then
         i18n.set_language(config.language)
         shown = _theme_name(config, host) if not once else config.theme
         try:
@@ -386,9 +447,74 @@ class MainLoop:
         self.snapshot: Snapshot | None = None
         self.next_sample = 0.0
         self.started = 0.0  # when the last step began, on the clock
+        if not once and renderer.screen is not None:  # prepare() before the first frame
+            prepare = threading.Thread(target=renderer.warm, args=(None, 0.0), daemon=True)
+            prepare.start()
+            prepare.join(_Warmup.LIMIT_S)
 
     def _renderer(self, theme: Theme, config: Config) -> Renderer:
-        return Renderer(theme, animate=config.fps > 1, motion=self.motion)
+        """The renderer for ``theme``: warmed up if it was, else a new one."""
+        warmed = self.warmup.take(self._warm_key(theme, config))
+        if warmed is None:
+            return Renderer(theme, animate=config.fps > 1, motion=self.motion)
+        renderer, motion = warmed
+        renderer.motion = self.motion  # from now on the panel's
+        self.motion.adopt(motion)  # graph histories it began
+        return renderer
+
+    @staticmethod
+    def _warm_key(theme: Theme, config: Config) -> Any:
+        theme_file = _theme_file(theme)
+        stamp = _Watcher._stamp(theme_file) if theme_file else None
+        return (str(theme.root), stamp, theme.name, config.fps > 1)
+
+    def _warmed(
+        self, config: Config, host: Any, shown: str, refused: str | None, watcher: _Watcher,
+        now: float,
+    ) -> bool:  # fmt: skip
+        """Whether a switch coming up may happen now. The theme it brings is
+        warmed up in a thread of its own first (:class:`_Warmup`) while this
+        one goes on; nothing to switch to, or a theme that fails, goes ahead."""
+        pending = watcher.pending()
+        wanted = _theme_name(config, host)
+        if not pending and wanted in (shown, refused):
+            return True
+        try:
+            fresh = load_config(config.path) if pending and config.path else config
+            theme = load_theme(find_theme(_theme_name(fresh, host)))
+        except (ConfigError, ThemeError):
+            return True  # the switch says why
+        if fresh.language != config.language:
+            return True  # a new language: modules are laid out in it, at once
+        key = self._warm_key(theme, fresh)
+        if self.warmup.ready(key, now):
+            return True
+        if not self.warmup.busy:
+            self.warmup.start(key, self._warm_job(theme, fresh, now), now)
+        return False
+
+    def _warm_job(
+        self, theme: Theme, config: Config, now: float
+    ) -> Callable[[], tuple[Renderer, Motion]]:
+        """Building and drawing ``theme`` once, with copies of what the panel's
+        drawing keeps (it goes on meanwhile)."""
+        motion = self.motion.copy()
+        snapshot = self.snapshot
+        if snapshot is not None:  # dicts of its own: this thread goes on replacing them
+            snapshot = Snapshot(
+                dict(snapshot.readings), snapshot.history, snapshot.now, dict(snapshot.images)
+            )
+        current, animate = self.renderer, config.fps > 1
+        continuous, fps, sample = current.continuous, current.fps, current.sample
+
+        def build() -> tuple[Renderer, Motion]:
+            renderer = Renderer(theme, animate=animate, motion=motion)
+            renderer.continuous, renderer.fps, renderer.sample = continuous, fps, sample
+            # widget by widget between the panel's frames, not while one is drawn
+            renderer.warm(snapshot, now, pause=lambda: self.idle.wait(0.1))
+            return renderer, motion
+
+        return build
 
     @property
     def streaming(self) -> bool:
@@ -433,11 +559,13 @@ class MainLoop:
         self.started = started = self.clock()  # fine-grained on every system (monotonic is
         # not on Windows before Python 3.13); a streaming frame is drawn at its planned time
         now = started if now is None else now
+        self.idle.clear()
         try:  # the frame's state is kept whatever happens
             # While a transition plays, a switch waits for its end, unless the
             # transition says otherwise (Transition.switch: follow or restart).
             policy = getattr(blend[0], "switch", "wait") if blend is not None else None
             may_switch = policy in (None, "follow", "restart")
+            may_switch = may_switch and self._warmed(config, host, shown, refused, watcher, now)
             changed = watcher.changed() if may_switch else False
             wanted = _theme_name(config, host)
             if may_switch and (changed or (wanted != shown and wanted != refused)):
@@ -535,6 +663,7 @@ class MainLoop:
                 if link.connected and display.restarted:
                     host.emit("panel-restarted")  # back after a restart, not a replug
         finally:
+            self.idle.set()
             self.config, self.shown, self.refused, self.theme = config, shown, refused, theme
             self.renderer, self.display, self.size, self.watcher = renderer, display, size, watcher
             self.link, self.blend, self.shown_frame = link, blend, shown_frame
@@ -558,6 +687,7 @@ class MainLoop:
     def close(self) -> None:
         self.display.close()
         self.toasts.close()
+        self.warmup.close()
         self.renderer.close()
         self.hub.close()
 

@@ -178,6 +178,41 @@ def _gradient(size: tuple[int, int], a: RGBA, b: RGBA, horizontal: bool) -> Imag
     return strip.resize(size, Image.NEAREST)
 
 
+@lru_cache(maxsize=64)
+def _gradient_down(size: tuple[int, int], a: RGBA, b: RGBA, horizontal: bool) -> Image.Image:
+    """The colours a gradient three times the size has once reduced (cached:
+    callers must not modify it)."""
+    steps = size[0] if horizontal else size[1]
+    last = max(1, steps * SUPERSAMPLE - 1)
+    colours = []
+    for i in range(steps):
+        parts = [_lerp(a, b, (SUPERSAMPLE * i + k) / last) for k in range(SUPERSAMPLE)]
+        colours.append(tuple(round(sum(p[c] for p in parts) / SUPERSAMPLE) for c in range(4)))
+    strip = Image.new("RGBA", (steps, 1) if horizontal else (1, steps))
+    strip.putdata(colours)
+    return strip.resize(size, Image.NEAREST)
+
+
+@lru_cache(maxsize=64)
+def _card_corners(r: int, outline: int) -> tuple[Image.Image, Image.Image | None, int]:
+    """How much of each pixel a card with corners of radius ``r`` (and an
+    outline ``outline`` px wide) covers near its corners: a small card drawn
+    three times larger and reduced, ``2 * c + 2`` px square, whose ``c`` px
+    corners are those of any larger card (Pillow draws the corners in boxes at
+    the card's corners, the rest as rectangles)."""
+    s, c = SUPERSAMPLE, r + 2
+    m = 2 * c + 2
+    box = [0, 0, m * s - 1, m * s - 1]
+    shape = Image.new("L", (m * s, m * s), 0)
+    ImageDraw.Draw(shape).rounded_rectangle(box, radius=r * s, fill=255)
+    ring = None
+    if outline:
+        ring = Image.new("L", (m * s, m * s), 0)
+        ImageDraw.Draw(ring).rounded_rectangle(box, radius=r * s, outline=255, width=outline * s)
+        ring = ring.reduce(s)
+    return shape.reduce(s), ring, c
+
+
 def _fitted(image: Image.Image, w: int, h: int, fit: str) -> Image.Image:
     """``image`` at w x h: stretched, inside with room left (contain) or filling it (cover)."""
     if fit == "cover":
@@ -301,6 +336,7 @@ class Renderer:
         # Plugins (docs/PLUGINS.md): a screen draws the frame under the widgets,
         # plugin widget types draw themselves.
         self.fps = 0  # the panel's frame rate, for screens (set by the main loop)
+        self._breathe: Callable[[], None] | None = None  # between widgets (warming up)
         self._plugin_types: dict[str, Any] = {}
         self._screen_last: tuple[Any, Piece] | None = None
         self.screen = self._make_screen()
@@ -757,6 +793,28 @@ class Renderer:
 
         return self._cached(widget, ("plugin", kind.key(widget, snapshot, now)), build)
 
+    def warm(
+        self, snapshot: Snapshot | None, now: float, pause: Callable[[], Any] | None = None
+    ) -> None:
+        """Build what the first frames need, away from the render thread: the
+        screen's ``prepare()``, and one frame of the widgets (cards, texts,
+        icons, graph strips). The screen does not draw here: its frames
+        belong to the render thread. ``pause`` runs between widgets (to wait
+        while the render thread draws)."""
+        screen = self.screen
+        if screen is not None:
+            try:
+                screen.prepare()
+            except Exception as exc:  # a broken plugin must not keep the theme away
+                self._warn(f"screen {self.theme.screen['name']!r} failed to prepare: {exc}")
+        if snapshot is None:
+            return
+        self.screen, self._breathe = None, pause
+        try:
+            self.render(snapshot, now)
+        finally:
+            self.screen, self._breathe = screen, None
+
     # -- rendering ---------------------------------------------------------
 
     def render(
@@ -781,6 +839,9 @@ class Renderer:
             except Exception as exc:  # one broken widget must not blank the panel
                 self._warn(f"widget {widget['id']!r} failed: {exc}")
                 continue
+            finally:
+                if self._breathe is not None:
+                    self._breathe()
             if piece is None:
                 continue
             pieces.append((widget["id"], piece))
@@ -1558,6 +1619,9 @@ class Renderer:
         s = SUPERSAMPLE
 
         def build() -> Piece:
+            card = self._card(widget, x, y, w, h)
+            if card is not None:
+                return card
             layer, draw = self._canvas(w, h)
             radius = min(widget["radius"], w // 2, h // 2) * s
             box = [0, 0, w * s - 1, h * s - 1]
@@ -1587,6 +1651,62 @@ class Renderer:
             )
 
         return self._cached(widget, None, build)
+
+    def _card(self, widget: dict[str, Any], x: int, y: int, w: int, h: int) -> Piece | None:
+        """A rect drawn at its size with only its round corners supersampled:
+        the pixels of drawing it three times larger, at a fraction of the
+        cost (a 1920x480 backdrop took 100 ms). None where the corners meet (a
+        pill, a circle) or the outline fills it: those are drawn whole."""
+        r = min(widget["radius"], w // 2, h // 2)
+        ring = widget["outline_width"] if widget["outline"] else 0
+        if min(w, h) < 2 * (r + 2) + 2 or 2 * ring >= min(w, h):
+            return None
+        shape, corners, c = _card_corners(r, ring)
+        small, _ = shape.size
+        full = Image.new("L", (w, h), 255)
+        edge = Image.new("L", (w, h), 0) if ring else None
+        if edge is not None:
+            draw = ImageDraw.Draw(edge)
+            for band in ([0, 0, w - 1, ring - 1], [0, h - ring, w - 1, h - 1],
+                         [0, 0, ring - 1, h - 1], [w - ring, 0, w - 1, h - 1]):  # fmt: skip
+                draw.rectangle(band, fill=255)
+        for (sx, sy), (bx, by) in zip(
+            ((0, 0), (small - c, 0), (0, small - c), (small - c, small - c)),
+            ((0, 0), (w - c, 0), (0, h - c), (w - c, h - c)),
+            strict=True,
+        ):
+            full.paste(shape.crop((sx, sy, sx + c, sy + c)), (bx, by))
+            if edge is not None:
+                edge.paste(corners.crop((sx, sy, sx + c, sy + c)), (bx, by))
+        layer = None
+        if widget["color"]:
+            a, b = self.color(widget["color"]), self.color(widget["color2"])
+            if b is None:
+                layer = Image.new("RGBA", (w, h), a)
+            else:
+                layer = _gradient_down((w, h), a, b, widget["gradient"] == "horizontal").copy()
+            inside = full if edge is None else ImageChops.subtract(full, edge)
+            alpha = layer.getchannel("A")
+            layer.putalpha(
+                inside if alpha.getextrema() == (255, 255) else ImageChops.multiply(alpha, inside)
+            )
+        if edge is not None:
+            color = self.color(widget["outline"])
+            line = Image.new("RGBA", (w, h), color)
+            line.putalpha(
+                edge
+                if color[3] == 255
+                else ImageChops.multiply(edge, Image.new("L", (w, h), color[3]))
+            )
+            layer = (
+                line
+                if layer is None
+                else ImageChops.add(layer.convert("RGBa"), line.convert("RGBa")).convert("RGBA")
+            )
+        if layer is None:
+            layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        backdrop = full if widget["backdrop_blur"] else None
+        return Piece(layer, x, y, [x, y, w, h], backdrop, widget["backdrop_blur"])
 
     def _draw_bar(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]

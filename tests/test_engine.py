@@ -115,6 +115,27 @@ def test_rect_gradient_and_backdrop():
     assert frosted.getpixel((10, 10)) == sharp.getpixel((10, 10))  # outside untouched
 
 
+@pytest.mark.parametrize("radius", [0, 3, 12])
+@pytest.mark.parametrize("outline", [None, "#ff000080"])
+@pytest.mark.parametrize("color2", [None, "#0000ff"])
+def test_cards_drawn_at_their_size_look_as_supersampled(radius, outline, color2):
+    """Only a card's round corners are drawn three times larger: the same look
+    (within two levels) as drawing it all three times larger, far faster."""
+    from PIL import ImageChops
+
+    card = rect(radius=radius, outline=outline, outline_width=2, color="#20304080",
+                color2=color2, backdrop_blur=4)  # fmt: skip
+    renderer = Renderer(theme(card))
+    widget = renderer.widgets[0]
+    fast = renderer._card(widget, 50, 25, 100, 50)
+    renderer._card = lambda *args: None
+    whole = renderer._draw_rect(widget, Snapshot(), 0.0)
+    assert fast is not None and fast.layer.size == whole.layer.size
+    shown = ImageChops.difference(fast.layer.convert("RGBa"), whole.layer.convert("RGBa"))
+    assert max(band[1] for band in shown.getextrema()) <= 2
+    assert ImageChops.difference(fast.backdrop, whole.backdrop).getextrema()[1] <= 2
+
+
 def bar(**kw):
     return {"type": "bar", "id": "b", "x": 0, "y": 0, "w": 200, "h": 20, "sensor": "v", "radius": 0,
             "background": "#202020", "color": "#ff0000", **kw}  # fmt: skip

@@ -17,6 +17,10 @@
   pixels a second). `seconds` sets the time a graph spans in video mode,
   whatever the frame rate; a theme that comes on shows its graphs full
 - For plugins: `libre_panel.clock()`, the clock of `now` (`time.perf_counter`)
+- A theme coming on is built and drawn once in the background while the
+  panel goes on showing the one before, so a switch no longer freezes a
+  video for a third of a second. Screens from plugins can load what their
+  first frames need meanwhile: `Screen.prepare()`
 
 **Fixes**
 - A seconds clock ticks on the frame that is due: `snapshot.now` is the time
@@ -27,6 +31,8 @@
   instead of once per reading, which kept the helper thread busy
 
 **Changes**
+- Cards draw about five times faster (only their round corners are drawn
+  three times larger), so a theme's first frame takes half as long
 - The main loop draws one frame at a time through `MainLoop.step(now)`, with
   the sensor hub, display, host and clock given: tests and plugins' test
   benches drive the real loop frame by frame instead of copying it

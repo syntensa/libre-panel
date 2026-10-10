@@ -217,6 +217,12 @@ class Studio(Screen):
   scrolls between readings.
 - `__init__` also runs for every preview in the editor, which then calls
   `close()`: keep expensive loading in a module-level cache.
+- `prepare()` (optional) runs once in a thread of its own before the
+  screen's first frame on the panel: at start, and when its theme is about
+  to come on, while the panel still shows the theme before (the switch
+  waits for it, up to two seconds). Load what the first frames need there
+  (pre-rendered layers, caches), so the first frame does not stall a video.
+  `render` must work without it too: previews do not call it.
 - The theme editor offers installed screens under *Theme → Look*, with their
   options.
 

@@ -275,7 +275,9 @@ class MemoryStream(Display):
 def test_the_main_loop_goes_one_frame_at_a_time_on_its_own_clock():
     """MainLoop.step draws one frame on the clock it is given: readings come by
     that clock, each frame reaches the streaming display, a requested theme
-    shows from the next frame on."""
+    shows once it is warmed up."""
+    import time
+
     from libre_panel.plugins import PluginHost
     from libre_panel.sensors.base import SensorHub
     from libre_panel.sensors.demo import DemoProvider
@@ -297,8 +299,13 @@ def test_the_main_loop_goes_one_frame_at_a_time_on_its_own_clock():
         assert len(display.frames) == 100 and all(region is None for _, region in display.frames)
         assert taken == [1000.0, 1001.0]  # slate reads its sensors once a second
         host.request_theme("libre-default", by="test", transition="cut")
-        clock.now += 1 / 50
-        out = loop.step(clock.now)
+        for _ in range(150):  # it is warmed up first (at most 2 s) while slate goes on
+            clock.now += 1 / 50
+            out = loop.step(clock.now)
+            if loop.status.theme == "libre-default":
+                break
+            assert out.size == (800, 480)
+            time.sleep(0.002)
         assert loop.status.theme == "libre-default" and out.size == (480, 320)
     finally:
         loop.close()
