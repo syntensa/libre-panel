@@ -2,11 +2,40 @@
 
 ## Unreleased
 
+**New**
+- Messages in the look of SPUR II: the band (`"toast": {"style": "band"}`,
+  or *Theme → Messages* in the editor). A glowing edge ignites from the
+  centre and the band rolls down from it, with a title, a cover or icon and
+  a progress bar that glides; turning the volume changes it in place
+  without blinking, another message rolls down inside the open band, and
+  one already leaving rolls back up. It fits every panel from 3.5" to the
+  9.2" bar, either way round
+- Two transitions after SPUR II, cheap for a panel's video encoder: `tube`
+  (a line ignites at mid-height and opens onto the new screen, live) and
+  `entrance` for a game or another mode (the screen closes to a line, the
+  game's logo or name lights up while "Game mode" or "Game ended" types
+  in, then the new screen opens)
+- Plugins: a toast style says how long a toast stays (`lifetime`) and how
+  long one without its own time holds (`hold_s`), and keeps what it knows
+  across theme switches; a transition can hide toasts while it plays
+  (`toasts = "hide"`) and decide case by case what a switch does
+  (`on_switch`); `context.image(key)` gives a published picture
+
 **Fixes**
 - Video mode: graphs that move a pixel per frame (`per_frame`) stood still
   about three seconds after the start and after every theme switch, while
   numbers and bars went on; scrolling graphs were drawn again on every frame
   instead of once per reading, which kept the helper thread busy
+- A mode change that brought a transition of its own (a game that ends
+  during its entrance) lost it while a transition that follows switches
+  played
+- A message on show was gone for good when a screen came that shows its
+  kind itself; now it goes on unseen and comes back with the next screen
+
+**Changes**
+- Without a queue (`"queue": false`), messages that come at the same moment
+  are decided one after the other: a warning that comes with a volume
+  change takes over from it at once
 
 ## 0.4.1 — 2026-10-10
 
