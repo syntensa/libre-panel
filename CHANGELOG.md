@@ -8,6 +8,11 @@
   numbers and bars went on; scrolling graphs were drawn again on every frame
   instead of once per reading, which kept the helper thread busy
 
+**Changes**
+- The main loop draws one frame at a time through `MainLoop.step(now)`, with
+  the sensor hub, display, host and clock given: tests and plugins' test
+  benches drive the real loop frame by frame instead of copying it
+
 ## 0.4.1 — 2026-10-10
 
 Upside down for panels mounted the other way round, and fixes from the first

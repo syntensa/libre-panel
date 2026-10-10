@@ -246,3 +246,60 @@ def test_auto_driver_falls_back_to_png(tmp_path):
     display.show(Image.new("RGB", (32, 16)))
     display.close()
     assert out.exists()
+
+
+class StepClock:
+    """The main loop's clock, set by the test."""
+
+    def __init__(self, now):
+        self.now = now
+
+    def __call__(self):
+        return self.now
+
+
+class MemoryStream(Display):
+    """A streaming display in memory: every frame is kept."""
+
+    streaming = True
+    stream_fps = 50
+
+    def __init__(self, config=None):
+        super().__init__(config or DeviceConfig())
+        self.frames = []
+
+    def show(self, frame, region=None):
+        self.frames.append((frame, region))
+
+
+def test_the_main_loop_goes_one_frame_at_a_time_on_its_own_clock():
+    """MainLoop.step draws one frame on the clock it is given: readings come by
+    that clock, each frame reaches the streaming display, a requested theme
+    shows from the next frame on."""
+    from libre_panel.plugins import PluginHost
+    from libre_panel.sensors.base import SensorHub
+    from libre_panel.sensors.demo import DemoProvider
+
+    clock = StepClock(1000.0)
+    hub = SensorHub([DemoProvider({"fixed_time": 1_700_000_000})])
+    taken = []
+    real_snapshot = hub.snapshot
+    hub.snapshot = lambda: taken.append(clock.now) or real_snapshot()
+    display, host = MemoryStream(), PluginHost()
+    config = Config(theme="slate", sensors=SensorsConfig(providers=["demo"]))
+    loop = app_module.MainLoop(config, host=host, hub=hub, display=display, clock=clock)
+    try:
+        for n in range(100):  # two seconds at 50 fps
+            clock.now = 1000.0 + n / 50
+            out = loop.step(clock.now)
+            assert out is not None and out.size == (800, 480)
+        assert loop.streaming and loop.fps == 50
+        assert len(display.frames) == 100 and all(region is None for _, region in display.frames)
+        assert taken == [1000.0, 1001.0]  # slate reads its sensors once a second
+        host.request_theme("libre-default", by="test", transition="cut")
+        clock.now += 1 / 50
+        out = loop.step(clock.now)
+        assert loop.status.theme == "libre-default" and out.size == (480, 320)
+    finally:
+        loop.close()
+        host.close()

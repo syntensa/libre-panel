@@ -21,7 +21,7 @@ from libre_panel.devices.virtual import VirtualDisplay
 from libre_panel.plugins.render import RenderContext
 from libre_panel.render.overlays import ToastLayer, transition
 from libre_panel.render.renderer import Renderer, changed_region
-from libre_panel.sensors.base import SensorHub, SensorProvider, create_provider
+from libre_panel.sensors.base import SensorHub, SensorProvider, Snapshot, create_provider
 from libre_panel.theme.model import THEME_FILENAME, Theme, ThemeError, find_theme, load_theme
 
 log = logging.getLogger(__name__)
@@ -324,72 +324,108 @@ def _same_device(a, b) -> bool:
     return replace(a, brightness=0, rotate=0) == replace(b, brightness=0, rotate=0)
 
 
-def run(
-    config: Config,
-    once: bool = False,
-    stop: threading.Event | None = None,
-    status: RunStatus | None = None,
-    host: Any = None,
-    on_config: Callable[[Config], None] | None = None,
-) -> None:
-    """Main loop: read sensors at the theme's rate, render at ``config.fps`` so
-    values glide between readings, and send only frames that changed. A
-    streaming display (video mode) gets every frame at its own steady rate.
+class MainLoop:
+    """One frame at a time of what :func:`run` does: follow switches, take
+    readings, draw, send. ``run`` drives it with the pacer; a test drives
+    :meth:`step` with its own clock, sensor hub, display and host.
 
-    With ``once`` a single frame is sent and any device error is raised.
-    ``status`` is kept up to date for status displays. ``host`` connects the
-    services (a :class:`~libre_panel.plugins.PluginHost`); ``on_config`` hears
-    about every config.toml that was loaded.
+    ``hub`` (built from the config without one) also gets the host's readings;
+    ``clock`` is the clock of the frames' times (``time.perf_counter``).
     """
-    stop = stop or threading.Event()
-    status = status or RunStatus()
-    i18n.set_language(config.language)
-    shown = _theme_name(config, host) if not once else config.theme
-    try:
-        theme = load_theme(find_theme(shown))
-    except ThemeError:
-        if shown == config.theme:
-            raise
-        log.warning("theme %r not found; showing %r", shown, config.theme)
-        shown = config.theme
-        theme = load_configured_theme(config)
-    refused: str | None = None  # a requested theme that failed to load
-    status.theme = shown
-    for warning in theme.warnings:
-        log.warning("theme %s: %s", shown, warning)
-    renderer = Renderer(theme, animate=config.fps > 1)
-    hub = build_hub(config)
-    if host is not None and not once:
-        hub.providers.append(host.provider())
-    display = create_display(config.device)
-    size = target_size(config, theme)
-    known = {config.path: config.stamp} if config.path and config.stamp else None
-    watcher = _Watcher(config.path, _theme_file(theme), known=known)
-    link = _Link(display, config.device.brightness, status)
-    toasts = ToastLayer(renderer)
-    blend: tuple[Any, Image.Image, float] | None = None  # a transition under way
-    shown_frame: Image.Image | None = None  # the last frame as it went out, toasts and all
-    switches = host.switches if host is not None else 0  # mode changes with a transition
-    last_frame: Image.Image | None = None
-    pacer = _Pacer()
-    planned: float | None = None  # when the pacer planned the next streaming frame
-    previous = None
-    turn = 0  # how the last frame went out: turned (180) or not
-    snapshot = None
-    next_sample = 0.0
-    try:
-        if once:
-            display.open()
-            display.set_brightness(config.device.brightness)
-            frame, _ = renderer.render(hub.snapshot())
-            frame = fit_frame(frame, size, background_of(renderer))
-            turn = config.device.rotate if _on_panel(display) else 0
-            display.show(turned(frame, turn), None)
-            return
-        while not stop.is_set():
-            started = time.perf_counter()  # fine-grained on every system (monotonic is not
-            # on Windows before Python 3.13); a streaming frame is drawn at its planned time
-            now, planned = (planned if planned is not None else started), None
+
+    def __init__(
+        self,
+        config: Config,
+        *,
+        once: bool = False,
+        status: RunStatus | None = None,
+        host: Any = None,
+        on_config: Callable[[Config], None] | None = None,
+        hub: SensorHub | None = None,
+        display: Display | None = None,
+        clock: Callable[[], float] = time.perf_counter,
+    ) -> None:
+        self.status = status = status or RunStatus()
+        self.host, self.on_config, self.clock = host, on_config, clock
+        i18n.set_language(config.language)
+        shown = _theme_name(config, host) if not once else config.theme
+        try:
+            theme = load_theme(find_theme(shown))
+        except ThemeError:
+            if shown == config.theme:
+                raise
+            log.warning("theme %r not found; showing %r", shown, config.theme)
+            shown = config.theme
+            theme = load_configured_theme(config)
+        self.refused: str | None = None  # a requested theme that failed to load
+        status.theme = shown
+        for warning in theme.warnings:
+            log.warning("theme %s: %s", shown, warning)
+        self.renderer = renderer = Renderer(theme, animate=config.fps > 1)
+        self.hub = hub if hub is not None else build_hub(config)
+        if host is not None and not once:
+            self.hub.providers.append(host.provider())
+        self.display = display if display is not None else create_display(config.device)
+        self.config, self.shown, self.theme = config, shown, theme
+        self.size = target_size(config, theme)
+        known = {config.path: config.stamp} if config.path and config.stamp else None
+        self.watcher = _Watcher(config.path, _theme_file(theme), known=known)
+        self.link = _Link(self.display, config.device.brightness, status)
+        self.toasts = ToastLayer(renderer)
+        self.blend: tuple[Any, Image.Image, float] | None = None  # a transition under way
+        self.shown_frame: Image.Image | None = None  # the last frame as it went out, toasts and all
+        self.switches = host.switches if host is not None else 0  # mode changes with a transition
+        self.last_frame: Image.Image | None = None
+        self.previous: Image.Image | None = None
+        self.turn = 0  # how the last frame went out: turned (180) or not
+        self.snapshot: Snapshot | None = None
+        self.next_sample = 0.0
+        self.started = 0.0  # when the last step began, on the clock
+
+    @property
+    def streaming(self) -> bool:
+        """Whether a connected streaming display wants every frame (video mode)."""
+        return self.link.connected and self.display.streaming
+
+    @property
+    def fps(self) -> int:
+        """The rate frames are planned at now (a mode's, the display's, config.fps)."""
+        return _fps(self.config, self.host, self.display)
+
+    def once(self) -> None:
+        """A single frame to the panel; device errors are raised."""
+        config, display, renderer = self.config, self.display, self.renderer
+        display.open()
+        display.set_brightness(config.device.brightness)
+        frame, _ = renderer.render(self.hub.snapshot())
+        frame = fit_frame(frame, self.size, background_of(renderer))
+        self.turn = config.device.rotate if _on_panel(display) else 0
+        display.show(turned(frame, self.turn), None)
+
+    def step(self, now: float | None = None) -> Image.Image | None:
+        """One frame: follow a switch, take readings when due, draw and send.
+
+        ``now`` is the time on :attr:`clock` the frame is planned for (None:
+        now). Returns the frame as the display gets it (turned as the panel
+        is mounted), or None while the panel is not connected.
+        """
+        config, host, status, hub, on_config = (
+            self.config, self.host, self.status, self.hub, self.on_config
+        )  # fmt: skip
+        shown, refused, theme, renderer = self.shown, self.refused, self.theme, self.renderer
+        display, size, watcher, link, toasts = (
+            self.display, self.size, self.watcher, self.link, self.toasts
+        )  # fmt: skip
+        blend, shown_frame = self.blend, self.shown_frame
+        switches, last_frame = self.switches, self.last_frame
+        previous, turn, snapshot, next_sample = (
+            self.previous, self.turn, self.snapshot, self.next_sample
+        )  # fmt: skip
+        out = None
+        self.started = started = self.clock()  # fine-grained on every system (monotonic is
+        # not on Windows before Python 3.13); a streaming frame is drawn at its planned time
+        now = started if now is None else now
+        try:  # the frame's state is kept whatever happens
             # While a transition plays, a switch waits for its end, unless the
             # transition says otherwise (Transition.switch: follow or restart).
             policy = getattr(blend[0], "switch", "wait") if blend is not None else None
@@ -489,18 +525,66 @@ def run(
                 host.emit("panel-connected" if link.connected else "panel-lost")
                 if link.connected and display.restarted:
                     host.emit("panel-restarted")  # back after a restart, not a replug
-            if link.connected and display.streaming:
-                planned = pacer.wait(_fps(config, host, display), stop)  # a steady clock
+        finally:
+            self.config, self.shown, self.refused, self.theme = config, shown, refused, theme
+            self.renderer, self.display, self.size, self.watcher = renderer, display, size, watcher
+            self.link, self.blend, self.shown_frame = link, blend, shown_frame
+            self.switches, self.last_frame, self.previous = switches, last_frame, previous
+            self.turn, self.snapshot, self.next_sample = turn, snapshot, next_sample
+        return out
+
+    def pause(self) -> float:
+        """Seconds to wait before the next frame when the display is not streaming."""
+        config, host, renderer, blend, toasts = (
+            self.config, self.host, self.renderer, self.blend, self.toasts
+        )  # fmt: skip
+        started, next_sample = self.started, self.next_sample
+        # While something glides, draw at full fps; otherwise wake for the next
+        # reading, but at least twice a second so a seconds clock never skips.
+        interval = 1 / _fps(config, host)
+        if not (renderer.moving or blend is not None or toasts.active):
+            interval = max(interval, min(0.5, next_sample - started))
+        return max(0.0, interval - (self.clock() - started))
+
+    def close(self) -> None:
+        self.display.close()
+        self.toasts.close()
+        self.renderer.close()
+        self.hub.close()
+
+
+def run(
+    config: Config,
+    once: bool = False,
+    stop: threading.Event | None = None,
+    status: RunStatus | None = None,
+    host: Any = None,
+    on_config: Callable[[Config], None] | None = None,
+) -> None:
+    """Main loop: read sensors at the theme's rate, render at ``config.fps`` so
+    values glide between readings, and send only frames that changed. A
+    streaming display (video mode) gets every frame at its own steady rate.
+
+    With ``once`` a single frame is sent and any device error is raised.
+    ``status`` is kept up to date for status displays. ``host`` connects the
+    services (a :class:`~libre_panel.plugins.PluginHost`); ``on_config`` hears
+    about every config.toml that was loaded.
+    """
+    stop = stop or threading.Event()
+    loop = MainLoop(config, once=once, status=status, host=host, on_config=on_config)
+    pacer = _Pacer()
+    planned: float | None = None  # when the pacer planned the next streaming frame
+    try:
+        if once:
+            loop.once()
+            return
+        while not stop.is_set():
+            loop.step(planned)
+            if loop.streaming:
+                planned = pacer.wait(loop.fps, stop)  # a steady clock
                 continue
+            planned = None
             pacer.reset()
-            # While something glides, draw at full fps; otherwise wake for the next
-            # reading, but at least twice a second so a seconds clock never skips.
-            interval = 1 / _fps(config, host)
-            if not (renderer.moving or blend is not None or toasts.active):
-                interval = max(interval, min(0.5, next_sample - started))
-            stop.wait(max(0.0, interval - (time.perf_counter() - started)))
+            stop.wait(loop.pause())
     finally:
-        display.close()
-        toasts.close()
-        renderer.close()
-        hub.close()
+        loop.close()
