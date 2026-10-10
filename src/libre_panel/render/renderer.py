@@ -138,6 +138,14 @@ def _rule_color(widget: dict[str, Any], value: float | None) -> str | None:
     return color
 
 
+def _steps(frac: float, length: float) -> float:
+    """``frac`` of ``length`` pixels in steps of the supersampled grid: a finer
+    change draws the same pixels, so a gliding bar is drawn again only when
+    it moves visibly."""
+    steps = max(1, round(length * SUPERSAMPLE))
+    return round(frac * steps) / steps
+
+
 def _smoothstep(u: float) -> float:
     return u * u * (3 - 2 * u)
 
@@ -311,6 +319,8 @@ class Renderer:
         self._strips: dict[str, _Strips] = {}  # graph id -> its strips (video mode)
         self._cache: dict[str, tuple[Any, Piece]] = {}
         self._texts: OrderedDict[tuple[str, str, str], Piece] = OrderedDict()
+        self._glyphs: OrderedDict[tuple[Any, ...], Image.Image] = OrderedDict()
+        self._glyph_lock = threading.Lock()
         # Modules become plain widgets laid out for their cells; the editor
         # gets one box per module.
         self.widgets, self.module_boxes = expand_modules(theme)
@@ -319,6 +329,8 @@ class Renderer:
         if not preview:  # costly sensors work only while a panel shows them
             want(self, _reads(self.widgets))
         self._background = self._load_background()
+        # Frames start from an opaque colour: pieces go on with a paste in place
+        self._opaque = (self.color(theme.background_color) or (0, 0, 0, 0))[3] == 255
         # Incremental compositing: the last frame and the pieces it was made of.
         # Only regions whose pieces changed are composed again, so a mostly
         # static screen costs little at 50 fps. The result is pixel-identical.
@@ -489,19 +501,32 @@ class Renderer:
         return out, pad
 
     @staticmethod
-    def _paste(canvas: Image.Image, layer: Image.Image, x: int, y: int) -> None:
-        """alpha_composite that tolerates layers hanging off the canvas."""
+    def _paste(
+        canvas: Image.Image, layer: Image.Image, x: int, y: int, opaque: bool = False
+    ) -> None:
+        """alpha_composite that tolerates layers hanging off the canvas. Onto an
+        ``opaque`` canvas, a paste through the layer's alpha gives the same
+        colours in place (the canvas's own alpha is not used afterwards)."""
         x0, y0 = max(x, 0), max(y, 0)
         x1, y1 = min(x + layer.width, canvas.width), min(y + layer.height, canvas.height)
         if x1 <= x0 or y1 <= y0:
             return
-        crop = layer.crop((x0 - x, y0 - y, x1 - x, y1 - y))
-        canvas.alpha_composite(crop, (x0, y0))
+        if (x0, y0, x1, y1) != (x, y, x + layer.width, y + layer.height):
+            layer = layer.crop((x0 - x, y0 - y, x1 - x, y1 - y))
+        if opaque:
+            canvas.paste(layer, (x0, y0), layer)
+        else:
+            canvas.alpha_composite(layer, (x0, y0))
 
     def _composite(
-        self, canvas: Image.Image, piece: Piece, origin: tuple[int, int] = (0, 0)
+        self,
+        canvas: Image.Image,
+        piece: Piece,
+        origin: tuple[int, int] = (0, 0),
+        opaque: bool = False,
     ) -> None:
-        """Draw ``piece`` onto ``canvas``, whose top left corner is ``origin`` on the panel."""
+        """Draw ``piece`` onto ``canvas``, whose top left corner is ``origin`` on
+        the panel (``opaque``: see :meth:`_paste`)."""
         ox, oy = origin
         if piece.backdrop is not None and piece.box is not None:
             bx, by, bw, bh = piece.box
@@ -520,7 +545,7 @@ class Renderer:
                     (region[0] - bx, region[1] - by, region[2] - bx, region[3] - by)
                 )
                 canvas.paste(blurred, region[:2], mask)
-        self._paste(canvas, piece.layer, piece.x - ox, piece.y - oy)
+        self._paste(canvas, piece.layer, piece.x - ox, piece.y - oy, opaque)
 
     @staticmethod
     def _extent(piece: Piece) -> tuple[int, int, int, int]:
@@ -633,7 +658,7 @@ class Renderer:
             if i == below and not (reused and done == below):
                 self._keep_underlay(region, [p for _, p in inside[:below]], part)
             try:
-                self._composite(part, piece, (x0, y0))
+                self._composite(part, piece, (x0, y0), self._opaque)
             except Exception as exc:  # one broken widget must not blank the panel
                 self._warn(f"widget {wid!r} failed: {exc}")
         return part
@@ -952,22 +977,37 @@ class Renderer:
         margin = max(2, widget.get("font_size", 24) // 6)  # room for overhanging glyphs
         w, h = math.ceil(total) + 2 * margin, ascent + descent
         layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(layer)
         pen = float(margin)
         for ch, advance in zip(text, advances, strict=True):
-            if tabular and ch in _DIGITS:
-                draw.text(
-                    (pen + (cell - font.getlength(ch)) / 2, 0),
-                    ch,
-                    font=font,
-                    fill=fill,
-                    anchor="la",
-                )
-            else:
-                draw.text((pen, 0), ch, font=font, fill=fill, anchor="la")
+            at = pen + (cell - font.getlength(ch)) / 2 if tabular and ch in _DIGITS else pen
+            glyph, gx = self._glyph(font, ch, fill, at, margin, h)
+            self._paste(layer, glyph, gx, 0)
             pen += advance
         left = math.floor(start) - margin
         return Piece(layer, left, y, box=[left + margin, y, math.ceil(total), h])
+
+    GLYPHS = 4096  # glyph images kept: a gliding number changes a digit or two at a time
+
+    def _glyph(
+        self, font: Any, ch: str, fill: RGBA, at: float, pad: int, h: int
+    ) -> tuple[Image.Image, int]:
+        """``ch`` drawn at ``at`` (its fraction of a pixel counts) on an image
+        ``pad`` px wider on each side, and where its left edge goes: kept, so
+        the next text with that character in that place costs no rendering."""
+        whole = math.floor(at)
+        key = (id(font), ch, fill, round(at - whole, 4), pad, h)
+        with self._glyph_lock:  # the helper thread draws texts too
+            image = self._glyphs.get(key)
+            if image is not None:
+                self._glyphs.move_to_end(key)
+                return image, whole - pad
+        image = Image.new("RGBA", (math.ceil(font.getlength(ch)) + 2 * pad + 1, h), (0, 0, 0, 0))
+        ImageDraw.Draw(image).text((at - whole + pad, 0), ch, font=font, fill=fill, anchor="la")
+        with self._glyph_lock:
+            self._glyphs[key] = image
+            while len(self._glyphs) > self.GLYPHS:
+                self._glyphs.popitem(last=False)
+        return image, whole - pad
 
     def _format(self, widget: dict[str, Any], reading: Any) -> tuple[str, float | None]:
         if reading is None or reading.value is None:
@@ -1009,8 +1049,12 @@ class Renderer:
         glide = self._glide_s()
         if widget.get("smooth") and glide > 0:  # the gliding value, with bars and rings
             state = self.motion.glide(widget["sensor"], value, now, glide, self._lead())
-            if state is not None and value is not None:
-                gliding, shown = self._format(widget, replace(reading, value=state[0]))
+            # 25 new texts a second at most, at the graphs' points: as fluid, half the work
+            at = self.motion.value(
+                widget["sensor"], max(grid(now) / RATE, self.motion.start(widget["sensor"]))
+            )
+            if state is not None and value is not None and at is not None:
+                gliding, shown = self._format(widget, replace(reading, value=at))
                 if gliding != text:  # settled once it reads the same
                     text, value = gliding, shown
                     self.moving = True
@@ -1713,8 +1757,9 @@ class Renderer:
         target = _number(snapshot.value(widget["sensor"]))
         value = self._eased(widget, target, now)
         frac = _fraction(value, widget["min"], widget["max"], widget.get("scale", "linear"))
+        frac = _steps(frac, w if widget["direction"] in ("right", "left") else h)
         paint = self._rule_paint(widget, value, now)
-        key = (round(frac, 4), paint)
+        key = (frac, paint)
         return self._cached(widget, key, lambda: self._bar_piece(widget, frac, paint, x, y, w, h))
 
     def _bar_piece(
@@ -1792,10 +1837,10 @@ class Renderer:
         target = _number(snapshot.value(widget["sensor"]))
         value = self._eased(widget, target, now)
         frac = _fraction(value, widget["min"], widget["max"], widget.get("scale", "linear"))
+        sweep = abs(widget["end_angle"] - widget["start_angle"])
+        frac = _steps(frac, math.radians(sweep) * max(widget["w"], widget["h"]) / 2)
         paint = self._rule_paint(widget, value, now)
-        return self._cached(
-            widget, (round(frac, 4), paint), lambda: self._gauge_piece(widget, frac, paint)
-        )
+        return self._cached(widget, (frac, paint), lambda: self._gauge_piece(widget, frac, paint))
 
     def _gauge_piece(
         self, widget: dict[str, Any], frac: float, paint: tuple[RGBA, RGBA | None]

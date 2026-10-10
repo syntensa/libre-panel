@@ -130,8 +130,11 @@ def test_numbers_glide_with_smooth_and_read_the_reading_without():
         renderer.render(snap(v=100.0), k / 50)
         texts.append(int(shown_text(renderer, "m")))
     assert shown_text(renderer, "raw") == "100"
-    assert texts[0] < 20 and texts == sorted(texts) and len(set(texts)) > 15  # counts up
-    assert abs(texts[4] - renderer.motion.value("v", 5 / 50)) <= 0.5  # the bar's value
+    # it counts up, a new number 25 times a second (as the graphs take their points)
+    assert texts[0] < 20 and texts == sorted(texts) and len(set(texts)) >= 12
+    changes = [i for i in range(1, len(texts)) if texts[i] != texts[i - 1]]
+    assert all(b - a >= 2 for a, b in zip(changes, changes[1:], strict=False)), texts
+    assert abs(texts[4] - renderer.motion.value("v", 4 / 50)) <= 0.5  # the bar's value
     for k in range(26, 100):  # settled: the reading itself, nothing moves
         renderer.render(snap(v=100.0), k / 50)
     assert shown_text(renderer, "m") == "100" and not renderer.moving

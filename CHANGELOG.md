@@ -34,8 +34,11 @@
   instead of once per reading, which kept the helper thread busy
 
 **Changes**
-- Cards draw about five times faster (only their round corners are drawn
-  three times larger), so a theme's first frame takes half as long
+- Drawing is faster: cards about five times (only their round corners are
+  drawn three times larger), so a theme's first frame takes half as long;
+  numbers that change a digit at a time about six times (each digit is drawn
+  once and kept); bars and rings are drawn again only when they move by a
+  visible amount, and pieces go onto the frame in place
 - The main loop draws one frame at a time through `MainLoop.step(now)`, with
   the sensor hub, display, host and clock given: tests and plugins' test
   benches drive the real loop frame by frame instead of copying it

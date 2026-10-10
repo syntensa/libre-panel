@@ -222,6 +222,11 @@ class Motion:
         spring = self.springs.get(key)
         return None if spring is None else spring.at(t)
 
+    def start(self, key: str) -> float:
+        """When the oldest piece of ``key``'s glide that is kept begins."""
+        spring = self.springs.get(key)
+        return spring.pieces[0][1] if spring is not None and spring.pieces else -math.inf
+
     def fade(self, key: Any, step: int, now: float) -> float:
         """The colour step a value shows (0: its own colour, 1: the first
         threshold's, ...), on its way to ``step`` one step per ``FADE_S``:
