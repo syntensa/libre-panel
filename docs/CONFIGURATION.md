@@ -395,7 +395,7 @@ when = { time = "22:00-06:30" }        # may cross midnight
 
   | Condition | Holds when |
   |---|---|
-  | `music = true` | something is playing (`media.playing`) |
+  | `music = true` | something is playing (`media.state` is "Playing") |
   | `microphone = true` | a program is recording (Windows; elsewhere never) |
   | `cpu_over = 80`, `gpu_over = 80` | the mean load over `for_s` seconds (20 by default) is at least that; it counts once four fifths of the window has been seen, so a peak at the start is no load |
   | `apps = ["a.exe"]` | one of these programs is in front (Windows; where Libre Panel cannot tell, one of them runs). Case does not matter |

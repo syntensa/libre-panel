@@ -16,7 +16,7 @@ from libre_panel.services import autopilot as autopilot_service
 from libre_panel.services import machine as computer
 from libre_panel.services.autopilot import in_time, parse_rules, parse_time
 
-READINGS = {"music": "media.playing", "cpu": "cpu.load", "gpu": "gpu.load"}
+READINGS = {"cpu": "cpu.load", "gpu": "gpu.load"}
 
 
 class Clock:
@@ -49,7 +49,10 @@ class Desk:
     def sample(self, seconds=1.0, **readings):
         """Time passes and a snapshot with these readings (music=1, cpu=90) is taken."""
         self.clock.now += seconds
+        music = readings.pop("music", 0)
         found = {READINGS[name]: Reading(READINGS[name], value) for name, value in readings.items()}
+        if music:
+            found["media.state"] = Reading("media.state", "Playing")
         self.host.emit("sample", wait=True, snapshot=Snapshot(readings=found))
 
     def run(self, seconds, step=1.0, **readings):
@@ -139,6 +142,29 @@ def test_rules_that_can_never_hold_are_reported_and_left_out(desk, caplog):
         assert name in caplog.text
     assert "unknown condition 'weather'" in caplog.text
     assert "Switched off" not in caplog.text
+
+
+def test_music_is_what_media_state_says_with_media_playing_as_the_second_choice(desk):
+    d = desk([MUSIC], **QUICK)
+
+    def sample(*readings):
+        d.clock.now += 1
+        d.host.emit(
+            "sample",
+            wait=True,
+            snapshot=Snapshot(readings={r.key: r for r in readings}),
+        )
+
+    sample(Reading("media.state", "Paused"), Reading("media.playing", 1))  # the state is the word
+    assert d.theme is None
+    sample(Reading("media.state", "playing"))
+    assert d.theme == "studio"
+    sample(Reading("media.state", "Stopped"))
+    assert d.theme is None
+    sample(Reading("media.playing", 1))  # a source that only knows 1 and 0
+    assert d.theme == "studio"
+    sample(Reading("media.playing", 0))
+    assert d.theme is None
 
 
 def test_without_usable_rules_it_says_so_and_does_nothing(desk, caplog):
@@ -425,7 +451,7 @@ def test_the_real_themes_are_looked_up_when_nothing_is_replaced(desk):
 
 def test_the_readings_the_rules_use_are_asked_for(desk):
     desk([MUSIC, LOAD, {"theme": "a", "when": {"gpu_over": 50}}])
-    assert wanted("media.playing") and wanted("cpu.load") and wanted("gpu.load")
+    assert wanted("media.state") and wanted("cpu.load") and wanted("gpu.load")
 
 
 def test_the_autopilot_comes_from_the_config():

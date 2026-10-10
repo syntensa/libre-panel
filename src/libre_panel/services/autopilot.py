@@ -26,7 +26,7 @@ from typing import Any
 from libre_panel.plugins import Service
 from libre_panel.sensors.base import Snapshot
 from libre_panel.services import machine as computer
-from libre_panel.services.readings import number
+from libre_panel.services.readings import is_playing, number
 
 CONDITIONS = ("music", "microphone", "cpu_over", "gpu_over", "apps", "time")
 FILL = 0.8  # a mean over a window counts once this much of it has been seen
@@ -203,7 +203,7 @@ class Autopilot(Service):
             return
         keys = []
         if "music" in self.reads:
-            keys.append("media.playing")
+            keys.append("media.state")
         if "cpu_over" in self.reads:
             keys.append("cpu.load")
         if "gpu_over" in self.reads:
@@ -226,7 +226,7 @@ class Autopilot(Service):
     def _read(self, snapshot: Snapshot, now: float) -> None:
         signals = self.signals
         if "music" in self.reads:
-            signals.music = bool(snapshot.value("media.playing"))
+            signals.music = is_playing(snapshot)
         if self.longest:
             if not signals.loads or now - signals.loads[-1][0] >= LOAD_EVERY_S:
                 signals.loads.append(

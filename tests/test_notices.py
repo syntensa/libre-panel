@@ -72,7 +72,11 @@ def volume(level, muted=False):
 
 
 def playing(title, artist="Artist", on=1, progress=None):
-    found = {"media.title": title, "media.playing": on}
+    found = {
+        "media.title": title,
+        "media.state": "Playing" if on else "Paused",
+        "media.playing": on,
+    }
     if artist:
         found["media.artist"] = artist
     if progress is not None:

@@ -23,7 +23,7 @@ from typing import Any, NamedTuple
 from libre_panel.i18n import t
 from libre_panel.plugins import Service
 from libre_panel.sensors.base import Snapshot
-from libre_panel.services.readings import number, readable
+from libre_panel.services.readings import is_playing, number, readable
 
 VOLUME_STEP = 1.0  # percent: a smaller change is no news
 HINT_AFTER_S = 30.0  # without a volume reading for this long, say what is missing
@@ -185,7 +185,7 @@ class Notices(Service):
 
     def _check_music(self, snapshot: Snapshot, now: float) -> None:
         title = snapshot.value("media.title")
-        if not snapshot.value("media.playing") or not isinstance(title, str):
+        if not is_playing(snapshot) or not isinstance(title, str):
             return  # paused: the track stays what it was, so resuming says nothing
         artist = snapshot.value("media.artist")
         track = (title, artist if isinstance(artist, str) else "")
