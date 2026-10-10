@@ -1038,6 +1038,7 @@ def test_main_loop_shows_toasts_and_fades_between_themes(monkeypatch, isolated_h
     from PIL import ImageStat
 
     from libre_panel.plugins import Toast
+    from libre_panel.render import overlays
     from libre_panel.theme.model import find_theme
 
     # a theme of the same size, plain white, to fade to
@@ -1048,6 +1049,9 @@ def test_main_loop_shows_toasts_and_fades_between_themes(monkeypatch, isolated_h
     (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
 
     monkeypatch.setattr(app, "create_display", Capture)
+    # long enough for frames in between also where the new theme's first frame is
+    # slow to draw (a busy CI machine took longer than the usual 0.4 s)
+    monkeypatch.setattr(overlays._Fade, "duration", 2.0)
     Capture.frames = []  # not the last test's frames while the display is not open yet
     host = PluginHost()
     config = Config(theme="libre-default", fps=20, sensors=SensorsConfig(providers=["demo"]))
@@ -1065,7 +1069,7 @@ def test_main_loop_shows_toasts_and_fades_between_themes(monkeypatch, isolated_h
         count = len(Capture.frames)
         host.request_theme("white", by="test", transition="fade")
         assert wait_for(lambda: status.theme == "white")
-        time.sleep(0.8)
+        time.sleep(2.5)
     finally:
         stop.set()
         thread.join(10)
