@@ -109,6 +109,9 @@ it is. Set `model = "turing-5"` (or `-2.1`, `-8.8`) to be sure.
 Awake, they use generic Linux USB gadget ids, which other devices use too (a
 Raspberry Pi as a USB gadget, say): with `model = "auto"` Libre Panel only
 talks to such a port when it has the panels' serial number.
+A rev. C panel loses an update whose closing bytes fill a 250-byte block or
+are split over two (it then answers `needReSend:1` and freezes); Libre Panel
+sends such an update in two parts, and a whole frame if the panel asks.
 Unlike turing-smart-screen-python, Libre Panel does not send the rev. C
 `OPTIONS` command: it also stores the panel's start mode and sleep time. If
 a rev. C panel stays dark with Libre Panel, please report it with the

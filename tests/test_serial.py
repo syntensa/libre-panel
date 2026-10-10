@@ -410,6 +410,77 @@ def test_rev_c_counts_its_boxes(ports, no_waiting):
     assert panel.counts == [0, 1, 2]
 
 
+def sweep(screen, frames, w, h):
+    """Boxes of 360 sizes, among them some of each length the panel would lose,
+    the frames in turn; returns what the panel should show."""
+    expected = frames[0].copy()
+    screen.show(frames[0])
+    sizes = ((bw, bh) for bw in range(1, 61) for bh in (1, 2, 5, 7, 19, 30))
+    for i, (bw, bh) in enumerate(sizes):
+        box = (10, 10, 10 + bw, 10 + bh)
+        frame = frames[i % len(frames)]
+        screen.show(frame, box)
+        expected.paste(frame.crop(box), box[:2])
+    return expected
+
+
+@pytest.mark.parametrize(
+    ("model", "orientation", "rom"),
+    [("turing-5", "landscape", 88), ("turing-5", "portrait", 90),
+     ("turing-2.1", "portrait", 87), ("turing-8.8", "landscape", 88)],
+)  # fmt: skip
+def test_rev_c_never_sends_a_box_the_panel_would_lose(
+    ports, no_waiting, monkeypatch, model, orientation, rom
+):
+    """A box whose closing EF 69 fills a 250-byte block or is split over two is
+    lost: the panel answers "needReSend:1" and freezes (#3). Such boxes go out
+    as two."""
+    w, h = find_model(model).size(orientation)
+    frames = [picture((w, h), seed=i * 50) for i in range(3)]
+    panel = ports(FakeRevC(model, rom), **AWAKE)
+    with display(model=model) as screen:
+        expected = sweep(screen, frames, w, h)
+    assert panel.unsafe == 0 and not panel.lost
+    whole = ports(FakeRevC(model, rom), **AWAKE)
+    with display(model=model) as screen:
+        screen.show(expected)
+    assert ImageChops.difference(panel.screen, whole.screen).getbbox() is None
+    # without the split the panel loses boxes; each time its status says so,
+    # and a whole frame brings it back
+    monkeypatch.setattr(turing_rev_c, "UNSAFE_ENDS", frozenset())
+    lossy = ports(FakeRevC(model, rom), **AWAKE)
+    with display(model=model) as screen:
+        sweep(screen, frames, w, h)
+    assert lossy.unsafe >= 2 and lossy.full_frames == 1 + lossy.unsafe
+
+
+def test_rev_c_sends_the_whole_frame_when_the_panel_lost_a_box(ports, no_waiting):
+    panel = ports(FakeRevC("turing-5"), **AWAKE)
+    first, second, box = rev_c_frames("turing-5", "landscape")
+    with display(model="turing-5") as screen:
+        screen.show(first)
+        panel.lost = True  # as if a box had gone astray
+        screen.show(second, box)  # lost too; the status says so
+        assert panel.full_frames == 1
+        screen.show(second, box)  # then the whole frame
+        assert panel.full_frames == 2 and not panel.lost
+        screen.show(first, box)
+    assert panel.boxes == 1  # boxes again after that
+
+
+def test_an_awake_rev_c_is_not_woken_again(ports, no_waiting):
+    """Its sleeping side may stay on the bus while it is awake (#3): the awake
+    port is used and the other one is not touched."""
+    asleep = ports(FakeRevC("turing-5"), device="/dev/ttyACM0", vid=0x1A86, pid=0xCA21,
+                   serial_number="CT21INCH")  # fmt: skip
+    panel = ports(FakeRevC("turing-5"), device="/dev/ttyACM1", vid=0x1D6B, pid=0x0106,
+                  serial_number="20080411")  # fmt: skip
+    with display(model="turing-5") as screen:
+        screen.show(picture((800, 480)))
+    assert panel.full_frames == 1 and asleep.commands == [] and not asleep.closed
+    assert no_waiting == []
+
+
 def test_rev_c_wakes_a_sleeping_panel(ports, no_waiting):
     awake = FakeRevC("turing-5")
 
@@ -546,7 +617,7 @@ def test_rev_c_logs_what_the_panel_says(ports, no_waiting, caplog):
         panel.answers += b"needReSend:1" + bytes(1012)  # a later status says something
         screen.show(picture((800, 480), seed=80), (10, 10, 60, 40))
     said = [r.getMessage() for r in caplog.records if "panel status" in r.getMessage()]
-    assert said[0].endswith("1024 bytes, no text") and "needReSend:1" in said[-1]
+    assert said[0].endswith("needReSend:0|renderCnt:0") and "needReSend:1" in said[-1]
 
 
 def test_a_model_of_another_kind_names_the_right_one(ports, no_waiting):

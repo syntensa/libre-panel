@@ -322,6 +322,11 @@ class FakeRevC(FakeSerial):
         self.counts: list[int] = []
         self.buffer = bytearray()
         self._expect = None
+        # Like the real panel, it loses a box whose data ends where the closing
+        # EF 69 fills a 250-byte block or is split over two; then it asks to send
+        # again and shows no box until a whole frame comes.
+        self.lost = False
+        self.unsafe = 0
 
     def write(self, data: bytes) -> int:
         self._check()
@@ -352,6 +357,9 @@ class FakeRevC(FakeSerial):
                 data = bytes(buffer[:cut_n])
                 if kind == "box":
                     assert buffer[cut_n : cut_n + 2] == b"\xef\x69", "box data must end with EF 69"
+                    if cut_n % 250 in (0, 248, 249):
+                        self.unsafe += 1
+                        self.lost = True
                 del buffer[:total]
                 data = self._uncut(data) if cut_n != n else data
                 self._expect = None
@@ -369,7 +377,7 @@ class FakeRevC(FakeSerial):
             if opcode == 0x01:
                 self.answers += self.hello.ljust(23, b"\0")
             elif opcode in (0x96, 0xCF):  # STOP_MEDIA, QUERY_STATUS: a status
-                self.answers += bytes(1024)
+                self.answers += self.status()
             elif opcode == 0x7B:
                 self.brightness.append(block[10])
             elif opcode == 0x2C:
@@ -384,13 +392,19 @@ class FakeRevC(FakeSerial):
                 self.counts.append(int.from_bytes(block[10:14], "big"))
                 self._expect = ("box", size - 2)
 
+    def status(self) -> bytes:
+        return f"needReSend:{int(self.lost)}|renderCnt:0".encode().ljust(1024, b"\0")
+
     def _full(self, data: bytes) -> None:
         b, g, r, _a = Image.frombytes("RGBA", self.screen.size, data).split()
         self.screen = Image.merge("RGB", (r, g, b))
         self.full_frames += 1
+        self.lost = False
         self.answers += bytes(1024)
 
     def _box(self, rows: bytes) -> None:
+        if self.lost:
+            return  # waits for a whole frame
         four = self.model != "turing-2.1" and self.rom > 88
         size = 4 if four else 3
         stride = self.screen.width

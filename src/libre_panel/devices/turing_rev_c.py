@@ -21,7 +21,12 @@ uses it on these panels:
 - A box: UPDATE_BITMAP with the data size and a running count, then row by
   row the row's offset in the framebuffer (3 bytes), its width (2 bytes) and
   its pixels (BGRA, or BGR on the 2.1" and on ROM 88 and older), then
-  0xEF 0x69; then QUERY_STATUS and a status read.
+  0xEF 0x69; then QUERY_STATUS and a status read ("needReSend:0|renderCnt:0").
+- The panel loses a box whose data ends where the closing 0xEF 0x69 fills its
+  250-byte block to the end or is split over two blocks: it waits for data
+  that never comes, answers "needReSend:1" and shows no box any more (found by
+  gwendal-h for turing-smart-screen-python, PR #348). Such a box goes out as
+  two; should the panel still ask, a whole frame follows.
 - SET_BRIGHTNESS: 0-255.
 
 Never sent: RESTART, TURNOFF/TURNON, and OPTIONS, which the reference sends
@@ -68,6 +73,8 @@ ASLEEP_IDS = {(0x1A86, 0xCA21)}
 AWAKE_IDS = {(0x0525, 0xA4A7), (0x1D6B, 0x0121), (0x1D6B, 0x0106)}
 AWAKE_SERIAL = "20080411"
 WAKE_TRIES = 15
+# Where a box's data may not end in its last 250-byte block (see above).
+UNSAFE_ENDS = frozenset({0, 248, 249})
 
 
 def padded(message: bytes, fill: int = 0x00) -> bytes:
@@ -88,6 +95,15 @@ def bgra(image: Image.Image) -> bytes:
 def bgr(image: Image.Image) -> bytes:
     r, g, b = image.convert("RGB").split()
     return Image.merge("RGB", (b, g, r)).tobytes()
+
+
+def halves(image: Image.Image, x: int, y: int) -> list[tuple[Image.Image, int, int]]:
+    """``image`` at (x, y) as two boxes: its rows but the last, and the last one
+    (a single row: its pixels but the last, and the last one)."""
+    w, h = image.size
+    if h > 1:
+        return [(image.crop((0, 0, w, h - 1)), x, y), (image.crop((0, h - 1, w, h)), x, y + h - 1)]
+    return [(image.crop((0, 0, w - 1, 1)), x, y), (image.crop((w - 1, 0, w, 1)), x + w - 1, y)]
 
 
 def is_asleep(info) -> bool:
@@ -115,6 +131,7 @@ class RevCDisplay(SerialDisplay):
         self.count = 0
         # for the log (-v): what the panel last said, and the updates of the last minute
         self._said: str | None = None
+        self.resync = False  # the panel lost a box: the next frame goes out whole
         self._minute = (time.monotonic(), 0, 0, 0.0)  # (since, boxes, whole frames, slowest s)
 
     # -- finding and waking ----------------------------------------------------
@@ -124,21 +141,18 @@ class RevCDisplay(SerialDisplay):
 
         port = getattr(self.config, "port", "")
         ports = serial_link._ports()
-        for info in ports:
-            if is_asleep(info) and not (port and info.device != port):
-                hint = find_model(SIZE_SERIALS.get(info.serial_number or "", ""))
-                if hint is not None and not self.configured:
-                    self.model, self.sized = hint, True
-                ports = self._wake(info)
-                port = ""  # the port named the sleeping panel; awake, it has another
-                break
-        awake = [
-            p
-            for p in ports
-            if is_awake(p)
-            and not (port and p.device != port)
-            and (self.configured or port or p.serial_number == AWAKE_SERIAL)  # see GADGET_IDS
-        ]
+        for info in ports:  # asleep, its serial number may say the size
+            hint = find_model(SIZE_SERIALS.get(info.serial_number or "", ""))
+            if is_asleep(info) and hint is not None and not self.configured:
+                self.model, self.sized = hint, True
+        awake = self._awake(ports, port)
+        if not awake:  # an awake panel is taken as it is: only a sleeping one is woken
+            for info in ports:
+                if is_asleep(info) and not (port and info.device != port):
+                    ports = self._wake(info)
+                    port = ""  # the port named the sleeping panel; awake, it has another
+                    break
+            awake = self._awake(ports, port)
         if not awake and not port:
             raise DeviceError(t("no {panel} found on a serial port", panel=self.family))
         device = awake[0].device if awake else port
@@ -152,6 +166,17 @@ class RevCDisplay(SerialDisplay):
             self.close()
             raise
         log.info("connected to %s on %s (ROM %d)", self.model.label, device, self.rom)
+
+    def _awake(self, ports: list, port: str) -> list:
+        """Awake rev. C ports (on ``port``, if set), the panels' serial number first."""
+        found = [
+            p
+            for p in ports
+            if is_awake(p)
+            and not (port and p.device != port)
+            and (self.configured or port or p.serial_number == AWAKE_SERIAL)  # see GADGET_IDS
+        ]
+        return sorted(found, key=lambda p: p.serial_number != AWAKE_SERIAL)
 
     def _wake(self, info) -> list:
         """Open a sleeping panel's port until it comes back awake (up to 15 s)."""
@@ -211,6 +236,8 @@ class RevCDisplay(SerialDisplay):
             if fits:
                 self.model = fits[0]
             self.sized = True
+        if self.resync:
+            region = None  # a whole frame brings the panel back in step
         super().show(frame, region)
 
     def send_bitmap(self, x0: int, y0: int, x1: int, y1: int, image: Image.Image) -> None:
@@ -218,6 +245,7 @@ class RevCDisplay(SerialDisplay):
         started = time.monotonic()
         whole = (x0, y0, x1, y1) == (0, 0, width - 1, height - 1)
         if whole:
+            self.resync = False
             self._full(image)
         else:
             self._box(image, x0, y0)
@@ -228,9 +256,14 @@ class RevCDisplay(SerialDisplay):
         to look first when a panel stops showing new frames."""
         text = "".join(c for c in answer.decode("ascii", "ignore") if c in string.printable)
         said = text.strip()[:160] or (f"{len(answer)} bytes, no text" if answer else "no answer")
-        if said != self._said:
+        changed = said != self._said
+        if changed:
             log.debug("panel status (update %d): %s", self.count, said)
             self._said = said
+        if "needReSend:1" in text and not self.resync:
+            if changed:  # once, should it keep asking
+                log.info("the panel lost an update; sending the whole frame again")
+            self.resync = True
 
     def _count_update(self, whole: bool, seconds: float) -> None:
         since, boxes, frames, slowest = self._minute
@@ -265,6 +298,21 @@ class RevCDisplay(SerialDisplay):
         self._heard(self._command(QUERY_STATUS, read=STATUS_SIZE))
 
     def _box(self, image: Image.Image, x: int, y: int) -> None:
+        rows = self._rows(image, x, y)
+        data = cut(rows) if len(rows) > 250 else rows
+        if len(data) % 250 in UNSAFE_ENDS:  # the panel would lose it: two boxes instead
+            for part, px, py in halves(image, x, y):
+                self._box(part, px, py)
+            return
+        head = UPDATE_BITMAP + (len(rows) + 2).to_bytes(3, "big") + bytes(3)
+        head += self.count.to_bytes(4, "big")
+        self._command(head)
+        self._command(data + b"\xef\x69")
+        self._heard(self._command(QUERY_STATUS, read=STATUS_SIZE))
+        self.count += 1
+
+    def _rows(self, image: Image.Image, x: int, y: int) -> bytes:
+        """The box's rows in the panel's framebuffer: offset, width, pixels."""
         native_w, native_h = self.model.native_width, self.model.native_height
         width, height = self.model.size(self.orientation)  # the panel in this orientation
         x0, y0 = x, y
@@ -292,10 +340,4 @@ class RevCDisplay(SerialDisplay):
             rows += ((x0 + h) * stride + y0).to_bytes(3, "big")
             rows += image.width.to_bytes(2, "big")
             rows += pixels[h * line : (h + 1) * line]
-        head = UPDATE_BITMAP + (len(rows) + 2).to_bytes(3, "big") + bytes(3)
-        head += self.count.to_bytes(4, "big")
-        data = cut(bytes(rows)) if len(rows) > 250 else bytes(rows)
-        self._command(head)
-        self._command(data + b"\xef\x69")
-        self._heard(self._command(QUERY_STATUS, read=STATUS_SIZE))
-        self.count += 1
+        return bytes(rows)

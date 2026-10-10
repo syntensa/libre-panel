@@ -11,6 +11,13 @@
 - A panel set up as the wrong kind (a rev. A model on a rev. C panel's port)
   no longer stays dark without a word: Libre Panel names the models that fit
 - Waking a rev. C panel works with `port` set to its sleeping port
+- A rev. C panel froze after 20 seconds to a few minutes: it loses an update
+  whose closing bytes fill a 250-byte block or are split over two, answers
+  "needReSend:1" and shows nothing new (found by gwendal-h for
+  turing-smart-screen-python). Such updates now go out in two parts, and should
+  the panel still ask, the whole frame follows (#3)
+- An awake rev. C panel is used as it is: Libre Panel no longer opens the port
+  of its sleeping side, which may stay on the bus, or another device's (#3)
 - A panel set in the configuration whose size is not the theme's crashed
   Libre Panel ("unknown color specifier: '@bg'") with every built-in theme;
   the frame is scaled to fit again (#3)
