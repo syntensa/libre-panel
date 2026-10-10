@@ -63,7 +63,17 @@ port = ""
 providers = @PROVIDERS@
 
 [sensors.librehardwaremonitor]
-# Windows: the GPU, temperatures, power and fans come from LibreHardwareMonitor.
+# Windows: the GPU, temperatures, power and fans come from LibreHardwareMonitor. The
+# Windows downloads read it inside Libre Panel, no other program is needed. The CPU's
+# temperature and power also need Libre Panel to run as administrator
+# (libre-panel autostart enable --elevated) and the PawnIO driver (https://pawnio.eu).
+# "auto" reads it inside Libre Panel where it can and else asks the web server of a
+# LibreHardwareMonitor that you run yourself; "inprocess" and "webserver" choose. With a
+# pip install, inside needs pip install "libre-panel[lhm]" and dll_dir: the folder with
+# LibreHardwareMonitor's .NET libraries.
+# mode = "auto"
+# dll_dir = ""
+# The web server of LibreHardwareMonitor, at url:
 # Run it as administrator and turn on Options -> Remote Web Server -> Run.
 # While it does not run those readings show "--" and nothing else is lost.
 url = "http://127.0.0.1:8085/data.json"

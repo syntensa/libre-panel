@@ -1,12 +1,20 @@
-"""Windows sensors via LibreHardwareMonitor's "Remote Web Server".
+"""Windows sensors from LibreHardwareMonitor: the GPU, temperatures, power and fans.
 
-LibreHardwareMonitor (MPL-2.0) runs as a separate program; enable
-Options -> Remote Web Server and Libre Panel reads its ``data.json``
-(format checked against real output, see tests/data/lhm_data.json).
-Every sensor is exposed under its raw id (``lhm:/amdcpu/0/temperature/2``) and
-the common ones also get friendly aliases such as ``cpu.temp`` or ``gpu.load``.
-With several GPUs the dedicated one is used; ``gpu = "RTX 4080"`` in
-``[sensors.librehardwaremonitor]`` picks one by name.
+LibreHardwareMonitor (MPL-2.0) is read one of two ways, chosen by ``mode`` in
+``[sensors.librehardwaremonitor]``:
+
+- **Inside Libre Panel** (``lhm_inprocess``): its .NET library is loaded through pythonnet
+  and read in a thread. The Windows downloads carry it; with pip it needs
+  ``pip install "libre-panel[lhm]"`` and a ``dll_dir``. CPU temperature and power then need
+  Libre Panel to run as administrator (and the PawnIO driver).
+- **Its web server**: LibreHardwareMonitor runs as a separate program, as administrator,
+  with Options -> Remote Web Server; Libre Panel reads its ``data.json`` (format checked
+  against real output, see tests/data/lhm_data.json).
+
+``auto`` (the default) takes the first way where it is possible and the second otherwise.
+Either way every sensor is exposed under its raw id (``lhm:/amdcpu/0/temperature/2``) and
+the common ones also get friendly aliases such as ``cpu.temp`` or ``gpu.load``, made by the
+same code. With several GPUs the dedicated one is used; ``gpu = "RTX 4080"`` picks one by name.
 
 When the web server stops answering, its readings are kept for
 ``stale_seconds`` (5 by default) and then dropped, so the panel shows "--"
@@ -19,6 +27,7 @@ waits that grow to half a minute while nothing answers, and one line in the log.
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import re
@@ -42,6 +51,8 @@ REQUEST_SECONDS = 1.0  # one request, connecting included: it answers in millise
 BACKOFF_SECONDS = 30.0  # the longest wait between two requests while nothing answers
 # What on Windows only LibreHardwareMonitor gives (psutil has no sensors there).
 HARDWARE_KEYS = ("cpu.temp", "gpu.temp", "cpu.power", "gpu.power")
+MODES = ("auto", "inprocess", "webserver")
+PAWNIO_URL = "https://pawnio.eu"  # the driver LibreHardwareMonitor reads the CPU through
 
 # alias -> (sensor type, preferred sensor names in order), per device kind.
 # Names as LibreHardwareMonitor reports them for Intel, AMD and NVIDIA.
@@ -263,21 +274,74 @@ def fetch_tree(url: str, timeout: float = REQUEST_SECONDS) -> dict[str, Any]:
         return json.loads(response.read().decode("utf-8"))
 
 
+@dataclass(frozen=True)
+class LhmStatus:
+    """How LibreHardwareMonitor is read, and what keeps its CPU sensors away."""
+
+    mode: str  # "inprocess" (inside Libre Panel) or "webserver"
+    elevated: bool | None = None  # Libre Panel runs as administrator (inprocess only)
+    ring0: bool | None = None  # the CPU's sensors give real values; None: no such sensors / unknown
+    pawnio: str | None = None  # version of the installed PawnIO driver ("" unknown), None: none
+    error: str = ""  # why it could not start (inprocess only)
+
+
+def ring0_steps(status: LhmStatus) -> list[str]:
+    """What stands between the CPU's sensors and Libre Panel, from what is known: it has
+    to run as administrator, and the PawnIO driver (2.0 or newer) has to be installed."""
+    steps = []
+    if status.elevated is False:
+        steps.append("run Libre Panel as administrator (libre-panel autostart enable --elevated)")
+    if status.pawnio is None:
+        steps.append(f"install the PawnIO driver ({PAWNIO_URL})")
+    elif (old := re.match(r"\d+", status.pawnio)) and int(old.group()) < 2:
+        steps.append(f"update the PawnIO driver to version 2 or newer ({PAWNIO_URL})")
+    return steps
+
+
 def hardware_hint(
-    readings: dict[str, Reading], providers: list[str], url: str, platform: str
+    readings: dict[str, Reading],
+    providers: list[str],
+    url: str,
+    platform: str,
+    status: LhmStatus | None = None,
 ) -> str | None:
     """What to do on Windows when no CPU or GPU temperature or power arrives; None
-    when it does, and elsewhere (psutil has temperatures and fans on Linux)."""
+    when it does, and elsewhere (psutil has temperatures and fans on Linux).
+    ``status`` says how LibreHardwareMonitor is read, when Libre Panel reads it itself."""
     if platform != "win32" or any(key in readings for key in HARDWARE_KEYS):
         return None
-    text = (
-        "No CPU or GPU temperature or power readings. On Windows these come from "
-        "LibreHardwareMonitor: run it as administrator and turn on "
+    text = "No CPU or GPU temperature or power readings. "
+    if status is not None and status.mode == "inprocess":
+        if status.error:
+            return f"{text}LibreHardwareMonitor could not start inside Libre Panel: {status.error}"
+        steps = ring0_steps(status)
+        if not steps:
+            return (
+                f"{text}LibreHardwareMonitor runs inside Libre Panel, "
+                "but finds no sensors it supports."
+            )
+        return (
+            f"{text}LibreHardwareMonitor runs inside Libre Panel, but the CPU's sensors are out "
+            f"of reach: {' and '.join(steps)}."
+        )
+    text += (
+        "On Windows these come from LibreHardwareMonitor: run it as administrator and turn on "
         f"Options -> Remote Web Server -> Run (Libre Panel then reads {url})."
     )
     if "librehardwaremonitor" not in providers:
         text += ' Add "librehardwaremonitor" to providers under [sensors] in config.toml.'
     return text
+
+
+def _mode(value: Any) -> str:
+    if isinstance(value, str) and value.lower() in MODES:
+        return value.lower()
+    log.warning(
+        '[sensors.librehardwaremonitor] mode must be "auto", "inprocess" or "webserver", '
+        'not %r: using "auto"',
+        value,
+    )
+    return "auto"
 
 
 class LibreHardwareMonitorProvider(SensorProvider):
@@ -290,14 +354,73 @@ class LibreHardwareMonitorProvider(SensorProvider):
         # 0 (or less) keeps the last readings however long the web server is silent.
         self.stale_seconds = float(self.options.get("stale_seconds", STALE_SECONDS))
         self.gpu = self.options.get("gpu")
+        self.mode = _mode(self.options.get("mode", "auto"))
         self._latest: dict[str, Reading] = {}
         self._answered_at: float | None = None  # when the web server last answered
         self._misses = 0  # requests in a row that nobody answered while no readings were shown
         self._warned = False  # said that it is silent; says so when it answers again
         self._lock = threading.Lock()
         self._stop = threading.Event()
-        self._thread = threading.Thread(target=self._poll, name="lhm-poll", daemon=True)
-        self._thread.start()
+        self._polled = threading.Event()  # the web server was asked once, answer or not
+        self._web = threading.Lock()  # starting and stopping the poller
+        self._thread: threading.Thread | None = None  # the poller of the web server
+        self._source: Any = None  # LibreHardwareMonitor inside Libre Panel (lhm_inprocess)
+        self._why = ""  # why it is not inside Libre Panel
+        if self.mode != "webserver":
+            self._start_inprocess()
+        if self._source is None and self.mode != "inprocess":
+            self._start_web()
+
+    def _start_inprocess(self) -> None:
+        from libre_panel.sensors import lhm_inprocess
+
+        folder, why = lhm_inprocess.availability(self.options.get("dll_dir") or None)
+        if folder is None:
+            self._why = why
+            if self.mode == "inprocess":
+                log.warning("LibreHardwareMonitor cannot run inside Libre Panel: %s", why)
+            else:  # not a fault: the web server is the way where it cannot be inside
+                log.debug("LibreHardwareMonitor is read through its web server: %s", why)
+            return
+        self._source = lhm_inprocess.InProcessSource(
+            functools.partial(lhm_inprocess.open_computer, folder),
+            poll_seconds=self.poll_seconds,
+            stale_seconds=self.stale_seconds,
+            gpu=self.gpu,
+            on_ready=self._source_ready,
+            on_failure=self._source_failed,
+        )
+        self._source.start()
+
+    def _source_ready(self, status: LhmStatus) -> None:
+        """Without administrator rights (or PawnIO) the CPU's sensors stay out of reach. A
+        LibreHardwareMonitor that runs as administrator with its web server has them: if
+        that answers, its readings fill in what is missing."""
+        if self.mode != "auto" or status.ring0 is not False:
+            return
+        try:
+            self._fetch()
+        except Exception as exc:  # noqa: BLE001 - not running, or not what it should be
+            log.debug("no LibreHardwareMonitor web server at %s: %s", self.url, exc)
+            return
+        log.info(
+            "LibreHardwareMonitor's web server answers at %s: its readings fill in "
+            "what Libre Panel cannot read itself",
+            self.url,
+        )
+        self._start_web()
+
+    def _source_failed(self, why: str) -> None:
+        self._why = why
+        if self.mode == "auto":
+            self._start_web()
+
+    def _start_web(self) -> None:
+        with self._web:
+            if self._thread is not None or self._stop.is_set():
+                return
+            self._thread = threading.Thread(target=self._poll, name="lhm-poll", daemon=True)
+            self._thread.start()
 
     def _fetch(self) -> dict[str, Any]:
         return fetch_tree(self.url)
@@ -306,6 +429,7 @@ class LibreHardwareMonitorProvider(SensorProvider):
         while not self._stop.is_set():
             started = time.monotonic()
             delay = self._poll_once()
+            self._polled.set()
             self._stop.wait(max(0.1, delay - (time.monotonic() - started)))
 
     def _poll_once(self, now: float | None = None) -> float:
@@ -367,7 +491,38 @@ class LibreHardwareMonitorProvider(SensorProvider):
 
     def read(self) -> dict[str, Reading]:
         with self._lock:
-            return dict(self._latest)
+            readings = dict(self._latest)
+        if self._source is None:
+            return readings
+        try:
+            inside = self._source.read()
+        except Exception:  # noqa: BLE001 - a broken source must not stop the panel
+            log.exception("LibreHardwareMonitor inside Libre Panel failed")
+            return readings
+        for key, reading in readings.items():  # the web server only fills in
+            inside.setdefault(key, reading)
+        return inside
+
+    def status(self) -> LhmStatus:
+        """How the readings come, and what keeps the CPU's from coming."""
+        if self._source is not None:
+            return self._source.status()
+        if self.mode == "inprocess":  # inside only: it is not there, and that is the problem
+            return LhmStatus("inprocess", error=self._why)
+        return LhmStatus("webserver")
+
+    def wait_ready(self, timeout: float) -> bool:
+        """Whether the first readings are in (or it has given up) within ``timeout`` seconds.
+        For a command that asks once and must not ask too early."""
+        end = time.monotonic() + timeout
+        if self._source is not None and not self._source.wait_ready(timeout):
+            return False
+        if self._thread is None:
+            return True
+        return self._polled.wait(max(0.0, end - time.monotonic()))
 
     def close(self) -> None:
-        self._stop.set()
+        with self._web:
+            self._stop.set()
+        if self._source is not None:
+            self._source.close()
