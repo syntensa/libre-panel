@@ -782,7 +782,9 @@ def test_main_loop_sends_every_frame_at_the_stream_rate(monkeypatch, tmp_path):
     for _ in range(10):
         time.sleep(0.018)
     timer_rate = min(50, 10 / (time.perf_counter() - started))
-    assert 0.8 * timer_rate < rate < 55, (rate, timer_rate)
+    # Well above config.fps, as close to the timer as a busy machine manages (a
+    # loaded macOS runner drew 20 fps with a timer good for 26).
+    assert max(2 * config.fps, 0.6 * timer_rate) < rate < 55, (rate, timer_rate)
     assert renderers[0].background_builds
 
 
