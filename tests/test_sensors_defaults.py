@@ -248,7 +248,10 @@ def test_doctor_says_nothing_about_sensors_where_psutil_has_them(isolated_home):
 
 
 def test_doctor_says_plainly_that_librehardwaremonitor_does_not_answer(isolated_home):
-    result, said = doctor.sensors_check(None, "win32", fetch_of(OSError("connection refused")))
+    path = isolated_home / "config.toml"  # a list without it, whatever this machine's default
+    path.parent.mkdir(parents=True)
+    path.write_text('[sensors]\nproviders = ["load", "psutil"]\n')
+    result, said = doctor.sensors_check(path, "win32", fetch_of(OSError("connection refused")))
     assert result == "info"  # a panel check does not fail for this
     assert said.startswith(f"LibreHardwareMonitor does not answer at {URL}.")
     assert "No CPU or GPU temperature or power readings." in said
