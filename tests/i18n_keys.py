@@ -104,10 +104,12 @@ def all_messages() -> set[str]:
 
 def tables() -> dict[str, set[str]]:
     from libre_panel.icons import ICON_NAMES
+    from libre_panel.render.overlays import BUILT_IN_STYLES
     from libre_panel.theme.model import COMMON_FIELDS, TOAST_ANCHORS, WIDGET_SPECS
 
     fields, enums = set(COMMON_FIELDS), set(TOAST_ANCHORS)  # the editor's toast position
-    for spec in [COMMON_FIELDS, *WIDGET_SPECS.values()]:
+    styles = [style.options for style in BUILT_IN_STYLES.values()]  # Theme -> Messages
+    for spec in [COMMON_FIELDS, *WIDGET_SPECS.values(), *styles]:
         fields |= set(spec)
         for kind, _ in spec.values():
             kind = kind.rstrip("?")

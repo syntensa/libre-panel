@@ -19,7 +19,7 @@ from libre_panel.devices.base import DeviceError, Display, FrameError, create_di
 from libre_panel.devices.models import find_model
 from libre_panel.devices.virtual import VirtualDisplay
 from libre_panel.plugins.render import RenderContext
-from libre_panel.render.overlays import ToastLayer, transition
+from libre_panel.render.overlays import ToastLayer, switch_policy, transition
 from libre_panel.render.renderer import Renderer, changed_region
 from libre_panel.sensors.base import SensorHub, SensorProvider, create_provider
 from libre_panel.theme.model import THEME_FILENAME, Theme, ThemeError, find_theme, load_theme
@@ -368,6 +368,7 @@ def run(
     link = _Link(display, config.device.brightness, status)
     toasts = ToastLayer(renderer)
     blend: tuple[Any, Image.Image, float] | None = None  # a transition under way
+    began_in: str | None = None  # the mode it began in
     shown_frame: Image.Image | None = None  # the last frame as it went out, toasts and all
     switches = host.switches if host is not None else 0  # mode changes with a transition
     last_frame: Image.Image | None = None
@@ -391,11 +392,13 @@ def run(
             # on Windows before Python 3.13); a streaming frame is drawn at its planned time
             now, planned = (planned if planned is not None else started), None
             # While a transition plays, a switch waits for its end, unless the
-            # transition says otherwise (Transition.switch: follow or restart).
-            policy = getattr(blend[0], "switch", "wait") if blend is not None else None
+            # transition says otherwise (Transition.on_switch: follow or restart).
+            wanted = _theme_name(config, host)
+            mode = host.mode if host is not None else None
+            playing = blend
+            policy = switch_policy(blend[0], wanted, mode, began_in) if blend else None
             may_switch = policy in (None, "follow", "restart")
             changed = watcher.changed() if may_switch else False
-            wanted = _theme_name(config, host)
             if may_switch and (changed or (wanted != shown and wanted != refused)):
                 try:
                     fresh = load_config(config.path) if changed and config.path else config
@@ -426,7 +429,9 @@ def run(
                     toasts.set_renderer(renderer)
                     if wanted != shown:
                         chosen = host.take_transition() if host is not None else None
-                        if policy != "follow":  # a following one uncovers the new theme
+                        # a following one uncovers the new theme, unless a mode
+                        # change brought a transition of its own
+                        if policy != "follow" or (host is not None and host.switches != switches):
                             ctx = RenderContext(renderer)
                             kind = transition(chosen or config.transition, ctx)
                             blend = _begin(kind, last_frame, shown_frame, now, toasts) or blend
@@ -437,11 +442,12 @@ def run(
                     log.info("showing theme %r", shown)
                     if changed and on_config is not None:
                         on_config(config)
-            restart = blend is not None and getattr(blend[0], "switch", "wait") == "restart"
-            if host is not None and host.switches != switches and (blend is None or restart):
+            if host is not None and host.switches != switches and policy != "wait":
                 switches = host.switches  # a mode change that keeps the theme, with a transition
                 kind = transition(host.take_transition(), RenderContext(renderer))
                 blend = _begin(kind, last_frame, shown_frame, now, toasts) or blend
+            if blend is not playing:
+                began_in = mode
             status.mode = host.mode if host is not None else None
             if host is not None:
                 toasts.add(host.take_toasts())
@@ -462,8 +468,8 @@ def run(
                 renderer.background_builds = streaming
                 renderer.continuous = streaming  # graphs scroll, values glide on
                 renderer.fps = _fps(config, host, display)  # screens may pace animations by it
-                over = blend is not None and getattr(blend[0], "toasts", "wait") == "over"
-                toasts.advance(now, hold=blend is not None and not over)
+                go_on = getattr(blend[0], "toasts", "wait") in ("over", "hide") if blend else True
+                toasts.advance(now, hold=not go_on)
                 renderer.toast = toasts.showing(now)  # screens see a toast the moment it begins
                 snapshot.now = datetime.now()  # the clock ticks between readings too
                 frame, _ = renderer.render(snapshot, now)
@@ -471,7 +477,9 @@ def run(
                 if blend is not None:
                     frame, blend = _blend(blend, frame, now)
                 last_frame = frame
-                frame = shown_frame = renderer.shown = toasts.draw(frame, now)
+                # decided after _blend: the frame a hiding transition ends shows the toast
+                hidden = blend is not None and getattr(blend[0], "toasts", "wait") == "hide"
+                frame = shown_frame = renderer.shown = toasts.draw(frame, now, hidden=hidden)
                 upside = config.device.rotate if _on_panel(display) else 0
                 if upside != turn:  # turned now, or no longer: the whole frame again
                     previous, turn = None, upside

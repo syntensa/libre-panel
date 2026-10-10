@@ -297,6 +297,7 @@ class Renderer:
         self.preview = preview  # an editor preview or a picture, not the panel
         self.shown: Image.Image | None = None  # the frame the panel shows (set by the loop)
         self.toast: tuple[Any, float] | None = None  # the toast on show, its age (the loop)
+        self.snapshot: Snapshot | None = None  # the readings it drew last (context.image)
         self.warnings: list[str] = []
         self.moving = False  # True while an animation has not settled yet
         self._fonts: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
@@ -809,6 +810,7 @@ class Renderer:
         now = time.monotonic() if now is None else now
         theme = self.theme
         self.moving = False
+        self.snapshot = snapshot
         boxes: dict[str, Box] = {}
         pieces: list[tuple[str, Piece]] = []
         screen = self._screen_image(snapshot, now) if self.screen is not None else None

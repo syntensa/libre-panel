@@ -195,8 +195,9 @@ class Studio(Screen):
 - `context` has `size`, `orientation`, `palette`, `model`,
   `hidden_edges()` (pixels the bezel hides, as data: nothing is cropped),
   `font(ref, size)`, `color(value)`, `fps`, `language`, `t(text)`,
-  `supersample`/`downsample()` and `assets`, the plugin's own folder for
-  pre-rendered files.
+  `supersample`/`downsample()`, `image(key)` (a picture a service
+  published, e.g. `media.cover`, or None) and `assets`, the plugin's own
+  folder for pre-rendered files.
 - `suppresses = {"music"}` names toast kinds the screen shows anyway: those
   toasts are left out while it is on.
 - Do not change an image after returning it; return the same object when
@@ -265,27 +266,48 @@ class LightRing(WidgetType):
 
 ## Toasts
 
-`host.notify` shows a short message on the panel. Built in is a card in the
-theme's colours with a coloured edge for the level (`info`, `warning`,
-`error`, or `payload["color"]`) and one of the built-in icons (`cpu`, `gpu`,
-`temperature`, `fan`, …) if named, keeping clear of what the bezel hides.
-Toasts are part of the frame, also in video mode (a separate overlay would
-make the video judder).
+`host.notify` shows a short message on the panel. Two looks are built in:
+the card, in the theme's colours with a coloured edge for the level
+(`info`, `warning`, `error`, or `payload["color"]`) and one of the built-in
+icons (`cpu`, `gpu`, `temperature`, `fan`, …) if named; and the band
+(`"toast": {"style": "band"}`), a band across the panel after SPUR II: a
+glowing edge ignites from the centre and the band rolls down from it. Both
+keep clear of what the bezel hides. Toasts are part of the frame, also in
+video mode (a separate overlay would make the video judder).
 
 - Messages show one after the other, each for its `seconds` (None: the
   theme's hold time). A higher `rank` replaces the one on show at once; the
   others wait, by rank and then in order. With the theme's `"queue": false`
-  the same or a higher rank takes over at once and a lower one is dropped.
+  they are decided one by one as they come: the same or a higher rank
+  takes over at once, a lower one is dropped (a warning and the volume in
+  the same moment: the warning takes over).
 - A message with the `key` of the one on show (default: its `kind`)
   replaces it in place, whatever its rank: turning the volume from 30 to 34
   refreshes one toast. Waiting ones with that key collapse to the newest.
 - `kind` says what a message is about (`"music"`, `"volume"`, `"device"`,
   …). A theme switches kinds off with `"toast": {"off": ["music"]}`, and a
-  screen leaves out those it shows anyway with `suppresses = {"music"}`.
+  screen leaves out those it shows anyway with `suppresses = {"music"}`. A
+  message of such a kind that comes is dropped; one already on show when
+  such a screen comes goes on unseen (it still holds back lower ranks) and
+  shows again when the screen goes, on its own clock.
 - `payload` carries what a style draws besides the text, for example
   `{"image": cover, "progress": 0.4, "color": "#EF4444"}`.
 - While a transition plays, new toasts wait, unless the transition says
   otherwise (see *Transitions*).
+
+What the band draws besides `text` (other styles may read the same keys):
+
+| | |
+|---|---|
+| `payload["label"]` | a title above the text: `"Volume"`, `"Now playing"` |
+| `payload["progress"]` | 0 to 1: a bar that glides to its value. Rising levels for `kind="volume"`, a line under the text for `kind="music"` and on narrow panels, segments otherwise |
+| `payload["color"]` | the accent instead of the level's: `"#EF4444"` or `"@net"` |
+| `payload["image"]` | a picture in a tile on the left, e.g. a cover: a PIL image, or the key of a published one (`"media.cover"`) |
+| `payload["badge"]` | a small picture on the tile's corner, e.g. the icon of the app that plays |
+| `icon` | one of the built-in icons, in the tile when there is no picture |
+
+The theme's options for the band are `roll_in` (0.45 s) and `roll_out`
+(0.32 s); the hold time is the theme's `seconds`.
 
 The theme decides the rest (`"toast": {"anchor": "bottom-right",
 "seconds": 5, "style": "myplugin.band", "options": {...}}`; the editor has
@@ -303,25 +325,70 @@ class Band(ToastStyle):
     leave_s = 0.26  # seconds to leave after the hold time
 
     def draw(self, frame, toast, age, previous=None):
-        # age: 0 when it arrives ... toast.seconds + leave_s when it is gone;
-        # previous: (the toast this one replaced at once, its age), or None
+        # age: 0 when it arrives ... lifetime() (by default toast.seconds +
+        # leave_s) when it is gone; previous: (the toast this one replaced
+        # at once, its age), or None
         out = frame.copy()
         ...  # roll in (or change the content in place), draw toast.text, ...
         return out
 ```
 
 `self.context` is the theme's render context (palette, fonts, size,
-`hidden_edges()`), `self.anchor` the theme's toast position. `draw` runs at
-up to 50 fps: keep what does not change. A style that fails leaves the
-frame as it is; one that is not installed falls back to the card.
+`hidden_edges()`, `image(key)`), `self.anchor` the theme's toast position.
+`draw` runs at up to 50 fps: keep what does not change. A style that fails
+leaves the frame as it is; one that is not installed falls back to the
+card.
+
+Two more methods let a style decide its timing:
+
+- `lifetime(toast, previous)`: the seconds from its arrival until the toast
+  is gone, asked once when it starts (default `toast.seconds + leave_s`).
+  A band that changes in place instead of rolling in again ends sooner
+  than one that comes afresh, and says so here.
+- `hold_s(toast, theme_seconds)`: how long a toast without its own
+  `seconds` holds, asked before anything else sees it (default: the
+  theme's hold time), e.g. a hold time from the style's own design.
+
+The style instance stays across theme switches while the theme names the
+same style with the same options at the same size, so what it keeps per
+toast goes on (a band does not roll in again on the next screen);
+`self.context` then becomes the new theme's.
 
 ## Transitions
 
 When the theme changes (a service's `show_theme`, a mode, the editor, the
 tray), the panel blends from the old frame to the new one. `transition`
-in `config.toml` chooses how (`fade` by default; `cut`, `slide`), and a
-service can choose per change, also for a mode change that keeps the theme
-(`set_mode("game", transition=...)`). A plugin can add its own:
+in `config.toml` chooses how (`fade` by default; `cut`, `slide`, `tube`),
+and a service can choose per change, also for a mode change that keeps the
+theme (`set_mode("game", transition=...)`).
+
+Two are after SPUR II, drawn with light in the theme's accent; from one
+frame to the next only the rows under a moving edge and those just
+revealed change, which keeps them cheap for a panel's video encoder:
+
+- `tube` (0.9 s): a line ignites at mid-height and opens into two edges;
+  between them the new screen is already live.
+- `entrance` (3.2 s), for a mode such as a game: the old frame closes to a
+  line, a band opens with a logo or a title while a text types in below
+  it, then the band closes and opens onto the new screen. Parameters:
+  `title`, `text`, `logo` (a PIL image, or the key of one the service
+  published) and `kind`: `"start"` or `"end"` for a text of its own ("Game
+  mode", "Game ended") when there is no `text`. Toasts are not drawn over
+  it; the one on show rolls in afresh as it ends. A screen asked for
+  meanwhile (a round report) is revealed by it; when the mode turns back
+  (the game ends during its entrance) the next one starts from the frame
+  on show.
+
+```python
+# in a game-mode service:
+self.host.publish_image("game.logo", logo)
+entrance = {"title": game, "logo": "game.logo", "kind": "start"}
+self.host.set_mode("game", transition=("entrance", entrance))
+...
+self.host.set_mode(None, transition=("entrance", {"title": game, "kind": "end"}))
+```
+
+A plugin can add its own:
 
 ```python
 from libre_panel.plugins import Transition
@@ -364,8 +431,9 @@ A transition says how it gets along with what happens while it plays:
 
 | Attribute | Values |
 |---|---|
-| `switch` | `"wait"` (default): a switch waits until it is over, so a report after a game's end does not cut the entrance short. `"follow"`: the new theme shows at once and the transition keeps playing, uncovering it. `"restart"`: the switch's transition starts again from the frame on the panel. |
-| `toasts` | `"wait"` (default): the toast on show stays, new ones wait. `"over"`: toasts go on over the transition. `"restart"`: the toast on show leaves and comes again afterwards. |
+| `switch` | `"wait"` (default): a switch waits until it is over, so a report after a game's end does not cut the entrance short. `"follow"`: the new theme shows at once and the transition keeps playing, uncovering it. `"restart"`: the switch's transition starts again from the frame on the panel. A mode change that brings a transition of its own never waits behind a following one: that transition starts from the frame on the panel. |
+| `on_switch(theme, mode, mode_changed)` | decides case by case instead of `switch` (its default), asked on every frame it plays with the theme the panel should show and the mode on now; `mode_changed` is True when that is not the mode it began in. The entrance follows a report in its own mode and starts again when the mode turns back. |
+| `toasts` | `"wait"` (default): the toast on show stays, new ones wait. `"over"`: toasts go on over the transition. `"restart"`: the toast on show leaves and comes again afterwards. `"hide"`: toasts are decided as usual (screens see them in `context.toast`) but none is drawn; the one on show rolls in afresh on the frame the transition ends. |
 | `from_shown` | `True`: `old` is the last frame as it showed, with its toast (the band belongs to the old screen). |
 
 Between themes of different sizes (landscape to portrait) the panel switches

@@ -65,8 +65,20 @@ to write or review themes by hand.
   stays (4), `"queue": false` lets a new message of the same or a higher
   rank take over at once and drops lower ones (one after another by
   default), `"off"` lists kinds the theme does not show (`["music"]`), and
-  `"style"` with `"options"` names a toast style from a plugin (the
-  built-in card otherwise).
+  `"style"` with `"options"` names the toast style: the built-in card
+  (the default), `"band"` or one from a plugin.
+- The band (`"style": "band"`) is a band across the panel in the look of
+  SPUR II: a glowing edge ignites from the centre and the band rolls down
+  from it, with a title, a picture or icon, the text and a progress bar
+  when the message brings them. It lies at the bottom with an anchor
+  starting `bottom`, else at the top, and takes the theme's palette
+  (`bg`, `text`, `accent`, `warn`, `crit`, `track`). Its options
+  are `roll_in` (0.45 s) and `roll_out` (0.32 s):
+
+  ```json
+  "toast": { "style": "band", "anchor": "bottom", "queue": false, "seconds": 2,
+             "options": { "roll_in": 0.45, "roll_out": 0.32 } }
+  ```
 - Optional: `"screen": {"name": "...", "options": {...}}` lets an installed
   plugin draw the whole frame; the widgets are drawn on top. Widget types
   with a dot in the name (`"myplugin.ring"`) also come from plugins. A theme

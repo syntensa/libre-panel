@@ -50,6 +50,8 @@ def test_index_and_specs(server):
     assert status == 200
     assert "gauge" in specs["widgets"]
     assert any(m["id"] == "turing-9.2-usb" for m in specs["models"])
+    band = specs["toasts"]["band"]  # the built-in styles besides the card, with their options
+    assert band["label"] == "Band (built in)" and band["options"]["roll_in"] == ["number", 0.45]
 
 
 def test_the_preview_is_never_turned(server, isolated_home):
