@@ -145,11 +145,13 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "max": ("number?", 100),
         "scale": ("enum:linear|sqrt|log", "linear"),
         "history": ("int", 60),
+        # video mode: the seconds the curve spans (0: ``history`` readings' worth)
+        "seconds": ("number", 0),
         "color": ("color", "#22d3ee"),
         "fill": ("bool", True),
         "fill_fade": ("bool", True),
         "smooth": ("bool", True),
-        "per_frame": ("bool", False),
+        "per_frame": ("bool", False),  # older themes: a point a pixel apart (seconds = w / 25)
         "line_width": ("int", 2),
         "grid": ("int", 0),
         "grid_color": ("color?", "#ffffff1f"),

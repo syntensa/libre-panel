@@ -182,23 +182,28 @@ SPIKE = [10.0] * 8 + [90.0, 10.0, 10.0]  # the spike is the third reading from t
 STEP = 599 / 30  # 11 samples on 200 px: 19.97 px apart
 
 
+def reading(value, history):
+    """A snapshot as the hub makes it: the reading, and the readings so far."""
+    return Snapshot(readings={"v": Reading("v", value)}, history={"v": list(history)})
+
+
 def test_graphs_scroll_between_readings_in_video_mode():
+    """In video mode the curve moves on every frame, a reading's width a
+    second, and its newest point at the right edge is the value now."""
     renderer = Renderer(theme(spike_graph(), size=(200, 60)))
     renderer.continuous = True
-    delay = renderer.STRIP_DELAY_S
     renderer.new_sample(100.0, 1.0)
-    snap = Snapshot(history={"v": SPIKE})
-    at_start = spike_x(renderer.render(snap, 100.0 + delay)[0])
-    halfway = spike_x(renderer.render(snap, 100.5 + delay)[0])
-    at_end = spike_x(renderer.render(snap, 101.0 + delay)[0])
+    snap = reading(10.0, SPIKE)
+    at_start = spike_x(renderer.render(snap, 100.0)[0])
+    halfway = spike_x(renderer.render(snap, 100.5)[0])
+    at_end = spike_x(renderer.render(snap, 101.0)[0])
     assert renderer.moving
-    # one reading late: the second reading from the end is at the right edge
-    assert abs(at_start - (199 - STEP)) <= 1.5, at_start
-    assert abs(at_start - halfway - STEP / 2) <= 1.5 and abs(at_start - at_end - STEP) <= 1.5
-    # the next reading takes over exactly where the last strip stopped
+    # the spike was read from 98 to 99 s: at 100 s, one and a half readings from the edge
+    assert abs(at_start - (199 - 1.5 * STEP)) <= 1.5, at_start
+    assert abs(at_start - halfway - STEP / 2) <= 1 and abs(at_start - at_end - STEP) <= 1
+    # the next reading goes on from there
     renderer.new_sample(101.0, 1.0)
-    snap = Snapshot(history={"v": [*SPIKE, 10.0]})
-    assert abs(spike_x(renderer.render(snap, 101.0 + delay)[0]) - at_end) <= 1
+    assert abs(spike_x(renderer.render(reading(10.0, [*SPIKE, 10.0]), 101.0)[0]) - at_end) <= 1
     # without video mode the curve stands still between readings, the newest at the edge
     still = Renderer(theme(spike_graph(), size=(200, 60)))
     snap = Snapshot(history={"v": SPIKE})
@@ -212,8 +217,8 @@ def test_scrolling_graphs_draw_their_curve_once_per_reading(monkeypatch):
     renderer.continuous = True
     calls = []
     real = renderer._graph_layer
-    monkeypatch.setattr(renderer, "_graph_layer", lambda *a: calls.append(1) or real(*a))
-    snap = Snapshot(history={"v": [10.0, 50.0, 30.0, 90.0, 20.0]})
+    monkeypatch.setattr(renderer, "_graph_layer", lambda *a, **k: calls.append(1) or real(*a, **k))
+    snap = reading(20.0, [10.0, 50.0, 30.0, 90.0, 20.0])
     renderer.new_sample(0.0, 1.0)
     for frame in range(50):  # a second of video: 50 windows into one strip
         renderer.render(snap, frame / 50)
@@ -232,21 +237,23 @@ def feed(renderer, readings, start=100.0, interval=1.0):
     for i in range(1, len(readings) + 1):
         at = start + (i - 1) * interval
         renderer.new_sample(at, interval)
-        renderer.render(Snapshot(history={"v": readings[:i]}), at)
-    return Snapshot(history={"v": readings})
+        renderer.render(reading(readings[i - 1], readings[:i]), at)
+    return reading(readings[-1], readings)
 
 
-def test_per_frame_graphs_move_a_pixel_per_frame():
-    """As SPUR II: one point per frame, so the curve moves 50 px a second, not a
-    few pixels per reading."""
+@pytest.mark.parametrize("fps", [25, 50])
+def test_per_frame_graphs_move_a_pixel_per_point(fps):
+    """As SPUR II: a point every 1/25 s, a pixel apart, so the curve moves 25 px
+    a second at any frame rate (half a pixel per frame at 50 fps), and its
+    newest point is the value now."""
     renderer = Renderer(theme(spike_graph(per_frame=True, h=60), size=(200, 60)))
-    renderer.continuous, renderer.fps = True, 50
-    delay = renderer.STRIP_DELAY_S
+    renderer.continuous, renderer.fps = True, fps
     snap = feed(renderer, [10.0, 90.0, 10.0])  # high from 101 to 102 (no glide)
-    ends = [plateau_end(renderer.render(snap, 102.0 + delay + k / 50)[0]) for k in range(11)]
-    assert abs(ends[0] - 199) <= 1.5, ends  # the fall at 102 enters at the right edge
-    assert all(1 - 0.6 <= a - b <= 1 + 0.6 for a, b in zip(ends, ends[1:], strict=False)), ends
-    assert abs(ends[0] - ends[-1] - 10) <= 1, ends
+    ends = [plateau_end(renderer.render(snap, 102.0 + k / fps)[0]) for k in range(fps // 2 + 1)]
+    # the fall at 102 s is at the right edge (it glides from the frame before)
+    assert 199 - 25 / fps - 1.5 <= ends[0] <= 199, ends
+    assert all(0 <= a - b <= 1.5 for a, b in zip(ends, ends[1:], strict=False)), ends
+    assert abs(ends[0] - ends[-1] - 25 * (fps // 2) / fps) <= 1.5, ends
     assert renderer.warnings == []
     # without video mode it is an ordinary graph of the readings
     still = Renderer(theme(spike_graph(per_frame=True), size=(200, 60)))
@@ -259,7 +266,7 @@ def test_per_frame_graphs_draw_their_curve_once_per_reading(monkeypatch):
     renderer.continuous, renderer.fps = True, 50
     calls = []
     real = renderer._graph_layer
-    monkeypatch.setattr(renderer, "_graph_layer", lambda *a: calls.append(1) or real(*a))
+    monkeypatch.setattr(renderer, "_graph_layer", lambda *a, **k: calls.append(1) or real(*a, **k))
     snap = feed(renderer, [10.0, 50.0])
     for frame in range(50):  # a second of video: windows into one strip
         renderer.render(snap, 101.0 + frame / 50)
@@ -267,47 +274,47 @@ def test_per_frame_graphs_draw_their_curve_once_per_reading(monkeypatch):
     assert renderer.warnings == []
 
 
-def test_a_per_frame_graph_follows_the_value_bars_and_numbers_glide_along():
-    graph = spike_graph(per_frame=True)
-    t = theme(graph, bar(smooth=True), animation={"smoothing_ms": 400}, size=(200, 60))
+def head_y(frame, x):
+    """The middle of the curve's bright line in column ``x``."""
+    rows = [y for y in range(60) if frame.getpixel((x, y))[0] > 120]
+    return (rows[0] + rows[-1] + 1) / 2
+
+
+def test_a_graphs_newest_point_is_the_value_bars_and_numbers_show():
+    """The curve's head is the gliding value of its sensor, the same spring
+    the bar follows: it meets the number instead of trailing it."""
+    graph = spike_graph(per_frame=True, line_width=2)
+    t = theme(graph, bar(smooth=True, y=70), animation={"smoothing_ms": 400}, size=(200, 90))
     renderer = Renderer(t, animate=True)
     renderer.continuous, renderer.fps = True, 50
-    shown = []
     for i, value in enumerate([10.0, 80.0, 30.0]):
         renderer.new_sample(100.0 + i, 1.0)
         for k in range(50):
             now = 100.0 + i + k / 50
-            reading = {"v": Reading("v", value)}
-            renderer.render(Snapshot(readings=reading, history={"v": [value]}), now)
-            shown.append((now, renderer.motion.value("v", now)))
-    glide = renderer._glides["g"]
-    # The same spring: a bar takes a new reading from the frame before (it advances
-    # from its last frame), the graph from the reading's time, so one frame apart.
-    for now, value in shown[50:]:  # from the second reading on (the first one starts both)
-        assert abs(glide.at(now + 1 / 50) - value) < 0.01, (now, glide.at(now + 1 / 50), value)
+            frame = renderer.render(reading(value, [value]), now)[0]
+            if now - 0.08 < 100.0:
+                continue  # nothing read yet two pixels in from the edge
+            # two pixels in from the newest point (the right edge), 0.08 s ago: a
+            # reading late, the curve would be up to 39 px off there (a 2 px line
+            # on a steep stretch spans a few rows: a pixel or two either way)
+            shown = renderer.motion.value("v", now - 0.08)
+            expected = (4 + 111 * (1 - shown / 100)) / 2  # 2x drawn: 2 px lines, 111 px tall
+            assert abs(head_y(frame, 197) - expected) <= 3, (now, head_y(frame, 197), expected)
+            filled = sum(1 for x in range(0, 200, 2) if frame.getpixel((x, 80))[0] > 200) * 2
+            assert abs(filled - 2 * renderer.motion.value("v", now)) <= 4  # the bar's value
 
 
-def test_a_late_strip_keeps_the_old_one_moving():
-    """Video mode draws a new strip in the helper thread; until it is due the
-    old strip keeps travelling, so the curve never jumps back."""
-    import time as clock
-
-    renderer = Renderer(theme(spike_graph(), size=(200, 60)))
-    renderer.continuous = renderer.background_builds = True
-    delay = renderer.STRIP_DELAY_S
-    renderer.new_sample(100.0, 1.0)
-    first = spike_x(renderer.render(Snapshot(history={"v": SPIKE}), 100.9)[0])  # 0.8 of the way
-    renderer.new_sample(101.0, 1.0)
-    snap = Snapshot(history={"v": [*SPIKE, 10.0]})
-    early = spike_x(renderer.render(snap, 101.0)[0])  # the new strip is not due yet
-    assert 1 <= first - early <= 3  # still the old strip, 0.9 of the way
-    deadline = clock.monotonic() + 5
-    while renderer._strips["g"][1] is not None and clock.monotonic() < deadline:
-        clock.sleep(0.01)
-        renderer.render(snap, 101.0)
-    due = spike_x(renderer.render(snap, 101.0 + delay)[0])  # the new strip, where the old ended
-    assert abs(due - (first - 0.2 * STEP)) <= 1.5, (first, early, due)
-    renderer.close()
+def test_the_curve_ends_at_the_graphs_edges():
+    """In video mode a strip reaches past the window; beside the graph only
+    its glow shows, not the curve."""
+    graph = spike_graph(per_frame=True, x=20, line_width=2, glow=0.6, glow_radius=6)
+    renderer = Renderer(theme(graph, size=(240, 60)))
+    renderer.continuous, renderer.fps = True, 50
+    frame = feed(renderer, [90.0, 90.0]) and renderer.render(reading(90.0, [90.0]), 101.5)[0]
+    curve_y = round((2 + 115 * 0.1) / 2)  # 90 %: the line's row
+    assert frame.getpixel((210, curve_y))[0] > 200  # inside: the curve
+    beside = [frame.getpixel((x, curve_y))[0] for x in (*range(4, 18), *range(222, 236))]
+    assert 0 < max(beside) < 200, beside  # beside: some glow, no curve
 
 
 class LateBuilder:
@@ -333,6 +340,33 @@ class LateBuilder:
         pass
 
 
+def test_a_late_strip_keeps_the_curve_where_it_is():
+    """Video mode draws strips in the helper thread. Until a late one comes,
+    the end of the curve is drawn again over the old one once a new reading
+    shows: frame by frame the curve is what strips drawn on time show."""
+    from PIL import ImageChops
+
+    graph = spike_graph(per_frame=True, line_width=2, glow=0.5, glow_radius=6)
+    late = Renderer(theme(graph, animation={"smoothing_ms": 400}, size=(200, 60)), animate=True)
+    late.continuous = late.background_builds = True
+    late._builder = builder = LateBuilder()
+    on_time = Renderer(theme(graph, animation={"smoothing_ms": 400}, size=(200, 60)), animate=True)
+    on_time.continuous = True
+    late.fps = on_time.fps = 50
+    for i, value in enumerate([20.0, 85.0, 40.0, 70.0]):
+        for renderer in (late, on_time):
+            renderer.new_sample(100.0 + i, 1.0)
+        for k in range(50):
+            now = 100.0 + i + k / 50
+            a = late.render(reading(value, [value]), now)[0]
+            b = on_time.render(reading(value, [value]), now)[0]
+            difference = max(band[1] for band in ImageChops.difference(a, b).getextrema())
+            assert difference <= 8, (now, difference)
+            if k == 30:  # the strips asked for come more than half a second late
+                builder.run()
+    assert late.warnings == [] and on_time.warnings == []
+
+
 @pytest.mark.parametrize("per_frame", [True, False])
 def test_graphs_keep_moving_when_their_strips_come_from_the_helper_thread(monkeypatch, per_frame):
     """A strip built after its render call returned is still the one asked for:
@@ -344,13 +378,13 @@ def test_graphs_keep_moving_when_their_strips_come_from_the_helper_thread(monkey
     renderer._builder = builder = LateBuilder()
     calls = []
     real = renderer._graph_layer
-    monkeypatch.setattr(renderer, "_graph_layer", lambda *a: calls.append(1) or real(*a))
+    monkeypatch.setattr(renderer, "_graph_layer", lambda *a, **k: calls.append(1) or real(*a, **k))
     readings, previous, changed = [], None, []
     for second in range(8):
         at = 100.0 + second
         readings.append(90.0 if second % 2 else 10.0)
         renderer.new_sample(at, 1.0)
-        snap = Snapshot(history={"v": list(readings)})
+        snap = reading(readings[-1], readings)
         for k in range(50):
             frame = renderer.render(snap, at + k / 50)[0].tobytes()
             builder.run()

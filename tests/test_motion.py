@@ -1,5 +1,9 @@
 """Motion kept by the main loop: gliding values, fading colours, graph histories."""
 
+import math
+
+import pytest
+
 from libre_panel.render.motion import PAUSE_S, Motion
 from libre_panel.render.renderer import Renderer
 from libre_panel.sensors.base import Reading, Snapshot
@@ -178,3 +182,96 @@ def test_threshold_colours_fade_and_a_bar_and_its_number_change_together():
     still.render(snap(v=50.0), 0.0)
     still.render(snap(v=85.0), 0.02)
     assert still._cache["m"][0][1] == "#ffff00"
+
+
+def graph(wid="g", **kw):
+    return {"type": "graph", "id": wid, "x": 0, "y": 0, "w": 200, "h": 60, "sensor": "v",
+            "min": 0, "max": 100, "fill": False, "color": "#ffffff", "line_width": 1,
+            "smooth": False, "seconds": 8, **kw}  # fmt: skip
+
+
+def video(renderer, fps=50):
+    renderer.continuous, renderer.fps = True, fps
+    return renderer
+
+
+def wave(t):
+    return 50 + 40 * math.sin(t)
+
+
+def run(renderer, start, seconds, fps, value=wave):
+    """Readings once a second, frames at ``fps``, as the main loop draws them."""
+    frames = {}
+    readings = []
+    for n in range(round(seconds * fps)):
+        now = start + n / fps
+        if n % fps == 0:
+            readings.append(value(now))
+            renderer.new_sample(now, 1.0)
+        snapshot = Snapshot(readings={"v": Reading("v", readings[-1])}, history={"v": readings})
+        frames[round(now, 6)] = renderer.render(snapshot, now)[0]
+    return frames
+
+
+def curve_rows(frame):
+    """Per column, the topmost bright row of the curve (None where there is none)."""
+    rows = []
+    for x in range(frame.width):
+        bright = [y for y in range(frame.height) if frame.getpixel((x, y))[0] > 120]
+        rows.append(bright[0] if bright else None)
+    return rows
+
+
+def test_graphs_take_25_points_a_second_at_any_frame_rate():
+    for fps in (25, 30, 50):
+        renderer = video(Renderer(theme(graph(), smoothing_ms=400), animate=True), fps)
+        run(renderer, 100.0, 3, fps)
+        history = renderer.motion.histories["v"]
+        before = history.last
+        run(renderer, 103.0, 2, fps)
+        assert history.last - before == 50, fps  # two seconds: 50 points
+
+
+def test_a_graphs_window_is_its_seconds_whatever_the_frame_rate():
+    """``seconds`` across the width at 25 and at 50 fps: the same curve in the
+    same place, moving w / seconds pixels a second (25 here)."""
+    curves = {}
+    for fps in (25, 50):
+        renderer = video(Renderer(theme(graph(), smoothing_ms=400), animate=True), fps)
+        frames = run(renderer, 100.0, 10, fps)
+        curves[fps] = {t: curve_rows(frames[t]) for t in (108.0, 109.0)}
+    for t in (108.0, 109.0):
+        pairs = [(a, b) for a, b in zip(curves[25][t], curves[50][t], strict=True) if a and b]
+        assert len(pairs) > 180 and sum(abs(a - b) <= 1 for a, b in pairs) > 0.95 * len(pairs)
+    # one second later the curve is 25 px further left
+    later, earlier = curves[50][109.0], curves[50][108.0]
+    pairs = [(later[x], earlier[x + 25]) for x in range(10, 170) if later[x] and earlier[x + 25]]
+    assert len(pairs) > 150 and sum(abs(a - b) <= 1 for a, b in pairs) > 0.9 * len(pairs)
+
+
+def test_graphs_move_on_every_frame_by_half_a_pixel():
+    """25 px a second at 50 fps: each frame shifts the curve by half a pixel
+    (a second image of the strip, drawn half a pixel on), never standing still."""
+    renderer = video(Renderer(theme(graph(seconds=8), smoothing_ms=400), animate=True))
+    frames = list(run(renderer, 100.0, 3, 50).values())[50:]
+    assert all(a.tobytes() != b.tobytes() for a, b in zip(frames, frames[1:], strict=False))
+
+
+def test_a_new_theme_shows_its_graphs_full_at_once():
+    motion = Motion()
+    # the panel showed a theme with a bar of "v" for a while: the graph's history
+    # comes from the hub's readings
+    before = video(Renderer(theme(bar()), animate=True, motion=motion))
+    run(before, 100.0, 10, 50)
+    after = video(Renderer(theme(graph(seconds=8)), animate=True, motion=motion))
+    readings = [wave(100.0 + s) for s in range(10)]
+    after.new_sample(109.0, 1.0)
+    snapshot = Snapshot(readings={"v": Reading("v", readings[-1])}, history={"v": readings})
+    rows = curve_rows(after.render(snapshot, 110.0)[0])
+    assert sum(r is not None for r in rows) >= 195  # across the whole width
+    # and a theme after that one takes the history on as it is
+    again = video(Renderer(theme(graph("other", seconds=8)), animate=True, motion=motion))
+    again.new_sample(109.0, 1.0)
+    assert curve_rows(again.render(snapshot, 110.02)[0])[:190] == pytest.approx(
+        curve_rows(after.render(snapshot, 110.02)[0])[:190], abs=1
+    )

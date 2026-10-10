@@ -48,14 +48,16 @@ to write or review themes by hand.
   `builtin:JetBrainsMono-Medium`, `-Bold` ship with Libre Panel (SIL OFL), or
   use a `.ttf`/`.otf` inside the theme folder.
 - `refresh_ms` is how often sensors are read; `animation.smoothing_ms` is how
-  long bars and rings glide to a new value (0 = jump). In video mode values
-  glide until the next reading and graphs scroll on every frame (they show
-  the readings one interval late, smooth curves two), so the 50 fps show
-  even when readings come once a second. A graph with `"per_frame": true`
-  goes further, as SPUR II does: in video mode it takes the gliding value as
-  a point on every frame, a pixel apart, so the curve moves a pixel per
-  frame and shows the last `w` frames (a 900 px graph at 50 fps: 18 s).
-  Without video mode it shows `history` readings as usual.
+  long bars, rings and numbers with `smooth` glide to a new value (0 = jump).
+  In video mode values glide until the next reading, so they never stand
+  still between readings, and graphs draw the gliding value 25 times a
+  second: the curve moves on every frame (in half-pixel steps) and its
+  newest point is the value the numbers show now. A graph's `seconds` is the
+  time it spans in video mode, the same at any frame rate (`0`: as long as
+  `history` readings take); a 900 px graph moves 25 px a second at `36`.
+  `"per_frame": true` (older themes) means a point a pixel apart, `w / 25`
+  seconds. Without video mode a graph shows `history` readings. While its
+  sensor has no value, a graph in video mode moves on with a gap.
 - Widgets are drawn in list order: later ones are on top.
 - Unknown fields are ignored with a warning, so newer themes still load.
 - Optional: `"toast"` sets how messages from services show (editor:
@@ -101,7 +103,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `metric` | `sensor`, `format`, `fallback`, `smooth`, `color_rules` | a sensor value as text; with `smooth` the number glides between readings together with the sensor's bars and rings (give `format` a precision, e.g. `{value:.0f}`) |
 | `bar` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `color`, `color2`, `background`, `radius`, `direction`, `segments`, `segment_gap`, `smooth`, `color_rules` | progress bar; `color2` makes a gradient along the track, `segments` an LED-style bar |
 | `gauge` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `start_angle`, `end_angle`, `thickness`, `color`, `color2`, `background`, `cap`, `ticks`, `tick_color`, `smooth`, `color_rules` | ring; angles clockwise from 3 o'clock, default 135→405; `cap` round or flat |
-| `graph` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `history`, `color`, `fill`, `fill_fade`, `smooth`, `per_frame`, `line_width`, `grid`, `grid_color`, `background` | history; `min`/`max` `null` = automatic, `smooth` draws a curve, `per_frame` see below |
+| `graph` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `history`, `seconds`, `color`, `fill`, `fill_fade`, `smooth`, `per_frame`, `line_width`, `grid`, `grid_color`, `background` | history; `min`/`max` `null` = automatic, `smooth` draws a curve, `seconds` and `per_frame` see above |
 | `clock` | `format`, `timezone` | date/time with [strftime codes](https://strftime.org), e.g. `%H:%M:%S`, `%A %d %B`; `timezone` e.g. `Asia/Tokyo` (empty: this computer's) |
 | `analog` | `w`, `h`, `timezone`, `color`, `color2`, `face`, `marks`, `seconds` | a clock face with hands; `color2` the second hand |
 | `countdown` | `target`, `part`, `done` | the time left until `target` (`2026-12-24`, `2026-12-24 18:00`, or `12-24` for every year); `part`: `number` (76, 5:12, 12:33), `unit` (days, hours, minutes), `clock` (05:12:33 left in the day), `text` ("76 days"), `days`, `date`; `done` is shown once it is there ("Today", "Now") |

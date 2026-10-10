@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 from collections import deque
+from itertools import islice
 from typing import Any
 
 RATE = 25.0  # history points per second, whatever the frame rate
@@ -122,7 +123,7 @@ class History:
         oldest = self.last - len(self.points) + 1
         missing = max(0, min(oldest, self.last + 1) - first)
         skip = max(0, first - oldest)
-        return [None] * missing + [p for i, p in enumerate(self.points) if i >= skip]
+        return [None] * missing + list(islice(self.points, skip, None))
 
 
 class Motion:

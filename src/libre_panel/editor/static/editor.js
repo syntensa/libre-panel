@@ -1058,7 +1058,8 @@ function hintFor(widget, key, kind) {
   if (key === "hide_if_missing") return t("hide when the sensor has no value (e.g. weather off)");
   if (key === "needs") return t("show only while this sensor has a value (e.g. weather.temperature); with ! in front, only while it has none");
   if (key === "smooth" && widget.type === "metric") return t("the number glides between readings, together with the bars and rings of its sensor");
-  if (key === "per_frame") return t("video mode: a point per frame, a pixel apart, so the curve moves visibly; it shows the last seconds (otherwise: history readings)");
+  if (key === "seconds" && widget.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = as long as the history readings take");
+  if (key === "per_frame") return t("video mode: a point a pixel apart, as SPUR II draws its curves (seconds = width / 25)");
   return null;
 }
 

@@ -211,7 +211,7 @@ class Studio(Screen):
 - `context.continuous` is true in video mode, where every frame reaches the
   panel; `context.progress(now)` says how far `now` is from the last reading
   to the next (0 to 1). Move a curve by that part of a sample width and it
-  scrolls between readings, as the built-in graphs do.
+  scrolls between readings.
 - `__init__` also runs for every preview in the editor, which then calls
   `close()`: keep expensive loading in a module-level cache.
 - The theme editor offers installed screens under *Theme → Look*, with their

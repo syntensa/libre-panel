@@ -11,6 +11,11 @@
   (`"smooth": true` on a `metric`)
 - Threshold colours fade in a fifth of a second instead of jumping, and a
   bar and its number change colour together
+- Graphs in video mode move on every frame: they draw the gliding value 25
+  times a second and move in half-pixel steps, and their newest point is the
+  value the numbers show (they trailed a reading behind and moved a few
+  pixels a second). `seconds` sets the time a graph spans in video mode,
+  whatever the frame rate; a theme that comes on shows its graphs full
 
 **Fixes**
 - Video mode: graphs that move a pixel per frame (`per_frame`) stood still
