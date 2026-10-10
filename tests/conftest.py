@@ -1,10 +1,26 @@
 import itertools
+import os
 import sys
 import textwrap
 
 import pytest
 
 from libre_panel import i18n
+
+
+def pytest_runtest_logreport(report):
+    """On GitHub Actions a failed test becomes an annotation of the run, which the
+    API shows without the log (whose download may not be reachable)."""
+    if not report.failed or os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    path, line, _name = report.location
+    text = (report.longreprtext or "").strip()[-1500:]
+    for char, code in (("%", "%25"), ("\r", "%0D"), ("\n", "%0A")):
+        text = text.replace(char, code)
+    title = f"{report.nodeid} ({report.when})".replace(",", ";").replace("::", " ")
+    # on a line of its own: pytest's progress dots have no line break
+    sys.__stdout__.write(f"\n::error file={path},line={(line or 0) + 1},title={title}::{text}\n")
+    sys.__stdout__.flush()
 
 
 @pytest.fixture(autouse=True)

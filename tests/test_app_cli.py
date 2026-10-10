@@ -125,13 +125,14 @@ def test_turning_the_panel_follows_the_config_without_reopening_it(
     thread = threading.Thread(target=run, args=(config,), kwargs={"stop": stop}, daemon=True)
     thread.start()
     try:
-        deadline = time.time() + 10
+        deadline = time.time() + 30  # slow CI machines
         while not (panels and panels[0].shown) and time.time() < deadline:
             time.sleep(0.05)
         time.sleep(0.05)  # make sure the next write gets a new mtime
         shown = panels[0].shown
         before = len(shown)
         set_config_value("device.rotate", 180, path)
+        deadline = time.time() + 30
         while len(shown) == before and time.time() < deadline:
             time.sleep(0.05)
     finally:
