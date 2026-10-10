@@ -346,6 +346,77 @@ theme = "slate"        # optional: another theme
 - The frame rate of the game (`game.fps`) comes from the `presentmon` source,
   which is a separate setting.
 
+### Autopilot
+
+Picks the theme that fits what you are doing: the album theme while music
+plays, a big clock at night, a load display while the machine is busy. It
+follows rules, and when none holds, the theme of `config.toml` shows. The
+autopilot never writes your configuration.
+
+```toml
+[services]
+enabled = ["autopilot"]
+
+[services.autopilot]
+hold_s = 8             # a new choice must hold this long before the panel follows
+min_s = 20             # a theme then stays at least this long
+quiet_after_boot_s = 240   # right after the system started the load counts for nothing
+# transition = "tube"  # how the theme changes ("" is the transition of config.toml)
+
+[[services.autopilot.rules]]     # checked from the top: the first that holds wins
+name = "Music"
+theme = "studio"
+when = { music = true }
+
+[[services.autopilot.rules]]
+name = "Call"
+theme = "slate"
+when = { microphone = true }
+immediate = true       # no minimum time for this one
+hold_s = 2             # and its own hold time
+
+[[services.autopilot.rules]]
+name = "Busy"
+theme = "column"
+when = { cpu_over = 80, for_s = 30 }   # the mean load over 30 s
+
+[[services.autopilot.rules]]
+name = "Editor"
+theme = "orbit"
+when = { apps = ["code.exe", "devenv.exe"] }
+
+[[services.autopilot.rules]]
+name = "Night"
+theme = "pico"
+when = { time = "22:00-06:30" }        # may cross midnight
+```
+
+- **Conditions** (all of a rule's must hold, a rule needs at least one):
+
+  | Condition | Holds when |
+  |---|---|
+  | `music = true` | something is playing (`media.playing`) |
+  | `microphone = true` | a program is recording (Windows; elsewhere never) |
+  | `cpu_over = 80`, `gpu_over = 80` | the mean load over `for_s` seconds (20 by default) is at least that; it counts once four fifths of the window has been seen, so a peak at the start is no load |
+  | `apps = ["a.exe"]` | one of these programs is in front (Windows; where Libre Panel cannot tell, one of them runs). Case does not matter |
+  | `time = "22:00-06:30"` | the local time is in the window, start included, end not |
+
+  `music = false` and `microphone = false` hold when there is none. A rule
+  with no condition, or with one that is not on this list, never holds; it is
+  reported in the log and left out.
+- **A theme that is not installed** makes its rule be skipped, with one line in
+  the log; it is used as soon as it is there.
+- **Game mode.** While a mode such as `game` is on, the autopilot rests: its
+  choice stays and shows again right after the game, and a change in the
+  meantime must hold afresh. A service that asks for a theme with a higher
+  priority (a report) goes first.
+- **Cost.** The load rules keep the CPU and GPU load sources running (`cpu.load`,
+  `gpu.load`; the `load` source is the one that reads them ten times a second);
+  a music rule keeps the media source running; `microphone` and `apps` look at
+  the system once a second (the list of programs every two seconds).
+- Rules are read when the service starts: change `config.toml` and it restarts
+  by itself.
+
 ## Language
 
 Libre Panel speaks English and German. `language = "auto"` follows the

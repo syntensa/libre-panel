@@ -23,6 +23,7 @@ from typing import Any, NamedTuple
 from libre_panel.i18n import t
 from libre_panel.plugins import Service
 from libre_panel.sensors.base import Snapshot
+from libre_panel.services.readings import number, readable
 
 VOLUME_STEP = 1.0  # percent: a smaller change is no news
 HINT_AFTER_S = 30.0  # without a volume reading for this long, say what is missing
@@ -45,18 +46,6 @@ VOLUME = Kind("volume", 0, None)
 MUSIC = Kind("music", 1, 5.0)
 WARNING = Kind("warning", 2, 5.0)
 PANEL = Kind("panel", 2, 8.0)  # long enough for the first full frame after a restart
-
-
-def number(value: Any) -> float | None:
-    """A reading's value as a finite number, or None."""
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        return None
-    return float(value) if math.isfinite(value) else None
-
-
-def readable(value: float) -> str:
-    """A value as it reads on a panel: 92, 4.2."""
-    return f"{value:.0f}" if abs(value) >= 10 or value == round(value) else f"{value:.1f}"
 
 
 @dataclass

@@ -2,6 +2,7 @@
 programs that run, the window in front, the microphone, the uptime."""
 
 import os
+from collections import Counter
 from pathlib import Path
 
 from PIL import Image
@@ -19,6 +20,7 @@ class FakeMachine:
         self.microphone = False
         self.uptime = 100_000.0
         self.looked = 0
+        self.asked = Counter()  # how often each question was asked
 
     def start(self, name, pid, path=""):
         self.running.append(Program(name.lower(), pid, str(path)))
@@ -29,18 +31,22 @@ class FakeMachine:
 
     def programs(self):
         self.looked += 1
+        self.asked["programs"] += 1
         return list(self.running)
 
     def foreground_pid(self):
         return self.front if self.has_foreground else None
 
     def foreground_name(self):
+        self.asked["foreground"] += 1
         return next((p.name for p in self.running if p.pid == self.front), None)
 
     def microphone_in_use(self):
+        self.asked["microphone"] += 1
         return self.microphone
 
     def uptime_s(self):
+        self.asked["uptime"] += 1
         return self.uptime
 
 
