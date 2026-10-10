@@ -13,7 +13,7 @@ import sys
 import threading
 
 import pytest
-from fake_sensors import Rounds, show, wait_for
+from fake_sensors import FakeSource, Rounds, show, wait_for
 
 from libre_panel.sensors import audio, base
 
@@ -532,34 +532,6 @@ def test_a_device_that_comes_back_is_connected_to_again():
 
 
 # -- the provider ------------------------------------------------------------------------
-
-
-class FakeSource:
-    """A way to read the volume, made by the provider's thread."""
-
-    events = False
-
-    def __init__(self, *states, interval=0.005):
-        self.states = list(states)
-        self.interval = interval
-        self.device_checks = 0
-        self.changed = False  # the next check finds another device
-        self.closed_in = None
-        self.on_change = None
-
-    def sample(self):
-        state = self.states.pop(0) if len(self.states) > 1 else self.states[0]
-        if isinstance(state, Exception):
-            raise state
-        return state
-
-    def check_device(self):
-        self.device_checks += 1
-        changed, self.changed = self.changed, False
-        return changed
-
-    def close(self):
-        self.closed_in = threading.current_thread()
 
 
 def install(monkeypatch, source):

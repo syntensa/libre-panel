@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from PIL import Image, ImageChops
 
@@ -113,7 +115,7 @@ def test_turning_the_panel_follows_the_config_without_reopening_it(
     from libre_panel.config import load_config, set_config_value, write_default_config
 
     path = write_default_config()
-    text = path.read_text().replace('providers = ["psutil"]', 'providers = ["demo"]')
+    text = re.sub(r"(?m)^providers = .*$", 'providers = ["demo"]', path.read_text())
     path.write_text(text.replace('theme = "libre-default"', f'theme = "{static_theme()}"'))
     panels = []
     monkeypatch.setattr(app_module, "create_display", lambda device: panels.append(
@@ -208,7 +210,7 @@ def test_running_panel_picks_up_theme_changes(tmp_path, isolated_home):
 
     path = write_default_config()
     out = tmp_path / "frame.png"
-    text = path.read_text().replace('providers = ["psutil"]', 'providers = ["demo"]')
+    text = re.sub(r"(?m)^providers = .*$", 'providers = ["demo"]', path.read_text())
     path.write_text(
         text.replace('output = "libre-panel-frame.png"', f'output = "{out.as_posix()}"')
     )

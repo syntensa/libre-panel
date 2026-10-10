@@ -325,16 +325,33 @@ def _cmd_plugins(args: argparse.Namespace) -> int:
     return 1 if registry.errors or any(part.error for part in found) else 0
 
 
+SENSORS_SETTLE_SECONDS = 1.0  # between the two readings of `sensors`
+
+
+def _platform() -> str:
+    return sys.platform
+
+
+class _Reader:
+    """Stands in for a theme on show (``want`` needs something that can be forgotten)."""
+
+
 def _cmd_sensors(args: argparse.Namespace) -> int:
     import time
 
     from libre_panel.app import build_hub
+    from libre_panel.sensors.base import want
+    from libre_panel.sensors.librehardwaremonitor import DEFAULT_URL, hardware_hint
 
     config = load_config(args.config)
     hub = build_hub(config, demo=args.demo)
+    # Some sources read only while a theme shows their keys. Ask for those that cost
+    # nothing (not the ping or the game frame rate), as a theme would, so they are listed.
+    reader = _Reader()
+    want(reader, {"cpu.load", "gpu.load", "audio.*"})
     try:
         hub.snapshot()
-        time.sleep(1.0)  # let rate counters and background pollers produce values
+        time.sleep(SENSORS_SETTLE_SECONDS)  # rate counters and pollers need time
         snapshot = hub.snapshot()
     finally:
         hub.close()
@@ -342,6 +359,11 @@ def _cmd_sensors(args: argparse.Namespace) -> int:
         r = snapshot.readings[key]
         value = f"{r.value:.2f}" if isinstance(r.value, float) else str(r.value)
         print(f"{key:<40} {value:>14} {r.unit:<5} {r.label}")
+    if not args.demo:
+        url = config.sensors.options.get("librehardwaremonitor", {}).get("url", DEFAULT_URL)
+        hint = hardware_hint(snapshot.readings, config.sensors.providers, url, _platform())
+        if hint:
+            print(f"\nnote: {hint}", file=sys.stderr)
     return 0
 
 

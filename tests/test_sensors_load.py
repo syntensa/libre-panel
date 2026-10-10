@@ -12,7 +12,7 @@ import threading
 import time
 
 import pytest
-from fake_sensors import Rounds, show, wait_for
+from fake_sensors import Rounds, Scripted, show, wait_for
 
 from libre_panel.sensors import base, load
 from libre_panel.sensors.base import Reading, SensorHub, SensorProvider
@@ -31,29 +31,6 @@ def nothing_is_shown(monkeypatch):
     gc.collect()
     monkeypatch.setattr(base, "_WANTED", {})
     monkeypatch.setattr(load, "SAMPLE_SECONDS", 0.005)
-
-
-class Scripted:
-    """A sampler that gives one value per read, the last one for ever. An exception
-    is raised, ``None`` means "no value this time"."""
-
-    def __init__(self, *values):
-        self.values = list(values)
-        self.reads = 0
-        self.closed = threading.Event()
-        self.gate = None  # an Event: reads wait for it
-
-    def read(self):
-        if self.gate is not None:
-            assert self.gate.wait(10)
-        self.reads += 1
-        value = self.values.pop(0) if len(self.values) > 1 else self.values[0]
-        if isinstance(value, Exception):
-            raise value
-        return value
-
-    def close(self):
-        self.closed.set()
 
 
 def install(monkeypatch, cpu=None, gpu=None):

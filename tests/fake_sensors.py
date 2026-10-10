@@ -35,3 +35,54 @@ class Rounds(threading.Event):
         self.count += 1
         self.log.append("wait")
         return super().wait(timeout)
+
+
+class Scripted:
+    """A sampler of the load source that gives one value per read, the last one for ever.
+    An exception is raised, ``None`` means "no value this time"."""
+
+    def __init__(self, *values):
+        self.values = list(values)
+        self.reads = 0
+        self.closed = threading.Event()
+        self.gate = None  # an Event: reads wait for it
+
+    def read(self):
+        if self.gate is not None:
+            assert self.gate.wait(10)
+        self.reads += 1
+        value = self.values.pop(0) if len(self.values) > 1 else self.values[0]
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    def close(self):
+        self.closed.set()
+
+
+class FakeSource:
+    """A way to read the volume (the audio source), made by the provider's thread."""
+
+    events = False
+
+    def __init__(self, *states, interval=0.005):
+        self.states = list(states)
+        self.interval = interval
+        self.device_checks = 0
+        self.changed = False  # the next check finds another device
+        self.closed_in = None
+        self.on_change = None
+
+    def sample(self):
+        state = self.states.pop(0) if len(self.states) > 1 else self.states[0]
+        if isinstance(state, Exception):
+            raise state
+        return state
+
+    def check_device(self):
+        self.device_checks += 1
+        changed, self.changed = self.changed, False
+        return changed
+
+    def close(self):
+        self.closed_in = threading.current_thread()

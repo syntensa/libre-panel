@@ -21,11 +21,47 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from libre_panel import __version__
-from libre_panel.config import ConfigError, load_config
+from libre_panel.config import Config, ConfigError, load_config
 from libre_panel.devices.base import DeviceError, list_serial_ports
 from libre_panel.devices.models import PanelModel, models_for_usb
 
 ISSUE_URL = "https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml"
+
+
+def sensors_check(
+    config_path: Path | None = None, platform: str = sys.platform, fetch: Callable | None = None
+) -> tuple[str, str] | None:
+    """Windows: do the temperatures and power that need LibreHardwareMonitor arrive?
+
+    (result, what to say) for the report; None elsewhere, where psutil has them.
+    ``fetch(url)`` asks the web server (tests give their own)."""
+    if platform != "win32":
+        return None
+    from libre_panel.sensors.librehardwaremonitor import (
+        DEFAULT_URL,
+        fetch_tree,
+        hardware_hint,
+        readings_from_tree,
+    )
+
+    try:
+        config = load_config(config_path)
+    except ConfigError:
+        config = Config()
+    options = config.sensors.options.get("librehardwaremonitor", {})
+    url = options.get("url", DEFAULT_URL)
+    # a report goes to a public issue: no address of the user's network in it
+    shown = url if url == DEFAULT_URL else "the address in [sensors.librehardwaremonitor]"
+    try:
+        readings = readings_from_tree((fetch or fetch_tree)(url), options.get("gpu"))
+        answers = True
+    except Exception:  # noqa: BLE001 - not running, or not what it should be
+        readings, answers = {}, False
+    hint = hardware_hint(readings, config.sensors.providers, shown, platform)
+    if hint is None:
+        return "info", f"LibreHardwareMonitor answers at {shown}: temperature and power arrive"
+    state = "answers, but sends no temperatures or power" if answers else "does not answer"
+    return "info", f"LibreHardwareMonitor {state} at {shown}. {hint}"
 
 
 @dataclass
@@ -268,6 +304,7 @@ class Doctor:
         open_serial: Callable[[], object] | None = None,
         model_id: str = "",
         port: str = "",
+        sensors: Callable[[], tuple[str, str] | None] | None = None,
     ) -> None:
         self.ask = ask
         self.brightness = brightness  # set again after the brightness check
@@ -286,6 +323,7 @@ class Doctor:
                 return open_serial_panel(port, self._choose_size, model_id)
 
         self.open_serial = open_serial
+        self.sensors = sensors  # asked for a step of the report, even where no panel is found
         self.transport = None  # a USB panel
         self.display = None  # a serial panel, through its driver
         self.report = Report()
@@ -352,6 +390,7 @@ class Doctor:
 
     def run(self) -> Report:
         self._step("environment", "info", _versions())
+        self._sensors_step()
         self.transport = self._find_and_open()
         if self.transport is None:
             self.display = self._find_serial()
@@ -366,6 +405,16 @@ class Doctor:
                 if device is not None:
                     device.close()
         return self.report
+
+    def _sensors_step(self) -> None:
+        if self.sensors is None:
+            return
+        try:
+            step = self.sensors()
+        except Exception as exc:  # noqa: BLE001 - a side check must not stop the panel check
+            step = ("info", f"not checked ({type(exc).__name__}: {exc})")
+        if step is not None:
+            self._step("temperature and power readings", *step)
 
     def _find_and_open(self):
         try:
@@ -532,7 +581,14 @@ def run_doctor(
         brightness, model_id, port = 60, "", ""
     if model_id == "auto":
         model_id = ""
-    doctor = Doctor(ask=ask, frames=frames, brightness=brightness, model_id=model_id, port=port)
+    doctor = Doctor(
+        ask=ask,
+        frames=frames,
+        brightness=brightness,
+        model_id=model_id,
+        port=port,
+        sensors=lambda: sensors_check(config_path),
+    )
     report = doctor.run()
     path = report_path or Path(
         f"libre-panel-doctor-{report.model.id if report.model else 'no-panel'}.txt"
