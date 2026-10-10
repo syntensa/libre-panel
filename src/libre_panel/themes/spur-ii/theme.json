@@ -35,7 +35,7 @@
     "color": "@bg",
     "image": null
   },
-  "refresh_ms": 1000,
+  "refresh_ms": 500,
   "animation": {
     "smoothing_ms": 450
   },
@@ -215,7 +215,8 @@
       "font": "builtin:Barlow-SemiBold",
       "align": "right",
       "glow": 0.3,
-      "tabular": true
+      "tabular": true,
+      "smooth": true
     },
     {
       "type": "text",
@@ -236,7 +237,7 @@
       "h": 126,
       "sensor": "cpu.load",
       "history": 300,
-      "per_frame": true,
+      "seconds": 36,
       "min": 0,
       "max": 100,
       "color": "@cpu",
@@ -318,7 +319,8 @@
       "font": "builtin:Barlow-SemiBold",
       "align": "right",
       "glow": 0.3,
-      "tabular": true
+      "tabular": true,
+      "smooth": true
     },
     {
       "type": "text",
@@ -339,7 +341,7 @@
       "h": 126,
       "sensor": "gpu.load",
       "history": 300,
-      "per_frame": true,
+      "seconds": 36,
       "min": 0,
       "max": 100,
       "color": "@gpu",
@@ -420,6 +422,7 @@
       "color": "@text",
       "font": "builtin:Barlow-SemiBold",
       "align": "right",
+      "smooth": true,
       "color_rules": [
         {
           "above": 80,
@@ -481,6 +484,7 @@
       "color": "@text",
       "font": "builtin:Barlow-SemiBold",
       "align": "right",
+      "smooth": true,
       "color_rules": [],
       "tabular": true
     },
@@ -524,6 +528,7 @@
       "color": "@text",
       "font": "builtin:Barlow-SemiBold",
       "align": "right",
+      "smooth": true,
       "color_rules": [],
       "tabular": true
     },
@@ -614,6 +619,7 @@
       "color": "@text",
       "font": "builtin:Barlow-SemiBold",
       "align": "right",
+      "smooth": true,
       "color_rules": [],
       "tabular": true
     },
@@ -657,6 +663,7 @@
       "color": "@text",
       "font": "builtin:Barlow-SemiBold",
       "align": "right",
+      "smooth": true,
       "color_rules": [],
       "tabular": true
     },
@@ -700,6 +707,7 @@
       "color": "@text",
       "font": "builtin:Barlow-SemiBold",
       "align": "right",
+      "smooth": true,
       "color_rules": [],
       "tabular": true
     },
@@ -790,6 +798,7 @@
       "color": "@text",
       "font": "builtin:Barlow-SemiBold",
       "align": "right",
+      "smooth": true,
       "color_rules": [
         {
           "above": 80,
@@ -851,6 +860,7 @@
       "color": "@text",
       "font": "builtin:Barlow-SemiBold",
       "align": "right",
+      "smooth": true,
       "color_rules": [],
       "tabular": true
     },
@@ -894,6 +904,7 @@
       "color": "@text",
       "font": "builtin:Barlow-SemiBold",
       "align": "right",
+      "smooth": true,
       "color_rules": [],
       "tabular": true
     },
@@ -984,6 +995,7 @@
       "color": "@text",
       "font": "builtin:Barlow-SemiBold",
       "align": "right",
+      "smooth": true,
       "color_rules": [],
       "tabular": true
     },
@@ -1027,6 +1039,7 @@
       "color": "@text",
       "font": "builtin:Barlow-SemiBold",
       "align": "right",
+      "smooth": true,
       "color_rules": [],
       "tabular": true
     },

@@ -43,7 +43,7 @@
     "color": "@base",
     "image": null
   },
-  "refresh_ms": 1000,
+  "refresh_ms": 500,
   "animation": {
     "smoothing_ms": 600
   },
@@ -129,7 +129,8 @@
       "color": "@tx_1",
       "font": "builtin:Barlow-SemiBold",
       "tabular": true,
-      "hide_if_missing": true
+      "hide_if_missing": true,
+      "smooth": true
     },
     {
       "type": "icon",
@@ -153,7 +154,8 @@
       "color": "@tx_1",
       "font": "builtin:Barlow-SemiBold",
       "tabular": true,
-      "hide_if_missing": true
+      "hide_if_missing": true,
+      "smooth": true
     },
     {
       "type": "icon",
@@ -373,7 +375,8 @@
       "font": "builtin:Barlow-SemiBold",
       "align": "center",
       "tabular": true,
-      "needs": "cpu.load"
+      "needs": "cpu.load",
+      "smooth": true
     },
     {
       "type": "text",
@@ -401,6 +404,7 @@
       "align": "center",
       "tabular": true,
       "hide_if_missing": true,
+      "smooth": true,
       "color_rules": [
         {
           "above": 75,
@@ -426,7 +430,8 @@
       "align": "center",
       "tabular": true,
       "hide_if_missing": true,
-      "needs": "cpu.load"
+      "needs": "cpu.load",
+      "smooth": true
     },
     {
       "type": "gauge",
@@ -458,7 +463,8 @@
       "font": "builtin:Barlow-SemiBold",
       "align": "center",
       "tabular": true,
-      "needs": "mem.load"
+      "needs": "mem.load",
+      "smooth": true
     },
     {
       "type": "text",
@@ -486,6 +492,7 @@
       "align": "center",
       "tabular": true,
       "hide_if_missing": true,
+      "smooth": true,
       "color_rules": [],
       "needs": "mem.load"
     },
@@ -534,7 +541,8 @@
       "font": "builtin:Barlow-SemiBold",
       "align": "center",
       "tabular": true,
-      "needs": "gpu.load"
+      "needs": "gpu.load",
+      "smooth": true
     },
     {
       "type": "text",
@@ -562,6 +570,7 @@
       "align": "center",
       "tabular": true,
       "hide_if_missing": true,
+      "smooth": true,
       "color_rules": [
         {
           "above": 75,
@@ -587,7 +596,8 @@
       "align": "center",
       "tabular": true,
       "hide_if_missing": true,
-      "needs": "gpu.load"
+      "needs": "gpu.load",
+      "smooth": true
     },
     {
       "type": "gauge",
@@ -619,7 +629,8 @@
       "font": "builtin:Barlow-SemiBold",
       "align": "center",
       "tabular": true,
-      "needs": "!gpu.load"
+      "needs": "!gpu.load",
+      "smooth": true
     },
     {
       "type": "text",
@@ -647,6 +658,7 @@
       "align": "center",
       "tabular": true,
       "hide_if_missing": true,
+      "smooth": true,
       "color_rules": [],
       "needs": "!gpu.load"
     },

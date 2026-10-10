@@ -34,6 +34,11 @@
   instead of once per reading, which kept the helper thread busy
 
 **Changes**
+- SPUR II and Studio read the sensors twice a second and their numbers
+  glide; SPUR II's graphs span 36 seconds in video mode, moving 25 pixels a
+  second. The graphs of Slate, Libre Default and Column have a window in
+  seconds for video mode too; on the serial panels these themes run on
+  nothing changes
 - Drawing is faster: cards about five times (only their round corners are
   drawn three times larger), so a theme's first frame takes half as long;
   numbers that change a digit at a time about six times (each digit is drawn
