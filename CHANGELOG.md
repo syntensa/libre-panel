@@ -32,7 +32,7 @@ fixes follow one user's logs: reports from more rev. C owners are welcome.
 - An awake rev. C panel is used as it is: Libre Panel no longer opens the port
   of its sleeping side, which may stay on the bus, or another device's (#3)
 - A panel set in the configuration whose size is not the theme's crashed
-  Libre Panel ("unknown color specifier: '@bg'") with every built-in theme;
+  Libre Panel (`unknown color specifier: '@bg'`) with every built-in theme;
   the frame is scaled to fit again (#3)
 - UsbPCMonitor 5" and 7" set up in the configuration are found, although they
   report the serial number of the Turing 3.5"
