@@ -44,9 +44,14 @@ port = ""                      # serial panels: found by their USB ids; only if 
 providers = ["load", "psutil"]
 
 [sensors.librehardwaremonitor]
-url = "http://127.0.0.1:8085/data.json"
+# mode = "auto"                # "auto", "inprocess" (inside Libre Panel) or "webserver"
+# dll_dir = ""                 # pip install: the folder with LibreHardwareMonitor's libraries
+# poll_seconds = 1             # how often it is read
+url = "http://127.0.0.1:8085/data.json"   # the web server (mode "webserver", and "auto"
+                               # where it cannot be read inside Libre Panel)
 # stale_seconds = 5            # no answer for this long: its readings are hidden
                                # ("--" on the panel); 0 keeps the last ones
+# gpu = "RTX 4080"             # with several graphics cards: the one whose name has this
 
 [sensors.psutil]
 # disk = "C:\\"                # the drive behind disk.load (default: the system drive)
@@ -84,7 +89,7 @@ sources you want in front of it.
 |---|---|---|
 | `load` | `cpu.load` and `gpu.load`, measured ten times a second | CPU everywhere, GPU on Windows (any vendor) |
 | `psutil` | CPU, memory, drives, network, battery, the busiest programs; temperatures and fans where the system has them | everywhere |
-| `librehardwaremonitor` | temperatures, power, clocks and fans of CPU, GPU and mainboard | Windows (in its default list), needs LibreHardwareMonitor running, see [below](#windows-sensors-gpu-power-fans) |
+| `librehardwaremonitor` | temperatures, power, clocks and fans of CPU, GPU and mainboard | Windows (in its default list); the Windows downloads carry what it needs, see [below](#windows-sensors-gpu-power-fans) |
 | `audio` | `audio.volume` (0 while muted) and `audio.muted` (1 or 0) of the default output | Windows, Linux (`wpctl` or `pactl`), macOS |
 
 **Fast load** (`load`): `cpu.load` and, on Windows, `gpu.load` are measured in
@@ -293,18 +298,92 @@ The settings were measured on the 9.2" panel; the details are in
 On Windows the temperatures and power of the processor and the graphics card,
 and the fans, come from
 [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor);
-psutil has none of them there. New configurations list it, and Libre Panel
-finds it by itself, at the latest half a minute after it is running:
+psutil has none of them there. New configurations list it
+(`providers = ["load", "librehardwaremonitor", "psutil"]`; a file made by an
+earlier version names `psutil` alone and gets the same list). Libre Panel reads it
+one of two ways, chosen by `mode` under `[sensors.librehardwaremonitor]`:
+
+| `mode` | |
+|---|---|
+| `"auto"` (default) | inside Libre Panel where that is possible, else through the web server of a LibreHardwareMonitor that you run yourself |
+| `"inprocess"` | inside Libre Panel only. Where that is not possible, the log says why and those readings show "--" |
+| `"webserver"` | the web server only, as Libre Panel 0.4 did |
+
+### Inside Libre Panel: no extra program
+
+**The Windows downloads** (setup and zip) carry LibreHardwareMonitor's library.
+Nothing else is to be installed or started, and no web server turned on. Libre
+Panel loads the library with [pythonnet](https://pythonnet.github.io/) on the
+.NET Framework that Windows has (4.7.2 or later; Windows 10 from version 1803 and
+Windows 11 have it) and reads it in the background once a second
+(`poll_seconds`). Only the parts of your computer that the theme on the panel
+shows are asked, so a theme with just a clock costs next to nothing.
+
+What it needs:
+
+| Reading | Needs |
+|---|---|
+| everything of the graphics card (temperature, load, power, clock, fan, memory), the loads of CPU and memory, memory use, network | nothing |
+| **CPU temperature, power and clock**, RAM temperature (DDR5), **the fans on the mainboard** | Libre Panel runs **as administrator**, and the **PawnIO** driver is installed |
+
+PawnIO is the small signed driver that LibreHardwareMonitor uses to talk to the
+chips on the mainboard and in the CPU. It is a separate program, not part of
+Libre Panel: install it once from [pawnio.eu](https://pawnio.eu) (version 2 or
+newer; installing a driver takes administrator rights). Windows starts programs
+without those rights, so Libre Panel has to be told to start with them:
+
+```
+libre-panel autostart enable --elevated      # in a terminal opened as administrator
+```
+
+([Running in the background](BACKGROUND.md#windows-starting-with-the-highest-rights)
+says what that does and when it is safe.) Without the rights or the driver these
+readings show "--", never 0, and everything else works as it does. In that case
+Libre Panel asks a LibreHardwareMonitor web server (below) once at the start: if
+yours runs as administrator, its readings fill in what is missing.
+
+Drive temperatures (`temp.nvme.*` and the like) are not read inside Libre Panel
+yet; the web server has them.
+
+`libre-panel sensors` and `libre-panel doctor` say which of the two is missing.
+`libre-panel sensors --check-lhm` only tests that the library loads and opens.
+
+### With pip
+
+A pip install has no library in it. Install the extra, which brings pythonnet,
+and fetch the libraries (they are not part of Libre Panel; the script downloads
+them from NuGet and checks them against fixed checksums):
+
+```
+pip install "libre-panel[lhm]"
+python fetch_lhm.py C:\lhm-libs
+```
+
+`fetch_lhm.py` is in the repository under
+[`packaging/windows`](https://github.com/syntensa/libre-panel/tree/main/packaging/windows);
+it needs nothing but Python. Then name the folder:
+
+```toml
+[sensors.librehardwaremonitor]
+dll_dir = "C:\\lhm-libs"
+```
+
+A 32-bit Python needs `--arch x86`. `dll_dir` can also be the folder of an
+unpacked [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases)
+0.9.6 download, which holds the same libraries.
+
+### Through the web server of LibreHardwareMonitor
+
+Used where Libre Panel cannot read the library itself (pythonnet or the library
+is missing, or the .NET Framework would not start, e.g. because another program
+already started pythonnet on another runtime), and always with
+`mode = "webserver"`:
 
 1. Install LibreHardwareMonitor and run it **as administrator** (CPU
    temperatures and power need its driver).
 2. *Options → Remote Web Server → Run*.
 3. Check that `providers` in your `config.toml` lists `"librehardwaremonitor"`,
    ahead of `"psutil"`: `providers = ["load", "librehardwaremonitor", "psutil"]`.
-   A file made by an earlier version names `psutil` alone.
-
-`libre-panel sensors` and `libre-panel doctor` say so when no CPU or GPU
-temperature or power reading arrives.
 
 Where LibreHardwareMonitor does not run, nothing else is lost: those readings
 show "--". Libre Panel gives a request up after a second, asks less and less
@@ -313,7 +392,8 @@ often (every half minute at last) and writes one line to the log.
 If LibreHardwareMonitor stops answering (closed, crashed, blocked), its
 readings stay for `stale_seconds` (5 by default) and then disappear, so the
 panel shows "--" instead of numbers that stand still. A line in the log says
-so, and another when it answers again.
+so, and another when it answers again. The same limit hides the readings
+of the library inside Libre Panel if its thread ever stops.
 
 ## Weather
 

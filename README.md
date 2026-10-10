@@ -171,7 +171,9 @@ Made one you like? Share it in
 - **Sensors**: CPU (every core), RAM, every drive, network, temperatures,
   fans, battery and the busiest programs via `psutil`; on Windows also GPU,
   power, every temperature and fan through
-  [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor).
+  [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor),
+  which the Windows downloads carry (no extra program; the CPU's temperature
+  needs administrator rights, see [Configuration](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans)).
 - **From your life**: what is playing, calendars (.ics), Home Assistant,
   MQTT, sunrise, sunset and the moon, and the frame rate of games
   ([PresentMon](https://github.com/GameTechDev/PresentMon), Windows).

@@ -90,9 +90,10 @@ Panel keeps looking for it and uses it as soon as it appears.
 
 Some sensors (CPU temperature and power, RAM temperature, mainboard fans)
 can be read only with administrator rights. The built-in LibreHardwareMonitor
-source asks LibreHardwareMonitor's web server and needs none; a sensor
-plugin that reads the hardware itself does. For that, in a terminal opened
-with *Run as administrator*:
+source reads them inside Libre Panel, so Libre Panel needs the rights (and the
+PawnIO driver, see [Windows sensors](CONFIGURATION.md#windows-sensors-gpu-power-fans));
+a sensor plugin that reads the hardware itself needs them too. For that, in a
+terminal opened with *Run as administrator*:
 
 ```
 libre-panel autostart enable --elevated
