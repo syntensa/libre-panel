@@ -211,8 +211,9 @@ Show these readings with the Dashboard module (`ha.sensor.living_room_temperatur
 
 ## Services and modes
 
-Plugins can add services (a game mode, an autopilot, …). They are off until
-you list them; each can have its own options table. A mode changes the frame
+Services are helpers that run beside the panel: Libre Panel's own
+([below](#built-in-services)) and those of plugins. They are off until you
+list them; each can have its own options table. A mode changes the frame
 rate and optionally the theme while a service keeps it switched on. Details
 are in [Plugins](PLUGINS.md).
 
@@ -227,6 +228,67 @@ poll_s = 1.0
 fps = 30
 theme = "slate"
 ```
+
+## Built-in services
+
+Libre Panel brings a few services of its own (no plugin needed). Each is off
+until `[services] enabled` lists it, and takes its settings from a table with
+its name. `libre-panel plugins` lists them as "built in".
+
+```toml
+[services]
+enabled = ["notices"]
+```
+
+### Notices
+
+Short messages on the panel for what happens around it. The theme decides how
+they look (the card, or the band after SPUR II: `"toast": {"style": "band"}`)
+and which kinds it shows (`"toast": {"off": ["music"]}`); a screen that shows
+something itself leaves its kind out.
+
+| Kind | When | The message |
+|---|---|---|
+| `volume` | the volume changes by at least 1, or is muted or unmuted; the value the service starts with is no change | the level with a bar, or "Muted" |
+| `music` | a new track starts playing; not a pause, a resume, or the track that was playing at the start | title and artist, with the cover and the icon of the player when a source brings them |
+| `warning` | a sensor reaches a limit you set | "CPU temperature 92 °C", in the theme's warning colour at `warn` and its critical one at `crit` |
+| `panel` | the panel is back from a restart that cleared a hung video decoder (not from a replug) | "Panel restarted 21:05" |
+
+```toml
+[services.notices]
+volume = true          # the volume; needs "audio" in [sensors] providers
+music = true           # a new track
+restarted = true       # "Panel restarted"
+quiet_s = 120          # warnings: the same sensor is not told again within this time
+
+[[services.notices.warnings]]
+key = "cpu.temp"       # any reading, see: libre-panel sensors
+warn = 80              # a message at this value (optional if crit is set)
+crit = 90              # a stronger one at this value
+# name = "CPU"         # the text before the value (default: the reading's name)
+# max = 100            # the value a full bar stands for (percentages need none)
+# icon = "cpu"         # one of the built-in icons (default: from the key)
+
+[[services.notices.warnings]]
+key = "gpu.temp"
+crit = 85
+```
+
+- A warning is told when the value reaches a limit and not again until it has
+  been below `warn` (below `crit` when there is no `warn`) in between, and
+  never twice within `quiet_s`. A worse level (`crit` after `warn`) is told
+  at once, also in the quiet time. A sensor that is past its limit when the
+  service starts is told too.
+- Notices look at every new reading, that is every `refresh_ms` of the theme.
+  For a volume bar that follows the volume keys closely use a theme with a short
+  `refresh_ms` (100 to 250).
+- While the service runs, the sources it needs run too, although no theme shows
+  them: what is playing (`media.*`), the volume (`audio.*`) and the warned
+  sensors. They cost what they cost otherwise (a player is asked once a
+  second); switch off `volume` or `music` to save that.
+- Texts follow the language setting. Each notice has its own `key`, so the
+  same one again (the volume while it turns) changes in place instead of
+  coming again.
 
 ## Language
 

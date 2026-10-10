@@ -217,6 +217,20 @@ frame rates (`game.*`). A service that reads such a key itself says so, once,
 with `host.want("media.*", "audio.volume")`; the source then runs for as long
 as the service does. A key a source does not know is harmless.
 
+### Built-in services
+
+Libre Panel brings services of its own. They are not plugins and need no
+package: they are in the app, listed by `libre-panel plugins` as "built in", and
+switched on like any service with `[services] enabled`. All are off until you
+do. Their names cannot be used by a plugin.
+
+| Service | What it does |
+|---|---|
+| `notices` | messages for the volume, a new track, sensors that cross a limit and a panel that restarted |
+
+Their options are in the [configuration guide](CONFIGURATION.md#built-in-services).
+They use only what is described here, so they are also examples for your own.
+
 ## Screens
 
 A screen draws the whole frame in code. Themes stay data: a theme names the

@@ -12,9 +12,10 @@ from libre_panel import app, cli
 from libre_panel.config import Config, ModeConfig, SensorsConfig, ServicesConfig, parse_config
 from libre_panel.devices.base import Display
 from libre_panel.plugins import PluginHost, ServiceManager, Toast, discover
-from libre_panel.plugins.loader import API_VERSION, reset_registry
+from libre_panel.plugins.loader import API_VERSION, BUILT_IN_PARTS, reset_registry
 
 _names = itertools.count()
+OWN_SERVICES = sorted(BUILT_IN_PARTS["services"])  # Libre Panel's own, no plugins
 
 SERVICE = """
 from libre_panel.plugins import Service
@@ -70,7 +71,7 @@ def wait_for(predicate, timeout=10.0):
 def test_folder_plugins_are_found_and_checked(plugin_folder, capsys):
     package = plugin_folder(SERVICE, parts=SERVICE_PARTS)
     registry = discover()
-    assert registry.names("services") == ["broken", "counter", "no-api"]
+    assert registry.names("services") == sorted([*OWN_SERVICES, "broken", "counter", "no-api"])
     assert registry.get("services", "counter").__name__ == "Counter"
     assert registry.get("services", "no-api") is None  # no api version declared
     assert "plugin API None" in registry.parts["services"]["no-api"].error
@@ -85,7 +86,7 @@ def test_folder_plugins_are_found_and_checked(plugin_folder, capsys):
 def test_plugins_for_another_api_are_refused(plugin_folder):
     plugin_folder(SERVICE, api=API_VERSION + 1, parts=SERVICE_PARTS)
     registry = discover()
-    assert registry.names("services") == []
+    assert registry.names("services") == OWN_SERVICES  # the plugin's are refused
     assert "written for plugin API 2" in registry.errors[0]
 
 

@@ -30,6 +30,15 @@
   across theme switches; a transition can hide toasts while it plays
   (`toasts = "hide"`) and decide case by case what a switch does
   (`on_switch`); `context.image(key)` gives a published picture
+- Services of its own, built into the app and switched on with `[services]
+  enabled` like a plugin's (all off until you list them; `libre-panel plugins`
+  lists them as "built in"). `notices` puts short messages on the panel: the
+  volume while it turns (changing in place, "Muted"), a new track with its
+  cover and the player's icon, sensors that cross a limit you set
+  (`[[services.notices.warnings]]` with `warn` and `crit`, told once until the
+  value has been below `warn`, and never twice within `quiet_s`), and "Panel
+  restarted 21:05" after a restart that cleared a hung video decoder. The
+  theme's toast style draws them (card or band), `toast.off` leaves kinds out
 - Plugins: services no longer poll. `host.on("sample", callback)` hands them
   every new snapshot of the readings (a slow callback gets the newest one,
   never a backlog), and what a service publishes reaches the next frame
