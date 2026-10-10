@@ -26,6 +26,36 @@ def test_theme_is_fitted_to_a_different_panel():
     assert frame.size == (1920, 480)
 
 
+def test_a_theme_with_a_palette_background_fits_another_panel(tmp_path):
+    # libre-default's background is "@bg", a palette name (issue #3: it crashed)
+    out = tmp_path / "frame.png"
+    config = Config(
+        device=DeviceConfig(model="turing-5", driver="virtual", output=str(out)),
+        sensors=SensorsConfig(providers=["demo"]),
+    )
+    theme = load_theme(find_theme(config.theme))
+    assert theme.background_color.startswith("@")
+    run(config, once=True)
+    with Image.open(out) as frame:
+        assert frame.size == (800, 480)
+        bg = theme.palette[theme.background_color[1:]].lstrip("#")
+        assert frame.convert("RGB").getpixel((2, 240)) == tuple(bytes.fromhex(bg[:6]))
+
+
+def test_a_broken_sensor_source_does_not_stop_the_panel(tmp_path, caplog):
+    out = tmp_path / "frame.png"
+    config = Config(
+        device=DeviceConfig(driver="virtual", output=str(out)),
+        sensors=SensorsConfig(
+            providers=["demo", "lhm", "calendar"],  # a typo, and a calendar set up wrong
+            options={"calendar": {"days": "two weeks"}},
+        ),
+    )
+    run(config, once=True)
+    assert out.exists()
+    assert "'lhm' not started" in caplog.text and "'calendar' not started" in caplog.text
+
+
 def test_cli_preview_and_models(tmp_path, capsys):
     out = tmp_path / "p.png"
     assert main(["preview", "spur-ii", "-o", str(out)]) == 0

@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
-from PIL import ImageFont
+from PIL import ImageColor, ImageFont
 
 from libre_panel import timezones
 from libre_panel.devices.models import find_model
@@ -257,8 +257,14 @@ def _clamp(value: float, low: float, high: float) -> float:
 
 
 def _rgb(color: str) -> tuple[int, int, int]:
-    color = color.lstrip("#")
-    return int(color[0:2], 16), int(color[2:4], 16), int(color[4:6], 16)
+    """Any colour a theme may hold ("#0b8", "#0B8C84CC", "teal") as red, green, blue."""
+    red, green, blue = ImageColor.getrgb(color)[:3]
+    return red, green, blue
+
+
+def _hex(color: str) -> str:
+    """``color`` as "#RRGGBB", the form the modules mix and add alpha to."""
+    return "#{:02X}{:02X}{:02X}".format(*_rgb(color))
 
 
 def mix(a: str, b: str, amount: float) -> str:
@@ -1766,7 +1772,7 @@ MODULE_FALLBACKS = ("auto", "none", "cpu", "gpu", "mem", "disk")
 def colors_of(palette: dict[str, str]) -> dict[str, str]:
     """The palette roles, from the theme where it has them, else from the default look."""
     default = LOOKS[DEFAULT_LOOK]["palette"]
-    return {role: palette.get(role, default[role])[:7] for role in ROLES}
+    return {role: _hex(palette.get(role, default[role])) for role in ROLES}
 
 
 def _fallback(module: dict[str, Any]) -> str | None:
@@ -1837,8 +1843,10 @@ def expand(theme: Any) -> tuple[list[dict[str, Any]], dict[str, list[int]]]:
         cols = min(max(1, widget["cols"]), grid.columns - col)
         rows = min(max(1, widget["rows"]), grid.rows - row)
         placed = {**widget, "col": col, "row": row, "cols": cols, "rows": rows}
-        if (placed["color"] or "").startswith("@"):  # a palette entry
-            placed["color"] = theme.palette.get(placed["color"][1:], "")[:7] or None
+        color = placed["color"] or ""
+        if color.startswith("@"):  # a palette entry
+            color = theme.palette.get(color[1:], "")
+        placed["color"] = _hex(color) if color else None
         box = grid.box(col, row, cols, rows)
         boxes[widget["id"]] = box
         for i, raw in enumerate(build_module(placed, box, colors, style)):

@@ -522,6 +522,16 @@ def test_doctor_uses_the_panel_in_the_config(ports, no_waiting):
         screen.close()
 
 
+@pytest.mark.parametrize("port", ["", "/dev/ttyACM0"])
+def test_a_usbpcmonitor_with_the_turing_serial_number_is_found(ports, port):
+    """UsbPCMonitor panels report the Turing 3.5" serial number; set up as what they
+    are, they were not found (or, with the port, called a panel of another kind)."""
+    ports(FakeRevA(native=(480, 800), hello=bytes([2] * 6)), serial_number="USB35INCHIPSV2")
+    with display(model="usbpcmonitor-5", port=port) as screen:
+        assert screen.model.id == "usbpcmonitor-5"
+        screen.show(picture((800, 480)))
+
+
 def test_a_model_of_another_kind_names_the_right_one(ports, no_waiting):
     """A rev. C panel set up as UsbPCMonitor 5" (rev. A) stayed black: now it says so."""
     sleeping_rev_c(ports, FakeRevC("turing-5"))

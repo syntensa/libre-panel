@@ -192,6 +192,19 @@ def test_a_module_colour_and_title_win():
     assert parts["m0/label"]["text"] == "MAIN"
 
 
+@pytest.mark.parametrize(
+    ("palette", "color"),
+    [({"surface": "#fff", "accent": "teal"}, "#f80"), ({"bg": "rgb(10, 20, 30)"}, "#FF880080")],
+)
+def test_modules_take_every_colour_a_theme_may_hold(palette, color):
+    t = theme({"module": "ring", "cols": 2}, {"module": "stat", "color": color}, palette=palette)
+    renderer = Renderer(t, preview=True)
+    renderer.render(snapshot())
+    assert renderer.warnings == []
+    parts = {w["id"]: w for w in renderer.widgets}
+    assert parts["m1/value"]["color"].startswith("#") and len(parts["m1/icon"]["color"]) == 7
+
+
 def test_every_look_has_every_role():
     for key in LOOKS:
         palette, style = look_theme_parts(key)

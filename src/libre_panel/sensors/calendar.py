@@ -185,8 +185,27 @@ def _nth_weekday(year: int, month: int, weekday: int, nth: int) -> date | None:
     return day if day.month == month else None
 
 
-def _occurrences(start: datetime, rule: dict[str, str], until_window: datetime) -> list[datetime]:
-    """The starts a rule gives, from ``start`` until the window's end."""
+def _first_step(start: datetime, freq: str, interval: int, since: datetime | None) -> int:
+    """The step to begin with: shortly before ``since``, so a rule that has run for
+    years does not use up its steps before it reaches the window."""
+    if since is None or since <= start:
+        return 0
+    if freq in ("DAILY", "WEEKLY"):
+        steps = (since - start).days // ((7 if freq == "WEEKLY" else 1) * interval)
+    elif freq == "MONTHLY":
+        steps = ((since.year - start.year) * 12 + since.month - start.month) // interval
+    elif freq == "YEARLY":
+        steps = (since.year - start.year) // interval
+    else:
+        return 0
+    return max(0, steps - 1)
+
+
+def _occurrences(
+    start: datetime, rule: dict[str, str], until_window: datetime, since: datetime | None = None
+) -> list[datetime]:
+    """The starts a rule gives, from ``start`` until the window's end (from shortly
+    before ``since`` on, unless the rule counts its occurrences)."""
     freq = rule.get("FREQ", "")
     interval = max(1, int(rule.get("INTERVAL", "1") or 1))
     count = int(rule["COUNT"]) if rule.get("COUNT", "").isdigit() else None
@@ -216,7 +235,8 @@ def _occurrences(start: datetime, rule: dict[str, str], until_window: datetime) 
         found.append(moment)
         return True
 
-    for step in range(MAX_STEPS):
+    first = 0 if count is not None else _first_step(start, freq, interval, since)
+    for step in range(first, first + MAX_STEPS):
         if freq == "DAILY":
             if not take(start + timedelta(days=step * interval)):
                 break
@@ -298,7 +318,7 @@ def events_from_ics(text: str, now: datetime, days: int = 14, calendar: str = ""
         starts = [start]
         rule = raw.get("RRULE")
         if rule and not raw.get("RECURRENCE-ID"):
-            starts = _occurrences(start, _rule(rule[1]), window_end)
+            starts = _occurrences(start, _rule(rule[1]), window_end, window_start - length)
             left_out = set()
             for params, value in raw.all("EXDATE"):
                 for part in value.split(","):

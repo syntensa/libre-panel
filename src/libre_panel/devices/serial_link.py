@@ -72,6 +72,8 @@ def find_port(model: PanelModel | None = None, port: str = "") -> FoundPort | No
         # a serial number that names a model settles it; else every model of the chip
         known = models_for_usb(info.vid, info.pid, info.serial_number)
         candidates = [m for m in known if m in wanted]
+        if not candidates and model is not None and _sibling(model, info, known):
+            candidates = [model]  # its serial number names another size of the family
         if candidates:
             return FoundPort(info.device, candidates[0], info.serial_number, tuple(candidates))
         if port and model is not None and known and not _generic(info):
@@ -81,6 +83,14 @@ def find_port(model: PanelModel | None = None, port: str = "") -> FoundPort | No
             raise DeviceError(t("device.port {port}: set device.model as well", port=port))
         return FoundPort(port, model, None)
     return None
+
+
+def _sibling(model: PanelModel, info: Any, known: list[PanelModel]) -> bool:
+    """Whether ``model`` speaks the protocol of the panel on ``info``, whose serial
+    number names other models: the UsbPCMonitor 5" and 7" say USB35INCHIPSV2 like
+    the Turing 3.5", and the driver asks them their size."""
+    same_ids = (info.vid, info.pid) in model.usb_ids
+    return same_ids and any(m.protocol == model.protocol for m in known)
 
 
 def _another_kind(port: str, model: PanelModel, known: list[PanelModel]) -> str:

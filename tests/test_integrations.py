@@ -268,6 +268,23 @@ def test_calendar_events_and_repeats(berlin):
     assert all(e.calendar == "Home" for e in events)
 
 
+@pytest.mark.parametrize(
+    ("rule", "start", "expected"),
+    [("FREQ=DAILY", "20100104T080000", "10-09 08:00"),  # from yesterday on
+     ("FREQ=WEEKLY;INTERVAL=2", "19700105T080000", "10-12 08:00"),
+     ("FREQ=MONTHLY;BYMONTHDAY=-1", "19000131T080000", "10-31 08:00"),
+     ("FREQ=DAILY;COUNT=3", "20100104T080000", None)],
+)  # fmt: skip
+def test_rules_that_began_long_ago_still_repeat(rule, start, expected):
+    ics = (
+        "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:old\nSUMMARY:Old\n"
+        f"DTSTART:{start}\nDURATION:PT15M\nRRULE:{rule}\nEND:VEVENT\nEND:VCALENDAR\n"
+    )
+    events = events_from_ics(ics, datetime(2026, 10, 10, 7, 0), days=30)
+    first = events[0].start.strftime("%m-%d %H:%M") if events else None
+    assert first == expected
+
+
 def test_calendar_readings(berlin):
     now = datetime(2026, 10, 19, 9, 45)
     readings = calendar_readings(events_from_ics(ICS, now, days=14), now)

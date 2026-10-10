@@ -30,7 +30,10 @@ def build_hub(config: Config, demo: bool = False) -> SensorHub:
     providers: list[SensorProvider] = []
     names = ["demo"] if demo else config.sensors.providers
     for name in names:
-        providers.append(create_provider(name, config.sensors.options.get(name, {})))
+        try:
+            providers.append(create_provider(name, config.sensors.options.get(name, {})))
+        except Exception as exc:  # a misspelt or misconfigured source must not stop the panel
+            log.error("sensor source %r not started: %s", name, exc)
     if config.weather.enabled and not demo:
         from libre_panel.weather.open_meteo import OpenMeteoProvider
 
@@ -71,10 +74,19 @@ def target_size(config: Config, theme: Theme) -> tuple[int, int]:
     return size
 
 
-def fit_frame(frame: Image.Image, size: tuple[int, int], background: str) -> Image.Image:
+def fit_frame(
+    frame: Image.Image, size: tuple[int, int], background: str | tuple[int, ...]
+) -> Image.Image:
+    """``frame`` scaled into ``size``; ``background`` fills the rest (a colour, not
+    a palette name: :func:`background_of` gives the theme's)."""
     if frame.size == size:
         return frame
     return ImageOps.pad(frame, size, method=Image.Resampling.LANCZOS, color=background)
+
+
+def background_of(renderer: Renderer) -> tuple[int, int, int]:
+    """The theme's background colour, its palette name (``"@bg"``) resolved."""
+    return renderer.color(renderer.theme.background_color)[:3]
 
 
 class _Watcher:
@@ -353,7 +365,7 @@ def run(
             display.open()
             display.set_brightness(config.device.brightness)
             frame, _ = renderer.render(hub.snapshot())
-            display.show(fit_frame(frame, size, theme.background_color), None)
+            display.show(fit_frame(frame, size, background_of(renderer)), None)
             return
         while not stop.is_set():
             started = time.perf_counter()  # fine-grained on every system (monotonic is not
@@ -435,7 +447,7 @@ def run(
                 renderer.toast = toasts.showing(now)  # screens see a toast the moment it begins
                 snapshot.now = datetime.now()  # the clock ticks between readings too
                 frame, _ = renderer.render(snapshot, now)
-                frame = fit_frame(frame, size, theme.background_color)
+                frame = fit_frame(frame, size, background_of(renderer))
                 if blend is not None:
                     frame, blend = _blend(blend, frame, now)
                 last_frame = frame

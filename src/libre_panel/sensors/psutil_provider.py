@@ -46,7 +46,18 @@ PROCESSES_EVERY = 2.0
 def _system_disk() -> str:
     if os.name == "nt":
         return os.environ.get("SystemDrive", "C:") + "\\"
+    # Fedora Atomic (Bazzite, Silverblue, Kinoite; composefs) mounts a read-only
+    # image of a few MB at "/", always full; the disk itself is at /sysroot.
+    if os.path.ismount("/sysroot") and _tiny("/"):
+        return "/sysroot"
     return "/"
+
+
+def _tiny(path: str) -> bool:
+    try:
+        return psutil.disk_usage(path).total < GIB
+    except OSError:
+        return False
 
 
 class PsutilProvider(SensorProvider):
@@ -100,12 +111,13 @@ class PsutilProvider(SensorProvider):
         except (OSError, RuntimeError):
             return
         keys: dict[tuple[str, int], str] = {}
+        used: dict[str, int] = {}
         for chip, entries in temps.items():
             for i, entry in enumerate(entries):
                 label = entry.label or str(i)
-                key = _slug(f"temp.{chip}.{label}")
-                keys[chip, i] = key
                 name = f"{_CHIP_NAMES.get(chip, chip)} {entry.label or i + 1}"
+                key, name = _unique(_slug(f"temp.{chip}.{label}"), name, used)
+                keys[chip, i] = key
                 out[key] = Reading(key, entry.current, "°C", name)
         for chip in _CPU_CHIPS:
             entries = temps.get(chip)
@@ -132,11 +144,12 @@ class PsutilProvider(SensorProvider):
             fans = reader() or {}
         except (OSError, RuntimeError):
             return
+        used: dict[str, int] = {}
         for chip, entries in fans.items():
             for i, entry in enumerate(entries):
                 label = entry.label or str(i)
-                key = _slug(f"fan.{chip}.{label}")
                 name = f"{_CHIP_NAMES.get(chip, chip)} {entry.label or i + 1}"
+                key, name = _unique(_slug(f"fan.{chip}.{label}"), name, used)
                 out[key] = Reading(key, float(entry.current), "RPM", name)
 
     # -- drives, cores, network details ----------------------------------------
@@ -170,7 +183,7 @@ class PsutilProvider(SensorProvider):
             options = part.opts.split(",")
             if part.fstype in _PSEUDO_FS or "cdrom" in options or not part.fstype:
                 continue
-            if os.name != "nt" and "ro" in options and part.mountpoint != "/":
+            if os.name != "nt" and "ro" in options and part.mountpoint not in ("/", self.disk_path):
                 continue  # read-only images, recovery
             if part.mountpoint.startswith(("/snap", "/boot", "/System/Volumes")):
                 continue
@@ -178,6 +191,8 @@ class PsutilProvider(SensorProvider):
                 continue
             seen.add(part.device)
             name = part.mountpoint.rstrip("\\") if os.name == "nt" else part.mountpoint
+            if name == "/sysroot":
+                name = "/"  # the system's disk (see _system_disk)
             found.append((part.mountpoint, name or part.mountpoint))
         found.sort(key=lambda p: os.path.normcase(p[0]) != system)  # the system drive first
         return found
@@ -369,3 +384,10 @@ def _program_name(name: str) -> str:
 
 def _slug(key: str) -> str:
     return key.replace(" ", "_").lower()
+
+
+def _unique(key: str, name: str, used: dict[str, int]) -> tuple[str, str]:
+    """``key`` and ``name``, numbered from the second sensor that has them on: Linux
+    names the sensors of two NVMe drives (or two GPUs) alike."""
+    used[key] = count = used.get(key, 0) + 1
+    return (key, name) if count == 1 else (f"{key}_{count}", f"{name} {count}")

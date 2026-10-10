@@ -170,6 +170,30 @@ def test_drives_leave_out_what_is_not_a_drive(monkeypatch):
     assert out["disk.2.free"].value == pytest.approx(75.0)
 
 
+def test_fedora_atomic_shows_the_disk_not_its_image(monkeypatch):
+    # Bazzite, Silverblue: "/" is a composefs image of a few MB, always full
+    parts = [
+        Part("/dev/nvme0n1p3", "/sysroot", "btrfs", "ro,relatime"),
+        Part("/dev/nvme0n1p3", "/var", "btrfs", "rw,relatime"),
+        Part("/dev/sdb1", "/run/media/games", "ext4", "rw"),
+    ]
+    sizes = {"/": (40 * 2**20, 40 * 2**20, 0, 100.0)}
+    monkeypatch.setattr(psutil_provider.os, "name", "posix")
+    monkeypatch.setattr(psutil_provider.os.path, "ismount", lambda path: path == "/sysroot")
+    monkeypatch.setattr(psutil_provider.psutil, "disk_partitions", lambda all=False: parts)
+    monkeypatch.setattr(
+        psutil_provider.psutil,
+        "disk_usage",
+        lambda path: Usage(*sizes.get(path, (500 * 2**30, 100 * 2**30, 400 * 2**30, 20.0))),
+    )
+    provider = psutil_provider.PsutilProvider()
+    assert provider.disk_path == "/sysroot"
+    out = provider.read()
+    assert out["disk.load"].value == 20.0 and out["disk.total"].value == pytest.approx(500)
+    assert out["disk.1.name"].value == "/" and out["disk.2.name"].value == "/run/media/games"
+    assert "disk.3.name" not in out  # /var is the same disk
+
+
 def test_processes_are_counted_once_per_program(monkeypatch):
     class Proc:
         def __init__(self, pid, name, cpu, mem):
@@ -202,6 +226,30 @@ def test_costly_sensors_wait_until_a_theme_shows_them(monkeypatch):
     assert sorted(started) == ["ping", "proc"]
     del renderer
     provider.close()
+
+
+Temp = namedtuple("Temp", "label current high critical")
+Fan = namedtuple("Fan", "label current")
+
+
+def test_two_drives_with_the_same_sensor_names_both_show(monkeypatch):
+    temps = {  # two NVMe drives, two AMD GPUs: Linux groups them by name
+        "nvme": [Temp("Composite", 40.0, 0, 0), Temp("Composite", 55.0, 0, 0)],
+        "amdgpu": [Temp("edge", 50.0, 0, 0), Temp("edge", 60.0, 0, 0)],
+    }
+    fans = {"amdgpu": [Fan("", 900), Fan("", 1200)]}
+    monkeypatch.setattr(psutil_provider.psutil, "sensors_temperatures", lambda: temps,
+                        raising=False)  # fmt: skip
+    monkeypatch.setattr(psutil_provider.psutil, "sensors_fans", lambda: fans, raising=False)
+    out = {}
+    provider = psutil_provider.PsutilProvider()
+    provider._temperatures(out)
+    provider._fans(out)
+    assert out["temp.nvme.composite"].value == 40.0 and out["temp.nvme.composite_2"].value == 55.0
+    assert out["temp.nvme.composite_2"].label == "NVMe Composite 2"
+    assert out["gpu.temp"].value == out[out["gpu.temp"].origin].value == 50.0
+    assert [i.number for i in lists.pick({"items": "temp.*"}, out)] == [50.0, 60.0, 40.0, 55.0]
+    assert out["fan.amdgpu.0"].value == 900.0 and out["fan.amdgpu.1"].value == 1200.0
 
 
 Battery = namedtuple("Battery", "percent secsleft power_plugged")

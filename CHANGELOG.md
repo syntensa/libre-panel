@@ -11,6 +11,20 @@
 - A panel set up as the wrong kind (a rev. A model on a rev. C panel's port)
   no longer stays dark without a word: Libre Panel names the models that fit
 - Waking a rev. C panel works with `port` set to its sleeping port
+- A panel set in the configuration whose size is not the theme's crashed
+  Libre Panel ("unknown color specifier: '@bg'") with every built-in theme;
+  the frame is scaled to fit again (#3)
+- UsbPCMonitor 5" and 7" set up in the configuration are found, although they
+  report the serial number of the Turing 3.5"
+- A misspelt or misconfigured sensor source no longer stops the panel: it is
+  left out, with an error in the log
+- Two NVMe drives (or GPUs) whose sensors Linux names alike: the temperatures
+  and fans of both show (`temp.nvme.composite`, `temp.nvme.composite_2`)
+- Bazzite, Silverblue and other Fedora Atomic systems: the disk shows its real
+  use, not that of the small read-only image at `/` (always 100 %)
+- Modules take every colour a theme may hold: a short one (`#fff`), a name or
+  `rgb()` in the palette stopped the whole theme
+- Calendar: events that repeat since many years (daily since 2010) show again
 - CI also runs on Python 3.14
 
 **Changes**
