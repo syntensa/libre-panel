@@ -18,3 +18,6 @@ libre-panel-frame.png
 libre-panel-frame.png.tmp
 preview.png
 libre-panel-doctor-*.txt
+
+# LibreHardwareMonitor's libraries, fetched from NuGet for the Windows build (never committed)
+packaging/windows/lhm-libs/

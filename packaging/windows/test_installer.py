@@ -62,6 +62,17 @@ def main(setup):
     value = run_value() or ""
     check("LibrePanel.exe" in value and "tray --background" in value, f"autostart entry: {value}")
 
+    # It carries LibreHardwareMonitor and loads it: no separate program for the GPU,
+    # temperatures, power and fans (no administrator rights needed for this check).
+    lhm = subprocess.run(
+        [str(APP / "libre-panel.exe"), "sensors", "--check-lhm"],
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    print(lhm.stdout, lhm.stderr)
+    check(lhm.returncode == 0, "the installed program loads its LibreHardwareMonitor libraries")
+
     # The installed program works as autostart would start it.
     subprocess.run(
         [sys.executable, str(SMOKE), str(APP / "LibrePanel.exe"), "--background"], check=True

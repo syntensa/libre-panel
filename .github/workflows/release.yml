@@ -84,11 +84,26 @@ jobs:
             Linux)   echo "CLI=dist/libre-panel/libre-panel" >> "$GITHUB_ENV"
                      echo "GUI=dist/libre-panel/libre-panel" >> "$GITHUB_ENV" ;;
           esac
+      - name: LibreHardwareMonitor libraries (Windows)
+        # From NuGet, each package checked against the SHA-256 pinned in the script; they
+        # are not in the repository. The spec bundles them, with pythonnet.
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          pip install ".[lhm]"
+          python packaging/windows/fetch_lhm.py
       - name: Build
         run: pyinstaller --noconfirm --clean packaging/pyinstaller/libre-panel.spec
       - name: Smoke test (render)
         shell: bash
         run: '"$CLI" preview spur-ii -o smoke.png'
+      - name: Smoke test (LibreHardwareMonitor in the bundle)
+        # Loads the bundled libraries through pythonnet and opens them. Needs no
+        # administrator rights; the CPU's sensors being out of reach is not a failure.
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: bash
+        run: '"$CLI" sensors --check-lhm'
       - name: Smoke test (serial and USB libraries in the bundle)
         shell: bash
         run: |
@@ -103,7 +118,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Copy-Item LICENSE, README.md dist/libre-panel/
+          Copy-Item LICENSE, README.md, NOTICE.md dist/libre-panel/
           7z a "dist/libre-panel-$env:VERSION-windows-x64-portable.zip" ./dist/libre-panel/*
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }

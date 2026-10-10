@@ -50,6 +50,23 @@ if sys.platform == "win32":
         datas += winrt_datas
         binaries += winrt_binaries
         hiddenimports += winrt_hidden
+if sys.platform == "win32":
+    # LibreHardwareMonitor inside Libre Panel (docs/CONFIGURATION.md): pythonnet starts the
+    # .NET Framework (clr_loader brings the native part), and the .NET libraries are what
+    # packaging/windows/fetch_lhm.py put in packaging/windows/lhm-libs, bundled as "lhm".
+    # Without them (a local build that did not fetch) Libre Panel reads the web server only.
+    for package in ("pythonnet", "clr_loader"):
+        try:
+            lhm_datas, lhm_binaries, lhm_hidden = collect_all(package)
+        except Exception:  # not installed: pip install ".[lhm]"
+            continue
+        datas += lhm_datas
+        binaries += lhm_binaries
+        hiddenimports += lhm_hidden
+        hiddenimports += ["clr", "_cffi_backend"] if package == "pythonnet" else []
+    lhm_libs = ROOT / "packaging" / "windows" / "lhm-libs"
+    if (lhm_libs / "LibreHardwareMonitorLib.dll").is_file():
+        datas.append((str(lhm_libs), "lhm"))  # data, not binaries: they are .NET, not DLLs to scan
 hiddenimports += ["paho.mqtt.client"]  # MQTT readings, imported when configured
 usb_datas, usb_binaries, usb_hidden = collect_all("libusb_package")
 datas += usb_datas
