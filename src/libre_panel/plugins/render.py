@@ -75,6 +75,14 @@ class RenderContext:
         snapshot = getattr(self._renderer, "snapshot", None)
         return (getattr(snapshot, "images", None) or {}).get(key)
 
+    def state(self, key: str, default: Any = None) -> Any:
+        """A dict or list a service published with ``publish_state``
+        (``"myplugin.round"``), as of the readings the panel was last drawn
+        from; ``default`` when there is none."""
+        snapshot = getattr(self._renderer, "snapshot", None)
+        read = getattr(snapshot, "state", None)
+        return read(key, default) if read is not None else default
+
     @property
     def language(self) -> str:
         return i18n.language()

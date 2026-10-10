@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from collections import deque
@@ -52,6 +53,8 @@ class Reading:
     # The key of the reading this one repeats under a friendlier name
     # (cpu.temp is one of the temp.* readings), so lists show it once.
     origin: str = ""
+    # A state (``publish_state``): when it was published, on the main loop's clock.
+    stamp: float | None = None
 
 
 @dataclass
@@ -64,6 +67,25 @@ class Snapshot:
     def value(self, key: str) -> Any:
         reading = self.readings.get(key)
         return reading.value if reading else None
+
+    def state(self, key: str, default: Any = None) -> Any:
+        """The dict or list a service published with ``publish_state``, parsed anew
+        on every call; ``default`` when there is none, it is ``null`` or the
+        text is no JSON."""
+        text = self.value(key)
+        if not isinstance(text, str):
+            return default
+        try:
+            found = json.loads(text)
+        except ValueError:
+            return default
+        return found if isinstance(found, dict | list) else default
+
+    def state_stamp(self, key: str) -> float | None:
+        """When the state was published, on the main loop's clock (the ``now`` a
+        screen is drawn with): ``now - snapshot.state_stamp(key)`` is its age."""
+        reading = self.readings.get(key)
+        return reading.stamp if reading else None
 
 
 class SensorProvider:

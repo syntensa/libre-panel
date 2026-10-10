@@ -121,13 +121,15 @@ while Libre Panel runs.
 
 | Call | |
 |---|---|
-| `host.publish(key, value, unit="", label="")` | a reading, shown by themes like any sensor (graphs keep its history); `host.unpublish(key)` |
+| `host.publish(key, value, unit="", label="")` | a reading, shown by themes like any sensor (graphs keep its history); `host.unpublish(key)`. It reaches the next frame |
+| `host.publish_state(key, value, label="")` | a dict or a list (`None`: none) for screens and services: kept as JSON text with a time stamp, never smoothed, never in a graph's history; read with `snapshot.state(key, default)` (see *States*) |
 | `host.publish_image(key, image)` | an image (PIL) for screens and widgets, e.g. `media.cover`; `None` removes it |
 | `host.snapshot()` | the readings and history the panel was last drawn from |
+| `host.want(*keys)` | the readings the service reads (`"media.*"`, `"audio.volume"`): sources that work on demand run for it although no theme shows them |
 | `host.show_theme(name, transition=None, priority=0, mode=ANY_MODE)` / `host.restore_theme(transition=None)` | show another theme for a while; `config.toml` stays as it is. `transition`: `cut`, `fade`, `slide`, a plugin's, or `(name, {parameters})`; default from `config.toml`. `mode=None`: only while no mode is on; `mode="game"`: only in that mode |
 | `host.set_mode(name, transition=None)` / `host.mode` | switch to a mode from `[modes.<name>]`; `None` ends it. A transition plays also when the theme stays |
 | `host.notify(text, icon=None, level="info", seconds=None, kind="", rank=0, payload=None, key="")` | a short message on the panel (see *Toasts*) |
-| `host.on(event, callback)` | `panel-connected`, `panel-lost`, `panel-restarted` (after `panel-connected`, when the panel came back from a restart that cleared a hung video decoder, not from a replug), `theme-changed` (`theme=`), `mode-changed` (`mode=`), `quit`; callbacks run in an event thread |
+| `host.on(event, callback)` | `panel-connected`, `panel-lost`, `panel-restarted` (after `panel-connected`, when the panel came back from a restart that cleared a hung video decoder, not from a replug), `theme-changed` (`theme=`), `mode-changed` (`mode=`), `sample` (`snapshot=`, see below), `quit`; callbacks run in an event thread |
 | `host.data_dir` | `<settings>/plugins-data/<service>/` for the service's files |
 | `host.log` | a logger named after the service |
 
@@ -144,8 +146,76 @@ one.
 
 When a service stops (Quit, or it was removed from `[services]`), what it
 left goes too: its readings and images disappear, a theme or mode it set
-ends, and its listeners hear nothing more. `quit` arrives before the
-services stop.
+ends, what it asked for with `host.want` is no longer asked for, and its
+listeners hear nothing more. `quit` arrives before the services stop.
+
+### Reacting to readings: `host.on("sample", callback)`
+
+Whatever reacts to readings (a notice for the volume, a rule that picks a
+screen) should not poll. The main loop emits `sample` after every new
+snapshot, about every `refresh_ms` of the theme, with the snapshot:
+
+```python
+def start(self):
+    self.host.on("sample", self.on_sample)
+
+def on_sample(self, snapshot):
+    if snapshot.value("cpu.temp") > 90:
+        self.host.notify("CPU is hot", level="warning", kind="warning")
+```
+
+- The callback runs in a thread for samples alone, so a slow one holds up no
+  other event. If it takes longer than a sample interval it is handed the
+  newest snapshot when it is free again, not every one in between. Keep it
+  short; do slow work (a process list, a file) in a thread of your own.
+- A callback that raises is logged, once for every new error text, and does
+  not stop the others.
+- Readings from sources that read on every frame (the volume) are brought up
+  to date between samples; a `sample` callback sees them as of the sample.
+  For a volume bar that follows the keys closely use a theme with a short
+  `refresh_ms`.
+- Readings you publish reach the next frame, not only the next sample. A
+  `set_mode` or `show_theme` right after a `publish` is therefore drawn with
+  the value already in; nothing needs to wait for a sample. (Images reach the
+  snapshot with the next sample; pass an image a transition needs to it as a
+  parameter instead of its key.)
+
+### States: `host.publish_state(key, value)`
+
+A reading is a number or a text. Structured data (a list of fans, a report)
+goes as a state: a dict or a list, kept as JSON text together with the time it
+was published. It is not smoothed and not part of a graph's history; screens,
+widget types, transitions, toast styles and other services read it back:
+
+```python
+# in the service
+self.host.publish_state("myplugin.round", {"name": "Space Game", "minutes": 42})
+
+# in a screen or widget type: render(snapshot, now) / draw(widget, ctx, snapshot, now)
+round_ = snapshot.state("myplugin.round")                 # a new dict; None if there is none
+age = now - snapshot.state_stamp("myplugin.round")        # seconds since it was published
+# in a toast style or transition: self.context.state("myplugin.round", default)
+```
+
+- `snapshot.state(key, default=None)` gives the default when nothing was
+  published, the state is `null` (`publish_state(key, None)`) or the text is
+  no JSON. Every call parses the text again, so what you get is yours to
+  change; read it once per frame.
+- The time stamp is on the main loop's clock (`time.perf_counter()`), the
+  clock of the `now` a screen is drawn with. `PluginHost(clock=...)` sets the
+  clock for tests.
+- Only a dict, a list or `None` is a state; a number or a text goes through
+  `publish`. A value that is not JSON raises `TypeError` in the service.
+- A state reaches the next frame, like a reading, and goes when the service
+  stops.
+
+### Sources that work on demand: `host.want`
+
+Sources that cost something read only what a theme on the panel shows: what
+is playing (`media.*`), the volume (`audio.*`), the CPU and GPU load, game
+frame rates (`game.*`). A service that reads such a key itself says so, once,
+with `host.want("media.*", "audio.volume")`; the source then runs for as long
+as the service does. A key a source does not know is harmless.
 
 ## Screens
 
@@ -189,15 +259,17 @@ class Studio(Screen):
   (the full frame, 1920×480 on the 9.2"). It runs on the render thread at
   up to 50 fps; returning the same image object again costs nothing.
 - `snapshot.readings`, `snapshot.history` and `snapshot.images` (from
-  services) are there; `now` is the frame's time in seconds for animations
+  services) are there, and `snapshot.state(key)` gives a dict or list a
+  service published (see *States*); `now` is the frame's time in seconds for animations
   (steady; in video mode the time the frame is planned for, so a frame that
   starts a little late does not make an animation stutter).
 - `context` has `size`, `orientation`, `palette`, `model`,
   `hidden_edges()` (pixels the bezel hides, as data: nothing is cropped),
   `font(ref, size)`, `color(value)`, `fps`, `language`, `t(text)`,
   `supersample`/`downsample()`, `image(key)` (a picture a service
-  published, e.g. `media.cover`, or None) and `assets`, the plugin's own
-  folder for pre-rendered files.
+  published, e.g. `media.cover`, or None), `state(key, default)` (a dict or
+  list a service published) and `assets`, the plugin's own folder for
+  pre-rendered files.
 - `suppresses = {"music"}` names toast kinds the screen shows anyway: those
   toasts are left out while it is on.
 - Do not change an image after returning it; return the same object when

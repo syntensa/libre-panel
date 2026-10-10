@@ -30,6 +30,16 @@
   across theme switches; a transition can hide toasts while it plays
   (`toasts = "hide"`) and decide case by case what a switch does
   (`on_switch`); `context.image(key)` gives a published picture
+- Plugins: services no longer poll. `host.on("sample", callback)` hands them
+  every new snapshot of the readings (a slow callback gets the newest one,
+  never a backlog), and what a service publishes reaches the next frame
+  instead of the next reading, so `set_mode` or `show_theme` right after a
+  `publish` is drawn with the value in. `host.publish_state(key, value)`
+  keeps a dict or list as JSON with the time it was published, never smoothed
+  and never in a graph's history; `snapshot.state(key)` and
+  `context.state(key)` read it back. `host.want("media.*")` tells the sources
+  that work on demand (what is playing, the volume, the load) that a service
+  reads them
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

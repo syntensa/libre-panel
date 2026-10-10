@@ -456,6 +456,7 @@ def run(
                 if host is not None:
                     snapshot.images = {**snapshot.images, **host.images()}
                     host.latest = snapshot
+                    host.emit("sample", snapshot=snapshot)
                 every = (config.refresh_ms or theme.refresh_ms) / 1000
                 next_sample = started + every
                 renderer.new_sample(now, every)

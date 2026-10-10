@@ -2,19 +2,22 @@
 
 A service runs in the background app (tray, ``start``) and in ``libre-panel
 run``. It talks to the panel only through its :class:`ServiceHost`: publish
-readings and images, show another theme for a while, switch the mode (with
-its own frame rate), show a toast, and hear about events. Every call into a
-service is guarded: a failing service is logged and the panel keeps going.
+readings, states and images, show another theme for a while, switch the mode
+(with its own frame rate), show a toast, and hear about events (among them
+every new sample of the readings). Every call into a service is guarded: a
+failing service is logged and the panel keeps going.
 """
 
 from __future__ import annotations
 
 import itertools
+import json
 import logging
 import queue
 import threading
+import time
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -23,6 +26,7 @@ from PIL import Image
 
 from libre_panel.config import config_dir
 from libre_panel.sensors.base import Reading, SensorProvider, Snapshot
+from libre_panel.sensors.base import want as want_readings
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +36,7 @@ EVENTS = (
     "panel-restarted",  # back after the driver restarted it to clear a hung decoder
     "theme-changed",
     "mode-changed",
+    "sample",  # a new snapshot of the readings (snapshot=), about every refresh_ms
     "quit",
 )
 OPTION_TYPES = {
@@ -136,11 +141,28 @@ class ServiceHost:
 
     def publish(self, key: str, value: float | str | None, unit: str = "", label: str = "") -> None:
         """A reading themes can show like any sensor (e.g. ``game.fps``). It goes
-        away when the service stops."""
+        away when the service stops. It reaches the next frame, not only the next
+        sample, so ``set_mode`` and ``show_theme`` right after it see the value."""
         self._hub.publish(Reading(key, value, unit, label), owner=self.name)
+
+    def publish_state(self, key: str, value: dict | list | None, label: str = "") -> None:
+        """A structured value (a dict or a list, ``None`` for none) that screens, widget
+        types and other services read with ``snapshot.state(key, default)`` (or
+        ``context.state``). It is kept as JSON text with the time it was published
+        (``snapshot.state_stamp(key)``, on the main loop's clock), so it is never
+        smoothed and never in a graph's history. It reaches the next frame and goes
+        away when the service stops."""
+        self._hub.publish_state(key, value, owner=self.name, label=label)
 
     def unpublish(self, key: str) -> None:
         self._hub.unpublish(key)
+
+    def want(self, *keys: str) -> None:
+        """Say which readings the service reads (``"media.*"``, ``"audio.volume"``): a
+        source that works on demand (what is playing, the volume, the CPU and GPU
+        load, game frame rates) then runs although no theme on the panel shows them.
+        Replaces the keys of an earlier call; none takes them back."""
+        self._hub.want(self.name, keys)
 
     def publish_image(self, key: str, image: Image.Image | None) -> None:
         """An image for screens and widgets (e.g. ``media.cover``); None removes it."""
@@ -202,12 +224,16 @@ class ServiceHost:
         """Hear about ``panel-connected``, ``panel-lost``, ``panel-restarted``
         (after ``panel-connected`` when the panel came back from a restart that
         cleared a hung decoder, not from a replug), ``theme-changed``,
-        ``mode-changed`` and ``quit``. Callbacks run in an event thread."""
+        ``mode-changed``, ``sample`` (``snapshot=``: a new snapshot of the readings,
+        about every ``refresh_ms``) and ``quit``. Callbacks run in an event thread;
+        a slow ``sample`` callback is handed the newest snapshot when it is free
+        again, not every one."""
         self._hub.listen(event, callback, owner=self.name)
 
 
 class _HostProvider(SensorProvider):
     name = "services"
+    every_frame = True  # cheap (a copy of a dict): a published reading reaches the next frame
 
     def __init__(self, hub: PluginHost) -> None:
         super().__init__()
@@ -217,12 +243,20 @@ class _HostProvider(SensorProvider):
         return self.hub.published()
 
 
+class _Reader:
+    """Stands for a service where readings are asked for (``sensors.base.want``)."""
+
+
 class PluginHost:
-    """Shared by all services and the main loop."""
+    """Shared by all services and the main loop.
+
+    ``clock`` is the main loop's clock, which time stamps of states come from.
+    """
 
     MAX_TOASTS = 20
 
-    def __init__(self) -> None:
+    def __init__(self, clock: Callable[[], float] = time.perf_counter) -> None:
+        self.clock = clock
         self._lock = threading.Lock()
         # value and the service that owns it: a stopped service leaves nothing behind
         self._published: dict[str, tuple[Reading, str | None]] = {}
@@ -241,12 +275,36 @@ class PluginHost:
         self._listeners: dict[str, list[tuple[str | None, Callable[..., None]]]] = {}
         self._events: queue.Queue[tuple[str, dict[str, Any]] | None] = queue.Queue()
         self._dispatcher: threading.Thread | None = None
+        # Samples have a thread of their own and only the newest one is kept: a
+        # slow listener neither holds up the other events nor falls behind.
+        self._sample: dict[str, Any] | None = None
+        self._sample_ready = threading.Event()
+        self._sampler: threading.Thread | None = None
+        self._sampler_stop = False
+        self._failed: dict[int, str] = {}  # sample listener (id) -> the last error logged
+        self._readers: dict[str, _Reader] = {}
 
     # -- for services ------------------------------------------------------
 
     def publish(self, reading: Reading, owner: str | None = None) -> None:
         with self._lock:
             self._published[reading.key] = (reading, owner)
+
+    def publish_state(
+        self, key: str, value: dict | list | None, owner: str | None = None, label: str = ""
+    ) -> None:
+        if value is not None and not isinstance(value, dict | list):
+            raise TypeError(
+                f"publish_state takes a dict, a list or None, not {type(value).__name__} "
+                "(publish takes a number or a text)"
+            )
+        text = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        self.publish(Reading(key, text, "", label, "", self.clock()), owner=owner)
+
+    def want(self, owner: str, keys: Iterable[str]) -> None:
+        with self._lock:
+            reader = self._readers.setdefault(owner, _Reader())
+        want_readings(reader, frozenset(keys))
 
     def unpublish(self, key: str) -> None:
         with self._lock:
@@ -307,6 +365,11 @@ class PluginHost:
             mode_ended = self._mode is not None and self._mode[1] == owner
             if mode_ended:
                 self._mode = None
+            reader = self._readers.pop(owner, None)
+            kept = {id(cb) for cbs in self._listeners.values() for _o, cb in cbs}
+            self._failed = {i: text for i, text in self._failed.items() if i in kept}
+        if reader is not None:
+            want_readings(reader, frozenset())
         if mode_ended:
             self.emit("mode-changed", mode=None)
 
@@ -319,7 +382,14 @@ class PluginHost:
             raise ValueError(f"unknown event {event!r} (known: {', '.join(EVENTS)})")
         with self._lock:
             self._listeners.setdefault(event, []).append((owner, callback))
-            if self._dispatcher is None:
+            if event == "sample":
+                if self._sampler is None:
+                    self._sampler_stop = False
+                    self._sampler = threading.Thread(
+                        target=self._sample_loop, name="plugin-samples", daemon=True
+                    )
+                    self._sampler.start()
+            elif self._dispatcher is None:
                 self._dispatcher = threading.Thread(
                     target=self._dispatch, name="plugin-events", daemon=True
                 )
@@ -362,11 +432,16 @@ class PluginHost:
         return toasts
 
     def emit(self, event: str, wait: bool = False, **data: Any) -> None:
-        """Tell the listeners, in the event thread (or here, with ``wait``)."""
+        """Tell the listeners, in the event thread (or here, with ``wait``). The
+        main loop emits ``sample`` (``snapshot=``) after every new snapshot."""
         if not self._listeners.get(event):
             return
         if wait:
             self._deliver(event, data)
+        elif event == "sample":
+            with self._lock:
+                self._sample = data  # one not yet delivered is replaced: the newest counts
+            self._sample_ready.set()
         else:
             self._events.put((event, data))
 
@@ -376,8 +451,25 @@ class PluginHost:
         for callback in callbacks:
             try:
                 callback(**data)
-            except Exception:
+            except Exception as exc:
+                if event == "sample":  # ten times a second: say each failure once
+                    text = f"{type(exc).__name__}: {exc}"
+                    if self._failed.get(id(callback)) == text:
+                        continue
+                    self._failed[id(callback)] = text
                 log.exception("a %s listener failed", event)
+
+    def _sample_loop(self) -> None:
+        while True:
+            self._sample_ready.wait()
+            self._sample_ready.clear()
+            with self._lock:
+                data, self._sample = self._sample, None
+                stopping = self._sampler_stop
+            if stopping:
+                return
+            if data is not None:
+                self._deliver("sample", data)
 
     def _dispatch(self) -> None:
         while True:
@@ -391,6 +483,12 @@ class PluginHost:
             self._events.put(None)
             self._dispatcher.join(5)
             self._dispatcher = None
+        with self._lock:
+            sampler, self._sampler = self._sampler, None
+            self._sampler_stop = True
+        if sampler is not None:
+            self._sample_ready.set()
+            sampler.join(5)
 
 
 class ServiceManager:
