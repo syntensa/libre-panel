@@ -6,6 +6,7 @@ from libre_panel.config import (
     DEFAULT_CONFIG_TOML,
     ConfigError,
     config_dir,
+    default_providers,
     load_config,
     parse_config,
     write_default_config,
@@ -22,7 +23,7 @@ def test_defaults_have_nothing_personal():
 def test_default_template_parses_to_defaults():
     cfg = parse_config(tomllib.loads(DEFAULT_CONFIG_TOML))
     assert cfg.weather.enabled is False
-    assert cfg.sensors.providers == ["psutil"]
+    assert cfg.sensors.providers == default_providers()
     assert cfg.sensors.options["librehardwaremonitor"]["url"].startswith("http://127.0.0.1")
 
 

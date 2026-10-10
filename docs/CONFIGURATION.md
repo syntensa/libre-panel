@@ -39,10 +39,14 @@ port = ""                      # serial panels: found by their USB ids; only if 
                                # picks the wrong port: "COM5", "/dev/ttyACM0"
 
 [sensors]
-providers = ["psutil"]         # order = priority; also "librehardwaremonitor", "demo", plugins
+# order = priority. Without this line: ["load", "psutil"], on Windows
+# ["load", "librehardwaremonitor", "psutil"]. More: "audio", "demo", plugins
+providers = ["load", "psutil"]
 
 [sensors.librehardwaremonitor]
 url = "http://127.0.0.1:8085/data.json"
+# stale_seconds = 5            # no answer for this long: its readings are hidden
+                               # ("--" on the panel); 0 keeps the last ones
 
 [sensors.psutil]
 # disk = "C:\\"                # the drive behind disk.load (default: the system drive)
@@ -62,6 +66,60 @@ mode = "off"                   # "on": smooth video mode (TURZX USB panels, need
 fps = 50                       # frames per second in video mode
 local_clip = ""                # required for "on", see below
 ```
+
+## Sensor sources and their order
+
+`[sensors] providers` lists the sources in order of priority: when two of them
+have a value for the same key, the earlier one wins. A quicker or better source
+goes first.
+
+A configuration that names no list (no `config.toml`, or none with `providers`)
+starts with `["load", "psutil"]`, and on Windows with
+`["load", "librehardwaremonitor", "psutil"]`; `libre-panel config init` writes
+that list into a new file. **A list you wrote is never changed.** A
+`config.toml` made by an earlier version names `["psutil"]` alone: put the
+sources you want in front of it.
+
+| Source | Gives | Where |
+|---|---|---|
+| `load` | `cpu.load` and `gpu.load`, measured ten times a second | CPU everywhere, GPU on Windows (any vendor) |
+| `psutil` | CPU, memory, drives, network, battery, the busiest programs; temperatures and fans where the system has them | everywhere |
+| `librehardwaremonitor` | temperatures, power, clocks and fans of CPU, GPU and mainboard | Windows (in its default list), needs LibreHardwareMonitor running, see [below](#windows-sensors-gpu-power-fans) |
+| `audio` | `audio.volume` (0 while muted) and `audio.muted` (1 or 0) of the default output | Windows, Linux (`wpctl` or `pactl`), macOS |
+
+**Fast load** (`load`): `cpu.load` and, on Windows, `gpu.load` are measured in
+a background thread ten times a second and read on every frame, so bars and
+graphs follow the load as it happens. The other sources give it only once per
+reading (`refresh_ms`) or once a second. It needs no other program and no
+administrator rights.
+
+- The processor load comes from `GetSystemTimes` on Windows and from psutil
+  elsewhere.
+- The GPU load is what Task Manager shows, read from Windows' performance
+  counters, for any vendor: the busiest 3D engine of the graphics card that
+  has the most memory in use of its own (chosen again every minute). Where
+  the counters are missing (some virtual machines), `gpu.load` is simply not
+  there and the next source supplies it; the log says so.
+- It runs only while a theme on the panel shows `cpu.load` or `gpu.load`.
+- It stands before the sources whose load it replaces, also in the default
+  list. In a list of your own put it first, e.g.
+  `providers = ["load", "librehardwaremonitor", "psutil"]`; behind
+  LibreHardwareMonitor its readings would never be used.
+
+**Volume** (`audio`): the volume and the mute of the default output device,
+read on every frame, so a volume bar follows the volume keys at once. It is not
+in the default list; add it: `providers = ["load", "psutil", "audio"]`.
+
+- `audio.volume` is 0 while the sound is muted; `audio.muted` is 1 then, else 0.
+- Windows: Windows' own sound interface, no program needed. Windows reports
+  every change by itself. When the default output device changes (a headset
+  plugged in, speakers chosen) the volume follows it within two seconds.
+- Linux: `wpctl` (PipeWire), else `pactl` (PulseAudio), asked four times a
+  second. Without either tool installed there are no readings, and the log
+  says so.
+- macOS: `osascript`, asked twice a second.
+- It runs only while a theme on the panel shows `audio.volume` or
+  `audio.muted`.
 
 ## More sensor sources
 
@@ -91,7 +149,7 @@ and is never written to the log.
 
 ```toml
 [sensors]
-providers = ["psutil", "calendar"]
+providers = ["load", "psutil", "calendar"]
 
 [sensors.calendar]
 sources = ["https://calendar.google.com/calendar/ical/.../basic.ics"]
@@ -105,7 +163,7 @@ Security → Long-lived access tokens.
 
 ```toml
 [sensors]
-providers = ["psutil", "homeassistant"]
+providers = ["load", "psutil", "homeassistant"]
 
 [sensors.homeassistant]
 url = "http://homeassistant.local:8123"
@@ -120,7 +178,7 @@ reading per field.
 
 ```toml
 [sensors]
-providers = ["psutil", "mqtt"]
+providers = ["load", "psutil", "mqtt"]
 
 [sensors.mqtt]
 host = "192.168.1.10"
@@ -141,7 +199,7 @@ Users and Groups → Groups; sign out and in again).
 
 ```toml
 [sensors]
-providers = ["librehardwaremonitor", "psutil", "presentmon"]
+providers = ["load", "librehardwaremonitor", "psutil", "presentmon"]
 
 [sensors.presentmon]
 path = "C:/Tools/PresentMon-2.3.0-x64.exe"
@@ -232,10 +290,30 @@ The settings were measured on the 9.2" panel; the details are in
 
 ## Windows sensors (GPU, power, fans)
 
-1. Install [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)
-   and run it as administrator (CPU temperatures and power need its driver).
+On Windows the temperatures and power of the processor and the graphics card,
+and the fans, come from
+[LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor);
+psutil has none of them there. New configurations list it, and Libre Panel
+finds it by itself, at the latest half a minute after it is running:
+
+1. Install LibreHardwareMonitor and run it **as administrator** (CPU
+   temperatures and power need its driver).
 2. *Options → Remote Web Server → Run*.
-3. `providers = ["librehardwaremonitor", "psutil"]`.
+3. Check that `providers` in your `config.toml` lists `"librehardwaremonitor"`,
+   ahead of `"psutil"`: `providers = ["load", "librehardwaremonitor", "psutil"]`.
+   A file made by an earlier version names `psutil` alone.
+
+`libre-panel sensors` and `libre-panel doctor` say so when no CPU or GPU
+temperature or power reading arrives.
+
+Where LibreHardwareMonitor does not run, nothing else is lost: those readings
+show "--". Libre Panel gives a request up after a second, asks less and less
+often (every half minute at last) and writes one line to the log.
+
+If LibreHardwareMonitor stops answering (closed, crashed, blocked), its
+readings stay for `stale_seconds` (5 by default) and then disappear, so the
+panel shows "--" instead of numbers that stand still. A line in the log says
+so, and another when it answers again.
 
 ## Weather
 

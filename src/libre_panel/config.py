@@ -18,7 +18,7 @@ from typing import Any
 
 CONFIG_FILENAME = "config.toml"
 
-DEFAULT_CONFIG_TOML = """\
+_DEFAULT_CONFIG_TEMPLATE = """\
 # Libre Panel configuration
 # Docs: https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md
 
@@ -54,15 +54,22 @@ output = "libre-panel-frame.png"
 port = ""
 
 [sensors]
-# Sensor sources, queried in this order. Available: psutil, librehardwaremonitor,
-# calendar, homeassistant, mqtt, presentmon, demo, plus any installed sensor plugin (see the
-# configuration guide for their settings). The sun, the moon and what is playing
-# come by themselves.
-providers = ["psutil"]
+# Sensor sources, queried in this order: for each reading the first source that
+# has one wins. Available: load (CPU and GPU load ten times a second), psutil,
+# librehardwaremonitor (Windows: GPU, temperatures, power, fans), audio (the
+# volume), calendar, homeassistant, mqtt, presentmon, demo, plus any installed
+# sensor plugin (see the configuration guide for their settings). The sun, the
+# moon and what is playing come by themselves.
+providers = @PROVIDERS@
 
 [sensors.librehardwaremonitor]
-# Windows: enable "Remote Web Server" in LibreHardwareMonitor.
+# Windows: the GPU, temperatures, power and fans come from LibreHardwareMonitor.
+# Run it as administrator and turn on Options -> Remote Web Server -> Run.
+# While it does not run those readings show "--" and nothing else is lost.
 url = "http://127.0.0.1:8085/data.json"
+# Without an answer for this many seconds its readings disappear ("--" on the
+# panel) instead of staying as they were; 0 keeps the last ones.
+# stale_seconds = 5
 
 [sensors.psutil]
 # What a theme's ping connects to (host:port); only while a theme shows the ping.
@@ -79,6 +86,23 @@ provider = "open-meteo"
 units = "metric"
 update_minutes = 15
 """
+
+
+def default_providers(platform: str = sys.platform) -> list[str]:
+    """The sensor sources of a config that names none, in order of priority: the fast
+    load source; on Windows LibreHardwareMonitor, which alone has the GPU, temperatures,
+    power and fans there (and costs nothing while it is not running); psutil."""
+    if platform == "win32":
+        return ["load", "librehardwaremonitor", "psutil"]
+    return ["load", "psutil"]
+
+
+def default_config_toml(platform: str = sys.platform) -> str:
+    """The commented config.toml that ``config init`` and the first change write."""
+    return _DEFAULT_CONFIG_TEMPLATE.replace("@PROVIDERS@", json.dumps(default_providers(platform)))
+
+
+DEFAULT_CONFIG_TOML = default_config_toml()
 
 
 class ConfigError(ValueError):
@@ -138,7 +162,8 @@ class DeviceConfig:
 
 @dataclass
 class SensorsConfig:
-    providers: list[str] = field(default_factory=lambda: ["psutil"])
+    # looked up when a config is made, not once at import
+    providers: list[str] = field(default_factory=lambda: default_providers())
     # Provider-specific tables, e.g. {"librehardwaremonitor": {"url": "..."}}
     options: dict[str, dict[str, Any]] = field(default_factory=dict)
 
@@ -334,7 +359,7 @@ def write_default_config(path: Path | None = None, overwrite: bool = False) -> P
     if path.exists() and not overwrite:
         raise FileExistsError(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(DEFAULT_CONFIG_TOML, encoding="utf-8")
+    path.write_text(default_config_toml(), encoding="utf-8")
     return path
 
 
