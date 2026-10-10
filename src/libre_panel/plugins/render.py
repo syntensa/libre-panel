@@ -169,7 +169,8 @@ class WidgetType:
 
 
 class Transition:
-    """A way from one theme (or mode) to the next (built in: cut, fade, slide).
+    """A way from one theme (or mode) to the next (built in: cut, fade, slide,
+    tube, entrance).
 
     Set ``name``, ``api = 1`` and ``duration`` in seconds. A new instance is
     made for every switch, with the new theme's ``context`` (palette, fonts,

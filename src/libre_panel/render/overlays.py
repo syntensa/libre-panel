@@ -18,6 +18,7 @@ from libre_panel.icons import ICON_NAMES, draw_icon
 from libre_panel.plugins.render import RenderContext, ToastStyle, Transition
 from libre_panel.render.band import BandStyle
 from libre_panel.render.light import role_value
+from libre_panel.render.transitions import Entrance, Tube
 
 log = logging.getLogger(__name__)
 
@@ -384,7 +385,13 @@ class _Slide(Transition):
         return out
 
 
-BUILT_IN_TRANSITIONS = {"cut": _Cut, "fade": _Fade, "slide": _Slide}
+BUILT_IN_TRANSITIONS = {
+    "cut": _Cut,
+    "fade": _Fade,
+    "slide": _Slide,
+    "tube": Tube,
+    "entrance": Entrance,
+}
 BUILT_IN_STYLES = {"card": CardStyle, "band": BandStyle}
 
 

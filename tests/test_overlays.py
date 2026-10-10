@@ -1,6 +1,6 @@
 """Toasts and transitions over the frame: the toast layer's rules (how long a
-toast stays, what a transition or a screen does to it, several at once) and
-the band toast style."""
+toast stays, what a transition or a screen does to it, several at once), the
+band toast style, and the tube and entrance transitions."""
 
 import math
 from types import SimpleNamespace
@@ -12,7 +12,7 @@ from libre_panel import app
 from libre_panel.plugins import Toast, ToastStyle, Transition
 from libre_panel.plugins.render import RenderContext
 from libre_panel.render import overlays
-from libre_panel.render.overlays import ToastLayer, switch_policy
+from libre_panel.render.overlays import ToastLayer, switch_policy, transition
 from libre_panel.render.renderer import Renderer
 from libre_panel.theme.model import parse_theme
 
@@ -234,6 +234,9 @@ def test_a_transition_decides_how_a_switch_goes_on():
     assert switch_policy(Asking(), "normal", None, "game") == "restart"
     assert asked == [("report", "game", False), ("normal", None, True)]
     assert switch_policy(Broken(), "x", None, None) == "restart"  # its switch, logged
+    entrance = transition("entrance")
+    assert switch_policy(entrance, "report", None, None) == "follow"  # a report is revealed
+    assert switch_policy(entrance, "clock", None, "game") == "restart"  # the game ended
 
 
 # -- T5: a screen that shows a toast's kind itself ---------------------------------------
@@ -432,6 +435,74 @@ def test_the_band_takes_published_pictures(tmp_path):
     layer.advance(0.0)
     frame = layer.apply(Image.new("RGB", (480, 320)), 1.0)
     assert (255, 128, 0) in {frame.getpixel((x, y)) for x in range(10, 90) for y in range(200, 300)}
+
+
+# -- the tube and the entrance ----------------------------------------------------------
+
+
+def frames_of(kind, size, steps=24):
+    old = Image.new("RGB", size, (200, 40, 40))
+    new = Image.new("RGB", size, (30, 60, 200))
+    return old, new, [kind.frame(old, new, i / steps) for i in range(steps + 1)]
+
+
+@pytest.mark.parametrize("size", [(1920, 480), (480, 320), (320, 480)])
+@pytest.mark.parametrize("name", ["tube", "entrance"])
+def test_light_transitions_at_every_size(name, size):
+    context = RenderContext(renderer(*size))
+    kind = transition((name, {"title": "Space Game", "kind": "start"}), context)
+    old, new, frames = frames_of(kind, size)
+    assert all(f.size == size and f.mode == "RGB" for f in frames)
+    assert not _differs(frames[0], old)  # it starts from the old frame,
+    moving = [_differs(a, b) for a, b in zip(frames[:-1], frames[1:], strict=True)]
+    assert sum(moving) >= len(moving) - 3  # changes on the way
+    assert frames[-1] is new  # and ends on the new screen
+    blend = (kind, old, 0.0)  # in the main loop it ends on the new frame too
+    assert app._blend(blend, new, kind.duration) == (new, None)
+
+
+def test_the_tube_changes_only_rows_near_its_edges():
+    size = (1920, 480)
+    kind = transition("tube", RenderContext(renderer(*size)))
+    old, new, frames = frames_of(kind, size, steps=45)
+    for before, after in zip(frames[5:40], frames[6:41], strict=True):
+        rows = _rows_changed(before, after)
+        assert rows and len(rows) < 240  # never the whole frame, as a crossfade would
+
+
+def test_the_tube_plays_as_a_switch_wants_it():
+    tube = transition("tube")
+    assert (tube.duration, tube.switch, tube.toasts, tube.from_shown) == (
+        0.9,
+        "restart",
+        "over",
+        True,
+    )
+    entrance = transition("entrance")
+    assert (entrance.duration, entrance.switch, entrance.toasts) == (3.2, "follow", "hide")
+    assert entrance.from_shown
+
+
+def test_the_entrance_shows_a_logo_or_a_title_and_a_text():
+    from libre_panel import i18n
+    from libre_panel.sensors.base import Snapshot
+
+    i18n.set_language("de")
+    assert transition(("entrance", {"kind": "end"})).text == "SPIEL BEENDET"
+    i18n.set_language("en")
+    assert transition(("entrance", {"kind": "start"})).text == "GAME MODE"
+    assert transition(("entrance", {"text": "Round over"})).text == "ROUND OVER"
+    made = renderer(1920, 480)
+    logo = Image.new("RGBA", (300, 100), (255, 255, 0, 255))
+    made.render(Snapshot(images={"game.logo": logo}), 0.0)
+    old, new = Image.new("RGB", (1920, 480)), Image.new("RGB", (1920, 480), "blue")
+    for given in ("game.logo", logo):
+        kind = transition(("entrance", {"logo": given, "kind": "start"}), RenderContext(made))
+        frame = kind.frame(old, new, 1.6 / 3.2)
+        assert (255, 255, 0) in {frame.getpixel((x, 220)) for x in range(800, 1120)}
+    titled = transition(("entrance", {"title": "Doom"}), RenderContext(made))
+    frame = titled.frame(old, new, 1.6 / 3.2)
+    assert frame.getbbox() is not None and titled.text == ""  # no text: nothing types in
 
 
 def _differs(a, b):

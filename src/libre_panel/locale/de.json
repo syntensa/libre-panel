@@ -105,6 +105,8 @@
     "Full moon in {value:.0f} days": "Vollmond in {value:.0f} Tagen",
     "GPU temp": "GPU-Temp.",
     "Game FPS": "Spiele-FPS",
+    "Game ended": "Spiel beendet",
+    "Game mode": "Spielmodus",
     "Grid": "Raster",
     "Guides": "Hilfslinien",
     "Heavy rain": "Starker Regen",
