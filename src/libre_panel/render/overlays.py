@@ -16,17 +16,11 @@ from PIL import Image, ImageDraw, ImageFont
 
 from libre_panel.icons import ICON_NAMES, draw_icon
 from libre_panel.plugins.render import RenderContext, ToastStyle, Transition
+from libre_panel.render.band import BandStyle
+from libre_panel.render.light import role_value
 
 log = logging.getLogger(__name__)
 
-# Palette names themes use for these roles, and a fallback colour.
-ROLES = {
-    "card": (("card", "panel", "surface", "bg2"), "#101722"),
-    "text": (("text",), "#F1F5F9"),
-    "info": (("accent", "primary"), "#22D3EE"),
-    "warning": (("warn", "warning"), "#FBBF24"),
-    "error": (("crit", "error", "danger"), "#F87171"),
-}
 SS = 3  # supersampling for smooth corners
 SWITCH_POLICIES = ("wait", "follow", "restart")
 
@@ -293,9 +287,7 @@ class CardStyle(ToastStyle):
         return out
 
     def _role(self, role: str) -> str:
-        names, fallback = ROLES[role]
-        palette = self.context.palette
-        return next((palette[n] for n in names if palette.get(n)), fallback)
+        return role_value(self.context.palette, role)
 
     def _draw(self, toast: Any, size: tuple[int, int]) -> Image.Image:
         unit = max(12, min(size) // 16)  # 30 px on a 480 px high panel
@@ -393,7 +385,7 @@ class _Slide(Transition):
 
 
 BUILT_IN_TRANSITIONS = {"cut": _Cut, "fade": _Fade, "slide": _Slide}
-BUILT_IN_STYLES = {"card": CardStyle}
+BUILT_IN_STYLES = {"card": CardStyle, "band": BandStyle}
 
 
 def toast_style(name: str) -> Any:

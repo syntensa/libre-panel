@@ -1,10 +1,12 @@
 """Toasts and transitions over the frame: the toast layer's rules (how long a
-toast stays, what a transition or a screen does to it, several at once)."""
+toast stays, what a transition or a screen does to it, several at once) and
+the band toast style."""
 
+import math
 from types import SimpleNamespace
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageChops
 
 from libre_panel import app
 from libre_panel.plugins import Toast, ToastStyle, Transition
@@ -304,3 +306,148 @@ def test_without_a_queue_what_waited_for_a_transition_comes_first(timed):
     layer.add([Toast("c", kind="c", rank=0)])
     layer.advance(1.0)  # the newest of the highest rank that waited, then the one that came
     assert layer.current[0].text == "b" and not layer.queue
+
+
+# -- the band ----------------------------------------------------------------------
+
+
+def band_layer(width, height, **toast):
+    return ToastLayer(renderer(width, height, style="band", seconds=2, queue=False, **toast))
+
+
+@pytest.mark.parametrize("size", [(1920, 480), (480, 320), (320, 480)])
+def test_the_band_rolls_in_stays_and_leaves(size):
+    layer = band_layer(*size, anchor="bottom")
+    plain = Image.new("RGB", size, (10, 20, 30))
+    payload = {"label": "Volume", "progress": 0.3, "color": "#13E5D7"}
+    layer.add([Toast("30 %", kind="volume", payload=payload)])
+    layer.advance(0.0)
+    assert layer.ends == pytest.approx(0.45 + 2.0 + 0.32)  # the defaults of its options
+    reach = []  # how far down the band reaches, frame by frame
+    for i in range(0, 140):
+        frame = layer.apply(plain, i * 0.02)
+        assert frame.size == size
+        reach.append(_reach(frame, plain))
+    assert reach[0] == 0  # nothing on the first frame: the edge starts in the centre
+    assert 0 < reach[5] < reach[20]  # the edge, then the band rolling down
+    assert all(a <= b for a, b in zip(reach[:22], reach[1:23], strict=True))
+    assert all(r == size[1] for r in reach[30:120])  # down to the bottom: it stands
+    assert reach[-1] < size[1]  # and leaves
+    assert layer.apply(plain, 3.0) is plain and not layer.active  # gone: the frame as it was
+
+
+def test_the_band_refreshes_in_place_without_blinking():
+    layer = band_layer(480, 320, anchor="bottom")
+    alone = band_layer(480, 320, anchor="bottom")  # gets no "36": the band it continues
+    plain = Image.new("RGB", (480, 320), (10, 20, 30))
+
+    def shown(now, text=None, value=None):
+        if text is not None:
+            layer.add([Toast(text, kind="volume", payload={"progress": value})])
+            if text != "36":
+                alone.add(layer.inbox[-1:])
+        alone.apply(plain, now)
+        return _reach(layer.apply(plain, now), plain)
+
+    shown(0.0, "30", 0.30)
+    rolling = [shown(0.02 * i) for i in range(1, 8)]
+    # the same key while rolling in: it rolls on, not from the start
+    assert shown(0.16, "32", 0.32) >= rolling[-1]
+    assert layer.ends == pytest.approx(0.45 + 2.0 + 0.32)  # its life began with "30"
+    standing = shown(1.0)
+    assert shown(1.5, "34", 0.34) == standing  # standing: stays as it is
+    assert layer.ends == pytest.approx(1.5 + 2.0 + 0.32)
+    leaving = [shown(3.5 + 0.02 * i) for i in range(1, 9)]
+    assert leaving[-1] < standing  # it is leaving ...
+    back = shown(3.68, "36", 0.36)
+    assert back == _reach(alone.apply(plain, 3.68), plain)  # ... and goes on from where it is
+    assert back < shown(3.7) < shown(3.8) and shown(4.3) == standing  # rolling back up
+
+
+def test_the_band_bar_glides_to_its_value():
+    from libre_panel.render.band import BandStyle
+
+    style = BandStyle(RenderContext(renderer(480, 320)), {})
+    style.anchor = "bottom"
+    toast = Toast("30", kind="volume", seconds=2.0, payload={"progress": 0.3})
+    style.lifetime(toast, None)
+    run = style._runs[toast]
+    assert style._bar(toast, run, 0.0) == pytest.approx(0.3)  # the first value is taken
+    assert style._bar(toast, run, 0.48) == pytest.approx(0.3)
+    louder = Toast("80", kind="volume", seconds=2.0, payload={"progress": 0.8})
+    style.lifetime(louder, (toast, 0.5))  # the same key: it goes on from where it stood
+    run = style._runs[louder]
+    first = 0.3 + 0.5 * (1 - math.exp(-0.02 / 0.09))  # on time since it last moved
+    assert style._bar(louder, run, 0.0) == pytest.approx(first)
+    assert style._bar(louder, run, 0.09) == pytest.approx(0.8 - (0.8 - first) / math.e)
+    assert style._bar(louder, run, 1.0) == pytest.approx(0.8, abs=1e-3)
+
+
+def test_another_message_rolls_down_inside_the_open_band():
+    layer = band_layer(480, 320, anchor="bottom")
+    plain = Image.new("RGB", (480, 320), (10, 20, 30))
+    layer.add([Toast("music", kind="music", payload={"color": "#00ff00"})])
+    for i in range(60):
+        standing = layer.apply(plain, i * 0.02)
+    layer.add([Toast("warning", kind="warning", rank=1, payload={"color": "#ff0000"})])
+    first = layer.apply(plain, 1.2)
+    assert layer.current[2][0].text == "music"  # it took over, with the one before
+    assert layer.ends == pytest.approx(1.2 + 2.0 + 0.32)  # the band was open: it stays open
+    box = ImageChops.difference(first, plain).getbbox()
+    assert box == ImageChops.difference(standing, plain).getbbox()  # the band stays as large
+    middle = layer.apply(plain, 1.32)
+    later = layer.apply(plain, 1.5)
+    assert _differs(first, middle) and _differs(middle, later)  # the new content rolls down
+    assert layer.apply(plain, 1.6).tobytes() == later.tobytes()  # in 0.26 s, then it stands
+
+
+@pytest.mark.parametrize("anchor", ["top", "bottom-left"])
+def test_the_band_keeps_clear_of_the_bezel(anchor):
+    data = {
+        "format": "libre-panel-theme/1",
+        "name": "bar",
+        "display": {"model": "turing-9.2-usb", "orientation": "landscape"},
+        "widgets": [],
+        "toast": {"style": "band", "anchor": anchor},
+    }
+    layer = ToastLayer(Renderer(parse_theme(data)))
+    plain = Image.new("RGB", (1920, 480))
+    layer.add([Toast("hello", icon="fan", payload={"label": "Notice", "progress": 0.5})])
+    layer.advance(0.0)
+    box = ImageChops.difference(layer.apply(plain, 1.0), plain).getbbox()
+    assert box is not None and box[1] >= 18 and box[3] <= 480  # the 9.2" hides 18 px on top
+    assert (box[1] < 240) == (anchor == "top")
+
+
+def test_the_band_takes_published_pictures(tmp_path):
+    from libre_panel.sensors.base import Snapshot
+
+    made = renderer(480, 320, style="band", anchor="bottom")
+    cover = Image.new("RGB", (64, 64), (255, 128, 0))
+    made.render(Snapshot(images={"media.cover": cover}), 0.0)
+    context = RenderContext(made)
+    assert context.image("media.cover") is cover and context.image("nothing") is None
+    layer = ToastLayer(made)
+    layer.add([Toast("song", kind="music", payload={"image": "media.cover", "badge": cover})])
+    layer.advance(0.0)
+    frame = layer.apply(Image.new("RGB", (480, 320)), 1.0)
+    assert (255, 128, 0) in {frame.getpixel((x, y)) for x in range(10, 90) for y in range(200, 300)}
+
+
+def _differs(a, b):
+    return ImageChops.difference(a, b).getbbox() is not None
+
+
+def _rows_changed(a, b):
+    """The rows in which ``b`` differs from ``a``."""
+    channels = ImageChops.difference(a, b).split()
+    most = channels[0]
+    for channel in channels[1:]:
+        most = ImageChops.lighter(most, channel)
+    return [y for y, changed in enumerate(most.getprojection()[1]) if changed]
+
+
+def _reach(frame, plain):
+    """How far down the frame differs from ``plain``: where a band at the bottom ends."""
+    box = ImageChops.difference(frame, plain).getbbox()
+    return 0 if box is None else box[3]

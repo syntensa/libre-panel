@@ -69,6 +69,12 @@ class RenderContext:
         curve by this part of a sample width to scroll it between readings."""
         return self._renderer.progress(now)
 
+    def image(self, key: str) -> Image.Image | None:
+        """An image a service or sensor source published (``"media.cover"``), as
+        of the readings the panel was last drawn from, or None."""
+        snapshot = getattr(self._renderer, "snapshot", None)
+        return (getattr(snapshot, "images", None) or {}).get(key)
+
     @property
     def language(self) -> str:
         return i18n.language()
@@ -216,7 +222,8 @@ class Transition:
 
 
 class ToastStyle:
-    """How toasts look; a theme picks one with ``"toast": {"style": name}``.
+    """How toasts look; a theme picks one with ``"toast": {"style": name}``
+    (built in: card, band).
 
     Set ``name``, ``api = 1``, optionally ``label``, ``options`` ({key: (field
     kind, default)}, set in the theme's ``toast.options``) and ``leave_s``,

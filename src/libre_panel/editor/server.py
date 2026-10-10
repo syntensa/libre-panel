@@ -119,7 +119,13 @@ def _plugin_specs() -> dict[str, Any]:
         if cls is not None:
             options = {k: list(v) for k, v in cls.options.items()}
             screens[name] = {"label": label_for(cls), "options": options}
+    from libre_panel.render.overlays import BUILT_IN_STYLES
+
     toasts = {}
+    for name, cls in BUILT_IN_STYLES.items():  # the card is the editor's own first choice
+        if name != "card":
+            label = i18n.t("{name} (built in)", name=label_for(cls))
+            toasts[name] = {"label": label, "options": {k: list(v) for k, v in cls.options.items()}}
     for name in installed.names("toasts"):
         cls = installed.get("toasts", name)
         if cls is not None:
