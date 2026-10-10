@@ -310,6 +310,58 @@ def test_a_late_strip_keeps_the_old_one_moving():
     renderer.close()
 
 
+class LateBuilder:
+    """Runs a strip's job only after the render call that made it returned, as
+    the helper thread does in video mode."""
+
+    def __init__(self):
+        self.jobs = []
+
+    def submit(self, job):
+        from concurrent.futures import Future
+
+        future = Future()
+        self.jobs.append((future, job))
+        return future
+
+    def run(self):
+        jobs, self.jobs = self.jobs, []
+        for future, job in jobs:
+            future.set_result(job())
+
+    def close(self):
+        pass
+
+
+@pytest.mark.parametrize("per_frame", [True, False])
+def test_graphs_keep_moving_when_their_strips_come_from_the_helper_thread(monkeypatch, per_frame):
+    """A strip built after its render call returned is still the one asked for:
+    the curve goes on moving (per-frame graphs froze after the first strips) and
+    each reading draws one strip (scrolling ones were drawn on every frame)."""
+    renderer = Renderer(theme(spike_graph(per_frame=per_frame), size=(200, 60)))
+    renderer.continuous = renderer.background_builds = True
+    renderer.fps = 50
+    renderer._builder = builder = LateBuilder()
+    calls = []
+    real = renderer._graph_layer
+    monkeypatch.setattr(renderer, "_graph_layer", lambda *a: calls.append(1) or real(*a))
+    readings, previous, changed = [], None, []
+    for second in range(8):
+        at = 100.0 + second
+        readings.append(90.0 if second % 2 else 10.0)
+        renderer.new_sample(at, 1.0)
+        snap = Snapshot(history={"v": list(readings)})
+        for k in range(50):
+            frame = renderer.render(snap, at + k / 50)[0].tobytes()
+            builder.run()
+            if frame != previous:
+                changed.append(at + k / 50)
+            previous = frame
+    assert changed[-1] > 107.5, changed[-5:]  # still moving in the last second
+    assert len(calls) <= 8 + 1, len(calls)  # one strip per reading
+    assert renderer.warnings == []
+
+
 def test_values_glide_until_the_next_reading_in_video_mode():
     t = theme(bar(smooth=True), animation={"smoothing_ms": 400})
 

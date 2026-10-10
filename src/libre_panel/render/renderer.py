@@ -1796,7 +1796,8 @@ class Renderer:
             values = snapshot.history.get(widget["sensor"], [])[-(slots + lag + 1) :]
             number, at = self._sample_no, self.sample[0]
 
-            def job() -> tuple[Any, ...]:
+            # bound now: the helper thread runs it after this call reuses the names
+            def job(number=number, at=at, values=values, lag=lag) -> tuple[Any, ...]:
                 return (number, at, *self._graph_strip(widget, values, slots, lag))
 
             if ready and self.background_builds:
@@ -1886,7 +1887,10 @@ class Renderer:
             known = [v for v in points[skip:] if v is not None]
             number = self._sample_no
 
-            def job() -> tuple[Any, ...]:
+            # bound now: the helper thread runs it after this call reuses the names
+            def job(
+                number=number, at=at, begin=begin, fps=fps, known=known, skip=skip, count=count
+            ) -> tuple[Any, ...]:
                 return (number, at, begin, fps, *self._frame_strip(widget, known, skip, count))
 
             if ready and self.background_builds:

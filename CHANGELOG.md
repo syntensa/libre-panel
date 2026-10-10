@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+**Fixes**
+- Video mode: graphs that move a pixel per frame (`per_frame`) stood still
+  about three seconds after the start and after every theme switch, while
+  numbers and bars went on; scrolling graphs were drawn again on every frame
+  instead of once per reading, which kept the helper thread busy
+
 ## 0.4.1 — 2026-10-10
 
 Upside down for panels mounted the other way round, and fixes from the first
