@@ -106,3 +106,75 @@ def test_previews_keep_their_own_motion():
     preview = Renderer(theme(bar()), animate=True, preview=True)
     preview.render(snap(v=90.0), 0.05)
     assert preview.motion is not loop and loop.value("v", 0.05) == 40.0
+
+
+def metric(wid="m", **kw):
+    return {"type": "metric", "id": wid, "x": 0, "y": 40, "sensor": "v", "format": "{value:.0f}",
+            "font_size": 30, **kw}  # fmt: skip
+
+
+def shown_text(renderer, wid):
+    return renderer._cache[wid][0][0]
+
+
+def test_numbers_glide_with_smooth_and_read_the_reading_without():
+    renderer = Renderer(theme(bar(), metric(smooth=True), metric("raw", y=70)), animate=True)
+    renderer.fps = 50
+    renderer.render(snap(v=0.0), 0.0)
+    texts = []
+    for k in range(1, 26):  # half a second after a jump to 100
+        renderer.render(snap(v=100.0), k / 50)
+        texts.append(int(shown_text(renderer, "m")))
+    assert shown_text(renderer, "raw") == "100"
+    assert texts[0] < 20 and texts == sorted(texts) and len(set(texts)) > 15  # counts up
+    assert abs(texts[4] - renderer.motion.value("v", 5 / 50)) <= 0.5  # the bar's value
+    for k in range(26, 100):  # settled: the reading itself, nothing moves
+        renderer.render(snap(v=100.0), k / 50)
+    assert shown_text(renderer, "m") == "100" and not renderer.moving
+
+
+def test_gliding_numbers_draw_each_text_once():
+    renderer = Renderer(theme(metric(smooth=True)), animate=True)
+    renderer.fps = 50
+    drawn = []
+    real = renderer._text_piece
+
+    def counted(widget, text, color):
+        drawn.append(text)
+        return real(widget, text, color)
+
+    renderer._text_piece = counted
+    for k in range(200):  # 0 -> 30 -> 0 -> 30, two seconds each way
+        value = 30.0 if (k // 50) % 2 else 0.0
+        renderer.render(snap(v=value), k / 50)
+    assert len(drawn) == len(set(drawn)) <= 31  # 0..30, each once
+
+
+def rules():
+    return [{"above": 80, "color": "#ffff00"}, {"above": 90, "color": "#ff0000"}]
+
+
+def test_threshold_colours_fade_and_a_bar_and_its_number_change_together():
+    widgets = (
+        bar(color="#00ff00", color_rules=rules()),
+        metric(color="#00ff00", color_rules=rules()),
+    )
+    renderer = Renderer(theme(*widgets, smoothing_ms=0), animate=True)
+    renderer.fps = 50
+    renderer.render(snap(v=50.0), 0.0)
+    assert renderer._cache["m"][0][1] == "#00ff00"
+    bars, texts = [], []
+    for k in range(1, 15):  # 50 -> 85 at once: past the first threshold
+        renderer.render(snap(v=85.0), k / 50)
+        bars.append(renderer._cache["b"][0][1][0])
+        texts.append(renderer._cache["m"][0][1])
+    assert any(b not in ((0, 255, 0, 255), (255, 255, 0, 255)) for b in bars)  # on its way
+    assert bars[-1] == (255, 255, 0, 255) and texts[-1] == "#ffff00"  # there within 0.3 s
+    for colour, text in zip(bars, texts, strict=True):  # the same colour at every step
+        assert text.lower() in ("#ffff00", "#00ff00") or text == "#{:02x}{:02x}{:02x}{:02x}".format(
+            *colour
+        )
+    still = Renderer(theme(*widgets, smoothing_ms=0))  # no animation: at once
+    still.render(snap(v=50.0), 0.0)
+    still.render(snap(v=85.0), 0.02)
+    assert still._cache["m"][0][1] == "#ffff00"

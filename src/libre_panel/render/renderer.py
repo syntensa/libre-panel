@@ -18,9 +18,10 @@ import math
 import queue
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from concurrent.futures import Future
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Any
@@ -188,6 +189,10 @@ def _rule_color(widget: dict[str, Any], value: float | None) -> str | None:
     return color
 
 
+def _smoothstep(u: float) -> float:
+    return u * u * (3 - 2 * u)
+
+
 def _lerp(a: RGBA, b: RGBA, t: float) -> RGBA:
     t = min(1.0, max(0.0, t))
     return tuple(round(a[i] + (b[i] - a[i]) * t) for i in range(4))  # type: ignore[return-value]
@@ -323,6 +328,7 @@ class Renderer:
         self._frame_strips: dict[str, Any] = {}  # the same for graphs that move per frame
         self._glides: dict[str, _Glide] = {}  # graph id -> the value its curve follows
         self._cache: dict[str, tuple[Any, Piece]] = {}
+        self._texts: OrderedDict[tuple[str, str, str], Piece] = OrderedDict()
         # Modules become plain widgets laid out for their cells; the editor
         # gets one box per module.
         self.widgets, self.module_boxes = expand_modules(theme)
@@ -966,15 +972,97 @@ class Renderer:
             text = value if isinstance(value, str) else widget.get("fallback", "--")
         return text, _number(value)
 
+    TEXTS = 256  # text pieces kept: gliding numbers come back to the same texts
+
     def _text_widget(self, widget: dict[str, Any], text: str, color: str) -> Piece | None:
-        return self._cached(widget, (text, color), lambda: self._text_piece(widget, text, color))
+        """The text as a piece, kept by (text, colour): a number gliding back
+        and forth, or a seconds clock, draws each text once."""
+        wid = widget["id"]
+        piece = self._texts.get((wid, text, color))
+        if piece is not None:
+            self._texts.move_to_end((wid, text, color))
+            self._cache[wid] = ((text, color), piece)
+            return piece
+        piece = self._cached(widget, (text, color), lambda: self._text_piece(widget, text, color))
+        hit = self._cache.get(wid)
+        if hit is not None and (wid, *hit[0]) not in self._texts:  # built now, or earlier
+            self._texts[(wid, *hit[0])] = hit[1]
+            while len(self._texts) > self.TEXTS:
+                self._texts.popitem(last=False)
+        return piece
 
     def _draw_text(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         return self._text_widget(widget, widget["text"], widget["color"])
 
     def _draw_metric(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
-        text, value = self._format(widget, snapshot.readings.get(widget["sensor"]))
-        return self._text_widget(widget, text, _rule_color(widget, value) or widget["color"])
+        reading = snapshot.readings.get(widget["sensor"])
+        text, value = self._format(widget, reading)
+        glide = self._glide_s()
+        if widget.get("smooth") and glide > 0:  # the gliding value, with bars and rings
+            state = self.motion.glide(widget["sensor"], value, now, glide, self._lead())
+            if state is not None and value is not None:
+                gliding, shown = self._format(widget, replace(reading, value=state[0]))
+                if gliding != text:  # settled once it reads the same
+                    text, value = gliding, shown
+                    self.moving = True
+        return self._text_widget(widget, text, self._rule_text(widget, value, now))
+
+    # -- thresholds --------------------------------------------------------
+
+    def _rule_step(self, widget: dict[str, Any], value: float | None, now: float) -> float:
+        """Which colour a value shows: 0 the widget's own, i the i-th lowest
+        threshold's. Crossing a threshold fades the colour in a fraction of a
+        second (Motion.fade), the same for every widget of the sensor with the
+        same rules: a bar and its number change together."""
+        rules = sorted(widget.get("color_rules", []), key=lambda r: r["above"])
+        if not rules:
+            return 0.0
+        step = 0 if value is None else sum(1 for rule in rules if value > rule["above"])
+        if not self.animate:
+            return float(step)
+        key = (widget.get("sensor"), tuple((rule["above"], rule["color"]) for rule in rules))
+        shown = self.motion.fade(key, step, now)
+        if shown != step:
+            self.moving = True
+        return shown
+
+    def _rule_mix(self, step: float) -> tuple[int, float]:
+        """The colour step below ``step`` and how far on to the next (eighths)."""
+        low = math.floor(step)
+        return low, round(_smoothstep(step - low) * 8) / 8
+
+    def _rule_text(self, widget: dict[str, Any], value: float | None, now: float) -> str:
+        """The text colour for ``value``: its own, a threshold's, or on the way."""
+        step = self._rule_step(widget, value, now)
+        rules = sorted(widget.get("color_rules", []), key=lambda r: r["above"])
+        colors = [widget["color"], *(rule["color"] for rule in rules)]
+        low, u = self._rule_mix(step)
+        if u <= 0 or low + 1 >= len(colors):
+            return colors[min(low, len(colors) - 1)]
+        mixed = _lerp(self.color(colors[low]), self.color(colors[low + 1]), u)
+        return "#{:02x}{:02x}{:02x}{:02x}".format(*mixed)
+
+    def _rule_paint(
+        self, widget: dict[str, Any], value: float | None, now: float
+    ) -> tuple[RGBA, RGBA | None]:
+        """A bar's or ring's colours for ``value``: its own (``color``, and
+        ``color2`` for a gradient along it), a threshold's (plain), or on the way."""
+        rules = sorted(widget.get("color_rules", []), key=lambda r: r["above"])
+        step = self._rule_step(widget, value, now)
+        low, u = self._rule_mix(step)
+        paints = [self._paint(widget, None), *(self._paint(widget, r["color"]) for r in rules)]
+        if u <= 0 or low + 1 >= len(paints):
+            return paints[min(low, len(paints) - 1)]
+        (a0, b0), (a1, b1) = paints[low], paints[low + 1]
+        if b0 is None and b1 is None:
+            return _lerp(a0, a1, u), None
+        return _lerp(a0, a1, u), _lerp(b0 or a0, b1 or a1, u)
+
+    def _paint(self, widget: dict[str, Any], rule: str | None) -> tuple[RGBA, RGBA | None]:
+        """A bar's colours: a threshold's colour plain, else ``color`` (to ``color2``)."""
+        if rule:
+            return self.color(rule), None
+        return self.color(widget["color"]), self.color(widget["color2"])
 
     def _draw_weather(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         text, _ = self._format(widget, snapshot.readings.get(f"weather.{widget['field']}"))
@@ -1318,7 +1406,7 @@ class Renderer:
             "color": "#{:02x}{:02x}{:02x}{:02x}".format(*deep), "color2": widget["color2"],
             "background": widget["background"],
         }  # fmt: skip
-        piece = self._bar_piece(bar, frac, rule, x, y, w, h)
+        piece = self._bar_piece(bar, frac, self._paint(bar, rule), x, y, w, h)
         self._paste(layer, piece.layer, x, y)
 
     def _list_piece(self, widget: dict[str, Any], rows: list[tuple]) -> Piece:
@@ -1558,21 +1646,29 @@ class Renderer:
         target = _number(snapshot.value(widget["sensor"]))
         value = self._eased(widget, target, now)
         frac = _fraction(value, widget["min"], widget["max"], widget.get("scale", "linear"))
-        rule = _rule_color(widget, target)
-        key = (round(frac, 4), rule)
-        return self._cached(widget, key, lambda: self._bar_piece(widget, frac, rule, x, y, w, h))
+        paint = self._rule_paint(widget, value, now)
+        key = (round(frac, 4), paint)
+        return self._cached(widget, key, lambda: self._bar_piece(widget, frac, paint, x, y, w, h))
 
     def _bar_piece(
-        self, widget: dict[str, Any], frac: float, rule: str | None, x: int, y: int, w: int, h: int
+        self,
+        widget: dict[str, Any],
+        frac: float,
+        paint: tuple[RGBA, RGBA | None],
+        x: int,
+        y: int,
+        w: int,
+        h: int,
     ) -> Piece:
+        """``paint``: the colour where the bar starts, and where a full bar
+        ends (None: one colour)."""
         s = SUPERSAMPLE
         layer, draw = self._canvas(w, h)
         W, H = w * s, h * s
         radius = min(widget["radius"], w // 2, h // 2) * s
         direction = widget["direction"]
         horizontal = direction in ("right", "left")
-        a = self.color(rule or widget["color"])  # colour where the bar starts
-        b = None if rule else self.color(widget["color2"])  # colour where a full bar ends
+        a, b = paint
         track = self.color(widget["background"])
 
         def span(p0: float, p1: float) -> list[float]:
@@ -1629,12 +1725,14 @@ class Renderer:
         target = _number(snapshot.value(widget["sensor"]))
         value = self._eased(widget, target, now)
         frac = _fraction(value, widget["min"], widget["max"], widget.get("scale", "linear"))
-        rule = _rule_color(widget, target)
+        paint = self._rule_paint(widget, value, now)
         return self._cached(
-            widget, (round(frac, 4), rule), lambda: self._gauge_piece(widget, frac, rule)
+            widget, (round(frac, 4), paint), lambda: self._gauge_piece(widget, frac, paint)
         )
 
-    def _gauge_piece(self, widget: dict[str, Any], frac: float, rule: str | None) -> Piece:
+    def _gauge_piece(
+        self, widget: dict[str, Any], frac: float, paint: tuple[RGBA, RGBA | None]
+    ) -> Piece:
         """Ring gauge: a cached static part (track, ticks) plus the value arc.
 
         The arc is one antialiased mask filled from a cached conic gradient, so
@@ -1643,8 +1741,7 @@ class Renderer:
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
         layer = self._gauge_static(widget).copy()
         if frac > 0:
-            a = self.color(rule or widget["color"])
-            b = None if rule else self.color(widget["color2"])
+            a, b = paint
             mask = self._gauge_mask(widget, frac)
             if b is None:
                 arc = Image.new("RGBA", (w, h), a)

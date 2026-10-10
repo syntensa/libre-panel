@@ -6,6 +6,11 @@
 - What moves on the panel goes on from theme to theme: a value gliding when
   the theme switches glides on in the next one instead of starting over
   (the main loop keeps it; the editor's previews have their own)
+- Numbers glide too: a value with *smooth* on counts to a new reading with
+  the bars and rings of its sensor instead of jumping once per reading
+  (`"smooth": true` on a `metric`)
+- Threshold colours fade in a fifth of a second instead of jumping, and a
+  bar and its number change colour together
 
 **Fixes**
 - Video mode: graphs that move a pixel per frame (`per_frame`) stood still

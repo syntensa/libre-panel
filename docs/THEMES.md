@@ -98,7 +98,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | Type | Fields | |
 |---|---|---|
 | `text` | `text` | static label, may contain line breaks |
-| `metric` | `sensor`, `format`, `fallback`, `color_rules` | a sensor value as text |
+| `metric` | `sensor`, `format`, `fallback`, `smooth`, `color_rules` | a sensor value as text; with `smooth` the number glides between readings together with the sensor's bars and rings (give `format` a precision, e.g. `{value:.0f}`) |
 | `bar` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `color`, `color2`, `background`, `radius`, `direction`, `segments`, `segment_gap`, `smooth`, `color_rules` | progress bar; `color2` makes a gradient along the track, `segments` an LED-style bar |
 | `gauge` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `start_angle`, `end_angle`, `thickness`, `color`, `color2`, `background`, `cap`, `ticks`, `tick_color`, `smooth`, `color_rules` | ring; angles clockwise from 3 o'clock, default 135→405; `cap` round or flat |
 | `graph` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `history`, `color`, `fill`, `fill_fade`, `smooth`, `per_frame`, `line_width`, `grid`, `grid_color`, `background` | history; `min`/`max` `null` = automatic, `smooth` draws a curve, `per_frame` see below |
@@ -118,7 +118,9 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 on huge ranges such as network rates.
 
 `color_rules` change the colour by value; the highest matching threshold wins
-(and replaces a gradient):
+(and replaces a gradient). Crossing a threshold fades the colour in a fifth
+of a second, the same for a bar and a number of one sensor with the same
+rules:
 
 ```json
 "color_rules": [{ "above": 70, "color": "@warn" }, { "above": 85, "color": "@crit" }]

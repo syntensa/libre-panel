@@ -1057,6 +1057,7 @@ function hintFor(widget, key, kind) {
   if (key === "scale") return t("sqrt/log keep small values visible (network rates)");
   if (key === "hide_if_missing") return t("hide when the sensor has no value (e.g. weather off)");
   if (key === "needs") return t("show only while this sensor has a value (e.g. weather.temperature); with ! in front, only while it has none");
+  if (key === "smooth" && widget.type === "metric") return t("the number glides between readings, together with the bars and rings of its sensor");
   if (key === "per_frame") return t("video mode: a point per frame, a pixel apart, so the curve moves visibly; it shows the last seconds (otherwise: history readings)");
   return null;
 }
@@ -1189,7 +1190,7 @@ function buildThemeProps(form) {
     buildPaletteEditor(),
     el("h2", { class: "section-title", text: t("Timing") }),
     field(t("sensor refresh (ms)"), numberInput(theme.refresh_ms, set("refresh", (v) => (theme.refresh_ms = Math.max(100, v || 1000))))),
-    field(t("smoothing (ms)"), numberInput(theme.animation.smoothing_ms, set("smooth", (v) => (theme.animation.smoothing_ms = Math.max(0, Math.min(5000, v ?? 0))))), t("how long bars and rings take to glide to a new value; 0 = jump")),
+    field(t("smoothing (ms)"), numberInput(theme.animation.smoothing_ms, set("smooth", (v) => (theme.animation.smoothing_ms = Math.max(0, Math.min(5000, v ?? 0))))), t("how long bars, rings and gliding numbers take to a new value; 0 = jump")),
     ...buildToastFields(),
   );
 }

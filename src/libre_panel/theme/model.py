@@ -98,6 +98,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "format": ("format", "{value:.0f}{unit}"),
         "fallback": ("string", "--"),
         **_text_style(True),
+        "smooth": ("bool", False),  # the number glides with bars and rings of its sensor
         "color_rules": ("rules", []),
     },
     "bar": {
