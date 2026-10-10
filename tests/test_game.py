@@ -85,7 +85,7 @@ def test_a_steam_game_counts_once_its_window_has_been_in_front(steam):
     assert look(0) is None  # it runs, but nobody has seen its window
     machine.front = 7
     found = look(2)
-    assert (found.name, found.pid, found.appid, found.key) == ("Space Game", 7, "10", "game.exe")
+    assert (found.name, found.pid, found.appid, found.key) == ("Space Game", 7, "10", "steam:10")
     machine.front = 1  # alt-tab: it is still the game
     assert look(4).name == "Space Game"
 
@@ -333,6 +333,43 @@ def test_a_game_gone_before_the_mode_began_leaves_nothing(desk):
     assert d.mode() is None
 
 
+def test_a_picture_that_goes_while_the_logo_is_read_is_no_logo(desk, monkeypatch):
+    from libre_panel.services import steam
+
+    def gone(root, appid):
+        raise FileNotFoundError("the cache is being cleaned")
+
+    monkeypatch.setattr(steam, "load_logo", gone)
+    d = desk()
+    d.play()
+    d.look()
+    assert d.mode() == "game" and d.host.images() == {}  # no logo: no sample to wait for
+
+
+def test_what_the_service_is_doing_can_be_looked_at(desk):
+    d = desk()
+    assert d.service.status() == {"game": None, "steam_id": None, "mode": None, "waiting": False}
+    d.play()
+    d.look()
+    assert d.service.status() == {
+        "game": "Space Game", "steam_id": "10", "mode": None, "waiting": True,
+    }  # fmt: skip
+    d.sample()
+    assert d.service.status()["mode"] == "game" and not d.service.status()["waiting"]
+
+
+def test_a_sample_that_comes_after_the_service_stopped_changes_nothing(desk):
+    d = desk()
+    d.play()
+    d.look()
+    d.service.stop()
+    d.sample()  # the sample that was under way
+    d.clock.now += 5
+    d.service.advance()
+    d.look()
+    assert d.mode() is None and d.service.waiting is not None  # it never began
+
+
 def test_the_next_game_changes_the_name_and_logo_not_the_mode(desk):
     d = desk(linger_s=0.0)
     first = d.play(pid=1)
@@ -468,11 +505,17 @@ def test_a_game_starts_and_ends_in_the_main_loop(steam, monkeypatch, isolated_ho
         made.append(spec)
         return make(spec, context)
 
+    shots = []  # every frame that went to the panel, small
+
+    class Recording(Panel):
+        def show(self, frame, region=None):
+            shots.append(frame.resize((48, 32)).tobytes())
+
     machine = FakeMachine()
     monkeypatch.setattr(computer, "current", lambda: machine)
     monkeypatch.setattr(Renderer, "render", rendered)
     monkeypatch.setattr(app, "transition", transition)
-    monkeypatch.setattr(app, "create_display", Panel)
+    monkeypatch.setattr(app, "create_display", Recording)
     host = PluginHost()
     manager = ServiceManager(host)
     options = {"steam_path": str(steam), "poll_s": 3600, "linger_s": 0.0}
@@ -525,4 +568,13 @@ def test_a_game_starts_and_ends_in_the_main_loop(steam, monkeypatch, isolated_ho
     assert themes.index("focus") in (began, began + 1)  # the mode's theme from its first frame
     assert set(themes[began + 1 : ended]) == {"focus"}
     assert set(themes[ended + 1 :]) == {"classic"} and host.mode is None  # and the user's again
+    # the entrances are on the panel, not only asked for: between the two screens
+    # the frames are neither one nor the other, and each screen is there again after
+    assert len(shots) == len(themes)
+    classic, focus = shots[10], shots[ended - 5]
+    assert classic != focus
+    for middle in (began + 100, ended + 100):
+        assert shots[middle] not in (classic, focus)
+    assert shots[began + ENTRANCE + 5] == focus
+    assert shots[-1] == classic
     assert "failed" not in caplog.text  # no entrance that broke

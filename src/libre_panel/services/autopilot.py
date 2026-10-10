@@ -195,8 +195,12 @@ class Autopilot(Service):
         self._asked: dict[str, float] = {}  # slow signals: when each was last asked
         self._installed: dict[str, tuple[bool, float]] = {}
         self._past_boot = False
+        self._stopped = False
 
     def start(self) -> None:
+        if not self.rules:
+            self.host.log.info("no usable rules in [services.autopilot]: nothing to do")
+            return
         keys = []
         if "music" in self.reads:
             keys.append("media.playing")
@@ -207,9 +211,14 @@ class Autopilot(Service):
         self.host.want(*keys)
         self.host.on("sample", self.on_sample)
 
+    def stop(self) -> None:
+        self._stopped = True  # a sample that is under way then asks for nothing
+
     # -- every sample ------------------------------------------------------------
 
     def on_sample(self, snapshot: Snapshot) -> None:
+        if self._stopped:
+            return
         now = self.clock()
         self._read(snapshot, now)
         self.decide(now)

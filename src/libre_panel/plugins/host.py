@@ -24,6 +24,7 @@ from typing import Any
 
 from PIL import Image
 
+import libre_panel
 from libre_panel.config import config_dir
 from libre_panel.sensors.base import Reading, SensorProvider, Snapshot
 from libre_panel.sensors.base import want as want_readings
@@ -250,13 +251,14 @@ class _Reader:
 class PluginHost:
     """Shared by all services and the main loop.
 
-    ``clock`` is the main loop's clock, which time stamps of states come from.
+    ``clock`` is the main loop's clock (``libre_panel.clock``), which the time stamps
+    of states come from.
     """
 
     MAX_TOASTS = 20
 
-    def __init__(self, clock: Callable[[], float] = time.perf_counter) -> None:
-        self.clock = clock
+    def __init__(self, clock: Callable[[], float] | None = None) -> None:
+        self.clock = clock or getattr(libre_panel, "clock", time.perf_counter)
         self._lock = threading.Lock()
         # value and the service that owns it: a stopped service leaves nothing behind
         self._published: dict[str, tuple[Reading, str | None]] = {}

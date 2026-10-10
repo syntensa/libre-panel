@@ -291,6 +291,15 @@ def test_a_restarted_panel_is_told(desk):
     assert toast.payload == {"label": "Panel"}
 
 
+def test_a_sample_that_comes_after_the_service_stopped_says_nothing(desk):
+    d = desk(volume=True, restarted=True)
+    d.sample(volume(30))
+    d.service.stop()
+    assert d.sample(volume(50)) == []
+    d.host.emit("panel-restarted", wait=True)
+    assert d.host.take_toasts() == []
+
+
 def test_a_kind_that_is_switched_off_is_not_told(desk):
     d = desk(volume=False, restarted=False, music=True)
     d.host.emit("panel-restarted", wait=True)  # nobody listens

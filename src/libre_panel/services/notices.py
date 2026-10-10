@@ -135,6 +135,7 @@ class Notices(Service):
         self._track: tuple[str, str] | None = None  # (title, artist) of what plays
         self._late: tuple[tuple[str, str], float] | None = None  # told without a cover, until
         self._began = clock()
+        self._stopped = False
 
     def start(self) -> None:
         keys = [limit.key for limit in self.limits]
@@ -147,9 +148,14 @@ class Notices(Service):
         if self.options["restarted"]:
             self.host.on("panel-restarted", self.on_restarted)
 
+    def stop(self) -> None:
+        self._stopped = True  # a sample that is under way then says nothing
+
     # -- every sample ------------------------------------------------------------
 
     def on_sample(self, snapshot: Snapshot) -> None:
+        if self._stopped:
+            return
         now = self.clock()
         if self.options["volume"]:
             self._check_volume(snapshot, now)
@@ -246,6 +252,8 @@ class Notices(Service):
 
     def on_restarted(self) -> None:
         """Back from a restart that cleared a hung video decoder (not from a replug)."""
+        if self._stopped:
+            return
         text = t("Panel restarted {time}", time=self.wall().strftime("%H:%M"))
         self._tell(PANEL, text, {"label": t("Panel")})
 

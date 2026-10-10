@@ -131,7 +131,10 @@ def libraries(root: Path) -> list[Path]:
     listed = read_vdf(root / "steamapps" / "libraryfolders.vdf").get("libraryfolders", {})
     for number, entry in listed.items() if isinstance(listed, dict) else ():
         # newer Steam: a table with a "path"; older: the path itself, numbered
-        path = entry.get("path") if isinstance(entry, dict) else entry if number.isdigit() else ""
+        if isinstance(entry, dict):
+            path = entry.get("path")
+        else:
+            path = entry if number.isdigit() else None
         library = Path(path) if isinstance(path, str) and path else None
         if library and library.is_absolute() and library.is_dir():
             if all(not _same(library, other) for other in found):
@@ -240,7 +243,13 @@ class Library:
         """The logo of a game from Steam's cache, cut out and not scaled (the header
         picture when there is no logo), or None."""
         self._refresh()
-        return load_logo(self.root, appid) if self.root else None
+        if self.root is None:
+            return None
+        try:
+            return load_logo(self.root, appid)
+        except OSError as exc:  # a picture that goes while we look: no logo this time
+            log.debug("logo of %s not read: %s", appid, exc)
+            return None
 
 
 def cache_files(root: Path, appid: str, names: tuple[str, ...]) -> list[Path]:

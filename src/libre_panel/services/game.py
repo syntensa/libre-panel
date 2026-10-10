@@ -40,7 +40,7 @@ POLL_RANGE_S = (0.25, 60.0)  # how often it looks for a game
 class Found:
     """A game that runs."""
 
-    key: str  # its program ("" for a game made by ``force``): the same key, the same game
+    key: str  # the same key, the same game: its program, "steam:<number>", "" for ``force``
     name: str
     pid: int = 0
     path: str = ""
@@ -118,7 +118,8 @@ class Detector:
                     self.front.add(program.pid)
                 if program.pid not in self.front:
                     continue
-            return Found(program.name, game.name, program.pid, program.path, game.appid)
+            key = f"steam:{game.appid}"  # one game, whatever the program of it that is in front
+            return Found(key, game.name, program.pid, program.path, game.appid)
         return None
 
 
@@ -186,10 +187,10 @@ class Game(Service):
             if self._ended.wait(wait):
                 return
             try:
+                self.advance()
                 if self.clock() >= due:
                     due = self.clock() + self.poll_s
                     self.detect()
-                self.advance()
                 self._report(None)
             except Exception as exc:  # one failed round must not end the service
                 self._report(f"{type(exc).__name__}: {exc}")
@@ -210,7 +211,8 @@ class Game(Service):
         if found is None and self.options["force"]:
             found = Found("", t("Game mode"))
         with self._lock:
-            self._apply(found, now)
+            if not self._ended.is_set():  # a look that was under way when the service stopped
+                self._apply(found, now)
 
     def _apply(self, found: Found | None, now: float) -> None:
         if found is None:
@@ -219,8 +221,7 @@ class Game(Service):
             return
         if self.found is not None and self.found.key == found.key:
             return  # still the same game
-        self.found = found
-        self.logo = self._logo_of(found)
+        self.found, self.logo = found, self._logo_of(found)
         self.host.log.info("game: %s", found.name)
         self.host.publish(NAME, found.name, "", "Game")
         self.host.publish_image(LOGO, self.logo)
@@ -240,13 +241,15 @@ class Game(Service):
 
     def on_sample(self, snapshot: Snapshot) -> None:
         with self._lock:
-            if self.waiting is not None and snapshot.images.get(LOGO) is not None:
+            there = self.waiting is not None and snapshot.images.get(LOGO) is not None
+            if there and not self._ended.is_set():
                 self._enter()
 
     def advance(self) -> None:
         """The switch no longer waits for a sample once a second has passed."""
         with self._lock:
-            if self.waiting is not None and self.clock() - self.waiting >= SAMPLE_WAIT_S:
+            late = self.waiting is not None and self.clock() - self.waiting >= SAMPLE_WAIT_S
+            if late and not self._ended.is_set():
                 self._enter()
 
     def _enter(self) -> None:
@@ -278,6 +281,15 @@ class Game(Service):
         if self.logo is not None:
             params["logo"] = self.logo
         return ("entrance", params)
+
+    def status(self) -> dict[str, Any]:
+        """What the service is doing, for a console page."""
+        return {
+            "game": self.found.name if self.found else None,
+            "steam_id": (self.found.appid or None) if self.found else None,
+            "mode": MODE if self.in_mode else None,
+            "waiting": self.waiting is not None,
+        }
 
     def _announce(self, label: str) -> None:
         if self.found is not None:

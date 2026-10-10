@@ -141,6 +141,15 @@ def test_rules_that_can_never_hold_are_reported_and_left_out(desk, caplog):
     assert "Switched off" not in caplog.text
 
 
+def test_without_usable_rules_it_says_so_and_does_nothing(desk, caplog):
+    with caplog.at_level("INFO", logger="libre_panel.service.autopilot"):
+        d = desk([])
+    assert "no usable rules" in caplog.text
+    assert d.host._listeners.get("sample") is None  # nothing to look at the samples for
+    d.sample(music=1)
+    assert d.theme is None
+
+
 def test_a_rule_has_a_name_by_default():
     problems = []
     rules = parse_rules([{"theme": "a", "when": {"music": True}}, 5], problems.append)
@@ -367,6 +376,13 @@ def test_it_rests_in_game_mode_and_its_choice_is_back_when_the_game_ends(desk):
     d.sample()  # the music stops
     assert d.theme == "studio"  # a new choice must hold afresh
     d.run(2)
+    assert d.theme is None
+
+
+def test_a_sample_that_comes_after_the_service_stopped_asks_for_nothing(desk):
+    d = desk([MUSIC], **QUICK)
+    d.service.stop()  # the host has not yet forgotten it: a sample is under way
+    d.sample(music=1)
     assert d.theme is None
 
 

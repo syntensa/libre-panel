@@ -160,7 +160,8 @@ def start(self):
     self.host.on("sample", self.on_sample)
 
 def on_sample(self, snapshot):
-    if snapshot.value("cpu.temp") > 90:
+    temperature = snapshot.value("cpu.temp")
+    if temperature is not None and temperature > 90:
         self.host.notify("CPU is hot", level="warning", kind="warning")
 ```
 
@@ -201,9 +202,9 @@ age = now - snapshot.state_stamp("myplugin.round")        # seconds since it was
   published, the state is `null` (`publish_state(key, None)`) or the text is
   no JSON. Every call parses the text again, so what you get is yours to
   change; read it once per frame.
-- The time stamp is on the main loop's clock (`time.perf_counter()`), the
-  clock of the `now` a screen is drawn with. `PluginHost(clock=...)` sets the
-  clock for tests.
+- The time stamp is on the main loop's clock, `libre_panel.clock()`
+  (`time.perf_counter()`), the clock of the `now` a screen is drawn with.
+  `PluginHost(clock=...)` sets the clock for tests.
 - Only a dict, a list or `None` is a state; a number or a text goes through
   `publish`. A value that is not JSON raises `TypeError` in the service.
 - A state reaches the next frame, like a reading, and goes when the service
