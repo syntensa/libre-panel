@@ -760,9 +760,9 @@ def test_toasts_without_a_queue():
     layer.apply(frame, 0.2)
     assert layer.current[0].text == "GPU 95 °C" and not layer.queue
     layer.add([Toast("CPU 90 °C", kind="cpu", rank=5), Toast("VRAM full", kind="vram", rank=5)])
-    layer.apply(frame, 0.5)  # the same rank takes over at once: the newest
+    layer.apply(frame, 0.5)  # the same rank takes over at once, one after the other
     toast, _began, previous = layer.current
-    assert toast.text == "VRAM full" and previous[0].text == "GPU 95 °C"
+    assert toast.text == "VRAM full" and previous[0].text == "CPU 90 °C" and previous[1] == 0
     assert layer.apply(frame, 10.0) is frame and not layer.active  # all gone, nothing waits
 
 

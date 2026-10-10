@@ -177,19 +177,24 @@ class Transition:
     (the default) holds it until the end; ``"follow"`` shows the new theme at
     once and this transition keeps playing, uncovering it (an entrance that
     reveals the screen asked for meanwhile); ``"restart"`` starts the new
-    switch's transition from the frame that shows now.
+    switch's transition from the frame that shows now. A mode change that
+    brings a transition of its own never waits behind a following one: it
+    starts from the frame that shows now. :meth:`on_switch` can decide case
+    by case.
 
     ``toasts`` says what toasts do meanwhile: ``"wait"`` (the default) lets
     the one on show stay and new ones wait; ``"over"`` lets them go on over
     the transition; ``"restart"`` makes the one on show leave and come again
-    afterwards. ``from_shown = True`` hands the old frame over as it showed,
-    with its toast.
+    afterwards; ``"hide"`` decides them as usual (screens see them in
+    ``context.toast``) but draws none, and the one on show rolls in afresh
+    on the frame the transition ends. ``from_shown = True`` hands the old
+    frame over as it showed, with its toast.
     """
 
     name = ""
     duration = 0.4
     switch = "wait"
-    toasts = "wait"  # "wait": new ones wait; "over": they go on; "restart": leave, come again
+    toasts = "wait"  # "wait", "over", "restart" (leave, come again) or "hide"
     from_shown = False  # True: the old frame with the toast on it, as it showed
 
     def __init__(
@@ -201,6 +206,14 @@ class Transition:
     def frame(self, old: Image.Image, new: Image.Image, t: float) -> Image.Image:
         raise NotImplementedError
 
+    def on_switch(self, theme: str, mode: str | None, mode_changed: bool) -> str:
+        """What a switch does while this plays: ``"wait"``, ``"follow"`` or
+        ``"restart"`` (see ``switch``, the default). Asked on every frame it
+        plays, with the theme the panel should show and the mode on now;
+        ``mode_changed`` is True when that is not the mode it began in (a game
+        that ended during its own entrance)."""
+        return self.switch
+
 
 class ToastStyle:
     """How toasts look; a theme picks one with ``"toast": {"style": name}``.
@@ -210,11 +223,15 @@ class ToastStyle:
     the time a toast takes to leave after its hold time. ``draw`` puts one
     toast (:class:`~libre_panel.plugins.Toast`: text, icon, level, kind,
     payload, ...) on the finished frame and returns it; ``age`` runs from 0,
-    when it arrives, to ``toast.seconds + leave_s``. ``previous`` is the toast
-    this one replaced at once (the same key again, or one it took over from)
-    and that one's age then, or None: change the content in place instead of
-    rolling in again. It runs at up to 50 fps: keep what does not change in
-    ``self``. ``self.anchor`` is the theme's toast position.
+    when it arrives, to :meth:`lifetime`. ``previous`` is the toast this one
+    replaced at once (the same key again, or one it took over from) and that
+    one's age then, or None: change the content in place instead of rolling
+    in again. It runs at up to 50 fps: keep what does not change in ``self``.
+    ``self.anchor`` is the theme's toast position.
+
+    The instance stays across theme switches while the theme names the same
+    style with the same options at the same size, so what it keeps per toast
+    goes on; ``self.context`` then becomes the new theme's.
     """
 
     name = ""
@@ -228,6 +245,18 @@ class ToastStyle:
 
     def draw(self, frame: Image.Image, toast: Any, age: float, previous: Any = None) -> Image.Image:
         raise NotImplementedError
+
+    def lifetime(self, toast: Any, previous: Any) -> float:
+        """Seconds from its arrival until ``toast`` is gone, asked once when it
+        starts (``previous`` as for :meth:`draw`). A toast that continues
+        another (the volume while it turns) may end sooner than one that
+        rolls in afresh."""
+        return toast.seconds + self.leave_s
+
+    def hold_s(self, toast: Any, theme_seconds: float) -> float:
+        """How long a toast without its own ``seconds`` holds, asked before
+        anything else sees it; the default is the theme's hold time."""
+        return theme_seconds
 
     def close(self) -> None:
         pass

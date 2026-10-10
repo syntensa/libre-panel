@@ -469,6 +469,10 @@ def valid_kind(kind: Any) -> bool:
 
 
 def _plugin(kind: str, name: str) -> Any:
+    if kind == "toasts":  # the built-in styles (card, band) and plugins' alike
+        from libre_panel.render.overlays import toast_style
+
+        return toast_style(name)
     from libre_panel.plugins.loader import registry
 
     return registry().get(kind, name)
