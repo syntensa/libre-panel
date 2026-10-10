@@ -28,7 +28,7 @@ from typing import Any
 
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont, ImageOps
 
-from libre_panel import i18n, timezones
+from libre_panel import clock, i18n, timezones
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
 from libre_panel.icons import draw_icon, weather_icon_name
 from libre_panel.render import lists
@@ -762,7 +762,7 @@ class Renderer:
     def render(
         self, snapshot: Snapshot, now: float | None = None
     ) -> tuple[Image.Image, dict[str, Box]]:
-        now = time.monotonic() if now is None else now
+        now = clock() if now is None else now
         theme = self.theme
         self.moving = False
         self.motion.begin(snapshot.readings, now, self._glide_s(), self._lead())

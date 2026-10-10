@@ -13,6 +13,7 @@ from typing import Any
 
 from PIL import Image, ImageOps
 
+from libre_panel import clock as loop_clock
 from libre_panel import i18n
 from libre_panel.config import Config, ConfigError, load_config
 from libre_panel.devices.base import DeviceError, Display, FrameError, create_display
@@ -246,7 +247,7 @@ class _Pacer:
 
     def __init__(
         self,
-        clock: Callable[[], float] = time.perf_counter,
+        clock: Callable[[], float] = loop_clock,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self.clock, self.sleep = clock, sleep
@@ -331,7 +332,7 @@ class MainLoop:
     :meth:`step` with its own clock, sensor hub, display and host.
 
     ``hub`` (built from the config without one) also gets the host's readings;
-    ``clock`` is the clock of the frames' times (``time.perf_counter``).
+    ``clock`` is the clock of the frames' times (:func:`libre_panel.clock`).
     """
 
     def __init__(
@@ -344,7 +345,7 @@ class MainLoop:
         on_config: Callable[[Config], None] | None = None,
         hub: SensorHub | None = None,
         display: Display | None = None,
-        clock: Callable[[], float] = time.perf_counter,
+        clock: Callable[[], float] = loop_clock,
     ) -> None:
         self.status = status = status or RunStatus()
         self.host, self.on_config, self.clock = host, on_config, clock
@@ -508,7 +509,8 @@ class MainLoop:
                 over = blend is not None and getattr(blend[0], "toasts", "wait") == "over"
                 toasts.advance(now, hold=blend is not None and not over)
                 renderer.toast = toasts.showing(now)  # screens see a toast the moment it begins
-                snapshot.now = datetime.now()  # the clock ticks between readings too
+                # the clock ticks between readings too, at the planned frame's time
+                snapshot.now = datetime.fromtimestamp(time.time() - (self.clock() - now))
                 frame, _ = renderer.render(snapshot, now)
                 frame = fit_frame(frame, size, background_of(renderer))
                 if blend is not None:

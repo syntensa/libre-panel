@@ -191,7 +191,10 @@ class Studio(Screen):
 - `snapshot.readings`, `snapshot.history` and `snapshot.images` (from
   services) are there; `now` is the frame's time in seconds for animations
   (steady; in video mode the time the frame is planned for, so a frame that
-  starts a little late does not make an animation stutter).
+  starts a little late does not make an animation stutter). It is a time on
+  `libre_panel.clock()` (`time.perf_counter`): compare with that clock, not
+  with `time.monotonic`. `snapshot.now` is the same moment as a wall-clock
+  `datetime`, so a seconds clock ticks on the frame that is due.
 - `context` has `size`, `orientation`, `palette`, `model`,
   `hidden_edges()` (pixels the bezel hides, as data: nothing is cropped),
   `font(ref, size)`, `color(value)`, `fps`, `language`, `t(text)`,

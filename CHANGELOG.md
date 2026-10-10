@@ -16,8 +16,11 @@
   value the numbers show (they trailed a reading behind and moved a few
   pixels a second). `seconds` sets the time a graph spans in video mode,
   whatever the frame rate; a theme that comes on shows its graphs full
+- For plugins: `libre_panel.clock()`, the clock of `now` (`time.perf_counter`)
 
 **Fixes**
+- A seconds clock ticks on the frame that is due: `snapshot.now` is the time
+  a frame is planned for, not the moment its drawing begins
 - Video mode: graphs that move a pixel per frame (`per_frame`) stood still
   about three seconds after the start and after every theme switch, while
   numbers and bars went on; scrolling graphs were drawn again on every frame

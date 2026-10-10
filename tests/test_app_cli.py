@@ -303,3 +303,35 @@ def test_the_main_loop_goes_one_frame_at_a_time_on_its_own_clock():
     finally:
         loop.close()
         host.close()
+
+
+def test_one_clock_for_the_loop_the_renderer_and_plugins():
+    """``now`` everywhere is on libre_panel.clock() (time.perf_counter), and
+    snapshot.now is the wall time of the frame as planned: a seconds clock
+    ticks on the frame that is due, not on the one that happens to be drawn."""
+    import time
+    from datetime import datetime, timedelta
+
+    import libre_panel
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.sensors.base import SensorHub, Snapshot
+    from libre_panel.sensors.demo import DemoProvider
+
+    before = time.perf_counter()
+    assert before <= libre_panel.clock() <= time.perf_counter()
+    assert app_module._Pacer().clock is libre_panel.clock
+    renderer = Renderer(load_theme(find_theme("pico")))
+    renderer.render(Snapshot())
+    assert before <= renderer.motion.now <= time.perf_counter()
+
+    clock = StepClock(1000.5)  # drawn half a second after it was due
+    hub = SensorHub([DemoProvider({"fixed_time": 1_700_000_000})])
+    config = Config(theme="pico", sensors=SensorsConfig(providers=["demo"]))
+    loop = app_module.MainLoop(config, hub=hub, display=MemoryStream(), clock=clock)
+    try:
+        assert loop.clock is clock
+        loop.step(1000.0)
+        due = datetime.now() - timedelta(seconds=0.5)
+        assert abs((loop.snapshot.now - due).total_seconds()) < 0.2
+    finally:
+        loop.close()
