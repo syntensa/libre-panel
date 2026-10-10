@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.4.1 — 2026-10-10
+
+Upside down for panels mounted the other way round, and fixes from the first
+reports: Turing rev. C panels (2.1", 5", 8.8", and the 5" sold as UsbPCMonitor)
+are no longer taken for another size and no longer freeze after a while; a
+panel whose size is not the theme's no longer crashes Libre Panel; Bazzite
+shows the real disk; and the fixes of a review of the whole code. The rev. C
+fixes follow one user's logs: reports from more rev. C owners are welcome.
 
 **New**
 - Upside down, for a panel mounted the other way round: `rotate = 180` under
