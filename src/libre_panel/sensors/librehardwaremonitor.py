@@ -25,7 +25,7 @@ import re
 import threading
 import time
 import urllib.request
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -107,14 +107,47 @@ def _walk(node: dict[str, Any], device: dict[str, Any] | None = None) -> Iterato
         yield from _walk(child, device)
 
 
-def _reading(leaf: dict[str, Any], key: str) -> Reading | None:
+@dataclass(frozen=True)
+class LhmSensor:
+    """One sensor with a value, whichever way it was read: from the web server's
+    tree or from LibreHardwareMonitor running inside Libre Panel. Both ways end in
+    :func:`readings_from_sensors`, so they name and group readings the same."""
+
+    sensor_id: str  # "/amdcpu/0/temperature/2"
+    hardware_id: str  # "/amdcpu/0"
+    hardware_name: str  # as LibreHardwareMonitor shows it
+    sensor_type: str  # LibreHardwareMonitor's SensorType: "Temperature", "Load", ...
+    label: str  # "Core (Tctl/Tdie)"
+    value: float
+    unit: str  # "°C"; "" for a plain number
+
+
+def _leaf_value(leaf: dict[str, Any]) -> tuple[float, str] | None:
     raw = leaf.get("RawValue")
     if str(leaf.get("Type", "")).lower() == "throughput" and isinstance(raw, (int, float)):
-        return Reading(key, float(raw), "B/s", str(leaf.get("Text", "")))
+        return float(raw), "B/s"
     value, unit = parse_value(leaf.get("Value"))
     if value is None:
         return None
-    return Reading(key, value, unit, str(leaf.get("Text", "")))
+    return value, unit
+
+
+def sensors_from_tree(tree: dict[str, Any]) -> Iterator[LhmSensor]:
+    """The sensors of the web server's ``data.json`` that have a value."""
+    for leaf, device_node in _walk(tree):
+        found = _leaf_value(leaf)
+        if found is None:
+            continue
+        sensor_id = str(leaf["SensorId"])
+        hardware_id = (device_node or {}).get("HardwareId") or "/".join(sensor_id.split("/")[:3])
+        yield LhmSensor(
+            sensor_id,
+            hardware_id,
+            str((device_node or {}).get("Text", hardware_id)),
+            str(leaf.get("Type") or sensor_id.strip("/").split("/")[2]),
+            str(leaf.get("Text", "")),
+            *found,
+        )
 
 
 def _gpu_rank(device: _Device) -> tuple[int, float]:
@@ -126,21 +159,30 @@ def _gpu_rank(device: _Device) -> tuple[int, float]:
 
 
 def readings_from_tree(tree: dict[str, Any], gpu: str | None = None) -> dict[str, Reading]:
+    return readings_from_sensors(sensors_from_tree(tree), gpu)
+
+
+def readings_from_sensors(
+    sensors: Iterable[LhmSensor],
+    gpu: str | None = None,
+    sources: dict[str, tuple[str, ...]] | None = None,
+) -> dict[str, Reading]:
+    """Every sensor under its raw key (``lhm:<id>``), the common ones under friendly
+    keys (``cpu.temp``, ``gpu.load``), every temperature and fan by device and name.
+
+    ``sources``, if given, is filled with the ids of the sensors each key is made
+    from (none for a name), so that a caller can tell which sensors a key needs."""
     out: dict[str, Reading] = {}
     devices: dict[str, _Device] = {}
-    for leaf, device_node in _walk(tree):
-        sensor_id = str(leaf["SensorId"])
-        reading = _reading(leaf, f"lhm:{sensor_id}")
-        if reading is None:
-            continue
+    for sensor in sensors:
+        reading = Reading(f"lhm:{sensor.sensor_id}", sensor.value, sensor.unit, sensor.label)
         out[reading.key] = reading
-        hardware_id = (device_node or {}).get("HardwareId") or "/".join(sensor_id.split("/")[:3])
-        device = devices.get(hardware_id)
+        device = devices.get(sensor.hardware_id)
         if device is None:
-            name = str((device_node or {}).get("Text", hardware_id))
-            device = devices[hardware_id] = _Device(hardware_id, name, _kind(sensor_id))
-        sensor_type = str(leaf.get("Type") or sensor_id.strip("/").split("/")[2]).lower()
-        device.sensors.setdefault((sensor_type, reading.label), reading)
+            device = devices[sensor.hardware_id] = _Device(
+                sensor.hardware_id, sensor.hardware_name, _kind(sensor.sensor_id)
+            )
+        device.sensors.setdefault((sensor.sensor_type.lower(), reading.label), reading)
 
     cpus = [d for d in devices.values() if d.kind == "cpu"]
     gpus = [d for d in devices.values() if d.kind == "gpu"]
@@ -158,20 +200,29 @@ def readings_from_tree(tree: dict[str, Any], gpu: str | None = None) -> dict[str
             src = device.get(sensor_type, names)
             if src is not None:
                 out[alias] = Reading(alias, src.value, src.unit, src.label, src.key)
+    averaged: tuple[str, ...] = ()
     if cpus and "cpu.freq" not in out:
-        # Older LibreHardwareMonitor versions have no average: use the mean of the cores.
-        clocks = [
-            r.value
+        # No average clock (Intel, and older versions): use the mean of the cores.
+        cores = [
+            r
             for (sensor_type, name), r in cpus[0].sensors.items()
             if sensor_type == "clock" and _CORE_CLOCK.match(name) and isinstance(r.value, float)
         ]
-        if clocks:
-            out["cpu.freq"] = Reading("cpu.freq", sum(clocks) / len(clocks), "MHz", "CPU clock")
+        if cores:
+            mean = sum(r.value for r in cores) / len(cores)
+            out["cpu.freq"] = Reading("cpu.freq", mean, "MHz", "CPU clock")
+            averaged = tuple(r.key[4:] for r in cores)
     if cpus:
         out["cpu.name"] = Reading("cpu.name", cpus[0].name, "", "CPU")
     if gpus:
         out["gpu.name"] = Reading("gpu.name", gpus[0].name, "", "GPU")
     _temperatures_and_fans(list(devices.values()), out)
+    if sources is not None:
+        for key, reading in out.items():
+            origin = reading.origin or (key if key.startswith("lhm:") else "")
+            sources[key] = (origin[4:],) if origin else ()
+        if averaged:
+            sources["cpu.freq"] = averaged
     return out
 
 
