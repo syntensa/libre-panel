@@ -1,9 +1,6 @@
 # Changelog
 
-## 0.4.2 — 2026-10-10
-
-A fix for video mode (the 9.2" panel with `[video] mode = "on"`): graphs no
-longer stop moving a few seconds after the start.
+## Unreleased
 
 **New**
 - `load`, a sensor source for the CPU and GPU load ten times a second: bars
@@ -35,10 +32,6 @@ longer stop moving a few seconds after the start.
   (`on_switch`); `context.image(key)` gives a published picture
 
 **Fixes**
-- Video mode: graphs that move a pixel per frame (`per_frame`) stood still
-  about three seconds after the start and after every theme switch, while
-  numbers and bars went on; scrolling graphs were drawn again on every frame
-  instead of once per reading, which kept the helper thread busy
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
   showing the last numbers for ever. After 5 seconds (`stale_seconds` under
   `[sensors.librehardwaremonitor]`; 0 keeps them) the readings go and the
@@ -65,6 +58,17 @@ longer stop moving a few seconds after the start.
 - Without a queue (`"queue": false`), messages that come at the same moment
   are decided one after the other: a warning that comes with a volume
   change takes over from it at once
+
+## 0.4.2 — 2026-10-10
+
+A fix for video mode (the 9.2" panel with `[video] mode = "on"`): graphs no
+longer stop moving a few seconds after the start.
+
+**Fixes**
+- Video mode: graphs that move a pixel per frame (`per_frame`) stood still
+  about three seconds after the start and after every theme switch, while
+  numbers and bars went on; scrolling graphs were drawn again on every frame
+  instead of once per reading, which kept the helper thread busy
 
 ## 0.4.1 — 2026-10-10
 
