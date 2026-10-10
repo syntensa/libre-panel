@@ -38,7 +38,14 @@
   (`[[services.notices.warnings]]` with `warn` and `crit`, told once until the
   value has been below `warn`, and never twice within `quiet_s`), and "Panel
   restarted 21:05" after a restart that cleared a hung video decoder. The
-  theme's toast style draws them (card or band), `toast.off` leaves kinds out
+  theme's toast style draws them (card or band), `toast.off` leaves kinds out.
+  `game` is game mode: it finds the game you play, from a list of programs or
+  Steam's library (read from `libraryfolders.vdf` and the `appmanifest` files
+  on Windows, Linux and macOS; on Windows a game counts once its window has
+  been in front), publishes `game.name` and `game.logo` (Steam's logo, cut out
+  and not scaled), and switches to `[modes.game]` with the entrance, six
+  seconds after the game's program ended back again. Without the entrance a
+  "Game mode" message says so
 - Plugins: services no longer poll. `host.on("sample", callback)` hands them
   every new snapshot of the readings (a slow callback gets the newest one,
   never a backlog), and what a service publishes reaches the next frame

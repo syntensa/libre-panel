@@ -290,6 +290,62 @@ crit = 85
   same one again (the volume while it turns) changes in place instead of
   coming again.
 
+### Game mode
+
+The panel changes by itself when you play: it switches to the mode `game`
+(its own frame rate and theme, `[modes.game]`) with an entrance that shows the
+game's logo, and back a few seconds after you quit.
+
+```toml
+[services]
+enabled = ["game"]
+
+[services.game]
+programs = ["emulator.exe = Retro Games", "othergame.exe"]  # programs that are games
+steam = true           # and any game installed through Steam
+# steam_path = ""      # where Steam is, if Libre Panel does not find it
+# ignore = ["Wallpaper Engine"]  # games and tools in Steam's library that never count
+automatic = true       # switch by itself when a game runs
+force = false          # game mode on, game or not (to try the screens)
+entrance = true        # the entrance; false: a "Game mode" message and the theme's transition
+logo = true            # the game's logo (Steam's cache) in the entrance and on screens
+linger_s = 6           # the mode stays this long after the game's program ended
+poll_s = 2             # how often to look for a game (0.25 to 60)
+
+[modes.game]
+fps = 30               # frames per second while the mode is on
+theme = "slate"        # optional: another theme
+```
+
+- **What is a game.** A program in `programs` (its file name, case does not
+  matter; `name = A Better Name` sets the name to show), and with `steam` any
+  program of a game installed through Steam. Steam's libraries are found
+  from its own files (`libraryfolders.vdf`, `appmanifest_*.acf`), on Windows,
+  Linux (also Flatpak and Snap) and macOS. Tools in a library, such as Proton,
+  the Steam Linux Runtime or SteamVR, are not games; `ignore` adds more.
+  Windows programs under Wine and Proton are found by the folder they work in.
+- **The window in front.** On Windows a Steam game counts only once its window
+  has been in front, because a library also holds programs that run all day (a
+  wallpaper). Where Libre Panel cannot tell which window is in front (Linux,
+  macOS), a running program of a Steam game is enough.
+- **The beginning.** The service shows the name (`game.name`) and the logo
+  (`game.logo`, an image: `"src": "@game.logo"` in an image widget) to the
+  screens, then switches. The logo comes from Steam's picture cache, cut out
+  and not scaled, or the game's header picture; a program that is not a Steam
+  game shows its name in big letters. The switch waits for the next reading
+  (at most a second) so that the first game screen already has the logo.
+- **The end.** When the program has been gone for `linger_s` seconds the mode
+  ends with the entrance for the end. Games restart while they are set up and
+  launchers swap their process, so the mode does not follow every flicker.
+- **Without the entrance** (`entrance = false`) the switch uses the
+  `transition` of `config.toml`, and a message says "Game mode" (and "Game
+  ended"), so the theme's toast style draws it.
+- `force = true` keeps the mode on, which is how to try the game screens;
+  `automatic = false` with `force = false` does nothing. A game that runs
+  while `force` is on is named.
+- The frame rate of the game (`game.fps`) comes from the `presentmon` source,
+  which is a separate setting.
+
 ## Language
 
 Libre Panel speaks English and German. `language = "auto"` follows the

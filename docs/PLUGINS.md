@@ -227,6 +227,7 @@ do. Their names cannot be used by a plugin.
 | Service | What it does |
 |---|---|
 | `notices` | messages for the volume, a new track, sensors that cross a limit and a panel that restarted |
+| `game` | game mode: finds the game you play (a list of programs, Steam's library) and switches the mode with an entrance, and back |
 
 Their options are in the [configuration guide](CONFIGURATION.md#built-in-services).
 They use only what is described here, so they are also examples for your own.
