@@ -25,6 +25,9 @@
 **Fixes**
 - A seconds clock ticks on the frame that is due: `snapshot.now` is the time
   a frame is planned for, not the moment its drawing begins
+- Video mode: a graph whose sensor goes missing or reads nothing moves on
+  with a gap, instead of standing still (or, with `per_frame`, running on as
+  a flat line)
 - Video mode: graphs that move a pixel per frame (`per_frame`) stood still
   about three seconds after the start and after every theme switch, while
   numbers and bars went on; scrolling graphs were drawn again on every frame

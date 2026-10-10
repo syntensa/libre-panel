@@ -277,6 +277,33 @@ def test_a_new_theme_shows_its_graphs_full_at_once():
     )
 
 
+def test_a_graph_moves_on_with_a_gap_while_its_sensor_has_no_value():
+    """A sensor that goes missing (or reads None) leaves a gap: the curve moves
+    on, it does not stand still or run on as a flat line, and it comes back."""
+    renderer = video(Renderer(theme(graph(seconds=8)), animate=True))
+    frames = []
+    for n in range(8 * 50):
+        now, t = 100.0 + n / 50, n / 50
+        if n % 50 == 0:
+            renderer.new_sample(now, 1.0)
+        if t < 3:
+            readings = {"v": Reading("v", 60.0)}
+        elif t < 5:
+            readings = {}  # gone
+        elif t < 6:
+            readings = {"v": Reading("v", None)}  # there, without a value
+        else:
+            readings = {"v": Reading("v", 30.0)}
+        snapshot = Snapshot(readings=readings, history={"v": [60.0, 60.0, 60.0]})
+        frames.append(renderer.render(snapshot, now)[0])
+    assert all(a.tobytes() != b.tobytes() for a, b in zip(frames[60:], frames[61:], strict=False))
+    rows = curve_rows(frames[-1])  # 8 s across 200 px: the gap from 3 to 6 s is 75 px wide
+    gap = [x for x, row in enumerate(rows) if row is None]
+    assert 65 < len(gap) < 85 and min(gap) > 60 and max(gap) < 160, gap
+    assert rows[40] is not None and rows[190] is not None  # before and after it
+    assert rows[40] < rows[190]  # 60 before, 30 after (higher up is a smaller y)
+
+
 # -- warming up the next theme ---------------------------------------------------
 
 PREPARED = """
