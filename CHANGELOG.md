@@ -28,6 +28,9 @@
 - CI also runs on Python 3.14
 
 **Changes**
+- To find out why a panel stops changing: with `-v` the log shows what a
+  rev. C panel answers (when that changes) and a summary of its updates every
+  minute; `kill -USR1 <pid>` prints where every thread is (Linux, macOS)
 - Serial panels are now called "USB serial panels (virtual COM port)" in the
   docs, `libre-panel models` and `doctor`: they plug in with USB(-C) like the
   others and only show up as a COM port

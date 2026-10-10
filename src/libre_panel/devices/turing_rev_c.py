@@ -113,6 +113,9 @@ class RevCDisplay(SerialDisplay):
         self.sized = self.configured  # is the model's size known (else: from the first frame)
         self.rom = 87
         self.count = 0
+        # for the log (-v): what the panel last said, and the updates of the last minute
+        self._said: str | None = None
+        self._minute = (time.monotonic(), 0, 0, 0.0)  # (since, boxes, whole frames, slowest s)
 
     # -- finding and waking ----------------------------------------------------
 
@@ -212,10 +215,35 @@ class RevCDisplay(SerialDisplay):
 
     def send_bitmap(self, x0: int, y0: int, x1: int, y1: int, image: Image.Image) -> None:
         width, height = self.model.size(self.orientation)
-        if (x0, y0, x1, y1) == (0, 0, width - 1, height - 1):
+        started = time.monotonic()
+        whole = (x0, y0, x1, y1) == (0, 0, width - 1, height - 1)
+        if whole:
             self._full(image)
         else:
             self._box(image, x0, y0)
+        self._count_update(whole, time.monotonic() - started)
+
+    def _heard(self, answer: bytes) -> None:
+        """The panel's answer to a status query, in the log when it changes: where
+        to look first when a panel stops showing new frames."""
+        text = "".join(c for c in answer.decode("ascii", "ignore") if c in string.printable)
+        said = text.strip()[:160] or (f"{len(answer)} bytes, no text" if answer else "no answer")
+        if said != self._said:
+            log.debug("panel status (update %d): %s", self.count, said)
+            self._said = said
+
+    def _count_update(self, whole: bool, seconds: float) -> None:
+        since, boxes, frames, slowest = self._minute
+        boxes, frames = boxes + (not whole), frames + whole
+        slowest = max(slowest, seconds)
+        now = time.monotonic()
+        if now - since >= 60:
+            log.debug(
+                "%d updates (%d whole frames) in %.0f s, the slowest %.0f ms",
+                boxes + frames, frames, now - since, slowest * 1000,
+            )  # fmt: skip
+            since, boxes, frames, slowest = now, 0, 0, 0.0
+        self._minute = (since, boxes, frames, slowest)
 
     @property
     def _tall(self) -> bool:  # the 8.8": a portrait framebuffer
@@ -234,7 +262,7 @@ class RevCDisplay(SerialDisplay):
         self._command(START_DISPLAY_BITMAP, fill=0x2C)
         self._command(DISPLAY_BITMAP[self.model.id] + size)
         self._command(cut(bgra(image)), read=STATUS_SIZE)
-        self._command(QUERY_STATUS, read=STATUS_SIZE)
+        self._heard(self._command(QUERY_STATUS, read=STATUS_SIZE))
 
     def _box(self, image: Image.Image, x: int, y: int) -> None:
         native_w, native_h = self.model.native_width, self.model.native_height
@@ -269,5 +297,5 @@ class RevCDisplay(SerialDisplay):
         data = cut(bytes(rows)) if len(rows) > 250 else bytes(rows)
         self._command(head)
         self._command(data + b"\xef\x69")
-        self._command(QUERY_STATUS, read=STATUS_SIZE)
+        self._heard(self._command(QUERY_STATUS, read=STATUS_SIZE))
         self.count += 1

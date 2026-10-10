@@ -532,6 +532,23 @@ def test_a_usbpcmonitor_with_the_turing_serial_number_is_found(ports, port):
         screen.show(picture((800, 480)))
 
 
+def test_rev_c_logs_what_the_panel_says(ports, no_waiting, caplog):
+    """With -v the log shows the panel's status when it changes: the first thing
+    to look at when a panel stops showing new frames."""
+    import logging
+
+    panel = FakeRevC("turing-5")
+    sleeping_rev_c(ports, panel)
+    caplog.set_level(logging.DEBUG, logger="libre_panel.devices.turing_rev_c")
+    with display(model="turing-5") as screen:
+        screen.show(picture((800, 480)))
+        screen.show(picture((800, 480), seed=40), (10, 10, 60, 40))
+        panel.answers += b"needReSend:1" + bytes(1012)  # a later status says something
+        screen.show(picture((800, 480), seed=80), (10, 10, 60, 40))
+    said = [r.getMessage() for r in caplog.records if "panel status" in r.getMessage()]
+    assert said[0].endswith("1024 bytes, no text") and "needReSend:1" in said[-1]
+
+
 def test_a_model_of_another_kind_names_the_right_one(ports, no_waiting):
     """A rev. C panel set up as UsbPCMonitor 5" (rev. A) stayed black: now it says so."""
     sleeping_rev_c(ports, FakeRevC("turing-5"))

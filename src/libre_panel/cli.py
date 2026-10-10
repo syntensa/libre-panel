@@ -436,6 +436,20 @@ def _cmd_location(args: argparse.Namespace) -> int:
     return 0
 
 
+def _threads_on_signal() -> None:
+    """``kill -USR1 <pid>`` prints where every thread is: what to look at when the
+    panel stops changing and nothing is logged (Linux, macOS)."""
+    import faulthandler
+    import signal
+
+    if sys.stderr is None or not hasattr(signal, "SIGUSR1"):
+        return
+    try:
+        faulthandler.register(signal.SIGUSR1, all_threads=True)
+    except (AttributeError, OSError, RuntimeError, ValueError):  # no real stderr (a test)
+        pass
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="libre-panel", description=__doc__)
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -543,6 +557,7 @@ def main(argv: list[str] | None = None, default_command: str = "start") -> int:
         # Programs without a console (pythonw, the windowed build) have no stderr.
         handlers=[logging.StreamHandler()] if sys.stderr else [logging.NullHandler()],
     )
+    _threads_on_signal()
     from libre_panel import i18n
     from libre_panel.instance import AlreadyRunning
     from libre_panel.theme.model import ThemeError

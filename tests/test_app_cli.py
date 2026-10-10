@@ -1,3 +1,4 @@
+import pytest
 from PIL import Image
 
 from libre_panel.app import fit_frame, run, target_size
@@ -62,6 +63,18 @@ def test_cli_preview_and_models(tmp_path, capsys):
     assert out.exists()
     assert main(["models"]) == 0
     assert "turing-9.2-usb" in capsys.readouterr().out
+
+
+def test_a_signal_shows_where_the_threads_are(monkeypatch):
+    import faulthandler
+    import signal
+
+    if not hasattr(signal, "SIGUSR1"):
+        pytest.skip("no SIGUSR1 on this system")
+    registered = []
+    monkeypatch.setattr(faulthandler, "register", lambda *a, **kw: registered.append((a, kw)))
+    assert main(["models"]) == 0
+    assert registered == [((signal.SIGUSR1,), {"all_threads": True})]
 
 
 def test_cli_reports_errors(capsys):
