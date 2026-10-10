@@ -87,9 +87,11 @@ _PAGE_TYPES = {
 
 
 def _plugin_specs() -> dict[str, Any]:
-    """Installed plugin widget types and screens, for the inspector and the building blocks."""
+    """Installed plugin widget types, screens and toast styles (and the built-in
+    styles besides the card), for the inspector and the building blocks."""
     from libre_panel.plugins.loader import registry
     from libre_panel.plugins.render import label_for
+    from libre_panel.render.overlays import BUILT_IN_STYLES
 
     installed = registry()
     widgets: dict[str, Any] = {}
@@ -119,8 +121,6 @@ def _plugin_specs() -> dict[str, Any]:
         if cls is not None:
             options = {k: list(v) for k, v in cls.options.items()}
             screens[name] = {"label": label_for(cls), "options": options}
-    from libre_panel.render.overlays import BUILT_IN_STYLES
-
     toasts = {}
     for name, cls in BUILT_IN_STYLES.items():  # the card is the editor's own first choice
         if name != "card":
