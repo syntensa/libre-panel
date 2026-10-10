@@ -7,6 +7,10 @@
   about three seconds after the start and after every theme switch, while
   numbers and bars went on; scrolling graphs were drawn again on every frame
   instead of once per reading, which kept the helper thread busy
+- LibreHardwareMonitor: when its web server stopped answering, the panel kept
+  showing the last numbers for ever. After 5 seconds (`stale_seconds` under
+  `[sensors.librehardwaremonitor]`; 0 keeps them) the readings go and the
+  panel shows "--"; the log says so, and when they are back
 
 ## 0.4.1 — 2026-10-10
 

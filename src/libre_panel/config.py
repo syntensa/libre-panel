@@ -63,6 +63,9 @@ providers = ["psutil"]
 [sensors.librehardwaremonitor]
 # Windows: enable "Remote Web Server" in LibreHardwareMonitor.
 url = "http://127.0.0.1:8085/data.json"
+# Without an answer for this many seconds its readings disappear ("--" on the
+# panel) instead of staying as they were; 0 keeps the last ones.
+# stale_seconds = 5
 
 [sensors.psutil]
 # What a theme's ping connects to (host:port); only while a theme shows the ping.

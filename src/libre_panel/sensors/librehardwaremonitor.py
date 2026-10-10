@@ -7,6 +7,10 @@ Every sensor is exposed under its raw id (``lhm:/amdcpu/0/temperature/2``) and
 the common ones also get friendly aliases such as ``cpu.temp`` or ``gpu.load``.
 With several GPUs the dedicated one is used; ``gpu = "RTX 4080"`` in
 ``[sensors.librehardwaremonitor]`` picks one by name.
+
+When the web server stops answering, its readings are kept for
+``stale_seconds`` (5 by default) and then dropped, so the panel shows "--"
+instead of numbers that stand still; they return with the first answer.
 """
 
 from __future__ import annotations
@@ -28,6 +32,7 @@ log = logging.getLogger(__name__)
 
 _NUMBER = re.compile(r"^\s*(-?[0-9]+(?:[.,][0-9]+)?)\s*(.*)$")
 _CORE_CLOCK = re.compile(r"^(CPU )?Core #\d+$")
+STALE_SECONDS = 5.0  # without an answer for this long the readings are dropped
 
 # alias -> (sensor type, preferred sensor names in order), per device kind.
 # Names as LibreHardwareMonitor reports them for Intel, AMD and NVIDIA.
@@ -198,8 +203,12 @@ class LibreHardwareMonitorProvider(SensorProvider):
         super().__init__(options)
         self.url = self.options.get("url", "http://127.0.0.1:8085/data.json")
         self.poll_seconds = float(self.options.get("poll_seconds", 1.0))
+        # 0 (or less) keeps the last readings however long the web server is silent.
+        self.stale_seconds = float(self.options.get("stale_seconds", STALE_SECONDS))
         self.gpu = self.options.get("gpu")
         self._latest: dict[str, Reading] = {}
+        self._answered_at: float | None = None  # when the web server last answered
+        self._warned = False  # said that it is silent; says so when it answers again
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._poll, name="lhm-poll", daemon=True)
@@ -213,19 +222,49 @@ class LibreHardwareMonitorProvider(SensorProvider):
             return json.loads(response.read().decode("utf-8"))
 
     def _poll(self) -> None:
-        warned = False
         while not self._stop.is_set():
             started = time.monotonic()
-            try:
-                readings = readings_from_tree(self._fetch(), self.gpu)
-                with self._lock:
-                    self._latest = readings
-                warned = False
-            except Exception as exc:
-                if not warned:
-                    log.warning("LibreHardwareMonitor not reachable at %s: %s", self.url, exc)
-                    warned = True
+            self._poll_once()
             self._stop.wait(max(0.1, self.poll_seconds - (time.monotonic() - started)))
+
+    def _poll_once(self, now: float | None = None) -> None:
+        """One request. ``now`` (``time.monotonic()``) is for tests."""
+        try:
+            readings = readings_from_tree(self._fetch(), self.gpu)
+        except Exception as exc:  # noqa: BLE001 - whatever went wrong, it did not answer
+            self._unanswered(exc, time.monotonic() if now is None else now)
+            return
+        with self._lock:
+            self._latest = readings
+            self._answered_at = time.monotonic() if now is None else now
+        if self._warned:
+            self._warned = False
+            log.info("LibreHardwareMonitor answers again at %s: its readings are back", self.url)
+
+    def _unanswered(self, exc: Exception, now: float) -> None:
+        """A short silence keeps the last readings (one slow answer is no reason to
+        blank the panel); a long one drops them, so numbers never stand still unseen."""
+        with self._lock:
+            shown = bool(self._latest)
+            silent = now - self._answered_at if self._answered_at is not None else 0.0
+            expired = shown and 0 < self.stale_seconds <= silent
+            if expired:
+                self._latest = {}
+        if self._warned:
+            return
+        if expired:
+            log.warning(
+                "LibreHardwareMonitor has not answered at %s for %.0f s (%s): "
+                "its readings are hidden until it does",
+                self.url,
+                silent,
+                exc,
+            )
+        elif not shown or self.stale_seconds <= 0:
+            log.warning("LibreHardwareMonitor not reachable at %s: %s", self.url, exc)
+        else:
+            return
+        self._warned = True
 
     def read(self) -> dict[str, Reading]:
         with self._lock:

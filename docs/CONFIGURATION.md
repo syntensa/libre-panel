@@ -43,6 +43,8 @@ providers = ["psutil"]         # order = priority; also "librehardwaremonitor", 
 
 [sensors.librehardwaremonitor]
 url = "http://127.0.0.1:8085/data.json"
+# stale_seconds = 5            # no answer for this long: its readings are hidden
+                               # ("--" on the panel); 0 keeps the last ones
 
 [sensors.psutil]
 # disk = "C:\\"                # the drive behind disk.load (default: the system drive)
@@ -236,6 +238,11 @@ The settings were measured on the 9.2" panel; the details are in
    and run it as administrator (CPU temperatures and power need its driver).
 2. *Options → Remote Web Server → Run*.
 3. `providers = ["librehardwaremonitor", "psutil"]`.
+
+If LibreHardwareMonitor stops answering (closed, crashed, blocked), its
+readings stay for `stale_seconds` (5 by default) and then disappear, so the
+panel shows "--" instead of numbers that stand still. A line in the log says
+so, and another when it answers again.
 
 ## Weather
 
