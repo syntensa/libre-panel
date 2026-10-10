@@ -8,6 +8,11 @@
   load (Windows, any vendor, no administrator rights) is the one Task Manager
   shows. It runs only while a theme shows `cpu.load` or `gpu.load`; put it
   before the other sources in `[sensors] providers`
+- `audio`, a sensor source for the volume: `audio.volume` (0 while muted) and
+  `audio.muted` of the default output, read on every frame so a volume bar
+  follows the volume keys at once. Windows (no extra program; it follows a
+  changed default device), Linux (`wpctl` or `pactl`) and macOS. It runs only
+  while a theme shows `audio.*`; add `"audio"` to `[sensors] providers`
 
 **Fixes**
 - Video mode: graphs that move a pixel per frame (`per_frame`) stood still

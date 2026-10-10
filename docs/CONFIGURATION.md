@@ -76,6 +76,7 @@ goes first.
 | `load` | `cpu.load` and `gpu.load`, measured ten times a second | CPU everywhere, GPU on Windows (any vendor) |
 | `psutil` | CPU, memory, drives, network, battery, the busiest programs; temperatures and fans where the system has them | everywhere |
 | `librehardwaremonitor` | temperatures, power, clocks and fans of CPU, GPU and mainboard | Windows, see [below](#windows-sensors-gpu-power-fans) |
+| `audio` | `audio.volume` (0 while muted) and `audio.muted` (1 or 0) of the default output | Windows, Linux (`wpctl` or `pactl`), macOS |
 
 **Fast load** (`load`): `cpu.load` and, on Windows, `gpu.load` are measured in
 a background thread ten times a second and read on every frame, so bars and
@@ -94,6 +95,21 @@ administrator rights.
 - Put it before the sources whose load it replaces, e.g.
   `providers = ["load", "librehardwaremonitor", "psutil"]`; behind
   LibreHardwareMonitor its readings would never be used.
+
+**Volume** (`audio`): the volume and the mute of the default output device,
+read on every frame, so a volume bar follows the volume keys at once. It is not
+in the default list; add it: `providers = ["load", "psutil", "audio"]`.
+
+- `audio.volume` is 0 while the sound is muted; `audio.muted` is 1 then, else 0.
+- Windows: Windows' own sound interface, no program needed. Windows reports
+  every change by itself. When the default output device changes (a headset
+  plugged in, speakers chosen) the volume follows it within two seconds.
+- Linux: `wpctl` (PipeWire), else `pactl` (PulseAudio), asked four times a
+  second. Without either tool installed there are no readings, and the log
+  says so.
+- macOS: `osascript`, asked twice a second.
+- It runs only while a theme on the panel shows `audio.volume` or
+  `audio.muted`.
 
 ## More sensor sources
 

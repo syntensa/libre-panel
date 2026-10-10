@@ -2,24 +2,15 @@
 
 import json
 import logging
-import threading
 from pathlib import Path
 
 import pytest
+from fake_sensors import wait_for
 
 from libre_panel.sensors import librehardwaremonitor as lhm
 
 LOGGER = "libre_panel.sensors.librehardwaremonitor"
 TREE = json.loads((Path(__file__).parent / "data" / "lhm_data.json").read_text("utf-8"))
-
-
-def wait_for(predicate, timeout=10.0):
-    pause = threading.Event()
-    for _ in range(int(timeout / 0.01)):
-        if predicate():
-            return True
-        pause.wait(0.01)
-    return False
 
 
 @pytest.fixture

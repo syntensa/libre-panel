@@ -12,9 +12,10 @@ import threading
 import time
 
 import pytest
+from fake_sensors import Rounds, show, wait_for
 
 from libre_panel.sensors import base, load
-from libre_panel.sensors.base import Reading, SensorHub, SensorProvider, want
+from libre_panel.sensors.base import Reading, SensorHub, SensorProvider
 
 # Instance names as PDH gives them: a card is named by its LUID, an engine counter
 # also by the process (pid_...) that uses the engine.
@@ -24,28 +25,12 @@ PDH_MORE_DATA = 0x800007D2
 PDH_NO_DATA = 0x800007D5
 
 
-def wait_for(predicate, timeout=10.0):
-    pause = threading.Event()
-    for _ in range(int(timeout / 0.005)):
-        if predicate():
-            return True
-        pause.wait(0.005)
-    return False
-
-
 @pytest.fixture(autouse=True)
 def nothing_is_shown(monkeypatch):
     """Which keys themes read: only what a test says. And a quick pace."""
     gc.collect()
     monkeypatch.setattr(base, "_WANTED", {})
     monkeypatch.setattr(load, "SAMPLE_SECONDS", 0.005)
-
-
-def show(*keys):
-    """A theme on show that reads ``keys``; the test keeps it for as long as it is shown."""
-    theme = type("Theme", (), {})()
-    want(theme, set(keys))
-    return theme
 
 
 class Scripted:
@@ -69,20 +54,6 @@ class Scripted:
 
     def close(self):
         self.closed.set()
-
-
-class Rounds(threading.Event):
-    """The provider's stop event, counting the waits of its thread: one per round."""
-
-    def __init__(self, log=None):
-        super().__init__()
-        self.count = 0
-        self.log = log if log is not None else []
-
-    def wait(self, timeout=None):
-        self.count += 1
-        self.log.append("wait")
-        return super().wait(timeout)
 
 
 def install(monkeypatch, cpu=None, gpu=None):
