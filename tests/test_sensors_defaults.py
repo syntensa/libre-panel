@@ -82,7 +82,7 @@ def test_a_config_that_names_no_list_gets_the_default(isolated_home, monkeypatch
 
 @pytest.mark.parametrize(
     "providers",
-    [["psutil"], ["librehardwaremonitor", "psutil"], ["demo"], ["psutil", "load"], []],
+    [["librehardwaremonitor", "psutil"], ["demo"], ["psutil", "load"], ["psutil", "demo"], []],
 )
 def test_a_list_in_the_users_config_is_left_alone(isolated_home, providers):
     assert parse_config({"sensors": {"providers": providers}}).sensors.providers == providers
@@ -90,9 +90,15 @@ def test_a_list_in_the_users_config_is_left_alone(isolated_home, providers):
     path.parent.mkdir(parents=True)
     path.write_text(f"[sensors]\nproviders = {json.dumps(providers)}\n")
     assert load_config(path).sensors.providers == providers
-    # a file as 0.4 wrote it names psutil alone: still psutil alone
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+def test_psutil_alone_as_0_4_wrote_it_means_todays_default(monkeypatch, platform):
+    """Every config.toml up to 0.4 named psutil alone: the default then, not a choice."""
+    monkeypatch.setattr("libre_panel.config.sys.platform", platform)
     old = default_config_toml().replace(json.dumps(default_providers()), '["psutil"]')
-    assert parse_config(tomllib.loads(old)).sensors.providers == ["psutil"]
+    expected = WINDOWS if platform == "win32" else ELSEWHERE
+    assert parse_config(tomllib.loads(old)).sensors.providers == expected
 
 
 def test_the_hub_of_a_default_config_starts_with_the_default_sources():

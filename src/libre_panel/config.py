@@ -88,21 +88,25 @@ update_minutes = 15
 """
 
 
-def default_providers(platform: str = sys.platform) -> list[str]:
+def default_providers(platform: str | None = None) -> list[str]:
     """The sensor sources of a config that names none, in order of priority: the fast
     load source; on Windows LibreHardwareMonitor, which alone has the GPU, temperatures,
     power and fans there (and costs nothing while it is not running); psutil."""
-    if platform == "win32":
+    if (platform or sys.platform) == "win32":
         return ["load", "librehardwaremonitor", "psutil"]
     return ["load", "psutil"]
 
 
-def default_config_toml(platform: str = sys.platform) -> str:
+def default_config_toml(platform: str | None = None) -> str:
     """The commented config.toml that ``config init`` and the first change write."""
     return _DEFAULT_CONFIG_TEMPLATE.replace("@PROVIDERS@", json.dumps(default_providers(platform)))
 
 
 DEFAULT_CONFIG_TOML = default_config_toml()
+
+# What every config.toml written up to 0.4 named: the default then, not a choice,
+# so it means today's default (a Windows panel gets its GPU and temperatures).
+_OLD_DEFAULT_PROVIDERS = ["psutil"]
 
 
 class ConfigError(ValueError):
@@ -265,6 +269,8 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     sensors = dict(data.get("sensors", {}))
     providers = sensors.pop("providers", cfg.sensors.providers)
     cfg.sensors.providers = [_expect(p, str, "sensors.providers[]") for p in providers]
+    if cfg.sensors.providers == _OLD_DEFAULT_PROVIDERS:
+        cfg.sensors.providers = default_providers()
     cfg.sensors.options = {k: v for k, v in sensors.items() if isinstance(v, dict)}
 
     w = data.get("weather", {})

@@ -31,8 +31,9 @@
   `["load", "psutil"]`), and an unset list means the same. LibreHardwareMonitor
   must run as administrator with *Options → Remote Web Server → Run*; where it
   does not run, asking costs nothing (one second at most, waits that grow to
-  half a minute, one line in the log) and those readings show "--". A list in
-  an existing `config.toml` is left as it is: add the sources there
+  half a minute, one line in the log) and those readings show "--". A
+  `config.toml` from 0.4 or earlier that names psutil alone (what those
+  versions wrote) gets the new list too; any other list is left as it is
 - `libre-panel sensors` lists the load and the volume too, and on Windows
   `libre-panel sensors` and `libre-panel doctor` say what to do when no
   temperature, power or GPU reading arrives
