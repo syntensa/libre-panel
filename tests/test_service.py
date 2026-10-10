@@ -147,6 +147,11 @@ def test_background_app_controls_through_the_editor(app, isolated_home):
     assert status == 200 and data["brightness"] == 25
     assert load_config().device.brightness == 25
 
+    assert data["upside_down"] is False
+    status, data = call(url, "POST", {"action": "upside_down", "value": True})
+    assert status == 200 and data["upside_down"] is True
+    assert load_config().device.rotate == 180
+
     status, data = call(url, "POST", {"action": "autostart", "value": True})
     assert data["autostart"] is True
     assert app.registry.values["Libre Panel"] == "LibrePanel.exe tray --background"
@@ -161,6 +166,7 @@ def test_background_app_controls_through_the_editor(app, isolated_home):
         {"action": "brightness", "value": 101},
         {"action": "brightness", "value": True},
         {"action": "autostart", "value": "yes"},
+        {"action": "upside_down", "value": 180},
         {"action": "reboot"},
     ):
         status, data = call(url, "POST", bad)

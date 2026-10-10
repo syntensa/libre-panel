@@ -52,6 +52,29 @@ def test_index_and_specs(server):
     assert any(m["id"] == "turing-9.2-usb" for m in specs["models"])
 
 
+def test_the_preview_is_never_turned(server, isolated_home):
+    """Upside down is for the panel; the editor shows the theme the right way up."""
+    from io import BytesIO
+
+    from PIL import Image, ImageChops
+
+    from libre_panel.config import set_config_value
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.sensors.demo import demo_snapshot
+    from libre_panel.theme.model import parse_theme
+
+    set_config_value("device.rotate", 180)
+    theme = {"format": "libre-panel-theme/1", "name": "still",
+             "display": {"width": 480, "height": 320},
+             "widgets": [{"type": "rect", "id": "a", "x": 10, "y": 10, "w": 120, "h": 40,
+                          "color": "#ff8800"}]}  # fmt: skip
+    status, data = request(server, "POST", "/api/render", {"theme": theme})
+    assert status == 200
+    preview = Image.open(BytesIO(base64.b64decode(data["png"]))).convert("RGB")
+    upright, _ = Renderer(parse_theme(theme), preview=True).render(demo_snapshot())
+    assert ImageChops.difference(preview, upright).getbbox() is None
+
+
 def test_render(server):
     status, data = request(
         server, "POST", "/api/render", {"theme": theme_dict(), "base": "libre-default"}

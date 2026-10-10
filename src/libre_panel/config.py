@@ -45,6 +45,8 @@ model = "auto"
 driver = "auto"
 # 0-100
 brightness = 60
+# 180 shows the picture upside down, for a panel mounted the other way round.
+rotate = 0
 # Where frames go when no panel is used (relative = in this settings folder).
 output = "libre-panel-frame.png"
 # Serial panels (3.5", 5", 2.1" ...) are found by their USB ids. Only if that
@@ -128,6 +130,7 @@ class DeviceConfig:
     model: str = "auto"
     driver: str = "auto"
     brightness: int = 60
+    rotate: int = 0  # 180: upside down, for a panel mounted the other way round
     output: str = "libre-panel-frame.png"
     port: str = ""  # serial panels: the port; empty = found by its USB ids
     video: VideoConfig = field(default_factory=VideoConfig)
@@ -227,6 +230,9 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     )
     if not 0 <= cfg.device.brightness <= 100:
         raise ConfigError("device.brightness: must be between 0 and 100")
+    cfg.device.rotate = _expect(dev.get("rotate", cfg.device.rotate), int, "device.rotate")
+    if cfg.device.rotate not in (0, 180):
+        raise ConfigError("device.rotate: must be 0, or 180 for upside down")
     cfg.device.output = _expect(dev.get("output", cfg.device.output), str, "device.output")
     cfg.device.port = _expect(dev.get("port", cfg.device.port), str, "device.port").strip()
     cfg.device.video = _parse_video(_expect(data.get("video", {}), dict, "video"))

@@ -48,6 +48,8 @@ def test_weather_with_location():
         {"device": {"model": "no-such-panel"}},
         {"device": {"brightness": 150}},
         {"device": {"brightness": True}},
+        {"device": {"rotate": 90}},
+        {"device": {"rotate": "180"}},
         {"weather": {"units": "kelvin"}},
         {"refresh_ms": 10},
     ],
@@ -61,6 +63,8 @@ def test_write_default_config_roundtrip(isolated_home):
     path = write_default_config()
     assert path == config_dir() / "config.toml"
     assert load_config(path).theme == "libre-default"
+    assert load_config(path).device.rotate == 0
+    assert parse_config({"device": {"rotate": 180}}).device.rotate == 180
     with pytest.raises(FileExistsError):
         write_default_config()
 

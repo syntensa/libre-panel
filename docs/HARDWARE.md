@@ -157,7 +157,9 @@ check `doctor` waits for Enter, so you are watching the panel when it dims.
 Known so far: the 9.2" hides 18 px at the top in landscape (on the left in
 portrait). The editor shows such a strip as a hatched guide and snaps to its
 edge; the built-in layouts keep text and values out of it. Nothing is cut
-off or moved: a background may run under the bezel.
+off or moved: a background may run under the bezel. With `rotate = 180`
+(upside down) the strip is at the opposite edge of the picture; the layouts
+do not know that yet.
 
 ## Help add your panel
 

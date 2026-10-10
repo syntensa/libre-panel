@@ -249,6 +249,9 @@ def test_panel_controls_of_the_background_app(isolated_home):
             )
             assert wait_for(lambda: load_config().device.brightness == 30)
 
+            page.locator("#app-upside-down").check()
+            assert wait_for(lambda: load_config().device.rotate == 180)
+
             page.locator("#app-autostart").check()
             assert wait_for(lambda: "Libre Panel" in registry.values)
 

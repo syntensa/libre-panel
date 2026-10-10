@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+**New**
+- Upside down, for a panel mounted the other way round: `rotate = 180` under
+  `[device]`, or "Upside down" in the tray menu and in the editor's panel menu.
+  Off unless chosen; works with every panel. Only the panel's picture is
+  turned: themes, the editor's preview and the PNG file stay the right way up
+
 **Fixes**
 - A 5" rev. C panel sold as UsbPCMonitor 5" was taken for the round 2.1": its
   USB serial number (CT21INCH asleep, 20080411 awake) fits several sizes. The

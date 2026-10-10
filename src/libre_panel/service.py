@@ -26,6 +26,7 @@ from libre_panel.config import (
     config_dir,
     load_config,
     set_brightness,
+    set_config_value,
     user_themes_dir,
 )
 from libre_panel.devices.base import DeviceError
@@ -297,6 +298,15 @@ class BackgroundApp:
         except ConfigError:
             return None
 
+    def upside_down(self) -> bool | None:
+        try:
+            return load_config(self.config_path).device.rotate == 180
+        except ConfigError:
+            return None
+
+    def set_upside_down(self, on: bool) -> None:
+        set_config_value("device.rotate", 180 if on else 0, self.config_path)
+
     def active_theme(self) -> str | None:
         try:
             return load_config(self.config_path).theme
@@ -311,6 +321,7 @@ class BackgroundApp:
         return {
             "panel": self.panel.state(),
             "brightness": self.brightness(),
+            "upside_down": self.upside_down(),
             "autostart": autostart,
             "autostart_location": self.autostart.location(),
             "can_quit": True,
@@ -338,6 +349,10 @@ class BackgroundApp:
             if isinstance(value, bool) or not isinstance(value, int):
                 raise ValueError("brightness must be a whole number")
             self.set_brightness(value)
+        elif action == "upside_down":
+            if not isinstance(value, bool):
+                raise ValueError("upside_down must be true or false")
+            self.set_upside_down(value)
         elif action == "autostart":
             if not isinstance(value, bool):
                 raise ValueError("autostart must be true or false")

@@ -1632,6 +1632,9 @@ function renderApp(app) {
   if (document.activeElement !== slider && app.brightness !== null) slider.value = app.brightness;
   slider.disabled = app.brightness === null;
   $("#app-brightness-value").textContent = `${slider.value} %`;
+  const upsideDown = $("#app-upside-down");
+  upsideDown.checked = Boolean(app.upside_down);
+  upsideDown.disabled = app.upside_down === null;
   const autostart = $("#app-autostart");
   autostart.checked = Boolean(app.autostart);
   autostart.disabled = app.autostart === null;
@@ -1716,6 +1719,7 @@ function setupApp() {
   $("#app-chip").addEventListener("click", () => toggleAppPopover());
   $("#app-pause").addEventListener("click", () => appAction(state.app?.panel.state === "paused" ? "resume" : "pause"));
   $("#app-quit").addEventListener("click", quitApp);
+  $("#app-upside-down").addEventListener("change", (event) => appAction("upside_down", event.target.checked));
   $("#app-autostart").addEventListener("change", (event) => appAction("autostart", event.target.checked));
   const slider = $("#app-brightness");
   slider.addEventListener("input", () => ($("#app-brightness-value").textContent = `${slider.value} %`));

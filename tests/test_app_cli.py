@@ -1,9 +1,11 @@
 import pytest
-from PIL import Image
+from PIL import Image, ImageChops
 
+from libre_panel import app as app_module
 from libre_panel.app import fit_frame, run, target_size
 from libre_panel.cli import main
 from libre_panel.config import Config, DeviceConfig, SensorsConfig
+from libre_panel.devices.base import Display
 from libre_panel.theme.model import find_theme, load_theme
 
 
@@ -41,6 +43,104 @@ def test_a_theme_with_a_palette_background_fits_another_panel(tmp_path):
         assert frame.size == (800, 480)
         bg = theme.palette[theme.background_color[1:]].lstrip("#")
         assert frame.convert("RGB").getpixel((2, 240)) == tuple(bytes.fromhex(bg[:6]))
+
+
+def static_theme():
+    """A theme that draws the same frame every time, and not symmetrically."""
+    from libre_panel.theme.model import save_theme
+
+    save_theme("still", {
+        "format": "libre-panel-theme/1", "name": "still",
+        "display": {"width": 480, "height": 320}, "background": {"color": "#102030"},
+        "widgets": [
+            {"type": "rect", "id": "a", "x": 10, "y": 10, "w": 120, "h": 40, "color": "#ff8800"},
+            {"type": "text", "id": "b", "x": 200, "y": 200, "text": "Libre", "color": "#ffffff"},
+        ],
+    })  # fmt: skip
+    return "still"
+
+
+class RecordingPanel(Display):
+    """A panel that keeps what it was sent."""
+
+    opened = 0
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.shown = []
+
+    def open(self):
+        RecordingPanel.opened += 1
+
+    def show(self, frame, region=None):
+        self.shown.append((frame.copy(), region))
+
+
+def test_an_upside_down_panel_gets_the_frame_turned(tmp_path, isolated_home, monkeypatch):
+    panels = []
+    monkeypatch.setattr(app_module, "create_display", lambda device: panels.append(
+        RecordingPanel(device)) or panels[-1])  # fmt: skip
+    for rotate in (0, 180):
+        config = Config(theme=static_theme(), device=DeviceConfig(rotate=rotate),
+                        sensors=SensorsConfig(providers=["demo"]))  # fmt: skip
+        run(config, once=True)
+    upright, turned = (panel.shown[0][0] for panel in panels)
+    assert ImageChops.difference(upright, turned).getbbox() is not None
+    assert ImageChops.difference(upright.rotate(180), turned).getbbox() is None
+
+
+def test_the_png_file_is_never_turned(tmp_path, isolated_home):
+    frames = []
+    for rotate in (0, 180):
+        out = tmp_path / f"frame-{rotate}.png"
+        config = Config(
+            theme=static_theme(),
+            device=DeviceConfig(driver="virtual", output=str(out), rotate=rotate),
+            sensors=SensorsConfig(providers=["demo"]),
+        )
+        run(config, once=True)
+        with Image.open(out) as frame:
+            frames.append(frame.convert("RGB"))
+    assert ImageChops.difference(*frames).getbbox() is None  # a picture, not a mounted panel
+
+
+def test_turning_the_panel_follows_the_config_without_reopening_it(
+    tmp_path, isolated_home, monkeypatch
+):
+    import threading
+    import time
+
+    from libre_panel.config import load_config, set_config_value, write_default_config
+
+    path = write_default_config()
+    text = path.read_text().replace('providers = ["psutil"]', 'providers = ["demo"]')
+    path.write_text(text.replace('theme = "libre-default"', f'theme = "{static_theme()}"'))
+    panels = []
+    monkeypatch.setattr(app_module, "create_display", lambda device: panels.append(
+        RecordingPanel(device)) or panels[-1])  # fmt: skip
+    RecordingPanel.opened = 0
+    config = load_config(path)
+    config.refresh_ms = 100
+    stop = threading.Event()
+    thread = threading.Thread(target=run, args=(config,), kwargs={"stop": stop}, daemon=True)
+    thread.start()
+    try:
+        deadline = time.time() + 10
+        while not (panels and panels[0].shown) and time.time() < deadline:
+            time.sleep(0.05)
+        time.sleep(0.05)  # make sure the next write gets a new mtime
+        shown = panels[0].shown
+        before = len(shown)
+        set_config_value("device.rotate", 180, path)
+        while len(shown) == before and time.time() < deadline:
+            time.sleep(0.05)
+    finally:
+        stop.set()
+        thread.join(5)
+    first, after = shown[0][0], shown[before][0]
+    assert shown[before][1] == (0, 0, 480, 320)  # all of it, turned
+    assert ImageChops.difference(first.rotate(180), after).getbbox() is None
+    assert len(panels) == 1 and RecordingPanel.opened == 1  # the panel stayed open
 
 
 def test_a_broken_sensor_source_does_not_stop_the_panel(tmp_path, caplog):

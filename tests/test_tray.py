@@ -72,6 +72,7 @@ def test_menu_layout_and_state(tray):
         "Open theme editor",
         "Theme",
         "Brightness",
+        "Upside down",
         "Pause panel",
         "Start with system",
         "Open settings folder",
@@ -94,6 +95,12 @@ def test_menu_actions(tray):
     items(menu["Brightness"].submenu)["25 %"](tray.icon)
     assert wait_for(lambda: load_config().device.brightness == 25)
     assert items(menu["Brightness"].submenu)["25 %"].checked
+
+    menu["Upside down"](tray.icon)
+    assert wait_for(lambda: load_config().device.rotate == 180)
+    assert menu["Upside down"].checked
+    menu["Upside down"](tray.icon)
+    assert wait_for(lambda: load_config().device.rotate == 0)
 
     menu["Start with system"](tray.icon)
     assert wait_for(lambda: tray.app.snapshot()["autostart"] is True)

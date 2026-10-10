@@ -30,6 +30,9 @@ transition = "fade"            # between themes: "cut", "fade", "slide" or from 
 model = "auto"                 # or an id from `libre-panel models`
 driver = "auto"                # panel if connected, else PNG; "turzx" or "virtual" to force
 brightness = 60                # 0-100
+rotate = 0                     # 180: upside down, for a panel mounted the other way
+                               # round (also in the tray menu and the editor); the
+                               # editor's preview and the PNG file stay upright
 output = "libre-panel-frame.png"   # frames go here when no panel is used;
                                    # a relative path is inside the settings folder
 port = ""                      # serial panels: found by their USB ids; only if that

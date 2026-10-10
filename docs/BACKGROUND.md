@@ -52,7 +52,8 @@ the editor say why; Libre Panel starts again by itself as soon as the file is
 fixed).
 
 The same controls are in the editor: the **Panel** button at the top right
-shows the state and has pause, brightness, start with system and quit.
+shows the state and has pause, brightness, upside down, start with system
+and quit.
 
 ## Shutting down
 

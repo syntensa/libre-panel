@@ -183,8 +183,8 @@ Made one you like? Share it in
   weather); follows the system language.
 - **Safe to share themes**: themes are plain JSON plus images/fonts and
   cannot run code or read files outside their folder.
-- **Runs in the background**: tray icon with theme, brightness, pause and
-  quit; starts with the system if you want; picks up the panel whenever it
+- **Runs in the background**: tray icon with theme, brightness, upside down,
+  pause and quit; starts with the system if you want; picks up the panel whenever it
   is plugged in.
 - **Plugins** ([plugin API](docs/PLUGINS.md)): services that publish
   readings and switch themes or modes, short messages on the panel,

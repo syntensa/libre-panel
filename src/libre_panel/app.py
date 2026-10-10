@@ -17,6 +17,7 @@ from libre_panel import i18n
 from libre_panel.config import Config, ConfigError, load_config
 from libre_panel.devices.base import DeviceError, Display, FrameError, create_display
 from libre_panel.devices.models import find_model
+from libre_panel.devices.virtual import VirtualDisplay
 from libre_panel.plugins.render import RenderContext
 from libre_panel.render.overlays import ToastLayer, transition
 from libre_panel.render.renderer import Renderer, changed_region
@@ -82,6 +83,20 @@ def fit_frame(
     if frame.size == size:
         return frame
     return ImageOps.pad(frame, size, method=Image.Resampling.LANCZOS, color=background)
+
+
+def turned(frame: Image.Image, rotate: int) -> Image.Image:
+    """The frame as it goes to the panel: upside down with ``rotate = 180``."""
+    return frame.transpose(Image.Transpose.ROTATE_180) if rotate == 180 else frame
+
+
+def _on_panel(display: Display) -> bool:
+    """Whether frames go to a panel: only a panel is turned, never the PNG file
+    that stands in for one (it is a picture to look at, like the editor's)."""
+    if isinstance(display, VirtualDisplay):
+        return False
+    using = getattr(display, "using_panel", None)  # auto: a panel, or the PNG file
+    return True if using is None else bool(using)
 
 
 def background_of(renderer: Renderer) -> tuple[int, int, int]:
@@ -304,8 +319,9 @@ def _begin(
 
 
 def _same_device(a, b) -> bool:
-    """Brightness changes on the open panel; anything else needs it opened again."""
-    return replace(a, brightness=0) == replace(b, brightness=0)
+    """Brightness and the picture's turn change on the open panel; anything else
+    needs it opened again."""
+    return replace(a, brightness=0, rotate=0) == replace(b, brightness=0, rotate=0)
 
 
 def run(
@@ -358,6 +374,7 @@ def run(
     pacer = _Pacer()
     planned: float | None = None  # when the pacer planned the next streaming frame
     previous = None
+    turn = 0  # how the last frame went out: turned (180) or not
     snapshot = None
     next_sample = 0.0
     try:
@@ -365,7 +382,9 @@ def run(
             display.open()
             display.set_brightness(config.device.brightness)
             frame, _ = renderer.render(hub.snapshot())
-            display.show(fit_frame(frame, size, background_of(renderer)), None)
+            frame = fit_frame(frame, size, background_of(renderer))
+            turn = config.device.rotate if _on_panel(display) else 0
+            display.show(turned(frame, turn), None)
             return
         while not stop.is_set():
             started = time.perf_counter()  # fine-grained on every system (monotonic is not
@@ -396,6 +415,7 @@ def run(
                     elif fresh.device.brightness != device.brightness:
                         link.set_brightness(fresh.device.brightness)
                         device.brightness = fresh.device.brightness
+                    device.rotate = fresh.device.rotate
                     fresh.device, config = device, fresh
                     i18n.set_language(config.language)
                     renderer.close()
@@ -452,13 +472,17 @@ def run(
                     frame, blend = _blend(blend, frame, now)
                 last_frame = frame
                 frame = shown_frame = renderer.shown = toasts.draw(frame, now)
+                upside = config.device.rotate if _on_panel(display) else 0
+                if upside != turn:  # turned now, or no longer: the whole frame again
+                    previous, turn = None, upside
+                out = turned(frame, turn)  # as the panel is mounted
                 if streaming:
-                    link.show(frame, None, started)
+                    link.show(out, None, started)
                     previous = None
                 else:
-                    region = changed_region(previous, frame)
+                    region = changed_region(previous, out)
                     if region is not None:
-                        previous = frame if link.show(frame, region, started) else None
+                        previous = out if link.show(out, region, started) else None
             else:
                 previous = None  # send a full frame after reconnecting
             if host is not None and link.connected != was_connected:

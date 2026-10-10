@@ -96,6 +96,9 @@ class Tray:
             item(t("Open theme editor"), self.open_editor, default=True),
             item(t("Theme"), menu(self._theme_items)),
             item(t("Brightness"), menu(self._brightness_items)),
+            item(
+                t("Upside down"), self.toggle_upside_down, checked=lambda _: bool(app.upside_down())
+            ),
             item(t("Pause panel"), self.toggle_pause, checked=lambda _: app.panel.paused),
             menu.SEPARATOR,
             item(
@@ -160,6 +163,9 @@ class Tray:
         panel = self.app.panel
         self._later(panel.resume if panel.paused else panel.pause)()
 
+    def toggle_upside_down(self) -> None:
+        self._later(lambda: self.app.set_upside_down(not self.app.upside_down()))()
+
     def toggle_autostart(self) -> None:
         self._later(lambda: self.app.set_autostart(not self.app.snapshot()["autostart"]))()
 
@@ -208,6 +214,7 @@ class Tray:
             state.get("mode"),
             self.app.active_theme(),
             snapshot["brightness"],
+            snapshot["upside_down"],
             snapshot["autostart"],
         )
         if signature == self._last:
