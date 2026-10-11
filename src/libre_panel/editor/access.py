@@ -27,11 +27,13 @@ import logging
 import os
 import re
 import secrets
+import sys
 import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from libre_panel.config import config_dir
+from libre_panel.config import CONFIG_FILENAME, config_dir
+from libre_panel.i18n import t
 
 log = logging.getLogger(__name__)
 
@@ -177,3 +179,39 @@ def read_token(url: str | None = None) -> str | None:
         if not isinstance(pid, int) or not psutil.pid_exists(pid):
             return None  # a run that ended: its token opens nothing
     return token
+
+
+# -- rights --------------------------------------------------------------------------------------
+
+
+def elevated() -> bool:
+    """Whether this program runs with administrator rights (Windows) or as root (elsewhere)."""
+    if sys.platform == "win32":
+        from libre_panel.autostart import is_admin
+
+        return is_admin()
+    geteuid = getattr(os, "geteuid", None)
+    return geteuid is not None and geteuid() == 0
+
+
+def folder_risk(folder: Path, home: Path | None = None, posix: bool | None = None) -> str:
+    """Why a Libre Panel with the highest rights should not read its settings from ``folder``,
+    in a few words; "" when nothing is wrong or nothing can be told. It runs with those rights
+    what config.toml and the plugins in it name, so whoever else can write there can run a
+    program as administrator. On Windows the profile of the user (``home``) keeps the others
+    out; elsewhere (``posix``) the owner and the modes of the folder and of what is in it tell."""
+    try:
+        if os.name == "posix" if posix is None else posix:
+            for path in (folder, folder / CONFIG_FILENAME, folder / "plugins"):
+                if not path.exists():
+                    continue
+                info = path.stat()
+                if info.st_uid != os.geteuid():
+                    return t("it belongs to another user")
+                if info.st_mode & 0o022:
+                    return t("other users may write to it")
+        elif not folder.resolve().is_relative_to((home or Path.home()).resolve()):
+            return t("it is outside your user folder, where other users may be allowed to write")
+    except OSError:
+        pass
+    return ""

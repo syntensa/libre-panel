@@ -574,6 +574,16 @@
   missing, and what to do. A request that a browser sends from a page of another origin is
   refused as well. Plugin pages that use `kit.js` need no change; see
   [Running in the background](docs/BACKGROUND.md#who-can-talk-to-the-app)
+- With the highest rights (administrator, or root) Libre Panel no longer changes, when the
+  editor's server asks, a setting that names a program, a library or a file: `video.ffmpeg`,
+  the picture file `device.output`, a path under `[sensors.*]` and the files and folders that a
+  service's options name. The app says to set it in `config.toml`, which Libre Panel reads
+  from your own folder (an editor page can ask `self.context.elevated` to do the same). That
+  folder is trusted with the highest rights, so `libre-panel autostart enable --elevated` and
+  the log now say when other users can change it, and the documentation says which folders
+  those are: one made directly under `C:\` can be changed by every user of the PC, as
+  `C:\LibrePanelData` and `C:\lhm-libs` in earlier examples would be; the examples name a
+  folder under *Program Files* or in your profile now
 - LibreHardwareMonitor's web server on this PC is asked directly, past a proxy
   set for the system, which could not reach it
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

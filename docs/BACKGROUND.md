@@ -175,7 +175,8 @@ anything does. A website cannot guess the token, and no other user of the PC has
   several people use, prefer the window (pywebview, above) to the browser.
 
 Anything that runs as you can read the token and change `config.toml`; the token keeps out the
-programs of *other* users and of websites.
+programs of *other* users and of websites. That is why a Libre Panel that runs with the highest
+rights (below) trusts your settings folder and nothing else.
 
 ## Autostart, per system
 
@@ -220,6 +221,20 @@ administrator itself; otherwise the app shows the command to run in a terminal
 opened as one. It warns, as the command does, when Libre Panel lies in your user
 folder.
 
+**What Libre Panel trusts while it has the highest rights.** It reads `config.toml` and your
+plugins from the settings folder and starts or loads what they name with those rights: ffmpeg
+(`video.ffmpeg`), PresentMon (`[sensors.presentmon] path`), the libraries of LibreHardwareMonitor
+(`dll_dir`) and the plugins in `plugins\`. The settings folder is yours: `%APPDATA%\LibrePanel`
+can be written by you and by administrators, no other user, so no other user can make Libre Panel
+run anything. The programs and libraries it names are better where only administrators can write,
+under *Program Files*. Take care with a folder made directly under `C:\`, as `C:\LibrePanelData`
+or `C:\Tools` would be: every user of the PC can change what is in it unless you take their
+rights away, and that would let another user run a program with administrator rights, whether it
+holds the settings, a program or a library. While Libre Panel runs with the highest rights the
+app does not change a setting that names a program, a library or a file (`video.ffmpeg`, the
+picture file `device.output`, a path under `[sensors.*]`, the files and folders a service's
+options name): it says to set it in `config.toml`, which Libre Panel reads from your own folder.
+
 The task reads the settings from `%APPDATA%\LibrePanel` as usual. **A program
 started from a Microsoft Store app (an MSIX package) writes `%APPDATA%` into
 the package's private folder instead.** Some desktop apps, terminals and
@@ -231,13 +246,15 @@ at it with the user environment variable `LIBRE_PANEL_HOME`, for example in a
 terminal:
 
 ```
-setx LIBRE_PANEL_HOME "C:\LibrePanelData"
+setx LIBRE_PANEL_HOME "%USERPROFILE%\LibrePanelData"
 ```
 
 Libre Panel then keeps `config.toml`, the themes, the plugins and the log
 there, however it is started. Move what is in `%APPDATA%\LibrePanel` over
 first if you want to keep it; programs that are already running (and the
-task, until the next login) still use the old place.
+task, until the next login) still use the old place. Choose a folder in your
+profile, as above, not one directly under `C:\` (every user may change those
+by default): with the highest rights Libre Panel runs what is in this folder.
 
 ### Linux desktops
 

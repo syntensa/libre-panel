@@ -14,7 +14,10 @@ libre-panel config path     # where it is
 | Linux | `~/.config/libre-panel/config.toml` |
 
 Set `LIBRE_PANEL_HOME` to use another folder (portable installs). Changes to
-`config.toml` and to the active theme are picked up while running.
+`config.toml` and to the active theme are picked up while running. Choose a folder that
+only you can change, such as one in your profile: a Libre Panel that starts with the
+highest rights runs the programs and plugins this folder names with those rights
+([Running in the background](BACKGROUND.md#windows-starting-with-the-highest-rights)).
 
 ## Every setting is in the app
 
@@ -278,6 +281,11 @@ providers = ["load", "librehardwaremonitor", "psutil", "presentmon"]
 [sensors.presentmon]
 path = "C:/Tools/PresentMon-2.3.0-x64.exe"
 ```
+
+Libre Panel starts this program, with the rights it has itself. If it runs as administrator,
+keep PresentMon where only administrators can change it (a folder under *Program Files*, not
+one you or another user may write to), and name it here in `config.toml`: the app does not
+change `path` then.
 
 | Reading | |
 |---|---|
@@ -878,7 +886,8 @@ field is empty until you type a name; nothing is ever filled in for you.
 - **ffmpeg** encodes the video. Install it (Windows: `winget install ffmpeg`;
   Linux: the `ffmpeg` package), or set `ffmpeg = "C:/path/to/ffmpeg.exe"`. It
   must include libx264, which the usual builds do. It uses one CPU core,
-  lightly.
+  lightly. When Libre Panel runs as administrator, the app does not change this path
+  (it starts that program with those rights): set it in `config.toml`.
 - **`local_clip`** is the name the panel's video start command carries: the
   clip the panel plays by itself while the PC is off, if it has one (vendor
   app: standby video) and the mainboard keeps USB powered then. The command
@@ -971,7 +980,7 @@ them from NuGet and checks them against fixed checksums):
 
 ```
 pip install "libre-panel[lhm]"
-python fetch_lhm.py C:\lhm-libs
+python fetch_lhm.py "C:\Program Files\lhm-libs"      # in a terminal opened as administrator
 ```
 
 `fetch_lhm.py` is in the repository under
@@ -980,12 +989,18 @@ it needs nothing but Python. Then name the folder:
 
 ```toml
 [sensors.librehardwaremonitor]
-dll_dir = "C:\\lhm-libs"
+dll_dir = "C:\\Program Files\\lhm-libs"
 ```
 
 A 32-bit Python needs `--arch x86`. `dll_dir` can also be the folder of an
 unpacked [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases)
 0.9.6 download, which holds the same libraries.
+
+Libre Panel loads these libraries with the rights it has itself, and for the CPU's
+temperatures that means administrator rights. So keep them where only administrators can change
+them, under *Program Files* as above: every user of the PC may change a folder made directly
+under `C:\` unless you take their rights away, and a library of their own in it would run as
+administrator. The app does not change `dll_dir` while it runs as administrator.
 
 ### Through the web server of LibreHardwareMonitor
 

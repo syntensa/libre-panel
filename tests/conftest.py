@@ -51,6 +51,16 @@ def editor_tokens(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def not_elevated(monkeypatch):
+    """The tests run with the rights of an ordinary user, whoever runs them (a CI runner on
+    Windows is an administrator, a container is root): the settings that name a program change
+    unless a test says Libre Panel runs with the highest rights."""
+    from libre_panel.editor import access
+
+    monkeypatch.setattr(access, "elevated", lambda: False)
+
+
+@pytest.fixture(autouse=True)
 def no_installed_plugins(monkeypatch):
     """Plugins installed next to Libre Panel (a mod) stay out of the tests;
     tests install their own as folders."""

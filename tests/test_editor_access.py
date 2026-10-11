@@ -18,6 +18,7 @@ from libre_panel.editor import access
 from libre_panel.editor import server as editor
 from libre_panel.editor.server import ROUTES, EditorHandler, make_server
 
+real_elevated = access.elevated  # (conftest.py replaces it for the tests; this is the real one)
 URL = "http://127.0.0.1:8765/"
 TOKEN = "T" * 43
 
@@ -433,3 +434,107 @@ def test_the_editor_command_prints_the_address_with_the_token(monkeypatch, capsy
     finally:
         made[0].shutdown()
         thread.join(10)
+
+
+# -- rights --------------------------------------------------------------------------------------
+
+
+def test_root_and_an_administrator_are_elevated(monkeypatch):
+    monkeypatch.setattr(access.sys, "platform", "linux")
+    monkeypatch.setattr(access.os, "geteuid", lambda: 0, raising=False)
+    assert real_elevated() is True
+    monkeypatch.setattr(access.os, "geteuid", lambda: 1000, raising=False)
+    assert real_elevated() is False
+    monkeypatch.delattr(access.os, "geteuid", raising=False)  # no such thing there
+    assert real_elevated() is False
+
+    from libre_panel import autostart
+
+    monkeypatch.setattr(access.sys, "platform", "win32")
+    for answer in (True, False):
+        monkeypatch.setattr(autostart, "is_admin", lambda answer=answer: answer)
+        assert real_elevated() is answer
+
+
+# -- the folder the highest rights trust --------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    os.name != "posix", reason="owners and modes of files are for Linux and the like"
+)
+def test_a_folder_that_others_can_change_is_no_place_for_the_highest_rights(tmp_path, monkeypatch):
+    folder = tmp_path / "settings"
+    folder.mkdir()
+    folder.chmod(0o755)  # others may look, not change
+    assert access.folder_risk(folder) == ""
+    (folder / "config.toml").write_text("")
+    (folder / "plugins").mkdir()
+    for path, mode in ((folder / "config.toml", 0o644), (folder / "plugins", 0o755)):
+        path.chmod(mode)
+    assert access.folder_risk(folder) == ""
+    for path, mode in (
+        (folder, 0o775),  # the group may
+        (folder, 0o757),  # anybody may
+        (folder / "config.toml", 0o666),  # in a folder nobody else may change, but the file
+        (folder / "plugins", 0o775),
+    ):
+        folder.chmod(0o755)
+        (folder / "config.toml").chmod(0o644)
+        (folder / "plugins").chmod(0o755)
+        path.chmod(mode)
+        assert access.folder_risk(folder) == "other users may write to it", (path, oct(mode))
+    folder.chmod(0o755)
+    (folder / "config.toml").chmod(0o644)
+    (folder / "plugins").chmod(0o755)
+    monkeypatch.setattr(access.os, "geteuid", lambda: os.stat(folder).st_uid + 1)  # root, say
+    assert access.folder_risk(folder) == "it belongs to another user"
+    assert access.folder_risk(tmp_path / "nothing there") == ""  # (nothing to trust yet)
+
+
+def test_on_windows_the_profile_is_the_place(tmp_path):
+    home = tmp_path / "Users" / "me"
+    (home / "AppData" / "Roaming" / "LibrePanel").mkdir(parents=True)
+    (tmp_path / "LibrePanelData").mkdir()
+    inside = home / "AppData" / "Roaming" / "LibrePanel"
+    assert access.folder_risk(inside, home=home, posix=False) == ""
+    assert access.folder_risk(home / "LibrePanelData", home=home, posix=False) == ""
+    assert "outside your user folder" in access.folder_risk(
+        tmp_path / "LibrePanelData", home=home, posix=False
+    )
+
+
+def test_the_log_says_when_the_highest_rights_run_what_others_can_change(
+    isolated_home, monkeypatch, caplog
+):
+    from test_service import write_config
+
+    write_config(isolated_home)
+    monkeypatch.setattr(access, "folder_risk", lambda folder: "other users may write to it")
+    app = background_app()
+    try:
+        with caplog.at_level(logging.WARNING, logger="libre_panel.service"):
+            app.start()  # (an ordinary user: nothing to say)
+            assert "administrator rights" not in caplog.text
+            app.quit()
+            app.shutdown()
+            monkeypatch.setattr(access, "elevated", lambda: True)
+            app = background_app()
+            app.start()
+        assert "runs with administrator rights" in caplog.text
+        assert str(isolated_home) in caplog.text and "other users may write to it" in caplog.text
+    finally:
+        app.quit()
+        app.shutdown()
+
+
+def test_asking_for_the_highest_rights_warns_of_a_folder_others_can_change(monkeypatch, capsys):
+    from libre_panel import cli
+
+    monkeypatch.setattr(access, "folder_risk", lambda folder: "other users may write to it")
+    assert cli.main(["autostart", "enable", "--elevated"]) == 1  # (this is not Windows)
+    err = capsys.readouterr().err
+    assert "other users may write to it" in err and str(config_dir()) in err
+    assert "LIBRE_PANEL_HOME" in err
+    monkeypatch.setattr(access, "folder_risk", lambda folder: "")
+    assert cli.main(["autostart", "enable", "--elevated"]) == 1
+    assert "LIBRE_PANEL_HOME" not in capsys.readouterr().err

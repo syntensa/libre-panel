@@ -227,6 +227,7 @@ def _cmd_autostart(args: argparse.Namespace) -> int:
         launch_command,
         writable_by_user,
     )
+    from libre_panel.editor import access
 
     autostart = Autostart()
     try:
@@ -239,6 +240,19 @@ def _cmd_autostart(args: argparse.Namespace) -> int:
                         "run could replace it and so get administrator rights at the next "
                         "login. Safer: install Libre Panel under Program Files.",
                         program=command[0],
+                    ),
+                    file=sys.stderr,
+                )
+            why = access.folder_risk(config_dir()) if args.elevated else ""
+            if why:
+                print(
+                    t(
+                        "Warning: with the highest rights Libre Panel runs what config.toml and "
+                        "the plugins in {folder} name, and {why}: any user who can change them "
+                        "can run a program with administrator rights. Keep the settings in your "
+                        "user folder (LIBRE_PANEL_HOME), or take the other users' rights away.",
+                        folder=config_dir(),
+                        why=why,
                     ),
                     file=sys.stderr,
                 )

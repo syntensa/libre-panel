@@ -91,6 +91,16 @@ class PageContext:
         return self._controls is not None
 
     @property
+    def elevated(self) -> bool:
+        """True when Libre Panel runs with administrator rights (root on Linux). A request
+        cannot be told from the person's, and what it asks for is done with those rights: a page
+        then leaves what names a program, a library or a file to config.toml, as the app's own
+        settings do (``editor/settings.py``), and does not start or write what a request names."""
+        from libre_panel.editor import access
+
+        return access.elevated()
+
+    @property
     def config_path(self) -> Path:
         """config.toml (change single settings with ``libre_panel.config.set_config_value``)."""
         path = getattr(self._controls, "config_path", None) or self._config_path

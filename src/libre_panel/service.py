@@ -283,7 +283,27 @@ class BackgroundApp:
 
     # -- lifecycle -----------------------------------------------------------
 
+    def _check_folders(self) -> None:
+        """With the highest rights Libre Panel runs what config.toml and the plugins name: the
+        log says so when other users can change them (editor/access.py)."""
+        if not access.elevated():
+            return
+        folders = [config_dir()]
+        if self.config_path is not None:
+            folders.append(Path(self.config_path).resolve().parent)
+        for folder in dict.fromkeys(folders):
+            why = access.folder_risk(folder)
+            if why:
+                log.warning(
+                    "Libre Panel runs with administrator rights and runs what the settings and "
+                    "plugins in %s name, but %s: any user who can change them can run a program "
+                    "with those rights",
+                    folder,
+                    why,
+                )
+
     def start(self) -> str:
+        self._check_folders()
         try:
             self.services.apply(load_config(self.config_path))
         except ConfigError as exc:
