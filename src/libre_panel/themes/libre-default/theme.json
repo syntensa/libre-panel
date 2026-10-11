@@ -3,7 +3,7 @@
   "name": "Libre Default",
   "author": "Libre Panel contributors",
   "license": "CC0-1.0",
-  "description": "Clean starter theme for 3.5\" panels in landscape (480x320): two rings, temperature, disk and network, and a CPU history.",
+  "description": "Clean starter theme for 3.5\" panels in landscape (480x320): two lit rings, temperature, disk and network, a CPU history, and in the corner what plays (the weather when nothing does, the day while there is neither).",
   "display": {
     "model": "turing-3.5",
     "orientation": "landscape",
@@ -11,22 +11,26 @@
     "height": 320
   },
   "palette": {
-    "bg": "#090D13",
+    "bg": "#0A0E13",
     "bg2": "#0E141D",
     "card": "#111822",
     "card2": "#0C1219",
     "edge": "#1C2633",
-    "text": "#F1F5F9",
-    "muted": "#8391A5",
-    "dim": "#4B5768",
-    "accent": "#22D3EE",
-    "accent_deep": "#0E6F86",
+    "text": "#E8EEF4",
+    "muted": "#93A1B2",
+    "dim": "#5F6E80",
+    "accent": "#2EE6D6",
+    "accent_deep": "#0F6B64",
     "violet": "#A78BFA",
     "violet_deep": "#5B3FB8",
     "green": "#34D399",
     "pink": "#F472B6",
     "warn": "#FBBF24",
-    "crit": "#F87171"
+    "crit": "#F87171",
+    "line": "#1C2633",
+    "track": "#1A2129",
+    "text2": "#C9D3DE",
+    "text3": "#93A1B2"
   },
   "font": "builtin:Barlow-Medium",
   "background": {
@@ -68,44 +72,33 @@
       "format": "%A, %d %B",
       "font_size": 16,
       "color": "@muted",
-      "tabular": false
-    },
-    {
-      "type": "icon",
-      "id": "weather-icon",
-      "x": 380,
-      "y": 14,
-      "icon": "weather",
-      "size": 30,
-      "color": "@muted",
-      "stroke": 1.8,
-      "hide_if_missing": true
-    },
-    {
-      "type": "weather",
-      "id": "weather-temp",
-      "x": 464,
-      "y": 16,
-      "field": "temperature",
-      "format": "{value:.0f}°",
-      "font_size": 26,
-      "color": "@text",
-      "align": "right",
-      "font": "builtin:Barlow-SemiBold",
-      "hide_if_missing": true
-    },
-    {
-      "type": "weather",
-      "id": "weather-desc",
-      "x": 464,
-      "y": 49,
-      "field": "description",
-      "format": "{value}",
-      "font_size": 13,
-      "color": "@muted",
-      "align": "right",
       "tabular": false,
-      "hide_if_missing": true
+      "needs": "weather.temperature"
+    },
+    {
+      "type": "clock",
+      "id": "date-music",
+      "x": 18,
+      "y": 60,
+      "format": "%A, %d %B",
+      "font_size": 16,
+      "color": "@muted",
+      "tabular": false,
+      "needs": "!weather.temperature, media.title"
+    },
+    {
+      "type": "module",
+      "id": "corner",
+      "module": "cards",
+      "col": 2,
+      "row": 0,
+      "cols": 1,
+      "rows": 1,
+      "items": "playback\nforecast\ndate",
+      "card": "off",
+      "change": 0.6,
+      "hold": 2.0,
+      "forecast": "off"
     },
     {
       "type": "gauge",
@@ -116,18 +109,20 @@
       "h": 124,
       "sensor": "cpu.load",
       "thickness": 11,
-      "color": "@accent_deep",
-      "color2": "@accent",
-      "background": "#ffffff10",
+      "color": "@accent",
+      "background": "#ffffff14",
       "ticks": 0,
-      "glow": 0.55,
+      "glow": 0.5,
       "glow_radius": 7,
       "color_rules": [
         {
           "above": 90,
           "color": "@crit"
         }
-      ]
+      ],
+      "finish": "lit",
+      "cap": "flat",
+      "smooth": true
     },
     {
       "type": "metric",
@@ -140,7 +135,8 @@
       "color": "@text",
       "align": "center",
       "font": "builtin:Barlow-SemiBold",
-      "tabular": true
+      "tabular": true,
+      "smooth": true
     },
     {
       "type": "icon",
@@ -172,18 +168,20 @@
       "h": 124,
       "sensor": "mem.load",
       "thickness": 11,
-      "color": "@violet_deep",
-      "color2": "@violet",
-      "background": "#ffffff10",
+      "color": "@violet",
+      "background": "#ffffff14",
       "ticks": 0,
-      "glow": 0.55,
+      "glow": 0.5,
       "glow_radius": 7,
       "color_rules": [
         {
           "above": 90,
           "color": "@crit"
         }
-      ]
+      ],
+      "finish": "lit",
+      "cap": "flat",
+      "smooth": true
     },
     {
       "type": "metric",
@@ -196,7 +194,8 @@
       "color": "@text",
       "align": "center",
       "font": "builtin:Barlow-SemiBold",
-      "tabular": true
+      "tabular": true,
+      "smooth": true
     },
     {
       "type": "icon",
@@ -272,7 +271,8 @@
           "color": "@crit"
         }
       ],
-      "tabular": true
+      "tabular": true,
+      "smooth": true
     },
     {
       "type": "icon",
@@ -304,15 +304,16 @@
       "font_size": 14,
       "color": "@text",
       "align": "right",
-      "tabular": true
+      "tabular": true,
+      "smooth": true
     },
     {
       "type": "bar",
       "id": "disk-bar",
       "x": 312,
-      "y": 186,
+      "y": 185,
       "w": 140,
-      "h": 6,
+      "h": 8,
       "sensor": "disk.load",
       "color": "@green",
       "background": "#ffffff12",
@@ -326,7 +327,8 @@
           "above": 90,
           "color": "@crit"
         }
-      ]
+      ],
+      "finish": "lit"
     },
     {
       "type": "icon",
@@ -348,7 +350,8 @@
       "font_size": 14,
       "color": "@text",
       "align": "right",
-      "tabular": true
+      "tabular": true,
+      "smooth": true
     },
     {
       "type": "icon",
@@ -370,7 +373,8 @@
       "font_size": 14,
       "color": "@text",
       "align": "right",
-      "tabular": true
+      "tabular": true,
+      "smooth": true
     },
     {
       "type": "rect",
@@ -393,7 +397,7 @@
       "h": 48,
       "sensor": "cpu.load",
       "history": 120,
-      "seconds": 18,
+      "seconds": 30,
       "min": 0,
       "max": 100,
       "color": "@accent",
@@ -404,7 +408,9 @@
       "grid": 1,
       "grid_color": "#ffffff0c",
       "glow": 0.4,
-      "glow_radius": 6
+      "glow_radius": 6,
+      "finish": "lit",
+      "fill_alpha": 0.5
     },
     {
       "type": "text",
@@ -416,5 +422,19 @@
       "color": "@dim",
       "letter_spacing": 2
     }
-  ]
+  ],
+  "grid": {
+    "columns": 3,
+    "rows": 4,
+    "gap": 8,
+    "margin": 8
+  },
+  "style": {
+    "card": "flat",
+    "radius": 12,
+    "glow": 0.5,
+    "backdrop": "flat",
+    "display_font": "builtin:Barlow-SemiBold",
+    "text_font": "builtin:Barlow-Medium"
+  }
 }

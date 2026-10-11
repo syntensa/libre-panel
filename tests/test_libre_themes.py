@@ -1,6 +1,6 @@
-"""Libre Panel's own screens: Studio. It loads, draws with the demo's readings and with none,
-keeps flat frames, shows what plays (else the weather, else the day) in its card, and moves to
-other panels without parts running into each other."""
+"""Libre Panel's own screens: Studio and Libre Default. They load, draw with the demo's
+readings and with none, keep flat frames, show what plays (else the weather, else the day) in
+their card, and move to other panels without parts running into each other."""
 
 import gc
 import itertools
@@ -21,7 +21,7 @@ from libre_panel.theme.model import (
 )
 from libre_panel.theme.modules import make_grid
 
-OWN = ["studio"]
+OWN = ["studio", "libre-default"]
 # the panels of the other built-in themes, and the bars'
 PANELS = [("turing-3.5", "landscape"), ("turing-3.5", "portrait"), ("turing-5", "landscape"),
           ("turing-5", "portrait"), ("turing-2.1", "landscape"), ("turing-8.8-usb", "landscape"),
@@ -128,7 +128,7 @@ def slot_of(name, card="card"):
     return theme, renderer, renderer._slots[card]
 
 
-@pytest.mark.parametrize("name, card", [("studio", "card")])
+@pytest.mark.parametrize("name, card", [("studio", "card"), ("libre-default", "corner")])
 def test_the_card_shows_what_plays_else_the_weather_else_the_day(name, card):
     from test_slot import demo
 
@@ -158,7 +158,7 @@ def test_the_day_under_the_clock_steps_aside_while_the_card_shows_it(name):
     assert shown(demo(media=False, weather=False)) == []  # the card shows the day
 
 
-# -- Studio keeps its layout --------------------------------------------------------------------
+# -- Studio and Libre Default keep their layout -------------------------------------------------
 
 
 def test_studio_keeps_its_layout_with_the_card_where_the_weather_was():
@@ -172,3 +172,17 @@ def test_studio_keeps_its_layout_with_the_card_where_the_weather_was():
     card = Renderer(theme, preview=True).module_boxes["card"]
     assert by["date"]["x"] + 520 < card[0] and card[0] + card[2] < rings[0]["x"]  # between
     assert card[2] >= 1.6 * card[3]  # wide enough for the weather card's details in a row
+
+
+def test_libre_default_keeps_its_layout_with_the_corner_showing_what_plays():
+    theme = load_theme(find_theme("libre-default"))
+    by = {w["id"]: w for w in theme.widgets}
+    for part in ("cpu-ring", "ram-ring", "side-card", "history-card", "history"):
+        assert part in by
+    assert by["cpu-ring"]["finish"] == by["ram-ring"]["finish"] == "lit"
+    assert by["history"]["finish"] == "lit" and by["history"]["seconds"] == 30
+    corner = by["corner"]
+    assert (corner["cols"], corner["rows"]) == (1, 1)  # one cell: the modules' compact looks
+    box = Renderer(theme, preview=True).module_boxes["corner"]
+    ram, side = by["ram-ring"], by["side-card"]
+    assert box[0] > ram["x"] + ram["w"] and box[1] + box[3] < side["y"]  # where the weather was
