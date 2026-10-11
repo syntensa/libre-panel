@@ -108,8 +108,9 @@ without editing.
 
 Text-like widgets share `font` (empty = the theme font), `font_size`, `color`,
 `align` (`left`, `center`, `right`; `x` is the left edge, centre or right edge
-accordingly; `y` is the top of the line), `letter_spacing` and `tabular`
-(equal-width digits so numbers do not jitter; on by default for values).
+accordingly; `y` is the top of the line), `letter_spacing` (pixels, also
+fractions of one) and `tabular` (equal-width digits so numbers do not jitter;
+on by default for values).
 `max_width` (0 = any) keeps text within so many pixels: `fit` `shrink` makes
 the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 

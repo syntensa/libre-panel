@@ -73,7 +73,7 @@ def _text_style(tabular: bool) -> dict[str, tuple[str, Any]]:
         "font_size": ("int", 24),
         "color": ("color", "#ffffff"),
         "align": ("enum:left|center|right", "left"),
-        "letter_spacing": ("int", 0),
+        "letter_spacing": ("number", 0),
         "tabular": ("bool", tabular),  # equal-width digits: numbers do not jitter
         "max_width": ("int", 0),  # 0 = any width; wider text is made to fit
         "fit": ("enum:shrink|ellipsis", "shrink"),  # how: a smaller font, or cut with …

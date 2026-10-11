@@ -493,6 +493,12 @@ def test_letter_spacing():
     tight = render(theme(text("CPU", tabular=False)), {"v": 1.0})[1]["m"][2]
     wide = render(theme(text("CPU", tabular=False, letter_spacing=6)), {"v": 1.0})[1]["m"][2]
     assert wide >= tight + 10
+    # in fractions of a pixel too: a word set to a width (SPUR II's wordmark)
+    exact = theme(text("SPUR", tabular=False, letter_spacing=3.62))
+    assert exact.widgets[0]["letter_spacing"] == 3.62
+    spaced = [render(theme(text("SPUR", tabular=False, letter_spacing=gap)), {"v": 1.0})[1]["m"][2]
+              for gap in (3, 3.62, 4)]  # fmt: skip
+    assert spaced[0] < spaced[1] < spaced[2]
 
 
 def test_icons():

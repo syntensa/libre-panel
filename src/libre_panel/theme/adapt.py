@@ -37,8 +37,8 @@ def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any
     out = dict(widget)
     for key in _UNIFORM:
         if key in out and isinstance(out[key], (int, float)):
-            if key == "letter_spacing":  # may be negative (tight tracking)
-                out[key] = round(out[key] * s)
+            if key == "letter_spacing":  # may be negative (tight tracking), and a fraction
+                out[key] = round(out[key] * s, 2)
                 continue
             minimum = {"font_size": 6, "thickness": 1, "line_width": 1, "outline_width": 1}
             out[key] = max(minimum.get(key, 0), round(out[key] * s))
