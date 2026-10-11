@@ -161,14 +161,18 @@ def test_readings_still_shown_are_asked_for_at_the_normal_rate_until_they_go(web
     provider = provider_with(stale_seconds=5)
     try:
         assert wait_for(lambda: provider.read())
+        provider._stop.set()  # from here on only the test asks, at the times it gives
+        provider._thread.join(5)
         provider.poll_seconds = 1.0
         answered = provider._answered_at
         web_server["answer"] = OSError("gone")
         # they are hidden on time, however seldom it would be asked later
         assert [provider._poll_once(answered + s) for s in (1, 2, 3, 4)] == [1.0] * 4
         assert provider.read()
-        assert provider._poll_once(answered + 5) == 1.0  # gone now, first step of the backoff
-        assert provider.read() == {}
+        # gone now, first step of the backoff (a little past 5 s: a large monotonic
+        # clock, as on macOS, makes (t + 5) - t a hair less than 5)
+        assert provider._poll_once(answered + 5.001) == 1.0
+        assert provider.read() == {}, (answered, provider._answered_at, provider._misses)
         assert [provider._poll_once(answered + 6) for _ in range(3)] == [2.0, 4.0, 8.0]
     finally:
         provider.close()
