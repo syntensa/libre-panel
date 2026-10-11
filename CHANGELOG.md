@@ -660,6 +660,9 @@
   alone, which another picture can get once the first is freed (a stream with no cover between
   two tracks): the old cover then stayed on show with the new track. The picture is kept for as
   long as what was made of it
+- A palette colour with alpha (`"track": "#FFFFFF14"`, a translucent `surface` or `line`) was made
+  opaque by the modules, so a translucent track read as a white one; a card's glass added its 90 %
+  to whatever the palette said. A role keeps its alpha now, and the glass takes 90 % of it
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

@@ -221,7 +221,30 @@ def test_modules_take_every_colour_a_theme_may_hold(palette, color):
     renderer.render(snapshot())
     assert renderer.warnings == []
     parts = {w["id"]: w for w in renderer.widgets}
-    assert parts["m1/value"]["color"].startswith("#") and len(parts["m1/icon"]["color"]) == 7
+    # written out in full, with the alpha it has
+    assert parts["m1/icon"]["color"] == {"#f80": "#FF8800", "#FF880080": "#FF880080"}[color]
+    assert parts["m1/value"]["color"].startswith("#")
+
+
+def test_a_role_that_has_alpha_keeps_it_in_the_modules():
+    """A translucent track or card (``#FFFFFF14``) is what the theme says: it was made opaque
+    (a white track), and a card's glass came with the 90 % it adds to a colour."""
+    palette = {"surface": "#14202E80", "line": "#FFFFFF22", "track": "#FFFFFF14",
+               "bg2": "#06090F80"}  # fmt: skip
+
+    def parts(*modules, colours=palette, **extra):
+        renderer = Renderer(theme(*modules, palette=colours, **extra), preview=True)
+        return {w["id"]: w for w in renderer.widgets}
+
+    glass = parts({"module": "ring"})
+    assert glass["m0/card"]["color"] == "#14202E73"  # the glass's 90 % of the palette's 50 %
+    assert glass["m0/card"]["outline"] == "#FFFFFF22"
+    assert glass["m0/ring"]["background"] == "#FFFFFF14"
+    assert parts({"module": "ring"}, style={"card": "flat"})["m0/card"]["color"] == "#14202E80"
+    picture = parts({"module": "image", "items": "a.png", "title": "A"})
+    assert picture["m0/shade"]["color2"] == "#06090F66"  # a shade of the ground, 80 % of it
+    plain = parts({"module": "ring"}, colours={"surface": "#14202E", "track": "teal"})
+    assert plain["m0/card"]["color"] == "#14202EE6" and plain["m0/ring"]["background"] == "#008080"
 
 
 def test_every_look_has_every_role():

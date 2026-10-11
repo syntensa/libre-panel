@@ -265,9 +265,22 @@ def _rgb(color: str) -> tuple[int, int, int]:
     return red, green, blue
 
 
+def _alpha(color: str) -> int:
+    """How opaque a colour a theme may hold is, 0 to 255 (255 for one without alpha)."""
+    found = ImageColor.getrgb(color)
+    return found[3] if len(found) > 3 else 255
+
+
 def _hex(color: str) -> str:
-    """``color`` as "#RRGGBB", the form the modules mix and add alpha to."""
-    return "#{:02X}{:02X}{:02X}".format(*_rgb(color))
+    """``color`` as "#RRGGBB", or "#RRGGBBAA" where it is not opaque: the form the modules
+    mix (the mix is opaque) and fade (:func:`faded`)."""
+    alpha = _alpha(color)
+    return "#{:02X}{:02X}{:02X}".format(*_rgb(color)) + (f"{alpha:02X}" if alpha < 255 else "")
+
+
+def faded(color: str, share: float) -> str:
+    """``color`` as "#RRGGBBAA" with ``share`` of the opacity it has."""
+    return "#{:02X}{:02X}{:02X}{:02X}".format(*_rgb(color), round(_alpha(color) * share))
 
 
 def mix(a: str, b: str, amount: float) -> str:
@@ -344,7 +357,7 @@ class _Build:
             return
         radius = round(self.style["radius"] * self.u / 200)
         kind = self.style["card"]
-        fill = {"glass": self.c("surface") + "E6", "flat": self.c("surface")}.get(kind)
+        fill = {"glass": faded(self.c("surface"), 0.9), "flat": self.c("surface")}.get(kind)
         outline = self.c("line") if outline and kind in ("glass", "outline") else None
         self.add(
             "rect", "card", x=self.x, y=self.y, w=self.w, h=self.h, color=fill,
@@ -1314,7 +1327,7 @@ def build_image(b: _Build, _src: Source) -> None:
     if b.module["title"]:
         shade = round(b.h * 0.4)
         b.add("rect", "shade", x=b.x, y=b.y + b.h - shade, w=b.w, h=shade, color="#00000000",
-              color2=b.c("bg2") + "CC", radius=radius)  # fmt: skip
+              color2=faded(b.c("bg2"), 0.8), radius=radius)  # fmt: skip
         b.label("title", b.module["title"], b.x + b.pad * 2, b.y + b.h - b.pad * 2 - CAP * b.ts,
                 b.ts * 1.05, color=b.c("text"), width=b.w - b.pad * 4)  # fmt: skip
 
