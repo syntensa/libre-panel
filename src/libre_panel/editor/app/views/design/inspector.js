@@ -36,7 +36,7 @@ const label = (key) => cap(fieldLabel(key));
 
 export const TYPE_ICONS = {
   rect: "rect",
-  text: "text",
+  "text": "text",
   metric: "metric",
   bar: "bar",
   gauge: "ring",
@@ -63,7 +63,7 @@ export const MODULE_ICONS = {
   bars: "bar",
   network: "download",
   system: "info",
-  text: "text",
+  "text": "text",
   temps: "sun",
   cores: "grid",
   drives: "save",
@@ -90,7 +90,7 @@ const SECTION_OF = {
   sensor: "shows",
   source: "shows",
   module: "shows",
-  text: "shows",
+  "text": "shows",
   format: "shows",
   field: "shows",
   target: "shows",
@@ -182,7 +182,7 @@ function DetailsHead({ title, onBack }) {
   return html`<div class="inspector-head details">
     <${IconButton} icon="chevron-left" label=${t("Back")} onClick=${onBack} />
     <div class="inspector-heading">
-      <div class="inspector-title">${t("Details")}</div>
+      <div class="inspector-title">${t("Fine-tuning")}</div>
       <div class="inspector-subtitle">${title}</div>
     </div>
   </div>`;
@@ -302,7 +302,7 @@ function WidgetInspector({ widget }) {
       </div>
     `;
   }
-  const summary = `${t("Details")}: ${details
+  const summary = `${t("Fine-tuning")}: ${details
     .map((group) => group.short)
     .slice(0, 3)
     .join(", ")}`;
@@ -472,7 +472,7 @@ function ModuleInspector({ widget }) {
       <//>
     </div>
     <${Footer}
-      summary=${`${t("Details")}: ${[t("Title"), t("Advanced"), t("Detach")].join(", ")}`}
+      summary=${`${t("Fine-tuning")}: ${[t("Title"), t("Advanced"), t("Detach")].join(", ")}`}
       onDetails=${() => setPage("details")}
       onDuplicate=${duplicateSelection}
       onRemove=${deleteSelection}
@@ -757,7 +757,7 @@ function ThemeInspector({ theme }) {
           <//>`
         : null}
     </div>
-    <${Footer} summary=${`${t("Details")}: ${[t("About"), t("Palette"), t("Messages")].join(", ")}`} onDetails=${() => setPage("details")} />
+    <${Footer} summary=${`${t("Fine-tuning")}: ${[t("About"), t("Palette"), t("Messages")].join(", ")}`} onDetails=${() => setPage("details")} />
   `;
 }
 

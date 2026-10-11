@@ -27,6 +27,39 @@ SERIAL_DRIVERS = {
 }
 
 
+def video_mode(video, model: PanelModel | None) -> tuple[bool, list[str]]:
+    """Whether a TURZX USB panel runs in video mode, and what keeps ``auto`` from it.
+
+    ``"on"`` and ``"off"`` decide alone. ``"auto"`` needs a model the video mode
+    is proven on, the name its start command carries (``local_clip``: never
+    made up, it lands in the panel's settings) and ffmpeg.
+    """
+    if video.mode != "auto":
+        return video.mode == "on", []
+    if model is None:
+        return False, []
+    if not model.video:
+        return False, [t("the video mode is not proven on the {panel} yet", panel=model.label)]
+    missing = []
+    if not video.local_clip:
+        missing.append(t("video.local_clip is not set (see docs/CONFIGURATION.md, Video)"))
+    from libre_panel.devices.h264 import find_ffmpeg
+
+    try:
+        find_ffmpeg(video.ffmpeg)
+    except DeviceError:  # said without the path: doctor reports are shared
+        if video.ffmpeg:
+            missing.append(t("ffmpeg is not at the path in video.ffmpeg (config.toml)"))
+        else:
+            missing.append(
+                t(
+                    "the video mode needs ffmpeg: install it, or set video.ffmpeg in config.toml "
+                    "to the ffmpeg program"
+                )
+            )
+    return not missing, missing
+
+
 class TurzxDisplay(Display):
     name = "turzx"
 
@@ -34,6 +67,7 @@ class TurzxDisplay(Display):
         super().__init__(config)
         self.model = find_model(config.model)
         self._impl: Display | None = None
+        self._told = ""  # why "auto" left the video mode off, as last logged
 
     def open(self) -> None:
         if self.model is None:
@@ -46,11 +80,22 @@ class TurzxDisplay(Display):
     def _driver(self, model: PanelModel | None, configured: bool = True) -> Display:
         protocol = model.protocol if model else "usb-turing"
         if protocol == "usb-turing":
-            if self.config.video.mode == "on":
+            video = self.config.video
+            probed = model
+            if probed is None and video.mode == "auto":
+                from libre_panel.devices.turzx_usb import present_model
+
+                probed = present_model()
+            on, missing = video_mode(video, probed)
+            told = "; ".join(missing)
+            if told and told != self._told:
+                log.info("video mode off: %s", told)
+            self._told = told
+            if on:
                 from libre_panel.devices.turzx_video import TurzxVideoDisplay as Impl
             else:
                 from libre_panel.devices.turzx_usb import TurzxUsbDisplay as Impl
-            return Impl(self.config, model)
+            return self._counted(Impl(self.config, model))
         target = SERIAL_DRIVERS.get(protocol)
         if target is None:
             raise DeviceError(
@@ -61,7 +106,11 @@ class TurzxDisplay(Display):
             log.info("video mode is for TURZX USB panels; %s gets single frames", model.label)
         module_name, _, attr = target.partition(":")
         module = __import__(module_name, fromlist=[attr])
-        return getattr(module, attr)(self.config, model, configured=configured)
+        return self._counted(getattr(module, attr)(self.config, model, configured=configured))
+
+    def _counted(self, impl: Display) -> Display:
+        impl.counters = self.counters  # what it counts goes where the main loop looks
+        return impl
 
     def _open_any(self) -> Display:
         """A USB panel, else a serial one (``device.model = "auto"``)."""

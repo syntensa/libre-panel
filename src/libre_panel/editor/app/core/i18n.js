@@ -21,7 +21,7 @@ export const languages = () => catalog.languages || {};
 // The widget types' names in English (the catalogs name them in other languages).
 const WIDGET_NAMES = {
   rect: "Box",
-  text: "Text",
+  "text": "Text",
   metric: "Value",
   bar: "Bar",
   gauge: "Ring",

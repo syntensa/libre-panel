@@ -146,6 +146,119 @@
   rain starting or stopping; the text says so ("Rain in 20 min", "Rain stops
   in 40 min", "No rain for the next 2 h"), in German too. The request still
   carries only your coordinates; the answer is a little larger
+- Depth dust, after SPUR II: `"look": {"dust": true}` in a theme lets fine
+  grains fall from the letters, rails, rings and bars into the depth behind
+  the panel, in the colour of what they come from, a few of them as soft
+  discs. Nothing in the theme says where the sources are: the dust reads the
+  frame the panel showed. `count`, `rate`, `depth`, `strength`, `colors` and
+  `areas` (rectangles with or without dust) set it, *Theme → Dust* in the
+  editor has them. It is drawn on a video panel and in the editor's preview,
+  never on a panel that is sent changed regions, and costs nothing while the
+  theme has none; at 1920 × 480 it adds a millisecond or two to a frame
+- A `fan` widget: a rotor of nine lit blades that turns with a fan's RPM (calm
+  and with inertia, standing at 0 RPM, dimmed without a reading) in a ring that
+  shows its share of `max_rpm`, or in a square frame; *Fan with speed* in the
+  editor's presets adds one with its name and value
+- `"finish": "facet"` on `text`, `metric`, `clock`, `weather`, `countdown`,
+  `bar`, `gauge` and `graph`: a flat top in the exact colour and a sharp
+  bevel lit from the top left, like SPUR II's lettering. Lettering is bright
+  metal that mirrors the sky above it (the accent) and the ground below (the
+  background), with a light touch up to 28 px and the full look from 52 px;
+  `"finish": "acrylic"` is the same lettering lit from within, as the "II" of
+  the wordmark. Bars and rings are raised in a milled track, a graph's line
+  becomes a ridge on the plateau of its fill with a halo of its colour (a
+  slimmer ridge on a bar panel). Text keeps the pixels of the flat text;
+  shapes are built once per size and colour, so it costs no more than the
+  flat look
+- `fill_alpha` on a `graph`: how opaque its fill is, 0 to 1 (0: as before, a
+  flat fill a quarter, a fade 0.45 at its top)
+- `libre_panel.render.facets.groove_bar` and `groove_ring`: the milled groove
+  of a bar or a ring (a floor of exactly the colour and a bevel lit from the
+  top left), cached, for finishes of their own
+- Plugins: an editor page asks `context.background` whether the background app
+  serves its editor (the panel and the services run only there),
+  `context.shown_frame()` for the picture on the panel now, messages and
+  transitions included, and `context.log_tail(lines)` for the end of the log
+  the tray app writes
+- Plugins: `host.notify` says whether the message will show. It returns a
+  `Delivery`, true when it will, else with the `reason`: the theme switches the
+  kind off (`"theme"`), the screen shows it itself (`"screen"`) or no panel is
+  connected (`"no-panel"`). A page sends one with `context.notify(...)`
+- How the panel is doing: the main loop measures its frame rate against the
+  target, the time to draw a frame (median and slowest of the last 120), the
+  data rate sent to the panel, and in video mode the blocks per second, the
+  deepest queue the panel reported, the waits and the pictures thrown away,
+  and counts USB errors, restarts of the panel and of ffmpeg. They are in
+  `/api/app` (`panel.stats`), in the editor's **Panel** menu (with a button to
+  the new Control page) and for plugins in `context.status()`;
+  `context.sources()` lists the sensor sources and what they say about
+  themselves. Measuring costs a few additions per frame and holds no lock
+- Plugins: `set_config_value` writes lists too (`"services.enabled"`) and
+  replaces a list that runs over several lines, the new `set_config_tables`
+  writes an array of tables such as `[[services.autopilot.rules]]`, and
+  `edit_config` makes several such changes in one write. They keep the rest of
+  `config.toml`, compare the new file with the old one, and refuse what they
+  cannot edit safely
+- The editor has two pages of its own, built in like the services (*Pages* in
+  the top bar), written with the plugin API. **Control** shows the live picture
+  of the panel, the numbers above as tiles, each sensor source (LibreHardwareMonitor
+  says how it is read, whether it has administrator rights, whether PawnIO is there)
+  and each service with a *Restart*, sends a test message of each kind and says
+  whether it shows or why not, sets the theme of the normal and the game mode in
+  `config.toml`, and shows the end of the log. **Autopilot** edits the autopilot's
+  rules and settings in `config.toml`, switches it on and off, and shows which
+  rule holds and what it sees. Without the background app (`libre-panel editor`)
+  they say so. An editor page may answer with a file (`(status, bytes, type)`)
+- The two pages are a JSON API that a screen of any design can call
+  (`/api/plugins/control/` and `/api/plugins/autopilot/`, listed under "The
+  console API" in docs/ARCHITECTURE.md): the live picture as JPEG or PNG, the
+  numbers, the sources (LibreHardwareMonitor's mode, rights and PawnIO driver as
+  data), the services with `enabled` and a state (`running`, `stopped`, `failed`,
+  `not-installed`, `off`, `pending` until the app follows `config.toml`,
+  `unknown`) that can be switched on and off and restarted, test messages with
+  their verdict, the theme per mode, the log, and the autopilot's rules. Plugin
+  pages that write `config.toml` ask the app to follow it with
+  `context.follow_config()`
+- `memory`, a built-in service (off until listed in `[services] enabled`) that
+  keeps what happens at the desk in a SQLite file on this PC: a row a minute
+  (means and highest values of load, temperature, power, clocks, memory and
+  network; how long music played, never what), a row per game (frame rates,
+  how long at which rate, what held it back, the highest temperatures), the
+  cooling state whenever it moves (temperatures, power, each fan's speed and
+  duty, what each FanControl curve reads) and every change to FanControl's
+  curves (read only). One sample a second, one writer thread with a bounded
+  queue, WAL mode, 730 and 180 days kept (`keep_days`, `cooling_days`). No
+  title, window title or file name is read, and nothing leaves the PC
+- A round report when a game that was played for 3 minutes with frame rates
+  ends: the round against the last 10 of the same program, published as the
+  state `report` and as `report.*` readings, and shown with the theme
+  `report_theme` for 30 s (priority 10, normal mode only); a new game ends it
+  at once. `round-report` is a plain built-in theme (1920×480) for it; the
+  data is described in the plugin guide for screens that draw it better
+- `libre_panel.services.fancontrol`: FanControl's curves, fans and the sensor
+  each curve reads, from its configuration file (found from the environment or
+  `fancontrol = "..."`; opened for reading only)
+- `cooling`, a built-in service that checks FanControl's fan curves against
+  what the PC really did (the memory's cooling state, weighed by time) and
+  says what to change: a curve that reads the sensor of another device (found
+  by calculating back, from the duty a fan had, the temperature its curve must
+  have seen), a mix that does not pass on the higher part, a temperature over
+  your limit in a game, a fan that oscillates or runs higher than it needs on
+  the desktop, cooling that slowly gets worse. Each recommendation names the
+  data it rests on, and since FanControl was last changed it says what that
+  change did. Read only: FanControl's file and the memory's database are
+  opened for reading, nothing is changed or sent; devices come from the
+  readings, limits from `limits`. It answers an editor page or a script with
+  the analysis as data and a plain-text report in English and German
+- `downloads`, a built-in service that notes what is downloading: Steam's
+  games and updates (read from its `content_log.txt` and `appmanifest` files,
+  with the network's download as the speed) and the part files of browsers
+  (`.crdownload`, `.part`, `.partial`) in the Downloads folder (Windows: the
+  shell's folder; Linux: `xdg-user-dir DOWNLOAD`). It publishes the download that
+  matters most as the state `downloads`: progress, speed, the last three minutes
+  of speed and the time left, for a screen that draws a download card. Nothing
+  below `min_mb` (50) counts, the browser's history is never read, and nothing is
+  written
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
@@ -171,8 +284,16 @@
 - Video mode: where many widgets move, what lies under a graph was laid anew
   on most frames (the kept layers went oldest first, not least used); the
   ones a frame uses are now kept longest
+- Services follow `config.toml` whenever the panel loop starts. A service switched
+  on (or off, or given other options) while the panel was paused, or in a
+  `config.toml` that did not load at the start and was fixed later, stayed as it
+  was until the file changed once more
 
 **Changes**
+- The video mode turns itself on: `video.mode` is `"auto"` by default, which
+  streams to a 9.2" (the panel it is proven on) as soon as ffmpeg is found and
+  `local_clip` names the panel's standby clip. `libre-panel doctor` and the log
+  say what is missing. A `mode = "off"` in `config.toml` stays off
 - macOS is no longer supported: no download, no tests, no macOS code. Windows
   and Linux are. Nobody downloaded the macOS builds of any release. Gone with
   it: the disk image and the menu bar app, the LaunchAgent, and reading the
@@ -225,6 +346,9 @@
   shows at once. The cover is read when the track changes, not at every look;
   a look every five seconds is the safety net, and the position still moves on
   by itself. Linux asks once a second as before
+- `tools/motion_bench.py` takes `--dust`, `--finish facet` and `--fans N`: it
+  runs each theme with and without that look, side by side frame by frame, and
+  prints what the look adds to a frame
 
 ## 0.4.2 — 2026-10-10
 

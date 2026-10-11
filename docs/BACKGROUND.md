@@ -49,6 +49,49 @@ The same controls are in the editor: the **Panel** button at the top right
 shows the state and has pause, brightness, upside down, start with system
 and quit.
 
+## How the panel is doing
+
+Below the state, the **Panel** menu shows numbers measured over the last few
+seconds. They are also in `/api/app` (`panel.stats`) and on the *Control*
+page (below).
+
+| Row | What it says |
+|---|---|
+| **Frame rate** | frames drawn per second, and the rate Libre Panel aims for (the mode's, the display's, else `fps`). In video mode every frame goes out, so a rate below the target means the PC or the panel cannot keep up. Without video mode a frame is drawn only when something moves, so a lower rate is normal there |
+| **Drawing** | the median time to draw a frame, and the slowest of the last 120. It has to stay below the time one frame has (20 ms at 50 fps) |
+| **Data rate** | what goes to the panel, in KB/s (1 KB = 1000 bytes); not shown for the PNG file |
+| **Video** | video mode only: pictures (blocks) sent per second, the deepest queue the panel reported (it holds five, and the driver waits above two), how often the driver waited for room, and how many pictures it threw away unsent when the stream restarted |
+| **Faults** | since the panel loop started: errors on the panel's link that made the driver reconnect, restarts of the panel to clear a hung video decoder, and restarts of ffmpeg |
+
+Measuring costs next to nothing: the main loop keeps a ring of drawing times
+and counts, and makes the numbers once a second; nothing waits for it.
+
+## The Control and Autopilot pages
+
+*Pages → Control* in the editor (also the **Control page** button in the Panel
+menu) is the console of the background app. In a plain `libre-panel editor`
+there is no panel, so the page says so and keeps what works without one: the
+theme per mode and the log.
+
+| Part | What it does |
+|---|---|
+| **Live picture** | the frame on the panel now, with transitions and messages, about five times a second; it is the theme's way up, not turned for an upside-down panel. Paused, it says so |
+| **How the panel is doing** | the numbers above as tiles, with the panel's state and how long the loop has run |
+| **Sensor sources** | each source in the order it is asked, with the readings it gave last time. LibreHardwareMonitor says how it is read (inside Libre Panel or through its web server), whether Libre Panel has administrator rights, whether the CPU's sensors are within reach and which PawnIO driver is there, and on Windows what to do when no temperature or power arrives |
+| **Services** | each service Libre Panel knows, with its state (running, failed with the reason, stopped, off, or changing while the app follows a change of `config.toml`) and **Restart**, which stops it and starts it again with its settings. A service that is not in `[services] enabled` is off |
+| **Test messages** | sends a test message of each kind (volume, music, warning, panel, device, game) and says whether it shows, or why not: the theme switches the kind off (`toast.off`), the screen shows it itself, or no panel is connected |
+| **Theme per mode** | the theme of the normal mode and of game mode, written to `config.toml` (`theme`, and `theme` under `[modes.game]`); "same as the normal mode" leaves the game mode without a theme of its own |
+| **Log** | the last lines of `logs/libre-panel.log`, which the tray app writes (`libre-panel start` logs to its terminal instead) |
+
+*Pages → Autopilot* edits the rules of the `autopilot` service, switches it on
+and off, and shows which rule holds and what it sees; see
+[the autopilot](CONFIGURATION.md#autopilot).
+
+Both pages are a skin over a JSON API (the live picture, the numbers, the
+sources, switching and restarting services, test messages, the theme per mode,
+the log, the autopilot's rules), so a screen of another design can show and do
+the same: [The console API](ARCHITECTURE.md#the-console-api).
+
 ## Shutting down
 
 Quit, signing out and shutting the PC down all end Libre Panel cleanly: it
@@ -101,12 +144,24 @@ can change it (under *Program Files*): a program in your user folder could
 be replaced by anything you run, which would then get those rights at the
 next login. `enable --elevated` warns about that.
 
-The task reads the settings from `%APPDATA%\LibrePanel` as usual. A program
-from the Microsoft Store or another MSIX package (some desktop apps and
-their terminals) does not write there: Windows redirects what it writes to
-`%APPDATA%` into the package's own folder, so settings changed through such
-a program never reach the task. Then keep the settings in a folder of your
-own and set the user environment variable `LIBRE_PANEL_HOME` to it.
+The task reads the settings from `%APPDATA%\LibrePanel` as usual. **A program
+started from a Microsoft Store app (an MSIX package) writes `%APPDATA%` into
+the package's private folder instead.** Some desktop apps, terminals and
+assistants are packaged that way, and so is everything they start: a setting
+changed, a theme saved or a plugin installed from there never reaches the
+task, which runs outside the package and sees the real `%APPDATA%`. To avoid
+that, keep the settings in a folder outside `%APPDATA%` and point Libre Panel
+at it with the user environment variable `LIBRE_PANEL_HOME`, for example in a
+terminal:
+
+```
+setx LIBRE_PANEL_HOME "C:\LibrePanelData"
+```
+
+Libre Panel then keeps `config.toml`, the themes, the plugins and the log
+there, however it is started. Move what is in `%APPDATA%\LibrePanel` over
+first if you want to keep it; programs that are already running (and the
+task, until the next login) still use the old place.
 
 ### Linux desktops
 

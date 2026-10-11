@@ -63,6 +63,14 @@ CMD_RESTART = 11
 USB_PIDS = {pid: m for m in MODELS if m.protocol == "usb-turing" for _vid, pid in m.usb_ids}
 
 
+def present_model() -> PanelModel | None:
+    """The model of a USB panel on the bus, without opening it (None: none there, or no pyusb)."""
+    for pid, model in USB_PIDS.items():
+        if UsbTransport.present(pid):
+            return model
+    return None
+
+
 def ms_since_midnight(now: float | None = None) -> int:
     # From the local wall clock, not via mktime: Windows' mktime fails for
     # midnights before 1970, i.e. for "now" near the epoch east of UTC.
@@ -390,6 +398,7 @@ class TurzxUsbDisplay(Display):
             # A replug, standby or a crashed earlier session leaves the pipe out of
             # step; one fresh connection with a resync usually fixes it (SPUR II).
             log.warning("panel stopped answering (%s); reconnecting", exc)
+            self.counters.usb_errors += 1
             self.close()
             self.open()
             if self.brightness is not None:
@@ -400,6 +409,7 @@ class TurzxUsbDisplay(Display):
         if self.transport is None:
             raise DeviceError("panel not open")
         self.transport.command(CMD_UPLOAD_PNG, struct.pack(">I", len(png)), png, timeout_ms=5000)
+        self.counters.bytes += len(png)
 
     def close(self) -> None:
         if self.transport is not None:

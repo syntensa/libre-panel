@@ -24,7 +24,7 @@ from libre_panel.config import (  # noqa: E402
     parse_config,
 )
 from libre_panel.devices import turzx_usb, turzx_video  # noqa: E402
-from libre_panel.devices.base import DeviceError, Display  # noqa: E402
+from libre_panel.devices.base import Counters, DeviceError, Display  # noqa: E402
 from libre_panel.devices.h264 import (  # noqa: E402
     EncoderSettings,
     PictureSplitter,
@@ -114,10 +114,37 @@ def test_find_ffmpeg(tmp_path, monkeypatch):
 def test_video_config():
     video = parse_config({"video": {"mode": "on", "fps": 30, "device_fps": 40}}).device.video
     assert (video.mode, video.fps, video.device_fps, video.crf) == ("on", 30, 40, 25)
-    assert parse_config({}).device.video.mode == "off"
-    for bad in ({"mode": "auto"}, {"fps": 50, "device_fps": 40}, {"maxrate": "fast"}):
+    assert parse_config({}).device.video.mode == "auto"
+    assert parse_config({"video": {"mode": "off"}}).device.video.mode == "off"
+    for bad in ({"mode": "always"}, {"fps": 50, "device_fps": 40}, {"maxrate": "fast"}):
         with pytest.raises(ConfigError):
             parse_config({"video": bad})
+
+
+def test_auto_video_mode_needs_a_proven_panel_the_clip_name_and_ffmpeg(tmp_path):
+    """``auto`` turns the video mode on only where all is there; it never makes
+    up the clip name, which the start command copies into the panel's settings."""
+    from libre_panel.devices.models import get_model
+    from libre_panel.devices.turzx import video_mode
+
+    nine, eight = get_model("turing-9.2-usb"), get_model("turing-8.8-usb")
+    ffmpeg = tmp_path / "ffmpeg"
+    ffmpeg.write_text("")
+    ready = VideoConfig(local_clip="usr/data/clip.h264", ffmpeg=str(ffmpeg))
+    assert ready.mode == "auto"
+    assert video_mode(ready, nine) == (True, [])
+    assert video_mode(ready, None) == (False, [])  # no panel found: nothing to tell
+    on, why = video_mode(ready, eight)
+    assert not on and why == ['the video mode is not proven on the Turing 8.8" yet']
+    on, why = video_mode(VideoConfig(ffmpeg=str(tmp_path / "missing")), nine)
+    assert not on and "local_clip is not set" in why[0] and "video.ffmpeg" in why[1]
+    assert str(tmp_path) not in why[1]  # doctor reports are shared: no paths
+    # "on" and "off" decide alone
+    assert video_mode(VideoConfig(mode="on"), eight) == (True, [])
+    assert video_mode(VideoConfig(mode="off", local_clip="x", ffmpeg=str(ffmpeg)), nine) == (
+        False,
+        [],
+    )
 
 
 # -- the session against the simulated panel ------------------------------------
@@ -651,8 +678,38 @@ def test_video_mode_through_the_turzx_driver(panel):
         display.close()
     png = TurzxDisplay(DeviceConfig(driver="turzx", model="turing-9.2-usb"))
     png.open()
-    assert not png.streaming
+    assert not png.streaming  # "auto", but no clip name
     png.close()
+
+
+@needs_ffmpeg
+def test_auto_video_mode_on_a_detected_panel(panel, monkeypatch, caplog):
+    """``model = "auto"``: the panel on the bus is looked up without opening it,
+    and the 9.2" streams; what is missing is logged once, not on every reconnect."""
+    from libre_panel.devices.turzx import TurzxDisplay
+
+    monkeypatch.setattr(
+        turzx_usb.UsbTransport, "present", staticmethod(lambda pid: pid == panel.pid)
+    )
+    found = TurzxDisplay(
+        DeviceConfig(
+            driver="turzx", model="auto", video=VideoConfig(local_clip="usr/data/clip.h264")
+        )
+    )
+    found.open()
+    try:
+        assert found.streaming and found.model.id == "turing-9.2-usb"
+    finally:
+        found.close()
+    assert 110 in panel.commands
+    plain = TurzxDisplay(DeviceConfig(driver="turzx", model="auto"))
+    with caplog.at_level("INFO", logger="libre_panel.devices.turzx"):
+        for _ in range(2):
+            plain.open()
+            assert not plain.streaming
+            plain.close()
+    told = [r.getMessage() for r in caplog.records if "video mode off" in r.getMessage()]
+    assert len(told) == 1 and "local_clip is not set" in told[0]
 
 
 # -- the main loop -----------------------------------------------------------------
@@ -839,3 +896,129 @@ def test_a_mode_sets_the_stream_rate(monkeypatch):
     # and before it, faster than 12: neither the mode's rate nor config.fps (a
     # loaded runner managed only 15 of the display's 50)
     assert normal > 12, (normal, game)
+
+
+# -- what the video driver counts for the editor's diagnostics ----------------------------
+# One Counters is shared by every display and session of a run (the main loop hands it out).
+
+
+def test_the_session_counts_what_it_sends(panel):
+    counters = Counters()
+    session = session_for(panel, device_fps=20, counters=counters)
+    session.start()
+    for _ in range(40):  # far faster than the player takes them
+        session.send(nal(1))
+    assert counters.blocks == session.blocks == 40
+    assert counters.bytes == session.bytes == sum(len(block) for block in panel.blocks)
+    assert counters.waits == session.waits > 0
+    assert counters.max_depth == session.max_depth and 0 < counters.max_depth < FakePanel.RING
+    again = session_for(panel, counters=counters)  # the next session after a reconnect
+    again.start()
+    again.send(nal(1))
+    assert counters.blocks == 41 and again.blocks == 1  # the run's numbers go on
+
+
+@needs_ffmpeg
+def test_a_stopped_ffmpeg_is_one_restart_in_the_counters(panel):
+    counters = Counters()
+    display = TurzxVideoDisplay(video_config())
+    display.counters = counters
+    display.open()
+    try:
+        frames = moving_frames(20)
+        stream_frames(display, frames[:10])
+        display.encoder.proc.kill()
+        display.encoder.proc.wait()
+        time.sleep(0.2)
+        stream_frames(display, frames[10:])
+        settle(panel)
+        assert counters.ffmpeg_restarts == 1 and counters.panel_restarts == 0
+        assert counters.usb_errors == 0
+        assert counters.blocks == len(panel.blocks) >= 15 and counters.bytes > 0
+    finally:
+        display.close()
+
+
+@needs_ffmpeg
+def test_a_usb_error_is_counted_once_and_the_video_comes_back(panel):
+    counters = Counters()
+    display = TurzxVideoDisplay(video_config())
+    display.counters = counters
+    display.open()
+    try:
+        frames = moving_frames(30)
+        stream_frames(display, frames[:10])
+        time.sleep(0.2)
+        panel.fail_next_writes = 1  # the next block fails
+        stream_frames(display, frames[10:20])
+        time.sleep(0.3)
+        stream_frames(display, frames[20:])
+        settle(panel)
+        assert counters.usb_errors == 1 and counters.ffmpeg_restarts == 0
+        assert counters.blocks == len(panel.blocks) and display._error is None
+    finally:
+        display.close()
+
+
+@needs_ffmpeg
+def test_a_restart_of_the_panel_is_counted_across_displays(panel, monkeypatch):
+    """The main loop opens a new display after the panel restarted (``auto`` makes one
+    each time): the count, and the blocks sent before, stay."""
+    hang_quickly(monkeypatch)
+    counters = Counters()
+    display = TurzxVideoDisplay(video_config())
+    display.counters = counters
+    display.open()
+    panel.hung_depths = itertools.repeat(24)
+    show_until(display, PanelRestarting)
+    display.close()
+    assert counters.panel_restarts == 1
+    assert counters.usb_errors == 0  # a decoder that hangs is no fault of the link
+    sent = counters.blocks
+    assert sent > 0
+
+    again = TurzxVideoDisplay(video_config())
+    again.counters = counters
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            again.open()
+            break
+        except PanelRestarting:
+            assert time.monotonic() < deadline
+            time.sleep(0.05)
+    try:
+        stream_frames(again, moving_frames(20))
+        settle(panel)
+    finally:
+        again.close()
+    assert counters.panel_restarts == 1 and counters.blocks > sent
+    assert counters.bytes == sum(len(block) for block in panel.blocks)
+
+
+def test_pictures_waiting_for_the_sender_when_a_stream_ends_are_counted_as_dropped():
+    display = TurzxVideoDisplay(video_config())
+    display._pictures.put(b"one")
+    display._pictures.put(b"two")
+    display._discard_pictures()
+    assert display.counters.drops == 2 and display._pictures.empty()
+    display._discard_pictures()
+    assert display.counters.drops == 2
+
+
+def test_the_png_path_counts_bytes_and_a_reconnect(panel):
+    counters = Counters()
+    display = turzx_usb.TurzxUsbDisplay(DeviceConfig(driver="turzx", model="turing-9.2-usb"))
+    display.counters = counters
+    display.open()
+    try:
+        frame = Image.new("RGB", (1920, 480), (10, 40, 90))
+        size = len(turzx_usb.encode_frame(turzx_usb.to_native(frame)))
+        display.show(frame)
+        display.show(frame)
+        assert counters.bytes == 2 * size and counters.usb_errors == 0
+        panel.fail_next_writes = 1
+        display.show(frame)  # reconnects and sends it again
+        assert counters.usb_errors == 1 and counters.bytes == 3 * size
+    finally:
+        display.close()

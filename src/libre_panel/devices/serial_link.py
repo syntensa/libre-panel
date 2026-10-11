@@ -118,6 +118,7 @@ class SerialLink:
                 t("serial panels need pyserial: pip install 'libre-panel[serial]'")
             ) from exc
         self._errors = (serial.SerialException, OSError)
+        self.written = 0  # bytes sent on this link, for the driver's counters
         try:
             self.port = open_serial(device, baud, rtscts)
         except self._errors as exc:
@@ -128,6 +129,7 @@ class SerialLink:
             self.port.write(data)
         except self._errors as exc:
             raise DeviceError(t("serial write failed: {error}", error=exc)) from exc
+        self.written += len(data)
 
     def read(self, size: int) -> bytes:
         try:

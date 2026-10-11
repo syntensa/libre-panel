@@ -11,6 +11,7 @@ sources and display drivers have their own entry point groups
 from libre_panel.plugins.host import (
     ANY_MODE,
     EVENTS,
+    Delivery,
     PluginHost,
     Service,
     ServiceHost,
@@ -31,6 +32,7 @@ __all__ = [
     "ANY_MODE",
     "API_VERSION",
     "EVENTS",
+    "Delivery",
     "EditorPage",
     "PageContext",
     "PluginError",

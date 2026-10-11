@@ -62,7 +62,7 @@ export function widgetMenu() {
     items.push({ icon: "select-all", label: t("Select all like this ({name})", { name }), run: () => selectSameKind(one) });
   }
   if (one && isModule(one)) items.push({ icon: "detach", label: t("Detach into widgets"), run: () => detachModule(one) });
-  if (one) items.push({ icon: "sliders", label: t("Details"), run: () => inspectorState.set({ page: "details" }) });
+  if (one) items.push({ icon: "sliders", label: t("Fine-tuning"), run: () => inspectorState.set({ page: "details" }) });
   items.push("-", { icon: "trash", label: t("Remove"), keys: "delete", danger: true, run: deleteSelection });
   return items;
 }

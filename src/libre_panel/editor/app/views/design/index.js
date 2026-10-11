@@ -242,7 +242,7 @@ registerProvider(() => {
         id: `sensor.${sensor.key}`,
         title: () => t("Show {sensor}", { sensor: sensorName(sensor.key, sensor.label) }),
         hint: () => sensor.key,
-        group: () => t("Sensor"),
+        group: () => t("Sensors"),
         icon: "sensor",
         rank: 70,
         run: () => edit(null, () => withSensor.forEach((widget) => (widget.sensor = sensor.key))),

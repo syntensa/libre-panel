@@ -40,6 +40,8 @@ from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import (
     COMMON_FIELDS,
+    DUST_MAX_AREAS,
+    DUST_MAX_COLORS,
     EFFECT_FIELDS,
     LOOK_SPECS,
     PRIMARY_FIELDS,
@@ -368,12 +370,15 @@ class EditorHandler(BaseHTTPRequestHandler):
         if page_id not in pages:
             pages[page_id] = cls(PageContext(self.controls, self.state.config_path))
         try:
-            status, data = pages[page_id].handle(method, path, query, body)
-            payload = json.dumps(data).encode("utf-8")
+            status, data, *kind = pages[page_id].handle(method, path, query, body)
+            if isinstance(data, bytes):  # a file, e.g. a picture: (status, bytes, content type)
+                payload, content_type = data, kind[0] if kind else "application/octet-stream"
+            else:
+                payload, content_type = json.dumps(data).encode("utf-8"), "application/json"
         except Exception as exc:  # a broken page must not take the editor down
             log.exception("editor page %s failed", page_id)
             return self._error(f"{page_id}: {exc}", HTTPStatus.INTERNAL_SERVER_ERROR)
-        self._send(int(status), payload, "application/json")
+        self._send(int(status), payload, content_type)
 
     def _static(self, name: str) -> None:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", name) or name.startswith("."):
@@ -553,6 +558,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             "default_font": DEFAULT_FONT,
             "icons": list(ICON_NAMES),
             "modules": module_info(),
+            # what the look blocks that are lists may hold, at most
+            "look_limits": {"dust": {"colors": DUST_MAX_COLORS, "areas": DUST_MAX_AREAS}},
             **presets,
         }
 

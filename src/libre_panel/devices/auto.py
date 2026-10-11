@@ -40,6 +40,7 @@ class AutoDisplay(Display):
     def _try_panel(self) -> Display | None:
         self._next_probe = self._clock() + self.PROBE_INTERVAL_S
         panel = TurzxDisplay(self.config)
+        panel.counters = self.counters
         try:
             panel.open()
             if self._brightness is not None:
@@ -62,6 +63,7 @@ class AutoDisplay(Display):
             self.PROBE_INTERVAL_S,
         )
         self._impl = VirtualDisplay(self.config)
+        self._impl.counters = self.counters
         self._impl.open()
 
     @property

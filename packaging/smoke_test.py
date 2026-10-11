@@ -41,6 +41,12 @@ def api(url, action=None):
         return json.loads(response.read())
 
 
+def fetch(url):
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # local, no proxy
+    with opener.open(url, timeout=10) as response:
+        return response.read()
+
+
 PLUGIN = """
 import sqlite3
 
@@ -86,6 +92,22 @@ def main(command):
             print("panel:", state["panel"])
             wait(frame.exists, 10, "frame file")
             wait((home / "plugins-data" / "smoke" / "started").exists, 10, "folder plugin")
+            # the editor's own pages (Control, Autopilot): their files and code are in the build
+            pages = {page["id"] for page in json.loads(fetch(url + "api/plugins/pages"))}
+            if not {"control", "autopilot"} <= pages:
+                raise SystemExit(f"FAIL: the editor's built-in pages are missing: {sorted(pages)}")
+            if b"console.js" not in fetch(url + "plugins/control/"):
+                raise SystemExit("FAIL: the Control page's files are not in the build")
+            control = json.loads(fetch(url + "api/plugins/control/status"))
+            if not control["background"] or not any(
+                s["name"] == "notices" for s in control["services"]
+            ):
+                raise SystemExit(f"FAIL: the Control page does not see the app: {control}")
+            # the live picture (Pillow's JPEG and PNG writers are in the build)
+            live = url + "api/plugins/control/live"
+            wait(lambda: fetch(live).startswith(b"\xff\xd8"), 20, "live picture (JPEG)")
+            png = live + "?format=png"
+            wait(lambda: fetch(png).startswith(b"\x89PNG"), 20, "live picture (PNG)")
             api(url, "quit")
             code = proc.wait(30)
             if code != 0:

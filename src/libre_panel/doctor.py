@@ -23,7 +23,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 from libre_panel import __version__
-from libre_panel.config import Config, ConfigError, load_config
+from libre_panel.config import Config, ConfigError, VideoConfig, load_config
 from libre_panel.devices.base import DeviceError, list_serial_ports
 from libre_panel.devices.models import PanelModel, models_for_usb
 
@@ -350,8 +350,10 @@ class Doctor:
         model_id: str = "",
         port: str = "",
         sensors: Callable[[], tuple[str, str] | None] | None = None,
+        video: VideoConfig | None = None,
     ) -> None:
         self.ask = ask
+        self.video = video  # the [video] settings: whether this panel would get the video mode
         self.brightness = brightness  # set again after the brightness check
         self.say = say
         self.pause = pause
@@ -609,6 +611,20 @@ class Doctor:
             self.display.open()
         self._step("close and reconnect", "ok")
         self._send(test_card(w, h, "Test finished", "you can close this window", round_panel))
+        if usb and self.video is not None:
+            self._video_step(model)
+
+    def _video_step(self, model) -> None:
+        from libre_panel.devices.turzx import video_mode
+
+        on, missing = video_mode(self.video, model)
+        if on:
+            detail = f"on, {self.video.fps} fps"
+        elif missing:
+            detail = "off: " + "; ".join(missing)
+        else:
+            detail = f'off (mode = "{self.video.mode}")'
+        self._step("video mode", "info", detail)
 
 
 def run_doctor(
@@ -622,8 +638,10 @@ def run_doctor(
     try:
         device = load_config(config_path).device
         brightness, model_id, port = device.brightness, device.model, device.port
+        video = device.video
     except ConfigError:
         brightness, model_id, port = 60, "", ""
+        video = None
     if model_id == "auto":
         model_id = ""
     doctor = Doctor(
@@ -633,6 +651,7 @@ def run_doctor(
         model_id=model_id,
         port=port,
         sensors=lambda: sensors_check(config_path),
+        video=video,
     )
     report = doctor.run()
     path = report_path or Path(

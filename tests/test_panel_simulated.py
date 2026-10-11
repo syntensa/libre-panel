@@ -224,3 +224,19 @@ def test_ruler_bars_are_exactly_as_deep_as_their_number(size):
         if size == (1920, 480):  # every 2 px on the 9.2" (small panels have fewer bars)
             assert steps == list(range(2, 41, 2)), (edge, counts)
             assert counts[17] == counts[18] + 1, (edge, counts)  # bar 18 ends at row 17
+
+
+def test_doctor_says_whether_the_panel_gets_the_video_mode(panel, tmp_path):
+    from libre_panel.config import VideoConfig
+
+    def run(video):
+        doctor = Doctor(ask=None, say=lambda s: None, pause=lambda s: None, frames=1, video=video)
+        return doctor.run().text()
+
+    text = run(VideoConfig(ffmpeg=str(tmp_path / "nowhere" / "ffmpeg")))
+    assert "video mode" in text and "local_clip is not set" in text and "video.ffmpeg" in text
+    assert "nowhere" not in text  # no paths in a report that gets shared
+    ffmpeg = tmp_path / "ffmpeg"
+    ffmpeg.write_text("")
+    assert "on, 50 fps" in run(VideoConfig(local_clip="usr/data/clip.h264", ffmpeg=str(ffmpeg)))
+    assert 'off (mode = "off")' in run(VideoConfig(mode="off"))

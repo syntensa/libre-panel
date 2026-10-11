@@ -49,6 +49,8 @@ class PanelModel:
     # Pixels of the framebuffer (native, portrait) behind the bezel:
     # top, right, bottom, left. Measured with the ruler card of `libre-panel doctor`.
     hidden: tuple[int, int, int, int] = (0, 0, 0, 0)
+    # Video mode (H.264) proven on this model: ``video.mode = "auto"`` uses it here.
+    video: bool = False
 
     def size(self, orientation: str) -> tuple[int, int]:
         """Frame size for ``portrait`` or ``landscape``."""
@@ -202,6 +204,7 @@ MODELS: tuple[PanelModel, ...] = (
         usb_ids=((0x1CBE, 0x0092),),
         notes="protocol verified on hardware",
         hidden=(0, 18, 0, 0),
+        video=True,
     ),
     PanelModel(
         "turing-12.3-usb",

@@ -7,6 +7,7 @@ vendors) down to one small class registered under ``libre_panel.devices``.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from importlib.metadata import entry_points
 from typing import Any
 
@@ -23,6 +24,26 @@ class FrameError(DeviceError):
     """This frame cannot be shown (e.g. too large); the connection is fine."""
 
 
+@dataclass
+class Counters:
+    """What the drivers count while the panel runs, for the editor's diagnostics.
+
+    The main loop gives every display the same one (``display.counters``), so the
+    numbers go on when a display is made again after a replug. A driver adds to the
+    counters that apply to it; each is written by one thread, so nothing is locked
+    and counting costs a few additions per frame.
+    """
+
+    bytes: int = 0  # sent to the panel
+    blocks: int = 0  # video: pictures handed to the panel's decoder
+    waits: int = 0  # video: times the sender waited for room in the panel's queue
+    drops: int = 0  # video: pictures thrown away unsent (the stream was replaced)
+    max_depth: int = 0  # video: the deepest queue the panel reported
+    usb_errors: int = 0  # errors on the panel's link that made the driver reconnect
+    panel_restarts: int = 0  # video: restarts of the panel to clear a hung decoder
+    ffmpeg_restarts: int = 0  # video: times ffmpeg stopped by itself and was started again
+
+
 class Display:
     name = "base"
     # A streaming display (a video encoder) wants every frame at ``stream_fps``,
@@ -35,6 +56,9 @@ class Display:
 
     def __init__(self, config: DeviceConfig) -> None:
         self.config = config
+        # Replaced by the main loop's, shared by every display it makes (and by the
+        # displays a wrapping one makes inside: ``auto``, ``turzx``).
+        self.counters = Counters()
 
     def open(self) -> None:
         """Connect and initialise the panel."""
