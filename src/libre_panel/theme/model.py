@@ -126,6 +126,11 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "smooth": ("bool", True),
         "color_rules": ("rules", []),
         "glow_area": ("box?", None),  # [x, y, w, h]: a lit bar's glow stays inside
+        # a second reading as a thin line across the bar, at its value on the bar's own scale
+        # (the average of earlier rounds, a limit); drawn over the bar, whatever its finish
+        "mark": ("sensor", ""),
+        "mark_color": ("color", "#ffffff"),
+        "mark_width": ("int", 2),
     },
     "gauge": {
         "sensor": ("sensor", "cpu.load"),
@@ -162,6 +167,9 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "fill_alpha": ("number", 0),  # how opaque the fill is, 0 to 1 (0: 0.25, a fade 0.45)
         "direction": ("enum:up|down", "up"),  # down: hangs from the top, filled from there
         "inset": ("bool", True),  # the line stays inside (off: the range spans the box)
+        # a dot of this radius (px) in the line's colour at the newest point of the line, with
+        # the widget's glow around it, as the end of SPUR II's Horizon curves (0: none)
+        "end_dot": ("number", 0),
         "smooth": ("bool", True),
         "per_frame": ("bool", False),  # older themes: a point a pixel apart (seconds = w / 25)
         "line_width": ("int", 2),
@@ -218,6 +226,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "w": ("int", 0),
         "h": ("int", 0),
         "fit": ("enum:stretch|contain|cover", "stretch"),  # into w x h
+        "align": ("enum:left|center|right", "center"),  # contain: where it stands in w x h
         "radius": ("int", 0),
         # more pictures for a slideshow, one per line ("photos/*.jpg" takes a folder)
         "slides": ("text", ""),
@@ -340,6 +349,12 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "moving": ("bool", True),
         "hold": ("number", 2.0),
         "change": ("number", 0.6),
+        # a slot's playback card: a new track moves in from the right as the old one moves out
+        # to the left, in this many seconds (0: the new track is there at once)
+        "slide": ("number", 0),
+        # the playback card: the time at the right of the progress, the track's length (3:47)
+        # or what is left of it (-2:24)
+        "time": ("enum:total|remaining", "total"),
     },
 }
 

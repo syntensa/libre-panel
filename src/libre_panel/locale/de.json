@@ -1475,7 +1475,9 @@
     "1 reading": "1 Wert",
     "{panel} is paused": "{panel} ist pausiert",
     "{panel} shows “{theme}”": "{panel} zeigt „{theme}“",
-    "“{name}” is made for {size}; the picture is scaled to this panel. Adapt the theme in Design for a sharp result.": "„{name}“ ist für {size} gemacht; das Bild wird auf dieses Panel skaliert. Passe das Theme in Gestalten an, damit es scharf wird."
+    "“{name}” is made for {size}; the picture is scaled to this panel. Adapt the theme in Design for a sharp result.": "„{name}“ ist für {size} gemacht; das Bild wird auf dieses Panel skaliert. Passe das Theme in Gestalten an, damit es scharf wird.",
+    "Free": "Frei",
+    "Share of the round · tick: average": "Anteil der Runde · Strich: Schnitt"
   },
   "fields": {
     "align": "Ausrichtung",
@@ -1597,7 +1599,13 @@
     "y": "y",
     "glow_area": "Leuchtbereich",
     "inset": "eingerückt",
-    "ridge": "Grat"
+    "ridge": "Grat",
+    "end_dot": "Punkt am Ende",
+    "mark": "Marke",
+    "mark_color": "Farbe der Marke",
+    "mark_width": "Breite der Marke",
+    "slide": "Schwenkzeit",
+    "time": "Zeit rechts"
   },
   "widgets": {
     "analog": "Analoguhr",
@@ -1709,7 +1717,9 @@
     "vertical": "senkrecht",
     "weather": "Wetter",
     "wind_speed": "Windgeschwindigkeit",
-    "world": "Weltzeit"
+    "world": "Weltzeit",
+    "remaining": "Restzeit",
+    "total": "Gesamtlänge"
   },
   "icons": {
     "battery": "Akku",

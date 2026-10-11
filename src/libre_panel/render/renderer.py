@@ -238,14 +238,16 @@ def _card_corners(r: int, outline: int) -> tuple[Image.Image, Image.Image | None
     return shape.reduce(s), ring, c
 
 
-def _fitted(image: Image.Image, w: int, h: int, fit: str) -> Image.Image:
-    """``image`` at w x h: stretched, inside with room left (contain) or filling it (cover)."""
+def _fitted(image: Image.Image, w: int, h: int, fit: str, align: str = "center") -> Image.Image:
+    """``image`` at w x h: stretched, inside with room left (contain, at the left, in the middle
+    or at the right: ``align``) or filling it (cover)."""
     if fit == "cover":
         return ImageOps.fit(image, (w, h), Image.Resampling.LANCZOS)
     if fit == "contain":
         inner = ImageOps.contain(image, (w, h), Image.Resampling.LANCZOS)
         out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        out.paste(inner, ((w - inner.width) // 2, (h - inner.height) // 2))
+        left = {"left": 0, "right": w - inner.width}.get(align, (w - inner.width) // 2)
+        out.paste(inner, (left, (h - inner.height) // 2))
         return out
     return image.resize((w, h), Image.Resampling.LANCZOS)
 
@@ -344,6 +346,8 @@ def _reads(widgets: list[dict[str, Any]]) -> set[str]:
     for widget in widgets:
         if widget.get("sensor"):
             keys.add(widget["sensor"])
+        if widget.get("mark"):
+            keys.add(widget["mark"])
         for need in (widget.get("needs") or "").split(","):
             need = need_key(need)
             if need:
@@ -385,7 +389,7 @@ class Renderer:
         self.moving = False  # True while an animation has not settled yet
         self._fonts: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
         self._digit_width: dict[int, float] = {}
-        self._images: dict[tuple[str, int, int, str], Image.Image | None] = {}
+        self._images: dict[tuple[str, int, int, str, str], Image.Image | None] = {}
         self._slide_lists: dict[str, tuple[float, list[str]]] = {}  # widget id -> pictures
         self._gauge_parts: dict[tuple[Any, ...], Image.Image] = {}  # static rings, colour fields
         # Video mode (the main loop sets these): every frame goes out, so graphs
@@ -444,6 +448,7 @@ class Renderer:
         self._plugin_types: dict[str, Any] = {}
         self._screen_last: tuple[Any, Piece] | None = None
         self._dust: Dust | None = None  # the theme's look.dust, once it is drawn (render/dust.py)
+        self._dots: dict[tuple[Any, ...], tuple[Image.Image, int]] = {}  # end dots, by look
         self._rotors: dict[str, fan.Rotor] = {}  # fan widget id -> how it turns (render/fan.py)
         self._fans: OrderedDict[tuple[Any, ...], Piece] = OrderedDict()  # fan pieces, by look
         self._downloads: dict[str, tuple[Any, Any]] = {}  # download widget id -> what it shows
@@ -502,8 +507,10 @@ class Renderer:
             self._fonts[key] = font or ImageFont.load_default(size)
         return self._fonts[key]
 
-    def _asset_image(self, rel: str, w: int, h: int, fit: str = "stretch") -> Image.Image | None:
-        key = (rel, w, h, fit)
+    def _asset_image(
+        self, rel: str, w: int, h: int, fit: str = "stretch", align: str = "center"
+    ) -> Image.Image | None:
+        key = (rel, w, h, fit, align)
         if key not in self._images:
             image = None
             if rel and self.theme.root is not None:
@@ -511,7 +518,7 @@ class Renderer:
                     with Image.open(resolve_asset(self.theme.root, rel)) as src:
                         image = ImageOps.exif_transpose(src).convert("RGBA")
                     if w > 0 and h > 0:
-                        image = _fitted(image, w, h, fit)
+                        image = _fitted(image, w, h, fit, align)
                 except (OSError, ThemeError) as exc:
                     self._warn(f"image {rel!r} could not be loaded ({exc})")
             self._images[key] = image
@@ -1109,6 +1116,15 @@ class Renderer:
             if piece is None:
                 continue
             pieces.append((widget["id"], piece))
+            if slot is None:  # what lies over a bar or a graph: its mark, its end dot
+                if widget["type"] == "bar" and widget.get("mark"):
+                    over = self._draw_mark(widget, snapshot), "mark"
+                elif widget["type"] == "graph" and widget.get("end_dot"):
+                    over = self._draw_end_dot(widget, snapshot, now), "dot"
+                else:
+                    over = None, ""
+                if over[0] is not None:
+                    pieces.append((f"{widget['id']}\0{over[1]}", over[0]))
             if module is not None:
                 boxes[module["id"]] = self.module_boxes[module["id"]]
                 continue
@@ -1572,7 +1588,7 @@ class Renderer:
             return self._live_image(widget, snapshot.images.get(rel[1:]))
 
         def build() -> Piece:
-            image = self._asset_image(rel, w, h, widget["fit"])
+            image = self._asset_image(rel, w, h, widget["fit"], widget.get("align", "center"))
             if image is None:
                 empty = Image.new("RGBA", (max(w, 1), max(h, 1)), (0, 0, 0, 0))
                 return Piece(empty, x, y)
@@ -1590,7 +1606,7 @@ class Renderer:
         def build() -> Piece:
             picture = image.convert("RGBA")
             if w > 0 and h > 0:
-                picture = _fitted(picture, w, h, widget["fit"])
+                picture = _fitted(picture, w, h, widget["fit"], widget.get("align", "center"))
             if widget["radius"] > 0:
                 picture = _rounded(picture, widget["radius"])
             return Piece(picture, x, y)
@@ -2162,6 +2178,31 @@ class Renderer:
                     self._fill_shape(layer, box, fill_r, first, last, horizontal)
         return Piece(self._down(layer, w, h), x, y, [x, y, w, h])
 
+    def _draw_mark(self, widget: dict[str, Any], snapshot: Snapshot) -> Piece | None:
+        """A bar's mark: a thin line across the bar where the reading ``mark`` stands on the bar's
+        own scale, reaching a little beyond it on both sides (the average of earlier rounds, a
+        limit). A reading that is not there draws none."""
+        value = _number(snapshot.value(widget["mark"]))
+        if value is None:
+            return None
+        x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
+        direction = widget["direction"]
+        horizontal = direction in ("right", "left")
+        length, across = (w, h) if horizontal else (h, w)
+        thick = max(1, min(widget["mark_width"], length))
+        frac = _fraction(value, widget["min"], widget["max"], widget.get("scale", "linear"))
+        along = int((length - thick) * frac)  # from the bar's start, in whole pixels
+        if direction in ("left", "up"):  # these start at the far end
+            along = length - thick - along
+        reach = round(across * 0.22)
+        color = self.color(widget["mark_color"])
+        at = (x + along, y - reach) if horizontal else (x - reach, y + along)
+        size = (thick, h + 2 * reach) if horizontal else (w + 2 * reach, thick)
+        marked = {"id": f"{widget['id']}\0mark", "opacity": widget.get("opacity", 1.0)}
+        return self._cached(
+            marked, (at, size, color), lambda: Piece(Image.new("RGBA", size, color), *at)
+        )
+
     @staticmethod
     def _gradient_colors(a: RGBA, b: RGBA | None, n: int) -> list[RGBA]:
         if b is None:
@@ -2299,6 +2340,60 @@ class Renderer:
         draw.pieslice(box, *tail, fill=b)
         self._gauge_parts[key] = field
         return field
+
+    DOTS = 256  # end dots kept (a dot moves in quarter pixels: a handful of looks at a time)
+
+    def _draw_end_dot(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        """A graph's end dot: a dot of ``end_dot`` px radius in the line's colour, with the
+        widget's glow around it, where the line ends: at the right edge, at the newest value.
+        Drawn in quarter pixels, as SPUR II draws it, so it glides with the value. None where
+        the line has no end (too few points, no value)."""
+        radius = float(widget["end_dot"])
+        x, y, w = widget["x"], widget["y"], widget["w"]
+        key = widget["sensor"]
+        if self.continuous:  # the curve is drawn from the gliding value: so is its end
+            value, scale = self.motion.value(key, now), self.STRIP_SCALE
+            strips = self._strips.get(widget["id"])
+            strip = strips.ready if strips is not None else None
+            bounds = strip.bounds if strip is not None else None
+        else:
+            values = snapshot.history.get(key, [])[-max(2, widget["history"]) :]
+            value, scale = (values[-1] if len(values) > 1 else None), SUPERSAMPLE
+            bounds = self._graph_bounds(widget, values) if len(values) > 1 else None
+        if value is None or bounds is None:
+            return None
+        first, last = self._range_rows(widget, scale)
+        frac = _fraction(value, *bounds, widget.get("scale", "linear"))
+        row = first + (last - first) * (1 - frac)
+        if widget.get("direction") == "down":  # it hangs from the top edge
+            row = first + last - row
+        # the curve's end in pixels (the last point is a quarter of a pixel inside the edge)
+        cx, cy = x + w - 0.5 / scale, y + (row + 0.5) / scale
+        left, top = cx - radius - 1.0, cy - radius - 1.0
+        ix, iy = math.floor(left), math.floor(top)
+        px, py = int((left - ix) * 4) % 4, int((top - iy) * 4) % 4
+        color = self.color(widget["color"])
+        glow, glow_radius = widget.get("glow", 0.0), widget.get("glow_radius", 10)
+        look = (radius, color, px, py, glow, glow_radius)
+        if look not in self._dots:
+            if len(self._dots) >= self.DOTS:
+                self._dots.clear()
+            size = math.ceil(2 * radius + 3)
+            big = Image.new("RGBA", (size * 4, size * 4), (0, 0, 0, 0))
+            mx, my = radius + 1.0 + px / 4, radius + 1.0 + py / 4
+            ImageDraw.Draw(big).ellipse(
+                [(mx - radius) * 4, (my - radius) * 4, (mx + radius) * 4, (my + radius) * 4],
+                fill=color,
+            )
+            dot = self._down(big, size, size, 4)
+            halo, pad = self._halo({"glow": glow, "glow_radius": glow_radius}, dot)
+            if halo is not None:
+                halo.alpha_composite(dot, (pad, pad))
+                dot = halo
+            self._dots[look] = (dot, pad)
+        dot, pad = self._dots[look]
+        plain = {"id": f"{widget['id']}\0dot", "opacity": widget.get("opacity", 1.0)}
+        return self._cached(plain, (ix, iy, look), lambda: Piece(dot, ix - pad, iy - pad))
 
     def _draw_graph(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         if self.continuous:

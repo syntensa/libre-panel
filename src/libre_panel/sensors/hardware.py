@@ -1,11 +1,12 @@
 """The names of the processor, graphics card and memory: found by themselves, or the user's own.
 
 This source is always on (``build_hub`` adds it) and publishes ``cpu.name``, ``gpu.name`` and
-``mem.name`` for headings on a panel. The computer is asked once, with no administrator
-rights and nothing to install, and the answer is kept; reading a snapshot costs a copy of
-three small values. The names are tidied for a panel (``hwnames``: "Ryzen 5 7600", not
-"AMD Ryzen 5 7600 6-Core Processor"), and text the user gives under ``[hardware]`` in
-config.toml is shown as it is instead.
+``mem.name`` for headings on a panel, and ``mem.speed``, the speed the memory runs at, where
+the firmware tells it. The computer is asked once, with no administrator rights and nothing
+to install, and the answer is kept; reading a snapshot costs a copy of a few small values.
+The names are tidied for a panel (``hwnames``: "Ryzen 5 7600", not "AMD Ryzen 5 7600
+6-Core Processor"), and text the user gives under ``[hardware]`` in config.toml is shown as
+it is instead.
 
 - Processor: Windows' registry (``ProcessorNameString``); Linux' ``/proc/cpuinfo`` (on ARM the
   board or chip it names); else what ``platform`` says.
@@ -56,6 +57,7 @@ PARTS = ("cpu", "gpu", "memory")  # what has a name; the editor's and config.tom
 _KEYS = {"cpu": "cpu.name", "gpu": "gpu.name", "memory": "mem.name"}
 _LABELS = {"cpu": "CPU", "gpu": "GPU", "memory": "Memory"}
 NAME_KEYS = tuple(_KEYS.values())
+SPEED_KEY = "mem.speed"  # megatransfers a second, from the memory modules' SMBIOS entries
 
 _CPU_KEY = r"HARDWARE\DESCRIPTION\System\CentralProcessor\0"
 _DISPLAY_CLASS = r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
@@ -423,6 +425,12 @@ def memory_label(found: Found) -> str:
     return size_label(installed_gb(found.memory)) if found.memory else ""
 
 
+def memory_speed(found: Found) -> int:
+    """The speed the memory runs at, in megatransfers a second: the slowest module's (it sets
+    the pace of the others); 0 where no module tells it."""
+    return min((m.speed for m in found.modules if m.speed), default=0)
+
+
 def describe(found: Found, prefer_gpu: str = "") -> dict[str, str]:
     """The three names, tidied, by ``PARTS``; empty where nothing was found."""
     adapter = pick_adapter(found.adapters, prefer_gpu)
@@ -440,7 +448,7 @@ def detected_names(prefer_gpu: str = "", refresh: bool = False) -> dict[str, str
 
 class HardwareProvider(SensorProvider):
     """``cpu.name``, ``gpu.name`` and ``mem.name``: what was found, or the user's own text
-    (``[hardware]``), which replaces it."""
+    (``[hardware]``), which replaces it; and ``mem.speed`` where the modules tell it."""
 
     name = "hardware"
     overrides = NAME_KEYS
@@ -459,6 +467,9 @@ class HardwareProvider(SensorProvider):
             text = self._custom[part] or names[part]
             if text:
                 readings[key] = Reading(key, text, "", _LABELS[part])
+        speed = memory_speed(self._found)
+        if speed:
+            readings[SPEED_KEY] = Reading(SPEED_KEY, float(speed), "MT/s", "Memory speed")
         return readings
 
     def follow_config(self, config: Any) -> None:

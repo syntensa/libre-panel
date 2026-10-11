@@ -908,7 +908,7 @@
       "y": 407,
       "w": 194,
       "h": 12,
-      "sensor": "temp.gpu.hot_spot",
+      "sensor": "gpu.hotspot",
       "min": 0,
       "max": 110,
       "color": "@gpu",
@@ -1027,7 +1027,7 @@
     },
     {
       "type": "rect",
-      "id": "temp-memory-temperature-mark",
+      "id": "mem-temp-mark",
       "x": 737,
       "y": 451,
       "w": 2,
@@ -1036,12 +1036,12 @@
     },
     {
       "type": "bar",
-      "id": "temp-memory-temperature-bar",
+      "id": "mem-temp-bar",
       "x": 740,
       "y": 451,
       "w": 200,
       "h": 12,
-      "sensor": "temp.memory.temperature",
+      "sensor": "mem.temp",
       "min": 25,
       "max": 70,
       "color": "@mem",
@@ -1294,10 +1294,10 @@
     },
     {
       "type": "metric",
-      "id": "temp-memory-temperature-value",
+      "id": "mem-temp-value",
       "x": 682,
       "y": 436,
-      "sensor": "temp.memory.temperature",
+      "sensor": "mem.temp",
       "format": "{value:.0f}",
       "font": "builtin:LiberationSans-Bold",
       "font_size": 34,
@@ -1307,7 +1307,7 @@
     },
     {
       "type": "text",
-      "id": "temp-memory-temperature-unit",
+      "id": "mem-temp-unit",
       "x": 688,
       "y": 449,
       "text": "°C",
@@ -1357,7 +1357,7 @@
       "id": "gpu-hot-spot-value",
       "x": 1159,
       "y": 392,
-      "sensor": "temp.gpu.hot_spot",
+      "sensor": "gpu.hotspot",
       "format": "{value:.0f}",
       "font": "builtin:LiberationSans-Bold",
       "font_size": 34,
@@ -1631,11 +1631,12 @@
       "id": "game-logo",
       "x": 286,
       "y": 20,
-      "w": 120,
+      "w": 72,
       "h": 48,
       "src": "@game.logo",
       "fit": "contain",
-      "needs": "@game.logo"
+      "needs": "@game.logo",
+      "align": "left"
     },
     {
       "type": "metric",
@@ -1649,7 +1650,7 @@
       "color": "@text2",
       "align": "left",
       "fallback": "",
-      "max_width": 120,
+      "max_width": 72,
       "fit": "ellipsis",
       "tabular": false,
       "needs": "game.name,!@game.logo"
@@ -1666,7 +1667,7 @@
       "color": "@text2",
       "align": "left",
       "fallback": "",
-      "max_width": 120,
+      "max_width": 72,
       "fit": "ellipsis",
       "tabular": false,
       "needs": "!game.name,!@game.logo"
@@ -1674,7 +1675,7 @@
     {
       "type": "text",
       "id": "fps-label",
-      "x": 440,
+      "x": 371,
       "y": 35,
       "text": "FPS",
       "font": "builtin:LiberationSans-Regular",
@@ -1686,7 +1687,7 @@
     {
       "type": "metric",
       "id": "fps-value",
-      "x": 494,
+      "x": 425,
       "y": 5,
       "sensor": "game.fps",
       "format": "{value:.0f}",
@@ -1699,7 +1700,7 @@
     {
       "type": "text",
       "id": "low-label",
-      "x": 621,
+      "x": 552,
       "y": 35,
       "text": "1% LOW",
       "font": "builtin:LiberationSans-Regular",
@@ -1711,7 +1712,7 @@
     {
       "type": "metric",
       "id": "low-value",
-      "x": 723,
+      "x": 654,
       "y": 19,
       "sensor": "game.low",
       "format": "{value:.0f}",
@@ -1724,7 +1725,7 @@
     {
       "type": "rect",
       "id": "hud-rule",
-      "x": 813,
+      "x": 744,
       "y": 16,
       "w": 2,
       "h": 43,
@@ -1733,7 +1734,7 @@
     {
       "type": "fan",
       "id": "fan-1-wheel",
-      "x": 837,
+      "x": 768,
       "y": 20,
       "w": 48,
       "h": 48,
@@ -1746,7 +1747,7 @@
     {
       "type": "metric",
       "id": "fan-1-rpm",
-      "x": 969,
+      "x": 900,
       "y": 25,
       "sensor": "fan.lpc.fan_1",
       "format": "{value:.0f}",
@@ -1760,7 +1761,7 @@
     {
       "type": "fan",
       "id": "fan-2-wheel",
-      "x": 991,
+      "x": 934,
       "y": 20,
       "w": 48,
       "h": 48,
@@ -1773,7 +1774,7 @@
     {
       "type": "metric",
       "id": "fan-2-rpm",
-      "x": 1123,
+      "x": 1066,
       "y": 25,
       "sensor": "fan.lpc.fan_2",
       "format": "{value:.0f}",
@@ -1787,7 +1788,7 @@
     {
       "type": "fan",
       "id": "fan-3-wheel",
-      "x": 1168,
+      "x": 1134,
       "y": 20,
       "w": 48,
       "h": 48,
@@ -1800,7 +1801,7 @@
     {
       "type": "metric",
       "id": "fan-3-rpm",
-      "x": 1300,
+      "x": 1266,
       "y": 25,
       "sensor": "fan.lpc.fan_4",
       "format": "{value:.0f}",
@@ -1814,7 +1815,7 @@
     {
       "type": "fan",
       "id": "fan-4-wheel",
-      "x": 1345,
+      "x": 1334,
       "y": 20,
       "w": 48,
       "h": 48,
@@ -1827,7 +1828,7 @@
     {
       "type": "metric",
       "id": "fan-4-rpm",
-      "x": 1477,
+      "x": 1466,
       "y": 25,
       "sensor": "fan.lpc.fan_3",
       "format": "{value:.0f}",
