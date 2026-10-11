@@ -3,7 +3,7 @@
   "name": "SPUR Classic",
   "author": "Libre Panel",
   "license": "GPL-3.0-or-later",
-  "description": "SPUR II's classic screen for 1920x480 bar panels: two load charts with their sections, RAM and network in staggered boxes, fans and the clock in the header; light bars, frames as ridges, the grid and one light.",
+  "description": "SPUR II's classic screen for 1920x480 bar panels: two load charts with their sections, RAM and network in staggered boxes, fans and the clock in the header; light bars, flat frames, the grid and one light.",
   "display": {
     "model": "turing-8.8-usb",
     "orientation": "landscape",
@@ -267,8 +267,7 @@
       "y": 90,
       "w": 943,
       "h": 5,
-      "color": "@cpu_frame",
-      "ridge": "cpu-frame"
+      "color": "@cpu_frame"
     },
     {
       "type": "rect",
@@ -277,8 +276,7 @@
       "y": 90,
       "w": 5,
       "h": 382,
-      "color": "@cpu_frame",
-      "ridge": "cpu-frame"
+      "color": "@cpu_frame"
     },
     {
       "type": "rect",
@@ -287,8 +285,7 @@
       "y": 90,
       "w": 5,
       "h": 213,
-      "color": "@cpu_frame",
-      "ridge": "cpu-frame"
+      "color": "@cpu_frame"
     },
     {
       "type": "rect",
@@ -297,8 +294,7 @@
       "y": 298,
       "w": 485,
       "h": 5,
-      "color": "@cpu_frame",
-      "ridge": "cpu-frame"
+      "color": "@cpu_frame"
     },
     {
       "type": "rect",
@@ -307,8 +303,7 @@
       "y": 298,
       "w": 5,
       "h": 174,
-      "color": "@cpu_frame",
-      "ridge": "cpu-frame"
+      "color": "@cpu_frame"
     },
     {
       "type": "rect",
@@ -317,8 +312,7 @@
       "y": 90,
       "w": 943,
       "h": 5,
-      "color": "@gpu_frame",
-      "ridge": "gpu-frame"
+      "color": "@gpu_frame"
     },
     {
       "type": "rect",
@@ -327,8 +321,7 @@
       "y": 90,
       "w": 5,
       "h": 382,
-      "color": "@gpu_frame",
-      "ridge": "gpu-frame"
+      "color": "@gpu_frame"
     },
     {
       "type": "rect",
@@ -337,8 +330,7 @@
       "y": 90,
       "w": 5,
       "h": 213,
-      "color": "@gpu_frame",
-      "ridge": "gpu-frame"
+      "color": "@gpu_frame"
     },
     {
       "type": "rect",
@@ -347,8 +339,7 @@
       "y": 298,
       "w": 484,
       "h": 5,
-      "color": "@gpu_frame",
-      "ridge": "gpu-frame"
+      "color": "@gpu_frame"
     },
     {
       "type": "rect",
@@ -357,8 +348,7 @@
       "y": 298,
       "w": 5,
       "h": 174,
-      "color": "@gpu_frame",
-      "ridge": "gpu-frame"
+      "color": "@gpu_frame"
     },
     {
       "type": "rect",
@@ -367,8 +357,7 @@
       "y": 310,
       "w": 5,
       "h": 162,
-      "color": "@mem_frame",
-      "ridge": "mem-box"
+      "color": "@mem_frame"
     },
     {
       "type": "rect",
@@ -377,8 +366,7 @@
       "y": 310,
       "w": 5,
       "h": 162,
-      "color": "@mem_frame",
-      "ridge": "mem-box"
+      "color": "@mem_frame"
     },
     {
       "type": "rect",
@@ -387,8 +375,7 @@
       "y": 310,
       "w": 473,
       "h": 5,
-      "color": "@mem_frame",
-      "ridge": "mem-box"
+      "color": "@mem_frame"
     },
     {
       "type": "rect",
@@ -397,8 +384,7 @@
       "y": 310,
       "w": 5,
       "h": 162,
-      "color": "@net_frame",
-      "ridge": "net-box"
+      "color": "@net_frame"
     },
     {
       "type": "rect",
@@ -407,8 +393,7 @@
       "y": 310,
       "w": 5,
       "h": 162,
-      "color": "@net_frame",
-      "ridge": "net-box"
+      "color": "@net_frame"
     },
     {
       "type": "rect",
@@ -417,8 +402,7 @@
       "y": 310,
       "w": 472,
       "h": 5,
-      "color": "@net_frame",
-      "ridge": "net-box"
+      "color": "@net_frame"
     },
     {
       "type": "text",
