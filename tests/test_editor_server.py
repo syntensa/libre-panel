@@ -6,8 +6,10 @@ import tomllib
 from types import SimpleNamespace
 
 import pytest
+from editor_token import token_of
 from fake_hardware import PC, TIDY
 
+from libre_panel.editor import access
 from libre_panel.editor.server import make_server
 from libre_panel.sensors import hardware
 from libre_panel.theme.model import find_theme, load_theme
@@ -26,12 +28,14 @@ def server():
 
 
 def request(port, method, path, body=None, headers=None, host=None):
+    """A request as the app makes it: with the token of the server on ``port``, unless
+    ``headers`` says otherwise (a header given as None is left out)."""
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
-    hdrs = {"Host": host or f"127.0.0.1:{port}"}
+    hdrs = {"Host": host or f"127.0.0.1:{port}", access.HEADER: token_of(port)}
     if method == "POST":
-        hdrs["X-Libre-Panel"] = "1"
         hdrs["Content-Type"] = "application/json"
     hdrs.update(headers or {})
+    hdrs = {name: value for name, value in hdrs.items() if value is not None}
     data = body if isinstance(body, bytes) or body is None else json.dumps(body).encode()
     conn.request(method, path, body=data, headers=hdrs)
     response = conn.getresponse()

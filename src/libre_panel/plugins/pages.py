@@ -3,8 +3,9 @@
 The page's files (``index.html``, scripts, styles) are served from
 ``/plugins/<id>/``; its API from ``/api/plugins/<id>/<path>``. Pages link
 ``/static/editor.css`` and import ``/static/kit.js`` to look and work like
-the editor. The editor listens on 127.0.0.1 only and writes need its
-``X-Libre-Panel`` header, as everywhere in the editor.
+the editor. The editor listens on 127.0.0.1 only, and a request to a page's API (GET as much as
+POST) needs the secret token of the run in the ``X-Libre-Panel`` header, as everywhere in the
+editor (``editor/access.py``): ``kit.js`` sends it.
 """
 
 from __future__ import annotations
@@ -88,6 +89,16 @@ class PageContext:
         """True when the background app (the tray, ``libre-panel start``) serves this
         editor, so the panel and the services run here; False in ``libre-panel editor``."""
         return self._controls is not None
+
+    @property
+    def elevated(self) -> bool:
+        """True when Libre Panel runs with administrator rights (root on Linux). A request
+        cannot be told from the person's, and what it asks for is done with those rights: a page
+        then leaves what names a program, a library or a file to config.toml, as the app's own
+        settings do (``editor/settings.py``), and does not start or write what a request names."""
+        from libre_panel.editor import access
+
+        return access.elevated()
 
     @property
     def config_path(self) -> Path:

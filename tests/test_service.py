@@ -5,11 +5,13 @@ import json
 import time
 
 import pytest
+from editor_token import token_of
 from PIL import Image
 from test_autostart import FakeTasks
 
 from libre_panel.autostart import Autostart
 from libre_panel.config import config_dir, load_config, set_config_value
+from libre_panel.editor import access
 from libre_panel.instance import AlreadyRunning, InstanceLock
 from libre_panel.service import BackgroundApp, PanelService, running_instance
 
@@ -143,8 +145,8 @@ def call(url, method="GET", body=None, header=True):
     host = url.split("//")[1].rstrip("/")
     conn = http.client.HTTPConnection(*host.split(":"), timeout=10)
     headers = {"Host": host, "Content-Type": "application/json"}
-    if header and method == "POST":
-        headers["X-Libre-Panel"] = "1"
+    if header:  # the token of the app's editor, as the app sends it
+        headers[access.HEADER] = token_of(host.split(":")[1])
     conn.request(method, "/api/app", body=json.dumps(body) if body else None, headers=headers)
     response = conn.getresponse()
     data = json.loads(response.read())

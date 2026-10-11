@@ -7,8 +7,10 @@ import threading
 from io import BytesIO
 
 import pytest
+from editor_token import token_of
 from PIL import Image, ImageChops
 
+from libre_panel.editor import access
 from libre_panel.editor.server import make_server
 from libre_panel.theme.model import LOOK_RANGES, LOOK_SPECS, find_theme, load_theme
 
@@ -27,7 +29,7 @@ def ask(port, method, path, body=None):
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=20)
     headers = {
         "Host": f"127.0.0.1:{port}",
-        "X-Libre-Panel": "1",
+        access.HEADER: token_of(port),
         "Content-Type": "application/json",
     }
     data = None if body is None else json.dumps(body).encode()

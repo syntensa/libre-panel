@@ -1,9 +1,10 @@
 """Local web server for the visual theme editor.
 
-Binds to 127.0.0.1 only. Because any website the user visits could try to
-talk to a local port, requests must carry the expected Host header and
-writes need a custom header that browsers never send cross-origin without a
-CORS preflight (which this server does not grant).
+Binds to 127.0.0.1 only. That keeps other computers out, not the other users of this one, and not
+a website the user visits (it can try a local port). So a request must carry the expected Host
+header, and the secret token of this run in the ``X-Libre-Panel`` header (access.py): everything
+but the app's own files needs it. Every route is in ``ROUTES``; one that is not there is not
+answered, and the token is asked for before the answer "not found".
 """
 
 from __future__ import annotations
@@ -16,11 +17,13 @@ import math
 import re
 import threading
 import webbrowser
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import ParseResult, parse_qs, unquote, urlparse
 
 from libre_panel import __version__, i18n
 from libre_panel.config import (
@@ -33,9 +36,11 @@ from libre_panel.config import (
     user_themes_dir,
 )
 from libre_panel.devices.models import MODELS, PROTOCOLS
+from libre_panel.editor import access
 from libre_panel.editor import settings as app_settings
 from libre_panel.editor.presets import presets_for_editor
 from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_font_path, builtin_fonts
+from libre_panel.i18n import t
 from libre_panel.icons import ICON_NAMES
 from libre_panel.render.renderer import Renderer
 from libre_panel.sensors.base import SensorHub, Snapshot
@@ -344,15 +349,51 @@ class EditorState:
                 self._hub.close()
 
 
+_PART = re.compile(r"\{(\w+)([+*]?)\}")
+_PARTS = {"": "[^/]+", "+": ".+", "*": ".*"}
+
+
+def _compile(template: str) -> re.Pattern[str]:
+    """The pattern of a route's template: ``{name}`` is one part of the path, ``{name+}`` the
+    rest of it (one character or more), ``{name*}`` the rest, or nothing."""
+    pieces, last = [], 0
+    for part in _PART.finditer(template):
+        pieces.append(re.escape(template[last : part.start()]))
+        pieces.append(f"(?P<{part[1]}>{_PARTS[part[2]]})")
+        last = part.end()
+    pieces.append(re.escape(template[last:]))
+    return re.compile("".join(pieces))
+
+
+@dataclass(frozen=True)
+class Route:
+    """One way into the server (``ROUTES``): the method, the path as a template, what to do."""
+
+    method: str
+    template: str
+    handle: Callable[[EditorHandler, re.Match[str], ParseResult], None]
+    # the app's own files and those of plugins' pages (code, no data): no token needed
+    public: bool = False
+    # an <img> asks for it and cannot send the header: the token may be in the query (?token=)
+    picture: bool = False
+    pattern: re.Pattern[str] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "pattern", _compile(self.template))
+
+
 class EditorHandler(BaseHTTPRequestHandler):
     server_version = f"LibrePanelEditor/{__version__}"
     state: EditorState
     allowed_hosts: set[str]
+    token: str  # what a request must carry (access.py); made with the server
     # The running background app (tray or `start`); None for a plain `libre-panel editor`.
     controls: Any = None
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        log.debug("editor: " + fmt, *args)
+        # the line of a request has its address, and a picture's address may have the token
+        shown = [access.hide_token(arg) if isinstance(arg, str) else arg for arg in args]
+        log.debug("editor: " + fmt, *shown)
 
     # -- helpers -----------------------------------------------------------
 
@@ -362,6 +403,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
         self.send_header(
             "Content-Security-Policy",
             "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'",
@@ -395,10 +437,25 @@ class EditorHandler(BaseHTTPRequestHandler):
         self._json({"error": message}, status)
 
     def _host_ok(self) -> bool:
+        """Only the names this server listens under are answered (a web page that reaches it
+        through a name of its own gets nothing), and a browser's request only from a page of
+        the app itself."""
         if self.headers.get("Host", "") not in self.allowed_hosts:
             self._error("forbidden host", HTTPStatus.FORBIDDEN)
             return False
+        origin = self.headers.get("Origin")  # sent by a browser on a request from another page
+        if origin is not None and origin not in {f"http://{host}" for host in self.allowed_hosts}:
+            self._error("forbidden origin", HTTPStatus.FORBIDDEN)
+            return False
         return True
+
+    def _token_ok(self, url: ParseResult, route: Route | None) -> bool:
+        """Whether the request carries this run's token: in the header, or, for a picture, which
+        an <img> asks for and cannot send a header with, in the query."""
+        given = self.headers.get(access.HEADER)
+        if given is None and route is not None and route.picture:
+            given = (parse_qs(url.query).get(access.NAME) or [""])[0]
+        return access.matches(given, self.token)
 
     def _read_body(self, limit: int) -> bytes | None:
         try:
@@ -421,64 +478,38 @@ class EditorHandler(BaseHTTPRequestHandler):
             self._error("invalid JSON")
             return None
 
-    # -- GET ---------------------------------------------------------------
+    # -- the routes --------------------------------------------------------------
 
     def do_GET(self) -> None:  # noqa: N802
+        self._serve("GET")
+
+    def do_POST(self) -> None:  # noqa: N802
+        self._serve("POST")
+
+    def _serve(self, method: str) -> None:
+        """Answer a request: only to a name of this server and only with the token, but for
+        the app's own files. The token is asked for first, also for a path that is no route:
+        only those who may use the server learn what is there."""
         if not self._host_ok():
             return
-        path = urlparse(self.path).path
-        if path in ("/", "/index.html"):
-            return self._app_file("index.html")
-        if path in ("/classic", "/classic/", "/classic/index.html"):
-            return self._redirect("/")  # a bookmark of the old editor leads to the app
-        if path.startswith("/app/fonts/"):
-            return self._font(path[len("/app/fonts/") :])
-        if path.startswith("/app/"):
-            return self._app_file(path[len("/app/") :])
-        if path.startswith("/static/"):
-            return self._static(path[len("/static/") :])
-        if path == "/api/specs":
-            return self._json(self._specs())
-        if path == "/api/themes":
-            return self._json(_theme_list())
-        match = re.fullmatch(r"/api/themes/([^/]+)/assets", path)
-        if match:
-            return self._assets(match.group(1))
-        match = re.fullmatch(r"/api/themes/([^/]+)/assets/(.+)", path)
-        if match:
-            return self._asset_file(match.group(1), unquote(match.group(2)))
-        match = re.fullmatch(r"/api/themes/([^/]+)/preview", path)
-        if match:
-            return self._theme_preview(match.group(1), parse_qs(urlparse(self.path).query))
-        if path == "/api/readings":
-            return self._json(self._readings(parse_qs(urlparse(self.path).query)))
-        if path == "/api/pages":
-            return self._panel_pages()
-        if path in _SETTINGS_GET:
-            return self._settings(_SETTINGS_GET[path])
-        if path.startswith("/api/themes/"):
-            return self._get_theme(path[len("/api/themes/") :])
-        if path == "/api/sensors":
-            return self._json(self._sensors())
-        if path == "/api/i18n":
-            return self._json(self._i18n())
-        if path == "/api/app":
-            if self.controls is None:
-                return self._json({"available": False})
-            return self._json({"available": True, **self.controls.snapshot()})
-        if path == "/api/hardware":
-            asked = parse_qs(urlparse(self.path).query, keep_blank_values=True).get("refresh")
-            return self._hardware(asked is not None and asked[0] not in ("0", "false"))
-        if path == "/api/plugins/pages":
-            return self._json(self._pages())
-        match = re.fullmatch(r"/plugins/([^/]+)/(.*)", path)
-        if match:
-            return self._page_file(match.group(1), match.group(2) or "index.html")
-        match = re.fullmatch(r"/api/plugins/([^/]+)/(.*)", path)
-        if match:
-            query = parse_qs(urlparse(self.path).query)
-            return self._page_api("GET", match.group(1), match.group(2), query, None)
-        self._error("not found", HTTPStatus.NOT_FOUND)
+        url = urlparse(self.path)
+        route, match = None, None
+        for candidate in ROUTES:
+            found = candidate.method == method and candidate.pattern.fullmatch(url.path)
+            if found:
+                route, match = candidate, found
+                break
+        if (route is None or not route.public) and not self._token_ok(url, route):
+            return self._error(
+                t(
+                    "Access token missing or wrong. Open Libre Panel from its window or its "
+                    "tray icon, or with the address that libre-panel editor prints."
+                ),
+                HTTPStatus.FORBIDDEN,
+            )
+        if route is None or match is None:
+            return self._error("not found", HTTPStatus.NOT_FOUND)
+        route.handle(self, match, url)
 
     # -- plugin editor pages ---------------------------------------------------
 
@@ -805,50 +836,14 @@ class EditorHandler(BaseHTTPRequestHandler):
             found[key] = {"key": key, "unit": "", "label": label, "picture": True}
         return [found[key] for key in sorted(found)]
 
-    # -- POST --------------------------------------------------------------
+    # -- what POST routes do ---------------------------------------------------------
 
-    def do_POST(self) -> None:  # noqa: N802
-        if not self._host_ok():
+    def _post_page(self, page_id: str, path: str, query: dict[str, list[str]]) -> None:
+        """A plugin's page gets what it was sent (a JSON object) and the answer is its own."""
+        body = self._read_json()
+        if body is None:
             return
-        if self.headers.get("X-Libre-Panel") != "1":
-            return self._error("missing X-Libre-Panel header", HTTPStatus.FORBIDDEN)
-        url = urlparse(self.path)
-        path = url.path
-        if path == "/api/render":
-            return self._render()
-        if path == "/api/adapt":
-            return self._adapt()
-        if path == "/api/module-previews":
-            return self._module_previews()
-        if path == "/api/templates":
-            return self._templates()
-        if path == "/api/detach":
-            return self._detach()
-        if path == "/api/app":
-            return self._app_action()
-        if path == "/api/language":
-            return self._set_language()
-        if path == "/api/pages":
-            return self._set_panel_page()
-        if path in _SETTINGS_POST:
-            return self._settings(_SETTINGS_POST[path], body=True)
-        if path == "/api/preset-previews":
-            return self._preset_previews()
-        if path == "/api/hardware":
-            return self._set_hardware()
-        match = re.fullmatch(r"/api/plugins/([^/]+)/(.*)", path)
-        if match:
-            body = self._read_json()
-            if body is None:
-                return None
-            query = parse_qs(url.query)
-            return self._page_api("POST", match.group(1), match.group(2), query, body)
-        match = re.fullmatch(r"/api/themes/([^/]+)/assets", path)
-        if match:
-            return self._upload_asset(match.group(1), parse_qs(url.query))
-        if path.startswith("/api/themes/"):
-            return self._save(path[len("/api/themes/") :])
-        self._error("not found", HTTPStatus.NOT_FOUND)
+        self._page_api("POST", page_id, path, query, body)
 
     def _set_language(self) -> None:
         payload = self._read_json()
@@ -1021,6 +1016,12 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error(str(exc))
         self._json({"available": True, **snapshot})
 
+    def _app_state(self) -> None:
+        """``GET /api/app``: the background app's state, if this editor belongs to one."""
+        if self.controls is None:
+            return self._json({"available": False})
+        self._json({"available": True, **self.controls.snapshot()})
+
     def _base_folder(self, base: Any) -> Path | None:
         if isinstance(base, str) and valid_theme_name(base):
             try:
@@ -1182,8 +1183,100 @@ class EditorHandler(BaseHTTPRequestHandler):
         self._json({"ok": True, "path": f"assets/{name}"})
 
 
+def _refresh_asked(query: str) -> bool:
+    """``?refresh=1`` (and ``?refresh``): ask the computer for its hardware's names again."""
+    asked = parse_qs(query, keep_blank_values=True).get("refresh")
+    return asked is not None and asked[0] not in ("0", "false")
+
+
+# Every route of the server, the first that fits answers. A request needs the token, unless the
+# route is ``public``; tests/test_editor_access.py goes through this list.
+ROUTES: tuple[Route, ...] = (
+    # -- the app: its page, modules, fonts, styles; the files of plugins' pages -----------------
+    Route("GET", "/", lambda h, m, u: h._app_file("index.html"), public=True),
+    Route("GET", "/index.html", lambda h, m, u: h._app_file("index.html"), public=True),
+    # a bookmark of the old editor leads to the app
+    Route("GET", "/classic", lambda h, m, u: h._redirect("/"), public=True),
+    Route("GET", "/classic/", lambda h, m, u: h._redirect("/"), public=True),
+    Route("GET", "/classic/index.html", lambda h, m, u: h._redirect("/"), public=True),
+    Route("GET", "/app/fonts/{name*}", lambda h, m, u: h._font(m["name"]), public=True),
+    Route("GET", "/app/{name*}", lambda h, m, u: h._app_file(m["name"]), public=True),
+    Route("GET", "/static/{name*}", lambda h, m, u: h._static(m["name"]), public=True),
+    Route(
+        "GET",
+        "/plugins/{page}/{name*}",
+        lambda h, m, u: h._page_file(m["page"], m["name"] or "index.html"),
+        public=True,
+    ),
+    # -- reading ------------------------------------------------------------------------------
+    Route("GET", "/api/specs", lambda h, m, u: h._json(h._specs())),
+    Route("GET", "/api/themes", lambda h, m, u: h._json(_theme_list())),
+    Route("GET", "/api/themes/{theme}/assets", lambda h, m, u: h._assets(m["theme"])),
+    Route(
+        "GET",
+        "/api/themes/{theme}/assets/{rel+}",
+        lambda h, m, u: h._asset_file(m["theme"], unquote(m["rel"])),
+        picture=True,
+    ),
+    Route(
+        "GET",
+        "/api/themes/{theme}/preview",
+        lambda h, m, u: h._theme_preview(m["theme"], parse_qs(u.query)),
+        picture=True,
+    ),
+    Route("GET", "/api/readings", lambda h, m, u: h._json(h._readings(parse_qs(u.query)))),
+    Route("GET", "/api/pages", lambda h, m, u: h._panel_pages()),
+    *(
+        Route("GET", path, lambda h, m, u, name=name: h._settings(name))
+        for path, name in _SETTINGS_GET.items()
+    ),
+    Route("GET", "/api/themes/{theme+}", lambda h, m, u: h._get_theme(m["theme"])),
+    Route("GET", "/api/sensors", lambda h, m, u: h._json(h._sensors())),
+    Route("GET", "/api/i18n", lambda h, m, u: h._json(h._i18n())),
+    Route("GET", "/api/app", lambda h, m, u: h._app_state()),
+    Route("GET", "/api/hardware", lambda h, m, u: h._hardware(_refresh_asked(u.query))),
+    Route("GET", "/api/plugins/pages", lambda h, m, u: h._json(h._pages())),
+    Route(
+        "GET",
+        "/api/plugins/{page}/{rest*}",
+        lambda h, m, u: h._page_api("GET", m["page"], m["rest"], parse_qs(u.query), None),
+        picture=True,  # a page may answer with a picture
+    ),
+    # -- writing ------------------------------------------------------------------------------
+    Route("POST", "/api/render", lambda h, m, u: h._render()),
+    Route("POST", "/api/adapt", lambda h, m, u: h._adapt()),
+    Route("POST", "/api/module-previews", lambda h, m, u: h._module_previews()),
+    Route("POST", "/api/templates", lambda h, m, u: h._templates()),
+    Route("POST", "/api/detach", lambda h, m, u: h._detach()),
+    Route("POST", "/api/app", lambda h, m, u: h._app_action()),
+    Route("POST", "/api/language", lambda h, m, u: h._set_language()),
+    Route("POST", "/api/pages", lambda h, m, u: h._set_panel_page()),
+    *(
+        Route("POST", path, lambda h, m, u, name=name: h._settings(name, body=True))
+        for path, name in _SETTINGS_POST.items()
+    ),
+    Route("POST", "/api/preset-previews", lambda h, m, u: h._preset_previews()),
+    Route("POST", "/api/hardware", lambda h, m, u: h._set_hardware()),
+    Route(
+        "POST",
+        "/api/plugins/{page}/{rest*}",
+        lambda h, m, u: h._post_page(m["page"], m["rest"], parse_qs(u.query)),
+    ),
+    Route(
+        "POST",
+        "/api/themes/{theme}/assets",
+        lambda h, m, u: h._upload_asset(m["theme"], parse_qs(u.query)),
+    ),
+    Route("POST", "/api/themes/{theme*}", lambda h, m, u: h._save(m["theme"])),
+)
+
+
 class EditorServer(ThreadingHTTPServer):
     daemon_threads = True
+
+    def __init__(self, address: tuple[str, int], handler: type[EditorHandler]) -> None:
+        super().__init__(address, handler)
+        self.token = handler.token  # what a request must carry (access.py)
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         # A browser that closes a tab mid-request is normal, not an error.
@@ -1196,13 +1289,19 @@ class EditorServer(ThreadingHTTPServer):
 
 
 def make_server(
-    port: int = 8765, config_path: Path | None = None, controls: Any = None
-) -> ThreadingHTTPServer:
+    port: int = 8765, config_path: Path | None = None, controls: Any = None, token: str = ""
+) -> EditorServer:
+    """The editor's server, not yet serving. Its ``token`` is new, unless given (access.py)."""
     state = EditorState(config_path, controls)
     handler = type(
         "Handler",
         (EditorHandler,),
-        {"state": state, "allowed_hosts": set(), "controls": controls},
+        {
+            "state": state,
+            "allowed_hosts": set(),
+            "controls": controls,
+            "token": token or access.new_token(),
+        },
     )
     server = EditorServer(("127.0.0.1", port), handler)
     real_port = server.server_address[1]
@@ -1227,20 +1326,24 @@ def serve(
     except OSError:  # port taken: any free port will do
         server = make_server(0, config_path)
     url = f"http://127.0.0.1:{server.server_address[1]}/"
-    print(f"Libre Panel theme editor running at {url}  (Ctrl+C to stop)")
+    # the address with the token: the way into the app for whoever started it (access.py)
+    print(
+        f"Libre Panel theme editor running at {access.with_token(url, server.token)}"
+        "  (Ctrl+C to stop)"
+    )
     backend = None if browser or not open_browser else window.load_backend()
     if backend is not None:
         thread = threading.Thread(target=server.serve_forever, name="editor", daemon=True)
         thread.start()
         try:
-            window.run_window(url, view, webview=backend)
+            window.run_window(url, view, webview=backend, token=server.token)
         finally:
             server.shutdown()
             server.server_close()
             server.editor_state.close()  # type: ignore[attr-defined]
         return
     if open_browser:
-        webbrowser.open(window.view_url(url, view))
+        webbrowser.open(access.with_token(window.view_url(url, view), server.token))
     try:
         server.serve_forever()
     except KeyboardInterrupt:

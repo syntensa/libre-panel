@@ -319,8 +319,9 @@ def running(
     theme: dict[str, Any], folder: Path | None = None, language: str = "en"
 ) -> Iterator[str]:
     """The editor's server on a port of its own, with ``theme`` (and the files in ``folder``)
-    in a home called LibrePanel; yields its address."""
+    in a home called LibrePanel; yields its address, with the access token the app takes."""
     from libre_panel.config import set_config_value
+    from libre_panel.editor import access
     from libre_panel.editor import server as editor
     from libre_panel.plugins import loader
     from libre_panel.sensors.demo import demo_snapshot
@@ -344,7 +345,9 @@ def running(
             server = editor.make_server(port=0)
             threading.Thread(target=server.serve_forever, daemon=True).start()
             try:
-                yield f"http://127.0.0.1:{server.server_address[1]}/"
+                yield access.with_token(
+                    f"http://127.0.0.1:{server.server_address[1]}/", server.token
+                )
             finally:
                 server.shutdown()
                 server.server_close()

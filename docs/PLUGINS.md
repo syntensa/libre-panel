@@ -890,17 +890,28 @@ await api("curve", { method: "POST", body: { points } });
 ```
 
 - Files come from `/plugins/<id>/` (`.html`, `.js`, `.css`, images, fonts,
-  `.json`; nothing outside the folder). Scripts must be files: the editor's
-  security policy allows no inline scripts.
+  `.json`; nothing outside the folder). They are given to anyone who can reach
+  the editor, so keep nothing in them that is private. Scripts must be files:
+  the editor's security policy allows no inline scripts.
 - `handle(method, path, query, body)` answers `/api/plugins/<id>/<path>` and
   returns `(status, data)`; `data` is sent as JSON. `(status, bytes,
   "image/jpeg")` sends a file instead, e.g. the picture on the panel for an
-  `<img>`. GET must not change anything: changes go through POST, which needs
-  the editor's header (`kit.js`'s `api()` sends it). The editor listens on
-  127.0.0.1 only.
+  `<img>`. GET must not change anything: changes go through POST. The editor
+  listens on 127.0.0.1 only, and every request to `/api/plugins/<id>/…`, GET
+  and POST, must carry the run's secret token, which no other user of the PC
+  has (`kit.js`'s `api()` sends it; the server answers 403 without it).
+  `handle` runs for requests that have it, and with the rights of Libre Panel:
+  a page that changes what a program runs or loads (a path to a program, a
+  library, a file it writes) should leave that to `config.toml` when Libre
+  Panel runs with administrator rights (`self.context.elevated`, below), as the
+  app's own settings do.
 - `kit.js` exports `api`, `loadTexts`, `t`, `language`, `el`, `field`,
-  `button` and `setStatus`; `editor.css` gives the page Libre Panel's dark
-  colours and controls.
+  `button`, `setStatus` and `withToken`. An `<img>` cannot send the token in a
+  header; `img.src = withToken("/api/plugins/<id>/picture")` puts it in the
+  address, which the server accepts for the `GET` routes of a page (and for
+  nothing else). A page that does not use `kit.js` imports `authHeaders()` from
+  `/static/token.js` for its own `fetch` calls. `editor.css` gives the page
+  Libre Panel's dark colours and controls.
 
 `self.context` gives what the page may need from the running app. Only the
 background app (the tray, `libre-panel start`) runs a panel and services; in a
@@ -910,6 +921,7 @@ None, so a page says what is missing instead of failing.
 | | |
 |---|---|
 | `background` | True when the background app serves this editor |
+| `elevated` | True when Libre Panel runs with administrator rights (root on Linux). A page then leaves a setting that names a program, a library or a file to `config.toml`: a request cannot be told from the person's, and what it asks for would be done with those rights |
 | `service(name)` / `services()` | the running service or None / each enabled service and its state (`running`, `failed: …`, `not installed`, `stopped`) |
 | `restart_service(name)` | stop and start an enabled service again; its new state |
 | `follow_config()` | after a page wrote `config.toml` (`services.enabled`, a service's options): have the running app bring its services in line with it now, instead of when the panel loop next sees the file, which it does not while the panel is paused. Nothing happens in a plain editor |

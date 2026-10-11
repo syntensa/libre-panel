@@ -1,10 +1,12 @@
 // What the built-in pages share: messages, requests, polling and small building blocks.
-import { api, button, el, field, setStatus, t } from "/static/kit.js";
+import { api, button, el, field, setStatus, t, withToken } from "/static/kit.js";
 
 export { api, button, el, field, t };
 
-// The address of the page's own API, for what is not JSON (a picture).
-export const pageUrl = (path) => `/api/plugins/${encodeURIComponent(location.pathname.split("/")[2] || "")}/${path}`;
+// The address of the page's own API, for what is not JSON (a picture): an <img> sends no header,
+// so the token goes in the address.
+export const pageUrl = (path) =>
+  withToken(`/api/plugins/${encodeURIComponent(location.pathname.split("/")[2] || "")}/${path}`);
 
 export const $ = (id) => document.getElementById(id);
 

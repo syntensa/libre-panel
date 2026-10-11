@@ -4,7 +4,7 @@
 // request waits for the last one.
 
 import { useCallback, useEffect, useRef, useState } from "../lib/preact.js";
-import { get, post } from "./api.js";
+import { authHeaders, get, post } from "./api.js";
 
 const BASE = "/api/plugins/control";
 
@@ -92,7 +92,7 @@ export function useLivePicture({ width = 960, every = 250, on = true } = {}) {
       let wait = every;
       if (!document.hidden) {
         try {
-          const response = await fetch(control.liveUrl(width));
+          const response = await fetch(control.liveUrl(width), { headers: authHeaders() });
           if (!alive) return;
           if (response.ok) keep(URL.createObjectURL(await response.blob()), 200);
           else {
