@@ -289,7 +289,8 @@ memory_name = "Kingston Fury Beast DDR5-5600 2 x 16 GB"
 gpu_name = ""                  # empty: the one found
 ```
 
-A name is one line of at most 100 characters. It wins over every other source.
+A name is one line of at most 100 characters. It wins over every other source
+(but for the `demo` source, whose made-up names stay when it is in your list).
 A changed `config.toml` is picked up while Libre Panel runs. The editor reads
 and writes the names through `GET /api/hardware`, which answers
 `{"cpu": {"detected": "Ryzen 5 7600", "custom": ""}, "gpu": {...},
