@@ -94,8 +94,11 @@ export function useLivePicture({ width = 960, every = 250, on = true } = {}) {
         try {
           const response = await fetch(control.liveUrl(width));
           if (!alive) return;
-          if (response.ok) keep(URL.createObjectURL(await response.blob()), 200);
-          else {
+          if (response.ok) {
+            const picture = await response.blob();
+            if (!alive) return; // the view is gone: nobody revokes a URL made now
+            keep(URL.createObjectURL(picture), 200);
+          } else {
             keep(null, response.status);
             wait = Math.max(every, 1500);
           }

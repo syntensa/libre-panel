@@ -699,6 +699,53 @@ def test_live_without_the_panel_says_so_and_keeps_the_switches(app_url, isolated
         assert wait_for(lambda: "game" in load_config().services.enabled)
 
 
+WATCH_BLOBS = """
+  // the blob URLs that are made and not revoked yet
+  window.__blobs = new Set();
+  const make = URL.createObjectURL.bind(URL);
+  const revoke = URL.revokeObjectURL.bind(URL);
+  URL.createObjectURL = (blob) => {
+    const url = make(blob);
+    window.__blobs.add(url);
+    return url;
+  };
+  URL.revokeObjectURL = (url) => {
+    window.__blobs.delete(url);
+    revoke(url);
+  };
+  // a picture's body that waits to be let go, as if it were still on its way
+  window.__bodies = [];
+  window.__let_go = 0;
+  const body = Response.prototype.blob;
+  Response.prototype.blob = function () {
+    return new Promise((resolve) => {
+      window.__bodies.push(() =>
+        body.call(this).then((blob) => {
+          resolve(blob);
+          window.__let_go++;
+        }),
+      );
+    });
+  };
+"""
+
+
+def test_a_picture_that_arrives_after_live_was_left_is_not_kept(background):
+    """The picture's body was still on its way when the view went: the URL made for it then
+    was never revoked (a picture of memory kept for every such visit)."""
+    app, url = background
+    with browser_page(url, "home", allow=PICTURE) as page:
+        page.add_init_script(WATCH_BLOBS)
+        page.reload()
+        page.goto(f"{url}#/live")
+        page.wait_for_function("window.__bodies.length > 0")  # a picture is on its way
+        page.goto(f"{url}#/settings/panel")  # Live is gone
+        page.wait_for_selector(".settings-main")
+        js(page, "window.__bodies.forEach((letGo) => letGo())")
+        page.wait_for_function("window.__let_go === window.__bodies.length")  # they came after all
+        assert js(page, "window.__blobs.size") == 0
+
+
 def test_the_new_views_speak_german(app_url, isolated_home):
     from libre_panel import i18n
 
