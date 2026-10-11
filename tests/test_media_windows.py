@@ -225,6 +225,14 @@ def test_no_cover_is_read_until_somebody_shows_it(winrt, backend):
     assert look_again(backend, 1, want_cover=False).cover is None  # and not shown any more
 
 
+def test_a_cover_that_is_shown_again_after_a_pause_is_read_again(winrt, backend):
+    session = winrt.manager.current = FakeSession(thumbnail=FakeThumbnail(b"old"))
+    assert look_again(backend, 1).cover == b"old"
+    look_again(backend, 2, want_cover=False)  # nobody shows it for a while
+    session.thumbnail = FakeThumbnail(b"new")  # the picture changed meanwhile, the track did not
+    assert look_again(backend, 1).cover == b"new"
+
+
 def test_a_cover_that_comes_after_the_title_is_read_when_it_is_there(winrt, backend):
     session = winrt.manager.current = FakeSession(thumbnail=None)
     assert look_again(backend, 2).cover is None

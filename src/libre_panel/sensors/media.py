@@ -204,6 +204,8 @@ class _WindowsBackend:
                 self._cover_key, self._cover_asked = key, now
                 self._cover = await self._read_cover(props.thumbnail)
             cover = self._cover
+        elif not want_cover:
+            self._cover_key = None  # nobody shows it: read it again when somebody does
         return Track(
             state, props.title, props.artist or "", props.album_title or "",
             position, duration, cover, _app_name(app_id or ""), at, app_id or "",
