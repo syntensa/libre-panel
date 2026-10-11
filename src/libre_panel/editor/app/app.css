@@ -279,7 +279,7 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 0;
+  flex-shrink: 0;
 }
 
 .theme-name {
@@ -348,10 +348,25 @@ a:hover {
 }
 
 .search-trigger.wide {
-  margin-left: 0;
   width: 260px;
+  min-width: 150px;
+  flex-shrink: 1;
   gap: 10px;
   font-size: 14px;
+}
+
+.search-trigger.wide .search-trigger-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.topbar > * {
+  flex-shrink: 0;
+}
+
+.topbar > .search-trigger.wide,
+.topbar > .topbar-flex {
+  flex-shrink: 1;
 }
 
 .search-trigger-text {

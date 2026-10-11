@@ -99,7 +99,7 @@ export function Library() {
   const groups = [
     ["all", t("All")],
     ["system", t("System")],
-    ["time", t("Time")],
+    ["time", t("Time and date")],
     ["media", t("Media")],
     ["game", t("Game")],
   ];

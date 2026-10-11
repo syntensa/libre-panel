@@ -1045,7 +1045,8 @@
     "shows the normal theme": "zeigt das normale Theme",
     "Show the normal theme here": "Hier das normale Theme zeigen",
     "Close the window? Changes that are not saved are lost.": "Fenster schließen? Was nicht gespeichert ist, geht verloren.",
-    "after a game": "nach einem Spiel"
+    "after a game": "nach einem Spiel",
+    "Time and date": "Zeit"
   },
   "fields": {
     "align": "Ausrichtung",

@@ -183,6 +183,14 @@
   font-weight: 600;
 }
 
+.library .chips {
+  gap: 5px;
+}
+
+.library .chip {
+  padding: 5px 10px;
+}
+
 .library-hint {
   margin: 0;
   padding: 12px;
