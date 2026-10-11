@@ -463,7 +463,9 @@ class Renderer:
         self.moving = False  # True while an animation has not settled yet
         self._fonts: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
         self._digit_width: dict[int, float] = {}
-        self._images: dict[tuple[str, int, int, str, str], Image.Image | None] = {}
+        self._images: OrderedDict[tuple[str, int, int, str, str], Image.Image | None] = (
+            OrderedDict()
+        )
         self._slide_lists: dict[str, tuple[float, list[str]]] = {}  # widget id -> pictures
         self._gauge_parts: dict[tuple[Any, ...], Image.Image] = {}  # static rings, colour fields
         # Video mode (the main loop sets these): every frame goes out, so graphs
@@ -582,22 +584,38 @@ class Renderer:
             self._fonts[key] = font or ImageFont.load_default(size)
         return self._fonts[key]
 
+    IMAGE_BYTES = 64 << 20  # pictures kept fitted: a slideshow of a folder reads the rest again
+
     def _asset_image(
         self, rel: str, w: int, h: int, fit: str = "stretch", align: str = "center"
     ) -> Image.Image | None:
         key = (rel, w, h, fit, align)
-        if key not in self._images:
-            image = None
-            if rel and self.theme.root is not None:
-                try:
-                    with Image.open(resolve_asset(self.theme.root, rel)) as src:
-                        image = ImageOps.exif_transpose(src).convert("RGBA")
-                    if w > 0 and h > 0:
-                        image = _fitted(image, w, h, fit, align)
-                except (OSError, ThemeError) as exc:
-                    self._warn(f"image {rel!r} could not be loaded ({exc})")
-            self._images[key] = image
-        return self._images[key]
+        if key in self._images:
+            self._images.move_to_end(key)
+            return self._images[key]
+        image = None
+        if rel and self.theme.root is not None:
+            try:
+                with Image.open(resolve_asset(self.theme.root, rel)) as src:
+                    image = ImageOps.exif_transpose(src).convert("RGBA")
+                if w > 0 and h > 0:
+                    image = _fitted(image, w, h, fit, align)
+            except (OSError, ThemeError) as exc:
+                self._warn(f"image {rel!r} could not be loaded ({exc})")
+        self._images[key] = image
+        self._forget_images()
+        return image
+
+    def _forget_images(self) -> None:
+        """Let the oldest pictures go beyond ``IMAGE_BYTES`` (the newest stays): a folder of
+        photos would else be kept whole, each as fitted, for as long as the theme shows."""
+
+        def size(image: Image.Image | None) -> int:  # (a picture that is not there counts too)
+            return 4096 if image is None else max(4096, image.width * image.height * 4)
+
+        total = sum(size(image) for image in self._images.values())
+        while total > self.IMAGE_BYTES and len(self._images) > 1:
+            total -= size(self._images.popitem(last=False)[1])
 
     def _load_background(self) -> Image.Image | None:
         rel = self.theme.background_image

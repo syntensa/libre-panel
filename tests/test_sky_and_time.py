@@ -175,6 +175,30 @@ def test_a_slideshow_takes_turns(tmp_path):
     assert any("outside" in w for w in renderer.warnings) or len(colors) == 3
 
 
+def test_a_slideshow_keeps_so_many_pictures_and_reads_the_others_again(tmp_path, monkeypatch):
+    """A folder of photos was kept whole, each as it was fitted, for as long as the theme showed
+    (2 000 photos of a bar's size: 7 GB)."""
+    folder = tmp_path / "pictures"
+    (folder / "assets").mkdir(parents=True)
+    colors = [(40 * k, 255 - 40 * k, 90) for k in range(6)]
+    for k, color in enumerate(colors):
+        Image.new("RGB", (40, 20), color).save(folder / "assets" / f"p{k}.png")
+    theme = frame(
+        {"type": "image", "id": "show", "x": 0, "y": 0, "w": 60, "h": 60, "fit": "cover",
+         "slides": "assets/*.png", "seconds": 5},
+        root=folder,
+    )  # fmt: skip
+    monkeypatch.setattr(Renderer, "IMAGE_BYTES", 3 * 60 * 60 * 4)  # room for three of them
+    renderer = Renderer(theme)
+    base = datetime(2026, 1, 1, 12, 0, 0)
+    for step in range(2 * len(colors)):  # round twice: what was let go is read again
+        image, _ = renderer.render(snap(base + timedelta(seconds=5 * step)))
+        shown, want = image.getpixel((30, 30)), colors[step % len(colors)]
+        assert max(abs(a - b) for a, b in zip(shown, want, strict=True)) <= 1, step
+        assert len(renderer._images) <= 3, step
+    assert renderer.warnings == []
+
+
 def test_sky_modules_without_a_place_show_the_moon():
     from test_modules import shown, snapshot, theme
 
