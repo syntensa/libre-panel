@@ -681,6 +681,9 @@
 - Design: in English the library, the layers and the inspector named the fan, the weather
   symbol and the download display by their raw types (*fan*, *symbol*, *downloads*); they
   are *Fan*, *Weather symbol* and *Download display* now
+- The brightness slider (panel chip, Start, Live) went back to the old value the moment it
+  was let go and jumped forward when the panel answered; it stays where it was let go, and
+  goes back only if the change is refused
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

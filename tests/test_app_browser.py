@@ -183,26 +183,31 @@ def set_range(locator, value):
     )
 
 
-def a_panel_app(target='Turing 9.2", video 50 fps', hint="", **numbers):
-    """What /api/app says for a connected 9.2" bar in video mode, as a route's handler: Start
-    then sees the model (and what the panel could not read) without a panel on this machine.
-    ``numbers`` change the panel's stats (``fps=20.0``)."""
-    import json
-
+def app_answer(target='Turing 9.2", video 50 fps', hint="", brightness=80, **numbers):
+    """What /api/app says for a connected 9.2" bar in video mode (``numbers`` change the
+    panel's stats: ``fps=20.0``)."""
     stats = {
         "fps": 50.0, "target_fps": 50, "streaming": True, "render_ms": 9.8,
         "render_peak_ms": 21.0, "kbps": 248.3, "blocks_per_s": 50.0, "max_depth": 1,
         "waits": 0, "drops": 0, "usb_errors": 0, "panel_restarts": 0, "ffmpeg_restarts": 0,
         "uptime_s": 10800, **numbers,
     }  # fmt: skip
-    answer = {
+    return {
         "available": True,
         "panel": {
             "state": "showing", "detail": "", "hint": hint, "target": target,
             "theme": "libre-default", "frames": 9, "mode": None, "stats": stats,
         },
-        "brightness": 80, "upside_down": False, "autostart": False, "can_quit": True,
+        "brightness": brightness, "upside_down": False, "autostart": False, "can_quit": True,
     }  # fmt: skip
+
+
+def a_panel_app(*args, **kwargs):
+    """``app_answer`` as a route's handler: Start then sees the model (and what the panel could
+    not read) without a panel on this machine."""
+    import json
+
+    answer = app_answer(*args, **kwargs)
 
     def handler(route, request):
         if request.method == "GET":
@@ -1324,6 +1329,49 @@ def test_the_chip_numbers_leave_out_what_nothing_counts(background):
         page.wait_for_selector("[data-number=fps]")
         page.wait_for_selector("[data-number=draw]")
         assert page.locator("[data-number=data]").count() == 0
+
+
+def test_brightness_stays_where_it_was_let_go_until_the_panel_answers(app_url):
+    """The slider gave the old value back the moment it was let go, until the background app
+    answered (a panel takes a moment); it keeps the new one, and returns to the old one only
+    when the change is refused."""
+    import json
+
+    held = []
+
+    def handler(route, request):
+        if request.method == "GET":
+            body = json.dumps(app_answer())
+            route.fulfill(status=200, content_type="application/json", body=body)
+        else:
+            held.append((route, json.loads(request.post_data)))
+
+    with browser_page(app_url, routes={"**/api/app": handler}, allow=("/api/app",)) as page:
+        page.locator(".panel-chip").click()
+        slider = page.locator(".popover input[aria-label='Brightness']")
+        shown = page.locator(".popover .slider output")
+        expect(slider).to_have_value("80")
+        set_range(slider, 35)
+        while not held:  # the change is on its way
+            page.wait_for_timeout(20)
+        assert held[0][1] == {"action": "brightness", "value": 35}
+        page.wait_for_timeout(200)  # time enough for the old value to come back, if it would
+        expect(slider).to_have_value("35")
+        expect(shown).to_have_text("35 %")
+        # answered: what the panel says is the same
+        route, _ = held.pop()
+        route.fulfill(
+            status=200, content_type="application/json", body=json.dumps(app_answer(brightness=35))
+        )
+        expect(slider).to_have_value("35")
+        # refused: the slider goes back to what the panel has
+        set_range(slider, 60)
+        while not held:
+            page.wait_for_timeout(20)
+        expect(slider).to_have_value("60")
+        route, _ = held.pop()
+        route.fulfill(status=500, content_type="application/json", body='{"error": "no"}')
+        expect(slider).to_have_value("80")
 
 
 # -- Design: the work of the hand ----------------------------------------------------------------

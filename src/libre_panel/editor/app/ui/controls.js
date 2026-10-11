@@ -183,9 +183,14 @@ export function Select({ value, options, onChange, label, class: className = "" 
   </span>`;
 }
 
-/** A slider; `onChange` while it moves, `onCommit` when it is let go. */
+/**
+ * A slider; `onChange` while it moves, `onCommit` when it is let go. Where it was let go it
+ * stays until `onCommit` (it may return a promise) is done, so it does not go back to the old
+ * `value` while a panel or the server takes the new one; after that `value` is what it shows.
+ */
 export function Slider({ value, min = 0, max = 100, step = 1, onChange, onCommit, label, format }) {
   const [moving, setMoving] = useState(null);
+  const moves = useRef(0); // a move that began later keeps the slider where the hand is
   const shown = moving ?? value;
   return html`<span class="slider">
     <input
@@ -197,12 +202,17 @@ export function Slider({ value, min = 0, max = 100, step = 1, onChange, onCommit
       aria-label=${label}
       onInput=${(event) => {
         const next = Number(event.currentTarget.value);
+        moves.current += 1;
         setMoving(next);
         onChange?.(next);
       }}
-      onChange=${(event) => {
-        setMoving(null);
-        onCommit?.(Number(event.currentTarget.value));
+      onChange=${async (event) => {
+        const mine = (moves.current += 1);
+        try {
+          await onCommit?.(Number(event.currentTarget.value));
+        } finally {
+          if (moves.current === mine) setMoving(null);
+        }
       }}
     />
     <output class="mono">${format ? format(shown) : shown}</output>
