@@ -620,6 +620,22 @@ def test_about_gives_the_version_the_licence_the_links_and_the_folders(server, i
     assert data["notice"].startswith("# Notices and credits")
 
 
+def test_the_settings_routes_in_the_docs_are_the_ones_the_server_answers():
+    """docs/ARCHITECTURE.md lists the routes the Settings use; this keeps the list true."""
+    import re
+    from pathlib import Path
+
+    from libre_panel.editor.server import _SETTINGS_GET, _SETTINGS_POST
+
+    docs = Path(__file__).resolve().parent.parent / "docs" / "ARCHITECTURE.md"
+    rows = re.findall(
+        r"^\| `(/api/[a-z]+)` \| ([A-Z, ]+) \|", docs.read_text("utf-8"), re.MULTILINE
+    )
+    documented = {(method, path) for path, methods in rows for method in methods.split(", ")}
+    built = {("GET", path) for path in _SETTINGS_GET} | {("POST", path) for path in _SETTINGS_POST}
+    assert documented == built and len(rows) == len({path for path, _ in rows})
+
+
 def test_the_notice_in_the_package_is_the_notice_of_the_project():
     """The app shows NOTICE.md from the package (a pip install and the downloads have no copy
     of the project's file); this makes sure it is the same text."""
@@ -631,6 +647,22 @@ def test_the_notice_in_the_package_is_the_notice_of_the_project():
     assert settings.notice_text() == root.read_text(encoding="utf-8")
     packaged = Path(settings.__file__).resolve().parents[1] / "assets" / "NOTICE.md"
     assert packaged.read_text(encoding="utf-8") == root.read_text(encoding="utf-8")
+
+
+def test_the_command_line_program_is_named_as_one_types_it(tmp_path, monkeypatch):
+    from libre_panel.editor import settings
+
+    assert settings.cli_command("doctor") == "libre-panel doctor"
+    # the Windows download: its program is not on the PATH, so its own is named
+    (tmp_path / "LibrePanel.exe").write_text("")
+    monkeypatch.setattr(
+        settings,
+        "sys",
+        SimpleNamespace(platform="win32", frozen=True, executable=str(tmp_path / "LibrePanel.exe")),
+    )
+    assert settings.cli_command("doctor") == "libre-panel doctor"  # no libre-panel.exe beside it
+    (tmp_path / "libre-panel.exe").write_text("")
+    assert settings.cli_command("doctor") == f'"{tmp_path / "libre-panel.exe"}" doctor'
 
 
 def test_a_folder_is_opened_in_the_file_manager(server, isolated_home, monkeypatch):
