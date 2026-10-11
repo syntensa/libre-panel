@@ -22,6 +22,8 @@ const serviceStates = () => ({
   stopped: ["waiting", t("stopped")],
   failed: ["error", t("failed")],
   "not-installed": ["error", t("not installed")],
+  pending: ["waiting", t("changing")],
+  unknown: ["gone", t("unknown")],
   off: ["gone", t("off")],
 });
 
@@ -193,7 +195,7 @@ function drawServices() {
 
 async function restart(name, button) {
   button.disabled = true;
-  const answer = await send("restart", { service: name });
+  const answer = await send("services/restart", { service: name });
   if (answer) {
     const [, words] = serviceStates()[answer.state] || ["gone", answer.state];
     say(t("{name}: {state}", { name, state: words }), answer.state === "running" ? "" : "warn");

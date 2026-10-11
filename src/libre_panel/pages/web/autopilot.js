@@ -56,7 +56,7 @@ export async function start(root) {
       event.returnValue = "";
     }
   });
-  load(await api("autopilot"));
+  load(await api("settings"));
   every(1500, async () => drawStatus(await api("status")));
 }
 
@@ -343,7 +343,7 @@ function addRule() {
 }
 
 async function save() {
-  const answer = await send("autopilot", { enabled: model.enabled, options: model.options, rules: model.rules });
+  const answer = await send("settings", { enabled: model.enabled, options: model.options, rules: model.rules });
   if (!answer) return;
   load(answer);
   say(t("Saved to config.toml. The autopilot restarts by itself."));
@@ -351,5 +351,5 @@ async function save() {
 
 async function revert() {
   if (dirty && !confirm(t("Discard the changes?"))) return;
-  load(await api("autopilot"));
+  load(await api("settings"));
 }

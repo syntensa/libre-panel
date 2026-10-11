@@ -13,7 +13,7 @@ from typing import Any
 from libre_panel.config import Config, ConfigError, edit_config, load_config
 from libre_panel.i18n import t
 from libre_panel.pages.base import ConsolePage, Refused, Request
-from libre_panel.pages.control import service_state
+from libre_panel.pages.control import service_state, with_service
 from libre_panel.plugins.loader import registry
 from libre_panel.render.overlays import BUILT_IN_TRANSITIONS
 from libre_panel.services import autopilot as service
@@ -88,9 +88,9 @@ def settings_problem(options: Any) -> str:
 class Autopilot(ConsolePage):
     title = {"en": "Autopilot", "de": "Autopilot"}
     routes = {
-        ("GET", "autopilot"): "read",
+        ("GET", "settings"): "read",
         ("GET", "status"): "status",
-        ("POST", "autopilot"): "save",
+        ("POST", "settings"): "save",
     }
 
     def _config(self) -> Config:
@@ -100,13 +100,25 @@ class Autopilot(ConsolePage):
             raise Refused(str(exc), 409) from exc
 
     def status(self, request: Request) -> dict[str, Any]:
-        """The service now: whether it runs, and what it is doing."""
+        """The service now: whether it is on and runs, and what it is doing."""
+        try:
+            config = load_config(self.context.config_path)
+        except ConfigError:
+            config = None  # the manager's word is all there is
+        return self._status(config)
+
+    def _status(self, config: Config | None) -> dict[str, Any]:
         context = self.context
-        code, detail = service_state(context.services().get(SERVICE))
+        enabled = SERVICE in config.services.enabled if config else None
+        if context.background:
+            code, detail = service_state(context.services().get(SERVICE), enabled)
+        else:
+            code, detail = "unknown", ""  # this editor does not run services
         running = context.service(SERVICE)
         return {
             "background": context.background,
-            "state": code if context.background else None,
+            "enabled": enabled,
+            "state": code,
             "detail": detail,
             "status": running.status() if running is not None else None,
         }
@@ -127,8 +139,7 @@ class Autopilot(ConsolePage):
                 )
             problems.append(problem)
         return {
-            **self.status(request),
-            "enabled": SERVICE in config.services.enabled,
+            **self._status(config),
             "options": {
                 key: given.get(key, default)
                 for key, (_, default) in service.Autopilot.options.items()
@@ -163,8 +174,8 @@ class Autopilot(ConsolePage):
                 if value != given.get(key, service.Autopilot.options[key][1]):
                     changes.append(("value", f"services.{SERVICE}.{key}", value))
         if enabled is not None and enabled != (SERVICE in config.services.enabled):
-            names = [name for name in config.services.enabled if name != SERVICE]
-            changes.append(("value", "services.enabled", [*names, SERVICE] if enabled else names))
+            names = with_service(config.services.enabled, SERVICE, enabled)
+            changes.append(("value", "services.enabled", names))
         if rules is not None and rules != given.get("rules", []):  # else their comments stay
             changes.append(("tables", RULES, rules))
         try:
