@@ -647,6 +647,10 @@
   service publishes, 24 GB at about 38 MB/s), so the playback card shows its
   app with an icon and the Studio's NET section shows a download there, as
   they do with a player and a download on a real PC
+- SPUR Session sets the rule and the fans of its header where SPUR II has
+  them, as SPUR Header does: the game's logo or name has the room of a short
+  name (51 px, up to 62 for a longer one) in place of 120 px, and the fans
+  spread over what was gained
 
 ## 0.4.2 — 2026-10-10
 

@@ -358,6 +358,28 @@ def test_session_shows_dashes_until_the_memory_service_has_counted_something():
     assert not any(wid.startswith("level-") and wid.endswith(("-bar", "-name")) for wid in ids)
 
 
+def test_session_sets_the_rule_and_the_fans_where_spur_ii_does_behind_a_short_name():
+    """As in the header: the rule stands 24 px behind a name of 51 px (at 361), and the fans take
+    the room that gives them, in groups; a longer name or a wider logo takes up to 11 px of it."""
+    theme = load_theme(find_theme("spur-session"))
+    by = {w["id"]: w for w in theme.widgets}
+    slot = by["game-logo"]
+    assert slot["align"] == "left" and by["hud-rule"]["x"] == slot["x"] + 51 + 24
+    assert (
+        slot["w"] == by["header-game-name"]["max_width"] == by["header-game-app"]["max_width"] == 62
+    )
+    assert slot["x"] + slot["w"] < by["hud-rule"]["x"]
+    wheels = [by[f"fan-{k}-wheel"]["x"] for k in range(1, 6)]
+    assert wheels[0] == by["hud-rule"]["x"] + by["hud-rule"]["w"] + 22
+    gaps = [b - a for a, b in zip(wheels, wheels[1:], strict=False)]
+    assert gaps == pytest.approx([237.5, 297.5, 297.5, 237.5], abs=1)  # (groups of two, one, two)
+    for k in range(1, 6):  # the number and its unit stay where they were to the wheel
+        assert (
+            by[f"fan-{k}-rpm"]["x"] - wheels[k - 1] == 132
+            and by[f"fan-{k}-unit"]["x"] - wheels[k - 1] == 140
+        )
+
+
 # -- Cockpit (building blocks on a 40 px grid) ---------------------------------------------------
 
 
