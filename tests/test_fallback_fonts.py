@@ -587,6 +587,64 @@ def test_a_text_widget_shows_the_letters_its_font_lacks(use, liberation):
     assert frame_of({"text": "Привет", "tabular": True, "align": "right", "x": 290}).getbbox()
 
 
+def plain_truetype(font, size=10, index=0, **options):
+    return ImageFont.truetype(str(font), size, index, **options)
+
+
+@pytest.mark.parametrize("name", ["lumen", "studio", "libre-default", "spur-classic"])
+def test_a_theme_with_latin_text_is_drawn_exactly_as_with_pillows_own_faces(name, monkeypatch):
+    """The whole renderer, with its caches and its glyph by glyph layouts: the frame of a
+    built-in theme, with its time, numbers, names and cards, is the same picture whether the
+    faces are Pillow's own or fall back."""
+    from libre_panel.render import light, overlays
+    from libre_panel.render import renderer as renderer_module
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.theme.model import find_theme, load_theme
+
+    def frame(face_maker) -> bytes:
+        for module in (renderer_module, light, overlays):
+            monkeypatch.setattr(module, "truetype", face_maker)
+        light.face.cache_clear()
+        renderer = Renderer(load_theme(find_theme(name)), animate=True)
+        try:
+            return renderer.render(demo_snapshot(1_700_000_000), 5.0)[0].tobytes()
+        finally:
+            renderer.close()
+            light.face.cache_clear()
+
+    assert frame(truetype) == frame(plain_truetype)
+
+
+@pytest.mark.parametrize("style", ["card", "band"])
+def test_a_toast_with_latin_text_is_drawn_exactly_as_with_pillows_own_faces(style, monkeypatch):
+    from libre_panel.plugins import Toast
+    from libre_panel.render import light, overlays
+    from libre_panel.render.overlays import ToastLayer
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.theme.model import parse_theme
+
+    def shown(face_maker) -> bytes:
+        for module in (light, overlays):
+            monkeypatch.setattr(module, "truetype", face_maker)
+        light.face.cache_clear()
+        toast = {"style": style, "anchor": "bottom", "seconds": 3, "queue": False}
+        renderer = Renderer(parse_theme(theme([], (800, 320), toast=toast)), preview=True)
+        layer = ToastLayer(renderer)
+        try:
+            text = "Midnight Drive — The Night Owls, Zürich 21 °C"
+            layer.add(
+                [Toast(kind="info", level="info", text=text, payload={"label": "Now playing"})]
+            )
+            layer.advance(0.0)
+            return layer.apply(Image.new("RGB", (800, 320), (16, 24, 32)), 1.5).tobytes()
+        finally:
+            layer.close()
+            renderer.close()
+            light.face.cache_clear()
+
+    assert shown(truetype) == shown(plain_truetype)
+
+
 def test_the_band_and_the_card_toast_draw_the_letters_too(use, liberation):
     from libre_panel.plugins import Toast
     from libre_panel.render.overlays import ToastLayer
