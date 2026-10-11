@@ -668,6 +668,9 @@
   of 16 px and a gap of 1 px came along as it was, and its cells shrank to a pixel. The margin and
   gap of the grid scale with the panel now, and a grid has no cells smaller than 4 px (it has
   fewer of them)
+- A theme moved to a much smaller panel lost the rules at its far edges: the frame line 4 px
+  from the right edge of a 1920 px bar came out one pixel past the last column of the 0.96"
+  panel's 80. A moved widget's corner keeps to the last column and row now
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

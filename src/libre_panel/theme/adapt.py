@@ -70,6 +70,14 @@ def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any
     return out
 
 
+def _on_frame(widget: dict[str, Any], width: int, height: int) -> dict[str, Any]:
+    """A rule in the last column or row of the old frame rounds onto the first one past a much
+    smaller frame, where nothing shows of it: its origin keeps to the last column and row."""
+    widget["x"] = min(widget["x"], width - 1)
+    widget["y"] = min(widget["y"], height - 1)
+    return widget
+
+
 def _scale_look(look: dict[str, Any], sx: float, sy: float) -> dict[str, Any]:
     """The look on a panel of another size: the dust's areas are places on the panel, and
     move with it (its count follows the panel's area by itself)."""
@@ -153,7 +161,8 @@ def adapt_theme(
     if mode == "scale":
         sx, sy = new_w / old_w, new_h / old_h
         result["widgets"] = [
-            w if w["type"] == "module" else _scale_widget(w, sx, sy) for w in theme.widgets
+            w if w["type"] == "module" else _on_frame(_scale_widget(w, sx, sy), new_w, new_h)
+            for w in theme.widgets
         ]
         if theme.look:
             result["look"] = _scale_look(theme.look, sx, sy)

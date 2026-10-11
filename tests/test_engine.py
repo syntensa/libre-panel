@@ -567,6 +567,21 @@ def test_adapt_scales_new_fields():
     assert {w["id"]: w for w in narrow["widgets"]}["name"]["max_width"] == 80
 
 
+def test_adapt_keeps_a_rule_at_the_far_edge_on_the_frame():
+    """A box 4 px from the right edge of 1920 px was at 80 on a 160 px panel's 80 px: past it,
+    and nothing of the frame line showed."""
+    data = theme(
+        {"type": "rect", "id": "right", "x": 1911, "y": 20, "w": 5, "h": 100},
+        {"type": "rect", "id": "floor", "x": 20, "y": 478, "w": 1000, "h": 2},
+        size=(1920, 480),
+    ).to_dict()
+    for orientation in ("landscape", "portrait"):
+        out = adapt_theme(data, "weact-0.96", orientation)
+        for widget in out["widgets"]:
+            assert widget["x"] < out["display"]["width"], (orientation, widget["id"])
+            assert widget["y"] < out["display"]["height"], (orientation, widget["id"])
+
+
 def test_fps_setting():
     assert parse_config({"fps": 25}).fps == 25
     with pytest.raises(ConfigError):
