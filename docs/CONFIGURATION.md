@@ -832,6 +832,8 @@ yet; the web server has them.
 
 `libre-panel sensors` and `libre-panel doctor` say which of the two is missing.
 `libre-panel sensors --check-lhm` only tests that the library loads and opens.
+The tray (a line under its status line, and its tooltip) and the Control page say
+it too, in a sentence in your language, for as long as it is the case.
 
 ### With pip
 

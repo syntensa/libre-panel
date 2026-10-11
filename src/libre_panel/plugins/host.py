@@ -493,7 +493,11 @@ class PluginHost:
         Tell the ``fresh`` listeners which readings changed, if any did."""
         if not self._listeners.get("fresh"):
             return
-        moved = frozenset(key for key, reading in latest.items() if before.get(key) != reading)
+        moved = frozenset(
+            key
+            for key, reading in latest.items()
+            if (old := before.get(key)) is not reading and old != reading  # same object: same
+        )
         if moved:
             self.emit("fresh", snapshot=snapshot, keys=moved)
 
