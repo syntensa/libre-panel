@@ -43,6 +43,7 @@ def test_driver_status():
     assert get_model("turing-3.5").driver == "unverified"  # rev. A
     assert get_model("usbpcmonitor-7").driver == "unverified"
     assert get_model("turing-5").driver == "unverified"  # rev. C
+    assert get_model("turing-9.2-usb").driver == "supported"  # stills and video, on the panel
     assert {m.driver for m in MODELS} <= {"unverified", "supported"}  # every family has one
 
 
