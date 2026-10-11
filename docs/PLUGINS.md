@@ -233,6 +233,7 @@ do. Their names cannot be used by a plugin.
 | `autopilot` | picks the theme by rules: music, microphone, load, program, time of day |
 | `devices` | messages for drives, USB devices and controllers that come and go, a full drive and a hot SSD (Windows) |
 | `memory` | keeps minutes, games and the cooling state in a database on this PC, and shows a round report after a game |
+| `cooling` | checks the fan curves of FanControl against what the PC did and says what to change; answers an editor page or a script, reads only |
 
 Their options are in the [configuration guide](CONFIGURATION.md#built-in-services).
 They talk to the panel only through the host described here, so they are also
@@ -305,6 +306,129 @@ The service also has `show_last_report()` (builds and shows the latest round
 that was long enough again; for a console page) and `status()` (is it
 recording, the file, how many rows were written, the last error, the game now
 played).
+
+### The cooling analysis
+
+The `cooling` service shows nothing by itself; an editor page (or a script)
+asks it. A page gets the running service with `context.service("cooling")`
+(`None` where it does not run), then calls, from any thread:
+
+| Call | Answers |
+|---|---|
+| `analysis(days=1.0, mode=None, points=480)` | everything a page draws, as plain data (below), and the report's lines in `text`. `days`: the last this many days (`None`: all); `mode`: `"game"`, `"desktop"` or `None` for both; `points`: how many points the course (`history`) has |
+| `recommendations()` | what to change in FanControl, from the data since it was last changed (below) |
+| `report(days=None, mode=None)` | the plain-text report as a list of lines: what was recorded, each fan, what is notable, the trend and the recommendations |
+| `status()` | `{"database", "database_found", "fancontrol", "curves", "fans"}`: what it reads and what it found |
+
+All of it is JSON-able. The texts (`title`, `why`, `findings`, the report) are
+in the language of the panel, English or German. An answer is kept for 5
+minutes, and until FanControl's settings or the language change (the same
+object comes back: do not change it), so a page may ask often. Nothing is
+written, neither to the memory's file nor to FanControl. Without data
+`analysis()` and `recommendations()` answer `{"empty": true, "reason": "..."}`
+and `report()` with one line that says so.
+
+`recommendations()`:
+
+```json
+{
+  "empty": false,
+  "since": 1759990000, "changed": true,
+  "basis": "50 min game (1 round), 2.5 h desktop",
+  "list": [
+    {
+      "id": "source:Gpu_Curve", "number": 1, "curve": "Gpu_Curve",
+      "title": "Tie Gpu Fan to the graphics card",
+      "why": "The curve Gpu_Curve reads /gpu-amd/0/temperature/0. On the desktop it sees 52 °C, the graphics card is at 28 °C: it follows another device. ...",
+      "do": ["Open the curve “Gpu_Curve” in FanControl.", "Choose “GPU Core” of “Graphics Card” as the temperature source: ...", "Set the curve points: 32 °C → 22 %, 54 °C → 82 %, ..."],
+      "effect": ["Desktop: 22 % instead of 33 % (≈ 692 RPM)", "Game: practically unchanged (82 % → 82 %)"],
+      "note": "The points leave the fan at its base value on the desktop ...",
+      "confidence": "certain (source) · preliminary (points)",
+      "basis": "50 min game (1 round), 2.5 h desktop",
+      "proposal": [[32, 22], [54, 82], [70, 85], [78, 100]]
+    },
+    {
+      "id": "mix:Mix_Case", "number": 2, "curve": "Mix_Case", "proposal": null,
+      "after": "source:Gpu_Curve", "after_number": 1,
+      "title": "...", "why": "...", "do": ["..."], "effect": ["..."], "note": "...",
+      "confidence": "preliminary", "basis": "..."
+    }
+  ],
+  "checked": ["Cpu_Curve follows the right device (+0 K)."],
+  "proposals": {"Gpu_Curve": [[32, 22], [54, 82], [70, 85], [78, 100]]},
+  "change": {"ts": 1759990000, "what": ["Gpu_Curve: sensor /gpu-amd/0/temperature/0 → /gpu-amd/5/temperature/0"]},
+  "effect": [
+    {"mode": "game", "before_s": 3000, "after_s": 3600,
+     "rows": [{"quantity": "Case Fan", "unit": "%", "before": 36.0, "after": 52.4}]}
+  ],
+  "computed": 1760086400,
+  "changes": [1759990000],
+  "waiting": "Since the change at 2025-10-09 07:26 only 6 min of data: ..."
+}
+```
+
+| Field | |
+|---|---|
+| `list[].id` | the rule and what it is about: `source:<curve>` (the curve reads the sensor of another device), `mix:<curve>` (a mix does not pass on the higher part), `warm:<reading>` (over its limit in a game), `oscillation:<curve>`, `quieter:<curve>` (a fan runs higher on the desktop than it needs to) and `trend` (cooling gets worse over weeks) |
+| `list[].number`, `after`, `after_number` | the order to work in; a recommendation with `after` makes sense only once the one it names is done |
+| `list[].why`, `do`, `effect`, `note` | the reason; the steps, in FanControl; what changes (duty, and speed where it was measured); a remark |
+| `list[].confidence`, `basis` | how certain it is, in words ("reliable", "preliminary", "certain (source)" where the sensor is known), and which data it rests on |
+| `list[].proposal` | curve points `[[°C, %], ...]` for the curve, or `null` |
+| `checked` | what was looked at and found fine, or not yet judged, one line each |
+| `since` | the data is from here on: the last change in FanControl, else the first row |
+| `change` | `ts` and `what`: the last change in FanControl, in words (`null` if it was never changed) |
+| `effect` | before and after that change, per `mode` (`"game"`, `"desktop"`): medians of each fan's duty and of the temperatures, over `before_s` and `after_s` seconds; only where both sides have enough data |
+| `waiting` | present right after a change, while there is not yet enough data after it |
+| `changes` | the times of all changes to FanControl the memory has seen |
+
+`analysis()` has, beside `advice` (the `recommendations()` above) and `text`
+(the report's lines):
+
+```json
+{
+  "empty": false,
+  "from": 1759990000, "to": 1760086400, "seconds": 86400, "rows": 2880,
+  "states": [{"name": "Desktop", "seconds": 61200}, {"name": "Space Game", "seconds": 25200}],
+  "sessions": [{"name": "Space Game", "from": 1760040000, "to": 1760065200}],
+  "series": [{"curve": "Cpu_Curve", "name": "Cpu Fan", "fans": ["Cpu Fan"], "device": "cpu"}],
+  "history": {
+    "t": [1759990900, 1759992700],
+    "temps": {"cpu_temp": [55.1, 56.0], "gpu_temp": [28.1, null], "gpu_hotspot": [36.1, null]},
+    "duty": {"Cpu_Curve": [25.4, 26.1]}
+  },
+  "plots": [
+    {"curve": "Cpu_Curve", "name": "Cpu Fan", "device": "cpu",
+     "target": [[50, 22], [62, 30], [72, 42]], "x_name": "Curve input (measured)", "measured": true,
+     "cloud": [[72.0, 42.0, 1800], [55.0, 26.0, 900]], "note": null, "proposal": null}
+  ],
+  "table": [
+    {"fan": "Cpu Fan", "curve": "Cpu_Curve", "p50": 26.0, "p95": 42.0, "max": 42.0,
+     "minimum_share": 0.0, "rpm50": 613.0, "rpm_max": 804.0, "characteristic": [[20, 606], [40, 804]]}
+  ],
+  "findings": [
+    {"level": "ok", "text": "Cpu Fan follows the curve Cpu_Curve: 0.0 points off on average, p95 0.0: ..."},
+    {"level": "info", "text": "Unused curve points and oscillation are judged from 6 h of recording: so far 3.3 h."}
+  ],
+  "text": ["RECORDED  3.3 h in 400 rows, from ...", "..."]
+}
+```
+
+| Field | |
+|---|---|
+| `from`, `to`, `seconds`, `rows` | the period of the rows used (Unix seconds), the time they hold, and how many there are |
+| `states`, `sessions` | where the time went (`Desktop`, each game by name; the desktop first), and each game round with its `from` and `to` |
+| `series` | the fans per curve that drives them; `device`: `"cpu"`, `"gpu"`, `"mix"` or `"other"` (by the sensor the curve reads) |
+| `history` | the course in `points` steps (`t`: the middle of each, Unix seconds): the temperatures (`cpu_temp`, `gpu_temp`, `gpu_hotspot`, and the other readings the memory keeps, by their keys) and the duty of each series by its curve; `null` where there is no data |
+| `plots[]` | a curve against what the fans did. `target`: the curve's points `[[°C, %], ...]` (for a mix, those of its CPU or GPU part, the `note` says so); `cloud`: `[input, duty, seconds]`, the most time first, at most 800; `x_name`: what the input is; `measured`: whether it is the temperature the curve really read (kept by the memory) or the sensor of the device; `proposal`: the points a recommendation would set, where they fit this input |
+| `table[]` | per fan: duty median, 95th percentile and highest (`p50`, `p95`, `max`, %), the share of the time at the minimum, speed median and highest (RPM), and the speed at each duty `characteristic: [[duty %, RPM], ...]` |
+| `findings[]` | what the numbers say by themselves: `level` (`"ok"`, `"warn"` or `"info"`), `text` and sometimes the `id` of the recommendation it belongs to; one that a recommendation already covers is left out |
+
+How a curve's real input is found when FanControl's own reading was not kept:
+the duty a fan had is put back through the curve (the rising part, where it
+can be turned around) and gives the temperature the curve must have seen; the
+recorded sensor that lies on top of it, or follows it with a fixed offset, is
+what the curve reads. A course that moved less than 5 K proves nothing, and the
+answer says so (`too quiet`) instead of guessing.
 
 ## Screens
 

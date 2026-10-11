@@ -551,6 +551,7 @@ fps_levels = [60, 90, 120, 144, 165]   # the frame-rate ranges of the report's c
 | `sessions` | a row per game, written every minute while it is played and again when it ends: the game's name and its program, how long, the frame rates (mean, the 1 % quantile, the 1 % low), how long at which frame rate, how long the CPU, the GPU or a frame limit held it back, the highest temperatures, power and video memory |
 | `cooling` | the cooling state whenever it moves: temperatures, power and load, each fan's speed and duty, and what each FanControl curve reads. At least 12 s apart (5 s in a game) and at least one a minute, so that a longer gap means the service did not run |
 | `fancontrol` | every change to FanControl's curves and fans, with the time (FanControl's file is only read, never written) |
+| `meta` | the names of the CPU, the GPU and the temperature sensors as the readings give them ("GPU Core"), noted with `cooling` on, so that the [cooling analysis](#cooling-analysis) can speak of them by name |
 
 - **Where, and what stays out.** The file is `memory.db` in
   `plugins-data/memory/` of the settings folder; it is a plain SQLite file that
@@ -586,6 +587,70 @@ fps_levels = [60, 90, 120, 144, 165]   # the frame-rate ranges of the report's c
   game's frame rates, and with `music` the player's state (not its title).
   A write that cannot be made (the disk is full, the file is locked) is said
   once in the log and never holds the panel back.
+- The options are read when the service starts: change `config.toml` and it
+  restarts by itself.
+
+### Cooling analysis
+
+Checks the fan curves of FanControl against what your PC really did, and says
+what to change so that it runs quieter or cooler. It reads the cooling state that the
+[memory](#memory-and-round-report) keeps, and FanControl's own settings:
+**read only**. Libre Panel never writes to FanControl; you make the changes
+yourself. Nothing is sent anywhere.
+
+```toml
+[services]
+enabled = ["memory", "cooling"]   # the memory with cooling = true feeds it
+
+[services.cooling]
+limits = [
+  { key = "cpu.temp", max = 90 },
+  { key = "gpu.temp", max = 85, name = "Graphics card" },
+]
+# fancontrol = ""      # FanControl's userConfig.json, if Libre Panel does not find it
+# database = ""        # the memory's file (default: the memory service's folder)
+```
+
+- **It answers, it does not show.** The service has no screen of its own: an
+  editor page of a plugin, or a script, asks it for the analysis, for the
+  recommendations or for a plain-text report ([Plugins](PLUGINS.md#the-cooling-analysis)).
+  The work is done when asked and kept for 5 minutes, and until FanControl's
+  settings change. The texts are in the language of the panel.
+- **Everything is weighed by time**, not by rows: half an hour of the desktop
+  standing still counts for half an hour, a minute of changing load for a
+  minute. The recommendations look at the last 60 days of the cooling state,
+  and only at what happened since FanControl was last changed (the memory
+  notes every change); they say what the data before and after the change
+  shows. A statement about the desktop needs 30
+  minutes of desktop since the change, one about a game 20 minutes of game
+  time; oscillation needs 6 hours. Until then it says that it is waiting.
+- **What it looks for.** Each finding names the data it rests on ("50 min game,
+  2.5 h desktop") and how certain it is.
+
+| Rule | The question |
+|---|---|
+| `source` | Does a curve read the sensor of the device it should cool for? From the duty a fan really had, it calculates back the temperature its curve must have seen, and compares that with the recorded sensors; where FanControl's own reading of a curve was kept, it compares that directly. |
+| `mix` | Does a mix curve pass on the higher value of its parts, as a case fan should, or does one hot part leave the fans cold? |
+| `warm` | Does anything stay over its limit for more than 5 % of the time in a game? |
+| `oscillation` | Does a duty keep jumping, which one hears as up and down? |
+| `quieter` | Does a fan run faster on the desktop than its curve needs, and how many RPM would a gentler start save? |
+| `trend` | Does the same light load at the same outside temperature get warmer over weeks (dust, a fan that slows)? It needs 14 days of data and the [weather](#weather) for the outside temperature. |
+
+- **No fixed devices or limits.** The names of the CPU, the GPU and the sensors
+  come from the readings the memory noted, the fans from FanControl's file.
+  What is too warm depends on the hardware, so `limits` says: each entry names
+  a reading (`cpu.temp`, `gpu.temp`, `gpu.hotspot`, or any other the memory
+  keeps, see its `temperatures`), the highest temperature wanted and, if you
+  like, a name. Without `limits` the starting points are 90 °C for the CPU,
+  85 °C for the GPU and 100 °C for its hot spot: change them to what your
+  parts are specified for.
+- **Without FanControl** (it is a Windows program) or without its file there
+  are no curves to check: the service still says what is too warm in a game
+  and what the trend is. It finds FanControl's `userConfig.json` as the memory
+  does; `fancontrol` names it if it lies elsewhere.
+- **What it keeps.** Nothing of its own: it opens the memory's file read only,
+  so it can run while the memory writes. Without the memory's file (or with
+  `cooling = false`) it says that there is no data yet.
 - The options are read when the service starts: change `config.toml` and it
   restarts by itself.
 

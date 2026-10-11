@@ -141,6 +141,18 @@
 - `libre_panel.services.fancontrol`: FanControl's curves, fans and the sensor
   each curve reads, from its configuration file (found from the environment or
   `fancontrol = "..."`; opened for reading only)
+- `cooling`, a built-in service that checks FanControl's fan curves against
+  what the PC really did (the memory's cooling state, weighed by time) and
+  says what to change: a curve that reads the sensor of another device (found
+  by calculating back, from the duty a fan had, the temperature its curve must
+  have seen), a mix that does not pass on the higher part, a temperature over
+  your limit in a game, a fan that oscillates or runs higher than it needs on
+  the desktop, cooling that slowly gets worse. Each recommendation names the
+  data it rests on, and since FanControl was last changed it says what that
+  change did. Read only: FanControl's file and the memory's database are
+  opened for reading, nothing is changed or sent; devices come from the
+  readings, limits from `limits`. It answers an editor page or a script with
+  the analysis as data and a plain-text report in English and German
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

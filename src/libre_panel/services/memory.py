@@ -51,6 +51,7 @@ log = logging.getLogger(__name__)
 SAMPLE_S = 1.0  # one sample a second, however often the main loop takes readings
 GAP_S = 5.0  # after a pause longer than this the grid starts afresh instead of catching up
 SESSION_WRITE_S = 60.0  # a game in progress is written this often
+SENSORS_EVERY_S = 60.0  # the names of the sensors are looked at this often
 DAY_S = 86400
 # The cooling state is written when something moves, not on a clock (it all stands still at
 # the desk): at least COOLING_MIN_S apart (less in a game, where it changes fast) and at
@@ -234,6 +235,45 @@ class Reader:
             if "hot spot" in words or "hotspot" in words or "junction" in words:
                 found.append((not (card and reading.origin.startswith(card + "/")), key))
         return min(found)[1] if found else None  # the main card's first
+
+    def sensors(self, readings: dict[str, Any]) -> dict[str, Any]:
+        """The names of the hardware and of every temperature sensor, for the cooling analysis
+        to speak of them by name: ``cpu`` and ``gpu`` as the readings call them, and for each
+        ``temp.*`` reading its id (where LibreHardwareMonitor gave one), its label, and
+        ``panel``: whether it is the sensor behind ``cpu_temp``, ``gpu_temp`` or ``gpu_hotspot``."""
+        behind = {}
+        hotspot = self._hotspot if self._hotspot in readings else self._find_hotspot(readings)
+        for column, key in (
+            ("cpu_temp", "cpu.temp"),
+            ("gpu_temp", "gpu.temp"),
+            ("gpu_hotspot", hotspot),
+        ):
+            reading = readings.get(key) if key else None
+            if reading is not None and reading.origin:
+                behind[reading.origin] = column
+        names = {}
+        for kind in ("cpu", "gpu"):
+            reading = readings.get(f"{kind}.name")
+            names[kind] = (
+                reading.value if reading is not None and isinstance(reading.value, str) else None
+            )
+        found = []
+        for key, reading in sorted(readings.items()):
+            if key.startswith("temp.") and number(reading.value) is not None:
+                ident = (
+                    reading.origin.removeprefix("lhm:")
+                    if reading.origin.startswith("lhm:")
+                    else None
+                )
+                found.append(
+                    {
+                        "key": key,
+                        "id": ident,
+                        "label": reading.label,
+                        "panel": behind.get(reading.origin),
+                    }
+                )
+        return {**names, "sensors": found}
 
     def _fans(self, readings: dict[str, Any]) -> dict[str, tuple[float | None, float | None]]:
         """Every fan: its speed and, where LibreHardwareMonitor also has the output that
@@ -613,6 +653,8 @@ class Memory(Service):
         self._lock = threading.RLock()
         self._stopped = False
         self._mark: str | None = None  # the fingerprint of the FanControl state stored last
+        self._sensors = ""  # the names of the sensors, as stored last
+        self._sensors_due = 0.0
         self._game = ""  # the game now under way, for the status
         self._shown = False  # a report is on the panel
         self._keys: set[str] = set()  # the readings it published
@@ -658,6 +700,20 @@ class Memory(Service):
                 sample = self.reader.read(snapshot, now)
                 self._game = sample.game or ""
                 self.recorder.add(sample)
+                self._note_sensors(snapshot, now)
+
+    def _note_sensors(self, snapshot: Snapshot, now: float) -> None:
+        """Keep the names of the sensors, for the cooling analysis; written when they change."""
+        if not self.settings.cooling or self.store is None or now < self._sensors_due:
+            return
+        self._sensors_due = now + SENSORS_EVERY_S
+        found = self.reader.sensors(snapshot.readings)
+        if not found["sensors"] and not (found["cpu"] or found["gpu"]):
+            return
+        text = json.dumps(found, sort_keys=True, ensure_ascii=False)
+        if text != self._sensors:
+            self._sensors = text
+            self.store.put("INSERT OR REPLACE INTO meta VALUES ('sensors', ?)", [text])
 
     def _look_at_fancontrol(self, now: float) -> None:
         """Note a changed FanControl configuration: the names of the fans and what each curve

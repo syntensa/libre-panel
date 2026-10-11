@@ -13,7 +13,7 @@ from fake_sensors import wait_for
 from libre_panel.sensors.base import Reading, Snapshot
 from libre_panel.services import memory
 from libre_panel.services.memory import Reader, Recorder, Sample, Settings
-from libre_panel.services.memory_store import MEANS, Store
+from libre_panel.services.memory_store import MEANS, Store, read_only
 
 T0 = 1_800_000_000 - 1_800_000_000 % 60  # the start of a minute
 
@@ -612,6 +612,37 @@ def test_more_temperatures_and_what_the_curves_read_are_taken_when_asked_for():
     assert s.sources == {"Board_Fan": 36.0}
 
 
+def test_the_names_of_the_hardware_and_the_sensors_are_noted_as_the_readings_give_them():
+    snap = snapshot_of(
+        reading("cpu.name", "8-Core Processor"),
+        reading("gpu.name", "Graphics Card"),
+        reading("cpu.temp", 61.0, "°C", "CPU", "lhm:/amdcpu/0/temperature/2"),
+        reading("gpu.temp", 44.0, "°C", "GPU", "lhm:/gpu-amd/5/temperature/0"),
+        reading("temp.cpu.core", 61.0, "°C", "Core (Tctl/Tdie)", "lhm:/amdcpu/0/temperature/2"),
+        reading("temp.gpu.gpu_core", 44.0, "°C", "GPU Core", "lhm:/gpu-amd/5/temperature/0"),
+        reading("temp.gpu.hot_spot", 58.0, "°C", "GPU Hot Spot", "lhm:/gpu-amd/5/temperature/2"),
+        reading("temp.board.system", 33.0, "°C", "System", "lhm:/lpc/chip/temperature/0"),
+        reading("temp.other", 40.0, "°C", "Sensor"),  # not from LibreHardwareMonitor: no id
+        reading("temp.nvme.broken", None, "°C", "No value", "lhm:/nvme/0/temperature/0"),
+        reading("fan.lpc.fan_1", 900.0, "RPM", "Fan #1", "lhm:/lpc/chip/fan/1"),
+    )
+    found = Reader(Settings()).sensors(snap.readings)
+    assert found["cpu"] == "8-Core Processor" and found["gpu"] == "Graphics Card"
+    assert found["sensors"] == [
+        {"key": "temp.board.system", "id": "/lpc/chip/temperature/0", "label": "System",
+         "panel": None},
+        {"key": "temp.cpu.core", "id": "/amdcpu/0/temperature/2", "label": "Core (Tctl/Tdie)",
+         "panel": "cpu_temp"},
+        {"key": "temp.gpu.gpu_core", "id": "/gpu-amd/5/temperature/0", "label": "GPU Core",
+         "panel": "gpu_temp"},
+        {"key": "temp.gpu.hot_spot", "id": "/gpu-amd/5/temperature/2", "label": "GPU Hot Spot",
+         "panel": "gpu_hotspot"},
+        {"key": "temp.other", "id": None, "label": "Sensor", "panel": None},
+    ]  # fmt: skip
+    nameless = Reader(Settings()).sensors(snapshot_of(reading("cpu.name", 5)).readings)
+    assert nameless == {"cpu": None, "gpu": None, "sensors": []}
+
+
 def test_the_game_comes_from_the_game_service_and_the_rates_from_presentmon():
     snap = snapshot_of(
         reading("game.name", "Space Game"),
@@ -1095,6 +1126,55 @@ def test_the_fancontrol_states_are_not_kept_when_cooling_is_left_out(desk, tmp_p
     db = d.database()
     assert db.execute("SELECT COUNT(*) FROM fancontrol").fetchone() == (0,)
     assert db.execute("SELECT COUNT(*) FROM cooling").fetchone() == (0,)
+
+
+def stored_names(d):
+    """The names of the sensors in the file now (it is opened the way the cooling analysis does)."""
+    d.settle()
+    con = read_only(d.service.database)
+    try:
+        row = con.execute("SELECT value FROM meta WHERE key = 'sensors'").fetchone()
+    finally:
+        con.close()
+    return json.loads(row[0]) if row else None
+
+
+def named_readings(gpu="Graphics Card"):
+    return {
+        "cpu.name": Reading("cpu.name", "8-Core Processor"),
+        "gpu.name": Reading("gpu.name", gpu),
+        "cpu.temp": Reading("cpu.temp", 55.0, "°C", "CPU", "lhm:/amdcpu/0/temperature/2"),
+        "temp.cpu.core": Reading(
+            "temp.cpu.core", 55.0, "°C", "Core (Tctl/Tdie)", "lhm:/amdcpu/0/temperature/2"
+        ),
+    }
+
+
+def test_the_names_of_the_sensors_are_kept_for_the_cooling_analysis_and_looked_at_each_minute(desk):
+    d = desk()
+    d.sample(**named_readings())
+    assert stored_names(d) == {
+        "cpu": "8-Core Processor",
+        "gpu": "Graphics Card",
+        "sensors": [
+            {
+                "key": "temp.cpu.core",
+                "id": "/amdcpu/0/temperature/2",
+                "label": "Core (Tctl/Tdie)",
+                "panel": "cpu_temp",
+            }
+        ],
+    }
+    d.sample(**named_readings(gpu="Another Card"))  # looked at once a minute, not at every second
+    assert stored_names(d)["gpu"] == "Graphics Card"
+    d.sample(seconds=70, **named_readings(gpu="Another Card"))
+    assert stored_names(d)["gpu"] == "Another Card"
+
+
+def test_the_names_of_the_sensors_are_not_kept_when_cooling_is_left_out(desk):
+    d = desk(cooling=False)
+    d.sample(**named_readings())
+    assert stored_names(d) is None
 
 
 # -- the real main loop ---------------------------------------------------------------------------
