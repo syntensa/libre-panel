@@ -22,8 +22,9 @@ library and read it inside Libre Panel (see "Windows downloads" below); a
 LibreHardwareMonitor that you run yourself can still be read through its web
 server. <https://github.com/LibreHardwareMonitor/LibreHardwareMonitor>.
 
-**Barlow** (Jeremy Tribby) and **JetBrains Mono** (JetBrains) — bundled fonts
-under the SIL Open Font License 1.1, see `src/libre_panel/fonts/`.
+**Barlow** (Jeremy Tribby), **JetBrains Mono** (JetBrains) and **Liberation
+Sans** (Red Hat, Google) — bundled fonts under the SIL Open Font License 1.1,
+see `src/libre_panel/fonts/`.
 
 **librehardwaremonitor-api** (Sab44, MIT) — the real LibreHardwareMonitor
 output in `tests/data/` comes from its test fixtures.

@@ -141,6 +141,9 @@
   `libre_panel.render.finish.register`
 - `tools/motion_bench.py` leaves the warm-up out (`--warmup`) and times the
   frames a sweep of light runs over on their own line
+- Liberation Sans ships with Libre Panel (`builtin:LiberationSans-Regular`,
+  `-Bold`): its letters are as wide as Arial's, so a layout made for Arial
+  stays in place
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

@@ -45,7 +45,8 @@ to write or review themes by hand.
   theme's `palette`. Change a palette colour and every widget using it follows.
 - `font` is the default for all text; `builtin:Barlow-Regular`, `-Medium`,
   `-SemiBold`, `-Bold`, `builtin:BarlowCondensed-Medium`, `-SemiBold`,
-  `builtin:JetBrainsMono-Medium`, `-Bold` ship with Libre Panel (SIL OFL), or
+  `builtin:JetBrainsMono-Medium`, `-Bold`, `builtin:LiberationSans-Regular`,
+  `-Bold` (the widths of Arial's letters) ship with Libre Panel (SIL OFL), or
   use a `.ttf`/`.otf` inside the theme folder.
 - `refresh_ms` is how often sensors are read; `animation.smoothing_ms` is how
   long bars, rings and numbers with `smooth` glide to a new value (0 = jump).
