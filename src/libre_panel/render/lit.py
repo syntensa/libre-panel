@@ -17,7 +17,8 @@ weather symbols built of lit bodies.
 - A weather icon is built of lit bodies (render.light3d): a glowing sun with
   rays, clouds, glass drops, a bolt.
 
-The grooves are the bars' and rings' ``background``. A bar or ring too thin
+The grooves are the bars' and rings' ``background``, milled into the panel
+as the facet finish mills them (render.facets). A bar or ring too thin
 for light, or an icon under 16 px, is drawn flat. Coloured pictures are kept
 by colour and step, so a value gliding back and forth colours each step once.
 """
@@ -33,7 +34,7 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-from libre_panel.render import light3d
+from libre_panel.render import facets, light3d
 from libre_panel.render.finish import Finish, register
 from libre_panel.render.light import mix, role_color
 from libre_panel.render.renderer import Piece, _fraction, _number, _steps
@@ -162,8 +163,11 @@ def _bar_colours(widget, length, paint, reverse) -> np.ndarray:
 
 def _groove(renderer: Any, widget: dict[str, Any], length: int, thick: int,
             track: tuple[int, ...]) -> Image.Image:  # fmt: skip
-    """A bar's groove, lying (``length`` x ``thick``), in the track colour.
-    SPUR II mills it into the panel; this is the one place that draws it."""
+    """A bar's groove, lying (``length`` x ``thick``): milled into the panel
+    in the track colour (render.facets), plain where a bevel does not read."""
+    milled = facets.groove_bar(length, thick, track)
+    if milled is not None:
+        return milled
     key = ("bar-groove", length, thick, tuple(track))
     return _PICTURES.get(key, lambda: Image.new("RGBA", (length, thick), tuple(track)))
 
@@ -308,11 +312,21 @@ class LitBar(Finish):
 
 
 def _groove_ring(renderer: Any, widget: dict[str, Any]) -> Image.Image | None:
-    """A ring's groove (with its ticks), the gauge's size: the one place that
-    draws it."""
-    if not widget["background"] and widget["ticks"] <= 0:
+    """A ring's groove, milled into the panel in its ``background``
+    (render.facets), with its ticks flat on it; the gauge's size."""
+    track = renderer.color(widget["background"])
+    if not track and widget["ticks"] <= 0:
         return None
-    return renderer._gauge_static(widget)
+    out = Image.new("RGBA", (widget["w"], widget["h"]), (0, 0, 0, 0))
+    if track:
+        w, h, thickness = widget["w"], widget["h"], widget["thickness"]
+        start, end = widget["start_angle"], widget["end_angle"]
+        out.paste(facets.groove_ring(w, h, thickness, start, end, track))
+    if widget["ticks"] > 0:
+        ticks = {**widget, "background": None,
+                 "tick_color": widget["tick_color"] or widget["background"]}  # fmt: skip
+        out.alpha_composite(renderer._gauge_static(ticks))
+    return out
 
 
 def _arc(widget: dict[str, Any], frac: float, stroke: int, room: int) -> np.ndarray:
@@ -383,9 +397,10 @@ class LitGauge(Finish):
 # -- texts --------------------------------------------------------------------
 
 
-def text_light(piece: Piece, radius: float, strength: float) -> Piece | None:
+def text_light(piece: Piece, radius: float, strength: float, area=None) -> Piece | None:
     """A text's glow as light (SPUR II's headings): the text in its colours,
-    blurred, ``strength`` of it, to add over the text and around it."""
+    blurred, ``strength`` of it, to add over the text and around it; inside
+    ``area`` ([x, y, w, h] on the panel) only, if given."""
     layer = piece.layer
     pad = math.ceil(3 * radius) + 2
     rgba = np.asarray(layer, np.float32)
@@ -394,16 +409,26 @@ def text_light(piece: Piece, radius: float, strength: float) -> Piece | None:
     plane.paste(Image.fromarray(np.round(shown).astype(np.uint8), "RGB"), (pad, pad))
     blurred = np.asarray(plane.filter(ImageFilter.GaussianBlur(radius)), np.float32)
     rgb = np.floor(blurred * np.float32(strength))  # whole levels, as SPUR II's blend
+    x, y = piece.x - pad, piece.y - pad
+    if area:
+        ax, ay, aw, ah = area
+        x0, y0 = max(x, ax), max(y, ay)
+        x1, y1 = min(x + rgb.shape[1], ax + aw), min(y + rgb.shape[0], ay + ah)
+        if x1 <= x0 or y1 <= y0:
+            return None
+        rgb, x, y = rgb[y0 - y : y1 - y, x0 - x : x1 - x], x0, y0
     if not rgb.any():
         return None
     out = np.concatenate([rgb, rgb.max(-1, keepdims=True)], -1).astype(np.uint8)
-    return Piece(Image.fromarray(out, "RGBA"), piece.x - pad, piece.y - pad)
+    return Piece(Image.fromarray(out, "RGBA"), x, y)
 
 
 class LitText(Finish):
     """A text's glow is light, as SPUR II's headings and labels glow: its
     colours blurred and added over the text and around it (the renderer's
-    own glow lies beneath the text)."""
+    own glow lies beneath the text). ``opacity`` fades the letters, not
+    their light: at 0 only the light is left, which lets a copy of a word
+    glow over it (SPUR II's wordmark)."""
 
     name = "lit"
     types = ("text", "metric")
@@ -414,20 +439,24 @@ class LitText(Finish):
         self._lock = threading.Lock()
 
     def widget(self, widget):
-        return {**widget, "glow": 0.0, "\0light": widget.get("glow", 0.0)}
+        # the renderer draws the letters whole and without its glow
+        return {**widget, "glow": 0.0, "opacity": 1.0, "\0light": widget.get("glow", 0.0),
+                "\0opacity": widget.get("opacity", 1.0)}  # fmt: skip
 
     def draw(self, renderer, widget, snapshot, now):
         drawn = renderer._draw_text if widget["type"] == "text" else renderer._draw_metric
         piece = drawn(widget, snapshot, now)
         strength = widget.get("\0light", 0.0)
-        if piece is None or strength <= 0:
+        opacity = widget.get("\0opacity", 1.0)
+        if piece is None or (strength <= 0 and opacity >= 0.999):
             return piece
         with self._lock:
             hit = self._lit.get(id(piece))
             if hit is not None and hit[0] is piece:
                 return hit[1]
         radius = max(1.0, float(widget.get("glow_radius", 10)))
-        lit = replace(piece, light=text_light(piece, radius, strength))
+        light_ = text_light(piece, radius, strength, widget.get("glow_area")) if strength else None
+        lit = replace(piece, layer=_alpha_scaled(piece.layer, opacity), light=light_)
         with self._lock:
             self._lit[id(piece)] = (piece, lit)
             while len(self._lit) > self.KEPT:

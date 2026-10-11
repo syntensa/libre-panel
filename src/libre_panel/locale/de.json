@@ -211,7 +211,7 @@
     "Only {free} free": "Nur noch {free} frei",
     "one light for the whole panel: it glints on frames and sweeps across at start, on the hour, on a new track and after a tube or entrance": "ein Licht für das ganze Panel: es glänzt auf Rahmen und läuft beim Start, zur vollen Stunde, bei einem neuen Titel und nach einer Röhre oder einem Auftritt einmal darüber",
     "x, y, w, h": "x, y, B, H",
-    "x, y, w, h on the panel: a lit bar's glow stays inside, worked out as SPUR II's glow zones; empty: around the bar": "x, y, B, H auf dem Panel: das Leuchten eines Licht-Balkens bleibt darin, gerechnet wie die Leuchtzonen von SPUR II; leer: um den Balken herum",
+    "x, y, w, h on the panel: with the lit finish the glow stays inside (a bar's worked out as SPUR II's glow zones); empty: all around": "x, y, B, H auf dem Panel: mit der Oberfläche „plastisch“ bleibt das Leuchten darin (bei einem Balken gerechnet wie die Leuchtzonen von SPUR II); leer: rundherum",
     "a name makes the rect a ridge that catches the light; rects with the same name are one ridge": "ein Name macht das Rechteck zu einem Grat, der das Licht fängt; Rechtecke mit demselben Namen sind ein Grat",
     "the line stays a line's width inside the box; off: the range spans the box, as SPUR II's charts": "die Linie bleibt eine Linienbreite innerhalb des Kastens; aus: der Wertebereich reicht über den ganzen Kasten, wie bei den Diagrammen von SPUR II",
     "down: the curve hangs from the top and is filled from there, below an upward one it mirrors it": "unten: die Kurve hängt von oben und ist von dort gefüllt, unter einer nach oben gerichteten spiegelt sie diese",

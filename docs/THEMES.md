@@ -116,8 +116,8 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 
 | Type | Fields | |
 |---|---|---|
-| `text` | `text` | static label, may contain line breaks |
-| `metric` | `sensor`, `format`, `fallback`, `smooth`, `color_rules` | a sensor value as text; with `smooth` the number glides between readings together with the sensor's bars and rings (give `format` a precision, e.g. `{value:.0f}`) |
+| `text` | `text`, `glow_area` | static label, may contain line breaks; `glow_area` see [Look and finish](#look-and-finish) |
+| `metric` | `sensor`, `format`, `fallback`, `smooth`, `color_rules`, `glow_area` | a sensor value as text; with `smooth` the number glides between readings together with the sensor's bars and rings (give `format` a precision, e.g. `{value:.0f}`) |
 | `bar` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `color`, `color2`, `background`, `radius`, `direction`, `segments`, `segment_gap`, `smooth`, `color_rules`, `glow_area` | progress bar; `color2` makes a gradient along the track, `segments` an LED-style bar; `glow_area` see [Look and finish](#look-and-finish) |
 | `gauge` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `start_angle`, `end_angle`, `thickness`, `color`, `color2`, `background`, `cap`, `ticks`, `tick_color`, `smooth`, `color_rules` | ring; angles clockwise from 3 o'clock, default 135→405; `cap` round or flat |
 | `graph` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `history`, `seconds`, `color`, `fill`, `fill_fade`, `fill_alpha`, `direction`, `inset`, `smooth`, `per_frame`, `line_width`, `grid`, `grid_color`, `background` | history; `min`/`max` `null` = automatic, `smooth` draws a curve, `fill_alpha` 0 to 1 sets how opaque the fill is (0: the default, a flat fill 0.25, a fade 0.45 at its top), `direction` `down` hangs the curve from the top edge and fills it from there (upload above a line, download below it), `inset` off lets the range span the box (a line at an edge is cut in half there) as SPUR II's charts, `seconds` and `per_frame` see above |
@@ -443,7 +443,10 @@ its colour, lying in a groove (the widget's `background`), its scale.
   in a soft halo of its colour (`glow`, `glow_radius`).
 - A `text` or `metric` glows as SPUR II's headings and labels do: its
   colours, blurred by `glow_radius` and `glow` of them, are light added over
-  the text and around it (flat, the glow lies beneath the text).
+  the text and around it (flat, the glow lies beneath the text), inside its
+  `glow_area` if it has one. `opacity` fades the letters and not their
+  light: at `0` only the light is left, so a copy of a word glows over the
+  word itself, as SPUR II's wordmark does.
 - Weather icons (`icon` `weather` and the symbols `sun`, `moon`, `partly`,
   `cloud`, `fog`, `rain`, `snow`, `storm`) are built of lit bodies, baked
   from Blender renders and coloured: clouds and the moon in the icon's

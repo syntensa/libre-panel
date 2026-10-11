@@ -95,7 +95,11 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         # with the same name are one ridge, so bands that meet join at mitres
         "ridge": ("string", ""),
     },
-    "text": {"text": ("text", "Label"), **_text_style(False)},
+    "text": {
+        "text": ("text", "Label"),
+        **_text_style(False),
+        "glow_area": ("box?", None),  # [x, y, w, h]: a lit text's glow stays inside
+    },
     "metric": {
         "sensor": ("sensor", "cpu.load"),
         "format": ("format", "{value:.0f}{unit}"),
@@ -103,6 +107,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         **_text_style(True),
         "smooth": ("bool", False),  # the number glides with bars and rings of its sensor
         "color_rules": ("rules", []),
+        "glow_area": ("box?", None),
     },
     "bar": {
         "sensor": ("sensor", "cpu.load"),
@@ -306,8 +311,8 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
 }
 
 # How a widget's shape is drawn (render.finish): "flat" (the default), "lit"
-# (light from SPUR II's 3D layers), "facet" or "acrylic". A finish a type does not have
-# draws it flat, with a warning.
+# (SPUR II's light: values as light in their grooves, glows as light), "facet" or
+# "acrylic". A finish a type does not have draws it flat, with a warning.
 FINISHES = ("flat", "lit", "facet", "acrylic")
 FINISH_FIELD = ("enum:" + "|".join(FINISHES), FINISHES[0])
 for _type in (

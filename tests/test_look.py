@@ -173,6 +173,48 @@ def test_a_glow_area_is_a_box_on_the_panel(area, message):
     ] == [1, 2, 3, 4]
 
 
+def test_lit_values_lie_in_a_milled_groove():
+    bar = {**lit_widgets()[1], "glow": 0.0, "y": 20, "h": 12}  # a 12 px groove: 2 px bevels
+    frame, _ = Renderer(theme_of([bar])).render(snap(0.0), 0.0)
+    column = np.asarray(frame, np.int16)[20:32, 250]
+    floor = (0x16, 0x23, 0x32)
+    assert tuple(column[6]) == floor  # the floor: exactly its colour
+    assert column[0].sum() < sum(floor) < column[-1].sum()  # in shade above, lit below
+    ring = {**lit_widgets()[0], "x": 20, "y": 20, "w": 120, "h": 120, "start_angle": -90,
+            "end_angle": 270}  # fmt: skip
+    frame, _ = Renderer(theme_of([ring], size=(160, 160))).render(snap(0.0), 0.0)
+    across = np.asarray(frame, np.int16)[80, 20:30]  # nine o'clock, from the outer edge in
+    assert tuple(across[5]) == floor and across[0].sum() != across[9].sum()
+
+
+def test_a_lit_text_without_opacity_is_only_its_light():
+    word = {"type": "text", "id": "word", "x": 20, "y": 20, "text": "II", "font_size": 58,
+            "font": "builtin:Barlow-Bold", "color": "#13E5D7"}  # fmt: skip
+    glow = {**word, "id": "glow", "finish": "lit", "glow": 0.6, "glow_radius": 16, "opacity": 0}
+    over, _ = Renderer(theme_of([word, glow])).render(snap(), 0.0)
+    bare, _ = Renderer(theme_of([word])).render(snap(), 0.0)
+    alone, _ = Renderer(theme_of([glow])).render(snap(), 0.0)
+    a, b, c = (np.asarray(f, np.int16) for f in (over, bare, alone))
+    letters = (b == (0x13, 0xE5, 0xD7)).all(-1)
+    assert letters.sum() > 100 and (a[letters] > b[letters]).any()  # the light lies on them
+    ground = np.asarray(Renderer(theme_of([])).render(snap(), 0.0)[0], np.int16)
+    assert (c[letters] != (0x13, 0xE5, 0xD7)).any(-1).all()  # alone: no letters, only light
+    assert (c >= ground).all() and (c > ground).any()
+
+
+def test_a_lit_texts_glow_area_keeps_its_light_inside():
+    text = {"type": "text", "id": "t", "x": 20, "y": 20, "text": "CPU", "font_size": 40,
+            "color": "#13E5D7", "glow": 0.6, "glow_radius": 8, "finish": "lit",
+            "glow_area": [0, 0, 480, 40]}  # fmt: skip
+    cut, _ = Renderer(theme_of([text])).render(snap(), 0.0)
+    whole, _ = Renderer(theme_of([{**text, "glow_area": None}])).render(snap(), 0.0)
+    a, b = np.asarray(cut, np.int16), np.asarray(whole, np.int16)
+    assert (a[:40] == b[:40]).all()  # inside the area, the same light
+    bare, _ = Renderer(theme_of([{**text, "glow": 0.0}])).render(snap(), 0.0)
+    assert (a[40:] == np.asarray(bare, np.int16)[40:]).all()  # below it, none
+    assert (b[40:] != a[40:]).any()
+
+
 def test_a_lit_texts_glow_is_light_over_it_and_around_it():
     text = {"type": "text", "id": "t", "x": 20, "y": 20, "text": "CPU", "font_size": 40,
             "color": "#13E5D7", "glow": 0.6, "glow_radius": 8}  # fmt: skip
