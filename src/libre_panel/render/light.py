@@ -1,9 +1,10 @@
 """Light over a frame, after SPUR II's light edges: glowing lines, the curves
 that time them, and the theme colours they take.
 
-Used by the band toast style and the tube and entrance transitions. Light
-is added (``ImageChops.add``), not blended, and only the rows a line covers
-are touched: cheap to draw, and cheap for a panel's video encoder.
+Used by the band toast style, the tube and entrance transitions, the lit
+finish and the panel light (render.lit, render.look). Light is added
+(``ImageChops.add``), not blended, and only the rows a line covers are
+touched: cheap to draw, and cheap for a panel's video encoder.
 """
 
 from __future__ import annotations
@@ -177,6 +178,49 @@ def bloom(layer: Image.Image, radius: float, strength: float, scale: int = 4) ->
     small = layer.resize((max(1, w // scale), max(1, h // scale)), Image.Resampling.BILINEAR)
     soft = small.filter(ImageFilter.GaussianBlur(max(0.3, radius)))
     return scaled(soft.resize((w, h), Image.Resampling.BILINEAR), strength)
+
+
+def light_layer(rgb: Any) -> Image.Image:
+    """Light given as RGB values (an array, 0 to 255) as an RGBA layer to add with
+    :func:`plus`: its colour the light's, its alpha its strongest channel."""
+    import numpy as np
+
+    rgb = np.clip(np.asarray(rgb, np.float32), 0, 255)
+    alpha = rgb.max(-1)
+    plain = rgb * (255 / np.maximum(alpha, 1e-3))[..., None]
+    out = np.concatenate([plain, alpha[..., None]], -1) + 0.5
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGBA")
+
+
+def plus(layer: Image.Image, light: Image.Image) -> Image.Image:
+    """``light`` (see :func:`light_layer`) added to the RGBA ``layer`` of the same
+    size: over something it adds up as light does, over nothing it shows
+    as a glow of its own."""
+    return ImageChops.add(layer.convert("RGBa"), light.convert("RGBa")).convert("RGBA")
+
+
+def sun_position(t: float, latitude: float, longitude: float) -> tuple[float, float]:
+    """Where the sun stands at Unix time ``t`` seen from a place: (azimuth from
+    north, clockwise; elevation) in degrees. The Astronomical Almanac's
+    approximation, good to about a degree: plenty for the direction of a light."""
+    d = t / 86400.0 + 2440587.5 - 2451545.0
+    g = math.radians((357.529 + 0.98560028 * d) % 360)
+    q = (280.459 + 0.98564736 * d) % 360
+    ecliptic = math.radians((q + 1.915 * math.sin(g) + 0.020 * math.sin(2 * g)) % 360)
+    tilt = math.radians(23.439 - 0.00000036 * d)
+    ascension = math.atan2(math.cos(tilt) * math.sin(ecliptic), math.cos(ecliptic))
+    declination = math.asin(math.sin(tilt) * math.sin(ecliptic))
+    sidereal = (18.697374558 + 24.06570982441908 * d) % 24
+    hour = math.radians((sidereal * 15 + longitude) % 360) - ascension
+    phi = math.radians(latitude)
+    elevation = math.asin(
+        math.sin(phi) * math.sin(declination)
+        + math.cos(phi) * math.cos(declination) * math.cos(hour)
+    )
+    azimuth = math.atan2(
+        -math.sin(hour), math.tan(declination) * math.cos(phi) - math.sin(phi) * math.cos(hour)
+    )
+    return math.degrees(azimuth) % 360, math.degrees(elevation)
 
 
 def paste_top(image: Image.Image, layer: Image.Image, x: int, y: int, rows: float) -> None:

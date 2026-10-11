@@ -143,6 +143,9 @@ class Motion:
         self.histories: dict[str, History] = {}
         self.previous: float | None = None  # the frame before this one
         self.now: float | None = None  # the frame being drawn
+        # The panel light's sweeps and the moments that start them (render.look
+        # makes it): they go on from theme to theme too. A copy starts without.
+        self.sweeps: Any = None
 
     # -- frames --------------------------------------------------------------
 

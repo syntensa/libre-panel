@@ -289,6 +289,50 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
     },
 }
 
+# How a widget's shape is drawn (render.finish): "flat" (the default), "lit"
+# (light from SPUR II's 3D layers) or "facet". A finish a type does not have
+# draws it flat, with a warning.
+FINISHES = ("flat", "lit", "facet")
+FINISH_FIELD = ("enum:" + "|".join(FINISHES), FINISHES[0])
+for _type in ("text", "metric", "bar", "gauge", "graph", "icon", "module"):
+    WIDGET_SPECS[_type]["finish"] = FINISH_FIELD
+
+# The look of the whole panel, block by block (render.look); a block that is
+# missing is off. The editor builds its settings from this table.
+LOOK_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
+    # SPUR II's grid: thin lines every ``spacing`` px, every ``major``-th one
+    # stronger (0: none); colours empty: the palette's grid colours, else a
+    # breath away from the background
+    "grid": {
+        "spacing": ("int", 8),
+        "major": ("int", 5),
+        "color": ("color?", None),
+        "major_color": ("color?", None),
+        "alpha": ("number", 1.0),
+    },
+    # One light for the panel: the sun at the place in config.toml (else noon)
+    # glints on light edges (outlines of rects with ``frames``), and sweeps of
+    # light run across at moments
+    "light": {
+        "strength": ("number", 1.0),
+        "sun": ("bool", True),
+        "frames": ("bool", True),
+        "color": ("color?", None),  # the sweeps' tint; empty: the accent
+        "sweep_s": ("number", 1.6),
+        "on_start": ("bool", True),
+        "on_hour": ("bool", True),
+        "on_track": ("bool", True),
+        "on_transition": ("bool", True),
+    },
+}
+LOOK_RANGES: dict[tuple[str, str], tuple[float, float]] = {
+    ("grid", "spacing"): (2, 400),
+    ("grid", "major"): (0, 50),
+    ("grid", "alpha"): (0, 1),
+    ("light", "strength"): (0, 2),
+    ("light", "sweep_s"): (0.3, 10),
+}
+
 _PALETTE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
 
@@ -315,6 +359,8 @@ class Theme:
     # corners, glow, fonts); None = not set in the theme.
     grid: dict[str, int] | None = None
     style: dict[str, Any] | None = None
+    # The panel's look by block ("grid", "light", ...; render.look); {} = none.
+    look: dict[str, Any] = field(default_factory=dict)
     root: Path | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -352,6 +398,8 @@ class Theme:
             data["style"] = dict(self.style)
         if self.screen is not None:
             data["screen"] = deepcopy(self.screen)
+        if self.look:
+            data["look"] = deepcopy(self.look)
         toast = {k: deepcopy(v) for k, v in self.toast.items() if v != TOAST_DEFAULTS[k]}
         if toast:
             data["toast"] = toast
@@ -671,6 +719,59 @@ def _parse_style(raw: Any, root: Path | None) -> dict[str, Any] | None:
     return style
 
 
+def _parse_look(raw: Any, palette: dict[str, str], warnings: list[str]) -> dict[str, Any]:
+    """``"look": {"grid": {...}, "light": {...}}``: the panel's look, block by
+    block. A missing block (or ``false``) is off, ``true`` or ``{}`` is on with
+    the defaults. Blocks this version does not know are kept as they are,
+    so saving loses nothing."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ThemeError("look must be an object")
+    look: dict[str, Any] = {}
+    for name, given in raw.items():
+        spec = LOOK_SPECS.get(name)
+        if spec is None:
+            warnings.append(f"look: ignoring unknown block {name!r}")
+            look[name] = deepcopy(given)
+            continue
+        if given is None or given is False:
+            continue
+        if given is True:
+            given = {}
+        if not isinstance(given, dict):
+            raise ThemeError(f"look.{name} must be an object")
+        block = {}
+        for key, (kind, default) in spec.items():
+            value = _coerce(kind, given.get(key, deepcopy(default)), f"look.{name}.{key}", palette)
+            low, high = LOOK_RANGES.get((name, key), (None, None))
+            if low is not None and not low <= value <= high:
+                raise ThemeError(f"look.{name}.{key}: must be between {low} and {high}")
+            block[key] = value
+        warnings.extend(
+            f"look.{name}: ignoring unknown field {k!r}" for k in sorted(set(given) - set(spec))
+        )
+        look[name] = block
+    return look
+
+
+def _finish_warnings(widgets: list[dict[str, Any]], warnings: list[str]) -> None:
+    """One warning per widget type (or icon) whose finish is not there: drawn flat."""
+    if all(widget.get("finish", FINISHES[0]) == FINISHES[0] for widget in widgets):
+        return
+    from libre_panel.render.finish import supports  # the finishes are code: loaded when named
+
+    told = set()
+    for widget in widgets:
+        name = widget.get("finish", FINISHES[0])
+        if name == FINISHES[0] or supports(widget):
+            continue
+        what = f"the icon {widget['icon']!r}" if widget["type"] == "icon" else widget["type"]
+        if (name, what) not in told:
+            told.add((name, what))
+            warnings.append(f"finish {name!r} is not available for {what}; drawn flat")
+
+
 def parse_theme(data: Any, root: Path | None = None) -> Theme:
     if not isinstance(data, dict):
         raise ThemeError("theme.json must contain an object")
@@ -744,6 +845,7 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
             resolve_asset(root, widget["src"])  # "@media.cover": a picture a sensor has
         widgets.append(widget)
         warnings.extend(w)
+    _finish_warnings(widgets, warnings)
 
     return Theme(
         name=_coerce("string", data.get("name", "Untitled"), "name"),
@@ -764,6 +866,7 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         style=_parse_style(data.get("style"), root),
         screen=_parse_screen(data.get("screen"), palette, root, warnings),
         toast=_parse_toast(data.get("toast"), palette, root, warnings),
+        look=_parse_look(data.get("look"), palette, warnings),
         root=root,
         warnings=warnings,
     )

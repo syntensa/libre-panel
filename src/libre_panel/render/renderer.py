@@ -23,7 +23,7 @@ from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
-from functools import lru_cache
+from functools import lru_cache, partial
 from typing import Any
 
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont, ImageOps
@@ -31,6 +31,7 @@ from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont
 from libre_panel import clock, i18n, timezones
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
 from libre_panel.icons import draw_icon, weather_icon_name
+from libre_panel.render import finish as finishes
 from libre_panel.render import lists
 from libre_panel.render.countdown import countdown_text
 from libre_panel.render.formatting import FormatError, auto_format, safe_format
@@ -64,6 +65,7 @@ class Piece:
     box: Box | None = None  # hit box for the editor; defaults to the layer bounds
     backdrop: Image.Image | None = None  # "L" mask: blur the canvas beneath first
     backdrop_radius: int = 0
+    add: bool = False  # light: added onto what lies beneath (the panel light's gloss)
 
 
 class _Builder:
@@ -325,6 +327,18 @@ class Renderer:
         # Modules become plain widgets laid out for their cells; the editor
         # gets one box per module.
         self.widgets, self.module_boxes = expand_modules(theme)
+        # Finishes other than flat, and the panel's look (render.finish,
+        # render.look); a theme with neither pays nothing for them.
+        self.light_edges: list[Any] = []  # this frame's, for the panel light (add_light_edge)
+        self.place: tuple[float, float] | None = None  # where the sun is seen from (the loop)
+        self._finishes = finishes.attach(self)  # widget id -> finish
+        self.look: Any = None
+        if theme.look:
+            from libre_panel.render.look import Look
+
+            self.look = Look(self)
+        self._drawers = {wid: partial(f.draw, self) for wid, f in self._finishes.items()
+                         if finishes.draws(f)}  # fmt: skip
         self._modules = {w["id"]: w for w in theme.widgets if w["type"] == "module"}
         self._keys = {w["id"]: json.dumps(w, sort_keys=True) for w in self.widgets}
         if not preview:  # costly sensors work only while a panel shows them
@@ -546,7 +560,22 @@ class Renderer:
                     (region[0] - bx, region[1] - by, region[2] - bx, region[3] - by)
                 )
                 canvas.paste(blurred, region[:2], mask)
+        if piece.add:
+            self._add_light(canvas, piece.layer, piece.x - ox, piece.y - oy)
+            return
         self._paste(canvas, piece.layer, piece.x - ox, piece.y - oy, opaque)
+
+    @staticmethod
+    def _add_light(canvas: Image.Image, layer: Image.Image, x: int, y: int) -> None:
+        """Light (a layer whose colour is the light) added onto the canvas, as
+        light adds up; the part on the canvas only."""
+        x0, y0 = max(x, 0), max(y, 0)
+        x1, y1 = min(x + layer.width, canvas.width), min(y + layer.height, canvas.height)
+        if x1 <= x0 or y1 <= y0:
+            return
+        if (x0, y0, x1, y1) != (x, y, x + layer.width, y + layer.height):
+            layer = layer.crop((x0 - x, y0 - y, x1 - x, y1 - y))
+        canvas.paste(ImageChops.add(canvas.crop((x0, y0, x1, y1)), layer), (x0, y0))
 
     @staticmethod
     def _extent(piece: Piece) -> tuple[int, int, int, int]:
@@ -817,22 +846,65 @@ class Renderer:
             image, (x, y) = result if isinstance(result, tuple) else (result, at)
             return Piece(image if image.mode == "RGBA" else image.convert("RGBA"), int(x), int(y))
 
-        return self._cached(widget, ("plugin", kind.key(widget, snapshot, now)), build)
+        piece = self._cached(widget, ("plugin", kind.key(widget, snapshot, now)), build)
+        edges = getattr(kind, "edges", None)  # where the panel light glints (WidgetType.edges)
+        if edges is not None and self.look is not None and self.look.light is not None:
+            for edge in edges(widget, ctx, snapshot, now) or ():
+                self.add_light_edge(edge)
+        return piece
+
+    # -- the look ----------------------------------------------------------
+
+    def add_light_edge(self, edge: Any) -> None:
+        """Let the panel light (theme ``look.light``) glint on ``edge`` (a
+        render.look.LightEdge) in this frame. Call it on every frame, on the
+        render thread (while drawing a widget, not in a build that may run in
+        the helper thread), with the same object while nothing changes."""
+        self.light_edges.append(edge)
+
+    def transition_ended(self, kind: Any, now: float) -> None:
+        """A transition between themes ended at ``now`` (the main loop says so):
+        after a tube or an entrance, the panel light sweeps across."""
+        if self.look is not None:
+            self.look.transition_ended(kind, now)
+
+    @property
+    def prepares(self) -> bool:
+        """Whether :meth:`warm` has something to load before the first frame
+        (a screen's ``prepare()``, light layers)."""
+        return self.screen is not None or self.look is not None or bool(self._finishes)
+
+    def _prepare_look(self) -> None:
+        """Load the light layers and build what the finishes and the look draw
+        from, so the first frame loads nothing (SPUR II stalled 118 ms on a
+        layer loaded in a frame)."""
+        for widget in self.widgets:
+            finish = self._finishes.get(widget["id"])
+            if finish is None:
+                continue
+            try:
+                finish.prepare(self, widget)
+            except Exception as exc:  # it is drawn when it comes, or flat
+                self._warn(f"widget {widget['id']!r} failed to prepare: {exc}")
+        if self.look is not None:
+            self.look.prepare()
 
     def warm(
         self, snapshot: Snapshot | None, now: float, pause: Callable[[], Any] | None = None
     ) -> None:
         """Build what the first frames need, away from the render thread: the
-        screen's ``prepare()``, and one frame of the widgets (cards, texts,
-        icons, graph strips). The screen does not draw here: its frames
-        belong to the render thread. ``pause`` runs between widgets (to wait
-        while the render thread draws)."""
+        screen's ``prepare()``, the light layers of the look and the finishes,
+        and one frame of the widgets (cards, texts, icons, graph strips). The
+        screen does not draw here: its frames belong to the render thread.
+        ``pause`` runs between widgets (to wait while the render thread draws)."""
         screen = self.screen
         if screen is not None:
             try:
                 screen.prepare()
             except Exception as exc:  # a broken plugin must not keep the theme away
                 self._warn(f"screen {self.theme.screen['name']!r} failed to prepare: {exc}")
+        if self.look is not None or self._finishes:
+            self._prepare_look()
         if snapshot is None:
             return
         self.screen, self._breathe = None, pause
@@ -850,6 +922,7 @@ class Renderer:
         theme = self.theme
         self.moving = False
         self.snapshot = snapshot
+        self.light_edges = []
         self.motion.begin(snapshot.readings, now, self._glide_s(), self._lead())
         boxes: dict[str, Box] = {}
         pieces: list[tuple[str, Piece]] = []
@@ -860,7 +933,11 @@ class Renderer:
             module = self._modules.get(widget.get("_module", ""))
             if module is not None and (not module["visible"] or self._missing(module, snapshot)):
                 continue
-            draw = getattr(self, f"_draw_{widget['type']}", None) or self._draw_plugin
+            draw = (
+                self._drawers.get(widget["id"])
+                or getattr(self, f"_draw_{widget['type']}", None)
+                or self._draw_plugin
+            )
             try:
                 piece = draw(widget, snapshot, now)
             except Exception as exc:  # one broken widget must not blank the panel
@@ -884,12 +961,16 @@ class Renderer:
                 piece.layer.height,
             ]
         if screen is not None:
-            if not pieces and screen.mode == "RGB" and screen.size == (theme.width, theme.height):
+            alone = not pieces and self.look is None
+            if alone and screen.mode == "RGB" and screen.size == (theme.width, theme.height):
                 # an opaque screen alone is the frame: nothing to compose
                 self._last = None
                 return screen, boxes
             pieces.insert(0, ("\0screen", self._screen_piece(screen)))  # ids are never empty
-        return self._compose(pieces).convert("RGB"), boxes
+        if self.look is None:
+            return self._compose(pieces).convert("RGB"), boxes
+        self.look.compose(pieces, snapshot, now)  # the grid beneath, the sun's gloss on top
+        return self.look.finish(self._compose(pieces).convert("RGB"), now), boxes
 
     @staticmethod
     def _missing(widget: dict[str, Any], snapshot: Snapshot) -> bool:
@@ -1295,7 +1376,8 @@ class Renderer:
         self._slide_lists[key] = (time.monotonic(), found)
         return found
 
-    def _draw_icon(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+    def _icon_name(self, widget: dict[str, Any], snapshot: Snapshot) -> str:
+        """The icon to show: the widget's, or for ``weather`` the weather's now."""
         name = widget["icon"]
         if name == "weather":
             key = widget.get("sensor") or "weather.code"
@@ -1308,6 +1390,10 @@ class Renderer:
                 daylight = snapshot.value("weather.is_day")
             night = not 6 <= snapshot.now.hour < 20 if daylight is None else not daylight
             name = weather_icon_name(snapshot.value(key), night)
+        return name
+
+    def _draw_icon(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        name = self._icon_name(widget, snapshot)
         color = self.color(widget["color"])
 
         def build() -> Piece:
@@ -1661,42 +1747,40 @@ class Renderer:
         layer.paste(_gradient(layer.size, a, b, horizontal), (0, 0), mask)
 
     def _draw_rect(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        return self._cached(widget, None, lambda: self._rect_piece(widget))
+
+    def _rect_piece(self, widget: dict[str, Any]) -> Piece:
+        """A rect as it is drawn flat (the panel light's frames start from it)."""
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
         s = SUPERSAMPLE
-
-        def build() -> Piece:
-            card = self._card(widget, x, y, w, h)
-            if card is not None:
-                return card
-            layer, draw = self._canvas(w, h)
-            radius = min(widget["radius"], w // 2, h // 2) * s
-            box = [0, 0, w * s - 1, h * s - 1]
-            if widget["color"]:
-                self._fill_shape(
-                    layer,
-                    box,
-                    radius,
-                    self.color(widget["color"]),
-                    self.color(widget["color2"]),
-                    widget["gradient"] == "horizontal",
-                )
-            if widget["outline"]:
-                draw.rounded_rectangle(
-                    box,
-                    radius=radius,
-                    outline=self.color(widget["outline"]),
-                    width=widget["outline_width"] * s,
-                )
-            backdrop = None
-            if widget["backdrop_blur"]:
-                mask = Image.new("L", layer.size, 0)
-                ImageDraw.Draw(mask).rounded_rectangle(box, radius=radius, fill=255)
-                backdrop = self._down(mask, w, h)
-            return Piece(
-                self._down(layer, w, h), x, y, [x, y, w, h], backdrop, widget["backdrop_blur"]
+        card = self._card(widget, x, y, w, h)
+        if card is not None:
+            return card
+        layer, draw = self._canvas(w, h)
+        radius = min(widget["radius"], w // 2, h // 2) * s
+        box = [0, 0, w * s - 1, h * s - 1]
+        if widget["color"]:
+            self._fill_shape(
+                layer,
+                box,
+                radius,
+                self.color(widget["color"]),
+                self.color(widget["color2"]),
+                widget["gradient"] == "horizontal",
             )
-
-        return self._cached(widget, None, build)
+        if widget["outline"]:
+            draw.rounded_rectangle(
+                box,
+                radius=radius,
+                outline=self.color(widget["outline"]),
+                width=widget["outline_width"] * s,
+            )
+        backdrop = None
+        if widget["backdrop_blur"]:
+            mask = Image.new("L", layer.size, 0)
+            ImageDraw.Draw(mask).rounded_rectangle(box, radius=radius, fill=255)
+            backdrop = self._down(mask, w, h)
+        return Piece(self._down(layer, w, h), x, y, [x, y, w, h], backdrop, widget["backdrop_blur"])
 
     def _card(self, widget: dict[str, Any], x: int, y: int, w: int, h: int) -> Piece | None:
         """A rect drawn at its size with only its round corners supersampled:
@@ -2315,6 +2399,9 @@ class Renderer:
                 alpha = ImageChops.multiply(alpha, Image.new("L", layer.size, color[3]))
             tint.putalpha(alpha)
             layer.alpha_composite(tint)
+        finish = self._finishes.get(widget["id"])  # a finish may draw the line its own way
+        if finish is not None and finish.curve(self, widget, layer, runs, color, s):
+            return layer
         joint = "curve" if widget.get("\0joints", True) else None
         for run in runs:
             draw.line(run, fill=color, width=widget["line_width"] * s, joint=joint)
