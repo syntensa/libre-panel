@@ -345,6 +345,28 @@
 - Liberation Sans ships with Libre Panel (`builtin:LiberationSans-Regular`,
   `-Bold`): its letters are as wide as Arial's, so a layout made for Arial
   stays in place
+- The names of the processor, the graphics card and the memory (`cpu.name`,
+  `gpu.name`, `mem.name`) are found by Libre Panel itself, on Windows and
+  Linux, once at the start, with no administrator rights and no other
+  program: from the registry and the firmware's SMBIOS table on Windows, from
+  `/proc`, `/sys` and the system's `pci.ids` on Linux (and the SMBIOS files,
+  where the user may read them). They are shortened for a panel, "Ryzen 5
+  7600", "Core i7-12700K", "GeForce RTX 4070", "Kingston DDR5-5600 32 GB";
+  where the memory modules cannot be read `mem.name` is the size, "32 GB". The
+  new `hardware` source is always on, adds nothing to a frame's time and wins
+  over LibreHardwareMonitor's names, which fill in where it finds none
+- `[hardware]` in `config.toml`: `cpu_name`, `gpu_name` and `memory_name`. Text
+  there is the name, as written (one line, 100 characters at most); empty means
+  the name found. A changed `config.toml` is taken while the panel runs. The
+  names never go to the log or into the report of `libre-panel doctor`
+- The editor's server answers `GET /api/hardware` with the found and the
+  written name of each part (`{"cpu": {"detected": ..., "custom": ""}, "gpu":
+  ..., "memory": ...}`; `?refresh=1` asks the computer again) and
+  `POST /api/hardware` sets any of `cpu`, `gpu` and `memory` (an empty text
+  gives the found name back) through `config.toml`, comments kept
+- Plugins: a sensor source can win over sources before it for some keys
+  (`overrides`), and gets the loaded configuration in `follow_config(config)`,
+  when it is made and whenever `config.toml` changes while the panel runs
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
@@ -464,6 +486,12 @@
 - `tools/motion_bench.py` takes `--dust`, `--finish facet` and `--fans N`: it
   runs each theme with and without that look, side by side frame by frame, and
   prints what the look adds to a frame
+- LibreHardwareMonitor's `cpu.name` and `gpu.name` are shortened like the names
+  Libre Panel finds itself ("Ryzen 7 7800X3D" for "AMD Ryzen 7 7800X3D")
+- SPUR Classic's RAM heading names the memory (`mem.name`) instead of giving
+  its size only. The RAM modules (ring, big number, history) show the name
+  under their title as CPU and GPU do, and the System module lists it as a
+  fourth row where there is room
 
 ## 0.4.2 — 2026-10-10
 

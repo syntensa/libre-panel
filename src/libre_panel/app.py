@@ -45,6 +45,7 @@ def build_hub(config: Config, demo: bool = False) -> SensorHub:
 
         providers.append(OpenMeteoProvider(config.weather))
     if not demo:
+        from libre_panel.sensors.hardware import HardwareProvider
         from libre_panel.sensors.media import MediaProvider
         from libre_panel.sensors.sky import SkyProvider
 
@@ -54,7 +55,11 @@ def build_hub(config: Config, demo: bool = False) -> SensorHub:
             providers.append(SkyProvider(place))
         if "media" not in given:  # idle until a theme shows what is playing
             providers.append(MediaProvider(config.sensors.options.get("media", {})))
-    return SensorHub(providers)
+        if not given & {"hardware", "demo"}:  # a demo has names of its own, made up
+            providers.append(HardwareProvider())  # the names of this PC, and [hardware]
+    hub = SensorHub(providers)
+    hub.follow_config(config)  # [hardware] and the like, which no source's own table holds
+    return hub
 
 
 def load_configured_theme(config: Config) -> Theme:
@@ -655,6 +660,7 @@ class MainLoop:
                     device.rotate = fresh.device.rotate
                     fresh.device, config = device, fresh
                     i18n.set_language(config.language)
+                    hub.follow_config(config)  # taken at the sample that follows (next_sample)
                     renderer.close()
                     theme, renderer = new_theme, self._renderer(new_theme, config)
                     size, previous, next_sample = target_size(config, theme), None, 0.0

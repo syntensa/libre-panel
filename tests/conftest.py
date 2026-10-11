@@ -43,6 +43,17 @@ def no_installed_plugins(monkeypatch):
     loader.reset_registry()
 
 
+@pytest.fixture(autouse=True)
+def no_machine_names(monkeypatch):
+    """What the computer running the tests is made of stays out of them (it differs from
+    machine to machine, and the names are its owner's): nothing is found, until a test
+    brings a computer of its own."""
+    from libre_panel.sensors import hardware
+
+    monkeypatch.setattr(hardware, "_found", None)  # what was asked before is not an answer
+    monkeypatch.setattr(hardware, "_scan_machine", lambda *args: hardware.Found())
+
+
 class NoTasks:
     """A Task Scheduler without tasks, for tests that do not bring their own."""
 

@@ -23,8 +23,8 @@ def app_url():
 
 
 def expected_404(message):
-    """The app asks for the hardware's names; a server without them answers 404 (the app
-    then hides them), which Chromium logs as an error."""
+    """The app asks for the hardware's names; a server without them (an older background
+    app, as one test plays) answers 404, the app hides them, and Chromium logs an error."""
     return message.text.startswith("Failed to load resource") and message.location.get(
         "url", ""
     ).endswith("/api/hardware")
@@ -331,8 +331,10 @@ def test_hardware_names_in_settings_and_where_they_show(app_url):
 
 
 def test_without_hardware_names_nothing_shows(app_url):
-    """A server without /api/hardware: no fields, and the section says what is to come."""
-    with browser_page(app_url, "settings/sensors") as page:
+    """A server without /api/hardware (an older background app): no fields, and the section
+    says what is to come."""
+    missing = {"**/api/hardware": lambda route: route.fulfill(status=404, body="")}
+    with browser_page(app_url, "settings/sensors", routes=missing) as page:
         page.wait_for_function("window.libre.store.get().hardware === false")
         assert page.locator(".hardware-name").count() == 0
         assert page.locator(".settings-upcoming").is_visible()

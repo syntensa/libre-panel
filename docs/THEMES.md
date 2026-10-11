@@ -278,7 +278,7 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `graph` | a history graph under its name and value | as `stat` |
 | `bars` | rows with bars for CPU, RAM, disk and GPU, as many as fit | |
 | `network` | download and upload; graphs when wide or large | |
-| `system` | names of processor and graphics card, uptime | |
+| `system` | names of processor and graphics card, uptime; the memory's name too when there is room for a fourth row | |
 | `text` | a title (`text`) with an accent line | |
 | `temps` | every temperature as a bar, CPU and GPU first, warm and hot in `warn` and `crit`; the fans beside them when long, as tiles below when big | `items` |
 | `cores` | the load of every core: tiles when small, columns when wide; the history when big | |
@@ -555,7 +555,7 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `game.fps`, `game.frametime`, `game.low`, `game.app` | fps, ms, fps, text | the game being played, through [PresentMon](CONFIGURATION.md#more-sensor-sources) (Windows) |
 | `game.frametime_peak`, `game.limiter` | ms, text | the longest frame time since the last reading (0 while a game runs and no frame came: a graph of it never stops), and who holds the frame rate down: `cpu`, `gpu` or `cap` |
 | `game.name` | text | the name of the game while the `game` service has the panel in game mode ([Configuration](CONFIGURATION.md#game-mode)); its logo is the picture `@game.logo` |
-| `cpu.name`, `gpu.name` | text | LibreHardwareMonitor |
+| `cpu.name`, `gpu.name`, `mem.name` | text | the names of the processor, graphics card and memory, shortened for a panel ("Ryzen 5 7600", "GeForce RTX 4070", "Kingston DDR5-5600 32 GB"; `mem.name` is the size, "32 GB", where the modules cannot be read): found by Libre Panel itself, or the text you give under `[hardware]`, see [Configuration](CONFIGURATION.md#hardware-names); LibreHardwareMonitor's two fill in where nothing is found |
 | `weather.temperature`, `.apparent_temperature`, `.humidity`, `.wind_speed`, `.code`, `.description`, `.is_day` | °C, %, km/h | Open-Meteo, when enabled |
 | `weather.hour.<n>.temperature`, `.code`, `.rain`, `.day`, `.time` | °C, %, 1/0, "15:00" | the hour `n` hours ahead (1 = the next full hour, up to 24) |
 | `weather.day.<n>.high`, `.low`, `.code`, `.rain`, `.name` | °C, % | day `n` (0 = today, up to 6); `name` is "Today" or the short weekday |

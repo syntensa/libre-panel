@@ -118,6 +118,7 @@ class DemoProvider(SensorProvider):
         out.update(demo_calendar(t))
         out["cpu.name"] = Reading("cpu.name", "8-Core Processor", "", "CPU")
         out["gpu.name"] = Reading("gpu.name", "Graphics Card", "", "GPU")
+        out["mem.name"] = Reading("mem.name", "DDR5-5600 32 GB", "", "Memory")
         if self.include_weather:
             for key, (label, unit, value) in _WEATHER.items():
                 out[key] = Reading(key, value, unit, label)

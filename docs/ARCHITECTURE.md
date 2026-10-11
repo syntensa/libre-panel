@@ -76,6 +76,15 @@ frame between the `refresh_ms` snapshots (graphs keep one value per
 snapshot). `every_frame = "video"` does so only in video mode, where every
 frame reaches the panel anyway (the `load` source).
 
+Where two sources have a reading for a key, the one earlier in the list wins.
+A source whose reading must win over those before it (the user said so, or it
+is surely right) names the keys in `overrides = ("cpu.name",)`: the built-in
+`hardware` source does so for `cpu.name`, `gpu.name` and `mem.name`, which come
+from the computer itself or from `[hardware]` in `config.toml`. A source that
+reads settings outside its own `[sensors.<name>]` table gets the loaded
+`Config` in `follow_config(config)`, once when it is made and again whenever
+`config.toml` changes while the panel runs.
+
 ## The console API
 
 The editor's own pages (`pages`) answer under `/api/plugins/<page>/` with JSON, one route
