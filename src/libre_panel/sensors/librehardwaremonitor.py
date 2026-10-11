@@ -35,6 +35,7 @@ import re
 import sys
 import threading
 import time
+import urllib.parse
 import urllib.request
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
@@ -300,10 +301,17 @@ def _memory_temperature(devices: list[_Device], out: dict[str, Reading]) -> tupl
     return tuple(reading.key[4:] for reading in found)
 
 
+# This PC's own web server is asked directly: a system proxy would not reach it.
+_DIRECT = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+_LOOPBACK = {"localhost", "127.0.0.1", "::1"}
+
+
 def fetch_tree(url: str, timeout: float = REQUEST_SECONDS) -> dict[str, Any]:
     """The web server's ``data.json``; raises OSError (or ValueError) if it does not answer."""
     request = urllib.request.Request(url, headers={"User-Agent": f"libre-panel/{__version__}"})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    host = urllib.parse.urlsplit(url).hostname or ""
+    opener = _DIRECT.open if host in _LOOPBACK else urllib.request.urlopen
+    with opener(request, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
 

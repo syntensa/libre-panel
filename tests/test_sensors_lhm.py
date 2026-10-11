@@ -186,6 +186,7 @@ def test_a_request_is_given_up_after_a_second(monkeypatch):
         raise OSError("refused")
 
     monkeypatch.setattr(lhm.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(lhm._DIRECT, "open", urlopen)  # this PC's own server: no proxy
     with pytest.raises(OSError):
         lhm.fetch_tree("http://192.0.2.7:8085/data.json")
     provider = lhm.LibreHardwareMonitorProvider({"poll_seconds": 3600})
@@ -210,3 +211,34 @@ def test_the_hint_names_what_to_do_on_windows():
     for key in lhm.HARDWARE_KEYS:  # any one of them: the sensors arrive
         assert lhm.hardware_hint({key: Reading(key, 50.0)}, listed, url, "win32") is None
     assert lhm.hardware_hint({}, ["psutil"], url, "linux") is None  # psutil has them there
+
+
+def test_this_pcs_own_web_server_is_asked_past_a_system_proxy(monkeypatch):
+    """A proxy set for the system (common at work) cannot reach 127.0.0.1 on this PC."""
+    import http.server
+    import threading
+
+    class Answer(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = b'{"Text": "Sensor", "Children": []}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Answer)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    for name in ("http_proxy", "HTTP_PROXY"):
+        monkeypatch.setenv(name, "http://192.0.2.1:9")  # nobody there
+    monkeypatch.delenv("no_proxy", raising=False)
+    monkeypatch.delenv("NO_PROXY", raising=False)
+    try:
+        port = server.server_address[1]
+        assert lhm.fetch_tree(f"http://127.0.0.1:{port}/data.json")["Text"] == "Sensor"
+    finally:
+        server.shutdown()
+        server.server_close()
