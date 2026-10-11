@@ -1,0 +1,42 @@
+// The app's frame: header, the current view, and what floats above them
+// (command palette, dialogs, messages).
+
+import { t } from "../core/i18n.js";
+import { useStore } from "../core/state.js";
+import { html } from "../lib/preact.js";
+import { Dialogs } from "../ui/dialog.js";
+import { Icon } from "../ui/icons.js";
+import { CommandPalette } from "../ui/palette.js";
+import { Toasts } from "../ui/toast.js";
+import { Header } from "./header.js";
+import { viewById } from "./views.js";
+
+function Loading() {
+  return html`<div class="view-message" aria-busy="true"><span class="spinner"></span>${t("Loading…")}</div>`;
+}
+
+function Failure({ message }) {
+  return html`<div class="view-message error" role="alert">
+    <${Icon} name="warning" size=${22} />
+    <strong>${t("Libre Panel could not start")}</strong>
+    <span>${message}</span>
+    <button type="button" class="btn" onClick=${() => location.reload()}>${t("Try again")}</button>
+  </div>`;
+}
+
+export function App() {
+  useStore((s) => s.lang); // a new language: everything is drawn again
+  const { ready, failed, route } = useStore((s) => ({ ready: s.ready, failed: s.failed, route: s.route }));
+  const view = viewById(route.view);
+  const View = view?.component;
+  let body = html`<${Loading} />`;
+  if (failed) body = html`<${Failure} message=${failed} />`;
+  else if (ready && View) body = html`<${View} key=${view.id} rest=${route.rest} />`;
+  return html`<div class="app" data-view=${route.view}>
+    <${Header} view=${ready ? view : null} />
+    <main class="view" id="main">${body}</main>
+    <${CommandPalette} />
+    <${Dialogs} />
+    <${Toasts} />
+  </div>`;
+}

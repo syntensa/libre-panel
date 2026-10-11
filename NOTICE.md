@@ -23,7 +23,14 @@ LibreHardwareMonitor that you run yourself can still be read through its web
 server. <https://github.com/LibreHardwareMonitor/LibreHardwareMonitor>.
 
 **Barlow** (Jeremy Tribby) and **JetBrains Mono** (JetBrains) — bundled fonts
-under the SIL Open Font License 1.1, see `src/libre_panel/fonts/`.
+under the SIL Open Font License 1.1, see `src/libre_panel/fonts/`. The app shows
+its own text in them too.
+
+**Preact** (MIT, Copyright (c) 2015-present Jason Miller) and **htm** (Apache-2.0,
+Copyright 2018 Google Inc.) — the app's front-end is built with them. The files
+are those npm publishes, unchanged but for one import in Preact's hooks; their
+versions, addresses and SHA-256 are in `src/libre_panel/editor/app/vendor/SOURCES.txt`,
+their licence texts beside them.
 
 **librehardwaremonitor-api** (Sab44, MIT) — the real LibreHardwareMonitor
 output in `tests/data/` comes from its test fixtures.
