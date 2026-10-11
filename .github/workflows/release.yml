@@ -48,8 +48,8 @@ jobs:
 
   standalone:
     # Build, package and test on each system: the program folder, then what
-    # people download (Windows setup, macOS disk image, Linux AppImage), which
-    # is installed, started as autostart/double-click would, and removed.
+    # people download (Windows setup, Linux AppImage), which is installed,
+    # started as autostart/double-click would, and removed.
     timeout-minutes: 45
     needs: test
     strategy:
@@ -60,8 +60,6 @@ jobs:
             name: windows-x64
           - os: ubuntu-latest
             name: linux-x64
-          - os: macos-latest
-            name: macos-arm64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -79,8 +77,6 @@ jobs:
           case "${{ runner.os }}" in
             Windows) echo "CLI=dist/libre-panel/libre-panel.exe" >> "$GITHUB_ENV"
                      echo "GUI=dist/libre-panel/LibrePanel.exe" >> "$GITHUB_ENV" ;;
-            macOS)   echo "CLI=dist/Libre Panel.app/Contents/MacOS/libre-panel" >> "$GITHUB_ENV"
-                     echo "GUI=dist/Libre Panel.app/Contents/MacOS/LibrePanel" >> "$GITHUB_ENV" ;;
             Linux)   echo "CLI=dist/libre-panel/libre-panel" >> "$GITHUB_ENV"
                      echo "GUI=dist/libre-panel/libre-panel" >> "$GITHUB_ENV" ;;
           esac
@@ -129,13 +125,6 @@ jobs:
         shell: pwsh
         run: python packaging/windows/test_installer.py "dist/libre-panel-$env:VERSION-windows-x64-setup.exe"
 
-      - name: macOS disk image
-        if: runner.os == 'macOS'
-        run: packaging/macos/build_dmg.sh "dist/libre-panel-$VERSION-macos-arm64.dmg"
-      - name: Test the disk image (mount, run, double-click, quit)
-        if: runner.os == 'macOS'
-        run: packaging/macos/test_app.sh "dist/libre-panel-$VERSION-macos-arm64.dmg"
-
       - name: Linux AppImage and archive
         if: runner.os == 'Linux'
         run: |
@@ -155,7 +144,6 @@ jobs:
           path: |
             dist/*.zip
             dist/*-setup.exe
-            dist/*.dmg
             dist/*.tar.gz
             dist/*.AppImage
 
@@ -181,7 +169,7 @@ jobs:
             found { print }
           ' CHANGELOG.md | sed -E "s#\]\((docs/|[A-Z]+\.md)#](${base}/\1#g" > notes.md
           test -s notes.md
-          printf '\n**Which file?** Windows: `…-setup.exe`, macOS: `….dmg`, Linux: `….AppImage`; see [Install](https://github.com/%s#install).\n' "$GITHUB_REPOSITORY" >> notes.md
+          printf '\n**Which file?** Windows: `…-setup.exe`, Linux: `….AppImage`; see [Install](https://github.com/%s#install).\n' "$GITHUB_REPOSITORY" >> notes.md
       - name: Publish the release with all files
         env:
           GH_TOKEN: ${{ github.token }}
