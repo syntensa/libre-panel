@@ -28,6 +28,7 @@ from libre_panel.config import (
     load_config,
     set_active_theme,
     set_config_value,
+    theme_chosen,
     user_themes_dir,
 )
 from libre_panel.devices.models import MODELS, PROTOCOLS
@@ -44,6 +45,7 @@ from libre_panel.theme.model import (
     DUST_MAX_COLORS,
     EFFECT_FIELDS,
     FINISHES,
+    LOOK_RANGES,
     LOOK_SPECS,
     PRIMARY_FIELDS,
     THEME_FILENAME,
@@ -177,6 +179,14 @@ def _finish_types(types: list[str]) -> dict[str, list[str]]:
         if any(finish.get(name, part) for part in finish.PART_TYPES):
             kinds.append("module")
         found[name] = kinds
+    return found
+
+
+def _look_ranges() -> dict[str, dict[str, list[float]]]:
+    """``LOOK_RANGES`` by block, for sliders that stop where the theme would refuse."""
+    found: dict[str, dict[str, list[float]]] = {}
+    for (block, key), (low, high) in LOOK_RANGES.items():
+        found.setdefault(block, {})[key] = [low, high]
     return found
 
 
@@ -568,7 +578,8 @@ class EditorHandler(BaseHTTPRequestHandler):
         """The pages of the panel: the theme it shows normally, the theme of each mode
         ([modes.<name>], game mode's among them, with its frame rate; None: the normal
         one) and the round report's (the memory service's ``report_theme``), and which
-        page is on show now. The console's ``control/themes`` has the first two."""
+        page is on show now, and whether config.toml names a theme at all (``chosen``). The
+        console's ``control/themes`` has the first two."""
         from libre_panel.services.game import MODE as GAME_MODE
         from libre_panel.services.memory import Memory
 
@@ -599,7 +610,8 @@ class EditorHandler(BaseHTTPRequestHandler):
                 shown, mode_now = panel.get("theme"), panel.get("mode")
             except Exception as exc:  # the panel's state is a nice-to-have here
                 log.debug("no panel state: %s", exc)
-        self._json({"pages": pages, "shown": shown, "mode": mode_now})
+        chosen = theme_chosen(config.path)  # false on a first start: Start offers the themes
+        self._json({"pages": pages, "shown": shown, "mode": mode_now, "chosen": chosen})
 
     def _i18n(self) -> dict[str, Any]:
         try:
@@ -642,6 +654,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             "look": {
                 name: {k: list(v) for k, v in spec.items()} for name, spec in LOOK_SPECS.items()
             },
+            # the range each numeric field of a look block accepts: {block: {field: [low, high]}}
+            "look_ranges": _look_ranges(),
             "models": models,
             "protocols": PROTOCOLS,
             "fonts": [BUILTIN_PREFIX + name for name in builtin_fonts()],

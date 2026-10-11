@@ -255,6 +255,18 @@ def test_specs_carry_the_panel_look_and_the_finishes(server):
     assert "finish" not in specs["widgets"]["rect"]
 
 
+def test_specs_carry_the_ranges_of_the_look(server):
+    """Sliders for the look stop where the theme would refuse a value."""
+    from libre_panel.theme.model import LOOK_RANGES
+
+    _, specs = request(server, "GET", "/api/specs")
+    ranges = specs["look_ranges"]
+    assert ranges["light"]["sweep_seconds"] == [0.3, 10] and ranges["dust"]["rate"] == [1, 60]
+    assert {(block, key) for block, keys in ranges.items() for key in keys} == set(LOOK_RANGES)
+    for block, keys in ranges.items():
+        assert set(keys) <= set(specs["look"][block]), block
+
+
 def test_module_previews_follow_the_look(server):
     from libre_panel.theme.modules import look_theme_parts
 
@@ -346,6 +358,18 @@ def test_pages_of_the_panel(server, isolated_home):
         {"page": "report", "theme": ""},
     ):
         assert request(server, "POST", "/api/pages", wrong)[0] == 400, wrong
+
+
+def test_pages_say_whether_a_theme_was_chosen(server, isolated_home):
+    """A first start has no theme line in config.toml: Start then asks which look to use.
+    Choosing one (or any other way of writing the line) ends it."""
+    assert request(server, "GET", "/api/pages")[1]["chosen"] is False  # no config.toml at all
+    isolated_home.mkdir(parents=True, exist_ok=True)
+    (isolated_home / "config.toml").write_text("fps = 5\n", encoding="utf-8")
+    assert request(server, "GET", "/api/pages")[1]["chosen"] is False  # a file without the line
+    status, data = request(server, "POST", "/api/pages", {"page": "normal", "theme": "slate"})
+    assert status == 200 and data["chosen"] is True
+    assert request(server, "GET", "/api/pages")[1]["chosen"] is True
 
 
 def test_theme_pictures_and_files(server, isolated_home):
