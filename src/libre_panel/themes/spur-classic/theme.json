@@ -69,7 +69,10 @@
       "spacing": 8,
       "major": 5
     },
-    "light": {}
+    "light": {},
+    "dust": {
+      "strength": 1.5
+    }
   },
   "widgets": [
     {
@@ -1101,12 +1104,12 @@
       "color": "@cpu",
       "fill": true,
       "fill_fade": false,
-      "fill_alpha": 0.4117647058823529,
+      "fill_alpha": 0.4118,
       "smooth": false,
       "line_width": 2,
-      "finish": "lit",
-      "glow": 1.0,
-      "glow_radius": 8
+      "finish": "facet",
+      "per_frame": true,
+      "inset": false
     },
     {
       "type": "graph",
@@ -1122,12 +1125,12 @@
       "color": "@gpu",
       "fill": true,
       "fill_fade": false,
-      "fill_alpha": 0.4117647058823529,
+      "fill_alpha": 0.4118,
       "smooth": false,
       "line_width": 2,
-      "finish": "lit",
-      "glow": 1.0,
-      "glow_radius": 8
+      "finish": "facet",
+      "per_frame": true,
+      "inset": false
     },
     {
       "type": "graph",
@@ -1143,13 +1146,13 @@
       "color": "@net",
       "fill": true,
       "fill_fade": false,
-      "fill_alpha": 0.4117647058823529,
+      "fill_alpha": 0.4118,
       "smooth": false,
       "line_width": 2,
       "direction": "up",
-      "finish": "lit",
-      "glow": 1.0,
-      "glow_radius": 8
+      "finish": "facet",
+      "per_frame": true,
+      "inset": false
     },
     {
       "type": "graph",
@@ -1165,13 +1168,13 @@
       "color": "@net",
       "fill": true,
       "fill_fade": false,
-      "fill_alpha": 0.4117647058823529,
+      "fill_alpha": 0.4118,
       "smooth": false,
       "line_width": 2,
       "direction": "down",
-      "finish": "lit",
-      "glow": 1.0,
-      "glow_radius": 8
+      "finish": "facet",
+      "per_frame": true,
+      "inset": false
     },
     {
       "type": "metric",
@@ -1503,7 +1506,8 @@
       "font_size": 58,
       "color": "@text",
       "letter_spacing": 3.333,
-      "align": "left"
+      "align": "left",
+      "finish": "facet"
     },
     {
       "type": "text",
@@ -1515,14 +1519,103 @@
       "font_size": 58,
       "color": "@accent",
       "letter_spacing": 3.333,
-      "align": "left"
+      "align": "left",
+      "finish": "acrylic"
+    },
+    {
+      "type": "text",
+      "id": "wordmark-glow-1",
+      "x": 23,
+      "y": 3,
+      "text": "SPUR",
+      "font": "builtin:LiberationSans-Bold",
+      "font_size": 58,
+      "color": "@accent",
+      "letter_spacing": 3.333,
+      "align": "left",
+      "finish": "lit",
+      "glow": 0.9,
+      "glow_radius": 16,
+      "glow_area": [
+        0,
+        0,
+        287,
+        96
+      ],
+      "opacity": 0
+    },
+    {
+      "type": "text",
+      "id": "wordmark-ii-glow-1",
+      "x": 212,
+      "y": 3,
+      "text": "II",
+      "font": "builtin:LiberationSans-Bold",
+      "font_size": 58,
+      "color": "@accent",
+      "letter_spacing": 3.333,
+      "align": "left",
+      "finish": "lit",
+      "glow": 0.9,
+      "glow_radius": 16,
+      "glow_area": [
+        0,
+        0,
+        287,
+        96
+      ],
+      "opacity": 0
+    },
+    {
+      "type": "text",
+      "id": "wordmark-glow-2",
+      "x": 23,
+      "y": 3,
+      "text": "SPUR",
+      "font": "builtin:LiberationSans-Bold",
+      "font_size": 58,
+      "color": "@accent",
+      "letter_spacing": 3.333,
+      "align": "left",
+      "finish": "lit",
+      "glow": 0.6,
+      "glow_radius": 50,
+      "glow_area": [
+        0,
+        0,
+        287,
+        96
+      ],
+      "opacity": 0
+    },
+    {
+      "type": "text",
+      "id": "wordmark-ii-glow-2",
+      "x": 212,
+      "y": 3,
+      "text": "II",
+      "font": "builtin:LiberationSans-Bold",
+      "font_size": 58,
+      "color": "@accent",
+      "letter_spacing": 3.333,
+      "align": "left",
+      "finish": "lit",
+      "glow": 0.6,
+      "glow_radius": 50,
+      "glow_area": [
+        0,
+        0,
+        287,
+        96
+      ],
+      "opacity": 0
     },
     {
       "type": "rect",
       "id": "wordmark-line",
       "x": 23,
       "y": 66,
-      "w": 226,
+      "w": 225,
       "h": 1,
       "color": "@accent_deep"
     },
@@ -1538,14 +1631,16 @@
       "align": "right"
     },
     {
-      "type": "icon",
-      "id": "fan-1-wheel-placeholder",
+      "type": "fan",
+      "id": "fan-1-wheel",
       "x": 286,
       "y": 20,
-      "icon": "fan",
-      "size": 48,
-      "color": "@cpu",
+      "w": 48,
+      "h": 48,
       "sensor": "fan.lpc.fan_1",
+      "color": "@cpu",
+      "max_rpm": 3000,
+      "frame": "ring",
       "needs": "fan.lpc.fan_1"
     },
     {
@@ -1589,14 +1684,16 @@
       "needs": "fan.lpc.fan_1"
     },
     {
-      "type": "icon",
-      "id": "fan-2-wheel-placeholder",
+      "type": "fan",
+      "id": "fan-2-wheel",
       "x": 553,
       "y": 20,
-      "icon": "fan",
-      "size": 48,
-      "color": "@cpu",
+      "w": 48,
+      "h": 48,
       "sensor": "fan.lpc.fan_2",
+      "color": "@cpu",
+      "max_rpm": 3000,
+      "frame": "ring",
       "needs": "fan.lpc.fan_2"
     },
     {
@@ -1640,14 +1737,16 @@
       "needs": "fan.lpc.fan_2"
     },
     {
-      "type": "icon",
-      "id": "fan-3-wheel-placeholder",
+      "type": "fan",
+      "id": "fan-3-wheel",
       "x": 823,
       "y": 20,
-      "icon": "fan",
-      "size": 48,
-      "color": "@neutral",
+      "w": 48,
+      "h": 48,
       "sensor": "fan.lpc.fan_4",
+      "color": "@neutral",
+      "max_rpm": 3000,
+      "frame": "ring",
       "needs": "fan.lpc.fan_4"
     },
     {
@@ -1691,14 +1790,16 @@
       "needs": "fan.lpc.fan_4"
     },
     {
-      "type": "icon",
-      "id": "fan-4-wheel-placeholder",
+      "type": "fan",
+      "id": "fan-4-wheel",
       "x": 1128,
       "y": 20,
-      "icon": "fan",
-      "size": 48,
-      "color": "@gpu",
+      "w": 48,
+      "h": 48,
       "sensor": "fan.lpc.fan_3",
+      "color": "@gpu",
+      "max_rpm": 3000,
+      "frame": "ring",
       "needs": "fan.lpc.fan_3"
     },
     {
@@ -1742,14 +1843,16 @@
       "needs": "fan.lpc.fan_3"
     },
     {
-      "type": "icon",
-      "id": "fan-5-wheel-placeholder",
+      "type": "fan",
+      "id": "fan-5-wheel",
       "x": 1395,
       "y": 20,
-      "icon": "fan",
-      "size": 48,
-      "color": "@gpu",
+      "w": 48,
+      "h": 48,
       "sensor": "gpu.fan",
+      "color": "@gpu",
+      "max_rpm": 3000,
+      "frame": "ring",
       "needs": "gpu.fan"
     },
     {

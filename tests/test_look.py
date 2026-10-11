@@ -721,14 +721,15 @@ def test_plugin_widgets_give_the_light_their_edges(plugin_folder):
 def test_spur_classic_is_spur_iis_classic_screen_on_the_bar():
     theme = load_theme(builtin_themes_dir() / "spur-classic")
     assert (theme.width, theme.height) == (1920, 480) and theme.warnings == []
-    assert set(theme.look) == {"grid", "light"}
+    assert set(theme.look) == {"grid", "light", "dust"}
     renderer = Renderer(theme)
     found = demo_snapshot(fixed_time=1_700_000_000)
     frame, _ = renderer.render(found, 0.0)
     assert renderer.warnings == [] and frame.size == (1920, 480)
-    assert {type(f).__name__ for f in renderer._finishes.values()} >= {
-        "LitBar", "LitGraph", "LitText", "Ridge"
+    assert {type(f).__name__ for f in renderer._finishes.values()} == {
+        "LitBar", "LitText", "FacetGraph", "FacetText", "AcrylicText", "Ridge"
     }  # fmt: skip
+    assert sum(w["type"] == "fan" for w in theme.widgets) == 5
     owners = {renderer.edge_owners[id(edge)] for edge in renderer.light_edges}
     assert owners == {"cpu-frame-top", "gpu-frame-top", "mem-box-left", "net-box-left"}
     shown = {w["sensor"] for w in theme.widgets if w["type"] in ("metric", "bar", "graph")}

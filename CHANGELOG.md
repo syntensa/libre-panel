@@ -139,9 +139,10 @@
   background* and *Panel light* with the theme, *Finish* for a widget)
 - The theme *SPUR Classic* (`spur-classic`, 1920 × 480): SPUR II's classic
   screen as it is now, rebuilt from its geometry with the look and the
-  finishes: two load charts in ridged frames, the CPU and GPU sections,
-  RAM and network in staggered boxes, values as light in their grooves
-  with SPUR II's glow, glowing headings, the fans and the clock above
+  finishes: two load charts with raised curves in ridged frames, the CPU and
+  GPU sections, RAM and network in staggered boxes, values as light in their
+  milled grooves with SPUR II's glow, glowing headings, the faceted wordmark,
+  the turning fans and the clock above, the grid, one light and the depth dust
 - Ridges: a `rect` with a `ridge` name is drawn as SPUR II draws its frames,
   a ridge with two facets under the guide light, the lit one glowing a
   little; rects with the same name are one ridge, joined at mitres. Rects
