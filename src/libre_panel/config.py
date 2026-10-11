@@ -100,9 +100,11 @@ url = "http://127.0.0.1:8085/data.json"
 # Weather is off by default. Turn it on and set your own location.
 enabled = false
 provider = "open-meteo"
-# Find coordinates with:  libre-panel location "Your City"
+# Find coordinates with:  libre-panel location "Your City"  (or in the app: Settings)
 # latitude = 0.0
 # longitude = 0.0
+# What the app calls the place (the app writes it when you pick one).
+# place = ""
 # "metric" (°C, km/h) or "imperial" (°F, mph)
 units = "metric"
 update_minutes = 15
@@ -212,6 +214,7 @@ class WeatherConfig:
     provider: str = "open-meteo"
     latitude: float | None = None
     longitude: float | None = None
+    place: str = ""  # what the app calls the place; the coordinates are what counts
     units: str = "metric"
     update_minutes: int = 15
 
@@ -313,6 +316,9 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     for key in ("latitude", "longitude"):
         if key in w:
             setattr(cfg.weather, key, float(_expect(w[key], (int, float), f"weather.{key}")))
+    cfg.weather.place = _expect(w.get("place", ""), str, "weather.place")
+    if len(cfg.weather.place) > 120:
+        raise ConfigError("weather.place: at most 120 characters")
     cfg.weather.units = _expect(w.get("units", "metric"), str, "weather.units")
     if cfg.weather.units not in ("metric", "imperial"):
         raise ConfigError('weather.units: must be "metric" or "imperial"')
@@ -549,6 +555,17 @@ def _comments_above(text: str, pos: int) -> int:
     return pos
 
 
+def _without_key(text: str, table: str | None, key: str) -> str:
+    """``text`` without the setting ``key`` of ``table`` (None: the top level), over as many
+    lines as its value takes; the comments above it stay. Unchanged where it is not set."""
+    body = _table_body(text, table)
+    found = _key_span(text, body, key) if body is not None else None
+    if found is None:
+        return text
+    first, _, value_end = found
+    return text[:first] + text[text.find("\n", value_end) + 1 or len(text) :]
+
+
 def _without_tables(text: str, name: str) -> tuple[str, int | None]:
     """``text`` without the ``[[name]]`` blocks (and the tables inside them), and without
     a ``name = [...]`` in the parent table; and where the first block was (None when
@@ -569,12 +586,7 @@ def _without_tables(text: str, name: str) -> tuple[str, int | None]:
     kept.append(text[cut:])
     text = "".join(kept)
     head, _, last = name.rpartition(".")
-    body = _table_body(text, head or None)
-    found = _key_span(text, body, last) if body is not None else None
-    if found is not None:  # written as a list in the parent table: that goes too
-        first, _, value_end = found
-        text = text[:first] + text[text.find("\n", value_end) + 1 or len(text) :]
-    return text, at
+    return _without_key(text, head or None, last), at  # a list in the parent table goes too
 
 
 def _pruned(value: Any) -> Any:
@@ -621,9 +633,10 @@ def _table_of(document: dict[str, Any], parents: list[str], name: str) -> dict[s
 def edit_config(*changes: tuple[str, str, Any], path: Path | None = None) -> Path:
     """Change config.toml in one write. A change is ``("value", name, value)``, one setting
     (``"theme"``, ``"device.brightness"``, ``"modes.game.theme"``, ``"services.enabled"``) set
-    to a boolean, a number, a string or a list of them; or ``("tables", name, tables)``, an
-    array of tables (``"services.autopilot.rules"``) replaced by ``tables``, each written as
-    a ``[[name]]`` block.
+    to a boolean, a number, a string or a list of them; ``("unset", name, None)``, a setting
+    taken out, so that its default holds again (nothing happens where it is not set); or
+    ``("tables", name, tables)``, an array of tables (``"services.autopilot.rules"``)
+    replaced by ``tables``, each written as a ``[[name]]`` block.
 
     The rest of the file, comments included, stays as it is (the comments inside the blocks
     of a replaced array go with them). The new file is compared with the old one: only what
@@ -653,6 +666,9 @@ def edit_config(*changes: tuple[str, str, Any], path: Path | None = None) -> Pat
         elif kind == "value":
             text = _with_key(text, ".".join(parents) or None, key, _toml_literal(value))
             node[key] = list(value) if isinstance(value, tuple) else value
+        elif kind == "unset":
+            text = _without_key(text, ".".join(parents) or None, key)
+            node.pop(key, None)
         else:
             raise ValueError(f"unknown kind of change: {kind!r}")
     try:

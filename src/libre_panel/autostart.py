@@ -277,6 +277,11 @@ class Autostart:
             self._elevated = (now, self.tasks.exists(WINDOWS_TASK))
         return self._elevated[1]
 
+    def can_elevate(self) -> bool:
+        """Whether this process may set up the start with the highest rights: it runs as
+        administrator on Windows. Anything else has to be done in a terminal opened so."""
+        return self.kind == "windows" and bool(self._admin())
+
     def path(self) -> Path | None:
         """The desktop entry's file (XDG); None where there is no such file."""
         if self.kind != "xdg":

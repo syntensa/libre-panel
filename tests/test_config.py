@@ -339,3 +339,52 @@ def test_edit_config_makes_several_changes_in_one_write(isolated_home):
     with pytest.raises(ValueError, match="kind of change"):
         edit_config(("rename", "theme", "x"), path=path)
     assert path.read_text(encoding="utf-8") == before
+
+
+def test_edit_config_takes_a_setting_out(isolated_home):
+    from libre_panel.config import edit_config
+
+    path = config_dir() / "config.toml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        'theme = "slate"\nrefresh_ms = 500  # twice a second\n\n[weather]\nenabled = false\n'
+        '# the place\nlatitude = 1.5\nlongitude = 2.5\nunits = "imperial"\n',
+        encoding="utf-8",
+    )
+    edit_config(("unset", "refresh_ms", None), ("unset", "weather.latitude", None), path=path)
+    text = path.read_text(encoding="utf-8")
+    assert "refresh_ms" not in text and "latitude" not in text
+    assert "# the place\nlongitude = 2.5" in text and 'units = "imperial"' in text
+    config = load_config()
+    assert config.refresh_ms is None and config.weather.latitude is None
+    assert (config.weather.longitude, config.weather.units) == (2.5, "imperial")
+
+    # where it is not set, nothing happens; a table that is not there is not made
+    before = path.read_text(encoding="utf-8")
+    edit_config(("unset", "refresh_ms", None), ("unset", "modes.game.fps", None), path=path)
+    assert path.read_text(encoding="utf-8") == before
+
+    # a value that takes several lines goes whole; set and unset go in one write
+    path.write_text('[sensors]\nproviders = [\n  "load",\n  "psutil",\n]\nurl = "x"\n', "utf-8")
+    edit_config(("unset", "sensors.providers", None), ("value", "refresh_ms", 250), path=path)
+    assert load_config().sensors.providers == default_providers()  # the default again
+    assert 'url = "x"' in path.read_text(encoding="utf-8")
+    assert load_config().refresh_ms == 250
+
+    # taking out what makes the rest invalid is refused like any other change
+    path.write_text("[weather]\nenabled = true\nlatitude = 1.0\nlongitude = 2.0\n", "utf-8")
+    with pytest.raises(ConfigError, match="no location"):
+        edit_config(("unset", "weather.latitude", None), path=path)
+    assert "latitude" in path.read_text(encoding="utf-8")
+
+
+def test_the_place_has_a_name(isolated_home):
+    from libre_panel.config import set_config_value
+
+    assert load_config().weather.place == ""
+    set_config_value("weather.place", "Nowhere, Country")
+    assert load_config().weather.place == "Nowhere, Country"
+    with pytest.raises(ConfigError):
+        parse_config({"weather": {"place": 5}})
+    with pytest.raises(ConfigError, match="at most 120"):
+        parse_config({"weather": {"place": "x" * 121}})

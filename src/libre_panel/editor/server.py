@@ -31,6 +31,7 @@ from libre_panel.config import (
     user_themes_dir,
 )
 from libre_panel.devices.models import MODELS, PROTOCOLS
+from libre_panel.editor import settings as app_settings
 from libre_panel.editor.presets import presets_for_editor
 from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_font_path, builtin_fonts
 from libre_panel.icons import ICON_NAMES
@@ -133,6 +134,19 @@ _ASSET_TYPES = {
 }
 # A page of the panel: "normal", "report" or a mode ([modes.<name>] in config.toml).
 _MODE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+# The routes of the app's Settings, and the method of editor/settings.py::Settings behind each.
+_SETTINGS_GET = {
+    "/api/settings": "read",
+    "/api/panel": "panel",
+    "/api/system": "system",
+    "/api/about": "about",
+}
+_SETTINGS_POST = {
+    "/api/settings": "write",
+    "/api/system": "set_system",
+    "/api/location": "search_place",
+    "/api/open": "open_folder",
+}
 # What a plugin's editor page may serve from its folder.
 _PAGE_TYPES = {
     **_CONTENT_TYPES,
@@ -243,6 +257,7 @@ class EditorState:
         self.pages: dict[str, Any] = {}  # plugin editor pages, created on first use
         self.previews: dict[tuple, bytes] = {}  # pictures of saved themes
         self.previews_lock = threading.Lock()
+        self.restart = app_settings.Restart()  # settings the panel loop takes in when it restarts
 
     def live_snapshot(self):
         """The readings for previews. In the background app they are the panel's
@@ -374,6 +389,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._json(self._readings(parse_qs(urlparse(self.path).query)))
         if path == "/api/pages":
             return self._panel_pages()
+        if path in _SETTINGS_GET:
+            return self._settings(_SETTINGS_GET[path])
         if path.startswith("/api/themes/"):
             return self._get_theme(path[len("/api/themes/") :])
         if path == "/api/sensors":
@@ -725,6 +742,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._set_language()
         if path == "/api/pages":
             return self._set_panel_page()
+        if path in _SETTINGS_POST:
+            return self._settings(_SETTINGS_POST[path], body=True)
         if path == "/api/preset-previews":
             return self._preset_previews()
         match = re.fullmatch(r"/api/plugins/([^/]+)/(.*)", path)
@@ -789,6 +808,23 @@ class EditorHandler(BaseHTTPRequestHandler):
         except (ConfigError, OSError) as exc:
             return self._error(str(exc), HTTPStatus.CONFLICT)
         self._panel_pages()
+
+    def _settings(self, method: str, body: bool = False) -> None:
+        """A route of the Settings (editor/settings.py): its answer, or why it is refused."""
+        args = []
+        if body:
+            payload = self._read_json()
+            if payload is None:
+                return
+            args.append(payload)
+        settings = app_settings.Settings(self.state.config_path, self.controls, self.state.restart)
+        try:
+            self._json(getattr(settings, method)(*args))
+        except app_settings.SettingsError as exc:
+            self._error(str(exc), exc.status)
+        except Exception as exc:  # the app shows the reason; a dropped connection says nothing
+            log.exception("settings: %s failed", method)
+            self._error(f"{type(exc).__name__}: {exc}", HTTPStatus.INTERNAL_SERVER_ERROR)
 
     def _preset_previews(self) -> None:
         """Each building block (presets.py and plugins') drawn in the given palette,
