@@ -232,10 +232,79 @@ do. Their names cannot be used by a plugin.
 | `game` | game mode: finds the game you play (a list of programs, Steam's library) and switches the mode with an entrance, and back |
 | `autopilot` | picks the theme by rules: music, microphone, load, program, time of day |
 | `devices` | messages for drives, USB devices and controllers that come and go, a full drive and a hot SSD (Windows) |
+| `memory` | keeps minutes, games and the cooling state in a database on this PC, and shows a round report after a game |
 
 Their options are in the [configuration guide](CONFIGURATION.md#built-in-services).
 They talk to the panel only through the host described here, so they are also
 examples for your own.
+
+### The round report
+
+When a game that was played long enough ends, the `memory` service publishes the
+round against the last ones of the same program: as the state `report` (a
+screen reads it with `snapshot.state("report")`, `None` when none is on show),
+and as plain readings for a theme made of the usual widgets (the built-in theme
+`round-report` is one). Both stay for `report_seconds`, or until a new game
+begins.
+
+```json
+{
+  "session": {
+    "id": 1760000000123, "game": "Space Game", "program": "spacegame",
+    "started": 1760000000, "ended": 1760002700, "duration_s": 2700,
+    "fps_s": 2610, "fps_mean": 148.3, "fps_p01": 104.0, "fps_low_mean": 101.0,
+    "frametime_mean": 6.7,
+    "levels": {"edges": [60, 90, 120, 144, 165], "seconds": [26, 52, 235, 1150, 1040, 107]},
+    "limit_cpu_s": 160, "limit_gpu_s": 2440, "limit_cap_s": 10,
+    "cpu_temp_max": 74.1, "gpu_temp_max": 56.0, "gpu_hotspot_max": 80.0,
+    "cpu_power_max": 96.0, "gpu_power_max": 327.0, "vram_used_max": 14.8,
+    "outside_temp": 12.6, "closed": 1
+  },
+  "comparison": {
+    "count": 7,
+    "mean": {"fps_mean": 142.1, "fps_p01": 101.2, "fps_low_mean": 99.0, "frametime_mean": 6.9,
+             "cpu_temp_max": 72.4, "gpu_temp_max": 57.1, "gpu_hotspot_max": 78.0,
+             "cpu_power_max": 94.0, "gpu_power_max": 318.0, "vram_used_max": 14.5},
+    "levels": [0.02, 0.03, 0.12, 0.40, 0.36, 0.07]
+  },
+  "seconds": 30,
+  "until": 1760002730.4
+}
+```
+
+| Field | |
+|---|---|
+| `session.game`, `program` | the game's name (`game.name`), and the program PresentMon counted, in lower case without `.exe` (`""` if it was never seen) |
+| `started`, `ended`, `duration_s` | Unix seconds; how long the game ran |
+| `fps_s` | the seconds that have a frame rate |
+| `fps_mean`, `fps_p01`, `fps_low_mean`, `frametime_mean` | the mean of the per-second frame rates; the rate that 1 % of the seconds fell below; the mean of PresentMon's 1 % low; the mean frame time in ms |
+| `levels` | `seconds` in each range of frame rates: below `edges[0]`, between two edges, above the last (one more than there are edges; the `fps_levels` option) |
+| `limit_cpu_s`, `limit_gpu_s`, `limit_cap_s` | the seconds `game.limiter` said the CPU, the GPU or a frame limit held the rate down |
+| `*_max` | the highest value of the round: °C, W, GB (`gpu_hotspot_max` where the card has a hot spot); `null` where there is no such reading |
+| `outside_temp` | °C, from the weather, `null` without |
+| `comparison.count` | how many earlier rounds are in it (0: the first round) |
+| `comparison.mean` | the same numbers, averaged over those rounds (`null` where none had it) |
+| `comparison.levels` | the mean share of the time in each range (they add up to 1); `null` without earlier rounds, or when the ranges were another ones |
+| `seconds`, `until` | how long the report is shown, and when it ends (Unix time) |
+
+The readings (a value may be `None`; labels and texts are in the language of
+the panel):
+
+| Key | Value |
+|---|---|
+| `report.title`, `report.game`, `report.when`, `report.versus` | texts: "Round report", the game, "21:03 – 21:48", "Compared with the last 7 rounds" |
+| `report.length`, `report.outside` | s, °C |
+| `report.fps`, `report.low`, `report.frametime` | the means: fps, fps, ms |
+| `report.fps_delta`, `report.low_delta` | this round minus the mean of the earlier ones |
+| `report.limit` | text: who held the rate down, by share, "GPU 94 %  CPU 6 %" |
+| `report.cpu_temp`, `report.gpu_temp`, `report.gpu_hotspot`, `report.cpu_power`, `report.gpu_power`, `report.vram_used` | the highest values: °C, W, GB |
+| `report.level.0` ... | the share of the round in each range of frame rates in percent, the slowest range first; the label is the range ("< 60", "60–90", "165+") |
+| `report.head.levels`, `report.head.peaks` | headings for a chart and a list |
+
+The service also has `show_last_report()` (builds and shows the latest round
+that was long enough again; for a console page) and `status()` (is it
+recording, the file, how many rows were written, the last error, the game now
+played).
 
 ## Screens
 

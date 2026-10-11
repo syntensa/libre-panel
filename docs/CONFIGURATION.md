@@ -518,6 +518,77 @@ warnings like those of the notices service (kind `warning`).
   read off the disk; USB devices are read from the system's own list and never
   opened; nothing is written, and nothing is sent anywhere.
 
+### Memory and round report
+
+Keeps what happens at the desk over weeks and months, in a database on this
+computer, and shows a round report when a game ends: the round against your
+last rounds of the same program. Nothing is sent anywhere.
+
+```toml
+[services]
+enabled = ["game", "memory"]
+
+[services.memory]
+keep_days = 730        # minutes and games are kept this long (0: for ever)
+cooling = true         # also the cooling state and FanControl's settings
+cooling_days = 180     # the cooling state is kept this long (0: for ever)
+music = true           # how long music plays, never what; asks the media source
+# temperatures = ["temp.board.system", "temp.nvme.*"]   # more readings for the cooling state
+report = true          # a round report when a game ends
+report_minutes = 3     # only for rounds at least this long, and with frame rates
+report_compare = 10    # against the last this many rounds of the same program
+report_seconds = 30    # how long it stays on the panel
+report_theme = "round-report"   # "": no theme, only the data for a screen of a plugin
+report_transition = "tube"      # "" is the transition of config.toml
+fps_levels = [60, 90, 120, 144, 165]   # the frame-rate ranges of the report's chart
+# fancontrol = ""      # FanControl's userConfig.json, if Libre Panel does not find it
+# database = ""        # where the file lies (default: the service's folder)
+```
+
+| Table | What it holds |
+|---|---|
+| `minutes` | a row a minute: the means, and the highest values of temperature and power, of the load, clocks, memory, network and volume; the frame rate in a game; how long music played; the outside temperature (with the weather on); each fan's speed |
+| `sessions` | a row per game, written every minute while it is played and again when it ends: the game's name and its program, how long, the frame rates (mean, the 1 % quantile, the 1 % low), how long at which frame rate, how long the CPU, the GPU or a frame limit held it back, the highest temperatures, power and video memory |
+| `cooling` | the cooling state whenever it moves: temperatures, power and load, each fan's speed and duty, and what each FanControl curve reads. At least 12 s apart (5 s in a game) and at least one a minute, so that a longer gap means the service did not run |
+| `fancontrol` | every change to FanControl's curves and fans, with the time (FanControl's file is only read, never written) |
+
+- **Where, and what stays out.** The file is `memory.db` in
+  `plugins-data/memory/` of the settings folder; it is a plain SQLite file that
+  you can open, copy or delete (stop the service first to start afresh). No
+  title of a track, no window title and no file name is read, so none can be
+  kept: music is only how long it played, and of a game only its name and its
+  program's file name (`spacegame`). It takes about 0.3 MB a day for the minutes
+  and half a megabyte to a megabyte for the cooling state; the defaults keep up
+  to a few hundred MB.
+- **Names of readings.** Everything comes from the readings of the panel
+  (`cpu.temp`, `gpu.power`, `fan.*`, `game.fps` ...), whichever source
+  supplies them; what a PC does not have is left empty. The duty of a fan
+  (how hard FanControl drives it) and the temperature a curve reads come from
+  LibreHardwareMonitor's outputs and FanControl's file, so Windows. On Linux the
+  fan speeds are recorded, no duty.
+- **Games** are those the [`game` service](#game-mode) finds (`game.name`);
+  without it only minutes and the cooling state are kept. Frame rates need the
+  `presentmon` source ([above](#more-sensor-sources)): a game without them is
+  kept, but has no report. A game ends when its name goes, so a game that
+  restarts within the service's `linger_s` is one round.
+- **The report.** When a round that lasted `report_minutes` and had frame rates
+  ends, the report is built from the file: this round against the mean of the
+  last `report_compare` rounds of the same program that were long enough too
+  (compared by the game's name where the program is not known). It shows the
+  theme for `report_seconds`, ahead of an autopilot's choice and in normal mode
+  only; a new game ends it at once, and a round that ends because Libre Panel
+  quits has none. `round-report` is a plain built-in theme for 8.8" and 9.2"
+  bars; copy it in the editor to change it, or let a screen of a plugin draw
+  the data ([Plugins](PLUGINS.md#the-round-report)).
+- **Cost.** One sample a second, whatever the theme's `refresh_ms`. While the
+  service runs the sources it needs run too, although no theme shows them: the
+  load (`cpu.load`, `gpu.load`), temperatures, power and clocks, the fans, the
+  game's frame rates, and with `music` the player's state (not its title).
+  A write that cannot be made (the disk is full, the file is locked) is said
+  once in the log and never holds the panel back.
+- The options are read when the service starts: change `config.toml` and it
+  restarts by itself.
+
 ## Language
 
 Libre Panel speaks English and German. `language = "auto"` follows the

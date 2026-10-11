@@ -122,6 +122,25 @@
   game runs), and `game.limiter`, `cpu`, `gpu` or `cap`: who holds the frame
   rate down, judged from how long the CPU and the GPU wait for each other
   (PresentMon 2)
+- `memory`, a built-in service (off until listed in `[services] enabled`) that
+  keeps what happens at the desk in a SQLite file on this PC: a row a minute
+  (means and highest values of load, temperature, power, clocks, memory and
+  network; how long music played, never what), a row per game (frame rates,
+  how long at which rate, what held it back, the highest temperatures), the
+  cooling state whenever it moves (temperatures, power, each fan's speed and
+  duty, what each FanControl curve reads) and every change to FanControl's
+  curves (read only). One sample a second, one writer thread with a bounded
+  queue, WAL mode, 730 and 180 days kept (`keep_days`, `cooling_days`). No
+  title, window title or file name is read, and nothing leaves the PC
+- A round report when a game that was played for 3 minutes with frame rates
+  ends: the round against the last 10 of the same program, published as the
+  state `report` and as `report.*` readings, and shown with the theme
+  `report_theme` for 30 s (priority 10, normal mode only); a new game ends it
+  at once. `round-report` is a plain built-in theme (1920×480) for it; the
+  data is described in the plugin guide for screens that draw it better
+- `libre_panel.services.fancontrol`: FanControl's curves, fans and the sensor
+  each curve reads, from its configuration file (found from the environment or
+  `fancontrol = "..."`; opened for reading only)
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
