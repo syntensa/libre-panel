@@ -1061,6 +1061,8 @@ function hintFor(widget, key, kind) {
   if (key === "seconds" && widget.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = as long as the history readings take");
   if (key === "per_frame") return t("video mode: a point a pixel apart, as SPUR II draws its curves (seconds = width / 25)");
   if (key === "finish") return t("lit: SPUR II's light on rings, bars, graph lines and weather icons; glow then sets their glow");
+  if (key === "fill_opacity") return t("how strongly the area under the curve is filled when it does not fade (0 to 1)");
+  if (key === "direction" && widget.type === "graph") return t("down: the curve hangs from the top and is filled from there, below an upward one it mirrors it");
   return null;
 }
 

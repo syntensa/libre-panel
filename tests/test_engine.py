@@ -181,6 +181,40 @@ def test_graph_options_render_cleanly():
     assert renderer.warnings == []
 
 
+
+def flat_graph(**kw):
+    return {"type": "graph", "id": "g", "x": 0, "y": 0, "w": 100, "h": 60, "sensor": "v",
+            "history": 10, "min": 0, "max": 100, "color": "#ffffff", "smooth": False,
+            "fill_fade": False, "line_width": 1, **kw}  # fmt: skip
+
+
+def test_a_graphs_fill_takes_its_opacity():
+    snap = Snapshot(history={"v": [50.0] * 10})
+    for opacity, level in ((0.25, 64), (105 / 255, 105), (1.0, 255)):
+        frame, _ = Renderer(theme(flat_graph(fill_opacity=opacity), size=(100, 60))).render(snap)
+        assert frame.getpixel((50, 50)) == (level,) * 3  # under the curve, on black
+        assert frame.getpixel((50, 10)) == BG  # above it
+    with pytest.raises(ThemeError, match="fill_opacity: must be between 0 and 1"):
+        theme(flat_graph(fill_opacity=1.5))
+
+
+def test_a_downward_graph_hangs_from_its_top_and_is_filled_from_there():
+    snap = Snapshot(history={"v": [25.0] * 10})
+    up, _ = Renderer(theme(flat_graph(), size=(100, 60))).render(snap)
+    down, _ = Renderer(theme(flat_graph(direction="down"), size=(100, 60))).render(snap)
+
+    def line(frame):  # the middle of the line, weighed by its light
+        rows = [(y, frame.getpixel((50, y))[0]) for y in range(60)]
+        rows = [(y, v) for y, v in rows if v > 100]
+        return sum(y * v for y, v in rows) / sum(v for _, v in rows)
+
+    assert line(down) < 20 and line(up) + line(down) == pytest.approx(59, abs=0.5)  # mirrored
+    assert down.getpixel((50, 5)) == (64,) * 3 and down.getpixel((50, 40)) == BG
+    faded = flat_graph(direction="down", fill_fade=True)
+    frame, _ = Renderer(theme(faded, size=(100, 60))).render(snap)
+    assert 0 < frame.getpixel((50, 1))[0] < frame.getpixel((50, 12))[0]  # it fades upwards
+
+
 def spike_graph(**kw):
     return {"type": "graph", "id": "g", "x": 0, "y": 0, "w": 200, "h": 60, "sensor": "v",
             "history": 11, "min": 0, "max": 100, "fill": False, "color": "#ffffff",

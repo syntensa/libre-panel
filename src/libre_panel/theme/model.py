@@ -150,6 +150,8 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "color": ("color", "#22d3ee"),
         "fill": ("bool", True),
         "fill_fade": ("bool", True),
+        "fill_opacity": ("number", 0.25),  # the area under the curve without fade
+        "direction": ("enum:up|down", "up"),  # down: hangs from the top, filled from there
         "smooth": ("bool", True),
         "per_frame": ("bool", False),  # older themes: a point a pixel apart (seconds = w / 25)
         "line_width": ("int", 2),
@@ -568,6 +570,8 @@ def normalize_widget(
         raise ThemeError(f"{where}.opacity: must be between 0 and 1")
     if not 0 <= widget["glow"] <= 1:
         raise ThemeError(f"{where}.glow: must be between 0 and 1")
+    if not 0 <= widget.get("fill_opacity", 0) <= 1:
+        raise ThemeError(f"{where}.fill_opacity: must be between 0 and 1")
     for key in ("glow_radius", "shadow_blur", "backdrop_blur"):
         if key in widget and not 0 <= widget[key] <= 64:
             raise ThemeError(f"{where}.{key}: must be between 0 and 64")

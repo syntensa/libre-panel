@@ -141,6 +141,10 @@
   `libre_panel.render.finish.register`
 - `tools/motion_bench.py` leaves the warm-up out (`--warmup`) and times the
   frames a sweep of light runs over on their own line
+- Graphs: `fill_opacity`, how strongly the area under the curve is filled
+  when it does not fade, and `direction` `down`: the curve hangs from the
+  top edge and is filled from there, as SPUR II draws the download below
+  the upload
 - Format specs `{value:gb}`, a size in GB whatever unit the reading comes
   in, and `{value:rate}` with `{value:rate_unit}`: a data rate as SPUR II
   sets it, its number and its unit apart (519 and KB/s, from 1 MB/s 1.2 and

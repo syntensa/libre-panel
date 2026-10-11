@@ -2368,13 +2368,15 @@ class Renderer:
         lo, hi = bounds or self._graph_bounds(widget, numbers)
         pad = widget["line_width"] * s
         scale_kind = widget.get("scale", "linear")
+        down = widget.get("direction") == "down"  # hangs from the top edge
         runs: list[list[tuple[float, float]]] = [[]]
         for px, v in points:
             if v is None:
                 if runs[-1]:
                     runs.append([])
                 continue
-            runs[-1].append((px, pad + (H - 1 - 2 * pad) * (1 - _fraction(v, lo, hi, scale_kind))))
+            py = pad + (H - 1 - 2 * pad) * (1 - _fraction(v, lo, hi, scale_kind))
+            runs[-1].append((px, H - 1 - py if down else py))
         runs = [run for run in runs if len(run) >= 2]
         if widget["smooth"]:
             runs = [
@@ -2384,22 +2386,24 @@ class Renderer:
         color = self.color(widget["color"])
         if widget["fill"] and runs:
             area = Image.new("L", layer.size, 0)
+            base = 0 if down else H - 1
             for run in runs:
-                polygon = [*run, (run[-1][0], H - 1), (run[0][0], H - 1)]
+                polygon = [*run, (run[-1][0], base), (run[0][0], base)]
                 ImageDraw.Draw(area).polygon(polygon, fill=255)
             if widget["fill_fade"]:
-                if top is None:
-                    top = int(min(py for run in runs for _, py in run))
+                if top is None:  # the peak, counted from where the fill starts
+                    ys = [py for run in runs for _, py in run]
+                    top = int(H - 1 - max(ys) if down else min(ys))
+                rows = [
+                    int(115 * min(1.0, max(0.0, 1 - (row - top) / max(1, H - top))))
+                    for row in range(H)
+                ]
                 fade = Image.new("L", (1, H), 0)
-                fade.putdata(
-                    [
-                        int(115 * min(1.0, max(0.0, 1 - (row - top) / max(1, H - top))))
-                        for row in range(H)
-                    ]
-                )
+                fade.putdata(rows[::-1] if down else rows)
                 alpha = ImageChops.multiply(area, fade.resize(layer.size))
             else:
-                alpha = area.point(lambda v: v * 64 // 255)
+                level = round(255 * widget.get("fill_opacity", 0.25))
+                alpha = area.point([v * level // 255 for v in range(256)])
             tint = Image.new("RGBA", layer.size, (*color[:3], 255))
             if color[3] < 255:
                 alpha = ImageChops.multiply(alpha, Image.new("L", layer.size, color[3]))
