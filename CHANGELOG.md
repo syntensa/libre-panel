@@ -22,6 +22,33 @@
   several widgets at once, layers with lock and eye, the theme's pictures and
   fonts. The panel's pages are tabs over it: the normal theme, game mode's,
   the round report's and those of plugins' modes, each with its frame rate
+- *Start*, the first view of the app: the panel at a glance (what it shows,
+  its picture, pause, brightness, upside down), the themes made for it to
+  switch between with one click, and the way on to Design, Look, Live and
+  Settings. *All* is the gallery of every installed theme, built in, from
+  plugins and your own, each drawn by the panel's own renderer; Libre
+  Panel's own themes and yours come first, and a set of themes that belongs
+  together (a theme's `collection`, such as the SPUR II screens: *SPUR II ·
+  Legacy*) waits closed at the end; its pencil opens a theme in Design. On a
+  first start (no `theme` in `config.toml` yet) Start asks "How should it
+  look?" with Libre Panel's own themes for the panel it found, or the one
+  you name under *Another panel*; *Start empty* and *Open a theme file* are
+  there too. What the panel could not read (the sentence the tray shows) is
+  on Start with the way to its details
+- *Look*, the theme's look in one place beside the picture of the panel: the
+  six colour worlds and the palette, how rings, bars, graphs, lettering,
+  icons and modules are drawn (light, facet, acrylic, flat) with their glow,
+  the panel light (the sun, its strength, the sweeps and when they run), the
+  grid, the depth dust with its colours and areas, and how notices look
+  (card, band, a plugin's), which the preview can show as a test notice.
+  Every change is one undo step and the preview follows; ridge frames are not
+  offered, a theme that has some can make them flat under *Advanced*
+- *Live*, what the panel shows and how it runs: its picture, the frame rate
+  against the target, the data rate, the drawing time, the video queue and
+  the faults, the sensor sources with their state and the hint about missing
+  readings, the services with a switch each (and *Restart*), test notices of
+  every kind with what became of them, and the end of the log; pause and
+  brightness are in the header. It polls the console API while it is shown
 - The hardware's names in the app: *Settings → Sensors → Hardware names*
   shows the processor, graphics card and memory names the sensors detect, and
   a text typed there takes their place on the panel (*Automatic* brings the

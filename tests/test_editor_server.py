@@ -226,6 +226,28 @@ def module_theme(*modules):
     }
 
 
+def test_the_preview_can_show_a_test_notice(server):
+    """A notice is drawn on the picture in the theme's toast style, for Look to show."""
+    from io import BytesIO
+
+    from PIL import Image, ImageChops
+
+    def picture(**more):
+        status, data = request(server, "POST", "/api/render", {"theme": theme, **more})
+        assert status == 200
+        return Image.open(BytesIO(base64.b64decode(data["png"]))).convert("RGB")
+
+    theme = theme_dict()
+    plain = picture(base="libre-default")
+    card = picture(base="libre-default", notice="volume")
+    assert ImageChops.difference(plain, card).getbbox() is not None  # a card in the corner
+    theme["toast"] = {"style": "band"}
+    band = picture(base="libre-default", notice="volume")
+    assert ImageChops.difference(card, band).getbbox() is not None  # the style is the theme's
+    status, data = request(server, "POST", "/api/render", {"theme": theme, "notice": "nope"})
+    assert status == 400 and "notice" in data["error"]
+
+
 def test_render_reports_the_grid_and_module_cells(server):
     status, data = request(server, "POST", "/api/render", {"theme": theme_dict()})
     assert status == 200 and data["grid_active"] is False and data["module_boxes"] == {}
@@ -261,6 +283,18 @@ def test_specs_carry_the_panel_look_and_the_finishes(server):
     ]  # fmt: skip
     assert FINISH_FIELD[1] == "flat" and "lit" in FINISH_FIELD[0]
     assert "finish" not in specs["widgets"]["rect"]
+
+
+def test_specs_carry_the_ranges_of_the_look(server):
+    """Sliders for the look stop where the theme would refuse a value."""
+    from libre_panel.theme.model import LOOK_RANGES
+
+    _, specs = request(server, "GET", "/api/specs")
+    ranges = specs["look_ranges"]
+    assert ranges["light"]["sweep_seconds"] == [0.3, 10] and ranges["dust"]["rate"] == [1, 60]
+    assert {(block, key) for block, keys in ranges.items() for key in keys} == set(LOOK_RANGES)
+    for block, keys in ranges.items():
+        assert set(keys) <= set(specs["look"][block]), block
 
 
 def test_module_previews_follow_the_look(server):
@@ -354,6 +388,18 @@ def test_pages_of_the_panel(server, isolated_home):
         {"page": "report", "theme": ""},
     ):
         assert request(server, "POST", "/api/pages", wrong)[0] == 400, wrong
+
+
+def test_pages_say_whether_a_theme_was_chosen(server, isolated_home):
+    """A first start has no theme line in config.toml: Start then asks which look to use.
+    Choosing one (or any other way of writing the line) ends it."""
+    assert request(server, "GET", "/api/pages")[1]["chosen"] is False  # no config.toml at all
+    isolated_home.mkdir(parents=True, exist_ok=True)
+    (isolated_home / "config.toml").write_text("fps = 5\n", encoding="utf-8")
+    assert request(server, "GET", "/api/pages")[1]["chosen"] is False  # a file without the line
+    status, data = request(server, "POST", "/api/pages", {"page": "normal", "theme": "slate"})
+    assert status == 200 and data["chosen"] is True
+    assert request(server, "GET", "/api/pages")[1]["chosen"] is True
 
 
 def test_theme_pictures_and_files(server, isolated_home):
