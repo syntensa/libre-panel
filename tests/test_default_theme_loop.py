@@ -134,6 +134,22 @@ def test_a_display_that_is_open_already_says_which_panel_it_is(monkeypatch, isol
         loop.close()
 
 
+def test_the_bus_is_asked_once_for_a_changed_driver(monkeypatch, isolated_home):
+    """A switch looks at the new config at every frame while its theme is warmed up: the
+    panel the change asks for is looked for once, not at each of those frames."""
+    asked = []
+    monkeypatch.setattr(turzx_usb, "present_model", lambda: asked.append("bus") or NINE)
+    loop, _ = loop_for(demo_config(DeviceConfig(driver="virtual")))
+    try:
+        fresh = demo_config(DeviceConfig(driver="auto"))
+        assert [loop._default_for(fresh) for _ in range(30)] == ["lumen"] * 30
+        assert asked == ["bus"]
+        same = demo_config(DeviceConfig(driver="virtual", brightness=10))
+        assert loop._default_for(same) == "libre-default" and asked == ["bus"]  # nothing asked
+    finally:
+        loop.close()
+
+
 def test_a_driver_without_a_panel_never_asks_the_bus(monkeypatch, isolated_home):
     nothing_on_the_bus(monkeypatch)
     loop, _ = loop_for(demo_config(DeviceConfig(driver="virtual")))

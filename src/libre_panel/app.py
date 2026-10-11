@@ -478,6 +478,7 @@ class MainLoop:
         # the USB bus) now, and again when the display says which panel it is (step).
         told = getattr(display, "model", None)  # (a display that is open says so already)
         self.reported: PanelModel | None = told if isinstance(told, PanelModel) else None
+        self.worked_out: tuple[Any, str] | None = None  # the default for a changed model or driver
         panel = panel_model(config.device, self.reported)
         self.default = status.default_theme = default_theme(panel)
         named = config.theme if config.theme_given else self.default
@@ -646,12 +647,16 @@ class MainLoop:
 
     def _default_for(self, fresh: Config) -> str:
         """The default theme for a config just read: the one now, unless it names another
-        panel or driver, which are worked out again."""
+        panel or driver, which are worked out again (once for a change: a switch asks at
+        every frame while its theme is warmed up)."""
         now = self.config.device
         if (fresh.device.model, fresh.device.driver) == (now.model, now.driver):
             return self.default
         reported = self.reported if _same_device(now, fresh.device) else None  # same display
-        return default_theme(panel_model(fresh.device, reported))
+        asked = fresh.device.model, fresh.device.driver, reported
+        if self.worked_out is None or self.worked_out[0] != asked:
+            self.worked_out = asked, default_theme(panel_model(fresh.device, reported))
+        return self.worked_out[1]
 
     def _follow_panel(self) -> None:
         """A display that has connected says which panel it is. Where config.toml does not
