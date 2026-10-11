@@ -18,6 +18,7 @@ from typing import Any
 from PIL import Image
 
 from libre_panel.config import CONFIG_FILENAME, config_dir, log_file
+from libre_panel.plugins.host import NO_PANEL, Delivery, ServiceHost
 
 log = logging.getLogger(__name__)
 
@@ -88,6 +89,16 @@ class PageContext:
         the main loop may hand the same image out again."""
         host = self._host
         return host.shown if host is not None else None
+
+    def notify(self, text: str, **options: Any) -> Delivery:
+        """A message on the panel, for a test or to answer an action of the page. The
+        arguments are those of ``ServiceHost.notify`` (``icon``, ``level``, ``seconds``,
+        ``kind``, ``rank``, ``payload``, ``key``); the answer says whether it will show
+        or why not (``Delivery``). Without the background app nothing shows it."""
+        host = self._host
+        if host is None:
+            return Delivery(False, NO_PANEL)
+        return ServiceHost(host, "editor").notify(text, **options)
 
     def log_tail(self, lines: int = 40) -> list[str]:
         """The last ``lines`` lines (at most 1000) of the log the tray app writes

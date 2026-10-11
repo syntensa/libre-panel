@@ -19,6 +19,7 @@ from libre_panel.config import Config, ConfigError, load_config
 from libre_panel.devices.base import DeviceError, Display, FrameError, create_display
 from libre_panel.devices.models import find_model
 from libre_panel.devices.virtual import VirtualDisplay
+from libre_panel.plugins.host import LEFT_OUT, NO_PANEL, OFF_IN_THEME, Delivery, Toast
 from libre_panel.plugins.render import RenderContext
 from libre_panel.render.motion import Motion
 from libre_panel.render.overlays import ToastLayer, switch_policy, transition
@@ -438,6 +439,8 @@ class MainLoop:
         self.watcher = _Watcher(config.path, _theme_file(theme), known=known)
         self.link = _Link(self.display, config.device.brightness, status)
         self.toasts = ToastLayer(renderer)
+        if host is not None:
+            host.judge = self.judge  # ``notify`` says whether a message will show
         self.blend: tuple[Any, Image.Image, float] | None = None  # a transition under way
         self.began_in: str | None = None  # the mode it began in
         self.shown_frame: Image.Image | None = None  # the last frame as it went out, toasts and all
@@ -526,6 +529,18 @@ class MainLoop:
     def fps(self) -> int:
         """The rate frames are planned at now (a mode's, the display's, config.fps)."""
         return _fps(self.config, self.host, self.display)
+
+    def judge(self, toast: Toast) -> Delivery:
+        """Whether a message would show now: the panel has to be connected, and neither
+        the theme (``toast.off``) nor the screen (``suppresses``) may leave its kind out.
+        ``PluginHost.notify`` asks, from any thread: only attributes are read."""
+        if not self.link.connected:
+            return Delivery(False, NO_PANEL)
+        if toast.kind in self.toasts.off:
+            return Delivery(False, OFF_IN_THEME)
+        if toast.kind in self.toasts.left_out:
+            return Delivery(False, LEFT_OUT)
+        return Delivery(True)
 
     def once(self) -> None:
         """A single frame to the panel; device errors are raised."""
@@ -699,7 +714,8 @@ class MainLoop:
 
     def close(self) -> None:
         if self.host is not None:
-            self.host.shown = None  # a paused panel shows no live picture
+            self.host.shown = None  # a paused panel shows no live picture...
+            self.host.judge = None  # ...and no message
         self.display.close()
         self.toasts.close()
         self.warmup.close()

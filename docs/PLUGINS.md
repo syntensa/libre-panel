@@ -128,7 +128,7 @@ while Libre Panel runs.
 | `host.want(*keys)` | the readings the service reads (`"media.*"`, `"audio.volume"`): sources that work on demand run for it although no theme shows them |
 | `host.show_theme(name, transition=None, priority=0, mode=ANY_MODE)` / `host.restore_theme(transition=None)` | show another theme for a while; `config.toml` stays as it is. `transition`: `cut`, `fade`, `slide`, a plugin's, or `(name, {parameters})`; default from `config.toml`. `mode=None`: only while no mode is on; `mode="game"`: only in that mode |
 | `host.set_mode(name, transition=None)` / `host.mode` | switch to a mode from `[modes.<name>]`; `None` ends it. A transition plays also when the theme stays |
-| `host.notify(text, icon=None, level="info", seconds=None, kind="", rank=0, payload=None, key="")` | a short message on the panel (see *Toasts*) |
+| `host.notify(text, icon=None, level="info", seconds=None, kind="", rank=0, payload=None, key="")` | a short message on the panel (see *Toasts*). It returns a `Delivery`: true when the message will show, else `reason` says why (`"theme"`, `"screen"`, `"no-panel"`) |
 | `host.on(event, callback)` | `panel-connected`, `panel-lost`, `panel-restarted` (after `panel-connected`, when the panel came back from a restart that cleared a hung video decoder, not from a replug), `theme-changed` (`theme=`), `mode-changed` (`mode=`), `sample` (`snapshot=`, see below), `quit`; callbacks run in an event thread |
 | `host.data_dir` | `<settings>/plugins-data/<service>/` for the service's files |
 | `host.log` | a logger named after the service |
@@ -395,6 +395,15 @@ video mode (a separate overlay would make the video judder).
   `{"image": cover, "progress": 0.4, "color": "#EF4444"}`.
 - While a transition plays, new toasts wait, unless the transition says
   otherwise (see *Transitions*).
+- `host.notify` answers with a `Delivery`, so a service (or the editor's
+  *Control* page, which sends a test message of each kind) can tell whether the
+  message will show. `delivery.shown` (also its truth value) is True when
+  nothing stands in the way; otherwise `delivery.reason` is `"theme"` (the
+  theme switches the kind off), `"screen"` (the screen shows it itself) or
+  `"no-panel"` (the panel is not connected or paused: the message waits for
+  it). It is the answer of the moment: a theme or screen that comes before the
+  message is due changes it, and a message of a higher rank can still take its
+  place. A message that will not show is handed over all the same.
 
 What the band draws besides `text` (other styles may read the same keys):
 
@@ -609,6 +618,7 @@ None, so a page says what is missing instead of failing.
 | `restart_service(name)` | stop and start an enabled service again; its new state |
 | `snapshot()` | the readings and history the panel was last drawn from, or None |
 | `shown_frame()` | the frame on the panel now, with transitions and messages, as a PIL image in the theme's orientation (not turned for an upside-down panel); None before the first frame and while the panel is paused. Read it only |
+| `notify(text, **options)` | a message on the panel as a service sends it (`ServiceHost.notify`'s arguments), e.g. a test or the answer to an action; returns the `Delivery` (see *Toasts*) |
 | `log_tail(lines=40)` | the last lines of `logs/libre-panel.log`, the log the tray app writes (nothing for `libre-panel start`, which logs to its terminal) |
 | `config_path` | config.toml; change one setting with `libre_panel.config.set_config_value("modes.game.theme", ...)` |
 | `data_dir(name)` | a service's data folder |

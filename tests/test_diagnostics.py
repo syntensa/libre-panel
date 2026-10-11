@@ -9,9 +9,12 @@ from test_app_cli import MemoryStream, StepClock
 
 from libre_panel import app as app_module
 from libre_panel.config import Config, SensorsConfig, log_file
-from libre_panel.plugins import PageContext, PluginHost, Toast
+from libre_panel.devices.base import DeviceError
+from libre_panel.plugins import Delivery, PageContext, PluginHost, Toast
+from libre_panel.plugins.host import ServiceHost
 from libre_panel.sensors.base import SensorHub
 from libre_panel.sensors.demo import DemoProvider
+from libre_panel.theme.model import save_theme
 
 
 def demo_loop(clock, host, display=None, theme="pico"):
@@ -75,3 +78,99 @@ def test_the_loop_hands_out_the_frame_on_the_panel():
         loop.close()
         host.close()
     assert host.shown is None
+
+
+# -- will a message show? ----------------------------------------------------------------
+
+
+def quiet_theme(name="quiet", off=("music",)):
+    """A user theme that switches some kinds of messages off."""
+    save_theme(
+        name,
+        {
+            "format": "libre-panel-theme/1",
+            "name": name,
+            "display": {"model": "custom", "width": 320, "height": 240},
+            "background": {"color": "#000000"},
+            "widgets": [],
+            "toast": {"off": list(off)},
+        },
+    )
+    return name
+
+
+def test_a_delivery_is_true_when_the_message_will_show():
+    assert Delivery(True) and not Delivery(False, "theme")
+    assert Delivery(False, "screen").reason == "screen" and Delivery(True).reason == ""
+
+
+def test_notify_says_whether_a_message_will_show(isolated_home):
+    clock, host = StepClock(1000.0), PluginHost()
+    service = ServiceHost(host, "test")
+    assert service.notify("hello", kind="volume") == Delivery(False, "no-panel")  # no loop yet
+    loop = demo_loop(clock, host, theme=quiet_theme())
+    try:
+        assert service.notify("hello", kind="volume") == Delivery(False, "no-panel")  # not open yet
+        loop.step(clock.now)
+        assert service.notify("hello", kind="volume") == Delivery(True)
+        assert service.notify("hello") == Delivery(True)  # no kind: nothing to switch off
+        refused = service.notify("a song", kind="music")
+        assert not refused and refused.reason == "theme"  # the theme's toast.off
+        # a screen that shows some kinds itself
+        screen = SimpleNamespace(suppresses={"warning", "music"}, close=lambda: None)
+        loop.renderer.screen = screen
+        loop.toasts.set_renderer(loop.renderer)
+        assert service.notify("hot", kind="warning") == Delivery(False, "screen")
+        assert service.notify("a song", kind="music").reason == "theme"  # the theme's word first
+        assert service.notify("hello", kind="volume").shown
+    finally:
+        loop.close()
+    assert service.notify("hello", kind="volume") == Delivery(False, "no-panel")  # the loop ended
+    # whatever was told after the first frame was handed over, shown or not (the layer
+    # decides when a message is due)
+    assert len(host.take_toasts()) == 7
+    host.close()
+
+
+def test_a_panel_that_is_not_connected_shows_nothing_yet():
+    class Unplugged(MemoryStream):
+        plugged = False
+
+        def open(self):
+            if not self.plugged:
+                raise DeviceError("no panel found")
+
+    clock, host, display = StepClock(1000.0), PluginHost(), Unplugged()
+    service = ServiceHost(host, "test")
+    loop = demo_loop(clock, host, display)
+    try:
+        loop.step(clock.now)
+        assert not loop.link.connected
+        assert service.notify("hello", kind="volume") == Delivery(False, "no-panel")
+        display.plugged = True
+        loop.link.retry_at = 0.0
+        loop.step(clock.now)
+        assert loop.link.connected and service.notify("hello", kind="volume").shown
+    finally:
+        loop.close()
+        host.close()
+
+
+def test_a_page_can_send_a_message_and_learn_whether_it_shows(isolated_home):
+    plain = PageContext(None)
+    assert plain.notify("test", kind="volume") == Delivery(False, "no-panel")
+    clock, host = StepClock(1000.0), PluginHost()
+    loop = demo_loop(clock, host, theme=quiet_theme())
+    context = PageContext(SimpleNamespace(plugin_host=host))
+    try:
+        loop.step(clock.now)
+        assert context.notify("Volume", kind="volume", rank=0, key="volume").shown
+        assert context.notify("A song", kind="music", icon="music").reason == "theme"
+        sent = host.take_toasts()
+        assert [(t.text, t.kind, t.service, t.key) for t in sent] == [
+            ("Volume", "volume", "editor", "volume"),
+            ("A song", "music", "editor", ""),
+        ]
+    finally:
+        loop.close()
+        host.close()

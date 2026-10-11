@@ -73,7 +73,9 @@ class ToastLayer:
         theme = renderer.theme
         settings, size = theme.toast, (theme.width, theme.height)
         screen = getattr(renderer, "screen", None)
-        self.suppressed = set(settings["off"]) | set(getattr(screen, "suppresses", ()) or ())
+        self.off = frozenset(settings["off"])  # the theme switches these kinds off
+        self.left_out = frozenset(getattr(screen, "suppresses", ()) or ())  # the screen shows them
+        self.suppressed = set(self.off | self.left_out)
         same = (settings["style"], settings["options"], size) == (
             self.settings.get("style"),
             self.settings.get("options"),

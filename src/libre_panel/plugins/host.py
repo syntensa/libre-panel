@@ -91,6 +91,28 @@ class Toast:
     key: str = ""  # the same key replaces the one on show; empty: the kind
 
 
+NO_PANEL = "no-panel"  # the panel is not connected or paused: the message waits for it
+OFF_IN_THEME = "theme"  # the theme switches its kind off (``toast.off``)
+LEFT_OUT = "screen"  # the screen shows its kind itself (``Screen.suppresses``)
+
+
+@dataclass(frozen=True)
+class Delivery:
+    """What ``notify`` says about a message: whether it will show, and if not, why.
+
+    ``shown`` is True when nothing stands in its way (a message of a higher rank can
+    still take its place). Otherwise ``reason`` is ``"theme"`` (the theme switches its
+    kind off), ``"screen"`` (the screen shows its kind itself) or ``"no-panel"``. The
+    answer is that of the moment: a theme or screen that comes before the message is
+    due changes it. A Delivery is true when the message will show."""
+
+    shown: bool
+    reason: str = ""
+
+    def __bool__(self) -> bool:
+        return self.shown
+
+
 TransitionSpec = str | tuple[str, dict[str, Any]] | None
 """A transition: a name, (name, parameters for it) or None for config.toml's."""
 
@@ -214,11 +236,12 @@ class ServiceHost:
         rank: int = 0,
         payload: dict[str, Any] | None = None,
         key: str = "",
-    ) -> None:
-        """A short message on the panel (see :class:`Toast`)."""
+    ) -> Delivery:
+        """A short message on the panel (see :class:`Toast`). The answer says whether it
+        will show or why not (see :class:`Delivery`); it is true when it will."""
         hold = None if seconds is None else float(seconds)
         toast = Toast(text, icon, level, hold, kind, int(rank), dict(payload or {}), self.name, key)
-        self._hub.notify(toast)
+        return self._hub.notify(toast)
 
     def on(self, event: str, callback: Callable[..., None]) -> None:
         """Hear about ``panel-connected``, ``panel-lost``, ``panel-restarted``
@@ -266,6 +289,9 @@ class PluginHost:
         # The frame on the panel now, after transitions and toasts; set by the main loop,
         # read by editor pages (PageContext.shown_frame). It is never drawn on afterwards.
         self.shown: Image.Image | None = None
+        # Says whether a toast would show now (the main loop knows the theme, the screen and
+        # the panel); None while no loop runs. ``notify`` passes its answer on.
+        self.judge: Callable[[Toast], Delivery] | None = None
         # theme requests by service: (theme, priority, order of asking, mode it counts in)
         self._themes: dict[str, tuple[str, int, int, str | None]] = {}
         self._asked = itertools.count()
@@ -377,9 +403,11 @@ class PluginHost:
         if mode_ended:
             self.emit("mode-changed", mode=None)
 
-    def notify(self, toast: Toast) -> None:
+    def notify(self, toast: Toast) -> Delivery:
         with self._lock:
             self._toasts.append(toast)
+        judge = self.judge
+        return judge(toast) if judge is not None else Delivery(False, NO_PANEL)
 
     def listen(self, event: str, callback: Callable[..., None], owner: str | None = None) -> None:
         if event not in EVENTS:

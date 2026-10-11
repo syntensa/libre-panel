@@ -127,6 +127,10 @@
   `context.shown_frame()` for the picture on the panel now, messages and
   transitions included, and `context.log_tail(lines)` for the end of the log
   the tray app writes
+- Plugins: `host.notify` says whether the message will show. It returns a
+  `Delivery`, true when it will, else with the `reason`: the theme switches the
+  kind off (`"theme"`), the screen shows it itself (`"screen"`) or no panel is
+  connected (`"no-panel"`). A page sends one with `context.notify(...)`
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
