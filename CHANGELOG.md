@@ -359,6 +359,34 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
   (`/api/app`, `GET control/panel`) and on the LibreHardwareMonitor row of `GET control/sources`. It
   keeps quiet while LibreHardwareMonitor starts and about what nobody can change.
   `libre-panel sensors --check-lhm` tests that the library loads
+- The sensor service (Windows): `LibrePanelSensors`, a small Windows service that runs
+  LibreHardwareMonitor as LocalSystem on every kind of hardware it knows (the CPU's temperature,
+  power and clock, the mainboard's temperatures and fans, the memory's and the drives'
+  temperatures, fan controllers, pumps, power supplies) and hands the readings to Libre Panel over
+  a local pipe, so Libre Panel itself needs no administrator rights for them. It only reads: two
+  requests (hello, read) as length-prefixed JSON with bounded sizes and a rate limit; people
+  signed in at the PC may ask for readings, nobody can change anything through it, network logons
+  and other computers are refused, and Libre Panel talks only to the service's own process. It
+  reads only the hardware the themes show, and nothing while nobody asks. `mode = "service"`
+  under `[sensors.librehardwaremonitor]` asks it alone; `"auto"` prefers it wherever it is
+  installed, reads the other ways while it does not answer and lets a service installed later
+  take over. What it may do and why it is safe: [the sensor
+  service](docs/BACKGROUND.md#the-sensor-service)
+- The Windows setup installs for all users and sets up what the sensors need, in three checked
+  boxes that say what each is (English and German): the sensor service, the PawnIO driver (from
+  the download) and *Performance Log Users*, which game frame rates need. *Install for me only*
+  installs without administrator rights as before, and an update keeps the way it was installed.
+  The uninstaller stops and removes the service and takes back the group membership it gave
+- `libre-panel system-setup --service --pawnio --perf-log-users` (as administrator; `--remove`
+  takes it back, `--status` needs no rights): the one way the setup and the portable zip set these
+  up, which may run again without harm
+- *Unlock all sensors*: where a Windows download runs without the sensor service (the portable
+  zip, an install for one user), a card on Start and *Settings → Sensors* run `system-setup` after
+  one question of Windows (UAC). *Settings → Sensors* shows the service, the PawnIO driver and
+  whether game frame rates may be recorded, and sets the service up again or removes it.
+  `libre-panel sensors --check-service` asks it for readings
+- Drive temperatures (`temp.nvme.*` and the like) through the sensor service: the Windows
+  downloads carry LibreHardwareMonitor's DiskInfoToolkit 1.1.2 (MPL-2.0) and BlackSharp.Core 1.0.7
 - The names of the processor, the graphics card and the memory (`cpu.name`, `gpu.name`, `mem.name`)
   are found by Libre Panel itself, on Windows and Linux, once at the start, with no administrator
   rights and no other program: from the registry and the firmware's SMBIOS table on Windows, from

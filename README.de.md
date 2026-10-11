@@ -178,9 +178,11 @@ Marken: [docs/HARDWARE.md](docs/HARDWARE.md) (englisch).
 Aus dem [neuesten Release](https://github.com/syntensa/libre-panel/releases/latest), ohne
 Python:
 
-- **Windows 10 und 11:** `libre-panel-…-windows-x64-setup.exe` installiert für deinen Benutzer
-  ohne Administratorrechte, mit Startmenü-Eintrag und auf Wunsch Start bei der Anmeldung. Ein
-  portables Zip gibt es auch.
+- **Windows 10 und 11:** `libre-panel-…-windows-x64-setup.exe` installiert für alle Benutzer,
+  mit Startmenü-Eintrag, auf Wunsch Start bei der Anmeldung und, in angehakten Kästchen, die
+  sagen, was jedes ist, dem Sensordienst, dem Treiber PawnIO und dem, was Bildraten in Spielen
+  brauchen; Windows fragt einmal nach Administratorrechten, Libre Panel selbst läuft ohne sie.
+  Ein portables Zip gibt es auch: Sein *Alle Sensoren freischalten* richtet dasselbe ein.
 - **Linux (x86-64):** `Libre_Panel-…-x86_64.AppImage`: ausführbar machen und starten, ohne
   Installation. Ein Tarball gibt es auch.
 
@@ -195,8 +197,9 @@ Python:
    Dienste (alle aus, bis du sie einschaltest). Das Tray-Symbol hat Theme, Helligkeit, Pause
    und *Mit dem System starten*.
 
-Unter Windows brauchen Temperatur und Leistung des Prozessors und die Mainboard-Lüfter
-Administratorrechte und den Treiber PawnIO ([FAQ](#faq)); alles andere geht ohne. Die App
+Unter Windows kommen Temperatur und Leistung des Prozessors, die Mainboard-Lüfter und die
+Temperaturen von Arbeitsspeicher und Laufwerken über den Sensordienst von Libre Panel, der sie
+mit den nötigen Rechten liest ([FAQ](#faq)); die App selbst läuft ohne diese Rechte. Die App
 öffnet sich in einem eigenen Fenster (WebView2 unter Windows, WebKitGTK unter Linux); das
 AppImage öffnet sie vorerst im Browser
 ([Einzelheiten](docs/BACKGROUND.md#the-apps-window)).
@@ -267,17 +270,17 @@ das gefundene Panel; unter *Anderes Panel* wählst du selbst. Im Zweifel fragt u
 <summary><b>Warum zeigen CPU-Temperatur und -Leistung unter Windows „--“?</b></summary>
 <br>
 
-Die Windows-Downloads bringen die Bibliothek von LibreHardwareMonitor mit und lesen
-Grafikkarte, Leistung und Lüfter in Libre Panel selbst, ohne weiteres Programm. Temperatur,
-Leistung und Takt des Prozessors, die RAM-Temperatur und die Mainboard-Lüfter brauchen
-zusätzlich **Administratorrechte** und den Treiber **PawnIO**
-([pawnio.eu](https://pawnio.eu)); das Tray sagt, was davon fehlt. Damit Libre Panel bei jeder
-Anmeldung mit diesen Rechten startet, führ `libre-panel autostart enable --elevated` in einem
-Terminal als Administrator aus, aber nur, wo allein Administratoren die Dateien von Libre
-Panel ändern können, etwa beim portablen Zip unter *Programme*
-([warum](docs/BACKGROUND.md#windows-starting-with-the-highest-rights)). Ein
-LibreHardwareMonitor, den du selbst mit Webserver laufen lässt, geht auch und füllt aus, was
-fehlt ([Einzelheiten](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans)).
+Die Windows-Downloads bringen die Bibliothek von LibreHardwareMonitor mit und lesen die
+Grafikkarte und ihre Lüfter ohne weiteres Programm. Temperatur, Leistung und Takt des
+Prozessors, die Temperaturen von RAM und Laufwerken und die Mainboard-Lüfter brauchen
+**Administratorrechte** und den Treiber **PawnIO** ([pawnio.eu](https://pawnio.eu)). Der
+**Sensordienst** von Libre Panel hat beides: Das Setup installiert ihn (das angehakte Kästchen
+*Sensordienst*), das portable Zip bietet auf Start *Alle Sensoren freischalten* an (eine Frage
+von Windows), und Libre Panel selbst läuft weiter ohne Administratorrechte
+([wie das sicher bleibt](docs/BACKGROUND.md#the-sensor-service)). *Einstellungen → Sensoren*
+sagt, ob er läuft. Ohne ihn gehen `libre-panel autostart enable --elevated` (als
+Administrator) oder ein LibreHardwareMonitor, den du selbst mit Webserver laufen lässt, wie
+bisher ([Einzelheiten](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans)).
 </details>
 
 <details>

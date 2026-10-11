@@ -172,9 +172,11 @@ others have no video decoder. Details, Linux permissions and the panels of other
 From the [latest release](https://github.com/syntensa/libre-panel/releases/latest), no
 Python needed:
 
-- **Windows 10 and 11:** `libre-panel-…-windows-x64-setup.exe` installs for your user without
-  administrator rights, with a start menu entry and an optional start at login. A portable
-  zip is there too.
+- **Windows 10 and 11:** `libre-panel-…-windows-x64-setup.exe` installs for all users, with
+  a start menu entry, an optional start at login and, in checked boxes that say what each
+  is, the sensor service, the PawnIO driver and what game frame rates need; Windows asks
+  once for administrator rights, Libre Panel itself runs without them. A portable zip is
+  there too: its *Unlock all sensors* sets up the same.
 - **Linux (x86-64):** `Libre_Panel-…-x86_64.AppImage`: make it executable and start it, no
   installation. A tarball is there too.
 
@@ -188,8 +190,9 @@ Python needed:
    services (all off until you switch them on). The tray icon has the theme, brightness,
    pause and *Start with system*.
 
-On Windows, the processor's temperature and power and the mainboard's fans need
-administrator rights and the PawnIO driver ([FAQ](#faq)); everything else works without.
+On Windows, the processor's temperature and power, the mainboard's fans and the
+temperatures of memory and drives come through Libre Panel's sensor service, which reads
+them with the rights they need ([FAQ](#faq)); the app itself runs without those rights.
 The app opens in a window of its own (WebView2 on Windows, WebKitGTK on Linux); the AppImage
 opens it in the browser for now ([details](docs/BACKGROUND.md#the-apps-window)).
 
@@ -257,16 +260,16 @@ as a virtual COM port (`COM3`, `/dev/ttyACM0`). *Start* in the app names the pan
 <summary><b>Why do the CPU temperature and power show "--" on Windows?</b></summary>
 <br>
 
-The Windows downloads carry LibreHardwareMonitor's library and read the graphics card,
-power and fans inside Libre Panel, with no other program. The processor's temperature, power
-and clock, the RAM's temperature and the mainboard's fans also need **administrator rights**
-and the **PawnIO** driver ([pawnio.eu](https://pawnio.eu)); the tray says which one is
-missing. To start with those rights at every login, run `libre-panel autostart enable
---elevated` in a terminal opened as administrator, but only where only administrators can
-change Libre Panel's files, such as the portable zip unpacked under *Program Files*
-([why](docs/BACKGROUND.md#windows-starting-with-the-highest-rights)). A LibreHardwareMonitor
-that you run yourself with its web server works too and fills in what is missing
-([details](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans)).
+The Windows downloads carry LibreHardwareMonitor's library and read the graphics card and
+its fans with no other program. The processor's temperature, power and clock, the RAM's and
+the drives' temperatures and the mainboard's fans need **administrator rights** and the
+**PawnIO** driver ([pawnio.eu](https://pawnio.eu)). Libre Panel's **sensor service** has
+both: the setup installs it (the checked box *Sensor service*), the portable zip offers
+*Unlock all sensors* on Start (one question of Windows), and Libre Panel itself goes on
+without administrator rights ([how it is kept safe](docs/BACKGROUND.md#the-sensor-service)).
+*Settings → Sensors* says whether it runs. Without it, `libre-panel autostart enable
+--elevated` (as administrator) or a LibreHardwareMonitor that you run yourself with its web
+server work as before ([details](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans)).
 </details>
 
 <details>
