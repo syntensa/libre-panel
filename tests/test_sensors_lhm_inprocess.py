@@ -260,6 +260,35 @@ def test_only_the_nodes_a_theme_reads_are_updated():
     del theme
 
 
+def test_what_all_themes_read_together():
+    assert base.wanted_keys() == frozenset()
+    one, two = show("a.b", "c.*"), show("c.*", "d")
+    assert base.wanted_keys() == {"a.b", "c.*", "d"}
+    del one
+    assert base.wanted_keys() == {"c.*", "d"}
+    del two
+    assert base.wanted_keys() == frozenset()
+
+
+def test_what_themes_read_is_looked_at_again_only_when_it_has_changed(monkeypatch):
+    asked = []
+    real = inside.wanted
+    monkeypatch.setattr(inside, "wanted", lambda key: asked.append(key) or real(key))
+    computer = small_computer()
+    source = opened(computer)
+    theme = show("gpu.temp")
+    source.refresh()
+    first = len(asked)
+    assert first > 0 and computer.Hardware[3].updates == 2
+    for _ in range(5):  # the same themes: the same nodes, without asking again
+        source.refresh()
+    assert len(asked) == first and computer.Hardware[3].updates == 7
+    other = show("cpu.load")  # another theme on show: asked again
+    source.refresh()
+    assert len(asked) > first and computer.Hardware[1].updates == 2
+    del theme, other
+
+
 def test_a_key_made_from_several_sensors_wakes_the_node_of_them_all():
     cores = [
         FakeSensor(f"/intelcpu/0/clock/{i}", f"CPU Core #{i}", "Clock", 3000.0 + i) for i in (1, 2)
@@ -320,6 +349,24 @@ def test_a_sensor_without_a_value_yet_is_still_known_to_make_its_key():
     temperature.Value = 50.0
     source.refresh()
     assert gpu.updates == 2 and source.read()["gpu.temp"].value == 50.0
+    del theme
+
+
+def test_a_round_that_fails_again_and_again_is_said_once(caplog):
+    caplog.set_level(logging.DEBUG, logger=LOGGER)
+    source = opened(small_computer())
+    ok = source._publish
+    source._publish = lambda: (_ for _ in ()).throw(RuntimeError("no mapping"))
+    theme = show("gpu.temp")
+    for _ in range(4):
+        source._refresh_guarded()
+    said = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(said) == 1 and "could not be read" in said[0].getMessage()
+    source._publish = ok
+    source._refresh_guarded()  # it works again
+    source._publish = lambda: (_ for _ in ()).throw(RuntimeError("no mapping"))
+    source._refresh_guarded()
+    assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 2
     del theme
 
 
@@ -584,6 +631,13 @@ def test_the_folder_next_to_a_frozen_program(tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "executable", str(program / "libre-panel.exe"))
     assert inside.find_dll_dir(None) == program / "_internal" / "lhm"
+
+
+def test_pythonnet_is_found_also_when_it_is_imported_already(monkeypatch):
+    monkeypatch.setitem(sys.modules, "pythonnet", types.ModuleType("pythonnet"))  # no spec
+    assert inside._has_pythonnet()
+    monkeypatch.setitem(sys.modules, "pythonnet", None)
+    assert not inside._has_pythonnet()
 
 
 def test_availability_says_why_not(tmp_path, monkeypatch, caplog):

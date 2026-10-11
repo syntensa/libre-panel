@@ -122,7 +122,7 @@ def _walk(node: dict[str, Any], device: dict[str, Any] | None = None) -> Iterato
 class LhmSensor:
     """One sensor with a value, whichever way it was read: from the web server's
     tree or from LibreHardwareMonitor running inside Libre Panel. Both ways end in
-    :func:`readings_from_sensors`, so they name and group readings the same."""
+    ``readings_from_sensors``, so they name and group readings the same."""
 
     sensor_id: str  # "/amdcpu/0/temperature/2"
     hardware_id: str  # "/amdcpu/0"
@@ -330,7 +330,20 @@ def hardware_hint(
     )
     if "librehardwaremonitor" not in providers:
         text += ' Add "librehardwaremonitor" to providers under [sensors] in config.toml.'
+    if status is not None and status.error:  # it tried to start inside Libre Panel first
+        text += f" (Inside Libre Panel it could not start: {status.error}.)"
     return text
+
+
+def dll_dir_of(options: dict[str, Any]) -> str | None:
+    """``dll_dir`` of ``[sensors.librehardwaremonitor]``: the folder with the .NET libraries."""
+    value = options.get("dll_dir")
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str):
+        log.warning("[sensors.librehardwaremonitor] dll_dir must be a folder name, not %r", value)
+        return None
+    return value
 
 
 def _mode(value: Any) -> str:
@@ -374,7 +387,7 @@ class LibreHardwareMonitorProvider(SensorProvider):
     def _start_inprocess(self) -> None:
         from libre_panel.sensors import lhm_inprocess
 
-        folder, why = lhm_inprocess.availability(self.options.get("dll_dir") or None)
+        folder, why = lhm_inprocess.availability(dll_dir_of(self.options))
         if folder is None:
             self._why = why
             if self.mode == "inprocess":
@@ -506,7 +519,10 @@ class LibreHardwareMonitorProvider(SensorProvider):
     def status(self) -> LhmStatus:
         """How the readings come, and what keeps the CPU's from coming."""
         if self._source is not None:
-            return self._source.status()
+            status = self._source.status()
+            if status.error and self.mode == "auto":  # it did not start: the web server it is
+                return LhmStatus("webserver", error=status.error)
+            return status
         if self.mode == "inprocess":  # inside only: it is not there, and that is the problem
             return LhmStatus("inprocess", error=self._why)
         return LhmStatus("webserver")

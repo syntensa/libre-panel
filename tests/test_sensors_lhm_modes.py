@@ -176,6 +176,25 @@ def test_inside_that_fails_later_goes_to_the_web_server_in_auto_only(possible, w
     strict.close()
 
 
+def test_the_status_after_a_start_that_failed_depends_on_the_mode(possible, web_server):
+    auto = provider_with()
+    possible.sources[0].state = lhm.LhmStatus(
+        "inprocess", error="pythonnet already runs on CoreCLR"
+    )
+    assert auto.status() == lhm.LhmStatus("webserver", error="pythonnet already runs on CoreCLR")
+    said = hint(auto.status())  # the steps for the web server, and why not inside
+    assert "Options -> Remote Web Server -> Run" in said and said.endswith(
+        "(Inside Libre Panel it could not start: pythonnet already runs on CoreCLR.)"
+    )
+    auto.close()
+    strict = provider_with(mode="inprocess")
+    possible.sources[-1].state = lhm.LhmStatus(
+        "inprocess", error="pythonnet already runs on CoreCLR"
+    )
+    assert strict.status().mode == "inprocess"  # the problem as it is, no web server to turn to
+    strict.close()
+
+
 def test_a_mode_that_is_not_one_becomes_auto(possible, web_server, caplog):
     provider = provider_with(mode="somehow")
     assert provider.mode == "auto" and provider._source is not None
@@ -189,6 +208,15 @@ def test_a_mode_that_is_not_one_becomes_auto(possible, web_server, caplog):
 
 def test_the_default_mode_is_auto(possible):
     assert provider_with().mode == "auto"
+
+
+def test_a_dll_dir_that_is_no_folder_name_is_left_out(possible, caplog):
+    for value, passed in (("", None), (None, None), (5, None), (["x"], None), ("libs", "libs")):
+        possible.dll_dirs.clear()
+        provider_with(dll_dir=value).close()
+        assert possible.dll_dirs == [passed], value
+    said = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(said) == 2 and "dll_dir must be a folder name, not 5" in said[0]
 
 
 def test_a_source_that_breaks_does_not_stop_the_reading(possible):
@@ -345,6 +373,20 @@ def test_sensors_asks_for_every_sensor_of_the_library(isolated_home, possible, m
     run_sensors(isolated_home, monkeypatch, capsys, provider)
     assert seen == [True]  # while it waits, every node counts as read
     assert not base.wanted("lhm:/amdcpu/0/")  # and afterwards nothing stays asked for
+
+
+def test_a_live_preview_waits_for_the_source_too(isolated_home, possible, monkeypatch, tmp_path):
+    provider = provider_with()
+    (source,) = possible.sources
+    source.readings = {"gpu.temp": Reading("gpu.temp", 50.0, "°C", "GPU temp")}
+    waited = []
+    source.wait_ready = lambda timeout: waited.append(timeout) or True
+    monkeypatch.setattr(
+        "libre_panel.app.build_hub", lambda config, demo=False: SensorHub([provider])
+    )
+    picture = tmp_path / "live.png"
+    assert cli.main(["preview", "libre-default", "-o", str(picture), "--live"]) == 0
+    assert picture.is_file() and waited == [inside.READY_SECONDS] and source.closed
 
 
 # -- libre-panel sensors --check-lhm ---------------------------------------------------------

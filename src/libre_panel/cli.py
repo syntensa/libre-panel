@@ -265,6 +265,7 @@ def _cmd_preview(args: argparse.Namespace) -> int:
         hub = build_hub(config)
         try:
             hub.snapshot()  # rates (network, disk) need two samples
+            _wait_for_sources(hub)
             snapshot = hub.snapshot()
         finally:
             hub.close()
@@ -362,9 +363,10 @@ def _check_lhm(args: argparse.Namespace) -> int:
     to try the bundled libraries: it needs no administrator rights, and the CPU's sensors
     being out of reach is not a failure."""
     from libre_panel.sensors import lhm_inprocess
+    from libre_panel.sensors.librehardwaremonitor import dll_dir_of
 
     options = load_config(args.config).sensors.options.get("librehardwaremonitor", {})
-    worked, lines = lhm_inprocess.check(options.get("dll_dir") or None)
+    worked, lines = lhm_inprocess.check(dll_dir_of(options))
     print("\n".join(lines))
     return 0 if worked else 1
 

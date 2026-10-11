@@ -84,11 +84,12 @@ def _inside_check(
     from libre_panel.sensors import lhm_inprocess
     from libre_panel.sensors.librehardwaremonitor import (
         LibreHardwareMonitorProvider,
+        dll_dir_of,
         hardware_hint,
         ring0_steps,
     )
 
-    folder, why = lhm_inprocess.availability(options.get("dll_dir") or None)
+    folder, why = lhm_inprocess.availability(dll_dir_of(options))
     if folder is None:
         if options.get("mode") == "inprocess":
             return "info", f"LibreHardwareMonitor cannot run inside Libre Panel: {why}"

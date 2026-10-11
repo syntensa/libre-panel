@@ -7,8 +7,8 @@ thread of its own. ``LibreHardwareMonitorProvider`` takes this way when it can
 (``mode = "auto"``) and keeps asking the web server otherwise.
 
 - **.NET Framework only.** LibreHardwareMonitor 0.9.6 on CoreCLR stops in its mutex code
-  (``ArgumentNullException: identity``), so pythonnet is told to start ``netfx``. Where
-  pythonnet already runs on another runtime (a plugin loaded it first) this source
+  (seen as ``ArgumentNullException: identity``), so pythonnet is told to start ``netfx``.
+  Where pythonnet already runs on another runtime (a plugin loaded it first) this source
   steps aside.
 - **The libraries** are the .NET Framework builds from NuGet that
   ``packaging/windows/fetch_lhm.py`` collects. The Windows downloads carry them in a folder
@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from libre_panel.sensors.base import Reading, wanted
+from libre_panel.sensors.base import Reading, wanted, wanted_keys
 from libre_panel.sensors.librehardwaremonitor import (
     LhmSensor,
     LhmStatus,
@@ -134,6 +134,13 @@ def find_dll_dir(configured: str | None = None) -> Path | None:
     return None
 
 
+def _has_pythonnet() -> bool:
+    try:
+        return importlib.util.find_spec("pythonnet") is not None
+    except (ImportError, ValueError):  # imported already, with no spec to speak of
+        return sys.modules.get("pythonnet") is not None
+
+
 def availability(
     dll_dir: str | None = None, platform: str | None = None
 ) -> tuple[Path | None, str]:
@@ -141,7 +148,7 @@ def availability(
     else (None, why not). Cheap: nothing is loaded yet."""
     if (platform or sys.platform) != "win32":
         return None, "it runs on Windows only"
-    if importlib.util.find_spec("pythonnet") is None:
+    if not _has_pythonnet():
         return None, 'pythonnet is not installed (pip install "libre-panel[lhm]")'
     folder = find_dll_dir(dll_dir)
     if folder is None:
@@ -201,8 +208,8 @@ def load_library(dll_dir: Path) -> Any:
 
 def open_computer(dll_dir: Path) -> Any:
     """LibreHardwareMonitor's ``Computer``, open on CPU, GPU, memory, mainboard and network.
-    (Drives need one more library and are not read; the USB controllers, power supplies
-    and batteries are of no use to a panel.)"""
+    Drives (they need one more library), USB controllers, power supplies and batteries are
+    not opened."""
     computer = load_library(dll_dir)()
     computer.IsCpuEnabled = True
     computer.IsGpuEnabled = True
@@ -399,6 +406,9 @@ class InProcessSource:
         self._clock = clock
         self._nodes: list[_Node] = []
         self._node_of: dict[str, _Node] = {}  # sensor id -> node
+        self._needed: tuple[Any, list[_Node]] | None = None  # for what was read, who was needed
+        self._learned = 0  # how many keys the nodes know: it grows when one is learned
+        self._broken = False  # the last round failed, and the log said so
         self._latest: dict[str, Reading] = {}
         self._beat: float | None = None  # when the last round ended
         self._ring0: bool | None = None
@@ -474,7 +484,13 @@ class InProcessSource:
         try:
             self.refresh()
         except Exception:  # noqa: BLE001 - one bad round must not end the thread
-            log.warning("LibreHardwareMonitor could not be read", exc_info=True)
+            level = (
+                logging.DEBUG if self._broken else logging.WARNING
+            )  # said once, not every second
+            log.log(level, "LibreHardwareMonitor could not be read", exc_info=True)
+            self._broken = True
+        else:
+            self._broken = False
 
     # -- reading ------------------------------------------------------------------------
 
@@ -507,8 +523,9 @@ class InProcessSource:
             if not key.startswith("lhm:"):
                 for sensor_id in ids:
                     node = self._node_of.get(sensor_id)
-                    if node is not None:
+                    if node is not None and key not in node.keys:
                         node.keys.add(key)
+                        self._learned += 1
         return readings
 
     def _update(self, node: _Node) -> None:
@@ -523,12 +540,18 @@ class InProcessSource:
 
     def needed(self) -> list[_Node]:
         """The nodes with a sensor that a theme on show reads: by raw key, or by the
-        friendly key (``cpu.temp``, ``temp.gpu.gpu_core``) one of its sensors makes."""
-        return [
-            n
-            for n in self._nodes
-            if n.entries and (wanted(n.prefix) or any(wanted(k) for k in n.keys))
-        ]
+        friendly key (``cpu.temp``, ``temp.gpu.gpu_core``) one of its sensors makes. Asking
+        ``wanted`` for every key takes milliseconds, so it is done again only when what
+        themes read, or what the nodes make, has changed."""
+        state = (wanted_keys(), self._learned)
+        if self._needed is None or self._needed[0] != state:
+            nodes = [
+                n
+                for n in self._nodes
+                if n.entries and (wanted(n.prefix) or any(wanted(k) for k in n.keys))
+            ]
+            self._needed = (state, nodes)
+        return self._needed[1]
 
     def refresh(self) -> None:
         """One round: update what is read, then make the readings."""
