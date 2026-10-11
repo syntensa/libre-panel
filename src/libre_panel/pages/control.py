@@ -342,6 +342,7 @@ class Control(ConsolePage):
                 set_config_value("services.enabled", names, self.context.config_path)
             except (ConfigError, OSError) as exc:
                 raise Refused(str(exc), 409) from exc
+            self.context.follow_config()
         row = self._service(name, on, self.context.services())
         return {"service": name, "enabled": on, "state": row["state"], "detail": row["detail"]}
 

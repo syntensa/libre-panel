@@ -163,9 +163,15 @@
   data), the services with `enabled` and a state (`running`, `stopped`, `failed`,
   `not-installed`, `off`, `pending` until the app follows `config.toml`,
   `unknown`) that can be switched on and off and restarted, test messages with
-  their verdict, the theme per mode, the log, and the autopilot's rules
+  their verdict, the theme per mode, the log, and the autopilot's rules. Plugin
+  pages that write `config.toml` ask the app to follow it with
+  `context.follow_config()`
 
 **Fixes**
+- Services follow `config.toml` whenever the panel loop starts. A service switched
+  on (or off, or given other options) while the panel was paused, or in a
+  `config.toml` that did not load at the start and was fixed later, stayed as it
+  was until the file changed once more
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
   showing the last numbers for ever. After 5 seconds (`stale_seconds` under
   `[sensors.librehardwaremonitor]`; 0 keeps them) the readings go and the

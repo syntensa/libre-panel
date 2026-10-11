@@ -507,6 +507,37 @@ def test_a_service_is_pending_until_the_app_follows_the_file(isolated_home):
     assert row("game")["restartable"] is True
 
 
+def test_the_services_follow_the_page_while_the_panel_is_paused(running):
+    """The panel loop watches config.toml; with the panel paused the page has the app follow."""
+    app, port = running
+    app.panel.pause()
+    assert wait_for(lambda: app.panel.state()["state"] == "paused")
+    status, answer = post(port, "control/services/enable", {"service": "notices", "enabled": True})
+    assert status == 200 and answer["enabled"] is True
+    assert wait_for(lambda: "notices" in app.services.running, 15)
+    assert app.panel.state()["state"] == "paused"
+    rows = get(port, "control/services")[1]["services"]
+    assert next(row for row in rows if row["name"] == "notices")["state"] == "running"
+    assert post(port, "control/services/enable", {"service": "notices", "enabled": False})[0] == 200
+    assert wait_for(lambda: "notices" not in app.services.running, 15)
+    # the Autopilot page saves the same way
+    assert post(port, "autopilot/settings", {"enabled": True, "rules": RULES[:1]})[0] == 200
+    assert wait_for(lambda: "autopilot" in app.services.running, 15)
+    assert get(port, "autopilot/status")[1]["state"] in ("running", "pending")
+
+
+def test_a_page_context_has_the_app_follow_config_toml():
+    from types import SimpleNamespace
+
+    from libre_panel.plugins import PageContext
+
+    asked = []
+    PageContext(SimpleNamespace(follow_config=lambda: asked.append(1))).follow_config()
+    assert asked == [1]
+    PageContext().follow_config()  # a plain editor: no services, nothing to follow
+    PageContext(SimpleNamespace()).follow_config()  # an app that cannot be asked: no failure
+
+
 def test_a_source_that_says_how_it_is_read_is_explained(running):
     """LibreHardwareMonitor tells its mode, the rights and the driver; the page turns that
     into rows, and adds the hint of ``hardware_hint`` where nothing arrives (Windows)."""

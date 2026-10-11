@@ -626,6 +626,7 @@ None, so a page says what is missing instead of failing.
 | `background` | True when the background app serves this editor |
 | `service(name)` / `services()` | the running service or None / each enabled service and its state (`running`, `failed: …`, `not installed`, `stopped`) |
 | `restart_service(name)` | stop and start an enabled service again; its new state |
+| `follow_config()` | after a page wrote `config.toml` (`services.enabled`, a service's options): have the running app bring its services in line with it now, instead of when the panel loop next sees the file, which it does not while the panel is paused. Nothing happens in a plain editor |
 | `snapshot()` | the readings and history the panel was last drawn from, or None |
 | `status()` | what the panel is doing, as `/api/app` shows it: `state`, `detail`, `target`, `theme`, `frames`, `mode` and `stats` (frame rate, drawing time, data rate, the video link, faults; see [Running in the background](BACKGROUND.md#how-the-panel-is-doing)); None without the background app |
 | `sources()` | the sensor sources the panel reads, the first with a reading wins: `[{"name", "readings", "status"}]`, with the number of readings the last snapshot took from the source and, if it has a `status()` (LibreHardwareMonitor does), what it says about itself as a dict |

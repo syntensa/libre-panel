@@ -185,4 +185,6 @@ class Autopilot(ConsolePage):
             raise Refused(str(exc), 409) from exc
         except TypeError as exc:  # a value config.toml cannot hold (a rule's own extra key)
             raise Refused(str(exc)) from exc
+        if changes:
+            self.context.follow_config()
         return self.read(request)

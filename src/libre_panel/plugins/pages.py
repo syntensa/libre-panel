@@ -173,6 +173,15 @@ class PageContext:
             raise LookupError("no services run in this editor")
         return manager.restart(name)
 
+    def follow_config(self) -> None:
+        """After a page wrote config.toml: have the running app bring its services in line
+        with it now (a service switched on starts, one switched off stops, one whose
+        options changed restarts), instead of when the panel loop next sees the file, which
+        it does not while the panel is paused. Nothing happens in a plain editor."""
+        follow = getattr(self._controls, "follow_config", None)
+        if callable(follow):
+            follow()
+
     def data_dir(self, service: str) -> Path:
         """The data folder a service of that name uses (``host.data_dir``)."""
         return config_dir() / "plugins-data" / service

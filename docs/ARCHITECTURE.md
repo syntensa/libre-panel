@@ -95,7 +95,7 @@ rules.
   service: `panel` is `null`, `sources` is empty, a service's `state` is `unknown`. The
   theme per mode, the switches in config.toml and the log work all the same.
 - What a screen changes goes into config.toml, so it is kept, and the running app
-  follows within a second or two.
+  follows within a second or two (services too, also while the panel is paused).
 - Polling: `panel` once a second (the numbers are made once a second), `services` and
   `sources` every two, `log` while it is open. Ask for the next `live` picture when the
   last one has come (the panel draws `target_fps` at most). Answers are sent with
@@ -114,7 +114,7 @@ rules.
 | `GET control/log` | `lines` (1 to 1000, default 60) | `{lines, path, exists}`: the end of the log the tray app writes |
 | `GET control/status` | | the parts above in one answer, for a page that polls once: `{background, panel, config_problem, services, sources, probes, themes, log}` (`log` is `{path, exists}`) |
 | `POST control/probe` | `{kind}` | `{kind, name, shown, reason, message}`: a message of that kind goes to the panel the way a service's does, and the answer says whether it will show. `reason` is `""`, `"theme"` (the theme switches that kind off), `"screen"` (the screen shows the kind itself) or `"no-panel"`; `message` says it in words |
-| `POST control/services/enable` | `{service, enabled}` | `{service, enabled, state, detail}`: writes `services.enabled`; the state is `pending` until the app has followed. Asking twice writes once; an unknown service cannot be switched on (404) |
+| `POST control/services/enable` | `{service, enabled}` | `{service, enabled, state, detail}`: writes `services.enabled`; the state is `pending` until the app has followed (a moment). Asking twice writes once; an unknown service cannot be switched on (404) |
 | `POST control/services/restart` | `{service}` | `{service, state, detail}`: stops the service and starts it again (404 when it is not enabled or this editor runs no services) |
 | `POST control/theme` | `{mode, theme}` | `{mode, theme}`: `mode` is `"normal"` or `"game"`; for `"game"` an empty `theme` means the normal one's |
 

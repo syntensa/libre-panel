@@ -9,7 +9,7 @@ from PIL import Image
 from test_autostart import FakeTasks
 
 from libre_panel.autostart import Autostart
-from libre_panel.config import config_dir, load_config
+from libre_panel.config import config_dir, load_config, set_config_value
 from libre_panel.instance import AlreadyRunning, InstanceLock
 from libre_panel.service import BackgroundApp, PanelService, running_instance
 
@@ -65,6 +65,24 @@ def test_panel_service_waits_for_a_fixed_config(isolated_home):
         write_config(isolated_home, theme="slate")  # e.g. fixed in the editor
         assert wait_for(lambda: service.state()["state"] == "showing")
         assert service.state()["theme"] == "slate"
+    finally:
+        service.stop()
+
+
+def test_the_services_come_in_line_whenever_the_loop_starts(isolated_home):
+    """A change made while the loop did not run (the panel was paused) reaches the services
+    when it runs again: the loop sees nothing new in a file it has just read."""
+    write_config(isolated_home)
+    heard = []
+    service = PanelService(on_config=heard.append)
+    service.start()
+    try:
+        assert wait_for(lambda: len(heard) == 1)  # at the start
+        service.pause()
+        set_config_value("services.enabled", ["notices"])
+        service.resume()
+        assert wait_for(lambda: len(heard) == 2)
+        assert heard[-1].services.enabled == ["notices"]
     finally:
         service.stop()
 
@@ -132,6 +150,33 @@ def call(url, method="GET", body=None, header=True):
     data = json.loads(response.read())
     conn.close()
     return response.status, data
+
+
+def test_services_start_once_a_broken_config_is_fixed(app, isolated_home):
+    path = isolated_home / "config.toml"
+    fixed = path.read_text(encoding="utf-8") + '\n[services]\nenabled = ["notices"]\n'
+    path.write_text("fps = 'fast'\n", encoding="utf-8")
+    app.start()
+    assert wait_for(lambda: app.panel.state()["state"] == "error")
+    assert app.services.running == {}  # nothing to start from a file that does not load
+    path.write_text(fixed, encoding="utf-8")
+    assert wait_for(lambda: "notices" in app.services.running, 15)
+    assert wait_for(lambda: app.panel.state()["state"] == "showing")
+
+
+def test_a_page_has_the_app_follow_config_toml_also_while_the_panel_is_paused(app, isolated_home):
+    app.start()
+    assert wait_for(lambda: app.panel.state()["state"] == "showing")
+    app.panel.pause()  # the loop that watches the file is gone
+    set_config_value("services.enabled", ["notices"])
+    assert not wait_for(lambda: "notices" in app.services.running, 0.5)  # nobody told the app
+    app.follow_config()
+    assert wait_for(lambda: "notices" in app.services.running, 10)
+    assert app.panel.state()["state"] == "paused"
+    (isolated_home / "config.toml").write_text("this is not toml", encoding="utf-8")
+    app.follow_config()  # a file that cannot be read leaves the services as they are
+    time.sleep(0.2)
+    assert "notices" in app.services.running
 
 
 def test_the_editor_gets_the_numbers_of_the_panel(app):
