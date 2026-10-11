@@ -105,3 +105,43 @@ publishes it with the pictures from `docs/images` whenever either changes on
 `main`. It needs Pages turned on once: *Settings → Pages → Source: GitHub
 Actions*, then run the *Website* workflow (*Actions → Website → Run
 workflow*). The pictures come from `python tools/readme_images.py`.
+
+## Animated pictures
+
+The GIFs of the README and of forum posts, and the small videos of the website, are made by
+`python tools/readme_media.py` into `docs/media` (`--list` says what there is). A clip is a
+recipe: the panel in video mode in `tools/media_panel.py` (the real main loop, frame by frame on a
+clock of its own, so a clip is the same on every run) or the app in a browser in
+`tools/media_app.py`. Each clip gives a GIF (960 px wide, 25 frames a second, under 4 MB, and
+the run stops if one cannot be made smaller than 8 MB, what a forum takes), an MP4 and a WebM
+for the website, and a poster. ffmpeg makes the videos and the best GIFs (without it Pillow writes
+the GIFs); the app's clips need `pip install playwright` and `playwright install chromium`
+(without them they are skipped, with a word about it).
+
+Make them again for every release, so that they show the release's look and nothing else:
+
+- A clip shows the theme its recipe names (Lumen on the bars, Libre Default on the small panel,
+  Studio for the notice). When Libre Panel's own screens change, or to try another:
+  `--theme video-mode=NAME`, a built-in theme or a folder with a theme in it; a clip that goes
+  from one theme to another takes two names (`--theme theme-tube=lumen,studio`). SPUR II's screen
+  is in one clip only, `where-it-started`.
+- `--only NAME ...` makes some of them, `--gif-only` the GIFs for a forum, `--bare` leaves the
+  device frame out, `--draft` is half the size and half the frames to try a recipe, and
+  `--keep-frames DIR` keeps the pictures a clip was made of.
+- Only demo values are drawn: the hardware has the names the demo gives it, and nothing of the
+  machine that makes the clips is in them. Look at each clip before it goes in: a recipe cannot
+  tell whether a screen reads well.
+
+The README links the GIFs. The website's page takes the videos, with the GIF where a browser
+cannot play them:
+
+```html
+<video autoplay loop muted playsinline poster="media/video-mode.png">
+  <source src="media/video-mode.webm" type="video/webm">
+  <source src="media/video-mode.mp4" type="video/mp4">
+  <img src="media/video-mode.gif" alt="The panel in video mode">
+</video>
+```
+
+`pages.yml` copies `docs/images/*.png` only: add `docs/media` to it (its `paths` and a `cp` into
+`_site/media`) when the page uses the clips.
