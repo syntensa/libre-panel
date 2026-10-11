@@ -313,8 +313,9 @@ def test_control_shows_the_panel_its_sources_and_its_services(running, isolated_
     assert status == 200 and panel["background"] is True
     assert panel["panel"]["state"] == "showing" and panel["panel"]["stats"]["fps"] > 0
     assert set(panel["panel"]) == {
-        "state", "detail", "hint", "target", "theme", "frames", "mode", "stats",
+        "state", "detail", "hint", "target", "theme", "default_theme", "frames", "mode", "stats",
     }  # fmt: skip
+    assert panel["panel"]["default_theme"] == "libre-default"  # a 3.5" config names a theme
     assert get(port, "control/services")[1]["services"] == data["services"]
     assert get(port, "control/themes")[1]["shown"] == "libre-default"
     sources = get(port, "control/sources")[1]
