@@ -482,6 +482,7 @@ def test_the_first_theme_is_drawn_ahead_with_the_readings_of_the_first_frame(
 
     from libre_panel.render.renderer import Renderer
 
+    monkeypatch.setattr(app_module._Warmup, "LIMIT_S", 60.0)  # (however slow this machine is)
     write_ahead_theme(isolated_home)
     drawn, real = [], Renderer.render
 
@@ -514,6 +515,7 @@ def test_the_first_theme_is_drawn_ahead_with_the_readings_of_the_first_frame(
 def test_drawing_the_first_theme_ahead_changes_nothing_the_panel_shows(isolated_home, monkeypatch):
     """The frames of a loop that drew its theme ahead are those of one that did not: numbers,
     graph, fan and all (what was drawn is the panel's, not a copy that starts the animations)."""
+    monkeypatch.setattr(app_module._Warmup, "LIMIT_S", 60.0)  # (however slow this machine is)
     write_ahead_theme(isolated_home)
     shown, draw_ahead = {}, app_module.MainLoop._draw_ahead
     for ahead in (True, False):
