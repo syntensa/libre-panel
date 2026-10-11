@@ -16,6 +16,7 @@ function savedPrefs() {
 export const store = createStore({
   ready: false,
   failed: null, // why the app could not start
+  choosing: false, // a first start: a theme was chosen and is being taken on to Design
   lang: 0, // counts language switches: every text is rendered again
   route: { view: "home", rest: "" },
   specs: null, // /api/specs
@@ -59,6 +60,14 @@ export const store = createStore({
 });
 
 export const useStore = (selector) => useSelector(store, selector);
+
+/**
+ * A first start: config.toml names no theme yet (or the one just chosen is being taken on to
+ * Design), so Start asks "How should it look?". Nothing is known while config.toml cannot be
+ * read (`pages` is null then), so it is no first start.
+ */
+export const firstStart = (state = store.get()) =>
+  state.ready && Boolean(state.pages) && (state.pages.chosen === false || state.choosing);
 
 /** Change a preference; it is remembered in this browser (or window). */
 export function setPref(key, value) {

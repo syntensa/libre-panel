@@ -792,6 +792,9 @@
   them, as SPUR Header does: the game's logo or name has the room of a short
   name (51 px, up to 62 for a longer one) in place of 120 px, and the fans
   spread over what was gained
+- On a first start *Start* asks "How should it look?" without the tabs in the header:
+  the views behind them have nothing to show before a theme is on the panel. The tabs
+  come with the choice
 
 ## 0.4.2 — 2026-10-10
 

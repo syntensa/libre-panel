@@ -317,6 +317,33 @@ def test_a_first_start_asks_how_it_should_look(app_url, isolated_home):
         page.wait_for_selector(".start.launcher")  # a theme is chosen: the launcher
 
 
+def test_a_first_start_is_asked_without_the_tabs(app_url, isolated_home):
+    """ "How should it look?" stands alone: the views behind the tabs have nothing to show
+    before a theme is chosen. The tabs come with the choice, and are there in the gallery,
+    in Settings and wherever else the question is not."""
+    assert not (isolated_home / "config.toml").exists()
+    tabs = ".topbar .tabs"
+    with browser_page(app_url, "home", allow=PICTURE) as page:
+        page.wait_for_selector(".start.first .theme-card")
+        expect(page.locator(tabs)).to_have_count(0)
+        assert page.locator(".brand").is_visible() and page.locator(".gear").is_visible()
+        page.goto(f"{app_url}#/home/themes")  # the gallery is not the question
+        page.wait_for_selector(".start.gallery .theme-card")
+        expect(page.locator(tabs)).to_have_count(1)
+        page.goto(f"{app_url}#/settings/panel")
+        expect(page.locator(tabs)).to_have_count(1)
+        page.goto(f"{app_url}#/home")
+        page.wait_for_selector(".start.first .theme-card")
+        expect(page.locator(tabs)).to_have_count(0)
+        choice = shown_themes(page)[0]  # a theme is chosen and taken on to Design, which has them
+        page.locator(f'.theme-card[data-theme="{choice}"] .theme-card-main').click()
+        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design")
+        expect(page.locator(tabs)).to_have_count(1)
+        page.goto(f"{app_url}#/home")
+        page.wait_for_selector(".start.launcher")
+        expect(page.locator(tabs)).to_have_count(1)
+
+
 def test_a_first_start_offers_the_themes_for_the_panel_it_found(app_url, isolated_home):
     with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
         page.wait_for_selector(".start.first .theme-card")

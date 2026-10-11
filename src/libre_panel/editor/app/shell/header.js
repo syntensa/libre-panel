@@ -4,7 +4,7 @@
 import { applyToPanel } from "../core/actions.js";
 import { redo, undo } from "../core/doc.js";
 import { t } from "../core/i18n.js";
-import { useStore } from "../core/state.js";
+import { firstStart, useStore } from "../core/state.js";
 import { keyLabel } from "../core/shortcuts.js";
 import { html } from "../lib/preact.js";
 import { IconButton } from "../ui/controls.js";
@@ -47,6 +47,8 @@ export function ApplyButton() {
 
 export function Header({ view }) {
   const route = useStore((s) => s.route);
+  // the question "How should it look?" is asked on its own: the other views have nothing to show yet
+  const asking = useStore((s) => firstStart(s)) && route.view === "home" && !route.rest.startsWith("themes");
   const parts = view?.header || {};
   const tabs = allViews().filter((item) => item.tab);
   return html`<header class="topbar">
@@ -55,16 +57,18 @@ export function Header({ view }) {
       <span>Libre Panel</span>
     </a>
     ${parts.lead ? html`<div class="topbar-sep"></div><${parts.lead} />` : null}
-    <nav class="tabs" aria-label=${t("Area")}>
-      ${tabs.map(
-        (item) => html`<a
-          key=${item.id}
-          href=${`#/${item.id}`}
-          class="tab"
-          aria-current=${route.view === item.id ? "page" : undefined}
-        >${typeof item.title === "function" ? item.title() : item.title}</a>`,
-      )}
-    </nav>
+    ${asking
+      ? null
+      : html`<nav class="tabs" aria-label=${t("Area")}>
+          ${tabs.map(
+            (item) => html`<a
+              key=${item.id}
+              href=${`#/${item.id}`}
+              class="tab"
+              aria-current=${route.view === item.id ? "page" : undefined}
+            >${typeof item.title === "function" ? item.title() : item.title}</a>`,
+          )}
+        </nav>`}
     ${parts.center ? html`<${parts.center} />` : null}
     <div class="topbar-flex"></div>
     ${parts.actions ? html`<${parts.actions} />` : null}
