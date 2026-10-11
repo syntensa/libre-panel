@@ -304,6 +304,10 @@
   minutes. SPUR II's sums over a whole session (time played, average frame
   rate, share of time per frame rate, highest values) need readings Libre
   Panel does not have
+- The theme *SPUR Cockpit* (`spur-cockpit`, 1920 × 480): SPUR II's Cockpit
+  screen, laid out on its 40 px grid: the CPU's and GPU's load as two equal
+  charts, the RAM as a ring beside them, and CPU, GPU, memory and network in
+  four columns of equal width
 - Ridges: a `rect` with a `ridge` name is drawn as SPUR II draws its frames,
   a ridge with two facets under the guide light, the lit one glowing a
   little; rects with the same name are one ridge, joined at mitres. Rects

@@ -133,6 +133,7 @@ Calendars, Home Assistant, MQTT and PresentMon are set up in the
 | `spur-header` | 8.8" / 9.2" bar (1920×480) | SPUR II's game screen with the familiar frame: the frame rate and the 1% low beside the game's logo, load charts, RAM and the GPU's temperatures, a frame time chart and who holds the rate down |
 | `spur-focus` | 8.8" / 9.2" bar (1920×480) | SPUR II's Focus for a game: the frame rate large with its course over 35 seconds, small load charts beside it, frames, CPU, GPU and system below |
 | `spur-session` | 8.8" / 9.2" bar (1920×480) | SPUR II's Session for a game: the frame rate with its last ten minutes, a chart of the longest frame of each moment, and temperatures and power with their course |
+| `spur-cockpit` | 8.8" / 9.2" bar (1920×480) | SPUR II's Cockpit: the CPU's and GPU's load as two equal charts with the RAM as a ring, and CPU, GPU, memory and network in four equal columns |
 | `slate` | 5" (800×480) | four cards: CPU, GPU, memory, network |
 | `libre-default` | 3.5" (480×320) | two rings, temperature, disk, network and history |
 | `orbit` | round 2.1" / 2.8" (480×480) | three concentric rings around a large clock |

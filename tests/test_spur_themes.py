@@ -18,7 +18,7 @@ from libre_panel.theme.model import (
     parse_theme,
 )
 
-SPUR = ["spur-horizon", "spur-header", "spur-focus", "spur-session"]
+SPUR = ["spur-horizon", "spur-header", "spur-focus", "spur-session", "spur-cockpit"]
 # readings the demo has not got yet: they come with the merge of the sources that add them
 LATER = {"mem.name"}
 
@@ -222,3 +222,40 @@ def test_session_shows_the_last_ten_minutes_of_the_frame_rate_the_frames_and_the
     assert by["peaks-box-top"]["color"] == "@rule_strong"  # two channels: neutral
     rows = [by[f"peak-{n}-graph"]["y"] for n in range(6)]
     assert [b - a for a, b in zip(rows, rows[1:], strict=False)] == [56] * 5
+
+
+# -- Cockpit (building blocks on a 40 px grid) ---------------------------------------------------
+
+
+def test_cockpit_lays_its_blocks_on_the_grid_4_px_in_from_the_cells():
+    theme = load_theme(find_theme("spur-cockpit"))
+    by = {w["id"]: w for w in theme.widgets}
+    # two charts of 20 cells, the ring in the 8 cells that are left
+    assert (by["cpu-frame-top"]["x"], by["cpu-frame-top"]["y"], by["cpu-frame-top"]["w"]) == (
+        4,
+        84,
+        792,
+    )
+    assert (by["gpu-frame-top"]["x"], by["gpu-frame-top"]["w"]) == (804, 792)
+    # four columns of 12 cells, 8 px apart, open at the bottom
+    lefts = [by[f"{n}-box-left"]["x"] for n in ("cpu", "gpu", "memory", "net")]
+    assert lefts == [4, 484, 964, 1444]
+    assert all(f"{n}-box-bottom" not in by for n in ("cpu", "gpu", "memory", "net"))
+    assert "cpu-frame-bottom" in by  # the charts are closed
+    glow_areas_hold_their_bars(theme)
+
+
+def test_cockpit_shows_the_ram_as_a_ring_and_the_network_mirrored_on_a_root_scale():
+    theme = load_theme(find_theme("spur-cockpit"))
+    by = {w["id"]: w for w in theme.widgets}
+    ring = by["ram-ring"]
+    assert (ring["sensor"], ring["min"], ring["max"], ring["finish"]) == (
+        "mem.used",
+        0,
+        32,
+        "facet",
+    )
+    assert (ring["start_angle"], ring["end_angle"]) == (270, 630)  # from twelve o'clock, round
+    up, down = by["net-up-graph"], by["net-down-graph"]
+    assert (up["direction"], down["direction"]) == ("up", "down") and up["scale"] == "sqrt"
+    assert up["y"] + up["h"] - 1 == down["y"] == by["net-mid"]["y"]  # they meet on the middle line
