@@ -158,6 +158,7 @@ def _sources() -> dict[str, Source]:
             t("RAM"), "mem.load", "{value:.0f}%", "ram", "mem",
             (("mem.used", "{value:.1f} GB", t("Used")), ("mem.total", "{value:.0f} GB", t("Total")),
              ("swap.load", "{value:.0f}%", t("Swap"))),
+            name="mem.name",
         ),
         "disk": Source(
             t("Disk"), "disk.load", "{value:.0f}%", "disk", "disk",
@@ -970,7 +971,8 @@ def _temp_fields(b: _Build, x: float, cap_top: float, size: float, width: float,
 
 
 def build_system(b: _Build, _src: Source) -> None:
-    """The names of the processor and graphics card, and the uptime."""
+    """The names of the processor and graphics card, and the uptime; with room for a fourth
+    row the memory's name too."""
     b.card()
     rows = (
         ("cpu.name", "{value}", "CPU", "cpu"),
@@ -978,7 +980,9 @@ def build_system(b: _Build, _src: Source) -> None:
         ("sys.uptime", "{value:duration}", t("Uptime"), "accent"),
     )
     row_min = b.ts * 3.4
-    count = int(_clamp(b.ih // row_min, 1, 3))
+    count = int(_clamp(b.ih // row_min, 1, 4))
+    if count == 4:  # the names together, then the uptime
+        rows = (*rows[:2], ("mem.name", "{value}", t("RAM"), "mem"), rows[2])
     row = b.ih / count
     for i, (sensor, fmt, text, role) in enumerate(rows[:count]):
         top = b.iy + i * row + (row - (CAP * b.ts + b.ts * 0.7 + CAP * b.ts * 1.3)) / 2
