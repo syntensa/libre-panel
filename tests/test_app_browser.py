@@ -801,6 +801,30 @@ def test_select_move_undo_redo(page):
     assert widget(page, "cpu-ring")["x"] == moved[0] + 1
 
 
+def test_undo_acts_where_the_theme_is_shown_and_not_behind_other_views(app_url, page):
+    """Ctrl+Z and Ctrl+Y change the theme of Design and Look; pressed in Settings, Live or Start
+    they must not undo what the person cannot see (the palette does not offer them there)."""
+    js(page, "window.libre.doc.edit('n', (theme) => { theme.name = 'Changed'; })")
+    name = "window.libre.doc.theme().name"
+    for view in ("settings/panel", "live", "home"):
+        page.goto(f"{app_url}#/{view}")
+        page.wait_for_selector(".view > *")
+        page.keyboard.press("Control+z")
+        page.keyboard.press("Control+y")
+        page.keyboard.press("Control+k")
+        page.locator(".palette input").fill("undo")
+        expect(page.locator(".palette-item", has_text="Undo")).to_have_count(0)
+        page.keyboard.press("Escape")
+        assert js(page, name) == "Changed", view  # nothing was undone behind the view
+        assert js(page, "window.libre.store.get().canUndo") is True
+    page.goto(f"{app_url}#/look")  # where the theme is shown, it works
+    page.wait_for_selector(".look-side")
+    page.keyboard.press("Control+z")
+    assert js(page, name) == "Libre Default"
+    page.keyboard.press("Control+y")
+    assert js(page, name) == "Changed"
+
+
 def test_toolbar_sensor_and_finish(page):
     js(page, "window.libre.doc.setSelection(['cpu-ring'])")
     toolbar = page.locator(".floating-toolbar")

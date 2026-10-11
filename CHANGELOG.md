@@ -650,6 +650,9 @@
   until it was drawn, which on a slow computer or for a big theme took seconds. The
   panel's picture waits with a spinner at the new theme's size, and the pictures of the
   library, which are drawn on the side, wait for it
+- Ctrl+Z, Ctrl+Y and the palette's *Undo* and *Redo* acted on the theme in every view,
+  so a press in Settings, Live or Start undid a change that could not be seen; they act
+  in Design and Look, where the theme is shown
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

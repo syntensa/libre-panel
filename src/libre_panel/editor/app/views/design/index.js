@@ -116,6 +116,7 @@ const WideSearch = () => html`<${SearchTrigger} wide />`;
 registerView({
   id: "design",
   title: () => t("Design"),
+  edits: true,
   order: 20,
   icon: "pencil",
   component: DesignView,
