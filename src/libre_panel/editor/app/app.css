@@ -962,6 +962,7 @@ textarea.input {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.35;
+  overflow-wrap: anywhere; /* a path without a space does not run under the control */
 }
 
 .row-control {
@@ -1687,6 +1688,63 @@ textarea.input {
   color: var(--warn);
   font-size: 12px;
   line-height: 1.4;
+}
+
+.pop-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pop-head .link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 12px;
+}
+
+/* the numbers of the running panel: name on the left, the figure and what it is measured against */
+.run-numbers {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.run-number {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.run-number dt {
+  color: var(--muted);
+}
+
+.run-number dd {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+}
+
+.run-number b {
+  font-weight: 600;
+}
+
+.run-number small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.run-number.warn b {
+  color: var(--warn);
+}
+
+.run-number.bad b {
+  color: var(--danger-text);
 }
 
 /* the theme menu */

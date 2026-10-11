@@ -6,10 +6,12 @@ import { adaptPanel } from "../core/actions.js";
 import { appAction, quitApp } from "../core/app.js";
 import { t } from "../core/i18n.js";
 import { setPref, store, useStore } from "../core/state.js";
+import { statTiles } from "../core/stats.js";
 import { html, useRef, useState } from "../lib/preact.js";
 import { NumberField, Row, Segmented, Slider, Toggle } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { Popover } from "../ui/layer.js";
+import { navigate } from "./views.js";
 
 export const panelName = (model) => (model ? model.label.replace(/"/g, "″") : t("Custom size"));
 
@@ -134,17 +136,41 @@ function PanelChoice({ theme, models }) {
   `;
 }
 
-function Running({ app }) {
+/** The tiles of Live the chip shows: the frame rate against its target, the data rate, the drawing time. */
+const NUMBERS = ["fps", "data", "draw"];
+
+/** How the running panel is doing, in the numbers the old editor's chip had (those that count). */
+function Numbers({ stats }) {
+  if (!stats || stats.fps === undefined) return null;
+  const rows = statTiles(stats).filter((tile) => NUMBERS.includes(tile.id) && tile.value !== "–");
+  if (!rows.length) return null;
+  return html`<dl class="run-numbers" aria-label=${t("How the panel is doing")}>
+    ${rows.map(
+      (tile) => html`<div class=${`run-number ${tile.level}`} key=${tile.id} data-number=${tile.id} title=${tile.title}>
+        <dt>${tile.label}</dt>
+        <dd><b class="mono">${tile.value}</b><small>${tile.note}</small></dd>
+      </div>`,
+    )}
+  </dl>`;
+}
+
+function Running({ app, onClose }) {
   const panel = app.panel || {};
   if (app.quit) return html`<div class="pop-section"><p class="muted">${t("Libre Panel has quit.")}</p></div>`;
   return html`<div class="pop-section">
-    <div class="pop-title">${t("On the panel now")}</div>
+    <div class="pop-head">
+      <div class="pop-title">${t("On the panel now")}</div>
+      <button type="button" class="link-btn" title=${t("Open the Live view")} onClick=${() => (onClose(), navigate("live"))}>
+        ${t("Live")} <${Icon} name="chevron-right" size=${13} strokeWidth=${2.4} />
+      </button>
+    </div>
     <div class=${`run-state ${panel.state}`}>
       <span class="dot"></span>
       <strong>${stateText(panel.state)}</strong>
       <span class="muted">${[panel.target, panel.theme, panel.mode && modeName(panel.mode)].filter(Boolean).join(" · ")}</span>
     </div>
     ${panel.detail ? html`<p class="run-detail">${panel.detail}</p>` : null}
+    <${Numbers} stats=${panel.stats} />
     <${Row} label=${t("Brightness")}>
       <${Slider}
         label=${t("Brightness")}
@@ -210,7 +236,7 @@ export function PanelChip() {
     </button>
     <${Popover} anchor=${anchor} open=${open} onClose=${() => setOpen(false)} placement="bottom-end" label=${t("Panel")} width=${360}>
       <${PanelChoice} theme=${theme} models=${models} />
-      ${app.available ? html`<${Running} app=${app} />` : null}
+      ${app.available ? html`<${Running} app=${app} onClose=${() => setOpen(false)} />` : null}
     <//>
   `;
 }

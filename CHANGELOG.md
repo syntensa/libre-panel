@@ -555,6 +555,11 @@
   to the left, a gap between them that closes, as SPUR II's Studio moves on
   to a new track; the parts are made once and each frame moves and cuts them.
   SPUR Studio slides in 0.55 s
+- The panel chip in the header of *Design* and *Look* says how the running panel is
+  doing, as the old editor's did: the frame rate against its target, the data rate and
+  the drawing time (a number nothing counts, such as the data rate of a PNG file, is
+  left out), marked when the panel cannot keep up; *Live* beside them opens the Live
+  view, which has the same numbers, the sources and the log
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

@@ -183,16 +183,17 @@ def set_range(locator, value):
     )
 
 
-def a_panel_app(target='Turing 9.2", video 50 fps', hint=""):
+def a_panel_app(target='Turing 9.2", video 50 fps', hint="", **numbers):
     """What /api/app says for a connected 9.2" bar in video mode, as a route's handler: Start
-    then sees the model (and what the panel could not read) without a panel on this machine."""
+    then sees the model (and what the panel could not read) without a panel on this machine.
+    ``numbers`` change the panel's stats (``fps=20.0``)."""
     import json
 
     stats = {
         "fps": 50.0, "target_fps": 50, "streaming": True, "render_ms": 9.8,
         "render_peak_ms": 21.0, "kbps": 248.3, "blocks_per_s": 50.0, "max_depth": 1,
         "waits": 0, "drops": 0, "usb_errors": 0, "panel_restarts": 0, "ffmpeg_restarts": 0,
-        "uptime_s": 10800,
+        "uptime_s": 10800, **numbers,
     }  # fmt: skip
     answer = {
         "available": True,
@@ -988,6 +989,48 @@ def test_the_running_panel_in_the_chip(isolated_home):
     finally:
         app.quit()
         app.shutdown()
+
+
+def test_the_chip_has_the_panels_numbers_and_a_way_to_live(app_url):
+    """The old editor's chip showed how the panel is doing: the frame rate against its target,
+    the data rate and the drawing time; its Control button is the Live view's now."""
+    routes = {"**/api/app": a_panel_app()}
+    with browser_page(app_url, routes=routes, allow=PICTURE) as page:
+        page.locator(".panel-chip").click()
+        rows = page.locator(".popover .run-number")
+        assert rows.evaluate_all("rows => rows.map((r) => r.dataset.number)") == [
+            "fps",
+            "data",
+            "draw",
+        ]
+        fps, data, draw = (
+            page.locator(f"[data-number={name}]") for name in ("fps", "data", "draw")
+        )
+        expect(fps).to_contain_text("Frames per second")
+        expect(fps).to_contain_text("50.0")
+        expect(fps).to_contain_text("target 50")
+        expect(data).to_contain_text("248")
+        expect(data).to_contain_text("KB/s")
+        expect(draw).to_contain_text("9.8")
+        expect(draw).to_contain_text("peak 21")
+        expect(page.locator(".run-number.warn, .run-number.bad")).to_have_count(0)  # as it should
+        page.locator(".popover .pop-head .link-btn").click()  # Live
+        page.wait_for_selector(".view .live")
+        expect(page.locator(".popover")).to_have_count(0)
+    # a panel that cannot keep up is marked, as on Live
+    with browser_page(app_url, routes={"**/api/app": a_panel_app(fps=20.0)}) as page:
+        page.locator(".panel-chip").click()
+        expect(page.locator("[data-number=fps]")).to_have_class("run-number bad")
+
+
+def test_the_chip_numbers_leave_out_what_nothing_counts(background):
+    """A panel that is a PNG file has no data rate: no row with a dash for it."""
+    app, url = background
+    with browser_page(url, allow=PICTURE) as page:
+        page.locator(".panel-chip").click()
+        page.wait_for_selector("[data-number=fps]")
+        page.wait_for_selector("[data-number=draw]")
+        assert page.locator("[data-number=data]").count() == 0
 
 
 # -- Design: the work of the hand ----------------------------------------------------------------
