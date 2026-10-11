@@ -27,6 +27,9 @@ Libre Panel ships three ways; one git tag produces all of them.
 ```bash
 # 1. set the version in pyproject.toml and src/libre_panel/__init__.py
 # 2. CHANGELOG.md: a section "## 0.1.0 — <date>"
+# 3. the pictures and clips of this release (see below), looked at one by one
+python tools/readme_images.py && python tools/readme_media.py && python tools/check_pages.py
+git add docs/images docs/media
 git commit -am "Release 0.1.0"
 git tag v0.1.0
 git push origin main v0.1.0
@@ -100,11 +103,35 @@ formats keep loading.
 
 ## Website
 
-`site/index.html` is the project's page on GitHub Pages; `pages.yml`
-publishes it with the pictures from `docs/images` whenever either changes on
-`main`. It needs Pages turned on once: *Settings → Pages → Source: GitHub
-Actions*, then run the *Website* workflow (*Actions → Website → Run
-workflow*). The pictures come from `python tools/readme_images.py`.
+`site/index.html` (English) and `site/de/index.html` (German), with `site/site.css` and
+`site/site.js`, are the project's page on GitHub Pages. `pages.yml` puts the site together with
+`python tools/check_pages.py --build _site`: the pictures of `docs/images` in `images/`, the clips
+of `docs/media` in `media/`, the app's icon and the fonts the stylesheet names (the page loads
+nothing from another site). It then checks that every file a page names is there, and publishes
+whenever one of them changes on `main`. Without the clips in `docs/media` the build fails and the
+published site stays as it was, so commit them with the release (below). Pages needs turning on
+once: *Settings → Pages → Source: GitHub Actions*, then run the *Website* workflow (*Actions →
+Website → Run workflow*).
+
+## The release's pictures and clips
+
+The README (both languages), the website and the release notes show pictures from `docs/images`
+(made by `python tools/readme_images.py`) and clips from `docs/media` (made by
+`python tools/readme_media.py`). Neither folder is kept up to date between releases: make both
+for every release, look at each picture, and commit them before the tag, so that the README, the
+website and the release notes all show the release's own look.
+
+| Where | What it shows |
+|---|---|
+| README.md, README.de.md | `docs/media/*.gif`: `video-mode` on top (with `docs/images/hero.png` for those who ask for less motion), `close-up-rings`, `close-up-curves`, `card-ignition`, `volume-band`, `game-entrance`, `small-panel`, `app-drag-module`, `app-look`, `app-command-palette`, and `where-it-started.png` linking its GIF; `docs/images/gallery.png` and `module-catalog.png` |
+| site/, site/de/ | every clip of `docs/media` as WebM and MP4 with its poster (`*.png`), the GIF only where a browser has no script or no video; from `docs/images` the themes (`lumen`, `studio`, `libre-default`, `slate`, `orbit`, `column`, `pico`), `looks`, `studio-adapts`, `editor-new` and, for links shared elsewhere, `social-preview` |
+| CHANGELOG.md (the release notes) | `docs/media/video-mode.gif`, `card-ignition.gif`, `game-entrance.gif` and `small-panel.gif` on the tag (raw.githubusercontent.com, so the tag must hold them) |
+| The repository's social preview | `docs/images/social-preview.png`, uploaded by hand in *Settings → General → Social preview* |
+
+`python tools/check_pages.py` checks that every picture and clip these pages name is one a recipe
+makes (and that every link of theirs leads to a file or a heading); `tests/test_pages.py` runs the
+same check in CI. Rename a clip or a picture and the test says which page still names the old
+one.
 
 ## Animated pictures
 
@@ -143,5 +170,6 @@ cannot play them:
 </video>
 ```
 
-`pages.yml` copies `docs/images/*.png` only: add `docs/media` to it (its `paths` and a `cp` into
-`_site/media`) when the page uses the clips.
+Below the first screen the page loads a clip only when it comes into view (`preload="none"`,
+its poster set by `site/site.js`), plays it while it is in view, and not at all for a visitor
+who asks for less motion; each clip has a button to pause it.
