@@ -10,19 +10,47 @@ the editor. The editor listens on 127.0.0.1 only and writes need its
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any
 
-from libre_panel.config import CONFIG_FILENAME, config_dir
+from PIL import Image
+
+from libre_panel.config import CONFIG_FILENAME, config_dir, log_file
 
 log = logging.getLogger(__name__)
 
+MAX_LOG_LINES = 1000
+
+
+def tail(path: Path, lines: int) -> list[str]:
+    """The last ``lines`` lines of a text file (all of them if it is shorter), read from
+    its end: a log of a megabyte costs a few kilobytes. Empty if it cannot be read."""
+    lines = max(1, min(int(lines), MAX_LOG_LINES))
+    try:
+        with path.open("rb") as file:
+            size = file.seek(0, os.SEEK_END)
+            window = lines * 200
+            while True:
+                start = max(0, size - window)
+                file.seek(start)
+                rows = file.read(size - start).decode("utf-8", errors="replace").splitlines()
+                if start == 0 or len(rows) > lines:  # enough, or the whole file
+                    break
+                window *= 2
+    except OSError:
+        return []
+    if start > 0:
+        rows = rows[1:]  # the first line is cut off
+    return rows[-lines:]
+
 
 class PageContext:
-    """What a page gets: the panel's readings, the services (in the background
-    app), config.toml and data folders. In a plain ``libre-panel editor`` no
-    panel runs: ``snapshot`` and ``service`` are None, ``services`` is empty."""
+    """What a page gets: the panel's readings and picture, the services (in the
+    background app), config.toml and data folders. In a plain ``libre-panel
+    editor`` no panel runs: ``background`` is False, ``snapshot``, ``service`` and
+    ``shown_frame`` give None, ``services`` is empty."""
 
     def __init__(self, controls: Any = None, config_path: Path | None = None) -> None:
         self._controls = controls
@@ -33,6 +61,16 @@ class PageContext:
         return getattr(self._controls, "services", None)
 
     @property
+    def _host(self) -> Any:
+        return getattr(self._controls, "plugin_host", None)
+
+    @property
+    def background(self) -> bool:
+        """True when the background app (the tray, ``libre-panel start``) serves this
+        editor, so the panel and the services run here; False in ``libre-panel editor``."""
+        return self._controls is not None
+
+    @property
     def config_path(self) -> Path:
         """config.toml (change single settings with ``libre_panel.config.set_config_value``)."""
         path = getattr(self._controls, "config_path", None) or self._config_path
@@ -40,8 +78,22 @@ class PageContext:
 
     def snapshot(self) -> Any:
         """The readings and history the panel was last drawn from, or None."""
-        host = getattr(self._controls, "plugin_host", None)
+        host = self._host
         return host.latest if host is not None else None
+
+    def shown_frame(self) -> Image.Image | None:
+        """The frame on the panel now, after transitions and messages, in the theme's
+        orientation (not turned for a panel mounted upside down); None before the first
+        frame, while the panel is paused and without the background app. Read it only:
+        the main loop may hand the same image out again."""
+        host = self._host
+        return host.shown if host is not None else None
+
+    def log_tail(self, lines: int = 40) -> list[str]:
+        """The last ``lines`` lines (at most 1000) of the log the tray app writes
+        (``logs/libre-panel.log`` in the settings folder). Empty when there is no log,
+        e.g. when ``libre-panel start`` logs to its terminal instead."""
+        return tail(log_file(), lines)
 
     def service(self, name: str) -> Any:
         """The running service of that name, or None (e.g. in ``libre-panel editor``)."""

@@ -263,6 +263,9 @@ class PluginHost:
         self._published: dict[str, tuple[Reading, str | None]] = {}
         self._images: dict[str, tuple[Image.Image, str | None]] = {}
         self.latest: Snapshot | None = None
+        # The frame on the panel now, after transitions and toasts; set by the main loop,
+        # read by editor pages (PageContext.shown_frame). It is never drawn on afterwards.
+        self.shown: Image.Image | None = None
         # theme requests by service: (theme, priority, order of asking, mode it counts in)
         self._themes: dict[str, tuple[str, int, int, str | None]] = {}
         self._asked = itertools.count()

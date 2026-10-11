@@ -594,15 +594,24 @@ await api("curve", { method: "POST", body: { points } });
   returns `(status, data)`; `data` is sent as JSON. GET must not change
   anything: changes go through POST, which needs the editor's header
   (`kit.js`'s `api()` sends it). The editor listens on 127.0.0.1 only.
-- `self.context` gives what the page may need from the running app (in a
-  plain `libre-panel editor` there is none): `service(name)` (the running
-  service or None), `services()` (each enabled service and its state),
-  `restart_service(name)`, `snapshot()` (the readings the panel was drawn
-  from, or None), `config_path` (change one setting with
-  `libre_panel.config.set_config_value("modes.game.theme", ...)`) and
-  `data_dir(name)`, a service's data folder.
 - `kit.js` exports `api`, `loadTexts`, `t`, `language`, `el`, `field`,
   `button` and `setStatus`; with `editor.css` the page looks like the editor.
+
+`self.context` gives what the page may need from the running app. Only the
+background app (the tray, `libre-panel start`) runs a panel and services; in a
+plain `libre-panel editor` `background` is False and the rest is empty or
+None, so a page says what is missing instead of failing.
+
+| | |
+|---|---|
+| `background` | True when the background app serves this editor |
+| `service(name)` / `services()` | the running service or None / each enabled service and its state (`running`, `failed: …`, `not installed`, `stopped`) |
+| `restart_service(name)` | stop and start an enabled service again; its new state |
+| `snapshot()` | the readings and history the panel was last drawn from, or None |
+| `shown_frame()` | the frame on the panel now, with transitions and messages, as a PIL image in the theme's orientation (not turned for an upside-down panel); None before the first frame and while the panel is paused. Read it only |
+| `log_tail(lines=40)` | the last lines of `logs/libre-panel.log`, the log the tray app writes (nothing for `libre-panel start`, which logs to its terminal) |
+| `config_path` | config.toml; change one setting with `libre_panel.config.set_config_value("modes.game.theme", ...)` |
+| `data_dir(name)` | a service's data folder |
 
 ## Modes
 

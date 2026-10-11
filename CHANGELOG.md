@@ -122,6 +122,11 @@
   game runs), and `game.limiter`, `cpu`, `gpu` or `cap`: who holds the frame
   rate down, judged from how long the CPU and the GPU wait for each other
   (PresentMon 2)
+- Plugins: an editor page asks `context.background` whether the background app
+  serves its editor (the panel and the services run only there),
+  `context.shown_frame()` for the picture on the panel now, messages and
+  transitions included, and `context.log_tail(lines)` for the end of the log
+  the tray app writes
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

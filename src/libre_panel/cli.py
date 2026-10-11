@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from libre_panel import __version__
-from libre_panel.config import ConfigError, config_dir, load_config, write_default_config
+from libre_panel.config import ConfigError, config_dir, load_config, log_file, write_default_config
 from libre_panel.devices.base import DeviceError
 from libre_panel.i18n import t
 
@@ -48,7 +48,7 @@ def _log_file() -> Path:
     """Background runs log to a file (there is no terminal to read)."""
     from logging.handlers import RotatingFileHandler
 
-    path = config_dir() / "logs" / "libre-panel.log"
+    path = log_file()
     path.parent.mkdir(parents=True, exist_ok=True)
     handler = RotatingFileHandler(path, maxBytes=1_000_000, backupCount=2, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))

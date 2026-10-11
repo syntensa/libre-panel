@@ -655,6 +655,8 @@ class MainLoop:
                 # decided after _blend: the frame a hiding transition ends shows the toast
                 hidden = blend is not None and getattr(blend[0], "toasts", "wait") == "hide"
                 frame = shown_frame = renderer.shown = toasts.draw(frame, now, hidden=hidden)
+                if host is not None:
+                    host.shown = frame  # for the editor's pages: never drawn on from here on
                 upside = config.device.rotate if _on_panel(display) else 0
                 if upside != turn:  # turned now, or no longer: the whole frame again
                     previous, turn = None, upside
@@ -696,6 +698,8 @@ class MainLoop:
         return max(0.0, interval - (self.clock() - started))
 
     def close(self) -> None:
+        if self.host is not None:
+            self.host.shown = None  # a paused panel shows no live picture
         self.display.close()
         self.toasts.close()
         self.warmup.close()

@@ -142,6 +142,14 @@ def user_themes_dir() -> Path:
     return config_dir() / "themes"
 
 
+LOG_FILENAME = "libre-panel.log"
+
+
+def log_file() -> Path:
+    """The log of the tray app (its "Open log"); the editor's pages read it too."""
+    return config_dir() / "logs" / LOG_FILENAME
+
+
 @dataclass
 class VideoConfig:
     """Video mode for panels with an H.264 decoder (TURZX USB): smooth frame rates."""
