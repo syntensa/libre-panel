@@ -289,8 +289,10 @@ export async function adaptPanel(options) {
   if (!doc) return;
   const fresh = !adaptBase || adaptBase.rev !== rev || adaptBase.serial !== docSerial();
   const base = fresh ? clone(doc.theme) : adaptBase.theme;
+  const serial = docSerial();
   try {
     const data = await endpoints.adapt({ theme: base, ...options });
+    if (docSerial() !== serial) return; // another theme was opened meanwhile: it stays
     replaceTheme(data.theme, "adapt");
     setSelection([]);
     adaptBase = { theme: base, rev: store.get().rev, serial: docSerial() };
