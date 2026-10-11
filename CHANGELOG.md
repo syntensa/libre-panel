@@ -675,6 +675,9 @@
 - Pressing *To the panel* (or *Save*) on a theme that comes with Libre Panel opened a
   *Save as…* dialog without a word about why; it now says the theme is built in and that
   the changes are saved as a theme of your own
+- Design: the library cut off long names (German's *Lüfter mit Drehz…*, *Netzwerk-Det…*,
+  and more in the small tiles of single widgets); a name takes a second line now, and a
+  word that is longer than its tile (*Monatskalender*) breaks instead of losing its end
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

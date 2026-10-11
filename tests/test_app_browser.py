@@ -974,6 +974,29 @@ def test_a_module_from_the_library(page):
     assert js(page, "window.libre.doc.single().module") == "clock"
 
 
+def test_the_librarys_long_names_wrap_instead_of_being_cut(page):
+    """German's names are long: "Lüfter mit Drehzahl" took a second line only by being cut
+    ("Lüfter mit Dreh…"), and a single word like "Monatskalender" is longer than a small tile.
+    A name takes a second line, and a word that cannot fit breaks; no name loses its end."""
+    js(page, "window.libre.commands.runCommand('language.de')")
+    page.wait_for_function("document.documentElement.lang === 'de'")
+    page.wait_for_function("document.fonts.status === 'loaded'")  # the lines are the font's
+    expect(page.locator('.tile[data-item="widget:calendar"] .tile-name')).to_have_text(
+        "Monatskalender"
+    )
+    measured = page.locator(".tile-name").evaluate_all(
+        """(names) => names.map((el) => {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          const lines = new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+          return [el.textContent, el.scrollWidth > el.clientWidth + 1, lines];
+        })"""
+    )
+    assert [name for name, beyond, lines in measured if beyond or lines > 2] == []
+    wrapped = {name for name, beyond, lines in measured if lines == 2}
+    assert {"Lüfter mit Drehzahl", "Symbol mit Beschriftung", "Monatskalender"} <= wrapped
+
+
 def test_every_source_of_a_module_has_a_name_in_both_languages(page):
     """The fan instrument can show a fan; its chip read "fan" (the names were kept in two
     places, the toolbar's and the inspector's, and neither had it)."""
