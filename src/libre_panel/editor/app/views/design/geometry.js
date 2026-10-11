@@ -100,6 +100,9 @@ export function snapLines(size, boxes, skip, hidden) {
   return { xs, ys };
 }
 
+/** A value on the snap step (whole pixels for 1); 0 is no snapping. */
+export const snapTo = (value, step) => (step >= 1 ? Math.round(value / step) * step : value);
+
 /**
  * Where a box moved by (dx, dy) lands: its edge or centre on a line within
  * `threshold`, else on the snap step. Returns {dx, dy, guides: [{axis, at}]}.
@@ -124,9 +127,9 @@ export function snapMove(bounds, dx, dy, { lines, threshold, step = 0, guides: u
   const sx = useGuides && lines ? toLine(x, bounds[2], lines.xs, "v") : null;
   const sy = useGuides && lines ? toLine(y, bounds[3], lines.ys, "h") : null;
   if (sx !== null) x = sx;
-  else if (step > 1) x = Math.round(x / step) * step;
+  else x = snapTo(x, step);
   if (sy !== null) y = sy;
-  else if (step > 1) y = Math.round(y / step) * step;
+  else y = snapTo(y, step);
   return { dx: Math.round(x - bounds[0]), dy: Math.round(y - bounds[1]), guides };
 }
 

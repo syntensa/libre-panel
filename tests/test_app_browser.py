@@ -1122,6 +1122,48 @@ def test_a_corner_resizes_a_widget(page):
     )
 
 
+def test_snapping_can_be_to_a_single_pixel(page):
+    """Snap offers 1 px beside off, 4, 8 and 16: a widget then moves in whole pixels where
+    4 px puts it on a step of four."""
+    import json
+
+    from test_editor_server import theme_dict
+
+    theme = theme_dict()
+    theme["widgets"] = [
+        {"type": "rect", "id": "probe", "x": 10, "y": 10, "w": 100, "h": 50, "color": "#ff8800"}
+    ]
+    js(page, f"window.libre.doc.openDoc({{ theme: {json.dumps(theme)}, dirty: true }})")
+    # (no guides: only the step pulls)
+    js(
+        page,
+        "window.libre.store.set({ prefs: { ...window.libre.store.get().prefs, guides: false } })",
+    )
+    page.locator(".rail-gear").click()
+    choices = page.get_by_role("radiogroup", name="Snap")
+    assert choices.get_by_role("radio").all_inner_texts() == ["off", "1", "4", "8", "16"]
+    zoom = page.locator(".panel-canvas").bounding_box()["width"] / 480
+
+    def snapped(step, dx, dy):
+        """Where the probe's corner ends after the pointer moved (dx, dy) screen pixels."""
+        choices.get_by_role("radio", name=str(step) if step else "off", exact=True).click()
+        assert js(page, "window.libre.store.get().prefs.snap") == step
+        page.keyboard.press("Escape")  # the popover
+        box = page.locator('.overlay .box[data-id="probe"]').bounding_box()
+        middle = (box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        drag(page, middle, (middle[0] + dx, middle[1] + dy), steps=6)
+        found = (widget(page, "probe")["x"], widget(page, "probe")["y"])
+        page.keyboard.press("Control+z")
+        assert (widget(page, "probe")["x"], widget(page, "probe")["y"]) == (10, 10)
+        page.locator(".rail-gear").click()
+        return found
+
+    dx, dy = 40, 10  # screen pixels: 28.9 and 7.2 panel pixels, which no step of four makes
+    assert snapped(1, dx, dy) == (round(10 + dx / zoom), round(10 + dy / zoom))
+    assert snapped(4, dx, dy) == (40, 16)
+    assert snapped(0, dx, dy) == (round(10 + dx / zoom), round(10 + dy / zoom))  # (off: the same)
+
+
 @pytest.fixture
 def drawing_plugin(plugin_folder):
     """A plugin with a screen and a widget type, installed before the app starts."""

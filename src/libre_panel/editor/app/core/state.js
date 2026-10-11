@@ -49,7 +49,7 @@ export const store = createStore({
   sourceStates: null, // Settings: what the running app says of its sensor sources
   serviceStates: null, // Settings: the services and their states
   prefs: {
-    snap: 4, // px; 0 = off
+    snap: 4, // px: 1, 4, 8 or 16; 0 = off
     guides: true,
     live: false, // previews with this computer's sensors
     panel: "library", // the open side panel of the design view (null: closed)

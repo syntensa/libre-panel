@@ -18,8 +18,8 @@
   drag onto it; a toolbar over the selection for what it shows, how it is
   drawn (light, facet, acrylic lettering, flat: those that show on it), its
   colour and size; a short inspector with the rest under *Fine-tuning*, the
-  six looks in the theme's settings; corners that resize, snapping guides,
-  several widgets at once, layers with lock and eye, the theme's pictures and
+  six looks in the theme's settings; corners that resize, snapping guides and
+  steps (1, 4, 8 or 16 px), several widgets at once, layers with lock and eye, the theme's pictures and
   fonts. The panel's pages are tabs over it: the normal theme, game mode's,
   the round report's and those of plugins' modes, each with its frame rate
 - *Start*, the first view of the app: the panel at a glance (what it shows,
