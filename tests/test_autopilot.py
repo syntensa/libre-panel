@@ -3,6 +3,7 @@ must hold and a theme must stay; what the load, the microphone, the programs and
 time of day say; resting in game mode. Through the host and the service manager, with
 a made-up computer and time by hand."""
 
+import time
 from datetime import datetime
 
 import pytest
@@ -557,6 +558,12 @@ def test_the_autopilot_changes_the_theme_in_the_main_loop(monkeypatch, isolated_
         elif "on" in seen and "off" not in seen and script.n >= seen["on"] + 100:
             seen["off"] = script.n
             machine.microphone = False
+        elif "off" in seen and "back" not in seen and script.n >= seen["off"] + 20:
+            # samples went out since: the service's thread may need longer on a slow runner
+            deadline = time.monotonic() + 10
+            while host.theme == "focus" and time.monotonic() < deadline:
+                time.sleep(0.01)
+            seen["back"] = script.n
 
     script = Script(1500, {20: [call_begins], **{n: [watch] for n in range(21, 2000)}})
     monkeypatch.setattr(app, "_Warmup", NoWarmup)  # frames counted: switch at once
