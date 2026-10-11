@@ -593,7 +593,9 @@ module's parts where the module is in the list.
 
 The look of SPUR II in two parts: the theme's `look` block for the whole
 panel, and a widget's `finish` for its shape. A theme with neither costs
-nothing extra. The built-in *SPUR Classic* (1920 × 480) shows both. The app's
+nothing extra. The built-in *SPUR Classic* (1920 × 480) shows both, with the
+grid and the dust; its frames are flat lines, so it has no panel light (the
+light needs ridges or a plugin's edges to glint on). The app's
 *Look* view sets them: the blocks below, and the finish and glow of each kind of
 element.
 

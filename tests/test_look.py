@@ -666,6 +666,21 @@ def test_a_sweep_runs_on_the_frames_planned_time():
     assert preview.look.light.running(0.5) == []  # previews have no sweeps
 
 
+def test_a_sweep_over_no_edge_does_not_keep_the_png_path_drawing_at_full_rate():
+    """A sweep only lights edges: with none on the frame it draws nothing, and the PNG path must
+    not run at full rate for it (the start's sweep, the hour's, a new track's, a tube's)."""
+    plain = {"type": "text", "id": "t", "x": 10, "y": 10, "text": "no edge here"}
+    renderer = Renderer(theme_of([plain], look={"light": {}}))
+    frame, _ = renderer.render(snap(), 0.0)  # the panel starts: a sweep begins
+    assert renderer.look.light.running(0.5) and renderer.light_edges == []
+    assert not renderer.moving
+    again, _ = renderer.render(snap(), 0.5)
+    assert changed_region(frame, again) is None  # (and the sweep drew nothing)
+    edged = Renderer(theme_of([FRAME], look={"light": {}}))
+    edged.render(snap(), 0.0)
+    assert edged.moving  # over a ridge it does
+
+
 def test_sweeps_carry_on_into_the_next_theme():
     theme = theme_of([FRAME], look={"light": {}})
     first = Renderer(theme)
@@ -718,10 +733,23 @@ def test_plugin_widgets_give_the_light_their_edges(plugin_folder):
 # -- sizes ----------------------------------------------------------------------------
 
 
+BUILTIN = sorted(path.parent.name for path in builtin_themes_dir().glob("*/theme.json"))
+
+
+@pytest.mark.parametrize("name", BUILTIN)
+def test_a_built_in_theme_has_a_panel_light_only_where_it_has_edges_to_glint_on(name):
+    """The light falls on light edges (ridges, a plugin's): the frames of the built-in themes are
+    flat lines, so a light there would run its sweeps over nothing."""
+    theme = load_theme(builtin_themes_dir() / name)
+    renderer = Renderer(theme)
+    renderer.render(demo_snapshot(fixed_time=1_700_000_000), 0.0)
+    assert "light" not in theme.look or renderer.light_edges, name
+
+
 def test_spur_classic_is_spur_iis_classic_screen_on_the_bar():
     theme = load_theme(builtin_themes_dir() / "spur-classic")
     assert (theme.width, theme.height) == (1920, 480) and theme.warnings == []
-    assert set(theme.look) == {"grid", "light", "dust"}
+    assert set(theme.look) == {"grid", "dust"}  # (no panel light: its frames are flat)
     renderer = Renderer(theme)
     found = demo_snapshot(fixed_time=1_700_000_000)
     frame, _ = renderer.render(found, 0.0)

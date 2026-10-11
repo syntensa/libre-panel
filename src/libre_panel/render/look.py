@@ -547,11 +547,11 @@ class PanelLight:
     def sweep(self, frame: Image.Image, now: float) -> Image.Image:
         """After the frame is composed: the sweeps on it, in place (``frame`` is
         RGB and the frame's own), only in the strips where they shine."""
-        lights = self.running(now)
+        edges = self.renderer.light_edges
+        lights = self.running(now) if edges else []  # (a sweep only lights edges)
         if not lights:
             return frame
         self.renderer.moving = True  # the PNG path draws at full rate meanwhile
-        edges = self.renderer.light_edges
         key = tuple(id(edge) for edge in edges)
         if self._joined is None or self._joined[0] != key:  # the edges kept: their ids stay
             self._joined = (key, list(edges), LightEdge.joined(edges))
