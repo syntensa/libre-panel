@@ -512,7 +512,9 @@ export function Canvas() {
             class=${`panel-canvas${round ? " round" : ""}${z >= 2 ? " pixelated" : ""}`}
             style=${{ width: `${Math.round(width * z)}px`, height: `${Math.round(height * z)}px` }}
           >
-            ${render.png ? html`<img class="preview" src=${render.png} alt=${t("Preview of the panel")} draggable="false" />` : html`<div class="preview-wait"><span class="spinner"></span></div>`}
+            ${render.png
+              ? html`<img class="preview" src=${render.png} alt=${t("Preview of the panel")} draggable="false" />`
+              : html`<div class="preview-wait">${renderError ? null : html`<span class="spinner"></span>`}</div>`}
             <div class="overlay" data-rev=${rev}>
               ${strips}
               ${cells}

@@ -645,6 +645,11 @@
   new kind has it too and takes the new kind's first source otherwise: a big number that
   showed the network no longer stays on *network* as a ring, which has none (the
   inspector showed no choice, the panel drew the processor)
+- Design and Look: a theme that has just been opened (from Start, the theme menu, a
+  first start) showed the picture of the one before, at its size and with its boxes,
+  until it was drawn, which on a slow computer or for a big theme took seconds. The
+  panel's picture waits with a spinner at the new theme's size, and the pictures of the
+  library, which are drawn on the side, wait for it
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

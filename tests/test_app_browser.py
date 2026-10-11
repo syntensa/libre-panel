@@ -1125,6 +1125,38 @@ def test_a_round_panel_and_the_strip_its_frame_hides(page):
     assert page.locator(".hidden-strip").count() == 0  # a round panel hides nothing
 
 
+def test_a_theme_that_is_opened_shows_no_picture_of_the_one_before(page):
+    """While the new theme is drawn (a slow computer, a big theme) the canvas waits with a
+    spinner at the new theme's size, with no boxes: it showed the old picture, whose boxes
+    could be picked, at the old size."""
+    import json
+
+    from test_editor_server import theme_dict
+
+    held = []
+    page.route("**/api/render", lambda route, request: held.append(route))  # not answered yet
+    theme = theme_dict()
+    theme["display"] = {"model": "turing-9.2-usb", "orientation": "landscape"}
+    theme["display"].update(width=1920, height=480)
+    theme["widgets"] = [
+        {"type": "rect", "id": "probe", "x": 700, "y": 40, "w": 100, "h": 50, "color": "#ff8800"}
+    ]
+    assert page.locator(".panel-canvas img.preview").count() == 1  # the theme before is drawn
+    js(page, f"window.libre.doc.openDoc({{ theme: {json.dumps(theme)}, dirty: true }})")
+    expect(page.locator(".panel-canvas .preview-wait .spinner")).to_be_visible()
+    assert page.locator(".panel-canvas img.preview").count() == 0
+    assert page.locator(".overlay .box").count() == 0
+    assert js(page, "window.libre.store.get().render.size") == [1920, 480]
+    for _ in range(100):  # the request of the new theme is held
+        if held:
+            break
+        page.wait_for_timeout(20)
+    page.unroute("**/api/render")  # lets the held request through
+    page.wait_for_selector(".panel-canvas img.preview")  # drawn at last
+    expect(page.locator('.overlay .box[data-id="probe"]')).to_have_count(1)
+    assert page.locator(".panel-canvas .preview-wait").count() == 0
+
+
 def test_a_widget_snaps_to_the_strip_the_frame_hides(page):
     """The edge of what the bezel hides is a guide like any box's edge."""
     import json

@@ -42,19 +42,23 @@ async function refreshPictures(palette, style, lang) {
 function usePictures() {
   const [, rerender] = useState(0);
   // (the pictures hold dates and weather: a new language draws them again)
-  const look = useStore((s) => JSON.stringify([s.doc?.theme?.palette || {}, s.doc?.theme?.style || null, s.lang]));
+  const { look, drawn } = useStore((s) => ({
+    look: JSON.stringify([s.doc?.theme?.palette || {}, s.doc?.theme?.style || null, s.lang]),
+    drawn: Boolean(s.render.png),
+  }));
   useEffect(() => {
     const listener = () => rerender((n) => n + 1);
     listeners.add(listener);
     return () => listeners.delete(listener);
   }, []);
   useEffect(() => {
+    if (!drawn) return undefined; // the panel's own picture comes first: it is what is waited for
     const timer = setTimeout(() => {
       const [palette, style, lang] = JSON.parse(look);
       refreshPictures(palette, style, lang);
     }, 250);
     return () => clearTimeout(timer);
-  }, [look]);
+  }, [look, drawn]);
   return pictures;
 }
 
