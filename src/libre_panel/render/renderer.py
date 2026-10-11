@@ -287,16 +287,42 @@ def _catmull_rom(points: list[tuple[float, float]], samples: int = 6) -> list[tu
     return out
 
 
+def _needs(widget: dict[str, Any]) -> list[tuple[bool, str, str | None]]:
+    """What a widget's ``needs`` asks, as (turned round, key, value): ``key`` (it has a value),
+    ``key=text`` (it is that), ``@picture`` (a source or service has the picture), each with
+    ``!`` in front for the opposite."""
+    found = []
+    for need in (widget.get("needs") or "").split(","):
+        need = need.strip()
+        if need:
+            key, sep, value = need.lstrip("!").strip().partition("=")
+            found.append((need.startswith("!"), key.strip(), value.strip() if sep else None))
+    return found
+
+
+def _holds(snapshot: Snapshot, key: str, value: str | None) -> bool:
+    """Whether one entry of ``needs`` holds: numbers are equal by value (1 is 1.0), texts
+    without regard to case."""
+    if key.startswith("@"):
+        return snapshot.images.get(key[1:]) is not None
+    found = snapshot.value(key)
+    if found is None or value is None:
+        return found is not None
+    if isinstance(found, int | float) and not isinstance(found, bool):
+        try:
+            return float(found) == float(value)
+        except ValueError:
+            return False
+    return str(found).strip().casefold() == value.casefold()
+
+
 def _reads(widgets: list[dict[str, Any]]) -> set[str]:
     """The sensor keys (and patterns) the widgets read."""
     keys: set[str] = set()
     for widget in widgets:
         if widget.get("sensor"):
             keys.add(widget["sensor"])
-        for need in (widget.get("needs") or "").split(","):
-            need = need.strip().lstrip("!").strip()
-            if need:
-                keys.add(need)
+        keys.update(key for _, key, _ in _needs(widget) if key and not key.startswith("@"))
         if widget["type"] == "weather":
             keys.add(f"weather.{widget['field']}")
         elif widget["type"] == "list":
@@ -1036,12 +1062,8 @@ class Renderer:
 
     @staticmethod
     def _missing(widget: dict[str, Any], snapshot: Snapshot) -> bool:
-        for need in (widget.get("needs") or "").split(","):  # all of them must hold
-            need = need.strip()
-            if not need:
-                continue
-            has = snapshot.value(need.lstrip("!").strip()) is not None
-            if has == need.startswith("!"):
+        for turned, key, value in _needs(widget):  # all of them must hold
+            if _holds(snapshot, key, value) == turned:
                 return True
         if widget["type"] == "module":
             return False

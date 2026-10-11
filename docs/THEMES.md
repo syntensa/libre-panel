@@ -106,6 +106,12 @@ else while the weather is off. Several conditions, separated by commas, must
 all hold: `"needs": "cpu.load, !gpu.load"`. Themes that use it fit each PC
 without editing.
 
+`key=text` holds while the reading is that (`"needs": "game.limiter=gpu"`;
+numbers count by value, texts in any case), and `@name` while a source or
+service has the picture (`"needs": "@game.logo"`): a game's name can stand
+where its logo is missing, and a word in the colour of whoever holds the frame
+rate down shows only while it does.
+
 Text-like widgets share `font` (empty = the theme font), `font_size`, `color`,
 `align` (`left`, `center`, `right`; `x` is the left edge, centre or right edge
 accordingly; `y` is the top of the line), `letter_spacing` (pixels, also

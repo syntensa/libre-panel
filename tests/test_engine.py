@@ -708,3 +708,38 @@ def test_needs_shows_a_widget_only_with_its_sensor():
         Snapshot(readings={"weather.temperature": Reading("weather.temperature", 12.0)})
     )
     assert set(boxes) == {"card"} and on.getpixel((20, 20))[:3] == (255, 0, 0)
+
+
+def test_needs_can_ask_for_what_a_reading_is_or_for_a_picture():
+    """``key=text`` holds while the reading is that (numbers by value, texts in any case),
+    ``@name`` while a source or service has the picture; ``!`` turns each round."""
+    from PIL import Image
+
+    def card(wid, needs):
+        return rect(id=wid, x=0, y=0, w=10, h=10, needs=needs)
+
+    t = theme(
+        card("gpu", "game.limiter=gpu"), card("cpu", "game.limiter = CPU"),
+        card("not-gpu", "!game.limiter=gpu"), card("playing", "media.playing=1"),
+        card("paused", "media.playing=0"), card("both", "game.limiter=gpu, media.playing=1"),
+        card("logo", "@game.logo"), card("no-logo", "!@game.logo"),
+    )  # fmt: skip
+
+    def shown(readings, images=None):
+        found = {k: Reading(k, v) for k, v in readings.items()}
+        snap = Snapshot(readings=found, images=images or {})
+        return set(Renderer(t, preview=True).render(snap)[1])
+
+    assert shown({}) == {"not-gpu", "no-logo"}  # no reading is not "gpu"
+    assert shown({"game.limiter": "GPU", "media.playing": 1.0}) == {
+        "gpu", "playing", "both", "no-logo"
+    }  # fmt: skip
+    assert shown({"game.limiter": "cpu ", "media.playing": 0}) == {
+        "cpu", "not-gpu", "paused", "no-logo"
+    }  # fmt: skip
+    assert shown({"game.limiter": 3}) == {"not-gpu", "no-logo"}  # a number is no text to match
+    assert shown({}, {"game.logo": Image.new("RGBA", (4, 4))}) == {"not-gpu", "logo"}
+    # what a theme asks for is what the sources are told to work on, a picture is not a sensor
+    from libre_panel.render.renderer import _reads
+
+    assert _reads(t.widgets) == {"game.limiter", "media.playing"}
