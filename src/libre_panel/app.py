@@ -629,13 +629,17 @@ class MainLoop:
             may_switch = may_switch and self._warmed(config, host, shown, refused, watcher, now)
             changed = watcher.changed() if may_switch else False
             if may_switch and (changed or (wanted != shown and wanted != refused)):
+                fresh = config
                 try:
-                    fresh = load_config(config.path) if changed and config.path else config
+                    if changed and config.path:
+                        fresh = load_config(config.path)
                     wanted = _theme_name(fresh, host)
                     new_theme = load_theme(find_theme(wanted))
                 except (ConfigError, ThemeError) as exc:
                     log.warning("keeping theme %r: %s", shown, exc)  # e.g. half-written file
                     refused = wanted
+                    if fresh is not config and on_config is not None:
+                        on_config(fresh)  # the file loaded: services follow it, theme or not
                 else:
                     device = config.device
                     if not _same_device(device, fresh.device):

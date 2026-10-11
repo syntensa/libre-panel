@@ -314,6 +314,89 @@ def test_the_main_loop_goes_one_frame_at_a_time_on_its_own_clock():
         host.close()
 
 
+def test_services_follow_config_toml_although_its_theme_does_not_load(isolated_home):
+    """A change of ``[services]`` saved together with a theme that is not there: the file
+    loaded, so the services follow it now, and not only with the next save. A file that does
+    not load at all changes nothing."""
+    import os
+    import time
+
+    from libre_panel.config import load_config
+    from libre_panel.sensors.base import SensorHub
+    from libre_panel.sensors.demo import DemoProvider
+
+    path = isolated_home / "config.toml"
+    isolated_home.mkdir(parents=True, exist_ok=True)
+
+    def save(text, minute):
+        path.write_text(text, encoding="utf-8")
+        os.utime(path, (1_700_000_000 + minute, 1_700_000_000 + minute))  # a stamp of its own
+
+    save('theme = "pico"\nfps = 5\n', 0)
+    clock, heard = StepClock(1000.0), []
+    config = load_config(path)
+    hub = SensorHub([DemoProvider({"fixed_time": 1_700_000_000})])
+    loop = app_module.MainLoop(
+        config, hub=hub, display=MemoryStream(), clock=clock, on_config=heard.append
+    )
+
+    def step(times=1):
+        for _ in range(times):
+            clock.now += 0.02
+            loop.step(clock.now)
+
+    try:
+        step(3)
+        assert heard == [] and loop.status.theme == "pico"  # the first load is the caller's
+        save('theme = "pico"\n[services]\nenabled = ["notices"\n', 1)  # broken: no list closes
+        step(3)
+        assert heard == [] and loop.status.theme == "pico"  # nothing to follow yet
+        save('theme = "no-such-theme"\n[services]\nenabled = ["notices"]\n', 2)
+        step(3)
+        assert len(heard) == 1 and heard[0].services.enabled == ["notices"]
+        assert loop.status.theme == "pico" and loop.refused == "no-such-theme"  # kept
+        step(5)
+        assert len(heard) == 1  # told once, not at every frame
+        save('theme = "no-such-theme"\n[services]\nenabled = []\n', 3)  # and the next save
+        step(3)
+        assert [c.services.enabled for c in heard] == [["notices"], []]
+        save('theme = "slate"\n[services]\nenabled = []\n', 4)  # the theme fixed
+        for _ in range(150):
+            step()
+            if loop.status.theme == "slate":
+                break
+            time.sleep(0.002)  # the next theme is warmed up in a thread first
+        assert loop.status.theme == "slate" and len(heard) == 3
+    finally:
+        loop.close()
+
+
+def test_the_services_of_the_app_follow_a_config_whose_theme_is_not_there(isolated_home):
+    """Through the background app: one write switches a service on and names a theme that does
+    not exist. The panel keeps its theme, the service starts."""
+    from test_autostart import FakeTasks
+    from test_service import FakeRegistry, wait_for, write_config
+
+    from libre_panel.autostart import Autostart
+    from libre_panel.config import edit_config
+    from libre_panel.service import BackgroundApp
+
+    write_config(isolated_home)
+    app = BackgroundApp(
+        port=0, autostart=Autostart("win32", registry=FakeRegistry(), tasks=FakeTasks())
+    )
+    app.start()
+    try:
+        assert wait_for(lambda: app.panel.state()["state"] == "showing")
+        assert app.services.running == {}
+        edit_config(("value", "theme", "no-such-theme"), ("value", "services.enabled", ["notices"]))
+        assert wait_for(lambda: "notices" in app.services.running, 15)
+        assert app.panel.state()["theme"] == "libre-default"  # the panel is as it was
+    finally:
+        app.quit()
+        app.shutdown()
+
+
 def test_one_clock_for_the_loop_the_renderer_and_plugins():
     """``now`` everywhere is on libre_panel.clock() (time.perf_counter), and
     snapshot.now is the wall time of the frame as planned: a seconds clock

@@ -316,6 +316,9 @@
   on (or off, or given other options) while the panel was paused, or in a
   `config.toml` that did not load at the start and was fixed later, stayed as it
   was until the file changed once more
+- A change of `[services]` saved together with a theme name that does not exist (a typo, a
+  theme not installed yet) reached the services only with the next save. They now follow
+  `config.toml` whenever it loads, whether or not its theme does; the panel keeps its theme
 
 **Changes**
 - The video mode turns itself on: `video.mode` is `"auto"` by default, which
