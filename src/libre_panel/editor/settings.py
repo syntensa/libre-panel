@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import sys
 import threading
 from pathlib import Path
@@ -193,12 +194,17 @@ def _declared(cls: Any) -> list[dict[str, Any]]:
 
 
 def cli_command(arguments: str) -> str:
-    """The command-line program as one types it in a terminal: the download's own on
-    Windows, where it is not on the PATH, else ``libre-panel``."""
-    if getattr(sys, "frozen", False) and sys.platform == "win32":
-        beside = Path(sys.executable).with_name("libre-panel.exe")
-        if beside.is_file():
-            return f'"{beside}" {arguments}'
+    """The command-line program as one types it in a terminal: where a download is not on
+    the PATH its own (``libre-panel.exe`` of the Windows download, the AppImage file),
+    else ``libre-panel``."""
+    if getattr(sys, "frozen", False):
+        if sys.platform == "win32":
+            beside = Path(sys.executable).with_name("libre-panel.exe")
+            if beside.is_file():
+                return f'"{beside}" {arguments}'
+        appimage = os.environ.get("APPIMAGE")  # the .AppImage file, not its temporary mount
+        if appimage and sys.platform.startswith("linux"):
+            return f'"{appimage}" {arguments}'
     return f"libre-panel {arguments}"
 
 

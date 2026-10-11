@@ -710,6 +710,12 @@ def test_the_command_line_program_is_named_as_one_types_it(tmp_path, monkeypatch
     assert settings.cli_command("doctor") == "libre-panel doctor"  # no libre-panel.exe beside it
     (tmp_path / "libre-panel.exe").write_text("")
     assert settings.cli_command("doctor") == f'"{tmp_path / "libre-panel.exe"}" doctor'
+    # the Linux AppImage is the program itself
+    monkeypatch.setattr(
+        settings, "sys", SimpleNamespace(platform="linux", frozen=True, executable="/tmp/mount/app")
+    )
+    monkeypatch.setenv("APPIMAGE", "/home/me/Libre_Panel.AppImage")
+    assert settings.cli_command("doctor") == '"/home/me/Libre_Panel.AppImage" doctor'
 
 
 def test_a_folder_is_opened_in_the_file_manager(server, isolated_home, monkeypatch):
