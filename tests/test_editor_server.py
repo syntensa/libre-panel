@@ -2,10 +2,14 @@ import base64
 import http.client
 import json
 import threading
+import tomllib
+from types import SimpleNamespace
 
 import pytest
+from fake_hardware import PC, TIDY
 
 from libre_panel.editor.server import make_server
+from libre_panel.sensors import hardware
 from libre_panel.theme.model import find_theme, load_theme
 from libre_panel.theme.modules import MODULE_KINDS
 
@@ -227,3 +231,178 @@ def test_detach_gives_plain_widgets(server):
     assert status == 200
     ids = [w["id"] for w in data["widgets"]]
     assert "m0-time" in ids and all("_module" not in w for w in data["widgets"])
+
+
+# -- the names of the hardware -------------------------------------------------------------------
+
+
+@pytest.fixture
+def editor():
+    """The editor server (``port``, ``state``), polled every 10 ms so that ending it does not
+    take half a second, as it does for ``server``."""
+    srv = make_server(port=0)
+    kwargs = {"poll_interval": 0.01}
+    threading.Thread(target=srv.serve_forever, kwargs=kwargs, daemon=True).start()
+    yield SimpleNamespace(port=srv.server_address[1], state=srv.editor_state)
+    srv.shutdown()
+    srv.server_close()
+    srv.editor_state.close()
+
+
+@pytest.fixture
+def pc(monkeypatch):
+    """A computer for /api/hardware to find, and how often it was asked."""
+    asked = []
+    monkeypatch.setattr(hardware, "_found", None)
+    monkeypatch.setattr(hardware, "_scan_machine", lambda *args: asked.append(1) or PC)
+    return asked
+
+
+def names(editor, body=None, query="", **options):
+    """GET /api/hardware, or POST ``body`` to it."""
+    method = "GET" if body is None else "POST"
+    return request(editor.port, method, "/api/hardware" + query, body, **options)
+
+
+def hardware_state(custom=("", "", "")):
+    parts = zip(("cpu", "gpu", "memory"), custom, strict=True)
+    return {part: {"detected": TIDY[part], "custom": text} for part, text in parts}
+
+
+def written(isolated_home):
+    return tomllib.loads((isolated_home / "config.toml").read_text(encoding="utf-8"))
+
+
+def test_the_hardware_names_are_what_is_found_and_what_the_user_wrote(editor, pc, isolated_home):
+    status, data = names(editor)
+    assert status == 200 and data == hardware_state()
+    assert data["cpu"]["detected"] == "Ryzen 5 7600"  # tidied, as the panel shows it
+    assert not (isolated_home / "config.toml").exists()  # asking writes nothing
+
+
+def test_the_users_text_is_written_to_config_toml_and_comes_back(editor, pc, isolated_home):
+    status, data = names(editor, {"cpu": "My CPU"})
+    assert status == 200 and data == hardware_state(("My CPU", "", ""))
+    assert names(editor) == (200, data)
+    assert written(isolated_home)["hardware"] == {"cpu_name": "My CPU"}
+    assert "# Libre Panel configuration" in (isolated_home / "config.toml").read_text("utf-8")
+    status, data = names(editor, {"gpu": "My card", "memory": "2x16 GB"})
+    assert status == 200 and data == hardware_state(("My CPU", "My card", "2x16 GB"))
+    assert written(isolated_home)["hardware"] == {
+        "cpu_name": "My CPU", "gpu_name": "My card", "memory_name": "2x16 GB",
+    }  # fmt: skip
+
+
+def test_an_empty_text_gives_the_found_name_back_and_the_others_stay(editor, pc, isolated_home):
+    names(editor, {"cpu": "My CPU", "gpu": "My card"})
+    status, data = names(editor, {"cpu": ""})
+    assert status == 200 and data == hardware_state(("", "My card", ""))
+    assert written(isolated_home)["hardware"]["cpu_name"] == ""
+
+
+def test_the_users_text_is_one_line_without_the_spaces_around_it(editor, pc, isolated_home):
+    status, data = names(editor, {"gpu": "  My   card \n"})
+    assert status == 200 and data["gpu"]["custom"] == "My card"
+    assert written(isolated_home)["hardware"]["gpu_name"] == "My card"
+
+
+def test_the_section_in_a_written_config_takes_the_text_and_the_rest_stays(editor, pc):
+    from libre_panel.config import load_config, write_default_config
+
+    path = write_default_config()
+    before = path.read_text(encoding="utf-8")
+    assert "[hardware]" in before  # the template has the section, its keys commented out
+    assert names(editor, {"memory": 'Kingston "Fury" 32 GB'})[0] == 200
+    after = path.read_text(encoding="utf-8")
+    assert after.replace('memory_name = "Kingston \\"Fury\\" 32 GB"\n', "") == before
+    assert load_config(path).hardware.memory_name == 'Kingston "Fury" 32 GB'
+    assert "# cpu_name" in after and "[sensors.librehardwaremonitor]" in after
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        [],
+        {},
+        "text",
+        {"cpu": 5},
+        {"cpu": None},
+        {"cpu": ["a"]},
+        {"disk": "x"},
+        {"cpu": "fine", "bogus": "y"},  # one wrong key refuses the whole request
+        {"cpu": "x" * 101},
+        b"{not json",
+    ],
+)
+def test_a_request_that_is_not_names_changes_nothing(editor, pc, isolated_home, body):
+    status, data = names(editor, body)
+    assert status == 400 and data["error"]
+    assert not (isolated_home / "config.toml").exists()
+
+
+def test_the_longest_text_is_a_hundred_characters(editor, pc):
+    assert names(editor, {"cpu": "x" * 100})[0] == 200
+    status, data = names(editor, {"cpu": "x" * 101})
+    assert status == 400 and "hardware.cpu_name: at most 100 characters" in data["error"]
+
+
+def test_a_config_that_cannot_be_read_is_told_and_not_written_over(editor, pc, isolated_home):
+    isolated_home.mkdir(parents=True)
+    (isolated_home / "config.toml").write_text("this is = not [valid", encoding="utf-8")
+    for status, data in (names(editor), names(editor, {"cpu": "My CPU"})):
+        assert status == 400 and "config.toml" in data["error"]
+    assert (isolated_home / "config.toml").read_text("utf-8") == "this is = not [valid"
+
+
+def test_the_hardware_routes_keep_the_editors_protections(editor, pc):
+    assert names(editor, host="evil.example")[0] == 403
+    assert names(editor, {"cpu": "x"}, host="evil.example")[0] == 403
+    assert names(editor, {"cpu": "x"}, headers={"X-Libre-Panel": "0"})[0] == 403
+
+
+def test_the_computer_is_asked_once_and_again_when_the_editor_asks_for_it(editor, pc):
+    names(editor)
+    names(editor)
+    assert len(pc) == 1
+    names(editor, query="?refresh=0")
+    assert len(pc) == 1
+    assert names(editor, query="?refresh=1")[0] == 200
+    assert len(pc) == 2
+    assert names(editor, query="?refresh")[0] == 200
+    assert len(pc) == 3
+
+
+def test_the_card_librehardwaremonitor_is_told_to_use_is_the_card_that_is_found(
+    editor, monkeypatch, isolated_home
+):
+    from fake_hardware import gigabytes
+
+    from libre_panel.sensors.hardware import Adapter, Found
+
+    cards = (
+        Adapter("NVIDIA GeForce RTX 4070", gigabytes(12)),
+        Adapter("AMD Radeon RX 6800", gigabytes(16)),
+    )
+    monkeypatch.setattr(hardware, "_found", None)
+    monkeypatch.setattr(hardware, "_scan_machine", lambda *args: Found(adapters=cards))
+    assert names(editor)[1]["gpu"]["detected"] == "Radeon RX 6800"
+    isolated_home.mkdir(parents=True)
+    (isolated_home / "config.toml").write_text(
+        '[sensors.librehardwaremonitor]\ngpu = "RTX 4070"\n', encoding="utf-8"
+    )
+    assert names(editor)[1]["gpu"]["detected"] == "GeForce RTX 4070"
+
+
+def test_the_editors_own_sensors_follow_the_names_it_wrote(editor, pc):
+    """A plain `libre-panel editor` reads its previews from a hub of its own."""
+    assert editor.state.live_snapshot().value("cpu.name") == "Ryzen 5 7600"
+    assert names(editor, {"cpu": "My CPU"})[0] == 200
+    assert editor.state.live_snapshot().value("cpu.name") == "My CPU"
+    assert names(editor, {"cpu": ""})[0] == 200
+    assert editor.state.live_snapshot().value("cpu.name") == "Ryzen 5 7600"
+
+
+def test_the_sensor_list_has_the_three_names(server):
+    status, sensors = request(server, "GET", "/api/sensors")
+    keys = {sensor["key"] for sensor in sensors}
+    assert status == 200 and {"cpu.name", "gpu.name", "mem.name"} <= keys

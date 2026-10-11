@@ -24,6 +24,8 @@ from urllib.parse import parse_qs, urlparse
 from libre_panel import __version__, i18n
 from libre_panel.config import (
     ConfigError,
+    edit_config,
+    hardware_name,
     load_config,
     set_active_theme,
     set_config_value,
@@ -36,6 +38,7 @@ from libre_panel.icons import ICON_NAMES
 from libre_panel.render.renderer import Renderer
 from libre_panel.sensors.base import SensorHub, Snapshot
 from libre_panel.sensors.demo import demo_snapshot
+from libre_panel.sensors.hardware import detected_names
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import (
     COMMON_FIELDS,
@@ -71,6 +74,8 @@ ASSET_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ttf", ".otf"}
 # Parts of the language catalog the editor needs.
 _EDITOR_TABLES = ("messages", "fields", "widgets", "enums", "icons")
 _ASSET_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
+# The names /api/hardware talks about, and the setting in config.toml ([hardware]) of each.
+_HARDWARE_SETTINGS = {"cpu": "cpu_name", "gpu": "gpu_name", "memory": "memory_name"}
 _CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -164,6 +169,18 @@ class EditorState:
                 self._hub = build_hub(load_config(self.config_path))
                 self._hub.snapshot()  # rates need a previous sample
             return self._hub.snapshot()
+
+    def follow_config(self) -> None:
+        """config.toml was written: the sources of this editor's own hub (a plain editor;
+        in the background app the panel's follow the file by themselves) take it in."""
+        with self._lock:
+            hub = self._hub
+            if hub is None:
+                return
+            try:
+                hub.follow_config(load_config(self.config_path))
+            except ConfigError:
+                pass  # until the file is fixed they go on as they are
 
     def close(self) -> None:
         with self._lock:
@@ -280,6 +297,9 @@ class EditorHandler(BaseHTTPRequestHandler):
             if self.controls is None:
                 return self._json({"available": False})
             return self._json({"available": True, **self.controls.snapshot()})
+        if path == "/api/hardware":
+            asked = parse_qs(urlparse(self.path).query, keep_blank_values=True).get("refresh")
+            return self._hardware(asked is not None and asked[0] not in ("0", "false"))
         if path == "/api/plugins/pages":
             return self._json(self._pages())
         match = re.fullmatch(r"/plugins/([^/]+)/(.*)", path)
@@ -461,6 +481,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._app_action()
         if path == "/api/language":
             return self._set_language()
+        if path == "/api/hardware":
+            return self._set_hardware()
         match = re.fullmatch(r"/api/plugins/([^/]+)/(.*)", path)
         if match:
             body = self._read_json()
@@ -488,6 +510,44 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error(str(exc))
         i18n.set_language(setting)  # the tray and the panel follow at once
         self._json(self._i18n())
+
+    def _hardware(self, refresh: bool = False) -> None:
+        """The names of the processor, graphics card and memory: what Libre Panel finds
+        (``detected``, as the panel would show it) and the user's own text for each
+        (``custom``, empty: the detected one). ``?refresh=1`` asks the computer again."""
+        try:
+            config = load_config(self.state.config_path)
+        except ConfigError as exc:
+            return self._error(str(exc))
+        card = config.sensors.options.get("librehardwaremonitor", {}).get("gpu")
+        found = detected_names(card if isinstance(card, str) else "", refresh)
+        own = config.hardware
+        custom = {"cpu": own.cpu_name, "gpu": own.gpu_name, "memory": own.memory_name}
+        self._json({part: {"detected": found[part], "custom": custom[part]} for part in custom})
+
+    def _set_hardware(self) -> None:
+        """Set the user's own text for any of ``cpu``, ``gpu`` and ``memory`` ("" gives the
+        detected name back); answers like the GET."""
+        payload = self._read_json()
+        if payload is None:
+            return
+        if (
+            not isinstance(payload, dict)
+            or not payload
+            or not set(payload) <= set(_HARDWARE_SETTINGS)
+            or not all(isinstance(text, str) for text in payload.values())
+        ):
+            return self._error('expected text for "cpu", "gpu" or "memory": {"cpu": "My CPU"}')
+        try:
+            changes = []
+            for part, text in payload.items():
+                name = f"hardware.{_HARDWARE_SETTINGS[part]}"
+                changes.append(("value", name, hardware_name(text, name)))
+            edit_config(*changes, path=self.state.config_path)  # all of them in one write
+        except (ConfigError, OSError) as exc:
+            return self._error(str(exc))
+        self.state.follow_config()
+        self._hardware()
 
     def _app_action(self) -> None:
         payload = self._read_json()
