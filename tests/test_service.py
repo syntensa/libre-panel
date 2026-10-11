@@ -164,6 +164,30 @@ def test_services_start_once_a_broken_config_is_fixed(app, isolated_home):
     assert wait_for(lambda: app.panel.state()["state"] == "showing")
 
 
+@pytest.mark.parametrize(
+    ("text", "said"),
+    [
+        (b'device = "turing-5"\n', "device"),  # the model where its table belongs
+        (b"weather = true\n", "weather"),
+        (b'sensors = "psutil"\n', "sensors"),
+        (b'[sensors]\nproviders = "psutil"\n', "sensors.providers"),
+        (b"[sensors]\nproviders = 5\n", "sensors.providers"),
+        ('[weather]\nplace = "Café"\n'.encode("cp1252"), "UTF-8"),  # an old editor's encoding
+    ],
+)
+def test_the_app_starts_with_a_config_of_the_wrong_shape_and_says_what_is_wrong(
+    app, isolated_home, text, said
+):
+    """A table or a list of the wrong kind, or a file that is not UTF-8, ended the app at its
+    start: such a config.toml is an error of the config like any other, which the panel
+    shows until the file is fixed."""
+    (isolated_home / "config.toml").write_bytes(text)
+    app.start()
+    assert wait_for(lambda: app.panel.state()["state"] == "error")
+    assert said in app.panel.state()["detail"]
+    assert app.brightness() is None and app.active_theme() is None  # the tray's menu
+
+
 def test_a_page_has_the_app_follow_config_toml_also_while_the_panel_is_paused(app, isolated_home):
     app.start()
     assert wait_for(lambda: app.panel.state()["state"] == "showing")

@@ -639,6 +639,11 @@
 - Two changes to `config.toml` at the same moment (the tray's brightness while the app
   saves a setting) both started from the file as it was, and the one that finished last
   undid the other. A change now waits for the one under way
+- A `config.toml` with a table or a list of the wrong kind (`device = "turing-5"` where
+  `[device]` belongs, `weather = true`, `providers = "psutil"`) or saved in another
+  encoding than UTF-8 ended the app at its start, and the tray's menu and some of the
+  app's pages failed with it. Such a file is an error of the config now: the app starts,
+  says what is wrong, and goes on once the file is fixed
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars
