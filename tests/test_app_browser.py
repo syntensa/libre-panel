@@ -2067,7 +2067,7 @@ def test_settings_about(app_url, isolated_home, monkeypatch):
 def test_settings_say_when_config_toml_has_a_mistake(app_url, isolated_home):
     (isolated_home).mkdir(parents=True)
     (isolated_home / "config.toml").write_text("this is not toml", encoding="utf-8")
-    allow = ("/api/settings", "/api/panel", "/api/system", "/api/pages", "/api/active")
+    allow = ("/api/settings", "/api/panel", "/api/system", "/api/pages")
     with browser_page(app_url, "settings/panel", allow=allow) as page:
         page.wait_for_selector(".note.error")
         assert "config.toml has a mistake in it." in page.locator(".note.error").inner_text()

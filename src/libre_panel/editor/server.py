@@ -28,7 +28,6 @@ from libre_panel.config import (
     edit_config,
     hardware_name,
     load_config,
-    set_active_theme,
     set_config_value,
     theme_chosen,
     user_themes_dir,
@@ -459,11 +458,6 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._get_theme(path[len("/api/themes/") :])
         if path == "/api/sensors":
             return self._json(self._sensors())
-        if path == "/api/active":
-            try:
-                return self._json({"theme": load_config(self.state.config_path).theme})
-            except ConfigError as exc:
-                return self._error(str(exc))
         if path == "/api/i18n":
             return self._json(self._i18n())
         if path == "/api/app":
@@ -812,8 +806,6 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._templates()
         if path == "/api/detach":
             return self._detach()
-        if path == "/api/activate":
-            return self._activate()
         if path == "/api/app":
             return self._app_action()
         if path == "/api/language":
@@ -1140,18 +1132,6 @@ class EditorHandler(BaseHTTPRequestHandler):
         except (ThemeError, KeyError, ValueError, TypeError) as exc:
             return self._error(str(exc))
         self._json({"theme": result})
-
-    def _activate(self) -> None:
-        payload = self._read_json()
-        if payload is None:
-            return
-        theme_id = payload.get("id")
-        try:
-            find_theme(theme_id if isinstance(theme_id, str) else "")
-            path = set_active_theme(theme_id, self.state.config_path)
-        except (ThemeError, ConfigError, OSError) as exc:
-            return self._error(str(exc))
-        self._json({"ok": True, "theme": theme_id, "config": str(path)})
 
     def _save(self, theme_id: str) -> None:
         payload = self._read_json()
