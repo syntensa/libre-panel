@@ -10,7 +10,7 @@ as a plugin: a Python package that registers parts of these kinds.
 | Widget type | `libre_panel.widgets` | a widget the editor can place, drawn by plugin code |
 | Transition | `libre_panel.transitions` | how the panel goes from one theme (or mode) to the next |
 | Toast style | `libre_panel.toasts` | how messages from services look; a theme selects it by name |
-| Editor page | `libre_panel.editor_pages` | a page of the plugin's own in the theme editor |
+| Editor page | `libre_panel.editor_pages` | a page of the plugin's own in the app |
 | Themes | `libre_panel.themes` | a package whose folder holds theme folders |
 | Sensor source | `libre_panel.sensors` | readings (see [Architecture](ARCHITECTURE.md#plugins)) |
 | Display driver | `libre_panel.devices` | another kind of panel |
