@@ -94,6 +94,7 @@ class System(Protocol):
     def session_user(self) -> str | None: ...
     def added(self) -> list[str]: ...
     def set_added(self, sids: list[str]) -> None: ...
+    def alive(self, pid: int) -> bool: ...
     def sleep(self, seconds: float) -> None: ...
 
 
@@ -237,6 +238,7 @@ def _replace_folder(source: Path, target: Path) -> None:
 
 
 def stop_service(system: System, out: Outcome) -> None:
+    """Stop the service, and wait until its process has let go of its files."""
     info = system.service()
     if info is None or info.state == "stopped":
         return
@@ -245,6 +247,10 @@ def stop_service(system: System, out: Outcome) -> None:
         raise SetupError(f"the sensor service did not stop (sc.exe: {code})")
     if not _wait_for(system, "stopped"):
         raise SetupError("the sensor service did not stop in time")
+    waited = 0.0
+    while info.pid and system.alive(info.pid) and waited < STATE_SECONDS:
+        system.sleep(0.5)
+        waited += 0.5
     out.say("stopped the sensor service")
 
 
@@ -510,6 +516,11 @@ class WindowsSystem:
                 winreg.DeleteKeyEx(winreg.HKEY_LOCAL_MACHINE, SETUP_KEY, winreg.KEY_WOW64_64KEY, 0)
             except OSError:
                 pass  # something else is in it
+
+    def alive(self, pid: int) -> bool:
+        import psutil
+
+        return psutil.pid_exists(pid)
 
     def sleep(self, seconds: float) -> None:
         time.sleep(seconds)

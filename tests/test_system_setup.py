@@ -39,6 +39,7 @@ class FakeSystem:
         self.recorded = []
         self.user = ME
         self.slept = 0.0
+        self.lingers = 0  # how often the service's process is still there after it stopped
 
     def program_files(self):
         return self.root
@@ -111,6 +112,13 @@ class FakeSystem:
 
     def set_added(self, sids):
         self.recorded = list(sids)
+
+    def alive(self, pid):
+        assert pid == 4242
+        if self.lingers:
+            self.lingers -= 1
+            return True
+        return False
 
     def sleep(self, seconds):
         self.slept += seconds
@@ -250,6 +258,13 @@ def test_removing_it_stops_and_deletes_it_and_its_files(system, download):
     assert not target(system).exists() and not target(system).parent.exists()
     again = setup.apply(system, service=True, remove=True)  # nothing there: nothing to do
     assert not again.failed and again.lines == []
+
+
+def test_its_files_are_replaced_only_once_its_process_let_go_of_them(system, download):
+    setup.apply(system, service=True, source=download)
+    system.lingers = 3  # the process ends a moment after the service says it stopped
+    out = setup.apply(system, service=True, source=download)
+    assert not out.failed and system.lingers == 0 and system.slept == 1.5
 
 
 def test_the_files_of_the_setup_are_left_to_its_uninstaller(system):
