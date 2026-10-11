@@ -24,7 +24,11 @@ FLAT = FINISHES[0]
 # graphs, icons and texts are drawn with it where the finish has them.
 PART_TYPES = ("bar", "gauge", "graph", "icon", "text", "metric")
 # Built-in finishes: the module that registers them when it is imported.
-_BUILT_IN = {"lit": "libre_panel.render.lit"}
+_BUILT_IN = {
+    "lit": "libre_panel.render.lit",
+    "facet": "libre_panel.render.facet",
+    "acrylic": "libre_panel.render.facet",
+}
 
 
 class Finish:
@@ -58,6 +62,18 @@ class Finish:
         """Draw a graph's line through ``runs`` (lists of points at ``scale``)
         onto ``layer``; False leaves it to the renderer."""
         return False
+
+    def lettering(self, renderer: Any, widget: dict[str, Any], font: Any, text: str) -> bool:
+        """Whether ``text`` of a text widget, in ``font``, is laid out by the renderer and
+        drawn letter by letter by :meth:`glyph` (else it is drawn flat)."""
+        return False
+
+    def glyph(self, renderer: Any, widget: dict[str, Any], font: Any, ch: str, fill: Any,
+              at: float) -> tuple[Any, int, int] | None:  # fmt: skip
+        """The letter ``ch`` with the pen ``at`` (its fraction of a pixel) from the
+        pixel it stands on: ``(image, left, top)`` with ``left`` and ``top`` from that
+        pixel and the line's top, or None for a blank. Only after :meth:`lettering`."""
+        return None
 
     def prepare(self, renderer: Any, widget: dict[str, Any]) -> None:
         """Load and build what drawing ``widget`` needs (any thread)."""

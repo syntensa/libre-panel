@@ -187,16 +187,6 @@ def flat_graph(**kw):
             "fill_fade": False, "line_width": 1, **kw}  # fmt: skip
 
 
-def test_a_graphs_fill_takes_its_opacity():
-    snap = Snapshot(history={"v": [50.0] * 10})
-    for opacity, level in ((0.25, 64), (105 / 255, 105), (1.0, 255)):
-        frame, _ = Renderer(theme(flat_graph(fill_opacity=opacity), size=(100, 60))).render(snap)
-        assert frame.getpixel((50, 50)) == (level,) * 3  # under the curve, on black
-        assert frame.getpixel((50, 10)) == BG  # above it
-    with pytest.raises(ThemeError, match="fill_opacity: must be between 0 and 1"):
-        theme(flat_graph(fill_opacity=1.5))
-
-
 def test_a_downward_graph_hangs_from_its_top_and_is_filled_from_there():
     snap = Snapshot(history={"v": [25.0] * 10})
     up, _ = Renderer(theme(flat_graph(), size=(100, 60))).render(snap)

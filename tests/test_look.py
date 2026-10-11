@@ -423,13 +423,13 @@ def test_look_blocks_are_off_unless_named_and_take_their_defaults():
 
 
 def test_unknown_look_blocks_and_fields_warn_and_are_kept():
-    theme = theme_of([], look={"dust": {"amount": 3}, "grid": {"spacing": 10, "glitter": 1}})
+    theme = theme_of([], look={"mist": {"amount": 3}, "grid": {"spacing": 10, "glitter": 1}})
     assert theme.warnings == [
-        "look: ignoring unknown block 'dust'",
+        "look: ignoring unknown block 'mist'",
         "look.grid: ignoring unknown field 'glitter'",
     ]
-    assert theme.look["dust"] == {"amount": 3}  # a later version's: saved as it came
-    assert theme.to_dict()["look"]["dust"] == {"amount": 3}
+    assert theme.look["mist"] == {"amount": 3}  # a later version's: saved as it came
+    assert theme.to_dict()["look"]["mist"] == {"amount": 3}
     again = parse_theme(theme.to_dict())
     assert again.look == theme.look
 

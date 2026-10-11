@@ -151,10 +151,42 @@
   `libre_panel.render.finish.register`
 - `tools/motion_bench.py` leaves the warm-up out (`--warmup`) and times the
   frames a sweep of light runs over on their own line
-- Graphs: `fill_opacity`, how strongly the area under the curve is filled
-  when it does not fade, and `direction` `down`: the curve hangs from the
-  top edge and is filled from there, as SPUR II draws the download below
-  the upload
+- `weather.rain.minutes` and `weather.rain.text`: the rain of the next two
+  hours from Open-Meteo's 15-minute precipitation. The minutes count to the
+  rain starting or stopping; the text says so ("Rain in 20 min", "Rain stops
+  in 40 min", "No rain for the next 2 h"), in German too. The request still
+  carries only your coordinates; the answer is a little larger
+- Depth dust, after SPUR II: `"look": {"dust": true}` in a theme lets fine
+  grains fall from the letters, rails, rings and bars into the depth behind
+  the panel, in the colour of what they come from, a few of them as soft
+  discs. Nothing in the theme says where the sources are: the dust reads the
+  frame the panel showed. `count`, `rate`, `depth`, `strength`, `colors` and
+  `areas` (rectangles with or without dust) set it, *Theme → Dust* in the
+  editor has them. It is drawn on a video panel and in the editor's preview,
+  never on a panel that is sent changed regions, and costs nothing while the
+  theme has none; at 1920 × 480 it adds a millisecond or two to a frame
+- A `fan` widget: a rotor of nine lit blades that turns with a fan's RPM (calm
+  and with inertia, standing at 0 RPM, dimmed without a reading) in a ring that
+  shows its share of `max_rpm`, or in a square frame; *Fan with speed* in the
+  editor's presets adds one with its name and value
+- `"finish": "facet"` on `text`, `metric`, `clock`, `weather`, `countdown`,
+  `bar`, `gauge` and `graph`: a flat top in the exact colour and a sharp
+  bevel lit from the top left, like SPUR II's lettering. Lettering is bright
+  metal that mirrors the sky above it (the accent) and the ground below (the
+  background), with a light touch up to 28 px and the full look from 52 px;
+  `"finish": "acrylic"` is the same lettering lit from within, as the "II" of
+  the wordmark. Bars and rings are raised in a milled track, a graph's line
+  becomes a ridge on the plateau of its fill with a halo of its colour (a
+  slimmer ridge on a bar panel). Text keeps the pixels of the flat text;
+  shapes are built once per size and colour, so it costs no more than the
+  flat look
+- `fill_alpha` on a `graph`: how opaque its fill is, 0 to 1 (0: as before, a
+  flat fill a quarter, a fade 0.45 at its top)
+- `libre_panel.render.facets.groove_bar` and `groove_ring`: the milled groove
+  of a bar or a ring (a floor of exactly the colour and a bevel lit from the
+  top left), cached, for finishes of their own
+- Graphs: `direction` `down`: the curve hangs from the top edge and is
+  filled from there, as SPUR II draws the download below the upload
 - Format specs `{value:gb}`, a size in GB whatever unit the reading comes
   in, and `{value:rate}` with `{value:rate_unit}`: a data rate as SPUR II
   sets it, its number and its unit apart (519 and KB/s, from 1 MB/s 1.2 and
@@ -245,6 +277,9 @@
   shows at once. The cover is read when the track changes, not at every look;
   a look every five seconds is the safety net, and the position still moves on
   by itself. Linux asks once a second as before
+- `tools/motion_bench.py` takes `--dust`, `--finish facet` and `--fans N`: it
+  runs each theme with and without that look, side by side frame by frame, and
+  prints what the look adds to a frame
 
 ## 0.4.2 — 2026-10-10
 

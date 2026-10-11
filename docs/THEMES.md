@@ -87,9 +87,9 @@ to write or review themes by hand.
   with a dot in the name (`"myplugin.ring"`) also come from plugins. A theme
   that needs a plugin you do not have still loads; those parts are not drawn.
   See [Plugins](PLUGINS.md).
-- Optional: `"look"` lays SPUR II's grid over the background and lights the
-  panel with one light; a widget's `finish` draws it lit. See
-  [Look and finish](#look-and-finish).
+- Optional: `"look"` lays SPUR II's grid over the background, lights the
+  panel with one light and lets fine dust fall into the depth; a widget's
+  `finish` draws it lit or faceted. See [Look and finish](#look-and-finish).
 
 ## Widgets
 
@@ -120,11 +120,12 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `metric` | `sensor`, `format`, `fallback`, `smooth`, `color_rules` | a sensor value as text; with `smooth` the number glides between readings together with the sensor's bars and rings (give `format` a precision, e.g. `{value:.0f}`) |
 | `bar` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `color`, `color2`, `background`, `radius`, `direction`, `segments`, `segment_gap`, `smooth`, `color_rules`, `glow_area` | progress bar; `color2` makes a gradient along the track, `segments` an LED-style bar; `glow_area` see [Look and finish](#look-and-finish) |
 | `gauge` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `start_angle`, `end_angle`, `thickness`, `color`, `color2`, `background`, `cap`, `ticks`, `tick_color`, `smooth`, `color_rules` | ring; angles clockwise from 3 o'clock, default 135→405; `cap` round or flat |
-| `graph` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `history`, `seconds`, `color`, `fill`, `fill_fade`, `fill_opacity`, `direction`, `smooth`, `per_frame`, `line_width`, `grid`, `grid_color`, `background` | history; `min`/`max` `null` = automatic, `smooth` draws a curve, `seconds` and `per_frame` see above; without `fill_fade` the fill has `fill_opacity` (0 to 1); `direction` `down` hangs the curve from the top edge and fills it from there (upload above a line, download below it) |
+| `graph` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `history`, `seconds`, `color`, `fill`, `fill_fade`, `fill_alpha`, `direction`, `smooth`, `per_frame`, `line_width`, `grid`, `grid_color`, `background` | history; `min`/`max` `null` = automatic, `smooth` draws a curve, `fill_alpha` 0 to 1 sets how opaque the fill is (0: the default, a flat fill 0.25, a fade 0.45 at its top), `direction` `down` hangs the curve from the top edge and fills it from there (upload above a line, download below it), `seconds` and `per_frame` see above |
 | `clock` | `format`, `timezone` | date/time with [strftime codes](https://strftime.org), e.g. `%H:%M:%S`, `%A %d %B`; `timezone` e.g. `Asia/Tokyo` (empty: this computer's) |
 | `analog` | `w`, `h`, `timezone`, `color`, `color2`, `face`, `marks`, `seconds` | a clock face with hands; `color2` the second hand |
 | `countdown` | `target`, `part`, `done` | the time left until `target` (`2026-12-24`, `2026-12-24 18:00`, or `12-24` for every year); `part`: `number` (76, 5:12, 12:33), `unit` (days, hours, minutes), `clock` (05:12:33 left in the day), `text` ("76 days"), `days`, `date`; `done` is shown once it is there ("Today", "Now") |
 | `moon` | `size`, `sensor`, `color`, `color2`, `mirror` | the moon as it is lit (`moon.phase`); `mirror` as seen south of the equator |
+| `fan` | `sensor`, `w`, `h`, `color`, `max_rpm`, `frame` | a fan that turns with its speed (default `gpu.fan`), see [Fans](#fans) |
 | `image` | `src`, `w`, `h`, `fit`, `radius`, `slides`, `seconds` | a picture from the theme folder, or one a sensor source has (`@media.cover`: the album cover); `w`/`h` 0 = original size; `fit` `stretch`, `contain` or `cover`; `slides`: more pictures, one per line (`photos/*.jpg` takes a folder), each shown `seconds` |
 | `weather` | `field`, `format`, `fallback` | `temperature`, `apparent_temperature`, `humidity`, `wind_speed`, `description`, `code` |
 | `icon` | `icon`, `sensor`, `size`, `color`, `stroke` | line icons: cpu, gpu, ram, disk, network, download, upload, temperature, fan, power, clock, sun, moon, cloud, partly, rain, snow, storm, fog, humidity, wind, battery, plug, list, grid, signal — and `weather`, which follows the live weather, or the code in `sensor` (e.g. `weather.day.1.code`), by day or night |
@@ -136,8 +137,9 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 `scale` is `linear`, `sqrt` or `log`: the latter two keep small values visible
 on huge ranges such as network rates.
 
-`bar`, `gauge`, `graph`, `icon`, `text`, `metric` and `module` also take
-`finish`: how their shape is drawn, see [Look and finish](#look-and-finish).
+`bar`, `gauge`, `graph`, `icon`, `text`, `metric`, `clock`, `weather`,
+`countdown` and `module` also take `finish`: how their shape is drawn, see
+[Look and finish](#look-and-finish).
 
 `color_rules` change the colour by value; the highest matching threshold wins
 (and replaces a gradient). Crossing a threshold fades the colour in a fifth
@@ -177,6 +179,75 @@ the sensor's label.
 - `min`/`max` give the bars' range; `max` at or below `min` lets the largest
   value fill its bar. `levels` off shows numbers only
 - `empty`: a text while nothing is found
+
+### Facets
+
+`"finish": "facet"` gives a widget the raised look of SPUR II's lettering: a
+flat top in the exact colour and a sharp 45-degree bevel inside the outline,
+lit from the top left. Where the bevel faces the light it is lighter, where it
+faces away darker. `"flat"` is the default and draws as ever.
+
+- Text (`text`, `metric`, `clock`, `weather`, `countdown`) keeps the outline
+  of the flat text pixel for pixel; the bevel lies inside it. It is bright
+  metal that mirrors its surroundings, as the "SPUR" of the wordmark: a bevel
+  that faces up takes on the sky (the palette's `accent`, a third of the way
+  to white), one that faces down the ground (the theme's background colour), so
+  the edges look milled instead of shaded grey. The bevel is about 2 px wide at
+  a font size of 58 and takes at most a half of a stroke. Small text gets a
+  light touch (up to 28 px: a faint highlight and shade, no mirror) and the
+  full look comes at 52 px; use a bold font for it. Text under 20 px, with
+  line breaks, or in a bitmap font stays flat: a bevel there is only mush.
+- `"finish": "acrylic"` is the same lettering lit from within, as the "II" of
+  the wordmark: the bevels that face the light lighter still and the others
+  hardly darker, nothing mirrored. It is for text only; on anything else the
+  theme loader warns and the widget is drawn flat. The glow round the
+  wordmark is not part of either finish: put a copy of the text in the accent
+  colour below it with `glow` and `glow_radius`.
+- A `bar` is raised in a milled track (its `background`), with straight
+  bevelled ends (`radius` does not apply), as blocks with `segments`. A `color2`
+  gradient runs along the whole track and `color_rules` work as before. A bar
+  under 6 px thick stays flat.
+- A `gauge`'s arc is raised in a milled track with straight bevelled ends,
+  whatever its `cap`; `ticks` stay flat.
+- A `graph`'s line becomes a ridge on the plateau of its fill: bright on the
+  flank away from the fill, dark on the one towards it, then a band a little
+  brighter than the fill, and a soft halo of the line's colour round it all.
+  `fill_alpha` (0 to 1) sets how opaque the plateau is: SPUR II's is 0.41 with
+  `fill_fade` off. A graph wider than 1200 px (a bar panel) gets a slimmer,
+  single-band ridge.
+
+Every shape is built once per font, size and colour and kept, so a gliding
+bar or a changing number costs no more than a flat one (`tools/motion_bench.py
+--finish facet` compares).
+
+The milled groove a value lies in is there for other finishes to use, in
+`libre_panel.render.facets`: `groove_bar(w, h, color, vertical=False)` and
+`groove_ring(w, h, thickness, start=0, end=360, color=(22, 35, 50))`. Each
+returns an RGBA picture whose floor is exactly `color`, with a sharp bevel of a
+sixth of the thickness that is in shade on the upper and left edges and
+catches the light on the lower and right ones; a bar's ends are straight and
+its corners mitred, an open ring has straight ends too. They are kept by size
+and colour and give the same picture on every call: copy it before drawing on
+it. `groove_bar` returns `None` for a bar under 6 px or over 400 px thick,
+where a flat track is drawn instead.
+
+### Fans
+
+A `fan` draws a rotor of nine lit blades in its `color` that turns with a fan's
+speed (`sensor`, in RPM; `gpu.fan` by default). It is not the real speed (1200
+RPM would be 20 turns a second, a flicker at 50 frames a second) but a calm one
+between a fifth of a turn and a turn a second that rises with the RPM, follows
+it with inertia, runs out slowly and stands still at 0 RPM. Fast, the blades
+blur towards a disc. `max_rpm` (3000) is the speed the ring is full at.
+
+`frame` is `ring` (the default: a groove with a glowing arc as long as the
+fan's share of `max_rpm`), `square` (a lit housing that is the brighter the
+faster the fan runs) or `none`. `w` and `h` set the size (48 px; the smaller
+counts). A fan without a reading stands dimmed and still, a stopped one dimmer
+than a running one. It turns where the panel is driven faster than once a
+second (video mode, or `fps` above 1); in the editor's preview and on a
+panel that gets one picture a second it stands, its ring and its blur showing
+the speed. In the editor, *Fan with speed* adds a fan with its name and RPM.
 
 ## Modules
 
@@ -313,8 +384,45 @@ outlined rect gives its outline, a filled one its fill. A ridge is a light
 edge for `look.light`. Without a name a rect stays flat, with or without a
 look.
 
-**`finish`** is `flat` (the default: the widget as it always looked), `lit`
-or `facet`. A widget keeps its place and size in any finish.
+**`dust`** lets fine dust fall from the lit things on the panel into the
+depth behind the glass, as on SPUR II: letters, rails, rings and bars give
+off grains of their own colour, which shrink and fade on their way to a
+vanishing point a little above the middle, and a few near ones are soft
+discs. The theme does not say where the sources are. The dust reads the
+frame the panel showed, takes every bright pixel for a source (a new stock
+every 4 seconds, and again when a message begins and once it has rolled in)
+and so follows any layout.
+
+```json
+"look": { "dust": { "count": 1800, "rate": 25, "depth": 1, "strength": 1.5,
+                    "colors": ["@accent"],
+                    "areas": [{ "x": 0, "y": 0, "w": 480, "h": 120, "dust": false }] } }
+```
+
+- `count` (1800, 0–8000) is the number of grains on a 1920 × 480 panel; other
+  sizes get as many as their area asks for.
+- `rate` (25, 1–60) is how often the grains move in a second, `depth` (1, 0–3)
+  how far they fall towards the vanishing point (0: they hang where they are),
+  `strength` (1, 0–3) how bright they are.
+- `colors`: up to 8 colours (`#rrggbb` or `@name`); empty, each grain takes
+  the colour of the thing it comes from.
+- `areas`: up to 64 rectangles `{x, y, w, h, dust}` in panel pixels (they move
+  with the layout when a theme is adapted to another panel). With an area that
+  says `"dust": true` there is dust only inside it, otherwise everywhere;
+  `"dust": false` areas are cut out either way.
+- A bright element hides the dust over it, as if the dust lay behind it. A dark
+  card does not: dust shows over it, so keep dust out of it with an area.
+- It is drawn on a panel driven frame by frame (video mode) and in the editor's
+  preview. A panel that is sent the changed regions as pictures would get the
+  whole frame at every update, so there is none.
+- It costs a millisecond or two a frame at 1920 × 480 (the grains move in the
+  helper thread, a frame lays them in one pass); `tools/motion_bench.py --dust`
+  measures it on your machine.
+
+**`finish`** is `flat` (the default: the widget as it always looked), `lit`,
+`facet` or `acrylic`. A widget keeps its place and size in any finish. `facet`
+is a flat top in the widget's own colour with a sharp bevel and `acrylic` its
+lettering lit from within, see [Facets](#facets).
 
 `lit` draws SPUR II's light, in the widget's colours and at its size. A
 value is light, not a body: a core that runs towards white in a soft halo of
@@ -445,13 +553,14 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `weather.temperature`, `.apparent_temperature`, `.humidity`, `.wind_speed`, `.code`, `.description`, `.is_day` | °C, %, km/h | Open-Meteo, when enabled |
 | `weather.hour.<n>.temperature`, `.code`, `.rain`, `.day`, `.time` | °C, %, 1/0, "15:00" | the hour `n` hours ahead (1 = the next full hour, up to 24) |
 | `weather.day.<n>.high`, `.low`, `.code`, `.rain`, `.name` | °C, % | day `n` (0 = today, up to 6); `name` is "Today" or the short weekday |
+| `weather.rain.minutes`, `weather.rain.text` | min, text | the rain of the next two hours: `minutes` counts to the rain starting (dry now) or stopping (raining now), and is absent when neither happens in those two hours; `text` says it in the language: "Rain in 20 min", "Rain stops in 40 min", "No rain for the next 2 h" |
 | `lhm:/<sensor id>` | | any LibreHardwareMonitor sensor |
 
 `gpu.power` is the whole board (TBP), like LibreHardwareMonitor's "GPU Package".
 
 The forecast keys are counted from the moment they are read, so "the next
 hour" stays true between two weather updates. `rain` is the chance of
-rain in percent.
+rain in percent, and `weather.rain.minutes` is counted the same way.
 
 ## Sharing themes
 
