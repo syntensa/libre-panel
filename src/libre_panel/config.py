@@ -203,7 +203,7 @@ class VideoConfig:
     preset: str = "superfast"
     keyframe_s: float = 10.0
     maxrate: str = "2M"
-    ffmpeg: str = ""  # path to ffmpeg; empty = search PATH
+    ffmpeg: str = ""  # path to ffmpeg; empty = the download's own (bundled.py), else PATH
     # The name the video start command (110) needs: the panel's own standby
     # clip, so its standby behaviour stays as it was.
     local_clip: str = ""

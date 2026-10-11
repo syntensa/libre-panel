@@ -120,8 +120,8 @@
           <p>TURZX USB panels have a video decoder, and Libre Panel feeds it a frame every 20
             milliseconds. Numbers count to each new reading, rings and bars glide, graphs scroll a
             little on every frame, and fans turn at their real speed.</p>
-          <p class="note">It needs ffmpeg and turns itself on on the 9.2". Panels without a decoder get
-            still frames, sent where something changed.</p>
+          <p class="note">The downloads carry the ffmpeg it needs, and it turns itself on on the 9.2".
+            Panels without a decoder get still frames, sent where something changed.</p>
         </div>
         <div class="pair">
           <figure class="media">
@@ -208,8 +208,8 @@
             screen closes to a line, the game's name lights up, and the game screen opens with the
             frame rate, its 1% low and who holds it back. After a round, an optional report compares
             it with your last ten.</p>
-          <p class="note">The frame rate comes from Intel's PresentMon (Windows), which you download and
-            name in the settings.</p>
+          <p class="note">The frame rate comes from Intel's PresentMon (Windows), which the download
+            carries.</p>
         </div>
         <figure class="media">
           <video loop muted playsinline preload="none" width="2000" height="580" data-lazy data-poster="media/game-entrance.png" aria-label="A game starts: the screen closes to a line, the game's name lights up, and the game screen opens with the frame rate; when it ends, the same way back">
@@ -592,20 +592,23 @@ libre-panel doctor             <span class="c"># check your panel, write a repor
         </details>
         <details>
           <summary>How do I get the smooth video mode? Do I need ffmpeg?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
-          <div class="answer"><p>Video mode is for the TURZX USB panels, which have a video decoder. It
-            needs <a href="https://ffmpeg.org">ffmpeg</a> (Windows: <code>winget install ffmpeg</code>;
-            Linux: your distribution's package) and, in Settings → Panel, the name of the panel's standby
-            clip as the vendor app shows it. On the 9.2" it then turns itself on; on the other TURZX USB
-            panels, set it to on to try it. Nothing is saved on the panel
+          <div class="answer"><p>Video mode is for the TURZX USB panels, which have a video decoder. The
+            Windows and Linux downloads carry the <a href="https://ffmpeg.org">ffmpeg</a> it needs, so you
+            only name the panel's standby clip, as the vendor app shows it, in Settings → Panel. On the
+            9.2" it then turns itself on; on the other TURZX USB panels, set it to on to try it. With a
+            pip install, install ffmpeg yourself (Windows: <code>winget install ffmpeg</code>; Linux: your
+            distribution's package). Nothing is saved on the panel
             (<a href="https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md#video">details</a>).</p></div>
         </details>
         <details>
           <summary>Do I need LibreHardwareMonitor, FanControl or PresentMon?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
-          <div class="answer"><p>No other program is needed for the basics: LibreHardwareMonitor is built
-            into the Windows downloads. The game's frame rate needs Intel's
-            <a href="https://github.com/GameTechDev/PresentMon/releases">PresentMon</a> (Windows), which
-            you download and name in the settings. The cooling analysis reads FanControl's fan curves, if
-            you use FanControl.</p></div>
+          <div class="answer"><p>No other program is needed: LibreHardwareMonitor and Intel's
+            <a href="https://github.com/GameTechDev/PresentMon">PresentMon</a> are in the Windows
+            downloads. For the game's frame rate switch Game frame rate on in Settings → Sensors;
+            PresentMon needs administrator rights or your account in the Windows group "Performance Log
+            Users", which the setup can arrange
+            (<a href="https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md#more-sensor-sources">how</a>).
+            The cooling analysis reads FanControl's fan curves, if you use FanControl.</p></div>
         </details>
         <details>
           <summary>Can it harm my panel?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>

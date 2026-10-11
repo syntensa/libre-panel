@@ -7,9 +7,9 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
 ![Lumen, Libre Panel's own theme, in video mode on a 9.2" panel](https://raw.githubusercontent.com/syntensa/libre-panel/v0.5.0/docs/media/video-mode.gif)
 
 **Highlights**
-- **Video mode up to 50 frames a second**, on by itself on the 9.2" once ffmpeg is found and the
-  panel's standby clip is named: numbers count, rings and bars glide, graphs scroll on every
-  frame, fans turn at their speed.
+- **Video mode up to 50 frames a second**, on by itself on the 9.2" once the panel's standby clip
+  is named (the downloads carry the ffmpeg it needs): numbers count, rings and bars glide, graphs
+  scroll on every frame, fans turn at their speed.
 - **Lumen**, Libre Panel's own theme, is the default on the 8.8" and 9.2" bars, and Libre
   Default (every other panel) and Studio are renewed in its look: values as light in milled
   grooves, faceted lettering, depth dust.
@@ -674,9 +674,28 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
   wrote, and `libre-panel run --theme` always win. The app, the tray and the console API report the
   theme the panel really shows (`default_theme` in the panel's state, `default` in `GET /api/pages`)
 - The video mode turns itself on: `video.mode` is `"auto"` by default, which streams to a 9.2"
-  (the panel it is proven on) as soon as ffmpeg is found and `local_clip` names the panel's
-  standby clip. `libre-panel doctor` and the log say what is missing. A `mode = "off"` in
-  `config.toml` stays off
+  (the panel it is proven on) as soon as ffmpeg is found (the downloads carry one) and
+  `local_clip` names the panel's standby clip. `libre-panel doctor` and the log say what is
+  missing. A `mode = "off"` in `config.toml` stays off
+- The downloads carry the programs their features run, in a `tools` folder next to the program,
+  so that nothing else has to be installed: **ffmpeg** (a GPL build with libx264) in all of them
+  for the video mode, **PresentMon** 2.6 for the game's frame rate and the installer of the
+  **PawnIO** driver for the CPU's sensors in the Windows ones. The programs are not in the
+  repository: `packaging/fetch_tools.py` fetches them when a download is built and checks every
+  file against a SHA-256 written into the script (ffmpeg also for being the GPL build with libx264
+  and without non-free parts, with its licence text). The release's CI then proves, for the
+  program folder, the installed setup and the AppImage, that ffmpeg lists libx264 and encodes the
+  video mode's stream, that PresentMon starts and that the app finds both before anything on the
+  PATH. The licences: ffmpeg GPL-3.0-or-later, PresentMon MIT, PawnIO's driver GPL-2.0-or-later
+  with an exception (its installer says it may be passed on unmodified, which the build checks).
+  Their texts are in `tools/licenses`, the exact sources (FFmpeg's commit and the build recipe's)
+  in `tools/SOURCES.txt` and [NOTICE.md](NOTICE.md). A pip install has none of it:
+  install ffmpeg yourself (and PresentMon for game frame rates), or name them in `video.ffmpeg` and
+  `[sensors.presentmon] path`, which win over the download's own too. More:
+  [docs/CONFIGURATION.md](docs/CONFIGURATION.md#programs-that-come-with-the-downloads)
+- PresentMon 2.6 names the per-frame waits `MsCPUBusy` and so on by default: both that and the
+  names of 2.3 and `--v2_metrics` are read, so `game.limiter` works with the PresentMon that comes
+  with the download and with the one you name yourself
 - Windows: the GPU, temperatures, power and fans showed nothing unless `librehardwaremonitor` was
   listed in `config.toml`. New configurations now start with
   `providers = ["load", "audio", "librehardwaremonitor", "psutil"]` (on Linux

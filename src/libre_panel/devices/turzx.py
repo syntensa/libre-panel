@@ -72,8 +72,8 @@ def video_mode(video, model: PanelModel | None) -> tuple[bool, list[str]]:
         # said without the path: doctor reports are shared
         "ffmpeg-path": t("ffmpeg is not at the path in video.ffmpeg (config.toml)"),
         "ffmpeg": t(
-            "the video mode needs ffmpeg: install it, or set video.ffmpeg in config.toml "
-            "to the ffmpeg program"
+            "the video mode needs ffmpeg: the downloads of Libre Panel carry it; "
+            "with pip install it, or set video.ffmpeg in config.toml to the ffmpeg program"
         ),
     }
     return not gaps, [texts[gap] for gap in gaps]

@@ -21,3 +21,6 @@ libre-panel-doctor-*.txt
 
 # LibreHardwareMonitor's libraries, fetched from NuGet for the Windows build (never committed)
 packaging/windows/lhm-libs/
+
+# ffmpeg, PresentMon and PawnIO's installer, fetched for the downloads (never committed)
+packaging/bundled-tools/

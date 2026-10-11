@@ -225,7 +225,9 @@ folder.
 **What Libre Panel trusts while it has the highest rights.** It reads `config.toml` and your
 plugins from the settings folder and starts or loads what they name with those rights: ffmpeg
 (`video.ffmpeg`), PresentMon (`[sensors.presentmon] path`), the libraries of LibreHardwareMonitor
-(`dll_dir`) and the plugins in `plugins\`. The settings folder is yours: `%APPDATA%\LibrePanel`
+(`dll_dir`) and the plugins in `plugins\`. The programs the download carries itself (ffmpeg and
+PresentMon in its `tools` folder, used when the settings name none) lie where Libre Panel does:
+they are as safe as its installation. The settings folder is yours: `%APPDATA%\LibrePanel`
 can be written by you and by administrators, no other user, so no other user can make Libre Panel
 run anything. The programs and libraries it names are better where only administrators can write,
 under *Program Files*. Take care with a folder made directly under `C:\`, as `C:\LibrePanelData`

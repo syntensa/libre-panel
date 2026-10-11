@@ -270,23 +270,42 @@ units = { "home/+/temperature" = "°C" }
 [PresentMon](https://github.com/GameTechDev/PresentMon/releases) counts the
 frames of the game you play. It listens to what Windows reports about the
 frames it shows: nothing is put into the game, nothing hooks it, there is no
-overlay. Download its console version (MIT license) and name it. PresentMon
-needs administrator rights or your account in the "Performance Log Users"
-group (Computer Management → Local Users and Groups → Groups; sign out and in
-again).
+overlay. The Windows downloads carry its console version (MIT license) in their
+`tools` folder ([below](#programs-that-come-with-the-downloads)), and Libre Panel uses
+that one before any other. Switch *Game frame rate* on under *Settings → Sensors*, or list
+the source:
 
 ```toml
 [sensors]
 providers = ["load", "librehardwaremonitor", "psutil", "presentmon"]
+```
 
+PresentMon needs administrator rights or your account in the "Performance Log Users"
+group. The Windows setup can add you to the group (sign out and in again afterwards).
+Without the setup, with the zip or a pip install, do it once in a PowerShell opened as
+administrator; the group is named by its well-known id, so this works in every language of
+Windows:
+
+```powershell
+Add-LocalGroupMember -SID S-1-5-32-559 -Member "$env:USERDOMAIN\$env:USERNAME"
+```
+
+Uninstalling Libre Panel leaves your account in the group. With a pip install there is no
+PresentMon: download its console version (`PresentMon-…-x64.exe`, MIT license) from the
+[releases page](https://github.com/GameTechDev/PresentMon/releases) and name it, or put it
+on the `PATH`:
+
+```toml
 [sensors.presentmon]
-path = "C:/Tools/PresentMon-2.3.0-x64.exe"
+path = "C:/Tools/PresentMon-2.6.0-x64.exe"
 ```
 
 Libre Panel starts this program, with the rights it has itself. If it runs as administrator,
 keep PresentMon where only administrators can change it (a folder under *Program Files*, not
 one you or another user may write to), and name it here in `config.toml`: the app does not
-change `path` then.
+change `path` then. The one in the `tools` folder lies where Libre Panel does, and is as safe
+as that installation is
+([why](BACKGROUND.md#windows-starting-with-the-highest-rights)).
 
 | Reading | |
 |---|---|
@@ -894,11 +913,13 @@ name). Either answer sets `clip_asked = true`, so it is not asked again; put
 `clip_asked = false` back to be asked once more. A name typed in *Settings → Panel* is an
 answer too.
 
-- **ffmpeg** encodes the video. Install it (Windows: `winget install ffmpeg`;
-  Linux: the `ffmpeg` package), or set `ffmpeg = "C:/path/to/ffmpeg.exe"`. It
-  must include libx264, which the usual builds do. It uses one CPU core,
-  lightly. When Libre Panel runs as administrator, the app does not change this path
-  (it starts that program with those rights): set it in `config.toml`.
+- **ffmpeg** encodes the video. The Windows and Linux downloads carry one, with libx264, in
+  their `tools` folder ([below](#programs-that-come-with-the-downloads)), and Libre Panel uses
+  it before any other. With a pip install, install ffmpeg yourself (Windows: `winget install
+  ffmpeg`; Linux: the `ffmpeg` package; it must include libx264, which the usual builds do),
+  or set `ffmpeg = "C:/path/to/ffmpeg.exe"`, which wins over all of them, in a download too.
+  It uses one CPU core, lightly. When Libre Panel runs as administrator, the app does not
+  change this path (it starts that program with those rights): set it in `config.toml`.
 - **`local_clip`** is the name the panel's video start command carries: the
   clip the panel plays by itself while the PC is off, if it has one (vendor
   app: standby video) and the mainboard keeps USB powered then. The command
@@ -920,12 +941,36 @@ answer too.
 | `preset` | `"superfast"` | x264 speed preset |
 | `keyframe_s` | 10 | seconds between keyframes; below 3 flat backgrounds visibly pulse |
 | `maxrate` | `"2M"` | highest bit rate, e.g. `"1500k"` |
-| `ffmpeg` | `""` | path to ffmpeg; empty = look in `PATH` |
+| `ffmpeg` | `""` | path to ffmpeg; empty = the download's own, else look in `PATH` |
 | `local_clip` | `""` | see above |
 | `clip_asked` | `false` | `true` once the app has asked for `local_clip` (a name written there, or *Not now*); then it does not ask again |
 
 The settings were measured on the 9.2" panel; the details are in
 [the protocol notes](protocol/turzx-usb.md#two-layers-h264-video--png-overlay-smooth-path).
+
+## Programs that come with the downloads
+
+The Windows and Linux downloads (setup, zip, AppImage, tarball) carry the programs that
+Libre Panel's features run, in the folder `tools` next to the program (in the folder the
+setup installed to, the unpacked zip, the AppImage), so that nothing else has to be installed:
+
+| File | For | Licence |
+|---|---|---|
+| `ffmpeg`, `ffmpeg.exe` | the [video mode](#video) | GPL-3.0-or-later (a GPL build with libx264) |
+| `PresentMon.exe` (Windows) | the [game frame rate](#more-sensor-sources) | MIT |
+| `PawnIO_setup.exe` (Windows) | the installer of the PawnIO driver, through which LibreHardwareMonitor reads the CPU's temperature and power ([Windows sensors](#windows-sensors-gpu-power-fans)) | the driver: GPL-2.0-or-later with an exception |
+
+`tools\SOURCES.txt` lists the files with their SHA-256 and says where their source code is;
+their licence texts are in `tools\licenses`, and [NOTICE.md](../NOTICE.md) says the same.
+They are the files their projects publish, unchanged, fetched when a download is built.
+Uninstalling Libre Panel removes these files. What PawnIO's installer put on the PC, the
+driver, stays, as other programs may use it, and so does your membership in the group
+"Performance Log Users" ([above](#more-sensor-sources)).
+
+A setting always wins: `video.ffmpeg` and `[sensors.presentmon] path` name another program.
+Without them Libre Panel looks in this folder first, then on the `PATH`. It never looks in
+your Downloads folder. A pip install has no such folder: install ffmpeg yourself, and
+PresentMon if you want game frame rates.
 
 ## Windows sensors (GPU, power, fans)
 

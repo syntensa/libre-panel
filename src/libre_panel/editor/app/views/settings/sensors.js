@@ -32,7 +32,7 @@ const SOURCES = {
   },
   presentmon: {
     title: () => t("Game frame rate"),
-    hint: () => t("The frames per second of the game you play, through PresentMon (Windows). Set up in config.toml."),
+    hint: () => t("The frames per second of the game you play, through PresentMon (Windows; the download carries it)."),
   },
   calendar: {
     title: () => t("Calendars"),

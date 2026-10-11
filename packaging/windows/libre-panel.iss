@@ -64,6 +64,14 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 [InstallDelete]
 Type: filesandordirs; Name: "{app}\_internal"
 
+; --- The programs that come with the download: ffmpeg, PresentMon, PawnIO's installer -------
+; They are in the program folder's "tools" subfolder (packaging/fetch_tools.py, the PyInstaller
+; spec), so the [Files] line above installs them with everything else and the uninstaller
+; removes them with it. An update clears the folder first, so that a program a later version
+; no longer carries goes with it. Their licence texts and sources are in tools\licenses and
+; tools\SOURCES.txt (NOTICE.md says the same).
+Type: filesandordirs; Name: "{app}\tools"
+
 [Icons]
 Name: "{autoprograms}\Libre Panel"; Filename: "{app}\LibrePanel.exe"
 Name: "{autodesktop}\Libre Panel"; Filename: "{app}\LibrePanel.exe"; Tasks: desktopicon

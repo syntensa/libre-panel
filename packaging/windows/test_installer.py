@@ -16,6 +16,7 @@ from pathlib import Path
 APP = Path(os.environ["LOCALAPPDATA"]) / "Programs" / "Libre Panel"
 MENU = Path(os.environ["APPDATA"]) / "Microsoft/Windows/Start Menu/Programs/Libre Panel.lnk"
 SMOKE = Path(__file__).resolve().parent.parent / "smoke_test.py"
+CHECK_TOOLS = Path(__file__).resolve().parent.parent / "check_tools.py"
 
 
 def run_value():
@@ -73,9 +74,17 @@ def main(setup):
     print(lhm.stdout, lhm.stderr)
     check(lhm.returncode == 0, "the installed program loads its LibreHardwareMonitor libraries")
 
-    # The installed program works as autostart would start it.
+    # It carries ffmpeg, PresentMon and PawnIO's installer next to the program, so that the
+    # video mode, the game frame rates and the CPU's sensors need no other download: here they
+    # are as installed, ffmpeg encodes the video mode's stream, PresentMon starts, and the
+    # app finds them first (packaging/check_tools.py).
+    subprocess.run([sys.executable, str(CHECK_TOOLS), str(APP)], check=True, timeout=300)
+    check((APP / "tools" / "PawnIO_setup.exe").is_file(), "PawnIO's installer is carried")
+
+    # The installed program works as autostart would start it, and its video mode misses nothing.
     subprocess.run(
-        [sys.executable, str(SMOKE), str(APP / "LibrePanel.exe"), "--background"], check=True
+        [sys.executable, str(SMOKE), "--tools", str(APP / "LibrePanel.exe"), "--background"],
+        check=True,
     )
 
     # Uninstalling quits a running Libre Panel and removes everything it added.
@@ -99,6 +108,7 @@ def main(setup):
         )
         check(wait(lambda: running.poll() is not None, 60), "uninstaller quit the running app")
         check(wait(lambda: not (APP / "LibrePanel.exe").exists(), 120), "program files removed")
+        check(not (APP / "tools" / "ffmpeg.exe").exists(), "ffmpeg removed with them")
     check(not MENU.exists(), "start menu entry removed")
     check(run_value() is None, "autostart entry removed")
     print("OK")

@@ -54,11 +54,13 @@ Every download is tested on its own system before it is attached:
 - Windows: the setup installs silently, the start menu entry and autostart
   entry exist, the installed app loads its LibreHardwareMonitor libraries
   (`libre-panel sensors --check-lhm`, which needs no administrator rights),
+  the programs it carries work where they were installed (below), it
   runs, and the uninstaller quits a running app and removes files, shortcut
   and autostart (`packaging/windows/test_installer.py`, Inno Setup script
   `packaging/windows/libre-panel.iss`);
-- Linux: the AppImage runs without a desktop and on an X11 tray, and its
-  autostart entry points at the AppImage file (`packaging/linux/test_appimage.sh`).
+- Linux: the AppImage runs without a desktop and on an X11 tray, the ffmpeg in it
+  works (below), and its autostart entry points at the AppImage file
+  (`packaging/linux/test_appimage.sh`).
 
 **Dry run:** start *Release* by hand (Actions → Release → Run workflow). It
 builds and tests everything but publishes nothing; the bundles are attached to
@@ -94,6 +96,51 @@ To move to other versions:
    `python packaging/windows/fetch_lhm.py --print-pins` and copy the SHA-256 it
    prints for each package and library into the table. Run the script as the job
    does, and `libre-panel sensors --check-lhm` on a Windows machine.
+
+## ffmpeg, PresentMon and PawnIO's installer
+
+Every download carries ffmpeg, which the video mode encodes with; the Windows ones also
+PresentMon (game frame rates) and the installer of the PawnIO driver (the CPU's sensors). They
+are in a `tools` folder next to the program, and not in the repository: the job runs
+`packaging/fetch_tools.py` before PyInstaller. It downloads the pinned files from their
+projects' release pages, checks each against the SHA-256 written into the script, takes only the
+program out of ffmpeg's archive (it holds ffprobe, ffplay and documentation too) and checks that
+ffmpeg is the GPL build with libx264 and without the non-free parts, with its licence text. The
+spec copies the result next to the program as `tools`; `libre_panel/bundled.py` is where the
+app looks, before the `PATH` (`video.ffmpeg` and `[sensors.presentmon] path` still win).
+
+`packaging/check_tools.py` proves it on the PyInstaller folder, on what the Windows setup
+installed and on the files of the AppImage: every file listed in `tools/SOURCES.txt` is the one
+that was fetched, the app started from that folder finds ffmpeg and PresentMon there and not on
+the `PATH`, ffmpeg lists libx264 and encodes the video mode's own command to a stream with one
+slice per picture, and PresentMon starts and says its version. PawnIO's installer is checked
+for its hash and not run. `packaging/smoke_test.py --tools` also asks the running app whether
+its video mode lacks anything.
+
+ffmpeg is FFmpeg-Builds' `win64-gpl` and `linux64-gpl` build, from the last build of a month:
+the project keeps those for two years and the daily builds for 14 days, and the `latest`
+assets change every day, so never pin those. The source an ffmpeg download has to offer is
+FFmpeg at the commit in the file name, the recipe at the commit of the release's tag (its
+`scripts.d` names every library in the build with its version or commit) and x264 at the
+commit in `scripts.d/50-x264.sh`; all three are in `SOURCES.txt` and NOTICE.md.
+
+To move to other versions:
+
+1. Read the licences again: an ffmpeg that is built `--enable-gpl --enable-version3` and not
+   `--enable-nonfree`, PresentMon's `LICENSE.txt` and `THIRD_PARTY.txt` of the new tag, the
+   licence of PawnIO's driver and what its release page says about the installer. Update
+   NOTICE.md (and its copy in `src/libre_panel/assets`) and the texts in
+   `packaging/tools-licenses`. Do not ship what is unclear or does not go with the GPL.
+2. Change the addresses, versions and source addresses in the table of `fetch_tools.py`, run
+   `python packaging/fetch_tools.py --print-pins` and copy the SHA-256 it prints (a release of
+   FFmpeg-Builds has the same in its `checksums.sha256`, PresentMon's page shows them next to
+   the files). PawnIO's installer has its SHA-256 a second time, as `PAWNIO_SETUP_SHA256` in
+   `libre_panel/bundled.py`: the app checks the file against it before it is run with
+   administrator rights, and a test says if the two differ.
+3. Run `python packaging/fetch_tools.py` as the job does, build, and run
+   `python packaging/check_tools.py dist/libre-panel`. A new PresentMon may name its CSV
+   columns differently: `sensors/presentmon.py` reads the names of 2.3 and of 2.6 for the
+   waits, and the test with the header of the version that is carried says what changed.
 
 ## Versioning
 

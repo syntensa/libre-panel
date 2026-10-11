@@ -3,6 +3,7 @@
 # libre-panel(.exe)   the command-line program (all commands)
 # LibrePanel.exe      Windows: the tray app without a console window
 import importlib.util
+import shutil
 import sys
 from pathlib import Path
 
@@ -113,3 +114,15 @@ if sys.platform == "win32":
     parts += program("libre_panel_tray.py", "LibrePanel", console=False)
 
 COLLECT(*parts, name="libre-panel")  # noqa: F821
+
+# ffmpeg (all downloads), PresentMon and PawnIO's installer (Windows), which
+# packaging/fetch_tools.py put in packaging/bundled-tools, go next to the program as "tools":
+# the folder libre_panel.bundled looks in, and where a person who wants to swap one finds it.
+# Without them (a local build that did not fetch) the video mode and the game frame rates use
+# what the system has.
+tools = ROOT / "packaging" / "bundled-tools"
+if (tools / "SOURCES.txt").is_file():
+    from libre_panel.bundled import TOOLS_FOLDER
+
+    program_folder = Path(DISTPATH) / "libre-panel"  # noqa: F821 - provided by PyInstaller
+    shutil.copytree(tools, program_folder / TOOLS_FOLDER, dirs_exist_ok=True)
