@@ -87,8 +87,16 @@ function PaletteBox({ initial }) {
     list.current?.querySelector(".palette-item.active")?.scrollIntoView({ block: "nearest" });
   }, [active, query]);
   useEffect(() => {
+    const before = document.activeElement;
     input.current?.focus();
-    return bindKey("escape", () => closePalette(), { inInputs: true });
+    const unbind = bindKey("escape", () => closePalette(), { inInputs: true });
+    return () => {
+      unbind();
+      // back to where it was, unless the focus has gone somewhere else (a dialog a command opened)
+      const here = document.activeElement;
+      const free = !here || here === document.body || here === input.current;
+      if (free && before instanceof HTMLElement && document.contains(before)) before.focus({ preventScroll: true });
+    };
   }, []);
 
   const choose = (result) => {

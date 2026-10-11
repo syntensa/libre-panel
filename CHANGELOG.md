@@ -662,6 +662,8 @@
   address such as `#/home/themes/%E0%A4%A` (not a valid text) no longer breaks Start
 - With *Live values* on, the preview was asked for every second in every view, also in
   Start, Live and Settings, which do not show it; only Design and Look draw it again now
+- The command palette gives the keyboard focus back to where it was when it closes
+  (Escape or a command that opens nothing); the focus was lost to the page
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

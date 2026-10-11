@@ -922,6 +922,28 @@ def test_the_command_palette_finds_and_runs(page):
     assert "SPUR Classic" in palette.locator(".palette-item.active").inner_text()
 
 
+def test_the_palette_gives_the_focus_back(page):
+    """After Escape, or a command that opens nothing, the key goes on where it was (it was lost
+    to the page, which a keyboard user then has to tab through from its start)."""
+    layers = page.locator(".rail-item", has_text="Layers")
+    layers.focus()
+    page.keyboard.press("Control+k")
+    expect(page.locator(".palette input")).to_be_focused()
+    page.keyboard.press("Escape")
+    expect(layers).to_be_focused()
+    page.keyboard.press("Control+k")
+    page.locator(".palette input").fill("zoom in")
+    page.keyboard.press("Enter")
+    expect(page.locator(".palette")).to_have_count(0)
+    expect(layers).to_be_focused()
+    # a command that opens a dialog leaves the focus to the dialog
+    page.keyboard.press("Control+k")
+    page.locator(".palette input").fill("keyboard shortcuts")
+    page.keyboard.press("Enter")
+    expect(page.locator(".dialog")).to_be_visible()
+    assert js(page, "document.activeElement.closest('.dialog') !== null")
+
+
 def test_save_as_and_to_the_panel(page, isolated_home):
     from test_service import wait_for
 
