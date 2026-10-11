@@ -150,8 +150,6 @@ def demo_details(t: float, waves: dict[str, Reading]) -> dict[str, Reading]:
     out["battery.left"] = Reading("battery.left", 2 * 3600 + 40 * 60, "s", "Battery time left")
     out["net.ip"] = Reading("net.ip", "192.168.1.20", "", "IP address")
     out["game.app"] = Reading("game.app", "Starfall", "", "Game")
-    out["game.name"] = Reading("game.name", "Starfall", "", "Game")
-    out["game.limiter"] = Reading("game.limiter", "gpu", "", "Limited by")
     out["net.today.down"] = Reading("net.today.down", 3.42e9, "B", "Received today")
     out["net.today.up"] = Reading("net.today.up", 6.1e8, "B", "Sent today")
     return out
@@ -259,10 +257,20 @@ def _cover() -> Image.Image:
 HISTORY_SAMPLES = 1900  # a graph of SPUR II's panorama (1713 points) is full in a preview
 
 
+def demo_game() -> dict[str, Reading]:
+    """What the game service and PresentMon add to the frame rate: the game's name and who
+    holds the rate down. Not the provider's: with a name always there, the memory service
+    would find a game that never ends."""
+    return {
+        "game.name": Reading("game.name", "Starfall", "", "Game"),
+        "game.limiter": Reading("game.limiter", "gpu", "", "Limited by"),
+    }
+
+
 def demo_snapshot(fixed_time: float | None = None, samples: int = HISTORY_SAMPLES) -> Snapshot:
     """A complete snapshot with filled graph history, for previews and the editor."""
     provider = DemoProvider({"fixed_time": fixed_time})
-    readings = provider.read()
+    readings = {**provider.read(), **demo_game()}
     history = {key: demo_history(provider, key, samples) for key in _WAVES}
     now = datetime.fromtimestamp(fixed_time) if fixed_time is not None else datetime.now()
     return Snapshot(readings=readings, history=history, now=now, images=provider.images())
