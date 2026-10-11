@@ -25,7 +25,8 @@ def minimal(**display):
 
 
 @pytest.mark.parametrize(
-    "name", ["libre-default", "spur-ii", "studio", "orbit", "slate", "column", "pico"]
+    "name",
+    ["libre-default", "spur-ii", "spur-classic", "studio", "orbit", "slate", "column", "pico"],
 )
 def test_builtin_themes_are_valid(name):
     theme = load_theme(find_theme(name))

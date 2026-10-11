@@ -92,13 +92,149 @@ def test_a_lit_bar_is_brightest_at_its_head():
     frame, _ = Renderer(theme).render(snap(50.0), 0.0)
     light = np.asarray(frame.convert("L"), np.int16)
     bar, beside = light[27], light[15]  # its middle, and 5 px above it
-    assert bar[195:210].max() > bar[120:150].mean() + 15  # the head runs towards white
+    assert bar[120:150].mean() > 200  # the value is light
+    assert bar[195:210].max() > bar[120:150].mean() + 5  # the head runs whiter still
     assert beside[195:210].max() > 1.6 * beside[120:150].mean()  # its glow rises to the head
-    assert bar[230:300].max() < bar[120:150].mean()  # past the head: the dark groove
+    assert bar[230:300].max() < bar[120:150].mean() / 3  # past the head: the dark groove
 
 
-def test_too_small_for_depth_is_drawn_flat():
-    thin = [{**lit_widgets()[1], "h": light3d.MIN_BAR - 1}, {**lit_widgets()[4], "size": 12}]
+def schein_balken(length, thick, frac, colour):
+    """SPUR II's glow source for a bar (licht.schein_balken in its frame), drawn
+    as SPUR II draws it: the reference for lit.bar_piece's glow."""
+    from PIL import ImageDraw
+
+    layer = Image.new("RGB", (length, thick))
+    draw = ImageDraw.Draw(layer)
+    x0, x1, y0, y1 = 1, int((length - 2) * frac), 1, thick - 2
+    tail = 0.55 * 0.34
+
+    def shade(share, white=0.0):
+        rgb = [int(c * share) for c in colour]
+        return tuple(int(c + (255 - c) * white) for c in rgb) if white > 0 else tuple(rgb)
+
+    head = min(30, x1 - x0)
+    if x1 - head > x0:
+        draw.rectangle([x0, y0, x1 - head, y1], fill=shade(tail))
+    for i in range(7):
+        a0, a1, t = x1 - head + head * i / 7, x1 - head + head * (i + 1) / 7, (i + 1) / 7
+        draw.rectangle([a0, y0, a1, y1], fill=shade(tail + (1 - tail) * t**1.4, 0.65 * t**2))
+    return np.asarray(layer)
+
+
+@pytest.mark.parametrize("frac", [0.615, 0.08, 1.0])
+def test_a_lit_bars_glow_comes_from_spur_iis_source(frac):
+    colour = (19, 229, 215)
+    unit = np.asarray(colour, np.float32) / 255
+    spans = [(0.0, frac * 194, 1.0)]
+    ours = lit._glow_source(194, 12, spans, unit, 30.0, False)
+    assert np.array_equal(ours, schein_balken(194, 12, frac, colour))
+    mirrored = lit._glow_source(194, 12, [(194 - frac * 194, 194.0, 1.0)], unit, 30.0, True)
+    assert np.array_equal(mirrored, ours[:, ::-1])  # filling from the far end
+
+
+def test_a_lit_bars_glow_is_light_added_over_it():
+    bar = lit_widgets()[1]
+    theme = theme_of([bar])
+    renderer = Renderer(theme)
+    frame, _ = renderer.render(snap(50.0), 0.0)
+    piece = dict(renderer._last[0])["bar"]
+    light = piece.light
+    assert light is not None and light.layer.mode == "RGBA"
+    plain, _ = Renderer(theme_of([{**bar, "glow": 0.0}])).render(snap(50.0), 0.0)
+    for x, y in ((200, 14), (205, 27), (150, 40)):  # above, on and below the bar
+        added = light.layer.getpixel((x - light.x, y - light.y))[:3]
+        under = plain.getpixel((x, y))
+        expected = tuple(min(255, a + b) for a, b in zip(under, added, strict=True))
+        assert frame.getpixel((x, y)) == expected  # light adds up
+
+
+def test_a_glow_area_keeps_a_bars_glow_inside_it():
+    bar = {**lit_widgets()[1], "glow_radius": 12}
+    area = [100, 24, 230, 30]  # from below the bar's top: none of its glow above that
+    inside, _ = Renderer(theme_of([{**bar, "glow_area": area}])).render(snap(50.0), 0.0)
+    around, _ = Renderer(theme_of([bar])).render(snap(50.0), 0.0)
+    plain, _ = Renderer(theme_of([{**bar, "glow": 0.0}])).render(snap(50.0), 0.0)
+    a, b, c = (np.asarray(f, np.int16) for f in (inside, around, plain))
+    assert (a[:24] == c[:24]).all() and (b[10:20, 150:210] > c[10:20, 150:210]).any()
+    assert (a[24:54, 150:210] > c[24:54, 150:210]).any()  # inside: it glows
+    assert (a[54:] == c[54:]).all()  # below the area, nothing either
+
+
+@pytest.mark.parametrize(
+    ("area", "message"),
+    [([1, 2, 3], r"expected \[x, y, w, h\]"), ([0, 0, True, 4], r"expected \[x, y, w, h\]"),
+     ([0, 0, 0, 10], "its width and height must be above 0")],
+)  # fmt: skip
+def test_a_glow_area_is_a_box_on_the_panel(area, message):
+    with pytest.raises(ThemeError, match=message):
+        theme_of([{**lit_widgets()[1], "glow_area": area}])
+    assert theme_of([{**lit_widgets()[1], "glow_area": [1.0, 2, 3, 4]}]).widgets[0][
+        "glow_area"
+    ] == [1, 2, 3, 4]
+
+
+def test_lit_values_lie_in_a_milled_groove():
+    bar = {**lit_widgets()[1], "glow": 0.0, "y": 20, "h": 12}  # a 12 px groove: 2 px bevels
+    frame, _ = Renderer(theme_of([bar])).render(snap(0.0), 0.0)
+    column = np.asarray(frame, np.int16)[20:32, 250]
+    floor = (0x16, 0x23, 0x32)
+    assert tuple(column[6]) == floor  # the floor: exactly its colour
+    assert column[0].sum() < sum(floor) < column[-1].sum()  # in shade above, lit below
+    ring = {**lit_widgets()[0], "x": 20, "y": 20, "w": 120, "h": 120, "start_angle": -90,
+            "end_angle": 270}  # fmt: skip
+    frame, _ = Renderer(theme_of([ring], size=(160, 160))).render(snap(0.0), 0.0)
+    across = np.asarray(frame, np.int16)[80, 20:30]  # nine o'clock, from the outer edge in
+    assert tuple(across[5]) == floor and across[0].sum() != across[9].sum()
+
+
+def test_a_lit_text_without_opacity_is_only_its_light():
+    word = {"type": "text", "id": "word", "x": 20, "y": 20, "text": "II", "font_size": 58,
+            "font": "builtin:Barlow-Bold", "color": "#13E5D7"}  # fmt: skip
+    glow = {**word, "id": "glow", "finish": "lit", "glow": 0.6, "glow_radius": 16, "opacity": 0}
+    over, _ = Renderer(theme_of([word, glow])).render(snap(), 0.0)
+    bare, _ = Renderer(theme_of([word])).render(snap(), 0.0)
+    alone, _ = Renderer(theme_of([glow])).render(snap(), 0.0)
+    a, b, c = (np.asarray(f, np.int16) for f in (over, bare, alone))
+    letters = (b == (0x13, 0xE5, 0xD7)).all(-1)
+    assert letters.sum() > 100 and (a[letters] > b[letters]).any()  # the light lies on them
+    ground = np.asarray(Renderer(theme_of([])).render(snap(), 0.0)[0], np.int16)
+    assert (c[letters] != (0x13, 0xE5, 0xD7)).any(-1).all()  # alone: no letters, only light
+    assert (c >= ground).all() and (c > ground).any()
+
+
+def test_a_lit_texts_glow_area_keeps_its_light_inside():
+    text = {"type": "text", "id": "t", "x": 20, "y": 20, "text": "CPU", "font_size": 40,
+            "color": "#13E5D7", "glow": 0.6, "glow_radius": 8, "finish": "lit",
+            "glow_area": [0, 0, 480, 40]}  # fmt: skip
+    cut, _ = Renderer(theme_of([text])).render(snap(), 0.0)
+    whole, _ = Renderer(theme_of([{**text, "glow_area": None}])).render(snap(), 0.0)
+    a, b = np.asarray(cut, np.int16), np.asarray(whole, np.int16)
+    assert (a[:40] == b[:40]).all()  # inside the area, the same light
+    bare, _ = Renderer(theme_of([{**text, "glow": 0.0}])).render(snap(), 0.0)
+    assert (a[40:] == np.asarray(bare, np.int16)[40:]).all()  # below it, none
+    assert (b[40:] != a[40:]).any()
+
+
+def test_a_lit_texts_glow_is_light_over_it_and_around_it():
+    text = {"type": "text", "id": "t", "x": 20, "y": 20, "text": "CPU", "font_size": 40,
+            "color": "#13E5D7", "glow": 0.6, "glow_radius": 8}  # fmt: skip
+    lit_theme = theme_of([{**text, "finish": "lit"}])
+    assert lit_theme.warnings == []
+    shine, _ = Renderer(lit_theme).render(snap(), 0.0)
+    halo, _ = Renderer(theme_of([text])).render(snap(), 0.0)  # the renderer's glow
+    bare, _ = Renderer(theme_of([{**text, "glow": 0.0}])).render(snap(), 0.0)
+    a, b, c = (np.asarray(f, np.int16) for f in (shine, halo, bare))
+    letters = (c == (0x13, 0xE5, 0xD7)).all(-1)  # where the letters cover all
+    assert letters.sum() > 100
+    assert (a[letters] >= c[letters]).all() and (a[letters] > c[letters]).any()  # over it
+    assert (b[letters] == c[letters]).all()  # the renderer's glow lies beneath the letters
+    top = np.flatnonzero(letters.any(1))[0]
+    assert a[top - 4, 20:100].sum() > c[top - 4, 20:100].sum()  # and around it
+
+
+def test_too_small_for_light_is_drawn_flat():
+    thin = [{**lit_widgets()[1], "h": 1}, {**lit_widgets()[0], "thickness": 1},
+            {**lit_widgets()[4], "size": 12}]  # fmt: skip
     flat = [{**widget, "finish": "flat"} for widget in thin]
     a, _ = Renderer(theme_of(thin)).render(history(), 0.0)
     b, _ = Renderer(theme_of(flat)).render(history(), 0.0)
@@ -107,16 +243,14 @@ def test_too_small_for_depth_is_drawn_flat():
 
 def test_a_finish_a_type_does_not_have_is_drawn_flat_with_one_warning():
     widgets = [
-        {"type": "text", "id": "a", "x": 10, "y": 10, "text": "CPU", "finish": "lit"},
-        {"type": "text", "id": "b", "x": 10, "y": 40, "text": "GPU", "finish": "lit"},
-        {"type": "metric", "id": "m", "x": 10, "y": 70, "sensor": "cpu.load", "finish": "lit"},
-        {"type": "icon", "id": "i", "x": 100, "y": 10, "icon": "cpu", "finish": "lit"},
+        {"type": "icon", "id": "a", "x": 10, "y": 10, "icon": "cpu", "finish": "lit"},
+        {"type": "icon", "id": "b", "x": 10, "y": 60, "icon": "cpu", "finish": "lit"},
+        {"type": "icon", "id": "i", "x": 100, "y": 10, "icon": "gpu", "finish": "lit"},
     ]
     theme = theme_of(widgets)
     assert theme.warnings == [
-        "finish 'lit' is not available for text; drawn flat",
-        "finish 'lit' is not available for metric; drawn flat",
         "finish 'lit' is not available for the icon 'cpu'; drawn flat",
+        "finish 'lit' is not available for the icon 'gpu'; drawn flat",
     ]
     flat = theme_of([{**widget, "finish": "flat"} for widget in widgets])
     a, _ = Renderer(theme).render(snap(), 0.0)
@@ -173,25 +307,62 @@ def test_a_theme_without_a_look_pays_nothing_for_it():
 # -- light layers ---------------------------------------------------------------------
 
 
-def test_a_colour_is_coloured_once_per_step(monkeypatch):
+def test_a_lit_graphs_halo_glows_above_its_line_as_below_it():
+    graph = {"type": "graph", "id": "g", "x": 0, "y": 0, "w": 200, "h": 100, "sensor": "cpu.load",
+             "min": 0, "max": 100, "color": "#00FF00", "fill": False, "smooth": False,
+             "line_width": 2, "history": 20, "glow": 1.0, "glow_radius": 8,
+             "finish": "lit"}  # fmt: skip
+    found = snap(50.0)
+    found.history["cpu.load"] = [50.0] * 20
+    frame, _ = Renderer(theme_of([graph], size=(200, 100))).render(found, 0.0)
+    column = np.asarray(frame, np.int16)[:, 100, 1]
+    line = np.flatnonzero(column == 255)
+    above, below = column[line[0] - 2], column[line[-1] + 2]
+    assert above > 12 + 0x11 and abs(above - below) <= 2  # over nothing, the halo is as strong
+
+
+def test_a_colour_is_lit_once_per_step(monkeypatch):
     lit._PICTURES.clear()
     built = []
-    real = light3d.Bar.image
+    real = lit.light
 
-    def image(self, *args, **kwargs):
+    def light(*args, **kwargs):
         built.append(1)
-        return real(self, *args, **kwargs)
+        return real(*args, **kwargs)
 
-    monkeypatch.setattr(light3d.Bar, "image", image)
+    monkeypatch.setattr(lit, "light", light)
     bar = lit_widgets()[1]
     theme = theme_of([bar, {**bar, "id": "twin", "y": 60}])
     renderer = Renderer(theme)
     renderer.render(snap(40.0), 0.0)
-    assert len(built) == 2  # the groove and the value: once for both bars
+    assert len(built) == 1  # the value's light: once for both bars
     Renderer(theme).render(snap(40.0), 0.0)  # another renderer, the same colour and step
-    assert len(built) == 2
+    assert len(built) == 1
     renderer.render(snap(70.0), 1.0)
-    assert len(built) == 3  # a new step: its value, the groove stays
+    assert len(built) == 2  # a new step
+
+
+def test_light_runs_towards_white_in_a_halo_of_its_colour():
+    mask = np.zeros((20, 40), np.float32)
+    mask[8:12, 5:35] = 1
+    rgba = lit.light(mask, (19, 229, 215), 4.5).astype(np.int16)
+    core, halo, away = rgba[10, 20], rgba[6, 20], rgba[0, 20]
+    assert core[3] == 255 and core[0] > 19 + 150  # the core: opaque, most of the way to white
+    assert 0 < halo[3] < 255 and tuple(halo[:3]) == (19, 229, 215)  # the halo: its colour
+    assert away[3] < halo[3]
+
+
+def test_a_lit_ring_is_a_thin_arc_of_light_on_the_middle_of_its_groove():
+    ring = {**lit_widgets()[0], "x": 20, "y": 20, "w": 120, "h": 120, "start_angle": -90,
+            "end_angle": 270}  # fmt: skip
+    frame, _ = Renderer(theme_of([ring], size=(160, 160))).render(snap(50.0), 0.0)
+    pixels = np.asarray(frame, np.int16)
+    across = pixels[80, 128:142].sum(1)  # three o'clock, half way along the arc: the groove
+    bright = np.flatnonzero(across > across.max() / 2)  # is 130 to 139, the light ...
+    assert 133 <= 128 + bright.mean() <= 136  # ... lies on its middle
+    assert bright.size <= 7  # a thin arc (6 of the groove's 10 px), not a tube
+    assert pixels[80, 128 + bright[bright.size // 2], 0] > 0x22 + 100  # its core runs to white
+    assert tuple(pixels[80, 25]) == (0x16, 0x23, 0x32)  # nine o'clock: past its end, the groove
 
 
 def test_kept_pictures_stay_within_their_budget():
@@ -266,11 +437,10 @@ def test_a_warmed_up_renderer_loads_no_layers_in_its_first_frame(monkeypatch):
     for part in light3d.PARTS.values():
         part.reset()
     lit._PICTURES.clear()
-    lit._RINGS.clear()
     renderer = Renderer(theme_of(lit_widgets(), look={"grid": {}, "light": {}}))
     assert renderer.prepares
     renderer.warm(None, 0.0)
-    assert sorted(loads) == ["bar", "ring", "weather"]
+    assert loads == ["weather"]  # bars and rings are light worked out as they come
     loads.clear()
     renderer.render(history(), 0.0)
     assert loads == []
@@ -278,7 +448,7 @@ def test_a_warmed_up_renderer_loads_no_layers_in_its_first_frame(monkeypatch):
     for part in light3d.PARTS.values():
         part.reset()
     Renderer(theme_of(lit_widgets())).render(history(), 0.0)  # not warmed up: in the frame
-    assert sorted(loads) == ["bar", "ring", "weather"]
+    assert loads == ["weather"]
 
 
 # -- the look block ---------------------------------------------------------------------
@@ -350,7 +520,7 @@ def test_grid_colours_come_from_the_background_without_a_palette():
 
 
 FRAME = {"type": "rect", "id": "frame", "x": 40, "y": 40, "w": 400, "h": 240, "color": None,
-         "outline": "#3A4A5C", "outline_width": 4}  # fmt: skip
+         "outline": "#3A4A5C", "outline_width": 4, "ridge": "frame"}  # fmt: skip
 
 
 def test_ridges_are_mitred_and_flat_in_their_middle():
@@ -362,15 +532,70 @@ def test_ridges_are_mitred_and_flat_in_their_middle():
     assert not normals[5:].any()
 
 
-def test_frames_become_ridges_whose_gloss_lies_on_them():
-    theme = theme_of([FRAME, {**FRAME, "id": "thin", "outline_width": 1}], look={"light": {}})
+def test_rects_with_a_ridge_name_are_ridges_whose_gloss_lies_on_them():
+    flat = {**FRAME, "id": "flat", "x": 60, "y": 60, "w": 360, "h": 200, "ridge": ""}
+    theme = theme_of([FRAME, flat], look={"light": {}})
     renderer = Renderer(theme)
     frame, _ = renderer.render(snap(), 0.0)
     assert [renderer.edge_owners[id(edge)] for edge in renderer.light_edges] == ["frame"]
     ids = [wid for wid, _ in renderer._last[0]]
     assert ids[ids.index("frame") + 1].startswith("\0light")  # right on its frame
-    plain, _ = Renderer(theme_of([FRAME])).render(snap(), 0.0)
-    assert changed_region(frame, plain) is not None
+    dark, _ = Renderer(theme_of([FRAME, flat])).render(snap(), 0.0)  # a ridge without the light
+    plain, _ = Renderer(theme_of([{**FRAME, "ridge": ""}, flat])).render(snap(), 0.0)
+    assert changed_region(dark, plain) is not None and changed_region(frame, dark) is not None
+    inner = (62, 62, 418, 258)  # the rect without a name stays flat, light or not
+    assert changed_region(frame.crop(inner), plain.crop(inner)) is None
+
+
+def test_rects_are_flat_unless_a_theme_asks_for_a_ridge():
+    rects = [{**FRAME, "ridge": ""}, {**FRAME, "id": "band", "y": 300, "h": 8, "ridge": "",
+                                      "color": "#3A4A5C", "outline": None}]  # fmt: skip
+    lit_theme = theme_of(rects, look={"light": {}})
+    renderer = Renderer(lit_theme)
+    frame, _ = renderer.render(snap(), 0.0)
+    assert renderer.light_edges == [] and renderer._finishes == {}
+    plain, _ = Renderer(theme_of(rects)).render(snap(), 0.0)
+    assert changed_region(frame, plain) is None
+
+
+def test_bands_of_one_ridge_meet_at_a_mitre():
+    band = {"type": "rect", "color": "#13E5D7B9", "ridge": "cpu-frame"}
+    top = {**band, "id": "top", "x": 40, "y": 40, "w": 200, "h": 5}
+    left = {**band, "id": "left", "x": 40, "y": 40, "w": 5, "h": 120}
+    renderer = Renderer(theme_of([top, left], look={"light": {}}))
+    frame, boxes = renderer.render(snap(), 0.0)
+    [edge] = renderer.light_edges  # one ridge: the first band draws it, glossed once
+    assert renderer.edge_owners[id(edge)] == "top"
+    assert boxes["left"] == [40, 40, 5, 120] and boxes["top"] == [40, 40, 200, 5]
+    pieces = dict(renderer._last[0])
+    assert pieces["left"].layer.size == (1, 1)  # it only keeps its place for the editor
+    apart = Renderer(theme_of([top, {**left, "ridge": "other"}], look={"light": {}}))
+    apart.render(snap(), 0.0)  # two names: two ridges
+    assert sorted(apart.edge_owners[id(edge)] for edge in apart.light_edges) == ["left", "top"]
+
+    one, _ = Renderer(theme_of([top, left])).render(snap(), 0.0)  # (without the sun's gloss)
+    two, _ = Renderer(theme_of([top, {**left, "ridge": "other"}])).render(snap(), 0.0)
+    one, two = np.asarray(one, np.int16), np.asarray(two, np.int16)
+    assert one[41, 120].sum() > one[43, 120].sum()  # the facet towards the light, and away
+    assert (one[38:48, 100:200] == two[38:48, 100:200]).all()  # along a band: the same
+    assert (one[40:45, 40:45] != two[40:45, 40:45]).any()  # where they meet: one ridge
+
+
+def test_a_ridges_glow_is_light_added_also_where_its_colour_is_full():
+    band = {"type": "rect", "id": "band", "x": 40, "y": 40, "w": 200, "h": 5,
+            "color": "#A3AEFFB9", "ridge": "frame"}  # fmt: skip
+    renderer = Renderer(theme_of([band]))
+    frame, _ = renderer.render(snap(), 0.0)
+    piece = dict(renderer._last[0])["band"]
+    assert piece.light is not None
+    under = Image.new("RGBA", frame.size, "#0A1119")
+    under.alpha_composite(piece.layer, (piece.x, piece.y))
+    lit = np.asarray(under.convert("RGB"), np.int16)
+    light = np.zeros_like(lit)
+    glow = np.asarray(piece.light.layer, np.int16)[..., :3]
+    light[piece.light.y : piece.light.y + glow.shape[0], piece.light.x :][:, : glow.shape[1]] = glow
+    assert np.array_equal(np.asarray(frame, np.int16), np.minimum(255, lit + light))
+    assert frame.getpixel((120, 41))[2] > lit[41, 120, 2]  # blue is full, and still lit up
 
 
 def test_the_sun_comes_from_where_it_stands():
@@ -493,17 +718,22 @@ def test_plugin_widgets_give_the_light_their_edges(plugin_folder):
 # -- sizes ----------------------------------------------------------------------------
 
 
-def test_the_lit_demo_is_a_demo_on_the_bar():
-    theme = load_theme(builtin_themes_dir() / "lit-demo")
-    assert (theme.width, theme.height) == (1920, 480)
-    assert theme.description.startswith("DEMO")
-    assert set(theme.look) == {"grid", "light"}
+def test_spur_classic_is_spur_iis_classic_screen_on_the_bar():
+    theme = load_theme(builtin_themes_dir() / "spur-classic")
+    assert (theme.width, theme.height) == (1920, 480) and theme.warnings == []
+    assert set(theme.look) == {"grid", "light", "dust"}
     renderer = Renderer(theme)
-    frame, _ = renderer.render(demo_snapshot(fixed_time=1_700_000_000), 0.0)
+    found = demo_snapshot(fixed_time=1_700_000_000)
+    frame, _ = renderer.render(found, 0.0)
     assert renderer.warnings == [] and frame.size == (1920, 480)
-    assert {type(f).__name__ for f in renderer._finishes.values()} >= {
-        "LitBar", "LitGauge", "LitGraph", "LitIcon", "Ridge"
+    assert {type(f).__name__ for f in renderer._finishes.values()} == {
+        "LitBar", "LitText", "FacetGraph", "FacetText", "AcrylicText", "Ridge"
     }  # fmt: skip
+    assert sum(w["type"] == "fan" for w in theme.widgets) == 5
+    owners = {renderer.edge_owners[id(edge)] for edge in renderer.light_edges}
+    assert owners == {"cpu-frame-top", "gpu-frame-top", "mem-box-left", "net-box-left"}
+    shown = {w["sensor"] for w in theme.widgets if w["type"] in ("metric", "bar", "graph")}
+    assert {key for key in shown if found.value(key) is None} == set()  # the demo has them all
 
 
 @pytest.mark.parametrize("size", [(480, 320), (320, 480), (1920, 480)])

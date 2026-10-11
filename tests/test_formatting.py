@@ -15,6 +15,19 @@ def test_extra_specs():
     assert human_duration(59) == "0m"
 
 
+def test_rates_and_sizes_as_spur_ii_sets_them():
+    # a rate: whole KB/s below 1 MB/s (idle traffic is not 0.0), MB/s with a decimal above
+    assert safe_format("{value:rate} {value:rate_unit}", 43 * 1024) == "43 KB/s"
+    assert safe_format("{value:rate} {value:rate_unit}", 1023 * 1024) == "1023 KB/s"
+    assert safe_format("{value:rate} {value:rate_unit}", 3.5 * 1024**2) == "3.5 MB/s"
+    # a size in GB, from the unit the reading comes in
+    assert safe_format("{value:gb}", 13824, "MB") == "13.5"
+    assert safe_format("{value:gb}", 17.0, "GiB") == "17.0"
+    assert safe_format("{value:gb}", 5 * 1024**3, "B") == "5.0"
+    assert safe_format("{value:gb}", 4.7) == "4.7"  # no unit: GB already
+    assert safe_format("{value:gb} {unit}", 2048, "MB") == "2.0 MB"  # the unit stays the reading's
+
+
 @pytest.mark.parametrize(
     "fmt",
     [

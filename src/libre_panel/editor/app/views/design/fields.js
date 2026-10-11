@@ -27,7 +27,7 @@ export function hintFor(widget, key, kind) {
   if (key === "smooth" && widget?.type === "metric") return t("the number glides between readings, together with the bars and rings of its sensor");
   if (key === "seconds" && widget?.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = as long as the history readings take");
   if (key === "per_frame") return t("video mode: a point a pixel apart, as SPUR II draws its curves (seconds = width / 25)");
-  if (key === "finish") return t("lit: SPUR II's light on rings, bars, graph lines and weather icons; glow then sets their glow");
+  if (key === "finish") return t("lit: SPUR II's light on rings, bars, graph lines, texts and weather icons; glow then sets their glow");
   return null;
 }
 
