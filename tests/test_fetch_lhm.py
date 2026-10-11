@@ -215,6 +215,26 @@ def test_what_was_fetched_stays_out_of_the_repository():
     assert fetch_lhm.DEFAULT_FOLDER == root / "packaging" / "windows" / "lhm-libs"
 
 
+def test_the_pins_of_a_new_set_are_printed_not_checked(tmp_path, capsys, monkeypatch):
+    packages, libraries, texts = lab(tmp_path)
+    changed = dict(packages, First=make_package("lib/net472/First.dll", b"a new version"))
+    lines = fetch_lhm.pins(lambda library: changed[library.package], libraries)
+    assert lines[0] == f"First 1.0: nupkg {sha(changed['First'])}"
+    assert lines[1] == f"    x64: {sha(b'a new version')}  lib/net472/First.dll"  # one for all
+    assert lines[2].startswith("Second 2.0: nupkg ") and len(lines) == 6
+    assert [line.split(":")[0].strip() for line in lines[3:]] == ["x64", "x86", "arm64"]
+    assert f"    x86: {sha(b'second x86')}  runtimes/win-x86/lib/net472/Second.dll" in lines
+    # the command: from a folder of packages, nothing written
+    monkeypatch.setattr(fetch_lhm, "LIBRARIES", libraries)
+    nupkgs = tmp_path / "nupkgs"
+    nupkgs.mkdir()
+    for library in libraries:
+        (nupkgs / library.filename).write_bytes(changed[library.package])
+    assert fetch_lhm.main(["--print-pins", "--nupkg-dir", str(nupkgs)]) == 0
+    assert "First 1.0: nupkg" in capsys.readouterr().out
+    assert not (tmp_path / "libs").exists() and not fetch_lhm.DEFAULT_FOLDER.exists()
+
+
 # -- downloading -------------------------------------------------------------------------
 
 

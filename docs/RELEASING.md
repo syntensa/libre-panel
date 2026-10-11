@@ -54,9 +54,10 @@ Every download is tested on its own system before it is attached:
   autostart starts it, draws frames and quits through the editor API
   (`packaging/smoke_test.py`);
 - Windows: the setup installs silently, the start menu entry and autostart
-  entry exist, the installed app runs, and the uninstaller quits a running
-  app and removes files, shortcut and autostart
-  (`packaging/windows/test_installer.py`, Inno Setup script
+  entry exist, the installed app loads its LibreHardwareMonitor libraries
+  (`libre-panel sensors --check-lhm`, which needs no administrator rights),
+  runs, and the uninstaller quits a running app and removes files, shortcut
+  and autostart (`packaging/windows/test_installer.py`, Inno Setup script
   `packaging/windows/libre-panel.iss`);
 - macOS: the disk image mounts, the app is a menu bar app, it runs as the
   LaunchAgent starts it and when opened like a double-click
@@ -71,6 +72,33 @@ the run as artifacts.
 The bundles are built from `packaging/pyinstaller/libre-panel.spec`. The icons
 come from `packaging/make_icons.py` (the logo is drawn in
 `src/libre_panel/branding.py`); rerun it after changing the logo.
+
+## LibreHardwareMonitor's libraries (Windows)
+
+The Windows bundle carries LibreHardwareMonitor's .NET libraries, so that the
+GPU, temperatures, power and fans need no other program. They are not in the
+repository: the Windows job runs `packaging/windows/fetch_lhm.py` before
+PyInstaller, which downloads the pinned packages from NuGet, checks each against
+the SHA-256 written into the script and takes out the .NET Framework build. The
+spec bundles the result as `lhm`; the job then loads it from the bundle.
+
+To move to other versions:
+
+1. Read the licence of every package in the new set (the `.nuspec` on
+   nuget.org, the project's licence file, a notice in the files), and that of
+   anything embedded in LibreHardwareMonitorLib.dll (its
+   `THIRD-PARTY-NOTICES.txt`). Do not ship what is unclear or does not go with
+   the GPL; update NOTICE.md.
+2. Find what the new LibreHardwareMonitorLib's .NET Framework build really refers
+   to: its assembly references (read them from the file, e.g. with `dnfile`),
+   not only the dependencies in its `.nuspec`. Whatever it asks for beyond the
+   .NET Framework itself has to be in the set, in the version it asks for. Change
+   `LIBRARIES` in `fetch_lhm.py` and in `libre_panel/sensors/lhm_inprocess.py`
+   (the order is the load order).
+3. Change the versions in the table, run
+   `python packaging/windows/fetch_lhm.py --print-pins` and copy the SHA-256 it
+   prints for each package and library into the table. Run the script as the job
+   does, and `libre-panel sensors --check-lhm` on a Windows machine.
 
 ## Versioning
 

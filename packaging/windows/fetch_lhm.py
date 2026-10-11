@@ -15,8 +15,8 @@ existing FOLDER alone, when anything does not match.
 NuGet, for builds without a network; they are checked all the same.
 
 The licences were checked before these were pinned; see NOTICE.md. To move to other
-versions, check their licences again, then pin the new hashes (the script says what it
-got).
+versions, check their licences again, change the table and run ``--print-pins``: it
+prints the hashes of what the table now names (and checks and writes nothing).
 """
 
 from __future__ import annotations
@@ -170,7 +170,7 @@ def download(url: str) -> bytes:
     if not url.startswith("https://"):
         raise FetchError(f"{url} is not an https address")
     request = urllib.request.Request(url, headers={"User-Agent": "libre-panel-build"})
-    with urllib.request.urlopen(request, timeout=120) as response:  # noqa: S310 - https only
+    with urllib.request.urlopen(request, timeout=120) as response:
         if not response.geturl().startswith("https://"):
             raise FetchError(f"{url} was redirected to {response.geturl()}, which is not https")
         return response.read()
@@ -248,6 +248,27 @@ def fetch(
     return lines
 
 
+def pins(
+    fetch_package: Callable[[Library], bytes] | None = None,
+    libraries: tuple[Library, ...] = LIBRARIES,
+) -> list[str]:
+    """The SHA-256 of each package and of its library (per architecture where the package
+    has one for each), to be written into the table when it moves to other versions."""
+    get = fetch_package or (lambda library: download(library.url))
+    lines = []
+    for library in libraries:
+        package = get(library)
+        lines.append(f"{library.package} {library.version}: nupkg {sha256(package)}")
+        with zipfile.ZipFile(io.BytesIO(package)) as archive:
+            for arch in ARCHITECTURES:
+                member = library.member.format(arch=f"win-{arch}")
+                if member in archive.namelist():
+                    lines.append(f"    {arch}: {sha256(archive.read(member))}  {member}")
+                if "{arch}" not in library.member:
+                    break
+    return lines
+
+
 def _from_folder(nupkg_dir: Path) -> Callable[[Library], bytes]:
     def read(library: Library) -> bytes:
         path = nupkg_dir / library.filename
@@ -264,9 +285,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("folder", nargs="?", type=Path, default=DEFAULT_FOLDER)
     parser.add_argument("--arch", choices=ARCHITECTURES, default="x64", help="of the Python")
     parser.add_argument("--nupkg-dir", type=Path, help="read the packages from here, not NuGet")
+    parser.add_argument(
+        "--print-pins", action="store_true", help="print the hashes of the packages, nothing else"
+    )
     args = parser.parse_args(argv)
     source = _from_folder(args.nupkg_dir) if args.nupkg_dir else None
     try:
+        if args.print_pins:
+            print("\n".join(pins(source, LIBRARIES)))
+            return 0
         lines = fetch(args.folder, args.arch, source, LIBRARIES, LICENSES)
     except (FetchError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
