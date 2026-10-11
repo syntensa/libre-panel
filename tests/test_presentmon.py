@@ -638,7 +638,8 @@ def test_a_presentmon_that_does_not_end_when_asked_is_killed(make):
     assert process.killed >= 1 and process.returncode == -9 and theme is not None
 
 
-def test_on_other_systems_than_windows_no_session_is_stopped_by_name():
+def test_on_other_systems_than_windows_no_session_is_stopped_by_name(monkeypatch):
+    monkeypatch.setattr(presentmon.sys, "platform", "linux")
     provider = PresentMonProvider({}, popen=Launcher(), job=FakeJob())  # no tool of its own
     assert provider._tool is None
     provider._release_session("PresentMon.exe")  # must not run anything: Windows only

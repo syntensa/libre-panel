@@ -739,7 +739,7 @@ def test_a_look_that_fails_is_said_once_and_the_service_goes_on(service, caplog)
 
 
 def test_where_this_is_not_windows_the_service_runs_idle_and_says_so(caplog, monkeypatch):
-    monkeypatch.setattr(devices.sys, "platform", "linux")
+    monkeypatch.setattr(devices, "on_windows", lambda: False)
     host = PluginHost()
     svc = Devices(
         ServiceHost(host, "devices"), apply_options(Devices.options, {}, "services.devices")
@@ -753,7 +753,7 @@ def test_where_this_is_not_windows_the_service_runs_idle_and_says_so(caplog, mon
 
 
 def test_on_windows_the_service_takes_the_systems_readers(monkeypatch):
-    monkeypatch.setattr(devices.sys, "platform", "win32")
+    monkeypatch.setattr(devices, "on_windows", lambda: True)
     host = PluginHost()
     svc = Devices(
         ServiceHost(host, "devices"), apply_options(Devices.options, {}, "services.devices")

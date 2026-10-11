@@ -58,6 +58,11 @@ PHONE_MAKERS = {
 }  # fmt: skip
 
 
+def on_windows() -> bool:
+    """Whether this is Windows, the only system the service can look at (tests replace this)."""
+    return sys.platform == "win32"
+
+
 def size_text(size: float) -> str:
     """A size as drives are sold (powers of 1000): 512 MB, 29.8 GB, 1.0 TB."""
     if size >= 1000**4:
@@ -457,12 +462,10 @@ class Devices(Service):
     ) -> None:
         super().__init__(host, options)
         self.clock = clock
-        on_windows = sys.platform == "win32"
-        self.readers = (
-            readers if readers is not None else (windows.Readers() if on_windows else None)
-        )
+        here = on_windows()
+        self.readers = readers if readers is not None else (windows.Readers() if here else None)
         self.notifier = (
-            notifier if notifier is not None else (windows.ChangeNotifier() if on_windows else None)
+            notifier if notifier is not None else (windows.ChangeNotifier() if here else None)
         )
         mine = parse_ignored(options["usb_ignore"], lambda text: host.log.warning("%s", text))
         self.watcher = Watcher(self.readers, options, self.tell, panel_ids() | mine)
