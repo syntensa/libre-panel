@@ -246,7 +246,8 @@ round against the last ones of the same program: as the state `report` (a
 screen reads it with `snapshot.state("report")`, `None` when none is on show),
 and as plain readings for a theme made of the usual widgets (the built-in theme
 `round-report` is one). Both stay for `report_seconds`, or until a new game
-begins.
+begins; the readings go 3 s after the state, so that the theme still has its
+numbers while it leaves with a transition.
 
 ```json
 {

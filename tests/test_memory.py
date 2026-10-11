@@ -862,7 +862,11 @@ def test_the_report_goes_when_its_seconds_are_over(desk):
     d.sample(seconds=15)
     assert d.host.theme == "round-report" and d.state() is not None
     d.sample(seconds=6)
-    assert d.host.theme == "studio" and d.state() is None  # and the readings go with it
+    assert d.host.theme == "studio" and d.state() is None  # the state goes with the theme
+    assert d.host.published()["report.game"].value == "Space Game"  # the theme is still leaving
+    d.sample(seconds=2)
+    assert "report.game" in d.host.published()
+    d.sample(seconds=2)  # the grace is over
     assert not [key for key in d.host.published() if key.startswith("report.")]
 
 
@@ -873,6 +877,7 @@ def test_a_new_game_ends_the_report_at_once_and_it_does_not_come_back(desk):
     assert wait_for(lambda: d.host.theme == "round-report")
     d.host.set_mode("game", by="game")  # the next game: the mode comes before anything else
     assert wait_for(lambda: d.state() is None)
+    d.sample(seconds=4)  # the readings stay a moment while the theme leaves
     assert not [key for key in d.host.published() if key.startswith("report.")]
     d.host.set_mode(None, by="game")
     assert d.host.theme == "studio"  # the autopilot's choice, not a report from before
@@ -1278,6 +1283,7 @@ def test_a_game_is_played_and_its_report_comes_up_on_the_panel(monkeypatch, isol
             seen_at["first"] = ticks.now  # the memory has seen the game
         elif seen_at.get("first") and "ended" not in seen_at and ticks.now >= seen_at["first"] + 6:
             seen_at["ended"] = script.n
+            seen_at["frames"] = len(seen)  # what was drawn while the first game was on
             stop(100)
         elif "ended" in seen_at and "second" not in seen_at and any(s[1] for s in seen[-3:]):
             seen_at["second"] = ticks.now  # the report has been on the panel
@@ -1314,7 +1320,11 @@ def test_a_game_is_played_and_its_report_comes_up_on_the_panel(monkeypatch, isol
     assert order[:2] == ["classic", "focus"] and order.count("Round report") == 1, order
     assert order[order.index("Round report") + 1 :] == ["focus", "classic"], order
     shown = [s for s in seen if s[0] == "Round report"]
-    assert shown and all(s[1] == "Space Game" and s[3] == "Space Game" for s in shown)
+    assert shown and all(s[1] == "Space Game" for s in shown)  # the theme never lacks its numbers
+    assert any(s[3] == "Space Game" for s in shown)  # and the state is there while it lasts
     assert all(s[2] and s[2] > 50 for s in shown)  # the frame rate of the game, in the readings
-    assert all(s[3] is None and s[1] is None for s in seen if s[0] != "Round report")
+    # none of it before the first game was over, and its state is gone at the end (the readings
+    # stay a moment after the report, and come a moment before its theme: the calls are two)
+    assert all(s[3] is None and s[1] is None for s in seen[: seen_at["frames"]])
+    assert seen[-1][3] is None
     assert host.theme is None and host.mode is None

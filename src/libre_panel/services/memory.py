@@ -52,6 +52,7 @@ SAMPLE_S = 1.0  # one sample a second, however often the main loop takes reading
 GAP_S = 5.0  # after a pause longer than this the grid starts afresh instead of catching up
 SESSION_WRITE_S = 60.0  # a game in progress is written this often
 SENSORS_EVERY_S = 60.0  # the names of the sensors are looked at this often
+REPORT_GRACE_S = 3.0  # the readings of a report outlive it: its theme leaves with a transition
 DAY_S = 86400
 # The cooling state is written when something moves, not on a clock (it all stands still at
 # the desk): at least COOLING_MIN_S apart (less in a game, where it changes fast) and at
@@ -659,6 +660,7 @@ class Memory(Service):
         self._shown = False  # a report is on the panel
         self._keys: set[str] = set()  # the readings it published
         self._until = 0.0  # on `clock`: when it goes
+        self._gone_at = 0.0  # on `clock`: when its readings go, after it has ended
         self._games = 0  # how many times a mode began: a report is stale when a game came since
 
     def start(self) -> None:
@@ -695,6 +697,7 @@ class Memory(Service):
                 return
             now = self.wall()
             self._expire()
+            self._tidy()
             self._look_at_fancontrol(now)
             if self.recorder.due(now):
                 sample = self.reader.read(snapshot, now)
@@ -782,16 +785,26 @@ class Memory(Service):
             self._end_report()
 
     def _end_report(self) -> None:
+        """The report is over: its state goes at once, its theme leaves, and the readings the
+        theme shows stay a moment longer, for as long as it takes to leave."""
         with self._lock:
             if not self._shown:
                 return
             self._shown = False
             self.host.publish_state("report", None)
-            for key in self._keys:
-                self.host.unpublish(key)
-            self._keys = set()
+            grace = REPORT_GRACE_S if self.settings.report_theme else 0.0
+            self._gone_at = self.clock() + grace
             if self.settings.report_theme:
                 self.host.restore_theme(transition=self.settings.report_transition or None)
+            self._tidy()
+
+    def _tidy(self) -> None:
+        """Take the readings of a report that is over back, once the grace is up."""
+        with self._lock:
+            if self._keys and not self._shown and self.clock() >= self._gone_at:
+                for key in self._keys:
+                    self.host.unpublish(key)
+                self._keys = set()
 
     def on_mode(self, mode: str | None = None, **_: Any) -> None:
         """A game began: the report goes at once, and none that was being built is shown."""
