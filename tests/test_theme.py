@@ -43,6 +43,23 @@ def test_builtin_theme_list():
     assert {"libre-default", "spur-ii"} <= ids
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"background": "#101418"},  # the colour where its object belongs
+        {"animation": 400},
+        {"widgets": [{"type": ["text"], "id": "a"}]},
+        {"refresh_ms": float("inf")},  # 1e999 in the file
+        {"animation": {"smoothing_ms": float("nan")}},  # NaN, which JSON readers take
+    ],
+)
+def test_a_theme_of_the_wrong_shape_is_a_theme_error(change):
+    """What is wrong with a theme file is a ThemeError, which the panel and the app handle (the
+    panel keeps the theme it shows, the app says why); another error stopped the panel loop."""
+    with pytest.raises(ThemeError):
+        parse_theme({**minimal(), **change})
+
+
 def test_defaults_are_filled_in():
     theme = parse_theme(minimal())
     widget = theme.widgets[0]

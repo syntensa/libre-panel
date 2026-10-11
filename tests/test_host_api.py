@@ -366,6 +366,35 @@ def test_messages_wait_for_a_panel_that_is_away_without_piling_up(isolated_home)
         host.close()
 
 
+def test_a_theme_a_service_asks_for_that_is_broken_leaves_the_panel_its_own(isolated_home):
+    """The autopilot or game mode asks for a theme whose file has the wrong shape (a colour
+    where the background's object belongs): the panel keeps the theme it shows, at once and
+    after a new start, instead of the loop failing and starting over every few seconds."""
+    from test_app_cli import MemoryStream, StepClock
+
+    from libre_panel.config import user_themes_dir
+
+    folder = user_themes_dir() / "broken"
+    folder.mkdir(parents=True)
+    theme = {"format": "libre-panel-theme/1", "display": {"width": 480, "height": 320},
+             "background": "#101418", "widgets": []}  # fmt: skip
+    (folder / "theme.json").write_text(json.dumps(theme), encoding="utf-8")
+    clock, host, config = StepClock(1000.0), PluginHost(), config_for(isolated_home)
+    loops = [app.MainLoop(config, host=host, display=MemoryStream(), clock=clock)]
+    try:
+        ServiceHost(host, "autopilot").show_theme("broken")
+        for _ in range(3):
+            clock.now += 0.1
+            loops[0].step(clock.now)
+        assert (loops[0].shown, loops[0].refused) == ("libre-default", "broken")
+        loops.append(app.MainLoop(config, host=host, display=MemoryStream()))
+        assert loops[1].shown == "libre-default"  # the panel loop started anew
+    finally:
+        for loop in loops:
+            loop.close()
+        host.close()
+
+
 # -- states -------------------------------------------------------------------------------
 
 

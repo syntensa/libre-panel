@@ -644,6 +644,11 @@
   encoding than UTF-8 ended the app at its start, and the tray's menu and some of the
   app's pages failed with it. Such a file is an error of the config now: the app starts,
   says what is wrong, and goes on once the file is fixed
+- A theme file of the wrong shape (`"background": "#101418"` where its object belongs, a
+  list as a widget's `type`, `1e999` for a whole number) stopped the panel loop instead
+  of being refused like any other mistake in a theme. Named by an autopilot rule or a
+  mode, it took the panel down every few seconds; now the panel keeps its theme and the
+  log says why
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars
