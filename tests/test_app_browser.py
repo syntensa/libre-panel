@@ -412,6 +412,27 @@ def test_settings_panel_without_a_panel(app_url, monkeypatch):
         assert status == "Starts when a panel it runs on is connected."
 
 
+def test_settings_panel_says_why_it_waits(app_url):
+    """The running app knows why no panel is in use (no permission, a library missing): said."""
+    import json
+
+    found = {
+        "configured": "auto",
+        "found": None,
+        "model": None,
+        "running": {"state": "waiting", "detail": "cannot open the USB device: access denied"},
+        "video": {"mode": "auto", "fps": 50, "on": False, "usb": True, "gaps": []},
+    }
+
+    def answer(route, request):
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(found))
+
+    with browser_page(app_url, "settings/panel", routes={"**/api/panel": answer}) as page:
+        why = page.locator(".panel-found-why")
+        playwright.expect(why).to_contain_text("Waiting for the panel: cannot open the USB device")
+        assert page.locator(".panel-found-name").inner_text() == "No panel found"
+
+
 def test_settings_sensors(app_url, isolated_home):
     """The sources in their order and on or off, how often they are read."""
     from libre_panel.config import default_providers

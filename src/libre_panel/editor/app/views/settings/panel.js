@@ -6,7 +6,7 @@ import { t } from "../../core/i18n.js";
 import { loadPanelInfo, loadSettings, saveSettings, setting, useCatalog, useConfig } from "../../core/settings.js";
 import { useStore } from "../../core/state.js";
 import { html, useRef, useState } from "../../lib/preact.js";
-import { panelName } from "../../shell/panel-popover.js";
+import { panelName, stateText } from "../../shell/panel-popover.js";
 import { Segmented, Select, Slider, Toggle } from "../../ui/controls.js";
 import { Popover } from "../../ui/layer.js";
 import { Card, CommitField, Disclosure, SettingRow, Status, usePolling } from "./parts.js";
@@ -80,15 +80,16 @@ function PanelFound() {
   const anchor = useRef(null);
   usePolling(loadPanelInfo, 6000); // a panel plugged in while this is open
   if (!info) return null;
-  const { found, model, configured } = info;
+  const { found, model, configured, running } = info;
+  // the running app says why it waits for the panel (no permission, a missing library …)
+  const why = running && ["waiting", "error"].includes(running.state) && running.detail;
   const same = Boolean(found && model && found.id === model.id);
   const shown = same ? found : model;
-  let status;
+  let status = null; // without a panel there is nothing to say but how to get one
   if (same) status = html`<${Status} tone="ok">${t("Connected")}<//>`;
   else if (found && model)
     status = html`<${Status} tone="warn">${t("Another panel is connected: {name}", { name: panelName(found) })}<//>`;
   else if (model) status = html`<${Status} tone="warn">${t("Not connected")}<//>`;
-  else status = html`<${Status}>${t("Waiting for a panel")}<//>`;
   const details = shown ? [connectionName(shown), `${shown.size[0]} × ${shown.size[1]}`] : [];
   const pick = (id) => {
     setOpen(false);
@@ -104,6 +105,7 @@ function PanelFound() {
           : html`${t("Plug it in: Libre Panel looks for it every few seconds. Until then the picture goes to a file.")}`}
       </div>
       ${configured !== "auto" ? html`<div class="settings-row-hint">${t("Chosen by hand. “Detect automatically” goes back to finding it.")}</div>` : null}
+      ${why ? html`<div class="panel-found-why"><${Status} tone="warn">${stateText(running.state)}: ${running.detail}<//></div>` : null}
     </div>
     <button ref=${anchor} type="button" class="btn" aria-haspopup="dialog" aria-expanded=${String(open)} onClick=${() => setOpen(!open)}>
       ${t("Another panel")}

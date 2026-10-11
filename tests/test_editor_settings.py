@@ -93,6 +93,31 @@ def test_the_settings_are_the_config_with_its_defaults_filled_in(server):
     assert data["restart"] == []
 
 
+def test_what_other_sources_keep_in_config_toml_stays_there(server):
+    """Tokens, passwords and calendar addresses are not the page's business: only the
+    settings the page shows are sent to it, and a write leaves the rest of the file alone."""
+    import json
+
+    config_dir().mkdir(parents=True)
+    (config_dir() / "config.toml").write_text(
+        '[sensors]\nproviders = ["psutil", "homeassistant", "mqtt"]\n\n'
+        '[sensors.homeassistant]\nurl = "http://ha.example:8123"\ntoken = "secret-token"\n\n'
+        '[sensors.mqtt]\npassword = "secret-password"\n\n'
+        '[sensors.calendar]\nsources = ["https://calendar.example/private-address.ics"]\n',
+        encoding="utf-8",
+    )
+    status, data = request(server, "GET", "/api/settings")
+    assert status == 200
+    sent = json.dumps(data)
+    for secret in ("secret-token", "secret-password", "private-address", "ha.example"):
+        assert secret not in sent, secret
+    assert write(server, **{"device.brightness": 30, "refresh_ms": 400})[0] == 200
+    text = config_text()
+    for secret in ("secret-token", "secret-password", "private-address"):
+        assert secret in text
+    assert load_config().sensors.options["homeassistant"]["token"] == "secret-token"
+
+
 def test_the_catalog_names_the_sources_the_drivers_and_the_services_with_their_options(server):
     _, data = request(server, "GET", "/api/settings")
     catalog = data["catalog"]
@@ -136,6 +161,28 @@ def test_a_plugins_service_is_listed_with_its_options(server, plugin_folder):
     status, _ = write(server, **{"services.tick.every_s": 2.5, "services.tick.loud": True})
     assert status == 200
     assert load_config().services.options["tick"] == {"every_s": 2.5, "loud": True}
+
+
+def test_a_plugin_that_declares_its_options_wrongly_does_not_take_the_settings_down(
+    server, plugin_folder
+):
+    plugin_folder(
+        """
+        from libre_panel.plugins.host import Service
+
+        class Slip(Service):
+            name = "slip"
+            api = 1
+            options = {"good": ("bool", False), "bad": "bool", "worse": ("list",), 3: ("int", 1)}
+        """,
+        {"libre_panel.services": {"slip": "Slip"}},
+    )
+    status, data = request(server, "GET", "/api/settings")
+    assert status == 200
+    slip = next(s for s in data["catalog"]["services"] if s["name"] == "slip")
+    assert [o["key"] for o in slip["options"]] == ["good", "3"]  # what is (type, default)
+    assert write(server, **{"services.slip.good": True})[0] == 200
+    assert write(server, **{"services.slip.bad": True})[0] == 400  # not an option it declares
 
 
 def test_a_broken_config_is_told_not_overwritten(server):

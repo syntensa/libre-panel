@@ -179,6 +179,19 @@ def _model_info(model: Any, port: str | None = None, sure: bool = True) -> dict[
     }
 
 
+def _declared(cls: Any) -> list[dict[str, Any]]:
+    """The options a service class declares, as ``{key, type, default}``; one that is not
+    ``(type, default)`` is left out, so a plugin's slip does not take the settings down."""
+    declared = getattr(cls, "options", None)
+    if not isinstance(declared, dict):
+        return []
+    return [
+        {"key": str(key), "type": spec[0], "default": _plain(spec[1])}
+        for key, spec in declared.items()
+        if isinstance(spec, tuple | list) and len(spec) == 2 and isinstance(spec[0], str)
+    ]
+
+
 def cli_command(arguments: str) -> str:
     """The command-line program as one types it in a terminal: the download's own on
     Windows, where it is not on the PATH, else ``libre-panel``."""
@@ -302,10 +315,7 @@ class Settings:
                     "source": found[name].source,
                     "builtin": found[name].source == BUILT_IN,
                     "error": found[name].error if cls is None else "",
-                    "options": [
-                        {"key": key, "type": spec[0], "default": _plain(spec[1])}
-                        for key, spec in (cls.options.items() if cls is not None else ())
-                    ],
+                    "options": _declared(cls),
                 }
             )
         return {
@@ -371,12 +381,12 @@ class Settings:
         cls = registry().get("services", service)
         if cls is None:
             raise SettingsError(f"{service} is not an installed service", 404)
-        spec = cls.options.get(option)
+        spec = next((o for o in _declared(cls) if o["key"] == option), None)
         if spec is None:
             raise SettingsError(f"{service} has no option {option!r}")
         if value is None:
             return "unset", None
-        return "value", _option(name, value, spec[0])
+        return "value", _option(name, value, spec["type"])
 
     def _check_together(self, changes: dict[str, Any], config: Config) -> None:
         """What only holds across settings: the place is both coordinates or none, and the

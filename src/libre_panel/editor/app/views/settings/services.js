@@ -234,11 +234,12 @@ function OptionRow({ service, option, given }) {
           : null}
       <//>`;
     }
-    const numbers = meta.numbers || (option.default.length > 0 && option.default.every((item) => typeof item === "number"));
+    const base = Array.isArray(option.default) ? option.default : []; // a plugin may declare none
+    const numbers = meta.numbers || (base.length > 0 && base.every((item) => typeof item === "number"));
     const change = (edit) =>
       saveSettings((now) => {
         const current = now.services.options[service]?.[option.key];
-        return { [name]: edit(Array.isArray(current) ? current : option.default) };
+        return { [name]: edit(Array.isArray(current) ? current : base) };
       });
     return row(
       html`<${ListField} label=${label} value=${Array.isArray(value) ? value : []} numbers=${numbers} onChange=${change} />`,

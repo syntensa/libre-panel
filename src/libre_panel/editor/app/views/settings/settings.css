@@ -203,8 +203,9 @@
 }
 
 .settings-row.stacked .settings-row-control {
+  flex-direction: column;
+  align-items: stretch;
   flex-shrink: 1;
-  flex-wrap: wrap;
 }
 
 .settings-row-control > .input,
@@ -417,6 +418,12 @@
 
 .panel-found-text .settings-row-hint {
   margin-top: 4px;
+}
+
+.panel-found-why {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 /* -- Sensors ------------------------------------------------------------------------------------ */

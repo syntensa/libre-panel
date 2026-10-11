@@ -146,11 +146,16 @@ export async function loadServiceStates() {
   }
 }
 
+/** Ask for the services' states again in a moment: the app follows a change of config.toml
+ * within a second or two, and the state is "changing" until it has. */
+const askAgainSoon = () => setTimeout(loadServiceStates, 1500);
+
 /** Switch a service on or off in config.toml; the running app follows within a moment. */
 export async function enableService(service, enabled) {
   try {
     await api.enable(service, enabled);
     await Promise.all([loadServiceStates(), loadSettings()]);
+    askAgainSoon();
     return true;
   } catch (error) {
     toastError(error);
@@ -167,6 +172,7 @@ export async function restartService(service) {
     toastError(error);
   }
   await loadServiceStates();
+  askAgainSoon();
 }
 
 /**
