@@ -10,11 +10,11 @@ loop muted playsinline>`` (the GIF is its fallback) and a poster PNG. ``--gif-on
 the GIFs. OUT is docs/media unless given; ``--list`` says what there is. Needs ffmpeg for the
 videos; without it Pillow writes the GIFs.
 
-Which theme a clip shows is a parameter: ``--theme volume-band=NAME`` (two names, comma between,
+Which theme a clip shows is a parameter: ``--theme video-mode=NAME`` (two names, comma between,
 for a clip that goes from one theme to another; an app clip opens the app with the theme). A
-theme is a built-in or user theme, a folder with a theme in it, or one of the layouts made of
-modules in tools/media_panel.py. Clips of the panel are in the device frame of
-tools/readme_images.py; ``--bare`` leaves it out.
+theme is a built-in theme, a folder with a theme in it, or one of the layouts made of modules in
+tools/media_panel.py. Clips of the panel are in the device frame of tools/readme_images.py;
+``--bare`` leaves it out.
 """
 
 from __future__ import annotations
@@ -64,8 +64,8 @@ def describe(known: dict[str, Clip]) -> str:
     lines = []
     for name, clip in known.items():
         shows = ", ".join(clip.themes)
-        lines.append(f"{name:18s} {clip.kind:5s} {clip.seconds:4.1f} s  {clip.about}")
-        lines.append(f"{'':18s} shows: {shows}")
+        lines.append(f"{name:20s} {clip.kind:5s} {clip.seconds:4.1f} s  {clip.about}")
+        lines.append(f"{'':20s} shows: {shows}")
     return "\n".join(lines)
 
 

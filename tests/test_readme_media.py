@@ -7,6 +7,8 @@ fallbacks and the size check.
 """
 
 import shutil
+from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -150,11 +152,11 @@ def test_a_gif_goes_down_the_ladder_until_it_is_small_enough(encode, tmp_path):
 
 
 def test_a_gif_over_the_limit_is_an_error_and_leaves_nothing(encode, frames, tmp_path):
-    out = tmp_path / "out" / "big.gif"
+    out, ladder = tmp_path / "out" / "big.gif", encode.LADDER[:2]
     with pytest.raises(encode.GifTooLarge, match=r"big\.gif .* a forum takes"):
-        encode.write_gif(frames, out, encode.Settings(target=100, limit=200))
+        encode.write_gif(frames, out, encode.Settings(target=100, limit=200), ladder)
     assert not out.exists()
-    fine = encode.write_gif(frames, out, encode.Settings(target=100, limit=10**7))
+    fine = encode.write_gif(frames, out, encode.Settings(target=100, limit=10**7), ladder)
     assert out.exists() and fine.size < 10**7 and not fine.within_target  # over the target only
 
 
@@ -206,6 +208,18 @@ def clip(panel, encode, tmp_path_factory):
     return record
 
 
+@pytest.fixture(scope="module")
+def short(panel, encode, tmp_path_factory):
+    """A recipe cut to a second and a half, for what needs no more than to see it run."""
+
+    def record(name, themes=None, scale=0.15):
+        recipe = replace(panel.CLIPS[name], seconds=1.5, warmup=0.5)
+        settings = encode.Settings(fps=10, scale=scale)
+        return panel.record(name, recipe, settings, tmp_path_factory.mktemp(name), themes)
+
+    return record
+
+
 def pixels(recorded, n):
     return np.asarray(recorded.frames.image(n), np.int16)
 
@@ -215,22 +229,57 @@ def differ(recorded, a, b):
     return float(np.abs(pixels(recorded, a) - pixels(recorded, b)).mean())
 
 
-def test_every_panel_recipe_runs_headless_and_makes_a_clip(panel, clip):
-    assert list(panel.CLIPS) == ["video-mode", "volume-band", "theme-tube", "game-entrance",
-                                 "card-ignition", "close-up", "where-it-started"]  # fmt: skip
+LONG = ("card-ignition", "volume-band", "theme-tube", "game-entrance")  # what the tests below use
+
+
+def test_every_panel_recipe_runs_headless_and_makes_a_clip(panel, clip, short):
+    assert list(panel.CLIPS) == [
+        "video-mode", "card-ignition", "small-panel", "volume-band", "theme-tube",
+        "game-entrance", "close-up-rings", "close-up-curves", "where-it-started",
+    ]  # fmt: skip
     for name, recipe in panel.CLIPS.items():
-        recorded = clip(name)
+        # (a 3.5" panel at 0.15 is 72 pixels wide: too small for the card in its corner)
+        recorded, seconds = (
+            (clip(name), recipe.seconds)
+            if name in LONG
+            else (short(name, scale=0.3 if name == "small-panel" else 0.15), 1.5)
+        )
         frames = recorded.frames
-        assert frames.count == round(recipe.seconds * 10) and frames.fps == 10, name
+        assert frames.count == round(seconds * 10) and frames.fps == 10, name
         assert 0 <= recorded.poster < frames.count, name
-        assert len({pixels(recorded, n).tobytes() for n in range(frames.count)}) > 20, name
+        assert (
+            len({pixels(recorded, n).tobytes() for n in range(frames.count)}) > frames.count // 2
+        ), name
         assert recipe.about and recipe.kind == "panel" and recipe.themes, name
+        for theme in recipe.themes:  # every theme a recipe names is there
+            assert panel.theme_data(theme)[0]["widgets"], name
 
 
-def test_a_close_up_is_a_crop_without_the_device_frame(panel, clip):
-    crop = panel.CLIPS["close-up"].crop
-    assert clip("close-up").frames.size == (round(crop[2] * 0.3), round(crop[3] * 0.3))  # 2 x 0.15
-    assert clip("volume-band").frames.size[0] > 306 - 8  # a panel clip has the frame round it
+def test_a_close_up_is_a_crop_without_the_device_frame(panel, clip, short):
+    for name in ("close-up-rings", "close-up-curves"):
+        recipe = panel.CLIPS[name]
+        x, y, w, h = recipe.crop.box(panel.theme_data(recipe.themes[0])[0])
+        assert short(name).frames.size == (round(w * 0.3), round(h * 0.3)), name  # 2 x 0.15
+        assert w < 1920 / 2 and h < 480 and (x, y) != (0, 0), name  # a part of the bar
+    assert clip("volume-band").frames.size[0] > 288  # a panel clip has the frame round it
+
+
+def test_a_focus_is_the_box_round_the_widgets_of_some_kinds(panel):
+    data, _folder = panel.theme_data("lumen")
+    fans = panel.Focus(("fan",), 10, 20, 30, 10).box(data)
+    boxes = [(w["x"], w["y"], w["w"], w["h"]) for w in data["widgets"] if w["type"] == "fan"]
+    left, top = min(b[0] for b in boxes), min(b[1] for b in boxes)
+    right, bottom = max(b[0] + b[2] for b in boxes), max(b[1] + b[3] for b in boxes)
+    assert fans == (left - 10, top - 20, right - left + 40, bottom - top + 30)
+    rings = panel.Focus(("instrument",)).box(data)  # modules: by the module's kind, on the grid
+    assert rings is not None and rings[0] > 1280 and rings[0] + rings[2] <= 1920
+    assert panel.Focus(("fan",), 5000, 5000, 5000, 5000).box(data) == (0, 0, 1920, 480)  # kept in
+    assert panel.Focus(("fan", "instrument")).box(panel.theme_data("pico")[0]) is None
+
+
+def test_a_close_up_of_a_theme_without_what_it_looks_for_shows_the_panel(short):
+    whole = short("close-up-rings", themes=("pico",), scale=0.5)
+    assert whole.frames.size == (80, 40)  # the panel (160 x 80, at half) as it is, not enlarged
 
 
 def test_the_volume_band_rolls_down_and_the_clip_ends_as_it_began(clip):
@@ -257,14 +306,17 @@ def test_the_entrance_darkens_the_panel_for_the_game_and_the_end(clip):
 
 def test_the_card_slot_changes_and_changes_back(clip):
     cards = clip("card-ignition")
-    assert differ(cards, 5, 35) > 6  # the weather instead of what plays
-    assert differ(cards, 5, cards.frames.count - 1) < 1.5  # playing again at the end
+    slot = slice(0, cards.frames.size[0] * 2 // 5)  # (the card slot is at the left of the bar)
+
+    def card(n):
+        return pixels(cards, n)[:, slot]
+
+    assert np.abs(card(5) - card(35)).mean() > 8  # the weather instead of what plays
+    assert np.abs(card(5) - card(cards.frames.count - 1)).mean() < 1.5  # playing again at the end
 
 
-def test_a_clip_is_the_same_on_every_run(panel, clip, encode, tmp_path):
-    again = panel.record("card-ignition", panel.CLIPS["card-ignition"],
-                         encode.Settings(fps=10, scale=0.15), tmp_path / "again")  # fmt: skip
-    first = clip("card-ignition")
+def test_a_clip_is_the_same_on_every_run(short):
+    first, again = short("video-mode"), short("video-mode")  # (curves, fans, rings: all in it)
     assert again.frames.count == first.frames.count and again.poster == first.poster
     for n in range(first.frames.count):
         assert again.frames.path(n).read_bytes() == first.frames.path(n).read_bytes(), n
@@ -375,6 +427,74 @@ def test_the_bezel_is_the_device_frame_of_the_images_tool(panel):
     assert np.abs(made - expected).max() <= 1  # (a rounding in the reflection, at most)
 
 
+# -- the app -----------------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def app_clips(panel):
+    """tools/media_app.py: the recipes of the app, which need a browser to run (but not to list)."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.syspath_prepend(str(TOOLS))
+        import media_app
+
+        yield media_app
+
+
+def test_the_app_recipes_are_listed_with_a_panel_each_to_open_them_on(app_clips, panel):
+    assert list(app_clips.CLIPS) == ["app-drag-module", "app-ring-style", "app-command-palette",
+                                     "app-hardware-names"]  # fmt: skip
+    for name, recipe in app_clips.CLIPS.items():
+        assert recipe.kind == "app" and recipe.about and recipe.seconds > 0, name
+        data, folder = panel.theme_data(recipe.themes[0])  # (made without a browser)
+        assert folder is None and data["display"]["model"] == "turing-3.5", name  # the 3.5" panel
+        assert data["name"] == "My panel"  # a name of its own: nothing of this computer
+    assert app_clips.CLIPS["app-drag-module"].room  # there is room on its grid for a module
+
+
+def test_a_crop_around_an_element_keeps_its_room_inside_the_window(app_clips):
+    class Page:
+        def locator(self, selector):
+            assert selector == ".panel-canvas"
+            return self
+
+        first = property(lambda self: self)
+
+        def bounding_box(self):
+            return {"x": 395.4, "y": 185.0, "width": 504.0, "height": 336.2}
+
+    around = app_clips.Around(".panel-canvas", 46, 50, 46, 52)
+    assert app_clips.window_box(Page(), around) == {
+        "x": 349,
+        "y": 135,
+        "width": 597,
+        "height": 439,
+    }  # (rounded outwards)
+    wide = app_clips.Around(".panel-canvas", 999, 999, 999, 999)  # the window is all there is
+    box = app_clips.window_box(Page(), wide)
+    assert box == {"x": 0, "y": 0, "width": app_clips.VIEWPORT[0], "height": app_clips.VIEWPORT[1]}
+    assert app_clips.window_box(Page(), (1, 2, 3, 4)) == {"x": 1, "y": 2, "width": 3, "height": 4}
+    assert app_clips.window_box(Page(), None)["width"] == app_clips.VIEWPORT[0]
+
+
+def test_an_app_clip_is_shot_in_a_browser_and_ends_as_it_began(app_clips, encode, tmp_path):
+    pytest.importorskip("playwright", reason="Playwright is not installed")
+    settings = encode.Settings(quick=True, scale=0.25)  # short holds, half the density
+    try:
+        recorded = app_clips.record(
+            "app-command-palette", app_clips.CLIPS["app-command-palette"], settings, tmp_path
+        )
+    except app_clips.Unavailable as error:
+        pytest.skip(str(error))
+    frames = recorded.frames
+    assert frames.size == (640, 360) and frames.count > 20  # the window, at 0.25 x 2
+    assert 0 <= recorded.poster < frames.count
+    first, last = (np.asarray(frames.image(n), np.int16) for n in (0, frames.count - 1))
+    picked = np.asarray(frames.image(recorded.poster), np.int16)
+    assert np.abs(first - picked).mean() > 4  # the palette is open over the panel
+    assert np.abs(first - last).mean() < 1.5  # and the look is undone: where it began
+    assert len({frames.path(n).read_bytes() for n in range(frames.count)}) > 6  # it moves
+
+
 # -- the program -------------------------------------------------------------------------------
 
 
@@ -412,9 +532,12 @@ def test_the_list_says_what_there_is_and_what_each_shows(cli, capsys):
     assert cli.main(["--list"]) == 0
     shown = capsys.readouterr().out
     for name in ("video-mode", "volume-band", "theme-tube", "game-entrance", "card-ignition",
-                 "close-up", "where-it-started"):  # fmt: skip
+                 "small-panel", "close-up-rings", "close-up-curves", "where-it-started",
+                 "app-drag-module", "app-ring-style", "app-command-palette",
+                 "app-hardware-names"):  # fmt: skip
         assert name in shown
-    assert "shows: studio, layout-bar" in shown  # (the tube goes from one theme to another)
+    assert "shows: lumen, studio" in shown  # (the tube goes from one theme to another)
+    assert "shows: libre-default" in shown and "shows: layout-rings" in shown
 
 
 @needs_ffmpeg
@@ -449,7 +572,10 @@ def test_without_ffmpeg_the_gif_is_made_and_the_videos_are_told_about(
     assert any("tiny.mp4" in line and "need ffmpeg" in line for line in said)
 
 
-def test_a_gif_over_the_limit_fails_loudly_and_over_the_target_says_so(cli, encode, tiny, tmp_path):
+def test_a_gif_over_the_limit_fails_loudly_and_over_the_target_says_so(
+    cli, encode, tiny, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(encode, "write_gif", partial(encode.write_gif, ladder=encode.LADDER[:1]))
     said, status = run(cli, encode, tmp_path, settings={"limit": 100, "gif_only": True})
     assert status == 1 and any(line.strip().startswith("ERROR") for line in said)
     assert not (tmp_path / "out" / "tiny.gif").exists()

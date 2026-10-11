@@ -45,7 +45,7 @@ from libre_panel.sensors.demo import DemoProvider, demo_history
 from libre_panel.services.notices import Notices
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import THEME_FORMAT, find_theme, parse_theme, save_theme
-from libre_panel.theme.modules import look_theme_parts
+from libre_panel.theme.modules import look_theme_parts, make_grid
 
 START = 1000.0  # the loop's clock at the first frame of a clip (the number is arbitrary)
 WARMUP_S = (
@@ -536,37 +536,6 @@ def modules_theme(
     return data
 
 
-def layout_bar() -> dict[str, Any]:
-    """A bar made to move: the clock and the network, two history graphs, instruments for the
-    CPU and the GPU, and a fan. It reads four times a second, so that a graph (which shows 216
-    readings) shows under a minute and scrolls at a pace the eye follows."""
-    return modules_theme(
-        "arctic",
-        [
-            module("clock", 0, 0, 2), module("network", 0, 1, 2),
-            module("graph", 2, 0, 3, source="cpu"), module("graph", 2, 1, 3, source="gpu"),
-            module("instrument", 5, 0, 1, 2, source="cpu"),
-            module("instrument", 6, 0, 1, 2, source="gpu"),
-            module("instrument", 7, 0, 1, 2, source="fan"),
-        ],
-        dust=True, refresh_ms=250,
-    )  # fmt: skip
-
-
-def layout_cards() -> dict[str, Any]:
-    """The card slot (what plays, the weather when nothing does) beside the clock, the network
-    and three instruments."""
-    return modules_theme(
-        "arctic",
-        [
-            module("clock", 0, 0, 2), module("netcard", 0, 1, 2), module("cards", 2, 0, 3, 2),
-            module("instrument", 5, 0, 1, 2, source="cpu"),
-            module("instrument", 6, 0, 1, 2, source="gpu"),
-            module("instrument", 7, 0, 1, 2, source="mem"),
-        ],
-    )  # fmt: skip
-
-
 def layout_game() -> dict[str, Any]:
     """A screen for a game: the frame rate large with its course, the CPU and the GPU, the
     cores and the temperatures."""
@@ -581,17 +550,53 @@ def layout_game() -> dict[str, Any]:
     )  # fmt: skip
 
 
-# Themes a recipe may name besides the built-in ones. The clips of the README show Libre Panel's
-# own look: these layouts are what that looks like in modules until a flagship theme says it
-# better (``--theme clip=THEME`` puts any theme in a clip's place).
+# Themes a recipe may name besides the built-in ones: screens that Libre Panel's themes do not
+# have (a game's), made of modules in Libre Panel's own look. ``--theme clip=THEME`` puts any
+# theme in a clip's place.
 LAYOUTS: dict[str, Callable[[], dict[str, Any]]] = {
-    "layout-bar": layout_bar,
-    "layout-cards": layout_cards,
     "layout-game": layout_game,
 }
 
 
 # -- recipes ------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Focus:
+    """A close-up of what a theme has of some kinds of widget: the box around all the widgets
+    of these ``kinds`` (a widget's type, or the module of a module), with this much room on each
+    side. So a close-up finds its place in whatever theme it is made of."""
+
+    kinds: tuple[str, ...]
+    left: int = 0
+    top: int = 0
+    right: int = 0
+    bottom: int = 0
+
+    def box(self, data: dict[str, Any]) -> tuple[int, int, int, int] | None:
+        """(x, y, width, height) in the panel's own pixels; None if the theme has none of them."""
+        theme = parse_theme(data)
+        grid = make_grid(theme.width, theme.height, theme.grid, theme.model)
+        found = []
+        for widget in data.get("widgets", []):
+            kind = widget.get("module") if widget.get("type") == "module" else widget.get("type")
+            if kind not in self.kinds:
+                continue
+            if widget.get("type") == "module":
+                found.append(
+                    grid.box(
+                        widget["col"], widget["row"], widget.get("cols", 1), widget.get("rows", 1)
+                    )
+                )
+            elif all(key in widget for key in ("x", "y", "w", "h")):
+                found.append([widget["x"], widget["y"], widget["w"], widget["h"]])
+        if not found:
+            return None
+        x0 = max(0, min(x for x, _y, _w, _h in found) - self.left)
+        y0 = max(0, min(y for _x, y, _w, _h in found) - self.top)
+        x1 = min(theme.width, max(x + w for x, _y, w, _h in found) + self.right)
+        y1 = min(theme.height, max(y + h for _x, y, _w, h in found) + self.bottom)
+        return x0, y0, x1 - x0, y1 - y0
 
 
 @dataclass(frozen=True)
@@ -608,7 +613,9 @@ class PanelClip:
     setup: Callable[[Stage, tuple[str, ...]], None]
     poster: float = 0.0  # the second the poster is taken at
     zoom: int = 1  # drawn at this many times the panel's size: a close-up is sharp
-    crop: tuple[int, int, int, int] | None = None  # (x, y, width, height) of the panel's own pixels
+    # of the panel's own pixels: (x, y, width, height), or a :class:`Focus` that finds the box in
+    # the theme; a theme that has none of them is shown whole
+    crop: tuple[int, int, int, int] | Focus | None = None
     framed: bool = True  # in the device frame (a close-up is a detail: it is not)
     loop: str = "fade"  # "fade": the end is blended into the start; "cut": it is seamless as it is
     # Whether the demo's values come round with the clip: its end then leads on into its start
@@ -634,16 +641,17 @@ def record(
     if len(themes) != len(clip.themes):
         raise ValueError(f"{name} shows {len(clip.themes)} theme(s), not {len(themes)}")
     with workshop():
-        stage = Stage(settings, clip.zoom, clip.seconds if clip.periodic else None)
+        box = clip.crop
+        if isinstance(box, Focus):  # (a theme without what it looks for is shown whole)
+            box = box.box(theme_data(themes[0])[0])
+        stage = Stage(settings, clip.zoom if box else 1, clip.seconds if clip.periodic else None)
         clip.setup(stage, themes)
         fps = settings.fps
         overlap = round(FADE_S * fps) if clip.loop == "fade" else 0
         total = clip.seconds + overlap / fps
         sink = FrameSink(folder, fps)
         present: Presenter | None = None
-        crop = None
-        if clip.crop is not None:
-            crop = tuple(round(v * stage.factor) for v in clip.crop)
+        crop = tuple(round(v * stage.factor) for v in box) if box else None
         bare = settings.bare or not clip.framed
         for frame in stage.frames(total, clip.warmup):
             if present is None:
@@ -668,7 +676,8 @@ def work_burst(stage: Stage, at: float = 2.0) -> None:
 
 
 # Video mode: what is drawn on every frame. The history graphs scroll, the rings and numbers glide
-# to each new reading, the fan turns faster as it speeds up, and the dust drifts.
+# to each new reading, the fans turn faster as they speed up, and the dust drifts (if the theme
+# has any).
 def video_mode(stage: Stage, themes: tuple[str, ...]) -> None:
     stage.show(stage.theme(themes[0]))
     work_burst(stage)
@@ -719,37 +728,57 @@ def card_ignition(stage: Stage, themes: tuple[str, ...]) -> None:
     stage.tweak(silence("media.", 2.0, 5.0))
 
 
+# The small panel: a burst of work fills the rings, the history scrolls, and what plays in the
+# corner gives way to the weather and comes back (a card on a small panel is small).
+def small_panel(stage: Stage, themes: tuple[str, ...]) -> None:
+    stage.show(stage.theme(themes[0]))
+    work_burst(stage, at=0.6)
+    stage.tweak(silence("media.", 4.0, 7.0))
+
+
 # A ring that fills and a fan that runs up, close: drawn at twice the panel's size, cropped.
 def close_up(stage: Stage, themes: tuple[str, ...]) -> None:
     stage.show(stage.theme(themes[0]))
     work_burst(stage, at=1.0)
 
 
+# The clips show Libre Panel's own screens: Lumen on the bars, Libre Default on the small panel,
+# Studio for the notice. Their graphs show a long stretch of time, so none of them loops on data
+# that comes round (see ``periodic``): the end gives way to the start.
 CLIPS: dict[str, PanelClip] = {
     "video-mode": PanelClip(
-        "video mode: history graphs scrolling, rings and numbers gliding, a fan running up, dust",
-        ("layout-bar",), 8.0, video_mode, poster=4.0, periodic=False,
-    ),
-    "volume-band": PanelClip(
-        "the volume key: a notice in the band style, its number counting and its bar gliding",
-        ("studio",), 6.8, volume_band, poster=2.2,
-    ),
-    "theme-tube": PanelClip(
-        "one screen to the next with the tube, and back again",
-        ("studio", "layout-bar"), 6.6, theme_tube, poster=1.5, periodic=False,
-    ),
-    "game-entrance": PanelClip(
-        "a game starts and ends with the entrance: the screen closes to a line, a band opens",
-        ("studio", "layout-game"), 7.8, game_entrance, poster=2.6,
+        "video mode: lit curves scrolling, rings and numbers gliding, fans running up",
+        ("lumen",), 8.0, video_mode, poster=4.0, periodic=False,
     ),
     "card-ignition": PanelClip(
         "the card slot changes from playback to the weather and back, with its line of light",
-        ("layout-cards",), 6.6, card_ignition, poster=2.1,
+        ("lumen",), 6.6, card_ignition, poster=2.1, periodic=False,
     ),
-    "close-up": PanelClip(
-        "a close-up of a ring that fills and a fan that runs up, at twice the panel's size",
-        ("layout-bar",), 6.0, close_up, poster=3.0, zoom=2, crop=(1430, 30, 480, 430),
-        framed=False,
+    "small-panel": PanelClip(
+        "the small panel: lit rings filling, a history that scrolls, a card that changes",
+        ("libre-default",), 8.0, small_panel, poster=1.6, periodic=False,
+    ),
+    "volume-band": PanelClip(
+        "the volume key: a notice in the band style, its number counting and its bar gliding",
+        ("studio",), 6.8, volume_band, poster=2.2, periodic=False,
+    ),
+    "theme-tube": PanelClip(
+        "one screen to the next with the tube, and back again",
+        ("lumen", "studio"), 6.6, theme_tube, poster=1.5, periodic=False,
+    ),
+    "game-entrance": PanelClip(
+        "a game starts and ends with the entrance: the screen closes to a line, a band opens",
+        ("lumen", "layout-game"), 7.8, game_entrance, poster=2.6, periodic=False,
+    ),
+    "close-up-rings": PanelClip(
+        "a close-up of the rings: lit arcs that fill, numbers that glide, at twice the size",
+        ("lumen",), 6.0, close_up, poster=3.0, zoom=2, framed=False,
+        crop=Focus(("instrument", "ring", "gauge"), 14, 14, 14, 32), periodic=False,
+    ),
+    "close-up-curves": PanelClip(
+        "a close-up of the curves and the fans: a lit history that scrolls, fans that run up",
+        ("lumen",), 6.0, close_up, poster=3.0, zoom=2, framed=False,
+        crop=Focus(("graph", "fan"), 20, 44, 20, 22), periodic=False,
     ),
     # SPUR II's classic screen, where Libre Panel started: the only clip of its own look
     "where-it-started": PanelClip(
