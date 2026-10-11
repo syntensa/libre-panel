@@ -206,7 +206,7 @@ def page_plugin(plugin_folder):
 
 def test_plugin_page_opens_in_the_editor(page_plugin, page):
     page.click("#pages-button")
-    page.get_by_role("menuitem", name="Cooling").click()
+    page.get_by_role("menuitem", name="Analysis").click()
     frame = page.frame_locator("#plugin-frame")
     frame.locator("#out", has_text="1 3").wait_for()  # kit.js reached the page's own API
     assert page.locator("main.layout").is_hidden()
@@ -539,10 +539,10 @@ def test_the_autopilot_page_in_the_editor(background_editor):
         frame.locator("#dirty", has_text="unsaved").wait_for()
 
         frame.get_by_role("button", name="Save").click()
-        assert wait_for(lambda: load_config().services.options.get("autopilot", {}).get("rules"))
+        # one write: the rules and the switch together
+        assert wait_for(lambda: load_config().services.enabled == ["notices", "autopilot"])
         rules = load_config().services.options["autopilot"]["rules"]
         assert rules == [{"name": "Quiet", "theme": "slate", "when": {"music": False}}]
-        assert load_config().services.enabled == ["notices", "autopilot"]
         frame.locator("#dirty", has_text="unsaved").wait_for(state="hidden")
         assert wait_for(lambda: "autopilot" in app.services.running, 15)
         # the service runs: the page says what it does (and the rule holds: no music here)
@@ -555,3 +555,44 @@ def test_the_autopilot_page_in_the_editor(background_editor):
         assert wait_for(
             lambda: not load_config().services.options.get("autopilot", {}).get("rules")
         )
+
+
+STATS = """async (stats) => {
+  const { describeStats } = await import("/static/stats.js");
+  const fill = (text, vars = {}) => text.replace(/\\{(\\w+)\\}/g, (all, name) => vars[name] ?? all);
+  const rows = describeStats(stats, fill);
+  return Object.fromEntries(rows.map((row) => [row.id, [row.value, row.level]]));
+}"""
+
+HEALTHY = {
+    "fps": 49.8, "target_fps": 50, "streaming": True, "render_ms": 7.4, "render_peak_ms": 19.0,
+    "kbps": 251.0, "blocks_per_s": 50.1, "max_depth": 2, "waits": 0, "drops": 0,
+    "usb_errors": 0, "panel_restarts": 0, "ffmpeg_restarts": 0, "uptime_s": 120,
+}  # fmt: skip
+
+
+def test_the_numbers_are_judged_against_what_the_panel_should_manage(page):
+    def rows(**changes):
+        return page.evaluate(STATS, {**HEALTHY, **changes})
+
+    healthy = rows()
+    assert healthy == {
+        "fps": ["49.8 fps", ""], "render": ["7.4 ms", ""], "data": ["251 KB/s", ""],
+        "video": ["50.1 blocks/s", ""], "faults": ["none", ""],
+    }  # fmt: skip
+    assert rows(fps=40.0)["fps"] == [
+        "40 fps",
+        "warn",
+    ]  # video mode: under nine tenths of the target
+    assert rows(fps=20.0)["fps"][1] == "bad"  # under half of it
+    assert rows(streaming=False, fps=2.0, target_fps=10)["fps"] == [
+        "2 fps",
+        "",
+    ]  # drawn when it moves
+    assert rows(render_ms=25.0)["render"][1] == "warn"  # more than the 20 ms a frame has
+    assert rows(render_ms=25.0, streaming=False)["render"][1] == ""
+    assert rows(drops=1)["video"][1] == "warn" and rows(max_depth=4)["video"][1] == "warn"
+    assert rows(usb_errors=1, ffmpeg_restarts=2)["faults"] == ["3 so far", "warn"]
+    plain = rows(kbps=None, blocks_per_s=None, max_depth=None, waits=None, drops=None)
+    assert set(plain) == {"fps", "render", "faults"}  # what nobody counted is not shown
+    assert page.evaluate(STATS, {}) == {}  # no numbers: nothing to show
