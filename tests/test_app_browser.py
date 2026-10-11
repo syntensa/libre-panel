@@ -2093,12 +2093,20 @@ def test_snapping_can_be_to_a_single_pixel(page):
     choices = page.get_by_role("radiogroup", name="Snap")
     assert choices.get_by_role("radio").all_inner_texts() == ["off", "1", "4", "8", "16"]
     zoom = page.locator(".panel-canvas").bounding_box()["width"] / 480
+    # the preview is drawn where the probe is: a move starts from the drawn box, which an undo
+    # just before has not moved back yet
+    drawn_in_place = """(() => {
+      const box = window.libre.store.get().render.boxes.probe;
+      const probe = window.libre.doc.widgetById('probe');
+      return Boolean(box) && box[0] === probe.x && box[1] === probe.y;
+    })()"""
 
     def snapped(step, dx, dy):
         """Where the probe's corner ends after the pointer moved (dx, dy) screen pixels."""
         choices.get_by_role("radio", name=str(step) if step else "off", exact=True).click()
         assert js(page, "window.libre.store.get().prefs.snap") == step
         page.keyboard.press("Escape")  # the popover
+        page.wait_for_function(drawn_in_place, timeout=5000)
         box = page.locator('.overlay .box[data-id="probe"]').bounding_box()
         middle = (box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
         drag(page, middle, (middle[0] + dx, middle[1] + dy), steps=6)

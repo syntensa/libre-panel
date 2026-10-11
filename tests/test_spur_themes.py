@@ -429,7 +429,9 @@ def report_ids(theme, earlier):
 
 def test_the_round_report_reads_what_the_memory_service_publishes():
     theme = load_theme(find_theme("round-report"))
-    published = set(demo_report(0.0))  # the service's own readings (round_report.readings)
+    # the service's own readings (round_report.readings), at a time Windows can turn into a
+    # local one (not before 1970)
+    published = set(demo_report(1_700_000_000))
     read = keys_read(theme)
     ours = {key for key in read if key.startswith("report.")}
     assert ours <= published, ours - published

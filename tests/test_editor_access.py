@@ -1,6 +1,7 @@
 """Who may talk to the editor's server (editor/access.py): the secret token of a run, the file the
 programs of the same user read it from, and the routes that want it."""
 
+import functools
 import http.client
 import json
 import logging
@@ -528,10 +529,13 @@ def test_the_log_says_when_the_highest_rights_run_what_others_can_change(
 
 
 def test_asking_for_the_highest_rights_warns_of_a_folder_others_can_change(monkeypatch, capsys):
-    from libre_panel import cli
+    from libre_panel import autostart, cli
 
+    # as on Linux, where the highest rights are refused after the warning (on Windows they
+    # would make a real scheduled task)
+    monkeypatch.setattr(autostart, "Autostart", functools.partial(autostart.Autostart, "linux"))
     monkeypatch.setattr(access, "folder_risk", lambda folder: "other users may write to it")
-    assert cli.main(["autostart", "enable", "--elevated"]) == 1  # (this is not Windows)
+    assert cli.main(["autostart", "enable", "--elevated"]) == 1
     err = capsys.readouterr().err
     assert "other users may write to it" in err and str(config_dir()) in err
     assert "LIBRE_PANEL_HOME" in err
