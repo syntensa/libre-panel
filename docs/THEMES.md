@@ -270,10 +270,12 @@ bands in the colour of what they frame.
 |---|---|
 | `spur-classic` | two load charts, RAM and network in staggered boxes, CPU and GPU sections; for the desk |
 | `spur-horizon` | the CPU's load growing up from a midline and the GPU's down from it, 70 seconds side by side (a point a pixel, 25 a second, a mark every 10 s), tiles below for values, network and music; for the desk |
+| `spur-header` | for a game: the classic frame with the frame rate and the 1% low in the header beside the game's logo (its name where there is none), load charts, who holds the frame rate down and a chart of the longest frame of each moment; needs the `game` service and PresentMon |
 
 The fans in the header need their sensors (`fan.lpc.fan_1` ... , `gpu.fan`) and show
 only the ones that report; the volume needs the `audio` source, what plays the
-`media` source.
+`media` source, the screens for a game the `game` service and PresentMon
+(see [Configuration](CONFIGURATION.md#game-mode)).
 
 ## Modules
 

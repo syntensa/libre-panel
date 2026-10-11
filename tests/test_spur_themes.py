@@ -18,9 +18,9 @@ from libre_panel.theme.model import (
     parse_theme,
 )
 
-SPUR = ["spur-horizon"]
+SPUR = ["spur-horizon", "spur-header"]
 # readings the demo has not got yet: they come with the merge of the sources that add them
-LATER: set[str] = set()
+LATER = {"mem.name"}
 
 
 def drawn(theme_name):
@@ -126,3 +126,37 @@ def test_horizon_music_tile_follows_the_player():
     assert "media-paused-plain" in ids and "cover" not in ids
     ids = shown_ids(theme)  # nothing plays
     assert {"media-idle-plain"} <= ids and not ids & {"media-title-plain", "media-title-cover"}
+
+
+# -- Header (the game screen with the familiar frame) --------------------------------------------
+
+
+def test_header_shows_the_frame_rate_the_limit_and_the_game():
+    from PIL import Image
+
+    theme = load_theme(find_theme("spur-header"))
+    by = {w["id"]: w for w in theme.widgets}
+    assert by["fps-value"]["sensor"] == "game.fps" and by["low-value"]["sensor"] == "game.low"
+    words = {"limit-gpu", "limit-cpu", "limit-cap", "limit-none"}
+    assert shown_ids(theme, {"game.limiter": "gpu"}) & words == {"limit-gpu"}
+    assert shown_ids(theme, {"game.limiter": "CAP"}) & words == {"limit-cap"}
+    assert shown_ids(theme, {}) & words == {"limit-none"}  # PresentMon has not seen a game
+    # the logo where the game has one, its name where it has not
+    assert {"game-name"} <= shown_ids(theme, {"game.name": "Starfall"})
+    ids = shown_ids(theme, {"game.name": "Starfall"}, {"game.logo": Image.new("RGBA", (4, 4))})
+    assert "game-logo" in ids and "game-name" not in ids
+    # the fans keep their place after the game's values, without names once they are narrow
+    fans = [w for w in theme.widgets if w["type"] == "fan"]
+    assert fans[0]["x"] > by["low-value"]["x"] and not any("-name" in w["id"] and "fan" in w["id"]
+                                                          for w in theme.widgets)  # fmt: skip
+
+
+def test_header_charts_the_longest_frame_of_each_point_with_a_line_at_60_fps():
+    theme = load_theme(find_theme("spur-header"))
+    by = {w["id"]: w for w in theme.widgets}
+    graph = by["frames-graph"]
+    assert graph["sensor"] == "game.frametime_peak" and (graph["min"], graph["max"]) == (0, 33.3)
+    floor = graph["y"] + graph["h"] - 1
+    assert by["frames-floor"]["y"] == floor
+    assert by["frames-60fps"]["y"] == floor - int(16.667 / 33.3 * (graph["h"] - 1))
+    assert by["frames-60fps"]["x"] == graph["x"] and by["frames-60fps"]["w"] == graph["w"] - 1

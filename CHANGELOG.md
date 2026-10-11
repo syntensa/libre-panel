@@ -286,6 +286,12 @@
   across the whole panel, 70 seconds as a landscape with a mark every ten
   seconds, tiles below for CPU, GPU, RAM, network and what plays, the fans and
   the clock above
+- The theme *SPUR Header* (`spur-header`, 1920 × 480): SPUR II's game screen
+  with the classic frame: the frame rate large and the 1% low in the header
+  beside the game's logo (its name where it has none), the CPU's and GPU's
+  load as charts, RAM and the GPU's temperatures, and below, where the
+  network was, a chart of the longest frame of each moment, who holds the
+  frame rate down (in the colour of its chart) and the volume
 - Ridges: a `rect` with a `ridge` name is drawn as SPUR II draws its frames,
   a ridge with two facets under the guide light, the lit one glowing a
   little; rects with the same name are one ridge, joined at mitres. Rects
