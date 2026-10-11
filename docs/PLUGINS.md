@@ -328,10 +328,15 @@ the panel):
 | `report.cpu_temp_mean`, ..., `report.cpu_temp_delta`, ... | for each of those: the mean of the earlier rounds, and this round minus it |
 | `report.level.0` ... | the share of the round in each range of frame rates in percent, the slowest range first; the label is the range ("< 60", "60–90", "165+") |
 | `report.level.0.mean` ... | the mean share of the earlier rounds in each range (no value for the first round, or when the ranges were other ones) |
-| `report.head.levels`, `report.head.peaks` | headings for a chart and a list |
+| `report.head.levels`, `report.head.peaks` | headings for a chart and a list; with earlier rounds the first says what the tick on each bar of the chart is ("Share of the round · tick: average") |
 
 Where there is nothing to be against (the first round of a game) the mean and
 delta readings have no value: a theme shows "--" or hides them with `needs`.
+
+The game's logo is the picture `game.logo` (an image widget's `"src": "@game.logo"`):
+the `game` service keeps it after the game ends, until the next game, so the report
+can show it beside the name. A `bar` can draw the mean of a range as a tick across it
+with `mark` (`"mark": "report.level.3.mean"`).
 
 The service also has `show_last_report()` (builds and shows the latest round
 that was long enough again; for a console page) and `status()` (is it

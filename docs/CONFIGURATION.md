@@ -449,7 +449,9 @@ theme = "slate"        # optional: another theme
   (at most a second) so that the first game screen already has the logo.
 - **The end.** When the program has been gone for `linger_s` seconds the mode
   ends with the entrance for the end. Games restart while they are set up and
-  launchers swap their process, so the mode does not follow every flicker.
+  launchers swap their process, so the mode does not follow every flicker. The
+  name goes, the logo stays until the next game (or until the service stops): the
+  round report that follows shows it beside the name.
 - **Without the entrance** (`entrance = false`) the switch uses the
   `transition` of `config.toml`, and a message says "Game mode" (and "Game
   ended"), so the theme's toast style draws it.
@@ -706,8 +708,9 @@ fps_levels = [60, 90, 120, 144, 165]   # the frame-rate ranges of the report's c
   theme for `report_seconds`, ahead of an autopilot's choice and in normal mode
   only; a new game ends it at once, and a round that ends because Libre Panel
   quits has none. `round-report` is a plain built-in theme for 8.8" and 9.2"
-  bars in the look of SPUR II's report screen; copy it in the editor to change
-  it, or let a screen of a plugin draw the data
+  bars in the look of SPUR II's report screen, with the game's logo (the one the
+  [`game` service](#game-mode) keeps, `@game.logo`) beside its name; copy it in
+  the editor to change it, or let a screen of a plugin draw the data
   ([Plugins](PLUGINS.md#the-round-report)).
 - **Cost.** One sample a second, whatever the theme's `refresh_ms`. While the
   service runs the sources it needs run too, although no theme shows them: the

@@ -98,7 +98,7 @@ class DemoProvider(SensorProvider):
     name = "demo"
 
     def images(self) -> dict[str, Any]:
-        return {"media.cover": _cover()}
+        return {"media.cover": _cover(), "game.logo": _logo()}
 
     def __init__(self, options: dict[str, Any] | None = None) -> None:
         super().__init__(options)
@@ -211,6 +211,45 @@ def demo_cover(size: int = 320) -> Image.Image:
     return cover.convert("RGBA")
 
 
+def demo_logo(width: int = 240, height: int = 144) -> Image.Image:
+    """A game's logo for previews, made up: a star over a word on a clear ground, the way
+    Steam's cut-out logos come, in about the proportions of one (drawn three times larger and
+    reduced, so its edges are smooth)."""
+    from PIL import ImageDraw, ImageFont
+
+    from libre_panel.fonts import builtin_font_path
+
+    k = 3
+    logo = Image.new("RGBA", (width * k, height * k), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(logo)
+    cx, cy, r = width * k / 2, height * k * 0.34, height * k * 0.30
+    # a four-pointed star: points on the axes, waists between them
+    waist = r * 0.28
+    star = [
+        (cx + dx * (r if i % 2 == 0 else waist), cy + dy * (r if i % 2 == 0 else waist))
+        for i, (dx, dy) in enumerate(
+            [(0, -1), (0.7, -0.7), (1, 0), (0.7, 0.7), (0, 1), (-0.7, 0.7), (-1, 0), (-0.7, -0.7)]
+        )
+    ]
+    amber, white = (255, 176, 74, 255), (242, 247, 255, 255)
+    draw.polygon(star, fill=amber)
+    core = r * 0.2  # a pale centre
+    draw.ellipse([cx - core, cy - core, cx + core, cy + core], fill=(255, 244, 214, 255))
+    path = builtin_font_path("builtin:Barlow-Bold")
+    word = "STARFALL"
+    size = round(height * k * 0.27)
+    font = ImageFont.truetype(str(path), size) if path else ImageFont.load_default(size)
+    gap = size * 0.12  # letters apart, as a logo sets them
+    total = sum(font.getlength(c) + gap for c in word) - gap
+    pen, top = (width * k - total) / 2, height * k * 0.70
+    for c in word:
+        draw.text((pen, top), c, font=font, fill=white, anchor="lm")
+        pen += font.getlength(c) + gap
+    line = height * k * 0.88  # a thin rule under it
+    draw.rectangle([width * k * 0.18, line, width * k * 0.82, line + k * 2], fill=amber)
+    return logo.resize((width, height), Image.Resampling.LANCZOS)
+
+
 _DAILY = {  # high, low, code, rain: a week of autumn
     "temperature_2m_max": [17, 15, 13, 16, 18, 19, 14],
     "temperature_2m_min": [9, 8, 6, 7, 10, 11, 8],
@@ -258,12 +297,19 @@ def demo_forecast(t: float) -> dict[str, Reading]:
 
 
 _COVER: list[Image.Image] = []
+_LOGO: list[Image.Image] = []
 
 
 def _cover() -> Image.Image:
     if not _COVER:
         _COVER.append(demo_cover())
     return _COVER[0]
+
+
+def _logo() -> Image.Image:
+    if not _LOGO:
+        _LOGO.append(demo_logo())
+    return _LOGO[0]
 
 
 HISTORY_SAMPLES = 1900  # a graph of SPUR II's panorama (1713 points) is full in a preview

@@ -1107,7 +1107,8 @@
     "Free software for USB system-monitor panels, under the GNU General Public License 3.0.": "Freie Software für USB-Systemmonitor-Panels, unter der GNU General Public License 3.0.",
     "This part of the settings is being built; until then config.toml and the tray menu have it.": "Dieser Teil der Einstellungen entsteht gerade; bis dahin gibt es ihn in config.toml und im Menü des Infobereichs.",
     "processor, graphics card, memory": "Prozessor, Grafikkarte, Arbeitsspeicher",
-    "Free": "Frei"
+    "Free": "Frei",
+    "Share of the round · tick: average": "Anteil der Runde · Strich: Schnitt"
   },
   "fields": {
     "align": "Ausrichtung",
@@ -1164,6 +1165,9 @@
     "locked": "gesperrt",
     "major": "stärkere Linie alle",
     "major_color": "Farbe der stärkeren Linien",
+    "mark": "Marke",
+    "mark_color": "Farbe der Marke",
+    "mark_width": "Breite der Marke",
     "marks": "Striche",
     "max": "Maximum",
     "max_items": "höchstens",

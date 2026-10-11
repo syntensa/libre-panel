@@ -108,6 +108,12 @@ def readings(report: dict[str, Any]) -> dict[str, tuple[Any, str, str]]:
     played = " – ".join(
         time.strftime("%H:%M", time.localtime(session[key])) for key in ("started", "ended")
     )
+    # the heading's hint: the tick on each bar of the chart is the earlier rounds' average
+    levels = (
+        t("Share of the round · tick: average")
+        if count
+        else t("Share of the round at each frame rate")
+    )
     out: dict[str, tuple[Any, str, str]] = {
         "report.title": (t("Round report"), "", t("Round report")),
         "report.game": (session["game"], "", t("Game")),
@@ -123,7 +129,7 @@ def readings(report: dict[str, Any]) -> dict[str, tuple[Any, str, str]]:
         "report.frametime_delta": (against("frametime_mean"), "ms", t("Against the average")),
         "report.count": (count, "", t("Earlier rounds")),
         "report.limit": (_held_back(session), "", t("Held back by")),
-        "report.head.levels": (t("Share of the round at each frame rate"), "", ""),
+        "report.head.levels": (levels, "", ""),
         "report.head.peaks": (t("Highest values of the round"), "", ""),
     }  # fmt: skip
     held = {name: session.get(f"limit_{name}_s") or 0 for name in ("gpu", "cpu", "cap")}

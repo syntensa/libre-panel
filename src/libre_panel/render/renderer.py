@@ -238,14 +238,16 @@ def _card_corners(r: int, outline: int) -> tuple[Image.Image, Image.Image | None
     return shape.reduce(s), ring, c
 
 
-def _fitted(image: Image.Image, w: int, h: int, fit: str) -> Image.Image:
-    """``image`` at w x h: stretched, inside with room left (contain) or filling it (cover)."""
+def _fitted(image: Image.Image, w: int, h: int, fit: str, align: str = "center") -> Image.Image:
+    """``image`` at w x h: stretched, inside with room left (contain, at the left, in the middle
+    or at the right: ``align``) or filling it (cover)."""
     if fit == "cover":
         return ImageOps.fit(image, (w, h), Image.Resampling.LANCZOS)
     if fit == "contain":
         inner = ImageOps.contain(image, (w, h), Image.Resampling.LANCZOS)
         out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        out.paste(inner, ((w - inner.width) // 2, (h - inner.height) // 2))
+        left = {"left": 0, "right": w - inner.width}.get(align, (w - inner.width) // 2)
+        out.paste(inner, (left, (h - inner.height) // 2))
         return out
     return image.resize((w, h), Image.Resampling.LANCZOS)
 
@@ -344,6 +346,8 @@ def _reads(widgets: list[dict[str, Any]]) -> set[str]:
     for widget in widgets:
         if widget.get("sensor"):
             keys.add(widget["sensor"])
+        if widget.get("mark"):
+            keys.add(widget["mark"])
         for need in (widget.get("needs") or "").split(","):
             need = need_key(need)
             if need:
@@ -385,7 +389,7 @@ class Renderer:
         self.moving = False  # True while an animation has not settled yet
         self._fonts: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
         self._digit_width: dict[int, float] = {}
-        self._images: dict[tuple[str, int, int, str], Image.Image | None] = {}
+        self._images: dict[tuple[str, int, int, str, str], Image.Image | None] = {}
         self._slide_lists: dict[str, tuple[float, list[str]]] = {}  # widget id -> pictures
         self._gauge_parts: dict[tuple[Any, ...], Image.Image] = {}  # static rings, colour fields
         # Video mode (the main loop sets these): every frame goes out, so graphs
@@ -502,8 +506,10 @@ class Renderer:
             self._fonts[key] = font or ImageFont.load_default(size)
         return self._fonts[key]
 
-    def _asset_image(self, rel: str, w: int, h: int, fit: str = "stretch") -> Image.Image | None:
-        key = (rel, w, h, fit)
+    def _asset_image(
+        self, rel: str, w: int, h: int, fit: str = "stretch", align: str = "center"
+    ) -> Image.Image | None:
+        key = (rel, w, h, fit, align)
         if key not in self._images:
             image = None
             if rel and self.theme.root is not None:
@@ -511,7 +517,7 @@ class Renderer:
                     with Image.open(resolve_asset(self.theme.root, rel)) as src:
                         image = ImageOps.exif_transpose(src).convert("RGBA")
                     if w > 0 and h > 0:
-                        image = _fitted(image, w, h, fit)
+                        image = _fitted(image, w, h, fit, align)
                 except (OSError, ThemeError) as exc:
                     self._warn(f"image {rel!r} could not be loaded ({exc})")
             self._images[key] = image
@@ -1093,6 +1099,10 @@ class Renderer:
             if piece is None:
                 continue
             pieces.append((widget["id"], piece))
+            if widget.get("mark") and slot is None:  # a bar's mark lies over the bar
+                marked = self._draw_mark(widget, snapshot)
+                if marked is not None:
+                    pieces.append((f"{widget['id']}\0mark", marked))
             if module is not None:
                 boxes[module["id"]] = self.module_boxes[module["id"]]
                 continue
@@ -1557,7 +1567,7 @@ class Renderer:
             return self._live_image(widget, snapshot.images.get(rel[1:]))
 
         def build() -> Piece:
-            image = self._asset_image(rel, w, h, widget["fit"])
+            image = self._asset_image(rel, w, h, widget["fit"], widget.get("align", "center"))
             if image is None:
                 empty = Image.new("RGBA", (max(w, 1), max(h, 1)), (0, 0, 0, 0))
                 return Piece(empty, x, y)
@@ -1575,7 +1585,7 @@ class Renderer:
         def build() -> Piece:
             picture = image.convert("RGBA")
             if w > 0 and h > 0:
-                picture = _fitted(picture, w, h, widget["fit"])
+                picture = _fitted(picture, w, h, widget["fit"], widget.get("align", "center"))
             if widget["radius"] > 0:
                 picture = _rounded(picture, widget["radius"])
             return Piece(picture, x, y)
@@ -2146,6 +2156,31 @@ class Renderer:
                     first, last = (b, a) if direction in ("left", "up") else (a, b)
                     self._fill_shape(layer, box, fill_r, first, last, horizontal)
         return Piece(self._down(layer, w, h), x, y, [x, y, w, h])
+
+    def _draw_mark(self, widget: dict[str, Any], snapshot: Snapshot) -> Piece | None:
+        """A bar's mark: a thin line across the bar where the reading ``mark`` stands on the bar's
+        own scale, reaching a little beyond it on both sides (the average of earlier rounds, a
+        limit). A reading that is not there draws none."""
+        value = _number(snapshot.value(widget["mark"]))
+        if value is None:
+            return None
+        x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
+        direction = widget["direction"]
+        horizontal = direction in ("right", "left")
+        length, across = (w, h) if horizontal else (h, w)
+        thick = max(1, min(widget["mark_width"], length))
+        frac = _fraction(value, widget["min"], widget["max"], widget.get("scale", "linear"))
+        along = int((length - thick) * frac)  # from the bar's start, in whole pixels
+        if direction in ("left", "up"):  # these start at the far end
+            along = length - thick - along
+        reach = round(across * 0.22)
+        color = self.color(widget["mark_color"])
+        at = (x + along, y - reach) if horizontal else (x - reach, y + along)
+        size = (thick, h + 2 * reach) if horizontal else (w + 2 * reach, thick)
+        marked = {"id": f"{widget['id']}\0mark", "opacity": widget.get("opacity", 1.0)}
+        return self._cached(
+            marked, (at, size, color), lambda: Piece(Image.new("RGBA", size, color), *at)
+        )
 
     @staticmethod
     def _gradient_colors(a: RGBA, b: RGBA | None, n: int) -> list[RGBA]:

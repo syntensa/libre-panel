@@ -126,6 +126,11 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "smooth": ("bool", True),
         "color_rules": ("rules", []),
         "glow_area": ("box?", None),  # [x, y, w, h]: a lit bar's glow stays inside
+        # a second reading as a thin line across the bar, at its value on the bar's own scale
+        # (the average of earlier rounds, a limit); drawn over the bar, whatever its finish
+        "mark": ("sensor", ""),
+        "mark_color": ("color", "#ffffff"),
+        "mark_width": ("int", 2),
     },
     "gauge": {
         "sensor": ("sensor", "cpu.load"),
@@ -218,6 +223,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "w": ("int", 0),
         "h": ("int", 0),
         "fit": ("enum:stretch|contain|cover", "stretch"),  # into w x h
+        "align": ("enum:left|center|right", "center"),  # contain: where it stands in w x h
         "radius": ("int", 0),
         # more pictures for a slideshow, one per line ("photos/*.jpg" takes a folder)
         "slides": ("text", ""),

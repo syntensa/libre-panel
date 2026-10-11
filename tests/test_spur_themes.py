@@ -336,7 +336,7 @@ def test_the_round_report_sets_the_round_against_the_earlier_ones_when_there_wer
         for w in theme.widgets
         if w["id"].endswith(("-mean", "-delta", "-delta-label")) or w["id"] in heads
     }
-    assert len(compared) == 24  # six rows of the levels, six of the peaks (two each), four, two
+    assert len(compared) == 18  # six rows of the peaks (two each), four, two (a tick has none)
     ids = report_ids(theme, 7)
     assert compared <= ids and "first-round" not in ids
     ids = report_ids(theme, 0)  # the first round of a game: the round alone, and it says so
@@ -344,6 +344,46 @@ def test_the_round_report_sets_the_round_against_the_earlier_ones_when_there_wer
     assert {"fps", "low-value", "frame-value", "limit-gpu-bar", "round-head"} <= ids
     assert {f"level-{n}-bar" for n in range(6)} <= ids  # the spread of the round is still there
     assert {f"{peak}-value" for peak in ("cpu_temp", "gpu_hotspot", "vram_used")} <= ids
+
+
+def test_the_round_report_marks_the_earlier_rounds_with_a_tick_on_each_bar():
+    theme = load_theme(find_theme("round-report"))
+    by = {w["id"]: w for w in theme.widgets}
+    for n in range(6):  # SPUR II's: a white tick across the bar, not a line under it
+        bar = by[f"level-{n}-bar"]
+        assert (bar["mark"], bar["mark_color"], bar["mark_width"]) == (
+            f"report.level.{n}.mean", "@text", 2,
+        )  # fmt: skip
+        assert f"level-{n}-mean" not in by
+    renderer = Renderer(theme, preview=True)
+    snapshot = demo_snapshot(fixed_time=1_700_000_000)  # a round against seven earlier ones
+    renderer.render(snapshot)
+    marks = [wid for wid, _ in renderer._last[0] if wid.endswith("\0mark")]
+    assert marks == [f"level-{n}-bar\0mark" for n in (5, 4, 3, 2, 1, 0)]
+    snapshot.readings.update(demo_report(1_700_000_000, earlier=0))  # the first round: no ticks
+    renderer.render(snapshot)
+    assert not [wid for wid, _ in renderer._last[0] if wid.endswith("\0mark")]
+    assert {f"level-{n}-bar" for n in range(6)} <= {wid for wid, _ in renderer._last[0]}
+
+
+def test_the_round_report_shows_the_games_logo_at_the_top_right_and_leaves_its_name_room():
+    from PIL import Image
+
+    theme = load_theme(find_theme("round-report"))
+    by = {w["id"]: w for w in theme.widgets}
+    logo = by["game-logo"]
+    assert (logo["src"], logo["fit"], logo["align"]) == ("@game.logo", "contain", "right")
+    box = by["round-box-right"]
+    assert (logo["w"], logo["h"]) == (220, 52)  # SPUR II's slot: no wider, no taller
+    assert logo["x"] + logo["w"] == box["x"] - 11  # at the right of the round's box
+    name = by["game-with-logo"]
+    assert name["x"] + name["max_width"] + 20 == logo["x"]  # the name stops 20 px short of it
+    assert by["game"]["max_width"] > name["max_width"] and by["game"]["x"] == name["x"]
+    alone = {"report.game": "Starfall"}
+    ids = shown_ids(theme, alone)  # a game without a logo has the whole width for its name
+    assert "game" in ids and not ids & {"game-logo", "game-with-logo"}
+    ids = shown_ids(theme, alone, {"game.logo": Image.new("RGBA", (4, 4))})
+    assert {"game-logo", "game-with-logo"} <= ids and "game" not in ids
 
 
 def test_the_round_report_names_who_held_the_rate_down_as_the_service_counts_it():

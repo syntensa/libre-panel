@@ -498,6 +498,19 @@ def test_the_report_reads_out_its_comparison_for_a_theme_made_of_widgets():
     assert [none[f"report.limit.{name}"] for name in ("gpu", "cpu", "cap")] == [None] * 3
 
 
+def test_the_hint_of_the_chart_says_what_the_tick_on_each_bar_is_once_there_is_one():
+    from libre_panel import i18n
+
+    def hint(count):
+        return memory.round_report.readings(example_report(count=count))["report.head.levels"][0]
+
+    assert hint(7) == hint(1) == "Share of the round · tick: average"  # (earlier rounds)
+    assert hint(0) == "Share of the round at each frame rate"  # no tick without them
+    i18n.set_language("de")
+    assert hint(7) == "Anteil der Runde · Strich: Schnitt"
+    assert hint(0) == "Anteil der Runde je Bildrate"
+
+
 def test_the_first_round_of_a_game_has_nothing_to_compare_and_says_so():
     readings = memory.round_report.readings(example_report(count=0))
     got = {key: value for key, (value, _unit, _label) in readings.items()}

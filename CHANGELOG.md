@@ -469,6 +469,15 @@
   names the memory; Linux where it may be read). What a PC cannot give shows
   as `--` with its name. The RAM instrument card has these rows; SPUR Classic
   and SPUR Header read the memory temperature from `mem.temp`
+- The round report shows what SPUR II's does: the game's logo at the top
+  right beside its name (`game.logo`, which the `game` service now keeps
+  after the game, until the next one; the name has the whole width where
+  there is none) and, on each bar of the chart, a white tick where the
+  earlier rounds' average stands, in place of the line under it. For that a
+  `bar` takes a `mark`, a second reading drawn as a thin line across it at
+  its value on the bar's scale (`mark_color`, `mark_width`), in any finish,
+  and an `image` takes `align` (`left`, `center`, `right`) for a picture that
+  does not fill its box. The demo has a made-up logo, drawn when asked
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
