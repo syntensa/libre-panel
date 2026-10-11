@@ -297,6 +297,13 @@
   and its course over 35 seconds beside it, the CPU's and GPU's load as small
   charts, and FRAMES (1% low, frame time, who holds the rate down), CPU, GPU
   and system below
+- The theme *SPUR Session* (`spur-session`, 1920 × 480): SPUR II's Session
+  screen for a game, as far as the readings go: the frame rate large with its
+  last ten minutes, a chart of the longest frame of each moment, and the
+  CPU's and GPU's temperatures and power with their course over the same ten
+  minutes. SPUR II's sums over a whole session (time played, average frame
+  rate, share of time per frame rate, highest values) need readings Libre
+  Panel does not have
 - Ridges: a `rect` with a `ridge` name is drawn as SPUR II draws its frames,
   a ridge with two facets under the guide light, the lit one glowing a
   little; rects with the same name are one ridge, joined at mitres. Rects

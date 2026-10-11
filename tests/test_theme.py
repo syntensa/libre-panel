@@ -28,7 +28,7 @@ def minimal(**display):
     "name",
     [
         "libre-default", "spur-ii", "spur-classic", "spur-horizon", "spur-header", "spur-focus",
-        "studio", "orbit", "slate", "column", "pico",
+        "spur-session", "studio", "orbit", "slate", "column", "pico",
     ],
 )  # fmt: skip
 def test_builtin_themes_are_valid(name):

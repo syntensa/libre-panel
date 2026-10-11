@@ -18,7 +18,7 @@ from libre_panel.theme.model import (
     parse_theme,
 )
 
-SPUR = ["spur-horizon", "spur-header", "spur-focus"]
+SPUR = ["spur-horizon", "spur-header", "spur-focus", "spur-session"]
 # readings the demo has not got yet: they come with the merge of the sources that add them
 LATER = {"mem.name"}
 
@@ -202,3 +202,23 @@ def test_focus_has_four_sections_whose_light_stays_in_them():
     assert "cpu-box-bottom" not in by  # the boxes below are open at the bottom
     glow_areas_hold_their_bars(theme)
     assert shown_ids(theme, {"game.limiter": "cpu"}) & {"limit-gpu", "limit-cpu"} == {"limit-cpu"}
+
+
+# -- Session (the last ten minutes of what a game does) ------------------------------------------
+
+
+def test_session_shows_the_last_ten_minutes_of_the_frame_rate_the_frames_and_the_peaks():
+    from libre_panel.render.motion import MAX_POINTS, RATE
+
+    theme = load_theme(find_theme("spur-session"))
+    by = {w["id"]: w for w in theme.widgets}
+    graphs = [w for w in theme.widgets if w["type"] == "graph"]
+    assert {g["sensor"] for g in graphs} == {
+        "game.fps", "game.frametime_peak", "cpu.temp", "cpu.power", "gpu.temp",
+        "temp.gpu.hot_spot", "gpu.power", "gpu.mem.used",
+    }  # fmt: skip
+    # the longest window the core keeps in video mode: nothing here claims a whole session
+    assert {g["seconds"] for g in graphs} == {596} and 596 <= (MAX_POINTS - 4 * RATE) / RATE
+    assert by["peaks-box-top"]["color"] == "@rule_strong"  # two channels: neutral
+    rows = [by[f"peak-{n}-graph"]["y"] for n in range(6)]
+    assert [b - a for a, b in zip(rows, rows[1:], strict=False)] == [56] * 5
