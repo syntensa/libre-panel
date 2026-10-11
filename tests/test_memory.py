@@ -306,6 +306,7 @@ def test_the_cooling_state_is_written_when_it_moves_not_on_a_clock(rig):
     assert json.loads(rows[0][4]) == {"Rear": [900.0, 30.0]}
     assert json.loads(rows[0][5]) == {"Case_Fan": 51.2}
     assert rows[-1][1:3] == ("game", "Space Game")  # a change of state is written at once
+    assert rows[-1][4:] == (None, None, None)  # nothing to say is NULL, not an empty table
     assert 3 <= len(rows) <= 8  # when it moves, not once a second
     assert rows[0][1:3] == ("normal", None)
 

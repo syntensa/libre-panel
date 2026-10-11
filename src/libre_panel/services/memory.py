@@ -571,7 +571,9 @@ class Recorder:
                 *(now.values[k] for k in COOLING_VALUES), sample.outside,
                 json.dumps(now.temps) if now.temps else None,
                 json.dumps(fans) if fans else None,
-                json.dumps({k: round(v, 1) for k, v in now.sources.items()}) or None,
+                json.dumps({k: round(v, 1) for k, v in now.sources.items()})
+                if now.sources
+                else None,
             ],
         )  # fmt: skip
 
