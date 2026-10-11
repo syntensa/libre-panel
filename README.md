@@ -129,6 +129,7 @@ Calendars, Home Assistant, MQTT and PresentMon are set up in the
 | `studio` | 8.8" / 9.2" bar (1920×480) | after SPUR II's Studio screen: large clock, weather for your location, CPU, RAM and GPU rings named after your hardware |
 | `spur-ii` | 8.8" / 9.2" bar (1920×480) | the SPUR II layout: load charts, four sections, light on every value |
 | `spur-classic` | 8.8" / 9.2" bar (1920×480) | SPUR II's classic screen as it is now: raised load curves in flat frames, RAM and network in staggered boxes, values as light in milled grooves, the faceted wordmark, turning fans and the clock above, the grid, one light and depth dust |
+| `spur-horizon` | 8.8" / 9.2" bar (1920×480) | SPUR II's Horizon: the CPU's load grows up from a midline and the GPU's down from it, 70 seconds side by side, with tiles for values, network and music below |
 | `slate` | 5" (800×480) | four cards: CPU, GPU, memory, network |
 | `libre-default` | 3.5" (480×320) | two rings, temperature, disk, network and history |
 | `orbit` | round 2.1" / 2.8" (480×480) | three concentric rings around a large clock |

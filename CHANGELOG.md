@@ -281,6 +281,11 @@
   GPU sections, RAM and network in staggered boxes, values as light in their
   milled grooves with SPUR II's glow, glowing headings, the faceted wordmark,
   the turning fans and the clock above, the grid, one light and the depth dust
+- The theme *SPUR Horizon* (`spur-horizon`, 1920 × 480): SPUR II's Horizon
+  screen, the CPU's load growing up from a midline and the GPU's down from it
+  across the whole panel, 70 seconds as a landscape with a mark every ten
+  seconds, tiles below for CPU, GPU, RAM, network and what plays, the fans and
+  the clock above
 - Ridges: a `rect` with a `ridge` name is drawn as SPUR II draws its frames,
   a ridge with two facets under the guide light, the lit one glowing a
   little; rects with the same name are one ridge, joined at mitres. Rects
@@ -376,6 +381,9 @@
 - Without a queue (`"queue": false`), messages that come at the same moment
   are decided one after the other: a warning that comes with a volume
   change takes over from it at once
+- The demo readings of the editor, the previews and the pictures hold 1900
+  readings of history instead of 600, so the wide graphs of the SPUR themes
+  are full in them
 - Windows downloads: with `mode = "auto"` the library inside Libre Panel is read
   first; a LibreHardwareMonitor web server that happens to run only fills in
   what Libre Panel cannot read (the CPU's readings without administrator

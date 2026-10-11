@@ -258,6 +258,23 @@ second (video mode, or `fps` above 1); in the editor's preview and on a
 panel that gets one picture a second it stands, its ring and its blur showing
 the speed. In the editor, *Fan with speed* adds a fan with its name and RPM.
 
+### The SPUR II screens
+
+The screens of SPUR II are built-in themes for the 8.8" and 9.2" bars (1920 × 480)
+that show the look above in full; each is plain JSON like any other theme, and
+none names a piece of hardware (the names of the processor, the graphics card and
+the memory come from `cpu.name`, `gpu.name` and `mem.name`). Their frames are flat
+bands in the colour of what they frame.
+
+| Theme | Shows |
+|---|---|
+| `spur-classic` | two load charts, RAM and network in staggered boxes, CPU and GPU sections; for the desk |
+| `spur-horizon` | the CPU's load growing up from a midline and the GPU's down from it, 70 seconds side by side (a point a pixel, 25 a second, a mark every 10 s), tiles below for values, network and music; for the desk |
+
+The fans in the header need their sensors (`fan.lpc.fan_1` ... , `gpu.fan`) and show
+only the ones that report; the volume needs the `audio` source, what plays the
+`media` source.
+
 ## Modules
 
 A module is a building block that fills cells of the theme's grid and lays

@@ -8,6 +8,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Any
 
+import numpy as np
 from PIL import Image
 
 from libre_panel.sensors.base import Reading, SensorProvider, Snapshot
@@ -252,7 +253,10 @@ def _cover() -> Image.Image:
     return _COVER[0]
 
 
-def demo_snapshot(fixed_time: float | None = None, samples: int = 600) -> Snapshot:
+HISTORY_SAMPLES = 1900  # a graph of SPUR II's panorama (1713 points) is full in a preview
+
+
+def demo_snapshot(fixed_time: float | None = None, samples: int = HISTORY_SAMPLES) -> Snapshot:
     """A complete snapshot with filled graph history, for previews and the editor."""
     provider = DemoProvider({"fixed_time": fixed_time})
     readings = provider.read()
@@ -267,17 +271,14 @@ def demo_history(provider: DemoProvider, key: str, samples: int, step: float = 1
         return []
     label, unit, base, amp, period = _WAVES[key]
     t0 = provider.fixed_time if provider.fixed_time is not None else time.time()
-    values = []
-    for i in range(samples):
-        t = t0 - (samples - 1 - i) * step
-        # Incommensurate slow waves plus a little flutter read like real load.
-        v = (
-            base
-            + amp * 0.6 * math.sin(2 * math.pi * t / (period * 3.7))
-            + amp * 0.35 * math.sin(2 * math.pi * t / (period * 1.3) + 1.1)
-            + amp * 0.08 * math.sin(t * 0.9) * math.sin(t / 3.1)
-        )
-        if unit == "%":
-            v = min(100.0, max(0.0, v))
-        values.append(v)
-    return values
+    t = t0 - (samples - 1 - np.arange(samples)) * step
+    # Incommensurate slow waves plus a little flutter read like real load.
+    v = (
+        base
+        + amp * 0.6 * np.sin(2 * math.pi * t / (period * 3.7))
+        + amp * 0.35 * np.sin(2 * math.pi * t / (period * 1.3) + 1.1)
+        + amp * 0.08 * np.sin(t * 0.9) * np.sin(t / 3.1)
+    )
+    if unit == "%":
+        v = np.clip(v, 0.0, 100.0)
+    return v.tolist()
