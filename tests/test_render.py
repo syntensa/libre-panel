@@ -454,3 +454,63 @@ def test_a_weather_code_that_is_no_number_is_a_cloud_not_a_missing_icon():
     for code in (None, "n/a", "", math.nan, math.inf):
         assert weather_icon_name(code) == "cloud" and kind_of(code) == "overcast"
     assert weather_icon_name("63") == "rain" and kind_of(95.0) == "storm"
+
+
+# -- a renderer that is let go of is freed -------------------------------------------------------
+
+
+def lived(name, frames=4):
+    """A renderer of a built-in theme as the main loop drives it in video mode (the helper
+    thread, the dust), a few frames in, and the thread that builds for it."""
+    renderer = Renderer(load_theme(find_theme(name)), animate=True)
+    renderer.continuous = renderer.background_builds = True
+    renderer.fps = 25
+    for k in range(frames):
+        renderer.render(demo_snapshot(fixed_time=1_700_000_000), 10.0 + k / 25)
+    builder = renderer._builder
+    return renderer, builder._thread if builder is not None else None
+
+
+@pytest.mark.parametrize("name", BUILTIN)
+def test_a_renderer_the_loop_lets_go_of_is_freed_with_its_last_reference(name):
+    """What replaces a renderer (a switch of themes) closes it and lets go: nothing may still
+    refer back to it (a slot, the look, a finish's drawing, the dust's helper), or it lives on
+    until the collector runs, which the main loop's guards put off for hours."""
+    import gc
+    import weakref
+
+    renderer, thread = lived(name)
+    renderer.close()
+    if thread is not None:
+        thread.join(10)
+    ref = weakref.ref(renderer)
+    gc.collect()
+    gc.disable()  # the collector must not be what frees it
+    try:
+        del renderer
+        assert ref() is None
+    finally:
+        gc.enable()
+
+
+@pytest.mark.parametrize("name", ["lumen", "studio", "spur-classic"])
+def test_a_renderer_frozen_at_the_first_frame_is_freed_when_it_is_let_go_of(name):
+    """timing.Guards freezes what lives at the first frame (the collector leaves it alone
+    for good): the first theme's renderer, closed at the first switch, must go by reference
+    counting alone."""
+    import gc
+    import weakref
+
+    renderer, thread = lived(name)
+    gc.collect()
+    gc.freeze()
+    try:
+        renderer.close()
+        if thread is not None:
+            thread.join(10)
+        ref = weakref.ref(renderer)
+        del renderer
+        gc.collect()
+        assert ref() is None
+    finally:
+        gc.unfreeze()

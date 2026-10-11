@@ -32,6 +32,7 @@ frame, only around the points it lights. Everything runs on the frame's planned 
 from __future__ import annotations
 
 import math
+import weakref
 from typing import Any
 
 import numpy as np
@@ -440,7 +441,7 @@ class PanelLight:
     """The light of one renderer's frames (``look.light``)."""
 
     def __init__(self, renderer: Any, settings: dict[str, Any]) -> None:
-        self.renderer = renderer
+        self.renderer = weakref.proxy(renderer)  # (it holds the light: no cycle)
         self.settings = settings
         theme = renderer.theme
         self.size = w, h = theme.width, theme.height
@@ -738,7 +739,7 @@ class Look:
     """What a theme's ``look`` adds to one renderer's frames."""
 
     def __init__(self, renderer: Any) -> None:
-        self.renderer = renderer
+        self.renderer = weakref.proxy(renderer)  # (it holds the look: no cycle)
         theme = renderer.theme
         settings = theme.look
         self.grid = settings.get("grid")

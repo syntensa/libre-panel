@@ -19,12 +19,13 @@ import queue
 import re
 import threading
 import time
+import weakref
 from collections import OrderedDict
 from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
-from functools import lru_cache, partial
+from functools import lru_cache
 from typing import Any
 
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont, ImageOps
@@ -111,6 +112,31 @@ def changed_region(
     if previous is None or previous.size != current.size or previous.mode != current.mode:
         return (0, 0, current.width, current.height)
     return ImageChops.difference(previous, current).getbbox()
+
+
+def _drawing(finish: Any, renderer: Renderer) -> Callable[..., Any]:
+    """``finish.draw`` as the renderer calls it for a widget, without the reference to the
+    renderer that a ``partial`` would keep: the renderer holds it, and a cycle is freed only
+    when the collector runs, which the main loop's guards (timing.Guards) put off for hours."""
+    ref = weakref.ref(renderer)
+
+    def draw(widget: dict[str, Any], snapshot: Snapshot, now: float) -> Any:
+        return finish.draw(ref(), widget, snapshot, now)
+
+    return draw
+
+
+def _weakly(method: Callable[..., Any]) -> Callable[..., Any]:
+    """A bound method that does not keep its object alive (for what the renderer hands out)."""
+    ref = weakref.WeakMethod(method)
+
+    def call(*args: Any) -> Any:
+        found = ref()
+        if found is None:
+            raise RuntimeError("the renderer is gone")
+        return found(*args)
+
+    return call
 
 
 def _number(value: Any) -> float | None:
@@ -445,7 +471,7 @@ class Renderer:
             from libre_panel.render.look import Look
 
             self.look = Look(self)
-        self._drawers = {wid: partial(f.draw, self) for wid, f in self._finishes.items()
+        self._drawers = {wid: _drawing(f, self) for wid, f in self._finishes.items()
                          if finishes.draws(f)}  # fmt: skip
         self._modules = {w["id"]: w for w in theme.widgets if w["type"] == "module"}
         self._slots = self._make_slots(theme)  # modules that show one card of several
@@ -477,6 +503,7 @@ class Renderer:
         self._plugin_types: dict[str, Any] = {}
         self._screen_last: tuple[Any, Piece] | None = None
         self._dust: Dust | None = None  # the theme's look.dust, once it is drawn (render/dust.py)
+        self._dust_submit: Callable[..., Any] | None = None  # its way to the helper thread
         self._dots: dict[tuple[Any, ...], tuple[Image.Image, int]] = {}  # end dots, by look
         self._rotors: dict[str, fan.Rotor] = {}  # fan widget id -> how it turns (render/fan.py)
         self._fans: OrderedDict[tuple[Any, ...], Piece] = OrderedDict()  # fan pieces, by look
@@ -922,7 +949,9 @@ class Renderer:
         return hit[1]
 
     def close(self) -> None:
-        """Stop the helper thread and the screen (a replaced renderer should call this)."""
+        """Stop the helper thread and the screen, and let go of the contexts of plugin widget types
+        (a replaced renderer should call this; with the back references of its slots, look and
+        drawing weak, it is then freed with its last reference)."""
         if self._builder is not None:
             self._builder.close()
             self._builder = None
@@ -932,6 +961,7 @@ class Renderer:
             except Exception as exc:
                 log.warning("screen %s: %s", self.theme.screen["name"], exc)
             self.screen = None
+        self._plugin_types.clear()  # (their contexts refer to this renderer)
 
     # -- plugins -----------------------------------------------------------
 
@@ -1198,8 +1228,9 @@ class Renderer:
             config = self.theme.look["dust"]  # type: ignore[index]
             colors = [self.color(c)[:3] for c in config["colors"]]  # type: ignore[index]
             self._dust = Dust(canvas.size, config, colors)
+            self._dust_submit = _weakly(self._submit)  # (the dust is ours: no cycle back)
         # where a slow piece must not stall the video, the grains move in the helper thread too
-        self._dust.submit = self._submit if self.background_builds else None
+        self._dust.submit = self._dust_submit if self.background_builds else None
         return self._dust.apply(canvas, now, self.shown, self.toast)
 
     def _submit(self, job: Callable[[], Any]) -> Future:

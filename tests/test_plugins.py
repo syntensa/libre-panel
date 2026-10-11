@@ -495,6 +495,30 @@ def test_screen_and_plugin_widget_are_drawn(plugin_folder):
     assert calls["closed"] == 1
 
 
+def test_a_closed_renderer_with_a_screen_and_a_plugin_widget_is_freed(plugin_folder):
+    """The contexts of a screen and of a widget type refer to their renderer; closing it
+    lets go of them (the main loop keeps the collector from breaking a cycle for hours)."""
+    import gc
+    import weakref
+
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.theme.model import parse_theme
+
+    plugin_folder(DRAWING, parts=DRAWING_PARTS)
+    renderer = Renderer(parse_theme(theme_data({"name": "tint"}, [bar()])))
+    renderer.render(snapshot(50), 0.0)
+    assert renderer.screen is not None and renderer._plugin_types
+    renderer.close()
+    ref = weakref.ref(renderer)
+    gc.collect()
+    gc.disable()
+    try:
+        del renderer
+        assert ref() is None
+    finally:
+        gc.enable()
+
+
 def test_an_opaque_screen_alone_is_the_frame(plugin_folder, monkeypatch, isolated_home):
     import json
 

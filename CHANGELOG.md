@@ -642,6 +642,12 @@
 - Moving the Pico theme to a bigger panel (the 5.2", 8" and 12.3") failed with "glow_radius:
   must be between 0 and 64": the glow, shadow and backdrop blur are scaled with the panel and
   were not held to what a theme may have. They stop at 64 now
+- Every theme the panel switched away from stayed in memory, about 20 MB for Lumen, Studio and
+  the SPUR II screens, and so did every picture the editor drew of one: the renderer, its card
+  slots, its look and its drawing referred to one another, and the garbage collector that frees
+  such a ring is held back by the main loop for hours (and never frees what lived at the first
+  frame). A day of switching to a game's theme and back, or of editing, grew the app by hundreds of
+  megabytes. A renderer that is let go of is freed with its last reference now
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars
