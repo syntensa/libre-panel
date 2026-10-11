@@ -97,6 +97,7 @@ export const ICONS = {
   fit: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>',
   frame: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 7h18"/>',
   swap: '<path d="M7 4l-4 4 4 4M3 8h14M17 12l4 4-4 4M21 16H7"/>',
+  refresh: '<path d="M20 11a8 8 0 00-14.4-4M4 4v4h4"/><path d="M4 13a8 8 0 0014.4 4M20 20v-4h-4"/>',
   link: '<path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/>',
 };
 

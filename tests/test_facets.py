@@ -18,6 +18,14 @@ def font(size=60, name="Barlow-SemiBold"):
     return ImageFont.truetype(str(builtin_font_path("builtin:" + name)), size)
 
 
+@pytest.fixture
+def cold():
+    """The glyph caches empty: a test that counts what is built needs its text to be new to
+    them, and the editor's previews (the tests of the app) draw lettering in this process too."""
+    facets._glyphs.clear()
+    facets._patches.clear()
+
+
 def brute_edt(inside):
     """The distance to the nearest pixel outside, by looking at every one of them."""
     h, w = inside.shape
@@ -279,7 +287,7 @@ def test_a_stem_has_a_bevel_of_two_pixels_at_the_wordmarks_size():
     assert 3 <= on_top <= 5 and 3 <= bevelled <= 5  # about two of its pixels on each side
 
 
-def test_the_same_text_twice_builds_each_glyph_once():
+def test_the_same_text_twice_builds_each_glyph_once(cold):
     f = font(44)
     facets.builds.update(glyph=0, patch=0)
     first = facets.facet_text("1337", f, WHITE)
@@ -294,7 +302,7 @@ def test_the_same_text_twice_builds_each_glyph_once():
     assert facets.builds["glyph"] == 2 * built["glyph"]
 
 
-def test_a_quarter_pixel_position_is_a_glyph_of_its_own():
+def test_a_quarter_pixel_position_is_a_glyph_of_its_own(cold):
     f = font(50)
     facets.builds.update(glyph=0, patch=0)
     for frac in (0.0, 0.1, 0.2, 0.26, 0.49, 0.5, 0.74, 0.76, 0.9):
@@ -387,6 +395,23 @@ def test_facet_text_below_twenty_pixels_is_the_flat_text():
         a, _ = Renderer(theme(text_widget(font_size=size))).render(Snapshot())
         b, _ = Renderer(theme(text_widget(font_size=size, finish="facet"))).render(Snapshot())
         assert a.tobytes() == b.tobytes()
+
+
+def test_a_texts_and_a_clocks_letters_are_built_before_the_first_frame():
+    """A bevelled letter at a clock's size takes tens of milliseconds: the warm-up builds
+    those of a text and of the time a clock shows, so the first frame builds none."""
+    clock = {"type": "clock", "id": "c", "x": 10, "y": 80, "format": "%Y", "font_size": 61,
+             "font": "builtin:Barlow-SemiBold", "finish": "acrylic"}  # fmt: skip
+    renderer = Renderer(theme(text_widget(finish="acrylic", font_size=61), clock))
+    assert renderer.prepares
+    facets._glyphs.clear()
+    facets._patches.clear()
+    facets.builds.update(glyph=0, patch=0)
+    renderer.warm(None, 0.0)
+    assert facets.builds["glyph"] >= 8  # the letters of "SPUR 4059" and of the year
+    facets.builds.update(glyph=0, patch=0)
+    renderer.render(Snapshot())
+    assert facets.builds == {"glyph": 0, "patch": 0}
 
 
 def test_a_changing_number_costs_no_new_glyphs_once_all_digits_were_seen():

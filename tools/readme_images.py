@@ -158,9 +158,9 @@ def text_center(draw, cx, y, text, fnt, fill):
     draw.text((cx - w / 2, y), text, font=fnt, fill=fill)
 
 
-def hero(studio2x: Image.Image) -> Image.Image:
-    """Studio on its 9.2" bar."""
-    screen = studio2x.resize((1920, 480), Image.LANCZOS)
+def hero(bar2x: Image.Image) -> Image.Image:
+    """Lumen, Libre Panel's signature screen, on its 9.2" bar."""
+    screen = bar2x.resize((1920, 480), Image.LANCZOS)
     border = 18
     dev = device(screen, border)
     m = shadow_margin(border)
@@ -176,9 +176,9 @@ def gallery(shots: dict[str, Image.Image]) -> Image.Image:
     label, sub = font("Barlow-SemiBold", 30), font("Barlow-Regular", 24)
     m = shadow_margin(border)
 
-    # row 1: SPUR II across the width
+    # row 1: Lumen across the width
     bar_w = w - 2 * margin - 2 * border
-    bar = shots["spur-ii"].resize((bar_w, bar_w // 4), Image.LANCZOS)
+    bar = shots["lumen"].resize((bar_w, bar_w // 4), Image.LANCZOS)
     # row 2: the smaller panels at one screen height (Pico larger than life)
     hh = 270
     row = [
@@ -210,7 +210,7 @@ def gallery(shots: dict[str, Image.Image]) -> Image.Image:
     dev = device(bar, border)
     img.alpha_composite(dev, (margin - m, y - m))
     cy = y + row1_h + 22
-    text_center(draw, w / 2, cy, "SPUR II", label, TX_1)
+    text_center(draw, w / 2, cy, "Lumen", label, TX_1)
     text_center(draw, w / 2, cy + 38, '8.8" / 9.2" bar · 1920×480', sub, TX_3)
 
     y = margin + row1_h + caption_h + gap // 2
@@ -226,7 +226,7 @@ def gallery(shots: dict[str, Image.Image]) -> Image.Image:
     return img.convert("RGB")
 
 
-def social(studio2x: Image.Image) -> Image.Image:
+def social(bar2x: Image.Image) -> Image.Image:
     """1280x640 for the repository's social preview."""
     w, h = 1280, 640
     img = background(w, h, glow=(0.5, 1.0)).convert("RGBA")
@@ -243,7 +243,7 @@ def social(studio2x: Image.Image) -> Image.Image:
         fill=TX_3,
     )
     border = 10
-    screen = studio2x.resize((1120, 280), Image.LANCZOS)
+    screen = bar2x.resize((1120, 280), Image.LANCZOS)
     dev = device(screen, border)
     m = shadow_margin(border)
     img.alpha_composite(dev, ((w - dev.width) // 2, 304 - m))
@@ -628,13 +628,13 @@ def main() -> None:
     parser.add_argument("out", nargs="?", default="docs/images", type=Path)
     out = parser.parse_args().out
     out.mkdir(parents=True, exist_ok=True)
-    ids = ["studio", "spur-ii", "libre-default", "orbit", "slate", "column", "pico"]
+    ids = ["lumen", "studio", "spur-ii", "libre-default", "orbit", "slate", "column", "pico"]
     for theme_id in ids:  # true pixels, as the panel shows them
         render(theme_id).save(out / f"{theme_id}.png", optimize=True)
     big = {theme_id: render(theme_id, 2) for theme_id in ids}  # sharp when scaled
-    hero(big["studio"]).save(out / "hero.png", optimize=True)
+    hero(big["lumen"]).save(out / "hero.png", optimize=True)
     gallery(big).save(out / "gallery.png", optimize=True)
-    social(big["studio"]).save(out / "social-preview.png", optimize=True)
+    social(big["lumen"]).save(out / "social-preview.png", optimize=True)
     weather = tuple(k for k in snapshot().readings if k.startswith("weather."))
     gpu = tuple(k for k in snapshot().readings if k.startswith("gpu."))
     adapts(

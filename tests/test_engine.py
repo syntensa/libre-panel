@@ -554,6 +554,7 @@ def test_adapt_scales_new_fields():
         {"type": "icon", "id": "i", "x": 10, "y": 10, "size": 40},
         {"type": "text", "id": "t", "letter_spacing": 4, "glow": 0.5, "glow_radius": 10},
         {"type": "bar", "id": "b", "x": 20, "y": 30, "glow_area": [10, 20, 220, 40]},
+        {"type": "metric", "id": "name", "x": 240, "y": 300, "max_width": 120},
         size=(480, 320),
     ).to_dict()
     out = adapt_theme(data, "turing-5", "landscape")  # 800x480: s = 1.5
@@ -561,6 +562,9 @@ def test_adapt_scales_new_fields():
     assert widgets["i"]["size"] == 60
     assert widgets["t"]["letter_spacing"] == 6 and widgets["t"]["glow_radius"] == 15
     assert widgets["b"]["glow_area"] == [17, 30, 367, 60]  # a box on the panel, as x and w
+    assert widgets["name"]["max_width"] == 200 and widgets["t"]["max_width"] == 0  # 0: any
+    narrow = adapt_theme(data, "turing-3.5", "portrait")  # 320x480: the room narrows too
+    assert {w["id"]: w for w in narrow["widgets"]}["name"]["max_width"] == 80
 
 
 def test_fps_setting():

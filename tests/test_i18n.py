@@ -26,6 +26,21 @@ def test_the_catalog_has_no_stale_texts():
     assert unused == [], "no longer used, remove from locale/de.json:\n" + "\n".join(unused)
 
 
+def test_the_catalog_has_each_text_once():
+    """Two branches that translate the same text merge into a table that has it twice (each
+    in its own place, so git sees no clash) and the later one wins unseen."""
+    twice = []
+
+    def one_of_each(pairs):
+        names = [name for name, _ in pairs]
+        twice.extend(sorted({name for name in names if names.count(name) > 1}))
+        return dict(pairs)
+
+    text = (i18n.LOCALE_DIR / "de.json").read_text(encoding="utf-8")
+    json.loads(text, object_pairs_hook=one_of_each)
+    assert twice == [], "in locale/de.json more than once, keep one:\n" + "\n".join(twice)
+
+
 @pytest.mark.parametrize("table", ["fields", "widgets", "enums", "icons"])
 def test_editor_tables_are_complete(table):
     assert set(CATALOG[table]) == tables()[table]

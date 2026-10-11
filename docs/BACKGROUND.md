@@ -51,7 +51,9 @@ fixed).
 
 The same controls are in the app: the panel button at the top right of
 *Design* shows the state and has pause, brightness, upside down, start with
-system and quit.
+system and quit. *Start* shows the picture on the panel with pause, brightness
+and upside down, and *Live* has its numbers, the sensor sources, the services
+and test messages (the *Control* page, below, in the app's look).
 
 ## The app's window
 

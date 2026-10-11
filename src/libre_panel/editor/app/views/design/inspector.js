@@ -577,7 +577,7 @@ function LookBlocks({ theme }) {
   });
 }
 
-function PaletteEditor({ theme }) {
+export function PaletteEditor({ theme }) {
   const palette = theme.palette || {};
   const replace = (from, to) => {
     const walk = (node) => {

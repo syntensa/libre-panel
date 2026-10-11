@@ -30,6 +30,7 @@ from libre_panel.config import (
     load_config,
     set_active_theme,
     set_config_value,
+    theme_chosen,
     user_themes_dir,
 )
 from libre_panel.devices.models import MODELS, PROTOCOLS
@@ -48,6 +49,7 @@ from libre_panel.theme.model import (
     DUST_MAX_COLORS,
     EFFECT_FIELDS,
     FINISHES,
+    LOOK_RANGES,
     LOOK_SPECS,
     PRIMARY_FIELDS,
     THEME_FILENAME,
@@ -198,6 +200,48 @@ def _finish_types(types: list[str]) -> dict[str, list[str]]:
         if any(finish.get(name, part) for part in finish.PART_TYPES):
             kinds.append("module")
         found[name] = kinds
+    return found
+
+
+NOTICE_AGE_S = 1.2  # how far into its life a preview shows a notice: drawn in full
+
+
+def _with_notice(renderer: Renderer, frame: Any, kind: str) -> Any:
+    """``frame`` with the test message of ``kind`` (the Control page's: volume, music, ...)
+    drawn on it in the theme's toast style, a moment after it began; None for an unknown
+    kind. The previews of the editor have no messages of their own."""
+    from libre_panel.pages.control import probes
+    from libre_panel.plugins.host import Toast
+    from libre_panel.render.overlays import ToastLayer
+
+    made = probes().get(kind)
+    if made is None:
+        return None
+    _name, options = made
+    toast = Toast(
+        options["text"],
+        options.get("icon"),
+        options.get("level", "info"),
+        options.get("seconds"),
+        options.get("kind", ""),
+        options.get("rank", 0),
+        dict(options.get("payload", {})),
+        "editor",
+    )
+    layer = ToastLayer(renderer)
+    try:
+        layer.add([toast])
+        layer.advance(0.0)
+        return layer.draw(frame, NOTICE_AGE_S)
+    finally:
+        layer.close()
+
+
+def _look_ranges() -> dict[str, dict[str, list[float]]]:
+    """``LOOK_RANGES`` by block, for sliders that stop where the theme would refuse."""
+    found: dict[str, dict[str, list[float]]] = {}
+    for (block, key), (low, high) in LOOK_RANGES.items():
+        found.setdefault(block, {})[key] = [low, high]
     return found
 
 
@@ -607,7 +651,8 @@ class EditorHandler(BaseHTTPRequestHandler):
         """The pages of the panel: the theme it shows normally, the theme of each mode
         ([modes.<name>], game mode's among them, with its frame rate; None: the normal
         one) and the round report's (the memory service's ``report_theme``), and which
-        page is on show now. The console's ``control/themes`` has the first two."""
+        page is on show now, and whether config.toml names a theme at all (``chosen``). The
+        console's ``control/themes`` has the first two."""
         from libre_panel.services.game import MODE as GAME_MODE
         from libre_panel.services.memory import Memory
 
@@ -638,7 +683,8 @@ class EditorHandler(BaseHTTPRequestHandler):
                 shown, mode_now = panel.get("theme"), panel.get("mode")
             except Exception as exc:  # the panel's state is a nice-to-have here
                 log.debug("no panel state: %s", exc)
-        self._json({"pages": pages, "shown": shown, "mode": mode_now})
+        chosen = theme_chosen(config.path)  # false on a first start: Start offers the themes
+        self._json({"pages": pages, "shown": shown, "mode": mode_now, "chosen": chosen})
 
     def _i18n(self) -> dict[str, Any]:
         try:
@@ -681,6 +727,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             "look": {
                 name: {k: list(v) for k, v in spec.items()} for name, spec in LOOK_SPECS.items()
             },
+            # the range each numeric field of a look block accepts: {block: {field: [low, high]}}
+            "look_ranges": _look_ranges(),
             "models": models,
             "protocols": PROTOCOLS,
             "fonts": [BUILTIN_PREFIX + name for name in builtin_fonts()],
@@ -982,6 +1030,12 @@ class EditorHandler(BaseHTTPRequestHandler):
         renderer = Renderer(theme, preview=True)
         try:
             frame, boxes = renderer.render(snapshot)
+            notice = payload.get("notice")
+            if notice:  # a test message on it, as the theme's toast style shows it
+                shown = _with_notice(renderer, frame, notice) if isinstance(notice, str) else None
+                if shown is None:
+                    return self._error("notice must be the kind of a test message")
+                frame = shown
         finally:
             renderer.close()  # plugin screens end with the preview
         buffer = io.BytesIO()

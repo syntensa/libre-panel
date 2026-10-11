@@ -440,6 +440,16 @@ def load_config(path: Path | None = None) -> Config:
     return config
 
 
+def theme_chosen(path: Path | None = None) -> bool:
+    """Whether config.toml names a theme itself: a first start has no file, or none with a
+    ``theme`` line yet, and the app asks which look the panel should have."""
+    path = path or config_dir() / CONFIG_FILENAME
+    try:
+        return "theme" in tomllib.loads(path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return False
+
+
 def write_default_config(path: Path | None = None, overwrite: bool = False) -> Path:
     path = path or config_dir() / CONFIG_FILENAME
     if path.exists() and not overwrite:

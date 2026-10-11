@@ -274,6 +274,48 @@ second (video mode, or `fps` above 1); in the editor's preview and on a
 panel that gets one picture a second it stands, its ring and its blur showing
 the speed. In the editor, *Fan with speed* adds a fan with its name and RPM.
 
+### Libre Panel's screens
+
+Libre Panel's own themes show what 0.5 can do in its own look: the app's
+colours (`#2EE6D6` and its dark greys) and Barlow, flat frames, values as
+light. Each is plain JSON; none names a piece of hardware.
+
+| Theme | Panel | Shows |
+|---|---|---|
+| `lumen` | 8.8" / 9.2" bar | the signature screen: on the left a slot of cards (what plays, else the weather with its moving symbols and the next hours, else a calendar sheet); in the middle the time with its seconds, the load of the CPU and GPU over the last minute as light that scrolls (`seconds` 60), and the fans; on the right lit [instruments](#cards) for the CPU, GPU and RAM with their readings and the names of the hardware (`cpu.name`, `gpu.name`, `mem.name`), over the network card, which shows a download while one runs |
+| `studio` | 8.8" / 9.2" bar | a large clock with the date and the network, a slot of cards (what plays, the weather, the day) and lit rings for the CPU, RAM and GPU (the disk on a PC without GPU readings) with the hardware's names |
+| `libre-default` | 3.5" | two lit rings, the CPU's temperature, the disk and the network, a history that scrolls through the last 30 seconds, and a small slot in the corner: what plays, the weather or the day |
+
+A few things they do that a theme of your own can do too:
+
+- **What plays, else the weather, else the day.** A `cards` slot with the
+  items `playback`, `forecast` and `date`: the day takes the card when there is
+  neither a track nor weather (the weather is off until you set a place).
+- **A date that steps aside.** Studio's date under the clock is two widgets,
+  one with `"needs": "weather.temperature"`, one with `"needs":
+  "!weather.temperature, media.title"`: the date shows while the card shows
+  something else, and steps aside while the card shows the day.
+- **Fans by the names they have.** Lumen turns `gpu.fan` and the board's
+  first three fans as LibreHardwareMonitor names them (`fan.lpc.fan_1` ...),
+  each with `"needs"` on its own reading, so a fan that is not there leaves
+  no gap behind; their names come from the readings (`"format":
+  "{label:upper}"`). Where a PC names its fans otherwise (Linux), a
+  [list](#lists) of `fan.*` with `"needs": "!gpu.fan, !fan.lpc.fan_1"` shows
+  them instead.
+- **A backdrop of their own.** Lumen's background is a picture in its folder
+  (`assets/backdrop.png`): the dark gradient of the app with a dot every 22 px,
+  as the editor's stage has it.
+- **The grid as a ruler.** The cards are modules on a fine grid (48 × 48
+  cells on Lumen), placed where the plain widgets around them leave room. A
+  module that covers fewer than two rows of cells keeps its compact looks:
+  Libre Default's corner is one row of a 5 × 4 grid with `"forecast": "off"`,
+  so the weather in it is a symbol, a temperature and the sky, and the day a
+  calendar sheet without the month.
+
+On a smaller panel (*adapt* in the editor) the modules lay themselves out for
+their new size, and the other widgets, and the room their texts may take,
+scale with the panel.
+
 ### The SPUR II screens
 
 The screens of SPUR II are built-in themes for the 8.8" and 9.2" bars (1920 × 480)
@@ -532,7 +574,9 @@ module's parts where the module is in the list.
 
 The look of SPUR II in two parts: the theme's `look` block for the whole
 panel, and a widget's `finish` for its shape. A theme with neither costs
-nothing extra. The built-in *SPUR Classic* (1920 × 480) shows both.
+nothing extra. The built-in *SPUR Classic* (1920 × 480) shows both. The app's
+*Look* view sets them: the blocks below, and the finish and glow of each kind of
+element.
 
 ```json
 "look": {

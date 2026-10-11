@@ -22,6 +22,33 @@
   several widgets at once, layers with lock and eye, the theme's pictures and
   fonts. The panel's pages are tabs over it: the normal theme, game mode's,
   the round report's and those of plugins' modes, each with its frame rate
+- *Start*, the first view of the app: the panel at a glance (what it shows,
+  its picture, pause, brightness, upside down), the themes made for it to
+  switch between with one click, and the way on to Design, Look, Live and
+  Settings. *All* is the gallery of every installed theme, built in, from
+  plugins and your own, each drawn by the panel's own renderer; Libre
+  Panel's own themes and yours come first, and a set of themes that belongs
+  together (a theme's `collection`, such as the SPUR II screens: *SPUR II ·
+  Legacy*) waits closed at the end; its pencil opens a theme in Design. On a
+  first start (no `theme` in `config.toml` yet) Start asks "How should it
+  look?" with Libre Panel's own themes for the panel it found, or the one
+  you name under *Another panel*; *Start empty* and *Open a theme file* are
+  there too. What the panel could not read (the sentence the tray shows) is
+  on Start with the way to its details
+- *Look*, the theme's look in one place beside the picture of the panel: the
+  six colour worlds and the palette, how rings, bars, graphs, lettering,
+  icons and modules are drawn (light, facet, acrylic, flat) with their glow,
+  the panel light (the sun, its strength, the sweeps and when they run), the
+  grid, the depth dust with its colours and areas, and how notices look
+  (card, band, a plugin's), which the preview can show as a test notice.
+  Every change is one undo step and the preview follows; ridge frames are not
+  offered, a theme that has some can make them flat under *Advanced*
+- *Live*, what the panel shows and how it runs: its picture, the frame rate
+  against the target, the data rate, the drawing time, the video queue and
+  the faults, the sensor sources with their state and the hint about missing
+  readings, the services with a switch each (and *Restart*), test notices of
+  every kind with what became of them, and the end of the log; pause and
+  brightness are in the header. It polls the console API while it is shown
 - The hardware's names in the app: *Settings → Sensors → Hardware names*
   shows the processor, graphics card and memory names the sensors detect, and
   a text typed there takes their place on the panel (*Automatic* brings the
@@ -472,6 +499,15 @@
 - Plugins: a sensor source can win over sources before it for some keys
   (`overrides`), and gets the loaded configuration in `follow_config(config)`,
   when it is made and whenever `config.toml` changes while the panel runs
+- Lumen, Libre Panel's own signature screen for the 8.8" and 9.2" bars, in
+  the app's colours and type on the dot grid of the editor's stage. On the
+  left what plays (the weather with its moving symbols and the next hours when
+  nothing does, a calendar sheet when there is neither), in the middle the
+  time with its seconds, the load of the CPU and GPU over the last minute as
+  light that scrolls, and the fans turning with their speed, on the right lit
+  rings for the CPU, GPU and RAM named after your hardware, over the network
+  (a download in its place while one runs). Frames are flat lines; it keeps
+  clear of the 9.2"'s hidden strip and moves to the other panels
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
@@ -527,12 +563,29 @@
 - A change of `[services]` saved together with a theme name that does not exist (a typo, a
   theme not installed yet) reached the services only with the next save. They now follow
   `config.toml` whenever it loads, whether or not its theme does; the panel keeps its theme
+- A theme's first frame read the pictures of its fans' rotors (about 200 ms) and built the
+  bevels of a faceted or acrylic clock (some 30 ms a letter). The warm-up before the first
+  frame does both now: SPUR II's screens show their first frame in about half the time
+- Moving a theme to a narrower panel (*adapt*) kept the room each text may take
+  (`max_width`): a hardware name kept the width it had on a 9.2" bar and ran into its
+  neighbours. It narrows with the panel now
 
 **Changes**
 - SPUR II's screens are kept as a legacy set: their themes carry
   `"collection": "SPUR II"`, and galleries show Libre Panel's own themes
   first and SPUR II's apart, for those who want to see where Libre Panel
   started
+- Studio's card shows what plays, else the weather (the weather card, with its moving
+  symbol and the next hours), else a calendar sheet, and changes with a line of light. It
+  is wider than the old card, and the rings move 25 px to the right for it; they are light
+  in milled grooves now, with the names of the processor, the memory and the graphics card
+  under them. The clock, the date and the network keep their places
+- Libre Default, the theme a new install starts with: lit rings and disk segments, a CPU
+  history that scrolls through the last 30 seconds, numbers that glide and the app's
+  colours; the corner where the weather was shows what plays, else the weather, else the
+  day
+- The pictures of the README and the website show Lumen (on top, in the gallery, in the
+  social preview), and the README lists Libre Panel's own themes first, SPUR II's apart
 - The editor before the app stays at `/classic/` until the app has all its
   views; plugins' editor pages open inside the app (*Pages*, or Ctrl+K)
 - The video mode turns itself on: `video.mode` is `"auto"` by default, which
