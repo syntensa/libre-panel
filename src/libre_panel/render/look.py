@@ -308,7 +308,7 @@ class Sweeps:
 
     def watch(self, snapshot: Any, now: float, settings: dict[str, Any]) -> None:
         """Start one where the frame at ``now`` brings a moment the theme asks for."""
-        seconds = settings["sweep_s"]
+        seconds = settings["sweep_seconds"]
         if not self.started:
             self.started = True
             if settings["on_start"]:
@@ -433,7 +433,7 @@ class PanelLight:
 
     def transition_ended(self, kind: Any, now: float) -> None:
         if self.settings["on_transition"] and getattr(kind, "name", "") in TRANSITIONS:
-            self.sweeps.start(now, self.settings["sweep_s"])
+            self.sweeps.start(now, self.settings["sweep_seconds"])
 
 
 # -- frames as ridges ------------------------------------------------------------------
@@ -520,23 +520,17 @@ def grid_image(size: tuple[int, int], spacing: int, major: int, minor_colour: tu
     (0: none) in ``major_colour``, on a clear picture of ``size``."""
     w, h = size
     out = np.zeros((h, w, 4), np.uint8)
-    every = max(1, spacing) * max(1, major)
+    spacing = max(1, spacing)
+    every = spacing * major
+
+    def lines(length: int, strong: bool) -> np.ndarray:
+        at = np.arange(0, length, spacing)
+        return at[(at % every == 0) == strong] if major > 0 else (at[:0] if strong else at)
+
     for colour, strong in ((minor_colour, False), (major_colour, True)):
-        xs = np.arange(0, w, max(1, spacing))
-        ys = np.arange(0, h, max(1, spacing))
-        if major > 0:
-            xs = xs[(xs % every == 0) == strong]
-            ys = ys[(ys % every == 0) == strong]
-        elif strong:
-            continue
-        out[:, xs] = colour
+        out[:, lines(w, strong)] = colour
     for colour, strong in ((minor_colour, False), (major_colour, True)):  # rows over columns
-        ys = np.arange(0, h, max(1, spacing))
-        if major > 0:
-            ys = ys[(ys % every == 0) == strong]
-        elif strong:
-            continue
-        out[ys, :] = colour
+        out[lines(h, strong), :] = colour
     return Image.fromarray(out, "RGBA")
 
 

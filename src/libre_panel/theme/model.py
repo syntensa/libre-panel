@@ -318,7 +318,7 @@ LOOK_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "sun": ("bool", True),
         "frames": ("bool", True),
         "color": ("color?", None),  # the sweeps' tint; empty: the accent
-        "sweep_s": ("number", 1.6),
+        "sweep_seconds": ("number", 1.6),
         "on_start": ("bool", True),
         "on_hour": ("bool", True),
         "on_track": ("bool", True),
@@ -330,7 +330,7 @@ LOOK_RANGES: dict[tuple[str, str], tuple[float, float]] = {
     ("grid", "major"): (0, 50),
     ("grid", "alpha"): (0, 1),
     ("light", "strength"): (0, 2),
-    ("light", "sweep_s"): (0.3, 10),
+    ("light", "sweep_seconds"): (0.3, 10),
 }
 
 _PALETTE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")

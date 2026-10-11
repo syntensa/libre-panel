@@ -441,3 +441,36 @@ def test_time_module_settings(page):
     page.locator("#props select").first.select_option("world")
     places = page.locator("#props label.field", has_text="Places").locator("textarea")
     assert "Asia/Tokyo = Tokyo" in places.get_attribute("placeholder")
+
+
+def test_look_and_finish_in_the_editor(page, isolated_home):
+    """Theme → Look: the grid and the panel light are switched on and set from
+    their specs; a bar's finish comes first among its fields."""
+    props = page.locator("#props")
+    props.locator("label.field", has_text="in this theme").nth(0).locator("input").check()
+    assert js(page, "state.theme.look.grid") == {
+        "spacing": 8, "major": 5, "color": None, "major_color": None, "alpha": 1,
+    }  # fmt: skip
+    spacing = props.locator("label.field", has_text="spacing").locator("input")
+    spacing.fill("10")
+    spacing.press("Tab")
+    props.locator("label.field", has_text="in this theme").nth(1).locator("input").check()
+    props.locator("label.field", has_text="on hour").locator("input").uncheck()
+    assert js(page, "state.theme.look.grid.spacing") == 10
+    assert js(page, "state.theme.look.light.on_hour") is False
+    bar = js(page, "state.theme.widgets.find((w) => w.type === 'bar').id")
+    js(page, f"setSelection(['{bar}'])")
+    first = js(page, "document.querySelector('#props > label.field span').textContent")
+    assert first == "finish"
+    props.locator("label.field", has_text="finish").locator("select").select_option("lit")
+    assert js(page, f"widgetById('{bar}').finish") == "lit"
+    page.click("#btn-save")  # built-in theme: asks for a new name ("my-test")
+    page.wait_for_function("document.querySelector('#status').textContent.includes('my-test')")
+    from libre_panel.theme.model import load_theme
+
+    saved = load_theme(isolated_home / "themes" / "my-test")
+    assert saved.look["grid"]["spacing"] == 10 and saved.look["light"]["on_hour"] is False
+    assert next(w for w in saved.widgets if w["id"] == bar)["finish"] == "lit"
+    js(page, "setSelection([])")
+    props.locator("label.field", has_text="in this theme").nth(0).locator("input").uncheck()
+    assert "grid" not in js(page, "state.theme.look")

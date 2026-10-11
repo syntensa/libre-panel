@@ -145,10 +145,15 @@ def _upright(image: Image.Image, upright: bool) -> Image.Image:
 
 
 def _bar_glow(length: int, thick: int, spans, colours: np.ndarray, pad: int, radius: float,
-              strength: float) -> Image.Image:  # fmt: skip
+              strength: float, reverse: bool = False) -> Image.Image:  # fmt: skip
     """SPUR II's bar glow, lying: dim along the lit part, rising to the head,
     the head running towards white; blurred at a quarter of the size, as
     SPUR II's glow zones. ``pad`` px around the bar."""
+    if reverse:  # filling from the far end, its head is on the left: worked out mirrored
+        spans = [(length - b, length - a, amount) for a, b, amount in spans]
+        colours = colours[::-1] if np.ndim(colours) == 2 else colours
+        glow = _bar_glow(length, thick, spans, colours, pad, radius, strength)
+        return glow.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
     q = 4
     w, h = (length + 2 * pad + q - 1) // q, (thick + 2 * pad + q - 1) // q
     glow = np.zeros((h, w, 3), np.float32)
@@ -202,7 +207,7 @@ def bar_piece(renderer: Any, widget: dict[str, Any], frac: float, paint) -> Piec
     if glow > 0:
         radius = max(1.0, float(widget.get("glow_radius", 10)))
         pad = math.ceil(2 * radius)
-        light = _bar_glow(length, thick, lit, colours, pad, radius, glow)
+        light = _bar_glow(length, thick, lit, colours, pad, radius, glow, reverse)
         layer = Image.new("RGBA", light.size, (0, 0, 0, 0))
         if groove is not None:
             layer.alpha_composite(_upright(groove, upright), (pad, pad))  # back to lying
@@ -243,7 +248,8 @@ class LitBar(Finish):
 # -- rings --------------------------------------------------------------------
 
 
-def _ring(widget: dict[str, Any]) -> light3d.Ring:
+def _ring(widget: dict[str, Any]) -> tuple[light3d.Ring, tuple[Any, ...]]:
+    """The widget's ring (shared by every widget of that size and arc) and its key."""
     key = (widget["w"], widget["h"], widget["thickness"], widget["start_angle"],
            widget["end_angle"], widget["cap"] == "round")  # fmt: skip
     tables = light3d.RING.get()

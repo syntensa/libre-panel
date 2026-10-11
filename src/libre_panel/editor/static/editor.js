@@ -8,7 +8,7 @@ const PALETTE_NAME_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 const FORMAT_HINT = "{value:.0f}{unit} · {value:.1f} · {value:bytes}/s · {value:duration} · {label}";
 const POSITION_FIELDS = ["x", "y", "w", "h", "size"];
 const ADVANCED_FIELDS = ["id", "visible", "locked", "hide_if_missing"];
-const STEPS = { opacity: 0.05, glow: 0.05, stroke: 0.1 };
+const STEPS = { opacity: 0.05, glow: 0.05, stroke: 0.1, alpha: 0.05, strength: 0.05, sweep_seconds: 0.1 };
 const HISTORY_LIMIT = 200;
 
 const state = {
@@ -1060,6 +1060,7 @@ function hintFor(widget, key, kind) {
   if (key === "smooth" && widget.type === "metric") return t("the number glides between readings, together with the bars and rings of its sensor");
   if (key === "seconds" && widget.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = as long as the history readings take");
   if (key === "per_frame") return t("video mode: a point a pixel apart, as SPUR II draws its curves (seconds = width / 25)");
+  if (key === "finish") return t("lit: SPUR II's light on rings, bars, graph lines and weather icons; glow then sets their glow");
   return null;
 }
 
@@ -1095,6 +1096,7 @@ function buildProps() {
   form.append(el("div", { class: "quad" }, ...position.map(row)));
   const effects = state.specs.effect_fields;
   const main = Object.keys(spec).filter((k) => !POSITION_FIELDS.includes(k) && !ADVANCED_FIELDS.includes(k) && !effects.includes(k));
+  main.sort((a, b) => (b === "finish") - (a === "finish")); // how it is drawn comes first
   form.append(...main.map(row));
   const effectsActive = (widget.glow || 0) > 0 || !!widget.shadow || (widget.opacity ?? 1) < 1;
   form.append(el("details", { open: effectsActive }, el("summary", { text: t("Effects") }), el("div", { class: "fields" }, ...effects.map(row))));
@@ -1187,6 +1189,7 @@ function buildThemeProps(form) {
     field(t("background image"), assetInput(theme.background.image, set("bgimg", (v) => (theme.background.image = v || null)))),
     ...buildScreenFields(),
     ...buildModuleThemeFields(),
+    ...buildLookFields(),
     el("h2", { class: "section-title", text: t("Palette") }),
     buildPaletteEditor(),
     el("h2", { class: "section-title", text: t("Timing") }),
@@ -1194,6 +1197,57 @@ function buildThemeProps(form) {
     field(t("smoothing (ms)"), numberInput(theme.animation.smoothing_ms, set("smooth", (v) => (theme.animation.smoothing_ms = Math.max(0, Math.min(5000, v ?? 0))))), t("how long bars, rings and gliding numbers take to a new value; 0 = jump")),
     ...buildToastFields(),
   );
+}
+
+// The panel's look after SPUR II (theme "look"): each block is on or off, its
+// fields come from the specs. A block a plugin version adds shows up the same way.
+const LOOK_HINTS = {
+  "grid:color": () => t("empty: the palette's grid colour, else a breath away from the background"),
+  "grid:major": () => t("every so many lines a stronger one; 0 = none"),
+  "light:sun": () => t("the sun where it stands at the weather place in config.toml; off, or without a place: noon"),
+  "light:frames": () => t("outlines of 2 px or more become ridges that catch the light"),
+  "light:color": () => t("the sweeps' tint; empty: the accent"),
+};
+
+function buildLookFields() {
+  const theme = state.theme;
+  const blocks = state.specs.look || {};
+  const titles = { grid: t("Grid background"), light: t("Panel light") };
+  const about = {
+    grid: t("thin lines behind the widgets, as on SPUR II's screens"),
+    light: t("one light for the whole panel: it glints on frames and sweeps across at start, on the hour, on a new track and after a tube or entrance"),
+  };
+  const fields = [];
+  for (const [block, spec] of Object.entries(blocks)) {
+    const settings = theme.look?.[block];
+    const toggle = el("input", {
+      type: "checkbox",
+      checked: !!settings,
+      onchange: (event) => {
+        commit(`look:${block}`);
+        const look = { ...(theme.look || {}) };
+        if (event.target.checked) look[block] = Object.fromEntries(Object.entries(spec).map(([k, [, d]]) => [k, clone(d)]));
+        else delete look[block];
+        if (Object.keys(look).length) theme.look = look;
+        else delete theme.look;
+        buildProps();
+        scheduleRender();
+      },
+    });
+    fields.push(el("h2", { class: "section-title", text: titles[block] || fieldLabel(block) }));
+    fields.push(field(t("in this theme"), el("label", { class: "check" }, toggle, t("on")), about[block]));
+    if (!settings) continue;
+    for (const [key, [kind, fallback]] of Object.entries(spec)) {
+      const onChange = (value) => {
+        commit(`look:${block}:${key}`);
+        theme.look[block] = { ...theme.look[block], [key]: value };
+        scheduleRender();
+      };
+      const hint = LOOK_HINTS[`${block}:${key}`];
+      fields.push(field(fieldLabel(key), controlFor(key, kind, settings[key] ?? fallback, onChange), hint ? hint() : null));
+    }
+  }
+  return fields;
 }
 
 // The grid and the style of a theme with modules.

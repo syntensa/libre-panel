@@ -40,6 +40,7 @@ from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import (
     COMMON_FIELDS,
     EFFECT_FIELDS,
+    LOOK_SPECS,
     TOAST_ANCHORS,
     WIDGET_SPECS,
     ThemeError,
@@ -379,6 +380,10 @@ class EditorHandler(BaseHTTPRequestHandler):
             "toast_anchors": list(TOAST_ANCHORS),
             "common": {k: list(v) for k, v in COMMON_FIELDS.items()},
             "effect_fields": list(EFFECT_FIELDS),
+            # the panel's look, block by block: Theme -> Look
+            "look": {
+                name: {k: list(v) for k, v in spec.items()} for name, spec in LOOK_SPECS.items()
+            },
             "models": models,
             "protocols": PROTOCOLS,
             "fonts": [BUILTIN_PREFIX + name for name in builtin_fonts()],
