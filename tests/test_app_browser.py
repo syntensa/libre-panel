@@ -609,9 +609,10 @@ def test_the_launcher_does_not_offer_what_is_there_or_cannot_be(app_url, isolate
 
 
 def test_the_sensor_settings_show_the_service_and_take_it_away_after_asking(app_url):
-    answer, posted = windows_download(
+    answer = windows_download(
         service={"state": "running", "disabled": False}, pawnio="2.0.1", frame_rates="sign-in"
-    ), []
+    )
+    posted = []
     routes = {"**/api/unlock": unlock_route(answer, posted)}
     with browser_page(app_url, "settings/sensors", routes=routes) as page:
         card = page.locator("#sensor-service")

@@ -368,7 +368,7 @@ def test_auto_reads_inside_libre_panel_while_the_service_does_not_answer(install
 def test_a_service_installed_while_libre_panel_runs_takes_over_when_it_answers(
     installed, monkeypatch
 ):
-    """"Unlock all sensors", or the setup, while the panel reads inside Libre Panel: a look at
+    """The setup, or "Unlock all sensors", while the panel reads inside Libre Panel: a look at
     the registry now and then finds the service, which takes over once it answers."""
     monkeypatch.setattr(lhm_service, "registration", lambda name=None: None)
     provider = provider_with()
