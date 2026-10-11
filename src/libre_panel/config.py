@@ -134,8 +134,6 @@ def config_dir() -> Path:
     if sys.platform == "win32":
         base = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
         return Path(base) / "LibrePanel"
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "LibrePanel"
     base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
     return Path(base) / "libre-panel"
 

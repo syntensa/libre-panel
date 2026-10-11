@@ -452,15 +452,13 @@ def test_a_look_that_fails_is_no_reason_to_stop(winrt, provider, monkeypatch):
     assert theme is not None
 
 
-# -- the other systems keep their players --------------------------------------------------------
+# -- Linux keeps its players ---------------------------------------------------------------------
 
 
-def test_the_players_of_linux_and_macos_come_with_the_name_of_their_app():
+def test_the_players_of_linux_come_with_the_name_of_their_app():
     sep = "\x1f"
     line = sep.join(["Playing", "Band", "Song", "Album", "1000000", "200000000", "", "Spotify"])
     assert media.parse_playerctl(line, 0).app_id == "spotify"
-    mac = sep.join(["playing", "Band", "Song", "Album", "1", "200", "", "Music"])
-    assert media.parse_osascript(mac, 0).app_id == "Music"
 
 
 def test_each_system_has_its_backend(winrt, monkeypatch):
@@ -468,8 +466,6 @@ def test_each_system_has_its_backend(winrt, monkeypatch):
     monkeypatch.setattr(media, "_winrt", lambda: winrt)
     monkeypatch.setattr(media.sys, "platform", "win32")
     assert isinstance(media._backend(), media._WindowsBackend)
-    monkeypatch.setattr(media.sys, "platform", "darwin")
-    assert isinstance(media._backend(), media._AppleScriptBackend)
     monkeypatch.setattr(media.sys, "platform", "linux")
     monkeypatch.setattr(media.shutil, "which", lambda name: "/usr/bin/playerctl")
     assert isinstance(media._backend(), media._PlayerctlBackend)

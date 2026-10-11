@@ -133,6 +133,16 @@ def call(url, method="GET", body=None, header=True):
     return response.status, data
 
 
+def test_the_editor_gets_no_autostart_toggle_where_there_is_no_autostart(isolated_home):
+    write_config(isolated_home)
+    background = BackgroundApp(port=0, autostart=Autostart("sunos5", home=isolated_home))
+    snapshot = background.snapshot()
+    assert snapshot["autostart"] is None  # the checkbox stays greyed out
+    assert "not supported on this system" in snapshot["autostart_location"]
+    with pytest.raises(OSError, match="not supported on this system"):
+        background.act("autostart", True)
+
+
 def test_background_app_controls_through_the_editor(app, isolated_home):
     url = app.start()
     assert running_instance() == {"pid": __import__("os").getpid(), "editor": url}

@@ -10,7 +10,6 @@ volume keys at once.
   looked at again, so a headset plugged in or speakers chosen are followed.
 - Linux: ``wpctl`` (PipeWire), else ``pactl`` (PulseAudio), asked four times a
   second. Without either tool there are no readings.
-- macOS: ``osascript``, asked twice a second.
 
 The thread runs only while a theme on show reads ``audio.*``, and ends when
 the provider closes. Nothing here raises: where the volume cannot be read
@@ -39,7 +38,6 @@ EVENT_POLL_SECONDS = 0.25  # Windows tells about changes: the poll is only a saf
 POLL_SECONDS = 0.02  # without events
 DEVICE_CHECK_SECONDS = 2.0  # has the default output device changed?
 LINUX_POLL_SECONDS = 0.25
-MACOS_POLL_SECONDS = 0.5
 SLOW_POLL_SECONDS = 5.0  # a tool that keeps failing is asked less often
 FAILURES_BEFORE_SLOW = 5
 RETRY_SECONDS = 5.0  # no device or tool: look again now and then
@@ -48,13 +46,11 @@ IDLE_SECONDS = 60.0  # nobody looked for this long: the thread ends, and starts 
 COMMAND_TIMEOUT = 2.0
 
 
-# -- the tools of Linux and macOS (no Windows needed) ------------------------------
+# -- the tools of Linux (no Windows needed) ----------------------------------------
 
 _WPCTL = re.compile(r"Volume:\s*(\d*\.?\d+)")
 _PERCENT = re.compile(r"(\d+)%")
 _PACTL_MUTE = re.compile(r"Mute:\s*(yes|no)")
-_MAC_VOLUME = re.compile(r"output volume:\s*(\d+)")
-_MAC_MUTED = re.compile(r"output muted:\s*(true|false)")
 
 
 def parse_wpctl(text: str) -> tuple[float, bool] | None:
@@ -73,16 +69,6 @@ def parse_pactl_mute(text: str) -> bool | None:
     """``Mute: yes`` or ``Mute: no``."""
     found = _PACTL_MUTE.search(text)
     return found.group(1) == "yes" if found else None
-
-
-def parse_osascript(text: str) -> tuple[float, bool] | None:
-    """``output volume:37, input volume:75, alert volume:100, output muted:false``.
-    An output without a volume of its own (some HDMI) says ``missing value``."""
-    volume = _MAC_VOLUME.search(text)
-    if volume is None:
-        return None
-    muted = _MAC_MUTED.search(text)
-    return float(volume.group(1)), muted is not None and muted.group(1) == "true"
 
 
 def _run(command: list[str]) -> str | None:
@@ -115,13 +101,7 @@ def _sample_pactl(path: str) -> tuple[float, bool] | None:
     return level, bool(out is not None and parse_pactl_mute(out))
 
 
-def _sample_osascript(path: str) -> tuple[float, bool] | None:
-    out = _run([path, "-e", "get volume settings"])
-    return None if out is None else parse_osascript(out)
-
-
 _LINUX_TOOLS = (("wpctl", _sample_wpctl), ("pactl", _sample_pactl))
-_MACOS_TOOLS = (("osascript", _sample_osascript),)
 
 
 class _Source(Protocol):
@@ -481,8 +461,6 @@ def _open_source(on_change: Callable[[float, bool], None], platform: str = sys.p
     """The way to read the volume on this machine; raises OSError if there is none."""
     if platform == "win32":
         return _CoreAudio(on_change)
-    if platform == "darwin":
-        return _Commands(_MACOS_TOOLS, MACOS_POLL_SECONDS)
     return _Commands(_LINUX_TOOLS, LINUX_POLL_SECONDS)
 
 

@@ -1,4 +1,4 @@
-"""Cross-platform sensors via psutil (Windows, Linux, macOS).
+"""Cross-platform sensors via psutil (Windows, Linux).
 
 Temperatures and fans are only available where the OS exposes them
 (mostly Linux). On Windows use the LibreHardwareMonitor provider for those.
@@ -31,10 +31,10 @@ _CHIP_NAMES = {
 }  # fmt: skip
 
 
-# File systems that are not drives a user thinks of (Linux, macOS).
+# File systems that are not drives a user thinks of (Linux).
 _PSEUDO_FS = {
     "squashfs", "tmpfs", "devtmpfs", "overlay", "proc", "sysfs", "autofs", "ramfs",
-    "nsfs", "efivarfs", "fuse.portal", "devfs",
+    "nsfs", "efivarfs", "fuse.portal",
 }  # fmt: skip
 _TOP = 8  # top processes kept, per sort
 PING_EVERY = 5.0  # seconds
@@ -301,7 +301,7 @@ class PsutilProvider(SensorProvider):
     def read(self) -> dict[str, Reading]:
         out: dict[str, Reading] = {}
         out["cpu.load"] = Reading("cpu.load", psutil.cpu_percent(interval=None), "%", "CPU load")
-        # cpu_freq does not exist on every platform (e.g. macOS on Apple Silicon).
+        # cpu_freq is not available on every system (some ARM boards, virtual machines).
         freq_reader = getattr(psutil, "cpu_freq", None)
         try:
             freq = freq_reader() if freq_reader else None

@@ -170,7 +170,7 @@ def test_readings_still_shown_are_asked_for_at_the_normal_rate_until_they_go(web
         assert [provider._poll_once(answered + s) for s in (1, 2, 3, 4)] == [1.0] * 4
         assert provider.read()
         # gone now, first step of the backoff (a little past 5 s: a large monotonic
-        # clock, as on macOS, makes (t + 5) - t a hair less than 5)
+        # clock makes (t + 5) - t a hair less than 5)
         assert provider._poll_once(answered + 5.001) == 1.0
         assert provider.read() == {}, (answered, provider._answered_at, provider._misses)
         assert [provider._poll_once(answered + 6) for _ in range(3)] == [2.0, 4.0, 8.0]
@@ -209,5 +209,4 @@ def test_the_hint_names_what_to_do_on_windows():
     assert "Add " not in lhm.hardware_hint(load_only, listed, url, "win32")
     for key in lhm.HARDWARE_KEYS:  # any one of them: the sensors arrive
         assert lhm.hardware_hint({key: Reading(key, 50.0)}, listed, url, "win32") is None
-    for platform in ("linux", "darwin"):  # psutil has the temperatures and fans there
-        assert lhm.hardware_hint({}, ["psutil"], url, platform) is None
+    assert lhm.hardware_hint({}, ["psutil"], url, "linux") is None  # psutil has them there

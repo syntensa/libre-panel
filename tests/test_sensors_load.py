@@ -272,7 +272,7 @@ def test_missing_counters_raise_after_closing_the_query():
 
 
 def test_only_windows_has_the_gpu_counters(monkeypatch):
-    assert load._gpu_sampler("linux") is None and load._gpu_sampler("darwin") is None
+    assert load._gpu_sampler("linux") is None
 
 
 def test_windows_without_the_counters_fails_loudly_for_the_provider_to_say(monkeypatch):

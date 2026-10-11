@@ -2,10 +2,10 @@
 
 - Windows: a value under ``HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run``
 - Linux and other XDG desktops: ``~/.config/autostart/libre-panel.desktop``
-- macOS: ``~/Library/LaunchAgents/io.github.syntensa.libre-panel.plist``
 
 Everything is per user and needs no administrator rights. Turning it off
-removes exactly what turning it on created.
+removes exactly what turning it on created. On any other system there is no
+autostart: asking for it raises ``AutostartError``, which says so.
 
 On Windows some sensors (CPU temperature and power, RAM temperature,
 mainboard fans) can be read only by a process with administrator rights. The
@@ -20,7 +20,6 @@ and removing it needs an administrator; it is never done without being asked.
 from __future__ import annotations
 
 import os
-import plistlib
 import re
 import subprocess
 import sys
@@ -35,11 +34,12 @@ from libre_panel.i18n import t
 
 APP_NAME = "Libre Panel"
 DESKTOP_FILE = "libre-panel.desktop"
-MAC_LABEL = "io.github.syntensa.libre-panel"
 WINDOWS_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 WINDOWS_TASK = "Libre Panel"  # the Task Scheduler task for an elevated start
-# The release build's program without a console window (Windows) or Dock icon (macOS).
-WINDOWED_EXE = {"win32": "LibrePanel.exe", "darwin": "LibrePanel"}
+# The release build's program without a console window (Windows).
+WINDOWED_EXE = "LibrePanel.exe"
+# sys.platform of the systems with XDG desktops (a BSD's has its version after it: "freebsd14").
+XDG_PLATFORMS = ("linux", "freebsd", "openbsd", "netbsd", "dragonfly")
 
 ICON_PATH = Path(__file__).resolve().parent / "assets" / "libre-panel.png"
 
@@ -52,9 +52,8 @@ def launch_command(config_path: Path | None = None) -> list[str]:
         if appimage and sys.platform.startswith("linux"):
             return [appimage, *options, "tray", "--background"]
         exe = Path(sys.executable)
-        windowed = exe.with_name(WINDOWED_EXE.get(sys.platform, exe.name))
-        if windowed.exists():
-            exe = windowed
+        if sys.platform == "win32" and exe.with_name(WINDOWED_EXE).exists():
+            exe = exe.with_name(WINDOWED_EXE)
         return [str(exe), *options, "tray", "--background"]
     python = Path(sys.executable)
     if sys.platform == "win32" and python.with_name("pythonw.exe").exists():
@@ -102,6 +101,10 @@ class WindowsRegistry:
 
 class AutostartError(OSError):
     """Autostart could not be changed; the message says what to do."""
+
+
+def _not_supported() -> AutostartError:
+    return AutostartError(t("Autostart is not supported on this system."))
 
 
 class Tasks(Protocol):
@@ -244,11 +247,12 @@ class Autostart:
 
     @property
     def kind(self) -> str:
+        """``"windows"``, ``"xdg"`` (Linux, the BSDs) or ``"unsupported"``."""
         if self.platform == "win32":
             return "windows"
-        if self.platform == "darwin":
-            return "macos"
-        return "xdg"
+        if self.platform.startswith(XDG_PLATFORMS):
+            return "xdg"
+        return "unsupported"
 
     @property
     def registry(self) -> Registry:
@@ -274,33 +278,37 @@ class Autostart:
         return self._elevated[1]
 
     def path(self) -> Path | None:
-        if self.kind == "macos":
-            return self.home / "Library" / "LaunchAgents" / f"{MAC_LABEL}.plist"
-        if self.kind == "xdg":
-            base = self.environ.get("XDG_CONFIG_HOME") or str(self.home / ".config")
-            return Path(base) / "autostart" / DESKTOP_FILE
-        return None
+        """The desktop entry's file (XDG); None where there is no such file."""
+        if self.kind != "xdg":
+            return None
+        base = self.environ.get("XDG_CONFIG_HOME") or str(self.home / ".config")
+        return Path(base) / "autostart" / DESKTOP_FILE
 
     def location(self) -> str:
+        """Where the entry lives, or (on an unsupported system) that there is none."""
         if self.kind == "windows":
             if self.elevated():
                 return t("Task Scheduler: {name}, with the highest rights", name=WINDOWS_TASK)
             return f"HKEY_CURRENT_USER\\{WINDOWS_RUN_KEY}\\{APP_NAME}"
+        if self.kind == "unsupported":
+            return str(_not_supported())
         return str(self.path())
 
     def is_enabled(self) -> bool:
         if self.kind == "windows":
             return self.registry.get(APP_NAME) is not None or self.elevated()
+        if self.kind == "unsupported":
+            raise _not_supported()
         path = self.path()
         if not path.is_file():
             return False
-        if self.kind == "xdg":
-            text = path.read_text(encoding="utf-8", errors="replace")
-            return not re.search(r"^Hidden\s*=\s*true\s*$", text, re.MULTILINE | re.IGNORECASE)
-        return True
+        text = path.read_text(encoding="utf-8", errors="replace")
+        return not re.search(r"^Hidden\s*=\s*true\s*$", text, re.MULTILINE | re.IGNORECASE)
 
     def enable(self, command: list[str], elevated: bool = False) -> str:
         """Start ``command`` at login; ``elevated`` (Windows): with the highest rights."""
+        if self.kind == "unsupported":
+            raise _not_supported()
         if elevated:
             return self._enable_elevated(command)
         if self.kind == "windows":
@@ -315,36 +323,23 @@ class Autostart:
             return self.location()
         path = self.path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        if self.kind == "macos":
-            logs = self.home / "Library" / "Logs"
-            agent = {
-                "Label": MAC_LABEL,
-                "ProgramArguments": command,
-                "RunAtLoad": True,
-                # Start again after a crash, but not after "Quit" in the menu.
-                "KeepAlive": {"SuccessfulExit": False},
-                "ProcessType": "Interactive",
-                "StandardErrorPath": str(logs / "LibrePanel.log"),
-            }
-            path.write_bytes(plistlib.dumps(agent))
-        else:
-            lines = [
-                "[Desktop Entry]",
-                "Type=Application",
-                f"Name={APP_NAME}",
-                "GenericName=System monitor panel",
-                "GenericName[de]=Systemmonitor-Panel",
-                "Comment=Shows system sensors on a USB monitor panel",
-                "Comment[de]=Zeigt Systemsensoren auf einem USB-Monitor-Panel",
-                f"Exec={desktop_exec(command)}",
-                f"Icon={ICON_PATH}" if ICON_PATH.exists() else "",
-                "Terminal=false",
-                "Categories=System;Monitor;",
-                "X-GNOME-Autostart-enabled=true",
-                # Give the desktop a moment to bring up its tray first.
-                "X-GNOME-Autostart-Delay=5",
-            ]
-            path.write_text("\n".join(line for line in lines if line) + "\n", encoding="utf-8")
+        lines = [
+            "[Desktop Entry]",
+            "Type=Application",
+            f"Name={APP_NAME}",
+            "GenericName=System monitor panel",
+            "GenericName[de]=Systemmonitor-Panel",
+            "Comment=Shows system sensors on a USB monitor panel",
+            "Comment[de]=Zeigt Systemsensoren auf einem USB-Monitor-Panel",
+            f"Exec={desktop_exec(command)}",
+            f"Icon={ICON_PATH}" if ICON_PATH.exists() else "",
+            "Terminal=false",
+            "Categories=System;Monitor;",
+            "X-GNOME-Autostart-enabled=true",
+            # Give the desktop a moment to bring up its tray first.
+            "X-GNOME-Autostart-Delay=5",
+        ]
+        path.write_text("\n".join(line for line in lines if line) + "\n", encoding="utf-8")
         return self.location()
 
     def _enable_elevated(self, command: list[str]) -> str:
@@ -366,6 +361,8 @@ class Autostart:
 
     def disable(self) -> bool:
         """Remove the entry; returns whether there was one."""
+        if self.kind == "unsupported":
+            raise _not_supported()
         if self.kind == "windows":
             existed = self.registry.get(APP_NAME) is not None
             self.registry.delete(APP_NAME)

@@ -10,7 +10,6 @@ documented them on the hardware; see docs/HARDWARE.md for their status.
 from __future__ import annotations
 
 import logging
-import sys
 from dataclasses import dataclass
 from typing import Any
 
@@ -127,8 +126,6 @@ class SerialLink:
     def write(self, data: bytes) -> None:
         try:
             self.port.write(data)
-            if sys.platform == "darwin":
-                self.port.flush()  # macOS garbles bitmaps otherwise (reference library)
         except self._errors as exc:
             raise DeviceError(t("serial write failed: {error}", error=exc)) from exc
 
