@@ -130,6 +130,44 @@ def test_panel_texts_in_german():
     assert texts == {"w": "Overcast", "c": "Sunday"}
 
 
+def test_a_clock_sets_its_date_in_capitals_in_the_language_of_the_panel():
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.sensors.demo import demo_snapshot
+    from libre_panel.theme.model import parse_theme
+
+    def clock(wid, **extra):
+        return {"type": "clock", "id": wid, "x": 0, "y": 0, "format": "%A · %B", **extra}
+
+    theme = parse_theme(
+        {
+            "format": "libre-panel-theme/1",
+            "name": "t",
+            "display": {"width": 200, "height": 40},
+            "widgets": [clock("plain"), clock("caps", uppercase=True)],
+        }
+    )
+    snapshot = demo_snapshot()
+    snapshot.now = datetime(2026, 9, 28, 12, 0)
+    renderer = Renderer(theme)
+    texts = {}
+    original = renderer._text_widget
+
+    def spy(widget, text, color):
+        texts[widget["id"]] = text
+        return original(widget, text, color)
+
+    renderer._text_widget = spy
+    try:
+        i18n.set_language("de")
+        renderer.render(snapshot)
+        assert texts == {"plain": "Montag · September", "caps": "MONTAG · SEPTEMBER"}
+        i18n.set_language("en")
+        renderer.render(snapshot)
+        assert texts == {"plain": "Monday · September", "caps": "MONDAY · SEPTEMBER"}
+    finally:
+        i18n.set_language("en")
+
+
 def test_editor_switches_language(isolated_home):
     from test_editor_server import request
 

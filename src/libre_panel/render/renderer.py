@@ -1388,6 +1388,8 @@ class Renderer:
             text = i18n.format_date(self._time(widget, snapshot), widget["format"])[:100]
         except ValueError:
             text = "--:--"
+        if widget.get("uppercase"):
+            text = text.upper()
         return self._text_widget(widget, text, widget["color"])
 
     def _time(self, widget: dict[str, Any], snapshot: Snapshot) -> datetime:

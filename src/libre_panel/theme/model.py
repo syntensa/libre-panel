@@ -172,6 +172,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
     "clock": {
         "format": ("string", "%H:%M"),
         "timezone": ("string", ""),  # e.g. "Asia/Tokyo"; empty = this computer's
+        "uppercase": ("bool", False),  # the weekday and month in capitals, as SPUR II's date
         **_text_style(True),
     },
     # A clock face with hands.

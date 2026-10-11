@@ -417,7 +417,8 @@
   MB/s)
 - Format spec `{value:upper}`: a text in capitals (`{label:upper}` a reading's
   name), for headings that follow the language of the panel, as SPUR II sets
-  them
+  them; a `clock` sets its weekday and month in capitals with `"uppercase":
+  true` (MONTAG · 28. SEPTEMBER)
 - `tools/compare_reference.py` draws a theme with given readings and
   compares it with a picture of the same screen: the share of pixels that
   match, overall and per region, the pictures side by side, their
