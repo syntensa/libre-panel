@@ -22,8 +22,8 @@ function ThemeList({ onClose }) {
   const [query, setQuery] = useState("");
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = themes.filter((theme) => !q || theme.id.toLowerCase().includes(q));
-    return list.sort((a, b) => Number(a.builtin) - Number(b.builtin) || a.id.localeCompare(b.id));
+    const list = themes.filter((theme) => !q || theme.id.toLowerCase().includes(q) || (theme.name || "").toLowerCase().includes(q));
+    return list.sort((a, b) => Number(a.builtin) - Number(b.builtin) || (a.name || a.id).localeCompare(b.name || b.id));
   }, [themes, query]);
   return html`
     <label class="search-field">
@@ -45,8 +45,8 @@ function ThemeList({ onClose }) {
         >
           <img src=${endpoints.previewUrl(theme.id, 240)} alt="" loading="lazy" />
           <span class="theme-row-text">
-            <span class="theme-row-name">${theme.id}</span>
-            <span class="theme-row-note">${theme.id === active ? t("shown on the panel") : sourceText(theme)}</span>
+            <span class="theme-row-name">${theme.name || theme.id}</span>
+            <span class="theme-row-note">${theme.id === active ? t("shown on the panel") : sourceText(theme)} · <span class="mono">${theme.id}</span></span>
           </span>
           ${theme.id === current ? html`<${Icon} name="check" size=${15} />` : null}
         </button>`,

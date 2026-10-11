@@ -14,7 +14,7 @@ The editor's server (`editor/server.py`) serves `index.html` at `/`, this folder
 | `lib/preact.js` | `html` (htm on Preact) and the hooks |
 | `core/state.js` | the one store: `store.get()`, `store.set(patch)`, `useStore(selector)`, `setPref()` |
 | `core/doc.js` | the theme being edited: `theme()`, `widgets()`, `widgetById()`, `selection()`, `setSelection()`, `edit(key, fn)`, `commit()` + `touch()`, `undo()`, `redo()`, `openDoc()` |
-| `core/actions.js` | open, save, save as, import, export, `applyToPanel()`, `adaptPanel()`, `uploadAsset()`, the panel's pages |
+| `core/actions.js` | open, save, save as, import, export, `applyToPanel()`, `adaptPanel()`, `uploadAsset()`, the panel's pages, `themeName(id)` |
 | `core/api.js` | `endpoints.*`, one function per server route |
 | `core/preview.js` | draws the theme with the real renderer, throttled; it follows `rev` by itself |
 | `core/i18n.js` | `t("English text", { name })`, `fieldLabel`, `widgetLabel`, `enumLabel`, `setLanguage` |
@@ -63,6 +63,14 @@ registerCommand({
 
 `registerProvider(() => [...])` adds commands made from data (one per theme, sensor,
 module) each time the palette searches.
+
+## Themes in a list
+
+`store.get().themes` is the theme list (`/api/themes`, again after `refreshThemes()`):
+`{id, name, builtin, source, model, size}` for every built-in, plugin and own theme. A
+gallery lists these, not a fixed set; `endpoints.previewUrl(id, width)` is a theme's
+picture (the server keeps it until the theme changes), and `openTheme(id)` opens one for
+Design.
 
 ## A field in the inspector
 

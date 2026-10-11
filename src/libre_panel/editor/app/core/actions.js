@@ -37,6 +37,9 @@ export async function refreshPages() {
 /** The theme the panel shows normally (config.toml's), if known. */
 export const normalTheme = () => store.get().pages?.pages?.[0]?.theme ?? null;
 
+/** A theme's name from the theme list (its id where it has none). */
+export const themeName = (id) => store.get().themes.find((theme) => theme.id === id)?.name || id;
+
 /** The images and fonts in the open theme's folder. */
 export async function refreshAssets() {
   const { doc } = store.get();

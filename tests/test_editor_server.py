@@ -312,6 +312,18 @@ def test_theme_pictures_and_files(server, isolated_home):
     assert request(server, "GET", "/api/themes/mine/assets/..%2F..%2Fconfig.toml")[0] == 404
 
 
+def test_the_theme_list_names_each_theme(server, isolated_home):
+    """Lists and galleries show a theme's name and panel, from the list itself."""
+    (isolated_home / "themes" / "broken").mkdir(parents=True)
+    (isolated_home / "themes" / "broken" / "theme.json").write_text("{not json")
+    _, themes = request(server, "GET", "/api/themes")
+    found = {item["id"]: item for item in themes}
+    classic = found["spur-classic"]
+    assert classic["name"] == "SPUR Classic" and classic["builtin"]
+    assert classic["size"] == [1920, 480] and classic["model"]
+    assert found["broken"]["name"] == "broken" and found["broken"]["size"] is None
+
+
 def test_building_blocks_in_the_theme_colours(server):
     from libre_panel.editor.presets import PRESETS
 

@@ -139,8 +139,9 @@ export function registerAppCommands() {
   registerProvider(() =>
     store.get().themes.map((item) => ({
       id: `theme.open.${item.id}`,
-      title: () => t("Open theme {name}", { name: item.id }),
+      title: () => t("Open theme {name}", { name: item.name || item.id }),
       hint: () => (item.id === normalTheme() ? t("shown on the panel") : item.builtin ? t("built in") : t("yours")),
+      keywords: () => item.id,
       group: theme,
       icon: "file",
       rank: 30,

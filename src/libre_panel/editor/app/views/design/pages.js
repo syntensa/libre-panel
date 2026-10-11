@@ -4,7 +4,7 @@
 // tabs over the canvas open a page's theme; "+" puts the open theme on a page.
 // The pages panel also lists the pages that plugins bring to the editor.
 
-import { openTheme, refreshPages, save } from "../../core/actions.js";
+import { openTheme, refreshPages, save, themeName } from "../../core/actions.js";
 import { endpoints } from "../../core/api.js";
 import { t } from "../../core/i18n.js";
 import { store, useStore } from "../../core/state.js";
@@ -85,7 +85,7 @@ export function PageTabs() {
   return html`<div class="page-tabs" role="tablist" aria-label=${t("Pages of the panel")} onPointerDown=${(event) => event.stopPropagation()}>
     ${shownPages(data).map(
       (item) => html`<button type="button" role="tab" key=${item.id} class="page-tab" aria-selected=${String(page === item.id)}
-        title=${t("Shows {theme}", { theme: item.theme })} onClick=${() => openPage(item)}>
+        title=${t("Shows {theme}", { theme: themeName(item.theme) })} onClick=${() => openPage(item)}>
         ${pageName(item.id)}
         ${now === item.id ? html`<span class="page-live" title=${t("on the panel now")}></span>` : null}
       </button>`,
@@ -122,7 +122,7 @@ function PageCard({ item, current, open }) {
       : t("the memory service is off")
     : item.mode && !item.theme
       ? t("shows the normal theme")
-      : item.theme;
+      : themeName(item.theme);
   return html`<div class=${`page-card${current ? " current" : ""}${item.theme ? "" : " empty"}`}>
     <button type="button" class="page-card-main" disabled=${!item.theme} onClick=${() => item.theme && open(item)}
       title=${item.theme ? t("Open its theme") : null}>

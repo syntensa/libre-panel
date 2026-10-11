@@ -109,6 +109,28 @@ _PAGE_TYPES = {
 }
 
 
+def _theme_list() -> list[dict[str, Any]]:
+    """The installed themes (theme.model.list_themes) with their names and panels, for
+    lists and galleries: read from each theme.json, without loading the theme."""
+    themes = list_themes()
+    for item in themes:
+        try:
+            data = json.loads((Path(item["path"]) / THEME_FILENAME).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {}
+        display = data.get("display") if isinstance(data, dict) else None
+        display = display if isinstance(display, dict) else {}
+        name = data.get("name") if isinstance(data, dict) else None
+        item["name"] = name if isinstance(name, str) and name.strip() else item["id"]
+        item["model"] = display.get("model") if isinstance(display.get("model"), str) else None
+        item["size"] = (
+            [display["width"], display["height"]]
+            if all(isinstance(display.get(k), int) for k in ("width", "height"))
+            else None
+        )
+    return themes
+
+
 def _finish_types(types: list[str]) -> dict[str, list[str]]:
     """The widget types each finish draws (any other is drawn flat): the editor offers a
     finish only where it shows. A module counts when its finish reaches one of its parts."""
@@ -303,7 +325,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         if path == "/api/specs":
             return self._json(self._specs())
         if path == "/api/themes":
-            return self._json(list_themes())
+            return self._json(_theme_list())
         match = re.fullmatch(r"/api/themes/([^/]+)/assets", path)
         if match:
             return self._assets(match.group(1))

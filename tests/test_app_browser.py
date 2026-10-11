@@ -159,6 +159,8 @@ def test_the_command_palette_finds_and_runs(page):
     page.keyboard.press("Control+k")
     palette.locator("input").fill("lüf")  # an umlaut, as typed in German
     assert palette.locator(".palette-item").count() > 0
+    palette.locator("input").fill("spur-classic")  # a theme by its id, shown by its name
+    assert "SPUR Classic" in palette.locator(".palette-item.active").inner_text()
 
 
 def test_save_as_and_to_the_panel(page, isolated_home):
