@@ -152,12 +152,12 @@ def test_the_tray_says_what_keeps_the_temperatures_away_while_it_is_the_case(tra
     assert wait_for(lambda: tray.app.panel.state()["state"] == "showing")
     tray.refresh()
     quiet = tray.icon.menu_updates
-    assert list(items(tray.build_menu()))[1] == "Open theme editor"  # nothing to say
+    assert list(items(tray.build_menu()))[1] == "Open Libre Panel"  # nothing to say
     said = "CPU temperature and power need administrator rights: run Libre Panel as administrator."
     lhm = pretend_windows(tray.app, LhmStatus("inprocess", elevated=False, ring0=False, pawnio="2"))
     menu = list(items(tray.build_menu()))
     assert menu[0].startswith("Libre Panel: showing") and menu[1] == said
-    assert menu[2] == "Open theme editor"
+    assert menu[2] == "Open Libre Panel"
     assert tooltip(tray.app.panel.state()) == f"Libre Panel\n{said}"  # the long target gives way
     tray.refresh()
     assert tray.icon.menu_updates == quiet + 1 and tray.icon.title == f"Libre Panel\n{said}"
@@ -166,7 +166,7 @@ def test_the_tray_says_what_keeps_the_temperatures_away_while_it_is_the_case(tra
     lhm.state = LhmStatus("inprocess", elevated=True, ring0=True, pawnio="2")  # fixed
     tray.refresh()
     assert tray.icon.menu_updates == quiet + 2 and said not in tray.icon.title
-    assert list(items(tray.build_menu()))[1] == "Open theme editor"
+    assert list(items(tray.build_menu()))[1] == "Open Libre Panel"
 
 
 def test_the_tooltip_keeps_the_hint_whole_and_the_trouble_with_the_panel_comes_first():
