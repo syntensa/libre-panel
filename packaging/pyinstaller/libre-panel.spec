@@ -2,6 +2,7 @@
 #
 # libre-panel(.exe)   the command-line program (all commands)
 # LibrePanel.exe      Windows: the tray app without a console window
+import importlib.util
 import sys
 from pathlib import Path
 
@@ -65,6 +66,19 @@ if sys.platform == "win32":
     lhm_libs = ROOT / "packaging" / "windows" / "lhm-libs"
     if (lhm_libs / "LibreHardwareMonitorLib.dll").is_file():
         datas.append((str(lhm_libs), "lhm"))  # data, not binaries: they are .NET, not DLLs to scan
+if sys.platform == "win32":
+    # The app's window (libre_panel.window): pywebview's WinForms backend shows WebView2
+    # through pythonnet, on the .NET Framework that LibreHardwareMonitor starts as well
+    # (pythonnet and clr_loader are bundled above). pywebview's own PyInstaller hook brings
+    # its WebView2 libraries and scripts; the backend is imported by name when the window
+    # opens. Without pywebview (pip install ".[window]") the app opens in the browser.
+    if importlib.util.find_spec("webview") is not None:
+        hiddenimports += [
+            "webview.platforms.winforms",
+            "webview.platforms.edgechromium",
+            "webview.platforms.win32",
+            "webview.platforms.mshtml",
+        ]
 hiddenimports += ["paho.mqtt.client"]  # MQTT readings, imported when configured
 usb_datas, usb_binaries, usb_hidden = collect_all("libusb_package")
 datas += usb_datas

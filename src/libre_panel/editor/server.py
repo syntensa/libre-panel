@@ -12,6 +12,7 @@ import base64
 import io
 import json
 import logging
+import math
 import re
 import threading
 import webbrowser
@@ -19,7 +20,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from libre_panel import __version__, i18n
 from libre_panel.config import (
@@ -31,7 +32,7 @@ from libre_panel.config import (
 )
 from libre_panel.devices.models import MODELS, PROTOCOLS
 from libre_panel.editor.presets import presets_for_editor
-from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_fonts
+from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_font_path, builtin_fonts
 from libre_panel.icons import ICON_NAMES
 from libre_panel.render.renderer import Renderer
 from libre_panel.sensors.base import SensorHub, Snapshot
@@ -42,7 +43,10 @@ from libre_panel.theme.model import (
     DUST_MAX_AREAS,
     DUST_MAX_COLORS,
     EFFECT_FIELDS,
+    FINISHES,
     LOOK_SPECS,
+    PRIMARY_FIELDS,
+    THEME_FILENAME,
     TOAST_ANCHORS,
     WIDGET_SPECS,
     ThemeError,
@@ -50,6 +54,7 @@ from libre_panel.theme.model import (
     list_themes,
     load_theme,
     parse_theme,
+    resolve_asset,
     save_theme,
     valid_theme_name,
 )
@@ -64,7 +69,8 @@ from libre_panel.theme.modules import (
 
 log = logging.getLogger(__name__)
 
-STATIC_DIR = Path(__file__).resolve().parent / "static"
+STATIC_DIR = Path(__file__).resolve().parent / "static"  # the classic editor, kit.js
+APP_DIR = Path(__file__).resolve().parent / "app"  # the app: shell, views, vendored libraries
 MAX_JSON = 2 * 1024 * 1024
 MAX_ASSET = 10 * 1024 * 1024
 ASSET_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ttf", ".otf"}
@@ -113,6 +119,20 @@ _CONTENT_TYPES = {
     ".svg": "image/svg+xml; charset=utf-8",
     ".png": "image/png",
 }
+# The app's files (ES modules in folders) and the theme files the editor shows.
+_APP_TYPES = {**_CONTENT_TYPES, ".txt": "text/plain; charset=utf-8"}
+_APP_PATH = re.compile(r"^(?:[A-Za-z0-9_-][A-Za-z0-9_.-]*/){0,4}[A-Za-z0-9_-][A-Za-z0-9_.-]*$")
+_ASSET_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".ttf": "font/ttf",
+    ".otf": "font/otf",
+}
+# A page of the panel: "normal", "report" or a mode ([modes.<name>] in config.toml).
+_MODE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 # What a plugin's editor page may serve from its folder.
 _PAGE_TYPES = {
     **_CONTENT_TYPES,
@@ -122,6 +142,42 @@ _PAGE_TYPES = {
     ".woff2": "font/woff2",
     ".ttf": "font/ttf",
 }
+
+
+def _theme_list() -> list[dict[str, Any]]:
+    """The installed themes (theme.model.list_themes) with their names and panels, for
+    lists and galleries: read from each theme.json, without loading the theme."""
+    themes = list_themes()
+    for item in themes:
+        try:
+            data = json.loads((Path(item["path"]) / THEME_FILENAME).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {}
+        display = data.get("display") if isinstance(data, dict) else None
+        display = display if isinstance(display, dict) else {}
+        name = data.get("name") if isinstance(data, dict) else None
+        item["name"] = name if isinstance(name, str) and name.strip() else item["id"]
+        item["model"] = display.get("model") if isinstance(display.get("model"), str) else None
+        item["size"] = (
+            [display["width"], display["height"]]
+            if all(isinstance(display.get(k), int) for k in ("width", "height"))
+            else None
+        )
+    return themes
+
+
+def _finish_types(types: list[str]) -> dict[str, list[str]]:
+    """The widget types each finish draws (any other is drawn flat): the editor offers a
+    finish only where it shows. A module counts when its finish reaches one of its parts."""
+    from libre_panel.render import finish
+
+    found: dict[str, list[str]] = {}
+    for name in FINISHES[1:]:
+        kinds = [kind for kind in types if kind != "module" and finish.get(name, kind)]
+        if any(finish.get(name, part) for part in finish.PART_TYPES):
+            kinds.append("module")
+        found[name] = kinds
+    return found
 
 
 def _plugin_specs() -> dict[str, Any]:
@@ -185,6 +241,8 @@ class EditorState:
         self._hub: SensorHub | None = None
         self._lock = threading.Lock()
         self.pages: dict[str, Any] = {}  # plugin editor pages, created on first use
+        self.previews: dict[tuple, bytes] = {}  # pictures of saved themes
+        self.previews_lock = threading.Lock()
 
     def live_snapshot(self):
         """The readings for previews. In the background app they are the panel's
@@ -290,16 +348,32 @@ class EditorHandler(BaseHTTPRequestHandler):
             return
         path = urlparse(self.path).path
         if path in ("/", "/index.html"):
-            return self._static("index.html")
+            return self._app_file("index.html")
+        if path in ("/classic", "/classic/", "/classic/index.html"):
+            return self._static("index.html")  # the editor before the app, until it is retired
+        if path.startswith("/app/fonts/"):
+            return self._font(path[len("/app/fonts/") :])
+        if path.startswith("/app/"):
+            return self._app_file(path[len("/app/") :])
         if path.startswith("/static/"):
             return self._static(path[len("/static/") :])
         if path == "/api/specs":
             return self._json(self._specs())
         if path == "/api/themes":
-            return self._json(list_themes())
+            return self._json(_theme_list())
         match = re.fullmatch(r"/api/themes/([^/]+)/assets", path)
         if match:
             return self._assets(match.group(1))
+        match = re.fullmatch(r"/api/themes/([^/]+)/assets/(.+)", path)
+        if match:
+            return self._asset_file(match.group(1), unquote(match.group(2)))
+        match = re.fullmatch(r"/api/themes/([^/]+)/preview", path)
+        if match:
+            return self._theme_preview(match.group(1), parse_qs(urlparse(self.path).query))
+        if path == "/api/readings":
+            return self._json(self._readings(parse_qs(urlparse(self.path).query)))
+        if path == "/api/pages":
+            return self._panel_pages()
         if path.startswith("/api/themes/"):
             return self._get_theme(path[len("/api/themes/") :])
         if path == "/api/sensors":
@@ -387,6 +461,146 @@ class EditorHandler(BaseHTTPRequestHandler):
         content_type = _CONTENT_TYPES.get(file.suffix, "application/octet-stream")
         self._send(200, file.read_bytes(), content_type)
 
+    # -- the app ---------------------------------------------------------------
+
+    def _app_file(self, name: str) -> None:
+        """A file of the app: its page, modules, styles and vendored libraries."""
+        content_type = _APP_TYPES.get(Path(name).suffix.lower())
+        if not _APP_PATH.fullmatch(name) or ".." in name or content_type is None:
+            return self._error("not found", HTTPStatus.NOT_FOUND)
+        base = APP_DIR.resolve()
+        file = (base / name).resolve()
+        if not file.is_relative_to(base) or not file.is_file():
+            return self._error("not found", HTTPStatus.NOT_FOUND)
+        self._send(200, file.read_bytes(), content_type)
+
+    def _font(self, name: str) -> None:
+        """The bundled fonts, for the app's own text (never from the network)."""
+        path = builtin_font_path(BUILTIN_PREFIX + name.removesuffix(".ttf"))
+        if not name.endswith(".ttf") or path is None:
+            return self._error("not found", HTTPStatus.NOT_FOUND)
+        self._send(200, path.read_bytes(), "font/ttf")
+
+    def _asset_file(self, theme_id: str, rel: str) -> None:
+        """An image or font of a theme, for the library of pictures and their previews."""
+        try:
+            file = resolve_asset(find_theme(theme_id), rel)
+        except ThemeError:
+            return self._error("not found", HTTPStatus.NOT_FOUND)
+        content_type = _ASSET_TYPES.get(file.suffix.lower())
+        if content_type is None or not file.is_file():
+            return self._error("not found", HTTPStatus.NOT_FOUND)
+        self._send(200, file.read_bytes(), content_type)
+
+    def _theme_preview(self, theme_id: str, query: dict[str, list[str]]) -> None:
+        """A saved theme as a picture (``?w=`` its width), for lists of themes. The
+        pictures are kept until the theme changes."""
+        try:
+            width = max(64, min(1920, int((query.get("w") or ["480"])[0])))
+        except ValueError:
+            width = 480
+        try:
+            folder = find_theme(theme_id)
+            stamp = (folder / THEME_FILENAME).stat().st_mtime_ns
+        except (ThemeError, OSError):
+            return self._error("not found", HTTPStatus.NOT_FOUND)
+        key = (theme_id, stamp, width, i18n.language())
+        with self.state.previews_lock:
+            png = self.state.previews.get(key)
+        if png is None:
+            try:
+                theme = load_theme(folder)
+            except ThemeError as exc:
+                return self._error(str(exc), HTTPStatus.NOT_FOUND)
+            renderer = Renderer(theme, preview=True)
+            try:
+                frame, _boxes = renderer.render(demo_snapshot(fixed_time=1_700_000_000))
+            finally:
+                renderer.close()
+            frame = frame.convert("RGB")
+            if frame.width > width:
+                frame = frame.resize((width, max(1, round(frame.height * width / frame.width))))
+            buffer = io.BytesIO()
+            frame.save(buffer, format="PNG")
+            png = buffer.getvalue()
+            with self.state.previews_lock:
+                cache = self.state.previews
+                while len(cache) >= 48:  # the oldest go first
+                    cache.pop(next(iter(cache)))
+                cache[key] = png
+        self._send(200, png, "image/png")
+
+    def _readings(self, query: dict[str, list[str]]) -> dict[str, Any]:
+        """Sensor values for the editor's pickers (``?keys=a,b``; all without it) and
+        the recent history of some (``?history=a``): live where there are live ones,
+        sample values otherwise."""
+        snapshot = demo_snapshot()
+        live = False
+        try:
+            current = self.state.live_snapshot()
+            live = bool(current.readings)
+            snapshot.readings.update(current.readings)
+            snapshot.history.update({k: v for k, v in current.history.items() if len(v) > 1})
+        except Exception as exc:  # live sensors are optional for the editor
+            log.debug("live sensors unavailable: %s", exc)
+
+        def plain(value: Any) -> Any:  # JSON has no NaN
+            return None if isinstance(value, float) and not math.isfinite(value) else value
+
+        wanted = [k for k in ",".join(query.get("keys", [])).split(",") if k]
+        readings = {}
+        for key in wanted or sorted(snapshot.readings):
+            reading = snapshot.readings.get(key)
+            if reading is not None and not key.startswith("_"):
+                readings[key] = {
+                    "value": plain(reading.value),
+                    "unit": reading.unit,
+                    "label": reading.label,
+                }
+        history = {}
+        for key in ",".join(query.get("history", [])).split(","):
+            values = snapshot.history.get(key) if key else None
+            if values:
+                history[key] = [plain(round(v, 3)) for v in values[-60:]]
+        return {"live": live, "readings": readings, "history": history}
+
+    def _panel_pages(self) -> None:
+        """The pages of the panel: the theme it shows normally, the theme of each mode
+        ([modes.<name>], game mode's among them, with its frame rate; None: the normal
+        one) and the round report's (the memory service's ``report_theme``), and which
+        page is on show now. The console's ``control/themes`` has the first two."""
+        from libre_panel.services.game import MODE as GAME_MODE
+        from libre_panel.services.memory import Memory
+
+        try:
+            config = load_config(self.state.config_path)
+        except ConfigError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        pages = [{"id": "normal", "theme": config.theme}]
+        names = [GAME_MODE, *sorted(name for name in config.modes if name != GAME_MODE)]
+        for name in names:
+            mode = config.modes.get(name)
+            theme, fps = (mode.theme or None, mode.fps) if mode else (None, None)
+            pages.append({"id": name, "mode": name, "theme": theme, "fps": fps})
+        memory = config.services.options.get(Memory.name, {})
+        report = memory.get("report_theme", Memory.options["report_theme"][1])
+        pages.append(
+            {
+                "id": "report",
+                "service": Memory.name,
+                "theme": report if isinstance(report, str) and report else None,
+                "on": Memory.name in config.services.enabled and memory.get("report", True) is True,
+            }
+        )
+        shown = mode_now = None
+        if self.controls is not None:
+            try:
+                panel = self.controls.snapshot()["panel"]
+                shown, mode_now = panel.get("theme"), panel.get("mode")
+            except Exception as exc:  # the panel's state is a nice-to-have here
+                log.debug("no panel state: %s", exc)
+        self._json({"pages": pages, "shown": shown, "mode": mode_now})
+
     def _i18n(self) -> dict[str, Any]:
         try:
             setting = load_config(self.state.config_path).language
@@ -420,6 +634,10 @@ class EditorHandler(BaseHTTPRequestHandler):
             "toast_anchors": list(TOAST_ANCHORS),
             "common": {k: list(v) for k, v in COMMON_FIELDS.items()},
             "effect_fields": list(EFFECT_FIELDS),
+            # what the inspector shows first for each widget type
+            "primary": {kind: list(keys) for kind, keys in PRIMARY_FIELDS.items()},
+            # which widget types each finish draws (flat draws all)
+            "finishes": _finish_types(list(widgets)),
             # the panel's look, block by block: Theme -> Look
             "look": {
                 name: {k: list(v) for k, v in spec.items()} for name, spec in LOOK_SPECS.items()
@@ -505,6 +723,10 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._app_action()
         if path == "/api/language":
             return self._set_language()
+        if path == "/api/pages":
+            return self._set_panel_page()
+        if path == "/api/preset-previews":
+            return self._preset_previews()
         match = re.fullmatch(r"/api/plugins/([^/]+)/(.*)", path)
         if match:
             body = self._read_json()
@@ -532,6 +754,94 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error(str(exc))
         i18n.set_language(setting)  # the tray and the panel follow at once
         self._json(self._i18n())
+
+    def _set_panel_page(self) -> None:
+        """``{"page": ..., "theme": ...}`` and, for a mode, ``{"fps": ...}``: what a page of
+        the panel shows, written to config.toml. ``page`` is "normal", "report" (the round
+        report) or a mode's name; a mode's empty theme is the normal one's."""
+        from libre_panel.services.memory import Memory
+
+        payload = self._read_json()
+        if payload is None:
+            return
+        page = payload.get("page") if isinstance(payload, dict) else None
+        if not isinstance(page, str) or not _MODE_NAME.fullmatch(page):
+            return self._error('expected {"page": "normal", "report" or a mode, ...}')
+        theme = payload.get("theme")
+        fps = payload.get("fps")
+        if theme is not None and not isinstance(theme, str):
+            return self._error("theme must be a theme name")
+        if fps is not None and (isinstance(fps, bool) or not isinstance(fps, int)):
+            return self._error("fps must be a whole number")
+        if page in ("normal", "report") and (fps is not None or not theme):
+            return self._error(f"the page {page} needs a theme and has no frame rate of its own")
+        keys = {"normal": "theme", "report": f"services.{Memory.name}.report_theme"}
+        key = keys.get(page, f"modes.{page}.theme")
+        try:
+            if theme:
+                find_theme(theme)
+            if theme is not None:
+                set_config_value(key, theme, self.state.config_path)
+            if fps is not None:
+                set_config_value(f"modes.{page}.fps", fps, self.state.config_path)
+        except ThemeError as exc:
+            return self._error(str(exc))
+        except (ConfigError, OSError) as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        self._panel_pages()
+
+    def _preset_previews(self) -> None:
+        """Each building block (presets.py and plugins') drawn in the given palette,
+        for the library."""
+        payload = self._read_json()
+        if payload is None:
+            return
+        palette = payload.get("palette") if isinstance(payload, dict) else None
+        palette = palette if isinstance(palette, dict) else {}
+        specs = presets_for_editor()
+        tokens = specs["tokens"]
+
+        def resolve(value: Any) -> Any:  # "$accent": the theme's colour, else the default
+            if isinstance(value, str) and value.startswith("$"):
+                name = value[1:]
+                return f"@{name}" if name in palette else tokens.get(name, "#ffffff")
+            if isinstance(value, list):
+                return [resolve(v) for v in value]
+            if isinstance(value, dict):
+                return {k: resolve(v) for k, v in value.items()}
+            return value
+
+        snapshot = demo_snapshot(fixed_time=1_700_000_000)
+        previews = {}
+        pad = 8
+        for preset in specs["presets"] + _plugin_specs()["presets"]:
+            width, height = (max(16, int(v) + 2 * pad) for v in preset["size"])
+            widgets = [
+                {**raw, "x": raw.get("x", 0) + pad, "y": raw.get("y", 0) + pad}
+                for raw in resolve(preset["widgets"])
+            ]
+            try:
+                theme = parse_theme(
+                    {
+                        "format": "libre-panel-theme/1",
+                        "display": {"width": width, "height": height},
+                        "palette": palette,
+                        "background": {"color": "@bg" if "bg" in palette else "#0b1016"},
+                        "widgets": widgets,
+                    }
+                )
+            except ThemeError as exc:
+                log.debug("no preview for %s: %s", preset["id"], exc)
+                continue
+            renderer = Renderer(theme, preview=True)
+            try:
+                frame, _boxes = renderer.render(snapshot)
+            finally:
+                renderer.close()
+            buffer = io.BytesIO()
+            frame.save(buffer, format="PNG")
+            previews[preset["id"]] = base64.b64encode(buffer.getvalue()).decode("ascii")
+        self._json({"previews": previews})
 
     def _app_action(self) -> None:
         payload = self._read_json()
@@ -743,15 +1053,36 @@ def make_server(
     return server
 
 
-def serve(port: int = 8765, open_browser: bool = True, config_path: Path | None = None) -> None:
+def serve(
+    port: int = 8765,
+    open_browser: bool = True,
+    config_path: Path | None = None,
+    browser: bool = False,
+    view: str = "design",
+) -> None:
+    """Serve the app until Ctrl+C, or until its window is closed: it opens in a window of
+    its own when pywebview can show one (``browser``: in the browser anyway)."""
+    from libre_panel import window
+
     try:
         server = make_server(port, config_path)
     except OSError:  # port taken: any free port will do
         server = make_server(0, config_path)
     url = f"http://127.0.0.1:{server.server_address[1]}/"
     print(f"Libre Panel theme editor running at {url}  (Ctrl+C to stop)")
+    backend = None if browser or not open_browser else window.load_backend()
+    if backend is not None:
+        thread = threading.Thread(target=server.serve_forever, name="editor", daemon=True)
+        thread.start()
+        try:
+            window.run_window(url, view, webview=backend)
+        finally:
+            server.shutdown()
+            server.server_close()
+            server.editor_state.close()  # type: ignore[attr-defined]
+        return
     if open_browser:
-        webbrowser.open(url)
+        webbrowser.open(window.view_url(url, view))
     try:
         server.serve_forever()
     except KeyboardInterrupt:

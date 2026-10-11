@@ -144,17 +144,24 @@ Made one you like? Share it in
 
 <p align="center"><img src="docs/images/editor.png" alt="The theme editor: the module library on the left, a 9.2 inch panel with a selected ring module and its handles, the theme settings on the right" width="100%"></p>
 
+- **In a window of its own** (WebView2 on Windows, WebKitGTK on Linux), or
+  in the browser where there is none. The panel in the middle, settings where
+  you click: a toolbar over the selection for what it shows, how it is drawn,
+  its colour and size; a short inspector with the rest one click further.
 - **Modules** from a library with live pictures in your look, on a grid:
   drag, drop, swap, resize at the edges. Their settings are plain choices:
   what it shows, title, colour, what to show when readings are missing.
   *Detach* turns a module into single widgets.
 - **Free editing** of every widget: drag and drop with snapping and
-  alignment guides, multi-select, align and distribute, undo/redo,
-  copy/paste, layers with lock and hide, zoom, palette and font pickers.
-- **Every panel size from a menu**: 0.96" up to 12.3", round ones too,
-  portrait or landscape. Switching the panel rescales your layout.
+  alignment guides, corners that resize, multi-select, align and distribute,
+  undo/redo, copy/paste, layers with lock and hide, zoom, palette colours.
+- **Everything by name**: Ctrl+K finds any command, theme, module or sensor.
+- **Every panel size**: 0.96" up to 12.3", round ones too, portrait or
+  landscape. Switching the panel rescales your layout.
+- **The panel's pages**: the normal theme, game mode's and the round
+  report's, side by side.
 - What you see is what the panel shows: the editor renders with the panel's
-  own engine, with demo values or your live sensors. *Show on panel* sends
+  own engine, with demo values or your live sensors. *To the panel* sends
   it there.
 
 ## Features
@@ -225,7 +232,7 @@ Download from the [releases](https://github.com/syntensa/libre-panel/releases)
 
 A portable Windows zip and a Linux tarball are there too. The Windows
 downloads are not code-signed yet: SmartScreen asks once (*More info → Run
-anyway*). After the first start, the icon in the tray opens the theme editor;
+anyway*). After the first start, the icon in the tray opens Libre Panel's window;
 *Start with system* makes it start at every login. More in
 [Running in the background](docs/BACKGROUND.md).
 
@@ -233,7 +240,7 @@ With Python instead:
 
 ```bash
 pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.4.2"
-libre-panel tray                    # background app with tray icon; opens the editor
+libre-panel tray                    # background app with tray icon; opens its window
 libre-panel autostart enable        # start it whenever you log in
 ```
 
@@ -241,7 +248,7 @@ Other commands:
 
 ```bash
 libre-panel                         # panel + editor in a terminal (Ctrl+C stops)
-libre-panel editor                  # only the theme editor
+libre-panel editor                  # only the theme editor (--browser: in the browser)
 libre-panel run                     # only drive the panel
 libre-panel preview spur-ii -o spur.png   # render a theme to an image
 libre-panel models                  # all known panels and their resolutions

@@ -1,4 +1,5 @@
-"""The editor in a real browser (skipped when Playwright/Chromium are missing).
+"""The classic editor (/classic/) in a real browser (skipped when Playwright/Chromium
+are missing). The app that replaces it is tested in test_app_browser.py.
 
 CI runs this in its own job: pip install playwright && playwright install chromium
 """
@@ -38,7 +39,7 @@ def browser_page(url):
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
         page.on("dialog", lambda d: d.accept("my-test" if d.type == "prompt" else None))
-        page.goto(url)
+        page.goto(url + "classic/")
         page.wait_for_function(
             "document.querySelector('#preview').src.startsWith('data:image/png')"
         )

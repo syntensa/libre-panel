@@ -45,7 +45,9 @@ def theme_dict():
 
 def test_index_and_specs(server):
     status, body = request(server, "GET", "/")
-    assert status == 200 and b"Theme Editor" in body
+    assert status == 200 and b'src="/app/main.js"' in body  # the app
+    status, body = request(server, "GET", "/classic/")
+    assert status == 200 and b"Theme Editor" in body  # the editor before it, until it is retired
     status, specs = request(server, "GET", "/api/specs")
     assert status == 200
     assert "gauge" in specs["widgets"]
@@ -284,3 +286,129 @@ def test_detach_gives_plain_widgets(server):
     assert status == 200
     ids = [w["id"] for w in data["widgets"]]
     assert "m0-time" in ids and all("_module" not in w for w in data["widgets"])
+
+
+def test_the_app_and_its_fonts_are_served(server):
+    status, body = request(server, "GET", "/app/main.js")
+    assert status == 200 and b"import" in body
+    status, body = request(server, "GET", "/app/vendor/preact.module.js")
+    assert status == 200 and len(body) > 5000
+    conn = http.client.HTTPConnection("127.0.0.1", server, timeout=10)
+    conn.request("GET", "/app/fonts/Barlow-Medium.ttf", headers={"Host": f"127.0.0.1:{server}"})
+    response = conn.getresponse()
+    assert response.status == 200 and response.getheader("Content-Type") == "font/ttf"
+    assert len(response.read()) > 10_000
+    conn.close()
+    refused = ("/app/fonts/nope.ttf", "/app/../server.py", "/app/%2E%2E/x.py", "/app/README.md")
+    for path in refused:
+        assert request(server, "GET", path)[0] == 404, path
+
+
+def test_readings_with_history(server):
+    status, data = request(server, "GET", "/api/readings?keys=cpu.load,nope&history=cpu.load")
+    assert status == 200 and set(data["readings"]) == {"cpu.load"}
+    assert data["readings"]["cpu.load"]["unit"] == "%"
+    assert 1 < len(data["history"]["cpu.load"]) <= 60
+    status, data = request(server, "GET", "/api/readings")
+    assert status == 200 and "gpu.temp" in data["readings"]  # without keys: every reading
+
+
+def test_pages_of_the_panel(server, isolated_home):
+    """The normal theme, each mode's (game mode's always) and the round report's."""
+    from libre_panel.config import load_config
+
+    status, data = request(server, "GET", "/api/pages")
+    assert status == 200 and data["shown"] is None and data["mode"] is None
+    pages = {page["id"]: page for page in data["pages"]}
+    assert pages["normal"]["theme"] == "libre-default"
+    assert pages["game"] == {"id": "game", "mode": "game", "theme": None, "fps": None}
+    assert pages["report"]["theme"] == "round-report" and pages["report"]["on"] is False
+
+    game = {"page": "game", "theme": "slate", "fps": 30}
+    status, data = request(server, "POST", "/api/pages", game)
+    pages = {page["id"]: page for page in data["pages"]}
+    assert status == 200 and (pages["game"]["theme"], pages["game"]["fps"]) == ("slate", 30)
+    status, data = request(server, "POST", "/api/pages", {"page": "report", "theme": "orbit"})
+    assert status == 200 and data["pages"][-1]["theme"] == "orbit"
+    status, data = request(server, "POST", "/api/pages", {"page": "vr", "theme": "pico"})
+    assert status == 200 and [p["id"] for p in data["pages"]] == ["normal", "game", "vr", "report"]
+    status, data = request(server, "POST", "/api/pages", {"page": "game", "theme": ""})
+    assert status == 200 and data["pages"][1]["theme"] is None  # the normal one again
+    config = load_config()
+    assert config.modes["game"].fps == 30 and config.modes["vr"].theme == "pico"
+    assert config.services.options["memory"]["report_theme"] == "orbit"
+
+    for wrong in (
+        {"page": "Not A Name", "theme": "slate"},
+        {"page": "game", "theme": "nope"},
+        {"page": "game", "fps": True},
+        {"page": "normal", "theme": "slate", "fps": 20},
+        {"page": "report", "theme": ""},
+    ):
+        assert request(server, "POST", "/api/pages", wrong)[0] == 400, wrong
+
+
+def test_theme_pictures_and_files(server, isolated_home):
+    from io import BytesIO
+
+    from PIL import Image
+
+    status, body = request(server, "GET", "/api/themes/spur-ii/preview?w=320")
+    assert status == 200 and Image.open(BytesIO(body)).size[0] == 320
+    assert request(server, "GET", "/api/themes/nope/preview")[0] == 404
+    request(server, "POST", "/api/themes/mine", {"theme": theme_dict(), "source": "libre-default"})
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    )
+    request(server, "POST", "/api/themes/mine/assets?name=logo.png", png,
+            {"Content-Type": "application/octet-stream"})  # fmt: skip
+    status, body = request(server, "GET", "/api/themes/mine/assets/assets/logo.png")
+    assert status == 200 and body == png
+    (isolated_home / "themes" / "mine" / "notes.txt").write_text("not an asset")
+    assert request(server, "GET", "/api/themes/mine/assets/notes.txt")[0] == 404
+    assert request(server, "GET", "/api/themes/mine/assets/..%2F..%2Fconfig.toml")[0] == 404
+
+
+def test_the_theme_list_names_each_theme(server, isolated_home):
+    """Lists and galleries show a theme's name and panel, from the list itself."""
+    (isolated_home / "themes" / "broken").mkdir(parents=True)
+    (isolated_home / "themes" / "broken" / "theme.json").write_text("{not json")
+    _, themes = request(server, "GET", "/api/themes")
+    found = {item["id"]: item for item in themes}
+    classic = found["spur-classic"]
+    assert classic["name"] == "SPUR Classic" and classic["builtin"]
+    assert classic["size"] == [1920, 480] and classic["model"]
+    assert found["broken"]["name"] == "broken" and found["broken"]["size"] is None
+
+
+def test_building_blocks_in_the_theme_colours(server):
+    from libre_panel.editor.presets import PRESETS
+
+    palette = {"bg": "#101010", "accent": "#ff8800"}
+    status, data = request(server, "POST", "/api/preset-previews", {"palette": palette})
+    assert status == 200 and set(data["previews"]) == {p["id"] for p in PRESETS}
+    assert base64.b64decode(data["previews"]["ring"])[:4] == b"\x89PNG"
+
+
+def test_specs_name_the_primary_fields(server):
+    _, specs = request(server, "GET", "/api/specs")
+    assert specs["primary"]["gauge"][:3] == ["sensor", "finish", "color"]
+    for kind, keys in specs["primary"].items():
+        fields = {**specs["common"], **specs["widgets"][kind]}
+        assert set(keys) <= set(fields), kind
+        assert not set(keys) & {"x", "y", "w", "h"}, kind  # set on the canvas
+
+
+def test_specs_say_where_each_finish_shows(server):
+    _, specs = request(server, "GET", "/api/specs")
+    finishes = specs["finishes"]
+    assert set(finishes) == {"lit", "facet", "acrylic"}  # flat draws everything
+    assert {"gauge", "bar", "graph", "module"} <= set(finishes["lit"])
+    assert "clock" in finishes["facet"] and "clock" not in finishes["lit"]
+    assert "text" in finishes["acrylic"] and "bar" not in finishes["acrylic"]
+
+
+def test_plugin_pages_and_panel_pages_are_apart(server):
+    status, data = request(server, "GET", "/api/plugins/pages")
+    assert status == 200 and isinstance(data, list)  # the editor pages plugins bring
+    assert all({"id", "title"} <= set(page) for page in data)

@@ -14,7 +14,6 @@ import logging
 import os
 import sys
 import threading
-import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -205,15 +204,22 @@ class EditorService:
                 log.info("theme editor at %s", self.url)
             return self.url
 
-    def open(self) -> str:
+    def open(self, view: str = "home") -> str:
+        """Show the app on ``view``: in its window (opened or brought to the front), or in
+        the browser where there can be no window."""
+        from libre_panel.window import open_window
+
         url = self.start()
-        webbrowser.open(url)
+        open_window(url, view, config_path=self.config_path)
         return url
 
     def stop(self) -> None:
         with self._lock:
             server, self._server = self._server, None
         if server is not None:
+            from libre_panel.window import close_window
+
+            close_window(f"http://127.0.0.1:{server.server_address[1]}/")  # it would show nothing
             server.shutdown()
             server.server_close()
             server.editor_state.close()

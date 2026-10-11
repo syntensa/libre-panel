@@ -58,11 +58,10 @@ def _log_file() -> Path:
 
 def _background(args: argparse.Namespace, use_icon: bool, open_editor: bool) -> int:
     """Drive the panel and serve the editor until Quit; one instance at a time."""
-    import webbrowser
-
     from libre_panel.instance import AlreadyRunning, InstanceLock
     from libre_panel.service import BackgroundApp, running_instance
     from libre_panel.tray import run_app
+    from libre_panel.window import open_window
 
     lock = InstanceLock()
     try:
@@ -73,7 +72,7 @@ def _background(args: argparse.Namespace, use_icon: bool, open_editor: bool) -> 
             raise
         print(t("Libre Panel is already running. Theme editor: {url}", url=url))
         if open_editor:
-            webbrowser.open(url)
+            open_window(url, "home", config_path=args.config)
         return 0
     try:
         log_path = _log_file() if use_icon else None
@@ -282,11 +281,10 @@ def _cmd_preview(args: argparse.Namespace) -> int:
 
 
 def _cmd_editor(args: argparse.Namespace) -> int:
-    import webbrowser
-
     from libre_panel.editor.server import serve
     from libre_panel.instance import AlreadyRunning, InstanceLock
     from libre_panel.service import running_instance
+    from libre_panel.window import open_window
 
     try:
         InstanceLock().acquire().release()
@@ -295,10 +293,30 @@ def _cmd_editor(args: argparse.Namespace) -> int:
         if url:  # the background app already serves the editor
             print(t("Libre Panel is already running. Theme editor: {url}", url=url))
             if not args.no_browser:
-                webbrowser.open(url)
+                open_window(url, "design", browser=args.browser, config_path=args.config)
             return 0
-    serve(port=args.port, open_browser=not args.no_browser, config_path=args.config)
+    serve(
+        port=args.port,
+        open_browser=not args.no_browser,
+        config_path=args.config,
+        browser=args.browser,
+    )
     return 0
+
+
+def _cmd_window(args: argparse.Namespace) -> int:
+    """The app's window (the tray starts it as a process of its own), or --check."""
+    from libre_panel import window
+
+    if args.check:
+        worked, lines = window.check()
+        print("\n".join(lines))
+        return 0 if worked else 1
+    if not args.url:
+        print("error: the address of the app is missing", file=sys.stderr)
+        return 2
+    view = args.view if args.view in window.VIEWS else None
+    return window.run_window(args.url, view)
 
 
 def _cmd_themes(args: argparse.Namespace) -> int:
@@ -563,10 +581,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--live", action="store_true", help="use real sensors instead of demo data")
     p.set_defaults(func=_cmd_preview)
 
-    p = sub.add_parser("editor", help="open the visual theme editor in the browser")
+    p = sub.add_parser("editor", help="open the visual theme editor (in its own window)")
     p.add_argument("--port", type=int, default=8765)
-    p.add_argument("--no-browser", action="store_true")
+    p.add_argument("--no-browser", action="store_true", help="only serve it, open nothing")
+    p.add_argument("--browser", action="store_true", help="open it in the browser")
     p.set_defaults(func=_cmd_editor)
+
+    p = sub.add_parser("window", help="show the app in its own window (used by the tray)")
+    p.add_argument("url", nargs="?", help="the app's address, http://127.0.0.1:<port>/")
+    p.add_argument("--view", default=None, help="home, design, look, live or settings")
+    p.add_argument("--check", action="store_true", help="only check that a window could open here")
+    p.set_defaults(func=_cmd_window)
 
     p = sub.add_parser("themes", help="list installed themes")
     p.set_defaults(func=_cmd_themes)
