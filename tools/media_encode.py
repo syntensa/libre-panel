@@ -103,9 +103,13 @@ class FrameSink:
         folder.mkdir(parents=True, exist_ok=True)
         self.folder, self.fps, self.count = folder, fps, 0
 
-    def add(self, picture: Image.Image) -> None:
-        picture.convert("RGB").save(self.folder / f"{self.count:05d}.png", compress_level=1)
-        self.count += 1
+    def add(self, picture: Image.Image, copies: int = 1) -> None:
+        """The next picture, shown for ``copies`` frames (a clip that holds still)."""
+        first = self.folder / f"{self.count:05d}.png"
+        picture.convert("RGB").save(first, compress_level=1)
+        for n in range(1, copies):
+            shutil.copyfile(first, self.folder / f"{self.count + n:05d}.png")
+        self.count += max(1, copies)
 
     def frames(self) -> Frames:
         if not self.count:

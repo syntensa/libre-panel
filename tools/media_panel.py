@@ -288,6 +288,24 @@ def workshop() -> Iterator[Path]:
             loader.reset_registry()
 
 
+def theme_folder(source: str) -> Path | None:
+    """``source`` as a folder with a theme in it (``theme.json``), if it is one."""
+    folder = Path(source)
+    return folder if (folder / "theme.json").is_file() else None
+
+
+def theme_data(source: str | dict[str, Any]) -> tuple[dict[str, Any], Path | None]:
+    """The data of a theme, and the folder its files are in (None: it has none). ``source`` is
+    theme data, one of the :data:`LAYOUTS`, a folder with a theme in it, or the id of a built-in
+    or user theme."""
+    if isinstance(source, dict):
+        return dict(source), None
+    if source in LAYOUTS:
+        return LAYOUTS[source](), None
+    folder = theme_folder(source) or find_theme(source)
+    return json.loads((folder / "theme.json").read_text(encoding="utf-8")), folder
+
+
 # -- the stage ----------------------------------------------------------------------------------
 
 
@@ -321,20 +339,13 @@ class Stage:
         theme, a folder with a theme in it, one of the :data:`LAYOUTS`, or theme data;
         ``changes`` replace keys of its data (``toast={...}``). It is scaled to the clip's pixels.
         A theme that comes as it is, at its own size, is shown by its own id."""
-        folder: Path | None = None
-        base: str | None = None  # a theme whose files (pictures, fonts) come along
-        if isinstance(source, dict):
-            data = dict(source)
-        elif source in LAYOUTS:
-            data = LAYOUTS[source]()
-            name = name or (source if not changes and self.factor == 1 else None)
-        else:
-            folder = Path(source) if Path(source).is_dir() else find_theme(source)
-            data = json.loads((folder / "theme.json").read_text(encoding="utf-8"))
-            if not Path(source).is_dir():
-                base, folder = source, None
-                if not changes and self.factor == 1:
-                    return base
+        named = isinstance(source, str) and source not in LAYOUTS and theme_folder(source) is None
+        if named and not changes and self.factor == 1:
+            find_theme(source)  # (it is there: or this says it is not)
+            return source  # type: ignore[return-value]
+        data, folder = theme_data(source)
+        if isinstance(source, str) and source in LAYOUTS and not changes and self.factor == 1:
+            name = name or source
         data.update(changes)
         if self.factor != 1:
             theme = parse_theme(data)
@@ -344,10 +355,11 @@ class Stage:
             )
             data = adapt_theme(data, "custom", theme.orientation, "scale", *size)
         self._made += 1
-        name = name or (folder.name if folder is not None else f"clip-{self._made}")
-        if folder is not None:  # a theme of the user's own: its files come along
+        by_path = isinstance(source, str) and theme_folder(source) is not None
+        name = name or (Path(source).name if by_path else f"clip-{self._made}")  # type: ignore[arg-type]
+        if folder is not None:  # a theme with files of its own: they come along
             shutil.copytree(folder, user_themes_dir() / name, dirs_exist_ok=True)
-        save_theme(name, data, source=base)
+        save_theme(name, data)
         return name
 
     def show(
@@ -499,15 +511,19 @@ def module(kind: str, col: int, row: int, cols: int = 1, rows: int = 1, **option
 
 
 def modules_theme(
-    look: str, modules: list[dict], dust: bool = False, refresh_ms: int = 500
+    look: str,
+    modules: list[dict],
+    dust: bool = False,
+    refresh_ms: int = 500,
+    model: str = "turing-9.2-usb",
 ) -> dict[str, Any]:
-    """A theme made of modules for the 9.2" bar, in one of the looks of the editor (the pictures
-    of tools/readme_images.py are made the same way)."""
+    """A theme made of modules for a panel (the 9.2" bar unless ``model`` says another), in one
+    of the looks of the editor (the pictures of tools/readme_images.py are made the same way)."""
     palette, style = look_theme_parts(look)
     data: dict[str, Any] = {
         "format": THEME_FORMAT,
         "name": f"Clip layout ({look})",
-        "display": {"model": "turing-9.2-usb", "orientation": "landscape"},
+        "display": {"model": model, "orientation": "landscape"},
         "palette": palette,
         "style": style,
         "background": {"color": palette["bg"]},
