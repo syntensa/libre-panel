@@ -592,7 +592,7 @@ def editor_shots(out: Path) -> None:
 
     home = Path(tempfile.mkdtemp()) / "libre-panel"  # a home of its own, with a plain name
     home.mkdir()
-    (home / "config.toml").write_text('language = "en"\ntheme = "studio"\n', encoding="utf-8")
+    (home / "config.toml").write_text('language = "en"\ntheme = "lumen"\n', encoding="utf-8")
     os.environ["LIBRE_PANEL_HOME"] = str(home)  # no user themes, no config of the user's
     from libre_panel.editor.server import make_server
 
@@ -660,6 +660,7 @@ def editor_shots(out: Path) -> None:
             page.evaluate("location.hash = '#/home/themes'")
             page.wait_for_selector(".start.gallery .theme-card")
             page.wait_for_function(shown % ".theme-card img")
+            page.mouse.move(0, 0)  # (a card under the pointer shows its pencil)
             page.wait_for_timeout(500)
             page.screenshot(path=str(out / "start.png"))
             # Settings
