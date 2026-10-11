@@ -193,6 +193,41 @@ def test_the_header_row_says_where_things_are():
     assert presentmon.Columns.of(["Game.exe", "42", "7.5"]) is None  # not a header
 
 
+# What PresentMon 2.6 writes by default (CsvOutput.cpp of v2.6.0, with the display tracked): the
+# frame time is still MsBetweenPresents, but the waits carry an Ms in front.
+HEADER_2_6 = (
+    "Application,ProcessID,SwapChainAddress,PresentRuntime,SyncInterval,PresentFlags,"
+    "AllowsTearing,PresentMode,TimeInSeconds,MsBetweenSimulationStart,MsBetweenPresents,"
+    "MsBetweenDisplayChange,MsInPresentAPI,MsRenderPresentLatency,MsUntilDisplayed,"
+    "CPUStartTimeInSeconds,MsBetweenAppStart,MsCPUBusy,MsCPUWait,MsGPULatency,MsGPUTime,"
+    "MsGPUBusy,MsGPUWait,MsAnimationError,AnimationTime,MsFlipDelay,"
+    "MsAllInputToPhotonLatency,MsClickToPhotonLatency"
+)
+
+
+def test_the_waits_are_found_under_the_names_of_both_generations():
+    """The PresentMon the Windows downloads carry is 2.6; 2.3 and --v2_metrics name the
+    columns without the Ms. Without the waits there is no ``game.limiter``."""
+    header = HEADER_2_6.split(",")
+    columns = presentmon.Columns.of(header)
+    assert header[columns.app] == "Application" and header[columns.frame] == "MsBetweenPresents"
+    assert [header[i] for i in columns.waits] == [
+        "MsCPUBusy", "MsCPUWait", "MsGPUBusy", "MsGPUWait",
+    ]  # fmt: skip
+    row = ["Game.exe"] + ["0"] * (len(header) - 1)
+    values = {"MsBetweenPresents": "8.0", "MsCPUBusy": "1", "MsCPUWait": "2", "MsGPUBusy": "7"}
+    for name, value in {**values, "MsGPUWait": "0.5"}.items():
+        row[header.index(name)] = value
+    assert columns.frame_of(row) == ("Game.exe", 8.0, (1.0, 2.0, 7.0, 0.5))
+    # a header with both uses the first set that is whole; one with half a set has no waits
+    both = header + HEADER.split(",")[2:]
+    assert [both[i] for i in presentmon.Columns.of(both).waits] == [
+        "CPUBusy", "CPUWait", "GPUBusy", "GPUWait",
+    ]  # fmt: skip
+    half = presentmon.Columns.of(["Application", "MsBetweenPresents", "MsCPUBusy", "MsCPUWait"])
+    assert half.waits is None
+
+
 def test_na_and_short_rows_are_no_frames_or_no_waits():
     columns = presentmon.Columns.of(HEADER.split(","))
     assert columns.frame_of(["Game.exe", "42", "NA", "1", "1", "1", "1", "NA"]) is None

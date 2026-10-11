@@ -32,6 +32,7 @@ from pathlib import Path
 
 import psutil
 
+from libre_panel.bundled import bundled, program_name
 from libre_panel.devices.base import DeviceError
 from libre_panel.i18n import t
 
@@ -69,13 +70,17 @@ ROTATION_FILTERS = {
 
 
 def find_ffmpeg(configured: str = "") -> str:
-    """The ffmpeg program: the configured path, PATH, or next to Libre Panel."""
-    exe = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
+    """The ffmpeg program: the configured path, the one a download carries (its ``tools``
+    folder), PATH, or next to Libre Panel."""
+    exe = program_name("ffmpeg")
     if configured:
         path = Path(configured).expanduser()
         if path.is_file():
             return str(path)
         raise DeviceError(t("ffmpeg not found at {path} (video.ffmpeg in config.toml)", path=path))
+    own = bundled(exe)  # first: the build the download was tested with
+    if own:
+        return own
     found = shutil.which("ffmpeg")
     if found:
         return found
@@ -84,8 +89,8 @@ def find_ffmpeg(configured: str = "") -> str:
         return str(beside)
     raise DeviceError(
         t(
-            "the video mode needs ffmpeg: install it, or set video.ffmpeg in config.toml "
-            "to the ffmpeg program"
+            "the video mode needs ffmpeg: the downloads of Libre Panel carry it; "
+            "with pip install it, or set video.ffmpeg in config.toml to the ffmpeg program"
         )
     )
 

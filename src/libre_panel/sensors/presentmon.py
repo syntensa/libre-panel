@@ -1,10 +1,11 @@
 """Frames per second of the game you play, through Intel's PresentMon (Windows).
 
-PresentMon (MIT license) is a separate program: download the console
-version from https://github.com/GameTechDev/PresentMon/releases and name it
-in ``[sensors.presentmon]`` (or put it on the PATH)::
+PresentMon (MIT license) is a separate program. The Windows downloads carry its console
+version in their ``tools`` folder (bundled.py); with a pip install, download it from
+https://github.com/GameTechDev/PresentMon/releases and name it in ``[sensors.presentmon]``
+(or put it on the PATH)::
 
-    path = "C:/Tools/PresentMon-2.3.0-x64.exe"
+    path = "C:/Tools/PresentMon-2.6.0-x64.exe"
 
 It reads the frames Windows shows, which needs administrator rights or
 membership in the "Performance Log Users" group. It never touches the game:
@@ -48,6 +49,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from libre_panel.bundled import bundled, program_name
 from libre_panel.sensors.base import Reading, SensorProvider, wanted
 
 log = logging.getLogger(__name__)
@@ -62,8 +64,12 @@ IGNORED = {
 }  # fmt: skip
 # the time from one frame to the next, as PresentMon 2 (and 1) names it
 _FRAME_COLUMNS = ("MsBetweenPresents", "msBetweenPresents", "FrameTime", "MsBetweenAppStart")
-# how long each side works and waits for the other, per frame (PresentMon 2)
-_WAIT_COLUMNS = ("CPUBusy", "CPUWait", "GPUBusy", "GPUWait")
+# how long each side works and waits for the other, per frame (PresentMon 2): named like this
+# by 2.3 and by --v2_metrics, with an Ms in front by the default of 2.6 and later
+_WAIT_COLUMNS = (
+    ("CPUBusy", "CPUWait", "GPUBusy", "GPUWait"),
+    ("MsCPUBusy", "MsCPUWait", "MsGPUBusy", "MsGPUWait"),
+)
 
 SUPERVISE_SECONDS = 1.0  # how often the session is looked after
 IDLE_SECONDS = 60.0  # nobody reads game.* for this long: PresentMon ends, and starts on demand
@@ -90,8 +96,13 @@ def set_target(exe: str | None) -> None:
 
 
 def find_presentmon(path: str = "") -> str | None:
+    """The PresentMon program: the path named in the settings, the one a download carries
+    (its ``tools`` folder), PATH, or Intel's folder under Program Files."""
     if path:
         return path if Path(path).is_file() else shutil.which(path)
+    own = bundled(program_name("PresentMon"))
+    if own:
+        return own
     for name in ("PresentMon", "PresentMon-x64", "presentmon"):
         found = shutil.which(name)
         if found:
@@ -240,8 +251,10 @@ class Columns:
         if "Application" not in header or column is None:
             return None
         waits = None
-        if all(name in header for name in _WAIT_COLUMNS):  # PresentMon 2 and later
-            waits = tuple(header.index(name) for name in _WAIT_COLUMNS)
+        for names in _WAIT_COLUMNS:  # PresentMon 2 and later
+            if all(name in header for name in names):
+                waits = tuple(header.index(name) for name in names)
+                break
         return cls(header.index("Application"), header.index(column), waits)
 
     def frame_of(self, row: list[str]) -> tuple[str, float, Waits | None] | None:
