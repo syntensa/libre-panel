@@ -184,7 +184,7 @@ function VideoCard() {
             value=${clip}
             placeholder="usr/data/standby.h264"
             mono
-            onCommit=${(text) => change({ "video.local_clip": text })}
+            onCommit=${(text) => change({ "video.local_clip": text, "video.clip_asked": true })}
           />
         <//>`
       : null}

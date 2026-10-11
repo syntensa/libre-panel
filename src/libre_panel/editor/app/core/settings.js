@@ -14,6 +14,7 @@ const api = {
   settings: () => get("/api/settings"),
   write: (changes) => post("/api/settings", { set: changes }),
   panel: () => get("/api/panel"),
+  clipQuestion: () => get("/api/clip"),
   system: () => get("/api/system"),
   setSystem: (change) => post("/api/system", change),
   about: () => get("/api/about"),
@@ -80,6 +81,36 @@ export async function loadPanelInfo() {
     store.set({ panelInfo: null });
     if (error.status !== 409) toastError(error); // 409: config.toml is broken, said by the settings
   }
+}
+
+let asking = 0; // the question asked last: an older answer that comes late is not kept
+
+/**
+ * Whether Start is to ask for the name of the panel's standby clip (/api/clip):
+ * `store.get().clipQuestion` is `{ask, name}`, the name being the one the vendor app uses, which
+ * is only offered. Null while config.toml cannot be read: then there is nothing to ask.
+ */
+export async function loadClipQuestion() {
+  const mine = ++asking;
+  let question = null;
+  try {
+    question = await api.clipQuestion();
+  } catch {
+    // no answer is no question
+  }
+  if (mine === asking) store.set({ clipQuestion: question });
+}
+
+/**
+ * The answer to the question about the standby clip: the name to use, or null for "not now".
+ * Either way the question is not asked again (`video.clip_asked`). Nothing is written before this.
+ * Resolves to whether it was written.
+ */
+export async function answerClipQuestion(name) {
+  const changes = name ? { "video.local_clip": name, "video.clip_asked": true } : { "video.clip_asked": true };
+  const written = await saveSettings(changes);
+  await loadClipQuestion();
+  return written;
 }
 
 /** Starting with the system (/api/system). */
