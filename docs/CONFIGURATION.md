@@ -23,7 +23,8 @@ theme = "libre-default"        # built-in or user theme
 language = "auto"              # "auto" (system language), "en" or "de"
 # refresh_ms = 1000            # override the theme's refresh interval
 fps = 10                       # 1-60; values glide between readings
-transition = "fade"            # between themes: "cut", "fade", "slide", "tube" or from a plugin
+transition = "fade"            # between themes: "cut", "fade", "slide", "tube", "entrance",
+                               # or a plugin's
 
 [device]
 model = "auto"                 # or an id from `libre-panel models`
@@ -66,9 +67,10 @@ units = "metric"               # or "imperial"
 update_minutes = 15
 
 [video]
-mode = "off"                   # "on": smooth video mode (TURZX USB panels, needs ffmpeg)
+mode = "auto"                  # "auto": smooth video mode by itself where it is proven (the 9.2");
+                               # "on": on every TURZX USB panel (needs ffmpeg); "off"
 fps = 50                       # frames per second in video mode
-local_clip = ""                # required for "on", see below
+local_clip = ""                # required for "auto" and "on", see below
 ```
 
 ## Sensor sources and their order

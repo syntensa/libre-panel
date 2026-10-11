@@ -54,8 +54,11 @@ first. Each hardware step needs a tester with the panel.
 ## Later / plugins
 
 - [ ] Lian Li LCD driver (separate package, protocol from lian-li-linux)
-- [ ] Optional plugins: media "now playing", PresentMon FPS, volume, HWiNFO shared memory
+- [ ] Optional plugins: HWiNFO shared memory (what is playing, PresentMon's frame
+      rate and the volume are sensor sources of the app: `media`, `presentmon`, `audio`)
 - [ ] NVIDIA sensors without LibreHardwareMonitor (NVML) on Linux
 
-Personal features of SPUR II (see [SPUR2_MIGRATION.md](SPUR2_MIGRATION.md)) are
-not on this roadmap; they can come back as plugins if someone wants them.
+What SPUR II had for everyone comes into the app with 0.5: messages, transitions,
+game mode, the autopilot and more (see [SPUR2_MIGRATION.md](SPUR2_MIGRATION.md)).
+Its personal parts are not on this roadmap; they can come back as plugins if
+someone wants them.

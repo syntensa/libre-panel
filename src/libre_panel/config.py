@@ -238,7 +238,7 @@ class Config:
     language: str = "auto"
     refresh_ms: int | None = None
     fps: int = 10
-    transition: str = "fade"  # between themes: cut, fade, slide, or one from a plugin
+    transition: str = "fade"  # between themes: cut, fade, slide, tube, entrance, or a plugin's
     device: DeviceConfig = field(default_factory=DeviceConfig)
     sensors: SensorsConfig = field(default_factory=SensorsConfig)
     weather: WeatherConfig = field(default_factory=WeatherConfig)

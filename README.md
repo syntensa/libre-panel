@@ -172,8 +172,11 @@ Made one you like? Share it in
   fans, battery and the busiest programs via `psutil`; on Windows also GPU,
   power, every temperature and fan through
   [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor),
-  which the Windows downloads carry (no extra program; the CPU's temperature
-  needs administrator rights, see [Configuration](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans)).
+  which runs inside Libre Panel (the Windows downloads carry its library: no
+  extra program, no web server to turn on). The CPU's temperature and power
+  need administrator rights and the [PawnIO](https://pawnio.eu) driver; the
+  tray says so when they are missing, see
+  [Configuration](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans).
 - **From your life**: what is playing, calendars (.ics), Home Assistant,
   MQTT, sunrise, sunset and the moon, and the frame rate of games
   ([PresentMon](https://github.com/GameTechDev/PresentMon), Windows).
