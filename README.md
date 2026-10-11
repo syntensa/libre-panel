@@ -135,6 +135,10 @@ Calendars, Home Assistant, MQTT and PresentMon are set up in the
 | `column` | 3.5" portrait (320×480) | clock, resource rows and network |
 | `pico` | 0.96" (160×80) | CPU with temperature and memory, large numbers and slim bars |
 
+A new install starts with `lumen` on the 8.8" and 9.2" bars and with `libre-default` on every
+other panel. The app asks "How should it look?" on the first start, and a `theme` in
+`config.toml` decides for good ([how](docs/CONFIGURATION.md#the-theme-on-the-panel)).
+
 SPUR II, the private project Libre Panel grew out of, lives on as a legacy
 set of screens for the 8.8" and 9.2" bars (`"collection": "SPUR II"`):
 
