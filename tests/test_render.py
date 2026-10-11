@@ -121,3 +121,17 @@ def test_changed_region():
     b.putpixel((3, 4), (255, 255, 255))
     assert changed_region(a, b) == (3, 4, 4, 5)
     assert changed_region(None, b) == (0, 0, 10, 10)
+
+
+def test_a_pieces_extent_is_worked_out_once_and_follows_a_copy():
+    from dataclasses import replace
+
+    from libre_panel.render.renderer import Piece
+
+    light = Piece(Image.new("RGBA", (30, 10)), -5, 40)
+    piece = Piece(Image.new("RGBA", (20, 20)), 10, 30, light=light)
+    assert Renderer._extent(piece) == (-5, 30, 30, 50)  # the layer and its light
+    assert piece.span == (-5, 30, 30, 50) and Renderer._extent(piece) is piece.span
+    moved = replace(piece, x=100, light=None)
+    assert moved.span is None and Renderer._extent(moved) == (100, 30, 120, 50)
+    assert moved == replace(piece, x=100, light=None)  # the kept extent is no part of a piece

@@ -2,18 +2,26 @@
 
 Themes come from strangers, so ``str.format`` is locked down: only the named
 fields ``value``, ``unit`` and ``label`` exist, attribute/index access is
-refused and absurd widths are rejected. Three extra format specs exist:
-``{value:bytes}`` (1.2 MB), ``{value:duration}`` (3d 5h) and ``{value:clock}``
-(3:07, a song's length).
+refused and absurd widths are rejected. Extra format specs:
+``{value:bytes}`` (1.2 MB), ``{value:duration}`` (3d 5h), ``{value:clock}``
+(3:07, a song's length), ``{value:gb}`` (a size in GB from the reading's own
+unit: 13.5) and ``{value:rate}`` with ``{value:rate_unit}`` (a data rate as a
+number and its unit apart, as SPUR II sets them: 519 and KB/s, from 1 MB/s
+1.2 and MB/s).
 """
 
 from __future__ import annotations
 
 import re
 import string
+from contextvars import ContextVar
 from typing import Any
 
 _ALLOWED_FIELDS = {"value", "unit", "label"}
+_UNIT: ContextVar[str] = ContextVar("unit", default="")  # the reading's, for {value:gb}
+# Sizes in bytes of the units a reading may come in (binary, as the sources count)
+_SIZES = {"B": 1, "KB": 1024, "KiB": 1024, "MB": 1024**2, "MiB": 1024**2, "GB": 1024**3,
+          "GiB": 1024**3, "TB": 1024**4, "TiB": 1024**4}  # fmt: skip
 _HUGE_NUMBER = re.compile(r"\d{4,}")
 MAX_OUTPUT = 200
 
@@ -51,6 +59,15 @@ def clock_duration(seconds: float) -> str:
     return f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}"
 
 
+def rate_parts(value: float) -> tuple[str, str]:
+    """A data rate (bytes per second) as a number and its unit: whole KB/s
+    below 1 MB/s (else idle traffic would read 0.0), MB/s with a decimal above."""
+    kilobytes = float(value) / 1024
+    if kilobytes < 1024:
+        return f"{kilobytes:.0f}", "KB/s"
+    return f"{kilobytes / 1024:.1f}", "MB/s"
+
+
 def auto_format(value: Any, unit: str = "") -> str:
     """A reading shown the usual way for its unit: 45%, 61°, 2.4 MB/s, 3h 5m."""
     if isinstance(value, str):
@@ -86,6 +103,11 @@ class _SafeFormatter(string.Formatter):
             return human_duration(value)
         if format_spec == "clock":
             return clock_duration(value)
+        if format_spec in ("rate", "rate_unit"):
+            return rate_parts(value)[format_spec == "rate_unit"]
+        if format_spec == "gb":
+            size = _SIZES.get(_UNIT.get().removesuffix("/s"), 1024**3)
+            return f"{float(value) * size / 1024**3:.1f}"
         return super().format_field(value, format_spec)
 
 
@@ -93,10 +115,13 @@ _FORMATTER = _SafeFormatter()
 
 
 def safe_format(fmt: str, value: Any, unit: str = "", label: str = "") -> str:
+    token = _UNIT.set(unit or "")
     try:
         text = _FORMATTER.format(fmt, value=value, unit=unit, label=label)
     except FormatError:
         raise
     except (ValueError, TypeError, KeyError, IndexError, AttributeError) as exc:
         raise FormatError(str(exc)) from exc
+    finally:
+        _UNIT.reset(token)
     return text[:MAX_OUTPUT]

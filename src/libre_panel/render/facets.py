@@ -897,8 +897,10 @@ def curve_halo(layer: Image.Image, line: Image.Image, color: RGBA, scale: int = 
     and is worked out small: the line at a quarter of the size, blurred, and raised again."""
     w, h = layer.size
     divider = HALO_DIVIDER * scale
-    if w <= 2 * divider or h <= 2 * divider or HALO <= 0:
+    if w <= 2 * scale or h <= 2 * scale or HALO <= 0:
         return
+    if w < 2 * divider and h < 2 * divider:  # too small both ways to be soft (a narrow
+        return  # band keeps one: SPUR II's flat curves glow in the few rows they reach)
     soft = (
         line.resize((max(1, w // divider), max(1, h // divider)), Image.Resampling.BOX)
         .filter(ImageFilter.GaussianBlur(HALO_BLUR))
@@ -919,12 +921,15 @@ def curve_ridge(
     color: RGBA,
     wide: bool = False,
     scale: int = 1,
+    below: bool = True,
 ) -> bool:
     """Replace the line of a curve by a ridge, on ``layer`` (RGBA, the fill already
     drawn): a flank lit from the top left on the side away from the fill, a dark one
     on the side towards it, and a faint band beneath, each tilted by how the curve
     rises or falls there. ``run`` is the curve's points in the layer's pixels,
     ``thick`` the line's width in them. A ``wide`` graph gets one band only.
+    ``below``: the fill lies below the curve; else above it (a graph that hangs from
+    its top), and the ridge is mirrored, its light still from the top left.
     False if the points do not run from left to right: the caller draws a line.
 
     ``scale`` is the layer's pixels to a pixel of the picture it will be (a graph is drawn
@@ -949,30 +954,40 @@ def curve_ridge(
     out = np.stack(
         [steep / length * tilt_sin, -1 / length * tilt_sin, np.full_like(y, tilt_cos)], -1
     )
+    if not below:  # the outside is below the curve: its flank faces down
+        out = out * np.array([-1, -1, 1], np.float32)
+    away = 1.0 if below else -1.0  # towards the fill, in rows
     base = np.asarray(color[:3], np.float32)
 
     def paint(normals: np.ndarray, style: tuple[float, float]) -> np.ndarray:
         a, b = shade(facing(normals), style)
         return base * a[:, None] + b[:, None]
 
+    def zone(near: Any, far: Any) -> tuple[Any, Any]:
+        """The rows from ``near`` to ``far`` beyond the line, towards the fill."""
+        a, b = y + away * near, y + away * far
+        return (a, b) if below else (b, a)
+
     if wide:  # the line itself, shaded by the slope
-        rows0, rows1 = math.floor((y - thick / 2).min()) - 1, math.ceil((y + thick).max()) + 2
-        bands = [(y - thick / 2, y + thick, paint(out, RIDGE_BAND), None)]
+        lo, hi = zone(-thick / 2, thick)
+        rows0, rows1 = math.floor(lo.min()) - 1, math.ceil(hi.max()) + 2
+        bands = [(lo, hi, paint(out, RIDGE_BAND), None)]
     else:
-        avail = (height - 1) - y
+        avail = (height - 1) - y if below else y
         end = np.clip(avail / BAND_DEPTH, flank, BAND_SHARE * flank) + flank
         inner = out * np.array([-1, -1, 1], np.float32)  # tilted the other way
-        rows0, rows1 = math.floor((y - flank).min()) - 1, math.ceil((y + end).max()) + 2
+        lo, hi = zone(-flank, end)
+        rows0, rows1 = math.floor(lo.min()) - 1, math.ceil(hi.max()) + 2
         bands = []
         if (end > 2 * flank + 1e-3).any():  # a graph that is high enough has a band below
             above = max(0, rows0)
             cover = layer.crop((x0 * scale, above * scale, x1 * scale, min(height, rows1) * scale))
             cover = cover.getchannel("A")
             fill = np.asarray(cover.reduce(scale) if scale > 1 else cover)
-            bands.append((y + flank, end + y - flank, paint(out, RIDGE_BAND), fill / 255.0))
+            bands.append((*zone(flank, end - flank), paint(out, RIDGE_BAND), fill / 255.0))
         bands += [
-            (y, y + flank, paint(inner, RIDGE_FAR), None),
-            (y - flank, y, paint(out, RIDGE), None),
+            (*zone(0, flank), paint(inner, RIDGE_FAR), None),
+            (*zone(-flank, 0), paint(out, RIDGE), None),
         ]
     rows0, rows1 = max(0, rows0), min(height, rows1)
     if rows1 <= rows0:

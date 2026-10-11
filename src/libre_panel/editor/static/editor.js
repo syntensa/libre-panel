@@ -1026,6 +1026,18 @@ function rulesInput(rules, onChange) {
   return box;
 }
 
+function boxInput(value, onChange, optional) {
+  // x, y, w, h on the panel; empty for none
+  const input = el("input", { type: "text", value: Array.isArray(value) ? value.join(", ") : "", placeholder: t("x, y, w, h") });
+  input.addEventListener("change", () => {
+    const parts = input.value.split(",").map((v) => v.trim()).filter((v) => v !== "");
+    if (!parts.length && optional) return onChange(null);
+    const box = parts.map(Number);
+    if (box.length === 4 && box.every(Number.isFinite) && box[2] > 0 && box[3] > 0) onChange(box.map(Math.round));
+  });
+  return input;
+}
+
 function controlFor(key, kind, value, onChange) {
   const optional = kind.endsWith("?");
   const base = kind.replace(/\?$/, "");
@@ -1037,6 +1049,7 @@ function controlFor(key, kind, value, onChange) {
   if (base === "bool") return el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!value, onchange: (e) => onChange(e.target.checked) }), t("on"));
   if (base === "color") return colorInput(value, onChange, optional);
   if (base === "rules") return rulesInput(value || [], (rules) => onChange(rules));
+  if (base === "box") return boxInput(value, onChange, optional);
   if (base === "font") return fontInput(value, onChange);
   if (base === "asset") return assetInput(value, onChange);
   if (base === "icon") {
@@ -1063,12 +1076,16 @@ function hintFor(widget, key, kind) {
   if (key === "fill_alpha") return t("how opaque the fill is, 0 to 1; 0 = as before (a flat fill 0.25, a fade 0.45 at its top)");
   if (key === "finish") {
     return [
-      t("lit: SPUR II's light on rings, bars, graph lines and weather icons; glow then sets their glow"),
+      t("lit: SPUR II's light on rings, bars, graph lines, texts and weather icons; glow then sets their glow"),
       t("facet: a flat top with a lit, bevelled rim (text from 20 px, bars from 6 px)"),
       t("acrylic: lettering of acrylic lit from within, text from 20 px"),
     ].join(" · ");
   }
   if (key === "max_rpm") return t("the speed at which the ring is full; the rotor turns the faster the closer it gets");
+  if (key === "glow_area") return t("x, y, w, h on the panel: with the lit finish the glow stays inside (a bar's worked out as SPUR II's glow zones); empty: all around");
+  if (key === "ridge") return t("a name makes the rect a ridge that catches the light; rects with the same name are one ridge");
+  if (key === "inset") return t("the line stays a line's width inside the box; off: the range spans the box, as SPUR II's charts");
+  if (key === "direction" && widget.type === "graph") return t("down: the curve hangs from the top and is filled from there, below an upward one it mirrors it");
   return null;
 }
 
@@ -1213,7 +1230,6 @@ const LOOK_HINTS = {
   "grid:color": () => t("empty: the palette's grid colour, else a breath away from the background"),
   "grid:major": () => t("every so many lines a stronger one; 0 = none"),
   "light:sun": () => t("the sun where it stands at the weather place in config.toml; off, or without a place: noon"),
-  "light:frames": () => t("outlines of 2 px or more become ridges that catch the light"),
   "light:color": () => t("the sweeps' tint; empty: the accent"),
   "dust:count": () => t("on a 1920 × 480 panel; other sizes scale with their area"),
   "dust:rate": () => t("how often the grains move; 25 is calm and cheap"),
