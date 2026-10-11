@@ -26,7 +26,7 @@ fi
 echo "== the programs it carries: ffmpeg encodes the video mode's stream, the app finds it"
 # The AppImage is read-only while it runs: take its files out and check them where they are.
 unpacked="$(mktemp -d)"
-(cd "$unpacked" && "$appimage" --appimage-extract > /dev/null)
+(cd "$unpacked" && env -u APPIMAGE_EXTRACT_AND_RUN "$appimage" --appimage-extract > /dev/null)
 python3 "$root/packaging/check_tools.py" "$unpacked/squashfs-root/usr/lib/libre-panel"
 rm -rf "$unpacked"
 

@@ -73,10 +73,14 @@ def test_the_spec_puts_the_fetched_folder_next_to_the_program_under_the_name_the
     )
 
 
-def test_the_programs_the_check_looks_for_are_the_ones_the_table_names():
+def test_the_names_the_app_looks_for_are_the_ones_the_table_installs(monkeypatch):
     fetch_tools = load("fetch_tools_wiring", PACKAGING / "fetch_tools.py")
-    names = {tool.file for tool in fetch_tools.TOOLS}
-    assert {"ffmpeg", "ffmpeg.exe", "PresentMon.exe", "PawnIO_setup.exe"} == names
-    # find_ffmpeg and find_presentmon look for the names the table installs
-    assert bundled.program_name("ffmpeg") in names | {"ffmpeg"}
-    assert "PresentMon.exe" in names
+    for platform, system in (("windows", "win32"), ("linux", "linux")):
+        monkeypatch.setattr(sys, "platform", system)
+        files = {tool.file for tool in fetch_tools.TOOLS if tool.platform == platform}
+        assert bundled.program_name("ffmpeg") in files
+        if platform == "windows":
+            assert {bundled.program_name("PresentMon"), bundled.PAWNIO_SETUP} <= files
+            assert len(files) == 3  # and nothing else that the app does not know of
+        else:
+            assert files == {"ffmpeg"}
