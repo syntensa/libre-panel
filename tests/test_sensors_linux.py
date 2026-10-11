@@ -2,9 +2,13 @@
 
 A PC's /sys is laid out in a folder (``fake_sysfs``), the way the kernel's drivers lay it out,
 and the source reads it as its root. NVIDIA's library is an object with the same functions
-(``test_sensors_nvml``). Nothing here needs Linux, or hardware.
+(``test_sensors_nvml``). Nothing here needs Linux, or hardware; only the folders of the energy
+counters have names (``intel-rapl:0``) that Windows cannot give a folder, so the tests that lay
+those out run where such a folder can be made, and the arithmetic of the counters is also
+tested on plain files.
 """
 
+import os
 import threading
 from pathlib import Path
 
@@ -18,6 +22,10 @@ from libre_panel.sensors import base, gpus, hardware, hwmon, nvml, psutil_provid
 from libre_panel.sensors.base import SensorHub
 from libre_panel.sensors.hardware import Adapter
 from libre_panel.sensors.linux import RESCAN_SECONDS, LinuxProvider
+
+kernel_names = pytest.mark.skipif(
+    os.name == "nt", reason="Windows cannot make a folder named intel-rapl:0, as the kernel does"
+)
 
 
 class Clock:
@@ -324,6 +332,50 @@ def test_readings_follow_the_files(sysfs, make):
 # -- the processor's power -----------------------------------------------------------------
 
 
+def test_joules_are_watts_between_two_readings(tmp_path):
+    counter = tmp_path / "energy_uj"
+    counter.write_text("1000000\n", encoding="utf-8")
+    clock = Clock()
+    joules = rapl.Joules([rapl.Counter(counter)], clock)
+    assert joules.watts() is None  # one reading has nothing to compare with
+    clock.advance(2.0)
+    counter.write_text(f"{1_000_000 + 30_000_000}\n", encoding="utf-8")
+    assert joules.watts() == 15.0
+    clock.advance(0.1)  # a counter ticks only now and then: too close, the last power again
+    counter.write_text(f"{1_000_000 + 99_000_000}\n", encoding="utf-8")
+    assert joules.watts() == 15.0
+    clock.advance(1.0)
+    assert joules.watts() == pytest.approx((99_000_000 - 30_000_000) / 1e6 / 1.1)
+
+
+def test_a_counter_that_starts_again_is_counted_to_the_end_of_its_range_and_from_zero(tmp_path):
+    counter = tmp_path / "energy_uj"
+    counter.write_text("262143000000\n", encoding="utf-8")
+    clock = Clock()
+    joules = rapl.Joules([rapl.Counter(counter, wrap=262_143_328_850)], clock)
+    joules.watts()
+    clock.advance(1.0)
+    counter.write_text(f"{20_000_000 - 328_850}\n", encoding="utf-8")
+    # 328,850 µJ to the end of the range, then 19,671,150 µJ: 20 J in a second
+    assert joules.watts() == pytest.approx(20.0)
+
+
+def test_counters_that_go_back_without_a_range_or_vanish_give_no_power(tmp_path):
+    counter = tmp_path / "energy_uj"
+    counter.write_text("900\n", encoding="utf-8")
+    clock = Clock()
+    joules = rapl.Joules([rapl.Counter(counter)], clock)  # no range told
+    joules.watts()
+    clock.advance(1.0)
+    counter.write_text("100\n", encoding="utf-8")
+    assert joules.watts() is None  # no negative power, no guess
+    counter.unlink()
+    clock.advance(1.0)
+    assert joules.watts() is None  # a counter that is gone gives no half sum
+    assert rapl.Joules([], clock).watts() is None
+
+
+@kernel_names
 def test_the_processors_power_is_the_energy_between_two_readings(sysfs, make):
     sysfs.powercap("intel-rapl:0", "package-0", energy=1_000_000)
     sysfs.powercap("intel-rapl:0:0", "core", energy=500_000)
@@ -333,8 +385,10 @@ def test_the_processors_power_is_the_energy_between_two_readings(sysfs, make):
     sysfs.set("sys/class/powercap/intel-rapl:0/energy_uj", 1_000_000 + 30_000_000)
     reading = provider.read()["cpu.power"]
     assert (reading.value, reading.unit, reading.label) == (15.0, "W", "CPU power")
+    assert provider.status()["cpu power"] == "RAPL"
 
 
+@kernel_names
 def test_a_counter_that_starts_again_is_not_a_negative_power(sysfs, make):
     sysfs.powercap("intel-rapl:0", "package-0", energy=262_143_000_000, wrap=262_143_328_850)
     provider = make()
@@ -345,6 +399,7 @@ def test_a_counter_that_starts_again_is_not_a_negative_power(sysfs, make):
     assert provider.read()["cpu.power"].value == pytest.approx(20.0)
 
 
+@kernel_names
 def test_two_sockets_add_up_and_the_memory_mapped_copy_is_not_added(sysfs, make):
     sysfs.powercap("intel-rapl:0", "package-0", energy=0)
     sysfs.powercap("intel-rapl:1", "package-1", energy=0)
@@ -357,6 +412,7 @@ def test_two_sockets_add_up_and_the_memory_mapped_copy_is_not_added(sysfs, make)
     assert provider.read()["cpu.power"].value == pytest.approx(16.0)
 
 
+@kernel_names
 def test_counters_nobody_may_read_give_no_power_and_no_error(sysfs, make, monkeypatch):
     sysfs.powercap("intel-rapl:0", "package-0", energy=5)
     real = hwmon.read_text
@@ -380,8 +436,10 @@ def test_the_power_of_a_chip_stands_in_where_rapl_cannot_be_read(sysfs, make):
         power2_input=9_500_000,
         power2_label="SVI2_P_SoC",
     )
-    reading = make().read()["cpu.power"]
+    provider = make()
+    reading = provider.read()["cpu.power"]
     assert reading.value == pytest.approx(50.5) and reading.unit == "W"
+    assert provider.status()["cpu power"] == "chip"
 
 
 def test_amd_energy_counts_the_sockets(sysfs, make):
@@ -400,6 +458,7 @@ def test_amd_energy_counts_the_sockets(sysfs, make):
     assert provider.read()["cpu.power"].value == pytest.approx(40.0)
 
 
+@kernel_names
 def test_rapl_counters_are_found_and_judged_unreadable_by_rights(sysfs):
     sysfs.powercap("intel-rapl:0", "package-0", energy=1)
     sysfs.powercap("intel-rapl:0:0", "core", energy=1)
@@ -605,7 +664,6 @@ def test_the_source_has_a_name_and_says_what_it_found(sysfs, make):
     sysfs.hwmon(0, "k10temp", temp1_input=50000, temp1_label="Tctl")
     sysfs.hwmon(1, "nct6798", fan1_input=800, fan2_input=900)
     amd_card(sysfs, hwmon=3)
-    sysfs.powercap("intel-rapl:0", "package-0", energy=1)
     provider = make()
     provider.read()
     assert provider.name == "linux"
@@ -615,7 +673,7 @@ def test_the_source_has_a_name_and_says_what_it_found(sysfs, make):
         "fans": 3,
         "graphics": "amdgpu",
         "nvidia driver": None,
-        "cpu power": "RAPL",
+        "cpu power": None,
     }
     assert base.available_providers()["linux"] == "built in"
     assert isinstance(base.create_provider("linux"), LinuxProvider)

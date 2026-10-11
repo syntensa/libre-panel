@@ -61,6 +61,13 @@ def actions(steps, kind):
     return [action for step in steps for action in step.actions if isinstance(action, kind)]
 
 
+@pytest.fixture(autouse=True)
+def on_linux(monkeypatch):
+    """The setup is Linux's. What it asks of a computer is laid out in a folder or given by a
+    stand-in, so the tests run on any system; this one says it is Linux."""
+    monkeypatch.setattr(setup, "supported", lambda: True)
+
+
 # -- which driver fits the board ------------------------------------------------------------
 
 

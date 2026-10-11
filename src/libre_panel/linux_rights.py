@@ -13,6 +13,7 @@ import dataclasses
 import json
 import logging
 import os
+import posixpath
 import shlex
 import shutil
 import subprocess
@@ -83,9 +84,9 @@ def program(
     if frozen:
         appimage = environ.get("APPIMAGE")
         if appimage:
-            return [appimage] if os.path.isabs(appimage) and exists(appimage) else None
-        return [executable] if os.path.isabs(executable) else None
-    if not os.path.isabs(executable) or not (importable or imports_isolated)(executable):
+            return [appimage] if posixpath.isabs(appimage) and exists(appimage) else None
+        return [executable] if posixpath.isabs(executable) else None
+    if not posixpath.isabs(executable) or not (importable or imports_isolated)(executable):
         return None
     return [executable, "-B", "-I", "-m", "libre_panel"]
 

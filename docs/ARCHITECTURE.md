@@ -17,7 +17,7 @@
 | `config` | `config.toml`: panel, sensors, weather, plugins. No defaults that point at a person or place. |
 | `theme` | Theme format, validation, safe asset paths, saving; `adapt` rescales a theme to another panel; `defaults` says which theme a panel shows when `config.toml` names none (Lumen on a bar, Libre Default elsewhere). |
 | `render` | Pillow renderer; the same code serves the panel and the editor preview. Safe format strings. `motion` keeps what moves (gliding values, fading colours, graph histories) from frame to frame and theme to theme. |
-| `sensors` | `SensorProvider` plugins merged by `SensorHub` (priority, history for graphs). |
+| `sensors` | `SensorProvider` plugins merged by `SensorHub` (priority, history for graphs). On Linux the `linux` source reads the kernel's files without root: `hwmon` (chips, named as psutil named them), `gpus` (cards), `nvml` (NVIDIA's library through ctypes), `rapl` (energy counters). |
 | `weather` | Open-Meteo provider, background polling, off by default. |
 | `devices` | Panel catalog (`models`), `Display` drivers, USB/serial discovery. |
 | `plugins` | Plugin API: finding plugins (entry points, plugin folders), services and the host they talk to the panel through, modes. See [Plugins](PLUGINS.md). |
@@ -29,6 +29,7 @@
 | `service` | Background app: the main loop in a thread (pause/resume, restarts after a broken config is fixed), the editor server, and the controls shared by tray and editor. |
 | `tray` | Tray icon and menu (pystray); runs without an icon where there is no tray. |
 | `autostart` | Login start per system: Windows `Run` key (or, asked for, a Task Scheduler task with the highest rights), XDG autostart entry. |
+| `linux_setup`, `linux_rights` | `libre-panel system-setup --linux`, what needs an administrator on Linux: the panel's udev rule, the mainboard's Super I/O driver, `drivetemp` and, only if asked, the processor's energy counters. `linux_setup` works out a plan from facts about the computer (`plan`, no root needed) and applies it through a stand-in for the system (`apply`); `linux_rights` is how it is asked for (`pkexec` or `sudo`, the AppImage by its own file, a clean environment) and the background run the app starts (`/api/setup`). |
 | `instance` | OS file lock so only one process drives the panel. |
 | `branding` | The logo, drawn in code (tray icon with status dot, app icons). |
 | `cli` | `libre-panel` command. |
