@@ -2,7 +2,7 @@ import pytest
 
 from libre_panel.devices.models import MODELS, get_model, model_for_size, models_for_usb
 from libre_panel.theme.adapt import adapt_theme
-from libre_panel.theme.model import find_theme, load_theme, parse_theme
+from libre_panel.theme.model import find_theme, list_themes, load_theme, parse_theme
 
 
 def test_ids_are_unique():
@@ -56,6 +56,18 @@ def test_adapt_scales_and_keeps_round_things_round():
         if widget["type"] == "gauge":
             assert widget["w"] == widget["h"]
         assert 0 <= widget["x"] <= theme.width and 0 <= widget["y"] <= theme.height
+
+
+@pytest.mark.parametrize("name", sorted(p["id"] for p in list_themes()))
+def test_every_built_in_theme_adapts_to_every_panel_either_way_round(name):
+    """Scaling must not carry a value past what a theme may hold (the Pico's glow, 12 px
+    on the 0.96", went past the 64 a glow may have on the 5.2")."""
+    data = load_theme(find_theme(name)).to_dict()
+    for model in MODELS:
+        for orientation in ("landscape", "portrait"):
+            theme = parse_theme(adapt_theme(data, model.id, orientation))
+            assert (theme.width, theme.height) == model.size(orientation), (model.id, orientation)
+            assert theme.warnings == [], (model.id, orientation)
 
 
 def test_adapt_keep_mode_and_custom_size():

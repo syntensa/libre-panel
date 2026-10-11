@@ -65,6 +65,7 @@ _COMMON: dict[str, tuple[str, Any]] = {
 COMMON_FIELDS = _COMMON
 # Fields the editor groups under "Effects".
 EFFECT_FIELDS = ("opacity", "glow", "glow_radius", "shadow", "shadow_offset", "shadow_blur")
+BLUR_MAX = 64  # the most a widget's glow, shadow or backdrop may blur, in px
 
 
 def _text_style(tabular: bool) -> dict[str, tuple[str, Any]]:
@@ -698,8 +699,8 @@ def normalize_widget(
     if not 0 <= widget["glow"] <= 1:
         raise ThemeError(f"{where}.glow: must be between 0 and 1")
     for key in ("glow_radius", "shadow_blur", "backdrop_blur"):
-        if key in widget and not 0 <= widget[key] <= 64:
-            raise ThemeError(f"{where}.{key}: must be between 0 and 64")
+        if key in widget and not 0 <= widget[key] <= BLUR_MAX:
+            raise ThemeError(f"{where}.{key}: must be between 0 and {BLUR_MAX}")
     if wtype == "fan" and widget["max_rpm"] <= 0:
         raise ThemeError(f"{where}.max_rpm: must be above 0")
     if not widget["id"]:

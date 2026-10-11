@@ -11,7 +11,7 @@ from copy import deepcopy
 from typing import Any
 
 from libre_panel.devices.models import get_model
-from libre_panel.theme.model import parse_theme
+from libre_panel.theme.model import BLUR_MAX, parse_theme
 from libre_panel.theme.modules import Grid, make_grid
 
 # Sizes that should grow with the smaller scale factor (not stretched).
@@ -42,6 +42,8 @@ def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any
                 continue
             minimum = {"font_size": 6, "thickness": 1, "line_width": 1, "outline_width": 1}
             out[key] = max(minimum.get(key, 0), round(out[key] * s))
+            if key in ("glow_radius", "shadow_blur", "backdrop_blur"):
+                out[key] = min(out[key], BLUR_MAX)  # (a theme holds no more than that)
     if widget["type"] in ("icon", "symbol"):  # square: keep it square and centred
         size = max(8, round(widget["size"] * s))
         cx = (widget["x"] + widget["size"] / 2) * sx

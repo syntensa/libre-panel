@@ -639,6 +639,9 @@
   together in a card narrower than about 1.75 times its height, and began a few pixels right
   of the text column above it in every card. Each detail keeps a gap to the next, and the line
   begins with the column
+- Moving the Pico theme to a bigger panel (the 5.2", 8" and 12.3") failed with "glow_radius:
+  must be between 0 and 64": the glow, shadow and backdrop blur are scaled with the panel and
+  were not held to what a theme may have. They stop at 64 now
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars
