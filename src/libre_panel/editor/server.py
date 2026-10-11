@@ -39,11 +39,10 @@ from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import (
     COMMON_FIELDS,
-    DUST_LIMITS,
     DUST_MAX_AREAS,
     DUST_MAX_COLORS,
-    DUST_SPEC,
     EFFECT_FIELDS,
+    LOOK_SPECS,
     TOAST_ANCHORS,
     WIDGET_SPECS,
     ThemeError,
@@ -383,18 +382,18 @@ class EditorHandler(BaseHTTPRequestHandler):
             "toast_anchors": list(TOAST_ANCHORS),
             "common": {k: list(v) for k, v in COMMON_FIELDS.items()},
             "effect_fields": list(EFFECT_FIELDS),
+            # the panel's look, block by block: Theme -> Look
+            "look": {
+                name: {k: list(v) for k, v in spec.items()} for name, spec in LOOK_SPECS.items()
+            },
             "models": models,
             "protocols": PROTOCOLS,
             "fonts": [BUILTIN_PREFIX + name for name in builtin_fonts()],
             "default_font": DEFAULT_FONT,
             "icons": list(ICON_NAMES),
             "modules": module_info(),
-            "dust": {
-                "fields": {k: list(v) for k, v in DUST_SPEC.items()},
-                "limits": {k: list(v) for k, v in DUST_LIMITS.items()},
-                "max_colors": DUST_MAX_COLORS,
-                "max_areas": DUST_MAX_AREAS,
-            },
+            # what the look blocks that are lists may hold, at most
+            "look_limits": {"dust": {"colors": DUST_MAX_COLORS, "areas": DUST_MAX_AREAS}},
             **presets,
         }
 

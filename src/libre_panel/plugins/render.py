@@ -119,6 +119,17 @@ class RenderContext:
         """Ask for the next frame at full rate (something is animating)."""
         self._renderer.moving = True
 
+    @property
+    def light(self) -> bool:
+        """True while the theme has a panel light (``look.light``) to glint on edges."""
+        look = getattr(self._renderer, "look", None)
+        return look is not None and look.light is not None
+
+    def light_edge(self, edge: Any) -> None:
+        """Let the panel light glint on ``edge`` (``render.look.LightEdge``) in
+        this frame: from a screen's ``render``, on every frame it shows."""
+        self._renderer.add_light_edge(edge)
+
 
 class Screen:
     """Draws the whole frame in code; the theme's widgets are drawn on top.
@@ -180,6 +191,13 @@ class WidgetType:
     ) -> Image.Image | tuple[Image.Image, tuple[int, int]] | None:
         """An RGBA image placed at the widget's x, y (or at the returned position)."""
         raise NotImplementedError
+
+    def edges(self, widget: dict[str, Any], ctx: RenderContext, snapshot: Any, now: float) -> Any:
+        """Optional: light edges of the widget (``render.look.LightEdge``) the
+        panel light glints on while the theme has ``look.light``. Asked on every
+        frame, on the render thread; return the same objects while nothing
+        about them changes."""
+        return ()
 
 
 class Transition:

@@ -67,12 +67,6 @@ COMMON_FIELDS = _COMMON
 EFFECT_FIELDS = ("opacity", "glow", "glow_radius", "shadow", "shadow_offset", "shadow_blur")
 
 
-# How a widget's shapes are finished: as drawn, or with facets (render/facets.py): a flat
-# top in their own colour and a sharp bevel along the edges, lit from the top left.
-FINISHES = ("flat", "facet")
-_FINISH: tuple[str, Any] = ("enum:" + "|".join(FINISHES), "flat")
-
-
 def _text_style(tabular: bool) -> dict[str, tuple[str, Any]]:
     return {
         "font": ("font", ""),  # empty = the theme's font
@@ -83,7 +77,6 @@ def _text_style(tabular: bool) -> dict[str, tuple[str, Any]]:
         "tabular": ("bool", tabular),  # equal-width digits: numbers do not jitter
         "max_width": ("int", 0),  # 0 = any width; wider text is made to fit
         "fit": ("enum:shrink|ellipsis", "shrink"),  # how: a smaller font, or cut with …
-        "finish": _FINISH,  # facet: bevelled letters, from 20 px (smaller ones stay flat)
     }
 
 
@@ -124,7 +117,6 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "segment_gap": ("int", 2),
         "smooth": ("bool", True),
         "color_rules": ("rules", []),
-        "finish": _FINISH,  # facet: a raised bar with straight, bevelled ends in a milled track
     },
     "gauge": {
         "sensor": ("sensor", "cpu.load"),
@@ -144,7 +136,6 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "tick_color": ("color?", None),
         "smooth": ("bool", True),
         "color_rules": ("rules", []),
-        "finish": _FINISH,  # facet: a raised ring with straight, bevelled ends in a milled track
     },
     "graph": {
         "sensor": ("sensor", "cpu.load"),
@@ -165,7 +156,6 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "grid": ("int", 0),
         "grid_color": ("color?", "#ffffff1f"),
         "background": ("color?", None),
-        "finish": _FINISH,  # facet: the curve is a bevelled ridge (a slimmer one on wide graphs)
     },
     "clock": {
         "format": ("string", "%H:%M"),
@@ -308,20 +298,67 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
     },
 }
 
-_PALETTE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+# How a widget's shape is drawn (render.finish): "flat" (the default), "lit"
+# (light from SPUR II's 3D layers) or "facet". A finish a type does not have
+# draws it flat, with a warning.
+FINISHES = ("flat", "lit", "facet")
+FINISH_FIELD = ("enum:" + "|".join(FINISHES), FINISHES[0])
+for _type in (
+    "text", "metric", "clock", "weather", "countdown", "bar", "gauge", "graph", "icon", "module"
+):  # fmt: skip
+    WIDGET_SPECS[_type]["finish"] = FINISH_FIELD
 
-# The theme's "look" (render/dust.py): fine dust falling from the elements into
-# the depth behind the panel. Missing means off. The editor builds its form from
-# this table, so it is the single source of truth for the dust.
-DUST_SPEC: dict[str, tuple[str, Any]] = {
-    "enabled": ("bool", True),  # false keeps the settings but draws nothing
-    "count": ("int", 1800),  # grains on a 1920 x 480 panel; other sizes scale with their area
-    "rate": ("number", 25),  # how often the grains move, per second
-    "depth": ("number", 1.0),  # how far they fall towards the vanishing point (0: not at all)
-    "strength": ("number", 1.0),  # how bright they are
+# The look of the whole panel, block by block (render.look); a block that is
+# missing is off. The editor builds its settings from this table.
+LOOK_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
+    # SPUR II's grid: thin lines every ``spacing`` px, every ``major``-th one
+    # stronger (0: none); colours empty: the palette's grid colours, else a
+    # breath away from the background
+    "grid": {
+        "spacing": ("int", 8),
+        "major": ("int", 5),
+        "color": ("color?", None),
+        "major_color": ("color?", None),
+        "alpha": ("number", 1.0),
+    },
+    # One light for the panel: the sun at the place in config.toml (else noon)
+    # glints on light edges (outlines of rects with ``frames``), and sweeps of
+    # light run across at moments
+    "light": {
+        "strength": ("number", 1.0),
+        "sun": ("bool", True),
+        "frames": ("bool", True),
+        "color": ("color?", None),  # the sweeps' tint; empty: the accent
+        "sweep_seconds": ("number", 1.6),
+        "on_start": ("bool", True),
+        "on_hour": ("bool", True),
+        "on_track": ("bool", True),
+        "on_transition": ("bool", True),
+    },
+    # Fine dust falling from the elements into the depth behind the panel (render.dust).
+    # Besides these, ``colors`` (empty: each grain takes the colour of its source) and
+    # ``areas`` (rectangles with dust or without) are lists: LOOK_LISTS.
+    "dust": {
+        "count": ("int", 1800),  # grains on a 1920 x 480 panel; other sizes scale with their area
+        "rate": ("number", 25),  # how often the grains move, per second
+        "depth": ("number", 1.0),  # how far they fall towards the vanishing point (0: not at all)
+        "strength": ("number", 1.0),  # how bright they are
+    },
 }
-DUST_LIMITS = {"count": (0, 8000), "rate": (1, 60), "depth": (0, 3), "strength": (0, 3)}
+LOOK_RANGES: dict[tuple[str, str], tuple[float, float]] = {
+    ("grid", "spacing"): (2, 400),
+    ("grid", "major"): (0, 50),
+    ("grid", "alpha"): (0, 1),
+    ("light", "strength"): (0, 2),
+    ("light", "sweep_seconds"): (0.3, 10),
+    ("dust", "count"): (0, 8000),
+    ("dust", "rate"): (1, 60),
+    ("dust", "depth"): (0, 3),
+    ("dust", "strength"): (0, 3),
+}
 DUST_MAX_COLORS, DUST_MAX_AREAS = 8, 64
+
+_PALETTE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
 
 @dataclass
@@ -347,7 +384,8 @@ class Theme:
     # corners, glow, fonts); None = not set in the theme.
     grid: dict[str, int] | None = None
     style: dict[str, Any] | None = None
-    look: dict[str, Any] | None = None  # {"dust": {...}}: what the panel adds to the widgets
+    # The panel's look by block ("grid", "light", ...; render.look); {} = none.
+    look: dict[str, Any] = field(default_factory=dict)
     root: Path | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -387,6 +425,8 @@ class Theme:
             data["look"] = deepcopy(self.look)
         if self.screen is not None:
             data["screen"] = deepcopy(self.screen)
+        if self.look:
+            data["look"] = deepcopy(self.look)
         toast = {k: deepcopy(v) for k, v in self.toast.items() if v != TOAST_DEFAULTS[k]}
         if toast:
             data["toast"] = toast
@@ -708,63 +748,95 @@ def _parse_style(raw: Any, root: Path | None) -> dict[str, Any] | None:
     return style
 
 
-def _parse_dust(raw: Any, palette: dict[str, str]) -> dict[str, Any] | None:
-    """``"look": {"dust": {"count": 1800, "colors": ["@accent"], "areas": [...]}}``.
-
-    ``colors`` (empty: each grain takes the colour of the element it falls from) and
-    ``areas`` (rectangles ``{"x", "y", "w", "h", "dust": true|false}``: dust only where
-    an area says so, or everywhere but where one says not) are lists; the rest is
-    :data:`DUST_SPEC`. ``true`` is all defaults, ``false`` or nothing is no dust.
-    """
-    if raw is None or raw is False:
-        return None
-    if raw is True:
-        raw = {}
-    if not isinstance(raw, dict):
-        raise ThemeError("look.dust: expected an object (or true)")
-    dust: dict[str, Any] = {}
-    for key, (kind, default) in DUST_SPEC.items():
-        value = _coerce(kind, raw.get(key, default), f"look.dust.{key}")
-        if key in DUST_LIMITS and not DUST_LIMITS[key][0] <= value <= DUST_LIMITS[key][1]:
-            raise ThemeError(f"look.dust.{key}: must be between {DUST_LIMITS[key][0]} "
-                             f"and {DUST_LIMITS[key][1]}")  # fmt: skip
-        dust[key] = value
-    colors = raw.get("colors", [])
-    if not isinstance(colors, list) or len(colors) > DUST_MAX_COLORS:
-        raise ThemeError(f"look.dust.colors: expected a list of at most {DUST_MAX_COLORS} colours")
-    dust["colors"] = [
-        _check_color(color, f"look.dust.colors[{i}]", False, palette)
-        for i, color in enumerate(colors)
-    ]
-    areas = raw.get("areas", [])
-    if not isinstance(areas, list) or len(areas) > DUST_MAX_AREAS:
-        raise ThemeError(f"look.dust.areas: expected a list of at most {DUST_MAX_AREAS} areas")
-    dust["areas"] = []
-    for i, area in enumerate(areas):
-        where = f"look.dust.areas[{i}]"
-        if not isinstance(area, dict):
-            raise ThemeError(f"{where}: expected an object with x, y, w, h")
-        checked = {k: _coerce("int", area.get(k, 0), f"{where}.{k}") for k in ("x", "y", "w", "h")}
-        if checked["w"] < 1 or checked["h"] < 1:
-            raise ThemeError(f"{where}: w and h must be at least 1")
-        checked["dust"] = _coerce("bool", area.get("dust", True), f"{where}.dust")
-        dust["areas"].append(checked)
-    return dust
-
-
-def _parse_look(raw: Any, palette: dict[str, str], warnings: list[str]) -> dict[str, Any] | None:
-    """``"look"``: what the panel adds to the widgets. Today the dust; None while
-    there is nothing in it."""
+def _dust_colors(raw: Any, palette: dict[str, str], where: str) -> list[str]:
+    """``look.dust.colors``: up to :data:`DUST_MAX_COLORS` colours; none, each grain takes
+    the colour of the element it falls from."""
     if raw is None:
-        return None
+        return []
+    if not isinstance(raw, list) or len(raw) > DUST_MAX_COLORS:
+        raise ThemeError(f"{where}: expected a list of at most {DUST_MAX_COLORS} colours")
+    return [_check_color(color, f"{where}[{i}]", False, palette) for i, color in enumerate(raw)]
+
+
+def _dust_areas(raw: Any, palette: dict[str, str], where: str) -> list[dict[str, Any]]:
+    """``look.dust.areas``: rectangles ``{"x", "y", "w", "h", "dust": true|false}``: dust
+    only where an area says so, or everywhere but where one says not."""
+    if raw is None:
+        return []
+    if not isinstance(raw, list) or len(raw) > DUST_MAX_AREAS:
+        raise ThemeError(f"{where}: expected a list of at most {DUST_MAX_AREAS} areas")
+    areas = []
+    for i, area in enumerate(raw):
+        here = f"{where}[{i}]"
+        if not isinstance(area, dict):
+            raise ThemeError(f"{here}: expected an object with x, y, w, h")
+        checked = {k: _coerce("int", area.get(k, 0), f"{here}.{k}") for k in ("x", "y", "w", "h")}
+        if checked["w"] < 1 or checked["h"] < 1:
+            raise ThemeError(f"{here}: w and h must be at least 1")
+        checked["dust"] = _coerce("bool", area.get("dust", True), f"{here}.dust")
+        areas.append(checked)
+    return areas
+
+
+# The fields of look blocks that are lists, not single values: block -> field -> parser
+LOOK_LISTS: dict[str, dict[str, Any]] = {"dust": {"colors": _dust_colors, "areas": _dust_areas}}
+
+
+def _parse_look(raw: Any, palette: dict[str, str], warnings: list[str]) -> dict[str, Any]:
+    """``"look": {"grid": {...}, "light": {...}}``: the panel's look, block by
+    block. A missing block (or ``false``) is off, ``true`` or ``{}`` is on with
+    the defaults. Blocks this version does not know are kept as they are,
+    so saving loses nothing."""
+    if raw is None:
+        return {}
     if not isinstance(raw, dict):
         raise ThemeError("look must be an object")
     look: dict[str, Any] = {}
-    dust = _parse_dust(raw.get("dust"), palette)
-    if dust is not None:
-        look["dust"] = dust
-    warnings.extend(f"look: ignoring unknown field {k!r}" for k in sorted(set(raw) - {"dust"}))
-    return look or None
+    for name, given in raw.items():
+        spec = LOOK_SPECS.get(name)
+        if spec is None:
+            warnings.append(f"look: ignoring unknown block {name!r}")
+            look[name] = deepcopy(given)
+            continue
+        if given is None or given is False:
+            continue
+        if given is True:
+            given = {}
+        if not isinstance(given, dict):
+            raise ThemeError(f"look.{name} must be an object")
+        block = {}
+        for key, (kind, default) in spec.items():
+            value = _coerce(kind, given.get(key, deepcopy(default)), f"look.{name}.{key}", palette)
+            low, high = LOOK_RANGES.get((name, key), (None, None))
+            if low is not None and not low <= value <= high:
+                raise ThemeError(f"look.{name}.{key}: must be between {low} and {high}")
+            block[key] = value
+        lists = LOOK_LISTS.get(name, {})
+        for key, parse in lists.items():
+            block[key] = parse(given.get(key), palette, f"look.{name}.{key}")
+        warnings.extend(
+            f"look.{name}: ignoring unknown field {k!r}"
+            for k in sorted(set(given) - set(spec) - set(lists))
+        )
+        look[name] = block
+    return look
+
+
+def _finish_warnings(widgets: list[dict[str, Any]], warnings: list[str]) -> None:
+    """One warning per widget type (or icon) whose finish is not there: drawn flat."""
+    if all(widget.get("finish", FINISHES[0]) == FINISHES[0] for widget in widgets):
+        return
+    from libre_panel.render.finish import supports  # the finishes are code: loaded when named
+
+    told = set()
+    for widget in widgets:
+        name = widget.get("finish", FINISHES[0])
+        if name == FINISHES[0] or supports(widget):
+            continue
+        what = f"the icon {widget['icon']!r}" if widget["type"] == "icon" else widget["type"]
+        if (name, what) not in told:
+            told.add((name, what))
+            warnings.append(f"finish {name!r} is not available for {what}; drawn flat")
 
 
 def parse_theme(data: Any, root: Path | None = None) -> Theme:
@@ -840,6 +912,7 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
             resolve_asset(root, widget["src"])  # "@media.cover": a picture a sensor has
         widgets.append(widget)
         warnings.extend(w)
+    _finish_warnings(widgets, warnings)
 
     return Theme(
         name=_coerce("string", data.get("name", "Untitled"), "name"),
@@ -858,9 +931,9 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         widgets=widgets,
         grid=_parse_grid(data.get("grid")),
         style=_parse_style(data.get("style"), root),
-        look=_parse_look(data.get("look"), palette, warnings),
         screen=_parse_screen(data.get("screen"), palette, root, warnings),
         toast=_parse_toast(data.get("toast"), palette, root, warnings),
+        look=_parse_look(data.get("look"), palette, warnings),
         root=root,
         warnings=warnings,
     )

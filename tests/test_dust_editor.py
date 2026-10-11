@@ -10,7 +10,7 @@ import pytest
 from PIL import Image, ImageChops
 
 from libre_panel.editor.server import make_server
-from libre_panel.theme.model import DUST_LIMITS, DUST_SPEC, find_theme, load_theme
+from libre_panel.theme.model import LOOK_RANGES, LOOK_SPECS, find_theme, load_theme
 
 
 @pytest.fixture
@@ -45,14 +45,14 @@ def preview(port, theme):
 
 
 def test_specs_hand_the_dust_form_to_the_editor(editor):
-    """The editor draws the fields the model lists, with the limits the model checks."""
+    """The editor draws the fields the look table lists, and the lists a block may hold
+    come with their limits."""
     status, specs = ask(editor, "GET", "/api/specs")
     assert status == 200
-    dust = specs["dust"]
-    assert set(dust["fields"]) == set(DUST_SPEC) and set(dust["limits"]) == set(DUST_LIMITS)
-    assert dust["fields"]["count"] == ["int", 1800]
-    assert dust["limits"]["rate"] == [1, 60]
-    assert dust["max_colors"] >= 1 and dust["max_areas"] >= 1
+    dust = specs["look"]["dust"]
+    assert set(dust) == set(LOOK_SPECS["dust"]) == {"count", "rate", "depth", "strength"}
+    assert dust["count"] == ["int", 1800] and LOOK_RANGES[("dust", "rate")] == (1, 60)
+    assert specs["look_limits"]["dust"] == {"colors": 8, "areas": 64}
 
 
 def test_specs_carry_the_fan_and_the_facet_finish(editor):
@@ -63,7 +63,7 @@ def test_specs_carry_the_fan_and_the_facet_finish(editor):
         assert "facet" in specs["widgets"][kind]["finish"][0], kind
 
 
-def test_the_preview_shows_the_dust_and_switching_it_off_hides_it(editor):
+def test_the_preview_shows_the_dust_and_taking_it_out_hides_it(editor):
     theme = {
         "format": "libre-panel-theme/1",
         "name": "still",
@@ -77,9 +77,10 @@ def test_the_preview_shows_the_dust_and_switching_it_off_hides_it(editor):
     dusty, data = preview(editor, theme)
     assert data["warnings"] == []
     assert ImageChops.difference(plain, dusty).getbbox() is not None
-    theme["look"]["dust"]["enabled"] = False  # the settings stay, the grains go
-    off, _ = preview(editor, theme)
-    assert ImageChops.difference(plain, off).getbbox() is None
+    for look in ({"dust": False}, {}):  # a block that is false or missing is off
+        theme["look"] = look
+        off, _ = preview(editor, theme)
+        assert ImageChops.difference(plain, off).getbbox() is None
 
 
 def test_the_look_survives_a_save(editor, isolated_home):

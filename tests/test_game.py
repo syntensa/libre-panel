@@ -11,6 +11,7 @@ from fake_system import FakeMachine, game_path, make_logo, make_steam
 from libre_panel import i18n
 from libre_panel.config import Config, ServicesConfig
 from libre_panel.plugins import PluginHost, ServiceManager
+from libre_panel.sensors import base, presentmon
 from libre_panel.sensors.base import Snapshot
 from libre_panel.services import game as game_service
 from libre_panel.services import machine as computer
@@ -579,3 +580,63 @@ def test_a_game_starts_and_ends_in_the_main_loop(steam, monkeypatch, isolated_ho
     assert shots[began + ENTRANCE + 5] == focus
     assert shots[-1] == classic
     assert "failed" not in caplog.text  # no entrance that broke
+
+
+# -- the frame rates -------------------------------------------------------------------------------
+
+
+def test_the_service_asks_for_the_frame_rates_for_as_long_as_it_runs(desk, monkeypatch):
+    """PresentMon needs its recording session before the game starts, not when it does."""
+    monkeypatch.setattr(base, "_WANTED", {})
+    d = desk()
+    assert base.wanted("game.") and base.wanted("game.fps") and base.wanted("game.frametime_peak")
+    d.manager.stop()
+    assert not base.wanted("game.fps")
+
+
+def test_the_program_of_the_game_is_the_one_whose_frames_count(desk, monkeypatch):
+    told = []
+    monkeypatch.setattr(presentmon, "set_target", told.append)
+    d = desk()
+    pid = d.play(exe="Game.exe")
+    d.look()
+    assert told == ["game.exe"]  # the name PresentMon gives a program, in lower case
+    d.look(1)
+    assert told == ["game.exe"]  # not again while nothing changes
+    d.machine.end(pid)  # another program of the same game comes to the front
+    d.play(exe="Launcher.exe", pid=200)
+    d.look(1)
+    assert told[-1] == "launcher.exe" and d.service.found.name == "Space Game"
+    d.machine.end(200)
+    d.look(10)  # the game is over
+    assert told[-1] is None
+
+
+def test_a_listed_program_and_a_forced_mode(desk, monkeypatch):
+    told = []
+    monkeypatch.setattr(presentmon, "set_target", told.append)
+    d = desk(programs=["Emulator.exe = Retro Games"], steam=False)
+    d.machine.start("emulator.exe", 9, "")  # a program whose path cannot be read: its name is known
+    d.look()
+    assert told == ["emulator.exe"]
+    forced = desk(force=True)
+    forced.look()
+    assert told[-1] is None  # no program to name, whatever PresentMon counts
+
+
+def test_a_source_made_while_the_game_runs_knows_the_game_and_the_end_takes_it_back(desk):
+    d = desk()
+    d.play(exe="Game.exe")
+    d.look()
+    assert presentmon.PresentMonProvider()._counter.target == "game.exe"
+    d.manager.stop()  # the service stops with the game on
+    assert presentmon.PresentMonProvider()._counter.target is None
+
+
+def test_program_of_a_game(steam):
+    assert game_service.program_of(
+        Found("steam:10", "Space", 7, "C:/Games/Space/Game.EXE", "10")
+    ) == ("game.exe")
+    assert game_service.program_of(Found("mygame.exe", "My Game", 7, "")) == "mygame.exe"
+    assert game_service.program_of(Found("steam:10", "Space", 7, "")) is None
+    assert game_service.program_of(Found("", "Game mode")) is None

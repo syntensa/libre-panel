@@ -146,7 +146,7 @@ def adapt_theme(
         result["widgets"] = [
             w if w["type"] == "module" else _scale_widget(w, sx, sy) for w in theme.widgets
         ]
-        if theme.look is not None:
+        if theme.look:
             result["look"] = _scale_look(theme.look, sx, sy)
     elif mode != "keep":
         raise ValueError('mode must be "scale" or "keep"')

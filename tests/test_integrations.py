@@ -14,7 +14,7 @@ from libre_panel.sensors import base, media
 from libre_panel.sensors.base import Reading, SensorHub, SensorProvider, create_provider, want
 from libre_panel.sensors.calendar import calendar_readings, events_from_ics
 from libre_panel.sensors.homeassistant import readings_from_states
-from libre_panel.sensors.media import Track, load_cover, parse_osascript, parse_playerctl
+from libre_panel.sensors.media import Track, load_cover, parse_playerctl
 from libre_panel.sensors.mqtt import readings_from_message, topic_matches
 
 # -- what is playing ---------------------------------------------------------------
@@ -32,7 +32,7 @@ def test_a_song_moves_on_while_it_plays():
     assert Track("playing", "Live", position=5.0, at=0).readings(9999)["media.position"].value
 
 
-def test_players_on_linux_and_macos():
+def test_players_on_linux():
     sep = "\x1f"
     line = sep.join(["Playing", "Band", "Song", "Album", "61000000", "200000000",
                      "file:///tmp/cover.png", "spotify"])  # fmt: skip
@@ -41,10 +41,6 @@ def test_players_on_linux_and_macos():
     assert song.source == "Spotify" and song.cover == "file:///tmp/cover.png"
     assert parse_playerctl("", 0) is None
     assert parse_playerctl(sep.join(["Stopped", "", "", "", "", "", "", "vlc"]), 0) is None
-    mac = parse_osascript(
-        sep.join(["paused", "Band", "Song", "Album", "12,5", "180.0", "", "Music"]), 0
-    )
-    assert (mac.state, mac.position, mac.duration, mac.cover) == ("paused", 12.5, 180.0, None)
 
 
 def test_covers_from_files(tmp_path):

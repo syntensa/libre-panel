@@ -50,6 +50,10 @@ ICON_NAMES = (
     "calendar",
     "home",
     "gamepad",
+    "usb",
+    "stick",
+    "phone",
+    "ssd",
     "weather",
 )
 
@@ -349,6 +353,41 @@ def _gamepad(pen: _Pen) -> None:
     pen.circle(17.5, 12.6, 0.9, fill=True)
 
 
+def _usb(pen: _Pen) -> None:
+    """The USB trident: a shaft with an arrow, a circle and a square on its branches."""
+    pen.line((12, 19), (12, 4.5))
+    pen.draw.polygon([pen.p(12, 1.8), pen.p(9, 6.4), pen.p(15, 6.4)], fill=pen.color)
+    pen.line((12, 14.5), (6.5, 11), (6.5, 8.5))
+    pen.circle(6.5, 7, 1.9, fill=True)
+    pen.line((12, 11.5), (17.5, 8.5), (17.5, 7.2))
+    pen.draw.rectangle([*pen.p(15.7, 3.9), *pen.p(19.3, 7.5)], fill=pen.color)
+    pen.circle(12, 20.2, 2.1, fill=True)
+
+
+def _stick(pen: _Pen) -> None:
+    """A USB stick: the plug above, the body below."""
+    pen.rect(8, 2, 16, 9, 1)
+    pen.circle(10.4, 5.7, 0.7, fill=True)
+    pen.circle(13.6, 5.7, 0.7, fill=True)
+    pen.rect(6, 9, 18, 22, 2.5)
+    pen.line((10, 18), (14, 18))
+
+
+def _phone(pen: _Pen) -> None:
+    pen.rect(6, 2, 18, 22, 2.5)
+    pen.line((10.5, 5.8), (13.5, 5.8))
+    pen.line((10.5, 18.2), (13.5, 18.2))
+
+
+def _ssd(pen: _Pen) -> None:
+    """An M.2 module: the board with its notch, two chips and the screw hole."""
+    pen.rect(2, 7.5, 22, 16.5, 1.5)
+    pen.line((2, 10.5), (4.5, 10.5), (4.5, 13.5), (2, 13.5))
+    pen.rect(7, 10, 11.5, 14, 0.6)
+    pen.rect(13, 10, 17.5, 14, 0.6)
+    pen.circle(20, 12, 0.9, fill=True)
+
+
 def _cloud_icon(pen: _Pen) -> None:
     pen.shape(lambda d, p: _cloud(d, p))
 
@@ -435,6 +474,10 @@ _ICONS: dict[str, Callable[[_Pen], None]] = {
     "calendar": _calendar,
     "home": _home,
     "gamepad": _gamepad,
+    "usb": _usb,
+    "stick": _stick,
+    "phone": _phone,
+    "ssd": _ssd,
 }
 
 

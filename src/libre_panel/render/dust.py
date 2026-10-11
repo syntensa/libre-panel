@@ -38,7 +38,7 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageChops
 
-from libre_panel.theme.model import DUST_SPEC
+from libre_panel.theme.model import LOOK_SPECS
 
 log = logging.getLogger(__name__)
 
@@ -233,7 +233,7 @@ class Canvas:
 class Dust:
     """The dust of one panel: its grains, the stock of sources, and the drawing.
 
-    ``config`` is the theme's validated ``look.dust`` (see ``DUST_SPEC``);
+    ``config`` is the theme's validated ``look.dust`` (see ``LOOK_SPECS``);
     ``colors`` its colours as RGB (none: the colour of the source). Everything
     random comes from generators seeded from ``seed``, so a seed and a sequence of
     times give the same dust.
@@ -253,7 +253,7 @@ class Dust:
         submit: Callable[[Callable[[], Any]], Future] | None = None,
     ) -> None:
         self.width, self.height = size
-        cfg = {**{k: v[1] for k, v in DUST_SPEC.items()}, "areas": [], **(config or {})}
+        cfg = {**{k: v[1] for k, v in LOOK_SPECS["dust"].items()}, "areas": [], **(config or {})}
         area = self.width * self.height
         self.count = (
             0 if cfg["count"] <= 0 else max(MIN_COUNT, round(cfg["count"] * area / REFERENCE_AREA))

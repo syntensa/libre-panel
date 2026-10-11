@@ -35,7 +35,7 @@ ELSEWHERE = ["load", "psutil"]
 
 def test_the_fast_load_source_comes_before_psutil_and_on_windows_so_does_the_hardware_one():
     assert default_providers("win32") == WINDOWS
-    assert default_providers("linux") == default_providers("darwin") == ELSEWHERE
+    assert default_providers("linux") == ELSEWHERE
     assert default_providers() == default_providers(sys.platform)  # this machine's
 
 
@@ -244,7 +244,7 @@ def fetch_of(answer):
 
 def test_doctor_says_nothing_about_sensors_where_psutil_has_them(isolated_home):
     assert doctor.sensors_check(None, "linux") is None
-    assert doctor.sensors_check(None, "darwin", fetch_of(OSError("never asked"))) is None
+    assert doctor.sensors_check(None, "linux", fetch_of(OSError("never asked"))) is None
 
 
 def test_doctor_says_plainly_that_librehardwaremonitor_does_not_answer(isolated_home):

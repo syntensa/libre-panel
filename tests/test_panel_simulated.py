@@ -77,7 +77,6 @@ def test_oversized_frames_are_refused_without_reconnecting(monkeypatch):
         ("win32", 16, "TURZX app"),
         ("linux", 13, "udev"),
         ("linux", 16, "in use"),
-        ("darwin", 16, "in use"),
         ("linux", 5, None),
     ],
 )

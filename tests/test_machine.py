@@ -64,7 +64,7 @@ def test_the_real_list_has_this_process_in_it():
 
 def test_which_window_is_in_front_is_known_on_windows_only():
     assert Machine("linux").foreground_pid() is None and not Machine("linux").has_foreground
-    assert Machine("darwin").foreground_name() is None
+    assert Machine("linux").foreground_name() is None
     assert Machine("win32").has_foreground
 
 

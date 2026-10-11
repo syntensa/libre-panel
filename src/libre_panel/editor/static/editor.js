@@ -8,7 +8,7 @@ const PALETTE_NAME_RE = /^[a-z][a-z0-9_-]{0,31}$/;
 const FORMAT_HINT = "{value:.0f}{unit} · {value:.1f} · {value:bytes}/s · {value:duration} · {label}";
 const POSITION_FIELDS = ["x", "y", "w", "h", "size"];
 const ADVANCED_FIELDS = ["id", "visible", "locked", "hide_if_missing"];
-const STEPS = { opacity: 0.05, glow: 0.05, stroke: 0.1 };
+const STEPS = { opacity: 0.05, glow: 0.05, stroke: 0.1, alpha: 0.05, strength: 0.05, sweep_seconds: 0.1 };
 const HISTORY_LIMIT = 200;
 
 const state = {
@@ -1060,7 +1060,9 @@ function hintFor(widget, key, kind) {
   if (key === "smooth" && widget.type === "metric") return t("the number glides between readings, together with the bars and rings of its sensor");
   if (key === "seconds" && widget.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = as long as the history readings take");
   if (key === "per_frame") return t("video mode: a point a pixel apart, as SPUR II draws its curves (seconds = width / 25)");
-  if (key === "finish") return t("facet: a flat top with a lit, bevelled rim (text from 20 px, bars from 6 px)");
+  if (key === "finish") {
+    return [t("lit: SPUR II's light on rings, bars, graph lines and weather icons; glow then sets their glow"), t("facet: a flat top with a lit, bevelled rim (text from 20 px, bars from 6 px)")].join(" · ");
+  }
   if (key === "max_rpm") return t("the speed at which the ring is full; the rotor turns the faster the closer it gets");
   return null;
 }
@@ -1097,6 +1099,7 @@ function buildProps() {
   form.append(el("div", { class: "quad" }, ...position.map(row)));
   const effects = state.specs.effect_fields;
   const main = Object.keys(spec).filter((k) => !POSITION_FIELDS.includes(k) && !ADVANCED_FIELDS.includes(k) && !effects.includes(k));
+  main.sort((a, b) => (b === "finish") - (a === "finish")); // how it is drawn comes first
   form.append(...main.map(row));
   const effectsActive = (widget.glow || 0) > 0 || !!widget.shadow || (widget.opacity ?? 1) < 1;
   form.append(el("details", { open: effectsActive }, el("summary", { text: t("Effects") }), el("div", { class: "fields" }, ...effects.map(row))));
@@ -1189,7 +1192,7 @@ function buildThemeProps(form) {
     field(t("background image"), assetInput(theme.background.image, set("bgimg", (v) => (theme.background.image = v || null)))),
     ...buildScreenFields(),
     ...buildModuleThemeFields(),
-    ...buildDustFields(),
+    ...buildLookFields(),
     el("h2", { class: "section-title", text: t("Palette") }),
     buildPaletteEditor(),
     el("h2", { class: "section-title", text: t("Timing") }),
@@ -1197,6 +1200,63 @@ function buildThemeProps(form) {
     field(t("smoothing (ms)"), numberInput(theme.animation.smoothing_ms, set("smooth", (v) => (theme.animation.smoothing_ms = Math.max(0, Math.min(5000, v ?? 0))))), t("how long bars, rings and gliding numbers take to a new value; 0 = jump")),
     ...buildToastFields(),
   );
+}
+
+// The panel's look after SPUR II (theme "look"): each block is on or off, its
+// fields come from the specs. A block a plugin version adds shows up the same way.
+const LOOK_HINTS = {
+  "grid:color": () => t("empty: the palette's grid colour, else a breath away from the background"),
+  "grid:major": () => t("every so many lines a stronger one; 0 = none"),
+  "light:sun": () => t("the sun where it stands at the weather place in config.toml; off, or without a place: noon"),
+  "light:frames": () => t("outlines of 2 px or more become ridges that catch the light"),
+  "light:color": () => t("the sweeps' tint; empty: the accent"),
+  "dust:count": () => t("on a 1920 × 480 panel; other sizes scale with their area"),
+  "dust:rate": () => t("how often the grains move; 25 is calm and cheap"),
+  "dust:depth": () => t("how far they fall; 0 = they hang where they are"),
+  "dust:strength": () => t("how bright they are"),
+};
+
+function buildLookFields() {
+  const theme = state.theme;
+  const blocks = state.specs.look || {};
+  const titles = { grid: t("Grid background"), light: t("Panel light"), dust: t("Depth dust") };
+  const about = {
+    grid: t("thin lines behind the widgets, as on SPUR II's screens"),
+    light: t("one light for the whole panel: it glints on frames and sweeps across at start, on the hour, on a new track and after a tube or entrance"),
+    dust: t("fine grains fall from the elements into the depth behind the panel; drawn in video mode and here, not on a panel that is sent pictures"),
+  };
+  const fields = [];
+  for (const [block, spec] of Object.entries(blocks)) {
+    const settings = theme.look?.[block];
+    const toggle = el("input", {
+      type: "checkbox",
+      checked: !!settings,
+      onchange: (event) => {
+        commit(`look:${block}`);
+        const look = { ...(theme.look || {}) };
+        if (event.target.checked) look[block] = Object.fromEntries(Object.entries(spec).map(([k, [, d]]) => [k, clone(d)]));
+        else delete look[block];
+        if (Object.keys(look).length) theme.look = look;
+        else delete theme.look;
+        buildProps();
+        scheduleRender();
+      },
+    });
+    fields.push(el("h2", { class: "section-title", text: titles[block] || fieldLabel(block) }));
+    fields.push(field(t("in this theme"), el("label", { class: "check" }, toggle, t("on")), about[block]));
+    if (!settings) continue;
+    const change = (key) => (value) => {
+      commit(`look:${block}:${key}`);
+      theme.look[block] = { ...theme.look[block], [key]: value };
+      scheduleRender();
+    };
+    for (const [key, [kind, fallback]] of Object.entries(spec)) {
+      const hint = LOOK_HINTS[`${block}:${key}`];
+      fields.push(field(fieldLabel(key), controlFor(key, kind, settings[key] ?? fallback, change(key)), hint ? hint() : null));
+    }
+    if (block === "dust") fields.push(...dustLists(settings, change));
+  }
+  return fields;
 }
 
 // The grid and the style of a theme with modules.
@@ -1240,47 +1300,26 @@ function buildModuleThemeFields() {
   ];
 }
 
-// The depth dust (look.dust). The model's table says which fields there are, what
-// they start at and how far they go; the form only draws them.
-function buildDustFields() {
-  const info = state.specs.dust;
-  if (!info) return [];
-  const dust = state.theme.look?.dust;
-  const edit = (key, apply) => (value) => {
-    commit(`dust:${key}`);
-    const look = (state.theme.look = state.theme.look || {});
-    look.dust = look.dust || { ...Object.fromEntries(Object.entries(info.fields).map(([k, [, d]]) => [k, d])), colors: [], areas: [] };
-    apply(look.dust, value);
-    scheduleRender();
-  };
-  const number = (key, label, hint, step) => {
-    const [low, high] = info.limits[key];
-    const value = dust ? dust[key] : info.fields[key][1];
-    const save = (d, v) => (d[key] = Math.max(low, Math.min(high, v ?? low)));
-    return field(label, numberInput(value, edit(key, save), { step, min: low, max: high }), hint);
-  };
+// The dust's two lists, which the specs do not carry as single values: its colours and
+// the areas that have dust or have none.
+function dustLists(dust, change) {
+  const limits = state.specs.look_limits?.dust || { colors: 8, areas: 64 };
   const names = Object.keys(state.theme.palette || {});
   const colour = (v) => /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v) || (v.startsWith("@") && names.includes(v.slice(1)));
   const colours = el("input", {
     type: "text",
-    value: (dust?.colors || []).join(", "),
+    value: (dust.colors || []).join(", "),
     placeholder: t("each from its element"),
     onchange: (event) => {
       const list = event.target.value.split(",").map((c) => c.trim()).filter(Boolean);
       const bad = list.find((c) => !colour(c));
-      if (bad || list.length > info.max_colors) return setStatus(t("Not a usable colour list: {text}", { text: bad || event.target.value }), "warn");
-      edit("colors", (d, v) => (d.colors = v))(list);
+      if (bad || list.length > limits.colors) return setStatus(t("Not a usable colour list: {text}", { text: bad || event.target.value }), "warn");
+      change("colors")(list);
     },
   });
   return [
-    el("h2", { class: "section-title", text: t("Dust") }),
-    field(t("depth dust"), controlFor("enabled", "bool", !!dust && dust.enabled, edit("enabled", (d, v) => (d.enabled = v))), t("fine grains fall from the elements into the depth behind the panel; drawn in video mode and here, not on a panel that is sent pictures")),
-    number("count", t("grains"), t("on a 1920 × 480 panel; other sizes scale with their area"), "1"),
-    number("rate", t("moves a second"), t("how often the grains move; 25 is calm and cheap"), "1"),
-    number("depth", t("depth"), t("how far they fall; 0 = they hang where they are"), "0.1"),
-    number("strength", t("strength"), t("how bright they are"), "0.1"),
     field(t("dust colours"), colours, t("empty: each grain takes the colour of the element it falls from; else #rrggbb or @name, separated by commas")),
-    field(t("dust areas"), areasInput(dust?.areas || [], (areas) => edit("areas", (d, v) => (d.areas = v))(areas), info.max_areas), t("rectangles; with a \"dust here\" area there is dust only inside, else everywhere but in a \"no dust\" area")),
+    field(t("dust areas"), areasInput(dust.areas || [], change("areas"), limits.areas), t("rectangles; with a \"dust here\" area there is dust only inside, else everywhere but in a \"no dust\" area")),
   ];
 }
 

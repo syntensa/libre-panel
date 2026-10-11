@@ -1,16 +1,18 @@
 """How fluid the themes are in video mode, measured headless.
 
-    python tools/motion_bench.py [theme ...] [--seconds 6] [--switch THEME]
+    python tools/motion_bench.py [theme ...] [--seconds 6] [--warmup 1] [--switch THEME]
                                  [--dust] [--finish facet] [--fans N]
 
 Each theme runs through the main loop (``MainLoop.step``) at 50 fps in real
 time, with demo readings, the helper thread and a streaming display in
-memory, as on a video panel. Prints how long a frame takes (median, 95th
-percentile, slowest), how many frames changed the first graph and how fast
-it moved, and how many frames changed a number between readings.
-``--switch`` shows another theme halfway and prints the longest gap between
-two frames around the switch. Times depend on the machine; tests check the
-motion only (tests/test_motion.py).
+memory, as on a video panel. Prints how long a frame takes after the first
+``--warmup`` seconds (median, 95th percentile, slowest), how many frames
+changed the first graph and how fast it moved, and how many frames changed
+a number between readings. With a panel light (theme ``look.light``) it
+also prints the frames a sweep of light ran over: the panel starts with
+one. ``--switch`` shows another theme halfway and prints the longest gap
+between two frames around the switch. Times depend on the machine; tests
+check the motion only (tests/test_motion.py).
 
 ``--dust`` (the theme's ``look.dust`` with its defaults), ``--finish facet``
 (every text, bar, gauge and graph of the theme in facets) and ``--fans N`` (N
@@ -105,29 +107,39 @@ def moved(before: list[int], after: list[int], most: int = 80) -> int:
     return min(range(most), key=lambda s: sum(abs(before[x + s] - after[x]) for x in range(span)))
 
 
+def sweeping(loop: MainLoop, now: float) -> bool:
+    """Whether a sweep of the panel light runs over the frame at ``now``."""
+    light = getattr(loop.renderer.look, "light", None)
+    return light is not None and bool(light.running(now))
+
+
 class Run:
     """A theme going through the main loop, with the frame times it takes."""
 
-    def __init__(self, theme: str) -> None:
+    def __init__(self, theme: str, warmup: float = 1.0) -> None:
         self.display, self.host = Stream(), PluginHost()
         config = Config(theme=theme, sensors=SensorsConfig(providers=["demo"]))
         hub = SensorHub([Demo({})])
         self.loop = MainLoop(config, host=self.host, hub=hub, display=self.display)
         self.display.boxes = boxes(self.loop)
         self.times: list[float] = []
+        self.swept: list[float] = []  # frames a sweep of light ran over, after the warm-up
+        self.warm = round(warmup * FPS)  # frames left out at the start
 
     def step(self, due: float) -> None:
         began = clock()
         self.loop.step(due)
         self.times.append((clock() - began) * 1000)
+        if len(self.times) > self.warm and sweeping(self.loop, due):
+            self.swept.append(self.times[-1])
 
     def close(self) -> None:
         self.loop.close()
         self.host.close()
 
     def steady(self) -> list[float]:
-        """The frame times from the second second on (past the first frame), sorted."""
-        return sorted(self.times[FPS:])
+        """The frame times past the warm-up, sorted."""
+        return sorted(self.times[self.warm :])
 
 
 def wait_for(due: float) -> None:
@@ -136,8 +148,8 @@ def wait_for(due: float) -> None:
         time.sleep(wait)
 
 
-def bench(theme: str, seconds: float, switch: str | None) -> None:
-    run = Run(theme)
+def bench(theme: str, seconds: float, switch: str | None, warmup: float = 1.0) -> None:
+    run = Run(theme, warmup)
     every = round(run.loop.theme.refresh_ms * FPS / 1000)
     start, asked = clock(), None
     try:
@@ -154,6 +166,10 @@ def bench(theme: str, seconds: float, switch: str | None) -> None:
     print(f"{theme}: frame median {statistics.median(steady):.1f} ms, "
           f"95% {steady[int(len(steady) * 0.95)]:.1f} ms, slowest {steady[-1]:.1f} ms "
           f"(first {times[0]:.0f} ms)")  # fmt: skip
+    swept = run.swept
+    if swept:
+        print(f"  light: a sweep over {len(swept)} frames, "
+              f"median {statistics.median(swept):.1f} ms, slowest {max(swept):.1f} ms")  # fmt: skip
     shown = [parts for t, parts in display.frames if asked is None or t < asked]
     if "graph" in display.boxes:
         crops = [parts["graph"].tobytes() for parts in shown[FPS:]]
@@ -171,11 +187,11 @@ def bench(theme: str, seconds: float, switch: str | None) -> None:
         print(f"  switch to {switch}: longest gap between frames {max(gaps[: 2 * FPS]):.0f} ms")
 
 
-def compare(plain: str, look: str, seconds: float, what: str) -> None:
+def compare(plain: str, look: str, seconds: float, what: str, warmup: float = 1.0) -> None:
     """``plain`` and ``look`` (the same theme with the look) side by side: every frame is
     drawn by both, one after the other (the one that goes first alternates), so the
     machine's mood is the same for both and what is left is the look's cost."""
-    runs = [Run(plain), Run(look)]
+    runs = [Run(plain, warmup), Run(look, warmup)]
     start = clock()
     try:
         for n in range(round(seconds * FPS)):
@@ -193,7 +209,8 @@ def compare(plain: str, look: str, seconds: float, what: str) -> None:
             f"95% {times[int(len(times) * 0.95)]:.1f} ms, slowest {times[-1]:.1f} ms"
         )
     # frame by frame: the same moment, with and without
-    diff = sorted(y - x for x, y in zip(runs[0].times[FPS:], runs[1].times[FPS:], strict=True))
+    warm = runs[0].warm
+    diff = sorted(y - x for x, y in zip(runs[0].times[warm:], runs[1].times[warm:], strict=True))
     print(
         f"  {what} adds {statistics.median(diff):.1f} ms to a frame at the median, "
         f"{statistics.mean(diff):.1f} ms on average, "
@@ -206,7 +223,7 @@ def variant(name: str, dust: bool, finish: str, fans: int) -> str:
     bench runs in); the new theme's name."""
     data = json.loads((find_theme(name) / "theme.json").read_text(encoding="utf-8"))
     if dust:
-        data["look"] = {"dust": True}
+        data["look"] = {**data.get("look", {}), "dust": True}
     if finish:
         for widget in data["widgets"]:
             if widget["type"] in FINISHED:
@@ -229,8 +246,9 @@ def variant(name: str, dust: bool, finish: str, fans: int) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("themes", nargs="*", default=["spur-ii", "studio"])
+    parser.add_argument("themes", nargs="*", default=["spur-ii", "studio", "lit-demo"])
     parser.add_argument("--seconds", type=float, default=6.0)
+    parser.add_argument("--warmup", type=float, default=1.0, help="seconds left out at the start")
     parser.add_argument("--switch", help="show this theme halfway and time the switch")
     parser.add_argument("--dust", action="store_true", help="also with the theme's look.dust")
     parser.add_argument("--finish", choices=["facet"], help="also with every shape finished so")
@@ -246,11 +264,11 @@ def main() -> None:
         home = tempfile.TemporaryDirectory()
         os.environ["LIBRE_PANEL_HOME"] = home.name
     for theme in args.themes:
-        bench(theme, args.seconds, args.switch)
+        bench(theme, args.seconds, args.switch, args.warmup)
         if looks:
             what = " + ".join(w for w, _ in looks)
             name = variant(theme, args.dust, args.finish or "", args.fans)
-            compare(theme, name, args.seconds, what)
+            compare(theme, name, args.seconds, what, args.warmup)
 
 
 if __name__ == "__main__":

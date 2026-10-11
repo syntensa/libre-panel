@@ -68,16 +68,15 @@ def pixels(image):
 
 
 def test_a_theme_without_look_has_no_dust():
-    assert theme().look is None
-    assert theme(look={}).look is None
-    assert theme(look={"dust": False}).look is None
+    assert theme().look == {}
+    assert theme(look={}).look == {}
+    assert theme(look={"dust": False}).look == {}
 
 
 def test_dust_true_is_all_defaults_and_round_trips():
     t = theme(look={"dust": True})
     assert t.look == {
         "dust": {
-            "enabled": True,
             "count": 1800,
             "rate": 25,
             "depth": 1.0,
@@ -108,7 +107,7 @@ def test_dust_settings_are_checked():
         {"count": -1}, {"count": 99999}, {"rate": 0}, {"depth": 9}, {"strength": "a lot"},
         {"colors": "red"}, {"colors": ["nope"]}, {"colors": ["@missing"]}, {"areas": {}},
         {"areas": [3]}, {"areas": [{"x": 0, "y": 0, "w": 0, "h": 5}]},
-        {"areas": [{"x": 0, "y": 0, "w": 5, "h": 5, "dust": "yes"}]}, {"enabled": 1},
+        {"areas": [{"x": 0, "y": 0, "w": 5, "h": 5, "dust": "yes"}]},
     ]  # fmt: skip
     for dust in bad:
         with pytest.raises(ThemeError, match="look.dust"):
@@ -144,7 +143,7 @@ def test_without_dust_nothing_of_it_runs(monkeypatch):
 
     monkeypatch.setattr(Dust, "__init__", boom)
     monkeypatch.setattr(Dust, "apply", boom)
-    for look in (None, {"dust": False}, {"dust": {"enabled": False}}):
+    for look in (None, {}, {"dust": False}):
         renderer = Renderer(theme(look=look), animate=True, preview=True)
         renderer.continuous = True
         frame_, _ = renderer.render(demo_snapshot(fixed_time=1_700_000_000), 1.0)

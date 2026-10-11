@@ -93,8 +93,10 @@ def test_nothing_happens_at_import():
     import sys
 
     code = (
-        "import gc, sys; before = gc.get_threshold(); import libre_panel.timing; "
-        "print(gc.get_threshold() == before, gc.get_freeze_count() == 0, 'ctypes' in sys.modules)"
+        "import gc, sys; before = gc.get_threshold(), gc.get_freeze_count(); "
+        "import libre_panel.timing; "
+        "print(gc.get_threshold() == before[0], gc.get_freeze_count() == before[1], "
+        "'ctypes' in sys.modules)"
     )
     result = subprocess.run(
         [sys.executable, "-c", code], capture_output=True, text=True, check=True

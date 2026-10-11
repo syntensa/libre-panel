@@ -11,7 +11,6 @@ libre-panel config path     # where it is
 | System | Location |
 |---|---|
 | Windows | `%APPDATA%\LibrePanel\config.toml` |
-| macOS | `~/Library/Application Support/LibrePanel/config.toml` |
 | Linux | `~/.config/libre-panel/config.toml` |
 
 Set `LIBRE_PANEL_HOME` to use another folder (portable installs). Changes to
@@ -90,7 +89,7 @@ sources you want in front of it.
 | `load` | `cpu.load` and `gpu.load`, measured ten times a second | CPU everywhere, GPU on Windows (any vendor) |
 | `psutil` | CPU, memory, drives, network, battery, the busiest programs; temperatures and fans where the system has them | everywhere |
 | `librehardwaremonitor` | temperatures, power, clocks and fans of CPU, GPU and mainboard | Windows (in its default list); the Windows downloads carry what it needs, see [below](#windows-sensors-gpu-power-fans) |
-| `audio` | `audio.volume` (0 while muted) and `audio.muted` (1 or 0) of the default output | Windows, Linux (`wpctl` or `pactl`), macOS |
+| `audio` | `audio.volume` (0 while muted) and `audio.muted` (1 or 0) of the default output | Windows, Linux (`wpctl` or `pactl`) |
 
 **Fast load** (`load`): `cpu.load` and, on Windows, `gpu.load` are measured in
 a background thread ten times a second and read on every frame, so bars and
@@ -122,7 +121,6 @@ in the default list; add it: `providers = ["load", "psutil", "audio"]`.
 - Linux: `wpctl` (PipeWire), else `pactl` (PulseAudio), asked four times a
   second. Without either tool installed there are no readings, and the log
   says so.
-- macOS: `osascript`, asked twice a second.
 - It runs only while a theme on the panel shows `audio.volume` or
   `audio.muted`.
 
@@ -136,15 +134,27 @@ the moon and what is playing come by themselves; the others are listed in
 needed. Sunrise and sunset need your place: `latitude` and `longitude` in
 `[weather]` (also when the weather itself is off).
 
-**What is playing** (`media.*` and the cover) is read only while a theme
-shows it:
+**What is playing** (`media.*`, the cover and the icon of the player) is read
+only while a theme or a service reads it:
 
 - Windows: the media controls of Windows, whatever the volume pop-up shows
-  (Spotify, browsers, media players). The installer brings what it needs; a
-  pip install needs `pip install "libre-panel[media]"`.
+  (Spotify, browsers, media players). Windows reports a new track, a pause or
+  another player at once, so the panel follows without delay; a look every
+  five seconds is only the safety net, and the position moves on by itself in
+  between. The cover is read when the track changes. The installer brings what
+  it needs; a pip install needs `pip install "libre-panel[media]"`.
 - Linux: any MPRIS player through `playerctl` (install it from your
-  distribution).
-- macOS: Spotify or Music.
+  distribution), asked once a second.
+
+Two pictures go with it, for an image widget (`"src": "@media.cover"`):
+`media.cover`, the album cover, and `media.app_icon`, the icon of the program
+that plays. The icon is found once per program, never sent anywhere, and the
+notices service puts it on the cover of its "Now playing" message:
+
+- Windows: the logo of a Store app (from its package), else the icon of the
+  program that runs under the name Windows gives the player.
+- Linux: the PNG that the player's desktop entry names; a player whose icon
+  exists only as an SVG has none.
 
 **Calendars** (`calendar.*`): the secret address of a calendar (Google:
 settings of the calendar → "Secret address in iCal format"; Outlook:
@@ -196,11 +206,12 @@ units = { "home/+/temperature" = "°C" }
 
 **Game frame rate** (`game.*`, Windows): Intel's
 [PresentMon](https://github.com/GameTechDev/PresentMon/releases) counts the
-frames of the game you play. Download its console version (MIT license) and
-name it; Libre Panel starts it only while a theme shows the frame rate and
-stops it a minute after. PresentMon needs administrator rights or your
-account in the "Performance Log Users" group (Computer Management → Local
-Users and Groups → Groups; sign out and in again).
+frames of the game you play. It listens to what Windows reports about the
+frames it shows: nothing is put into the game, nothing hooks it, there is no
+overlay. Download its console version (MIT license) and name it. PresentMon
+needs administrator rights or your account in the "Performance Log Users"
+group (Computer Management → Local Users and Groups → Groups; sign out and in
+again).
 
 ```toml
 [sensors]
@@ -209,6 +220,31 @@ providers = ["load", "librehardwaremonitor", "psutil", "presentmon"]
 [sensors.presentmon]
 path = "C:/Tools/PresentMon-2.3.0-x64.exe"
 ```
+
+| Reading | |
+|---|---|
+| `game.fps` | frames per second over the last second |
+| `game.frametime` | the mean frame time over the last second, in ms |
+| `game.low` | the 1 % lows: the frame rate of the slowest hundredth of the last 30 s |
+| `game.frametime_peak` | the longest frame time since the last reading, in ms. A stutter of 60 ms between two readings shows in the next one even though the readings are a second apart. It is there all the time a game runs (0 when no frame came), so a graph of it never stops |
+| `game.limiter` | `cpu`, `gpu` or `cap`: who holds the frame rate down. It is judged from how long each side waits for the other, not from the load: the CPU if the GPU waits longer for it than it waits for the GPU, the GPU in the other case, and `cap` when neither waits much and both work much less than a frame takes (a frame rate limit, or vertical sync). Needs PresentMon 2 |
+| `game.app` | the program |
+
+- **When it runs.** PresentMon runs while a theme on the panel shows `game.*`
+  readings, or the `game` service is on (see [Game mode](#game-mode)), and
+  ends a minute after neither is. The recording session has to exist
+  *before* the game starts: the anti-cheat of some games refuses a new
+  session while the game runs, but leaves one that is already running alone.
+  That is why the service keeps it running, and why a theme that shows
+  `game.*` only once the game runs may miss those games.
+- **Which program counts.** With the `game` service, the program it found;
+  otherwise the program with the most frames. The desktop compositor and known
+  overlays never count.
+- **If it cannot start.** Without administrator rights or the group it ends at
+  once, and the log says so once; Libre Panel tries again with growing pauses
+  (up to a minute). While a game with an anti-cheat runs, it tries every 15
+  seconds, and the frame rates are there again when the game is over. PresentMon
+  is stopped with Libre Panel, also if Libre Panel is killed.
 
 Show these readings with the Dashboard module (`ha.sensor.living_room_temperature
 = Living room`, one per line), a list, or any widget with a `sensor`.
@@ -326,13 +362,13 @@ theme = "slate"        # optional: another theme
   matter; `name = A Better Name` sets the name to show), and with `steam` any
   program of a game installed through Steam. Steam's libraries are found
   from its own files (`libraryfolders.vdf`, `appmanifest_*.acf`), on Windows,
-  Linux (also Flatpak and Snap) and macOS. Tools in a library, such as Proton,
+  Linux (also Flatpak and Snap). Tools in a library, such as Proton,
   the Steam Linux Runtime or SteamVR, are not games; `ignore` adds more.
   Windows programs under Wine and Proton are found by the folder they work in.
 - **The window in front.** On Windows a Steam game counts only once its window
   has been in front, because a library also holds programs that run all day (a
-  wallpaper). Where Libre Panel cannot tell which window is in front (Linux,
-  macOS), a running program of a Steam game is enough.
+  wallpaper). Where Libre Panel cannot tell which window is in front (Linux),
+  a running program of a Steam game is enough.
 - **The beginning.** The service shows the name (`game.name`) and the logo
   (`game.logo`, an image: `"src": "@game.logo"` in an image widget) to the
   screens, then switches. The logo comes from Steam's picture cache, cut out
@@ -348,8 +384,10 @@ theme = "slate"        # optional: another theme
 - `force = true` keeps the mode on, which is how to try the game screens;
   `automatic = false` with `force = false` does nothing. A game that runs
   while `force` is on is named.
-- The frame rate of the game (`game.fps`) comes from the `presentmon` source,
-  which is a separate setting.
+- The frame rate of the game (`game.fps` and the other `game.*` readings) comes
+  from the `presentmon` source, which is a separate setting
+  ([above](#more-sensor-sources)). While this service is on it keeps PresentMon
+  running, ready before the game starts, and tells it which program is the game.
 
 ### Autopilot
 
@@ -422,6 +460,64 @@ when = { time = "22:00-06:30" }        # may cross midnight
 - Rules are read when the service starts: change `config.toml` and it restarts
   by itself.
 
+### Devices
+
+Short messages when a drive, a USB device or a game controller comes or goes,
+when a controller's battery runs low, when a drive is nearly full and when an
+SSD runs hot. Windows only: elsewhere the service starts, says so in the log
+and does nothing.
+
+```toml
+[services]
+enabled = ["devices"]
+
+[services.devices]
+drives = true          # removable drives, and drives on a USB, SD or MMC bus
+usb = true             # USB devices that plug in directly: phones, adapters, ...
+controllers = true     # game controllers (Xbox and compatible), with their battery
+storage = true         # free space and SSD temperature of the fixed drives, every minute
+# usb_ignore = ["1a86:7523"]  # USB devices to say nothing about, as VID:PID
+min_free_gb = 25       # "nearly full" below this much free space, or below...
+min_free_percent = 5   # ...this share of the drive, whichever is more
+# ssd_warn_c = 70      # "hot" from this temperature (default: the drive's own limit, else 70)
+```
+
+| What | When | The message |
+|---|---|---|
+| a drive | a removable drive, or a drive on a USB, SD or MMC bus, comes or goes | "USB Flash Drive · 20 GB free of 30 GB", titled "USB drive E:", with a bar for how full it is |
+| a controller | it connects, disconnects, or its battery runs low | "Connected · Battery full", "Disconnected", or "Battery low" (a warning), titled "Controller · player 1" |
+| a USB device | one that is no hub, no storage and no Xbox controller comes or goes | its name; a phone shows a phone and its maker |
+| a full drive | free space falls below the limit | "Only 20 GB free" with a bar; an error when less than a third of the limit is left |
+| a hot SSD | a fixed drive reaches its temperature limit | "88 °C · limit 70 °C" with a bar; an error from the drive's critical temperature |
+
+Drives, controllers and USB devices are messages of the kind `device`
+(`"toast": {"off": ["device"]}` switches them off in a theme), and each has a
+drawn icon (`stick`, `gamepad`, `phone`, `usb`). Full drives and hot SSDs are
+warnings like those of the notices service (kind `warning`).
+
+- **Only changes.** What is plugged in when the service starts is no news, so a
+  controller that has been connected for hours does not pop up at every start.
+  Four changes at once (the computer woke up, a hub reset) are taken in
+  silently too. A controller is told once it has stood there a moment, and one
+  that comes and goes at once is not told at all.
+- **One message for a stick.** A USB stick is a drive and a USB device; it is
+  told once, as a drive. Hubs, mass storage and Xbox controllers are not told as
+  USB devices, and neither is any panel Libre Panel drives: its own USB device
+  never makes a message (`usb_ignore` adds more).
+- **When it looks.** Windows reports every device that comes or goes and the
+  service looks at once; a look every ten seconds catches what was missed, and
+  where Windows does not report (before Windows 8) it looks every two seconds.
+  Controllers' batteries and the storage (once a minute) are looked at on a
+  clock. The first look at the storage can already find a full drive; that is
+  told once.
+- **Told once.** A full drive is told again only after its free space has risen
+  more than 20 % above the limit; a hot SSD only after it has been 5 °C below
+  its limit, or when it gets worse (from "hot" to critical). A battery is told
+  when it reaches "low" and not again until it was "medium" or "full" in between.
+- **It only looks.** A drive is asked with no access rights at all, so nothing is
+  read off the disk; USB devices are read from the system's own list and never
+  opened; nothing is written, and nothing is sent anywhere.
+
 ## Language
 
 Libre Panel speaks English and German. `language = "auto"` follows the
@@ -452,9 +548,9 @@ local_clip = "usr/data/standby.h264"
 ```
 
 - **ffmpeg** encodes the video. Install it (Windows: `winget install ffmpeg`;
-  macOS: `brew install ffmpeg`; Linux: the `ffmpeg` package), or set
-  `ffmpeg = "C:/path/to/ffmpeg.exe"`. It must include libx264, which the
-  usual builds do. It uses one CPU core, lightly.
+  Linux: the `ffmpeg` package), or set `ffmpeg = "C:/path/to/ffmpeg.exe"`. It
+  must include libx264, which the usual builds do. It uses one CPU core,
+  lightly.
 - **`local_clip`** is the name the panel's video start command carries: the
   clip the panel plays by itself while the PC is off, if it has one (vendor
   app: standby video) and the mainboard keeps USB powered then. The command

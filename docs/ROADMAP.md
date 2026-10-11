@@ -17,9 +17,9 @@ first. Each hardware step needs a tester with the panel.
       [turzx-usb.md](protocol/turzx-usb.md)); needs `ffmpeg`
 - [x] Plugin API 1: services, modes, screens, widgets, toasts, transitions,
       sensor sources, themes, editor pages ([PLUGINS.md](PLUGINS.md))
-- [x] Tray app with autostart; Windows setup, macOS disk image, Linux AppImage
+- [x] Tray app with autostart; Windows setup, Linux AppImage
 - [x] English and German
-- [x] First release: Windows/Linux/macOS downloads (see RELEASING.md)
+- [x] First release: Windows/Linux downloads (see RELEASING.md)
 - [ ] PyPI
 - [ ] `doctor` passed on the 9.2" (then: status "supported") and at least one other V1.x size
 
@@ -46,8 +46,8 @@ first. Each hardware step needs a tester with the panel.
 
 ## 0.4 — for everyone
 
-- [ ] Signed downloads (Windows SignPath, macOS notarization)
-- [ ] Packages: Flatpak, Homebrew, winget
+- [ ] Signed downloads (Windows SignPath)
+- [ ] Packages: Flatpak, winget
 - [ ] Editor and default labels in more languages
 - [ ] Theme gallery (import by link)
 

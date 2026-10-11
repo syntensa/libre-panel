@@ -1,6 +1,6 @@
 """Tray icon for the background app.
 
-Windows and macOS get the full menu. On Linux, pystray uses AppIndicator when
+Windows gets the full menu. On Linux, pystray uses AppIndicator when
 PyGObject is installed (full menu) and plain X11 tray icons otherwise, which
 only know a click: it opens the editor, which has the same controls (pause,
 brightness, start with system, quit). Without any tray the app keeps running
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -63,13 +64,13 @@ def load_pystray() -> Any:
 
 
 def open_path(path: Path) -> None:
-    """Show a file or folder with the system's default program."""
+    """Show a file or folder with the system's default program (Windows, or ``xdg-open``)."""
     if sys.platform == "win32":
         os.startfile(path)  # noqa: S606 - a local path chosen by the program
-    elif sys.platform == "darwin":
-        subprocess.Popen(["open", str(path)])
-    else:
+    elif shutil.which("xdg-open"):
         subprocess.Popen(["xdg-open", str(path)])
+    else:
+        raise OSError(t("Opening a file or folder is not supported on this system: no xdg-open."))
 
 
 class Tray:
@@ -187,14 +188,7 @@ class Tray:
         """Remove the icon once no update is under way."""
         with self._lock:
             self._stopped = True
-        if self.icon is None:
-            return
-        if sys.platform == "darwin" and threading.current_thread() is not threading.main_thread():
-            # AppKit ends its event loop reliably only when asked on the main thread.
-            from PyObjCTools import AppHelper
-
-            AppHelper.callAfter(self.icon.stop)
-        else:
+        if self.icon is not None:
             self.icon.stop()
 
     def refresh(self) -> None:
@@ -239,7 +233,7 @@ class Tray:
             self.refresh()
 
     def run(self) -> None:
-        """Show the icon; blocks until Quit (must run on the main thread for macOS)."""
+        """Show the icon; blocks until Quit."""
         state = self.app.panel.state()
         self.icon = self.pystray.Icon(
             "libre-panel", logo(64, state["state"]), tooltip(state), self.build_menu()

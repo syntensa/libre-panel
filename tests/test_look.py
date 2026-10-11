@@ -1,0 +1,515 @@
+"""The look of a theme: finishes (render.finish, render.lit, render.light3d)
+and the panel's look block (render.look: grid, panel light)."""
+
+import os
+import sys
+from datetime import UTC, datetime
+
+import numpy as np
+import pytest
+from PIL import Image
+
+from libre_panel.config import config_dir
+from libre_panel.render import finish as finishes
+from libre_panel.render import light3d, lit
+from libre_panel.render.finish import Finish, register
+from libre_panel.render.light import sun_position
+from libre_panel.render.look import LightEdge, Sweeps, grid_image, ridge_normals
+from libre_panel.render.renderer import Piece, Renderer, changed_region
+from libre_panel.sensors.base import Reading, Snapshot
+from libre_panel.sensors.demo import demo_snapshot
+from libre_panel.theme.model import (
+    LOOK_SPECS,
+    THEME_FORMAT,
+    ThemeError,
+    builtin_themes_dir,
+    load_theme,
+    parse_theme,
+)
+
+NOON = datetime(2024, 3, 20, 12, 0, tzinfo=UTC)
+
+
+def theme_of(widgets, look=None, size=(480, 320), **extra):
+    data = {
+        "format": THEME_FORMAT,
+        "name": "look test",
+        "display": {"width": size[0], "height": size[1]},
+        "background": {"color": "#0A1119"},
+        "widgets": widgets,
+        **extra,
+    }
+    if look is not None:
+        data["look"] = look
+    return parse_theme(data)
+
+
+def snap(load=60.0, now=NOON, **readings):
+    found = {"cpu.load": Reading("cpu.load", load, "%")}
+    found.update({key: Reading(key, value) for key, value in readings.items()})
+    return Snapshot(readings=found, now=now)
+
+
+def lit_widgets(finish="lit"):
+    track = {"color": "#22D3EE", "background": "#162332", "sensor": "cpu.load", "finish": finish}
+    return [
+        {"type": "gauge", "id": "ring", "x": 10, "y": 10, "w": 80, "h": 80, "thickness": 10,
+         **track},
+        {"type": "bar", "id": "bar", "x": 110, "y": 20, "w": 200, "h": 14, "glow": 1.0, **track},
+        {"type": "bar", "id": "up", "x": 330, "y": 10, "w": 14, "h": 120, "direction": "up",
+         **track},
+        {"type": "graph", "id": "graph", "x": 10, "y": 150, "w": 300, "h": 100,
+         "sensor": "cpu.load", "color": "#22D3EE", "glow": 1.0, "finish": finish},
+        {"type": "icon", "id": "sky", "x": 380, "y": 170, "icon": "weather", "size": 64,
+         "color": "#D8E2F0", "finish": finish},
+    ]  # fmt: skip
+
+
+def history(load=60.0):
+    found = snap(load)
+    found.history["cpu.load"] = [20 + 30 * np.sin(i / 9) ** 2 for i in range(120)]
+    found.readings["weather.code"] = Reading("weather.code", 3)  # overcast: clouds
+    return found
+
+
+# -- finishes ---------------------------------------------------------------------------
+
+
+def test_lit_widgets_keep_their_place_and_size_but_not_their_look():
+    flat, lit_ = theme_of(lit_widgets("flat")), theme_of(lit_widgets())
+    assert lit_.warnings == []
+    a, flat_boxes = Renderer(flat).render(history(), 0.0)
+    b, lit_boxes = Renderer(lit_).render(history(), 0.0)
+    assert lit_boxes == flat_boxes
+    for wid in ("ring", "bar", "up", "graph", "sky"):
+        x, y, w, h = lit_boxes[wid]
+        box = (x, y, x + w, y + h)
+        assert changed_region(a.crop(box), b.crop(box)) is not None, wid
+
+
+def test_a_lit_bar_is_brightest_at_its_head():
+    theme = theme_of([lit_widgets()[1]])  # 200 px from x 110, half full: its head at x 210
+    frame, _ = Renderer(theme).render(snap(50.0), 0.0)
+    light = np.asarray(frame.convert("L"), np.int16)
+    bar, beside = light[27], light[15]  # its middle, and 5 px above it
+    assert bar[195:210].max() > bar[120:150].mean() + 15  # the head runs towards white
+    assert beside[195:210].max() > 1.6 * beside[120:150].mean()  # its glow rises to the head
+    assert bar[230:300].max() < bar[120:150].mean()  # past the head: the dark groove
+
+
+def test_too_small_for_depth_is_drawn_flat():
+    thin = [{**lit_widgets()[1], "h": light3d.MIN_BAR - 1}, {**lit_widgets()[4], "size": 12}]
+    flat = [{**widget, "finish": "flat"} for widget in thin]
+    a, _ = Renderer(theme_of(thin)).render(history(), 0.0)
+    b, _ = Renderer(theme_of(flat)).render(history(), 0.0)
+    assert changed_region(a, b) is None
+
+
+def test_a_finish_a_type_does_not_have_is_drawn_flat_with_one_warning():
+    widgets = [
+        {"type": "text", "id": "a", "x": 10, "y": 10, "text": "CPU", "finish": "lit"},
+        {"type": "text", "id": "b", "x": 10, "y": 40, "text": "GPU", "finish": "lit"},
+        {"type": "metric", "id": "m", "x": 10, "y": 70, "sensor": "cpu.load", "finish": "lit"},
+        {"type": "icon", "id": "i", "x": 100, "y": 10, "icon": "cpu", "finish": "lit"},
+    ]
+    theme = theme_of(widgets)
+    assert theme.warnings == [
+        "finish 'lit' is not available for text; drawn flat",
+        "finish 'lit' is not available for metric; drawn flat",
+        "finish 'lit' is not available for the icon 'cpu'; drawn flat",
+    ]
+    flat = theme_of([{**widget, "finish": "flat"} for widget in widgets])
+    a, _ = Renderer(theme).render(snap(), 0.0)
+    b, _ = Renderer(flat).render(snap(), 0.0)
+    assert changed_region(a, b) is None
+    assert Renderer(theme)._finishes == {}
+
+
+def test_a_registered_finish_draws_its_types(monkeypatch):
+    monkeypatch.setattr(finishes, "_REGISTERED", dict(finishes._REGISTERED))
+    edge = LightEdge.ridge(np.ones((4, 40)), 10, 60)
+
+    class Stamp(Finish):
+        name = "stamp"
+        types = ("text",)
+
+        def draw(self, renderer, widget, snapshot, now):
+            renderer.add_light_edge(edge)
+            return Piece(Image.new("RGBA", (40, 20), (255, 0, 0, 255)), widget["x"], widget["y"])
+
+    register(Stamp())
+    theme = theme_of(
+        [{"type": "text", "id": "t", "x": 10, "y": 10, "text": "CPU"}], look={"light": {}}
+    )
+    theme.widgets[0]["finish"] = "stamp"  # names outside the theme format: plugins' code
+    renderer = Renderer(theme)
+    frame, boxes = renderer.render(snap(), 0.0)
+    assert frame.getpixel((30, 20)) == (255, 0, 0)
+    assert boxes["t"] == [10, 10, 40, 20]
+    assert renderer.light_edges == [edge] and renderer.edge_owners[id(edge)] == "t"
+
+
+def test_modules_hand_their_finish_to_their_parts():
+    data = {
+        "format": THEME_FORMAT,
+        "name": "modules",
+        "display": {"model": "turing-9.2-usb", "orientation": "landscape"},
+        "widgets": [{"type": "module", "id": "w", "module": "weather", "finish": "lit"}],
+    }
+    renderer = Renderer(parse_theme(data))
+    icons = [w for w in renderer.widgets if w["type"] == "icon"]
+    assert icons and all(w["finish"] == "lit" for w in icons)
+    assert all(isinstance(renderer._finishes[w["id"]], lit.LitIcon) for w in icons)
+    texts = [w for w in renderer.widgets if w["type"] == "weather"]
+    assert texts and all(w["id"] not in renderer._finishes for w in texts)
+
+
+def test_a_theme_without_a_look_pays_nothing_for_it():
+    theme = theme_of(lit_widgets("flat"))
+    renderer = Renderer(theme)
+    assert renderer.look is None and renderer._finishes == {} and not renderer.prepares
+
+
+# -- light layers ---------------------------------------------------------------------
+
+
+def test_a_colour_is_coloured_once_per_step(monkeypatch):
+    lit._PICTURES.clear()
+    built = []
+    real = light3d.Bar.image
+
+    def image(self, *args, **kwargs):
+        built.append(1)
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(light3d.Bar, "image", image)
+    bar = lit_widgets()[1]
+    theme = theme_of([bar, {**bar, "id": "twin", "y": 60}])
+    renderer = Renderer(theme)
+    renderer.render(snap(40.0), 0.0)
+    assert len(built) == 2  # the groove and the value: once for both bars
+    Renderer(theme).render(snap(40.0), 0.0)  # another renderer, the same colour and step
+    assert len(built) == 2
+    renderer.render(snap(70.0), 1.0)
+    assert len(built) == 3  # a new step: its value, the groove stays
+
+
+def test_kept_pictures_stay_within_their_budget():
+    kept = light3d.Kept(budget=3 * 1000)
+    made = []
+
+    def make(n):
+        def build():
+            made.append(n)
+            return np.zeros(1000, np.uint8)
+
+        return build
+
+    for n in (1, 2, 3, 1):
+        kept.get(n, make(n))
+    assert made == [1, 2, 3]
+    kept.get(4, make(4))  # over the budget: the least recently used (2) goes
+    kept.get(1, make(1))
+    kept.get(2, make(2))
+    assert made == [1, 2, 3, 4, 2]
+
+
+def fake_layers(folder, stems):
+    folder.mkdir(parents=True)
+    for stem in stems:
+        for layer in light3d.LAYERS:
+            Image.new("RGBA", (8, 8), (128, 128, 128, 255)).save(folder / f"{stem}_{layer}.png")
+
+
+def test_layers_are_kept_as_npz_and_prepared_again_when_a_source_is_newer(tmp_path):
+    fake_layers(tmp_path / "probe", ("a", "b"))
+    builds = []
+
+    def build(folder):
+        builds.append(folder)
+        return {"table": np.arange(len(builds) * 4, dtype=np.float32)}
+
+    part = light3d.Part("probe", ("a", "b"), build, tmp_path)
+    first = part.get()
+    assert builds == [tmp_path / "probe"]
+    assert part.cache == config_dir() / "cache" / "light3d" / "probe.npz" and part.cache.is_file()
+    again = light3d.Part("probe", ("a", "b"), build, tmp_path).get()  # the next start
+    assert len(builds) == 1 and np.array_equal(again["table"], first["table"])
+
+    source = tmp_path / "probe" / "b_gloss.png"
+    older = source.stat().st_mtime - 100  # the cache from before a source changed
+    os.utime(part.cache, (older, older))
+    rebuilt = light3d.Part("probe", ("a", "b"), build, tmp_path).get()
+    assert len(builds) == 2 and rebuilt["table"].size == 8
+    assert light3d.Part("probe", ("a", "b"), build, tmp_path).get()["table"].size == 8
+
+    stale = light3d.Part("probe", ("a", "b"), build, tmp_path)
+    stale.VERSION = light3d.Part.VERSION + 1  # an older format in the cache: prepared again
+    stale.get()
+    assert len(builds) == 3
+
+
+def test_missing_layers_draw_flat(tmp_path):
+    part = light3d.Part("gone", ("a",), lambda folder: {"x": np.zeros(1)}, tmp_path)
+    assert part.get() is None and part.loaded
+
+
+def test_a_warmed_up_renderer_loads_no_layers_in_its_first_frame(monkeypatch):
+    loads = []
+    real = light3d.Part._load
+
+    def load(self):
+        loads.append(self.name)
+        return real(self)
+
+    monkeypatch.setattr(light3d.Part, "_load", load)
+    for part in light3d.PARTS.values():
+        part.reset()
+    lit._PICTURES.clear()
+    lit._RINGS.clear()
+    renderer = Renderer(theme_of(lit_widgets(), look={"grid": {}, "light": {}}))
+    assert renderer.prepares
+    renderer.warm(None, 0.0)
+    assert sorted(loads) == ["bar", "ring", "weather"]
+    loads.clear()
+    renderer.render(history(), 0.0)
+    assert loads == []
+
+    for part in light3d.PARTS.values():
+        part.reset()
+    Renderer(theme_of(lit_widgets())).render(history(), 0.0)  # not warmed up: in the frame
+    assert sorted(loads) == ["bar", "ring", "weather"]
+
+
+# -- the look block ---------------------------------------------------------------------
+
+
+def test_look_blocks_are_off_unless_named_and_take_their_defaults():
+    assert theme_of([]).look == {}
+    theme = theme_of([], look={"grid": True, "light": {"strength": 1.5}})
+    assert theme.look["grid"] == {key: spec[1] for key, spec in LOOK_SPECS["grid"].items()}
+    assert theme.look["light"]["strength"] == 1.5
+    assert theme.look["light"]["sweep_seconds"] == LOOK_SPECS["light"]["sweep_seconds"][1]
+    assert theme_of([], look={"grid": False, "light": None}).look == {}
+    assert theme.warnings == []
+
+
+def test_unknown_look_blocks_and_fields_warn_and_are_kept():
+    theme = theme_of([], look={"mist": {"amount": 3}, "grid": {"spacing": 10, "glitter": 1}})
+    assert theme.warnings == [
+        "look: ignoring unknown block 'mist'",
+        "look.grid: ignoring unknown field 'glitter'",
+    ]
+    assert theme.look["mist"] == {"amount": 3}  # a later version's: saved as it came
+    assert theme.to_dict()["look"]["mist"] == {"amount": 3}
+    again = parse_theme(theme.to_dict())
+    assert again.look == theme.look
+
+
+@pytest.mark.parametrize(
+    ("look", "message"),
+    [
+        ({"grid": {"spacing": 1}}, "look.grid.spacing: must be between 2 and 400"),
+        ({"grid": {"alpha": 1.5}}, "look.grid.alpha: must be between 0 and 1"),
+        ({"light": {"sweep_seconds": 0.1}}, "look.light.sweep_seconds: must be between"),
+        ({"light": {"strength": -1}}, "look.light.strength: must be between 0 and 2"),
+        ({"light": {"color": "@nowhere"}}, "look.light.color"),
+        ({"grid": "on"}, "look.grid must be an object"),
+        ("grid", "look must be an object"),
+    ],
+)
+def test_bad_look_settings_are_refused(look, message):
+    with pytest.raises(ThemeError, match=message):
+        theme_of([], look=look)
+
+
+def test_the_grid_lies_on_the_backdrop_under_the_widgets():
+    backdrop = {"type": "rect", "id": "back", "w": 480, "h": 320, "color": "#101820"}
+    card = {"type": "rect", "id": "card", "x": 200, "y": 100, "w": 100, "h": 100}
+    card["color"] = "#405060"
+    theme = theme_of([backdrop, card], look={"grid": {"spacing": 10, "major": 4}},
+                     palette={"grid": "#182430", "grid_major": "#24384C"})  # fmt: skip
+    frame, _ = Renderer(theme).render(snap(), 0.0)
+    assert frame.getpixel((10, 5)) == (0x18, 0x24, 0x30)  # a line
+    assert frame.getpixel((40, 5)) == (0x24, 0x38, 0x4C)  # every fourth: stronger
+    assert frame.getpixel((15, 15)) == (0x10, 0x18, 0x20)  # between the lines: the backdrop
+    assert frame.getpixel((210, 110)) == (0x40, 0x50, 0x60)  # the card covers it
+
+
+def test_grid_colours_come_from_the_background_without_a_palette():
+    image = grid_image((40, 40), 8, 2, (20, 20, 20, 255), (40, 40, 40, 255))
+    pixels = np.asarray(image)
+    assert pixels[3, 8, 0] == 20 and pixels[3, 16, 0] == 40 and pixels[3, 3, 3] == 0
+    theme = theme_of([], look={"grid": {}})
+    frame, _ = Renderer(theme).render(snap(), 0.0)
+    line, ground = frame.getpixel((8, 3)), frame.getpixel((3, 3))
+    assert line != ground and max(abs(a - b) for a, b in zip(line, ground, strict=True)) < 40
+
+
+# -- the panel light --------------------------------------------------------------------
+
+
+FRAME = {"type": "rect", "id": "frame", "x": 40, "y": 40, "w": 400, "h": 240, "color": None,
+         "outline": "#3A4A5C", "outline_width": 4}  # fmt: skip
+
+
+def test_ridges_are_mitred_and_flat_in_their_middle():
+    mask = np.zeros((9, 9))
+    mask[0:3, :] = 1  # a rail three points thick
+    normals = ridge_normals(mask)
+    assert normals[0, 4, 1] < 0 and normals[2, 4, 1] > 0  # up and down from the middle
+    assert tuple(normals[1, 4]) == (0.0, 0.0, 1.0)  # the middle faces the viewer
+    assert not normals[5:].any()
+
+
+def test_frames_become_ridges_whose_gloss_lies_on_them():
+    theme = theme_of([FRAME, {**FRAME, "id": "thin", "outline_width": 1}], look={"light": {}})
+    renderer = Renderer(theme)
+    frame, _ = renderer.render(snap(), 0.0)
+    assert [renderer.edge_owners[id(edge)] for edge in renderer.light_edges] == ["frame"]
+    ids = [wid for wid, _ in renderer._last[0]]
+    assert ids[ids.index("frame") + 1].startswith("\0light")  # right on its frame
+    plain, _ = Renderer(theme_of([FRAME])).render(snap(), 0.0)
+    assert changed_region(frame, plain) is not None
+
+
+def test_the_sun_comes_from_where_it_stands():
+    theme = theme_of([FRAME], look={"light": {}})
+    renderer = Renderer(theme)
+    light = renderer.look.light
+    assert light.fixed(NOON.timestamp())[0][0][0] == 240  # no place: noon, in the middle
+    renderer.place = (0.0, 0.0)
+    morning = datetime(2024, 3, 20, 8, 0, tzinfo=UTC).timestamp()
+    evening = datetime(2024, 3, 20, 16, 0, tzinfo=UTC).timestamp()
+    night = datetime(2024, 3, 20, 0, 0, tzinfo=UTC).timestamp()
+    assert sun_position(morning, 0.0, 0.0)[0] < 180 < sun_position(evening, 0.0, 0.0)[0]
+    assert light.fixed(morning)[0][0][0] < 240 < light.fixed(evening)[0][0][0]
+    [(_position, colour, _strength, _kind)] = light.fixed(night)
+    assert colour[2] > colour[0]  # the night light is cool
+
+
+def test_sweeps_run_at_start_on_the_hour_on_a_new_track():
+    settings = {key: default for key, (_kind, default) in LOOK_SPECS["light"].items()}
+    sweeps = Sweeps()
+    at = datetime(2024, 5, 1, 9, 59, 58)
+    sweeps.watch(Snapshot(now=at), 100.0, settings)
+    assert sweeps.runs == [(100.0, 1.6)]  # the panel started
+    sweeps.watch(Snapshot(now=at), 101.0, settings)
+    sweeps.watch(Snapshot(now=at.replace(hour=10, minute=0, second=0)), 102.0, settings)
+    assert sweeps.runs == [(102.0, 1.6)]  # the full hour (the first one has run)
+    title = {"media.title": Reading("media.title", "A")}
+    playing = Snapshot(now=at.replace(hour=10), readings=title)
+    sweeps.watch(playing, 103.0, settings)
+    assert sweeps.runs == [(102.0, 1.6)]  # the first title known is not a new one
+    playing.readings["media.title"] = Reading("media.title", "B")
+    sweeps.watch(playing, 104.0, settings)
+    assert sweeps.runs[-1] == (104.0, 1.6)
+    assert sweeps.active(104.8) == [pytest.approx(0.5)]
+
+    quiet = Sweeps()
+    off = {**settings, "on_start": False, "on_hour": False, "on_track": False}
+    quiet.watch(Snapshot(now=at), 0.0, off)
+    quiet.watch(Snapshot(now=at.replace(hour=10, minute=0)), 1.0, off)
+    assert quiet.runs == []
+
+
+class Kind:
+    def __init__(self, name):
+        self.name = name
+
+
+def test_a_sweep_runs_on_the_frames_planned_time():
+    theme = theme_of([FRAME], look={"light": {}})
+    a, b = Renderer(theme), Renderer(theme)
+    for now in (0.0, 0.8):  # the start's sweep, half way at 0.8 s
+        frame_a, _ = a.render(snap(), now)
+        frame_b, _ = b.render(snap(), now)
+        assert changed_region(frame_a, frame_b) is None  # the same time, the same light
+    lit_frame = frame_a
+    assert a.moving  # the PNG path draws at full rate while it runs
+    after, _ = a.render(snap(), 2.0)
+    assert a.look.light.running(2.0) == [] and changed_region(lit_frame, after) is not None
+    still, _ = a.render(snap(), 3.0)
+    assert changed_region(after, still) is None
+
+    a.transition_ended(Kind("cut"), 4.0)
+    assert a.look.light.running(4.5) == []
+    a.transition_ended(Kind("tube"), 5.0)
+    assert len(a.look.light.running(5.5)) == 1
+    preview = Renderer(theme, preview=True)
+    preview.render(snap(), 0.0)
+    assert preview.look.light.running(0.5) == []  # previews have no sweeps
+
+
+def test_sweeps_carry_on_into_the_next_theme():
+    theme = theme_of([FRAME], look={"light": {}})
+    first = Renderer(theme)
+    first.render(snap(), 0.0)
+    second = Renderer(theme, motion=first.motion)
+    second.render(snap(), 0.5)
+    assert second.look.light.sweeps is first.look.light.sweeps
+    assert len(second.look.light.sweeps.runs) == 1  # a new theme is not a new start
+
+
+EDGY = """
+import numpy as np
+from PIL import Image
+
+from libre_panel.plugins import WidgetType
+from libre_panel.render.look import LightEdge
+
+
+class Edgy(WidgetType):
+    type = "demo.edgy"
+    api = 1
+    spec = {"w": ("int", 120), "h": ("int", 40)}
+    edge = None
+
+    def draw(self, widget, ctx, snapshot, now):
+        return Image.new("RGBA", (widget["w"], widget["h"]), (30, 30, 30, 255))
+
+    def edges(self, widget, ctx, snapshot, now):
+        if Edgy.edge is None:
+            mask = np.zeros((widget["h"], widget["w"]))
+            mask[:3, :] = 1
+            Edgy.edge = LightEdge.ridge(mask, widget["x"], widget["y"])
+        return [Edgy.edge] if ctx.light else []
+"""
+
+
+def test_plugin_widgets_give_the_light_their_edges(plugin_folder):
+    package = plugin_folder(EDGY, {"libre_panel.widgets": {"demo.edgy": "Edgy"}})
+    widget = {"type": "demo.edgy", "id": "edgy", "x": 100, "y": 100}
+    lit_theme = theme_of([widget], look={"light": {}})
+    renderer = Renderer(lit_theme)
+    renderer.render(snap(), 0.0)
+    edge = sys.modules[package].Edgy.edge
+    assert renderer.light_edges == [edge] and renderer.edge_owners[id(edge)] == "edgy"
+    dark = Renderer(theme_of([widget]))
+    dark.render(snap(), 0.0)
+    assert dark.light_edges == []
+
+
+# -- sizes ----------------------------------------------------------------------------
+
+
+def test_the_lit_demo_is_a_demo_on_the_bar():
+    theme = load_theme(builtin_themes_dir() / "lit-demo")
+    assert (theme.width, theme.height) == (1920, 480)
+    assert theme.description.startswith("DEMO")
+    assert set(theme.look) == {"grid", "light"}
+    renderer = Renderer(theme)
+    frame, _ = renderer.render(demo_snapshot(fixed_time=1_700_000_000), 0.0)
+    assert renderer.warnings == [] and frame.size == (1920, 480)
+    assert {type(f).__name__ for f in renderer._finishes.values()} >= {
+        "LitBar", "LitGauge", "LitGraph", "LitIcon", "Ridge"
+    }  # fmt: skip
+
+
+@pytest.mark.parametrize("size", [(480, 320), (320, 480), (1920, 480)])
+def test_lit_widgets_and_the_look_at_panel_sizes(size):
+    theme = theme_of(lit_widgets() + [FRAME], look={"grid": {}, "light": {}}, size=size)
+    a, b = Renderer(theme), Renderer(theme)
+    frame, _ = a.render(history(), 0.8)
+    assert frame.size == size and a.warnings == []
+    assert changed_region(frame, b.render(history(), 0.8)[0]) is None

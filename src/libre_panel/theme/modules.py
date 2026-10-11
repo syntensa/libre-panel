@@ -276,6 +276,13 @@ def mix(a: str, b: str, amount: float) -> str:
 _CARDLESS = ("clock", "text", "analog", "image")  # kinds without a card unless asked
 
 
+def _finished() -> set[str]:
+    """The widget types with a ``finish`` field (theme.model)."""
+    from libre_panel.theme.model import WIDGET_SPECS
+
+    return {kind for kind, spec in WIDGET_SPECS.items() if "finish" in spec and kind != "module"}
+
+
 class _Build:
     """Collects the widgets of one module, laid out in its box."""
 
@@ -321,6 +328,9 @@ class _Build:
         if self.needs:
             own = widget.get("needs", "")
             widget["needs"] = f"{own},{self.needs}" if own else self.needs
+        finish = self.module.get("finish", "flat")
+        if finish != "flat" and kind in _finished():  # its parts are drawn with it where they can
+            widget.setdefault("finish", finish)
         self.out.append(widget)
         return widget
 

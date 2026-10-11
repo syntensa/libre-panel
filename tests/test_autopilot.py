@@ -506,7 +506,7 @@ def test_what_it_is_doing_can_be_looked_at(desk):
 
 
 def test_the_autopilot_changes_the_theme_in_the_main_loop(monkeypatch, isolated_home):
-    from test_toast_scenarios import Panel, Script, write_theme
+    from test_toast_scenarios import NoWarmup, Panel, Script, write_theme
 
     from libre_panel import app
     from libre_panel.config import SensorsConfig
@@ -557,15 +557,19 @@ def test_the_autopilot_changes_the_theme_in_the_main_loop(monkeypatch, isolated_
         elif "on" in seen and "off" not in seen and script.n >= seen["on"] + 100:
             seen["off"] = script.n
             machine.microphone = False
+        elif "off" in seen and "back" not in seen and host.theme != "focus":
+            seen["back"] = script.n  # the service's own thread decided: a slow runner takes
+            script.length = script.n + 60  # longer, so the script ends once the switch is done
 
-    script = Script(1500, {20: [call_begins], **{n: [watch] for n in range(21, 2000)}})
+    script = Script(20000, {20: [call_begins], **{n: [watch] for n in range(21, 20000)}})
+    monkeypatch.setattr(app, "_Warmup", NoWarmup)  # frames counted: switch at once
     monkeypatch.setattr(app, "_Pacer", lambda: script)
     try:
         app.run(config, host=host)
     finally:
         manager.stop()
         host.close()
-    assert "on" in seen and "off" in seen, f"the microphone rule did not switch the theme: {seen}"
+    assert "back" in seen, f"the microphone rule did not switch the theme and back: {seen}"
     assert set(themes[:21]) == {"classic"} and "focus" in themes
     assert themes[-1] == "classic"  # the user's theme is back,
     assert made.count("fade") == 2  # each time with the transition the option names

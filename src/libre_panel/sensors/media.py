@@ -2,12 +2,14 @@
 
 - Windows: the system's media controls (what the volume pop-up shows), through
   the ``winrt`` packages (``pip install "libre-panel[media]"``; the installer
-  brings them along).
+  brings them along). Windows tells when the session, the track or the
+  playback changes, so a new track shows at once; a slow poll is the safety
+  net. The cover is read when the track changes, not on every look.
 - Linux: any MPRIS player (Spotify, browsers, VLC, ...) through ``playerctl``.
-- macOS: Spotify or Music, asked through ``osascript``.
 
 Only read while a theme shows ``media.*`` readings; a cover is fetched only
-when a theme shows it. Nothing is sent anywhere.
+when a theme shows it, and the icon of the player (``media.app_icon``, see
+``appicon``) only when a theme or a service reads it. Nothing is sent anywhere.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import math
 import shutil
 import subprocess
 import sys
@@ -22,8 +25,10 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from PIL import Image
@@ -32,7 +37,13 @@ from libre_panel.sensors.base import Reading, SensorProvider, wanted
 
 log = logging.getLogger(__name__)
 
-POLL_SECONDS = 1.0
+POLL_SECONDS = 1.0  # playerctl cannot tell what changes: it is asked this often
+SAFETY_SECONDS = 5.0  # Windows tells what changes; this only catches a notice that went missing
+SETTLE_SECONDS = 1.0  # after a notice, once more: players fill in the cover and the position later
+MIN_GAP_SECONDS = 0.05  # two looks are at least this far apart, whatever the notices
+IDLE_SECONDS = 60.0  # nobody looked for this long: the thread ends, and starts on demand
+IDLE_CHECK_SECONDS = 1.0  # while nobody looks: how often to see whether somebody does
+COVER_RETRY_SECONDS = 10.0  # a cover that could not be read is asked for again after this long
 MAX_COVER = 4 * 1024 * 1024
 # media.state: shown in the user's language (the renderer translates it)
 MEDIA_STATES = ("Playing", "Paused", "Stopped")
@@ -49,6 +60,7 @@ class Track:
     cover: str | bytes | None = None  # a file, a web address, or the picture itself
     source: str = ""
     at: float = 0.0  # time.monotonic() of the position
+    app_id: str = ""  # what finds the player's icon: the AppUserModelID or the MPRIS name
 
     def readings(self, now: float) -> dict[str, Reading]:
         out = {
@@ -88,30 +100,88 @@ def _app_name(model_id: str) -> str:
 # -- Windows -------------------------------------------------------------------
 
 
+def _winrt() -> Any:
+    """The WinRT pieces the media controls need, in one object. Raises ImportError
+    without the packages (``pip install "libre-panel[media]"``)."""
+    from winrt.runtime import ApartmentType, init_apartment
+    from winrt.windows.media.control import (
+        GlobalSystemMediaTransportControlsSessionManager as Manager,
+    )
+    from winrt.windows.storage.streams import Buffer, InputStreamOptions
+
+    return SimpleNamespace(
+        Manager=Manager,
+        Buffer=Buffer,
+        InputStreamOptions=InputStreamOptions,
+        ApartmentType=ApartmentType,
+        init_apartment=init_apartment,
+    )
+
+
 class _WindowsBackend:
-    """The current session of the system media transport controls."""
+    """The current session of the system media transport controls, by its events.
+
+    Windows tells when the session, the track or the playback changes, and the provider
+    looks then, instead of every second. A timeline event (the position) is no reason to
+    look: players send those every few seconds, and the position moves on by itself
+    between two looks. ``interval`` is the safety poll for a notice that went missing.
+    """
+
+    MANAGER_EVENTS = ("current_session_changed",)
+    SESSION_EVENTS = ("media_properties_changed", "playback_info_changed")
 
     def __init__(self) -> None:
-        from winrt.windows.media.control import (  # noqa: F401 - fails without the packages
-            GlobalSystemMediaTransportControlsSessionManager,
-        )
-
-        self._cover_key: tuple[str, str] | None = None
-        self._cover: bytes | None = None
+        self._w = _winrt()  # fails without the packages
         try:  # this thread talks to Windows: join the multi-threaded apartment
-            from winrt.runtime import ApartmentType, init_apartment
-
-            init_apartment(ApartmentType.MULTI_THREADED)
+            self._w.init_apartment(self._w.ApartmentType.MULTI_THREADED)
         except Exception:  # noqa: BLE001, S110 - already joined
             pass
+        self._wake: Callable[[], None] = lambda: None
+        self._manager: Any = None
+        self._manager_events: list[tuple[Any, str, Any, Any]] = []
+        self._manager_listens = self._session_listens = True  # every event could be subscribed
+        self._session_id: str | None = None  # the AppUserModelID of the session listened to
+        self._session_events: list[tuple[Any, str, Any, Any]] = []
+        self._new_session = False  # the current session changed: listen to it again
+        self._new_properties = False  # the track's properties changed since the cover was read
+        self._cover_key: tuple[str, str] | None = None
+        self._cover: bytes | None = None
+        self._cover_asked = -math.inf  # when a cover was last read (monotonic clock)
+
+    @property
+    def interval(self) -> float:
+        """Seconds until the next look when nothing is reported."""
+        listens = self._manager_listens and self._session_listens
+        return SAFETY_SECONDS if listens else POLL_SECONDS
+
+    def bind(self, wake: Callable[[], None]) -> None:
+        """``wake`` is called, from any thread, when Windows has news."""
+        self._wake = wake
+
+    def close(self) -> None:
+        self._unsubscribe(self._session_events)
+        self._unsubscribe(self._manager_events)
+        self._manager = None
+        self._session_id = None
 
     async def poll(self, want_cover: bool) -> Track | None:
-        from winrt.windows.media.control import (
-            GlobalSystemMediaTransportControlsSessionManager as Manager,
-        )
+        try:
+            return await self._look(want_cover)
+        except Exception:
+            self.close()  # the manager and the subscriptions may be unusable now: start anew
+            raise
 
-        manager = await Manager.request_async()
-        session = manager.get_current_session()
+    async def _look(self, want_cover: bool) -> Track | None:
+        # Taken before looking: news that comes while we look stays for the next look.
+        news, self._new_properties = self._new_properties, False
+        if self._manager is None:
+            self._manager = await self._w.Manager.request_async()
+            self._manager_listens = self._subscribe(
+                self._manager, self.MANAGER_EVENTS, self._manager_events
+            )
+        session = self._manager.get_current_session()
+        app_id = (session.source_app_user_model_id or "") if session is not None else None
+        self._follow(session, app_id)
         if session is None:
             return None
         props = await session.try_get_media_properties_async()
@@ -119,10 +189,40 @@ class _WindowsBackend:
             return None
         status = int(session.get_playback_info().playback_status)
         state = {4: "playing", 5: "paused"}.get(status, "stopped")
-        timeline = session.get_timeline_properties()
-        duration = timeline.end_time.total_seconds() - timeline.start_time.total_seconds()
-        position = timeline.position.total_seconds()
+        position, duration, at = self._timeline(session, state)
+        cover = None
+        key = (props.title, props.artist or "")
+        if want_cover and props.thumbnail is not None:
+            now = time.monotonic()
+            due = (
+                key != self._cover_key  # a new track
+                or news  # or the player says the picture changed
+                or (self._cover is None and now - self._cover_asked >= COVER_RETRY_SECONDS)
+            )
+            if due:
+                self._cover_key, self._cover_asked = key, now
+                self._cover = await self._read_cover(props.thumbnail)
+            cover = self._cover
+        elif not want_cover:
+            self._cover_key = None  # nobody shows it: read it again when somebody does
+        return Track(
+            state, props.title, props.artist or "", props.album_title or "",
+            position, duration, cover, _app_name(app_id or ""), at, app_id or "",
+        )  # fmt: skip
+
+    @staticmethod
+    def _timeline(session: Any, state: str) -> tuple[float | None, float | None, float]:
+        """(position, length, the time of the position) of the session's timeline."""
         at = time.monotonic()
+        try:
+            timeline = session.get_timeline_properties()
+            start = timeline.start_time.total_seconds()
+            duration = timeline.end_time.total_seconds() - start
+            position = max(0.0, timeline.position.total_seconds() - start)
+        except Exception:  # noqa: BLE001 - a player without a timeline (a live stream)
+            return None, None, at
+        if duration <= 0:
+            return None, None, at
         try:  # the position is as of its last update
             from datetime import UTC, datetime
 
@@ -131,27 +231,65 @@ class _WindowsBackend:
                 at -= max(0.0, (datetime.now(UTC) - updated).total_seconds())
         except (AttributeError, TypeError, ValueError, OverflowError):
             pass
-        cover = None
-        key = (props.title, props.artist)
-        if want_cover and props.thumbnail is not None:
-            if key != self._cover_key:
-                self._cover_key, self._cover = key, await self._read(props.thumbnail)
-            cover = self._cover
-        return Track(
-            state, props.title, props.artist or "", props.album_title or "",
-            position if duration > 0 else None, duration if duration > 0 else None, cover,
-            _app_name(session.source_app_user_model_id or ""), at,
-        )  # fmt: skip
+        return min(position, duration), duration, at
+
+    # -- listening ------------------------------------------------------------
+
+    def _follow(self, session: Any, app_id: str | None) -> None:
+        """Listen to the session that is current now, and to no other. Another player
+        is another session; the same player after a restart is a new session object, which
+        ``current_session_changed`` tells."""
+        if app_id == self._session_id and not self._new_session:
+            return
+        self._new_session = False
+        self._unsubscribe(self._session_events)
+        self._session_id = app_id
+        self._session_listens = session is None or self._subscribe(
+            session, self.SESSION_EVENTS, self._session_events
+        )
+
+    def _subscribe(self, target: Any, names: tuple[str, ...], into: list) -> bool:
+        """Listen to the events ``names`` of ``target``; False if one cannot be had (the
+        safety poll then looks more often)."""
+        everything = True
+        for name in names:
+
+            def handler(*_: Any, name: str = name) -> None:
+                self._noticed(name)
+
+            try:
+                token = getattr(target, "add_" + name)(handler)
+            except Exception:  # noqa: BLE001 - an older Windows
+                everything = False
+                continue
+            # the handler stays here: Windows calls it from threads of its own
+            into.append((target, name, token, handler))
+        return everything
 
     @staticmethod
-    async def _read(reference: Any) -> bytes | None:
-        from winrt.windows.storage.streams import Buffer, InputStreamOptions
+    def _unsubscribe(listening: list) -> None:
+        while listening:
+            target, name, token, _handler = listening.pop()
+            try:
+                getattr(target, "remove_" + name)(token)
+            except Exception:  # noqa: BLE001, S110 - the session may be gone already
+                pass
 
+    def _noticed(self, name: str) -> None:
+        """News from Windows, in a thread of Windows: note what it is, wake the reader."""
+        if name == "media_properties_changed":
+            self._new_properties = True
+        elif name == "current_session_changed":
+            self._new_session = True
+        self._wake()
+
+    async def _read_cover(self, reference: Any) -> bytes | None:
         try:
             stream = await reference.open_read_async()
             size = min(int(stream.size), MAX_COVER)
-            buffer = Buffer(size)
-            filled = await stream.read_async(buffer, size, InputStreamOptions.READ_AHEAD)
+            buffer = self._w.Buffer(size)
+            options = self._w.InputStreamOptions.READ_AHEAD
+            filled = await stream.read_async(buffer, size, options)
             filled = filled if filled is not None else buffer
             return bytes(memoryview(filled))[: filled.length]
         except Exception as exc:  # noqa: BLE001 - a missing cover is no error
@@ -183,7 +321,7 @@ def parse_playerctl(text: str, at: float) -> Track | None:
     return Track(
         status.lower() if status.lower() in ("playing", "paused") else "stopped", title,
         artist, album, seconds(position), seconds(length) or None, art or None,
-        player.capitalize(), at,
+        player.capitalize(), at, player.lower(),
     )  # fmt: skip
 
 
@@ -203,68 +341,9 @@ class _PlayerctlBackend:
         return parse_playerctl(result.stdout, time.monotonic())
 
 
-# -- macOS ---------------------------------------------------------------------
-
-_APPLESCRIPT = """
-set sep to ASCII character 31
-if application "Spotify" is running then
-  tell application "Spotify"
-    if player state is not stopped then
-      set t to current track
-      return (player state as text) & sep & (artist of t) & sep & (name of t) & sep & \
-(album of t) & sep & (player position as text) & sep & ((duration of t) / 1000 as text) & \
-sep & (artwork url of t) & sep & "Spotify"
-    end if
-  end tell
-end if
-if application "Music" is running then
-  tell application "Music"
-    if player state is not stopped then
-      set t to current track
-      return (player state as text) & sep & (artist of t) & sep & (name of t) & sep & \
-(album of t) & sep & (player position as text) & sep & (duration of t as text) & sep & "" & \
-sep & "Music"
-    end if
-  end tell
-end if
-return ""
-"""
-
-
-def parse_osascript(text: str, at: float) -> Track | None:
-    parts = text.strip().split(_SEP)
-    if len(parts) != 8 or not parts[2]:
-        return None
-    status, artist, title, album, position, length, art, player = parts
-
-    def number(value: str) -> float | None:
-        try:
-            return float(value.replace(",", "."))
-        except ValueError:
-            return None
-
-    return Track(
-        status if status in ("playing", "paused") else "stopped", title, artist, album,
-        number(position), number(length), art or None, player, at,
-    )  # fmt: skip
-
-
-class _AppleScriptBackend:
-    async def poll(self, want_cover: bool) -> Track | None:
-        result = subprocess.run(
-            ["osascript", "-e", _APPLESCRIPT], capture_output=True, text=True, timeout=3,
-            check=False,
-        )  # fmt: skip
-        if result.returncode != 0:
-            return None
-        return parse_osascript(result.stdout, time.monotonic())
-
-
 def _backend() -> Any:
     if sys.platform == "win32":
         return _WindowsBackend()
-    if sys.platform == "darwin":
-        return _AppleScriptBackend()
     return _PlayerctlBackend()
 
 
@@ -301,24 +380,29 @@ def load_cover(cover: str | bytes | None) -> Image.Image | None:
 
 
 class MediaProvider(SensorProvider):
-    """media.* readings and the ``media.cover`` picture, while a theme shows them."""
+    """media.* readings, the ``media.cover`` picture and the player's ``media.app_icon``,
+    while a theme or a service reads them."""
 
     name = "media"
 
-    def __init__(self, options: dict[str, Any] | None = None) -> None:
+    def __init__(self, options: dict[str, Any] | None = None, *, icons: Any = None) -> None:
         super().__init__(options)
         self._track: Track | None = None
         self._cover: tuple[Any, Image.Image | None] = (None, None)
+        self._icons = icons  # an appicon.AppIcons; made when first needed
+        self._icon: Image.Image | None = None
         self._thread: threading.Thread | None = None
+        self._poke: Callable[[], None] | None = None  # wakes the thread, from any thread
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self._warned = False
 
     def _start(self) -> None:
-        if self._thread is not None and self._thread.is_alive():
-            return
-        self._thread = threading.Thread(target=self._run, name="sensors-media", daemon=True)
-        self._thread.start()
+        with self._lock:
+            if self._thread is not None and self._thread.is_alive():
+                return
+            self._thread = threading.Thread(target=self._run, name="sensors-media", daemon=True)
+            self._thread.start()
 
     def _run(self) -> None:
         try:
@@ -332,30 +416,83 @@ class MediaProvider(SensorProvider):
         asyncio.run(self._loop(backend))
 
     async def _loop(self, backend: Any) -> None:
-        idle = 0.0
-        while not self._stop.is_set():
-            if not wanted("media."):
-                idle += POLL_SECONDS
-                if idle > 60:  # nobody looked for a minute: end, start again on demand
-                    with self._lock:
-                        self._track = None
-                    return
-            else:
-                idle = 0.0
+        """Look when the player has news (a backend that has events), and every
+        ``interval`` otherwise. After news, once more a moment later (``SETTLE_SECONDS``):
+        the cover and the position come in after the title."""
+        loop = asyncio.get_running_loop()
+        wake = asyncio.Event()
+
+        def poke() -> None:
+            try:
+                loop.call_soon_threadsafe(wake.set)
+            except RuntimeError:  # the loop is closed: nothing to wake
+                pass
+
+        self._poke = poke
+        if hasattr(backend, "bind"):
+            backend.bind(poke)
+        idle_since: float | None = None
+        news = False
+        try:
+            while not self._stop.is_set():
+                wake.clear()  # before looking: news that comes meanwhile brings the next look
+                now = time.monotonic()
+                if wanted("media."):
+                    idle_since = None
+                    failed = await self._look(backend)
+                    await asyncio.sleep(MIN_GAP_SECONDS)
+                    pause = SETTLE_SECONDS if news else getattr(backend, "interval", POLL_SECONDS)
+                    if failed:  # the backend starts anew and has no events yet: look soon
+                        pause = min(pause, POLL_SECONDS)
+                else:
+                    idle_since = now if idle_since is None else idle_since
+                    if now - idle_since > IDLE_SECONDS:
+                        # nobody looked for a minute: end, start again on demand
+                        with self._lock:
+                            self._track, self._icon = None, None
+                        return
+                    pause = IDLE_CHECK_SECONDS
                 try:
-                    track = await backend.poll(wanted("media.cover"))
-                except Exception as exc:  # noqa: BLE001 - a player must not stop the panel
-                    log.debug("media: %s", exc)
-                    track = None
-                cover = track.cover if track else None
-                if cover is not None and cover != self._cover[0]:
-                    self._cover = (cover, load_cover(cover))
-                with self._lock:
-                    self._track = track
-            await asyncio.sleep(POLL_SECONDS)
+                    await asyncio.wait_for(wake.wait(), pause)
+                    news = True
+                except TimeoutError:
+                    news = False
+        finally:
+            self._poke = None
+            if hasattr(backend, "close"):
+                try:
+                    backend.close()
+                except Exception:  # noqa: BLE001 - nothing left to do about it
+                    log.debug("media: closing failed", exc_info=True)
+
+    async def _look(self, backend: Any) -> bool:
+        """Ask the backend and keep the answer; True if the backend failed."""
+        failed = False
+        try:
+            track = await backend.poll(wanted("media.cover"))
+        except Exception as exc:  # noqa: BLE001 - a player must not stop the panel
+            log.debug("media: %s", exc)
+            track, failed = None, True
+        cover = track.cover if track else None
+        if cover is not None and cover != self._cover[0]:
+            self._cover = (cover, load_cover(cover))
+        icon = self._icon_of(track)
+        with self._lock:
+            self._track, self._icon = track, icon
+        return failed
+
+    def _icon_of(self, track: Track | None) -> Image.Image | None:
+        """The icon of the player, if somebody reads it; found once per player."""
+        if track is None or not track.app_id or not wanted("media.app_icon"):
+            return None
+        if self._icons is None:
+            from libre_panel.sensors import appicon
+
+            self._icons = appicon.AppIcons(appicon.finder())
+        return self._icons.get(track.app_id)
 
     def read(self) -> dict[str, Reading]:
-        if not wanted("media."):
+        if self._stop.is_set() or not wanted("media."):
             return {}
         self._start()
         with self._lock:
@@ -364,10 +501,21 @@ class MediaProvider(SensorProvider):
 
     def images(self) -> dict[str, Any]:
         with self._lock:
-            track = self._track
-        if track is None or track.cover is None or track.cover != self._cover[0]:
-            return {}
-        return {"media.cover": self._cover[1]} if self._cover[1] is not None else {}
+            track, icon = self._track, self._icon
+        found: dict[str, Any] = {}
+        cover = self._cover
+        if track is not None and track.cover is not None and track.cover == cover[0]:
+            if cover[1] is not None:
+                found["media.cover"] = cover[1]
+        if icon is not None:
+            found["media.app_icon"] = icon
+        return found
 
     def close(self) -> None:
         self._stop.set()
+        poke = self._poke
+        if poke is not None:
+            poke()  # the thread ends at once, and lets go of Windows' events
+        thread = self._thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(1.0)

@@ -12,6 +12,14 @@ from libre_panel.plugins.loader import BUILT_IN, BUILT_IN_PARTS
 NAMES = sorted(BUILT_IN_PARTS["services"])
 
 
+@pytest.fixture(autouse=True)
+def no_real_devices(monkeypatch):
+    """The devices service looks at no real drives, USB ports or controllers here."""
+    from libre_panel.services import devices
+
+    monkeypatch.setattr(devices, "on_windows", lambda: False)
+
+
 def test_the_built_in_services_are_registered_as_such():
     registry = discover()  # no plugin installed, no entry point: the app's own list
     assert registry.names("services") == NAMES

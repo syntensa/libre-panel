@@ -1132,7 +1132,7 @@ def test_a_transition_plays_to_the_end(plugin_folder, monkeypatch, isolated_home
         stop.set()
         thread.join(10)
         host.close()
-    # the switch waited for the 1 s entrance (seen late, and macOS runners
+    # the switch waited for the 1 s entrance (seen late, and busy runners
     # sleep coarsely: well over half of it is left)
     assert waited > 0.6 and len(seen) >= 2, (waited, seen)
     assert all(pure and theme == "libre-default" for pure, theme in seen), seen[:5]

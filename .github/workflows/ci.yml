@@ -26,7 +26,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest]
         python: ["3.11", "3.12", "3.13", "3.14"]
     runs-on: ${{ matrix.os }}
     steps:
@@ -36,7 +36,6 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: pip install -e ".[dev,usb,tray]"
       - name: ffmpeg for the video mode tests
-        if: runner.os != 'macOS'  # Homebrew's ffmpeg takes too long; macOS skips those tests
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then choco install ffmpeg -y --no-progress; else sudo apt-get update && sudo apt-get install -y ffmpeg; fi

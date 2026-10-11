@@ -263,7 +263,7 @@ def test_finish_is_a_field_of_the_shapes_that_have_one():
     from libre_panel.theme.model import WIDGET_SPECS
 
     for kind in ("text", "metric", "clock", "weather", "countdown", "bar", "gauge", "graph"):
-        assert WIDGET_SPECS[kind]["finish"] == ("enum:flat|facet", "flat")
+        assert WIDGET_SPECS[kind]["finish"] == ("enum:flat|lit|facet", "flat")
     assert "finish" not in WIDGET_SPECS["rect"]
     assert theme({"type": "text", "id": "t"}).widgets[0]["finish"] == "flat"
     with pytest.raises(ThemeError, match="finish"):
