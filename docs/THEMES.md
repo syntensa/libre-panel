@@ -279,7 +279,10 @@ bands in the colour of what they frame.
 The fans in the header need their sensors (`fan.lpc.fan_1` ... , `gpu.fan`) and show
 only the ones that report; the volume needs the `audio` source, what plays the
 `media` source, the screens for a game the `game` service and PresentMon
-(see [Configuration](CONFIGURATION.md#game-mode)).
+(see [Configuration](CONFIGURATION.md#game-mode)). Where a screen for a game
+shows its logo (`@game.logo`, from the `game` service) and the game has none, its
+name stands there: `game.name`, or the program PresentMon counts (`game.app`)
+where the service has no name.
 
 ## Modules
 

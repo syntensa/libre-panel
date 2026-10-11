@@ -344,8 +344,8 @@
   that (`game.limiter=gpu`; numbers count by value, texts in any case) and
   `@name` while a source or service has the picture (`@game.logo`), each with
   `!` in front for the opposite. A game's name can stand where its logo is
-  missing, and a word in the colour of whoever holds the frame rate down shows
-  only while it does
+  missing (the game service's, else the program PresentMon counts), and a word
+  in the colour of whoever holds the frame rate down shows only while it does
 - Format specs `{value:gb}`, a size in GB whatever unit the reading comes
   in, and `{value:rate}` with `{value:rate_unit}`: a data rate as SPUR II
   sets it, its number and its unit apart (519 and KB/s, from 1 MB/s 1.2 and
@@ -420,8 +420,8 @@
   change takes over from it at once
 - The demo readings of the editor, the previews and the pictures hold 1900
   readings of history instead of 600, so the wide graphs of the SPUR themes
-  are full in them, and they carry a made-up game and round report, so the
-  screens for a game and `round-report` are complete in them
+  are full in them, and they carry a made-up round report, so `round-report` is
+  complete in them
 - Windows downloads: with `mode = "auto"` the library inside Libre Panel is read
   first; a LibreHardwareMonitor web server that happens to run only fills in
   what Libre Panel cannot read (the CPU's readings without administrator

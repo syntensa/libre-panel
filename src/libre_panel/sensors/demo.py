@@ -45,7 +45,7 @@ _WAVES: dict[str, tuple[str, str, float, float, float]] = {
     "game.fps": ("Frames per second", "fps", 141, 12, 7),
     "game.frametime": ("Frame time", "ms", 7.1, 0.6, 7),
     "game.low": ("1% low", "fps", 104, 4, 19),
-    "game.frametime_peak": ("Frame time peak", "ms", 10.5, 3.5, 5),
+    "game.frametime_peak": ("Frame time peak", "ms", 9.4, 1.8, 7),
     "temp.cpu.ccd1": ("CPU CCD1", "°C", 52, 12, 29),
     "temp.gpu.hot_spot": ("GPU Hot Spot", "°C", 71, 12, 31),
     "temp.nvme.composite": ("NVMe SSD", "°C", 41, 3, 61),
@@ -150,6 +150,8 @@ def demo_details(t: float, waves: dict[str, Reading]) -> dict[str, Reading]:
     out["battery.left"] = Reading("battery.left", 2 * 3600 + 40 * 60, "s", "Battery time left")
     out["net.ip"] = Reading("net.ip", "192.168.1.20", "", "IP address")
     out["game.app"] = Reading("game.app", "Starfall", "", "Game")
+    out["game.limiter"] = Reading("game.limiter", "gpu", "", "Limited by")
+    out["audio.muted"] = Reading("audio.muted", 0, "", "Muted")
     out["net.today.down"] = Reading("net.today.down", 3.42e9, "B", "Received today")
     out["net.today.up"] = Reading("net.today.up", 6.1e8, "B", "Sent today")
     return out
@@ -257,16 +259,6 @@ def _cover() -> Image.Image:
 HISTORY_SAMPLES = 1900  # a graph of SPUR II's panorama (1713 points) is full in a preview
 
 
-def demo_game() -> dict[str, Reading]:
-    """What the game service and PresentMon add to the frame rate: the game's name and who
-    holds the rate down. Not the provider's: with a name always there, the memory service
-    would find a game that never ends."""
-    return {
-        "game.name": Reading("game.name", "Starfall", "", "Game"),
-        "game.limiter": Reading("game.limiter", "gpu", "", "Limited by"),
-    }
-
-
 def demo_report(t: float, earlier: int = 7) -> dict[str, Reading]:
     """A round report on show (made up, after the numbers of the plugin guide), so that the theme
     the memory service shows after a game is complete in a preview. ``earlier`` is how many
@@ -299,7 +291,7 @@ def demo_snapshot(fixed_time: float | None = None, samples: int = HISTORY_SAMPLE
     """A complete snapshot with filled graph history, for previews and the editor."""
     provider = DemoProvider({"fixed_time": fixed_time})
     when = fixed_time if fixed_time is not None else time.time()
-    readings = {**provider.read(), **demo_game(), **demo_report(when)}
+    readings = {**provider.read(), **demo_report(when)}
     history = {key: demo_history(provider, key, samples) for key in _WAVES}
     now = datetime.fromtimestamp(fixed_time) if fixed_time is not None else datetime.now()
     return Snapshot(readings=readings, history=history, now=now, images=provider.images())

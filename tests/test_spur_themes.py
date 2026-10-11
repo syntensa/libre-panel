@@ -23,6 +23,9 @@ SPUR = ["spur-horizon", "spur-header", "spur-focus", "spur-session", "spur-cockp
         "round-report"]  # fmt: skip
 # readings the demo has not got yet: they come with the merge of the sources that add them
 LATER = {"mem.name"}
+# the game service publishes this one, and a demo value would hide it: the program's name
+# (game.app) stands in on the screens, so the demo leaves it out
+LEFT_OUT = {"game.name"}
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -69,7 +72,7 @@ def test_a_spur_screen_draws_whole_with_the_demo(name):
     # flat frames and no ridges (the user's wish): nothing on the screen catches the panel light
     assert not any(w.get("ridge") for w in theme.widgets) and renderer.light_edges == []
     absent = {key for key in keys_read(theme) if snapshot.value(key) is None}
-    assert absent <= LATER, absent  # the demo has every reading a screen shows
+    assert absent <= LATER | LEFT_OUT, absent  # the demo has every reading a screen shows
 
 
 @pytest.mark.parametrize("name", SPUR)
@@ -145,6 +148,32 @@ def test_horizon_music_tile_follows_the_player():
     assert "media-paused-plain" in ids and "cover" not in ids
     ids = shown_ids(theme)  # nothing plays
     assert {"media-idle-plain"} <= ids and not ids & {"media-title-plain", "media-title-cover"}
+
+
+@pytest.mark.parametrize(
+    "name, name_id, app_id, logo_id",
+    [("spur-header", "game-name", "game-app", "game-logo"),
+     ("spur-focus", "game-name", "game-app", "game-logo"),
+     ("spur-session", "header-game-name", "header-game-app", "game-logo")],
+)  # fmt: skip
+def test_a_game_screen_shows_the_logo_else_the_games_name_else_the_programs(
+    name, name_id, app_id, logo_id
+):
+    from PIL import Image
+
+    theme = load_theme(find_theme(name))
+    both = {name_id, app_id}
+    named = {"game.name": "Space Game", "game.app": "spacegame"}
+    assert shown_ids(theme, named) & both == {name_id}  # the game service knows the game
+    assert shown_ids(theme, {"game.app": "spacegame"}) & both == {app_id}  # only PresentMon does
+    assert name_id not in shown_ids(theme, {})  # (the program's draws nothing without a reading)
+    logo = {"game.logo": Image.new("RGBA", (4, 4))}
+    ids = shown_ids(theme, named, logo)  # the logo says it all
+    assert logo_id in ids and not ids & both
+    by = {w["id"]: w for w in theme.widgets}
+    assert (by[name_id]["sensor"], by[app_id]["sensor"]) == ("game.name", "game.app")
+    assert by[name_id]["max_width"] == by[app_id]["max_width"]  # they stand in one place
+    assert (by[name_id]["x"], by[name_id]["y"]) == (by[app_id]["x"], by[app_id]["y"])
 
 
 # -- Header (the game screen with the familiar frame) --------------------------------------------

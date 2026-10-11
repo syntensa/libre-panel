@@ -1651,7 +1651,24 @@
       "max_width": 120,
       "fit": "ellipsis",
       "tabular": false,
-      "needs": "!@game.logo"
+      "needs": "game.name,!@game.logo"
+    },
+    {
+      "type": "metric",
+      "id": "game-app",
+      "x": 286,
+      "y": 35,
+      "sensor": "game.app",
+      "format": "{value}",
+      "font": "builtin:LiberationSans-Regular",
+      "font_size": 23,
+      "color": "@text2",
+      "align": "left",
+      "fallback": "",
+      "max_width": 120,
+      "fit": "ellipsis",
+      "tabular": false,
+      "needs": "!game.name,!@game.logo"
     },
     {
       "type": "text",
