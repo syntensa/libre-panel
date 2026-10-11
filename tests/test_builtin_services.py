@@ -20,6 +20,15 @@ def no_real_devices(monkeypatch):
     monkeypatch.setattr(devices, "on_windows", lambda: False)
 
 
+@pytest.fixture(autouse=True)
+def no_real_folders(monkeypatch, tmp_path):
+    """The downloads service looks in no real Downloads folder and at no real Steam here."""
+    from libre_panel.services import downloads, steam
+
+    monkeypatch.setattr(downloads, "downloads_folder", lambda: tmp_path / "Downloads")
+    monkeypatch.setattr(steam, "find_root", lambda given="": None)
+
+
 def test_the_built_in_services_are_registered_as_such():
     registry = discover()  # no plugin installed, no entry point: the app's own list
     assert registry.names("services") == NAMES

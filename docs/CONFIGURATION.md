@@ -524,6 +524,190 @@ warnings like those of the notices service (kind `warning`).
   read off the disk; USB devices are read from the system's own list and never
   opened; nothing is written, and nothing is sent anywhere.
 
+### Downloads
+
+Notes what is downloading: a game or an update that Steam loads, and a file
+that a browser saves in your Downloads folder. It publishes the download that
+matters most, with its progress, speed and the time left, for a screen that
+draws a download card ([Plugins](PLUGINS.md#the-downloads-state)); the service
+shows nothing by itself. Nothing is written and nothing is sent.
+
+```toml
+[services]
+enabled = ["downloads"]
+
+[services.downloads]
+min_mb = 50          # smaller downloads are not shown
+steam = true         # Steam's games and updates
+browser = true       # the part files of browsers in the Downloads folder
+# steam_path = ""    # Steam's folder, if Libre Panel does not find it
+# folder = ""        # the Downloads folder, if it is not the system's
+```
+
+- **Steam** is read from its own files, only read: `logs/content_log.txt` (what
+  it does with an app: preparing, downloading, installing, and how big it is)
+  and the app's `appmanifest_<id>.acf` in the libraries (its name and how much
+  is loaded). Steam gives a speed in its log only once a minute, so the speed
+  is the network's download (`net.down`, from the `psutil` source; it is all
+  that the PC loads, and without it a Steam download has an amount but no
+  speed); where the manifest stands
+  still although data flows, the amount loaded is worked out from the speed and
+  the state says so (`estimated`). Steam is found as the [`game`](#game-mode)
+  service finds it, and `steam_path` works as there.
+- **Browsers**: the part files `.crdownload` (Chrome, Edge, Brave and the other
+  Chromium browsers), `.part` (Firefox) and `.partial` in the Downloads folder:
+  on Windows the folder the shell names (it may have been moved), on Linux what
+  `xdg-user-dir DOWNLOAD` says, otherwise `Downloads` in your home folder. How a
+  file grows gives the amount and the speed. How big the whole will be is
+  written only in the browser's history, and **the browser's history is never
+  read**, as it holds everything you looked at: a browser download has no time
+  left. Libre Panel lists the folder and asks for the size of the part files;
+  no file in it is opened.
+- **What counts.** Nothing below `min_mb` megabytes; a download of unknown size
+  counts once it has run for 5 s at more than 1 MB/s. When it is finished it
+  stays for a few seconds as "done", then the panel goes back to what it showed.
+- **Data.** The name of the game or of the file is in the state, so that a card
+  can show it; the state lives in memory and on the panel only. Nothing is
+  written to a file or to the log, and nothing leaves the PC.
+- The options are read when the service starts: change `config.toml` and it
+  restarts by itself.
+
+### Memory and round report
+
+Keeps what happens at the desk over weeks and months, in a database on this
+computer, and shows a round report when a game ends: the round against your
+last rounds of the same program. Nothing is sent anywhere.
+
+```toml
+[services]
+enabled = ["game", "memory"]
+
+[services.memory]
+keep_days = 730        # minutes and games are kept this long (0: for ever)
+cooling = true         # also the cooling state and FanControl's settings
+cooling_days = 180     # the cooling state is kept this long (0: for ever)
+music = true           # how long music plays, never what; asks the media source
+# temperatures = ["temp.board.system", "temp.nvme.*"]   # more readings for the cooling state
+report = true          # a round report when a game ends
+report_minutes = 3     # only for rounds at least this long, and with frame rates
+report_compare = 10    # against the last this many rounds of the same program
+report_seconds = 30    # how long it stays on the panel
+report_theme = "round-report"   # "": no theme, only the data for a screen of a plugin
+report_transition = "tube"      # "" is the transition of config.toml
+fps_levels = [60, 90, 120, 144, 165]   # the frame-rate ranges of the report's chart
+# fancontrol = ""      # FanControl's userConfig.json, if Libre Panel does not find it
+# database = ""        # where the file lies (default: the service's folder)
+```
+
+| Table | What it holds |
+|---|---|
+| `minutes` | a row a minute: the means, and the highest values of temperature and power, of the load, clocks, memory, network and volume; the frame rate in a game; how long music played; the outside temperature (with the weather on); each fan's speed |
+| `sessions` | a row per game, written every minute while it is played and again when it ends: the game's name and its program, how long, the frame rates (mean, the 1 % quantile, the 1 % low), how long at which frame rate, how long the CPU, the GPU or a frame limit held it back, the highest temperatures, power and video memory |
+| `cooling` | the cooling state whenever it moves: temperatures, power and load, each fan's speed and duty, and what each FanControl curve reads. At least 12 s apart (5 s in a game) and at least one a minute, so that a longer gap means the service did not run |
+| `fancontrol` | every change to FanControl's curves and fans, with the time (FanControl's file is only read, never written) |
+| `meta` | the names of the CPU, the GPU and the temperature sensors as the readings give them ("GPU Core"), noted with `cooling` on, so that the [cooling analysis](#cooling-analysis) can speak of them by name |
+
+- **Where, and what stays out.** The file is `memory.db` in
+  `plugins-data/memory/` of the settings folder; it is a plain SQLite file that
+  you can open, copy or delete (stop the service first to start afresh). No
+  title of a track, no window title and no file name is read, so none can be
+  kept: music is only how long it played, and of a game only its name and its
+  program's file name (`spacegame`). It takes about 0.3 MB a day for the minutes
+  and half a megabyte to a megabyte for the cooling state; the defaults keep up
+  to a few hundred MB.
+- **Names of readings.** Everything comes from the readings of the panel
+  (`cpu.temp`, `gpu.power`, `fan.*`, `game.fps` ...), whichever source
+  supplies them; what a PC does not have is left empty. The duty of a fan
+  (how hard FanControl drives it) and the temperature a curve reads come from
+  LibreHardwareMonitor's outputs and FanControl's file, so Windows. On Linux the
+  fan speeds are recorded, no duty.
+- **Games** are those the [`game` service](#game-mode) finds (`game.name`);
+  without it only minutes and the cooling state are kept. Frame rates need the
+  `presentmon` source ([above](#more-sensor-sources)): a game without them is
+  kept, but has no report. A game ends when its name goes, so a game that
+  restarts within the service's `linger_s` is one round.
+- **The report.** When a round that lasted `report_minutes` and had frame rates
+  ends, the report is built from the file: this round against the mean of the
+  last `report_compare` rounds of the same program that were long enough too
+  (compared by the game's name where the program is not known). It shows the
+  theme for `report_seconds`, ahead of an autopilot's choice and in normal mode
+  only; a new game ends it at once, and a round that ends because Libre Panel
+  quits has none. `round-report` is a plain built-in theme for 8.8" and 9.2"
+  bars; copy it in the editor to change it, or let a screen of a plugin draw
+  the data ([Plugins](PLUGINS.md#the-round-report)).
+- **Cost.** One sample a second, whatever the theme's `refresh_ms`. While the
+  service runs the sources it needs run too, although no theme shows them: the
+  load (`cpu.load`, `gpu.load`), temperatures, power and clocks, the fans, the
+  game's frame rates, and with `music` the player's state (not its title).
+  A write that cannot be made (the disk is full, the file is locked) is said
+  once in the log and never holds the panel back.
+- The options are read when the service starts: change `config.toml` and it
+  restarts by itself.
+
+### Cooling analysis
+
+Checks the fan curves of FanControl against what your PC really did, and says
+what to change so that it runs quieter or cooler. It reads the cooling state that the
+[memory](#memory-and-round-report) keeps, and FanControl's own settings:
+**read only**. Libre Panel never writes to FanControl; you make the changes
+yourself. Nothing is sent anywhere.
+
+```toml
+[services]
+enabled = ["memory", "cooling"]   # the memory with cooling = true feeds it
+
+[services.cooling]
+limits = [
+  { key = "cpu.temp", max = 90 },
+  { key = "gpu.temp", max = 85, name = "Graphics card" },
+]
+# fancontrol = ""      # FanControl's userConfig.json, if Libre Panel does not find it
+# database = ""        # the memory's file (default: the memory service's folder)
+```
+
+- **It answers, it does not show.** The service has no screen of its own: an
+  editor page of a plugin, or a script, asks it for the analysis, for the
+  recommendations or for a plain-text report ([Plugins](PLUGINS.md#the-cooling-analysis)).
+  The work is done when asked and kept for 5 minutes, and until FanControl's
+  settings change. The texts are in the language of the panel.
+- **Everything is weighed by time**, not by rows: half an hour of the desktop
+  standing still counts for half an hour, a minute of changing load for a
+  minute. The recommendations look at the last 60 days of the cooling state,
+  and only at what happened since FanControl was last changed (the memory
+  notes every change); they say what the data before and after the change
+  shows. A statement about the desktop needs 30
+  minutes of desktop since the change, one about a game 20 minutes of game
+  time; oscillation needs 6 hours. Until then it says that it is waiting.
+- **What it looks for.** Each finding names the data it rests on ("50 min game,
+  2.5 h desktop") and how certain it is.
+
+| Rule | The question |
+|---|---|
+| `source` | Does a curve read the sensor of the device it should cool for? From the duty a fan really had, it calculates back the temperature its curve must have seen, and compares that with the recorded sensors; where FanControl's own reading of a curve was kept, it compares that directly. |
+| `mix` | Does a mix curve pass on the higher value of its parts, as a case fan should, or does one hot part leave the fans cold? |
+| `warm` | Does anything stay over its limit for more than 5 % of the time in a game? |
+| `oscillation` | Does a duty keep jumping, which one hears as up and down? |
+| `quieter` | Does a fan run faster on the desktop than its curve needs, and how many RPM would a gentler start save? |
+| `trend` | Does the same light load at the same outside temperature get warmer over weeks (dust, a fan that slows)? It needs 14 days of data and the [weather](#weather) for the outside temperature. |
+
+- **No fixed devices or limits.** The names of the CPU, the GPU and the sensors
+  come from the readings the memory noted, the fans from FanControl's file.
+  What is too warm depends on the hardware, so `limits` says: each entry names
+  a reading (`cpu.temp`, `gpu.temp`, `gpu.hotspot`, or any other the memory
+  keeps, see its `temperatures`), the highest temperature wanted and, if you
+  like, a name. Without `limits` the starting points are 90 °C for the CPU,
+  85 °C for the GPU and 100 °C for its hot spot: change them to what your
+  parts are specified for.
+- **Without FanControl** (it is a Windows program) or without its file there
+  are no curves to check: the service still says what is too warm in a game
+  and what the trend is. It finds FanControl's `userConfig.json` as the memory
+  does; `fancontrol` names it if it lies elsewhere.
+- **What it keeps.** Nothing of its own: it opens the memory's file read only,
+  so it can run while the memory writes. Without the memory's file (or with
+  `cooling = false`) it says that there is no data yet.
+- The options are read when the service starts: change `config.toml` and it
+  restarts by itself.
+
 ## Language
 
 Libre Panel speaks English and German. `language = "auto"` follows the

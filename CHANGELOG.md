@@ -219,6 +219,46 @@
   their verdict, the theme per mode, the log, and the autopilot's rules. Plugin
   pages that write `config.toml` ask the app to follow it with
   `context.follow_config()`
+- `memory`, a built-in service (off until listed in `[services] enabled`) that
+  keeps what happens at the desk in a SQLite file on this PC: a row a minute
+  (means and highest values of load, temperature, power, clocks, memory and
+  network; how long music played, never what), a row per game (frame rates,
+  how long at which rate, what held it back, the highest temperatures), the
+  cooling state whenever it moves (temperatures, power, each fan's speed and
+  duty, what each FanControl curve reads) and every change to FanControl's
+  curves (read only). One sample a second, one writer thread with a bounded
+  queue, WAL mode, 730 and 180 days kept (`keep_days`, `cooling_days`). No
+  title, window title or file name is read, and nothing leaves the PC
+- A round report when a game that was played for 3 minutes with frame rates
+  ends: the round against the last 10 of the same program, published as the
+  state `report` and as `report.*` readings, and shown with the theme
+  `report_theme` for 30 s (priority 10, normal mode only); a new game ends it
+  at once. `round-report` is a plain built-in theme (1920×480) for it; the
+  data is described in the plugin guide for screens that draw it better
+- `libre_panel.services.fancontrol`: FanControl's curves, fans and the sensor
+  each curve reads, from its configuration file (found from the environment or
+  `fancontrol = "..."`; opened for reading only)
+- `cooling`, a built-in service that checks FanControl's fan curves against
+  what the PC really did (the memory's cooling state, weighed by time) and
+  says what to change: a curve that reads the sensor of another device (found
+  by calculating back, from the duty a fan had, the temperature its curve must
+  have seen), a mix that does not pass on the higher part, a temperature over
+  your limit in a game, a fan that oscillates or runs higher than it needs on
+  the desktop, cooling that slowly gets worse. Each recommendation names the
+  data it rests on, and since FanControl was last changed it says what that
+  change did. Read only: FanControl's file and the memory's database are
+  opened for reading, nothing is changed or sent; devices come from the
+  readings, limits from `limits`. It answers an editor page or a script with
+  the analysis as data and a plain-text report in English and German
+- `downloads`, a built-in service that notes what is downloading: Steam's
+  games and updates (read from its `content_log.txt` and `appmanifest` files,
+  with the network's download as the speed) and the part files of browsers
+  (`.crdownload`, `.part`, `.partial`) in the Downloads folder (Windows: the
+  shell's folder; Linux: `xdg-user-dir DOWNLOAD`). It publishes the download that
+  matters most as the state `downloads`: progress, speed, the last three minutes
+  of speed and the time left, for a screen that draws a download card. Nothing
+  below `min_mb` (50) counts, the browser's history is never read, and nothing is
+  written
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

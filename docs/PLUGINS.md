@@ -232,10 +232,244 @@ do. Their names cannot be used by a plugin.
 | `game` | game mode: finds the game you play (a list of programs, Steam's library) and switches the mode with an entrance, and back |
 | `autopilot` | picks the theme by rules: music, microphone, load, program, time of day |
 | `devices` | messages for drives, USB devices and controllers that come and go, a full drive and a hot SSD (Windows) |
+| `memory` | keeps minutes, games and the cooling state in a database on this PC, and shows a round report after a game |
+| `cooling` | checks the fan curves of FanControl against what the PC did and says what to change; answers an editor page or a script, reads only |
+| `downloads` | notes what is downloading (Steam's games and updates, a browser's part files) with progress, speed and time left, as a state for a download card |
 
 Their options are in the [configuration guide](CONFIGURATION.md#built-in-services).
 They talk to the panel only through the host described here, so they are also
 examples for your own.
+
+### The round report
+
+When a game that was played long enough ends, the `memory` service publishes the
+round against the last ones of the same program: as the state `report` (a
+screen reads it with `snapshot.state("report")`, `None` when none is on show),
+and as plain readings for a theme made of the usual widgets (the built-in theme
+`round-report` is one). Both stay for `report_seconds`, or until a new game
+begins; the readings go 3 s after the state, so that the theme still has its
+numbers while it leaves with a transition.
+
+```json
+{
+  "session": {
+    "id": 1760000000123, "game": "Space Game", "program": "spacegame",
+    "started": 1760000000, "ended": 1760002700, "duration_s": 2700,
+    "fps_s": 2610, "fps_mean": 148.3, "fps_p01": 104.0, "fps_low_mean": 101.0,
+    "frametime_mean": 6.7,
+    "levels": {"edges": [60, 90, 120, 144, 165], "seconds": [26, 52, 235, 1150, 1040, 107]},
+    "limit_cpu_s": 160, "limit_gpu_s": 2440, "limit_cap_s": 10,
+    "cpu_temp_max": 74.1, "gpu_temp_max": 56.0, "gpu_hotspot_max": 80.0,
+    "cpu_power_max": 96.0, "gpu_power_max": 327.0, "vram_used_max": 14.8,
+    "outside_temp": 12.6, "closed": 1
+  },
+  "comparison": {
+    "count": 7,
+    "mean": {"fps_mean": 142.1, "fps_p01": 101.2, "fps_low_mean": 99.0, "frametime_mean": 6.9,
+             "cpu_temp_max": 72.4, "gpu_temp_max": 57.1, "gpu_hotspot_max": 78.0,
+             "cpu_power_max": 94.0, "gpu_power_max": 318.0, "vram_used_max": 14.5},
+    "levels": [0.02, 0.03, 0.12, 0.40, 0.36, 0.07]
+  },
+  "seconds": 30,
+  "until": 1760002730.4
+}
+```
+
+| Field | |
+|---|---|
+| `session.game`, `program` | the game's name (`game.name`), and the program PresentMon counted, in lower case without `.exe` (`""` if it was never seen) |
+| `started`, `ended`, `duration_s` | Unix seconds; how long the game ran |
+| `fps_s` | the seconds that have a frame rate |
+| `fps_mean`, `fps_p01`, `fps_low_mean`, `frametime_mean` | the mean of the per-second frame rates; the rate that 1 % of the seconds fell below; the mean of PresentMon's 1 % low; the mean frame time in ms |
+| `levels` | `seconds` in each range of frame rates: below `edges[0]`, between two edges, above the last (one more than there are edges; the `fps_levels` option) |
+| `limit_cpu_s`, `limit_gpu_s`, `limit_cap_s` | the seconds `game.limiter` said the CPU, the GPU or a frame limit held the rate down |
+| `*_max` | the highest value of the round: °C, W, GB (`gpu_hotspot_max` where the card has a hot spot); `null` where there is no such reading |
+| `outside_temp` | °C, from the weather, `null` without |
+| `comparison.count` | how many earlier rounds are in it (0: the first round) |
+| `comparison.mean` | the same numbers, averaged over those rounds (`null` where none had it) |
+| `comparison.levels` | the mean share of the time in each range (they add up to 1); `null` without earlier rounds, or when the ranges were another ones |
+| `seconds`, `until` | how long the report is shown, and when it ends (Unix time) |
+
+The readings (a value may be `None`; labels and texts are in the language of
+the panel):
+
+| Key | Value |
+|---|---|
+| `report.title`, `report.game`, `report.when`, `report.versus` | texts: "Round report", the game, "21:03 – 21:48", "Compared with the last 7 rounds" |
+| `report.length`, `report.outside` | s, °C |
+| `report.fps`, `report.low`, `report.frametime` | the means: fps, fps, ms |
+| `report.fps_delta`, `report.low_delta` | this round minus the mean of the earlier ones |
+| `report.limit` | text: who held the rate down, by share, "GPU 94 %  CPU 6 %" |
+| `report.cpu_temp`, `report.gpu_temp`, `report.gpu_hotspot`, `report.cpu_power`, `report.gpu_power`, `report.vram_used` | the highest values: °C, W, GB |
+| `report.level.0` ... | the share of the round in each range of frame rates in percent, the slowest range first; the label is the range ("< 60", "60–90", "165+") |
+| `report.head.levels`, `report.head.peaks` | headings for a chart and a list |
+
+The service also has `show_last_report()` (builds and shows the latest round
+that was long enough again; for a console page) and `status()` (is it
+recording, the file, how many rows were written, the last error, the game now
+played).
+
+### The cooling analysis
+
+The `cooling` service shows nothing by itself; an editor page (or a script)
+asks it. A page gets the running service with `context.service("cooling")`
+(`None` where it does not run), then calls, from any thread:
+
+| Call | Answers |
+|---|---|
+| `analysis(days=1.0, mode=None, points=480)` | everything a page draws, as plain data (below), and the report's lines in `text`. `days`: the last this many days (`None`: all); `mode`: `"game"`, `"desktop"` or `None` for both; `points`: how many points the course (`history`) has |
+| `recommendations()` | what to change in FanControl, from the data since it was last changed (below) |
+| `report(days=None, mode=None)` | the plain-text report as a list of lines: what was recorded, each fan, what is notable, the trend and the recommendations |
+| `status()` | `{"database", "database_found", "fancontrol", "curves", "fans"}`: what it reads and what it found |
+
+All of it is JSON-able. The texts (`title`, `why`, `findings`, the report) are
+in the language of the panel, English or German. An answer is kept for 5
+minutes, and until FanControl's settings or the language change (the same
+object comes back: do not change it), so a page may ask often. The first answer
+for a long period of a busy PC takes some seconds (60 days of games, 150 000
+rows: about 5 s for `recommendations()`, twice that for `analysis(days=60)`);
+the default day takes a fraction of a second. Nothing is
+written, neither to the memory's file nor to FanControl. Without data
+`analysis()` and `recommendations()` answer `{"empty": true, "reason": "..."}`
+and `report()` with one line that says so.
+
+`recommendations()`:
+
+```json
+{
+  "empty": false,
+  "since": 1759990000, "changed": true,
+  "basis": "50 min game (1 round), 2.5 h desktop",
+  "list": [
+    {
+      "id": "source:Gpu_Curve", "number": 1, "curve": "Gpu_Curve",
+      "title": "Tie Gpu Fan to the graphics card",
+      "why": "The curve Gpu_Curve reads /gpu-amd/0/temperature/0. On the desktop it sees 52 °C, the graphics card is at 28 °C: it follows another device. ...",
+      "do": ["Open the curve “Gpu_Curve” in FanControl.", "Choose “GPU Core” of “Graphics Card” as the temperature source: ...", "Set the curve points: 32 °C → 22 %, 54 °C → 82 %, ..."],
+      "effect": ["Desktop: 22 % instead of 33 % (≈ 692 RPM)", "Game: practically unchanged (82 % → 82 %)"],
+      "note": "The points leave the fan at its base value on the desktop ...",
+      "confidence": "certain (source) · preliminary (points)",
+      "basis": "50 min game (1 round), 2.5 h desktop",
+      "proposal": [[32, 22], [54, 82], [70, 85], [78, 100]]
+    },
+    {
+      "id": "mix:Mix_Case", "number": 2, "curve": "Mix_Case", "proposal": null,
+      "after": "source:Gpu_Curve", "after_number": 1,
+      "title": "...", "why": "...", "do": ["..."], "effect": ["..."], "note": "...",
+      "confidence": "preliminary", "basis": "..."
+    }
+  ],
+  "checked": ["Cpu_Curve follows the right device (+0 K)."],
+  "proposals": {"Gpu_Curve": [[32, 22], [54, 82], [70, 85], [78, 100]]},
+  "change": {"ts": 1759990000, "what": ["Gpu_Curve: sensor /gpu-amd/0/temperature/0 → /gpu-amd/5/temperature/0"]},
+  "effect": [
+    {"mode": "game", "before_s": 3000, "after_s": 3600,
+     "rows": [{"quantity": "Case Fan", "unit": "%", "before": 36.0, "after": 52.4}]}
+  ],
+  "computed": 1760086400,
+  "changes": [1759990000],
+  "waiting": "Since the change at 2025-10-09 07:26 only 6 min of data: ..."
+}
+```
+
+| Field | |
+|---|---|
+| `list[].id` | the rule and what it is about: `source:<curve>` (the curve reads the sensor of another device), `mix:<curve>` (a mix does not pass on the higher part), `warm:<reading>` (over its limit in a game), `oscillation:<curve>`, `quieter:<curve>` (a fan runs higher on the desktop than it needs to) and `trend` (cooling gets worse over weeks) |
+| `list[].number`, `after`, `after_number` | the order to work in; a recommendation with `after` makes sense only once the one it names is done |
+| `list[].why`, `do`, `effect`, `note` | the reason; the steps, in FanControl; what changes (duty, and speed where it was measured); a remark |
+| `list[].confidence`, `basis` | how certain it is, in words ("reliable", "preliminary", "certain (source)" where the sensor is known), and which data it rests on |
+| `list[].proposal` | curve points `[[°C, %], ...]` for the curve, or `null` |
+| `checked` | what was looked at and found fine, or not yet judged, one line each |
+| `since` | the data is from here on: the last change in FanControl, else the first row |
+| `change` | `ts` and `what`: the last change in FanControl, in words (`null` if it was never changed) |
+| `effect` | before and after that change, per `mode` (`"game"`, `"desktop"`): medians of each fan's duty and of the temperatures, over `before_s` and `after_s` seconds; only where both sides have enough data |
+| `waiting` | present right after a change, while there is not yet enough data after it |
+| `changes` | the times of all changes to FanControl the memory has seen |
+
+`analysis()` has, beside `advice` (the `recommendations()` above) and `text`
+(the report's lines):
+
+```json
+{
+  "empty": false,
+  "from": 1759990000, "to": 1760086400, "seconds": 86400, "rows": 2880,
+  "states": [{"name": "Desktop", "seconds": 61200}, {"name": "Space Game", "seconds": 25200}],
+  "sessions": [{"name": "Space Game", "from": 1760040000, "to": 1760065200}],
+  "series": [{"curve": "Cpu_Curve", "name": "Cpu Fan", "fans": ["Cpu Fan"], "device": "cpu"}],
+  "history": {
+    "t": [1759990900, 1759992700],
+    "temps": {"cpu_temp": [55.1, 56.0], "gpu_temp": [28.1, null], "gpu_hotspot": [36.1, null]},
+    "duty": {"Cpu_Curve": [25.4, 26.1]}
+  },
+  "plots": [
+    {"curve": "Cpu_Curve", "name": "Cpu Fan", "device": "cpu",
+     "target": [[50, 22], [62, 30], [72, 42]], "x_name": "Curve input (measured)", "measured": true,
+     "cloud": [[72.0, 42.0, 1800], [55.0, 26.0, 900]], "note": null, "proposal": null}
+  ],
+  "table": [
+    {"fan": "Cpu Fan", "curve": "Cpu_Curve", "p50": 26.0, "p95": 42.0, "max": 42.0,
+     "minimum_share": 0.0, "rpm50": 613.0, "rpm_max": 804.0, "characteristic": [[20, 606], [40, 804]]}
+  ],
+  "findings": [
+    {"level": "ok", "text": "Cpu Fan follows the curve Cpu_Curve: 0.0 points off on average, p95 0.0: ..."},
+    {"level": "info", "text": "Unused curve points and oscillation are judged from 6 h of recording: so far 3.3 h."}
+  ],
+  "text": ["RECORDED  3.3 h in 400 rows, from ...", "..."]
+}
+```
+
+| Field | |
+|---|---|
+| `from`, `to`, `seconds`, `rows` | the period of the rows used (Unix seconds), the time they hold, and how many there are |
+| `states`, `sessions` | where the time went (`Desktop`, each game by name; the desktop first), and each game round with its `from` and `to` |
+| `series` | the fans per curve that drives them; `device`: `"cpu"`, `"gpu"`, `"mix"` or `"other"` (by the sensor the curve reads) |
+| `history` | the course in `points` steps (`t`: the middle of each, Unix seconds): the temperatures (`cpu_temp`, `gpu_temp`, `gpu_hotspot`, and the other readings the memory keeps, by their keys) and the duty of each series by its curve; `null` where there is no data |
+| `plots[]` | a curve against what the fans did. `target`: the curve's points `[[°C, %], ...]` (for a mix, those of its CPU or GPU part, the `note` says so); `cloud`: `[input, duty, seconds]`, the most time first, at most 800; `x_name`: what the input is; `measured`: whether it is the temperature the curve really read (kept by the memory) or the sensor of the device; `proposal`: the points a recommendation would set, where they fit this input |
+| `table[]` | per fan: duty median, 95th percentile and highest (`p50`, `p95`, `max`, %), the share of the time at the minimum, speed median and highest (RPM), and the speed at each duty `characteristic: [[duty %, RPM], ...]` |
+| `findings[]` | what the numbers say by themselves: `level` (`"ok"`, `"warn"` or `"info"`), `text` and sometimes the `id` of the recommendation it belongs to; one that a recommendation already covers is left out |
+
+How a curve's real input is found when FanControl's own reading was not kept:
+the duty a fan had is put back through the curve (the rising part, where it
+can be turned around) and gives the temperature the curve must have seen; the
+recorded sensor that lies on top of it, or follows it with a fixed offset, is
+what the curve reads. A course that moved less than 5 K proves nothing, and the
+answer says so (`too quiet`) instead of guessing.
+
+### The downloads state
+
+While something downloads, the `downloads` service publishes the download that
+matters most as the state `downloads`, once a second (a screen reads it with
+`snapshot.state("downloads")`; it is `None` when nothing downloads, and a
+download that is finished shows for 6 s with the phase `done`, if no other is
+going):
+
+```json
+{
+  "id": "steam:777", "source": "steam", "name": "Space Game", "phase": "downloading",
+  "bytes": 1041943000, "total": 2000000000,
+  "rate": 41943040, "remaining_s": 22.8, "elapsed_s": 80.0,
+  "estimated": false,
+  "history": [0, 20971520, 31457280, 36700160, 39321600],
+  "more": 1
+}
+```
+
+| Field | |
+|---|---|
+| `id` | `steam:<app number>` or `browser:<number>` (counted from the start of the service); it stays the same while the download goes on, also when a browser renames its part file |
+| `source`, `name` | `"steam"` or `"browser"`; the game's name, or the file's name |
+| `phase` | `downloading`, `preparing` (Steam makes room), `paused`, `installing` (Steam checks and puts together what it loaded) or `done` (for 6 s) |
+| `bytes`, `total` | loaded so far, and the whole; `total` is `null` for a browser download, which does not tell |
+| `rate` | bytes per second, smoothed over about two seconds: the network's download for Steam, the growth of the file for a browser; 0 when it is not downloading |
+| `remaining_s` | seconds left; only for Steam, while it downloads with a known size at more than 0.2 MB/s, else `null` |
+| `elapsed_s` | seconds since it began |
+| `estimated` | `true` when `bytes` is worked out from the speed because Steam's manifest has not moved for 10 s |
+| `history` | `rate` of the last (at most 180) seconds, the oldest first, for a graph |
+| `more` | how many other downloads run beside this one |
+
+The one that matters most is the one still going that is fastest. Nothing below
+`min_mb` is in it; the browser's history is never read; see the
+[configuration guide](CONFIGURATION.md#downloads).
 
 ## Screens
 
