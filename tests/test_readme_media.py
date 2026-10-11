@@ -499,7 +499,10 @@ def test_an_app_clip_is_shot_in_a_browser_and_ends_as_it_began(app_clips, encode
     first, last = (np.asarray(frames.image(n), np.int16) for n in (0, frames.count - 1))
     picked = np.asarray(frames.image(recorded.poster), np.int16)
     assert np.abs(first - picked).mean() > 4  # the palette is open over the panel
-    assert np.abs(first - last).mean() < 1.5  # and the look is undone: where it began
+    h, w = first.shape[:2]
+    # the look is undone, in the panel's part of the window (the top bar says "not saved" now)
+    panel = (slice(h // 5, h * 9 // 10), slice(w * 3 // 10, w * 7 // 10))
+    assert np.abs(first[panel] - last[panel]).mean() < 0.5
     assert len({frames.path(n).read_bytes() for n in range(frames.count)}) > 6  # it moves
 
 

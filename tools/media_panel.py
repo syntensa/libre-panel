@@ -618,10 +618,10 @@ class PanelClip:
     crop: tuple[int, int, int, int] | Focus | None = None
     framed: bool = True  # in the device frame (a close-up is a detail: it is not)
     loop: str = "fade"  # "fade": the end is blended into the start; "cut": it is seamless as it is
-    # Whether the demo's values come round with the clip: its end then leads on into its start
-    # as it is. A graph that shows much more than the clip would show the same stretch again and
-    # again, so a clip with graphs lets its end give way to its start instead.
-    periodic: bool = True
+    # Whether the demo's values come round with the clip, so that its end leads on into its start
+    # as it is. Only for a screen without graphs: one that shows much more time than the clip
+    # would show the same stretch again and again. Else the end gives way to the start.
+    periodic: bool = False
     warmup: float = WARMUP_S
 
     @property
@@ -744,46 +744,46 @@ def close_up(stage: Stage, themes: tuple[str, ...]) -> None:
 
 
 # The clips show Libre Panel's own screens: Lumen on the bars, Libre Default on the small panel,
-# Studio for the notice. Their graphs show a long stretch of time, so none of them loops on data
-# that comes round (see ``periodic``): the end gives way to the start.
+# Studio for the notice. Their graphs show a long stretch of time, so none of the clips loops on
+# data that comes round (see ``periodic``): the end gives way to the start.
 CLIPS: dict[str, PanelClip] = {
     "video-mode": PanelClip(
         "video mode: lit curves scrolling, rings and numbers gliding, fans running up",
-        ("lumen",), 8.0, video_mode, poster=4.0, periodic=False,
+        ("lumen",), 8.0, video_mode, poster=4.0,
     ),
     "card-ignition": PanelClip(
         "the card slot changes from playback to the weather and back, with its line of light",
-        ("lumen",), 6.6, card_ignition, poster=3.4, periodic=False,
+        ("lumen",), 6.6, card_ignition, poster=3.4,
     ),
     "small-panel": PanelClip(
         "the small panel: lit rings filling, a history that scrolls, a card that changes",
-        ("libre-default",), 8.0, small_panel, poster=1.6, zoom=2, periodic=False,
+        ("libre-default",), 8.0, small_panel, poster=1.6, zoom=2,
     ),
     "volume-band": PanelClip(
         "the volume key: a notice in the band style, its number counting and its bar gliding",
-        ("studio",), 6.8, volume_band, poster=2.2, periodic=False,
+        ("studio",), 6.8, volume_band, poster=2.2,
     ),
     "theme-tube": PanelClip(
         "one screen to the next with the tube, and back again",
-        ("lumen", "studio"), 6.6, theme_tube, poster=1.5, periodic=False,
+        ("lumen", "studio"), 6.6, theme_tube, poster=1.5,
     ),
     "game-entrance": PanelClip(
         "a game starts and ends with the entrance: the screen closes to a line, a band opens",
-        ("lumen", "layout-game"), 7.8, game_entrance, poster=4.2, periodic=False,
+        ("lumen", "layout-game"), 7.8, game_entrance, poster=4.2,
     ),
     "close-up-rings": PanelClip(
         "a close-up of the rings: lit arcs that fill, numbers that glide, at twice the size",
         ("lumen",), 6.0, close_up, poster=3.0, zoom=2, framed=False,
-        crop=Focus(("instrument", "ring", "gauge"), 14, 14, 14, 32), periodic=False,
+        crop=Focus(("instrument", "ring", "gauge"), 14, 14, 14, 32),
     ),
     "close-up-curves": PanelClip(
         "a close-up of the curves and the fans: a lit history that scrolls, fans that run up",
         ("lumen",), 6.0, close_up, poster=3.0, zoom=2, framed=False,
-        crop=Focus(("graph", "fan"), 20, 44, 20, 22), periodic=False,
+        crop=Focus(("graph", "fan"), 20, 44, 20, 22),
     ),
     # SPUR II's classic screen, where Libre Panel started: the only clip of its own look
     "where-it-started": PanelClip(
         "SPUR II's classic screen in video mode, where it started: curves, fans, dust",
-        ("spur-classic",), 8.0, video_mode, poster=4.0, periodic=False,
+        ("spur-classic",), 8.0, video_mode, poster=4.0,
     ),
 }  # fmt: skip

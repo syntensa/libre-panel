@@ -629,6 +629,7 @@ def look(camera: Camera) -> None:
     camera.hold(1.3)
     for _ in range(2):  # (the notice goes with the first, the colours with the second)
         camera.key("Control+z", 0.4, "Ctrl Z")
+    camera.glide(1050.0, 400.0, 0.4)
     camera.scroll(-down, 0.6)  # and up again
 
 
@@ -639,7 +640,8 @@ def settings_names(camera: Camera) -> None:
     camera.pointer = (760.0, 500.0)  # (the wheel turns what is under the mouse)
     camera.glide(*camera.pointer, 0.5)
     field = page.locator("#hardware-cpu-row")
-    camera.scroll(field.bounding_box()["y"] - 320, 1.1)  # down to the card
+    down = field.bounding_box()["y"] - 320
+    camera.scroll(down, 1.1)  # down to the card
     camera.hold(0.4)
     camera.click(*camera.point(field), 0.6)
     camera.type("Workstation", 0.09)
@@ -649,7 +651,8 @@ def settings_names(camera: Camera) -> None:
     camera.click(
         *camera.point(page.locator(".settings-row", has_text="Processor").locator(".link-btn")), 0.6
     )
-    camera.hold(0.6)
+    camera.hold(0.5)
+    camera.scroll(-down, 0.8)  # and up again
 
 
 CLIPS: dict[str, AppClip] = {
@@ -672,7 +675,7 @@ CLIPS: dict[str, AppClip] = {
     ),
     "app-hardware-names": AppClip(
         "the app: Settings, Sensors, a name of your own for the processor",
-        7.0, settings_names, route="settings/sensors", ready="#hardware-cpu-row",
+        7.5, settings_names, route="settings/sensors", ready="#hardware-cpu-row",
         cursor=(0.6, 0.78),
     ),
 }  # fmt: skip
