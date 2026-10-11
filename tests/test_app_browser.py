@@ -22,16 +22,17 @@ def app_url():
     srv.editor_state.close()
 
 
-def expected_404(message):
+def expected_404(message, allow=()):
     """The app asks for the hardware's names; a server without them (an older background
-    app, as one test plays) answers 404, the app hides them, and Chromium logs an error."""
+    app, as one test plays) answers 404, the app hides them, and Chromium logs an error. So
+    is a request that a test makes fail on purpose (``allow``: the ends of their addresses)."""
     return message.text.startswith("Failed to load resource") and message.location.get(
         "url", ""
-    ).endswith("/api/hardware")
+    ).endswith(("/api/hardware", *allow))
 
 
 @contextlib.contextmanager
-def browser_page(url, view="design", strict_csp=False, size=(1440, 900), routes=None):
+def browser_page(url, view="design", strict_csp=False, size=(1440, 900), routes=None, allow=()):
     with playwright.sync_playwright() as p:
         try:
             browser = p.chromium.launch()
@@ -47,7 +48,9 @@ def browser_page(url, view="design", strict_csp=False, size=(1440, 900), routes=
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.on(
             "console",
-            lambda m: errors.append(m.text) if m.type == "error" and not expected_404(m) else None,
+            lambda m: (
+                errors.append(m.text) if m.type == "error" and not expected_404(m, allow) else None
+            ),
         )
         for pattern, handler in (routes or {}).items():  # stand-ins for the server's answers
             page.route(pattern, handler)
@@ -283,6 +286,552 @@ def test_the_running_panel_in_the_chip(isolated_home):
         app.shutdown()
 
 
+# -- Settings: each section's main path, against the real server and config.toml ----------------
+
+
+def settings_config():
+    from libre_panel.config import load_config
+
+    return load_config()
+
+
+def waits_for(page, predicate, timeout=10.0):
+    """Until the predicate holds (the app writes config.toml a moment after a click)."""
+    from test_service import wait_for
+
+    assert wait_for(predicate, timeout), "config.toml did not change as expected"
+
+
+def game_option(name):
+    """An option of the game service as config.toml has it now (None: it is not there)."""
+    return settings_config().services.options.get("game", {}).get(name)
+
+
+def radio(page, group, name):
+    return page.locator(f"[role='radiogroup'][aria-label='{group}'] [role='radio']", has_text=name)
+
+
+def settings_app(isolated_home, autostart=None):
+    """The background app with a panel that writes a PNG file, as the tray runs it."""
+    from test_autostart import FakeTasks
+    from test_service import FakeRegistry, write_config
+
+    from libre_panel.autostart import Autostart
+    from libre_panel.service import BackgroundApp
+
+    write_config(isolated_home)
+    auto = autostart or Autostart("win32", registry=FakeRegistry(), tasks=FakeTasks())
+    return BackgroundApp(port=0, autostart=auto, autostart_command=["/opt/libre-panel", "tray"])
+
+
+def test_the_settings_open_under_the_strict_csp(app_url):
+    """No section needs what the app's CSP forbids (inline scripts, inline styles)."""
+    with browser_page(app_url, "settings/panel", strict_csp=True) as page:
+        for section in ("panel", "sensors", "services", "weather", "system", "about"):
+            page.goto(f"{app_url}#/settings/{section}")
+            page.wait_for_selector(".settings-main .settings-card")
+            page.wait_for_timeout(200)
+
+
+def test_settings_panel(app_url, isolated_home, monkeypatch):
+    """The panel found, the video mode (and its clip name, written only when typed), the
+    frame rate, brightness, upside down, another panel, and Advanced."""
+    from test_editor_settings import lacking_ffmpeg, panel_on_the_bus
+
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    lacking_ffmpeg(monkeypatch)
+    with browser_page(app_url, "settings/panel") as page:
+        assert page.locator(".panel-found-name").inner_text() == "Turing 9.2″"
+        detail = page.locator(".panel-found-detail").inner_text()
+        assert "USB · 1920 × 480" in detail and "Connected" in detail
+        status = page.locator("#main .settings-row-status").first
+        assert status.inner_text() == "Off for now. Missing: the name of the standby clip, ffmpeg."
+        # the clip's name is never made up: the placeholder is no value, and nothing is
+        # written until the person types it
+        clip = page.get_by_label("Name of the standby clip")
+        assert clip.get_attribute("placeholder") == "usr/data/standby.h264"
+        assert clip.input_value() == ""
+        clip.focus()
+        clip.press("Tab")
+        page.wait_for_timeout(200)
+        assert not (isolated_home / "config.toml").exists()
+        lacking_ffmpeg(monkeypatch, found=True)  # ffmpeg is installed meanwhile
+        clip.fill("usr/data/standby.h264")
+        clip.press("Enter")
+        waits_for(
+            page, lambda: settings_config().device.video.local_clip == "usr/data/standby.h264"
+        )
+        video = page.locator("#main .settings-row-status").first
+        playwright.expect(video).to_contain_text("On, 50 fps")
+        radio(page, "Frames per second", "30").click()
+        waits_for(page, lambda: settings_config().device.video.fps == 30)
+        playwright.expect(video).to_contain_text("On, 30 fps")
+        radio(page, "Video mode", "Off").click()
+        waits_for(page, lambda: settings_config().device.video.mode == "off")
+        playwright.expect(video).to_contain_text("single pictures")
+        assert page.get_by_label("Name of the standby clip").count() == 0  # not needed now
+        radio(page, "Video mode", "Automatic").click()
+        waits_for(page, lambda: settings_config().device.video.mode == "auto")
+
+        slider = page.get_by_role("slider", name="Brightness")
+        slider.focus()
+        slider.press("ArrowLeft")
+        slider.press("ArrowLeft")
+        waits_for(page, lambda: settings_config().device.brightness == 50)
+        page.get_by_role("switch", name="Upside down").click()
+        waits_for(page, lambda: settings_config().device.rotate == 180)
+        page.get_by_role("switch", name="Upside down").click()
+        waits_for(page, lambda: settings_config().device.rotate == 0)
+
+        # another panel, by hand; the one on the bus is still told as it is
+        page.get_by_role("button", name="Another panel").click()
+        page.locator(".popover [role='option']", has_text="Turing 8.8").last.click()
+        waits_for(page, lambda: settings_config().device.model == "turing-8.8-usb")
+        playwright.expect(page.locator(".panel-found-name")).to_contain_text("8.8")
+        playwright.expect(page.locator(".panel-found")).to_contain_text(
+            "Another panel is connected: Turing 9.2″"
+        )
+        page.get_by_role("button", name="Another panel").click()
+        page.locator(".popover [role='option']", has_text="Detect automatically").click()
+        waits_for(page, lambda: settings_config().device.model == "auto")
+
+        # Advanced: the driver and the files it names
+        page.locator(".settings-disclosure", has_text="Advanced").click()
+        page.get_by_label("Driver").select_option("virtual")
+        waits_for(page, lambda: settings_config().device.driver == "virtual")
+        output = page.get_by_label("Picture file")
+        assert output.input_value() == "libre-panel-frame.png"
+        output.fill("shown.png")
+        output.press("Enter")
+        waits_for(page, lambda: settings_config().device.output == "shown.png")
+        port = page.get_by_label("Serial port")
+        port.fill("COM5")
+        port.press("Enter")
+        waits_for(page, lambda: settings_config().device.port == "COM5")
+    text = (isolated_home / "config.toml").read_text(encoding="utf-8")
+    assert "# Libre Panel configuration" in text  # the file is still the person's
+
+
+def test_settings_panel_without_a_panel(app_url, monkeypatch):
+    from test_editor_settings import panel_on_the_bus
+
+    panel_on_the_bus(monkeypatch)
+    with browser_page(app_url, "settings/panel") as page:
+        assert page.locator(".panel-found-name").inner_text() == "No panel found"
+        assert "Plug it in" in page.locator(".panel-found-detail").inner_text()
+        assert page.locator(".panel-outline.none").count() == 1
+        status = page.locator("#main .settings-row-status").first.inner_text()
+        assert status == "Starts when a panel it runs on is connected."
+
+
+def test_settings_panel_says_why_it_waits(app_url):
+    """The running app knows why no panel is in use (no permission, a library missing): said."""
+    import json
+
+    found = {
+        "configured": "auto",
+        "found": None,
+        "model": None,
+        "running": {"state": "waiting", "detail": "cannot open the USB device: access denied"},
+        "video": {"mode": "auto", "fps": 50, "on": False, "usb": True, "gaps": []},
+    }
+
+    def answer(route, request):
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(found))
+
+    with browser_page(app_url, "settings/panel", routes={"**/api/panel": answer}) as page:
+        why = page.locator(".panel-found-why")
+        playwright.expect(why).to_contain_text("Waiting for the panel: cannot open the USB device")
+        assert page.locator(".panel-found-name").inner_text() == "No panel found"
+
+
+def test_settings_sensors(app_url, isolated_home):
+    """The sources in their order and on or off, how often they are read."""
+    from libre_panel.config import default_providers
+
+    with browser_page(app_url, "settings/sensors") as page:
+        page.wait_for_selector(".source-row")
+        rows = page.locator(".source-row:not(.unused)")
+        assert [rows.nth(i).get_attribute("data-source") for i in range(rows.count())] == (
+            default_providers()
+        )  # in the order they are asked
+        assert page.locator(".source-row.unused[data-source='demo']").count() == 1
+        assert page.locator(".source-row[data-source='media']").count() == 0  # starts by itself
+        assert page.locator(".note.warn").count() == 0
+        page.locator(".source-row[data-source='audio'] [role='switch']").click()
+        waits_for(page, lambda: "audio" not in settings_config().sensors.providers)
+        # the sources are made when the panel starts: said, with nothing to restart here
+        note = page.locator(".note.warn")
+        assert "after Libre Panel is started again" in note.inner_text()
+        assert note.locator("button").count() == 0
+        page.locator(".source-row[data-source='audio'] [role='switch']").click()
+        waits_for(page, lambda: "audio" in settings_config().sensors.providers)
+        # a source that is switched on goes before psutil, which fills in the rest
+        waits_for(page, lambda: settings_config().sensors.providers == ["load", "audio", "psutil"])
+        page.get_by_role("button", name="Ask Fast load later").click()
+        waits_for(page, lambda: settings_config().sensors.providers[:2] == ["audio", "load"])
+        page.get_by_role("button", name="Back to the usual").click()
+        waits_for(page, lambda: settings_config().sensors.providers == default_providers())
+        playwright.expect(page.get_by_role("button", name="Back to the usual")).to_have_count(0)
+        # psutil alone would be read as the usual list again (config.py), so that switch is
+        # not offered: quick clicks follow each other, and the last one is refused
+        page.locator(".source-row[data-source='audio'] [role='switch']").click()
+        page.locator(".source-row[data-source='demo'] [role='switch']").click()
+        waits_for(page, lambda: settings_config().sensors.providers == ["load", "demo", "psutil"])
+        page.locator(".source-row[data-source='demo'] [role='switch']").click()
+        waits_for(page, lambda: settings_config().sensors.providers == ["load", "psutil"])
+        playwright.expect(
+            page.locator(".source-row[data-source='load'] [role='switch']")
+        ).to_be_disabled()
+        playwright.expect(
+            page.locator(".source-row[data-source='psutil'] [role='switch']")
+        ).to_be_enabled()
+        # how often they are read: empty is the theme's choice
+        interval = page.get_by_label("Reading interval")
+        assert interval.input_value() == "" and interval.get_attribute("placeholder") == "Automatic"
+        interval.fill("500")
+        interval.press("Enter")
+        waits_for(page, lambda: settings_config().refresh_ms == 500)
+        playwright.expect(page.locator("#main")).to_contain_text("Every 0.5 s")
+        page.locator(".row-action .link-btn", has_text="Automatic").click()
+        waits_for(page, lambda: settings_config().refresh_ms is None)
+    assert "refresh_ms = 500" not in (isolated_home / "config.toml").read_text(encoding="utf-8")
+
+
+def test_settings_sensors_of_the_running_app(isolated_home):
+    """What each source reads right now, and starting the panel again for a change to take."""
+    from test_service import wait_for
+
+    app = settings_app(isolated_home)
+    url = app.start()
+    try:
+        assert wait_for(lambda: app.panel.state()["state"] == "showing")
+        with browser_page(url, "settings/sensors") as page:
+            row = page.locator(".source-row[data-source='psutil']")
+            page.wait_for_function(
+                "document.querySelector(\"[data-source='psutil'] .status\") !== null"
+            )
+            assert "readings" in row.locator(".status").inner_text()
+            loop = app.panel.status
+            page.locator(".source-row[data-source='audio'] [role='switch']").click()
+            waits_for(page, lambda: "audio" not in settings_config().sensors.providers)
+            note = page.locator(".note.warn")
+            assert "after a restart of the panel" in note.inner_text()
+            note.get_by_role("button", name="Restart the panel").click()
+            assert wait_for(lambda: app.panel.status is not loop and app.panel.running)
+            page.wait_for_function("document.querySelector('.note.warn') === null")
+    finally:
+        app.quit()
+        app.shutdown()
+
+
+def test_settings_services(app_url, isolated_home):
+    """A service on or off, and its options by the type each declares."""
+    with browser_page(app_url, "settings/services") as page:
+        page.wait_for_selector(".settings-card.service")
+        cards = page.locator(".settings-card.service")
+        assert [cards.nth(i).get_attribute("data-service") for i in range(cards.count())] == [
+            "notices", "game", "autopilot", "devices", "memory", "cooling", "downloads",
+        ]  # fmt: skip
+        assert page.locator("[role='switch'][aria-checked='true']").count() == 0  # off until asked
+        game = page.locator("[data-service='game']")
+        game.get_by_role("switch", name="Game mode", exact=True).click()
+        waits_for(page, lambda: settings_config().services.enabled == ["game"])
+        game.locator(".settings-disclosure").click()
+        poll = game.locator("[data-option='poll_s'] input")
+        assert poll.input_value() == "2"  # the service's own default, until it is changed
+        poll.fill("1,5")
+        poll.press("Enter")
+        waits_for(page, lambda: game_option("poll_s") == 1.5)
+        game.locator("[data-option='steam'] [role='switch']").click()
+        waits_for(page, lambda: game_option("steam") is False)
+        programs = game.locator("[data-option='programs'] input")
+        programs.fill("emulator.exe = Retro")
+        programs.press("Enter")
+        programs.fill("othergame.exe")
+        programs.press("Enter")
+        waits_for(
+            page,
+            lambda: game_option("programs") == ["emulator.exe = Retro", "othergame.exe"],
+        )
+        game.get_by_role("button", name="Remove othergame.exe").click()
+        waits_for(
+            page,
+            lambda: game_option("programs") == ["emulator.exe = Retro"],
+        )
+        # back to the default takes the setting out of config.toml
+        game.locator("[data-option='poll_s'] .link-btn").click()
+        waits_for(page, lambda: game_option("poll_s") is None)
+        playwright.expect(game.locator("[data-option='poll_s'] .link-btn")).to_have_count(0)
+        game.get_by_role("switch", name="Game mode", exact=True).click()
+        waits_for(page, lambda: settings_config().services.enabled == [])
+        # a service whose rules have a page of their own
+        auto = page.locator("[data-service='autopilot']")
+        auto.locator(".settings-disclosure").click()
+        assert auto.locator("[data-option='rules']").inner_text().count("Edit") == 1
+        auto.locator("[data-option='rules'] button").click()
+        page.wait_for_function("location.hash === '#/plugin/autopilot'")
+
+
+def test_settings_services_of_the_running_app(isolated_home):
+    """Each service's state as the running app tells it, and Restart."""
+    from test_service import wait_for
+
+    app = settings_app(isolated_home)
+    url = app.start()
+    try:
+        assert wait_for(lambda: app.panel.state()["state"] == "showing")
+        with browser_page(url, "settings/services") as page:
+            notices = page.locator("[data-service='notices']")
+            notices.get_by_role("switch", name="Messages", exact=True).click()
+            assert wait_for(lambda: app.services.state.get("notices") == "running")
+            page.wait_for_function(
+                "document.querySelector(\"[data-service='notices'] .status.ok\") !== null"
+            )
+            assert "Running" in notices.locator(".status").inner_text()
+            first = app.services.running["notices"][0]
+            notices.get_by_role("button", name="Restart").click()
+            assert wait_for(lambda: app.services.running["notices"][0] is not first)
+            # an option changes: the service starts again by itself, with it
+            notices.locator(".settings-disclosure").click()
+            notices.locator("[data-option='music'] [role='switch']").click()
+            assert wait_for(lambda: app.services.running["notices"][0].options["music"] is False)
+            notices.get_by_role("switch", name="Messages", exact=True).click()
+            assert wait_for(lambda: "notices" not in app.services.running)
+            page.wait_for_function(
+                "document.querySelector(\"[data-service='notices'] .status\") === null"
+            )
+    finally:
+        app.quit()
+        app.shutdown()
+
+
+def test_settings_weather_and_place(app_url, isolated_home, monkeypatch):
+    """A place by its name, the weather on and off, units and interval; the place is kept
+    to about a kilometre and the weather needs one."""
+    from libre_panel.weather import open_meteo
+
+    asked = []
+
+    def geocode(name, count=5, language="en"):
+        asked.append(name)
+        return [
+            {"name": "Springfield", "region": "Region", "country": "Country",
+             "latitude": 50.123456, "longitude": 8.987654},
+            {"name": "Springfield", "region": "", "country": "Elsewhere",
+             "latitude": -33.5, "longitude": 151.25},
+        ]  # fmt: skip
+
+    monkeypatch.setattr(open_meteo, "geocode", geocode)
+    with browser_page(app_url, "settings/weather") as page:
+        toggle = page.get_by_role("switch", name="Weather")
+        assert toggle.is_disabled()  # no place yet
+        assert "Choose a place first" in page.locator("#main").inner_text()
+        assert asked == []  # nothing goes anywhere before the person asks
+        search = page.get_by_label("Name of a place")
+        assert page.get_by_role("button", name="Search", exact=True).is_disabled()
+        search.fill("Spring")
+        search.press("Enter")
+        places = page.locator(".places li")
+        page.wait_for_selector(".places li")
+        assert places.count() == 2 and asked == ["Spring"]
+        assert "50.12, 8.99" in places.first.inner_text()
+        places.first.locator("button").click()
+        waits_for(  # the place is one write; it does not switch the weather on
+            page,
+            lambda: (
+                (settings_config().weather.latitude, settings_config().weather.longitude)
+                == (50.12, 8.99)
+                and settings_config().weather.place == "Springfield, Region, Country"
+                and not settings_config().weather.enabled
+            ),
+        )
+        playwright.expect(page.locator("#place")).to_contain_text("Springfield, Region, Country")
+        playwright.expect(page.locator(".places")).to_have_count(0)
+        toggle.click()
+        waits_for(page, lambda: settings_config().weather.enabled)
+        radio(page, "Units", "°F").click()
+        waits_for(page, lambda: settings_config().weather.units == "imperial")
+        radio(page, "Update", "30").click()
+        waits_for(page, lambda: settings_config().weather.update_minutes == 30)
+        assert "after Libre Panel is started again" in page.locator(".note.warn").inner_text()
+        # taking the place away switches the weather off with it, after a question
+        page.locator("#place .link-btn", has_text="Remove").click()
+        page.locator(".dialog .btn-danger").click()
+        waits_for(
+            page,
+            lambda: (
+                settings_config().weather.latitude is None
+                and settings_config().weather.place == ""
+                and not settings_config().weather.enabled
+                and settings_config().weather.units == "imperial"
+            ),
+        )
+        playwright.expect(toggle).to_be_disabled()
+
+
+def test_settings_weather_search_fails_politely(app_url, monkeypatch):
+    from libre_panel.weather import open_meteo
+
+    def offline(name, count=5, language="en"):
+        raise open_meteo.WeatherError("timed out")
+
+    monkeypatch.setattr(open_meteo, "geocode", offline)
+    with browser_page(app_url, "settings/weather", allow=("/api/location",)) as page:
+        page.get_by_label("Name of a place").fill("Nowhere")
+        page.get_by_role("button", name="Search", exact=True).click()
+        page.wait_for_selector(".note.error")
+        assert "timed out" in page.locator(".note.error").inner_text()
+        assert page.get_by_role(
+            "button", name="Search", exact=True
+        ).is_enabled()  # it can be tried again
+
+
+def test_settings_start_and_language(app_url, isolated_home):
+    """The language switches the whole app, the tray and the panel (config.toml keeps it)."""
+    with browser_page(app_url, "settings/system") as page:
+        assert page.locator("#settings-title").inner_text() == "Start and system"
+        radio(page, "Language", "Deutsch").click()
+        waits_for(page, lambda: settings_config().language == "de")
+        playwright.expect(page.locator("#settings-title")).to_have_text("Start und System")
+        assert page.locator(".settings-nav button").first.inner_text() == "Panel"
+        playwright.expect(radio(page, "Sprache", "Deutsch")).to_have_attribute(
+            "aria-checked", "true"
+        )
+        page.locator(".settings-nav button", has_text="Dienste").click()
+        page.wait_for_selector("[data-service='game']")
+        assert "Spielmodus" in page.locator("[data-service='game']").inner_text()
+        page.goto(f"{app_url}#/settings/panel")
+        page.wait_for_selector(".panel-found")
+        text = page.locator("#main").inner_text()
+        assert "Videomodus" in text and "Bilder pro Sekunde" in text and "Auf dem Kopf" in text
+        page.goto(f"{app_url}#/settings/system")
+        radio(page, "Sprache", "System").click()
+        waits_for(page, lambda: settings_config().language == "auto")
+        radio(page, "Language", "English").click()
+        waits_for(page, lambda: settings_config().language == "en")
+
+
+def test_settings_start_with_the_system(isolated_home):
+    """Starting with the system is what the command line's autostart does."""
+    from libre_panel.autostart import Autostart
+
+    home = isolated_home.parent / "linux-home"
+    autostart = Autostart("linux", home=home, environ={})
+    app = settings_app(isolated_home, autostart)
+    url = app.start()
+    try:
+        with browser_page(url, "settings/system") as page:
+            toggle = page.get_by_role("switch", name="Start when you log in")
+            assert toggle.get_attribute("aria-checked") == "false"
+            assert page.get_by_role("switch", name="With administrator rights").count() == 0
+            toggle.click()
+            waits_for(page, lambda: autostart.is_enabled())
+            page.wait_for_function(
+                "document.querySelector(\"[aria-label='Start when you log in']\")"
+                ".getAttribute('aria-checked') === 'true'"
+            )
+            assert "libre-panel.desktop" in page.locator("#main").inner_text()
+            toggle.click()
+            waits_for(page, lambda: not autostart.is_enabled())
+    finally:
+        app.quit()
+        app.shutdown()
+
+
+def test_settings_the_highest_rights_only_when_asked_and_by_an_administrator(isolated_home):
+    from test_autostart import FakeRegistry, FakeTasks
+
+    from libre_panel.autostart import Autostart
+
+    registry, tasks = FakeRegistry(), FakeTasks()
+    autostart = Autostart("win32", registry=registry, tasks=tasks, admin=lambda: False)
+    app = settings_app(isolated_home, autostart)
+    url = app.start()
+    try:
+        with browser_page(url, "settings/system") as page:
+            assert (
+                page.get_by_role("switch", name="Start with Windows").get_attribute("aria-checked")
+                == "false"
+            )
+            rights = page.get_by_role("switch", name="With administrator rights")
+            assert rights.get_attribute("aria-checked") == "false"  # never the default
+            assert "temperature and power of the processor" in page.locator("#main").inner_text()
+            assert "needs Libre Panel to run as administrator" in page.locator("#main").inner_text()
+            rights.click()  # not an administrator: told what to do, nothing is set up
+            dialog = page.locator(".dialog")
+            assert "Run as administrator" in dialog.inner_text()
+            assert (
+                "libre-panel autostart enable --elevated" in dialog.locator(".command").inner_text()
+            )
+            dialog.get_by_role("button", name="Close").click()
+            assert not tasks.tasks and registry.get("Libre Panel") is None
+            autostart._admin = lambda: True  # started as an administrator
+            page.goto(f"{url}#/settings/panel")
+            page.goto(f"{url}#/settings/system")
+            page.wait_for_selector("[role='switch'][aria-label='With administrator rights']")
+            rights.click()
+            dialog = page.locator(".dialog")
+            assert "highest rights at every login" in dialog.inner_text()
+            dialog.get_by_role("button", name="Cancel").click()
+            assert not tasks.tasks  # a question first
+            rights.click()
+            page.locator(".dialog .btn-primary").click()
+            waits_for(page, lambda: "Libre Panel" in tasks.tasks)
+            page.wait_for_function(
+                "document.querySelector(\"[aria-label='With administrator rights']\")"
+                ".getAttribute('aria-checked') === 'true'"
+            )
+    finally:
+        app.quit()
+        app.shutdown()
+
+
+def test_settings_about(app_url, isolated_home, monkeypatch):
+    from libre_panel import __version__, tray
+
+    opened = []
+    monkeypatch.setattr(tray, "open_path", opened.append)
+    with browser_page(app_url, "settings/about") as page:
+        assert f"Libre Panel {__version__}" in page.locator("#main").inner_text()
+        assert "GPL-3.0-or-later" in page.locator("#main").inner_text()
+        links = page.locator("#main a.btn")
+        hrefs = [links.nth(i).get_attribute("href") for i in range(links.count())]
+        assert "https://github.com/syntensa/libre-panel" in hrefs
+        assert any(href.endswith("template=panel_support.yml") for href in hrefs)
+        commands = page.locator(".command")
+        assert [commands.nth(i).inner_text().split()[-1] for i in range(commands.count())] == [
+            "doctor",
+            "devices",
+        ]
+        assert str(isolated_home) in page.locator("[data-folder='config']").inner_text()
+        page.locator("[data-folder='themes'] button").click()
+        page.locator("[data-folder='logs'] button").click()
+        waits_for(page, lambda: len(opened) == 2)
+        assert opened == [isolated_home / "themes", isolated_home / "logs"]
+        # the notices of the software it is built on: shown in the app, from NOTICE.md
+        assert page.locator(".notices").count() == 0
+        page.locator(".settings-disclosure", has_text="Notices and credits").click()
+        notices = page.locator(".notices")
+        assert "turing-smart-screen-python" in notices.inner_text()
+        assert notices.locator("table").count() >= 1 and notices.locator("a").count() > 3
+        assert notices.locator("a").first.get_attribute("rel") == "noopener noreferrer"
+
+
+def test_settings_say_when_config_toml_has_a_mistake(app_url, isolated_home):
+    (isolated_home).mkdir(parents=True)
+    (isolated_home / "config.toml").write_text("this is not toml", encoding="utf-8")
+    allow = ("/api/settings", "/api/panel", "/api/system", "/api/pages", "/api/active")
+    with browser_page(app_url, "settings/panel", allow=allow) as page:
+        page.wait_for_selector(".note.error")
+        assert "config.toml has a mistake in it." in page.locator(".note.error").inner_text()
+        assert page.locator(".settings-card").count() == 0  # nothing to change meanwhile
+        (isolated_home / "config.toml").write_text("fps = 10\n", encoding="utf-8")
+        page.get_by_role("button", name="Try again").click()
+        page.wait_for_selector(".panel-found")
+        assert page.locator(".note.error").count() == 0
+
+
 class HardwareNames:
     """A stand-in for the server's /api/hardware: the names, and what the app posts."""
 
@@ -334,10 +883,11 @@ def test_hardware_names_in_settings_and_where_they_show(app_url):
 
 
 def test_without_hardware_names_nothing_shows(app_url):
-    """A server without /api/hardware (an older background app): no fields, and the section
-    says what is to come."""
+    """A server without /api/hardware (an older background app): no fields; the rest of
+    the section is there."""
     missing = {"**/api/hardware": lambda route: route.fulfill(status=404, body="")}
     with browser_page(app_url, "settings/sensors", routes=missing) as page:
         page.wait_for_function("window.libre.store.get().hardware === false")
         assert page.locator(".hardware-name").count() == 0
-        assert page.locator(".settings-upcoming").is_visible()
+        assert page.locator("#sensor-sources").is_visible()
+        assert page.locator(".settings-upcoming").count() == 0

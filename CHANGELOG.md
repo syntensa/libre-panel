@@ -27,6 +27,23 @@
   a text typed there takes their place on the panel (*Automatic* brings the
   detected one back). In *Design* the same field sits beside a widget that
   shows one of them
+- *Settings* in the app change `config.toml` for you, so that nothing needs a text
+  editor: *Panel* (the panel that is found; the video mode with what it still needs,
+  its frame rate, and the name of the standby clip, which is written only when you
+  type it; brightness; upside down; under *Advanced* the driver, the picture file,
+  the serial port and ffmpeg), *Sensors* (the sources, on and off and in their
+  order; how LibreHardwareMonitor is read, with what it says about administrator
+  rights and PawnIO; the reading interval), *Services* (each one on or off with its
+  state, *Restart*, and the options it declares), *Weather and place* (the weather,
+  its units and interval, and a place found by its name: the name goes to
+  Open-Meteo's search only when you press *Search*, and the place is kept to about a
+  kilometre), *Start and system* (starting with the system; the highest rights
+  only when you ask and only for an administrator; the language) and *About* (the
+  version, the licence, the notices, how to report a panel, the folders with *Open
+  folder*). The comments in `config.toml` stay. What the running app cannot take in
+  by itself, the sources and the weather, says so and has a *Restart the panel*
+  button; everything else is followed at once. `[weather]` has `place`, the name the
+  app shows for the coordinates
 - Everything in the app is a command: Ctrl+K finds it by a few letters
   (themes, modules, sensors, panels, the language, the panel's controls),
   with the keys it has

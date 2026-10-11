@@ -16,6 +16,27 @@ libre-panel config path     # where it is
 Set `LIBRE_PANEL_HOME` to use another folder (portable installs). Changes to
 `config.toml` and to the active theme are picked up while running.
 
+## Every setting is in the app
+
+Nothing in this file needs a text editor: *Settings* in the app (the gear at the top
+right, or the tray's *Settings*) changes each of its settings and writes it with the
+rest of the file, comments included, left as it is. A setting that would make the file
+invalid is refused with the reason, and nothing is written.
+
+| Section | What it changes in `config.toml` |
+|---|---|
+| Panel | `[device]` (`model`, `brightness`, `rotate`; under *Advanced* `driver`, `output`, `port`) and `[video]` (`mode`, `fps`, `local_clip`; under *Advanced* `ffmpeg`) |
+| Sensors | `[sensors] providers` (which sources, and their order), `[sensors.librehardwaremonitor]` (`mode`, `url`), `refresh_ms`, and the hardware's names |
+| Services | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Pages → Autopilot*), the warnings of `notices` and the limits of `cooling` are still written here |
+| Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
+| Start and system | `language`, and starting with the system (`libre-panel autostart`) |
+| About | nothing: the version, the licence, the notices, how to report a panel, and the folders (with *Open folder*) |
+
+The running Libre Panel follows a change at once, services included (one whose options
+change starts again by itself). The exceptions are the sensor sources and the weather:
+they are made when the panel starts, so the app says that a change takes effect after
+a restart, and its *Restart the panel* button does that without quitting Libre Panel.
+
 ## Reference
 
 ```toml
@@ -67,7 +88,8 @@ url = "http://127.0.0.1:8085/data.json"   # the web server (mode "webserver", an
 enabled = false                # off unless you turn it on
 provider = "open-meteo"
 # latitude = 0.0               # your location; find it with:
-# longitude = 0.0              #   libre-panel location "Your City"
+# longitude = 0.0              #   libre-panel location "Your City" (or in the app)
+# place = ""                   # what the app calls it; the coordinates are what counts
 units = "metric"               # or "imperial"
 update_minutes = 15
 
@@ -807,7 +829,10 @@ local_clip = "usr/data/standby.h264"
 With `mode = "auto"` (the default) the video mode is on by itself where it is
 proven, today the 9.2", as soon as ffmpeg is found and `local_clip` is set.
 `libre-panel doctor` and the log say what is missing. `mode = "on"` tries it on
-every TURZX USB panel; `"off"` keeps single PNG frames.
+every TURZX USB panel; `"off"` keeps single PNG frames. In the app, *Settings →
+Panel* shows the same (on with its frame rate, or what is still missing), sets the
+mode and the frame rate (25, 30 or 50), and has a field for the clip's name. That
+field is empty until you type a name; nothing is ever filled in for you.
 
 - **ffmpeg** encodes the video. Install it (Windows: `winget install ffmpeg`;
   Linux: the `ffmpeg` package), or set `ffmpeg = "C:/path/to/ffmpeg.exe"`. It
@@ -948,6 +973,10 @@ of the library inside Libre Panel if its thread ever stops.
 
 Weather is off by default and nothing is sent anywhere until you enable it.
 When enabled, only your coordinates go to Open-Meteo every `update_minutes`.
+In the app, *Settings → Weather and place* finds the place by its name: the name
+you type goes to Open-Meteo's place search, only when you press *Search*, and the
+place is kept (and sent) to about a kilometre. The sun and the moon use the place
+too, also while the weather is off.
 The answer includes the rain in 15-minute steps, for the `weather.rain.*`
 readings of the [theme guide](THEMES.md#sensor-keys).
 Weather data by [Open-Meteo.com](https://open-meteo.com), CC BY 4.0, free for

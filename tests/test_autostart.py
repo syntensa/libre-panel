@@ -162,6 +162,13 @@ class FakeTasks:
         self.tasks.pop(name, None)
 
 
+def test_only_an_administrator_can_set_up_the_start_with_the_highest_rights():
+    """The app asks, so it can tell a person to open a terminal as administrator."""
+    assert Autostart("win32", registry=FakeRegistry(), admin=lambda: True).can_elevate()
+    assert not Autostart("win32", registry=FakeRegistry(), admin=lambda: False).can_elevate()
+    assert not Autostart("linux", admin=lambda: True).can_elevate()  # Windows only
+
+
 def test_windows_elevated_start_is_a_task_with_the_highest_rights():
     import xml.etree.ElementTree as ET
 

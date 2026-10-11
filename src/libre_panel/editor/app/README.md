@@ -22,9 +22,10 @@ The editor's server (`editor/server.py`) serves `index.html` at `/`, this folder
 | `core/commands.js` | the command registry the palette searches |
 | `core/app.js` | the background app (`store.get().app`, polled), `appAction()`, `quitApp()`, the window's bridge |
 | `core/hardware.js` | the hardware's names (`/api/hardware`): `loadHardware()`, `setHardwareName(part, text)`; `store.get().hardware` is `false` where the server has none |
+| `core/settings.js` | what Settings reads and writes (`/api/settings`, `/api/panel`, `/api/system`, `/api/about`, the console's sources and services): `loadSettings()`, `saveSettings(changes)`, `useConfig()`, `useCatalog()`, `loadPanelInfo()`, `saveSystem(change)`, `searchPlaces(query)`, `enableService()`, `restartPanel()` |
 | `ui/` | controls (`Toggle`, `Segmented`, `Chips`, `NumberField`, `TextField`, `Select`, `Slider`, `Field`, `Row`, `Section`, `IconButton`), `Icon`, `Popover`, `Menu`, dialogs (`openDialog`, `confirmDialog`, `promptDialog`), `toast()`, the palette |
 | `shell/` | views and routes, the header and its parts (`ThemeTitle`, `SearchTrigger`, `PanelChip`, `UndoRedo`, `ApplyButton`), app-wide commands, plugin pages (`#/plugin/<id>`) |
-| `views/<id>/` | one folder per view; `design` is the editor, `settings` the frame of the settings (sections on the left), the others are empty places to fill |
+| `views/<id>/` | one folder per view; `design` is the editor, `settings` the settings (the frame with the sections on the left, and one file for each section: `panel.js`, `sensors.js`, `services.js`, `weather.js`, `system.js`, `about.js`; `parts.js` has the cards, rows and notes they are made of), the others are empty places to fill |
 | `app.css` | colours and fonts (`:root` tokens) and the shared controls; a view brings its own CSS |
 
 ## A view
@@ -81,12 +82,27 @@ About); a part of the app adds its group to one without touching the others:
 ```js
 registerSettingsGroup("sensors", {
   id: "hardware",
-  order: 10,
+  order: 40,
   component: HardwareNames, // a .settings-card with .settings-row rows
   load: () => loadHardware(true), // when the section opens
   shows: () => Boolean(store.get().hardware), // nothing to show: the section says what is to come
 });
 ```
+
+A group that changes a setting writes it to config.toml through `saveSettings`, by the
+setting's name there, and reads it from `useConfig()`; the server checks each setting
+(`editor/settings.py`) and keeps the file's comments:
+
+```js
+const config = useConfig(); // undefined until config.toml is read
+saveSettings({ "device.brightness": 70 }); // all that are given go in one write
+saveSettings((now) => ({ "sensors.providers": [...now.sensors.providers, "demo"] })); // from what is there
+```
+
+A change that depends on what is there (a list gets one more item) is given as a function
+of the config as the last write left it, so two quick ones do not undo each other. The
+sensor sources and the weather are made when the panel starts: a group that writes them
+shows `<RestartNote prefix="sensors." />`, which says so and has the button.
 
 ## A field in the inspector
 

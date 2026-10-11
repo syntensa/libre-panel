@@ -40,7 +40,7 @@ Installed with pip, add the `tray` extra: `pipx install "libre-panel[usb,serial,
 | **Brightness** | Off, 10–100 %; written to `config.toml` |
 | **Pause panel** | stops sending frames and releases the USB device, e.g. for the vendor app |
 | **Start with system** | the same as `libre-panel autostart enable/disable` |
-| **Settings** | the window on *Settings* |
+| **Settings** | the window on *Settings*: every setting of `config.toml` ([Configuration](CONFIGURATION.md#every-setting-is-in-the-app)) |
 | **Open settings folder** / **Open log** | `config.toml`, user themes, `logs/libre-panel.log` (in the file manager) |
 | **Quit Libre Panel** | |
 
@@ -156,7 +156,8 @@ removes exactly what turning it on created.
 
 The entry starts `libre-panel tray --background`, which does not open the
 editor. If a panel is not ready yet at login (USB still starting), Libre
-Panel keeps looking for it and uses it as soon as it appears.
+Panel keeps looking for it and uses it as soon as it appears. The same switch
+is in the app: *Settings → Start and system*.
 
 ### Windows: starting with the highest rights
 
@@ -179,6 +180,12 @@ task. Only use it when Libre Panel is installed where only administrators
 can change it (under *Program Files*): a program in your user folder could
 be replaced by anything you run, which would then get those rights at the
 next login. `enable --elevated` warns about that.
+
+In the app this is *Settings → Start and system → With administrator rights*. It is
+off until you turn it on, and Libre Panel can set it up only while it runs as an
+administrator itself; otherwise the app shows the command to run in a terminal
+opened as one. It warns, as the command does, when Libre Panel lies in your user
+folder.
 
 The task reads the settings from `%APPDATA%\LibrePanel` as usual. **A program
 started from a Microsoft Store app (an MSIX package) writes `%APPDATA%` into

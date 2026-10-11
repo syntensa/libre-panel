@@ -5,13 +5,21 @@
 
 import { registerProvider } from "../../core/commands.js";
 import { t } from "../../core/i18n.js";
+import { loadSettings } from "../../core/settings.js";
 import { store, useStore } from "../../core/state.js";
 import { loadHardware } from "../../core/hardware.js";
 import { html, useEffect } from "../../lib/preact.js";
 import { navigate, registerView } from "../../shell/views.js";
 import { Icon } from "../../ui/icons.js";
+import { aboutGroups } from "./about.js";
 import { HardwareNames } from "./hardware.js";
+import { panelGroups } from "./panel.js";
+import { Note } from "./parts.js";
 import { registerSettingsGroup, registerSettingsSection, settingsGroups, settingsSections } from "./sections.js";
+import { sensorGroups } from "./sensors.js";
+import { serviceGroups } from "./services.js";
+import { systemGroups } from "./system.js";
+import { weatherGroups } from "./weather.js";
 
 registerSettingsSection({
   id: "panel",
@@ -35,7 +43,7 @@ registerSettingsSection({
   id: "weather",
   order: 40,
   title: () => t("Weather and place"),
-  text: () => t("The place for the weather, the sun and the time zone."),
+  text: () => t("The place for the weather and the sun, and the weather itself."),
 });
 registerSettingsSection({
   id: "system",
@@ -50,24 +58,35 @@ registerSettingsSection({
   text: () => t("The version, the licence and where to find help."),
 });
 
-function About() {
-  const version = useStore((s) => s.specs?.version);
-  return html`<section class="settings-card">
-    <div class="settings-card-head">
-      <h2>Libre Panel ${version || ""}</h2>
-      <p>${t("Free software for USB system-monitor panels, under the GNU General Public License 3.0.")}</p>
-    </div>
-  </section>`;
+// each section's groups: the panel, the sources, the services, the weather, the system, about
+for (const [section, groups] of Object.entries({
+  panel: panelGroups,
+  sensors: sensorGroups,
+  services: serviceGroups,
+  weather: weatherGroups,
+  system: systemGroups,
+  about: aboutGroups,
+})) {
+  for (const group of groups) registerSettingsGroup(section, group);
 }
 
 registerSettingsGroup("sensors", {
   id: "hardware",
-  order: 10,
+  order: 40,
   component: HardwareNames,
   load: () => loadHardware(true), // what the sensors detect now
   shows: () => Boolean(store.get().hardware), // not where the server has no names
 });
-registerSettingsGroup("about", { id: "version", order: 10, component: About });
+
+/** config.toml cannot be read: nothing below it can be shown or changed until it is mended. */
+function ConfigProblem({ message }) {
+  return html`<${Note}
+    tone="error"
+    action=${html`<button type="button" class="btn" onClick=${loadSettings}>${t("Try again")}</button>`}
+  >
+    <strong>${t("config.toml has a mistake in it.")}</strong> ${message}
+  <//>`;
+}
 
 /** A section none of whose groups shows anything yet: what it is going to hold. */
 function Upcoming({ section }) {
@@ -82,6 +101,7 @@ function Upcoming({ section }) {
 
 function SettingsView({ rest }) {
   useStore((s) => [s.lang, s.hardware]); // the texts follow the language; groups come and go
+  const problem = useStore((s) => s.settingsError);
   const sections = settingsSections();
   const current = sections.find((section) => section.id === rest) || sections[0];
   const groups = settingsGroups(current.id);
@@ -96,6 +116,7 @@ function SettingsView({ rest }) {
     </nav>
     <main class="settings-main" aria-labelledby="settings-title">
       <h1 id="settings-title">${current.title()}</h1>
+      ${problem && current.id !== "about" ? html`<${ConfigProblem} message=${problem} />` : null}
       ${showing.map((group) => html`<${group.component} key=${group.id} />`)}
       ${showing.length ? null : html`<${Upcoming} section=${current} />`}
     </main>
