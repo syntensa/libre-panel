@@ -53,7 +53,7 @@ export function HardwareNameField({ part, label, hint, row = false }) {
     return html`<div class="settings-row hardware-name">
       <label class="settings-row-text" for=${id}>
         <span class="settings-row-title">${label}</span>
-        <span class="settings-row-hint">${detected ? t("detected: {name}", { name: detected }) : t("not detected")}</span>
+        <span class="settings-row-hint nowrap">${detected ? t("detected: {name}", { name: detected }) : t("not detected")}</span>
       </label>
       <div class="settings-row-control">${input}<span class="row-action">${automatic}</span></div>
     </div>`;

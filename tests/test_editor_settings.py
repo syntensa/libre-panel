@@ -166,6 +166,42 @@ def test_settings_are_written_with_the_comments_kept(server):
     assert load_config().device.video.local_clip == "usr/data/standby.h264"  # as typed, trimmed
 
 
+def test_writes_that_come_at_once_all_arrive(server):
+    """Each starts from the file the one before left: none is lost."""
+    changes = [
+        {"device.brightness": 15},
+        {"device.rotate": 180},
+        {"video.fps": 25},
+        {"refresh_ms": 400},
+        {"weather.units": "imperial"},
+        {"weather.update_minutes": 45},
+        {"services.game.poll_s": 3},
+        {"services.notices.quiet_s": 30},
+    ]
+    results = []
+    threads = [
+        threading.Thread(target=lambda c=c: results.append(write(server, **c)[0])) for c in changes
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert results == [200] * len(changes)
+    config = load_config()
+    assert (config.device.brightness, config.device.rotate, config.device.video.fps) == (
+        15,
+        180,
+        25,
+    )
+    assert (config.refresh_ms, config.weather.units, config.weather.update_minutes) == (
+        400,
+        "imperial",
+        45,
+    )
+    assert config.services.options["game"] == {"poll_s": 3}
+    assert config.services.options["notices"] == {"quiet_s": 30}
+
+
 def test_a_refused_setting_leaves_all_of_them_as_they_were(server):
     write(server, **{"device.brightness": 40})
     before = config_text()
@@ -185,6 +221,8 @@ def test_a_refused_setting_leaves_all_of_them_as_they_were(server):
         {"video.local_clip": 5},
         {"refresh_ms": 99},
         {"sensors.providers": []},
+        {"sensors.providers": ["psutil"]},  # config.py reads that as the usual list
+        {"sensors.providers": ["psutil", "psutil"]},  # the same, said twice
         {"sensors.providers": ["psutil", "nonesuch"]},
         {"sensors.providers": "psutil"},
         {"sensors.librehardwaremonitor.mode": "magic"},
@@ -309,7 +347,7 @@ def test_what_the_running_app_has_to_start_again_for_is_told_until_it_has(make):
     port = make(app)
     status, data = write(port, **{"device.brightness": 30})
     assert status == 200 and data["restart"] == [] and app.followed == 1  # brightness is live
-    status, data = write(port, **{"sensors.providers": ["psutil"], "refresh_ms": 200})
+    status, data = write(port, **{"sensors.providers": ["load", "psutil"], "refresh_ms": 200})
     assert data["restart"] == ["sensors.providers"] and app.followed == 2
     _, data = request(port, "GET", "/api/settings")
     assert data["restart"] == ["sensors.providers"]  # it is the server that remembers
@@ -324,7 +362,7 @@ def test_what_the_running_app_has_to_start_again_for_is_told_until_it_has(make):
 
 
 def test_without_the_background_app_a_change_waits_for_the_next_start(server):
-    _, data = write(server, **{"sensors.providers": ["psutil"]})
+    _, data = write(server, **{"sensors.providers": ["load", "psutil"]})
     assert data["restart"] == ["sensors.providers"]
     _, data = write(server, **{"device.brightness": 10})
     assert data["restart"] == ["sensors.providers"]

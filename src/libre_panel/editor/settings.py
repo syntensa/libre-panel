@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import math
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +41,7 @@ IMPLICIT_SOURCES = ("media", "sky")
 RESTART_PREFIXES = ("sensors.", "weather.")
 FOLDERS = ("config", "themes", "logs")
 PLACES = 6
+_WRITING = threading.Lock()  # two writes at once would each start from the same file
 
 
 class SettingsError(ValueError):
@@ -328,16 +330,17 @@ class Settings:
         changes = payload.get("set") if isinstance(payload, dict) else None
         if not isinstance(changes, dict) or not changes or len(changes) > 60:
             raise SettingsError('expected {"set": {"device.brightness": 70, ...}}')
-        config = self._config()
-        edits = []
-        for name, value in changes.items():
-            kind, cleaned = self._check(str(name), value, config)
-            edits.append((kind, str(name), cleaned))
-        self._check_together(changes, config)
-        try:
-            edit_config(*edits, path=self.config_path)
-        except (ConfigError, OSError) as exc:
-            raise SettingsError(str(exc), 409) from exc
+        with _WRITING:
+            config = self._config()
+            edits = []
+            for name, value in changes.items():
+                kind, cleaned = self._check(str(name), value, config)
+                edits.append((kind, str(name), cleaned))
+            self._check_together(changes, config)
+            try:
+                edit_config(*edits, path=self.config_path)
+            except (ConfigError, OSError) as exc:
+                raise SettingsError(str(exc), 409) from exc
         self.restart.written([name for _, name, _ in edits], self.controls)
         self._follow()
         return self.read()
@@ -592,6 +595,10 @@ def _rule_providers(name: str, value: Any, config: Config) -> list[str]:
     chosen = list(dict.fromkeys(value))
     if not chosen:
         raise SettingsError(f"{name}: at least one source")
+    if chosen == [
+        "psutil"
+    ]:  # what the files of 0.4 named alone: config.py reads it as the usual list
+        raise SettingsError(f"{name}: psutil alone stands for the usual list; keep another source")
     return chosen
 
 
