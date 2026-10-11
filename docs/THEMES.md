@@ -389,6 +389,8 @@ class Plate(WidgetType):
 | `{value:bytes}/s` | `2.4 MB/s` |
 | `{value:duration}` | `3d 5h` |
 | `{value:clock}` | `3:07` (a song's length) |
+| `{value:gb}` | `13.5` (a size in GB, whatever unit the reading comes in) |
+| `{value:rate}` and `{value:rate_unit}` | `519` and `KB/s`, from 1 MB/s `1.2` and `MB/s` (a data rate: the number and its unit apart, so each can have its own font) |
 | `{label}: {value:.0f}` | `CPU load: 38` |
 
 For safety, attribute or index access (`{value.x}`, `{value[0]}`), other field

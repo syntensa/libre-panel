@@ -141,6 +141,10 @@
   `libre_panel.render.finish.register`
 - `tools/motion_bench.py` leaves the warm-up out (`--warmup`) and times the
   frames a sweep of light runs over on their own line
+- Format specs `{value:gb}`, a size in GB whatever unit the reading comes
+  in, and `{value:rate}` with `{value:rate_unit}`: a data rate as SPUR II
+  sets it, its number and its unit apart (519 and KB/s, from 1 MB/s 1.2 and
+  MB/s)
 - Liberation Sans ships with Libre Panel (`builtin:LiberationSans-Regular`,
   `-Bold`): its letters are as wide as Arial's, so a layout made for Arial
   stays in place
