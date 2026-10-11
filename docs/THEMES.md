@@ -290,11 +290,12 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `audio.volume`, `audio.muted` | %, 1/0 | the volume of the default output (0 while muted) and whether it is muted; needs `"audio"` in `providers`, see [Configuration](CONFIGURATION.md#sensor-sources-and-their-order) |
 | `sun.rise`, `sun.set`, `sun.noon`, `sun.next_rise`, `sun.daylight`, `sun.up`, `sun.progress`, `sun.elevation` | "07:42", s, 1/0, 0–1, ° | computed for the place in `[weather]` (no internet needed); `progress` is how much of the day has passed, empty at night |
 | `moon.phase`, `moon.illumination`, `moon.name`, `moon.age`, `moon.full_in`, `moon.new_in` | 0–1, %, text, days | computed; `phase` 0 new, 0.5 full; `name` in the language |
-| `media.title`, `.artist`, `.album`, `.source`, `.state`, `.playing`, `.position`, `.duration`, `.progress` | text, 1/0, s, 0–1 | what is playing, while a theme shows it; the cover is the picture `@media.cover` |
+| `media.title`, `.artist`, `.album`, `.source`, `.state`, `.playing`, `.position`, `.duration`, `.progress` | text, 1/0, s, 0–1 | what is playing, while a theme shows it; the cover is the picture `@media.cover`, the icon of the player `@media.app_icon` |
 | `calendar.<n>.title`, `.when`, `.day`, `.time`, `.location`, `.calendar`, `.start`, `.minutes`, `.now`; `calendar.events`, `calendar.today` | text, s, min | the next events (1 = the next or the one going on), [calendars](CONFIGURATION.md#more-sensor-sources) |
 | `ha.<entity id>`, `ha.<entity id>.<attribute>` | as Home Assistant says | [Home Assistant](CONFIGURATION.md#more-sensor-sources) |
 | `mqtt.<topic with dots>` (`.field` for JSON) | | [MQTT](CONFIGURATION.md#more-sensor-sources) |
 | `game.fps`, `game.frametime`, `game.low`, `game.app` | fps, ms, fps, text | the game being played, through [PresentMon](CONFIGURATION.md#more-sensor-sources) (Windows) |
+| `game.frametime_peak`, `game.limiter` | ms, text | the longest frame time since the last reading (0 while a game runs and no frame came: a graph of it never stops), and who holds the frame rate down: `cpu`, `gpu` or `cap` |
 | `game.name` | text | the name of the game while the `game` service has the panel in game mode ([Configuration](CONFIGURATION.md#game-mode)); its logo is the picture `@game.logo` |
 | `cpu.name`, `gpu.name` | text | LibreHardwareMonitor |
 | `weather.temperature`, `.apparent_temperature`, `.humidity`, `.wind_speed`, `.code`, `.description`, `.is_day` | °C, %, km/h | Open-Meteo, when enabled |

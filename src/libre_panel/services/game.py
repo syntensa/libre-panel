@@ -14,6 +14,7 @@ Without the entrance a message ("Game mode") says that the panel changed.
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from collections.abc import Callable
@@ -24,6 +25,7 @@ from PIL import Image
 
 from libre_panel.i18n import t
 from libre_panel.plugins import Service
+from libre_panel.sensors import presentmon
 from libre_panel.sensors.base import Snapshot
 from libre_panel.services import machine as computer
 from libre_panel.services.steam import Library
@@ -45,6 +47,14 @@ class Found:
     pid: int = 0
     path: str = ""
     appid: str = ""  # Steam's number for it, if it is a Steam game
+
+
+def program_of(found: Found) -> str | None:
+    """The file name of the game's program in lower case, which is how PresentMon names the
+    program whose frames it counts. None where there is no program (a forced game mode)."""
+    if found.path:
+        return os.path.basename(found.path).lower() or None
+    return found.key if found.key and ":" not in found.key else None
 
 
 def parse_programs(raw: list[Any], report: Callable[[str], None]) -> dict[str, str]:
@@ -168,6 +178,10 @@ class Game(Service):
         self._failure: str | None = None
 
     def start(self) -> None:
+        # The frame rates come from PresentMon, whose recording session must exist before
+        # the game starts (an anti-cheat refuses a new one): the service asks for them, so
+        # that the source runs for as long as the service does, whether a theme shows them or not.
+        self.host.want("game.*")
         self.host.on("sample", self.on_sample)
         self._thread = threading.Thread(target=self._run, name="game-mode", daemon=True)
         self._thread.start()
@@ -177,6 +191,7 @@ class Game(Service):
         if self._thread is not None:
             self._thread.join(3.0)
             self._thread = None
+        presentmon.set_target(None)
 
     # -- looking ---------------------------------------------------------------------
 
@@ -220,9 +235,13 @@ class Game(Service):
                 self._end()
             return
         if self.found is not None and self.found.key == found.key:
+            if program_of(found) != program_of(self.found):  # another program of the game
+                self.found = found
+                presentmon.set_target(program_of(found))
             return  # still the same game
         self.found, self.logo = found, self._logo_of(found)
         self.host.log.info("game: %s", found.name)
+        presentmon.set_target(program_of(found))  # its frames are the ones that count
         self.host.publish(NAME, found.name, "", "Game")
         self.host.publish_image(LOGO, self.logo)
         if self.in_mode:
@@ -267,6 +286,7 @@ class Game(Service):
                 self._announce(t("Game ended"))
         self.host.log.info("game over" if was_in_mode else "game gone before the mode began")
         self.waiting, self.in_mode, self.found, self.logo = None, False, None, None
+        presentmon.set_target(None)
         self.host.publish(NAME, None, "", "Game")
         self.host.publish_image(LOGO, None)
 

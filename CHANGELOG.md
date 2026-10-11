@@ -84,7 +84,6 @@
   Apache-2.0 and MIT; see NOTICE.md) are fetched from NuGet when the Windows
   downloads are built, each checked against a fixed SHA-256; they are not in the
   repository
-
 - What moves on the panel goes on from theme to theme: a value gliding when
   the theme switches glides on in the next one instead of starting over
   (the main loop keeps it; the editor's previews have their own)
@@ -103,6 +102,27 @@
   panel goes on showing the one before, so a switch no longer freezes a
   video for a third of a second. Screens from plugins can load what their
   first frames need meanwhile: `Screen.prepare()`
+- `devices`, a built-in service for Windows (off until listed in
+  `[services] enabled`): messages when a removable or USB/SD/MMC drive, a USB
+  device (a phone with its maker's name) or a game controller comes or goes, a
+  controller's battery runs low, a drive is nearly full (`min_free_gb`,
+  `min_free_percent`) and an SSD runs hot (`ssd_warn_c`). Only changes are told,
+  never what is plugged in at the start; a stick is one message, not two; four
+  changes at once (waking from sleep) are taken in silently; Windows' own
+  notices bring the look at once, with a slow poll for what was missed. Nothing
+  is opened for data. The messages have drawn icons (`usb`, `stick`, `phone`,
+  `ssd`, with the existing `gamepad`) that also go in any icon widget
+- `media.app_icon`, the icon of the program that plays, next to `media.cover`
+  (an image widget: `"src": "@media.app_icon"`), and the small badge on the
+  cover of the "Now playing" message. Windows: the logo of a Store app, else
+  the icon of the running program; Linux: the PNG of the player's desktop
+  entry; macOS: the app's `.icns`. Found once per program and nothing is sent
+  anywhere
+- `game.frametime_peak`, the longest frame time since the last reading (so a
+  stutter between two readings shows, and a graph of it never stops while a
+  game runs), and `game.limiter`, `cpu`, `gpu` or `cap`: who holds the frame
+  rate down, judged from how long the CPU and the GPU wait for each other
+  (PresentMon 2)
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
@@ -114,12 +134,17 @@
   played
 - A message on show was gone for good when a screen came that shows its
   kind itself; now it goes on unseen and comes back with the next screen
-
 - A seconds clock ticks on the frame that is due: `snapshot.now` is the time
   a frame is planned for, not the moment its drawing begins
 - Video mode: a graph whose sensor goes missing or reads nothing moves on
   with a gap, instead of standing still (or, with `per_frame`, running on as
   a flat line)
+- PresentMon began when a theme first showed the frame rate, which is too late
+  for a game with an anti-cheat: it refuses a new recording session while the
+  game runs. It now runs for as long as the `game` service is on or a theme
+  shows `game.*`, ends with Libre Panel however that ends (a Windows job), and
+  when it cannot run (no administrator rights) it waits longer and longer
+  instead of trying again at every reading
 
 **Changes**
 - Windows: the GPU, temperatures, power and fans showed nothing unless
@@ -143,7 +168,6 @@
   what Libre Panel cannot read (the CPU's readings without administrator
   rights). Drive temperatures (`temp.nvme.*`) come only from the web server for
   now: set `mode = "webserver"` to keep them, or to read only it
-
 - SPUR II and Studio read the sensors twice a second and their numbers
   glide; SPUR II's graphs span 36 seconds in video mode, moving 25 pixels a
   second. The graphs of Slate, Libre Default and Column have a window in
@@ -161,6 +185,13 @@
 - The main loop draws one frame at a time through `MainLoop.step(now)`, with
   the sensor hub, display, host and clock given: tests and plugins' test
   benches drive the real loop frame by frame instead of copying it
+- With the `game` service on, the `game.*` readings count the frames of the
+  game it found instead of the program with the most frames
+- Windows: what is playing follows Windows' own reports of a new track, a
+  pause or another player instead of asking once a second, so a new track
+  shows at once. The cover is read when the track changes, not at every look;
+  a look every five seconds is the safety net, and the position still moves on
+  by itself. Linux and macOS ask once a second as before
 
 ## 0.4.2 — 2026-10-10
 
