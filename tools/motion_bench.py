@@ -1,15 +1,17 @@
 """How fluid the themes are in video mode, measured headless.
 
-    python tools/motion_bench.py [theme ...] [--seconds 6] [--switch THEME]
+    python tools/motion_bench.py [theme ...] [--seconds 6] [--warmup 1] [--switch THEME]
 
 Each theme runs through the main loop (``MainLoop.step``) at 50 fps in real
 time, with demo readings, the helper thread and a streaming display in
-memory, as on a video panel. Prints how long a frame takes (median, 95th
-percentile, slowest), how many frames changed the first graph and how fast
-it moved, and how many frames changed a number between readings.
-``--switch`` shows another theme halfway and prints the longest gap between
-two frames around the switch. Times depend on the machine; tests check the
-motion only (tests/test_motion.py).
+memory, as on a video panel. Prints how long a frame takes after the first
+``--warmup`` seconds (median, 95th percentile, slowest), how many frames
+changed the first graph and how fast it moved, and how many frames changed
+a number between readings. With a panel light (theme ``look.light``) it
+also prints the frames a sweep of light ran over: the panel starts with
+one. ``--switch`` shows another theme halfway and prints the longest gap
+between two frames around the switch. Times depend on the machine; tests
+check the motion only (tests/test_motion.py).
 """
 
 from __future__ import annotations
@@ -91,11 +93,19 @@ def moved(before: list[int], after: list[int], most: int = 80) -> int:
     return min(range(most), key=lambda s: sum(abs(before[x + s] - after[x]) for x in range(span)))
 
 
-def bench(theme: str, seconds: float, switch: str | None) -> None:
+def sweeping(loop: MainLoop, now: float) -> bool:
+    """Whether a sweep of the panel light runs over the frame at ``now``."""
+    light = getattr(loop.renderer.look, "light", None)
+    return light is not None and bool(light.running(now))
+
+
+def bench(theme: str, seconds: float, switch: str | None, warmup: float = 1.0) -> None:
     display, host = Stream(), PluginHost()
     config = Config(theme=theme, sensors=SensorsConfig(providers=["demo"]))
     loop = MainLoop(config, host=host, hub=SensorHub([Demo({})]), display=display)
     times: list[float] = []
+    swept: list[float] = []  # frames a sweep of light ran over, after the warm-up
+    warm = round(warmup * FPS)
     display.boxes = boxes(loop)
     every = round(loop.theme.refresh_ms * FPS / 1000)
     start, asked = clock(), None
@@ -111,13 +121,18 @@ def bench(theme: str, seconds: float, switch: str | None) -> None:
             began = clock()
             loop.step(due)
             times.append((clock() - began) * 1000)
+            if n >= warm and sweeping(loop, due):
+                swept.append(times[-1])
     finally:
         loop.close()
         host.close()
-    steady = sorted(times[FPS:])  # from the second second on: past the first frame
+    steady = sorted(times[warm:])  # past the first frames: after the warm-up
     print(f"{theme}: frame median {statistics.median(steady):.1f} ms, "
           f"95% {steady[int(len(steady) * 0.95)]:.1f} ms, slowest {steady[-1]:.1f} ms "
           f"(first {times[0]:.0f} ms)")  # fmt: skip
+    if swept:
+        print(f"  light: a sweep over {len(swept)} frames, "
+              f"median {statistics.median(swept):.1f} ms, slowest {max(swept):.1f} ms")  # fmt: skip
     shown = [parts for t, parts in display.frames if asked is None or t < asked]
     if "graph" in display.boxes:
         crops = [parts["graph"].tobytes() for parts in shown[FPS:]]
@@ -137,12 +152,13 @@ def bench(theme: str, seconds: float, switch: str | None) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("themes", nargs="*", default=["spur-ii", "studio"])
+    parser.add_argument("themes", nargs="*", default=["spur-ii", "studio", "lit-demo"])
     parser.add_argument("--seconds", type=float, default=6.0)
+    parser.add_argument("--warmup", type=float, default=1.0, help="seconds left out at the start")
     parser.add_argument("--switch", help="show this theme halfway and time the switch")
     args = parser.parse_args()
     for theme in args.themes:
-        bench(theme, args.seconds, args.switch)
+        bench(theme, args.seconds, args.switch, args.warmup)
 
 
 if __name__ == "__main__":
