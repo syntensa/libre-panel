@@ -328,15 +328,36 @@ the panel):
 | `report.cpu_temp_mean`, ..., `report.cpu_temp_delta`, ... | for each of those: the mean of the earlier rounds, and this round minus it |
 | `report.level.0` ... | the share of the round in each range of frame rates in percent, the slowest range first; the label is the range ("< 60", "60–90", "165+") |
 | `report.level.0.mean` ... | the mean share of the earlier rounds in each range (no value for the first round, or when the ranges were other ones) |
-| `report.head.levels`, `report.head.peaks` | headings for a chart and a list |
+| `report.head.levels`, `report.head.peaks` | headings for a chart and a list; with earlier rounds the first says what the tick on each bar of the chart is ("Share of the round · tick: average") |
 
 Where there is nothing to be against (the first round of a game) the mean and
 delta readings have no value: a theme shows "--" or hides them with `needs`.
+
+The game's logo is the picture `game.logo` (an image widget's `"src": "@game.logo"`):
+the `game` service keeps it after the game ends, until the next game, so the report
+can show it beside the name. A `bar` can draw the mean of a range as a tick across it
+with `mark` (`"mark": "report.level.3.mean"`).
 
 The service also has `show_last_report()` (builds and shows the latest round
 that was long enough again; for a console page) and `status()` (is it
 recording, the file, how many rows were written, the last error, the game now
 played).
+
+### The round under way
+
+While a game is played the `memory` service also publishes what the round has come to so
+far, once a second, as readings (a screen made of the usual widgets, such as the built-in
+`spur-session`, shows them; they are gone when the game's name goes):
+
+| Key | Value |
+|---|---|
+| `session.time` | s: how long the round has been played |
+| `session.fps` | fps: the mean of the per-second frame rates so far (no value before the first) |
+| `session.level.0` ... | the share of the round in each range of frame rates in percent, the slowest range first; the label is the range ("< 60", "60–90", "165+"), the ranges are the `fps_levels` option |
+| `session.cpu_temp_max`, `session.gpu_temp_max`, `session.gpu_hotspot_max`, `session.cpu_power_max`, `session.gpu_power_max`, `session.vram_used_max` | the highest value since the round began: °C, W, GB (no value for one that nothing has told) |
+
+They are what the round's row in the database will say when it ends, and what the
+`report.*` readings call the round's own numbers (`report.cpu_temp`, `report.level.0` ...).
 
 ### The cooling analysis
 

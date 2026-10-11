@@ -99,6 +99,7 @@ ON_DEMAND = (
     ("media.duration", "s", "Length"),
     ("media.position", "s", "Position"),
     ("media.progress", "", "Progress"),
+    ("media.remaining", "s", "Remaining"),
     ("game.fps", "fps", "Frames per second"),
     ("game.frametime", "ms", "Frame time"),
     ("game.low", "fps", "1% low"),

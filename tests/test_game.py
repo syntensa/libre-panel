@@ -291,7 +291,8 @@ def test_the_game_ends_a_few_seconds_after_its_program(desk):
     kind, params = d.host.take_transition()
     assert (kind, params["kind"], params["title"]) == ("entrance", "end", "Space Game")
     assert params["logo"].size == (440, 120)  # the end shows it too
-    assert d.host.published()["game.name"].value is None and d.host.images() == {}
+    assert d.host.published()["game.name"].value is None  # the game is over...
+    assert d.host.images()["game.logo"].size == (440, 120)  # ...its logo stays: the round report
 
 
 def test_without_the_entrance_a_message_says_so(desk):
@@ -384,6 +385,28 @@ def test_the_next_game_changes_the_name_and_logo_not_the_mode(desk):
     assert d.mode() == "game" and d.host.switches == switches  # no second entrance
     assert d.host.published()["game.name"].value == "Other Game"
     assert d.host.images() == {}  # that one has no logo; the old one is gone
+
+
+def test_the_logo_of_a_game_that_was_played_stays_until_the_next_game_or_the_service_ends(desk):
+    d = desk()
+    pid = d.play()
+    d.look()
+    d.sample()
+    d.machine.end(pid)
+    d.look(10)
+    assert d.mode() is None and d.host.images()["game.logo"].size == (440, 120)
+    d.look(100)  # nothing else plays: it is the logo of the last game
+    assert "game.logo" in d.host.images()
+    d.play("Other", pid=2, exe="other.exe")  # the next game, which has none, takes it away
+    d.look(1)
+    assert d.host.images() == {}
+    d.machine.end(2)
+    d.look(10)
+    assert d.host.images() == {}  # (and a game without a logo leaves none)
+    d.play(pid=3)
+    d.look(1)
+    d.manager.stop()  # a logo goes with its service, as everything a service published
+    assert d.host.images() == {}
 
 
 def test_the_switches_decide_what_is_looked_for(desk):

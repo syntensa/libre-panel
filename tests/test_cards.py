@@ -183,6 +183,7 @@ def snapshot_with(drop=(), **more):
             del snap.readings[key]
         if prefix.startswith("media"):
             snap.images.pop("media.cover", None)
+            snap.images.pop("media.app_icon", None)
     for key, value in more.items():
         snap.readings[key.replace("__", ".")] = Reading(key.replace("__", "."), value)
     return snap
@@ -330,7 +331,9 @@ def M_colors():
 
 
 def test_the_playback_card_shows_the_track_and_where_it_is():
-    names, _, _ = drawn("playback")
+    bare = snapshot_with()  # (a player that has no icon)
+    bare.images.pop("media.app_icon")
+    names, _, _ = drawn("playback", bare)
     assert {"cover", "playing-sign", "playing", "title", "artist", "app-bare", "progress",
             "position", "length"} <= names  # fmt: skip
     assert not {"paused", "paused-sign", "idle", "idle-icon", "app-icon", "app"} & names
@@ -382,6 +385,47 @@ def test_a_small_playback_card_is_the_music_module():
     assert "state" in names and "playing-sign" not in names
 
 
+def texts_drawn(renderer, snap):
+    """What each part of the last frame said, by the part's name (without its module's)."""
+    seen = {}
+    original = renderer._text_widget
+
+    def spy(widget, text, color):
+        seen[widget["id"].split("/")[-1]] = text
+        return original(widget, text, color)
+
+    renderer._text_widget = spy
+    renderer.render(snap, 1.0)
+    return seen
+
+
+def test_the_playback_card_shows_the_length_or_counts_down_to_the_end():
+    assert WIDGET_SPECS["module"]["time"] == ("enum:total|remaining", "total")
+    snap = snapshot_with(
+        media__position=83.0, media__duration=227.0, media__remaining=144.0
+    )  # 1:23 of 3:47
+    for option, right in (("total", "3:47"), ("remaining", "-2:24")):
+        seen = texts_drawn(Renderer(card_theme("playback", time=option), preview=True), snap)
+        assert (seen["position"], seen["length"]) == ("1:23", right), option
+    parts = widgets_of("playback", time="remaining")
+    assert parts["length"]["sensor"] == "media.remaining" and parts["length"]["align"] == "right"
+    assert parts["length"]["format"] == "-{value:clock}" and parts["length"]["hide_if_missing"]
+    assert widgets_of("playback")["length"]["sensor"] == "media.duration"  # the default
+    # a player that does not tell where it is: no time left to show, and no word about it
+    snap = snapshot_with(drop=("media.position", "media.remaining"))
+    seen = texts_drawn(Renderer(card_theme("playback", time="remaining"), preview=True), snap)
+    assert "length" not in seen
+
+
+def test_the_small_card_and_the_music_module_count_down_too():
+    for kind, size in (("playback", (2, 1)), ("music", (3, 2))):
+        parts = widgets_of(kind, *size, time="remaining")
+        assert parts["length"]["sensor"] == "media.remaining", kind
+        assert widgets_of(kind, *size)["length"]["sensor"] == "media.duration", kind
+    slot = widgets_of("cards", time="remaining")  # a slot hands the option to its playback card
+    assert slot["c0-length"]["sensor"] == "media.remaining"
+
+
 # the ring instrument
 
 
@@ -411,6 +455,34 @@ def test_every_source_has_a_ring_instrument(source):
     assert parts["ring"]["sensor"] == {
         "cpu": "cpu.load", "gpu": "gpu.load", "mem": "mem.load", "disk": "disk.load",
     }[source]  # fmt: skip
+
+
+def test_the_memory_instrument_shows_what_is_free_its_temperature_and_its_speed():
+    parts = widgets_of("instrument", 1, 2, source="mem")
+    assert [parts[f"r{i}"]["sensor"] for i in range(3)] == ["mem.free", "mem.temp", "mem.speed"]
+    assert [parts[f"r{i}-label"]["text"] for i in range(3)] == ["FREE", "TEMP", "FREQ"]
+    assert [parts[f"r{i}-unit"]["text"] for i in range(3)] == ["GB", "°C", "MT/s"]
+    assert parts["r0"]["format"] == "{value:.1f}" and parts["r2"]["format"] == "{value:.0f}"
+    assert parts["r1"]["color_rules"][0]["above"] < 75  # warm sooner than a processor is
+    snap = snapshot_with()
+    seen = texts_drawn(Renderer(card_theme("instrument", 1, 2, source="mem"), preview=True), snap)
+    assert seen["r0"] == f"{snap.value('mem.free'):.1f}" and seen["r2"] == "5600"
+    assert seen["r1"] == f"{snap.value('mem.temp'):.0f}"
+
+
+def test_a_memory_reading_a_pc_cannot_give_stays_on_show_as_dashes_with_its_name():
+    # the modules' temperature needs administrator rights, their speed a readable SMBIOS table
+    snap = snapshot_with(drop=("mem.temp", "mem.speed"))
+    renderer = Renderer(card_theme("instrument", 1, 2, source="mem"), preview=True)
+    seen = texts_drawn(renderer, snap)
+    assert (seen["r1"], seen["r2"]) == ("--", "--")
+    assert {"r0-label", "r1-label", "r2-label"} <= set(seen)  # the column keeps its shape
+    assert not {"r1-unit", "r2-unit"} & set(seen)  # a unit with no number would be noise
+    assert "r0-unit" in seen
+    # a processor's missing reading leaves its row out, as it always did
+    cpu = Renderer(card_theme("instrument", 1, 2, source="cpu"), preview=True)
+    seen = texts_drawn(cpu, snapshot_with(drop=("cpu.temp",)))
+    assert "r0" not in seen and "r0-label" not in seen and "r1" in seen
 
 
 def test_the_readings_fit_in_their_rows_and_never_run_into_their_names():
@@ -574,6 +646,7 @@ def test_the_playback_card_has_its_sign_and_progress_in_the_covers_colour():
 
 def test_a_need_can_ask_for_a_picture():
     snap = snapshot_with()
+    snap.images.pop("media.app_icon")  # (the demo's player has an icon: this one has none)
     assert not need_holds("@media.app_icon", snap) and need_holds("!@media.app_icon", snap)
     assert need_holds("@media.cover", snap) and not need_holds("!@media.cover", snap)
     snap.images["media.app_icon"] = Image.new("RGBA", (8, 8))

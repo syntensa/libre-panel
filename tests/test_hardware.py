@@ -517,7 +517,7 @@ def values_of(provider):
     return {key: reading.value for key, reading in provider.read().items()}
 
 
-def test_the_source_gives_the_three_names_tidied(machine):
+def test_the_source_gives_the_three_names_tidied_and_the_speed_of_the_memory(machine):
     machine(PC)
     provider = HardwareProvider()
     readings = provider.read()
@@ -525,9 +525,25 @@ def test_the_source_gives_the_three_names_tidied(machine):
         "cpu.name": ("Ryzen 5 7600", "", "CPU"),
         "gpu.name": ("GeForce RTX 4070", "", "GPU"),
         "mem.name": ("Kingston DDR5-5600 32 GB", "", "Memory"),
+        "mem.speed": (5600.0, "MT/s", "Memory speed"),
     }
+    # only the names win over other sources' (the user's own text replaces a found name)
     assert provider.name == "hardware" and provider.overrides == hardware.NAME_KEYS
-    assert set(hardware.NAME_KEYS) == set(readings)
+    assert {*hardware.NAME_KEYS, hardware.SPEED_KEY} == set(readings)
+
+
+def test_the_memory_runs_at_the_speed_of_its_slowest_module(machine):
+    slow, fast = Module(8192, "DDR4", 2666, "Corsair"), Module(8192, "DDR4", 3200, "Samsung")
+    silent = Module(8192, "DDR4", 0, "")  # a module that does not tell
+    assert hardware.memory_speed(Found(modules=(fast, slow))) == 2666
+    assert hardware.memory_speed(Found(modules=(silent, fast))) == 3200
+    assert hardware.memory_speed(Found(modules=(silent,))) == 0
+    assert hardware.memory_speed(Found(memory=gigabytes(8))) == 0  # no table to read (Linux)
+    machine(Found(modules=(fast, slow)))
+    speed = HardwareProvider().read()[hardware.SPEED_KEY]
+    assert (speed.value, speed.unit, speed.label) == (2666.0, "MT/s", "Memory speed")
+    machine(Found(memory=gigabytes(8)))  # the size only: no speed to give
+    assert hardware.SPEED_KEY not in HardwareProvider().read()
 
 
 def test_a_name_that_was_not_found_is_no_reading(machine):
@@ -545,9 +561,11 @@ def test_the_users_own_text_is_the_reading_as_it_is(machine):
         "cpu.name": "AMD Ryzen 5 7600 6-Core Processor",
         "gpu.name": "GeForce RTX 4070",
         "mem.name": "2x16 GB",
+        "mem.speed": 5600.0,  # (a name is text; the speed is still what the modules say)
     }
     provider.follow_config(config_with())  # emptied: the found ones again
-    assert values_of(provider) == dict(zip(hardware.NAME_KEYS, TIDY.values(), strict=True))
+    names = dict(zip(hardware.NAME_KEYS, TIDY.values(), strict=True))
+    assert values_of(provider) == {**names, "mem.speed": 5600.0}
 
 
 def test_the_users_text_shows_where_nothing_was_found(machine):
@@ -577,7 +595,7 @@ def test_reading_costs_a_copy_and_never_asks_the_computer_again(machine):
         provider.follow_config(config_with(cpu="x"))
     assert len(machine.asked) == 1
     provider.read().clear()  # whoever reads may do what it likes with the dict
-    assert len(provider.read()) == 3
+    assert len(provider.read()) == 4
 
 
 def test_a_refresh_reaches_the_source_at_its_next_reading(machine):

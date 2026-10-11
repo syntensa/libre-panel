@@ -2,6 +2,7 @@
 (a temp file here), the readings it takes and the ones it never does, and the service that
 runs it. Time is the samples' own, so a day passes in a moment."""
 
+import gc
 import json
 import sqlite3
 import threading
@@ -498,6 +499,19 @@ def test_the_report_reads_out_its_comparison_for_a_theme_made_of_widgets():
     assert [none[f"report.limit.{name}"] for name in ("gpu", "cpu", "cap")] == [None] * 3
 
 
+def test_the_hint_of_the_chart_says_what_the_tick_on_each_bar_is_once_there_is_one():
+    from libre_panel import i18n
+
+    def hint(count):
+        return memory.round_report.readings(example_report(count=count))["report.head.levels"][0]
+
+    assert hint(7) == hint(1) == "Share of the round · tick: average"  # (earlier rounds)
+    assert hint(0) == "Share of the round at each frame rate"  # no tick without them
+    i18n.set_language("de")
+    assert hint(7) == "Anteil der Runde · Strich: Schnitt"
+    assert hint(0) == "Anteil der Runde je Bildrate"
+
+
 def test_the_first_round_of_a_game_has_nothing_to_compare_and_says_so():
     readings = memory.round_report.readings(example_report(count=0))
     got = {key: value for key, (value, _unit, _label) in readings.items()}
@@ -841,6 +855,7 @@ class Desk:
 
 @pytest.fixture
 def desk():
+    gc.collect()  # a renderer an earlier test left asks the sources for what it reads until then
     made = []
 
     def make(**options):
@@ -886,6 +901,56 @@ def test_a_game_that_ends_brings_the_report_and_its_theme(desk):
     assert published["report.head.peaks"].value == "Highest values of the round"
     assert published["report.limit"].value == "GPU 100 %"
     assert d.host.published()["report"].label == "Round report"
+
+
+def test_the_totals_of_a_game_are_published_while_it_is_played_and_gone_with_it(desk):
+    d = desk()
+    d.sample()  # nothing plays yet
+    assert not [key for key in d.host.published() if key.startswith("session.")]
+    for fps in (150.0, 170.0, 130.0, 50.0):  # four seconds, in four of the ranges
+        d.sample(**readings_of(cpu__temp=70.0, gpu__power=200.0), **in_game(fps))
+    published = d.host.published()
+    got = {key: reading for key, reading in published.items() if key.startswith("session.")}
+    assert got["session.time"].value == pytest.approx(3.0)  # since the first second of the game
+    assert (got["session.time"].unit, got["session.time"].label) == ("s", "Played")
+    assert got["session.fps"].value == pytest.approx(125.0) and got["session.fps"].unit == "fps"
+    shares = [got[f"session.level.{n}"] for n in range(6)]  # the slowest range first
+    assert [round(r.value) for r in shares] == [25, 0, 0, 25, 25, 25]  # (50, 130, 150, 170 fps)
+    assert [r.label for r in shares] == ["< 60", "60–90", "90–120", "120–144", "144–165", "165+"]
+    assert got["session.cpu_temp_max"].value == 70.0 and got["session.cpu_temp_max"].unit == "°C"
+    assert got["session.gpu_power_max"].value == 200.0
+    assert got["session.gpu_temp_max"].value is None  # a peak nothing has told yet
+    d.sample(**readings_of(cpu__temp=60.0), **in_game(100.0))  # cooler: the highest stays
+    assert d.host.published()["session.cpu_temp_max"].value == 70.0
+    assert d.host.published()["session.time"].value == pytest.approx(4.0)
+    d.sample()  # the game's name goes: the round is over and so are its totals
+    assert not [key for key in d.host.published() if key.startswith("session.")]
+
+
+def test_the_totals_of_a_round_without_frame_rates_have_no_mean_yet(desk):
+    d = desk()
+    for _ in range(3):  # a game that PresentMon has not seen frames of
+        d.sample(**{"game.name": Reading("game.name", "Space Game")})
+    got = d.host.published()
+    assert got["session.time"].value == pytest.approx(2.0)
+    assert got["session.fps"].value is None
+    assert [got[f"session.level.{n}"].value for n in range(6)] == [None] * 6
+    d.sample(**in_game(100.0))  # the first frame rate counts from here
+    assert d.host.published()["session.fps"].value == 100.0
+
+
+def test_the_totals_follow_the_frame_rate_ranges_and_the_language_of_the_panel(desk):
+    from libre_panel import i18n
+
+    i18n.set_language("de")
+    d = desk(fps_levels=[30, 60])
+    d.sample(**in_game(45.0))
+    got = d.host.published()
+    assert [got[f"session.level.{n}"].label for n in range(3)] == ["< 30", "30–60", "60+"]
+    assert "session.level.3" not in got
+    assert (got["session.time"].label, got["session.fps"].label) == ("Gespielt", "Mittlere FPS")
+    assert got["session.cpu_temp_max"].label == "CPU-Temp."
+    assert [round(got[f"session.level.{n}"].value) for n in range(3)] == [0, 100, 0]
 
 
 def test_the_texts_of_the_report_are_in_the_language_of_the_panel(desk):

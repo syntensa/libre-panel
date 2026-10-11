@@ -317,6 +317,8 @@ class PsutilProvider(SensorProvider):
             "mem.used", (mem.total - mem.available) / GIB, "GiB", "Memory used"
         )
         out["mem.total"] = Reading("mem.total", mem.total / GIB, "GiB", "Memory total")
+        # what programs can still take without the system swapping: used and free add up
+        out["mem.free"] = Reading("mem.free", mem.available / GIB, "GiB", "Memory free")
         swap = psutil.swap_memory()
         out["swap.load"] = Reading("swap.load", swap.percent, "%", "Swap usage")
 

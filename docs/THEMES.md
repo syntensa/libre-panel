@@ -138,15 +138,15 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 |---|---|---|
 | `text` | `text`, `glow_area` | static label, may contain line breaks; `glow_area` see [Look and finish](#look-and-finish) |
 | `metric` | `sensor`, `format`, `fallback`, `smooth`, `color_rules`, `glow_area` | a sensor value as text; with `smooth` the number glides between readings together with the sensor's bars and rings (give `format` a precision, e.g. `{value:.0f}`) |
-| `bar` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `color`, `color2`, `background`, `radius`, `direction`, `segments`, `segment_gap`, `smooth`, `color_rules`, `glow_area` | progress bar; `color2` makes a gradient along the track, `segments` an LED-style bar; `glow_area` see [Look and finish](#look-and-finish) |
+| `bar` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `color`, `color2`, `background`, `radius`, `direction`, `segments`, `segment_gap`, `smooth`, `color_rules`, `glow_area`, `mark`, `mark_color`, `mark_width` | progress bar; `color2` makes a gradient along the track, `segments` an LED-style bar; `glow_area` see [Look and finish](#look-and-finish); `mark` names a second reading that is drawn as a thin line across the bar, at its value on the bar's own scale (the average of earlier rounds, a limit), `mark_width` px wide (2) in `mark_color`, reaching a fifth of the bar's thickness beyond it on both sides; it lies over the bar in any finish, and is gone with the bar or while its reading has no number |
 | `gauge` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `start_angle`, `end_angle`, `thickness`, `color`, `color2`, `background`, `cap`, `ticks`, `tick_color`, `smooth`, `color_rules` | ring; angles clockwise from 3 o'clock, default 135→405; `cap` round or flat |
-| `graph` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `history`, `seconds`, `color`, `fill`, `fill_fade`, `fill_alpha`, `direction`, `inset`, `smooth`, `per_frame`, `line_width`, `grid`, `grid_color`, `background` | history; `min`/`max` `null` = automatic, `smooth` draws a curve, `fill_alpha` 0 to 1 sets how opaque the fill is (0: the default, a flat fill 0.25, a fade 0.45 at its top), `direction` `down` hangs the curve from the top edge and fills it from there (upload above a line, download below it), `inset` off lets the range span the box (a line at an edge is cut in half there) as SPUR II's charts, `seconds` and `per_frame` see above |
+| `graph` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `history`, `seconds`, `color`, `fill`, `fill_fade`, `fill_alpha`, `direction`, `inset`, `end_dot`, `smooth`, `per_frame`, `line_width`, `grid`, `grid_color`, `background` | history; `min`/`max` `null` = automatic, `smooth` draws a curve, `fill_alpha` 0 to 1 sets how opaque the fill is (0: the default, a flat fill 0.25, a fade 0.45 at its top), `direction` `down` hangs the curve from the top edge and fills it from there (upload above a line, download below it), `inset` off lets the range span the box (a line at an edge is cut in half there) as SPUR II's charts, `end_dot` (a radius in px, 0: none) ends the line in a dot of its colour at the newest value, with the graph's `glow` around it, as the ends of SPUR II's Horizon curves, `seconds` and `per_frame` see above |
 | `clock` | `format`, `timezone`, `uppercase` | date/time with [strftime codes](https://strftime.org), e.g. `%H:%M:%S`, `%A %d %B`; `timezone` e.g. `Asia/Tokyo` (empty: this computer's); `uppercase` sets the weekday and month in capitals, in the language of the panel (MONTAG · 28. SEPTEMBER) |
 | `analog` | `w`, `h`, `timezone`, `color`, `color2`, `face`, `marks`, `seconds` | a clock face with hands; `color2` the second hand |
 | `countdown` | `target`, `part`, `done` | the time left until `target` (`2026-12-24`, `2026-12-24 18:00`, or `12-24` for every year); `part`: `number` (76, 5:12, 12:33), `unit` (days, hours, minutes), `clock` (05:12:33 left in the day), `text` ("76 days"), `days`, `date`; `done` is shown once it is there ("Today", "Now") |
 | `moon` | `size`, `sensor`, `color`, `color2`, `mirror` | the moon as it is lit (`moon.phase`); `mirror` as seen south of the equator |
 | `fan` | `sensor`, `w`, `h`, `color`, `max_rpm`, `frame` | a fan that turns with its speed (default `gpu.fan`), see [Fans](#fans) |
-| `image` | `src`, `w`, `h`, `fit`, `radius`, `slides`, `seconds` | a picture from the theme folder, or one a sensor source has (`@media.cover`: the album cover); `w`/`h` 0 = original size; `fit` `stretch`, `contain` or `cover`; `slides`: more pictures, one per line (`photos/*.jpg` takes a folder), each shown `seconds` |
+| `image` | `src`, `w`, `h`, `fit`, `align`, `radius`, `slides`, `seconds` | a picture from the theme folder, or one a sensor source has (`@media.cover`: the album cover); `w`/`h` 0 = original size; `fit` `stretch`, `contain` or `cover`; `align` `left`, `center` (the default) or `right` says where a `contain`ed picture stands in its box when it does not fill it, as a logo that is wider or narrower than its slot; `slides`: more pictures, one per line (`photos/*.jpg` takes a folder), each shown `seconds` |
 | `weather` | `field`, `format`, `fallback` | `temperature`, `apparent_temperature`, `humidity`, `wind_speed`, `description`, `code` |
 | `icon` | `icon`, `sensor`, `size`, `color`, `stroke` | line icons: cpu, gpu, ram, disk, network, download, upload, temperature, fan, power, clock, sun, moon, cloud, partly, rain, snow, storm, fog, humidity, wind, battery, plug, list, grid, signal, play, pause, up, down — and `weather`, which follows the live weather, or the code in `sensor` (e.g. `weather.day.1.code`), by day or night |
 | `symbol` | `sensor`, `size`, `color`, `moving`, `offset` | a weather symbol that moves (default `weather.code`), see [Weather symbols](#weather-symbols) |
@@ -154,7 +154,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `calendar` | `w`, `h`, `font`, `font_size`, `color`, `color2`, `muted`, `first_day` | the month as a grid of days, today marked in `color2`; weekday names in `muted` and the language; `first_day` `monday` or `sunday` |
 | `list` | `w`, `h`, `items`, `style`, `columns`, `max_items`, `sort`, `format`, `detail`, `detail_format`, `min`, `max`, `scale`, `levels`, `font`, `font_size`, `label_font`, `uppercase`, `color`, `muted`, `color2`, `background`, `empty`, `color_rules` | readings found by name or pattern, as many as fit, see [Lists](#lists) |
 | `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur`, `ridge` | cards, frames, separators; `backdrop_blur` gives frosted glass, `ridge` a ridge (see [Look and finish](#look-and-finish)) |
-| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `moving`, `hold`, `change` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
+| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `moving`, `hold`, `change`, `slide`, `time` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
 
 `scale` is `linear`, `sqrt` or `log`: the latter two keep small values visible
 on huge ranges such as network rates.
@@ -327,13 +327,13 @@ bands in the colour of what they frame.
 | Theme | Shows |
 |---|---|
 | `spur-classic` | two load charts, RAM and network in staggered boxes, CPU and GPU sections; for the desk |
-| `spur-horizon` | the CPU's load growing up from a midline and the GPU's down from it, 70 seconds side by side (a point a pixel, 25 a second, a mark every 10 s), tiles below for values, network and music; for the desk |
+| `spur-horizon` | the CPU's load growing up from a midline and the GPU's down from it, 70 seconds side by side (a point a pixel, 25 a second, a mark every 10 s, a dot at each curve's end), tiles below for values, network and music; for the desk |
 | `spur-cockpit` | the CPU's and GPU's load as two equal charts with the RAM as a ring beside them, and CPU, GPU, memory and network in four columns of equal width (SPUR II's building blocks on its 40 px grid); for the desk |
-| `spur-header` | for a game: the classic frame with the frame rate and the 1% low in the header beside the game's logo (its name where there is none), load charts, who holds the frame rate down and a chart of the longest frame of each moment; needs the `game` service and PresentMon |
+| `spur-header` | for a game: the classic frame with the frame rate and the 1% low in the header beside the game's logo (its name where there is none; SPUR II moves the frame rate over for a long name, a theme cannot: a name wider than 72 px is cut with …, a wider logo is made smaller), load charts, who holds the frame rate down and a chart of the longest frame of each moment; needs the `game` service and PresentMon |
 | `spur-focus` | for a game: the frame rate large (150 px) with its course over 35 s beside it, the CPU's and GPU's load as small charts, then FRAMES, CPU, GPU and system with bars; the game's logo or name above the number; needs the `game` service and PresentMon |
-| `spur-session` | for a game: the frame rate with its last ten minutes, a chart of the longest frame of each moment, and the CPU's and GPU's temperatures and power with their course over the same ten minutes (SPUR II adds up a whole session: time played, average frame rate, share of time per frame rate, highest values; Libre Panel has no readings for those, so this screen shows the last ten minutes, the longest a graph can show); needs the `game` service and PresentMon |
-| `spur-studio` | SPUR II's Studio screen, for the desk, made of the [cards](#cards) on one grid: a large clock with the seconds and the date, the network (a download while one runs) and the volume on the left, the playback card in the middle (the weather card when nothing plays, with the line of light between them), and rings for the CPU, GPU and RAM; it needs `media` for the playback card, the weather for the forecast, and shows the volume with the `audio` source |
-| `round-report` | what the `memory` service shows after a game (`report_theme`): the round's average frame rate with its distance from the average of the earlier rounds, the 1% low and the frame time, who held the rate down as a bar in the colours of the GPU and CPU (and the frame limit's), the share of the round at each frame rate with a line under each bar for the earlier rounds, and the highest temperatures and power against their average; it reads the `report.*` readings ([Plugins](PLUGINS.md#the-round-report)), so its title, heading hints and note follow the language of the panel, and a first round says so and shows no comparison; needs the `memory` service and PresentMon |
+| `spur-session` | for a game: the game added up as SPUR II's Session screen does: the time played, the average frame rate large (with the frame rate now, the 1% low, who holds it down, and the last ten minutes of the rate under them), the share of the time at each frame rate, and the highest temperatures, power and video memory since it began beside what they are now; the totals are the `session.*` readings of the `memory` service (see [Plugins](PLUGINS.md#the-round-under-way)), the rest needs the `game` service and PresentMon; in the header the game's logo or name has the room SPUR II gives a short name (a name wider than 62 px is cut with …, a wider logo made smaller), as in `spur-header` |
+| `spur-studio` | SPUR II's Studio screen, for the desk, made of the [cards](#cards) on one grid: a large clock with the seconds and the date, the network (a download while one runs) and the volume on the left, the playback card in the middle (the weather card when nothing plays, with the line of light between them), and rings for the CPU, GPU and RAM (the RAM's readings: free, temperature, speed); it needs `media` for the playback card, the weather for the forecast, and shows the volume with the `audio` source |
+| `round-report` | what the `memory` service shows after a game (`report_theme`): the round's average frame rate with its distance from the average of the earlier rounds, the 1% low and the frame time, who held the rate down as a bar in the colours of the GPU and CPU (and the frame limit's), the share of the round at each frame rate with a tick across each bar where the earlier rounds' average stands, the game's logo at the top right beside its name (`@game.logo`, which the `game` service keeps after the game; its name alone where there is none), and the highest temperatures and power against their average; it reads the `report.*` readings ([Plugins](PLUGINS.md#the-round-report)), so its title, heading hints and note follow the language of the panel, and a first round says so and shows no comparison; needs the `memory` service and PresentMon |
 
 The fans in the header need their sensors (`fan.lpc.fan_1` ... , `gpu.fan`) and show
 only the ones that report; the volume needs the `audio` source, what plays the
@@ -471,6 +471,8 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
   [list](#lists); empty shows the module's own. For `world` the places, for
   `image` the pictures, for `cards` the cards.
 - `timezone` (analog), `target` (countdown), `seconds` (image): see the table.
+- `time` (playback, music): the time at the right of the progress, `total` (the track's
+  length, `3:47`; the default) or `remaining` (what is left, `-2:24`).
 - Labels follow the language: "Temp" reads "Temp." in German.
 
 ### Cards
@@ -488,9 +490,11 @@ are flat thin lines in their colour: a card has no ridge, no bevel and no trough
 - **`playback`** (3 × 2): the cover (`media.cover`; a note where there is none),
   a sign and a word for the state (*Now playing* or *Paused*), the title and the
   artist, the app that plays it with its icon (`media.app_icon`) and name, the
-  progress (`media.progress`) with the time played and the length. Without a track:
-  a note and "Nothing playing". The state's sign and the progress are in the colour
-  the cover carries (`@cover`), as in the Studio; `color` sets one.
+  progress (`media.progress`) with the time played and the length, or with `time`
+  `remaining` the time left, counting down with a minus (`-2:24`, from
+  `media.remaining`; SPUR Studio does so). Without a track: a note and "Nothing playing". The state's sign and
+  the progress are in the colour the cover carries (`@cover`), as in the Studio;
+  `color` sets one.
 - **`forecast`** (3 × 2): a moving symbol ([Weather symbols](#weather-symbols)),
   the temperature with the day's high and low, the sky, how it feels, the wind and
   the humidity, the rain of the next two hours (`weather.rain.text`, in the `gpu`
@@ -502,7 +506,10 @@ are flat thin lines in their colour: a card has no ridge, no bevel and no trough
   `disk`) as light in its groove, the number inside with a small unit, the name
   under it and the part's readings (temperature, power, clock ...) as rows, as many
   as fit; a wide module puts the name and rows beside the ring. The temperature
-  goes warm and hot. `source` `fan` makes it a fan: the rotor of the
+  goes warm and hot. The RAM's rows are what is free (`mem.free`), the modules'
+  temperature (`mem.temp`) and the speed they run at (`mem.speed`, in MT/s); a
+  reading the PC cannot give stays on show as `--` with its name, as in the Studio,
+  where the other parts leave such a row out. `source` `fan` makes it a fan: the rotor of the
   [`fan` widget](#fans) in its ring, which turns with the speed, with the fan's
   name and its speed in RPM beside it or under it; `sensor` names the fan
   (`fan.cpu`; default `gpu.fan`), `color` sets its colour.
@@ -536,6 +543,14 @@ showed last: its track is gone from the readings, its words are not. The time is
 frame's planned time, so a change takes as long at 50 frames a second as at 5; on a
 panel that gets one picture a second it is a cut. A change that is under way is
 finished before the next begins.
+
+**A new track** on the playback card that stays on show does not roll: with `slide` (seconds;
+0, none, by default, SPUR Studio sets 0.55) the content of the card moves out to the left and
+the new track's moves in from the right, a gap between them (48 px on a panel 480 px tall,
+scaled with it) that closes as it arrives, as SPUR II's Studio does it: one movement for a new
+track, none while a track plays. What moves out is what the card showed last; the frame stays
+and changes its colour with the cover as above. A pause, a cover that comes late and a change
+of cards are no new track. It takes the frame's planned time, and is a cut where a change is.
 
 The slot's frame is a thin flat line in the colour of the card on show: the colour
 that carries the cover, the weather's (the sun's by day, the clouds' by night, rain's,
@@ -777,7 +792,9 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 |---|---|---|
 | `cpu.load`, `cpu.freq`, `cpu.temp`, `cpu.power` | %, MHz, °C, W | psutil (temp on Linux), LibreHardwareMonitor; `cpu.load` also ten times a second from `load` |
 | `gpu.load`, `gpu.temp`, `gpu.power`, `gpu.fan`, `gpu.mem.load` | %, °C, W, RPM, % | LibreHardwareMonitor; `gpu.temp` also Linux AMD; `gpu.load` also from `load` (Windows, any vendor) |
-| `mem.load`, `mem.used`, `mem.total`, `swap.load` | %, GiB | psutil |
+| `gpu.hotspot` | °C | LibreHardwareMonitor: the hottest spot of the graphics chip ("GPU Hot Spot", as AMD and NVIDIA cards give it; none where the card has no such sensor), the one of the card `gpu.temp` is read from |
+| `mem.load`, `mem.used`, `mem.free`, `mem.total`, `swap.load` | %, GiB | psutil; `free` is what programs can still take without the system swapping, so used and free add up to the total |
+| `mem.temp`, `mem.speed` | °C, MT/s | the memory: the temperature of its hottest module (LibreHardwareMonitor, from the module's own thermal sensor: DDR4 and DDR5, with administrator rights and the PawnIO driver as for the CPU's temperature) and the speed it runs at (the firmware's SMBIOS table, the slowest module's: see [Configuration](CONFIGURATION.md#hardware-names)) |
 | `disk.load`, `disk.used`, `disk.total`, `disk.read`, `disk.write` | %, GiB, B/s | psutil |
 | `net.down`, `net.up` | B/s | psutil |
 | `fan.<device>.<name>`, `temp.<device>.<name>` | RPM, °C | every fan and temperature: psutil (Linux), LibreHardwareMonitor (e.g. `temp.cpu.package`, `fan.gpu.gpu_fan_1`) |
@@ -789,13 +806,14 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `audio.volume`, `audio.muted` | %, 1/0 | the volume of the default output (0 while muted) and whether it is muted; needs `"audio"` in `providers` (the default list has it on Windows and Linux), see [Configuration](CONFIGURATION.md#sensor-sources-and-their-order) |
 | `sun.rise`, `sun.set`, `sun.noon`, `sun.next_rise`, `sun.daylight`, `sun.up`, `sun.progress`, `sun.elevation` | "07:42", s, 1/0, 0–1, ° | computed for the place in `[weather]` (no internet needed); `progress` is how much of the day has passed, empty at night |
 | `moon.phase`, `moon.illumination`, `moon.name`, `moon.age`, `moon.full_in`, `moon.new_in` | 0–1, %, text, days | computed; `phase` 0 new, 0.5 full; `name` in the language |
-| `media.title`, `.artist`, `.album`, `.source`, `.state`, `.playing`, `.position`, `.duration`, `.progress` | text, 1/0, s, 0–1 | what is playing, while a theme shows it; the cover is the picture `@media.cover`, the icon of the player `@media.app_icon` |
+| `media.title`, `.artist`, `.album`, `.source`, `.state`, `.playing`, `.position`, `.duration`, `.remaining`, `.progress` | text, 1/0, s, 0–1 | what is playing, while a theme shows it; the cover is the picture `@media.cover`, the icon of the player `@media.app_icon` |
 | `calendar.<n>.title`, `.when`, `.day`, `.time`, `.location`, `.calendar`, `.start`, `.minutes`, `.now`; `calendar.events`, `calendar.today` | text, s, min | the next events (1 = the next or the one going on), [calendars](CONFIGURATION.md#more-sensor-sources) |
 | `ha.<entity id>`, `ha.<entity id>.<attribute>` | as Home Assistant says | [Home Assistant](CONFIGURATION.md#more-sensor-sources) |
 | `mqtt.<topic with dots>` (`.field` for JSON) | | [MQTT](CONFIGURATION.md#more-sensor-sources) |
 | `game.fps`, `game.frametime`, `game.low`, `game.app` | fps, ms, fps, text | the game being played, through [PresentMon](CONFIGURATION.md#more-sensor-sources) (Windows) |
 | `game.frametime_peak`, `game.limiter` | ms, text | the longest frame time since the last reading (0 while a game runs and no frame came: a graph of it never stops), and who holds the frame rate down: `cpu`, `gpu` or `cap` |
-| `game.name` | text | the name of the game while the `game` service has the panel in game mode ([Configuration](CONFIGURATION.md#game-mode)); its logo is the picture `@game.logo` |
+| `game.name` | text | the name of the game while the `game` service has the panel in game mode ([Configuration](CONFIGURATION.md#game-mode)); its logo is the picture `@game.logo`, which stays after the game for the round report, until the next one |
+| `session.time`, `session.fps`, `session.level.<n>`, `session.<peak>_max` | s, fps, %, °C / W / GB | the game being played, added up while it is: how long, the mean frame rate, the share of the time at each frame-rate range, the highest temperature, power and video memory since it began; published by the `memory` service ([Plugins](PLUGINS.md#the-round-under-way)) |
 | `cpu.name`, `gpu.name`, `mem.name` | text | the names of the processor, graphics card and memory, shortened for a panel ("Ryzen 5 7600", "GeForce RTX 4070", "Kingston DDR5-5600 32 GB"; `mem.name` is the size, "32 GB", where the modules cannot be read): found by Libre Panel itself, or the text you give under `[hardware]`, see [Configuration](CONFIGURATION.md#hardware-names); LibreHardwareMonitor's two fill in where nothing is found |
 | `weather.temperature`, `.apparent_temperature`, `.humidity`, `.wind_speed`, `.code`, `.description`, `.is_day` | °C, %, km/h | Open-Meteo, when enabled |
 | `weather.hour.<n>.temperature`, `.code`, `.rain`, `.day`, `.time` | °C, %, 1/0, "15:00" | the hour `n` hours ahead (1 = the next full hour, up to 24) |

@@ -81,6 +81,7 @@ class Track:
             out["media.position"] = (position, "s", "Position")
             if self.duration:
                 out["media.progress"] = (position / self.duration, "", "Progress")
+                out["media.remaining"] = (self.duration - position, "s", "Remaining")
         return {
             key: Reading(key, value, unit, label)
             for key, (value, unit, label) in out.items()

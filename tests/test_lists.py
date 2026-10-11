@@ -275,6 +275,7 @@ def test_librehardwaremonitor_names_every_temperature_and_fan():
     assert out["fan.gpu.gpu_fan_2"].unit == "RPM"
     # the friendly aliases point at what they repeat, so a list shows them once
     assert out["cpu.temp"].origin == out["temp.cpu.core_tctl_tdie"].origin != ""
+    assert out["gpu.hotspot"].origin == out["temp.gpu.gpu_hot_spot"].origin != ""
     names = [i.key for i in lists.pick({"items": "cpu.temp = CPU\ntemp.cpu.*"}, out)]
     assert names[0] == "cpu.temp" and "temp.cpu.core_tctl_tdie" not in names
 

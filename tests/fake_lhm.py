@@ -61,6 +61,7 @@ _TYPES = {
     "amdcpu": "Cpu",
     "intelcpu": "Cpu",
     "ram": "Memory",
+    "memory": "Memory",
     "lpc": "SuperIO",
     "nic": "Network",
     "gpu-nvidia": "GpuNvidia",
@@ -113,8 +114,8 @@ def computer_from_tree(tree):
 
 
 def small_computer():
-    """A processor, a graphics card, memory and a mainboard with a Super I/O chip (a
-    sub-hardware): enough to tell which node is updated and what needs ring0."""
+    """A processor, a graphics card, memory with a module and a mainboard with a Super I/O
+    chip (a sub-hardware): enough to tell which node is updated and what needs ring0."""
     cpu = FakeHardware(
         "/amdcpu/0",
         "8-Core Processor",
@@ -137,12 +138,20 @@ def small_computer():
         ],
     )
     memory = FakeHardware(
-        "/ram",
-        "Total Memory",
+        "/ram", "Total Memory", "Memory", [FakeSensor("/ram/load/0", "Memory", "Load", 40.0)]
+    )
+    # a memory module as LibreHardwareMonitor lists it (its DimmMemory): hardware of its own
+    # under /memory/dimm/<n>, its thermal sensor "DIMM #<n>", and the limits it reports as
+    # temperatures too
+    module = FakeHardware(
+        "/memory/dimm/1",
+        "Maker - PART-1 (#1)",
         "Memory",
         [
-            FakeSensor("/ram/load/0", "Memory", "Load", 40.0),
-            FakeSensor("/ram/temperature/0", "DIMM #1", "Temperature", 38.0),
+            FakeSensor("/memory/dimm/1/temperature/0", "DIMM #1", "Temperature", 38.0),
+            FakeSensor(
+                "/memory/dimm/1/temperature/3", "Thermal Sensor High Limit", "Temperature", 85.0
+            ),
         ],
     )
     chip = FakeHardware(
@@ -155,7 +164,7 @@ def small_computer():
         ],
     )
     board = FakeHardware("/motherboard", "Mainboard", "Motherboard", [], [chip])
-    return FakeComputer([board, cpu, memory, gpu])
+    return FakeComputer([board, cpu, memory, gpu, module])
 
 
 def ring0_off(computer):

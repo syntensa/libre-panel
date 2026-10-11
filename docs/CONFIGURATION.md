@@ -308,6 +308,12 @@ has `cpu.name` and `gpu.name`, tidied the same way) fill in, else a theme shows
 its fallback. With several graphics cards, `gpu` under
 `[sensors.librehardwaremonitor]` picks the card by its name here too.
 
+The same table gives `mem.speed`, the speed the memory runs at in MT/s (5600 for
+DDR5-5600; the slowest module's where they differ). Where the modules cannot be
+read it is no reading, and a theme shows "--". The memory's temperature,
+`mem.temp`, comes from LibreHardwareMonitor and needs what the processor's does
+(see [Windows sensors](#windows-sensors-gpu-power-fans)).
+
 **Your own names.** Text under `[hardware]` is the name, as you write it:
 
 ```toml
@@ -465,7 +471,9 @@ theme = "slate"        # optional: another theme
   (at most a second) so that the first game screen already has the logo.
 - **The end.** When the program has been gone for `linger_s` seconds the mode
   ends with the entrance for the end. Games restart while they are set up and
-  launchers swap their process, so the mode does not follow every flicker.
+  launchers swap their process, so the mode does not follow every flicker. The
+  name goes, the logo stays until the next game (or until the service stops): the
+  round report that follows shows it beside the name.
 - **Without the entrance** (`entrance = false`) the switch uses the
   `transition` of `config.toml`, and a message says "Game mode" (and "Game
   ended"), so the theme's toast style draws it.
@@ -715,6 +723,11 @@ fps_levels = [60, 90, 120, 144, 165]   # the frame-rate ranges of the report's c
   `presentmon` source ([above](#more-sensor-sources)): a game without them is
   kept, but has no report. A game ends when its name goes, so a game that
   restarts within the service's `linger_s` is one round.
+- **While a game is played** the service publishes what the round has come to so
+  far, once a second: `session.time`, `session.fps`, the share of the time at each
+  frame rate (`session.level.<n>`) and the highest values since it began
+  (`session.cpu_temp_max` ...; the list is in [Plugins](PLUGINS.md#the-round-under-way)).
+  The built-in theme `spur-session` shows them, in a game screen.
 - **The report.** When a round that lasted `report_minutes` and had frame rates
   ends, the report is built from the file: this round against the mean of the
   last `report_compare` rounds of the same program that were long enough too
@@ -722,8 +735,9 @@ fps_levels = [60, 90, 120, 144, 165]   # the frame-rate ranges of the report's c
   theme for `report_seconds`, ahead of an autopilot's choice and in normal mode
   only; a new game ends it at once, and a round that ends because Libre Panel
   quits has none. `round-report` is a plain built-in theme for 8.8" and 9.2"
-  bars in the look of SPUR II's report screen; copy it in the editor to change
-  it, or let a screen of a plugin draw the data
+  bars in the look of SPUR II's report screen, with the game's logo (the one the
+  [`game` service](#game-mode) keeps, `@game.logo`) beside its name; copy it in
+  the editor to change it, or let a screen of a plugin draw the data
   ([Plugins](PLUGINS.md#the-round-report)).
 - **Cost.** One sample a second, whatever the theme's `refresh_ms`. While the
   service runs the sources it needs run too, although no theme shows them: the
@@ -896,7 +910,7 @@ What it needs:
 | Reading | Needs |
 |---|---|
 | everything of the graphics card (temperature, load, power, clock, fan, memory), the loads of CPU and memory, memory use, network | nothing |
-| **CPU temperature, power and clock**, RAM temperature (DDR5), **the fans on the mainboard** | Libre Panel runs **as administrator**, and the **PawnIO** driver is installed |
+| **CPU temperature, power and clock**, RAM temperature (`mem.temp`; DDR4 and DDR5), **the fans on the mainboard** | Libre Panel runs **as administrator**, and the **PawnIO** driver is installed |
 
 PawnIO is the small signed driver that LibreHardwareMonitor uses to talk to the
 chips on the mainboard and in the CPU. It is a separate program, not part of

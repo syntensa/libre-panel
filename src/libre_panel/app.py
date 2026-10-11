@@ -19,6 +19,7 @@ from libre_panel import i18n, timing
 from libre_panel.config import Config, ConfigError, load_config
 from libre_panel.devices.base import Counters, DeviceError, Display, FrameError, create_display
 from libre_panel.devices.models import find_model
+from libre_panel.devices.turzx import video_mode
 from libre_panel.devices.virtual import VirtualDisplay
 from libre_panel.meter import Meter
 from libre_panel.plugins.host import LEFT_OUT, NO_PANEL, OFF_IN_THEME, Delivery, Toast
@@ -366,6 +367,19 @@ def _begin(
     return (kind, old, now)
 
 
+def _expects_video(config: Config) -> bool:
+    """Whether the panel will probably be driven in video mode, which decides what a frame
+    draws ahead (the graphs' strips): a guess before the panel is open. A wrong one costs a
+    little time at the first frame, nothing more."""
+    device = config.device
+    if device.driver not in ("auto", "turzx"):
+        return False
+    model = find_model(device.model)
+    if model is None and device.video.mode == "auto":  # the panel on the bus decides: the
+        return bool(device.video.local_clip)  # setup says whether it is meant for video
+    return video_mode(device.video, model)[0]
+
+
 class _Warmup:
     """The next theme's renderer, built in a thread of its own while the panel
     goes on showing the current theme (SPUR II preloads the same way): its
@@ -469,11 +483,14 @@ class MainLoop:
         # What moves on the panel goes on from theme to theme: every renderer
         # gets this one (gliding values, graph histories).
         self.motion = Motion()
-        self.renderer = renderer = self._renderer(theme, config)
         self.hub = hub if hub is not None else build_hub(config)
         if host is not None and not once:
             self.hub.providers.append(host.provider())
         self.display = display if display is not None else create_display(config.device)
+        self.first: Snapshot | None = None  # the readings the first theme was drawn with
+        if not once:
+            self._draw_ahead(theme, config)
+        self.renderer = renderer = self._renderer(theme, config)
         status.counters, status.stats = Counters(), {}  # a new loop counts from zero
         self.display.counters = status.counters  # the drivers count into these
         status.hub = self.hub
@@ -496,10 +513,39 @@ class MainLoop:
         self.snapshot: Snapshot | None = None
         self.next_sample = 0.0
         self.started = 0.0  # when the last step began, on the clock
-        if not once and renderer.prepares:  # prepare() and light layers before the first frame
+        drawn = renderer.snapshot is not None  # (drawn ahead: prepared, and its widgets made)
+        if not once and renderer.prepares and not drawn:  # prepare() and light layers at least
             prepare = threading.Thread(target=renderer.warm, args=(None, 0.0), daemon=True)
             prepare.start()
             prepare.join(_Warmup.LIMIT_S)
+
+    def _draw_ahead(self, theme: Theme, config: Config) -> None:
+        """Draw the first theme once before the loop starts, as a switch draws the next one
+        (:class:`_Warmup`): its texts, cards, graph strips and fans are made here, in a thread
+        of its own, and not in the first frame, which took 200 to 350 ms. It is drawn with the
+        first readings, which the first frame takes as its sample (the hub is asked once). A
+        theme that is not ready after ``_Warmup.LIMIT_S`` is drawn by the first frame."""
+        try:
+            first = self.hub.snapshot()
+        except Exception:  # the first frame asks again, and says what is wrong
+            log.exception("the first readings failed")
+            return
+        if self.host is not None:
+            first.images = {**first.images, **self.host.images()}
+        self.first, now = first, self.clock()
+        streaming = self.display.streaming  # a panel that is open already says so ...
+        video = streaming or _expects_video(config)  # ... else the settings are asked
+        fps = _fps(config, self.host, self.display)
+        if video and not streaming:
+            fps = config.device.video.fps  # what a video panel is driven at
+        every = (config.refresh_ms or theme.refresh_ms) / 1000
+        how = video, fps, (now, every)
+        self.idle.set()  # no frame is under way: the drawing need not wait for one
+        key = self._warm_key(theme, config)
+        self.warmup.start(key, self._warm_job(theme, config, now, first, how), now)
+        give_up = time.monotonic() + self.warmup.LIMIT_S  # (wall time, whatever the clock is)
+        while not self.warmup.ready(key, now) and time.monotonic() < give_up:
+            time.sleep(0.005)
 
     def _renderer(self, theme: Theme, config: Config) -> Renderer:
         """The renderer for ``theme``: warmed up if it was, else a new one."""
@@ -545,18 +591,29 @@ class MainLoop:
         return False
 
     def _warm_job(
-        self, theme: Theme, config: Config, now: float
+        self,
+        theme: Theme,
+        config: Config,
+        now: float,
+        snapshot: Snapshot | None = None,
+        how: tuple[bool, int, tuple[float, float]] | None = None,
     ) -> Callable[[], tuple[Renderer, Motion]]:
         """Building and drawing ``theme`` once, with copies of what the panel's
-        drawing keeps (it goes on meanwhile)."""
+        drawing keeps (it goes on meanwhile). It is drawn with the readings the panel
+        has now and as it is driven now (video mode or not, its frame rate, when the
+        readings were taken), unless ``snapshot`` and ``how`` say so: the first theme
+        has neither yet."""
         motion = self.motion.copy()
-        snapshot = self.snapshot
+        snapshot = self.snapshot if snapshot is None else snapshot
         if snapshot is not None:  # dicts of its own: this thread goes on replacing them
             snapshot = Snapshot(
                 dict(snapshot.readings), snapshot.history, snapshot.now, dict(snapshot.images)
             )
-        current, animate = self.renderer, config.fps > 1
-        continuous, fps, sample = current.continuous, current.fps, current.sample
+        animate = config.fps > 1
+        if how is None:
+            current = self.renderer
+            how = current.continuous, current.fps, current.sample
+        continuous, fps, sample = how
 
         def build() -> tuple[Renderer, Motion]:
             renderer = Renderer(theme, animate=animate, motion=motion)
@@ -692,7 +749,7 @@ class MainLoop:
             if host is not None:
                 toasts.add(host.take_toasts())
             if started >= next_sample or snapshot is None:
-                snapshot = hub.snapshot()
+                snapshot, self.first = self.first or hub.snapshot(), None
                 if host is not None:
                     snapshot.images = {**snapshot.images, **host.images()}
                     host.latest = snapshot
