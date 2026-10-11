@@ -42,6 +42,11 @@ def browser_page(url):
         page.wait_for_function(
             "document.querySelector('#preview').src.startsWith('data:image/png')"
         )
+        # The first picture does not end the start. The editor asks for it twice and wires
+        # its buttons and menus once the first answer is in, but shows the second: on a busy
+        # machine the second can come first, and a click or a choice that follows at once
+        # finds nobody listening. The start ends with the timer of the app chip.
+        page.wait_for_function("state.appTimer")
         page.wait_for_timeout(300)
         yield page
         assert errors == []
@@ -56,6 +61,31 @@ def page(editor_url):
 
 def js(page, expression):
     return page.evaluate(expression)
+
+
+def test_the_page_is_ready_when_the_fixture_hands_it_over(editor_url, monkeypatch):
+    """The editor asks for its first picture twice and starts listening when the first answer
+    is in; the picture shown is the second. With the first answer slow, the picture is there
+    long before: a choice made at once must still be heard."""
+    import time
+
+    from libre_panel.editor.server import EditorHandler
+
+    render, asked = EditorHandler._render, []
+
+    def slow_first(self):
+        asked.append(1)
+        if len(asked) == 1:
+            time.sleep(2.5)
+        return render(self)
+
+    monkeypatch.setattr(EditorHandler, "_render", slow_first)
+    with browser_page(editor_url) as page:
+        assert js(page, "state.appTimer !== null")  # it listens
+        page.select_option("#model-select", "turing-9.2-usb")
+        page.wait_for_function("state.size[0] === 1920")
+        page.click("#btn-new")
+        page.wait_for_selector("#new-dialog[open]")
 
 
 def clock_xy(page):
