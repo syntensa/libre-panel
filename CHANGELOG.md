@@ -35,39 +35,46 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
 </p>
 
 **New: motion**
-- What moves goes on from theme to theme: a value gliding when the theme switches glides on in
-  the next one instead of starting over (the main loop keeps it; the editor's previews have
-  their own)
-- Numbers glide too: a `metric` with `"smooth": true` counts to a new reading with the bars and
-  rings of its sensor instead of jumping once per reading
-- Threshold colours fade in a fifth of a second instead of jumping, and a bar and its number
-  change colour together
-- Graphs in video mode move on every frame: they draw the gliding value 25 times a second and
-  move in half-pixel steps, and their newest point is the value the numbers show (they
-  trailed a reading behind and moved a few pixels a second). `seconds` sets the time a graph
-  spans in video mode, whatever the frame rate; a theme that comes on shows its graphs full
-- A theme coming on is built and drawn once in the background while the panel goes on showing
-  the one before, so a switch no longer freezes a video for a third of a second. Screens from
-  plugins can load what their first frames need meanwhile: `Screen.prepare()`
+- What moves goes on from theme to theme: a value that glides when the theme switches glides on in
+  the next one (the main loop keeps it; the app's previews have their own)
+- Numbers glide too: a `metric` with `"smooth": true` counts to a new reading together with the bars
+  and rings of its sensor
+- Threshold colours fade in over a fifth of a second, and a bar and its number change colour
+  together
+- Graphs in video mode move on every frame: they draw the gliding value 25 times a second and move
+  in half-pixel steps, and their newest point is the value the numbers show. `seconds` sets the time
+  a graph spans in video mode, whatever the frame rate; a theme that comes on shows its graphs full
+- A theme coming on is built and drawn once in the background while the panel goes on showing the
+  one before, so a switch does not freeze a video. The first theme is drawn that way too, while the
+  loop is built (the start waits for it two seconds at most), with the pictures of the fans' rotors
+  and the bevels of faceted lettering made before the first frame, so the first frame takes a few
+  milliseconds. Screens from plugins can load what their first frames need meanwhile:
+  `Screen.prepare()`
+- Frames stay on time while the PC is busy, as SPUR II keeps them: while it drives a panel, Libre
+  Panel pauses less for garbage collection and, on Windows, asks for a 1 ms timer and runs the
+  threads that feed a video panel above normal priority
+- Drawing is faster: the rounded cards behind modules about five times (only their round corners are
+  drawn three times larger), so a theme's first frame takes half as long; numbers that change a
+  digit at a time about six times (each digit is drawn once and kept); bars and rings are drawn
+  again only when they move by a visible amount, and pieces go onto the frame in place
 
 **New: Libre Panel's themes**
-- Lumen, Libre Panel's own signature screen for the 8.8" and 9.2" bars, in the app's colours
-  and type on the dot grid of the editor's stage. On the left what plays (the weather with its
-  moving symbols and the next hours when nothing does, a calendar sheet when there is
-  neither), in the middle the time with its seconds, the load of the CPU and GPU over the last
-  minute as light that scrolls, and the fans turning with their speed, on the right lit rings
-  for the CPU, GPU and RAM named after your hardware, over the network (a download in its
-  place while one runs). Frames are flat lines; it keeps clear of the 9.2"'s hidden strip and
-  moves to the other panels
-- Studio, renewed: its card shows what plays, else the weather (the weather card, with its
-  moving symbol and the next hours), else a calendar sheet, and changes with a line of light.
-  It is wider than the old card, and the rings move 25 px to the right for it; they are light
-  in milled grooves now, with the names of the processor, the memory and the graphics card
-  under them. The clock, the date and the network keep their places
-- Libre Default, renewed, the theme a new install starts with on every panel but the bars: lit
-  rings and disk segments, a CPU history that scrolls through the last 30 seconds, numbers
-  that glide and the app's colours; the corner where the weather was shows what plays, else
-  the weather, else the day
+- Lumen, Libre Panel's own signature screen for the 8.8" and 9.2" bars, in the app's colours and
+  type on the dot grid of the app's stage. On the left what plays (the weather with its moving
+  symbols and the next hours when nothing does, a calendar sheet when there is neither), in the
+  middle the time with its seconds, the load of the CPU and GPU over the last minute as light that
+  scrolls, and the fans turning with their speed, on the right lit rings for the CPU, GPU and RAM
+  named after your hardware, over the network (a download in its place while one runs). Frames are
+  flat lines; it keeps clear of the 9.2"'s hidden strip and moves to the other panels
+- Studio, renewed: its card shows what plays, else the weather (the weather card, with its moving
+  symbol and the next hours), else a calendar sheet, and changes with a line of light. The card is
+  wider than 0.4's, and the rings sit 25 px further right; they are light in milled grooves, with
+  the names of the processor, the memory and the graphics card under them. The clock, the date and
+  the network keep their places
+- Libre Default, renewed, the theme a new install starts with on every panel but the bars: lit rings
+  and disk segments, a CPU history that scrolls through the last 30 seconds, numbers that glide and
+  the app's colours; the corner that showed the weather in 0.4 shows what plays, else the weather,
+  else the day
 
 **New: the look**
 - Values as light, for any theme, after SPUR II's look: a widget's `finish` and the theme's
@@ -91,39 +98,38 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
   of its fill with a halo of its colour (a slimmer ridge on a bar panel; the halo ends where
   SPUR II's does, and a graph that hangs from its top has it mirrored). Text keeps the pixels
   of the flat text; shapes are built once per size and colour, so it costs no more than flat
-- Depth dust: `"look": {"dust": true}` lets fine grains fall from the letters, rails, rings and
-  bars into the depth behind the panel, in the colour of what they come from, a few of them as
-  soft discs. Nothing in the theme says where the sources are: the dust reads the frame the
-  panel showed. `count`, `rate`, `depth`, `strength`, `colors` and `areas` (rectangles with or
-  without dust) set it; *Look → Depth dust* has them. It is drawn on a video panel and in the
-  editor's preview, never on a panel that is sent changed regions, costs nothing while the
-  theme has none, and adds a millisecond or two to a frame at 1920 × 480
-- A `fan` widget: a rotor of nine lit blades that turns with a fan's RPM (calm and with
-  inertia, standing at 0 RPM, dimmed without a reading) in a ring that shows its share of
-  `max_rpm`, or in a square frame; *Fan with speed* in the editor's presets adds one with its
-  name and value
+- Depth dust: `"look": {"dust": true}` lets fine grains fall from the letters, rails, rings and bars
+  into the depth behind the panel, in the colour of what they come from, a few of them as soft
+  discs. Nothing in the theme says where the sources are: the dust reads the frame the panel showed.
+  `count`, `rate`, `depth`, `strength`, `colors` and `areas` (rectangles with or without dust) set
+  it; *Look → Depth dust* has them. It is drawn on a video panel and in the app's preview, never on
+  a panel that is sent changed regions, costs nothing while the theme has none, and adds a
+  millisecond or two to a frame at 1920 × 480
+- A `fan` widget: a rotor of nine lit blades that turns with a fan's RPM (calm and with inertia,
+  standing at 0 RPM, dimmed without a reading) in a ring that shows its share of `max_rpm`, or in a
+  square frame; *Fan with speed* in Design's library adds one with its name and value
 - Weather symbols that move: the widget type `symbol` follows a weather code (`weather.code`,
   `weather.hour.3.code` ...) by day or night: the sun's rays turn, rain, drizzle and snow fall,
-  clouds drift and breathe, stars twinkle, fog sways and a bolt flashes now and then, as on
-  SPUR II's weather card. Flat, or with `"finish": "lit"` from lit bodies; `moving` and
-  `offset` keep a row of them out of step. It moves where the panel is driven faster than
-  once a second, and stands in the editor's preview
+  clouds drift and breathe, stars twinkle, fog sways and a bolt flashes now and then, as on SPUR
+  II's weather card. Flat, or with `"finish": "lit"` from lit bodies; `moving` and `offset` keep a
+  row of them out of step. It moves where the panel is driven faster than once a second, and stands
+  still in the app's preview
 - Ridges: a `rect` with a `ridge` name is drawn as SPUR II draws its frames, a ridge with two
   facets under the guide light, the lit one glowing a little; rects with the same name are one
   ridge, joined at mitres. Rects without a name stay flat
 
 **New: cards, notices and transitions**
-- Cards, after SPUR II's Studio screen, as modules that adapt to any panel: `playback` (the
-  cover, the state, title and artist, the app with its icon, the progress), `forecast` (a
-  moving symbol, the day's range, the details, the rain and the sun, the next hours),
-  `instrument` (a ring of light with its number inside and the readings of the part beside or
-  below it, or a fan with its speed), `download` (what loads, its progress, the rate and the
-  time left, the speed of the last minutes: the new widget type `downloads`, which reads the
-  state of the `downloads` service) and `netcard` (the network, with a download in its place
-  while one runs). Cards are lit by themselves (a module's `finish` is `auto` now: its kind's
-  own), their frames are flat thin lines, and where a module is too small for its card the
-  older module of its kind takes over. `time` on the playback card and the music module:
-  `remaining` writes the time left at the right of the progress with a minus (`-2:24`), as
+- Cards, after SPUR II's Studio screen, as modules that adapt to any panel: `playback` (the cover,
+  the state, title and artist, the app with its icon, the progress), `forecast` (a moving symbol,
+  the day's range, the details, the rain and the sun, the next hours), `instrument` (a ring of light
+  with its number inside and the readings of the part beside or below it, or a fan with its speed),
+  `download` (what loads, its progress, the rate and the time left, the speed of the last minutes:
+  the new widget type `downloads`, which reads the state of the `downloads` service) and `netcard`
+  (the network, with a download in its place while one runs). Cards are lit by themselves (a
+  module's `finish` is `auto`: its kind's own), their frames are flat thin lines, and where a module
+  is too small for its card, the older module of its kind takes over (the weather module for the
+  forecast card, the music module for the playback card). `time` on the playback card and the music
+  module: `remaining` writes the time left at the right of the progress with a minus (`-2:24`), as
   SPUR II's Studio does
 - `cards`, a slot that shows one card of several: the first that has something to show (a
   track that plays or was paused a short while, the weather, a download that runs), or by a
@@ -141,36 +147,42 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
   already leaving rolls back up. It fits every panel from 3.5" to the 9.2" bar, either way
   round
 - Two transitions after SPUR II, cheap for a panel's video encoder: `tube` (a line ignites at
-  mid-height and opens onto the new screen, live) and `entrance` for a game or another mode
-  (the screen closes to a line, the game's logo or name lights up while "Game mode" or "Game
-  ended" types in, then the new screen opens)
+  mid-height and opens onto the new screen, live) and `entrance` for a game or another mode (the
+  screen closes to a line, the game's logo or name lights up while "Game mode" or "Game ended" types
+  in, then the new screen opens). `transition` in `config.toml` takes both
 
 **New: the app**
-- A window of its own instead of the browser (pywebview: WebView2 on Windows, WebKitGTK on
-  Linux), one at a time, keeping its size. A click on the tray icon and *Open Libre Panel* show
-  it on *Start*, the tray's *Theme editor* and *Settings* on their views; `libre-panel start`,
-  `libre-panel editor` and a second start open the same window or bring it to the front. Where
-  no window can open (no WebView2 runtime, no GTK with WebKit, the Linux AppImage) the browser
-  opens as before, and `libre-panel editor --browser` asks for it. With pip on Windows: `pip
-  install "libre-panel[window]"`; on Linux see
-  [Running in the background](docs/BACKGROUND.md#the-apps-window)
-- *Start*: the panel at a glance (what it shows, its picture, pause, brightness, upside down),
-  the themes made for it, one click each, the way on to Design, Look, Live and Settings, and
-  what the panel could not read (the tray's sentence) with the way to its details. *All* is the
-  gallery of every installed theme (built in, from plugins, your own), each drawn by the
-  panel's renderer: Libre Panel's own and yours first, a set that belongs together (a theme's
-  `collection`, such as *SPUR II · Legacy*) closed at the end; a pencil opens a theme in
-  Design. On a first start (no `theme` in `config.toml`) it asks "How should it look?" with
-  Libre Panel's own themes for the panel it found, or the one named under *Another panel*;
-  *Start empty* and *Open a theme file* are there too
-- *Design*, the new theme editor: the panel in the middle; modules, building blocks and
-  widgets from a library with pictures in the theme's colours, to drag onto it; a toolbar
-  over the selection for what it shows, how it is drawn (light, facet, acrylic lettering,
-  flat: those that show on it), its colour and size; a short inspector with the rest under
-  *Fine-tuning*, the six looks in the theme's settings; corners that resize, snapping guides,
-  several widgets at once, layers with lock and eye, the theme's pictures and fonts. The
-  panel's pages are tabs over it: the normal theme, game mode's, the round report's and those
-  of plugins' modes, each with its frame rate
+- A window of its own instead of the browser (pywebview: WebView2 on Windows, WebKitGTK on Linux),
+  one at a time, keeping its size. A click on the tray icon and *Open Libre Panel* show it on
+  *Start*, the tray's *Theme editor* and *Settings* on their views; `libre-panel start`,
+  `libre-panel editor` and a second start open the same window or bring it to the front. Where no
+  window can open (no WebView2 runtime, no GTK with WebKit, the Linux AppImage) the browser opens
+  instead, and `libre-panel editor --browser` asks for it. With pip on Windows:
+  `pip install "libre-panel[window]"`; on Linux see [Running in the
+  background](docs/BACKGROUND.md#the-apps-window)
+- *Start*: the panel at a glance (what it shows, its picture, pause, brightness, upside down), the
+  themes made for it, one click each, the way on to Design, Look, Live and Settings, and what the
+  panel could not read (the tray's sentence) with the way to its details. *All* is the gallery of
+  every installed theme (built in, from plugins, your own), each drawn by the panel's renderer:
+  Libre Panel's own and yours first, a set that belongs together (a theme's `collection`, such as
+  *SPUR II · Legacy*) closed at the end; a pencil opens a theme in Design. On a first start (no
+  `theme` in `config.toml`) it asks "How should it look?", without the tabs in the header (the views
+  behind them have nothing to show before a theme is on the panel), with Libre Panel's own themes
+  for the panel it found, or the one named under *Another panel*, the panel's default first and
+  marked *Default*; *Start empty* and *Open a theme file* are there too
+- *Design*, the theme editor: the panel in the middle; modules, building blocks and widgets from a
+  library with pictures in the theme's colours, to drag onto it; a toolbar over the selection for
+  what it shows, how it is drawn (light, facet, acrylic lettering, flat: those that show on it), its
+  colour and size; a short inspector with the rest under *Fine-tuning*, the six looks in the theme's
+  settings; corners that resize, snapping guides and steps (1, 4, 8 or 16 px), several widgets at
+  once, layers with lock and eye, the theme's pictures and fonts. The panel's pages are tabs over
+  it: the normal theme, game mode's, the round report's and those of plugins' modes, each with its
+  frame rate. The sensor picker lists every key, also those a source reads only while a theme shows
+  them (the volume, the rain text, the game's frame rate and what holds it down). The preview shows
+  demo values unless *Live values* is on, with a round report, a game logo, a player icon and a
+  download that runs, so that the widgets which show those are complete, and 1900 readings of
+  history, so that the wide graphs are full. A theme that comes with Libre Panel is saved as a theme
+  of your own, under a name you give it
 - *Look*, the theme's look beside the picture of the panel: the six colour worlds and the
   palette; how rings, bars, graphs, lettering, icons and modules are drawn (light, facet,
   acrylic, flat) with their glow; the panel light (the sun, its strength, the sweeps and when
@@ -183,20 +195,25 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
   with their state and the hint about missing readings; the services with a switch each and
   *Restart*; test notices of every kind and what became of them; the end of the log. Pause and
   brightness are in the header. It polls the console API while it is shown
-- *Settings* change `config.toml` for you, comments kept, so that nothing needs a text editor:
-  *Panel* (the panel that is found; the video mode with what it still needs, its frame rate
-  and the name of the standby clip, written only when you type it; brightness; upside down;
-  under *Advanced* the driver, the picture file, the serial port and ffmpeg), *Sensors* (the
-  sources, on and off and in their order; how LibreHardwareMonitor is read, with what it says
-  about administrator rights and PawnIO; the reading interval), *Services* (each one on or off
-  with its state, *Restart*, and the options it declares), *Weather and place* (the weather,
-  its units and interval, and a place found by its name: the name goes to Open-Meteo's search
-  only when you press *Search*, and the place is kept to about a kilometre; `[weather]` has
-  `place`, the name the app shows for the coordinates), *Start and system* (starting with the
-  system; the highest rights only when you ask and only for an administrator; the language)
-  and *About* (the version, the licence, the notices, how to report a panel, the folders with
-  *Open folder*). What the running app cannot take in by itself, the sources and the weather,
-  says so and has a *Restart the panel* button; everything else is followed at once
+- *Settings* change `config.toml` for you, comments kept (a setting that is new to the file is
+  written under the comment that explains it), so that nothing needs a text editor: *Panel* (the
+  panel that is found; the video mode with what it still needs, its frame rate and the name of the
+  standby clip, written only when you type it; brightness; upside down; under *Advanced* the driver,
+  the picture file, the serial port and ffmpeg), *Sensors* (the sources, on and off and in their
+  order; how LibreHardwareMonitor is read, with what it says about administrator rights and PawnIO;
+  the reading interval), *Services* (each one on or off with its state, *Restart*, and the options
+  it declares), *Weather and place* (the weather, its units and interval, and a place found by its
+  name: the name goes to Open-Meteo's search only when you press *Search*, and the place is kept to
+  about a kilometre; `[weather]` has `place`, the name the app shows for the coordinates), *Start
+  and system* (starting with the system; the highest rights only when you ask and only for an
+  administrator; the language) and *About* (the version, the licence, the notices, how to report a
+  panel, the folders with *Open folder*). What the running app cannot take in by itself, the sources
+  and the weather, says so and has a *Restart the panel* button; everything else is followed at once
+- A Libre Panel that runs with the highest rights (as administrator or root) obeys what
+  `config.toml` names, so there Settings do not change a setting that names a program, a library or
+  a file (`video.ffmpeg`, the picture file `device.output`, a path under `[sensors.*]`, the files
+  and folders a service's options name): the app says to set it in `config.toml`, which Libre Panel
+  reads from your own folder
 - The hardware's names: *Settings → Sensors → Hardware names* shows the processor, graphics
   card and memory names the sensors detect, and a text typed there takes their place on the
   panel (*Automatic* brings the detected one back). In *Design* the same field sits beside a
@@ -216,52 +233,40 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
   in `config.toml`, on and off, and which rule holds and what it sees. Without the background
   app (`libre-panel editor`) they say so
 - The console API: the two pages are a JSON API that a screen of any design can call
-  (`/api/plugins/control/` and `/api/plugins/autopilot/`, under "The console API" in
-  docs/ARCHITECTURE.md): the live picture as JPEG or PNG, the numbers, the sources
-  (LibreHardwareMonitor's mode, rights and PawnIO driver as data), the services with `enabled`
-  and a state (`running`, `stopped`, `failed`, `not-installed`, `off`, `pending` until the app
-  follows `config.toml`, `unknown`) to switch on and off and restart, test messages with their
+  (`/api/plugins/control/` and `/api/plugins/autopilot/`, see [The console
+  API](docs/ARCHITECTURE.md#the-console-api)): the live picture as JPEG or PNG, the numbers, the
+  sources (LibreHardwareMonitor's mode, rights and PawnIO driver as data), the services with
+  `enabled` and a state (`running`, `stopped`, `failed`, `not-installed`, `off`, `pending` until the
+  app follows `config.toml`, `unknown`) to switch on and off and restart, test messages with their
   verdict, the theme per mode, the log, and the autopilot's rules
-- How the panel is doing: the main loop measures its frame rate against the target, the time
-  to draw a frame (median and slowest of the last 120), the data rate sent to the panel, and
-  in video mode the blocks per second, the deepest queue the panel reported, the waits and the
-  pictures thrown away, and counts USB errors, restarts of the panel and of ffmpeg. In
-  `/api/app` (`panel.stats`), on *Live*, on the Control page and for plugins in
-  `context.status()`; `context.sources()` lists the sensor sources and what they say about
-  themselves. Measuring costs a few additions per frame and holds no lock
-- *Design*, the new theme editor: the panel in the middle; modules, building
-  blocks and widgets from a library with pictures in the theme's colours, to
-  drag onto it; a toolbar over the selection for what it shows, how it is
-  drawn (light, facet, acrylic lettering, flat: those that show on it), its
-  colour and size; a short inspector with the rest under *Fine-tuning*, the
-  six looks in the theme's settings; corners that resize, snapping guides and
-  steps (1, 4, 8 or 16 px), several widgets at once, layers with lock and
-  eye, the theme's pictures and fonts. The panel's pages are tabs over it:
-  the normal theme, game mode's, the round report's and those of plugins'
-  modes, each with its frame rate
-- The panel chip in the header of *Design* and *Look* says how the running panel is
-  doing, as the old editor's did: the frame rate against its target, the data rate and
-  the drawing time (a number nothing counts, such as the data rate of a PNG file, is
-  left out), marked when the panel cannot keep up; *Live* beside them opens the Live
-  view, which has the same numbers, the sources and the log
+- How the panel is doing: the main loop measures its frame rate against the target, the time to draw
+  a frame (median and slowest of the last 120), the data rate sent to the panel, and in video mode
+  the blocks per second, the deepest queue the panel reported, the waits and the pictures thrown
+  away, and counts USB errors, restarts of the panel and of ffmpeg. It is in `/api/app`
+  (`panel.stats`), on *Live*, on the Control page and for plugins in `context.status()`;
+  `context.sources()` lists the sensor sources and what they say about themselves. Measuring costs a
+  few additions per frame and holds no lock. The panel chip in the header of *Design* and *Look*
+  shows the frame rate against its target, the data rate and the drawing time (a number nothing
+  counts, such as the data rate of a PNG file, is left out), marked when the panel cannot keep up;
+  *Live* beside them opens the Live view
 
 **New: services** (built in, each off until listed in `[services] enabled`)
 - Services of the app's own: `notices`, `game`, `autopilot`, `devices`, `memory`, `cooling` and
-  `downloads`. They are switched on with `[services] enabled` like a plugin's, work in the
-  downloads without any package, and `libre-panel plugins` lists them as "built in"; their
-  settings are in the configuration guide
+  `downloads`. They are switched on with `[services] enabled` like a plugin's, work in the downloads
+  without any package, and `libre-panel plugins` lists them as "built in"; their settings are in
+  [the configuration guide](docs/CONFIGURATION.md#built-in-services)
 - `notices` puts short messages on the panel: the volume while it turns (changing in place,
   "Muted"), a new track with its cover and the player's icon, sensors that cross a limit you
   set (`[[services.notices.warnings]]` with `warn` and `crit`, told once until the value has
   been below `warn`, and never twice within `quiet_s`), and "Panel restarted 21:05" after a
   restart that cleared a hung video decoder. The theme's toast style draws them (card or band)
   and `toast.off` leaves kinds out
-- `game` is game mode: it finds the game you play, from a list of programs or Steam's library
-  (read from `libraryfolders.vdf` and the `appmanifest` files on Windows and Linux; on Windows
-  a game counts once its window has been in front), publishes `game.name` and `game.logo`
-  (Steam's logo, cut out and not scaled, kept after the game until the next one), and switches
-  to `[modes.game]` with the entrance; six seconds after the game's program ended it switches
-  back. Without the entrance a "Game mode" message says so
+- `game` is game mode: it finds the game you play, from a list of programs or Steam's library (read
+  from `libraryfolders.vdf` and the `appmanifest` files on Windows and Linux; on Windows a game
+  counts once its window has been in front), publishes `game.name` and `game.logo` (Steam's logo,
+  cut out and not scaled, kept after the game until the next one), and switches to `[modes.game]`
+  with the entrance; six seconds after the game's program ended it switches back. Without the
+  entrance (`entrance = false`) a "Game mode" message says so
 - `autopilot` picks the theme by rules in `config.toml` (`[[services.autopilot.rules]]`, each
   naming a theme, the first that holds wins): music playing, the microphone in use (Windows),
   the mean CPU or GPU load over a time, a program in front, the time of day. A new choice must
@@ -331,31 +336,37 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
   Windows (no extra program; it follows a changed default device) and Linux (`wpctl` or
   `pactl`). It runs only while a theme or a service shows `audio.*`, and is in the default
   `[sensors] providers` on both; in a list of your own add `"audio"`
-- LibreHardwareMonitor inside Libre Panel (Windows): the downloads carry its library and read
-  it themselves, so the GPU, temperatures, power and fans no longer need a
-  LibreHardwareMonitor that runs as administrator with its web server turned on. `mode` under
-  `[sensors.librehardwaremonitor]` is `"auto"` (the default: inside Libre Panel where that is
-  possible, else the web server as before), `"inprocess"` or `"webserver"`. With pip: `pip
-  install "libre-panel[lhm]"`, `packaging/windows/fetch_lhm.py` and `dll_dir`. Only the
-  hardware a theme on the panel shows is read, once a second. The libraries
-  (LibreHardwareMonitor, MPL-2.0, and its companions under Apache-2.0 and MIT; see NOTICE.md)
-  are fetched from NuGet when the Windows downloads are built, each checked against a fixed
-  SHA-256; they are not in the repository
-- The CPU's temperature, power and clock, the RAM temperature and the mainboard's fans need
-  Libre Panel to run as administrator (`libre-panel autostart enable --elevated`) and
-  LibreHardwareMonitor's driver PawnIO ([pawnio.eu](https://pawnio.eu)). Without them those
-  readings show "--", never 0, and a LibreHardwareMonitor web server that does have them fills
-  in. `libre-panel sensors` and `libre-panel doctor` say which of the two is missing;
+- LibreHardwareMonitor inside Libre Panel (Windows): the downloads carry its library and read it
+  themselves, so the GPU, temperatures, power and fans need no LibreHardwareMonitor that runs as
+  administrator with its web server turned on. `mode` under `[sensors.librehardwaremonitor]` is
+  `"auto"` (the default: inside Libre Panel where that is possible, else its web server),
+  `"inprocess"` or `"webserver"`. With pip: `pip install "libre-panel[lhm]"`,
+  `packaging/windows/fetch_lhm.py` and `dll_dir`. Only the hardware a theme on the panel shows is
+  read, once a second. The libraries (LibreHardwareMonitor, MPL-2.0, and its companions under
+  Apache-2.0 and MIT; see [NOTICE.md](NOTICE.md)) are fetched from NuGet when the Windows downloads
+  are built, each checked against a fixed SHA-256; they are not in the repository. A download that
+  cannot use its library (damaged, or deleted by a virus scanner) reports that as the source's
+  `error` and does not ask a web server that is not there. More: [Windows
+  sensors](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans)
+- The CPU's temperature, power and clock, the RAM temperature and the mainboard's fans need Libre
+  Panel to run as administrator (`libre-panel autostart enable --elevated`) and
+  LibreHardwareMonitor's driver PawnIO ([pawnio.eu](https://pawnio.eu)). Without them those readings
+  show "--", never 0, and a LibreHardwareMonitor web server that does have them fills in.
+  `libre-panel sensors` and `libre-panel doctor` say which of the two is missing, and so does one
+  plain sentence in the user's language when a Windows PC gives no temperatures (no administrator
+  rights, no PawnIO driver, the reader did not start, its web server not running): a line under the
+  status line of the tray menu and in the tooltip of the icon, `hint` in the panel's state
+  (`/api/app`, `GET control/panel`) and on the LibreHardwareMonitor row of `GET control/sources`. It
+  keeps quiet while LibreHardwareMonitor starts and about what nobody can change.
   `libre-panel sensors --check-lhm` tests that the library loads
-- The names of the processor, the graphics card and the memory (`cpu.name`, `gpu.name`,
-  `mem.name`) are found by Libre Panel itself, on Windows and Linux, once at the start, with no
-  administrator rights and no other program: from the registry and the firmware's SMBIOS table
-  on Windows, from `/proc`, `/sys` and the system's `pci.ids` on Linux (and the SMBIOS files,
-  where the user may read them). They are shortened for a panel, "Ryzen 5 7600", "Core
-  i7-12700K", "GeForce RTX 4070", "Kingston DDR5-5600 32 GB"; where the memory modules cannot
-  be read `mem.name` is the size, "32 GB". The new `hardware` source is always on, adds nothing
-  to a frame's time and wins over LibreHardwareMonitor's names, which fill in where it finds
-  none
+- The names of the processor, the graphics card and the memory (`cpu.name`, `gpu.name`, `mem.name`)
+  are found by Libre Panel itself, on Windows and Linux, once at the start, with no administrator
+  rights and no other program: from the registry and the firmware's SMBIOS table on Windows, from
+  `/proc`, `/sys` and the system's `pci.ids` on Linux (and the SMBIOS files, where the user may read
+  them). They are shortened for a panel, "Ryzen 5 7600", "Core i7-12700K", "GeForce RTX 4070",
+  "Kingston DDR5-5600 32 GB"; where the memory modules cannot be read `mem.name` is the size, "32
+  GB". The new `hardware` source is always on, adds nothing to a frame's time and wins over
+  LibreHardwareMonitor's names, which are shortened the same way and fill in where it finds none
 - `[hardware]` in `config.toml`: `cpu_name`, `gpu_name` and `memory_name`. Text there is the
   name, as written (one line, 100 characters at most); empty means the name found. A changed
   `config.toml` is taken while the panel runs. The names never go to the log or into the
@@ -366,16 +377,22 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
   the player's desktop entry. Found once per program and nothing is sent anywhere
 - `media.remaining`, the time left of a track in seconds (its length less where it is; none
   where a player does not tell the one or the other)
+- What is playing (`media.*`) follows Windows' own reports of a new track, a pause or another
+  player, so a new track shows at once; the cover is read when the track changes, a look every five
+  seconds is the safety net, and the position moves on by itself. Linux asks once a second
 - `mem.free` (psutil, what programs can still take; used and free add up to the total),
   `mem.temp` (LibreHardwareMonitor: the hottest memory module's own thermal sensor, with the
   administrator rights and PawnIO the CPU's temperature needs) and `mem.speed` (what the memory
   runs at in MT/s, from the firmware's SMBIOS table, the same one that names the memory; Linux
   where it may be read). What a PC cannot give shows as `--` with its name; the RAM's
   instrument card has these rows
-- `game.frametime_peak`, the longest frame time since the last reading (so a stutter between
-  two readings shows, and a graph of it never stops while a game runs), and `game.limiter`,
-  `cpu`, `gpu` or `cap`: who holds the frame rate down, judged from how long the CPU and the
-  GPU wait for each other (PresentMon 2)
+- `gpu.hotspot` (LibreHardwareMonitor: the "GPU Hot Spot" sensor of the card `gpu.temp` is read
+  from)
+- `game.frametime_peak`, the longest frame time since the last reading (so a stutter between two
+  readings shows, and a graph of it never stops while a game runs), and `game.limiter`, `cpu`, `gpu`
+  or `cap`: who holds the frame rate down, judged from how long the CPU and the GPU wait for each
+  other (PresentMon 2). With the `game` service on, the `game.*` readings count the frames of the
+  game it found, not of the program with the most frames
 - `weather.rain.minutes` and `weather.rain.text`: the rain of the next two hours from
   Open-Meteo's 15-minute precipitation. The minutes count to the rain starting or stopping;
   the text says so ("Rain in 20 min", "Rain stops in 40 min", "No rain for the next 2 h"), in
@@ -391,13 +408,12 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
   down shows only while it does
 - The colour `@cover` is the colour the cover on show carries (bars, rings and icons follow the
   track), and `play`, `pause`, `up` and `down` are icons
-- Graphs: `fill_alpha`, how opaque the fill is, 0 to 1 (0: as before, a flat fill a quarter, a
-  fade 0.45 at its top); `direction` `down`: the curve hangs from the top edge and is filled
-  from there, as SPUR II draws the download below the upload; `inset` off: the range spans the
-  whole box, as in SPUR II's charts (the line keeps a line's width inside by default);
-  `end_dot`, a radius in px: the line ends in a dot of its colour at the newest value, with the
-  graph's glow around it, drawn in quarter pixels so that it glides with the value, in video
-  mode too
+- Graphs: `fill_alpha`, how opaque the fill is, 0 to 1 (0: the default, a flat fill a quarter, a
+  fade 0.45 at its top); `direction` `down`: the curve hangs from the top edge and is filled from
+  there, as SPUR II draws the download below the upload; `inset` off: the range spans the whole box,
+  as in SPUR II's charts (the line keeps a line's width inside by default); `end_dot`, a radius in
+  px: the line ends in a dot of its colour at the newest value, with the graph's glow around it,
+  drawn in quarter pixels so that it glides with the value, in video mode too
 - A `bar` takes a `mark`, a second reading drawn as a thin line across it at its value on the
   bar's scale (`mark_color`, `mark_width`), in any finish, and an `image` takes `align`
   (`left`, `center`, `right`) for a picture that does not fill its box
@@ -409,23 +425,26 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
   SEPTEMBER)
 - Liberation Sans ships with Libre Panel (`builtin:LiberationSans-Regular`, `-Bold`): its
   letters are as wide as Arial's, so a layout made for Arial stays in place
+- The RAM modules (ring, big number, history) show the memory's name (`mem.name`) under their title
+  as the CPU and GPU modules show theirs, and the System module lists it as a fourth row where there
+  is room
 
 **New: the SPUR II collection** (`"collection": "SPUR II"`, the screens of the private project
 Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
-- *SPUR Classic* (`spur-classic`): SPUR II's classic screen as it is now, rebuilt from its
-  geometry with the look and the finishes: two load charts with raised curves in flat frames,
-  the CPU and GPU sections, RAM and network in staggered boxes, values as light in their
-  milled grooves with SPUR II's glow, glowing headings, the faceted wordmark, the turning fans
-  and the clock above, the grid, one light and the depth dust
+- *SPUR Classic* (`spur-classic`): SPUR II's classic screen, rebuilt from its geometry with the look
+  and the finishes: two load charts with raised curves in flat frames, the CPU and GPU sections, RAM
+  (its heading names the memory, its temperature is `mem.temp`) and network in staggered boxes,
+  values as light in their milled grooves with SPUR II's glow, glowing headings, the faceted
+  wordmark, the turning fans and the clock above, the grid and the depth dust
 - *SPUR Horizon* (`spur-horizon`): the CPU's load growing up from a midline and the GPU's down
   from it across the whole panel, 70 seconds as a landscape with a mark every ten seconds and
   a dot at each curve's end, tiles below for CPU, GPU, RAM, network and what plays, the fans
   and the clock above
-- *SPUR Header* (`spur-header`): SPUR II's game screen with the classic frame: the frame rate
-  large and the 1% low in the header beside the game's logo (its name where it has none), the
-  CPU's and GPU's load as charts, RAM and the GPU's temperatures, and below, where the network
-  was, a chart of the longest frame of each moment, who holds the frame rate down (in the
-  colour of its chart) and the volume
+- *SPUR Header* (`spur-header`): SPUR II's game screen with the classic frame: the frame rate large
+  and the 1% low in the header beside the game's logo (its name where it has none), the CPU's and
+  GPU's load as charts, RAM and the GPU's temperatures (the memory's from `mem.temp`), and below,
+  where the network was, a chart of the longest frame of each moment, who holds the frame rate down
+  (in the colour of its chart) and the volume
 - *SPUR Focus* (`spur-focus`): SPUR II's Focus screen for a game, the frame rate in 150 px with
   the game's logo or name over it and its course over 35 seconds beside it, the CPU's and
   GPU's load as small charts, and FRAMES (1% low, frame time, who holds the rate down), CPU,
@@ -447,14 +466,14 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
   and the volume. Its playback card counts down the time left
 
 **New: plugins**
-- Services no longer poll: `host.on("sample", callback)` hands them every new snapshot of the
-  readings (a slow callback gets the newest one, never a backlog), and what a service
-  publishes reaches the next frame instead of the next reading, so `set_mode` or `show_theme`
-  right after a `publish` is drawn with the value in. `host.on("fresh", callback)`
-  (`snapshot=`, `keys=`) tells a service on the frame a reading of a source that follows on
-  every frame (the volume, the fast load, what services publish) changed between two samples,
-  and only then; it comes in the thread of `sample`, one callback after the other, and a slow
-  one gets the newest with all the keys that changed meanwhile
+- Services do not poll: `host.on("sample", callback)` hands them every new snapshot of the readings
+  (a slow callback gets the newest one, never a backlog), and what a service publishes reaches the
+  next frame instead of the next reading, so `set_mode` or `show_theme` right after a `publish` is
+  drawn with the value in. `host.on("fresh", callback)` (`snapshot=`, `keys=`) tells a service on
+  the frame a reading of a source that follows on every frame (the volume, the fast load, what
+  services publish) changed between two samples, and only then; it comes in the thread of `sample`,
+  one callback after the other, and a slow one gets the newest with all the keys that changed
+  meanwhile
 - `host.publish_state(key, value)` keeps a dict or list as JSON with the time it was published,
   never smoothed and never in a graph's history; `snapshot.state(key)` and `context.state(key)`
   read it back. `host.want("media.*")` tells the sources that work on demand (what is playing,
@@ -463,15 +482,24 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
   else with the `reason`: the theme switches the kind off (`"theme"`), the screen shows it
   itself (`"screen"`) or no panel is connected (`"no-panel"`). A page sends one with
   `context.notify(...)`
-- A toast style says how long a toast stays (`lifetime`) and how long one without its own time
-  holds (`hold_s`), and keeps what it knows across theme switches; a transition can hide
-  toasts while it plays (`toasts = "hide"`) and decide case by case what a switch does
-  (`on_switch`); `context.image(key)` gives a published picture
-- Editor pages: `context.background` says whether the background app serves the editor (the
-  panel and the services run only there), `context.shown_frame()` gives the picture on the
-  panel now, messages and transitions included, and `context.log_tail(lines)` the end of the
-  log the tray app writes. A page may answer with a file (`(status, bytes, type)`), and pages
-  that write `config.toml` ask the app to follow it with `context.follow_config()`
+- A toast style says how long a toast stays (`lifetime`) and how long one without its own time holds
+  (`hold_s`), and keeps what it knows across theme switches; a transition can hide toasts while it
+  plays (`toasts = "hide"`) and decide case by case what a switch does (`on_switch`), and a mode
+  change that brings a transition of its own keeps it while a transition that follows switches
+  plays; `context.image(key)` gives a published picture. A message on show when a screen comes that
+  shows its kind itself goes on unseen and comes back with the next screen; without a queue
+  (`"queue": false`), messages that come at the same moment are decided one after the other (a
+  warning that comes with a volume change takes over from it at once)
+- Editor pages: `context.background` says whether the background app serves the editor (the panel
+  and the services run only there), `context.shown_frame()` gives the picture on the panel now,
+  messages and transitions included, `context.log_tail(lines)` the end of the log the tray app
+  writes, and `context.elevated` whether Libre Panel runs with the highest rights (a page then
+  leaves what names a program, a library or a file to `config.toml`, as the app's Settings do). A
+  page may answer with a file (`(status, bytes, type)`), and pages that write `config.toml` ask the
+  app to follow it with `context.follow_config()`. Pages get the app's colours (its teal and amber,
+  its grey) and its typeface, Barlow, so that a page inside the app looks like part of it;
+  `/static/editor.css` keeps its names. `GET /api/sensors` also lists the pictures a source has
+  (`media.cover`, `media.app_icon`, `game.logo`), marked `"picture": true`, for an image's `"@key"`
 - `set_config_value` writes lists too (`"services.enabled"`) and replaces a list that runs over
   several lines, the new `set_config_tables` writes an array of tables such as
   `[[services.autopilot.rules]]`, and `edit_config` makes several such changes in one write.
@@ -485,7 +513,12 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
   `context.light_edge()`; finishes of their own with `libre_panel.render.finish.register`;
   `libre_panel.render.facets.groove_bar` and `groove_ring`, the milled groove of a bar or a
   ring (a floor of exactly the colour and a bevel lit from the top left), cached
-- `libre_panel.clock()`, the clock of `now` (`time.perf_counter`)
+- `libre_panel.clock()`, the clock of `now` (`time.perf_counter`); `snapshot.now` is the wall time
+  of the frame that is planned, not of the moment its drawing begins, so a seconds clock ticks on
+  the frame that is due
+- The main loop draws one frame at a time through `MainLoop.step(now)` (in `libre_panel.app`), with
+  the sensor hub, display, host and clock given: tests and plugins' test benches drive the real loop
+  frame by frame instead of copying it
 - `libre_panel.services.fancontrol`: FanControl's curves, fans and the sensor each curve reads,
   from its configuration file (found from the environment or `fancontrol = "..."`; opened for
   reading only)
@@ -504,349 +537,135 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
   together
 
 **Fixes**
-- Video mode: a graph whose sensor goes missing or reads nothing moves on with a gap, instead
-  of standing still (or, with `per_frame`, running on as a flat line)
-- Video mode: where many widgets move, what lies under a graph was laid anew on most frames
-  (the kept layers went oldest first, not least used); the ones a frame uses are now kept
-  longest
-- A seconds clock ticks on the frame that is due: `snapshot.now` is the time a frame is
-  planned for, not the moment its drawing begins
-- The first frame after the start took 200 to 350 ms: the first theme's texts, cards, graph
-  strips and fans were made in it, which held up a video panel's first moments. The theme is
-  drawn once while the loop is built, in a thread of its own, as the next theme is for a
-  switch, so the first frame takes a few milliseconds. The readings of that drawing are the
-  first frame's sample, and the start waits for it two seconds at most
-- A theme's first frame read the pictures of its fans' rotors (about 200 ms) and built the
-  bevels of a faceted or acrylic clock (some 30 ms a letter). The warm-up before the first
-  frame does both now: SPUR II's screens show their first frame in about half the time
-- Moving a theme to a narrower panel (*adapt*) kept the room each text may take (`max_width`):
-  a hardware name kept the width it had on a 9.2" bar and ran into its neighbours. It narrows
-  with the panel now
-- A mode change that brought a transition of its own (a game that ends during its entrance)
-  lost it while a transition that follows switches played
-- A message on show was gone for good when a screen came that shows its kind itself; now it
-  goes on unseen and comes back with the next screen
-- The volume message came with the next reading, up to `refresh_ms` late. It now comes within
-  a frame or two of the volume key, and a slow turn of the volume that moves less than a step
-  between two frames still adds up to one
-- While the panel was unplugged (or not found), every message of the services, a music
-  message with its cover among them, piled up in the main loop for as long as that lasted.
-  They wait in the services' queue now, the newest 20, and show when the panel is back
-- PresentMon is no longer looked for in the downloads folder: Libre Panel may run as
-  administrator, and it started any `PresentMon*.exe` found there. Name it in
-  `[sensors.presentmon] path`, put it in `PATH`, or install it
-- PresentMon began when a theme first showed the frame rate, which is too late for a game with
-  an anti-cheat: it refuses a new recording session while the game runs. It now runs for as
-  long as the `game` service is on or a theme shows `game.*`, ends with Libre Panel however
-  that ends (a Windows job), and when it cannot run (no administrator rights) it waits longer
-  and longer instead of trying again at every reading
-- LibreHardwareMonitor's web server on this PC is asked directly, past a proxy set for the
-  system, which could not reach it
-- LibreHardwareMonitor: when its web server stopped answering, the panel kept showing the last
-  numbers for ever. After 5 seconds (`stale_seconds` under `[sensors.librehardwaremonitor]`;
-  0 keeps them) the readings go and the panel shows "--"; the log says so, and when they are
-  back
-- Windows, when LibreHardwareMonitor gives no temperatures (Libre Panel not run as
-  administrator, no PawnIO driver, its reader did not start, its web server not running), the
-  panel showed "--" and only `libre-panel sensors`, `doctor` and the Control page said why, in
-  technical words. Now one sentence says what to do, in the user's language: a line under the
-  status line of the tray menu and in the tooltip of the icon, `hint` in the panel's state
-  (`/api/app`, `GET control/panel`) and on the LibreHardwareMonitor row of `GET
-  control/sources`. It keeps quiet while LibreHardwareMonitor starts and about what nobody can
-  change. A Windows download that cannot use its library (damaged, or deleted by a virus
-  scanner) reports that as the source's `error` instead of asking a web server that is not
-  there
-- SPUR Horizon, SPUR Header and SPUR Session read the GPU's hot spot by a key that no source
-  made (`temp.gpu.hot_spot`): on a PC they showed "--", while the demo, which had made the key
-  up, showed a value. LibreHardwareMonitor now gives `gpu.hotspot` (the "GPU Hot Spot" sensor
-  of the card `gpu.temp` is read from), the themes read it, and the demo has it as it has
-  `gpu.temp`. A test keeps every key the SPUR themes read from the hardware to what the source
-  makes from real output
-- An image widget that shows a picture of a source (`"src": "@media.app_icon"`, or such a line
-  in `slides`) now counts as reading it. Before, the icon of the player was never looked for
-  unless something else asked for it, and the cover of the music module was read only while
-  something else asked for `media.*` too, such as the notices service
-- The editor's sensor picker did not offer the volume, the rain text and the game's slowest
-  frame and what limits it: a source that reads only while a theme shows a key has none of
-  them in a running panel until then, and the demo had none. They are listed from a catalog
-  now, and the demo values of the previews gained the volume (46 %), the game keys and the
-  rain ("Rain in 35 min"). `GET /api/sensors` also lists the pictures a source has
-  (`media.cover`, `media.app_icon`, `game.logo`), marked `"picture": true`, for an image's
-  `"@key"`
-- Services follow `config.toml` whenever the panel loop starts. A service switched on (or off,
-  or given other options) while the panel was paused, or in a `config.toml` that did not load
-  at the start and was fixed later, stayed as it was until the file changed once more
-- A change of `[services]` saved together with a theme name that does not exist (a typo, a
-  theme not installed yet) reached the services only with the next save. They now follow
-  `config.toml` whenever it loads, whether or not its theme does; the panel keeps its theme
-- A panel loop that could not start (an unknown `driver` in `config.toml`: a typo, a display
-  plugin that was removed) left the sensor sources it had started running, and the app tries
-  again every 30 seconds, so their threads piled up. The display is made first now, before any
-  source starts
+- The app's local server (127.0.0.1) answered every program of every user of the PC: a `GET` needed
+  nothing, a `POST` only the header `X-Libre-Panel: 1`, which any program can send. Every request
+  now needs a secret token that is new at each start of Libre Panel, in the header
+  `X-Libre-Panel: <token>`, `GET` as well; only the app's own files come without it. It reaches the
+  app in the address (`#token=…`, which a browser never sends to a server), and the programs of your
+  own account (`libre-panel quit`, the window the tray opens) in `private/editor.json` in the
+  settings folder, which only you can open. A bookmark of an earlier run's address says the token is
+  missing and what to do, and a request that a browser sends from a page of another origin is
+  refused. See [Running in the background](docs/BACKGROUND.md#who-can-talk-to-the-app)
+- On Windows another program could bind the app's local port too and receive its requests; the port
+  is Libre Panel's alone now
+- A Libre Panel that starts with the highest rights (`libre-panel autostart enable --elevated`) runs
+  what `config.toml` and the plugins in its settings folder name: `autostart enable --elevated` and
+  the log now warn when other users can change that folder (one made directly under `C:\` can be
+  changed by every user of the PC; see [Windows: starting with the highest
+  rights](docs/BACKGROUND.md#windows-starting-with-the-highest-rights))
+- PresentMon is no longer looked for in the downloads folder: Libre Panel may run as administrator,
+  and it started any `PresentMon*.exe` found there. Name it in `[sensors.presentmon] path`, put it
+  in `PATH`, or install it
+- PresentMon began when a theme first showed the frame rate, too late for a game with an anti-cheat,
+  which refuses a new recording session while the game runs. It now runs for as long as the `game`
+  service is on or a theme shows `game.*`, ends with Libre Panel however that ends (a Windows job),
+  and waits longer and longer after a start that fails (no administrator rights)
+- LibreHardwareMonitor's web server on this PC is asked directly, past a proxy set for the system,
+  which could not reach it. When the web server stops answering, its readings go after 5 seconds
+  (`stale_seconds` under `[sensors.librehardwaremonitor]`; 0 keeps them) and the panel shows "--",
+  not the last numbers for ever; the log says so, and when they are back
+- The music module's cover (an image widget with `"src": "@media.cover"`) was looked for only while
+  something else asked for it, and an old cover could stay on show with the next track. An image
+  widget that shows a picture of a source (in `src` or on a line of `slides`) counts as reading it
+  now
+- A NaN or infinite reading (a payload "nan" from MQTT or Home Assistant) showed as "nan" and left
+  the bars and rings of its sensor empty for good, and an integer too large for a float (400 digits)
+  made its widgets fail with a warning at every frame. Both are no reading now: the numbers show
+  "--", what needs the reading hides, a graph has a gap (and a weather code that is no number is a
+  cloud)
+- A `config.toml` with a table or a list of the wrong kind (`device = "turing-5"` where `[device]`
+  belongs, `weather = true`) or not saved as UTF-8 ended the app at its start. It is an error of the
+  config now: the app starts, says what is wrong, and goes on once the file is fixed
+- A theme file of the wrong shape (a string where an object belongs, a list as a widget's `type`,
+  `1e999` for a whole number) stopped the panel loop instead of being refused like any other mistake
+  in a theme; named by a service or a mode, it took the panel down every few seconds. Now the panel
+  keeps its theme and the log says why
+- Saving a theme that could not be written (text with half an emoji in it, a full disk) emptied its
+  `theme.json` first. Such text is refused with a message now, and a theme is written whole or not
+  at all
 - Two changes to `config.toml` at the same moment (the tray's brightness while the app saves a
-  setting) both started from the file as it was, and the one that finished last undid the
-  other. A change now waits for the one under way
-- A `config.toml` with a table or a list of the wrong kind (`device = "turing-5"` where
-  `[device]` belongs, `weather = true`, `providers = "psutil"`) or saved in another encoding
-  than UTF-8 ended the app at its start, and the tray's menu and some of the app's pages
-  failed with it. Such a file is an error of the config now: the app starts, says what is
-  wrong, and goes on once the file is fixed
-- A theme file of the wrong shape (`"background": "#101418"` where its object belongs, a list
-  as a widget's `type`, `1e999` for a whole number) stopped the panel loop instead of being
-  refused like any other mistake in a theme. Named by an autopilot rule or a mode, it took the
-  panel down every few seconds; now the panel keeps its theme and the log says why
-- Saving a theme that could not be written (text with half an emoji in it, a full disk)
-  emptied its `theme.json` first, and the theme was gone. Such text is refused with a message
-  now, and a theme is written whole or not at all
-- The open window stopped answering the other starts after one line it could not use on its
-  port (a token that is not ASCII, a window call that failed): a click on the tray icon then
-  opened a second window, and quitting left the first one open
-- On Windows the app's local port is held by Libre Panel alone; before, another
-  program could bind the same port and receive its requests
-- The editor's server, which listens on 127.0.0.1, answered every program of every user of the
-  PC: a `GET` needed nothing, a `POST` only the header `X-Libre-Panel: 1`. Another user could
-  read the settings and the log, and make a Libre Panel that starts with the highest rights
-  (`autostart enable --elevated`) run a program as administrator, by setting `video.ffmpeg`,
-  say. Every request now needs a secret token that is new at each start of Libre Panel, in the
-  header `X-Libre-Panel: <token>`, `GET` as well (the settings, the log, the live picture, the
-  names of the hardware); only the app's own files come without it. The window, the tray and
-  `libre-panel editor` give the token to the app in the address (`#token=…`, which a browser
-  never sends to a server); the app keeps it for its tab and takes it out of the address.
-  `libre-panel quit` and the window the tray opens read it from `private/editor.json` in the
-  settings folder, which only you can open (mode 600 in a folder of mode 700 on Linux, your
-  profile on Windows). A bookmark of the address of an earlier run now says the token is
-  missing, and what to do. A request that a browser sends from a page of another origin is
-  refused as well. Plugin pages that use `kit.js` need no change; see
-  [Running in the background](docs/BACKGROUND.md#who-can-talk-to-the-app)
-- With the highest rights (administrator, or root) Libre Panel no longer changes, when the
-  editor's server asks, a setting that names a program, a library or a file: `video.ffmpeg`,
-  the picture file `device.output`, a path under `[sensors.*]` and the files and folders that a
-  service's options name. The app says to set it in `config.toml`, which Libre Panel reads
-  from your own folder (an editor page can ask `self.context.elevated` to do the same). That
-  folder is trusted with the highest rights, so `libre-panel autostart enable --elevated` and
-  the log now say when other users can change it, and the documentation says which folders
-  those are: one made directly under `C:\` can be changed by every user of the PC, as
-  `C:\LibrePanelData` and `C:\lhm-libs` in earlier examples would be; the examples name a
-  folder under *Program Files* or in your profile now
-- A reading that is NaN or infinite (a payload "nan" from MQTT or Home Assistant) made the
-  numbers, bars and rings of its sensor read "nan" and stand empty for good, and kept the
-  PNG path drawing at full rate: it poisoned the value that glides, which only a pause
-  of a quarter of a second cleared. It is no reading now (the numbers show "--", what
-  needs it hides) and the value is back with the next real one. A gap in a graph's history
-  that is NaN is a gap in the curve, not a range worked out from it. A weather code that is
-  no number is a cloud, not a missing icon
-- An integer reading too large for a float (a payload of 400 digits) made every widget that shows
-  it fail with a warning at every frame, and a graph with one in its history too. It is no reading
-  either (a gap in the curve), as NaN is
-- A theme with a slideshow of a folder kept every picture it had shown, each as it was fitted to
-  its box, for as long as the theme was on the panel: 2 000 photos of a bar's size took 7 GB. A
-  renderer keeps up to 64 MB of them now and reads the others again when their turn comes
+  setting) undid each other; a change now waits for the one under way
+- Services follow `config.toml` whenever the panel loop starts and whenever the file loads, also
+  when its theme does not: a service switched on, off or given other options while the panel was
+  paused, in a `config.toml` that did not load at the start, or saved together with a theme name
+  that does not exist, stayed as it was until the file changed once more
+- A panel loop that could not start (an unknown `driver` in `config.toml`) left the sensor sources
+  it had started running, and the app tries again every 30 seconds, so their threads piled up. The
+  display is made first now
+- While the panel was unplugged, every message of the services (a music message with its cover among
+  them) piled up in the main loop for as long as that lasted. The newest 20 wait in the services'
+  queue now and show when the panel is back
 - A notice on the card (the default look) with a `payload["color"]` that is a palette name
-  (`"@net"`, as the plugin docs have it) or a colour nobody can read was not shown at all: the
-  card handed the colour to Pillow as it came and failed. The card takes the accent as the band
-  does (`#rrggbb`, `@name` or a tuple), and the level's where it cannot read one
-- The weather card's line of details ("Feels like 12°", "Wind 18 km/h", the humidity) ran
-  together in a card narrower than about 1.75 times its height, and began a few pixels right
-  of the text column above it in every card. Each detail keeps a gap to the next, and the line
-  begins with the column
-- Moving the Pico theme to a bigger panel (the 5.2", 8" and 12.3") failed with "glow_radius:
-  must be between 0 and 64": the glow, shadow and backdrop blur are scaled with the panel and
-  were not held to what a theme may have. They stop at 64 now
-- Every theme the panel switched away from stayed in memory, about 20 MB for Lumen, Studio and
-  the SPUR II screens, and so did every picture the editor drew of one: the renderer, its card
-  slots, its look and its drawing referred to one another, and the garbage collector that frees
-  such a ring is held back by the main loop for hours (and never frees what lived at the first
-  frame). A day of switching to a game's theme and back, or of editing, grew the app by hundreds of
-  megabytes. A renderer that is let go of is freed with its last reference now
-- A fan resized in the editor kept the layers of every size it had passed (17 MB for one of
-  150 px) for as long as the app ran: dragging it from 48 to 150 px took hundreds of megabytes.
-  The sizes in use are kept up to 48 MB, the oldest go
-- The eight SPUR II screens carried a panel light that lit nothing: it glints only on ridges and
-  a plugin's edges, and their frames are flat lines (frame for frame the same with and without
-  it), yet every start, full hour and new track began a sweep of light that kept the PNG path
-  drawing at full rate for a second and a half. The light is gone from those themes (the grid
-  and the dust stay), and a sweep over no edge asks for no frames at all
-- A picture of a source (the cover of the track that plays) was known by its object's number
-  alone, which another picture can get once the first is freed (a stream with no cover between
-  two tracks): the old cover then stayed on show with the new track. The picture is kept for as
-  long as what was made of it
-- A palette colour with alpha (`"track": "#FFFFFF14"`, a translucent `surface` or `line`) was made
-  opaque by the modules, so a translucent track read as a white one; a card's glass added its 90 %
-  to whatever the palette said. A role keeps its alpha now, and the glass takes 90 % of it
-- Lumen, Studio and the SPUR II studio screen on the 0.96" panel (160×80) laid their modules
-  out past the frame, a card 95 px tall in a frame 80 px high: the grid of 48 cells with a margin
-  of 16 px and a gap of 1 px came along as it was, and its cells shrank to a pixel. The margin and
-  gap of the grid scale with the panel now, and a grid has no cells smaller than 4 px (it has
-  fewer of them)
-- A theme moved to a much smaller panel lost the rules at its far edges: the frame line 4 px
-  from the right edge of a 1920 px bar came out one pixel past the last column of the 0.96"
-  panel's 80. A moved widget's corner keeps to the last column and row now
-- A theme moved to another panel kept the size of a graph's end dot (SPUR II Horizon's 9 px dot on
-  a curve a sixth as big), of a bar's mark and of the moon. They scale with the panel like the
-  other sizes, and a dot never rounds away to none
-- The app's header fits a window of 1280 px, and the window's smallest 1100, with
-  unsaved changes, a longer theme name and German texts: the gear and *To the panel*
-  were pushed out of the window. The search field, the theme's name and the text of the
-  panel chip give way (the *Not saved* mark keeps its dot), and the brand is its icon at
-  the smallest size
-- Design: the size popover of a module in the toolbar cut off its last *+*; the width
-  and the height have a line each now
-- Design: another kind for a module (the *Module* choice) keeps what it shows where the
-  new kind has it too and takes the new kind's first source otherwise: a big number that
-  showed the network no longer stays on *network* as a ring, which has none (the
-  inspector showed no choice, the panel drew the processor)
-- Design and Look: a theme that has just been opened (from Start, the theme menu, a
-  first start) showed the picture of the one before, at its size and with its boxes,
-  until it was drawn, which on a slow computer or for a big theme took seconds. The
-  panel's picture waits with a spinner at the new theme's size, and the pictures of the
-  library, which are drawn on the side, wait for it
-- Ctrl+Z, Ctrl+Y and the palette's *Undo* and *Redo* acted on the theme in every view,
-  so a press in Settings, Live or Start undid a change that could not be seen; they act
-  in Design and Look, where the theme is shown
-- The app says when Libre Panel stops answering (quit from the tray, crashed): a bar
-  under the header, the panel chip "not answering" instead of the last state it knew,
-  and an error says "Libre Panel does not answer." instead of the browser's "Failed to
-  fetch"; Settings no longer blame config.toml for it
-- A view that fails while it is drawn no longer leaves the page blank: its place says
-  so, with *Try again* and the way to Start, and the other views stay reachable; an
-  address such as `#/home/themes/%E0%A4%A` (not a valid text) no longer breaks Start
-- With *Live values* on, the preview was asked for every second in every view, also in
-  Start, Live and Settings, which do not show it; only Design and Look draw it again now
-- The command palette gives the keyboard focus back to where it was when it closes
-  (Escape or a command that opens nothing); the focus was lost to the page
-- *Back* on a plugin's page goes to the view it was opened from (Start where the app was
-  opened on the page) instead of through the browser's history, which could leave the
-  app
-- Design: *Detach into widgets* on a module that was removed or undone before the answer
-  came replaced the last widget of the theme; the answer is ignored when its module or
-  its theme is gone
-- Design: the fan instrument's fan showed as "fan" in its chip, in the inspector and in
-  the toolbar (now "Fan", "Lüfter"), and *Live* names the source of the hardware's names
-- Pressing *To the panel* (or *Save*) on a theme that comes with Libre Panel opened a
-  *Save as…* dialog without a word about why; it now says the theme is built in and that
-  the changes are saved as a theme of your own
-- Design: the library cut off long names (German's *Lüfter mit Drehz…*, *Netzwerk-Det…*,
-  and more in the small tiles of single widgets); a name takes a second line now, and a
-  word that is longer than its tile (*Monatskalender*) breaks instead of losing its end
-- Design: in English the library, the layers and the inspector named the fan, the weather
-  symbol and the download display by their raw types (*fan*, *symbol*, *downloads*); they
-  are *Fan*, *Weather symbol* and *Download display* now
-- The brightness slider (panel chip, Start, Live) went back to the old value the moment it
-  was let go and jumped forward when the panel answered; it stays where it was let go, and
-  goes back only if the change is refused
-- The app's header kept the theme's name whole only in a wide window: at 1280 and 1366 px
-  with unsaved changes it lost a few pixels to the search field and read *Libre Defa…* or
-  *Me…*. The search field gives way first now (and the gaps are narrower up to 1440 px, so
-  that the default window has room for everything in German)
+  (`"@net"`, as the plugin docs have it) or a colour nobody can read was not shown at all. The card
+  takes the accent as the band does now (`#rrggbb`, `@name` or a tuple, else the level's)
+- A theme with a slideshow of a folder kept every picture it had shown, each as fitted to its box:
+  2000 photos of a bar's size took 7 GB. A renderer keeps up to 64 MB of them now and reads the
+  others again when their turn comes
+- Video mode: a graph whose sensor goes missing or reads nothing moves on with a gap (it repeated
+  the same window, and with `per_frame` ran on as a flat line), and where many widgets move, what
+  lies under a graph is no longer laid anew on most frames
+- Moving a theme to another panel: Pico no longer fails on the 5.2", 8" and 12.3" panels
+  (`glow_radius` must be 0 to 64: the glow, shadow and backdrop blur stop at 64 now), a `moon`
+  widget and a text's `max_width` scale with the panel, and a rule in the last column of a much
+  smaller panel (the 0.96") stays on its frame
+- Modules keep the alpha of a palette colour (a translucent `track`, `surface` or `line` was made
+  opaque)
 - A page that stayed open while Libre Panel was started again (a browser tab, which has the
   token of the run before) said "Libre Panel does not answer … this page tries again by
   itself", which it never would: the server refuses it, and the bar now shows the server's
   sentence about how to open Libre Panel again
 
 **Changes**
-- The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars (the
-  8.8" and 9.2"), Libre Default on every other panel. A `config.toml` without a `theme` means
-  "the panel's own default", so `libre-panel config init` and the app's first write no longer
-  put `theme = "libre-default"` into it; a comment says what the default is and how to name
-  another. The panel is the one `device.model` names, else (with `model = "auto"`) the TURZX
-  USB panel on the bus, found by its ids and not opened, else the panel that connects: the
-  theme then changes once, with the usual transition. A theme in `config.toml`, also the
-  `theme = "libre-default"` that 0.4 wrote, and `libre-panel run --theme` always win. *Start*
-  asks "How should it look?" with the panel's default first, marked *Default*; the app, the
-  tray and the console API report the theme the panel really shows (`default_theme` in the
-  panel's state, `default` in `GET /api/pages`)
+- macOS is no longer supported: no download, no tests, no macOS code. Windows and Linux are. Nobody
+  downloaded the macOS builds of any release. Gone with it: the disk image and the menu bar app, the
+  LaunchAgent, and reading the volume and the player through `osascript`. A system that has no
+  autostart (neither Windows nor an XDG desktop) now says "not supported on this system" to
+  `libre-panel autostart` and in the app, instead of getting a file that does nothing
+- The old browser editor is gone; the app replaces it. A bookmark of `/classic/` leads to the
+  app, and plugins' editor pages open inside it (*Pages* in *Design*, or Ctrl+K)
+- For editor pages and scripts that call the app's API: every request carries the token of the run
+  in `X-Libre-Panel`, `GET` as well as `POST` (`kit.js`'s `api()` does, `withToken()` puts it in the
+  address of a picture, `static/token.js` has `authHeaders()` for any other `fetch`); a script
+  outside the browser reads it from `private/editor.json` in the settings folder (see Fixes).
+  Without it the answer is 403, also for a route that does not exist. `make_server()` has a `token`
+  of its own, and `libre_panel.editor.access` the rest. The routes of the server are one list,
+  `editor.server.ROUTES`
+- The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars (the 8.8" and
+  9.2"), Libre Default on every other panel. A `config.toml` without a `theme` means "the panel's
+  own default", so `libre-panel config init` and the app's first write no longer put
+  `theme = "libre-default"` into it; a comment says what the default is and how to name another. The
+  panel is the one `device.model` names, else (with `model = "auto"`) the TURZX USB panel on the
+  bus, found by its ids and not opened, else the panel that connects: the theme then changes once,
+  with the usual transition. A theme in `config.toml`, also the `theme = "libre-default"` that 0.4
+  wrote, and `libre-panel run --theme` always win. The app, the tray and the console API report the
+  theme the panel really shows (`default_theme` in the panel's state, `default` in `GET /api/pages`)
 - The video mode turns itself on: `video.mode` is `"auto"` by default, which streams to a 9.2"
   (the panel it is proven on) as soon as ffmpeg is found and `local_clip` names the panel's
   standby clip. `libre-panel doctor` and the log say what is missing. A `mode = "off"` in
   `config.toml` stays off
-- Windows: the GPU, temperatures, power and fans showed nothing unless `librehardwaremonitor`
-  was listed in `config.toml`. New configurations now start with
+- Windows: the GPU, temperatures, power and fans showed nothing unless `librehardwaremonitor` was
+  listed in `config.toml`. New configurations now start with
   `providers = ["load", "audio", "librehardwaremonitor", "psutil"]` (on Linux
-  `["load", "audio", "psutil"]`, elsewhere `["load", "psutil"]`), and an unset list means the
-  same. Where Libre Panel cannot read LibreHardwareMonitor itself (see above), that one must
-  run as administrator with *Options → Remote Web Server → Run*; where it does not run, asking
-  costs nothing (one second at most, waits that grow to half a minute, one line in the log)
-  and those readings show "--". A `config.toml` from 0.4 or earlier that names psutil alone
-  (what those versions wrote) gets the new list too; any other list is left as it is
+  `["load", "audio", "psutil"]`, elsewhere `["load", "psutil"]`), and an unset list means the same.
+  Where Libre Panel cannot read LibreHardwareMonitor itself, that one must run as administrator with
+  *Options → Remote Web Server → Run*; where it does not run, asking costs nothing (one second at
+  most, waits that grow to half a minute, one line in the log) and those readings show "--". A
+  `config.toml` from 0.4 or earlier that names psutil alone (what those versions wrote) gets the new
+  list too; any other list is left as it is
 - Windows downloads: with `mode = "auto"` the library inside Libre Panel is read first; a
   LibreHardwareMonitor web server that happens to run only fills in what Libre Panel cannot
   read (the CPU's readings without administrator rights). Drive temperatures (`temp.nvme.*`)
   come only from the web server for now: set `mode = "webserver"` to keep them, or to read only
   it
-- A setting that `config.toml` gets for the first time, such as the theme chosen in the app, is
-  written under the commented line that explains it (`# theme = "slate"`) and no longer above
-  the title of the file
-- The old browser editor is gone; the app replaces it. A bookmark of `/classic/` leads to the
-  app, and plugins' editor pages open inside it (*Pages* in *Design*, or Ctrl+K)
-- macOS is no longer supported: no download, no tests, no macOS code. Windows and Linux are.
-  Nobody downloaded the macOS builds of any release. Gone with it: the disk image and the menu
-  bar app, the LaunchAgent, and reading the volume and the player through `osascript`. A
-  system that has no autostart (neither Windows nor an XDG desktop) now says "not supported on
-  this system" to `libre-panel autostart` and in the editor, instead of getting a file that
-  does nothing
-- SPUR II's screens are kept as a legacy set: their themes carry `"collection": "SPUR II"`, and
-  galleries show Libre Panel's own themes first and SPUR II's apart, for those who want to see
-  where Libre Panel started
-- SPUR II and Studio read the sensors twice a second and their numbers glide; SPUR II's graphs
-  span 36 seconds in video mode, moving 25 pixels a second. The graphs of Slate, Libre Default
-  and Column have a window in seconds for video mode too; on the serial panels these themes
-  run on nothing changes
-- SPUR Classic's RAM heading names the memory (`mem.name`) instead of giving its size only, and
-  SPUR Classic and SPUR Header read the memory temperature from `mem.temp`. The RAM modules
-  (ring, big number, history) show the name under their title as CPU and GPU do, and the
-  System module lists it as a fourth row where there is room
-- SPUR Header sets the frame rate, the 1% low and the fans of its header where SPUR II has
-  them, and SPUR Session the rule and the fans of its own: the game's logo or name has the room
-  of a short name (51 px, up to 72 for a longer one in SPUR Header and 62 in SPUR Session; a
-  name is cut with an ellipsis, a logo made smaller) in place of 120 px, and the fans spread
-  over what was gained as SPUR II spreads them
-- `libre-panel sensors` lists the load and the volume too, and on Windows `libre-panel sensors`
-  and `libre-panel doctor` say what to do when no temperature, power or GPU reading arrives
-- LibreHardwareMonitor's `cpu.name` and `gpu.name` are shortened like the names Libre Panel
-  finds itself ("Ryzen 5 7600" for "AMD Ryzen 5 7600 6-Core Processor")
-- Windows: what is playing follows Windows' own reports of a new track, a pause or another
-  player instead of asking once a second, so a new track shows at once. The cover is read when
-  the track changes, not at every look; a look every five seconds is the safety net, and the
-  position still moves on by itself. Linux asks once a second as before
-- With the `game` service on, the `game.*` readings count the frames of the game it found
-  instead of the program with the most frames
-- Without a queue (`"queue": false`), messages that come at the same moment are decided one
-  after the other: a warning that comes with a volume change takes over from it at once
-- While it drives a panel, Libre Panel keeps its frames on time as SPUR II did when the PC is
-  busy: Windows' timer at 1 ms, fewer and shorter pauses for garbage collection, and the
-  threads that feed a video panel above normal priority (Windows)
-- Drawing is faster: cards about five times (only their round corners are drawn three times
-  larger), so a theme's first frame takes half as long; numbers that change a digit at a time
-  about six times (each digit is drawn once and kept); bars and rings are drawn again only
-  when they move by a visible amount, and pieces go onto the frame in place
-- The main loop draws one frame at a time through `MainLoop.step(now)`, with the sensor hub,
-  display, host and clock given: tests and plugins' test benches drive the real loop frame by
-  frame instead of copying it
-- The demo readings of the editor, the previews and the pictures hold 1900 readings of history
-  instead of 600, so the wide graphs of the SPUR themes are full in them, and carry a made-up
-  round report (so `round-report` is complete in them), a made-up game logo (drawn when
-  asked), neutral values for the `session.*` readings, a made-up player icon
-  (`media.app_icon`, a note on a rounded square) and a game that downloads (`downloads`, in
-  the state the service publishes, 24 GB at about 38 MB/s), so the playback card shows its app
-  with an icon and the Studio's NET section a download, as they do on a real PC
-- The README and the website are a product page for 0.5, in English and German: Lumen in video
-  mode on top, a tour in clips (video mode, cards, notices, game mode, the small panels, the
-  app), Libre Panel's own themes first and SPUR II's apart, the panels, install, privacy and a
-  FAQ. The gallery shows Lumen and Studio over the small panels, and the social preview names
-  the video mode and the app
-- For editor pages and scripts that call the editor's API: every request carries the
-  token of the run in `X-Libre-Panel`, `GET` as well as `POST` (`kit.js`'s `api()` does,
-  `withToken()` puts it in the address of a picture, `static/token.js` has `authHeaders()`
-  for any other `fetch`); a script outside the browser reads it from `private/editor.json`
-  in the settings folder. Without it the answer is 403, also for a route that does not
-  exist. `make_server()` has a `token` of its own, and `libre_panel.editor.access` the
-  rest. The routes of the server are one list, `editor.server.ROUTES`
-- On a first start *Start* asks "How should it look?" without the tabs in the header:
-  the views behind them have nothing to show before a theme is on the panel. The tabs
-  come with the choice
-- The Control and Autopilot pages, and the editor pages plugins bring, have the app's
-  colours (its teal and amber, its grey) and its typeface, Barlow, so a page shown
-  inside the app looks like part of it; `/static/editor.css` keeps its names
+- `numpy` is a new requirement (light, dust and facets draw whole layers at a time). Python 3.11 to
+  3.14 stay supported
+- SPUR II's screens are kept as a legacy set: the SPUR II theme of 0.4 and the screens of the
+  project it came from carry `"collection": "SPUR II"`, and galleries show Libre Panel's own themes
+  first and SPUR II's apart (*SPUR II · Legacy*), for those who want to see where Libre Panel
+  started. SPUR II and Studio read the sensors twice a second and their numbers glide; SPUR II's
+  graphs span 36 seconds in video mode, moving 25 pixels a second. The graphs of Slate, Libre
+  Default and Column have a window in seconds for video mode too; on the serial panels these themes
+  run on, nothing changes
 
 ## 0.4.2 — 2026-10-10
 
