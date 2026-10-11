@@ -1559,7 +1559,7 @@
   "widgets": {
     "analog": "Analoguhr",
     "bar": "Balken",
-    "calendar": "Monatskalender",
+    "calendar": "Monats\u00adkalender",
     "clock": "Uhr",
     "countdown": "Countdown",
     "downloads": "Download-Anzeige",
@@ -1573,7 +1573,7 @@
     "module": "Modul",
     "moon": "Mondphase",
     "rect": "Fläche",
-    "symbol": "Wettersymbol",
+    "symbol": "Wetter\u00adsymbol",
     "text": "Text",
     "weather": "Wetter"
   },

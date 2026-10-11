@@ -91,7 +91,8 @@ export function Library() {
   const [group, setGroup] = useState("all");
   const shots = usePictures();
   const q = query.trim().toLowerCase();
-  const matches = (...words) => !q || words.some((word) => String(word || "").toLowerCase().includes(q));
+  // (a name may hold soft hyphens, where a small tile breaks it: a typed "wettersymbol" finds it)
+  const matches = (...words) => !q || words.some((word) => String(word || "").replace(/\u00ad/g, "").toLowerCase().includes(q));
 
   const modules = useMemo(
     () => Object.entries(moduleKinds()).map(([kind, info]) => ({ kind, name: info.name, group: groupOf(kind) })),

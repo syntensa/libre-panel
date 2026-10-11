@@ -764,6 +764,9 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
   the other previews do (a renderer that is not closed keeps what its plugin parts hold until the
   collector runs, which the background app keeps from running for hours); every preview of the
   editor, plugin screens and widgets among them, closes its renderer and frees it at once
+- Design, in German: *Wettersymbol* and *Monatskalender* broke in the middle of a syllable in the
+  library's three columns of single widgets (*Wettersymb-ol*); the catalog marks where a compound
+  may break now (*Wetter-symbol*, *Monats-kalender*), and a typed word finds the name as before
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars (the
