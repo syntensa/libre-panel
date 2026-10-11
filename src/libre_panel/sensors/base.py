@@ -107,12 +107,20 @@ class SensorProvider:
     # still keep one value per ``refresh_ms``. "video": on every frame only in
     # video mode; without it each changed value would be one more picture sent.
     every_frame: bool | str = False
+    # Keys this source gives even when a source earlier in the list has them too (the hub
+    # takes the first otherwise): for what the user said outright, or what is surely right.
+    overrides: tuple[str, ...] = ()
 
     def __init__(self, options: dict[str, Any] | None = None) -> None:
         self.options = options or {}
 
     def read(self) -> dict[str, Reading]:
         raise NotImplementedError
+
+    def follow_config(self, config: Any) -> None:
+        """config.toml was loaded (the :class:`~libre_panel.config.Config`), when the source
+        was made and each time it changes while the panel runs: take the settings that are
+        not in the source's own ``[sensors.<name>]`` table."""
 
     def images(self) -> dict[str, Any]:
         """Pictures this source has (an album cover), by name; image widgets
@@ -136,6 +144,7 @@ _BUILTIN_PROVIDERS = {
     "mqtt": "libre_panel.sensors.mqtt:MqttProvider",
     "sky": "libre_panel.sensors.sky:SkyProvider",
     "presentmon": "libre_panel.sensors.presentmon:PresentMonProvider",
+    "hardware": "libre_panel.sensors.hardware:HardwareProvider",
 }
 
 
@@ -175,7 +184,8 @@ def create_provider(name: str, options: dict[str, Any] | None = None) -> SensorP
 class SensorHub:
     """Collects readings from all providers and keeps a short history for graphs.
 
-    Providers earlier in the list win when two supply the same key.
+    Providers earlier in the list win when two supply the same key, unless a later one
+    lists the key in its ``overrides``.
     """
 
     def __init__(self, providers: list[SensorProvider]) -> None:
@@ -199,8 +209,9 @@ class SensorHub:
         readings: dict[str, Reading] = {}
         owners: dict[str, SensorProvider] = {}
         for provider in self.providers:
+            overrides = getattr(provider, "overrides", ())
             for key, reading in self._read(provider).items():
-                if key not in readings:
+                if key not in readings or key in overrides:
                     readings[key] = reading
                     owners[key] = provider
         self._owners = owners
@@ -220,6 +231,18 @@ class SensorHub:
             for key, image in (found or {}).items():
                 images.setdefault(key, image)
         return Snapshot(readings=readings, history=history, images=images)
+
+    def follow_config(self, config: Any) -> None:
+        """Tell the sources about the config.toml that was loaded (see
+        :meth:`SensorProvider.follow_config`)."""
+        for provider in self.providers:
+            follow = getattr(provider, "follow_config", None)
+            if follow is None:  # a source written without the base class
+                continue
+            try:
+                follow(config)
+            except Exception:  # a broken sensor must not stop the display
+                log.exception("sensor provider %s failed", provider.name)
 
     def readings_from(self, provider: SensorProvider) -> int:
         """How many readings of the last snapshot came from ``provider``."""

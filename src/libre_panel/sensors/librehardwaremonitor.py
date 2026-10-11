@@ -40,6 +40,7 @@ from typing import Any
 
 from libre_panel import __version__
 from libre_panel.sensors.base import Reading, SensorProvider
+from libre_panel.sensors.hwnames import tidy_cpu, tidy_gpu
 
 log = logging.getLogger(__name__)
 
@@ -223,10 +224,11 @@ def readings_from_sensors(
             mean = sum(r.value for r in cores) / len(cores)
             out["cpu.freq"] = Reading("cpu.freq", mean, "MHz", "CPU clock")
             averaged = tuple(r.key[4:] for r in cores)
+    # tidied as the hardware source tidies the names it finds, so they read alike
     if cpus:
-        out["cpu.name"] = Reading("cpu.name", cpus[0].name, "", "CPU")
+        out["cpu.name"] = Reading("cpu.name", tidy_cpu(cpus[0].name), "", "CPU")
     if gpus:
-        out["gpu.name"] = Reading("gpu.name", gpus[0].name, "", "GPU")
+        out["gpu.name"] = Reading("gpu.name", tidy_gpu(gpus[0].name), "", "GPU")
     _temperatures_and_fans(list(devices.values()), out)
     if sources is not None:
         for key, reading in out.items():
