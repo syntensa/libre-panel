@@ -184,6 +184,18 @@ def test_specs_carry_modules_and_looks(server):
     assert {"arctic", "paper", "mono"} <= set(specs["modules"]["looks"])
 
 
+def test_specs_carry_the_panel_look_and_the_finishes(server):
+    from libre_panel.theme.model import FINISH_FIELD
+
+    _, specs = request(server, "GET", "/api/specs")
+    assert specs["look"]["grid"]["spacing"] == ["int", 8]
+    assert specs["look"]["light"]["sweep_seconds"] == ["number", 1.6]
+    for kind in ("bar", "gauge", "graph", "icon", "text", "metric", "module"):
+        assert specs["widgets"][kind]["finish"] == list(FINISH_FIELD)
+    assert FINISH_FIELD[1] == "flat" and "lit" in FINISH_FIELD[0]
+    assert "finish" not in specs["widgets"]["rect"]
+
+
 def test_module_previews_follow_the_look(server):
     from libre_panel.theme.modules import look_theme_parts
 

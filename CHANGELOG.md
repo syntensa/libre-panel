@@ -122,6 +122,25 @@
   game runs), and `game.limiter`, `cpu`, `gpu` or `cap`: who holds the frame
   rate down, judged from how long the CPU and the GPU wait for each other
   (PresentMon 2)
+- The look of SPUR II for any theme: a widget's `finish` and the theme's
+  `look`. `"finish": "lit"` draws bars and rings as tubes in their groove
+  with round ends and SPUR II's glow, a graph's line as light in a halo and
+  the weather symbols from lit bodies, in the widget's colours and at its
+  size (bars, rings, graphs and icons; modules hand it to their parts).
+  `look.grid` lays SPUR II's grid over the backdrop; `look.light` is one
+  light for the panel: the sun, where it stands for the place in
+  `[weather]`, glints on frames (outlines of rects become ridges), and a
+  sweep of light runs across at the start, on the hour, on a new track and
+  after a tube or entrance transition. The light layers are prepared before
+  the first frame and kept in the cache folder. The editor sets both (*Grid
+  background* and *Panel light* with the theme, *Finish* for a widget); the
+  *Lit demo* theme (1920 × 480) shows them
+- For plugins: light edges the panel light glints on
+  (`libre_panel.render.look.LightEdge`), from a widget type's `edges()` or a
+  screen's `context.light_edge()`; finishes of their own with
+  `libre_panel.render.finish.register`
+- `tools/motion_bench.py` leaves the warm-up out (`--warmup`) and times the
+  frames a sweep of light runs over on their own line
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
@@ -144,6 +163,9 @@
   shows `game.*`, ends with Libre Panel however that ends (a Windows job), and
   when it cannot run (no administrator rights) it waits longer and longer
   instead of trying again at every reading
+- Video mode: where many widgets move, what lies under a graph was laid anew
+  on most frames (the kept layers went oldest first, not least used); the
+  ones a frame uses are now kept longest
 
 **Changes**
 - macOS is no longer supported: no download, no tests, no macOS code. Windows

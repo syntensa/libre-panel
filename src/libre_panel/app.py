@@ -101,6 +101,13 @@ def _on_panel(display: Display) -> bool:
     return True if using is None else bool(using)
 
 
+def _place(config: Config) -> tuple[float, float] | None:
+    """Where the panel light's sun is seen from: the weather's place in
+    config.toml when it is set (the light stands at noon without)."""
+    latitude, longitude = config.weather.latitude, config.weather.longitude
+    return None if latitude is None or longitude is None else (latitude, longitude)
+
+
 def background_of(renderer: Renderer) -> tuple[int, int, int]:
     """The theme's background colour, its palette name (``"@bg"``) resolved."""
     return renderer.color(renderer.theme.background_color)[:3]
@@ -448,7 +455,7 @@ class MainLoop:
         self.snapshot: Snapshot | None = None
         self.next_sample = 0.0
         self.started = 0.0  # when the last step began, on the clock
-        if not once and renderer.screen is not None:  # prepare() before the first frame
+        if not once and renderer.prepares:  # prepare() and light layers before the first frame
             prepare = threading.Thread(target=renderer.warm, args=(None, 0.0), daemon=True)
             prepare.start()
             prepare.join(_Warmup.LIMIT_S)
@@ -457,10 +464,12 @@ class MainLoop:
         """The renderer for ``theme``: warmed up if it was, else a new one."""
         warmed = self.warmup.take(self._warm_key(theme, config))
         if warmed is None:
-            return Renderer(theme, animate=config.fps > 1, motion=self.motion)
-        renderer, motion = warmed
-        renderer.motion = self.motion  # from now on the panel's
-        self.motion.adopt(motion)  # graph histories it began
+            renderer = Renderer(theme, animate=config.fps > 1, motion=self.motion)
+        else:
+            renderer, motion = warmed
+            renderer.motion = self.motion  # from now on the panel's
+            self.motion.adopt(motion)  # graph histories it began
+        renderer.place = _place(config)
         return renderer
 
     @staticmethod
@@ -650,7 +659,10 @@ class MainLoop:
                 frame, _ = renderer.render(snapshot, now)
                 frame = fit_frame(frame, size, background_of(renderer))
                 if blend is not None:
+                    playing_kind = blend[0]
                     frame, blend = _blend(blend, frame, now)
+                    if blend is None:  # it ended: the panel light may sweep (look.light)
+                        renderer.transition_ended(playing_kind, now)
                 last_frame = frame
                 # decided after _blend: the frame a hiding transition ends shows the toast
                 hidden = blend is not None and getattr(blend[0], "toasts", "wait") == "hide"
