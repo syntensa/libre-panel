@@ -64,9 +64,9 @@ port = ""                      # serial panels: found by their USB ids; only if 
                                # picks the wrong port: "COM5", "/dev/ttyACM0"
 
 [sensors]
-# order = priority. Without this line: ["load", "audio", "psutil"], on Windows
+# order = priority. Without this line: ["load", "audio", "linux", "psutil"], on Windows
 # ["load", "audio", "librehardwaremonitor", "psutil"]. More: "demo", plugins
-providers = ["load", "audio", "psutil"]
+providers = ["load", "audio", "linux", "psutil"]
 
 [sensors.librehardwaremonitor]
 # mode = "auto"                # "auto", "inprocess" (inside Libre Panel) or "webserver"
@@ -77,6 +77,11 @@ url = "http://127.0.0.1:8085/data.json"   # the web server (mode "webserver", an
 # stale_seconds = 5            # no answer for this long: its readings are hidden
                                # ("--" on the panel); 0 keeps the last ones
 # gpu = "RTX 4070"             # with several graphics cards: the one whose name has this
+
+[sensors.linux]
+# gpu = "RX 7900"              # with several graphics cards: the one whose name has this
+                               # gives the gpu.* readings (default: the one gpu.name names)
+# nvidia = "auto"              # "off" never loads NVIDIA's library (NVML)
 
 [sensors.psutil]
 # disk = "C:\\"                # the drive behind disk.load (default: the system drive)
@@ -135,18 +140,20 @@ have a value for the same key, the earlier one wins. A quicker or better source
 goes first.
 
 A configuration that names no list (no `config.toml`, or none with `providers`)
-starts with `["load", "audio", "psutil"]`, and on Windows with
-`["load", "audio", "librehardwaremonitor", "psutil"]` (elsewhere, where the
+starts with `["load", "audio", "linux", "psutil"]` on Linux and
+`["load", "audio", "librehardwaremonitor", "psutil"]` on Windows (elsewhere, where the
 volume cannot be read, `["load", "psutil"]`); `libre-panel config init` writes
-that list into a new file. **A list you wrote is never changed.** The one
-exception is the `["psutil"]` that `config.toml` files up to 0.4 name alone,
-which was the default then and not a choice: it gets today's list too. Put the
+that list into a new file. **A list you wrote is never changed.** The exceptions are
+the `["psutil"]` that `config.toml` files up to 0.4 name alone, and on Linux the
+`["load", "audio", "psutil"]` that builds of 0.5 wrote before it had a source of its
+own: they were the default then and not a choice, and get today's list too. Put the
 sources you want in front of psutil in any other list.
 
 | Source | Gives | Where |
 |---|---|---|
-| `load` | `cpu.load` and `gpu.load`, measured ten times a second | CPU everywhere, GPU on Windows (any vendor) |
-| `psutil` | CPU, memory, drives, network, battery, the busiest programs; temperatures and fans where the system has them | everywhere |
+| `load` | `cpu.load` and `gpu.load`, measured ten times a second | CPU everywhere, GPU on Windows (any vendor) and on Linux (AMD, NVIDIA) |
+| `psutil` | CPU, memory, drives, network, battery, the busiest programs; temperatures and fans where the system has them (on Linux the `linux` source reads those instead) | everywhere |
+| `linux` | temperatures and fans of the kernel's chips (processor, mainboard, drives, memory), the processor's power and the graphics card (`gpu.*`), without root; see [below](#linux-sensors-and-panel-access) | Linux (in its default list) |
 | `librehardwaremonitor` | temperatures, power, clocks and fans of CPU, GPU and mainboard | Windows (in its default list); the Windows downloads carry what it needs, see [below](#windows-sensors-gpu-power-fans) |
 | `audio` | `audio.volume` (0 while muted) and `audio.muted` (1 or 0) of the default output | Windows, Linux (`wpctl` or `pactl`); in the default list of both |
 
@@ -158,11 +165,13 @@ administrator rights.
 
 - The processor load comes from `GetSystemTimes` on Windows and from psutil
   elsewhere.
-- The GPU load is what Task Manager shows, read from Windows' performance
+- The GPU load is what Task Manager shows on Windows, read from the performance
   counters, for any vendor: the busiest 3D engine of the graphics card that
   has the most memory in use of its own (chosen again every minute). Where
   the counters are missing (some virtual machines), `gpu.load` is simply not
-  there and the next source supplies it; the log says so.
+  there and the next source supplies it; the log says so. On Linux it is the
+  counter of AMD's driver (`gpu_busy_percent`) or NVIDIA's library, for the card
+  `gpu.name` names; Intel's drivers tell no load.
 - It runs only while a theme on the panel shows `cpu.load` or `gpu.load`.
 - It stands before the sources whose load it replaces, also in the default
   list. In a list of your own put it first, e.g.
@@ -1024,6 +1033,87 @@ readings stay for `stale_seconds` (5 by default) and then disappear, so the
 panel shows "--" instead of numbers that stand still. A line in the log says
 so, and another when it answers again. The same limit hides the readings
 of the library inside Libre Panel if its thread ever stops.
+
+## Linux sensors and panel access
+
+On Linux Libre Panel reads what the kernel lets everyone read: no administrator rights, no
+extra program, no `lm-sensors`. The `linux` source (in the default list, before psutil)
+finds the chips once, looks again every few seconds for new ones, and reads a few tiny files
+per sample; the keys of temperatures and fans are those psutil gave in 0.4.
+
+| Reading | Comes from | Needs |
+|---|---|---|
+| `cpu.temp` | the processor's chip (`k10temp`, `coretemp`, `zenpower`): the die's temperature (Tdie, else Tctl, or the package) | nothing |
+| `cpu.power` | the energy counters of RAPL (Intel and AMD), else `zenpower`, `fam15h_power` or `amd_energy` | opening the counters, see [below](#one-click-for-what-needs-an-administrator) |
+| `fan.lpc.fan_1` ..., `temp.<chip>.<label>` | the chip on the mainboard (Super I/O: `nct6775`, `it87`, ...) named as Windows names its fans, so Lumen and the SPUR II screens show them | the chip's driver, loaded by the setup |
+| `fan.<chip>.<label>` | other fans: the board's controller (`asus_ec_sensors`), coolers and pumps on USB | their drivers, which the kernel loads itself |
+| `gpu.temp`, `gpu.hotspot`, `gpu.mem.temp`, `gpu.fan`, `gpu.fan.percent`, `gpu.power`, `gpu.freq`, `gpu.mem.freq`, `gpu.mem.used`, `gpu.mem.total`, `gpu.mem.load`, `gpu.load` | **AMD** (amdgpu): edge, junction and memory temperature, the fan in RPM and per cent, power, both clocks, the video memory and the load. **Intel** (i915, xe): temperature and power where the driver tells them, the clock. **NVIDIA**: the driver's own library (`libnvidia-ml.so.1`, NVML), loaded with ctypes: temperature, fan (per cent, and RPM from newer drivers), power, load, video memory, both clocks | nothing; NVIDIA needs the proprietary driver |
+| `temp.nvme.*` | every NVMe drive, named by its model | nothing |
+| `temp.drivetemp.*` | SATA drives, only while a theme shows them (a drive in standby can wake when it is read) | the `drivetemp` driver, loaded by the setup |
+| `mem.temp` | the hottest memory module's own sensor: `spd5118` (DDR5, Linux 6.8 and later) or `jc42` (DDR4) | the driver: DDR5's loads itself, DDR4's by `sudo modprobe jc42` |
+
+`gpu.fan` is in RPM, as on Windows; where a driver tells only the speed in per cent
+(NVIDIA's drivers before 555), `gpu.fan.percent` has it, and `gpu.fan` is missing rather
+than made up. Several graphics cards: `gpu.*` is the card `gpu.name`
+names (an NVIDIA card first, then the one with the most memory of its own); `gpu = "RX 7900"`
+under `[sensors.linux]` (or, as on Windows, under `[sensors.librehardwaremonitor]`) picks
+another by a part of its name, and the other cards keep the keys of their chips
+(`temp.amdgpu.edge_2`). A card that is powered down to save energy, as a laptop's second one,
+is never asked: that would switch it on.
+
+### One click for what needs an administrator
+
+Three things cannot be done without root, and the app offers them in one step. *Start* shows
+a card while something is missing (the panel may not be used, no fan readings, no processor
+power), and *Settings → Sensors* has the same under *Set up sensors and panel access*. The
+button asks your system for the administrator's password in its own window (polkit's
+`pkexec`), then runs **`libre-panel system-setup --linux`** as root. The same in a terminal:
+
+```
+libre-panel system-setup --linux              # AppImage: ./Libre_Panel-x86_64.AppImage system-setup --linux
+libre-panel system-setup --linux --dry-run    # only say what it would do
+libre-panel system-setup --linux --remove     # take it all out again
+```
+
+What it does, and nothing else:
+
+1. **The panel**: writes `/etc/udev/rules.d/60-libre-panel.rules` (what
+   `libre-panel udev-rules` prints), makes udev read its rules again and looks at a panel that
+   is plugged in again, so it need not be unplugged.
+2. **The mainboard's fans and temperatures**: the chip that reads them has a driver in the
+   kernel that is not loaded by itself. On a desktop board of a maker whose boards have such a
+   chip (ASUS, Gigabyte, MSI, ASRock, Biostar, EVGA, Supermicro, Intel) it loads `nct6775`,
+   `it87` or `nct6683`, in the order that fits the maker, and stops at the first that finds its
+   chip. What `sensors-detect` has recorded counts more than that guess. The drivers that
+   found a chip are written to `/etc/modules-load.d/libre-panel.conf`, so they come back at
+   every start. A notebook, a virtual machine, a maker's own PC and a board whose chip is read
+   already are left alone. No driver gets a parameter and none is forced: where the firmware
+   keeps the chip for itself (the kernel says "resource busy"), Libre Panel says so and does
+   not set `acpi_enforce_resources`.
+3. **SATA drives' temperatures**: the same file gets `drivetemp`, if there are SATA drives.
+
+**The processor's power is off unless you turn it on.** Since 2020 the kernel keeps the energy
+counters of the processor (`/sys/class/powercap/intel-rapl:*/energy_uj`) from everyone but root,
+because they can give away what the processor computes (CVE-2020-8694, "PLATYPUS"). The card
+has a switch, *Let Libre Panel read the processor's power*, and the command has `--rapl`
+(`--no-rapl` closes them again): it writes `/etc/udev/rules.d/60-libre-panel-rapl.rules`, which
+makes the counters readable for every program on the PC, and opens them now. Leave it off on a
+PC where you do not trust every program you run.
+
+The password window says which program it runs: the AppImage file (root starts that file, as
+the AppImage's own mount is closed to other users) or the Python of your installation. Only
+that file asks for the rights, and it works out what to do by itself on the PC it runs on;
+nothing from the app goes to it but its switches (`--rapl`, `--no-rapl`, `--remove`). Everything it
+does is printed (with `--json` as one line of JSON, which is how the app reads it), a second
+run changes nothing, and `--remove` takes out the three files and closes the counters again
+(drivers stay loaded until the next start, since another program may use them). Where there
+is no password window (no polkit agent, a session without a desktop) the card gives the command
+for a terminal, with `sudo`.
+
+What the setup cannot do: chips that no kernel driver supports. MSI's NCT6687D and the newer
+ITE chips of many Gigabyte boards need a driver from outside the kernel (look for the
+`nct6687d` and `it87` projects of your distribution); Libre Panel does not install drivers.
+The log of the setup and `libre-panel sensors` say what was tried.
 
 ## Weather
 

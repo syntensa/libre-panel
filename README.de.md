@@ -187,8 +187,8 @@ Python:
 1. **Hersteller-App beenden.** Sie hält das Panel für sich fest.
 2. **Libre Panel starten**, mit angestecktem Panel. Die Windows-Downloads sind noch nicht
    signiert: SmartScreen fragt einmal nach (*Weitere Informationen → Trotzdem ausführen*).
-   Unter Linux gibst du deinem Benutzer einmal Zugriff auf das Panel
-   ([so geht's](docs/HARDWARE.md#setup-per-operating-system)).
+   Unter Linux bietet *Start* an, deinem Benutzer mit einem Klick Zugriff auf das Panel zu geben
+   ([was dabei geschieht](docs/CONFIGURATION.md#linux-sensors-and-panel-access)).
 3. **Einen Look wählen.** *Start* fragt „Wie soll es aussehen?“ mit den Themes für das
    gefundene Panel: Lumen auf den 8,8"- und 9,2"-Leisten, Libre Default auf den anderen.
 4. **Einschalten, was du willst.** In den *Einstellungen*: Wetter und Ort, Videomodus, die
@@ -196,7 +196,9 @@ Python:
    und *Mit dem System starten*.
 
 Unter Windows brauchen Temperatur und Leistung des Prozessors und die Mainboard-Lüfter
-Administratorrechte und den Treiber PawnIO ([FAQ](#faq)); alles andere geht ohne. Die App
+Administratorrechte und den Treiber PawnIO ([FAQ](#faq)); alles andere geht ohne. Unter Linux
+brauchen die Sensoren keine Rechte, außer den Mainboard-Lüftern und der Leistung des
+Prozessors: *Start* bietet beides mit einem Klick an ([FAQ](#faq)). Die App
 öffnet sich in einem eigenen Fenster (WebView2 unter Windows, WebKitGTK unter Linux); das
 AppImage öffnet sie vorerst im Browser
 ([Einzelheiten](docs/BACKGROUND.md#the-apps-window)).
@@ -223,6 +225,7 @@ libre-panel doctor                  # das Panel von Anfang bis Ende prüfen, Ber
 libre-panel sensors                 # jeder Sensor-Schlüssel mit seinem aktuellen Wert
 libre-panel config init             # eine kommentierte config.toml schreiben
 libre-panel location "Berlin"       # Koordinaten für das Wetter
+libre-panel system-setup --linux    # Linux: ein Schritt für Panel-Zugriff und Mainboard-Lüfter
 libre-panel udev-rules              # Linux: die Regel, die deinem Benutzer USB-Zugriff gibt
 libre-panel quit                    # die Hintergrund-App beenden
 ```
@@ -278,6 +281,21 @@ Panel ändern können, etwa beim portablen Zip unter *Programme*
 ([warum](docs/BACKGROUND.md#windows-starting-with-the-highest-rights)). Ein
 LibreHardwareMonitor, den du selbst mit Webserver laufen lässt, geht auch und füllt aus, was
 fehlt ([Einzelheiten](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans)).
+</details>
+
+<details>
+<summary><b>Warum fehlen unter Linux die Lüfter oder die CPU-Leistung?</b></summary>
+<br>
+
+Die meisten Sensoren brauchen unter Linux keine Rechte (Prozessor, Grafikkarte, NVMe-Laufwerke,
+Speicher). Drei Dinge schon: die **USB-Berechtigung für das Panel**, der **Treiber für den Chip,
+der die Mainboard-Lüfter liest** (der Kernel hat ihn, aber niemand lädt ihn) und, nur wenn du sie
+willst, die **Leistung des Prozessors** (diese Zähler hält der Kernel seit 2020 von allen außer
+root fern). *Start* zeigt eine Karte, wenn eines davon fehlt, und *Einstellungen → Sensoren* hat
+sie immer: ein Klick, dein System fragt einmal nach dem Passwort, und die Karte sagt genau, was
+geändert wird. In einem Terminal: `libre-panel system-setup --linux` (mit `--rapl` für die
+Leistung, mit `--remove` wird alles zurückgenommen). Mehr:
+[Linux-Sensoren und Panel-Zugriff](docs/CONFIGURATION.md#linux-sensors-and-panel-access).
 </details>
 
 <details>

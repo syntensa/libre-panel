@@ -79,14 +79,23 @@ touches firmware.
 their descriptors; no Zadig needed. `pip install "libre-panel[usb]"` also
 installs a bundled libusb.
 
-**Linux:** allow your user to access the panel, then replug it:
+**Linux:** your user needs permission to use the panel. *Start* offers it as one click while the
+panel cannot be used (and *Settings → Sensors* always has it): your system asks for the
+administrator's password once, and the rule is applied to a panel that is plugged in, so it need
+not be replugged. The same in a terminal, with the AppImage too
+(`./Libre_Panel-x86_64.AppImage system-setup --linux`):
+
+```bash
+libre-panel system-setup --linux
+```
+
+That also loads the driver for the mainboard's fan chip; [what it does exactly](CONFIGURATION.md#linux-sensors-and-panel-access).
+By hand, only the rule, then replug the panel:
 
 ```bash
 libre-panel udev-rules | sudo tee /etc/udev/rules.d/60-libre-panel.rules
 sudo udevadm control --reload-rules
 ```
-
-(With the AppImage: `./Libre_Panel-x86_64.AppImage udev-rules | sudo tee …`.)
 
 USB serial panels appear as `/dev/ttyACM*`; add yourself to the `dialout` (Debian,
 Ubuntu) or `uucp` (Arch) group.

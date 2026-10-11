@@ -397,6 +397,45 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
   Open-Meteo's 15-minute precipitation. The minutes count to the rain starting or stopping;
   the text says so ("Rain in 20 min", "Rain stops in 40 min", "No rain for the next 2 h"), in
   German too. The request still carries only your coordinates; the answer is a little larger
+- **Linux reads its sensors without root.** The new `linux` source (in the default list, ahead of
+  psutil, which leaves the kernel's chips to it) reads the hwmon chips from sysfs: the processor
+  (`cpu.temp` from k10temp, coretemp or zenpower, Tdie before Tctl), the mainboard's Super I/O chip
+  with its fans named as Windows names them (`fan.lpc.fan_1` ..., so Lumen and the SPUR II screens
+  show them), NVMe and SATA drives, and the memory modules (`mem.temp`, DDR5's `spd5118`, DDR4's
+  `jc42`). The keys of temperatures and fans stay those psutil gave. Files are found once and a
+  rescan every ten seconds finds chips that appear; drives are read by a thread of their own,
+  SATA drives (`drivetemp`) only while a theme shows them, as a drive in standby can wake when it
+  is asked. `[sensors.linux]` has `gpu` (pick the card by a part of its name) and `nvidia = "off"`
+- `cpu.power` on Linux, from the energy counters of RAPL (Intel and AMD) where the user may read
+  them, else from zenpower, fam15h_power or amd_energy. Since 2020 the kernel keeps the counters
+  from everyone but root (the PLATYPUS side channel); opening them is off unless you say so
+- The graphics card on Linux, all of `gpu.*`: **AMD** through amdgpu (edge, junction as
+  `gpu.hotspot` and memory temperature, fan in RPM and per cent, power, both clocks, video memory,
+  the load), **Intel** (i915, xe) through hwmon and sysfs (power from the energy counter, the
+  temperatures a driver gives, the clock), **NVIDIA** through NVML, loaded from the driver's
+  `libnvidia-ml.so.1` with ctypes (no extra package): temperature, fan, power, load, video memory,
+  clocks. New keys: `gpu.fan.percent` (where a driver tells only per cent, NVIDIA's before 555;
+  `gpu.fan` stays RPM and is missing then, not made up), `gpu.mem.total`, `gpu.mem.freq`,
+  `gpu.mem.temp`. A card that is powered down to save energy, as a laptop's second one, is never
+  asked; `gpu.load` is measured ten times a second by `load` here too (AMD, NVIDIA)
+- **`libre-panel system-setup --linux`**: one command, one password, for what needs root. It lets
+  your user use the TURZX USB panels (the udev rule, applied to a panel that is plugged in, so
+  nobody replugs), loads the Super I/O driver of the mainboard (`nct6775`, `it87` or `nct6683`,
+  tried in the order that fits the maker, only on a desktop board, the first that finds its chip
+  stays) and `drivetemp` for SATA drives, and keeps them in `/etc/modules-load.d/libre-panel.conf`.
+  A driver is never given a parameter or forced (a firmware that keeps its chip, "resource
+  busy", is said, not overridden); what `sensors-detect` recorded counts more than the guess. The
+  processor's energy counters open only with `--rapl`. `--remove` takes it all out, `--dry-run`
+  says what it would do, `--json` reports every step; a second run changes nothing. It asks with
+  `pkexec` (polkit's own password window) or, in a terminal, `sudo`; the root side works out its
+  plan itself and takes nothing but its switches
+- The app offers it: *Start* shows a card while the panel may not be used, there are no fan
+  readings or the processor's power is not readable (with *Not now*), and *Settings → Sensors*
+  has *Set up sensors and panel access*, always (also *Remove again* and Ctrl+K). Both say
+  exactly what the button does, in your language, and give the command for a terminal where
+  there is no password window. The AppImage asks for rights as the AppImage file itself (its
+  mount is closed to root), with the environment of its bundle left out. Route: `GET`/`POST
+  /api/setup`
 
 **New: themes and widgets**
 - `needs` can compare a reading with a number (`media.playing=1`, `cpu.temp>80`) or a text
@@ -671,12 +710,14 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
 - Windows: the GPU, temperatures, power and fans showed nothing unless `librehardwaremonitor` was
   listed in `config.toml`. New configurations now start with
   `providers = ["load", "audio", "librehardwaremonitor", "psutil"]` (on Linux
-  `["load", "audio", "psutil"]`, elsewhere `["load", "psutil"]`), and an unset list means the same.
+  `["load", "audio", "linux", "psutil"]`, elsewhere `["load", "psutil"]`), and an unset list means
+  the same.
   Where Libre Panel cannot read LibreHardwareMonitor itself, that one must run as administrator with
   *Options → Remote Web Server → Run*; where it does not run, asking costs nothing (one second at
   most, waits that grow to half a minute, one line in the log) and those readings show "--". A
   `config.toml` from 0.4 or earlier that names psutil alone (what those versions wrote) gets the new
-  list too; any other list is left as it is
+  list too, and so does, on Linux, the `["load", "audio", "psutil"]` that builds of 0.5 wrote
+  before the Linux source; any other list is left as it is
 - Windows downloads: with `mode = "auto"` the library inside Libre Panel is read first; a
   LibreHardwareMonitor web server that happens to run only fills in what Libre Panel cannot
   read (the CPU's readings without administrator rights). Drive temperatures (`temp.nvme.*`)
