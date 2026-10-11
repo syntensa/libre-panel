@@ -395,6 +395,7 @@ class Renderer:
                          if finishes.draws(f)}  # fmt: skip
         self._modules = {w["id"]: w for w in theme.widgets if w["type"] == "module"}
         self._slots = self._make_slots(theme)  # modules that show one card of several
+        self._slots_warm = False  # whether their cards have been drawn once
         self._keys = {w["id"]: json.dumps(w, sort_keys=True) for w in self.widgets}
         if not preview:  # costly sensors work only while a panel shows them
             want(self, _reads(self.widgets))
@@ -998,12 +999,24 @@ class Renderer:
         finally:
             self.screen, self._breathe = screen, None
 
+    def _warm_slots(self, snapshot: Snapshot, now: float) -> None:
+        """Draw every card of every slot once, whichever is on show, so that the first change
+        finds its pieces made (a card's texts, icons and symbols take a few frames' time)."""
+        for slot in self._slots.values():
+            for card in range(len(slot.kinds)):
+                slot.pinned = card
+                self.render(snapshot, now)
+            slot.settle()
+
     # -- rendering ---------------------------------------------------------
 
     def render(
         self, snapshot: Snapshot, now: float | None = None
     ) -> tuple[Image.Image, dict[str, Box]]:
         now = clock() if now is None else now
+        if self._slots and self.animate and not self.preview and not self._slots_warm:
+            self._slots_warm = True  # (once, with the first frame, or with the warm-up's)
+            self._warm_slots(snapshot, now)
         theme = self.theme
         self.moving = False
         self.snapshot = snapshot

@@ -4,6 +4,7 @@ planned time), the frame's colour and the helpers that cut a piece to rows."""
 
 import copy
 import json
+import re
 
 import numpy as np
 import pytest
@@ -185,6 +186,21 @@ def test_a_network_card_shows_a_download_while_one_runs():
     assert box.shown == 1
     renderer.render(downloading(demo(), {**RUNNING, "phase": "done"}), 3.0)
     assert box.shown == 0  # a finished one shows for a while
+
+
+def test_the_first_frame_draws_every_card_once_and_shows_one():
+    renderer = Renderer(theme_of(), animate=True)
+    renderer.render(demo(), 0.0)
+    box = renderer._slots["m"]
+    drawn = {wid.split("/")[1][:2] for wid in renderer._cache if re.match(r"m/c\d-", wid)}
+    assert drawn == {"c0", "c1"}  # the weather card is made, ready for the first change
+    assert box.shown == 0 and box.leaving is None and not box.frozen and box.pinned is None
+    assert all(p.startswith("c0-") or p == "card" for p in parts(renderer))
+    renderer.render(demo(media=False), 1.0)
+    assert box.leaving == 0  # and the first change is a change: the first frame was no change
+    still = Renderer(theme_of(), preview=True)  # a picture draws what it shows, no more
+    still.render(demo(), 0.0)
+    assert not any(wid.startswith("m/c1-") for wid in still._cache)
 
 
 def test_a_slot_with_one_card_never_changes():

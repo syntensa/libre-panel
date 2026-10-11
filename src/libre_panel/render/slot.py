@@ -110,6 +110,7 @@ class Slot:
         self.frozen: dict[str, Piece] = {}  # what the leaving card showed last, by part
         self.last: dict[str, Piece] = {}  # what the card on show shows, by part
         self.started = False
+        self.pinned: int | None = None  # a card drawn for the warm-up, whatever the rules say
         self.paused_at: float | None = None
         self.paused_for: Any = None
         self.rows: tuple[float, float] | None = None  # in a change: how far each has rolled
@@ -174,6 +175,9 @@ class Slot:
     def begin(self, snapshot: Any, now: float) -> None:
         """Decide the card for this frame, and where a change has got to."""
         renderer = self.renderer
+        if self.pinned is not None:  # (the warm-up draws each card once, without a change)
+            self.shown, self.leaving, self.rows, self.line = self.pinned, None, None, 0.0
+            return
         if self.leaving is not None and now - self.since >= self.change:
             self.leaving, self.frozen, self.rows = None, {}, None
         want = self.wants(snapshot, now)
@@ -201,6 +205,17 @@ class Slot:
             else:
                 self.line = GLOW * (1.0 - light.ease_out((p - ROLL_UP) / (1.0 - ROLL_UP)))
         self._accent(snapshot, now)
+
+    def others(self) -> list[int]:
+        """The cards that are not on show."""
+        return [i for i in range(len(self.kinds)) if i != self.shown]
+
+    def settle(self) -> None:
+        """Forget what the warm-up showed: the first frame decides the card, with no change."""
+        self.pinned = None
+        self.shown, self.started, self.leaving = 0, False, None
+        self.last, self.frozen, self.rows, self.line = {}, {}, None, 0.0
+        self._to = self._from = self._colour = None
 
     def _inner(self) -> list[float]:
         """What rolls: the module's box inside its frame."""
@@ -326,7 +341,7 @@ class Slot:
         half = max(3, round(32 * unit))
         row = y + self.width / 2
         strip = Image.new("RGB", (w, 2 * half))
-        colour = self._colour or (255, 255, 255)
+        colour = self._to or self._colour or (255, 255, 255)  # (the card's that comes: one strip)
         light.add_line(strip, 0, w, half, colour, self.line, unit, 40 * unit, 7.0, 0.8,
                        light.role_color(self.renderer.theme, "text"))  # fmt: skip
         red, green, blue = strip.split()
