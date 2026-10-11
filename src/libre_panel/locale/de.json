@@ -141,7 +141,7 @@
     "Only if Libre Panel does not find Steam.": "Nur, falls Libre Panel Steam nicht findet.",
     "Only if Libre Panel does not find it.": "Nur, falls Libre Panel sie nicht findet.",
     "Only if it is not the system's.": "Nur, falls es nicht der des Systems ist.",
-    "Only needed where the sensor service is not set up (Settings → Sensors), and for sensor plugins that read the hardware themselves. Off unless you turn it on.": "Nur nötig, wo der Sensordienst nicht eingerichtet ist (Einstellungen → Sensoren), und für Sensor-Plugins, die die Hardware selbst lesen. Aus, bis du es einschaltest.",
+    "Needed for the temperature and power of the processor and for the fans on the mainboard only where the sensor service is not set up (Settings → Sensors), and for sensor plugins that read the hardware themselves. Off unless you turn it on.": "Nötig für CPU-Temperatur, -Leistung und Mainboard-Lüfter nur, wo der Sensordienst nicht eingerichtet ist (Einstellungen → Sensoren), und für Sensor-Plugins, die die Hardware selbst lesen. Aus, bis du es einschaltest.",
     "Only the coordinates of your place go to Open-Meteo, every {minutes} minutes. Nothing else leaves this computer for it.": "Nur die Koordinaten deines Ortes gehen an Open-Meteo, alle {minutes} Minuten. Sonst verlässt dafür nichts diesen Computer.",
     "Open an issue": "Problem melden",
     "Open folder": "Ordner öffnen",
