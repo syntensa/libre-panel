@@ -678,6 +678,9 @@
 - Design: the library cut off long names (German's *Lüfter mit Drehz…*, *Netzwerk-Det…*,
   and more in the small tiles of single widgets); a name takes a second line now, and a
   word that is longer than its tile (*Monatskalender*) breaks instead of losing its end
+- Design: in English the library, the layers and the inspector named the fan, the weather
+  symbol and the download display by their raw types (*fan*, *symbol*, *downloads*); they
+  are *Fan*, *Weather symbol* and *Download display* now
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

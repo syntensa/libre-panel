@@ -997,6 +997,28 @@ def test_the_librarys_long_names_wrap_instead_of_being_cut(page):
     assert {"Lüfter mit Drehzahl", "Symbol mit Beschriftung", "Monatskalender"} <= wrapped
 
 
+def test_every_widget_type_has_a_name_in_both_languages(page):
+    """The library, the layers and the inspector name a widget by its type: English knew 16 of
+    the 19 and showed the fan, the weather symbol and the download display as "fan", "symbol"
+    and "downloads"."""
+    types = js(page, "Object.keys(window.libre.store.get().specs.widgets)")
+    types.remove("module")  # a module is named by its kind
+    singles = page.locator('.tile[data-item^="widget:"] .tile-name')
+    for language, names in (
+        ("en", ["Fan", "Weather symbol", "Download display"]),
+        ("de", ["Lüfter", "Wettersymbol", "Download-Anzeige"]),
+    ):
+        js(page, f"window.libre.commands.runCommand('language.{language}')")
+        page.wait_for_function(f"document.documentElement.lang === '{language}'")
+        shown = [
+            page.locator(f'.tile[data-item="widget:{kind}"] .tile-name').inner_text()
+            for kind in ("fan", "symbol", "downloads")
+        ]
+        assert shown == names
+        assert set(singles.all_inner_texts()).isdisjoint(types)  # none shows a raw type name
+        assert singles.count() == len(types)
+
+
 def test_every_source_of_a_module_has_a_name_in_both_languages(page):
     """The fan instrument can show a fan; its chip read "fan" (the names were kept in two
     places, the toolbar's and the inspector's, and neither had it)."""
