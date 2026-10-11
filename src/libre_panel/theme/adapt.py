@@ -27,6 +27,8 @@ _UNIFORM = (
     "letter_spacing",
     "segment_gap",
     "backdrop_blur",
+    "mark_width",
+    "end_dot",
 )
 # Widgets whose box must keep its aspect ratio.
 _KEEP_ASPECT = ("gauge", "image", "fan")
@@ -40,11 +42,20 @@ def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any
             if key == "letter_spacing":  # may be negative (tight tracking), and a fraction
                 out[key] = round(out[key] * s, 2)
                 continue
-            minimum = {"font_size": 6, "thickness": 1, "line_width": 1, "outline_width": 1}
+            if key == "end_dot":  # a radius, a fraction of a px too; 0 is no dot at all
+                out[key] = max(1.0, round(out[key] * s, 1)) if out[key] > 0 else out[key]
+                continue
+            minimum = {
+                "font_size": 6,
+                "thickness": 1,
+                "line_width": 1,
+                "outline_width": 1,
+                "mark_width": 1,
+            }
             out[key] = max(minimum.get(key, 0), round(out[key] * s))
             if key in ("glow_radius", "shadow_blur", "backdrop_blur"):
                 out[key] = min(out[key], BLUR_MAX)  # (a theme holds no more than that)
-    if widget["type"] in ("icon", "symbol"):  # square: keep it square and centred
+    if widget["type"] in ("icon", "symbol", "moon"):  # square: keep it square and centred
         size = max(8, round(widget["size"] * s))
         cx = (widget["x"] + widget["size"] / 2) * sx
         cy = (widget["y"] + widget["size"] / 2) * sy

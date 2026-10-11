@@ -671,6 +671,9 @@
 - A theme moved to a much smaller panel lost the rules at its far edges: the frame line 4 px
   from the right edge of a 1920 px bar came out one pixel past the last column of the 0.96"
   panel's 80. A moved widget's corner keeps to the last column and row now
+- A theme moved to another panel kept the size of a graph's end dot (SPUR II Horizon's 9 px dot on
+  a curve a sixth as big), of a bar's mark and of the moon. They scale with the panel like the
+  other sizes, and a dot never rounds away to none
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars
