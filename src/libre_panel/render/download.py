@@ -129,8 +129,8 @@ def read(state: dict[str, Any]) -> Facts:
     if total and phase not in ("done", "installing"):
         text = ("≈ " if state.get("estimated") is True else "") + of_total(loaded, total)
     history = state.get("history")
-    series = tuple(
-        max(0.0, v) for v in (_number(x) for x in history) if v is not None
+    series = tuple(  # (the last speeds only: a state of another sender may carry any number)
+        max(0.0, v) for v in (_number(x) for x in history[-HISTORY:]) if v is not None
     ) if isinstance(history, list) else ()  # fmt: skip
     name = str(state.get("name") or "")
     more = _number(state.get("more"))

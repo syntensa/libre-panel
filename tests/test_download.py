@@ -113,6 +113,11 @@ def test_a_browser_download_has_no_share_and_an_estimate_is_marked():
     assert download.read({**STATE, "estimated": True}).amount.startswith("≈ ")
 
 
+def test_a_long_history_is_cut_to_what_the_graph_can_show():
+    r = download.read({**STATE, "history": list(range(100_000))})
+    assert len(r.history) == download.HISTORY and r.history[-1] == 99_999
+
+
 @pytest.mark.parametrize(
     "state",
     [
