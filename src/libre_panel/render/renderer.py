@@ -21,7 +21,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable
 from concurrent.futures import Future
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from functools import lru_cache, partial
 from typing import Any
@@ -68,6 +68,9 @@ class Piece:
     backdrop_radius: int = 0
     add: bool = False  # light: added onto what lies beneath (the panel light's gloss)
     light: Piece | None = None  # light added onto the panel after the layer: a glow
+    # what it can change on the canvas, worked out once (Renderer._extent): a frame
+    # asks that of every piece for every region it composes
+    span: tuple[int, int, int, int] | None = field(default=None, init=False, compare=False)
 
 
 class _Builder:
@@ -601,6 +604,8 @@ class Renderer:
     def _extent(piece: Piece) -> tuple[int, int, int, int]:
         """Everything a piece can change on the canvas: its layer, a backdrop
         box and its light."""
+        if piece.span is not None:
+            return piece.span
         x0, y0 = piece.x, piece.y
         x1, y1 = x0 + piece.layer.width, y0 + piece.layer.height
         if piece.backdrop is not None and piece.box is not None:
@@ -610,7 +615,8 @@ class Renderer:
             light = piece.light
             x0, y0 = min(x0, light.x), min(y0, light.y)
             x1, y1 = max(x1, light.x + light.layer.width), max(y1, light.y + light.layer.height)
-        return x0, y0, x1, y1
+        piece.span = (x0, y0, x1, y1)
+        return piece.span
 
     @staticmethod
     def _merge(rects: list[list[int]], gap: int = 8) -> list[list[int]]:

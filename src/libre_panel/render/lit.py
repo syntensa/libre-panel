@@ -32,7 +32,7 @@ from functools import lru_cache
 from typing import Any
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from libre_panel.render import facets, light3d
 from libre_panel.render.finish import Finish, register
@@ -243,12 +243,12 @@ def _glow_piece(renderer: Any, widget: dict[str, Any], frac: float, paint, lit,
     glow = small.filter(ImageFilter.GaussianBlur(radius / scale))
     if scale > 1:
         glow = glow.resize((aw, ah), Image.Resampling.BILINEAR)
-    rgb = np.asarray(glow, np.float32)
     if strength < 0.999:
-        rgb = rgb * np.float32(strength)
-    alpha = rgb.max(-1, keepdims=True)
-    out = np.concatenate([rgb, alpha], -1).astype(np.uint8)
-    return Piece(Image.fromarray(out, "RGBA"), ax, ay)
+        glow = glow.point(_scale(strength) * 3)  # a table for each band
+    red, green, blue = glow.split()
+    out = glow.convert("RGBA")  # its alpha its strongest channel (it is added, not laid)
+    out.putalpha(ImageChops.lighter(ImageChops.lighter(red, green), blue))
+    return Piece(out, ax, ay)
 
 
 def bar_piece(renderer: Any, widget: dict[str, Any], frac: float, paint) -> Piece:
