@@ -465,7 +465,9 @@ class EditorHandler(BaseHTTPRequestHandler):
                 config = load_config(self.state.config_path)
             except ConfigError as exc:
                 return self._error(str(exc))
-            return self._json({"theme": normal_theme(config, self._running_default())})
+            return self._json(
+                {"theme": normal_theme(config, self._panel_state().get("default_theme"))}
+            )
         if path == "/api/i18n":
             return self._json(self._i18n())
         if path == "/api/app":
@@ -650,15 +652,16 @@ class EditorHandler(BaseHTTPRequestHandler):
                 history[key] = [plain(round(v, 3)) for v in values[-60:]]
         return {"live": live, "readings": readings, "history": history}
 
-    def _running_default(self) -> str | None:
-        """The default theme of the panel the running app drives (None: no app, or it has
-        not worked it out yet): what a config.toml without a theme shows there."""
+    def _panel_state(self) -> dict[str, Any]:
+        """What the running app says about its panel (``panel`` of ``/api/app``); empty
+        without one, or when it cannot say."""
+        if self.controls is None:
+            return {}
         try:
-            panel = self.controls.snapshot()["panel"] if self.controls is not None else None
+            return self.controls.snapshot()["panel"] or {}
         except Exception as exc:  # the panel's state is a nice-to-have here
             log.debug("no panel state: %s", exc)
-            return None
-        return (panel or {}).get("default_theme") or None
+            return {}
 
     def _panel_pages(self) -> None:
         """The pages of the panel: the theme it shows normally (config.toml's, else the
@@ -674,7 +677,9 @@ class EditorHandler(BaseHTTPRequestHandler):
             config = load_config(self.state.config_path)
         except ConfigError as exc:
             return self._error(str(exc), HTTPStatus.CONFLICT)
-        default = self._running_default() or default_theme(panel_model(config.device))
+        panel = self._panel_state()
+        # the panel's own default: the running app's word, else worked out from the config
+        default = panel.get("default_theme") or default_theme(panel_model(config.device))
         pages = [{"id": "normal", "theme": config.theme if config.theme_given else default}]
         names = [GAME_MODE, *sorted(name for name in config.modes if name != GAME_MODE)]
         for name in names:
@@ -691,16 +696,15 @@ class EditorHandler(BaseHTTPRequestHandler):
                 "on": Memory.name in config.services.enabled and memory.get("report", True) is True,
             }
         )
-        shown = mode_now = None
-        if self.controls is not None:
-            try:
-                panel = self.controls.snapshot()["panel"]
-                shown, mode_now = panel.get("theme"), panel.get("mode")
-            except Exception as exc:  # the panel's state is a nice-to-have here
-                log.debug("no panel state: %s", exc)
         chosen = theme_chosen(config.path)  # false on a first start: Start offers the themes
         self._json(
-            {"pages": pages, "shown": shown, "mode": mode_now, "chosen": chosen, "default": default}
+            {
+                "pages": pages,
+                "shown": panel.get("theme"),
+                "mode": panel.get("mode"),
+                "chosen": chosen,
+                "default": default,
+            }
         )
 
     def _i18n(self) -> dict[str, Any]:
