@@ -251,8 +251,8 @@ def test_libre_default_keeps_its_layout_with_the_corner_showing_what_plays():
         assert part in by
     assert by["cpu-ring"]["finish"] == by["ram-ring"]["finish"] == "lit"
     assert by["history"]["finish"] == "lit" and by["history"]["seconds"] == 30
-    corner = by["corner"]
-    assert (corner["cols"], corner["rows"]) == (1, 1)  # one cell: the modules' compact looks
+    assert by["corner"]["rows"] == 1  # one row of cells: the modules' compact looks
     box = Renderer(theme, preview=True).module_boxes["corner"]
     ram, side = by["ram-ring"], by["side-card"]
     assert box[0] > ram["x"] + ram["w"] and box[1] + box[3] < side["y"]  # where the weather was
+    assert box[2] >= 180  # room beside the cover for a title that can be read

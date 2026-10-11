@@ -90,9 +90,9 @@
       "type": "module",
       "id": "corner",
       "module": "cards",
-      "col": 2,
+      "col": 3,
       "row": 0,
-      "cols": 1,
+      "cols": 2,
       "rows": 1,
       "items": "playback\nforecast\ndate",
       "card": "off",
@@ -424,7 +424,7 @@
     }
   ],
   "grid": {
-    "columns": 3,
+    "columns": 5,
     "rows": 4,
     "gap": 8,
     "margin": 8
