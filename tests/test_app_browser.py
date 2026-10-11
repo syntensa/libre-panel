@@ -94,7 +94,7 @@ def test_the_app_opens_without_breaking_its_rules(app_url):
         assert page.locator(".theme-name").inner_text() == "Libre Default"
         assert page.locator(".tile").count() > 30  # modules, building blocks, widgets
         assert js(page, "window.libre.store.get().render.size") == [480, 320]
-        for view, root in (("home", ".start"), ("look", ".look"), ("live", ".slot")):
+        for view, root in (("home", ".start"), ("look", ".look"), ("live", ".live")):
             page.goto(f"{app_url}#/{view}")
             page.wait_for_selector(f".view {root}")
         page.goto(f"{app_url}#/settings/about")
@@ -581,6 +581,16 @@ def test_the_launcher_shows_and_controls_the_running_panel(background):
         assert wait_for(lambda: load_config().device.rotate == 180)
 
 
+def test_the_launcher_says_what_the_panel_could_not_read(app_url, isolated_home):
+    hint = "CPU temperature and power need administrator rights."
+    choose_theme(isolated_home)
+    with browser_page(app_url, "home", routes={"**/api/app": a_panel_app(hint=hint)}) as page:
+        page.wait_for_selector(".hint-card")
+        expect(page.locator(".hint-card")).to_contain_text(hint)
+        page.get_by_role("button", name="Show details").click()
+        page.wait_for_selector(".live")
+
+
 def test_look_edits_the_theme_and_the_preview_follows(app_url):
     with browser_page(app_url, "look") as page:
         page.wait_for_selector(".look-side .finish-tile")
@@ -687,3 +697,121 @@ def test_look_shows_a_test_notice_on_the_preview(app_url):
         js(page, "window.libre.doc.edit('name', (theme) => { theme.name = 'Other'; })")
         shown = "document.querySelector('.look-picture img').src"
         page.wait_for_function(f"{shown} === window.libre.store.get().render.png")
+
+
+def test_live_shows_the_panel_and_runs_its_services(background, isolated_home):
+    from test_service import wait_for
+
+    from libre_panel.config import load_config, log_file
+
+    app, url = background
+    log_file().parent.mkdir(parents=True, exist_ok=True)
+    log_file().write_text(
+        "2026-10-11 09:12:04,100 INFO libre_panel.app: showing theme 'studio'\n"
+        "2026-10-11 09:14:31,000 WARNING libre_panel.x: a message to look at\n",
+        encoding="utf-8",
+    )
+    with browser_page(url, "live") as page:
+        page.wait_for_selector(".live-tile")
+        # the numbers come once the panel loop has run a second
+        page.wait_for_function(
+            "document.querySelector('[data-tile=fps] b').textContent.trim() !== '–'", timeout=20000
+        )
+        expect(page.locator("[data-tile=fps] small")).to_have_text("target 5")
+        expect(page.locator("[data-tile=faults] b")).to_have_text("0")
+        expect(page.locator("[data-tile=queue] small")).to_have_text("video mode only")
+        page.wait_for_selector(".live-picture img")  # the picture on the panel
+        # the sources the panel reads, and the services with their switches
+        page.wait_for_selector("[data-source=psutil]")
+        page.wait_for_selector("[data-service=notices]")
+        services = page.locator("[data-service]").evaluate_all(
+            "rows => rows.map((r) => r.dataset.service)"
+        )
+        assert {"autopilot", "game", "notices"} <= set(services)
+        switch = page.locator("[data-service=notices] [role=switch]")
+        assert switch.get_attribute("aria-checked") == "false"
+        switch.click()
+        assert wait_for(lambda: "notices" in load_config().services.enabled)
+        expect(switch).to_have_attribute("aria-checked", "true")
+        # a notice to test, and what became of it
+        page.locator("[data-kind=volume]").click()
+        expect(page.locator(".live-result")).to_contain_text("Volume:")
+        # the log's end, the warning marked
+        log = page.locator(".live-log")
+        expect(log).to_contain_text("09:12:04  showing theme 'studio'")
+        expect(log.locator(".warn")).to_have_text("09:14:31  a message to look at")
+        # pause and brightness are in the header
+        page.locator(".live-pause").click()
+        assert wait_for(lambda: app.panel.paused)
+        expect(page.locator(".live-picture-note")).to_contain_text("paused")
+        set_range(page.locator(".topbar .slider input"), 30)
+        assert wait_for(lambda: load_config().device.brightness == 30)
+
+
+def test_live_without_the_panel_says_so_and_keeps_the_switches(app_url, isolated_home):
+    from test_service import wait_for
+
+    from libre_panel.config import load_config
+
+    with browser_page(app_url, "live") as page:
+        page.wait_for_selector(".live-picture-note")
+        assert "does not run the panel" in page.locator(".live-picture-note").inner_text()
+        assert page.locator(".live-tile b").all_inner_texts() == ["–"] * 5
+        page.wait_for_selector(".live-chip")
+        expect(page.locator(".live-chip").first).to_be_disabled()
+        assert page.locator(".live-pause").count() == 0  # nothing to pause
+        page.wait_for_selector("[data-service=game]")
+        page.locator("[data-service=game] [role=switch]").click()  # config.toml, as ever
+        assert wait_for(lambda: "game" in load_config().services.enabled)
+
+
+def test_the_new_views_speak_german(app_url, isolated_home):
+    from libre_panel import i18n
+
+    choose_theme(isolated_home)
+    i18n.set_language("de")
+    with browser_page(app_url, "home") as page:
+        page.wait_for_selector(".start-tile")
+        assert page.locator(".start-tile strong").all_inner_texts() == [
+            "Gestalten",
+            "Look",
+            "Live",
+            "Einstellungen",
+        ]
+        assert page.locator(".panel-card .btn-primary").inner_text() == "Gestalten"
+        page.goto(f"{app_url}#/look")
+        page.wait_for_selector(".look-side")
+        titles = page.locator(".look-side .section-title").all_text_contents()
+        assert titles[:3] == ["Farbwelt", "Oberfläche und Schein", "Panel-Licht"]
+        page.goto(f"{app_url}#/live")
+        page.wait_for_selector(".live-side")
+        assert page.locator(".live-side .section-title").all_text_contents() == [
+            "Quellen",
+            "Dienste",
+            "Hinweis testen",
+        ]
+        assert page.locator(".live-head h2").inner_text() == "Auf dem Panel, jetzt"
+
+
+def test_start_look_and_live_have_their_commands(app_url, isolated_home):
+    from test_service import wait_for
+
+    from libre_panel.config import load_config
+
+    choose_theme(isolated_home)
+    with browser_page(app_url, "look") as page:
+        page.wait_for_selector(".look-side")
+        page.keyboard.press("Control+k")
+        page.locator(".palette input").fill("panel light")
+        expect(page.locator(".palette-item.active")).to_contain_text("Panel light: on")
+        page.keyboard.press("Enter")
+        page.wait_for_function("window.libre.doc.theme().look?.light !== undefined")
+        page.keyboard.press("Control+k")
+        page.locator(".palette input").fill("finish for everything facet")
+        page.keyboard.press("Enter")
+        page.wait_for_function("window.libre.doc.widgetById('cpu-ring').finish === 'facet'")
+        page.keyboard.press("Control+k")
+        page.locator(".palette input").fill("slate on the panel")
+        expect(page.locator(".palette-item.active")).to_contain_text("Show Slate on the panel")
+        page.keyboard.press("Enter")
+        assert wait_for(lambda: load_config().theme == "slate")

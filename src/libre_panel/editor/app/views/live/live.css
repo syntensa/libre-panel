@@ -1,0 +1,384 @@
+/* Live: the picture on the panel, its numbers and the log on the left; sources, services and
+   test notices on the right (Live.dc.html) */
+
+.live {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 400px;
+  min-height: 0;
+}
+
+.live-main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+  min-height: 0;
+  padding: 24px 28px;
+  overflow-y: auto;
+}
+
+.live-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.live-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.live-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--dim);
+}
+
+.dot.showing,
+.dot.ok {
+  background: var(--ok);
+  box-shadow: 0 0 8px var(--ok);
+}
+
+.dot.waiting,
+.dot.starting,
+.dot.warn {
+  background: var(--warn);
+}
+
+.dot.error {
+  background: var(--danger);
+}
+
+.live-picture {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 150px;
+  border-radius: 14px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--surface-4);
+  flex-shrink: 0;
+}
+
+.live-picture img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 46vh;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.live-picture-note {
+  margin: 0;
+  padding: 0 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.live-tiles {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.live-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+}
+
+.live-tile-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.live-tile b {
+  margin-top: 4px;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.live-tile small {
+  min-height: 15px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow: hidden;
+}
+
+.live-tile-part {
+  white-space: nowrap; /* a narrow window wraps the note between its parts, it does not cut it off */
+}
+
+.live-tile.ok b {
+  color: #6ee7a0;
+}
+
+.live-tile.warn b {
+  color: var(--warn);
+}
+
+.live-tile.bad b {
+  color: var(--danger-text);
+}
+
+.live-log {
+  flex: 1;
+  min-height: 120px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #080b0f;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.live-log .warn {
+  color: var(--warn);
+}
+
+.live-log .bad {
+  color: var(--danger-text);
+}
+
+.live-log p {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* -- the side ---------------------------------------------------------------------------------- */
+
+.live-side {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 24px 22px;
+  overflow-y: auto;
+  border-left: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.live-side section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.live-side .section-title {
+  margin-bottom: 4px;
+}
+
+.live-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.live-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.live-row-name {
+  flex: 0 0 auto;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-row-note {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.live-row-note.warn {
+  color: var(--warn);
+}
+
+.live-row-note.bad {
+  color: var(--danger-text);
+}
+
+.dot.idle {
+  background: var(--dim);
+}
+
+.live-source details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.live-source details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.live-source details > summary .icon {
+  color: var(--dim);
+  transition: transform 0.12s;
+}
+
+.live-source details[open] > summary .icon {
+  transform: rotate(180deg);
+}
+
+.live-source details > summary:hover {
+  background: var(--surface-2);
+}
+
+.live-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 12px;
+}
+
+.live-details div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.live-details dt {
+  color: var(--muted);
+}
+
+.live-details dd {
+  margin: 0;
+  text-align: right;
+}
+
+.live-hint {
+  margin: 6px 0 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.live-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.live-note.bad {
+  color: var(--danger-text);
+}
+
+.live-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.live-chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line-4);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  transition: border-color 0.12s;
+}
+
+.live-chip:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.live-chip:disabled {
+  color: var(--dim);
+}
+
+.live-result {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.live-result.ok {
+  color: #6ee7a0;
+}
+
+.live-result.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+/* -- the header's own parts ------------------------------------------------------------------------ */
+
+.live-pause {
+  height: 34px;
+}
+
+.live-brightness {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.live-brightness .slider input {
+  min-width: 100px;
+  width: 120px;
+  flex: none;
+}

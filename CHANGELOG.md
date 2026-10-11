@@ -45,6 +45,12 @@
   (card, band, a plugin's), which the preview can show as a test notice.
   Every change is one undo step and the preview follows; ridge frames are not
   offered, a theme that has some can make them flat under *Advanced*
+- *Live*, what the panel shows and how it runs: its picture, the frame rate
+  against the target, the data rate, the drawing time, the video queue and
+  the faults, the sensor sources with their state and the hint about missing
+  readings, the services with a switch each (and *Restart*), test notices of
+  every kind with what became of them, and the end of the log; pause and
+  brightness are in the header. It polls the console API while it is shown
 - Everything in the app is a command: Ctrl+K finds it by a few letters
   (themes, modules, sensors, panels, the language, the panel's controls),
   with the keys it has

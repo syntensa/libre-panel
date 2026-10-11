@@ -1480,41 +1480,7 @@ textarea.input {
   }
 }
 
-/* the place of a view before it is built */
-.slot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-  background-color: var(--stage);
-  background-image: radial-gradient(var(--stage-dot) 1px, transparent 1px);
-  background-size: 22px 22px;
-}
-
-.slot-card {
-  width: 440px;
-  max-width: 100%;
-  padding: 28px;
-  border-radius: 18px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.slot-card h1 {
-  margin: 0;
-  font-size: 22px;
-}
-
-.slot-card p {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.5;
-}
-
+/* an icon on a tinted tile: the place of what is still to come (Settings) */
 .slot-icon {
   width: 46px;
   height: 46px;
@@ -1524,12 +1490,6 @@ textarea.input {
   justify-content: center;
   background: var(--accent-soft);
   color: var(--accent);
-}
-
-.slot-actions {
-  display: flex;
-  gap: 10px;
-  margin-top: 6px;
 }
 
 /* a plugin's page */
