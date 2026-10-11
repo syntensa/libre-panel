@@ -1,6 +1,7 @@
-"""Libre Panel's own screens: Studio and Libre Default. They load, draw with the demo's
-readings and with none, keep flat frames, show what plays (else the weather, else the day) in
-their card, and move to other panels without parts running into each other."""
+"""Libre Panel's own screens: Lumen (the signature screen of the bars), Studio and Libre
+Default. They load, draw with the demo's readings and with none, keep flat frames, show what
+plays (else the weather, else the day) in their card, and move to other panels without parts
+running into each other."""
 
 import gc
 import itertools
@@ -21,7 +22,7 @@ from libre_panel.theme.model import (
 )
 from libre_panel.theme.modules import make_grid
 
-OWN = ["studio", "libre-default"]
+OWN = ["lumen", "studio", "libre-default"]
 # the panels of the other built-in themes, and the bars'
 PANELS = [("turing-3.5", "landscape"), ("turing-3.5", "portrait"), ("turing-5", "landscape"),
           ("turing-5", "portrait"), ("turing-2.1", "landscape"), ("turing-8.8-usb", "landscape"),
@@ -128,7 +129,8 @@ def slot_of(name, card="card"):
     return theme, renderer, renderer._slots[card]
 
 
-@pytest.mark.parametrize("name, card", [("studio", "card"), ("libre-default", "corner")])
+@pytest.mark.parametrize("name, card", [("lumen", "card"), ("studio", "card"),
+                                        ("libre-default", "corner")])  # fmt: skip
 def test_the_card_shows_what_plays_else_the_weather_else_the_day(name, card):
     from test_slot import demo
 
@@ -155,7 +157,75 @@ def test_the_day_under_the_clock_steps_aside_while_the_card_shows_it(name):
     assert len(shown(demo())) == 1  # the weather, and a track
     assert len(shown(demo(media=False))) == 1  # the weather alone
     assert len(shown(demo(weather=False))) == 1  # a track alone
-    assert shown(demo(media=False, weather=False)) == []  # the card shows the day
+    no_day = shown(demo(media=False, weather=False))
+    assert no_day == [] or name == "lumen"  # Lumen's date stays: its card is the far side
+
+
+# -- Lumen ------------------------------------------------------------------------------------
+
+
+def lumen():
+    theme = load_theme(find_theme("lumen"))
+    return theme, {w["id"]: w for w in theme.widgets}
+
+
+def test_lumen_is_libre_panels_own_and_made_for_the_bars_hidden_strip():
+    theme, by = lumen()
+    assert theme.model == "turing-9.2-usb" and (theme.width, theme.height) == (1920, 480)
+    assert theme.background_image == "assets/backdrop.png"  # the editor's stage: a dot grid
+    assert theme.palette["accent"] == "#2EE6D6" and theme.look == {}  # no grid, no dust
+    assert by["clock"]["finish"] == "acrylic" and by["seconds"]["color"] == "@accent"
+    assert all(w["y"] >= 0 for w in theme.widgets)  # (the strip test draws them: test_models)
+
+
+def test_lumen_shows_lit_instruments_with_the_names_of_the_hardware():
+    theme, by = lumen()
+    for src in ("cpu", "gpu", "mem"):
+        assert by[f"{src}-ring"]["module"] == "instrument" and by[f"{src}-ring"]["source"] == src
+        name = by[f"{src}-name"]
+        assert name["sensor"] == f"{src}.name" and name["fit"] == "ellipsis"
+        ring = Renderer(theme, preview=True).module_boxes[f"{src}-ring"]
+        assert ring[0] <= name["x"] - name["max_width"] // 2  # under its ring, as wide
+    rings = [Renderer(theme, preview=True).module_boxes[f"{s}-ring"] for s in ("cpu", "gpu", "mem")]
+    assert len({(r[1], r[2], r[3]) for r in rings}) <= 2  # one row of equal instruments
+
+
+def test_lumen_draws_the_load_of_the_last_minute_as_light_that_moves():
+    _, by = lumen()
+    for src in ("cpu", "gpu"):
+        graph = by[f"{src}-graph"]
+        assert graph["finish"] == "lit" and graph["smooth"] and graph["seconds"] == 60
+        assert graph["sensor"] == f"{src}.load"
+    cpu, gpu = by["cpu-graph"], by["gpu-graph"]
+    assert (cpu["x"], cpu["y"], cpu["w"], cpu["h"]) == (gpu["x"], gpu["y"], gpu["w"], gpu["h"])
+    assert by["gpu-graph"]["needs"] == "gpu.load"
+
+
+def test_lumen_turns_the_fans_that_report_else_lists_the_others():
+    _, by = lumen()
+    fans = [w for w in by.values() if w["type"] == "fan"]
+    assert [f["sensor"] for f in fans][0] == "gpu.fan"  # the graphics card's first
+    assert all(f["needs"] == f["sensor"] for f in fans)  # each only where it reports
+    listing = by["fans"]
+    assert listing["items"] == "fan.*" and listing["needs"] == "!gpu.fan, !fan.lpc.fan_1"
+    without = demo_snapshot(fixed_time=1_700_000_000)
+    for key in [k for k in without.readings if k == "gpu.fan" or k.startswith("fan.lpc.")]:
+        del without.readings[key]
+    assert not Renderer._missing(listing, without)  # a PC whose fans have other names
+    assert Renderer._missing(listing, demo_snapshot(fixed_time=1_700_000_000))
+
+
+def test_lumen_shows_the_network_else_a_download():
+    from test_slot import RUNNING, demo, downloading
+
+    theme, _ = lumen()
+    renderer = Renderer(theme, preview=True)
+    net = renderer._slots["net"]
+    assert net.kinds == ["download", "net"]
+    renderer.render(demo(), 0.0)
+    assert net.shown == 1  # nothing downloads
+    renderer.render(downloading(demo()), 1.0)
+    assert net.shown == 0 and RUNNING["name"]
 
 
 # -- Studio and Libre Default keep their layout -------------------------------------------------
