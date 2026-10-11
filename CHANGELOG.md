@@ -179,7 +179,8 @@
   `"finish": "acrylic"` is the same lettering lit from within, as the "II" of
   the wordmark. Bars and rings are raised in a milled track, a graph's line
   becomes a ridge on the plateau of its fill with a halo of its colour (a
-  slimmer ridge on a bar panel). Text keeps the pixels of the flat text;
+  slimmer ridge on a bar panel; the halo ends where SPUR II's does, and a
+  graph that hangs from its top has it mirrored). Text keeps the pixels of the flat text;
   shapes are built once per size and colour, so it costs no more than the
   flat look
 - `fill_alpha` on a `graph`: how opaque its fill is, 0 to 1 (0: as before, a

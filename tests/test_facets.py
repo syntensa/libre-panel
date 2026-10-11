@@ -888,9 +888,23 @@ def test_a_fade_starts_as_opaque_as_the_graph_says():
 def test_a_facet_graph_has_a_halo_above_its_curve_and_a_flat_one_has_none():
     flat = graph_pixels(fill_fade=False)
     facet = graph_pixels(fill_fade=False, finish="facet")
-    assert flat[24, 60] == 0 < facet[24, 60]  # a few pixels above the curve, which is at row 30
-    assert facet[24, 60] > facet[16, 60] >= 0  # the farther, the fainter
+    assert flat[26, 60] == 0 < facet[26, 60]  # a few pixels above the curve, which is at row 30
+    assert facet[26, 60] > facet[25, 60] > 0  # the farther, the fainter ...
+    assert facet[20, 60] == 0  # ... and it ends where SPUR II works the curve out: a line
+    # and two pixels above its highest point (the reference's curves show the same cut)
     assert facet[:, 0].max() > 0  # to the left edge too: the layer is cut, not an error
+
+
+def test_a_facet_curve_that_hangs_from_the_top_is_mirrored_with_its_light_still_above():
+    up = graph_pixels(fill_fade=False, finish="facet", fill_alpha=0.41)[:, 60]
+    down = graph_pixels(fill_fade=False, finish="facet", fill_alpha=0.41, direction="down")[:, 60]
+    assert up[20] == 0 and up[40] > 100  # the fill below the curve ...
+    assert down[20] > 100 and down[40] == 0  # ... or above it
+    for column in (up, down):
+        assert 27 <= int(np.argmax(column[20:42])) + 20 <= 30  # the flank facing up is lit
+    # the flank towards the fill: nearly black below a curve, in shade only below one that
+    # hangs (it faces down, away from the light, outside), as SPUR II's network graph
+    assert up[30] < 30 < 100 < down[30]
 
 
 # -- the shapes in a theme ---------------------------------------------------------------------

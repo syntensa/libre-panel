@@ -211,7 +211,10 @@ faces away darker. `"flat"` is the default and draws as ever.
   whatever its `cap`; `ticks` stay flat.
 - A `graph`'s line becomes a ridge on the plateau of its fill: bright on the
   flank away from the fill, dark on the one towards it, then a band a little
-  brighter than the fill, and a soft halo of the line's colour round it all.
+  brighter than the fill, and a soft halo of the line's colour round it all,
+  which ends a line and two pixels beyond the curve's highest and lowest
+  points, as SPUR II works a curve out. A graph that hangs from its top
+  (`direction` `down`) has the ridge mirrored, its light still from above.
   `fill_alpha` (0 to 1) sets how opaque the plateau is: SPUR II's is 0.41 with
   `fill_fade` off. A graph wider than 1200 px (a bar panel) gets a slimmer,
   single-band ridge.
