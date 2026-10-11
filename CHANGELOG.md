@@ -122,6 +122,11 @@
   game runs), and `game.limiter`, `cpu`, `gpu` or `cap`: who holds the frame
   rate down, judged from how long the CPU and the GPU wait for each other
   (PresentMon 2)
+- `weather.rain.minutes` and `weather.rain.text`: the rain of the next two
+  hours from Open-Meteo's 15-minute precipitation. The minutes count to the
+  rain starting or stopping; the text says so ("Rain in 20 min", "Rain stops
+  in 40 min", "No rain for the next 2 h"), in German too. The request still
+  carries only your coordinates; the answer is a little larger
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
