@@ -1924,9 +1924,9 @@ def test_settings_weather_and_place(app_url, isolated_home, monkeypatch):
         asked.append(name)
         return [
             {"name": "Springfield", "region": "Region", "country": "Country",
-             "latitude": 50.123456, "longitude": 8.987654},
+             "latitude": 1.234567, "longitude": 2.345678},
             {"name": "Springfield", "region": "", "country": "Elsewhere",
-             "latitude": -33.5, "longitude": 151.25},
+             "latitude": -3.5, "longitude": 4.75},
         ]  # fmt: skip
 
     monkeypatch.setattr(open_meteo, "geocode", geocode)
@@ -1942,13 +1942,13 @@ def test_settings_weather_and_place(app_url, isolated_home, monkeypatch):
         places = page.locator(".places li")
         page.wait_for_selector(".places li")
         assert places.count() == 2 and asked == ["Spring"]
-        assert "50.12, 8.99" in places.first.inner_text()
+        assert "1.23, 2.35" in places.first.inner_text()
         places.first.locator("button").click()
         waits_for(  # the place is one write; it does not switch the weather on
             page,
             lambda: (
                 (settings_config().weather.latitude, settings_config().weather.longitude)
-                == (50.12, 8.99)
+                == (1.23, 2.35)
                 and settings_config().weather.place == "Springfield, Region, Country"
                 and not settings_config().weather.enabled
             ),

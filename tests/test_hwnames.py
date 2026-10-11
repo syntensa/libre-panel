@@ -33,7 +33,7 @@ CPUS = [
     ("AMD Athlon(tm) II X4 640 Processor", "Athlon II X4 640"),
     ("AMD Phenom(tm) II X6 1090T Processor", "Phenom II X6 1090T"),
     ("Quad-Core AMD Opteron(tm) Processor 2376", "Opteron 2376"),
-    ("AMD Ryzen 7 7800X3D", "Ryzen 7 7800X3D"),  # as LibreHardwareMonitor says it
+    ("AMD Ryzen 7 5800X3D", "Ryzen 7 5800X3D"),  # as LibreHardwareMonitor says it
     # Intel: the generation, the marks, "CPU" and the clock go
     ("12th Gen Intel(R) Core(TM) i7-12700K", "Core i7-12700K"),
     ("13th Gen Intel(R) Core(TM) i9-13900K", "Core i9-13900K"),
@@ -79,7 +79,7 @@ CPUS = [
 GPUS = [
     ("NVIDIA GeForce RTX 4070", "GeForce RTX 4070"),
     ("NVIDIA GeForce RTX 4070 Ti SUPER", "GeForce RTX 4070 Ti SUPER"),
-    ("NVIDIA GeForce RTX 4080 SUPER", "GeForce RTX 4080 SUPER"),
+    ("NVIDIA GeForce RTX 2080 SUPER", "GeForce RTX 2080 SUPER"),
     ("NVIDIA GeForce GTX 1660 SUPER", "GeForce GTX 1660 SUPER"),
     ("NVIDIA GeForce GTX 1050 Ti", "GeForce GTX 1050 Ti"),
     ("NVIDIA GeForce RTX 3060 Laptop GPU", "GeForce RTX 3060 Laptop GPU"),  # part of its name

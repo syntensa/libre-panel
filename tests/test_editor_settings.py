@@ -366,19 +366,19 @@ def test_a_services_options_follow_the_spec_of_the_service(server):
 def test_the_weather_needs_a_place_and_the_place_is_both_coordinates_or_none(server):
     status, data = write(server, **{"weather.enabled": True})
     assert status == 400 and "place" in data["error"]
-    assert write(server, **{"weather.latitude": 50.5})[0] == 400  # one of two
-    place = {"weather.latitude": 50.55, "weather.longitude": 8.25, "weather.place": "Somewhere"}
+    assert write(server, **{"weather.latitude": 1.5})[0] == 400  # one of two
+    place = {"weather.latitude": 1.55, "weather.longitude": 2.25, "weather.place": "Somewhere"}
     status, data = write(server, **place, **{"weather.enabled": True, "weather.units": "imperial"})
     assert status == 200 and data["config"]["weather"] == {
         "enabled": True,
-        "latitude": 50.55,
-        "longitude": 8.25,
+        "latitude": 1.55,
+        "longitude": 2.25,
         "place": "Somewhere",
         "units": "imperial",
         "update_minutes": 15,
     }
     config = load_config().weather
-    assert config.enabled and config.latitude == 50.55 and config.place == "Somewhere"
+    assert config.enabled and config.latitude == 1.55 and config.place == "Somewhere"
     # the place cannot go while the weather needs it, but both can go together
     before = config_text()
     nothing = {"weather.latitude": None, "weather.longitude": None, "weather.place": None}
@@ -613,7 +613,7 @@ def test_a_place_is_looked_up_by_name_and_kept_to_about_a_kilometre(server, monk
         monkeypatch,
         [
             {"name": "Springfield", "region": "Region", "country": "Country",
-             "latitude": 50.123456, "longitude": -8.987654},
+             "latitude": 1.234567, "longitude": -2.876543},
             {"name": "Springfield", "region": "", "country": "Other",
              "latitude": None, "longitude": 1},
             {"name": "Lonely", "region": "", "country": "",
@@ -623,7 +623,7 @@ def test_a_place_is_looked_up_by_name_and_kept_to_about_a_kilometre(server, monk
     status, data = request(server, "POST", "/api/location", {"query": " Springfield "})
     assert status == 200
     assert data["places"] == [
-        {"name": "Springfield, Region, Country", "latitude": 50.12, "longitude": -8.99},
+        {"name": "Springfield, Region, Country", "latitude": 1.23, "longitude": -2.88},
         {"name": "Lonely", "latitude": 10, "longitude": 20},  # the one without a latitude is out
     ]
     assert asked == [("Springfield", 6, "en")]  # the typed name goes, and the language

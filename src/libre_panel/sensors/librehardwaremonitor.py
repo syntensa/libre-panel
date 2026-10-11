@@ -15,7 +15,7 @@ LibreHardwareMonitor (MPL-2.0) is read one of two ways, chosen by ``mode`` in
 Either way every sensor is exposed under its raw id (``lhm:/amdcpu/0/temperature/2``) and
 the common ones also get friendly aliases such as ``cpu.temp``, ``gpu.load`` or ``mem.temp``
 (the hottest memory module), made by the same code. With several GPUs the dedicated one is
-used; ``gpu = "RTX 4080"`` picks one by name.
+used; ``gpu = "RTX 4070"`` picks one by name.
 
 When the web server stops answering, its readings are kept for
 ``stale_seconds`` (5 by default) and then dropped, so the panel shows "--"

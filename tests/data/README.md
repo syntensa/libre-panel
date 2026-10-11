@@ -3,7 +3,7 @@
 `lhm_data.json` is real LibreHardwareMonitor `data.json` output, trimmed to the
 CPU and GPU devices, taken from the test fixtures of
 [librehardwaremonitor-api](https://pypi.org/project/librehardwaremonitor-api/)
-(computer name replaced). It is used under the MIT license below.
+(computer and hardware names replaced). It is used under the MIT license below.
 
 ---
 

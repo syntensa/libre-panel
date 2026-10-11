@@ -97,8 +97,8 @@ def test_lhm_real_output():
     # No average clock in this version: mean of the cores that report one ("NaN" skipped).
     assert round(out["cpu.freq"].value, 1) == round((4724.9 * 5 + 3149.9 * 2) / 7, 1)
     # the names, tidied as the hardware source tidies the ones it finds (sensors/hwnames.py)
-    assert out["cpu.name"].value == "Ryzen 7 7800X3D"
-    assert out["gpu.name"].value == "GeForce RTX 4080 SUPER"
+    assert out["cpu.name"].value == "Ryzen 5 7600"
+    assert out["gpu.name"].value == "GeForce RTX 4070"
     assert out["lhm:/gpu-nvidia/0/throughput/0"].unit == "MB/s"  # no raw value: as displayed
     raw = out["lhm:/gpu-nvidia/0/throughput/1"]  # raw value present: bytes per second
     assert (raw.value, raw.unit) == (307200.5, "B/s")
