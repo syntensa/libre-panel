@@ -1509,6 +1509,10 @@ def test_the_language_switch_keeps_unsaved_work(page_plugin, page, isolated_home
 
     js(page, "window.libre.doc.edit('t', (theme) => { theme.name = 'Work in progress'; })")
     assert js(page, "window.libre.store.get().dirty") is True
+    calendar = page.locator(".tile[data-item='module:date'] img")
+    calendar.wait_for()  # its picture is drawn, in English
+    english = calendar.get_attribute("src")
+    shown = js(page, "window.libre.store.get().render.png")
     page.keyboard.press("Control+k")
     page.locator(".palette input").fill("deutsch")
     page.keyboard.press("Enter")
@@ -1522,6 +1526,12 @@ def test_the_language_switch_keeps_unsaved_work(page_plugin, page, isolated_home
     assert page.locator(".tile[data-item='preset:cpu-card'] .tile-name").inner_text() == "CPU-Karte"
     titles = js(page, "window.libre.store.get().plugins.map((p) => p.title)")
     assert "Analyse" in titles and "Steuerung" in titles  # also the built-in Control page
+    # the pictures hold dates and weather: the panel's preview and the library's are drawn again
+    page.wait_for_function("(old) => window.libre.store.get().render.png !== old", arg=shown)
+    page.wait_for_function(
+        "(old) => document.querySelector(\".tile[data-item='module:date'] img\").src !== old",
+        arg=english,
+    )
     js(page, "window.libre.doc.setSelection(['clock'])")
     assert page.locator(".inspector .inspector-title").inner_text() == "Uhr"
     page.keyboard.press("Control+k")
