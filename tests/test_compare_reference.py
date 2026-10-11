@@ -62,11 +62,16 @@ def test_a_theme_against_its_own_picture_matches_everywhere(tool, tmp_path, monk
 
 
 def test_differences_are_counted_by_region(tool, tmp_path, monkeypatch, capsys):
-    reference = tool.render(str(bar_theme(tmp_path / "teal", "#13E5D7")), {}, datetime.now(), None)
+    # a lit bar shows its colour only with a value (an empty groove is the same in any colour)
+    values = {"readings": {"cpu.load": [42, "%"]}}
+    (tmp_path / "values.json").write_text(json.dumps(values), encoding="utf-8")
+    teal = bar_theme(tmp_path / "teal", "#13E5D7")
+    reference = tool.render(str(teal), values, datetime.now(), None, "basic")
     reference.save(tmp_path / "reference.png")
     other = bar_theme(tmp_path / "purple", "#E0A8FF")
     out = run(tool, monkeypatch, capsys, tmp_path / "reference.png", "--theme", other,
-              "--out", tmp_path / "cmp", "--zoom", "1")  # fmt: skip
+              "--values", tmp_path / "values.json", "--out", tmp_path / "cmp",
+              "--zoom", "1")  # fmt: skip
     lines = {line.split()[0]: line for line in out.splitlines() if "% within" in line}
     assert "100.00 %" in lines["header"] and "100.00 %" in lines["charts"]
     assert "100.00 %" not in lines["sections"]  # the bar's colour differs, down there only
