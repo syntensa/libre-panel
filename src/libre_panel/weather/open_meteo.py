@@ -232,6 +232,9 @@ def _rain_readings(data: dict[str, Any], local_now: datetime) -> dict[str, Readi
     stops (raining now); it is missing when neither happens in those two hours.
     ``weather.rain.text`` says it in words, and also when the rain stays or
     stays away. Nothing is said while the answer ends before the two hours do.
+
+    A step is the rain of the 15 minutes *up to* its time (Open-Meteo: "preceding
+    15 minutes sum"): the step of 14:45 is the rain from 14:30 to 14:45.
     """
     minutely = data.get("minutely_15") or {}
     times = minutely.get("time") or []
@@ -242,7 +245,8 @@ def _rain_readings(data: dict[str, Any], local_now: datetime) -> dict[str, Readi
         first = datetime.fromisoformat(times[0])
     except ValueError:
         return {}
-    now_index = (local_now - first) // RAIN_STEP  # the step that holds the present moment
+    # the step that holds the present moment: the first whose time is not past
+    now_index = -((first - local_now) // RAIN_STEP)
     end = min(now_index + RAIN_STEPS + 1, len(times), len(amounts))
     if not 0 <= now_index < end:
         return {}
@@ -254,7 +258,7 @@ def _rain_readings(data: dict[str, Any], local_now: datetime) -> dict[str, Readi
 
     out: dict[str, Reading] = {}
     if change is not None:
-        moment = first + RAIN_STEP * (now_index + change)
+        moment = first + RAIN_STEP * (now_index + change - 1)  # where the changed step begins
         minutes = math.ceil((moment - local_now) / timedelta(minutes=1))
         key = "weather.rain.minutes"
         out[key] = Reading(key, minutes, "min", "Rain starts or stops")
