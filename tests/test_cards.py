@@ -301,7 +301,8 @@ def test_the_weather_card_says_what_it_has_and_leaves_out_what_it_has_not():
         weather__rain__minutes=45.0, weather__rain__text="Rain from 07:00 likely"
     )
     with_rain, frame, _ = drawn("forecast", raining)
-    without, plain, _ = drawn("forecast", snapshot_with())
+    # (the demo has a rain sentence of its own: left out here)
+    without, plain, _ = drawn("forecast", snapshot_with(drop=("weather.rain",)))
     assert "rain" in with_rain and "dry" not in with_rain and "rain" not in without
     assert differs(frame, plain)
     parts = widgets_of("forecast")
