@@ -515,7 +515,9 @@
     "{temp} °C · limit {limit} °C": "{temp} °C · Grenze {limit} °C",
     "{type} widget": "Element: {type}",
     "{value:.0f} GB free": "{value:.0f} GB frei",
-    "{value:.0f}% lit": "{value:.0f} % beleuchtet"
+    "{value:.0f}% lit": "{value:.0f} % beleuchtet",
+    "the video mode is not proven on the {panel} yet": "Der Videomodus ist auf dem {panel} noch nicht erprobt",
+    "ffmpeg is not at the path in video.ffmpeg (config.toml)": "ffmpeg liegt nicht unter dem Pfad in video.ffmpeg (config.toml)"
   },
   "fields": {
     "align": "Ausrichtung",

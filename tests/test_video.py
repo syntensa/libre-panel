@@ -114,10 +114,37 @@ def test_find_ffmpeg(tmp_path, monkeypatch):
 def test_video_config():
     video = parse_config({"video": {"mode": "on", "fps": 30, "device_fps": 40}}).device.video
     assert (video.mode, video.fps, video.device_fps, video.crf) == ("on", 30, 40, 25)
-    assert parse_config({}).device.video.mode == "off"
-    for bad in ({"mode": "auto"}, {"fps": 50, "device_fps": 40}, {"maxrate": "fast"}):
+    assert parse_config({}).device.video.mode == "auto"
+    assert parse_config({"video": {"mode": "off"}}).device.video.mode == "off"
+    for bad in ({"mode": "always"}, {"fps": 50, "device_fps": 40}, {"maxrate": "fast"}):
         with pytest.raises(ConfigError):
             parse_config({"video": bad})
+
+
+def test_auto_video_mode_needs_a_proven_panel_the_clip_name_and_ffmpeg(tmp_path):
+    """``auto`` turns the video mode on only where all is there; it never makes
+    up the clip name, which the start command copies into the panel's settings."""
+    from libre_panel.devices.models import get_model
+    from libre_panel.devices.turzx import video_mode
+
+    nine, eight = get_model("turing-9.2-usb"), get_model("turing-8.8-usb")
+    ffmpeg = tmp_path / "ffmpeg"
+    ffmpeg.write_text("")
+    ready = VideoConfig(local_clip="usr/data/clip.h264", ffmpeg=str(ffmpeg))
+    assert ready.mode == "auto"
+    assert video_mode(ready, nine) == (True, [])
+    assert video_mode(ready, None) == (False, [])  # no panel found: nothing to tell
+    on, why = video_mode(ready, eight)
+    assert not on and why == ['the video mode is not proven on the Turing 8.8" yet']
+    on, why = video_mode(VideoConfig(ffmpeg=str(tmp_path / "missing")), nine)
+    assert not on and "local_clip is not set" in why[0] and "video.ffmpeg" in why[1]
+    assert str(tmp_path) not in why[1]  # doctor reports are shared: no paths
+    # "on" and "off" decide alone
+    assert video_mode(VideoConfig(mode="on"), eight) == (True, [])
+    assert video_mode(VideoConfig(mode="off", local_clip="x", ffmpeg=str(ffmpeg)), nine) == (
+        False,
+        [],
+    )
 
 
 # -- the session against the simulated panel ------------------------------------
@@ -651,8 +678,38 @@ def test_video_mode_through_the_turzx_driver(panel):
         display.close()
     png = TurzxDisplay(DeviceConfig(driver="turzx", model="turing-9.2-usb"))
     png.open()
-    assert not png.streaming
+    assert not png.streaming  # "auto", but no clip name
     png.close()
+
+
+@needs_ffmpeg
+def test_auto_video_mode_on_a_detected_panel(panel, monkeypatch, caplog):
+    """``model = "auto"``: the panel on the bus is looked up without opening it,
+    and the 9.2" streams; what is missing is logged once, not on every reconnect."""
+    from libre_panel.devices.turzx import TurzxDisplay
+
+    monkeypatch.setattr(
+        turzx_usb.UsbTransport, "present", staticmethod(lambda pid: pid == panel.pid)
+    )
+    found = TurzxDisplay(
+        DeviceConfig(
+            driver="turzx", model="auto", video=VideoConfig(local_clip="usr/data/clip.h264")
+        )
+    )
+    found.open()
+    try:
+        assert found.streaming and found.model.id == "turing-9.2-usb"
+    finally:
+        found.close()
+    assert 110 in panel.commands
+    plain = TurzxDisplay(DeviceConfig(driver="turzx", model="auto"))
+    with caplog.at_level("INFO", logger="libre_panel.devices.turzx"):
+        for _ in range(2):
+            plain.open()
+            assert not plain.streaming
+            plain.close()
+    told = [r.getMessage() for r in caplog.records if "video mode off" in r.getMessage()]
+    assert len(told) == 1 and "local_clip is not set" in told[0]
 
 
 # -- the main loop -----------------------------------------------------------------

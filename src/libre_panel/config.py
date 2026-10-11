@@ -53,6 +53,14 @@ output = "libre-panel-frame.png"
 # picks the wrong port, name it, e.g. "COM5" or "/dev/ttyACM0".
 port = ""
 
+[video]
+# TURZX USB panels: the whole picture as H.264 video, up to 50 frames a second
+# instead of about 9. "auto" turns it on where it is proven (the 9.2") once ffmpeg
+# is found and local_clip names the panel's standby clip (see the configuration
+# guide, Video); "on" and "off" decide by themselves.
+# mode = "auto"
+# local_clip = ""
+
 [sensors]
 # Sensor sources, queried in this order: for each reading the first source that
 # has one wins. Available: load (CPU and GPU load ten times a second), psutil,
@@ -146,7 +154,8 @@ def user_themes_dir() -> Path:
 class VideoConfig:
     """Video mode for panels with an H.264 decoder (TURZX USB): smooth frame rates."""
 
-    mode: str = "off"  # "off" | "on"
+    # "auto": on where it is proven (the 9.2"), ffmpeg is found and local_clip is set
+    mode: str = "auto"  # "auto" | "off" | "on"
     fps: int = 50
     # Reported to the panel. Its player shows pictures strictly at this rate and
     # never catches up, so it must be above ``fps`` (SPUR II: 60 for 50).
@@ -323,8 +332,8 @@ def _parse_video(v: dict[str, Any]) -> VideoConfig:
 
     video = VideoConfig()
     video.mode = _expect(v.get("mode", video.mode), str, "video.mode")
-    if video.mode not in ("off", "on"):
-        raise ConfigError('video.mode: must be "off" or "on"')
+    if video.mode not in ("auto", "off", "on"):
+        raise ConfigError('video.mode: must be "auto", "off" or "on"')
     video.fps = _expect(v.get("fps", video.fps), int, "video.fps")
     if not 1 <= video.fps <= 60:
         raise ConfigError("video.fps: must be between 1 and 60")

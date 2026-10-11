@@ -63,6 +63,14 @@ CMD_RESTART = 11
 USB_PIDS = {pid: m for m in MODELS if m.protocol == "usb-turing" for _vid, pid in m.usb_ids}
 
 
+def present_model() -> PanelModel | None:
+    """The model of a USB panel on the bus, without opening it (None: none there, or no pyusb)."""
+    for pid, model in USB_PIDS.items():
+        if UsbTransport.present(pid):
+            return model
+    return None
+
+
 def ms_since_midnight(now: float | None = None) -> int:
     # From the local wall clock, not via mktime: Windows' mktime fails for
     # midnights before 1970, i.e. for "now" near the epoch east of UTC.

@@ -202,6 +202,10 @@
   ones a frame uses are now kept longest
 
 **Changes**
+- The video mode turns itself on: `video.mode` is `"auto"` by default, which
+  streams to a 9.2" (the panel it is proven on) as soon as ffmpeg is found and
+  `local_clip` names the panel's standby clip. `libre-panel doctor` and the log
+  say what is missing. A `mode = "off"` in `config.toml` stays off
 - macOS is no longer supported: no download, no tests, no macOS code. Windows
   and Linux are. Nobody downloaded the macOS builds of any release. Gone with
   it: the disk image and the menu bar app, the LaunchAgent, and reading the

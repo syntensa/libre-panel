@@ -543,9 +543,13 @@ scroll on every frame instead of jumping once per reading.
 
 ```toml
 [video]
-mode = "on"
 local_clip = "usr/data/standby.h264"
 ```
+
+With `mode = "auto"` (the default) the video mode is on by itself where it is
+proven, today the 9.2", as soon as ffmpeg is found and `local_clip` is set.
+`libre-panel doctor` and the log say what is missing. `mode = "on"` tries it on
+every TURZX USB panel; `"off"` keeps single PNG frames.
 
 - **ffmpeg** encodes the video. Install it (Windows: `winget install ffmpeg`;
   Linux: the `ffmpeg` package), or set `ffmpeg = "C:/path/to/ffmpeg.exe"`. It
@@ -565,7 +569,7 @@ local_clip = "usr/data/standby.h264"
 
 | Setting | Default | |
 |---|---|---|
-| `mode` | `"off"` | `"on"` turns video mode on |
+| `mode` | `"auto"` | `"auto"`: on where proven (9.2"), with ffmpeg and `local_clip`; `"on"`, `"off"` |
 | `fps` | 50 | frames per second (1–60) |
 | `device_fps` | 60 | the rate reported to the panel; must be at least `fps`. The panel's player never catches up once behind, so it gets a little more than it needs |
 | `crf` | 25 | quality, 0–51; lower is sharper and needs more USB bandwidth |
