@@ -11,7 +11,7 @@ from libre_panel.render import finish
 from libre_panel.render.renderer import Renderer, _reads, need_holds, need_key
 from libre_panel.sensors.base import Reading, Snapshot
 from libre_panel.sensors.demo import demo_snapshot
-from libre_panel.theme.model import parse_theme
+from libre_panel.theme.model import WIDGET_SPECS, parse_theme
 
 
 def reading_snapshot(**values):
@@ -227,6 +227,8 @@ def test_no_card_has_a_ridge_a_bevel_or_a_trough_on_its_frame(kind):
 
 # the weather card
 
+WEATHER_STEP_DEFAULT = WIDGET_SPECS["module"]["step"][1]
+
 
 def test_the_weather_card_shows_the_weather_and_the_next_hours():
     names, _, _ = drawn("forecast")
@@ -236,13 +238,13 @@ def test_the_weather_card_shows_the_weather_and_the_next_hours():
     parts = widgets_of("forecast")
     assert parts["symbol"]["type"] == "symbol" and parts["symbol"]["sensor"] == "weather.code"
     assert (
-        parts["symbol"]["finish"] == "lit" and parts["h0-symbol"]["sensor"] == "weather.hour.3.code"
+        parts["symbol"]["finish"] == "lit" and parts["h0-symbol"]["sensor"] == "weather.hour.1.code"
     )
     assert (
         parts["high"]["sensor"] == "weather.day.0.high"
         and parts["low"]["sensor"] == "weather.day.0.low"
     )
-    assert parts["h0-rain"]["sensor"] == "weather.hour.3.rain" and parts["h0-rain"]["max"] == 100
+    assert parts["h0-rain"]["sensor"] == "weather.hour.1.rain" and parts["h0-rain"]["max"] == 100
     assert parts["h0-symbol"]["offset"] != parts["h1-symbol"]["offset"]  # not in step
 
 
@@ -255,6 +257,19 @@ def test_a_wider_weather_card_has_more_hours_and_step_says_how_far_apart():
     assert [times[f"h{i}-time"]["sensor"] for i in range(3)] == [
         "weather.hour.2.time", "weather.hour.4.time", "weather.hour.6.time",
     ]  # fmt: skip
+
+
+def test_the_card_shows_the_next_hours_and_the_weather_module_every_third():
+    card = widgets_of("forecast", 3, 2)
+    assert [card[f"h{i}-time"]["sensor"] for i in range(3)] == [
+        "weather.hour.1.time", "weather.hour.2.time", "weather.hour.3.time",
+    ]  # fmt: skip
+    every_third = widgets_of("forecast", 3, 2, step=3)
+    assert every_third["h1-time"]["sensor"] == "weather.hour.6.time"
+    module = widgets_of("weather", 4, 1)
+    assert module["f0-label"]["sensor"] != "" and WEATHER_STEP_DEFAULT == 0
+    hours = widgets_of("weather", 4, 1, forecast="hours")
+    assert hours["f0-label"]["sensor"] == "weather.hour.3.time"  # (as it was: step 0 is 3)
 
 
 def test_a_small_weather_card_is_the_weather_module():
@@ -315,12 +330,13 @@ def M_colors():
 
 def test_the_playback_card_shows_the_track_and_where_it_is():
     names, _, _ = drawn("playback")
-    assert {"cover", "playing-sign", "playing", "title", "artist", "app", "progress",
+    assert {"cover", "playing-sign", "playing", "title", "artist", "app-bare", "progress",
             "position", "length"} <= names  # fmt: skip
-    assert not {"paused", "paused-sign", "idle", "idle-icon", "app-icon"} & names  # (no icon yet)
-    snap = snapshot_with()
+    assert not {"paused", "paused-sign", "idle", "idle-icon", "app-icon", "app"} & names
+    snap = snapshot_with()  # (with the app's icon the name moves aside for it)
     snap.images["media.app_icon"] = Image.new("RGBA", (48, 48), (240, 40, 60, 255))
-    assert "app-icon" in drawn("playback", snap)[0]
+    with_icon = drawn("playback", snap)[0]
+    assert {"app-icon", "app"} <= with_icon and "app-bare" not in with_icon
     parts = widgets_of("playback")
     assert parts["progress"]["sensor"] == "media.progress" and parts["progress"]["max"] == 1
     assert parts["position"]["format"] == "{value:clock}" and parts["length"]["align"] == "right"
@@ -461,3 +477,107 @@ def test_the_network_card_has_up_and_down_with_their_speeds_and_the_history_mirr
 def test_a_small_network_card_is_the_network_module():
     parts = widgets_of("netcard", 1, 1)
     assert "c1-download-icon" in parts and "c1-up-value" not in parts
+
+
+# the fan instrument
+
+
+def test_a_fan_instrument_is_a_fan_with_its_name_and_its_speed():
+    parts = widgets_of("instrument", 2, 1, source="fan")
+    fan = parts["fan"]
+    assert fan["type"] == "fan" and fan["sensor"] == "gpu.fan" and fan["w"] == fan["h"]
+    assert fan["frame"] == "ring" and fan["max_rpm"] == 3000
+    assert parts["value"]["sensor"] == "gpu.fan" and parts["unit"]["text"] == "RPM"
+    assert parts["title"]["text"] == "GPU"
+    assert parts["title"]["x"] > fan["x"] + fan["w"]  # wide: the name and the speed beside it
+    tall = widgets_of("instrument", 1, 2, source="fan")
+    assert tall["title"]["y"] > tall["fan"]["y"] + tall["fan"]["h"]  # tall: under it
+    assert not any(w.get("ridge") for w in parts.values())
+
+
+def test_a_fan_instrument_can_name_its_fan_and_its_colour():
+    parts = widgets_of("instrument", 1, 1, source="fan", sensor="fan.board.case_1")
+    assert parts["fan"]["sensor"] == parts["value"]["sensor"] == "fan.board.case_1"
+    assert parts["title"]["text"] == "CASE 1"
+    colors = M_colors()
+    assert parts["fan"]["color"].upper() == colors["cpu"].upper()  # (a graphics card's is `gpu`)
+    own = widgets_of("instrument", 1, 1, source="fan", color="#ff8800")
+    assert own["fan"]["color"].lower() == "#ff8800"
+
+
+@pytest.mark.parametrize("size", [(1, 1), (2, 1), (1, 2), (2, 2), (3, 1)])
+def test_a_fan_instrument_draws_in_its_cells_and_turns_only_when_it_may(size):
+    names, frame, renderer = drawn("instrument", None, *size, source="fan", animate=True)
+    assert {"fan", "value", "title", "unit"} <= names and renderer.warnings == []
+    x, y, w, h = renderer.module_boxes["m"]
+    for widget in renderer.widgets:
+        if widget.get("_module") == "m" and "w" in widget and widget["type"] != "rect":
+            assert x <= widget["x"] and widget["x"] + widget["w"] <= x + w + 1, widget["id"]
+            assert y <= widget["y"] and widget["y"] + widget["h"] <= y + h + 1, widget["id"]
+
+
+def test_a_fan_instrument_without_its_fan_is_empty_and_the_named_fan_decides():
+    snap = snapshot_with(drop=("gpu.fan",))
+    names, _, _ = drawn("instrument", snap, 2, 1, source="fan")
+    assert "fan" not in names and "value" not in names
+    other = snapshot_with(drop=("gpu.fan",), fan__cpu=1200.0)
+    names, _, _ = drawn("instrument", other, 2, 1, source="fan", sensor="fan.cpu")
+    assert {"fan", "value"} <= names
+    names, _, _ = drawn("instrument", other, 2, 1, source="fan", sensor="fan.gone")
+    assert "fan" not in names
+
+
+# the colour of the cover
+
+
+def test_the_cover_colour_is_a_colour_that_follows_the_cover_on_show():
+    widget = {"type": "bar", "id": "b", "x": 4, "y": 4, "w": 100, "h": 12, "sensor": "cpu.load",
+              "color": "@cover", "color2": None, "background": None}  # fmt: skip
+    renderer = Renderer(theme_of(widget), preview=True)
+    plain = snapshot_with(drop=("media",))
+    assert renderer.color("@cover") == renderer.color("#22d3ee")  # (no snapshot yet: the accent)
+    red = snapshot_with()
+    red.images["media.cover"] = Image.new("RGB", (32, 32), (200, 30, 40))
+    green = snapshot_with()
+    green.images["media.cover"] = Image.new("RGB", (32, 32), (30, 200, 60))
+    frames = []
+    for snap in (plain, red, green, plain):
+        frames.append(renderer.render(snap, 1.0)[0].copy())
+        assert renderer.warnings == []
+    assert differs(frames[0], frames[1]) and differs(frames[1], frames[2])
+    assert not differs(frames[0], frames[3])  # the cover goes: the accent comes back
+    renderer.render(red, 1.0)
+    r, g, b, a = renderer.color("@cover")
+    assert r > g and r > b and a == 255 and max(r, g, b) >= 180
+    assert renderer.color("@cover", 0.5)[3] == 127
+
+
+def test_the_playback_card_has_its_sign_and_progress_in_the_covers_colour():
+    parts = widgets_of("playback")
+    for name in ("playing-sign", "paused-sign", "progress"):
+        assert parts[name]["color"] == "@cover", name
+    own = widgets_of("playback", color="#ff8800")
+    assert (
+        own["progress"]["color"].lower() == "#ff8800"
+        and own["playing-sign"]["color"].lower() == "#ff8800"
+    )
+    snap = snapshot_with()
+    orange, blue = snapshot_with(), snapshot_with()
+    orange.images["media.cover"] = Image.new("RGB", (32, 32), (250, 150, 40))
+    blue.images["media.cover"] = Image.new("RGB", (32, 32), (40, 120, 250))
+    a = drawn("playback", orange)[1]
+    b = drawn("playback", blue)[1]
+    c = drawn("playback", snap)[1]
+    assert differs(a, b) and differs(a, c)
+
+
+def test_a_need_can_ask_for_a_picture():
+    snap = snapshot_with()
+    assert not need_holds("@media.app_icon", snap) and need_holds("!@media.app_icon", snap)
+    assert need_holds("@media.cover", snap) and not need_holds("!@media.cover", snap)
+    snap.images["media.app_icon"] = Image.new("RGBA", (8, 8))
+    assert need_holds("@media.app_icon", snap)
+    assert need_key("!@media.app_icon") == "media.app_icon"
+    from libre_panel.render.renderer import _reads
+
+    assert "media.app_icon" in _reads([{"type": "text", "id": "t", "needs": "@media.app_icon"}])

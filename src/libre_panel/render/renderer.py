@@ -32,7 +32,7 @@ from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont
 from libre_panel import clock, i18n, timezones
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
 from libre_panel.icons import draw_icon, weather_icon_name
-from libre_panel.render import fan, lists
+from libre_panel.render import cover, fan, lists
 from libre_panel.render import finish as finishes
 from libre_panel.render.countdown import countdown_text
 from libre_panel.render.dust import Dust
@@ -40,7 +40,7 @@ from libre_panel.render.formatting import FormatError, auto_format, safe_format
 from libre_panel.render.motion import MAX_POINTS, RATE, History, Motion, Spring, grid
 from libre_panel.render.motion import number as motion_number
 from libre_panel.sensors.base import Snapshot, want
-from libre_panel.theme.model import Theme, ThemeError, resolve_asset
+from libre_panel.theme.model import COVER_COLOR, Theme, ThemeError, resolve_asset
 from libre_panel.theme.modules import SLOT_KINDS, slot_items
 from libre_panel.theme.modules import expand as expand_modules
 
@@ -302,21 +302,24 @@ _OPERATORS = {
 
 def need_key(need: str) -> str:
     """The sensor a condition of ``needs`` reads: ``"!gpu.load"`` and ``"media.playing=1"``
-    read ``gpu.load`` and ``media.playing``."""
+    read ``gpu.load`` and ``media.playing``; ``"@media.cover"`` (a picture) ``media.cover``."""
     need = need.strip().lstrip("!").strip()
     found = _COMPARE.match(need)
-    return found["key"].strip() if found else need
+    return (found["key"].strip() if found else need).lstrip("@")
 
 
 def need_holds(need: str, snapshot: Snapshot) -> bool:
     """Whether one condition of ``needs`` holds: a reading that has a value (``"gpu.load"``),
-    none (``"!gpu.load"``; a state that is ``null`` has none), or compares so
-    (``"media.playing=1"``: ``=``, ``!=``, ``>``, ``>=``, ``<``, ``<=`` with a number; a reading
-    without a number never does; a ``!`` in front says the opposite)."""
+    none (``"!gpu.load"``; a state that is ``null`` has none), a picture that a source has
+    (``"@media.app_icon"``), or compares so (``"media.playing=1"``: ``=``, ``!=``, ``>``, ``>=``,
+    ``<``, ``<=`` with a number; a reading without a number never does; a ``!`` in front says
+    the opposite)."""
     need = need.strip()
     body = need.lstrip("!").strip()
     found = _COMPARE.match(body)
-    if found is None:  # (a state a service has taken back is the text "null": none)
+    if body.startswith("@"):
+        holds = snapshot.images.get(body[1:]) is not None
+    elif found is None:  # (a state a service has taken back is the text "null": none)
         value = snapshot.value(body)
         holds = value is not None and value != "null"
     else:
@@ -449,7 +452,14 @@ class Renderer:
     def color(self, value: str | None, alpha_scale: float = 1.0) -> RGBA | None:
         if value is None:
             return None
-        if value.startswith("@"):
+        if value == COVER_COLOR:  # the colour the cover on show carries, else the accent
+            carried = (
+                cover.dominant(self.snapshot.images.get("media.cover")) if self.snapshot else None
+            )
+            if carried is not None:
+                return (*carried, int(255 * alpha_scale))
+            value = self.theme.palette.get("accent", "#22d3ee")
+        elif value.startswith("@"):
             value = self.theme.palette.get(value[1:], "#ff00ff")
         rgb = ImageColor.getrgb(value)
         alpha = rgb[3] if len(rgb) == 4 else 255

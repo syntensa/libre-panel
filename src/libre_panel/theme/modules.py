@@ -169,6 +169,8 @@ def _sources() -> dict[str, Source]:
             (("net.down", rate, t("Down")), ("net.up", rate, t("Up"))),
             low=0, high=None, scale="sqrt",
         ),
+        # (for the fan instrument: the module's ``sensor`` names another fan)
+        "fan": Source(t("Fan"), "gpu.fan", "{value:.0f} RPM", "fan", "gpu", low=0, high=None),
     }  # fmt: skip
 
 
@@ -896,7 +898,7 @@ def _weather_now(b: _Build, x: float, y: float, w: float, h: float, details: boo
 def _forecast(b: _Build, x: float, y: float, w: float, h: float, mode: str,
               rows: bool = False, prefix: str = "f") -> None:  # fmt: skip
     """Days (today first) or hours (every ``step`` hours) as columns, or as rows."""
-    step = max(1, min(6, b.module["step"]))
+    step = max(1, min(6, b.module["step"] or 3))
     limit = 7 if mode == "days" else 24 // step
     if rows:
         count = int(_clamp(h // (b.ts * 2.6), 1, limit))
@@ -1777,7 +1779,7 @@ def kinds() -> dict[str, Kind]:
         "instrument": Kind(
             t("Ring instrument"),
             cards.build_instrument,
-            ("cpu", "gpu", "mem", "disk"),
+            ("cpu", "gpu", "mem", "disk", "fan"),
             span=(1, 2),
             finish="lit",
         ),
@@ -1795,7 +1797,7 @@ MODULE_KINDS = (
 # Kinds that hold several cards and show one (render.slot); "netcard" is two: a download
 # while one runs, else the network
 SLOT_KINDS = ("cards", "netcard")
-MODULE_SOURCES = ("cpu", "gpu", "mem", "disk", "net", "sensor")
+MODULE_SOURCES = ("cpu", "gpu", "mem", "disk", "net", "sensor", "fan")
 MODULE_FALLBACKS = ("auto", "none", "cpu", "gpu", "mem", "disk")
 
 
@@ -1853,7 +1855,8 @@ def build_module(
     fallback = _fallback(module) if kind.sources and source in sources else None
     if fallback is None:
         if kind.sources:  # without its readings the module stays empty
-            b.needs = b.module["sensor"] if source == "sensor" else src.load
+            own = source == "sensor" or (source == "fan" and b.module["sensor"])
+            b.needs = b.module["sensor"] if own else src.load
         kind.build(b, src)
     else:  # e.g. no GPU readings: the disk instead
         b.needs = src.load

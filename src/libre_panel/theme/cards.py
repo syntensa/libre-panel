@@ -18,6 +18,7 @@ from typing import Any
 
 from libre_panel.i18n import t
 from libre_panel.theme import modules as M
+from libre_panel.theme.model import COVER_COLOR
 from libre_panel.theme.modules import CAP, _Build
 
 
@@ -152,7 +153,7 @@ def build_forecast(b: _Build, src: M.Source) -> None:
                 fit="ellipsis", needs=f"sun.up={up}")  # fmt: skip
 
     # the next hours across the card
-    step = max(1, min(6, b.module["step"]))
+    step = max(1, min(6, b.module["step"] or 1))  # (the Studio shows the next hours)
     strip = ref.x(24)
     count = int(M._clamp((right - strip) // ref.s(109), 1, 24 // step))
     cell = (right - strip) / count
@@ -187,7 +188,7 @@ def build_playback(b: _Build, src: M.Source) -> None:
         M.build_music(b, src)
         return
     b.card()
-    color = b.tint("accent")
+    color = b.module.get("color") or COVER_COLOR  # the colour the cover carries, as the Studio's
     left, right = ref.x(280), ref.right(26)
     width = right - left
     b.needs = "media.title"
@@ -214,9 +215,11 @@ def build_playback(b: _Build, src: M.Source) -> None:
     icon = ref.s(30)
     b.add("image", "app-icon", x=round(left), y=round(ref.y(182)), w=icon, h=icon,
           src="@media.app_icon", fit="contain")  # fmt: skip
-    b.value("app", "media.source", "{value}", left + ref.s(40), ref.cap(206, 20), ref.s(20),
-            color=b.c("text3"), width=width - ref.s(40), font="text_font", tabular=False,
-            fallback="", fit="ellipsis", hide_if_missing=True)  # fmt: skip
+    for name, shift, need in (("app", 40, "@media.app_icon"), ("app-bare", 0, "!@media.app_icon")):
+        b.value(name, "media.source", "{value}", left + ref.s(shift), ref.cap(206, 20), ref.s(20),
+                color=b.c("text3"), width=width - ref.s(shift), font="text_font",
+                tabular=False, fallback="", fit="ellipsis", hide_if_missing=True,
+                needs=need)  # fmt: skip
 
     # the progress, with the time played and the length
     strip = ref.x(24)
@@ -252,14 +255,95 @@ def _unit_of(fmt: str) -> tuple[str, str]:
     return head + brace, tail.strip()
 
 
+def _fan_name(sensor: str) -> str:
+    """A fan's name from its sensor: ``gpu.fan`` is "gpu", ``fan.board.case_1`` "case 1"."""
+    parts = sensor.split(".")
+    name = parts[-2] if parts[-1] == "fan" and len(parts) > 1 else parts[-1]
+    return name.replace("_", " ")
+
+
+def _build_fan(b: _Build, src: M.Source) -> None:
+    """A fan with its speed, as the top row of the Studio screen shows them: the rotor in
+    its ring (the ``fan`` widget: it turns with the speed) and, beside it or under it, the
+    name and the speed in RPM. ``sensor`` says which fan (default ``gpu.fan``)."""
+    sensor = b.module["sensor"] or src.load
+    color = b.module["color"] or b.c("gpu" if sensor.startswith("gpu") else "cpu")
+    b.card()
+    title = b.module["title"] or _fan_name(sensor)
+    fonts = b.style["text_font"], b.style["display_font"]
+    wide = b.aspect >= 1.5
+    value = min(b.ih * (0.36 if wide else 0.2), b.iw * 0.2)
+    digits = M._width_per_size(fonts[1], "0000")
+    unit_size = max(7, value * 0.5)
+    unit_w = M._width_per_size(fonts[0], "RPM") * unit_size
+    name = value * 0.55
+    gap = value * 0.16
+    if wide:
+        d = min(b.ih * 0.84, b.iw * 0.4)
+        x0 = b.ix + b.pad * 0.5
+        left = x0 + d + 0.16 * d
+        room = b.ix + b.iw - left
+        if digits * value + gap + unit_w > room:  # smaller until the number and its unit fit
+            k = room / (digits * value + gap + unit_w)
+            value, unit_size, name, gap = value * k, unit_size * k, name * k, gap * k
+        unit_w = M._width_per_size(fonts[0], "RPM") * unit_size
+        block = CAP * name + gap * 1.6 + CAP * value
+        top = b.iy + (b.ih - block) / 2
+        fan_xy = (x0, b.iy + (b.ih - d) / 2)
+        b.label("title", title, left, top, max(7, name), color=color, width=room)
+        number_at, cap = left + digits * value, top + CAP * name + gap * 1.6
+        align_right = True
+    else:
+        d = min(b.iw * 0.74, b.ih * 0.52)
+        if digits * value + gap + unit_w > b.iw * 0.92:
+            k = b.iw * 0.92 / (digits * value + gap + unit_w)
+            value, unit_size, name, gap = value * k, unit_size * k, name * k, gap * k
+            unit_w = M._width_per_size(fonts[0], "RPM") * unit_size
+        block = d + 0.14 * d + CAP * name + gap * 1.6 + CAP * value
+        top = b.iy + (b.ih - block) / 2
+        cx = b.ix + b.iw / 2
+        fan_xy = (cx - d / 2, top)
+        title_top = top + d + 0.14 * d
+        b.label("title", title, cx, title_top, max(7, name), color=color, align="center",
+                width=b.iw)  # fmt: skip
+        cap = title_top + CAP * name + gap * 1.6
+        pair = digits * value + gap + unit_w
+        number_at = cx - pair / 2 + digits * value
+        align_right = True
+    b.add("fan", "fan", x=round(fan_xy[0]), y=round(fan_xy[1]), w=round(d), h=round(d),
+          sensor=sensor, color=color, max_rpm=3000, frame="ring")  # fmt: skip
+    b.value("value", sensor, "{value:.0f}", number_at, cap, max(8, value),
+            align="right" if align_right else "left", width=digits * value * 1.15)  # fmt: skip
+    b.add("text", "unit", text="RPM", x=round(number_at + gap),
+          **b._text_fields(unit_size, cap + CAP * value - CAP * unit_size, "text_font",
+                           color=b.c("text3"), tabular=False))  # fmt: skip
+
+
+# The readings under a ring, as the Studio screen shows them: the processor's temperature, power
+# and clock; the graphics card's temperature, power and memory (its fans have instruments of
+# their own); the memory's. A source that is not here shows the rows its module has.
+def _rows() -> dict[str, tuple[tuple[str, str, str], ...]]:
+    heat = ("{value:.0f}°C", t("Temp"))
+    return {
+        "cpu": (("cpu.temp", heat[0], heat[1]), ("cpu.power", "{value:.0f} W", t("Watt")),
+                ("cpu.freq", "{value:.0f} MHz", t("Freq"))),
+        "gpu": (("gpu.temp", heat[0], heat[1]), ("gpu.power", "{value:.0f} W", t("Watt")),
+                ("gpu.mem.used", "{value:gb} GB", t("VRAM"))),
+    }  # fmt: skip
+
+
 def build_instrument(b: _Build, src: M.Source) -> None:
     """A ring with its value inside, as SPUR II's Studio shows CPU, GPU and RAM: the load as
     light in a milled groove, the number in the middle with a small unit, the name under it
     and the readings of the part (temperature, power, clock ...) in rows below, as many as
-    fit. A wide module puts the name and the rows beside the ring."""
+    fit. A wide module puts the name and the rows beside the ring. ``source`` ``fan`` is a
+    fan instead: the rotor in its ring with its name and speed."""
+    if b.module["source"] == "fan":
+        _build_fan(b, src)
+        return
     color = b.tint(src.role)
     b.card()
-    rows = list(src.details)
+    rows = list(_rows().get(src.role, src.details))
     wide = b.aspect >= 1.3
     # sizes follow the ring's diameter (164 px with its groove 10 px thick in the Studio)
     if wide:
@@ -416,7 +500,7 @@ def build_net(b: _Build, src: M.Source) -> None:
     for i, (key, name) in enumerate((("net.up", t("Up")), ("net.down", t("Down")))):
         baseline = (81, 125)[i]
         first = len(b.out)
-        b.label(name.lower(), name, left, ref.cap(baseline, 22), ref.s(22), width=ref.s(150))
+        b.label(name.lower(), name, left, ref.cap(baseline, 26), ref.s(26), width=ref.s(150))
         b.value(
             f"{name.lower()}-value",
             key,

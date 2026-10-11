@@ -43,6 +43,10 @@ to write or review themes by hand.
   `orientation`; a conflicting width/height is an error.
 - Colours are `#rgb`, `#rrggbb` or `#rrggbbaa` — or `@name` for an entry of the
   theme's `palette`. Change a palette colour and every widget using it follows.
+  `@cover` is the colour the cover on show carries (a small strong area of it, not
+  its average; the palette's `accent` while there is no cover or it is grey): it
+  follows the track. Use it for bars, rings and icons; a text keeps the colour it
+  was first drawn in.
 - `font` is the default for all text; `builtin:Barlow-Regular`, `-Medium`,
   `-SemiBold`, `-Bold`, `builtin:BarlowCondensed-Medium`, `-SemiBold`,
   `builtin:JetBrainsMono-Medium`, `-Bold`, `builtin:LiberationSans-Regular`,
@@ -111,7 +115,8 @@ shows a widget only while a track plays, `"cpu.temp>80"` only while the processo
 is hot (`=`, `==`, `!=`, `>`, `>=`, `<`, `<=`). A reading that is no number
 never holds, and `!` in front says the opposite. A state that a service has
 taken back (`null`) has no value, so `"needs": "downloads"` is true only while
-something downloads.
+something downloads. `@` in front of a name asks for a picture a source has:
+`"needs": "!@media.app_icon"` is true while the player has no icon.
 
 Text-like widgets share `font` (empty = the theme font), `font_size`, `color`,
 `align` (`left`, `center`, `right`; `x` is the left edge, centre or right edge
@@ -369,7 +374,7 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `playback` | the playback card of SPUR II's Studio screen: cover, state, title, artist, app and progress ([Cards](#cards)); the music module where it is small | |
 | `forecast` | the weather card of the Studio screen: a moving symbol, the temperature and the day's range, the details, the rain and the sun, the next hours ([Cards](#cards)); the weather module where it is small | |
 | `download` | the download card: the Studio's inset for a download ([Cards](#cards)); "No download running" otherwise | |
-| `instrument` | a ring with its number inside and the readings of the part beside or below it ([Cards](#cards)) | `cpu`, `gpu`, `mem`, `disk` |
+| `instrument` | a ring with its number inside and the readings of the part beside or below it, or a fan with its speed ([Cards](#cards)) | `cpu`, `gpu`, `mem`, `disk`, `fan` (with `sensor`) |
 | `cards` | a slot that shows one of several cards (`items`) and changes with the ignition line ([Cards](#cards)) | `items` |
 | `netcard` | a slot of a download card and the network card ([Cards](#cards)) | |
 
@@ -383,7 +388,8 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 - `card`: `auto` (cards for all but clock and title), `on` or `off`.
 - `forecast` (weather): `auto` (days; days and hours on a big wide module),
   `days`, `hours`, `both` or `off`; `step` is the hours between two hourly
-  columns (1–6, default 3).
+  columns (1–6; 0, the default, is 3 for the weather module and 1 for the
+  weather card).
 - `items` (temps, drives, values): the readings to show, written as for a
   [list](#lists); empty shows the module's own. For `world` the places, for
   `image` the pictures, for `cards` the cards.
@@ -406,19 +412,23 @@ are flat thin lines in their colour: a card has no ridge, no bevel and no trough
   a sign and a word for the state (*Now playing* or *Paused*), the title and the
   artist, the app that plays it with its icon (`media.app_icon`) and name, the
   progress (`media.progress`) with the time played and the length. Without a track:
-  a note and "Nothing playing".
+  a note and "Nothing playing". The state's sign and the progress are in the colour
+  the cover carries (`@cover`), as in the Studio; `color` sets one.
 - **`forecast`** (3 × 2): a moving symbol ([Weather symbols](#weather-symbols)),
   the temperature with the day's high and low, the sky, how it feels, the wind and
   the humidity, the rain of the next two hours (`weather.rain.text`, in the `gpu`
   colour where it will rain), the sun (`sun.set` by day, `sun.next_rise` by night),
   and under them the next hours as columns: time, symbol, temperature and the
   chance of rain as a bar. As many hours fit as the width allows, `step` hours apart
-  (3); `moving` off lets the symbols stand. Without weather it is a calendar sheet.
+  (1); `moving` off lets the symbols stand. Without weather it is a calendar sheet.
 - **`instrument`** (1 × 2): a ring with the load of `source` (`cpu`, `gpu`, `mem`,
   `disk`) as light in its groove, the number inside with a small unit, the name
   under it and the part's readings (temperature, power, clock ...) as rows, as many
   as fit; a wide module puts the name and rows beside the ring. The temperature
-  goes warm and hot.
+  goes warm and hot. `source` `fan` makes it a fan: the rotor of the
+  [`fan` widget](#fans) in its ring, which turns with the speed, with the fan's
+  name and its speed in RPM beside it or under it; `sensor` names the fan
+  (`fan.cpu`; default `gpu.fan`), `color` sets its colour.
 - **`download`** (2 × 1): the [download widget](#downloads) in a card, with the
   `net` colour.
 - **`netcard`** (2 × 1): a slot of the download card and **`net`**, the network

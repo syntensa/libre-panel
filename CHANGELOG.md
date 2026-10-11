@@ -36,7 +36,8 @@
   `playback` (the cover, the state, title and artist, the app with its icon,
   the progress), `forecast` (a moving symbol, the day's range, the details, the
   rain and the sun, the next hours), `instrument` (a ring of light with its
-  number inside and the readings of the part beside or below it), `download`
+  number inside and the readings of the part beside or below it, or a fan
+  with its speed), `download`
   (what loads, its progress, the rate and the time left, the speed of the last
   minutes: the new widget type `downloads`, which reads the state of the
   `downloads` service) and `netcard` (the network, with a download in its place
@@ -52,7 +53,9 @@
   5. The frame of the slot is a thin line in the colour of the card on show: the
   cover's, the weather's, the network's
 - A `needs` can compare a reading with a number (`media.playing=1`,
-  `cpu.temp>80`), a state that a service has taken back counts as no value, and
+  `cpu.temp>80`) or ask for a picture a source has (`@media.app_icon`), a state
+  that a service has taken back counts as no value, the colour `@cover` is the
+  colour the cover on show carries (bars, rings and icons follow the track), and
   `play`, `pause`, `up` and `down` are icons
 - Plugins: a toast style says how long a toast stays (`lifetime`) and how
   long one without its own time holds (`hold_s`), and keeps what it knows

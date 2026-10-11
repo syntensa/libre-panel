@@ -325,7 +325,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         # weather: a forecast when there is room; "auto" = days, and hours too
         # on a big module
         "forecast": ("enum:auto|days|hours|both|off", "auto"),
-        "step": ("int", 3),  # hourly forecast: hours between two columns
+        "step": ("int", 0),  # hourly forecast: hours between two columns (0: 3, the card 1)
         # temps, drives, dashboard: the readings to show, one per line ("cpu.temp = CPU");
         # card slots: the cards, one per line ("playback", "forecast if weather.temperature")
         "items": ("text", ""),
@@ -501,6 +501,9 @@ def resolve_asset(root: Path, rel: str) -> Path:
     return target
 
 
+COVER_COLOR = "@cover"  # a colour that is the colour of the cover on show, not a palette entry
+
+
 def _check_color(
     value: Any, where: str, optional: bool, palette: dict[str, str] | None = None
 ) -> Any:
@@ -508,6 +511,8 @@ def _check_color(
         return None
     if not isinstance(value, str):
         raise ThemeError(f"{where}: expected a color string like '#22d3ee'")
+    if value == COVER_COLOR:  # live: what the cover on show carries (render.cover)
+        return value
     if value.startswith("@"):
         if palette is None:
             raise ThemeError(f"{where}: palette references are not allowed here, use a colour")
