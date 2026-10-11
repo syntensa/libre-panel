@@ -142,7 +142,6 @@ def demo_details(t: float, waves: dict[str, Reading]) -> dict[str, Reading]:
     out["battery.left"] = Reading("battery.left", 2 * 3600 + 40 * 60, "s", "Battery time left")
     out["net.ip"] = Reading("net.ip", "192.168.1.20", "", "IP address")
     out["game.app"] = Reading("game.app", "Starfall", "", "Game")
-    out["game.name"] = Reading("game.name", "Starfall", "", "Game")
     out["game.limiter"] = Reading("game.limiter", "gpu", "", "Limited by")
     out["audio.muted"] = Reading("audio.muted", 0, "", "Muted")
     out["net.today.down"] = Reading("net.today.down", 3.42e9, "B", "Received today")

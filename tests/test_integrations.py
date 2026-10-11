@@ -422,7 +422,7 @@ def test_demo_has_a_volume_a_game_and_rain_at_any_time_of_day(hour):
     assert len(snap.history["audio.volume"]) == 600
     assert snap.readings["game.frametime_peak"].unit == "ms"
     assert snap.readings["game.limiter"].value in ("cpu", "gpu", "cap")
-    assert snap.readings["game.name"].value == snap.readings["game.app"].value
+    assert "game.name" not in snap.readings  # the game service publishes it; a demo would shadow it
     rain = snap.readings["weather.rain.minutes"]
     assert 30 < rain.value <= 45 and rain.unit == "min"
     assert snap.readings["weather.rain.text"].value == f"Rain in {rain.value} min"

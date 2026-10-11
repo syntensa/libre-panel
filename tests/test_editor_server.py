@@ -103,8 +103,11 @@ def test_the_catalog_of_on_demand_keys_says_what_the_sources_and_the_demo_say():
     assert spoken.keys() >= {"audio.volume", "media.title", "cpu.load", "gpu.load"}
     for key, reading in spoken.items():
         assert catalog[key] == (reading.unit, reading.label), key
-    demo = demo_snapshot().readings  # the previews show a value for every one of them
+    demo = demo_snapshot().readings  # the previews show a value for every one of them...
     for key, (unit, label) in catalog.items():
+        if key == "game.name":  # ...but one: the game service publishes this, and a demo value
+            assert key not in demo  # of the same name would hide it where the demo is a source
+            continue
         assert key in demo and (demo[key].unit, demo[key].label) == (unit, label), key
 
 
