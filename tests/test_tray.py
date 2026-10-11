@@ -69,17 +69,19 @@ def test_menu_layout_and_state(tray):
     menu = items(tray.build_menu())
     assert list(menu)[0].startswith("Libre Panel: showing on PNG file")
     assert [
-        "Open theme editor",
+        "Open Libre Panel",
+        "Theme editor",
         "Theme",
         "Brightness",
         "Upside down",
         "Pause panel",
         "Start with system",
+        "Settings",
         "Open settings folder",
         "Open log",
         "Quit Libre Panel",
     ] == list(menu)[1:]
-    assert menu["Open theme editor"].default
+    assert menu["Open Libre Panel"].default  # also a click on the icon
     themes = items(menu["Theme"].submenu)
     assert {"libre-default", "spur-ii", "orbit", "slate", "column"} <= set(themes)
     assert themes["libre-default"].checked and not themes["slate"].checked
@@ -114,6 +116,18 @@ def test_menu_actions(tray):
 
     menu["Quit Libre Panel"](tray.icon)
     assert tray.app.quit_requested.is_set() and tray.icon.stopped
+
+
+def test_menu_opens_the_app_on_its_views(tray, monkeypatch):
+    """The window (or the browser where there is none) shows the view the item names."""
+    from libre_panel import window
+
+    opened = []
+    monkeypatch.setattr(window, "open_window", lambda url, view, **kw: opened.append(view))
+    menu = items(tray.build_menu())
+    for name in ("Open Libre Panel", "Theme editor", "Settings"):
+        menu[name](tray.icon)
+    assert wait_for(lambda: sorted(opened) == ["design", "home", "settings"])
 
 
 def test_refresh_updates_icon_only_on_change(tray):

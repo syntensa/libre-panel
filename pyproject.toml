@@ -45,6 +45,13 @@ mqtt = ["paho-mqtt>=2"]
 # .NET libraries named by dll_dir (docs/CONFIGURATION.md). 3.0.5 is the first that runs on
 # Python 3.13, 3.1 the first on 3.14; the loading it needs is the same in all of 3.x so far.
 lhm = ["pythonnet>=3.0.5,<3.3; sys_platform == 'win32'"]
+# The app in a window of its own on Windows: pywebview shows it with WebView2, through the
+# same pythonnet as LibreHardwareMonitor. Linux uses the system's GTK and WebKit when
+# pywebview and PyGObject are there (docs/BACKGROUND.md); without a window, the browser.
+window = [
+    "pywebview>=6.2,<7; sys_platform == 'win32'",
+    "pythonnet>=3.0.5,<3.3; sys_platform == 'win32'",
+]
 dev = ["pytest>=8", "ruff==0.16.9", "pyserial>=3.5", "pycryptodome>=3.19"]
 
 [project.scripts]

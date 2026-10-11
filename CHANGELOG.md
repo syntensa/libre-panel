@@ -3,6 +3,27 @@
 ## Unreleased
 
 **New**
+- Libre Panel in a window of its own instead of the browser (pywebview:
+  WebView2 on Windows, WebKitGTK on Linux), one window at a time that keeps
+  its size. A click on the tray icon and *Open Libre Panel* show it on
+  *Start*, *Theme editor* and *Settings* on their views; `libre-panel start`,
+  `libre-panel editor` and a second start open the same window or bring it to
+  the front. Where no window can open (no WebView2 runtime, no GTK with
+  WebKit, the Linux AppImage) the browser opens as before, and
+  `libre-panel editor --browser` asks for it. With pip on Windows: `pip
+  install "libre-panel[window]"`; on Linux see
+  [Running in the background](docs/BACKGROUND.md#the-apps-window)
+- *Design*, the new theme editor: the panel in the middle; modules, building
+  blocks and widgets from a library with pictures in the theme's colours, to
+  drag onto it; a toolbar over the selection for what it shows, how it is
+  drawn (light, facet, flat), its colour and size; a short inspector with the
+  rest under *Fine-tuning*; corners that resize, snapping guides, several
+  widgets at once, layers with lock and eye, the theme's pictures and fonts.
+  The panel's pages are tabs over it: the normal theme, game mode's, the
+  round report's and those of plugins' modes, each with its frame rate
+- Everything in the app is a command: Ctrl+K finds it by a few letters
+  (themes, modules, sensors, panels, the language, the panel's controls),
+  with the keys it has
 - `load`, a sensor source for the CPU and GPU load ten times a second: bars
   and graphs follow the load as it happens instead of once a second. The GPU
   load (Windows, any vendor, no administrator rights) is the one Task Manager
@@ -290,6 +311,8 @@
   was until the file changed once more
 
 **Changes**
+- The editor before the app stays at `/classic/` until the app has all its
+  views; plugins' editor pages open inside the app (*Pages*, or Ctrl+K)
 - The video mode turns itself on: `video.mode` is `"auto"` by default, which
   streams to a 9.2" (the panel it is proven on) as soon as ffmpeg is found and
   `local_clip` names the panel's standby clip. `libre-panel doctor` and the log

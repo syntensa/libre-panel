@@ -970,15 +970,36 @@ def make_server(
     return server
 
 
-def serve(port: int = 8765, open_browser: bool = True, config_path: Path | None = None) -> None:
+def serve(
+    port: int = 8765,
+    open_browser: bool = True,
+    config_path: Path | None = None,
+    browser: bool = False,
+    view: str = "design",
+) -> None:
+    """Serve the app until Ctrl+C, or until its window is closed: it opens in a window of
+    its own when pywebview can show one (``browser``: in the browser anyway)."""
+    from libre_panel import window
+
     try:
         server = make_server(port, config_path)
     except OSError:  # port taken: any free port will do
         server = make_server(0, config_path)
     url = f"http://127.0.0.1:{server.server_address[1]}/"
     print(f"Libre Panel theme editor running at {url}  (Ctrl+C to stop)")
+    backend = None if browser or not open_browser else window.load_backend()
+    if backend is not None:
+        thread = threading.Thread(target=server.serve_forever, name="editor", daemon=True)
+        thread.start()
+        try:
+            window.run_window(url, view, webview=backend)
+        finally:
+            server.shutdown()
+            server.server_close()
+            server.editor_state.close()  # type: ignore[attr-defined]
+        return
     if open_browser:
-        webbrowser.open(url)
+        webbrowser.open(window.view_url(url, view))
     try:
         server.serve_forever()
     except KeyboardInterrupt:

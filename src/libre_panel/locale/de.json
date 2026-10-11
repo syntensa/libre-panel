@@ -1040,11 +1040,12 @@
     "{count} on this page": "{count} auf dieser Seite",
     "{edges} hidden by the frame": "{edges} vom Rahmen verdeckt",
     "Fine-tuning": "Feinheiten",
+    "Open Libre Panel": "Libre Panel öffnen",
     "the memory service is off": "der Gedächtnis-Dienst ist aus",
     "shows the normal theme": "zeigt das normale Theme",
     "Show the normal theme here": "Hier das normale Theme zeigen",
-    "after a game": "nach einem Spiel",
-    "Open theme editor": "Theme-Editor öffnen"
+    "Close the window? Changes that are not saved are lost.": "Fenster schließen? Was nicht gespeichert ist, geht verloren.",
+    "after a game": "nach einem Spiel"
   },
   "fields": {
     "align": "Ausrichtung",

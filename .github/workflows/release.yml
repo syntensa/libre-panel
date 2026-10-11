@@ -80,13 +80,14 @@ jobs:
             Linux)   echo "CLI=dist/libre-panel/libre-panel" >> "$GITHUB_ENV"
                      echo "GUI=dist/libre-panel/libre-panel" >> "$GITHUB_ENV" ;;
           esac
-      - name: LibreHardwareMonitor libraries (Windows)
+      - name: LibreHardwareMonitor libraries and the app's window (Windows)
         # From NuGet, each package checked against the SHA-256 pinned in the script; they
-        # are not in the repository. The spec bundles them, with pythonnet.
+        # are not in the repository. The spec bundles them, with pythonnet, which pywebview
+        # (the app's window, WebView2) uses too.
         if: runner.os == 'Windows'
         shell: bash
         run: |
-          pip install ".[lhm]"
+          pip install ".[lhm,window]"
           python packaging/windows/fetch_lhm.py
       - name: Build
         run: pyinstaller --noconfirm --clean packaging/pyinstaller/libre-panel.spec
@@ -100,6 +101,14 @@ jobs:
         timeout-minutes: 5
         shell: bash
         run: '"$CLI" sensors --check-lhm'
+      - name: Smoke test (the app's window in the bundle)
+        # Finds pywebview's WinForms backend with WebView2 and starts the .NET Framework,
+        # without opening a window (there is no desktop here). A runner without the WebView2
+        # runtime is said in the output; the build is what is tested.
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: bash
+        run: '"$CLI" window --check'
       - name: Smoke test (serial and USB libraries in the bundle)
         shell: bash
         run: |
