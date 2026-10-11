@@ -349,9 +349,9 @@ def inked(renderer, *names):
 @pytest.mark.parametrize("aspect", [1.5, 1.6, 1.65, 1.75, 2.0, 2.4])
 @pytest.mark.parametrize("height", [240, 376])
 def test_the_weather_cards_details_do_not_run_together_in_a_narrower_card(aspect, height):
-    """"Feels like 12°" and "Wind 18 km/h" are one line: the card's narrower than the
-    Studio's, the line is squeezed, and a gap stays between them (it was shrunk to fit
-    its box and the next began where it ended)."""
+    """The details ("Feels like 12°", "Wind 18 km/h") are one line: in a card narrower than the
+    Studio's it is squeezed, and a gap stays between them (each was shrunk to fit its box, and
+    the next box began where it ended)."""
     renderer = Renderer(alone("forecast", round(aspect * height), height), preview=True)
     renderer.render(snapshot_with(), 1.0)
     details = inked(renderer, "detail0", "detail1", "detail2")
