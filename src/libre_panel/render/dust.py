@@ -51,13 +51,13 @@ FALL = (2.0, 13.0)  # drift over a life, px on a panel 480 px high: slightly dow
 WOBBLE = 1.6  # sideways sway, px on a panel 480 px high
 SPEED = 1.28  # grains age this much faster than the clock
 OPACITY = 0.70  # the brightest grain, as a share of its source's colour
-NEAR_SHARE = 0.085  # this many grains are soft discs
+NEAR_SHARE = 0.05  # this many grains are soft discs
 DISC_OPACITY = 0.38  # a disc is weaker than a fine grain: it covers far more area
 LEVELS = 24  # brightness steps of the disc masks
 HIDE = (60, 150)  # a pixel this bright hides a grain fully, this dark not at all
 STEP = 4  # sub-pixel positions of a disc, per pixel and axis
 MIN_LEVEL = 2  # a disc fainter than this is a haze nobody sees: not drawn
-MIN_ADD = 2  # nor a pixel of a fine grain that adds less than this
+MIN_ADD = 3  # nor a pixel of a fine grain that adds less than this
 
 # how much of a grain shows over a pixel of each brightness: a bright element covers
 # it, as if the dust lay behind
@@ -66,6 +66,7 @@ _SHOWN = np.clip((HIDE[1] - np.arange(256, dtype=np.float32)) / (HIDE[1] - HIDE[
 _lock = threading.Lock()
 _sprites: list[tuple[int, np.ndarray, float]] = []  # per stage: radius, kernel (peak 1), peak ratio
 _masks: dict[tuple[int, int, int, int], Image.Image] = {}
+_STEPS: list[tuple[np.ndarray, np.ndarray]] = []
 
 
 def sprites() -> list[tuple[int, np.ndarray, float]]:
@@ -90,6 +91,19 @@ def sprites() -> list[tuple[int, np.ndarray, float]]:
         base = built[0][2]
         _sprites.extend((r, kernel, peak / base) for r, kernel, peak in built)
     return _sprites
+
+
+def _steps() -> tuple[np.ndarray, np.ndarray]:
+    """Per step of the sprites, the peak ratio and the radius, as arrays (read once)."""
+    if _STEPS:
+        return _STEPS[0]
+    found = sprites()
+    arrays = (
+        np.array([s[2] for s in found], np.float32),
+        np.array([s[0] for s in found], np.int32),
+    )
+    _STEPS.append(arrays)
+    return arrays
 
 
 def disc_mask(stage: int, qx: int, qy: int, level: int) -> Image.Image:
@@ -284,8 +298,10 @@ class Dust:
         red theme is as much a source as a cyan one); a point lies anywhere in
         its half-size pixel.
         """
-        small = np.asarray(frame.reduce(2).convert("RGB"), np.uint8)
-        bright = small.max(axis=-1) >= THRESHOLD
+        small = frame.reduce(2).convert("RGB")
+        r, g, b = small.split()  # the brightest channel in Pillow: numpy takes 6 ms to reduce
+        peak = ImageChops.lighter(ImageChops.lighter(r, g), b)  # over so short an axis
+        bright = np.asarray(peak) >= THRESHOLD
         if self.allowed is not None:
             bright &= self.allowed[::2, ::2]
         ys, xs = np.nonzero(bright)
@@ -298,7 +314,7 @@ class Dust:
             ys, xs = ys[pick], xs[pick]
         x = (xs * 2 + self.rng.random(xs.size) * 2).astype(np.float32)
         y = (ys * 2 + self.rng.random(ys.size) * 2).astype(np.float32)
-        return x, y, small[ys, xs].astype(np.float32)
+        return x, y, np.asarray(small, np.uint8)[ys, xs].astype(np.float32)
 
     # -- grains -------------------------------------------------------------------
 
@@ -397,7 +413,7 @@ class Dust:
         peak = weight * _brightest(value)[:, None]
         hit = np.flatnonzero(peak.reshape(-1) >= MIN_ADD)
         rows = hit // 9
-        add = weight.reshape(-1)[hit][:, None] * value[rows]
+        add = (weight.reshape(-1)[hit][:, None] * value[rows]).astype(np.int16)
         return (yi * w + xi)[rows] + _TAPS[w][hit - rows * 9], add
 
     def _near(
@@ -413,13 +429,14 @@ class Dust:
         if i.size == 0:
             return None
         stage = np.clip((z[i] * STAGES).astype(np.int32), 0, STAGES - 1)
+        peaks, radii = _steps()
         # the same energy on more area: the peak falls with the step, which is the blur
-        spike = light[i] * np.array([s[2] for s in sprites()], np.float32)[stage]
+        spike = light[i] * peaks[stage]
         level = (np.minimum(1.0, spike * 1.8 * self.strength) * LEVELS + 0.5).astype(np.int32)
         ix, iy = np.floor(x[i]).astype(np.int32), np.floor(y[i]).astype(np.int32)
         qx = ((x[i] - ix) * STEP).astype(np.int32)
         qy = ((y[i] - iy) * STEP).astype(np.int32)
-        radius = np.array([s[0] for s in sprites()], np.int32)[stage]
+        radius = radii[stage]
         keep = level >= MIN_LEVEL
         ix, iy, stage, qx, qy, level, radius = (
             c[keep] for c in (ix, iy, stage, qx, qy, level, radius)
@@ -480,7 +497,11 @@ class Dust:
         show = _SHOWN[_brightest(rgb)]
         if self.allowed is not None:
             show = show * self.allowed.reshape(-1)[index]
-        rgb[:, :3] = np.minimum(rgb[:, :3] + (add * show[:, None]).astype(np.int16), 255)
+        covered = np.flatnonzero(show < 1.0)  # over an element, or out of bounds: fainter
+        lit = rgb[:, :3] + add
+        if covered.size:
+            lit[covered] = rgb[covered, :3] + (add[covered] * show[covered, None]).astype(np.int16)
+        rgb[:, :3] = np.minimum(lit, 255)
         flat[index] = pixels
 
     def _lay_discs(self, image: Image.Image, array: np.ndarray) -> None:

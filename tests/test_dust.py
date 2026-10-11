@@ -8,6 +8,7 @@ from libre_panel.render import dust as dust_module
 from libre_panel.render.dust import Dust
 from libre_panel.render.renderer import Renderer
 from libre_panel.sensors.demo import demo_snapshot
+from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import THEME_FORMAT, ThemeError, parse_theme
 
 SIZE = (480, 160)
@@ -112,6 +113,18 @@ def test_dust_settings_are_checked():
         theme(look=[])
     with pytest.raises(ThemeError, match="look.dust"):
         theme(look={"dust": 3})
+
+
+def test_adapting_a_theme_moves_the_dust_areas_with_the_panel():
+    area = {"x": 40, "y": 20, "w": 100, "h": 50, "dust": False}
+    data = theme(look={"dust": {"areas": [area]}}).to_dict()
+    scaled = adapt_theme(data, "custom", "landscape", "scale", width=960, height=320)
+    assert scaled["look"]["dust"]["areas"] == [
+        {"x": 80, "y": 40, "w": 200, "h": 100, "dust": False}
+    ]
+    kept = adapt_theme(data, "custom", "landscape", "keep", width=960, height=320)
+    assert kept["look"]["dust"]["areas"] == [area]
+    assert data["look"]["dust"]["areas"] == [area]  # the original is not touched
 
 
 def test_unknown_look_fields_are_warned_about():
