@@ -635,6 +635,9 @@
   needs it hides) and the value is back with the next real one. A gap in a graph's history
   that is NaN is a gap in the curve, not a range worked out from it. A weather code that is
   no number is a cloud, not a missing icon
+- An integer reading too large for a float (a payload of 400 digits) made every widget that shows
+  it fail with a warning at every frame, and a graph with one in its history too. It is no reading
+  either (a gap in the curve), as NaN is
 - The weather card's line of details ("Feels like 12°", "Wind 18 km/h", the humidity) ran
   together in a card narrower than about 1.75 times its height, and began a few pixels right
   of the text column above it in every card. Each detail keeps a gap to the next, and the line

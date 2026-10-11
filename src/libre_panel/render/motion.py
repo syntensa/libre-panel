@@ -36,7 +36,10 @@ def number(value: Any) -> float | None:
     """A reading's value as a number for gliding and graphs, None if it is none."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    value = float(value)
+    try:
+        value = float(value)
+    except OverflowError:  # an integer beyond the range of a float
+        return None
     return value if math.isfinite(value) else None
 
 

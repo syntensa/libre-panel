@@ -401,10 +401,15 @@ def gliding(**metric):
     return renderer
 
 
-@pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+@pytest.mark.parametrize(
+    "value",
+    [math.nan, math.inf, -math.inf, 10**400, -(10**400)],
+    ids=["nan", "inf", "-inf", "huge", "-huge"],
+)
 def test_a_reading_that_is_not_a_number_is_no_reading_and_poisons_nothing(value):
-    """A source can send one ("nan" from a payload): it is a reading that is not there, and the
-    value that glides, the bars and the numbers of its sensor come back with the next one."""
+    """A source can send one ("nan" from a payload, a JSON integer of 400 digits that no float
+    holds): it is a reading that is not there, and the value that glides, the bars and the
+    numbers of its sensor come back with the next one."""
     renderer = gliding()
     renderer.render(readings(v=10.0), 0.0)
     _, boxes = renderer.render(readings(v=value), 0.02)
@@ -423,13 +428,13 @@ def test_a_value_that_is_not_a_number_is_a_gap_in_a_graphs_history():
     history): a gap in the curve, and no range worked out from NaN."""
     from libre_panel.render.motion import Motion
 
-    history = [10.0, math.nan, 30.0, math.inf, 50.0]
+    history = [10.0, math.nan, 30.0, math.inf, 10**400, 50.0]
     theme = parse_theme(
         {
             "format": THEME_FORMAT,
             "display": {"width": 100, "height": 40},
             "widgets": [{"type": "graph", "id": "g", "w": 100, "h": 40, "sensor": "v", "min": None,
-                         "max": None, "history": 5}],
+                         "max": None, "history": 6}],
         }
     )  # fmt: skip
     renderer = Renderer(theme)
@@ -442,7 +447,7 @@ def test_a_value_that_is_not_a_number_is_a_gap_in_a_graphs_history():
 
     renderer._graph_piece = spy
     renderer.render(Snapshot(readings={"v": Reading("v", 50.0)}, history={"v": history}))
-    assert drawn == [[10.0, None, 30.0, None, 50.0]]
+    assert drawn == [[10.0, None, 30.0, None, None, 50.0]]
     kept = Motion().history("v", 10, 100.0, history, 100.0, 1.0, 0.4)
     assert all(point is None or math.isfinite(point) for point in kept.points)
 

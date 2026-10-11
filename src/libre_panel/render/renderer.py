@@ -151,14 +151,26 @@ def _number(value: Any) -> float | None:
     return number if math.isfinite(number) else None
 
 
+def _undrawable(value: Any) -> bool:
+    """Whether ``value`` is a number that cannot be drawn: NaN, infinity, or an integer too large
+    for a float (over 2**1023: a JSON payload of 400 digits)."""
+    if isinstance(value, float):
+        return not math.isfinite(value)
+    return isinstance(value, int) and value.bit_length() > 1023
+
+
 def _finite(snapshot: Snapshot) -> Snapshot:
-    """``snapshot`` with every reading that is NaN or infinite taken for none: a source can
-    send one (a payload "nan"), and no widget, card or list must draw it or glide to it."""
-    bad = [
-        key
-        for key, reading in snapshot.readings.items()
-        if isinstance(reading.value, float) and not math.isfinite(reading.value)
-    ]
+    """``snapshot`` with every reading that is NaN, infinite or too large for a float taken for
+    none: a source can send one (a payload "nan"), and no widget, card or list must draw it or
+    glide to it."""
+    bad = []
+    for key, reading in snapshot.readings.items():  # (every frame: no call per reading)
+        value = reading.value
+        if isinstance(value, float):
+            if not math.isfinite(value):
+                bad.append(key)
+        elif isinstance(value, int) and value.bit_length() > 1023:
+            bad.append(key)
     if not bad:
         return snapshot
     readings = {**snapshot.readings}
@@ -168,10 +180,17 @@ def _finite(snapshot: Snapshot) -> Snapshot:
 
 
 def _gaps(values: list[float]) -> list[float | None]:
-    """A history with a gap (None) where a value is NaN or infinite, else the history itself."""
-    if all(value is None or math.isfinite(value) for value in values):
-        return values
-    return [value if value is not None and math.isfinite(value) else None for value in values]
+    """A history with a gap (None) where a value is NaN, infinite or too large for a float,
+    else the history itself."""
+    try:
+        if math.isfinite(sum(values)):  # (at C speed: one NaN or infinity makes the sum one)
+            return values
+    except (TypeError, OverflowError):  # a gap in it, or an integer beyond a float
+        pass
+    return [
+        value if isinstance(value, (int, float)) and not _undrawable(value) else None
+        for value in values
+    ]
 
 
 def _fraction(value: float | None, lo: float, hi: float, scale: str = "linear") -> float:
