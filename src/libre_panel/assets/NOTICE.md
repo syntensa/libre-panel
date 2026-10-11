@@ -123,7 +123,7 @@ SHA-256 and says where each one's source code is; the licence texts are in
 
 | Program | Version | Licence | Copyright | Source code |
 |---|---|---|---|---|
-| ffmpeg | n8.1.3-9-g29e619e767: FFmpeg 8.1.3 and nine more commits of its release branch, as built by FFmpeg-Builds (win64-gpl and linux64-gpl) on 2026-09-30 | GPL-3.0-or-later | the FFmpeg developers; x264: the x264 project (VideoLAN) | FFmpeg: <https://github.com/FFmpeg/FFmpeg>, commit `29e619e767cde9045a75c29bc9a8278ae7b3a98b`. The build recipe, which names every library in the build with its version or commit: <https://github.com/BtbN/FFmpeg-Builds>, commit `6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b` (tag `autobuild-2026-09-30-13-08`, folder `scripts.d`). x264: <https://code.videolan.org/videolan/x264>, commit `0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee` |
+| ffmpeg | n8.1.3-9-g29e619e767: FFmpeg 8.1.3 and nine more commits of its release branch, as built by FFmpeg-Builds (win64-gpl and linux64-gpl) on 2026-09-30 | GPL-3.0-or-later | the FFmpeg developers; x264: the x264 project (VideoLAN) | <https://github.com/FFmpeg/FFmpeg>, commit `29e619e767cde9045a75c29bc9a8278ae7b3a98b`; more below |
 | PresentMon (console program) | 2.6.0 | MIT | Intel Corporation | <https://github.com/GameTechDev/PresentMon>, commit `e13fce6acdb55a808fd8318175a56863e532d95f` (tag `v2.6.0`) |
 | PawnIO installer (`PawnIO_setup.exe`) | 2.2.0 | the driver: GPL-2.0-or-later with a special exception | namazso | the driver: <https://github.com/namazso/PawnIO>, commit `5cdf470831fdfff3f7f1d06363ca6b230f3bf35a` (tag `2.2.0`) |
 
@@ -133,9 +133,19 @@ SHA-256 and says where each one's source code is; the licence texts are in
   GNU General Public License, version 3 or later. The licence text that came with
   the build is `tools\licenses\FFmpeg-LICENSE.txt`. Libre Panel starts ffmpeg as a
   program of its own and talks to it through pipes; it is not linked with it, and
-  it is under the same licence. Nothing of the build was changed. If one of the
-  addresses above stops working, ask for the source in an issue of this project.
-  Another ffmpeg takes its place with `video.ffmpeg` in `config.toml`.
+  it is under the same licence. Nothing of the build was changed. Another ffmpeg
+  takes its place with `video.ffmpeg` in `config.toml`. The source of what is in
+  the program:
+  - FFmpeg: <https://github.com/FFmpeg/FFmpeg>, commit
+    `29e619e767cde9045a75c29bc9a8278ae7b3a98b` (branch release/8.1).
+  - The build recipe, which names every library in the build with its version or
+    commit (folder `scripts.d`): <https://github.com/BtbN/FFmpeg-Builds>, commit
+    `6c9aec5fc9a72ec3abedd1fa84db141fa18cf52b` (tag `autobuild-2026-09-30-13-08`).
+  - x264, which does the encoding: <https://code.videolan.org/videolan/x264>,
+    commit `0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee`.
+
+  If one of these addresses stops working, ask for the source in an issue of this
+  project.
 - **PresentMon (MIT).** Its licence text, with the copyright line, is
   `tools\licenses\PresentMon-LICENSE.txt`; the notices of the third-party parts in
   its source (AMD, NVIDIA, Google, Microsoft) are `PresentMon-THIRD_PARTY.txt`.
