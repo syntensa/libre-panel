@@ -921,6 +921,59 @@ def test_live_shows_the_panel_and_runs_its_services(background, isolated_home):
         assert wait_for(lambda: load_config().device.brightness == 30)
 
 
+def test_live_says_whether_the_video_mode_is_on_or_what_it_lacks(
+    app_url, isolated_home, monkeypatch
+):
+    """The state is the server's own (``video_mode()``, as Settings has it), and "on" is said
+    of a panel that is driven in video mode now."""
+    import json
+
+    from test_editor_settings import lacking_ffmpeg, panel_on_the_bus
+
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+
+    def running(streaming):
+        """The console's answer for a panel that runs (``streaming``: in video mode)."""
+        answer = {"background": True, "panel": app_answer(streaming=streaming)["panel"]}
+
+        def handler(route, request):
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
+
+        return {"**/api/plugins/control/panel": handler}
+
+    def state(config="", ffmpeg=True, streaming=False, app=True):
+        lacking_ffmpeg(monkeypatch, found=ffmpeg)
+        choose_theme(isolated_home)
+        with (isolated_home / "config.toml").open("a", encoding="utf-8") as file:
+            file.write(config)
+        with browser_page(
+            app_url, "live", routes=running(streaming) if app else None, allow=PICTURE
+        ) as page:
+            page.wait_for_selector(".live-tile")
+            if not app:
+                page.wait_for_timeout(500)
+                return None, page.locator(".live-video").count()
+            video = page.locator(".live-video")
+            expect(video).to_be_visible()
+            link = page.locator(".live-video a").all_inner_texts()
+            return video.get_attribute("data-video-state"), video.inner_text().strip(), link
+
+    missing = "Off for now. Missing: the name of the standby clip"
+    tone, text, link = state(ffmpeg=False)
+    assert (tone, link) == ("warn", ["Panel settings"])
+    assert text.startswith(f"{missing}, ffmpeg.")
+    tone, text, link = state()
+    assert tone == "warn" and text.startswith(f"{missing}.")
+    with_clip = f'\n[video]\nlocal_clip = "{CLIP}"\n'
+    tone, text, link = state(with_clip, streaming=True)
+    assert (tone, text, link) == ("ok", "On, 50 fps", [])  # at the rate the panel runs at
+    tone, text, link = state(with_clip, streaming=False)
+    assert (tone, text) == ("off", "Starts when a panel it runs on is connected.")  # not yet
+    tone, text, link = state('\n[video]\nmode = "off"\n')
+    assert (tone, text) == ("off", "Off. The panel gets single pictures, about nine a second.")
+    assert state(app=False) == (None, 0)  # a plain editor runs no panel: nothing to say
+
+
 def test_live_without_the_panel_says_so_and_keeps_the_switches(app_url, isolated_home):
     from test_service import wait_for
 

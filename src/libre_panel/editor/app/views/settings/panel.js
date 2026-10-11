@@ -5,6 +5,7 @@
 import { t } from "../../core/i18n.js";
 import { loadPanelInfo, loadSettings, saveSettings, setting, useCatalog, useConfig } from "../../core/settings.js";
 import { useStore } from "../../core/state.js";
+import { videoState } from "../../core/video.js";
 import { html, useRef, useState } from "../../lib/preact.js";
 import { panelName, stateText } from "../../shell/panel-popover.js";
 import { Segmented, Select, Slider, Toggle } from "../../ui/controls.js";
@@ -118,26 +119,10 @@ function PanelFound() {
 
 // -- the video mode ----------------------------------------------------------------------------
 
-const GAPS = {
-  clip: () => t("the name of the standby clip"),
-  ffmpeg: () => t("ffmpeg"),
-  "ffmpeg-path": () => t("ffmpeg at the path given under Advanced"),
-};
-
 /** What the video mode is doing, in a mark and words. */
 function VideoStatus({ video, mode, fps }) {
-  if (!video.usb) return html`<${Status}>${t("This panel gets single pictures: the video mode is for TURZX USB panels.")}<//>`;
-  if (mode === "off") return html`<${Status}>${t("Off. The panel gets single pictures, about nine a second.")}<//>`;
-  if (video.gaps[0] === "model")
-    return html`<${Status}>${t("Off. Not proven on this panel yet; “On” tries it.")}<//>`;
-  if (video.gaps.length) {
-    const missing = video.gaps.map((gap) => GAPS[gap]()).join(", ");
-    return html`<${Status} tone="warn">
-      ${mode === "on" ? t("Cannot start yet. Missing: {missing}.", { missing }) : t("Off for now. Missing: {missing}.", { missing })}
-    <//>`;
-  }
-  if (video.on) return html`<${Status} tone="ok">${t("On, {fps} fps", { fps })}<//>`;
-  return html`<${Status}>${t("Starts when a panel it runs on is connected.")}<//>`;
+  const state = videoState(video, mode, fps);
+  return html`<${Status} tone=${state.tone}>${state.text}<//>`;
 }
 
 function VideoCard() {
