@@ -753,6 +753,10 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
 - The card toast cut a long notice (a track and its artist, a device's name) off at the edge of
   its card in the middle of a letter; it ends with "…" now, the width counted in the font that
   draws each letter
+- Arabic is laid out whole: letter spacing, equal-width digits and the lettering of `facet` and
+  `acrylic` took its letters one by one, which cannot join them. Where Pillow has libraqm (the
+  Linux builds; the Windows ones have not) Arabic joins and Hebrew reads from the right; without
+  it the letters of both stand in the order they are written, from the left
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars (the

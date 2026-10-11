@@ -356,6 +356,29 @@ _ANCHORS_H, _ANCHORS_V = "lmr", "amsd"  # what a line of horizontal text can be 
 _UNSET: Any = object()
 
 
+# Blocks of scripts whose letters join (Arabic, Syriac, N'Ko, Mandaic, Mongolian, Adlam): the
+# letters take their shape from their neighbours, so a text of them is drawn whole or not at all
+_CURSIVE = (
+    (0x0600, 0x077F),  # Arabic, Syriac, Arabic Supplement
+    (0x07C0, 0x07FF),
+    (0x0840, 0x085F),
+    (0x08A0, 0x08FF),
+    (0x1800, 0x18AF),
+    (0xFB50, 0xFDFF),  # Arabic presentation forms
+    (0xFE70, 0xFEFF),
+    (0x1E900, 0x1E95F),
+)
+
+
+def cursive(text: str) -> bool:
+    """Whether ``text`` has letters of a script that joins them. Spread out letter by letter
+    (letter spacing, lettering with facets) they could not join: such text is laid out whole,
+    and with libraqm Pillow shapes it, else it shows the letters apart, in the order written."""
+    return not text.isascii() and any(
+        first <= ord(ch) <= last for ch in text for first, last in _CURSIVE
+    )
+
+
 def _has(found: Coverage | None, ch: str, shaped: bool = False) -> bool:
     """Whether a face covers ``ch``; one whose coverage is unknown covers everything (as before).
     ``shaped``: libraqm lays out the text and builds a letter from its parts (an accent) when the

@@ -63,6 +63,11 @@ to write or review themes by hand.
   names for the character (`fc-match`), else Noto Sans and DejaVu Sans. A computer with no
   font for a script (a Linux without Noto CJK) shows boxes for it: install one. A theme
   needs no setting for this, and a font of the theme that has the glyph draws it.
+  Right-to-left text (Arabic, Hebrew) is shaped and reordered only where Pillow has
+  libraqm, which the Windows builds of Pillow have not: there its letters are drawn apart,
+  in the order they are written, from the left (Arabic unjoined). Letters that join are
+  never spread letter by letter: a text with Arabic letters ignores `letter_spacing` and
+  `tabular` and is not lettered in facets.
 - `refresh_ms` is how often sensors are read; `animation.smoothing_ms` is how
   long bars, rings and numbers with `smooth` glide to a new value (0 = jump).
   In video mode values glide until the next reading, so they never stand

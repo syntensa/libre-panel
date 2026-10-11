@@ -13,7 +13,14 @@ from fake_fonts import make_collection, make_font
 from PIL import Image, ImageDraw, ImageFont, features
 
 from libre_panel.fonts import builtin_font_path, fallback
-from libre_panel.fonts.fallback import FallbackFont, Fallbacks, coverage, discover, truetype
+from libre_panel.fonts.fallback import (
+    FallbackFont,
+    Fallbacks,
+    coverage,
+    cursive,
+    discover,
+    truetype,
+)
 from libre_panel.render import facets
 from libre_panel.sensors.demo import demo_snapshot
 
@@ -599,3 +606,45 @@ def test_facet_lettering_has_the_letters_of_the_fallback(use, liberation):
     assert letter is not None and boxes is not None
     assert letter[0].tobytes() != boxes[0].tobytes()
     assert facets.glyph(font, "Ж", (255, 255, 255, 255))[0] is letter[0]  # (kept)
+
+
+# -- right to left and letters that join ---------------------------------------------------------
+
+
+def test_the_scripts_whose_letters_join_are_known():
+    assert all(cursive(text) for text in ("مرحبا", "ܐܒܓ", "ߊߋ", "Hello مرحبا", "ﻣﺮﺣﺒﺎ", "٠"))
+    assert not any(cursive(text) for text in ("", "Hello", "Привет", "שלום", "中文", "Äpfel – 5 €"))
+
+
+def test_letters_that_join_are_not_set_one_by_one(use, tmp_path):
+    """Letter spacing, equal-width digits and lettering with facets draw one letter at a time:
+    letters that join are drawn whole, as they would without them (with libraqm Pillow shapes
+    them; a Latin text is the control that the layout is otherwise different)."""
+    arabic = make_font(tmp_path / "arabic.ttf", "اب")
+    use(Fallbacks([(arabic, None, 0)]))
+    text = "ابا 2"
+    plain_frame = frame_of({"text": text})
+    for spaced in (
+        {"letter_spacing": 6},
+        {"tabular": True},
+        {"letter_spacing": 3, "tabular": True},
+    ):
+        assert frame_of({"text": text, **spaced}).tobytes() == plain_frame.tobytes()
+        assert (
+            frame_of({"text": "ABA 2", **spaced}).tobytes() != frame_of({"text": "ABA 2"}).tobytes()
+        )
+    assert plain_frame.getbbox()
+
+
+def test_letters_that_join_are_cut_to_the_width_of_the_whole(use, tmp_path):
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.theme.model import parse_theme
+
+    arabic = make_font(tmp_path / "arabic.ttf", "اب")  # 30 px wide each at 30
+    use(Fallbacks([(arabic, None, 0)]))
+    renderer = Renderer(parse_theme(theme([])), preview=True)
+    widget = {"font_size": 30, "max_width": 130, "fit": "ellipsis", "letter_spacing": 10}
+    cut, _size = renderer._fit(widget, "اب" * 3)
+    assert cut == "ابا…"  # three letters and the ellipsis: the spacing is not counted
+    assert renderer._fit(widget, "ABCDEFGH")[0] != "ABCDEFGH"  # (Latin, with it, is cut shorter)
+    renderer.close()

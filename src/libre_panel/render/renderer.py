@@ -32,7 +32,7 @@ from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont
 
 from libre_panel import clock, i18n, timezones
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
-from libre_panel.fonts.fallback import truetype
+from libre_panel.fonts.fallback import cursive, truetype
 from libre_panel.icons import draw_icon, weather_icon_name
 from libre_panel.render import cover, fan, lists
 from libre_panel.render import finish as finishes
@@ -1312,8 +1312,11 @@ class Renderer:
             return text, size
         spacing = widget.get("letter_spacing", 0)
         tabular = widget.get("tabular", False)
+        joined = cursive(text)  # (such text is laid out whole: see _text_piece)
 
         def width(candidate: str, font: Any) -> float:
+            if joined:
+                return font.getlength(candidate)
             cell = self._digit_cell(font) if tabular else 0
             advances = [
                 cell if tabular and ch in _DIGITS else font.getlength(ch) for ch in candidate
@@ -1342,6 +1345,8 @@ class Renderer:
         tabular = widget.get("tabular", False)
         finish = self._finishes.get(widget.get("id", ""))  # a finish may letter its own way
         lettered = finish is not None and finish.lettering(self, widget, font, text)
+        if cursive(text):  # letters that join cannot be set one by one: the whole text, as it is
+            spacing, tabular, lettered = 0, False, False
         if "\n" in text or not (
             spacing or lettered or (tabular and any(c in _DIGITS for c in text))
         ):
