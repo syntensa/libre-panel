@@ -1,7 +1,6 @@
 """Steam's folders, read only: the libraries, the installed games, the logos."""
 
 import os
-import sys
 from types import SimpleNamespace
 
 import pytest
@@ -102,9 +101,9 @@ def test_a_program_belongs_to_the_game_whose_folder_it_lies_in(tmp_path):
     assert library.match(game_path(root, "SpaceGame2")) is None  # not the same folder
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows paths do not care about case")
-def test_windows_paths_are_compared_without_case(tmp_path):
+def test_paths_are_compared_without_case_where_the_system_does_not_care(tmp_path, monkeypatch):
     root = make_steam(tmp_path / "Steam", ("10", "Space Game", "SpaceGame"))
+    monkeypatch.setattr(os.path, "normcase", lambda path: os.fspath(path).lower())  # Windows
     assert games_of(root).match(game_path(root, "spacegame").upper()).appid == "10"
 
 

@@ -232,7 +232,8 @@ do. Their names cannot be used by a plugin.
 | `autopilot` | picks the theme by rules: music, microphone, load, program, time of day |
 
 Their options are in the [configuration guide](CONFIGURATION.md#built-in-services).
-They use only what is described here, so they are also examples for your own.
+They talk to the panel only through the host described here, so they are also
+examples for your own.
 
 ## Screens
 

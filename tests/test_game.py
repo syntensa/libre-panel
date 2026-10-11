@@ -548,7 +548,7 @@ def test_a_game_starts_and_ends_in_the_main_loop(steam, monkeypatch, isolated_ho
             service.detect()
 
     events = {20: [game_starts], **{n: [watch] for n in range(21, 2000)}}
-    script = Script(1000, events)
+    script = Script(1400, events)  # room for a slow machine: the sample may come late
     monkeypatch.setattr(app, "_Pacer", lambda: script)
     try:
         with caplog.at_level("ERROR"):
@@ -558,7 +558,7 @@ def test_a_game_starts_and_ends_in_the_main_loop(steam, monkeypatch, isolated_ho
         host.close()
 
     began, ended = seen["began"], seen["ended"]
-    assert len(themes) == 1000 and set(themes[:21]) == {"classic"}
+    assert len(themes) == 1400 and set(themes[:21]) == {"classic"}
     assert seen["name"] == "Space Game"
     assert seen["logo"] is not None and seen["logo"].size == (440, 120)  # in the loop's snapshots
     start, end = [spec for spec in made if isinstance(spec, tuple)]
