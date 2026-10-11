@@ -265,6 +265,20 @@ def test_a_theme_without_a_look_pays_nothing_for_it():
 # -- light layers ---------------------------------------------------------------------
 
 
+def test_a_lit_graphs_halo_glows_above_its_line_as_below_it():
+    graph = {"type": "graph", "id": "g", "x": 0, "y": 0, "w": 200, "h": 100, "sensor": "cpu.load",
+             "min": 0, "max": 100, "color": "#00FF00", "fill": False, "smooth": False,
+             "line_width": 2, "history": 20, "glow": 1.0, "glow_radius": 8,
+             "finish": "lit"}  # fmt: skip
+    found = snap(50.0)
+    found.history["cpu.load"] = [50.0] * 20
+    frame, _ = Renderer(theme_of([graph], size=(200, 100))).render(found, 0.0)
+    column = np.asarray(frame, np.int16)[:, 100, 1]
+    line = np.flatnonzero(column == 255)
+    above, below = column[line[0] - 2], column[line[-1] + 2]
+    assert above > 12 + 0x11 and abs(above - below) <= 2  # over nothing, the halo is as strong
+
+
 def test_a_colour_is_lit_once_per_step(monkeypatch):
     lit._PICTURES.clear()
     built = []
@@ -523,6 +537,23 @@ def test_bands_of_one_ridge_meet_at_a_mitre():
     assert one[41, 120].sum() > one[43, 120].sum()  # the facet towards the light, and away
     assert (one[38:48, 100:200] == two[38:48, 100:200]).all()  # along a band: the same
     assert (one[40:45, 40:45] != two[40:45, 40:45]).any()  # where they meet: one ridge
+
+
+def test_a_ridges_glow_is_light_added_also_where_its_colour_is_full():
+    band = {"type": "rect", "id": "band", "x": 40, "y": 40, "w": 200, "h": 5,
+            "color": "#A3AEFFB9", "ridge": "frame"}  # fmt: skip
+    renderer = Renderer(theme_of([band]))
+    frame, _ = renderer.render(snap(), 0.0)
+    piece = dict(renderer._last[0])["band"]
+    assert piece.light is not None
+    under = Image.new("RGBA", frame.size, "#0A1119")
+    under.alpha_composite(piece.layer, (piece.x, piece.y))
+    lit = np.asarray(under.convert("RGB"), np.int16)
+    light = np.zeros_like(lit)
+    glow = np.asarray(piece.light.layer, np.int16)[..., :3]
+    light[piece.light.y : piece.light.y + glow.shape[0], piece.light.x :][:, : glow.shape[1]] = glow
+    assert np.array_equal(np.asarray(frame, np.int16), np.minimum(255, lit + light))
+    assert frame.getpixel((120, 41))[2] > lit[41, 120, 2]  # blue is full, and still lit up
 
 
 def test_the_sun_comes_from_where_it_stands():

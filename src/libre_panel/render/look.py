@@ -593,7 +593,7 @@ class Ridge(Finish):
     """Rects that share a ``ridge`` name as one ridge, as SPUR II's frames:
     every point of their union tilts towards its nearest edge (mitred where
     bands meet), so two facets catch the guide light or lie in its shadow.
-    The lit facets give the ridge itself a little more light, and the ridge is
+    The lit facets add a little light to the ridge itself, and the ridge is
     a light edge the panel light glints on. An outlined rect gives its
     outline, a filled one its fill. The first rect of the name draws the
     whole ridge; the others only keep their place for the editor."""
@@ -670,12 +670,16 @@ class Ridge(Finish):
             (pad, pad, pad + lit.shape[1], pad + lit.shape[0])
         )
         glow = np.asarray(soft, np.float32)[..., None] / 255 * ridge[..., :3] * RIDGE_GLOW
-        rgb = rgb + glow / np.maximum(alpha, 1e-6)[..., None]  # added over what lies beneath
+        glow = np.clip(glow, 0, 255).astype(np.uint8)  # whole levels, as SPUR II's
         out = np.concatenate([rgb, ridge[..., 3:4]], -1) + 0.5
         base.alpha_composite(Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGBA"))
+        light = None
+        if glow.any():  # added over the ridge (light adds up, also where a colour is full)
+            rgba = np.concatenate([glow, glow.max(-1, keepdims=True)], -1)
+            light = Piece(Image.fromarray(rgba, "RGBA"), x0, y0)
         first = self.members[0]
         box = [first["x"], first["y"], first["w"], first["h"]]
-        return Piece(base, x0, y0, box), LightEdge(normals, alpha, x0, y0)
+        return Piece(base, x0, y0, box, light=light), LightEdge(normals, alpha, x0, y0)
 
 
 # -- the grid --------------------------------------------------------------------------

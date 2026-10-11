@@ -474,7 +474,9 @@ class LitGraph(Finish):
 def _lay_halo(layer: Image.Image, mask: Image.Image, q: int, radius: float, share: float,
               color: tuple[int, ...]) -> None:  # fmt: skip
     """Lay ``color`` through the soft halo of ``mask`` onto ``layer``: worked
-    out at 1/``q`` of the size, and laid only where it shows."""
+    out at 1/``q`` of the size, and laid only where it shows. Laid over what
+    is there (the fill, or nothing above the curve), as SPUR II lays it over
+    its picture: where the layer is empty, the halo is the colour at its share."""
     halo = mask.reduce(q).filter(ImageFilter.GaussianBlur(radius)).point(_scale(share))
     box = halo.getbbox()
     if box is None:
@@ -485,7 +487,9 @@ def _lay_halo(layer: Image.Image, mask: Image.Image, q: int, radius: float, shar
     size = min(layer.width, x1 * q) - left, min(layer.height, y1 * q) - top
     big = halo.resize(size, Image.Resampling.BILINEAR,
                       box=(x0, y0, x0 + size[0] / q, y0 + size[1] / q))  # fmt: skip
-    layer.paste(_solid(size, (*color[:3], 255)), (left, top), big)
+    glow = Image.new("RGBA", size, (*color[:3], 0))
+    glow.putalpha(big)
+    layer.alpha_composite(glow, (left, top))
 
 
 _SOLIDS: dict[tuple[int, ...], Image.Image] = {}
