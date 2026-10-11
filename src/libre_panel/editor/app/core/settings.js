@@ -5,9 +5,10 @@
 // running Libre Panel follows. `store.get().settings` is `{config, catalog, restart}`
 // once loaded; `settingsError` says why not (config.toml with a mistake in it).
 
-import { toastError } from "../ui/toast.js";
+import { toast, toastError } from "../ui/toast.js";
 import { get, post } from "./api.js";
 import { appAction, pollApp } from "./app.js";
+import { t } from "./i18n.js";
 import { store, useStore } from "./state.js";
 
 const api = {
@@ -16,6 +17,8 @@ const api = {
   panel: () => get("/api/panel"),
   system: () => get("/api/system"),
   setSystem: (change) => post("/api/system", change),
+  unlock: () => get("/api/unlock"),
+  setUnlock: (action) => post("/api/unlock", { action }),
   about: () => get("/api/about"),
   open: (folder) => post("/api/open", { folder }),
   place: (query) => post("/api/location", { query }),
@@ -185,4 +188,66 @@ export async function restartPanel() {
   const resumed = await appAction("resume");
   await loadSettings(); // the server knows the loop started again
   return resumed;
+}
+
+// -- the sensor service (Windows) ----------------------------------------------------------------
+
+/** The sensor service and what "Unlock all sensors" sets up (/api/unlock); null off Windows. */
+export async function loadUnlock() {
+  try {
+    store.set({ unlockInfo: await api.unlock() });
+  } catch {
+    store.set({ unlockInfo: null });
+  }
+  return store.get().unlockInfo;
+}
+
+/** How a run of system-setup ended, in a sentence. */
+function tellUnlock(info) {
+  const job = info?.job;
+  if (!job || job.running) return;
+  if (job.cancelled) {
+    toast(t("Nothing was changed: Windows' question was answered with no."), { kind: "warn" });
+  } else if (job.error) {
+    toast(t("Windows did not start the setup: {error}", { error: job.error }), { kind: "error" });
+  } else if (job.code !== 0) {
+    toast(t("Not everything could be set up. In a terminal opened as administrator, this command says why: {command}", { command: info.command }), {
+      kind: "error",
+    });
+  } else if (job.action === "remove") {
+    toast(t("The sensor service is removed."), { kind: "success" });
+  } else {
+    const later = info.frame_rates === "sign-in" ? ` ${t("Game frame rates count from your next sign-in.")}` : "";
+    toast(t("All sensors are unlocked: the readings arrive within a few seconds.") + later, { kind: "success", timeout: 9000 });
+  }
+}
+
+let following = null;
+
+/** Follow a run until it is over, then say how it went. */
+function followUnlock() {
+  if (following) return;
+  following = setInterval(async () => {
+    const info = await loadUnlock();
+    if (info?.job?.running) return;
+    clearInterval(following);
+    following = null;
+    tellUnlock(info);
+    loadSourceStates(); // the sources say how LibreHardwareMonitor is read now
+  }, 1000);
+}
+
+/**
+ * "unlock" or "remove": libre-panel system-setup, after Windows asks for administrator rights
+ * (one UAC prompt). Resolves to whether it was started; how it ended is said when it has.
+ */
+export async function runUnlock(action) {
+  try {
+    store.set({ unlockInfo: await api.setUnlock(action) });
+  } catch (error) {
+    toastError(error);
+    return false;
+  }
+  followUnlock();
+  return true;
 }

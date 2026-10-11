@@ -541,6 +541,101 @@ def test_the_launcher_says_what_the_panel_could_not_read(app_url, isolated_home)
         page.wait_for_selector(".live")
 
 
+def unlock_route(answer, posted):
+    """``/api/unlock`` as a Windows download answers it, ``answer`` changed by what the
+    tests do; a POST is kept in ``posted`` and its run ends at once, with the service set up
+    (or removed)."""
+    import json
+
+    def handler(route, request):
+        if request.method == "POST":
+            asked = json.loads(request.post_data)
+            posted.append(asked)
+            answer["job"] = {
+                "action": asked["action"], "running": False, "code": 0,
+                "cancelled": False, "error": "",
+            }  # fmt: skip
+            removed = asked["action"] == "remove"
+            answer["service"] = None if removed else {"state": "running", "disabled": False}
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
+
+    return handler
+
+
+def windows_download(**changes):
+    return {
+        "platform": "win32",
+        "available": True,
+        "service": None,
+        "pawnio": None,
+        "frame_rates": "no",
+        "job": None,
+        "command": "libre-panel system-setup --service --pawnio --perf-log-users",
+        **changes,
+    }
+
+
+def test_the_launcher_offers_to_unlock_all_sensors(app_url, isolated_home):
+    """Without the sensor service, Start says what it reads and sets it up after Windows' one
+    question; the card goes once the service is there (and the hint with it)."""
+    choose_theme(isolated_home)
+    answer, posted = windows_download(), []
+    routes = {
+        "**/api/unlock": unlock_route(answer, posted),
+        "**/api/app": a_panel_app(hint="CPU temperature, power and fans need the sensor service."),
+    }
+    with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
+        card = page.locator(".unlock-card")
+        card.wait_for()
+        expect(card).to_contain_text("keeps running without administrator rights")
+        expect(page.locator(".hint-card:not(.unlock-card)")).to_have_count(0)  # one card
+        card.get_by_role("button", name="Unlock all sensors").click()
+        expect(page.locator(".unlock-card")).to_have_count(0)
+        page.wait_for_selector(".toast.success")
+    assert posted == [{"action": "unlock"}]
+
+
+def test_the_launcher_does_not_offer_what_is_there_or_cannot_be(app_url, isolated_home):
+    choose_theme(isolated_home)
+    for answer in (
+        windows_download(service={"state": "running", "disabled": False}),
+        windows_download(available=False),
+    ):
+        routes = {"**/api/unlock": unlock_route(answer, [])}
+        with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
+            page.wait_for_selector(".start.launcher")
+            page.wait_for_function("window.libre.store.get().unlockInfo !== null")
+            expect(page.locator(".unlock-card")).to_have_count(0)
+
+
+def test_the_sensor_settings_show_the_service_and_take_it_away_after_asking(app_url):
+    answer, posted = windows_download(
+        service={"state": "running", "disabled": False}, pawnio="2.0.1", frame_rates="sign-in"
+    ), []
+    routes = {"**/api/unlock": unlock_route(answer, posted)}
+    with browser_page(app_url, "settings/sensors", routes=routes) as page:
+        card = page.locator("#sensor-service")
+        card.wait_for()
+        for text in ("Running", "2.0.1", "From your next sign-in"):
+            expect(card).to_contain_text(text)
+        card.get_by_role("button", name="Remove").click()
+        dialog = page.locator(".btn-danger")
+        expect(dialog).to_have_text("Remove")
+        dialog.click()
+        expect(card).to_contain_text("Not set up")
+        expect(card.get_by_role("button", name="Unlock all sensors")).to_be_visible()
+    assert posted == [{"action": "remove"}]
+
+
+def test_the_sensor_settings_name_the_service_as_a_way_to_read(app_url):
+    with browser_page(app_url, "settings/sensors") as page:
+        page.wait_for_selector("#sensor-lhm, .settings-main")
+        if not page.locator("#sensor-lhm").count():  # (not on Windows, and not in the list)
+            return
+        labels = page.locator("#sensor-lhm .segmented button").all_inner_texts()
+        assert labels == ["Automatic", "Sensor service", "Inside Libre Panel", "Web server"]
+
+
 def test_look_edits_the_theme_and_the_preview_follows(app_url):
     with browser_page(app_url, "look") as page:
         page.wait_for_selector(".look-side .finish-tile")

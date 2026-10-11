@@ -47,6 +47,7 @@ export const store = createStore({
   settingsDown: false, // ... because the server does not answer
   panelInfo: null, // Settings: the panel found, the video mode's state
   systemInfo: null, // Settings: starting with the system
+  unlockInfo: null, // Start and Settings: the sensor service, "Unlock all sensors" (Windows)
   aboutInfo: null, // Settings: version, licence, notices, folders
   sourceStates: null, // Settings: what the running app says of its sensor sources
   serviceStates: null, // Settings: the services and their states
