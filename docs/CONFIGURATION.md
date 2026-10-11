@@ -633,8 +633,9 @@ fps_levels = [60, 90, 120, 144, 165]   # the frame-rate ranges of the report's c
   theme for `report_seconds`, ahead of an autopilot's choice and in normal mode
   only; a new game ends it at once, and a round that ends because Libre Panel
   quits has none. `round-report` is a plain built-in theme for 8.8" and 9.2"
-  bars; copy it in the editor to change it, or let a screen of a plugin draw
-  the data ([Plugins](PLUGINS.md#the-round-report)).
+  bars in the look of SPUR II's report screen; copy it in the editor to change
+  it, or let a screen of a plugin draw the data
+  ([Plugins](PLUGINS.md#the-round-report)).
 - **Cost.** One sample a second, whatever the theme's `refresh_ms`. While the
   service runs the sources it needs run too, although no theme shows them: the
   load (`cpu.load`, `gpu.load`), temperatures, power and clocks, the fans, the

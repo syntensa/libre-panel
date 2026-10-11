@@ -1,6 +1,7 @@
-"""The SPUR II screens as built-in themes: they load, draw with the demo's readings and with none,
-keep their look, and move to other panels."""
+"""The SPUR II screens as built-in themes (and the round report, in their look): they load, draw
+with the demo's readings and with none, keep their look, and move to other panels."""
 
+import gc
 import json
 
 import pytest
@@ -8,7 +9,7 @@ import pytest
 from libre_panel.devices.models import find_model
 from libre_panel.render.renderer import Renderer, _needs
 from libre_panel.sensors.base import Snapshot
-from libre_panel.sensors.demo import demo_snapshot
+from libre_panel.sensors.demo import demo_report, demo_snapshot
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import (
     THEME_FILENAME,
@@ -18,9 +19,16 @@ from libre_panel.theme.model import (
     parse_theme,
 )
 
-SPUR = ["spur-horizon", "spur-header", "spur-focus", "spur-session", "spur-cockpit"]
+SPUR = ["spur-horizon", "spur-header", "spur-focus", "spur-session", "spur-cockpit",
+        "round-report"]  # fmt: skip
 # readings the demo has not got yet: they come with the merge of the sources that add them
 LATER = {"mem.name"}
+
+
+@pytest.fixture(scope="module", autouse=True)
+def renderers_let_go():
+    yield
+    gc.collect()  # a renderer tells the sensors what it reads until it is collected
 
 
 def drawn(theme_name):
@@ -259,3 +267,85 @@ def test_cockpit_shows_the_ram_as_a_ring_and_the_network_mirrored_on_a_root_scal
     up, down = by["net-up-graph"], by["net-down-graph"]
     assert (up["direction"], down["direction"]) == ("up", "down") and up["scale"] == "sqrt"
     assert up["y"] + up["h"] - 1 == down["y"] == by["net-mid"]["y"]  # they meet on the middle line
+
+
+# -- Round report (what the memory service shows after a game) -----------------------------------
+
+
+def report_ids(theme, earlier):
+    """The widgets that are drawn for a round set against ``earlier`` rounds of the game."""
+    readings = {key: reading.value for key, reading in demo_report(1_700_000_000, earlier).items()}
+    return shown_ids(theme, readings)
+
+
+def test_the_round_report_reads_what_the_memory_service_publishes():
+    theme = load_theme(find_theme("round-report"))
+    published = set(demo_report(0.0))  # the service's own readings (round_report.readings)
+    read = keys_read(theme)
+    ours = {key for key in read if key.startswith("report.")}
+    assert ours <= published, ours - published
+    fans = {w["sensor"] for w in theme.widgets if w["type"] == "fan"}
+    assert read - ours == fans  # nothing else but what the fans in the header report
+    # all of it is on the screen: the round, how it was spread over the frame rates, the peaks
+    round_itself = ("title", "game", "when", "length", "outside", "fps", "low", "frametime")
+    assert {f"report.{name}" for name in round_itself} <= ours
+    assert {f"report.level.{n}" for n in range(6)} <= ours
+    assert {f"report.{peak}" for peak in ("cpu_temp", "gpu_temp", "gpu_hotspot", "cpu_power",
+                                         "gpu_power", "vram_used")} <= ours  # fmt: skip
+    # the box titles that name something are the panel's language, not the theme's
+    by = {w["id"]: w for w in theme.widgets}
+    assert by["round-title"]["format"] == "{value:upper}" and by["game"]["fit"] == "ellipsis"
+    assert by["game"]["x"] + by["game"]["max_width"] <= by["round-box-right"]["x"]
+
+
+def test_the_round_report_sets_the_round_against_the_earlier_ones_when_there_were_some():
+    theme = load_theme(find_theme("round-report"))
+    heads = {"mean-head", "delta-head"}
+    compared = {  # what only has a meaning next to earlier rounds
+        w["id"]
+        for w in theme.widgets
+        if w["id"].endswith(("-mean", "-delta", "-delta-label")) or w["id"] in heads
+    }
+    assert len(compared) == 24  # six rows of the levels, six of the peaks (two each), four, two
+    ids = report_ids(theme, 7)
+    assert compared <= ids and "first-round" not in ids
+    ids = report_ids(theme, 0)  # the first round of a game: the round alone, and it says so
+    assert not ids & compared and "first-round" in ids
+    assert {"fps", "low-value", "frame-value", "limit-gpu-bar", "round-head"} <= ids
+    assert {f"level-{n}-bar" for n in range(6)} <= ids  # the spread of the round is still there
+    assert {f"{peak}-value" for peak in ("cpu_temp", "gpu_hotspot", "vram_used")} <= ids
+
+
+def test_the_round_report_names_who_held_the_rate_down_as_the_service_counts_it():
+    theme = load_theme(find_theme("round-report"))
+    words = {"limit-gpu", "limit-cpu", "limit-cap"}
+    bars = {"limit-gpu-bar", "limit-cpu-bar", "limit-cap-bar"}
+    mixed = {"report.limit": "GPU 56 %", "report.limit.gpu": 56.0, "report.limit.cpu": 11.0,
+             "report.limit.cap": 33.0}  # fmt: skip
+    ids = shown_ids(theme, mixed)
+    assert words <= ids and bars <= ids and {"limit-label", "limit-groove"} <= ids
+    only_cap = {"report.limit": "CAP 100 %", "report.limit.cap": 100.0}  # the others are left out
+    ids = shown_ids(theme, only_cap)
+    assert ids & words == {"limit-cap"} and ids & bars == {"limit-cap-bar"}
+    ids = shown_ids(theme, {})  # nothing was counted
+    assert not ids & (words | bars | {"limit-label", "limit-groove"})
+    by = {w["id"]: w for w in theme.widgets}  # the GPU's share grows from the left, the CPU's right
+    assert (by["limit-gpu-bar"]["direction"], by["limit-cpu-bar"]["direction"]) == ("right", "left")
+    assert {by["limit-gpu-bar"]["x"], by["limit-cpu-bar"]["x"], by["limit-cap-bar"]["x"]} == {
+        by["limit-groove"]["x"] + 1
+    }
+
+
+def test_the_round_report_keeps_the_frames_of_the_screens_it_sits_with():
+    theme = load_theme(find_theme("round-report"))
+    by = {w["id"]: w for w in theme.widgets}
+    # three boxes of flat bands: the round and the spread in the colour of the frames, the
+    # comparison neutral (it holds the CPU's and the GPU's colours)
+    assert [by[f"{n}-box-top"]["color"] for n in ("round", "levels", "compare")] == [
+        "@net_frame",
+        "@net_frame",
+        "@rule_strong",
+    ]
+    assert not any(w["id"].endswith("-box-bottom") for w in theme.widgets)  # open at the bottom
+    glow = [w for w in theme.widgets if w["type"] == "bar" and w["finish"] == "lit"]
+    assert len(glow) == 6 and all(w["glow"] == 0.0 for w in glow)  # a bar's own light is enough

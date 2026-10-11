@@ -235,6 +235,18 @@
   `report_theme` for 30 s (priority 10, normal mode only); a new game ends it
   at once. `round-report` is a plain built-in theme (1920×480) for it; the
   data is described in the plugin guide for screens that draw it better
+- The round report in the look of SPUR II: `round-report` is SPUR II's report
+  screen as a theme, with the average frame rate large and its distance from
+  the earlier rounds, the 1% low and the frame time, who held the rate down as
+  a bar in the colours of the GPU, the CPU and the frame limit, the share of
+  the round at each frame rate with a line under each bar for the earlier
+  rounds, and the highest temperatures and power against their average. The
+  first round of a game shows no comparison and says so. For it the report
+  reads out more: `report.count`, `report.frametime_delta`,
+  `report.limit.gpu`, `.cpu` and `.cap` (shares in percent),
+  `report.<peak>_mean` and `_delta` for each highest value and
+  `report.level.<n>.mean`; the state `report` and the readings that were
+  there are as they were
 - `libre_panel.services.fancontrol`: FanControl's curves, fans and the sensor
   each curve reads, from its configuration file (found from the environment or
   `fancontrol = "..."`; opened for reading only)
@@ -408,7 +420,8 @@
   change takes over from it at once
 - The demo readings of the editor, the previews and the pictures hold 1900
   readings of history instead of 600, so the wide graphs of the SPUR themes
-  are full in them
+  are full in them, and they carry a made-up game and round report, so the
+  screens for a game and `round-report` are complete in them
 - Windows downloads: with `mode = "auto"` the library inside Libre Panel is read
   first; a LibreHardwareMonitor web server that happens to run only fills in
   what Libre Panel cannot read (the CPU's readings without administrator
