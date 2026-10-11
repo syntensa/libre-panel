@@ -70,6 +70,41 @@ MAX_ASSET = 10 * 1024 * 1024
 ASSET_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ttf", ".otf"}
 # Parts of the language catalog the editor needs.
 _EDITOR_TABLES = ("messages", "fields", "widgets", "enums", "icons")
+# Readings of sources that work on demand: a running panel has none of them until a theme (or a
+# service) shows one, so a sensor field offers them from here, whatever the live readings say.
+# (key, unit, label), as the sources give them; the demo values of the previews cover them too.
+ON_DEMAND = (
+    ("audio.volume", "%", "Volume"),
+    ("audio.muted", "", "Muted"),
+    ("cpu.load", "%", "CPU load"),  # the fast load
+    ("gpu.load", "%", "GPU load"),
+    ("media.title", "", "Title"),
+    ("media.artist", "", "Artist"),
+    ("media.album", "", "Album"),
+    ("media.source", "", "Player"),
+    ("media.state", "", "Media"),
+    ("media.playing", "", "Playing"),
+    ("media.duration", "s", "Length"),
+    ("media.position", "s", "Position"),
+    ("media.progress", "", "Progress"),
+    ("game.fps", "fps", "Frames per second"),
+    ("game.frametime", "ms", "Frame time"),
+    ("game.low", "fps", "1% low"),
+    ("game.frametime_peak", "ms", "Frame time peak"),
+    ("game.limiter", "", "Limited by"),
+    ("game.app", "", "Game"),
+    ("game.name", "", "Game"),
+    ("weather.rain.minutes", "min", "Rain starts or stops"),
+    ("weather.rain.text", "", "Rain"),
+    ("net.ping", "ms", "Ping"),
+)
+# Pictures a source or service has, for an image widget (``"src": "@media.cover"``). They are
+# no readings: they come marked ``picture``, and a sensor field leaves them out.
+PICTURES = (
+    ("media.cover", "Album cover"),
+    ("media.app_icon", "Player icon"),
+    ("game.logo", "Game logo"),
+)
 _ASSET_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 _CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
@@ -428,13 +463,22 @@ class EditorHandler(BaseHTTPRequestHandler):
             }
         )
 
-    def _sensors(self) -> list[dict[str, str]]:
+    def _sensors(self) -> list[dict[str, Any]]:
+        """Every key a theme can show: those that work on demand, the demo's and the panel's
+        own (a source's unit and label come last, so they win), and the pictures."""
+        found: dict[str, dict[str, Any]] = {
+            key: {"key": key, "unit": unit, "label": label} for key, unit, label in ON_DEMAND
+        }
         readings = dict(demo_snapshot().readings)
         try:
             readings.update(self.state.live_snapshot().readings)
         except Exception as exc:  # live sensors are optional for the editor
             log.debug("live sensors unavailable: %s", exc)
-        return [{"key": k, "unit": r.unit, "label": r.label} for k, r in sorted(readings.items())]
+        for key, reading in readings.items():
+            found[key] = {"key": key, "unit": reading.unit, "label": reading.label}
+        for key, label in PICTURES:
+            found[key] = {"key": key, "unit": "", "label": label, "picture": True}
+        return [found[key] for key in sorted(found)]
 
     # -- POST --------------------------------------------------------------
 

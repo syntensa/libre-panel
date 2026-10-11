@@ -30,6 +30,8 @@ from libre_panel.theme.model import list_themes
 
 log = logging.getLogger(__name__)
 
+TOOLTIP_CHARS = 120  # Windows: at most 127 characters
+
 
 def headline(state: dict[str, Any]) -> str:
     target = state.get("target") or t("the panel")
@@ -50,7 +52,11 @@ def tooltip(state: dict[str, Any]) -> str:
     text = headline(state)
     if state.get("detail"):
         text += "\n" + state["detail"]
-    return text if len(text) <= 120 else text[:119] + "…"  # Windows: at most 127 characters
+    elif state.get("hint"):  # what to do about missing readings: it gives the headline room
+        text += "\n" + state["hint"]
+        if len(text) > TOOLTIP_CHARS:
+            text = "Libre Panel\n" + state["hint"]
+    return text if len(text) <= TOOLTIP_CHARS else text[: TOOLTIP_CHARS - 1] + "…"
 
 
 def load_pystray() -> Any:
@@ -94,6 +100,12 @@ class Tray:
         app = self.app
         return menu(
             item(lambda _: headline(app.panel.state()), None, enabled=False),
+            item(  # temperatures missing: what to do about it, as long as it is the case
+                lambda _: app.panel.state().get("hint", ""),
+                None,
+                enabled=False,
+                visible=lambda _: bool(app.panel.state().get("hint")),
+            ),
             item(t("Open theme editor"), self.open_editor, default=True),
             item(t("Theme"), menu(self._theme_items)),
             item(t("Brightness"), menu(self._brightness_items)),
@@ -205,6 +217,7 @@ class Tray:
             state["state"],
             state["target"],
             state["detail"],
+            state.get("hint"),
             state.get("mode"),
             self.app.active_theme(),
             snapshot["brightness"],

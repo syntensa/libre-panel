@@ -26,20 +26,42 @@ from libre_panel.sensors.base import Reading, SensorHub, SensorProvider
 
 LHM_TREE = json.loads((Path(__file__).parent / "data" / "lhm_data.json").read_text("utf-8"))
 URL = "http://127.0.0.1:8085/data.json"
-WINDOWS = ["load", "librehardwaremonitor", "psutil"]
-ELSEWHERE = ["load", "psutil"]
+WINDOWS = ["load", "audio", "librehardwaremonitor", "psutil"]
+LINUX = ["load", "audio", "psutil"]
+ELSEWHERE = ["load", "psutil"]  # no way to read the volume there
 
 
 # -- the list a config starts with ----------------------------------------------------
 
 
-def test_the_fast_load_source_comes_before_psutil_and_on_windows_so_does_the_hardware_one():
+def test_the_fast_sources_come_before_psutil_and_on_windows_so_does_the_hardware_one():
     assert default_providers("win32") == WINDOWS
-    assert default_providers("linux") == ELSEWHERE
+    assert default_providers("linux") == LINUX
     assert default_providers() == default_providers(sys.platform)  # this machine's
 
 
-@pytest.mark.parametrize(("platform", "expected"), [("win32", WINDOWS), ("linux", ELSEWHERE)])
+@pytest.mark.parametrize("platform", ["darwin", "freebsd14", "cygwin"])
+def test_the_volume_is_left_out_where_nothing_reads_it(platform):
+    assert default_providers(platform) == ELSEWHERE
+
+
+def test_the_volume_is_in_the_default_list_where_it_can_be_read_and_costs_nothing_unshown(
+    monkeypatch,
+):
+    """Windows reads it through Core Audio and Linux through wpctl or pactl; either way
+    the thread starts only while a theme or a service shows ``audio.*``."""
+    gc.collect()
+    monkeypatch.setattr(base, "_WANTED", {})
+    for platform in ("win32", "linux"):
+        assert "audio" in default_providers(platform)
+    provider = audio.AudioProvider()
+    assert provider.read() == {} and provider._thread is None  # nobody shows it: no thread
+    provider.close()
+
+
+@pytest.mark.parametrize(
+    ("platform", "expected"), [("win32", WINDOWS), ("linux", LINUX), ("darwin", ELSEWHERE)]
+)
 def test_a_new_config_file_names_the_list_of_its_platform(platform, expected):
     text = default_config_toml(platform)
     assert "@PROVIDERS@" not in text
@@ -54,6 +76,14 @@ def test_the_generated_config_tells_what_librehardwaremonitor_needs():
     text = default_config_toml("win32")
     assert "Run it as administrator and turn on Options -> Remote Web Server -> Run." in text
     assert "# stale_seconds = 5" in text and "ten times a second" in text
+
+
+def test_the_generated_config_tells_what_the_volume_source_is():
+    text = default_config_toml("linux")
+    words = " ".join(line.removeprefix("# ") for line in text.splitlines())
+    assert "audio (the volume and mute of the default output: Windows, Linux with wpctl" in words
+    assert "load and audio work only while a theme or a service shows their readings" in words
+    assert '\nproviders = ["load", "audio", "psutil"]\n' in text
 
 
 def test_the_written_config_file_has_the_list(isolated_home):
@@ -92,12 +122,12 @@ def test_a_list_in_the_users_config_is_left_alone(isolated_home, providers):
     assert load_config(path).sensors.providers == providers
 
 
-@pytest.mark.parametrize("platform", ["win32", "linux"])
-def test_psutil_alone_as_0_4_wrote_it_means_todays_default(monkeypatch, platform):
-    """Every config.toml up to 0.4 named psutil alone: the default then, not a choice."""
+@pytest.mark.parametrize(("platform", "expected"), [("win32", WINDOWS), ("linux", LINUX)])
+def test_psutil_alone_as_0_4_wrote_it_means_todays_default(monkeypatch, platform, expected):
+    """Every config.toml up to 0.4 named psutil alone: the default then, not a choice. It
+    gets today's list, the volume included."""
     monkeypatch.setattr("libre_panel.config.sys.platform", platform)
     old = default_config_toml().replace(json.dumps(default_providers()), '["psutil"]')
-    expected = WINDOWS if platform == "win32" else ELSEWHERE
     assert parse_config(tomllib.loads(old)).sensors.providers == expected
 
 

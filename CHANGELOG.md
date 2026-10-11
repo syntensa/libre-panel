@@ -12,7 +12,8 @@
   `audio.muted` of the default output, read on every frame so a volume bar
   follows the volume keys at once. Windows (no extra program; it follows a
   changed default device) and Linux (`wpctl` or `pactl`). It runs only
-  while a theme shows `audio.*`; add `"audio"` to `[sensors] providers`
+  while a theme or a service shows `audio.*`, and is in the default
+  `[sensors] providers` on both; in a list of your own add `"audio"`
 - Messages in the look of SPUR II: the band (`"toast": {"style": "band"}`,
   or *Theme → Messages* in the editor). A glowing edge ignites from the
   centre and the band rolls down from it, with a title, a cover or icon and
@@ -40,6 +41,11 @@
   `context.state(key)` read it back. `host.want("media.*")` tells the sources
   that work on demand (what is playing, the volume, the load) that a service
   reads them
+- Plugins: `host.on("fresh", callback)` (`snapshot=`, `keys=`) tells a service on the
+  frame a reading of a source that follows on every frame (the volume, the fast load, what
+  services publish) changed between two samples, and only then. It comes in the thread of
+  `sample`, one callback after the other, and a slow one gets the newest with all the keys
+  that changed meanwhile
 - Services of its own, built into the app: `notices`, `game` and `autopilot`.
   They are switched on with `[services] enabled` like a plugin's, all are off
   until you list them, they work in the downloads without any package, and
@@ -337,10 +343,36 @@
 - Video mode: where many widgets move, what lies under a graph was laid anew
   on most frames (the kept layers went oldest first, not least used); the
   ones a frame uses are now kept longest
+- The volume message came with the next reading, up to `refresh_ms` late. It now comes
+  within a frame or two of the volume key, and a slow turn of the volume that moves less
+  than a step between two frames still adds up to one
+- An image widget that shows a picture of a source (`"src": "@media.app_icon"`, or such a
+  line in `slides`) now counts as reading it. Before, the icon of the player was never
+  looked for unless something else asked for it, and the cover of the music module was
+  read only while something else asked for `media.*` too, such as the notices service
+- The editor's sensor picker did not offer the volume, the rain text and the game's slowest
+  frame and what limits it: a source that reads only while a theme shows a key has none of
+  them in a running panel until then, and the demo had none. They are listed from a catalog
+  now, and the demo values of the previews gained the volume (46 %), the game keys and the
+  rain ("Rain in 35 min"). `GET /api/sensors` also lists the pictures a source has
+  (`media.cover`, `media.app_icon`, `game.logo`), marked `"picture": true`, for an image's
+  `"@key"`
+- Windows, when LibreHardwareMonitor gives no temperatures (Libre Panel not run as
+  administrator, no PawnIO driver, its reader did not start, its web server not running), the
+  panel showed "--" and only `libre-panel sensors`, `doctor` and the Control page said why, in
+  technical words. Now one sentence says what to do, in the user's language: a line under the
+  status line of the tray menu and in the tooltip of the icon, `hint` in the panel's state
+  (`/api/app`, `GET control/panel`) and on the LibreHardwareMonitor row of `GET
+  control/sources`. It keeps quiet while LibreHardwareMonitor starts and about what nobody can
+  change. A Windows download that cannot use its library (damaged, or deleted by a virus
+  scanner) reports that as the source's `error` instead of asking a web server that is not there
 - Services follow `config.toml` whenever the panel loop starts. A service switched
   on (or off, or given other options) while the panel was paused, or in a
   `config.toml` that did not load at the start and was fixed later, stayed as it
   was until the file changed once more
+- A change of `[services]` saved together with a theme name that does not exist (a typo, a
+  theme not installed yet) reached the services only with the next save. They now follow
+  `config.toml` whenever it loads, whether or not its theme does; the panel keeps its theme
 
 **Changes**
 - The video mode turns itself on: `video.mode` is `"auto"` by default, which
@@ -356,8 +388,9 @@
   does nothing
 - Windows: the GPU, temperatures, power and fans showed nothing unless
   `librehardwaremonitor` was listed in `config.toml`. New configurations now
-  start with `providers = ["load", "librehardwaremonitor", "psutil"]` (elsewhere
-  `["load", "psutil"]`), and an unset list means the same. Where Libre Panel
+  start with `providers = ["load", "audio", "librehardwaremonitor", "psutil"]`
+  (on Linux `["load", "audio", "psutil"]`, elsewhere `["load", "psutil"]`), and
+  an unset list means the same. Where Libre Panel
   cannot read LibreHardwareMonitor itself (see above), that one must run as
   administrator with *Options → Remote Web Server → Run*; where it does not run,
   asking costs nothing (one second at most, waits that grow to half a minute,

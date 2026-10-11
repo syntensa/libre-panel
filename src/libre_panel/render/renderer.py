@@ -301,7 +301,16 @@ def _reads(widgets: list[dict[str, Any]]) -> set[str]:
             keys.add(f"weather.{widget['field']}")
         elif widget["type"] == "list":
             keys |= lists.read_keys(widget["items"])
+        elif widget["type"] == "image":
+            keys |= _live_pictures(widget)
     return keys
+
+
+def _live_pictures(widget: dict[str, Any]) -> set[str]:
+    """The keys of the pictures an image widget takes from a source, not from the theme's
+    folder: ``"@media.cover"`` as its ``src`` or on a line of its ``slides``."""
+    pictures = [widget.get("src") or "", *(widget.get("slides") or "").splitlines()]
+    return {name[1:] for name in map(str.strip, pictures) if name.startswith("@") and len(name) > 1}
 
 
 class Renderer:

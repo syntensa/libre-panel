@@ -14,7 +14,6 @@ gathers the parts a screen polls together.
 from __future__ import annotations
 
 import io
-import sys
 from datetime import datetime
 from typing import Any
 
@@ -181,7 +180,7 @@ class Control(ConsolePage):
             "panel": self.context.status(),
             "config_problem": problem,
             "services": self._services(config),
-            "sources": self._sources(config),
+            "sources": self._sources(),
             "probes": self._probes(),
             "themes": self._themes(config),
             "log": self._log_file(),
@@ -192,8 +191,7 @@ class Control(ConsolePage):
         return {"background": self.context.background, "panel": self.context.status()}
 
     def sources(self, request: Request) -> dict[str, Any]:
-        config, _ = self._config()
-        return {"background": self.context.background, "sources": self._sources(config)}
+        return {"background": self.context.background, "sources": self._sources()}
 
     def services(self, request: Request) -> dict[str, Any]:
         config, problem = self._config()
@@ -269,25 +267,14 @@ class Control(ConsolePage):
         names = sorted({*registry().names("services"), *applied, *enabled})
         return [self._service(name, name in enabled, applied) for name in names]
 
-    def _sources(self, config: Config | None) -> list[dict[str, Any]]:
-        from libre_panel.sensors.librehardwaremonitor import DEFAULT_URL, LhmStatus, hardware_hint
-
-        sources = self.context.sources()
-        snapshot = self.context.snapshot()
+    def _sources(self) -> list[dict[str, Any]]:
+        panel = self.context.status() or {}
         found = []
-        for source in sources:
+        for source in self.context.sources():
             status, rows, hint = source["status"], [], None
             if status is not None and source["name"] == "librehardwaremonitor":
                 rows = lhm_rows(status)
-                if snapshot is not None and config is not None:
-                    options = config.sensors.options.get("librehardwaremonitor", {})
-                    hint = hardware_hint(
-                        snapshot.readings,
-                        [s["name"] for s in sources],
-                        options.get("url", DEFAULT_URL),
-                        sys.platform,
-                        LhmStatus(**status),
-                    )
+                hint = panel.get("hint") or None  # the one the tray shows, in the user's words
             elif status is not None:
                 rows = [[k.replace("_", " "), str(v)] for k, v in status.items() if v is not None]
             problem = bool(hint) or bool(status and status.get("error"))

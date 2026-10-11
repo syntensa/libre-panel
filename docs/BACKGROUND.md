@@ -32,6 +32,7 @@ Installed with pip, add the `tray` extra: `pipx install "libre-panel[usb,serial,
 | Item | What it does |
 |---|---|
 | status line | what the panel shows, or why it waits (e.g. "waiting for the panel") |
+| hint line | only on Windows, only while temperatures and power show "--": the one thing to do about it, e.g. "CPU temperature and power need administrator rights: run Libre Panel as administrator." The tooltip of the icon says it too |
 | **Open theme editor** | also a click on the icon |
 | **Theme** | switch the theme on the panel |
 | **Brightness** | Off, 10–100 %; written to `config.toml` |
@@ -77,7 +78,7 @@ theme per mode and the log.
 |---|---|
 | **Live picture** | the frame on the panel now, with transitions and messages, about five times a second; it is the theme's way up, not turned for an upside-down panel. Paused, it says so |
 | **How the panel is doing** | the numbers above as tiles, with the panel's state and how long the loop has run |
-| **Sensor sources** | each source in the order it is asked, with the readings it gave last time. LibreHardwareMonitor says how it is read (inside Libre Panel or through its web server), whether Libre Panel has administrator rights, whether the CPU's sensors are within reach and which PawnIO driver is there, and on Windows what to do when no temperature or power arrives |
+| **Sensor sources** | each source in the order it is asked, with the readings it gave last time. LibreHardwareMonitor says how it is read (inside Libre Panel or through its web server), whether Libre Panel has administrator rights, whether the CPU's sensors are within reach and which PawnIO driver is there, and on Windows what to do when the CPU's temperature and power or all of them do not arrive: the same sentence as the tray's hint line |
 | **Services** | each service Libre Panel knows, with its state (running, failed with the reason, stopped, off, or changing while the app follows a change of `config.toml`) and **Restart**, which stops it and starts it again with its settings. A service that is not in `[services] enabled` is off |
 | **Test messages** | sends a test message of each kind (volume, music, warning, panel, device, game) and says whether it shows, or why not: the theme switches the kind off (`toast.off`), the screen shows it itself, or no panel is connected |
 | **Theme per mode** | the theme of the normal mode and of game mode, written to `config.toml` (`theme`, and `theme` under `[modes.game]`); "same as the normal mode" leaves the game mode without a theme of its own |
