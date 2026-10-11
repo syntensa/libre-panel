@@ -44,7 +44,7 @@ def test_the_programs_of_a_download_are_found_in_its_tools_folder(tmp_path, monk
     )
     assert find_ffmpeg() == str(program / "tools" / f"ffmpeg{exe(platform)}")
     assert presentmon.find_presentmon() == str(program / "tools" / f"PresentMon{exe(platform)}")
-    assert bundled.bundled("PawnIO_setup.exe") is None  # what it does not carry is not there
+    assert bundled.find("PawnIO_setup.exe") is None  # what it does not carry is not there
 
 
 def test_the_programs_of_a_download_come_before_the_ones_on_the_path(tmp_path, monkeypatch):
@@ -119,6 +119,6 @@ def test_the_file_names_follow_the_system(monkeypatch):
 def test_a_folder_in_place_of_a_program_is_not_one(tmp_path, monkeypatch):
     program = release_build(tmp_path, monkeypatch, "linux")
     (program / "tools" / "ffmpeg").mkdir()
-    assert bundled.bundled("ffmpeg") is None
+    assert bundled.find("ffmpeg") is None
     with pytest.raises(DeviceError, match="needs ffmpeg"):
         find_ffmpeg()

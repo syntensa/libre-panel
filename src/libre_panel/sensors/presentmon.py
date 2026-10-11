@@ -49,7 +49,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from libre_panel.bundled import bundled, program_name
+from libre_panel import bundled
 from libre_panel.sensors.base import Reading, SensorProvider, wanted
 
 log = logging.getLogger(__name__)
@@ -100,7 +100,7 @@ def find_presentmon(path: str = "") -> str | None:
     (its ``tools`` folder), PATH, or Intel's folder under Program Files."""
     if path:
         return path if Path(path).is_file() else shutil.which(path)
-    own = bundled(program_name("PresentMon"))
+    own = bundled.find(bundled.program_name("PresentMon"))
     if own:
         return own
     for name in ("PresentMon", "PresentMon-x64", "presentmon"):

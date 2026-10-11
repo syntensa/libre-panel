@@ -35,7 +35,7 @@ def program_name(name: str) -> str:
     return f"{name}.exe" if sys.platform == "win32" else name
 
 
-def bundled(file_name: str) -> str | None:
+def find(file_name: str) -> str | None:
     """The path of the file ``file_name`` that the download carries, or None."""
     for folder in tools_folders():
         path = folder / file_name
