@@ -437,6 +437,13 @@ def test_downloads_are_https_only(monkeypatch):
         fetch_tools.download("https://github.com/x/releases/a.zip")
 
 
+def test_the_log_says_which_download_is_under_way(monkeypatch, capsys):
+    monkeypatch.setattr(fetch_tools, "download", lambda url: b"bytes of " + url.encode())
+    tool = fetch_tools.TOOLS[1]
+    assert fetch_tools._from_net(tool) == b"bytes of " + tool.url.encode()
+    assert capsys.readouterr().out == f"downloading {tool.url}\n"
+
+
 def test_a_server_that_fails_for_a_moment_is_asked_again(monkeypatch):
     answers = [
         fetch_tools.urllib.error.HTTPError("u", 502, "Bad Gateway", {}, None),

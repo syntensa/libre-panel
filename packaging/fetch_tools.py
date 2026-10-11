@@ -366,7 +366,7 @@ def fetch(
     chosen = [tool for tool in tools if tool.platform == platform]
     if not chosen:
         raise FetchError(f"the table has no program for {platform}")
-    get = fetch_file or (lambda tool: download(tool.url))
+    get = fetch_file or _from_net
     folder = Path(folder)
     folder.parent.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix=f".{folder.name}-", dir=folder.parent))
@@ -404,11 +404,16 @@ def pins(
 ) -> list[str]:
     """The SHA-256 of what each address of the table gives, to be written into it when it
     moves to other versions."""
-    get = fetch_file or (lambda tool: download(tool.url))
+    get = fetch_file or _from_net
     return [
         f"{tool.file} ({tool.platform}) {tool.url}\n    sha256 {sha256(get(tool))}"
         for tool in tools
     ]
+
+
+def _from_net(tool: Tool) -> bytes:
+    print(f"downloading {tool.url}", flush=True)  # 180 MB take a while: the log says where we are
+    return download(tool.url)
 
 
 def _from_folder(archive_dir: Path) -> Callable[[Tool], bytes]:
@@ -439,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
         "--print-pins", action="store_true", help="print the hashes of the downloads, nothing else"
     )
     args = parser.parse_args(argv)
-    source = _from_folder(args.archive_dir) if args.archive_dir else None
+    source = _from_folder(args.archive_dir) if args.archive_dir else _from_net
     try:
         if args.print_pins:
             print("\n".join(pins(source, TOOLS)))
