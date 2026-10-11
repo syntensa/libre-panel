@@ -663,6 +663,11 @@
 - A palette colour with alpha (`"track": "#FFFFFF14"`, a translucent `surface` or `line`) was made
   opaque by the modules, so a translucent track read as a white one; a card's glass added its 90 %
   to whatever the palette said. A role keeps its alpha now, and the glass takes 90 % of it
+- Lumen, Studio and the SPUR II studio screen on the 0.96" panel (160×80) laid their modules
+  out past the frame, a card 95 px tall in a frame 80 px high: the grid of 48 cells with a margin
+  of 16 px and a gap of 1 px came along as it was, and its cells shrank to a pixel. The margin and
+  gap of the grid scale with the panel now, and a grid has no cells smaller than 4 px (it has
+  fewer of them)
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

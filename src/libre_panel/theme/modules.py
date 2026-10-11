@@ -178,6 +178,7 @@ def _sources() -> dict[str, Source]:
 # -- the grid ----------------------------------------------------------------
 
 GRID_DEFAULTS: dict[str, int] = {"columns": 0, "rows": 0, "gap": 0, "margin": 0}  # 0 = automatic
+MIN_CELL = 4  # px: a grid never has cells smaller than this (it has fewer of them instead)
 
 
 @dataclass(frozen=True)
@@ -216,7 +217,7 @@ def make_grid(
 
     Automatic values give cells of about half the short side (two rows on a
     bar, three columns on a 3.5" panel) and keep clear of strips the panel's
-    bezel hides.
+    bezel hides. A grid that asks for finer cells than ``MIN_CELL`` px has fewer.
     """
     given = {**GRID_DEFAULTS, **(settings or {})}
     short = min(width, height)
@@ -234,6 +235,9 @@ def make_grid(
     target = max(64, min(240, short / 2))
     columns = given["columns"] or max(1, round(usable_w / target))
     rows = given["rows"] or max(1, round(usable_h / target))
+    # no more cells than fit: 48 cells and a gap of 1 px each do not go into 78 px
+    columns = min(columns, max(1, (usable_w + gap) // (MIN_CELL + gap)))
+    rows = min(rows, max(1, (usable_h + gap) // (MIN_CELL + gap)))
     cell_w = max(1.0, (usable_w - (columns - 1) * gap) / columns)
     cell_h = max(1.0, (usable_h - (rows - 1) * gap) / rows)
     return Grid(left, top, cell_w, cell_h, gap, columns, rows)

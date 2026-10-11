@@ -161,7 +161,13 @@ def adapt_theme(
         raise ValueError('mode must be "scale" or "keep"')
     if any(w["type"] == "module" for w in theme.widgets):  # modules follow the grid either way
         old = make_grid(old_w, old_h, theme.grid, theme.model)
-        new = make_grid(new_w, new_h, theme.grid, model)
+        if mode == "scale" and theme.grid:  # its margin and gap are pixels too (0: automatic)
+            s = min(new_w / old_w, new_h / old_h)
+            result["grid"] = {
+                key: max(1, round(value * s)) if key in ("margin", "gap") and value else value
+                for key, value in theme.grid.items()
+            }
+        new = make_grid(new_w, new_h, result.get("grid"), model)
         result["widgets"] = _move_modules(result["widgets"], old, new)
     parse_theme(deepcopy(result))  # the adapted theme must still be valid
     return result

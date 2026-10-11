@@ -70,6 +70,24 @@ def test_every_built_in_theme_adapts_to_every_panel_either_way_round(name):
             assert theme.warnings == [], (model.id, orientation)
 
 
+@pytest.mark.parametrize("name", ["lumen", "studio", "libre-default", "spur-studio"])
+def test_the_modules_of_an_adapted_theme_stay_in_the_frame_on_every_panel(name):
+    """Their grid is pixels too: it came along with its margin and gap and 48 x 48 cells, and
+    on the 0.96" the modules ran far past the frame."""
+    from libre_panel.render.renderer import Renderer
+
+    data = load_theme(find_theme(name)).to_dict()
+    for model in MODELS:
+        for orientation in ("landscape", "portrait"):
+            theme = parse_theme(adapt_theme(data, model.id, orientation), find_theme(name))
+            renderer = Renderer(theme, preview=True)
+            for module, (x, y, w, h) in renderer.module_boxes.items():
+                where = (model.id, orientation, module)
+                assert x >= 0 and y >= 0, where
+                assert x + w <= theme.width and y + h <= theme.height, where
+            renderer.close()
+
+
 def test_adapt_keep_mode_and_custom_size():
     data = load_theme(find_theme("libre-default")).to_dict()
     kept = adapt_theme(data, "custom", "landscape", mode="keep", width=640, height=400)

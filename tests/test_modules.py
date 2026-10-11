@@ -8,6 +8,7 @@ from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.theme.model import ThemeError, parse_theme
 from libre_panel.theme.modules import (
     LOOKS,
+    MIN_CELL,
     MODULE_KINDS,
     ROLES,
     look_theme_parts,
@@ -180,6 +181,18 @@ def test_a_hidden_module_hides_its_parts():
     assert not any(p.startswith(("m0/", "m1/")) for p in drawn)
     _, boxes = renderer.render(snapshot(drop=("gpu.",)))
     assert "m0" not in boxes and "m1" not in boxes
+
+
+@pytest.mark.parametrize("size", [(160, 80), (80, 160), (320, 480), (480, 320), (1920, 480)])
+def test_a_grid_has_no_more_cells_than_fit_in_the_frame(size):
+    """Lumen's grid of 48 x 48 cells with a gap of 1 px and a margin of 16 asks a 0.96" panel for
+    cells of a fraction of a pixel; a cell is at least a few pixels, and the grid keeps within
+    the margins (it ran 40 px past the frame)."""
+    grid = make_grid(*size, {"columns": 48, "rows": 48, "gap": 1, "margin": 16})
+    assert grid.cell_w >= MIN_CELL and grid.cell_h >= MIN_CELL
+    x, y, w, h = grid.box(0, 0, grid.columns, grid.rows)
+    assert (x, y) == (grid.x, grid.y) and x + w <= size[0] - 16 and y + h <= size[1] - 16
+    assert grid.columns <= 48 and grid.rows <= 48
 
 
 def test_modules_outside_the_grid_are_moved_in():
