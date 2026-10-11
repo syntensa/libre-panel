@@ -159,6 +159,10 @@
   in, and `{value:rate}` with `{value:rate_unit}`: a data rate as SPUR II
   sets it, its number and its unit apart (519 and KB/s, from 1 MB/s 1.2 and
   MB/s)
+- `tools/compare_reference.py` draws a theme with given readings and
+  compares it with a picture of the same screen: the share of pixels that
+  match, overall and per region, the pictures side by side, their
+  difference and enlarged crops
 - Liberation Sans ships with Libre Panel (`builtin:LiberationSans-Regular`,
   `-Bold`): its letters are as wide as Arial's, so a layout made for Arial
   stays in place
