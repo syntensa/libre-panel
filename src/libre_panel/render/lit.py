@@ -29,7 +29,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 from libre_panel.render import light3d
 from libre_panel.render.finish import Finish, register
-from libre_panel.render.light import light_layer, mix, plus, role_color
+from libre_panel.render.light import mix, role_color
 from libre_panel.render.renderer import Piece, _blur, _fraction, _number, _steps
 
 GLOW_TAIL = 0.55 * 0.34  # a bar's glow along its length, of its colour ...
@@ -124,98 +124,103 @@ def _bar_colours(widget, length, paint, reverse) -> np.ndarray:
     return start + (end - start) * t[:, None]
 
 
-def _groove_bar(widget: dict[str, Any], track: tuple[int, ...]) -> Image.Image:
-    length, thick, upright, reverse = _layout(widget)
-    key = ("bar-groove", length, thick, upright, reverse, widget["segments"],
-           widget["segment_gap"], tuple(track))  # fmt: skip
+def _groove_bar(widget: dict[str, Any], track: tuple[int, ...]) -> np.ndarray:
+    """The groove of a bar, lying: premultiplied RGBA, 0 to 1 (thick, length, 4)."""
+    length, thick, _upright_, reverse = _layout(widget)
+    key = ("bar-groove", length, thick, reverse, widget["segments"], widget["segment_gap"],
+           tuple(track))  # fmt: skip
 
-    def make() -> Image.Image:
+    def make() -> np.ndarray:
         _lit, cells = _spans(widget, length, 1.0, reverse)
         rgba = _tube(thick).image(length, [(a, b, 1.0) for a, b in cells], _unit(track), True)
-        if track[3] < 255:
-            rgba[..., 3] = (rgba[..., 3].astype(np.uint16) * track[3] // 255).astype(np.uint8)
-        return _upright(Image.fromarray(rgba, "RGBA"), upright)
+        return _premultiplied(rgba, track[3] / 255)
 
     return _PICTURES.get(key, make)
 
 
-def _upright(image: Image.Image, upright: bool) -> Image.Image:
-    """A bar drawn lying, turned upright: its start at the top, its light from the left."""
-    return image.transpose(Image.Transpose.TRANSPOSE) if upright else image
+def _premultiplied(rgba: np.ndarray, alpha: float = 1.0) -> np.ndarray:
+    out = rgba.astype(np.float32) / 255
+    out[..., 3] *= alpha
+    out[..., :3] *= out[..., 3:4]
+    return out
+
+
+def _gauss(sigma: float) -> np.ndarray:
+    """A Gaussian kernel of standard deviation ``sigma`` (as PIL's GaussianBlur)."""
+    n = max(1, math.ceil(3 * sigma))
+    x = np.arange(-n, n + 1, dtype=np.float32)
+    kernel = np.exp(-0.5 * (x / sigma) ** 2)
+    return kernel / kernel.sum()
+
+
+def _blurred(values: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+    n = (len(kernel) - 1) // 2
+    return np.convolve(values, kernel, mode="full")[n : n + len(values)]
 
 
 def _bar_glow(length: int, thick: int, spans, colours: np.ndarray, pad: int, radius: float,
-              strength: float, reverse: bool = False) -> Image.Image:  # fmt: skip
-    """SPUR II's bar glow, lying: dim along the lit part, rising to the head,
-    the head running towards white; blurred at a quarter of the size, as
-    SPUR II's glow zones. ``pad`` px around the bar."""
+              strength: float, reverse: bool = False) -> np.ndarray:  # fmt: skip
+    """SPUR II's bar glow, lying, as light (thick + 2 pad, length + 2 pad, 3; 0 to 1):
+    dim along the lit part, rising to the head, the head running towards white.
+    Its source is a band across the bar times a level along it, so its blur
+    is the blur along times the blur across: two short convolutions."""
     if reverse:  # filling from the far end, its head is on the left: worked out mirrored
         spans = [(length - b, length - a, amount) for a, b, amount in spans]
         colours = colours[::-1] if np.ndim(colours) == 2 else colours
-        glow = _bar_glow(length, thick, spans, colours, pad, radius, strength)
-        return glow.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-    q = 4
-    w, h = (length + 2 * pad + q - 1) // q, (thick + 2 * pad + q - 1) // q
-    glow = np.zeros((h, w, 3), np.float32)
+        return _bar_glow(length, thick, spans, colours, pad, radius, strength)[:, ::-1]
     start = min(a for a, _b, _amount in spans)
     head = max(b for _a, b, _amount in spans)
     rise = max(2.0, min(head - start, GLOW_HEAD * thick))
-    xs = (np.arange(w, dtype=np.float32) + 0.5) * q - pad  # along the bar, at the glow's columns
-    t = np.clip((xs - (head - rise)) / rise, 0, 1)
-    t = np.ceil(t * GLOW_STEPS) / GLOW_STEPS  # in steps, as SPUR II's rise
+    xs = np.arange(length + 2 * pad, dtype=np.float32) + 0.5 - pad  # along the bar
+    t = np.ceil(np.clip((xs - (head - rise)) / rise, 0, 1) * GLOW_STEPS) / GLOW_STEPS  # in steps
     level = np.where(xs >= head - rise, GLOW_TAIL + (1 - GLOW_TAIL) * t**1.4, GLOW_TAIL)
     level = np.where((xs >= start) & (xs <= head), level, 0.0)
     white = np.where(level > 0, GLOW_WHITE * t**2, 0.0)
     c = np.asarray(colours, np.float32)
-    if c.ndim == 2:  # a colour per column: those under the glow's columns
+    if c.ndim == 2:  # a colour per column
         c = c[np.clip(xs.astype(np.intp), 0, length - 1)]
-    colour = c * level[:, None] if c.ndim == 2 else c[None, :] * level[:, None]
+    colour = c * level[:, None]
     colour = colour + (1 - colour) * white[:, None]
-    rows = (np.arange(h, dtype=np.float32) + 0.5) * q - pad
-    inside = (rows >= 1) & (rows <= thick - 1)
-    glow[inside] = colour[None, :, :] * 255
-    small = Image.fromarray(np.clip(glow, 0, 255).astype(np.uint8), "RGB")
-    small = small.filter(ImageFilter.GaussianBlur(max(0.5, radius / q)))
-    big = small.resize((w * q, h * q), Image.Resampling.BILINEAR).crop(
-        (0, 0, length + 2 * pad, thick + 2 * pad)
-    )
-    return light_layer(np.asarray(big, np.float32) * strength)
+    kernel = _gauss(radius)
+    along = np.stack([_blurred(colour[:, i], kernel) for i in range(3)], -1)
+    rows = np.arange(thick + 2 * pad, dtype=np.float32) + 0.5 - pad
+    across = _blurred(((rows >= 1) & (rows <= thick - 1)).astype(np.float32), kernel)
+    return across[:, None, None] * along[None, :, :] * strength
 
 
 def bar_piece(renderer: Any, widget: dict[str, Any], frac: float, paint) -> Piece:
+    """The lit bar, composed in premultiplied light: groove, tube, then its
+    glow added (light over the tube adds up, beside it shows as a glow)."""
     x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
     length, thick, upright, reverse = _layout(widget)
     track = renderer.color(widget["background"])
-    groove = _groove_bar(widget, track) if track else None
+    layer = _groove_bar(widget, track) if track else np.zeros((thick, length, 4), np.float32)
     lit, _cells = _spans(widget, length, frac, reverse)
-    if not lit:
-        layer = groove or Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        return Piece(layer, x, y, [x, y, w, h])
-    colours = _bar_colours(widget, length, paint, reverse)
-    key = ("bar", length, thick, upright, tuple(lit), _key(paint[0]), _key(paint[1]))
-
-    def make() -> Image.Image:
-        rgba = _tube(thick).image(length, lit, colours)
-        alpha = paint[0][3]
-        if alpha < 255:
-            rgba[..., 3] = (rgba[..., 3].astype(np.uint16) * alpha // 255).astype(np.uint8)
-        return Image.fromarray(rgba, "RGBA")
-
-    value = _PICTURES.get(key, make)  # lying
     glow = widget.get("glow", 0.0)
     pad = 0
-    if glow > 0:
-        radius = max(1.0, float(widget.get("glow_radius", 10)))
-        pad = math.ceil(2 * radius)
-        light = _bar_glow(length, thick, lit, colours, pad, radius, glow, reverse)
-        layer = Image.new("RGBA", light.size, (0, 0, 0, 0))
-        if groove is not None:
-            layer.alpha_composite(_upright(groove, upright), (pad, pad))  # back to lying
-        layer.alpha_composite(value, (pad, pad))
-        layer = _upright(plus(layer, light), upright)
-    else:
-        layer = _over(groove, _upright(value, upright))
-    return Piece(layer, x - pad, y - pad, [x, y, w, h])
+    if lit:
+        colours = _bar_colours(widget, length, paint, reverse)
+        key = ("bar", length, thick, tuple(lit), _key(paint[0]), _key(paint[1]))
+        value = _PICTURES.get(
+            key, lambda: _premultiplied(_tube(thick).image(length, lit, colours), paint[0][3] / 255)
+        )
+        layer = value + layer * (1 - value[..., 3:4])
+        if glow > 0:
+            radius = max(1.0, float(widget.get("glow_radius", 10)))
+            pad = math.ceil(2 * radius)
+            light = _bar_glow(length, thick, lit, colours, pad, radius, glow, reverse)
+            grown = np.zeros((thick + 2 * pad, length + 2 * pad, 4), np.float32)
+            grown[pad : pad + thick, pad : pad + length] = layer
+            grown[..., :3] += light
+            grown[..., 3] += np.maximum(np.maximum(light[..., 0], light[..., 1]), light[..., 2])
+            layer = np.minimum(grown, 1.0)
+    alpha = layer[..., 3:4]
+    rgb = layer[..., :3] / np.maximum(alpha, 1e-4)
+    out = np.concatenate([rgb, alpha], -1) * 255 + 0.5
+    out = np.clip(out, 0, 255).astype(np.uint8)
+    if upright:  # drawn lying: its start at the top, its light from the left
+        out = np.ascontiguousarray(out.swapaxes(0, 1))
+    return Piece(Image.fromarray(out, "RGBA"), x - pad, y - pad, [x, y, w, h])
 
 
 class LitBar(Finish):

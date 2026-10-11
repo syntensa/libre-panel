@@ -51,13 +51,14 @@ RIDGE_GLOW = 0.45  # how much of its colour a ridge's lit facets glow with
 RIDGE_RADIUS = 7.0  # and how soft (480 px high panels)
 RIDGE_TILT = 45.0  # degrees
 
-SHARP, SOFT, SOFT_SHARE = 70, 9, 0.10  # the gloss: a short hard highlight on a soft one
+SOFT_SHARE = 0.10  # the gloss: a short hard highlight (** 70) on a soft one (** 9)
 TOP_GLOSS = 0.25  # faces turned to the viewer shine less than facets
 SWEEP_REACH = 520.0  # a sweep is near: its gloss fades with distance (1920 px wide) ...
 SWEEP_CUT = 1.6  # ... and is gone at this many reaches (nothing beyond is worked out)
 TILE = 96  # edges are lit tile by tile
 MARGIN = 14  # room around a tile's points for the halo of the gloss
-HALO = 0.55  # the soft halo around a gloss
+HALO = 0.55  # the soft halo around a gloss ...
+HALO_FROM = 30  # ... where it shines this much (of 255)
 TRANSITIONS = ("tube", "entrance")  # a sweep follows when one of these ends
 
 Light = tuple[
@@ -156,26 +157,30 @@ class LightEdge:
         self.strength = strength
         self.empty = ys.size == 0
         self._kept: dict[str, tuple[Any, Any]] = {}
+        self.tiles: list[tuple[tuple[int, int, int, int], slice, np.ndarray, np.ndarray]] = []
         if self.empty:
-            self.tiles: list[
-                tuple[tuple[int, int, int, int], np.ndarray, np.ndarray, np.ndarray]
-            ] = []
             return
         gx, gy = xs + int(x), ys + int(y)
+        # The points tile by tile, so a tile is a range of them. Each tile only
+        # as large as its points and the halo's room: a frame's rail fills a
+        # strip of its 96 x 96, and every pixel of a tile costs.
+        key = (gy // TILE) * 1_000_000 + gx // TILE
+        order = np.argsort(key, kind="stable")
+        gx, gy, key, ys, xs = gx[order], gy[order], key[order], ys[order], xs[order]
         n = np.asarray(normals, np.float32)[ys, xs]
         factor = np.where(n[:, 2] > 0.995, TOP_GLOSS, 1.0) * coverage[ys, xs]
         columns = (gx + 0.5, gy + 0.5, n[:, 0], n[:, 1], n[:, 2], factor)
         self._points = tuple(np.ascontiguousarray(a, np.float32) for a in columns)
-        # Each tile only as large as its points and the halo's room: a frame's
-        # rail fills a strip of its 96 x 96, and every pixel of a tile costs.
-        key = (gy // TILE) * 1_000_000 + gx // TILE
-        self.tiles = []
-        for tile in np.unique(key):
-            index = np.flatnonzero(key == tile)
-            px, py = gx[index], gy[index]
+        self._x, self._y = gx.astype(np.intp), gy.astype(np.intp)
+        starts = np.flatnonzero(np.r_[True, key[1:] != key[:-1]])
+        ends = np.r_[starts[1:], key.size]
+        for start, end in zip(starts.tolist(), ends.tolist(), strict=True):
+            px, py = gx[start:end], gy[start:end]
             box = (int(px.min()) - MARGIN, int(py.min()) - MARGIN,
                    int(px.max()) + 1 + MARGIN, int(py.max()) + 1 + MARGIN)  # fmt: skip
-            self.tiles.append((box, index, px - box[0], py - box[1]))
+            self.tiles.append((box, slice(start, end), px - box[0], py - box[1]))
+        self._boxes = np.array([tile[0] for tile in self.tiles], np.float32)
+        self._counts = ends - starts
 
     @classmethod
     def ridge(cls, mask: Any, x: int = 0, y: int = 0, strength: float = 1.0) -> LightEdge:
@@ -183,22 +188,18 @@ class LightEdge:
         coverage = np.asarray(mask, np.float32)
         return cls(ridge_normals(coverage > 0), coverage, x, y, strength)
 
-    def _gloss(self, lights: list[Light], reach: float, index: np.ndarray | None = None):
-        """The gloss of every point (or those of ``index``), (k, 3) RGB 0 to 1:
-        Blinn-Phong with the viewer straight in front and the points in the
-        panel's plane, so the half vector reduces to sums of 1-D arrays."""
-        x, y, nx, ny, nz, factor = (
-            self._points if index is None else (a[index] for a in self._points)
-        )
+    def _gloss(self, lights: list[Light], reach: float, index: np.ndarray) -> np.ndarray:
+        """The gloss of the points ``index``, (k, 3) RGB 0 to 1: Blinn-Phong with
+        the viewer straight in front and the points in the panel's plane, so
+        the half vector reduces to sums of 1-D arrays."""
+        x, y, nx, ny, nz, factor = (a[index] for a in self._points)
         total = np.zeros((x.shape[0], 3), np.float32)
         for position, colour, strength, kind in lights:
             if strength <= 0.01:
                 continue
-            lx, ly, lz = (
-                np.float32(position[0]) - x,
-                np.float32(position[1]) - y,
-                np.float32(position[2]),
-            )
+            lx = np.float32(position[0]) - x
+            ly = np.float32(position[1]) - y
+            lz = np.float32(position[2])
             distance = np.sqrt(lx * lx + ly * ly + lz * lz)
             half = (nx * lx + ny * ly + nz * lz) / distance + nz
             half /= np.sqrt(np.float32(2.0) * (np.float32(1.0) + lz / distance))
@@ -206,59 +207,124 @@ class LightEdge:
             if kind == "sweep":  # near: it fades with distance, softly to nothing at the cut
                 window = np.clip(1.0 - (distance / np.float32(reach * SWEEP_CUT)) ** 2, 0, 1) ** 2
                 strength = strength / (1.0 + (distance / np.float32(reach)) ** 2) * 2.0 * window
-            sharp = half**2  # half ** SHARP, by squaring: pow is ten times slower
-            for _ in range(5):
-                sharp = sharp * sharp  # ** 64
-            sharp = sharp * half**6  # ** 70
-            soft = half**9
-            shine = (sharp + SOFT_SHARE * soft) * factor * strength * self.strength
+            # half ** 70 and half ** 9 by multiplying: pow is many times slower
+            h2 = half * half
+            h4 = h2 * h2
+            h8 = h4 * h4
+            h64 = h8 * h8
+            h64 *= h64
+            h64 *= h64
+            shine = (h64 * h4 * h2 + SOFT_SHARE * h8 * half) * factor * strength * self.strength
             total += shine[:, None] * np.asarray(colour, np.float32)
         return total
+
+    def _near(self, lights: list[Light], reach: float) -> np.ndarray:
+        """Which tiles ``lights`` reach: a sweep fades out with distance, the sun
+        and the night light reach everywhere."""
+        if not any(kind == "sweep" for *_rest, kind in lights):
+            return np.ones(len(self.tiles), bool)
+        far, boxes = reach * SWEEP_CUT, self._boxes
+        near = np.zeros(len(self.tiles), bool)
+        for position, _colour, strength, _kind in lights:
+            if strength > 0.01:
+                dx = np.maximum(np.maximum(boxes[:, 0] - position[0], 0), position[0] - boxes[:, 2])
+                dy = np.maximum(np.maximum(boxes[:, 1] - position[1], 0), position[1] - boxes[:, 3])
+                near |= dx * dx + dy * dy < far * far
+        return near
+
+    def _shining(self, lights: list[Light], reach: float):
+        """The gloss of the points in the tiles ``lights`` reach (uint16, k x 3,
+        0 to 255), those points' indices, and per tile reached: its number and
+        where its points begin among them."""
+        reached = self._near(lights, reach)
+        near = np.flatnonzero(reached)
+        index = np.flatnonzero(np.repeat(reached, self._counts))
+        if index.size == 0:
+            return None
+        values = np.minimum(self._gloss(lights, reach, index) * 255 + 0.5, 255).astype(np.uint16)
+        firsts = np.r_[0, np.cumsum(self._counts[near])[:-1]]
+        return values, index, near, firsts
 
     def gloss(
         self, lights: list[Light], kind: str, reach: float, halo: float = HALO
     ) -> list[tuple[tuple[int, int, int, int], Image.Image]]:
         """The tiles where it shines: (box on the panel, RGB light). Kept per
         ``kind`` until the lights move (by 2 px) or change: the sun's gloss is
-        worked out a few times an hour, a sweep's on every frame it runs,
-        and only in the tiles it reaches."""
+        worked out a few times an hour."""
         if self.empty or not lights:
             return []
         key = (_light_key(lights), halo, reach)
         kept = self._kept.get(kind)
         if kept is not None and kept[0] == key:
             return kept[1]
-        tiles = self.tiles
-        total = None
-        if any(kind_ == "sweep" for *_rest, kind_ in lights):
-            far = reach * SWEEP_CUT  # tiles beyond every sweep's reach stay dark
-            tiles = [tile for tile in tiles if any(
-                strength > 0.01 and math.hypot(
-                    max(tile[0][0] - position[0], 0, position[0] - tile[0][2]),
-                    max(tile[0][1] - position[1], 0, position[1] - tile[0][3])) < far
-                for position, _colour, strength, _kind in lights)]  # fmt: skip
-            if tiles:
-                index = np.concatenate([tile[1] for tile in tiles])
-                total = np.zeros((self._points[0].shape[0], 3), np.float32)
-                total[index] = self._gloss(lights, reach, index)
-        elif tiles:
-            total = self._gloss(lights, reach)
         out = []
-        for box, index, lx, ly in tiles if total is not None else ():
-            shine = total[index]
-            if shine.max() < 0.02:
-                continue
-            field = np.zeros((box[3] - box[1], box[2] - box[0], 3), np.uint8)
-            field[ly, lx] = np.minimum(shine * 255 + 0.5, 255).astype(np.uint8)
-            image = Image.fromarray(field, "RGB")
-            if halo > 0:  # a soft halo, worked out at a third of the size
-                w, h = image.size
-                soft = image.resize((max(1, w // 3), max(1, h // 3)), Image.Resampling.BOX)
-                soft = soft.filter(ImageFilter.GaussianBlur(2.2)).resize(image.size, Image.BILINEAR)
-                image = ImageChops.add(image, Image.blend(Image.new("RGB", image.size), soft, halo))
-            out.append((box, image))
+        found = self._shining(lights, reach)
+        if found is not None:
+            values, _index, near, firsts = found
+            peaks = _peaks(values, firsts)
+            for tile, first, peak in zip(
+                near.tolist(), firsts.tolist(), peaks.tolist(), strict=True
+            ):
+                if peak < 5:  # below 2 % it does not show
+                    continue
+                box, _part, lx, ly = self.tiles[tile]
+                part = values[first : first + int(self._counts[tile])]
+                light = np.zeros((box[3] - box[1], box[2] - box[0], 3), np.uint16)
+                light[ly, lx] = part
+                if halo > 0 and peak >= HALO_FROM:
+                    light += _halo(box, lx, ly, part, halo)
+                out.append((box, Image.fromarray(np.minimum(light, 255).astype(np.uint8), "RGB")))
         self._kept[kind] = (key, out)
         return out
+
+    def shine(self, pixels: np.ndarray, lights: list[Light], reach: float,
+              halo: float = HALO) -> None:  # fmt: skip
+        """Add the gloss of ``lights`` (a sweep's: worked out on every frame) to
+        ``pixels`` (h, w, 3 uint8, the frame) in place: the points themselves,
+        and a halo around the tiles that shine clearly."""
+        if self.empty:
+            return
+        found = self._shining(lights, reach)
+        if found is None:
+            return
+        values, index, near, firsts = found
+        h, w = pixels.shape[:2]
+        x, y = self._x[index], self._y[index]
+        on = (x >= 0) & (x < w) & (y >= 0) & (y < h)
+        x, y = x[on], y[on]
+        pixels[y, x] = np.minimum(pixels[y, x] + values[on], 255)
+        if halo <= 0:
+            return
+        peaks = _peaks(values, firsts)
+        for tile, first, peak in zip(near.tolist(), firsts.tolist(), peaks.tolist(), strict=True):
+            if peak < HALO_FROM:
+                continue  # a faint glint's halo would stay below a few levels
+            box, _part, lx, ly = self.tiles[tile]
+            light = _halo(box, lx, ly, values[first : first + int(self._counts[tile])], halo)
+            x0, y0, x1, y1 = max(0, box[0]), max(0, box[1]), min(w, box[2]), min(h, box[3])
+            if x1 > x0 and y1 > y0:
+                region = pixels[y0:y1, x0:x1]
+                light = light[y0 - box[1] : y1 - box[1], x0 - box[0] : x1 - box[0]]
+                region[...] = np.minimum(region + light, 255)
+
+
+def _peaks(values: np.ndarray, firsts: np.ndarray) -> np.ndarray:
+    """The brightest channel of each tile's points (the points tile by tile)."""
+    brightest = np.maximum(np.maximum(values[:, 0], values[:, 1]), values[:, 2])
+    return np.maximum.reduceat(brightest, firsts)
+
+
+def _halo(box: tuple[int, int, int, int], lx: np.ndarray, ly: np.ndarray, values: np.ndarray,
+          share: float) -> np.ndarray:  # fmt: skip
+    """The soft halo around a tile's gloss (uint16, the tile's size): its
+    points dimmed to ``share`` and blurred, worked out at a third of the size."""
+    w, h = box[2] - box[0], box[3] - box[1]
+    field = np.zeros((h, w, 3), np.uint8)
+    field[ly, lx] = np.minimum(values * share + 0.5, 255).astype(np.uint8)
+    image = Image.fromarray(field, "RGB")
+    small = image.reduce(3) if min(w, h) >= 3 else image
+    small = small.filter(ImageFilter.GaussianBlur(2.2))
+    return np.asarray(small.resize((w, h), Image.Resampling.BILINEAR), np.uint16)
 
 
 def _light_key(lights: list[Light]) -> tuple[Any, ...]:
@@ -272,17 +338,6 @@ def _light_key(lights: list[Light]) -> tuple[Any, ...]:
         )
         for position, colour, strength, _kind in lights
     )
-
-
-def add_light(frame: Image.Image, box: tuple[int, int, int, int], light: Image.Image) -> None:
-    """Add ``light`` at ``box`` onto ``frame``, the part on the frame only."""
-    x0, y0 = max(0, box[0]), max(0, box[1])
-    x1, y1 = min(frame.width, box[2]), min(frame.height, box[3])
-    if x1 <= x0 or y1 <= y0:
-        return
-    if (x0, y0, x1, y1) != tuple(box):
-        light = light.crop((x0 - box[0], y0 - box[1], x1 - box[0], y1 - box[1]))
-    frame.paste(ImageChops.add(frame.crop((x0, y0, x1, y1)), light), (x0, y0))
 
 
 # -- sweeps ----------------------------------------------------------------------------
@@ -390,22 +445,33 @@ class PanelLight:
 
     def frame(self, pieces: list[tuple[str, Piece]], snapshot: Any, now: float) -> None:
         """Before the frame is composed: its moments, and the sun's gloss on its
-        edges as pieces of light on top (they stay the same objects until the
-        sun moves a step, so the composition reuses them)."""
+        edges as pieces of light. They stay the same objects until the sun
+        moves a step, and each lies right on the piece that drew its edge,
+        under what comes later (SPUR II bakes it into the background): where
+        a bar or a graph moves over it, the composition starts from beneath
+        the moving piece and does not lay the light again."""
         renderer = self.renderer
         if not renderer.preview:
             self.sweeps.watch(snapshot, now, self.settings)
         edges = renderer.light_edges
-        if not edges:
-            return
-        lights = self.fixed(snapshot.now.timestamp())
-        seen = set()
+        lights = self.fixed(snapshot.now.timestamp()) if edges else []
+        on: dict[str, list[tuple[str, Piece]]] = {}
         for edge in edges:
-            seen.add(id(edge))
-            for i, piece in enumerate(self._gloss_pieces(edge, lights)):
-                pieces.append((f"\0light{id(edge)}/{i}", piece))
-        for gone in set(self._pieces) - seen:  # edges no longer on the panel
+            owner = renderer.edge_owners.get(id(edge), "")
+            gloss = self._gloss_pieces(edge, lights)
+            on.setdefault(owner, []).extend(
+                (f"\0light{id(edge)}/{i}", piece) for i, piece in enumerate(gloss)
+            )
+        for gone in set(self._pieces) - {id(edge) for edge in edges}:  # no longer on the panel
             del self._pieces[gone]
+        if not on:
+            return
+        laid = []
+        for wid, piece in pieces:
+            laid.append((wid, piece))
+            laid.extend(on.pop(wid, ()))
+        laid.extend(on.pop("", ()))  # edges not drawn by a piece: on top
+        pieces[:] = laid
 
     def _gloss_pieces(self, edge: LightEdge, lights: list[Light]) -> list[Piece]:
         tiles = edge.gloss(lights, "fixed", self.reach)
@@ -426,10 +492,10 @@ class PanelLight:
         if not lights:
             return frame
         self.renderer.moving = True  # the PNG path draws at full rate meanwhile
+        pixels = np.array(frame)  # all of it at once: a sweep lights some thirty tiles
         for edge in self.renderer.light_edges:
-            for box, light in edge.gloss(lights, "sweep", self.reach):
-                add_light(frame, box, light)
-        return frame
+            edge.shine(pixels, lights, self.reach)
+        return Image.fromarray(pixels, frame.mode)
 
     def transition_ended(self, kind: Any, now: float) -> None:
         if self.settings["on_transition"] and getattr(kind, "name", "") in TRANSITIONS:

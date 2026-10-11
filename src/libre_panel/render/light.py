@@ -186,7 +186,7 @@ def light_layer(rgb: Any) -> Image.Image:
     import numpy as np
 
     rgb = np.clip(np.asarray(rgb, np.float32), 0, 255)
-    alpha = rgb.max(-1)
+    alpha = np.maximum(np.maximum(rgb[..., 0], rgb[..., 1]), rgb[..., 2])
     plain = rgb * (255 / np.maximum(alpha, 1e-3))[..., None]
     out = np.concatenate([plain, alpha[..., None]], -1) + 0.5
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGBA")

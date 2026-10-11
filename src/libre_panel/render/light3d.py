@@ -303,20 +303,22 @@ def _sphere_at(table: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
 def tint(shade: np.ndarray, colour: Any, mix: dict[str, float], groove: bool = False) -> np.ndarray:
     """RGB (n, 3, 0 to 1) of the shading ``shade`` (3, n) in ``colour``: RGB 0 to
     1, one (3) or one per point (n, 3). A groove takes the light of
-    :data:`GROOVE`, everything else ``mix``."""
+    :data:`GROOVE`, everything else ``mix``. Worked out channel by channel:
+    a maximum over three values per pixel is slow as an axis of its own."""
     shape, core, gloss = shade
     c = np.asarray(colour, np.float32)
+    c = c[:, None] if c.ndim == 1 else c.T  # (3, 1) or (3, n)
     if groove:
-        rgb = c * (GROOVE["ambient"] + GROOVE["diffuse"] * shape)[:, None]
-        rgb = rgb + GROOVE["gloss"] * gloss[:, None]
+        rgb = c * (GROOVE["ambient"] + GROOVE["diffuse"] * shape) + GROOVE["gloss"] * gloss
     else:
         light = (mix["ambient"] + mix["diffuse"] * shape) * ((1 - mix["core"]) + mix["core"] * core)
-        rgb = c * light[:, None]
-        rgb = rgb / np.maximum(1.0, rgb.max(-1, keepdims=True))  # pale colours would run to white
+        rgb = c * light
+        peak = np.maximum(np.maximum(rgb[0], rgb[1]), rgb[2])
+        rgb = rgb / np.maximum(1.0, peak)  # pale colours would run to white
         if mix.get("glow"):
-            rgb = rgb + mix["glow"] * (core**3)[:, None] * (1 - rgb)
-        rgb = rgb + mix["gloss"] * gloss[:, None]
-    return np.clip(rgb, 0, 1)
+            rgb = rgb + mix["glow"] * core**3 * (1 - rgb)
+        rgb = rgb + mix["gloss"] * gloss
+    return np.clip(rgb, 0, 1).T
 
 
 def rgba(rgb: np.ndarray, alpha: np.ndarray) -> np.ndarray:
@@ -482,6 +484,31 @@ class Bar:
         self.profile = np.stack([np.interp(across, samples, row) for row in tables["tube"]])
         self.profile = self.profile.astype(np.float32)  # (3, thickness)
         self.sphere = tables["sphere"]
+        self._caps: dict[tuple[int, int, bool], tuple[np.ndarray, np.ndarray]] = {}
+
+    PHASES = 8  # a sphere's centre in eighths of a pixel: its pictures are worked out once
+
+    def _cap(self, phase: int, side: int, groove: bool) -> tuple[np.ndarray, np.ndarray]:
+        """The coverage and shading of the sphere that rounds a span's ``side``
+        end (-1 start, 1 end), its centre ``phase`` eighths into a pixel: over
+        the columns from ``-ceil(r) - 1`` to ``ceil(r) + 1`` around the pixel."""
+        key = (phase, side, groove)
+        kept = self._caps.get(key)
+        if kept is None:
+            r = self.half
+            reach = math.ceil(r) + 1
+            near = np.arange(-reach, reach + 1, dtype=np.float32) + 0.5 - phase / self.PHASES
+            u = (near / r)[None, :]
+            v = ((np.arange(self.thick, dtype=np.float32) + 0.5 - r) / r)[:, None]
+            cover = np.clip(r + 0.5 - np.hypot(u, v) * r, 0, 1)
+            # only beyond the tube, on its own side (a pixel the tube's end cuts
+            # takes the rest from it)
+            cover = (cover * ((near + side * 0.5) * side > 0)).astype(np.float32)
+            shade = _sphere_at(self.sphere, *np.broadcast_arrays(u, v)).astype(np.float32)
+            if not groove:
+                shade[2] *= CAP_GLOSS
+            kept = self._caps[key] = (cover, shade)
+        return kept
 
     def image(self, length: int, spans: list[tuple[float, float, float]], colour: np.ndarray,
               groove: bool = False) -> np.ndarray:  # fmt: skip
@@ -511,17 +538,20 @@ class Bar:
                 piece_alpha += body
                 piece_shade += self.profile[:, :, None] * body
                 for centre, side in ((a + r, -1), (b - r, 1)):
-                    u, v = (cols - centre) / r, (ys - r) / r
-                    cover = np.clip(r + 0.5 - np.hypot(u, v) * r, 0, 1)
-                    # each sphere only beyond the tube, on its own side (a pixel the
-                    # tube's end cuts takes the rest from it)
-                    cover = cover * ((cols + side * 0.5 - centre) * side > 0)
-                    under = cover * (1 - piece_alpha)
-                    cap = _sphere_at(self.sphere, *np.broadcast_arrays(u, v))
-                    if not groove:
-                        cap[2] *= CAP_GLOSS
-                    piece_shade += cap * under
-                    piece_alpha += under
+                    whole = math.floor(centre)
+                    phase = round((centre - whole) * self.PHASES)
+                    if phase == self.PHASES:
+                        whole, phase = whole + 1, 0
+                    cover, cap = self._cap(phase, side, groove)
+                    reach = math.ceil(r) + 1
+                    first = whole - reach  # the column of the cap's first
+                    c0, c1 = max(left, first), min(right, first + cover.shape[1])
+                    if c1 <= c0:
+                        continue
+                    part = slice(c0 - first, c1 - first)
+                    under = cover[:, part] * (1 - piece_alpha[:, c0 - left : c1 - left])
+                    piece_shade[:, :, c0 - left : c1 - left] += cap[:, :, part] * under
+                    piece_alpha[:, c0 - left : c1 - left] += under
             else:  # shorter than thick: a sphere squeezed to its length
                 half_len = (b - a) / 2
                 u, v = (cols - (a + b) / 2) / half_len, (ys - r) / r

@@ -330,6 +330,8 @@ class Renderer:
         # Finishes other than flat, and the panel's look (render.finish,
         # render.look); a theme with neither pays nothing for them.
         self.light_edges: list[Any] = []  # this frame's, for the panel light (add_light_edge)
+        self.edge_owners: dict[int, str] = {}  # edge id -> the piece that drew it this frame
+        self._drawing = ""  # the widget being drawn ("\0screen": the screen)
         self.place: tuple[float, float] | None = None  # where the sun is seen from (the loop)
         self._finishes = finishes.attach(self)  # widget id -> finish
         self.look: Any = None
@@ -861,6 +863,7 @@ class Renderer:
         render thread (while drawing a widget, not in a build that may run in
         the helper thread), with the same object while nothing changes."""
         self.light_edges.append(edge)
+        self.edge_owners[id(edge)] = self._drawing  # its gloss lies on that piece
 
     def transition_ended(self, kind: Any, now: float) -> None:
         """A transition between themes ended at ``now`` (the main loop says so):
@@ -922,10 +925,11 @@ class Renderer:
         theme = self.theme
         self.moving = False
         self.snapshot = snapshot
-        self.light_edges = []
+        self.light_edges, self.edge_owners = [], {}
         self.motion.begin(snapshot.readings, now, self._glide_s(), self._lead())
         boxes: dict[str, Box] = {}
         pieces: list[tuple[str, Piece]] = []
+        self._drawing = "\0screen"
         screen = self._screen_image(snapshot, now) if self.screen is not None else None
         for widget in self.widgets:
             if not widget.get("visible", True) or self._missing(widget, snapshot):
@@ -938,6 +942,7 @@ class Renderer:
                 or getattr(self, f"_draw_{widget['type']}", None)
                 or self._draw_plugin
             )
+            self._drawing = widget["id"]
             try:
                 piece = draw(widget, snapshot, now)
             except Exception as exc:  # one broken widget must not blank the panel
