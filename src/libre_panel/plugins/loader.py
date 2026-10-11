@@ -9,7 +9,9 @@ Two ways to install, same package:
   into the downloads (Windows setup, macOS app, AppImage), which cannot pip
   install. The folder goes onto ``sys.path`` when one of its parts is used.
 
-Libre Panel never downloads or installs code itself.
+Libre Panel never downloads or installs code itself. Its own services are
+registered here too (source "built in"): they work in the downloads, which
+have no package metadata for entry points.
 """
 
 from __future__ import annotations
@@ -45,6 +47,17 @@ GROUPS = {
     "themes": "libre_panel.themes",  # a package whose folder holds theme folders
 }
 OWN_DISTRIBUTION = "libre-panel"  # its built-in sensors and drivers are no plugins
+BUILT_IN = "built in"  # the source of what Libre Panel brings itself
+
+# Built-in parts by kind and name ("module:attribute"), found without any package
+# metadata. A plugin cannot use their names. Imported on first use.
+BUILT_IN_PARTS: dict[str, dict[str, str]] = {
+    "services": {
+        "autopilot": "libre_panel.services.autopilot:Autopilot",
+        "game": "libre_panel.services.game:Game",
+        "notices": "libre_panel.services.notices:Notices",
+    },
+}
 
 
 class PluginError(ValueError):
@@ -163,6 +176,9 @@ def plugins_dir() -> Path:
 def discover(folder: Path | None = None) -> Registry:
     """Everything installed, without importing any plugin code yet."""
     registry = Registry()
+    for kind, parts in BUILT_IN_PARTS.items():
+        for name, target in parts.items():
+            registry.add(Found(kind, name, target, BUILT_IN))
     for kind, group in GROUPS.items():
         for entry in _installed(group):
             dist = entry.dist

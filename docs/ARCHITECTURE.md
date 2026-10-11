@@ -21,6 +21,7 @@
 | `weather` | Open-Meteo provider, background polling, off by default. |
 | `devices` | Panel catalog (`models`), `Display` drivers, USB/serial discovery. |
 | `plugins` | Plugin API: finding plugins (entry points, plugin folders), services and the host they talk to the panel through, modes. See [Plugins](PLUGINS.md). |
+| `services` | Libre Panel's own services, built in and off until `config.toml` lists them: `notices` (messages for the volume, tracks, limits), `game` (game mode) and `autopilot` (theme rules). They use only the plugin API; Steam, the programs that run and the Windows window in front are read in `steam` and `machine`. |
 | `editor` | Local HTTP server (127.0.0.1 only) + vanilla JS editor, no build step. |
 | `app` | Main loop: sample → render → diff → send; reloads config/theme on change; reports its state (`RunStatus`). |
 | `service` | Background app: the main loop in a thread (pause/resume, restarts after a broken config is fixed), the editor server, and the controls shared by tray and editor. |

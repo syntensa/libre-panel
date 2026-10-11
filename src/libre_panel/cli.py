@@ -309,12 +309,12 @@ def _cmd_themes(args: argparse.Namespace) -> int:
 
 
 def _cmd_plugins(args: argparse.Namespace) -> int:
-    from libre_panel.plugins.loader import API_VERSION, discover, plugins_dir
+    from libre_panel.plugins.loader import API_VERSION, BUILT_IN, discover, plugins_dir
 
     registry = discover()
     print(f"plugin API {API_VERSION}; plugin folders go into {plugins_dir()}")
     found = registry.all()
-    if not found:
+    if all(part.source == BUILT_IN for part in found):
         print("no plugins installed")
     for part in found:
         registry.get(part.kind, part.name)  # load it, so errors show here

@@ -1,7 +1,8 @@
 """Smoke test for a release build: start the background app, talk to it, quit it.
 
 A plugin folder with a service that uses sqlite3 checks that folder plugins
-load on the bundled Python.
+load on the bundled Python. The built-in service "notices" checks that Libre
+Panel's own services start from a build that has no package metadata.
 
 python packaging/smoke_test.py dist/libre-panel/libre-panel tray --background
 """
@@ -63,7 +64,7 @@ def main(command):
         frame = home / "frame.png"
         (home / "config.toml").write_text(
             f'theme = "spur-ii"\n\n[device]\ndriver = "virtual"\noutput = "{frame.as_posix()}"\n'
-            '\n[services]\nenabled = ["smoke"]\n',
+            '\n[services]\nenabled = ["smoke", "notices"]\n\n[services.notices]\nmusic = false\n',
             encoding="utf-8",
         )
         plugin = home / "plugins" / "smoke"
@@ -101,6 +102,8 @@ def main(command):
         # Quit has to work by itself, not through the last-resort exit.
         if "exiting anyway" in text:
             raise SystemExit("FAIL: the app only ended through the last-resort exit")
+        if "service 'notices' started" not in text:
+            raise SystemExit("FAIL: the built-in service notices did not start")
     print("OK")
 
 

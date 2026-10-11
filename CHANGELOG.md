@@ -30,6 +30,41 @@
   across theme switches; a transition can hide toasts while it plays
   (`toasts = "hide"`) and decide case by case what a switch does
   (`on_switch`); `context.image(key)` gives a published picture
+- Plugins: services no longer poll. `host.on("sample", callback)` hands them
+  every new snapshot of the readings (a slow callback gets the newest one,
+  never a backlog), and what a service publishes reaches the next frame
+  instead of the next reading, so `set_mode` or `show_theme` right after a
+  `publish` is drawn with the value in. `host.publish_state(key, value)`
+  keeps a dict or list as JSON with the time it was published, never smoothed
+  and never in a graph's history; `snapshot.state(key)` and
+  `context.state(key)` read it back. `host.want("media.*")` tells the sources
+  that work on demand (what is playing, the volume, the load) that a service
+  reads them
+- Services of its own, built into the app: `notices`, `game` and `autopilot`.
+  They are switched on with `[services] enabled` like a plugin's, all are off
+  until you list them, they work in the downloads without any package, and
+  `libre-panel plugins` lists them as "built in". Their settings are in the
+  configuration guide
+- `notices` puts short messages on the panel: the volume while it turns
+  (changing in place, "Muted"), a new track with its cover and the player's
+  icon, sensors that cross a limit you set (`[[services.notices.warnings]]`
+  with `warn` and `crit`, told once until the value has been below `warn`,
+  and never twice within `quiet_s`), and "Panel restarted 21:05" after a
+  restart that cleared a hung video decoder. The theme's toast style draws
+  them (card or band) and `toast.off` leaves kinds out
+- `game` is game mode: it finds the game you play, from a list of programs or
+  Steam's library (read from `libraryfolders.vdf` and the `appmanifest` files
+  on Windows, Linux and macOS; on Windows a game counts once its window has
+  been in front), publishes `game.name` and `game.logo` (Steam's logo, cut out
+  and not scaled), and switches to `[modes.game]` with the entrance; six
+  seconds after the game's program ended it switches back. Without the
+  entrance a "Game mode" message says so
+- `autopilot` picks the theme by rules in `config.toml`
+  (`[[services.autopilot.rules]]`, each naming a theme, the first that holds
+  wins): music playing, the microphone in use (Windows), the mean CPU or GPU
+  load over a time, a program in front, the time of day. A new choice must
+  hold for 8 s and a theme stays for 20 s, the load does not count for the
+  first four minutes after the system started, and it rests in game mode
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

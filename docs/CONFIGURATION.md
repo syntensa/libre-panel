@@ -211,8 +211,9 @@ Show these readings with the Dashboard module (`ha.sensor.living_room_temperatur
 
 ## Services and modes
 
-Plugins can add services (a game mode, an autopilot, …). They are off until
-you list them; each can have its own options table. A mode changes the frame
+Services are helpers that run beside the panel: Libre Panel's own
+([below](#built-in-services)) and those of plugins. They are off until you
+list them; each can have its own options table. A mode changes the frame
 rate and optionally the theme while a service keeps it switched on. Details
 are in [Plugins](PLUGINS.md).
 
@@ -227,6 +228,194 @@ poll_s = 1.0
 fps = 30
 theme = "slate"
 ```
+
+## Built-in services
+
+Libre Panel brings a few services of its own (no plugin needed). Each is off
+until `[services] enabled` lists it, and takes its settings from a table with
+its name. `libre-panel plugins` lists them as "built in".
+
+```toml
+[services]
+enabled = ["notices"]
+```
+
+### Notices
+
+Short messages on the panel for what happens around it. The theme decides how
+they look (the card, or the band after SPUR II: `"toast": {"style": "band"}`)
+and which kinds it shows (`"toast": {"off": ["music"]}`); a screen that shows
+something itself leaves its kind out.
+
+| Kind | When | The message |
+|---|---|---|
+| `volume` | the volume changes by at least 1, or is muted or unmuted; the value the service starts with is no change | the level with a bar, or "Muted" |
+| `music` | a new track starts playing; not a pause, a resume, or the track that was playing at the start | title and artist, with the cover and the icon of the player when a source brings them |
+| `warning` | a sensor reaches a limit you set | "CPU temperature 92 °C", in the theme's warning colour at `warn` and its critical one at `crit` |
+| `panel` | the panel is back from a restart that cleared a hung video decoder (not from a replug) | "Panel restarted 21:05" |
+
+```toml
+[services.notices]
+volume = true          # the volume; needs "audio" in [sensors] providers
+music = true           # a new track
+restarted = true       # "Panel restarted"
+quiet_s = 120          # warnings: the same sensor is not told again within this time
+
+[[services.notices.warnings]]
+key = "cpu.temp"       # any reading, see: libre-panel sensors
+warn = 80              # a message at this value (optional if crit is set)
+crit = 90              # a stronger one at this value
+# name = "CPU"         # the text before the value (default: the reading's name)
+# max = 100            # the value a full bar stands for (percentages need none)
+# icon = "cpu"         # one of the built-in icons (default: from the key)
+
+[[services.notices.warnings]]
+key = "gpu.temp"
+crit = 85
+```
+
+- A warning is told when the value reaches a limit and not again until it has
+  been below `warn` (below `crit` when there is no `warn`) in between, and
+  never twice within `quiet_s`. A worse level (`crit` after `warn`) is told
+  at once, also in the quiet time. A sensor that is past its limit when the
+  service starts is told too.
+- Notices look at every new reading, that is every `refresh_ms` of the theme.
+  For a volume bar that follows the volume keys closely use a theme with a short
+  `refresh_ms` (100 to 250).
+- While the service runs, the sources it needs run too, although no theme shows
+  them: what is playing (`media.*`), the volume (`audio.*`) and the warned
+  sensors. They cost what they cost otherwise (a player is asked once a
+  second); switch off `volume` or `music` to save that.
+- Texts follow the language setting. Each notice has its own `key`, so the
+  same one again (the volume while it turns) changes in place instead of
+  coming again.
+
+### Game mode
+
+The panel changes by itself when you play: it switches to the mode `game`
+(its own frame rate and theme, `[modes.game]`) with an entrance that shows the
+game's logo, and back a few seconds after you quit.
+
+```toml
+[services]
+enabled = ["game"]
+
+[services.game]
+programs = ["emulator.exe = Retro Games", "othergame.exe"]  # programs that are games
+steam = true           # and any game installed through Steam
+# steam_path = ""      # where Steam is, if Libre Panel does not find it
+# ignore = ["Wallpaper Engine"]  # games and tools in Steam's library that never count
+automatic = true       # switch by itself when a game runs
+force = false          # game mode on, game or not (to try the screens)
+entrance = true        # the entrance; false: a "Game mode" message and the theme's transition
+logo = true            # the game's logo (Steam's cache) in the entrance and on screens
+linger_s = 6           # the mode stays this long after the game's program ended
+poll_s = 2             # how often to look for a game (0.25 to 60)
+
+[modes.game]
+fps = 30               # frames per second while the mode is on
+theme = "slate"        # optional: another theme
+```
+
+- **What is a game.** A program in `programs` (its file name, case does not
+  matter; `name = A Better Name` sets the name to show), and with `steam` any
+  program of a game installed through Steam. Steam's libraries are found
+  from its own files (`libraryfolders.vdf`, `appmanifest_*.acf`), on Windows,
+  Linux (also Flatpak and Snap) and macOS. Tools in a library, such as Proton,
+  the Steam Linux Runtime or SteamVR, are not games; `ignore` adds more.
+  Windows programs under Wine and Proton are found by the folder they work in.
+- **The window in front.** On Windows a Steam game counts only once its window
+  has been in front, because a library also holds programs that run all day (a
+  wallpaper). Where Libre Panel cannot tell which window is in front (Linux,
+  macOS), a running program of a Steam game is enough.
+- **The beginning.** The service shows the name (`game.name`) and the logo
+  (`game.logo`, an image: `"src": "@game.logo"` in an image widget) to the
+  screens, then switches. The logo comes from Steam's picture cache, cut out
+  and not scaled, or the game's header picture; a program that is not a Steam
+  game shows its name in big letters. The switch waits for the next reading
+  (at most a second) so that the first game screen already has the logo.
+- **The end.** When the program has been gone for `linger_s` seconds the mode
+  ends with the entrance for the end. Games restart while they are set up and
+  launchers swap their process, so the mode does not follow every flicker.
+- **Without the entrance** (`entrance = false`) the switch uses the
+  `transition` of `config.toml`, and a message says "Game mode" (and "Game
+  ended"), so the theme's toast style draws it.
+- `force = true` keeps the mode on, which is how to try the game screens;
+  `automatic = false` with `force = false` does nothing. A game that runs
+  while `force` is on is named.
+- The frame rate of the game (`game.fps`) comes from the `presentmon` source,
+  which is a separate setting.
+
+### Autopilot
+
+Picks the theme that fits what you are doing: the album theme while music
+plays, a big clock at night, a load display while the machine is busy. It
+follows rules, and when none holds, the theme of `config.toml` shows. The
+autopilot never writes your configuration.
+
+```toml
+[services]
+enabled = ["autopilot"]
+
+[services.autopilot]
+hold_s = 8             # a new choice must hold this long before the panel follows
+min_s = 20             # a theme then stays at least this long
+quiet_after_boot_s = 240   # right after the system started the load counts for nothing
+# transition = "tube"  # how the theme changes ("" is the transition of config.toml)
+
+[[services.autopilot.rules]]     # checked from the top: the first that holds wins
+name = "Music"
+theme = "studio"
+when = { music = true }
+
+[[services.autopilot.rules]]
+name = "Call"
+theme = "slate"
+when = { microphone = true }
+immediate = true       # no minimum time for this one
+hold_s = 2             # and its own hold time
+
+[[services.autopilot.rules]]
+name = "Busy"
+theme = "column"
+when = { cpu_over = 80, for_s = 30 }   # the mean load over 30 s
+
+[[services.autopilot.rules]]
+name = "Editor"
+theme = "orbit"
+when = { apps = ["code.exe", "devenv.exe"] }
+
+[[services.autopilot.rules]]
+name = "Night"
+theme = "pico"
+when = { time = "22:00-06:30" }        # may cross midnight
+```
+
+- **Conditions** (all of a rule's must hold, a rule needs at least one):
+
+  | Condition | Holds when |
+  |---|---|
+  | `music = true` | something is playing (`media.state` is "Playing") |
+  | `microphone = true` | a program is recording (Windows; elsewhere never) |
+  | `cpu_over = 80`, `gpu_over = 80` | the mean load over `for_s` seconds (20 by default) is at least that; it counts once four fifths of the window has been seen, so a peak at the start is no load |
+  | `apps = ["a.exe"]` | one of these programs is in front (Windows; where Libre Panel cannot tell, one of them runs). Case does not matter |
+  | `time = "22:00-06:30"` | the local time is in the window, start included, end not |
+
+  `music = false` and `microphone = false` hold when there is none. A rule
+  with no condition, or with one that is not on this list, never holds; it is
+  reported in the log and left out.
+- **A theme that is not installed** makes its rule be skipped, with one line in
+  the log; it is used as soon as it is there.
+- **Game mode.** While a mode such as `game` is on, the autopilot rests: its
+  choice stays and shows again right after the game, and a change in the
+  meantime must hold afresh. A service that asks for a theme with a higher
+  priority (a report) goes first.
+- **Cost.** The load rules keep the CPU and GPU load sources running (`cpu.load`,
+  `gpu.load`; the `load` source is the one that reads them ten times a second);
+  a music rule keeps the media source running; `microphone` and `apps` look at
+  the system once a second (the list of programs every two seconds).
+- Rules are read when the service starts: change `config.toml` and it restarts
+  by itself.
 
 ## Language
 
