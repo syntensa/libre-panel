@@ -43,6 +43,23 @@ def test_builtin_theme_list():
     assert {"libre-default", "spur-ii"} <= ids
 
 
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"background": "#101418"},  # the colour where its object belongs
+        {"animation": 400},
+        {"widgets": [{"type": ["text"], "id": "a"}]},
+        {"refresh_ms": float("inf")},  # 1e999 in the file
+        {"animation": {"smoothing_ms": float("nan")}},  # NaN, which JSON readers take
+    ],
+)
+def test_a_theme_of_the_wrong_shape_is_a_theme_error(change):
+    """What is wrong with a theme file is a ThemeError, which the panel and the app handle (the
+    panel keeps the theme it shows, the app says why); another error stopped the panel loop."""
+    with pytest.raises(ThemeError):
+        parse_theme({**minimal(), **change})
+
+
 def test_defaults_are_filled_in():
     theme = parse_theme(minimal())
     widget = theme.widgets[0]
@@ -115,6 +132,30 @@ def test_save_copy_brings_assets_along(isolated_home, tmp_path):
     assert saved["name"] == "Libre Default"
     # User themes shadow built-in ones of the same name.
     assert find_theme("mine") == folder
+
+
+def test_a_save_that_fails_leaves_the_theme_as_it_was(isolated_home, monkeypatch):
+    """A save that could not be written emptied theme.json first: the theme was gone. Text
+    with half an emoji (a lone surrogate, which a page's script can send) is refused before
+    anything is written, and a write that fails (a full disk) leaves the file as it was."""
+    folder = save_theme("mine", minimal())
+    before = (folder / "theme.json").read_text(encoding="utf-8")
+    with pytest.raises(ThemeError, match="Unicode"):
+        save_theme("mine", {**minimal(), "name": "Mine \ud83d"})
+    assert (folder / "theme.json").read_text(encoding="utf-8") == before
+
+    def full_disk(self, data):
+        with open(self, "wb") as file:
+            file.write(data[:10])
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(Path, "write_bytes", full_disk)
+    monkeypatch.setattr(Path, "write_text", lambda self, text, **kw: full_disk(self, text.encode()))
+    with pytest.raises(OSError):
+        save_theme("mine", {**minimal(), "name": "Mine again"})
+    monkeypatch.undo()
+    assert (folder / "theme.json").read_text(encoding="utf-8") == before
+    assert load_theme(folder).name == "t"
 
 
 def test_invalid_theme_names():

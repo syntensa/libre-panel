@@ -314,9 +314,13 @@ class _Requests(threading.Thread):
                     conn.sendall(b"ok\n" if answer else b"no\n")
                 except (OSError, UnicodeDecodeError):
                     continue
+                except Exception:  # a window call that failed: this request, not the next
+                    log.debug("a request to the window failed", exc_info=True)
 
     def handle(self, words: list[str]) -> bool:
-        if len(words) < 2 or not secrets.compare_digest(words[1], self.token):
+        # as bytes: compare_digest refuses text that is not ASCII (anyone may send some)
+        given = words[1].encode("utf-8") if len(words) >= 2 else b""
+        if not given or not secrets.compare_digest(given, self.token.encode("utf-8")):
             return False
         if words[0] == "close":
             self.window.destroy()

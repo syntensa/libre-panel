@@ -504,10 +504,12 @@ class MainLoop:
         # What moves on the panel goes on from theme to theme: every renderer
         # gets this one (gliding values, graph histories).
         self.motion = Motion()
+        # The display first: an unknown driver fails here, before any sensor source has
+        # started (the background app tries again and again; each try would leave them on).
+        self.display = display if display is not None else create_display(config.device)
         self.hub = hub if hub is not None else build_hub(config)
         if host is not None and not once:
             self.hub.providers.append(host.provider())
-        self.display = display if display is not None else create_display(config.device)
         self.first: Snapshot | None = None  # the readings the first theme was drawn with
         if not once:
             self._draw_ahead(theme, config)
@@ -800,8 +802,6 @@ class MainLoop:
             if blend is not playing:
                 began_in = mode
             status.mode = host.mode if host is not None else None
-            if host is not None:
-                toasts.add(host.take_toasts())
             if started >= next_sample or snapshot is None:
                 snapshot, self.first = self.first or hub.snapshot(), None
                 if host is not None:
@@ -823,6 +823,8 @@ class MainLoop:
                 renderer.background_builds = streaming
                 renderer.continuous = streaming  # graphs scroll, values glide on
                 renderer.fps = _fps(config, host, display)  # screens may pace animations by it
+                if host is not None:  # (while the panel is away they wait there, the newest)
+                    toasts.add(host.take_toasts())
                 go_on = getattr(blend[0], "toasts", "wait") in ("over", "hide") if blend else True
                 toasts.advance(now, hold=not go_on)
                 renderer.toast = toasts.showing(now)  # screens see a toast the moment it begins

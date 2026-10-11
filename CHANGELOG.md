@@ -633,6 +633,33 @@
   is read from), the themes read it, and the demo has it as it has
   `gpu.temp`. A test keeps every key the SPUR themes read from the hardware
   to what the source makes from real output
+- A panel loop that could not start (an unknown `driver` in `config.toml`: a typo,
+  a display plugin that was removed) left the sensor sources it had started running,
+  and the app tries again every 30 seconds, so their threads piled up. The display is
+  made first now, before any source starts
+- While the panel was unplugged (or not found), every message of the services, a music
+  message with its cover among them, piled up in the main loop for as long as that
+  lasted. They wait in the services' queue now, the newest 20, and show when the panel
+  is back
+- Two changes to `config.toml` at the same moment (the tray's brightness while the app
+  saves a setting) both started from the file as it was, and the one that finished last
+  undid the other. A change now waits for the one under way
+- A `config.toml` with a table or a list of the wrong kind (`device = "turing-5"` where
+  `[device]` belongs, `weather = true`, `providers = "psutil"`) or saved in another
+  encoding than UTF-8 ended the app at its start, and the tray's menu and some of the
+  app's pages failed with it. Such a file is an error of the config now: the app starts,
+  says what is wrong, and goes on once the file is fixed
+- A theme file of the wrong shape (`"background": "#101418"` where its object belongs, a
+  list as a widget's `type`, `1e999` for a whole number) stopped the panel loop instead
+  of being refused like any other mistake in a theme. Named by an autopilot rule or a
+  mode, it took the panel down every few seconds; now the panel keeps its theme and the
+  log says why
+- The open window stopped answering the other starts after one line it could not use on
+  its port (a token that is not ASCII, a window call that failed): a click on the tray
+  icon then opened a second window, and quitting left the first one open
+- Saving a theme that could not be written (text with half an emoji in it, a full disk)
+  emptied its `theme.json` first, and the theme was gone. Such text is refused with a
+  message now, and a theme is written whole or not at all
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

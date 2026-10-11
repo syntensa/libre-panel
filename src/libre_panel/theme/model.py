@@ -9,6 +9,8 @@ into Python objects (see ``libre_panel.render.formatting``).
 from __future__ import annotations
 
 import json
+import math
+import os
 import re
 import shutil
 from copy import deepcopy
@@ -586,6 +588,8 @@ def _coerce(kind: str, value: Any, where: str, palette: dict[str, str] | None = 
     if base == "int":
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ThemeError(f"{where}: expected an integer")
+        if not math.isfinite(value):  # 1e999 or NaN in the file
+            raise ThemeError(f"{where}: expected an integer, not {value}")
         return int(value)
     if base == "number":
         if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -680,7 +684,7 @@ def normalize_widget(
         raise ThemeError(f"{where}: expected an object")
     wtype = raw.get("type")
     plugin = None
-    if wtype in WIDGET_SPECS:
+    if isinstance(wtype, str) and wtype in WIDGET_SPECS:
         spec = {**_COMMON, **WIDGET_SPECS[wtype]}
     elif isinstance(wtype, str) and "." in wtype:  # a plugin's widget type
         plugin = _plugin("widgets", wtype)
@@ -985,10 +989,14 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         _coerce("string", data.get("font", DEFAULT_FONT), "font") or DEFAULT_FONT, "font", root
     )
     animation = data.get("animation", {}) or {}
+    if not isinstance(animation, dict):
+        raise ThemeError("animation must be an object")
     smoothing_ms = _coerce("int", animation.get("smoothing_ms", 400), "animation.smoothing_ms")
     if not 0 <= smoothing_ms <= 5000:
         raise ThemeError("animation.smoothing_ms: must be between 0 and 5000")
     background = data.get("background", {}) or {}
+    if not isinstance(background, dict):
+        raise ThemeError('background must be an object, e.g. {"color": "#101418"}')
     bg_color = _check_color(background.get("color", "#000000"), "background.color", False, palette)
     bg_image = background.get("image")
     if bg_image is not None:
@@ -1109,7 +1117,13 @@ def save_theme(name: str, data: dict[str, Any], source: str | None = None) -> Pa
         shutil.copytree(src_folder, target)
     target.mkdir(parents=True, exist_ok=True)
     theme = parse_theme(data, root=target)
-    (target / THEME_FILENAME).write_text(
-        json.dumps(theme.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
+    try:
+        text = (json.dumps(theme.to_dict(), indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    except UnicodeEncodeError as exc:  # half of an emoji (a lone surrogate) from a page's script
+        raise ThemeError(f"the theme holds text that is not valid Unicode ({exc.reason})") from exc
+    # a write that fails (a full disk) leaves the theme as it was, and the panel never reads
+    # half a file
+    tmp = target / (THEME_FILENAME + ".tmp")
+    tmp.write_bytes(text)
+    os.replace(tmp, target / THEME_FILENAME)
     return target
