@@ -681,6 +681,7 @@ class Renderer:
         )
         if reused:
             done, part = len(hit[0]), hit[1].copy()
+            self._underlays[region] = self._underlays.pop(region)  # used: the last to go
         else:
             done = 0
             part = Image.new("RGBA", (x1 - x0, y1 - y0), self.color(self.theme.background_color))

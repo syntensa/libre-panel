@@ -22,6 +22,8 @@ value gliding back and forth colours each step once.
 from __future__ import annotations
 
 import math
+import threading
+from functools import lru_cache
 from typing import Any
 
 import numpy as np
@@ -61,11 +63,17 @@ def _over(under: Image.Image | None, top: Image.Image) -> Image.Image:
     return out
 
 
+@lru_cache(maxsize=256)
+def _scale(factor: float) -> tuple[int, ...]:
+    """A table that scales a channel by ``factor`` (for ``Image.point``)."""
+    return tuple(min(255, round(v * factor)) for v in range(256))
+
+
 def _alpha_scaled(image: Image.Image, factor: float) -> Image.Image:
     if factor >= 0.999:
         return image
     out = image.copy()
-    out.putalpha(image.getchannel("A").point(lambda a: round(a * factor)))
+    out.putalpha(image.getchannel("A").point(_scale(factor)))
     return out
 
 
@@ -159,15 +167,17 @@ def _blurred(values: np.ndarray, kernel: np.ndarray) -> np.ndarray:
 
 
 def _bar_glow(length: int, thick: int, spans, colours: np.ndarray, pad: int, radius: float,
-              strength: float, reverse: bool = False) -> np.ndarray:  # fmt: skip
-    """SPUR II's bar glow, lying, as light (thick + 2 pad, length + 2 pad, 3; 0 to 1):
-    dim along the lit part, rising to the head, the head running towards white.
-    Its source is a band across the bar times a level along it, so its blur
-    is the blur along times the blur across: two short convolutions."""
+              reverse: bool = False) -> tuple[np.ndarray, np.ndarray]:  # fmt: skip
+    """SPUR II's bar glow, lying, as light: dim along the lit part, rising to
+    the head, the head running towards white. Its source is a band across
+    the bar times a level along it, so its blur is the blur along times the
+    blur across: two short convolutions. Returned as those two factors, the
+    light along (length + 2 pad, 3) and across (thick + 2 pad)."""
     if reverse:  # filling from the far end, its head is on the left: worked out mirrored
         spans = [(length - b, length - a, amount) for a, b, amount in spans]
         colours = colours[::-1] if np.ndim(colours) == 2 else colours
-        return _bar_glow(length, thick, spans, colours, pad, radius, strength)[:, ::-1]
+        along, across = _bar_glow(length, thick, spans, colours, pad, radius)
+        return along[::-1], across
     start = min(a for a, _b, _amount in spans)
     head = max(b for _a, b, _amount in spans)
     rise = max(2.0, min(head - start, GLOW_HEAD * thick))
@@ -180,12 +190,12 @@ def _bar_glow(length: int, thick: int, spans, colours: np.ndarray, pad: int, rad
     if c.ndim == 2:  # a colour per column
         c = c[np.clip(xs.astype(np.intp), 0, length - 1)]
     colour = c * level[:, None]
-    colour = colour + (1 - colour) * white[:, None]
+    colour = (colour + (1 - colour) * white[:, None]).astype(np.float32)
     kernel = _gauss(radius)
     along = np.stack([_blurred(colour[:, i], kernel) for i in range(3)], -1)
     rows = np.arange(thick + 2 * pad, dtype=np.float32) + 0.5 - pad
     across = _blurred(((rows >= 1) & (rows <= thick - 1)).astype(np.float32), kernel)
-    return across[:, None, None] * along[None, :, :] * strength
+    return along, across
 
 
 def bar_piece(renderer: Any, widget: dict[str, Any], frac: float, paint) -> Piece:
@@ -194,7 +204,7 @@ def bar_piece(renderer: Any, widget: dict[str, Any], frac: float, paint) -> Piec
     x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
     length, thick, upright, reverse = _layout(widget)
     track = renderer.color(widget["background"])
-    layer = _groove_bar(widget, track) if track else np.zeros((thick, length, 4), np.float32)
+    layer = _groove_bar(widget, track) if track else None
     lit, _cells = _spans(widget, length, frac, reverse)
     glow = widget.get("glow", 0.0)
     pad = 0
@@ -204,23 +214,29 @@ def bar_piece(renderer: Any, widget: dict[str, Any], frac: float, paint) -> Piec
         value = _PICTURES.get(
             key, lambda: _premultiplied(_tube(thick).image(length, lit, colours), paint[0][3] / 255)
         )
-        layer = value + layer * (1 - value[..., 3:4])
+        layer = value if layer is None else value + layer * (1 - value[..., 3:4])
         if glow > 0:
             radius = max(1.0, float(widget.get("glow_radius", 10)))
             pad = math.ceil(2 * radius)
-            light = _bar_glow(length, thick, lit, colours, pad, radius, glow, reverse)
-            grown = np.zeros((thick + 2 * pad, length + 2 * pad, 4), np.float32)
-            grown[pad : pad + thick, pad : pad + length] = layer
-            grown[..., :3] += light
-            grown[..., 3] += np.maximum(np.maximum(light[..., 0], light[..., 1]), light[..., 2])
-            layer = np.minimum(grown, 1.0)
-    alpha = layer[..., 3:4]
-    rgb = layer[..., :3] / np.maximum(alpha, 1e-4)
-    out = np.concatenate([rgb, alpha], -1) * 255 + 0.5
-    out = np.clip(out, 0, 255).astype(np.uint8)
+            along, across = _bar_glow(length, thick, lit, colours, pad, radius, reverse)
+            along *= np.float32(255 * glow)  # worked out in levels from here on
+            grown = np.empty((thick + 2 * pad, length + 2 * pad, 4), np.float32)
+            np.multiply(across[:, None, None], along[None], out=grown[..., :3])
+            brightest = np.maximum(np.maximum(along[:, 0], along[:, 1]), along[:, 2])
+            np.multiply(across[:, None], brightest[None], out=grown[..., 3])  # light: its own alpha
+            grown[pad : pad + thick, pad : pad + length] += layer * np.float32(255)
+            grown += np.float32(0.5)
+            out = np.minimum(grown, 255, out=grown).astype(np.uint8)  # premultiplied, clamped
+    if pad == 0:
+        if layer is None:
+            layer = np.zeros((thick, length, 4), np.float32)
+        out = np.minimum(layer * 255 + 0.5, 255).astype(np.uint8)
     if upright:  # drawn lying: its start at the top, its light from the left
-        out = np.ascontiguousarray(out.swapaxes(0, 1))
-    return Piece(Image.fromarray(out, "RGBA"), x - pad, y - pad, [x, y, w, h])
+        out = out.swapaxes(0, 1)
+    out = np.ascontiguousarray(out)
+    size = out.shape[1], out.shape[0]
+    image = Image.frombuffer("RGBa", size, out, "raw", "RGBa", 0, 1).convert("RGBA")
+    return Piece(image, x - pad, y - pad, [x, y, w, h])
 
 
 class LitBar(Finish):
@@ -298,9 +314,7 @@ def gauge_piece(renderer: Any, widget: dict[str, Any], frac: float, paint) -> Pi
                 tint.putalpha(base.getchannel("A"))
                 base = tint
             halo = _blur(base, radius)
-            halo.putalpha(
-                halo.getchannel("A").point(lambda v: min(255, round(v * RING_GLOW * glow)))
-            )
+            halo.putalpha(halo.getchannel("A").point(_scale(RING_GLOW * glow)))
             if layer is not None:
                 grown = Image.new("RGBA", halo.size, (0, 0, 0, 0))
                 grown.paste(layer, (pad, pad))
@@ -360,29 +374,62 @@ class LitGraph(Finish):
         return {**widget, "glow": 0.0, "\0halo": widget.get("glow", 0.0)}
 
     def curve(self, renderer, widget, layer, runs, color, scale):
-        mask = Image.new("L", layer.size, 0)
-        draw = ImageDraw.Draw(mask)
         joint = "curve" if widget.get("\0joints", True) else None
-        for run in runs:
-            draw.line(run, fill=255, width=widget["line_width"] * scale, joint=joint)
+        width = widget["line_width"] * scale
+        core = (*mix((255, 255, 255), color[:3], LINE_WHITE), color[3])
         strength = widget.get("\0halo", 0.0)
+        mask = None
+        if strength > 0 or color[3] < 255:
+            mask = Image.new("L", layer.size, 0)
+            draw = ImageDraw.Draw(mask)
+            for run in runs:
+                draw.line(run, fill=255, width=width, joint=joint)
         if strength > 0:  # the halo lies under the line, worked out at a quarter of the size
-            q = 4 * scale
-            w, h = layer.size
-            small = mask.resize((max(1, w // q), max(1, h // q)), Image.Resampling.BOX)
             radius = max(0.5, widget.get("glow_radius", 10) / 4)
-            share = min(1.0, HALO * strength)
-            halo = small.filter(ImageFilter.GaussianBlur(radius)).point(
-                lambda v: min(255, round(v * share))
-            )
-            halo = halo.resize(layer.size, Image.Resampling.BILINEAR)
-            layer.paste(Image.new("RGBA", layer.size, (*color[:3], 255)), (0, 0), halo)
-        core = mix((255, 255, 255), color[:3], LINE_WHITE)
-        line = Image.new("RGBA", layer.size, (*core, color[3]))
+            _lay_halo(layer, mask, 4 * scale, radius, min(1.0, HALO * strength), color)
         if color[3] < 255:
-            mask = mask.point(lambda v: v * color[3] // 255)
-        layer.paste(line, (0, 0), mask)
+            layer.paste(_solid(layer.size, core), (0, 0), mask.point(_scale(color[3] / 255)))
+        else:  # opaque: drawn straight on, as the flat line
+            draw = ImageDraw.Draw(layer)
+            for run in runs:
+                draw.line(run, fill=core, width=width, joint=joint)
         return True
+
+
+def _lay_halo(layer: Image.Image, mask: Image.Image, q: int, radius: float, share: float,
+              color: tuple[int, ...]) -> None:  # fmt: skip
+    """Lay ``color`` through the soft halo of ``mask`` onto ``layer``: worked
+    out at 1/``q`` of the size, and laid only where it shows."""
+    halo = mask.reduce(q).filter(ImageFilter.GaussianBlur(radius)).point(_scale(share))
+    box = halo.getbbox()
+    if box is None:
+        return
+    x0, y0 = max(0, box[0] - 1), max(0, box[1] - 1)  # a pixel more: the scaling reaches it
+    x1, y1 = min(halo.width, box[2] + 1), min(halo.height, box[3] + 1)
+    left, top = x0 * q, y0 * q
+    size = min(layer.width, x1 * q) - left, min(layer.height, y1 * q) - top
+    big = halo.resize(size, Image.Resampling.BILINEAR,
+                      box=(x0, y0, x0 + size[0] / q, y0 + size[1] / q))  # fmt: skip
+    layer.paste(_solid(size, (*color[:3], 255)), (left, top), big)
+
+
+_SOLIDS: dict[tuple[int, ...], Image.Image] = {}
+_SOLIDS_LOCK = threading.Lock()
+
+
+def _solid(size: tuple[int, int], colour: tuple[int, ...]) -> Image.Image:
+    """A picture all of ``colour`` (RGBA): kept per colour at the largest size
+    asked for, as filling a large one costs more than laying it. Callers must
+    not change it."""
+    with _SOLIDS_LOCK:
+        have = _SOLIDS.pop(colour, None)
+        if have is None or have.width < size[0] or have.height < size[1]:
+            w, h = size if have is None else (max(size[0], have.width), max(size[1], have.height))
+            have = Image.new("RGBA", (w, h), colour)
+        _SOLIDS[colour] = have
+        while len(_SOLIDS) > 4:
+            del _SOLIDS[next(iter(_SOLIDS))]
+    return have if have.size == size else have.crop((0, 0, *size))
 
 
 # -- weather symbols ----------------------------------------------------------
