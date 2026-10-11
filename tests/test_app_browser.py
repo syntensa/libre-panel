@@ -1299,6 +1299,49 @@ def test_modules_from_a_layout_drag_resize_swap_and_look(page):
     expect(page.locator(".inspector .look-tile[aria-checked='true']")).to_have_text("Paper")
 
 
+def test_every_handle_of_a_module_resizes_it_one_cell_further_out(page):
+    """The eight handles of a module: the one pressed must stay under the pointer while it
+    is dragged (it once left with the first move, and the drag never reached the module)."""
+    js(
+        page,
+        """window.libre.doc.edit('grid', (theme) => {
+          const at = { col: 4, row: 3, cols: 1, rows: 1 };
+          theme.widgets = [{ type: 'module', id: 'box', module: 'stat', ...at }];
+          theme.grid = { columns: 9, rows: 7, gap: 0, margin: 0 };
+        })""",
+    )
+    page.wait_for_function("window.libre.store.get().render.grid?.columns === 9")
+    js(page, "window.libre.doc.setSelection(['box'])")
+    cells = "(w => [w.col, w.row, w.cols, w.rows])(window.libre.doc.widgetById('box'))"
+    frames = "new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
+
+    # each handle takes the pointer one cell beyond the module's edge; the module then fills
+    # more of the grid, so the next handle has room (and stands where the module's edge is)
+    steps = [
+        ("e", [4, 3, 2, 1]),
+        ("s", [4, 3, 2, 2]),
+        ("w", [3, 3, 3, 2]),
+        ("n", [3, 2, 3, 3]),
+        ("se", [3, 2, 4, 4]),
+        ("sw", [2, 2, 5, 5]),
+        ("ne", [2, 1, 6, 6]),
+        ("nw", [1, 0, 7, 7]),
+    ]
+    for edge, expected in steps:
+        col, row, cols, rows = js(page, cells)
+        handle = page.locator(f".handle.{edge}").bounding_box()
+        start = (handle["x"] + handle["width"] / 2, handle["y"] + handle["height"] / 2)
+        beyond_col = col + cols if "e" in edge else col - 1 if "w" in edge else None
+        beyond_row = row + rows if "s" in edge else row - 1 if "n" in edge else None
+        end = (
+            cell_center(page, beyond_col, row)[0] if beyond_col is not None else start[0],
+            cell_center(page, col, beyond_row)[1] if beyond_row is not None else start[1],
+        )
+        drag(page, start, end, steps=6)
+        page.wait_for_function(f"({cells}).join() === {expected!r}.join()", timeout=5000)
+        js(page, frames)  # the handles stand where the module's edges are now
+
+
 def test_a_modules_source_and_detaching_it(page):
     new_theme_from_a_layout(page, "Turing 3.5")
     ring = js(page, "window.libre.doc.widgets().find((w) => w.module === 'ring').id")
