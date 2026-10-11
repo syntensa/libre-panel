@@ -328,3 +328,9 @@ def test_specs_name_the_primary_fields(server):
         fields = {**specs["common"], **specs["widgets"][kind]}
         assert set(keys) <= set(fields), kind
         assert not set(keys) & {"x", "y", "w", "h"}, kind  # set on the canvas
+
+
+def test_plugin_pages_and_panel_pages_are_apart(server):
+    status, data = request(server, "GET", "/api/plugins/pages")
+    assert status == 200 and isinstance(data, list)  # the editor pages plugins bring
+    assert all({"id", "title"} <= set(page) for page in data)

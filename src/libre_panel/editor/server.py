@@ -301,7 +301,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         if path == "/api/readings":
             return self._json(self._readings(parse_qs(urlparse(self.path).query)))
         if path == "/api/pages":
-            return self._pages()
+            return self._panel_pages()
         if path.startswith("/api/themes/"):
             return self._get_theme(path[len("/api/themes/") :])
         if path == "/api/sensors":
@@ -492,7 +492,7 @@ class EditorHandler(BaseHTTPRequestHandler):
                 history[key] = [plain(round(v, 3)) for v in values[-60:]]
         return {"live": live, "readings": readings, "history": history}
 
-    def _pages(self) -> None:
+    def _panel_pages(self) -> None:
         """The pages of the panel: the theme it shows normally, the theme of each mode
         ([modes.<name>], game mode's among them, with its frame rate; None: the normal
         one) and the round report's (the memory service's ``report_theme``), and which
@@ -641,7 +641,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         if path == "/api/language":
             return self._set_language()
         if path == "/api/pages":
-            return self._set_page()
+            return self._set_panel_page()
         if path == "/api/preset-previews":
             return self._preset_previews()
         match = re.fullmatch(r"/api/plugins/([^/]+)/(.*)", path)
@@ -672,7 +672,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         i18n.set_language(setting)  # the tray and the panel follow at once
         self._json(self._i18n())
 
-    def _set_page(self) -> None:
+    def _set_panel_page(self) -> None:
         """``{"page": ..., "theme": ...}`` and, for a mode, ``{"fps": ...}``: what a page of
         the panel shows, written to config.toml. ``page`` is "normal", "report" (the round
         report) or a mode's name; a mode's empty theme is the normal one's."""
@@ -705,7 +705,7 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error(str(exc))
         except (ConfigError, OSError) as exc:
             return self._error(str(exc), HTTPStatus.CONFLICT)
-        self._pages()
+        self._panel_pages()
 
     def _preset_previews(self) -> None:
         """Each building block (presets.py and plugins') drawn in the given palette,
