@@ -22,9 +22,11 @@ The editor's server (`editor/server.py`) serves `index.html` at `/`, this folder
 | `core/commands.js` | the command registry the palette searches |
 | `core/app.js` | the background app (`store.get().app`, polled), `appAction()`, `quitApp()`, the window's bridge |
 | `core/hardware.js` | the hardware's names (`/api/hardware`): `loadHardware()`, `setHardwareName(part, text)`; `store.get().hardware` is `false` where the server has none |
+| `core/console.js` | the console API (docs/ARCHITECTURE.md): `control.panel()`, `.sources()`, `.services()`, `.probe(kind)`, `.enableService()`, …, and the polling hooks `usePolled(load, ms)` and `useLivePicture()` |
+| `core/stats.js` | the panel's numbers (`RunStatus.stats`) as tiles: `statTiles(stats)`, and `runtime(seconds)` |
 | `ui/` | controls (`Toggle`, `Segmented`, `Chips`, `NumberField`, `TextField`, `Select`, `Slider`, `Field`, `Row`, `Section`, `IconButton`), `Icon`, `Popover`, `Menu`, dialogs (`openDialog`, `confirmDialog`, `promptDialog`), `toast()`, the palette |
 | `shell/` | views and routes, the header and its parts (`ThemeTitle`, `SearchTrigger`, `PanelChip`, `UndoRedo`, `ApplyButton`), app-wide commands, plugin pages (`#/plugin/<id>`) |
-| `views/<id>/` | one folder per view; `design` is the editor, `settings` the frame of the settings (sections on the left), the others are empty places to fill |
+| `views/<id>/` | one folder per view: `home` is Start (`#/home`, also `#/start`: the launcher, or on a first start the question "How should it look?"; `#/home/themes` the gallery), `design` the editor, `settings` the frame of the settings (sections on the left), the others are empty places to fill |
 | `app.css` | colours and fonts (`:root` tokens) and the shared controls; a view brings its own CSS |
 
 ## A view
@@ -65,13 +67,22 @@ registerCommand({
 `registerProvider(() => [...])` adds commands made from data (one per theme, sensor,
 module) each time the palette searches.
 
+## Polling
+
+A view that shows the running panel asks the console API while it is shown, never faster
+than it needs: `usePolled(control.panel, 1000)` asks again a second after the last answer
+(and stops while the page is hidden or the view is left), `useLivePicture({ every })` asks
+for the picture on the panel when the last one has come. `store.get().app` is the
+background app's state every two seconds, for what needs no more.
+
 ## Themes in a list
 
 `store.get().themes` is the theme list (`/api/themes`, again after `refreshThemes()`):
 `{id, name, builtin, source, model, size}` for every built-in, plugin and own theme. A
 gallery lists these, not a fixed set; `endpoints.previewUrl(id, width)` is a theme's
-picture (the server keeps it until the theme changes), and `openTheme(id)` opens one for
-Design.
+picture (the server keeps it until the theme changes), `openTheme(id)` opens one for
+Design and `showOnPanel(id)` puts one on the panel. `store.get().pages.chosen` is false
+until config.toml names a theme: Start then asks which look the panel should have.
 
 ## A group in Settings
 

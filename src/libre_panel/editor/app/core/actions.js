@@ -185,6 +185,25 @@ export async function applyToPanel() {
   }
 }
 
+/**
+ * Show a saved theme on the panel as its normal theme, without opening it first (Start's
+ * gallery). The open theme follows when nothing of it would be lost, so Design and Look
+ * show what is on the panel. True when it is done.
+ */
+export async function showOnPanel(id) {
+  try {
+    store.set({ pages: await endpoints.setPage("normal", { theme: id }) });
+  } catch (error) {
+    toastError(error);
+    return false;
+  }
+  const { doc, dirty } = store.get();
+  if (!dirty && doc?.id !== id) await openTheme(id, { ask: false, page: "normal" });
+  else if (doc?.id === id && !store.get().page) store.set({ page: "normal" });
+  toast(t('"{id}" is now shown on the panel', { id: themeName(id) }), { kind: "success" });
+  return true;
+}
+
 /** Ask for a file (accept: ".json", "image/*", ...); null when none was picked. */
 export function pickFile(accept) {
   return new Promise((resolve) => {

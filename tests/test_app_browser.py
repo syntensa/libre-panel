@@ -8,6 +8,8 @@ import pytest
 
 playwright = pytest.importorskip("playwright.sync_api")
 
+from playwright.sync_api import expect  # noqa: E402
+
 from libre_panel.editor.server import make_server  # noqa: E402
 
 
@@ -23,11 +25,19 @@ def app_url():
 
 
 def expected_404(message):
-    """The app asks for the hardware's names; a server without them answers 404 (the app
-    then hides them), which Chromium logs as an error."""
+    """The app asks for the hardware's names; a server without them (an older background
+    app, as one test plays) answers 404, the app hides them, and Chromium logs an error."""
     return message.text.startswith("Failed to load resource") and message.location.get(
         "url", ""
     ).endswith("/api/hardware")
+
+
+def no_picture_yet(message):
+    """The live picture is 404 before the panel's first frame and while it is paused, which
+    Live and Start show as such; Chromium logs that as an error too."""
+    return message.text.startswith("Failed to load resource") and "/control/live" in (
+        message.location.get("url", "")
+    )
 
 
 @contextlib.contextmanager
@@ -47,7 +57,11 @@ def browser_page(url, view="design", strict_csp=False, size=(1440, 900), routes=
         page.on("pageerror", lambda e: errors.append(str(e)))
         page.on(
             "console",
-            lambda m: errors.append(m.text) if m.type == "error" and not expected_404(m) else None,
+            lambda m: (
+                errors.append(m.text)
+                if m.type == "error" and not (expected_404(m) or no_picture_yet(m))
+                else None
+            ),
         )
         for pattern, handler in (routes or {}).items():  # stand-ins for the server's answers
             page.route(pattern, handler)
@@ -80,9 +94,9 @@ def test_the_app_opens_without_breaking_its_rules(app_url):
         assert page.locator(".theme-name").inner_text() == "Libre Default"
         assert page.locator(".tile").count() > 30  # modules, building blocks, widgets
         assert js(page, "window.libre.store.get().render.size") == [480, 320]
-        for view in ("home", "look", "live"):  # the other views' places
+        for view, root in (("home", ".start"), ("look", ".slot"), ("live", ".slot")):
             page.goto(f"{app_url}#/{view}")
-            page.wait_for_selector(".view .slot")
+            page.wait_for_selector(f".view {root}")
         page.goto(f"{app_url}#/settings/about")
         current = page.locator(".settings-nav [aria-current='page']")
         assert current.inner_text() == "About Libre Panel"
@@ -180,6 +194,8 @@ def test_the_command_palette_finds_and_runs(page):
 
 
 def test_save_as_and_to_the_panel(page, isolated_home):
+    from test_service import wait_for
+
     from libre_panel.config import load_config
     from libre_panel.theme.model import load_theme
 
@@ -194,8 +210,9 @@ def test_save_as_and_to_the_panel(page, isolated_home):
     assert load_theme(isolated_home / "themes" / "mine").name == "Mine"
     assert page.locator(".unsaved").count() == 0
     page.locator(".btn-apply").click()
+    # (the save's success toast may still be up: wait for the setting, not for a toast)
+    assert wait_for(lambda: load_config().theme == "mine")
     page.wait_for_function("document.querySelector('.toast.success') !== null")
-    assert load_config().theme == "mine"
 
 
 def test_inspector_details_and_theme_settings(page):
@@ -336,3 +353,223 @@ def test_without_hardware_names_nothing_shows(app_url):
         page.wait_for_function("window.libre.store.get().hardware === false")
         assert page.locator(".hardware-name").count() == 0
         assert page.locator(".settings-upcoming").is_visible()
+
+
+# -- Start, Look and Live -------------------------------------------------------------------------
+# A test waits for the effect of what it did (a setting in config.toml, the store, what the app
+# shows), never for "a toast exists": an earlier one may still be up.
+
+
+@pytest.fixture
+def background(isolated_home):
+    """The background app with a panel that writes a PNG file, and the address of its app."""
+    from test_service import FakeRegistry, write_config
+
+    from libre_panel.autostart import Autostart
+    from libre_panel.service import BackgroundApp
+
+    write_config(isolated_home)
+    app = BackgroundApp(port=0, autostart=Autostart("win32", registry=FakeRegistry()))
+    url = app.start()
+    yield app, url
+    app.quit()
+    app.shutdown()
+
+
+def choose_theme(home, theme="libre-default"):
+    """A config.toml that names a theme: not a first start."""
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "config.toml").write_text(f'theme = "{theme}"\n', encoding="utf-8")
+
+
+def theme_ids(page):
+    return [item["id"] for item in js(page, "window.libre.store.get().themes")]
+
+
+def shown_themes(page):
+    """The ids of the theme cards on show."""
+    return page.locator(".theme-card").evaluate_all("cards => cards.map((c) => c.dataset.theme)")
+
+
+def set_range(locator, value):
+    """Move a slider as a hand does: input events while moving, change at the end."""
+    locator.evaluate(
+        """(el, value) => {
+          el.value = value;
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+        }""",
+        str(value),
+    )
+
+
+def a_panel_app(target='Turing 9.2", video 50 fps', hint=""):
+    """What /api/app says for a connected 9.2" bar in video mode, as a route's handler: Start
+    then sees the model (and what the panel could not read) without a panel on this machine."""
+    import json
+
+    stats = {
+        "fps": 50.0, "target_fps": 50, "streaming": True, "render_ms": 9.8,
+        "render_peak_ms": 21.0, "kbps": 248.3, "blocks_per_s": 50.0, "max_depth": 1,
+        "waits": 0, "drops": 0, "usb_errors": 0, "panel_restarts": 0, "ffmpeg_restarts": 0,
+        "uptime_s": 10800,
+    }  # fmt: skip
+    answer = {
+        "available": True,
+        "panel": {
+            "state": "showing", "detail": "", "hint": hint, "target": target,
+            "theme": "libre-default", "frames": 9, "mode": None, "stats": stats,
+        },
+        "brightness": 80, "upside_down": False, "autostart": False, "can_quit": True,
+    }  # fmt: skip
+
+    def handler(route, request):
+        if request.method == "GET":
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
+        else:
+            route.continue_()
+
+    return handler
+
+
+def test_start_lists_the_themes_and_switches_the_panel(app_url, isolated_home):
+    from test_service import wait_for
+
+    from libre_panel.config import load_config
+
+    choose_theme(isolated_home)
+    with browser_page(app_url, "home") as page:
+        page.wait_for_selector(".start.launcher .quick-theme")
+        rows = page.locator(".quick-theme")
+        ids = rows.evaluate_all("rows => rows.map((row) => row.dataset.theme)")
+        assert ids[0] == "libre-default"  # the one on the panel comes first
+        assert page.locator(".quick-theme.current").get_attribute("data-theme") == "libre-default"
+        assert len(ids) == min(5, len(theme_ids(page))) and set(ids) <= set(theme_ids(page))
+        picture = page.locator(".quick-theme img").first.get_attribute("src")
+        assert picture.startswith("/api/themes/")
+        # a key press on a theme puts it on the panel
+        target = ids[1]
+        page.locator(f'.quick-theme[data-theme="{target}"]').focus()
+        page.keyboard.press("Enter")
+        assert wait_for(lambda: load_config().theme == target)
+        expect(page.locator(".quick-theme.current")).to_have_attribute("data-theme", target)
+        # the open theme follows what is on the panel, and Design edits it
+        page.wait_for_function(f"window.libre.store.get().doc?.id === '{target}'")
+        page.locator(".panel-card .btn-primary").click()
+        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design")
+        assert js(page, "window.libre.store.get().doc.id") == target
+
+
+def test_start_has_a_gallery_of_every_theme(app_url, isolated_home):
+    choose_theme(isolated_home)
+    with browser_page(app_url, "home") as page:
+        page.locator(".start-side-head a").click()  # "All"
+        page.wait_for_selector(".start.gallery .theme-card")
+        shown = shown_themes(page)
+        assert sorted(shown) == sorted(theme_ids(page))  # whatever is installed, nothing fixed
+        assert page.locator(".theme-card.current").get_attribute("data-theme") == "libre-default"
+        other = next(i for i in shown if i != "libre-default")
+        card = page.locator(f'.theme-card[data-theme="{other}"]')
+        card.hover()
+        card.locator(".theme-card-edit").click()  # opens it in Design
+        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design")
+        assert js(page, "window.libre.store.get().doc.id") == other
+        # and from Design back to Start by the brand
+        page.locator(".brand").click()
+        page.wait_for_selector(".start.launcher")
+
+
+def test_start_begins_empty_or_with_a_file(app_url, isolated_home, tmp_path):
+    import json
+
+    from test_editor_server import theme_dict
+
+    choose_theme(isolated_home)
+    with browser_page(app_url, "home/themes") as page:
+        page.wait_for_selector(".start-actions")
+        page.get_by_role("button", name="Start empty").click()
+        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design")
+        assert js(page, "window.libre.doc.widgets().length") == 0
+        assert js(page, "window.libre.store.get().doc.id") is None
+        assert js(page, "window.libre.store.get().dirty") is True
+        # an unsaved theme is not thrown away by a click: it asks first
+        page.goto(f"{app_url}#/home/themes")
+        page.wait_for_selector(".start-actions")
+        theme = theme_dict()
+        theme["name"] = "From a file"
+        path = tmp_path / "from-file.json"
+        path.write_text(json.dumps(theme), encoding="utf-8")
+        with page.expect_file_chooser() as chooser:
+            page.get_by_role("button", name="Open a theme file").click()
+        chooser.value.set_files(str(path))
+        page.locator(".dialog .btn-danger").click()  # discard the empty theme
+        page.wait_for_function("window.libre.doc.theme()?.name === 'From a file'")
+        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design")
+
+
+def test_a_first_start_asks_how_it_should_look(app_url, isolated_home):
+    from test_service import wait_for
+
+    from libre_panel.config import load_config
+
+    assert not (isolated_home / "config.toml").exists()
+    with browser_page(app_url, "home") as page:
+        page.wait_for_selector(".start.first .theme-card")
+        assert page.locator(".start-head h1").inner_text() == "How should it look?"
+        assert page.locator(".panel-strip").inner_text().startswith("No panel found yet")
+        ids = theme_ids(page)  # no panel known: every theme is on offer
+        assert page.locator(".theme-card").count() == len(ids)
+        assert page.locator(".theme-card .theme-card-badge").count() == 0  # none is chosen yet
+        choice = ids[0]
+        page.locator(f'.theme-card[data-theme="{choice}"] .theme-card-main').click()
+        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design")  # on to Design
+        assert wait_for(lambda: load_config().theme == choice)
+        assert js(page, "window.libre.store.get().doc.id") == choice
+        page.goto(f"{app_url}#/home")
+        page.wait_for_selector(".start.launcher")  # a theme is chosen: the launcher
+
+
+def test_a_first_start_offers_the_themes_for_the_panel_it_found(app_url, isolated_home):
+    with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}) as page:
+        page.wait_for_selector(".start.first .theme-card")
+        strip = page.locator(".panel-strip")
+        expect(strip).to_contain_text("Your panel is here: Turing 9.2″")
+        expect(strip).to_contain_text("1920 × 480")
+        themes = js(page, "window.libre.store.get().themes")
+        fits = {i["id"] for i in themes if i["size"] == [1920, 480]}
+        assert set(shown_themes(page)) == fits and len(fits) < len(themes)
+        # the way to the others, and back
+        expect(page.locator(".start-actions")).to_contain_text(f"{len(themes) - len(fits)}")
+        page.get_by_role("button", name="See all").click()
+        expect(page.locator(".theme-card")).to_have_count(len(themes))
+        page.get_by_role("button", name="Only those for this panel").click()
+        expect(page.locator(".theme-card")).to_have_count(len(fits))
+        # another panel can be named
+        page.get_by_role("button", name="Another panel").click()
+        page.locator(".popover .model-row", has_text="Turing 3.5").first.click()
+        expect(strip).to_contain_text("Themes for Turing 3.5″")
+        small = {i["id"] for i in themes if i["size"] in ([480, 320], [320, 480])}
+        expect(page.locator(".theme-card")).to_have_count(len(small))
+        assert set(shown_themes(page)) == small
+
+
+def test_the_launcher_shows_and_controls_the_running_panel(background):
+    from test_service import wait_for
+
+    from libre_panel.config import load_config
+
+    app, url = background
+    with browser_page(url, "home") as page:
+        page.wait_for_selector(".panel-card .state-dot.showing")
+        expect(page.locator(".panel-card h2")).to_have_text("Showing “Libre Default”")
+        page.wait_for_selector(".panel-picture img")  # the picture on the panel
+        assert page.locator(".panel-picture img").get_attribute("src").startswith("blob:")
+        page.get_by_role("button", name="Pause panel").click()
+        assert wait_for(lambda: app.panel.paused)
+        page.wait_for_selector(".panel-card .state-dot.paused")
+        page.get_by_role("button", name="Resume panel").click()
+        assert wait_for(lambda: not app.panel.paused)
+        set_range(page.locator(".panel-card .slider input"), 35)
+        assert wait_for(lambda: load_config().device.brightness == 35)
+        page.locator(".panel-card [role='switch'][aria-label='Upside down']").click()
+        assert wait_for(lambda: load_config().device.rotate == 180)

@@ -32,8 +32,12 @@ export function navigate(id, rest = "") {
   else location.hash = hash;
 }
 
+// other names a view is known by: #/start is Start
+const ALIASES = { start: "home" };
+
 function route() {
-  const [id, ...rest] = location.hash.replace(/^#\/?/, "").split("/");
+  const [name, ...rest] = location.hash.replace(/^#\/?/, "").split("/");
+  const id = ALIASES[name] ?? name;
   const view = views.has(id) ? id : DEFAULT_VIEW;
   const current = store.get().route;
   const next = { view, rest: rest.join("/") };

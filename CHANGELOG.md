@@ -27,6 +27,16 @@
   a text typed there takes their place on the panel (*Automatic* brings the
   detected one back). In *Design* the same field sits beside a widget that
   shows one of them
+- *Start*, the first view of the app: the panel at a glance (what it shows,
+  its picture, pause, brightness, upside down), the themes made for it to
+  switch between with one click, and the way on to Design, Look, Live and
+  Settings. *All* is the gallery of every installed theme, built in, from
+  plugins and your own, each drawn by the panel's own renderer; its pencil
+  opens a theme in Design. On a first start (no `theme` in `config.toml`
+  yet) Start asks "How should it look?" with the themes for the panel it
+  found, or the one you name under *Another panel*; *Start empty* and *Open a
+  theme file* are there too. What the panel could not read (the sentence the
+  tray shows) is on Start with the way to its details
 - Everything in the app is a command: Ctrl+K finds it by a few letters
   (themes, modules, sensors, panels, the language, the panel's controls),
   with the keys it has
