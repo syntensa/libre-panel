@@ -2,6 +2,7 @@
 (a temp file here), the readings it takes and the ones it never does, and the service that
 runs it. Time is the samples' own, so a day passes in a moment."""
 
+import gc
 import json
 import sqlite3
 import threading
@@ -854,6 +855,7 @@ class Desk:
 
 @pytest.fixture
 def desk():
+    gc.collect()  # a renderer an earlier test left asks the sources for what it reads until then
     made = []
 
     def make(**options):
