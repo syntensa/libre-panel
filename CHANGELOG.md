@@ -382,12 +382,11 @@
   charts, and FRAMES (1% low, frame time, who holds the rate down), CPU, GPU
   and system below
 - The theme *SPUR Session* (`spur-session`, 1920 × 480): SPUR II's Session
-  screen for a game, as far as the readings go: the frame rate large with its
-  last ten minutes, a chart of the longest frame of each moment, and the
-  CPU's and GPU's temperatures and power with their course over the same ten
-  minutes. SPUR II's sums over a whole session (time played, average frame
-  rate, share of time per frame rate, highest values) need readings Libre
-  Panel does not have
+  screen for a game: the time played, the average frame rate large with the
+  frame rate now, the 1% low, who holds it down and the last ten minutes of
+  the rate, the share of the time at each frame rate, and the highest
+  temperatures, power and video memory since the game began beside what they
+  are now (the `memory` service's `session.*`, below)
 - The theme *SPUR Cockpit* (`spur-cockpit`, 1920 × 480): SPUR II's Cockpit
   screen, laid out on its 40 px grid: the CPU's and GPU's load as two equal
   charts, the RAM as a ring beside them, and CPU, GPU, memory and network in
@@ -478,6 +477,14 @@
   its value on the bar's scale (`mark_color`, `mark_width`), in any finish,
   and an `image` takes `align` (`left`, `center`, `right`) for a picture that
   does not fill its box. The demo has a made-up logo, drawn when asked
+- The `memory` service adds up the game while it is played and publishes the
+  totals once a second as `session.*`: `session.time` (seconds played),
+  `session.fps` (the mean frame rate so far), `session.level.<n>` (the share
+  of the time at each frame-rate range in percent, as `report.level.<n>`) and
+  the highest value since the game began (`session.cpu_temp_max`,
+  `gpu_temp_max`, `gpu_hotspot_max`, `cpu_power_max`, `gpu_power_max`,
+  `vram_used_max`). They are gone with the game. SPUR Session shows them
+  where SPUR II does, and the demo has neutral values for them
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

@@ -343,6 +343,22 @@ that was long enough again; for a console page) and `status()` (is it
 recording, the file, how many rows were written, the last error, the game now
 played).
 
+### The round under way
+
+While a game is played the `memory` service also publishes what the round has come to so
+far, once a second, as readings (a screen made of the usual widgets, such as the built-in
+`spur-session`, shows them; they are gone when the game's name goes):
+
+| Key | Value |
+|---|---|
+| `session.time` | s: how long the round has been played |
+| `session.fps` | fps: the mean of the per-second frame rates so far (no value before the first) |
+| `session.level.0` ... | the share of the round in each range of frame rates in percent, the slowest range first; the label is the range ("< 60", "60–90", "165+"), the ranges are the `fps_levels` option |
+| `session.cpu_temp_max`, `session.gpu_temp_max`, `session.gpu_hotspot_max`, `session.cpu_power_max`, `session.gpu_power_max`, `session.vram_used_max` | the highest value since the round began: °C, W, GB (no value for one that nothing has told) |
+
+They are what the round's row in the database will say when it ends, and what the
+`report.*` readings call the round's own numbers (`report.cpu_temp`, `report.level.0` ...).
+
 ### The cooling analysis
 
 The `cooling` service shows nothing by itself; an editor page (or a script)

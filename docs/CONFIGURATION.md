@@ -701,6 +701,11 @@ fps_levels = [60, 90, 120, 144, 165]   # the frame-rate ranges of the report's c
   `presentmon` source ([above](#more-sensor-sources)): a game without them is
   kept, but has no report. A game ends when its name goes, so a game that
   restarts within the service's `linger_s` is one round.
+- **While a game is played** the service publishes what the round has come to so
+  far, once a second: `session.time`, `session.fps`, the share of the time at each
+  frame rate (`session.level.<n>`) and the highest values since it began
+  (`session.cpu_temp_max` ...; the list is in [Plugins](PLUGINS.md#the-round-under-way)).
+  The built-in theme `spur-session` shows them, in a game screen.
 - **The report.** When a round that lasted `report_minutes` and had frame rates
   ends, the report is built from the file: this round against the mean of the
   last `report_compare` rounds of the same program that were long enough too

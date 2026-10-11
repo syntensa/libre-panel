@@ -3,6 +3,8 @@
 ``build`` reads the memory's database; ``readings`` turns the report into plain readings
 (``report.fps``, ``report.level.0``, ...) for a theme made of the usual widgets. A screen that
 draws more reads the whole report from the state ``report`` (docs/PLUGINS.md has its shape).
+``session_readings`` does the same for a round that is still under way (``session.time``,
+``session.fps``, ...): its totals so far.
 """
 
 from __future__ import annotations
@@ -88,6 +90,38 @@ def level_names(edges: list[float]) -> list[str]:
     return [*names, f"{edges[-1]:g}+"]
 
 
+def peak_labels() -> dict[str, str]:
+    """The names of the highest values, in the language of the panel."""
+    return {
+        "cpu_temp": t("CPU temp"), "gpu_temp": t("GPU temp"), "gpu_hotspot": t("GPU hot spot"),
+        "cpu_power": t("CPU power"), "gpu_power": t("GPU power"), "vram_used": t("Video memory"),
+    }  # fmt: skip
+
+
+def session_readings(totals: dict[str, Any]) -> dict[str, tuple[Any, str, str]]:
+    """A round under way as plain readings, key -> (value, unit, label), in the language of the
+    panel: how long it has been played (``session.time``), its mean frame rate
+    (``session.fps``), the share of the time at each range of frame rates in percent
+    (``session.level.<n>``, the slowest first, as ``report.level.<n>``) and the highest value of
+    each peak since it began (``session.<peak>_max``). A value may be None (not known yet).
+
+    ``totals``: ``duration_s``, ``fps_mean``, ``levels`` (``edges`` and ``seconds``) and
+    ``peaks`` (the highest values by name), as ``memory._Session.totals`` makes them."""
+    out: dict[str, tuple[Any, str, str]] = {
+        "session.time": (totals["duration_s"], "s", t("Played")),
+        "session.fps": (totals["fps_mean"], "fps", t("Average FPS")),
+    }
+    edges, seconds = totals["levels"]["edges"], totals["levels"]["seconds"]
+    total = sum(seconds)
+    for i, name in enumerate(level_names(edges)):
+        share = 100 * seconds[i] / total if total and i < len(seconds) else None
+        out[f"session.level.{i}"] = (share, "%", name)
+    labels = peak_labels()
+    for name, unit in PEAK_UNITS.items():
+        out[f"session.{name}_max"] = (totals["peaks"].get(name), unit, labels[name])
+    return out
+
+
 def readings(report: dict[str, Any]) -> dict[str, tuple[Any, str, str]]:
     """The report as plain readings: key -> (value, unit, label). The labels, and the texts
     that are values, are in the language of the panel. A value may be None (not known)."""
@@ -137,10 +171,7 @@ def readings(report: dict[str, Any]) -> dict[str, tuple[Any, str, str]]:
     for name, seconds in held.items():  # each one's share, for a bar in up to three colours
         share = 100 * seconds / total_held if total_held else 0.0
         out[f"report.limit.{name}"] = (share if share >= 0.5 else None, "%", name.upper())
-    labels = {
-        "cpu_temp": t("CPU temp"), "gpu_temp": t("GPU temp"), "gpu_hotspot": t("GPU hot spot"),
-        "cpu_power": t("CPU power"), "gpu_power": t("GPU power"), "vram_used": t("Video memory"),
-    }  # fmt: skip
+    labels = peak_labels()
     for name in SESSION_PEAKS:
         unit = PEAK_UNITS[name]
         out[f"report.{name}"] = (session.get(f"{name}_max"), unit, labels[name])

@@ -245,21 +245,59 @@ def test_focus_has_four_sections_whose_light_stays_in_them():
 # -- Session (the last ten minutes of what a game does) ------------------------------------------
 
 
-def test_session_shows_the_last_ten_minutes_of_the_frame_rate_the_frames_and_the_peaks():
-    from libre_panel.render.motion import MAX_POINTS, RATE
+def test_session_adds_the_game_up_time_played_average_shares_and_highest_values():
+    from libre_panel.sensors.demo import demo_session
 
     theme = load_theme(find_theme("spur-session"))
     by = {w["id"]: w for w in theme.widgets}
+    played, average = by["played-value"], by["fps-value"]
+    assert (played["sensor"], played["format"]) == ("session.time", "{value:clock}")  # 1:23:45
+    assert (average["sensor"], average["font_size"]) == ("session.fps", 120)
+    assert by["fps-label"]["text"] == "Ø FPS" and by["played-label"]["text"] == "PLAYED"
+    # the moment, in a row under it: the frame rate now, the 1% low, who holds the rate down
+    row = [by[name]["sensor"] for name in ("now-value", "low-value")]
+    assert row == ["game.fps", "game.low"]
+    assert by["now-label"]["x"] < by["now-value"]["x"] < by["low-label"]["x"] < by["low-value"]["x"]
+    assert by["low-value"]["x"] < by["limit-label"]["x"] < by["limit-gpu"]["x"]
+    # the distribution: the share of the time at each frame rate, the fastest on top
+    bars = [by[f"level-{n}-bar"] for n in (5, 4, 3, 2, 1, 0)]
+    assert [bar["sensor"] for bar in bars] == [f"session.level.{n}" for n in (5, 4, 3, 2, 1, 0)]
+    assert [b["y"] - a["y"] for a, b in zip(bars, bars[1:], strict=False)] == [56] * 5
+    assert bars[0]["color"] == "@net" and bars[-1]["color"] == "@crit"  # slow time is a warning
+    assert all(not bar["mark"] for bar in bars)  # nothing earlier to be against
+    # the highest values since the game began, and what they are now
+    names = ("cpu_temp", "cpu_power", "gpu_temp", "gpu_hotspot", "gpu_power", "vram_used")
+    for n, name in enumerate(names):
+        value, unit, now = by[f"peak-{n}-value"], by[f"peak-{n}-unit"], by[f"peak-{n}-now"]
+        assert value["sensor"] == f"session.{name}_max" and value["align"] == "right"
+        assert value["x"] < unit["x"] < by["max-head"]["x"]  # the unit ends the column
+        assert (now["x"], now["align"]) == (by["now-head"]["x"], "right")
+    warm = [bool(by[f"peak-{n}-value"]["color_rules"]) for n in range(6)]
+    assert warm == [True, False, True, False, False, False]  # as SPUR II: the processor's and
+    # the card's temperatures turn warm and hot, the rest stays white
+    # everything the memory service publishes about the round is on the screen, and nothing else
+    read = {key for key in keys_read(theme) if key.startswith("session.")}
+    assert read == set(demo_session())
+    # the last ten minutes of the frame rate stay under the numbers: the longest a graph holds
+    from libre_panel.render.motion import MAX_POINTS, RATE
+
     graphs = [w for w in theme.widgets if w["type"] == "graph"]
-    assert {g["sensor"] for g in graphs} == {
-        "game.fps", "game.frametime_peak", "cpu.temp", "cpu.power", "gpu.temp",
-        "temp.gpu.hot_spot", "gpu.power", "gpu.mem.used",
-    }  # fmt: skip
-    # the longest window the core keeps in video mode: nothing here claims a whole session
-    assert {g["seconds"] for g in graphs} == {596} and 596 <= (MAX_POINTS - 4 * RATE) / RATE
-    assert by["peaks-box-top"]["color"] == "@rule_strong"  # two channels: neutral
-    rows = [by[f"peak-{n}-graph"]["y"] for n in range(6)]
-    assert [b - a for a, b in zip(rows, rows[1:], strict=False)] == [56] * 5
+    assert [g["id"] for g in graphs] == ["session-graph"] and graphs[0]["sensor"] == "game.fps"
+    assert graphs[0]["seconds"] == 596 and 596 <= (MAX_POINTS - 4 * RATE) / RATE
+
+
+def test_session_shows_dashes_until_the_memory_service_has_counted_something():
+    theme = load_theme(find_theme("spur-session"))
+    renderer = Renderer(theme, preview=True)
+    snapshot = demo_snapshot(fixed_time=1_700_000_000)
+    full, _ = renderer.render(snapshot)
+    for key in [k for k in snapshot.readings if k.startswith("session.")]:
+        del snapshot.readings[key]  # no memory service
+    bare, _ = renderer.render(snapshot)
+    assert renderer.warnings == [] and full.tobytes() != bare.tobytes()
+    ids = shown_ids(theme, {"game.fps": 90.0})
+    assert {"played-value", "fps-value", "peak-0-value", "peak-3-now"} <= ids  # as "--"
+    assert not any(wid.startswith("level-") and wid.endswith(("-bar", "-name")) for wid in ids)
 
 
 # -- Cockpit (building blocks on a 40 px grid) ---------------------------------------------------

@@ -343,11 +343,30 @@ def demo_report(t: float, earlier: int = 7) -> dict[str, Reading]:
     return {key: Reading(key, value, unit, label) for key, (value, unit, label) in found.items()}
 
 
+def demo_session() -> dict[str, Reading]:
+    """A game under way for 1:23:45 (made up), as the memory service publishes the totals of a
+    round while it is played: ``session.*``, so that the screen that shows them is complete in a
+    preview."""
+    from libre_panel.services import round_report
+
+    totals = {
+        "duration_s": 5025.0,
+        "fps_mean": 156.0,
+        "levels": {"edges": [60, 90, 120, 144, 165], "seconds": [50, 55, 20, 700, 2865, 1335]},
+        "peaks": {
+            "cpu_temp": 81.0, "gpu_temp": 71.0, "gpu_hotspot": 89.0,
+            "cpu_power": 118.0, "gpu_power": 318.0, "vram_used": 14.2,
+        },
+    }  # fmt: skip
+    found = round_report.session_readings(totals)
+    return {key: Reading(key, value, unit, label) for key, (value, unit, label) in found.items()}
+
+
 def demo_snapshot(fixed_time: float | None = None, samples: int = HISTORY_SAMPLES) -> Snapshot:
     """A complete snapshot with filled graph history, for previews and the editor."""
     provider = DemoProvider({"fixed_time": fixed_time})
     when = fixed_time if fixed_time is not None else time.time()
-    readings = {**provider.read(), **demo_report(when)}
+    readings = {**provider.read(), **demo_report(when), **demo_session()}
     history = {key: demo_history(provider, key, samples) for key in _WAVES}
     now = datetime.fromtimestamp(fixed_time) if fixed_time is not None else datetime.now()
     return Snapshot(readings=readings, history=history, now=now, images=provider.images())
