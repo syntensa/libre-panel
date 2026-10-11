@@ -305,7 +305,8 @@ def demo_forecast(t: float) -> dict[str, Reading]:
     offset = local.utcoffset()
     midnight = local.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
     step_now = (local.replace(tzinfo=None) - midnight) // timedelta(minutes=15)
-    rain = [0.6 if 3 <= n - step_now < 7 else 0.0 for n in range(192)]  # dry now, then an hour
+    # dry now, then an hour (a step is the rain of the quarter hour up to its time)
+    rain = [0.6 if 4 <= n - step_now < 8 else 0.0 for n in range(192)]
     hours = range(48)
     data = {
         "utc_offset_seconds": int(offset.total_seconds()) if offset else 0,

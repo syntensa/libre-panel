@@ -10,7 +10,9 @@ whether the temperatures and power that only it gives arrive.
 
 from __future__ import annotations
 
+import os
 import platform
+import re
 import struct
 import sys
 import time
@@ -28,6 +30,21 @@ from libre_panel.devices.base import DeviceError, list_serial_ports
 from libre_panel.devices.models import PanelModel, models_for_usb
 
 ISSUE_URL = "https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml"
+# The folders of a Windows path (C:\..., file:///C:/..., \\server\share\...) up to its last part
+_FOLDERS = re.compile(
+    r"(?:file:/*)?(?:(?<![A-Za-z])[A-Za-z]:[\\/]|\\\\)(?:[^\\/:*?\"<>|;\r\n]+[\\/])*"
+)
+
+
+def without_folders(text: str, home: str | None = None) -> str:
+    """``text`` for the report: what LibreHardwareMonitor and .NET say names a file with its
+    folders, and a user's own folders hold the user's name. The home folder becomes ``~``, the
+    folders of any other path ``…``; the file a path names stays."""
+    home = os.path.expanduser("~") if home is None else home  # "~" itself where there is none
+    if len(home) > 3:  # not a bare "/" or "C:\"
+        for spelt in {home, home.replace("\\", "/")}:
+            text = re.sub(re.escape(spelt), "~", text, flags=re.IGNORECASE)
+    return _FOLDERS.sub("…\\\\", text)
 
 
 def sensors_check(
@@ -461,7 +478,8 @@ class Doctor:
         except Exception as exc:  # noqa: BLE001 - a side check must not stop the panel check
             step = ("info", f"not checked ({type(exc).__name__}: {exc})")
         if step is not None:
-            self._step("temperature and power readings", *step)
+            result, detail = step
+            self._step("temperature and power readings", result, without_folders(detail))
 
     def _find_and_open(self):
         try:

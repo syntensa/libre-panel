@@ -164,6 +164,42 @@ def test_what_the_video_mode_lacks_is_told_in_codes_too(tmp_path):
     assert len(video_mode(missing, nine)[1]) == len(video_gaps(missing, nine))
 
 
+def test_why_the_video_mode_is_off_is_logged_once_while_auto_looks_for_the_panel(
+    tmp_path, monkeypatch, caplog
+):
+    """The default driver looks for a panel every 5 s, with a new display each time. A panel
+    that is there but held by another program (the TURZX app) leaves the video mode off for
+    the same reason at every look: the log says it once, not every 5 s for hours."""
+    import logging
+
+    from libre_panel.devices import auto, serial_link, turzx
+    from libre_panel.devices.models import get_model
+
+    caplog.set_level(logging.INFO, logger="libre_panel.devices")
+    monkeypatch.setattr(turzx, "_told", "")  # nothing said before this test
+    nine = get_model("turing-9.2-usb")
+
+    def busy(pid=None):
+        raise DeviceError("the panel is in use by another program")
+
+    monkeypatch.setattr(turzx_usb, "present_model", lambda: nine)
+    monkeypatch.setattr(turzx_usb.UsbTransport, "open", staticmethod(busy))
+    monkeypatch.setattr(serial_link, "find_port", lambda *args, **kwargs: None)
+    ffmpeg = tmp_path / "ffmpeg"
+    ffmpeg.write_text("")  # found: only the clip's name is missing
+    device = DeviceConfig(output=str(tmp_path / "frame.png"), video=VideoConfig(ffmpeg=str(ffmpeg)))
+    now = [0.0]
+    display = auto.AutoDisplay(device, clock=lambda: now[0])
+    display.open()
+    for _ in range(4):
+        now[0] += auto.AutoDisplay.PROBE_INTERVAL_S + 0.1
+        display.show(Image.new("RGB", (8, 8)))
+    display.close()
+    told = [r.getMessage() for r in caplog.records if r.getMessage().startswith("video mode off")]
+    why = turzx.video_mode(device.video, nine)[1]
+    assert told == [f"video mode off: {why[0]}"] and "local_clip" in why[0]
+
+
 # -- the session against the simulated panel ------------------------------------
 
 

@@ -746,6 +746,72 @@ def test_doctor_in_the_web_server_mode_asks_only_it(isolated_home, monkeypatch):
     assert asked == [URL]
 
 
+def doctor_report(config_path):
+    """The text of a doctor report (no panel), as it is attached to a public issue."""
+    from libre_panel.devices.base import DeviceError
+
+    def no_panel():
+        raise DeviceError("no Turing/TURZX USB panel found")
+
+    report = doctor.Doctor(
+        ask=None,
+        say=lambda text: None,
+        pause=lambda seconds: None,
+        open_transport=no_panel,
+        open_serial=lambda: None,
+        sensors=lambda: doctor.sensors_check(config_path, "win32"),
+    ).run()
+    return report.text()
+
+
+def test_the_doctor_report_names_no_folder_of_the_user(isolated_home, monkeypatch):
+    """Where the libraries are not, the report says so without the folder: a user's own folder
+    holds the user's name, and the report goes to a public issue."""
+    real = inside.availability
+    monkeypatch.setattr(inside, "_has_pythonnet", lambda: True)
+    monkeypatch.setattr(
+        inside, "availability", lambda dll_dir=None, platform=None: real(dll_dir, "win32")
+    )
+    path = isolated_home / "config.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "[sensors.librehardwaremonitor]\nmode = \"inprocess\"\ndll_dir = 'C:\\Users\\Alice\\lhm'\n"
+    )
+    text = doctor_report(path)
+    assert "LibreHardwareMonitorLib.dll was not found" in text
+    assert "Alice" not in text
+
+
+def test_the_doctor_report_keeps_the_file_of_a_dot_net_message_but_not_its_folders(
+    isolated_home, possible, monkeypatch
+):
+    """.NET names the library that would not load with its whole path (here: where a user
+    without administrator rights installed Libre Panel); the report keeps the file's name."""
+    error = (
+        "FileLoadException: Could not load file or assembly 'file:///C:\\Users\\Alice\\AppData"
+        "\\Local\\Programs\\Libre Panel\\_internal\\lhm\\LibreHardwareMonitorLib.dll' or one of "
+        "its dependencies. Operation is not supported. (Exception from HRESULT: 0x80131515)"
+    )
+    failed = lhm.LhmStatus("inprocess", error=error)
+    monkeypatch.setattr(FakeSource, "status", lambda self: failed)
+    path = isolated_home / "config.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('[sensors.librehardwaremonitor]\nmode = "inprocess"\n')
+    text = doctor_report(path)
+    assert "could not start inside Libre Panel" in text
+    assert "LibreHardwareMonitorLib.dll' or one of its dependencies" in text
+    assert "Alice" not in text and "AppData" not in text
+
+
+def test_what_the_report_keeps_of_a_path():
+    home = "C:\\Users\\Alice"
+    said = doctor.without_folders("the path 'c:\\users\\alice' is denied", home)
+    assert said == "the path '~' is denied"  # the home folder, however it is spelt
+    assert doctor.without_folders("D:\\Tools\\lhm\\a.dll is missing", home) == "…\\a.dll is missing"
+    hint = f"Libre Panel then reads {URL}; {PAWNIO_STEP}"
+    assert doctor.without_folders(hint, home) == hint  # web addresses are no folders
+
+
 def test_a_fake_computer_is_enough_for_the_real_provider(monkeypatch):
     """The provider and the source together, on a fake computer, as the panel runs them."""
     computer = small_computer()
