@@ -43,6 +43,7 @@ from libre_panel.theme.model import (
     DUST_MAX_AREAS,
     DUST_MAX_COLORS,
     EFFECT_FIELDS,
+    FINISHES,
     LOOK_SPECS,
     PRIMARY_FIELDS,
     THEME_FILENAME,
@@ -106,6 +107,20 @@ _PAGE_TYPES = {
     ".woff2": "font/woff2",
     ".ttf": "font/ttf",
 }
+
+
+def _finish_types(types: list[str]) -> dict[str, list[str]]:
+    """The widget types each finish draws (any other is drawn flat): the editor offers a
+    finish only where it shows. A module counts when its finish reaches one of its parts."""
+    from libre_panel.render import finish
+
+    found: dict[str, list[str]] = {}
+    for name in FINISHES[1:]:
+        kinds = [kind for kind in types if kind != "module" and finish.get(name, kind)]
+        if any(finish.get(name, part) for part in finish.PART_TYPES):
+            kinds.append("module")
+        found[name] = kinds
+    return found
 
 
 def _plugin_specs() -> dict[str, Any]:
@@ -564,6 +579,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             "effect_fields": list(EFFECT_FIELDS),
             # what the inspector shows first for each widget type
             "primary": {kind: list(keys) for kind, keys in PRIMARY_FIELDS.items()},
+            # which widget types each finish draws (flat draws all)
+            "finishes": _finish_types(list(widgets)),
             # the panel's look, block by block: Theme -> Look
             "look": {
                 name: {k: list(v) for k, v in spec.items()} for name, spec in LOOK_SPECS.items()

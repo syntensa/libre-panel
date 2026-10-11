@@ -330,6 +330,15 @@ def test_specs_name_the_primary_fields(server):
         assert not set(keys) & {"x", "y", "w", "h"}, kind  # set on the canvas
 
 
+def test_specs_say_where_each_finish_shows(server):
+    _, specs = request(server, "GET", "/api/specs")
+    finishes = specs["finishes"]
+    assert set(finishes) == {"lit", "facet", "acrylic"}  # flat draws everything
+    assert {"gauge", "bar", "graph", "module"} <= set(finishes["lit"])
+    assert "clock" in finishes["facet"] and "clock" not in finishes["lit"]
+    assert "text" in finishes["acrylic"] and "bar" not in finishes["acrylic"]
+
+
 def test_plugin_pages_and_panel_pages_are_apart(server):
     status, data = request(server, "GET", "/api/plugins/pages")
     assert status == 200 and isinstance(data, list)  # the editor pages plugins bring

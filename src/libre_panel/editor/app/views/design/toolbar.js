@@ -9,7 +9,7 @@ import { Chips, IconButton, NumberField } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { Menu, Popover } from "../../ui/layer.js";
 import { ColorButton } from "./color.js";
-import { FINISH_NAMES, enumOptions } from "./fields.js";
+import { FINISH_NAMES, enumOptions, finishesFor } from "./fields.js";
 import { inspectorState } from "./inspector-state.js";
 import {
   align,
@@ -150,7 +150,7 @@ function SingleTools({ widget }) {
   else parts.push(html`<span key="name" class="tool-name">${isModule(widget) ? kindName(widget.module) : widgetLabel(widget.type)}</span>`);
   if ("finish" in spec) {
     const names = FINISH_NAMES();
-    const options = ["lit", "facet", "flat"].filter((name) => enumOptions(spec.finish[0]).includes(name));
+    const options = finishesFor(widget).filter((name) => enumOptions(spec.finish[0]).includes(name));
     parts.push(html`<span key="s1" class="tool-sep"></span>`);
     parts.push(html`<span key="finish" class="tool-group" role="radiogroup" aria-label=${fieldLabel("finish")}>
       ${options.map((finish) => html`<button key=${finish} type="button" role="radio" aria-checked=${String(widget.finish === finish)}

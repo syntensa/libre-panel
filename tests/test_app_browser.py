@@ -111,6 +111,11 @@ def test_toolbar_sensor_and_finish(page):
     assert inspector.locator(".finish-tile[aria-checked='true']").inner_text() == "Light"
     page.keyboard.press("Control+z")
     assert widget(page, "cpu-ring")["sensor"] == "cpu.load"
+    # only the finishes that show on a type: acrylic is for lettering
+    assert "Acrylic" not in toolbar.locator(".tool-text").all_inner_texts()
+    js(page, "window.libre.doc.setSelection(['cpu-label'])")
+    toolbar.locator(".tool-text", has_text="Acrylic").click()
+    assert widget(page, "cpu-label")["finish"] == "acrylic"
 
 
 def test_a_module_from_the_library(page):
@@ -182,6 +187,15 @@ def test_inspector_details_and_theme_settings(page):
     x.fill("33")
     x.press("Enter")
     assert widget(page, "cpu-ring")["x"] == 33
+    page.locator(".inspector [aria-label='Back']").click()
+    # an area on the panel (where a bar's lit glow stays): x, y, w, h, or none
+    js(page, "window.libre.doc.setSelection(['disk-bar'])")
+    page.locator(".details-button").click()
+    page.locator(".inspector button", has_text="Set an area").click()
+    area = widget(page, "disk-bar")["glow_area"]
+    assert len(area) == 4 and area[2] > 0 and area[3] > 0
+    page.locator(".inspector button", has_text="Remove the area").click()
+    assert widget(page, "disk-bar")["glow_area"] is None
     page.locator(".inspector [aria-label='Back']").click()
     page.keyboard.press("Escape")  # nothing selected: the theme's settings
     assert page.locator(".inspector .inspector-title").inner_text() == "Libre Default"

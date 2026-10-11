@@ -1,6 +1,6 @@
 // A control for each kind of field in the theme's specs (theme/model.py):
 // int, number, number?, string, text, color, color?, bool, sensor, format,
-// font, asset, rules, icon and "enum:a|b|c". The inspector is built from these.
+// font, asset, rules, icon, box? and "enum:a|b|c". The inspector is built from these.
 
 import { refreshAssets, uploadAsset } from "../../core/actions.js";
 import { endpoints } from "../../core/api.js";
@@ -27,7 +27,19 @@ export function hintFor(widget, key, kind) {
   if (key === "smooth" && widget?.type === "metric") return t("the number glides between readings, together with the bars and rings of its sensor");
   if (key === "seconds" && widget?.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = as long as the history readings take");
   if (key === "per_frame") return t("video mode: a point a pixel apart, as SPUR II draws its curves (seconds = width / 25)");
-  if (key === "finish") return t("lit: SPUR II's light on rings, bars, graph lines, texts and weather icons; glow then sets their glow");
+  if (key === "fill_alpha") return t("how opaque the fill is, 0 to 1; 0 = as before (a flat fill 0.25, a fade 0.45 at its top)");
+  if (key === "finish") {
+    return [
+      t("lit: SPUR II's light on rings, bars, graph lines, texts and weather icons; glow then sets their glow"),
+      t("facet: a flat top with a lit, bevelled rim (text from 20 px, bars from 6 px)"),
+      t("acrylic: lettering of acrylic lit from within, text from 20 px"),
+    ].join(" · ");
+  }
+  if (key === "max_rpm") return t("the speed at which the ring is full; the rotor turns the faster the closer it gets");
+  if (key === "glow_area") return t("x, y, w, h on the panel: with the lit finish the glow stays inside (a bar's worked out as SPUR II's glow zones); empty: all around");
+  if (key === "ridge") return t("a name makes the rect a ridge that catches the light; rects with the same name are one ridge");
+  if (key === "inset") return t("the line stays a line's width inside the box; off: the range spans the box, as SPUR II's charts");
+  if (key === "direction" && widget?.type === "graph") return t("down: the curve hangs from the top and is filled from there, below an upward one it mirrors it");
   return null;
 }
 
@@ -112,10 +124,32 @@ export function RulesControl({ value, onChange, unit = "" }) {
 
 // -- finishes: how a shape is drawn ------------------------------------------------------------
 
-export const FINISH_NAMES = () => ({ lit: t("Light"), facet: t("Facet"), flat: t("Flat") });
+export const FINISH_NAMES = () => ({ lit: t("Light"), facet: t("Facet"), acrylic: t("Acrylic"), flat: t("Flat") });
+const FINISH_ORDER = ["lit", "facet", "acrylic", "flat"];
 
-/** The look of a finish, drawn small: a ring or a bar. */
+/** The finishes that show on a widget (specs.finishes; any other draws it flat), and the
+ * one it has, in the order of the tiles. */
+export function finishesFor(widget) {
+  const shows = store.get().specs?.finishes;
+  return FINISH_ORDER.filter((name) => name === "flat" || name === widget?.finish || !shows || shows[name]?.includes(widget?.type));
+}
+
+/** The look of a finish, drawn small: a ring, a bar or lettering. */
 export function FinishPicture({ finish, shape = "ring", size = 46 }) {
+  if (shape === "text") {
+    const fill = { lit: "#C9FCF6", facet: "url(#facet-text)", acrylic: "#EFFFFD", flat: "#2EE6D6" }[finish] || "#2EE6D6";
+    return html`<svg width=${size} height=${size} viewBox="0 0 46 46" aria-hidden="true">
+      <defs>
+        <linearGradient id="facet-text" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#F2FFFE" /><stop offset="0.55" stop-color="#7FA5A8" /><stop offset="1" stop-color="#D5ECEC" />
+        </linearGradient>
+        <filter id="lit-text" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="2.4" /></filter>
+      </defs>
+      ${finish === "lit" ? html`<text x="23" y="32" text-anchor="middle" font-size="25" font-weight="700" fill="#2EE6D6" filter="url(#lit-text)">42</text>` : null}
+      <text x="23" y="32" text-anchor="middle" font-size="25" font-weight="700" fill=${fill}
+        stroke=${finish === "acrylic" ? "#5FF0E4" : finish === "facet" ? "#2C3A40" : "none"} stroke-width=${finish === "acrylic" ? 1.1 : 0.6}>42</text>
+    </svg>`;
+  }
   if (shape === "bar") {
     const fill = { lit: "#B9FBF4", facet: "url(#facet)", flat: "#2EE6D6" }[finish];
     return html`<svg width=${size} height="14" viewBox="0 0 46 14" aria-hidden="true">
@@ -135,20 +169,55 @@ export function FinishPicture({ finish, shape = "ring", size = 46 }) {
   </svg>`;
 }
 
-export const finishShape = (widget) => (["bar", "list", "metric", "text", "graph"].includes(widget?.type) ? "bar" : "ring");
+const LETTERING = ["text", "metric", "clock", "countdown", "weather"];
+
+export const finishShape = (widget) =>
+  LETTERING.includes(widget?.type) ? "text" : ["bar", "list", "graph"].includes(widget?.type) ? "bar" : "ring";
 
 /** The finishes as tiles with a picture each (instead of a select). */
 export function FinishTiles({ widget, value, options, onChange }) {
   const names = FINISH_NAMES();
-  const order = ["lit", "facet", "flat"].filter((name) => options.includes(name));
-  return html`<div class="finish-tiles" role="radiogroup" aria-label=${t("Style")}>
+  const order = finishesFor(widget).filter((name) => options.includes(name));
+  return html`<div class=${`finish-tiles${order.length > 3 ? " four" : ""}`} role="radiogroup" aria-label=${t("Style")}>
     ${order.map(
       (finish) => html`<button type="button" role="radio" key=${finish} aria-checked=${String(value === finish)}
         class="finish-tile" onClick=${() => onChange(finish)}>
-        <${FinishPicture} finish=${finish} shape=${finishShape(widget)} />
+        <${FinishPicture} finish=${finish} shape=${finish === "acrylic" ? "text" : finishShape(widget)} />
         <span>${names[finish]}</span>
       </button>`,
     )}
+  </div>`;
+}
+
+// -- an area on the panel ---------------------------------------------------------------------
+
+/** x, y, w, h on the panel (a "box" field), or none where the field may be empty. */
+export function BoxControl({ widget, label, value, optional, onChange }) {
+  const box = Array.isArray(value) && value.length === 4 ? value : null;
+  const parts = t("x, y, w, h").split(/,\s*/);
+  if (!box) {
+    // the box the widget is drawn in, with room around it
+    const [x, y, w, h] = store.get().render.boxes?.[widget?.id] || [widget?.x || 0, widget?.y || 0, widget?.w || 100, widget?.h || 40];
+    const start = [Math.max(0, Math.round(x - 8)), Math.max(0, Math.round(y - 8)), Math.round(w + 16), Math.round(h + 16)];
+    return html`<button type="button" class="btn btn-dashed" onClick=${() => onChange(start)}>
+      <${Icon} name="plus" size=${14} /> ${t("Set an area")}
+    </button>`;
+  }
+  const set = (index) => (number) => {
+    if (!Number.isFinite(number)) return;
+    const next = [...box];
+    next[index] = Math.round(number);
+    if (next[2] > 0 && next[3] > 0) onChange(next);
+  };
+  return html`<div class="box-field">
+    <div class="quad">
+      ${box.map((number, index) => html`<${Field} key=${index} label=${parts[index] || ""}>
+        <${NumberField} label=${`${label}: ${parts[index] || index}`} value=${number} min=${index > 1 ? 1 : undefined} unit="px" onChange=${set(index)} />
+      <//>`)}
+    </div>
+    ${optional
+      ? html`<button type="button" class="btn btn-quiet" onClick=${() => onChange(null)}><${Icon} name="close" size=${14} /> ${t("Remove the area")}</button>`
+      : null}
   </div>`;
 }
 
@@ -190,6 +259,7 @@ export function FieldControl({ widget, name, kind, value, onChange }) {
       ? html`<${Segmented} label=${label} value=${value} onChange=${onChange} options=${options.map((option) => ({ value: option, label: enumLabel(option) }))} />`
       : html`<${Select} label=${label} value=${value} onChange=${onChange} options=${options.map((option) => ({ value: option, label: enumLabel(option) }))} />`;
   }
+  if (base === "box") return html`<${BoxControl} widget=${widget} label=${label} value=${value} optional=${optional} onChange=${onChange} />`;
   if (base === "text") return html`<${TextField} label=${label} value=${value} onChange=${onChange} multiline rows=${3} />`;
   return html`<${TextField} label=${label} value=${value} onChange=${onChange} mono=${base === "format"} />`;
 }

@@ -19,7 +19,7 @@ import { Icon } from "../../ui/icons.js";
 import { Popover } from "../../ui/layer.js";
 import { paletteOpen } from "../../ui/palette.js";
 import { Canvas, dropItem, setZoom, zoomStep } from "./canvas.js";
-import { FINISH_NAMES } from "./fields.js";
+import { FINISH_NAMES, finishesFor } from "./fields.js";
 import { Images } from "./images.js";
 import { Inspector, MODULE_ICONS, TYPE_ICONS } from "./inspector.js";
 import { Layers } from "./layers.js";
@@ -272,14 +272,15 @@ registerProvider(() => {
   }
   const withFinish = chosenWidgets.filter((widget) => "finish" in specOf(widget.type));
   if (withFinish.length) {
-    for (const [finish, name] of Object.entries(FINISH_NAMES())) {
+    const shows = new Set(withFinish.flatMap((widget) => finishesFor(widget)));
+    for (const [finish, name] of Object.entries(FINISH_NAMES()).filter(([finish]) => shows.has(finish))) {
       commands.push({
         id: `finish.${finish}`,
         title: () => t("Style: {name}", { name }),
         group: sel,
         icon: "ring",
         rank: 46,
-        run: () => edit(null, () => withFinish.forEach((widget) => (widget.finish = finish))),
+        run: () => edit(null, () => withFinish.filter((widget) => finishesFor(widget).includes(finish)).forEach((widget) => (widget.finish = finish))),
       });
     }
   }

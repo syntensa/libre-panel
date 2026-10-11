@@ -1394,6 +1394,27 @@
   height: 46px;
 }
 
+.finish-tiles.four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.finish-tiles.four svg {
+  height: 40px;
+}
+
+/* an area on the panel: x, y, w, h */
+.box-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.box-field .quad {
+  align-self: stretch;
+}
+
 /* colours */
 .swatches {
   display: flex;

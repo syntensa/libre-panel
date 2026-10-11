@@ -135,9 +135,9 @@ const GROUPS = () => [
     id: "scale",
     title: t("Scale and shape"),
     short: t("Scale"),
-    keys: ["min", "max", "scale", "start_angle", "end_angle", "thickness", "cap", "ticks", "tick_color", "direction", "segments", "segment_gap", "line_width", "history", "seconds", "per_frame", "grid", "grid_color", "fill_fade", "columns", "max_items", "levels"],
+    keys: ["min", "max", "scale", "start_angle", "end_angle", "thickness", "cap", "ticks", "tick_color", "direction", "segments", "segment_gap", "line_width", "history", "seconds", "per_frame", "inset", "grid", "grid_color", "fill_fade", "fill_alpha", "columns", "max_items", "levels"],
   },
-  { id: "effects", title: t("Glow and shadow"), short: t("Glow"), keys: store.get().specs?.effect_fields || [] },
+  { id: "effects", title: t("Glow and shadow"), short: t("Glow"), keys: [...(store.get().specs?.effect_fields || []), "glow_area", "ridge"] },
   { id: "advanced", title: t("Advanced"), short: t("Advanced"), keys: ["id", "visible", "locked", "hide_if_missing", "needs"] },
 ];
 

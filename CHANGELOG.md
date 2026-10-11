@@ -16,11 +16,12 @@
 - *Design*, the new theme editor: the panel in the middle; modules, building
   blocks and widgets from a library with pictures in the theme's colours, to
   drag onto it; a toolbar over the selection for what it shows, how it is
-  drawn (light, facet, flat), its colour and size; a short inspector with the
-  rest under *Fine-tuning*; corners that resize, snapping guides, several
-  widgets at once, layers with lock and eye, the theme's pictures and fonts.
-  The panel's pages are tabs over it: the normal theme, game mode's, the
-  round report's and those of plugins' modes, each with its frame rate
+  drawn (light, facet, acrylic lettering, flat: those that show on it), its
+  colour and size; a short inspector with the rest under *Fine-tuning*, the
+  six looks in the theme's settings; corners that resize, snapping guides,
+  several widgets at once, layers with lock and eye, the theme's pictures and
+  fonts. The panel's pages are tabs over it: the normal theme, game mode's,
+  the round report's and those of plugins' modes, each with its frame rate
 - Everything in the app is a command: Ctrl+K finds it by a few letters
   (themes, modules, sensors, panels, the language, the panel's controls),
   with the keys it has
