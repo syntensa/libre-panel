@@ -306,7 +306,7 @@ def test_linux_names_the_cards_by_the_driver_amds_list_or_pci_ids(tmp_path):
     pc.ids()
     pc.card(0, 0x8086, 0x4680)  # an Intel chip in the processor
     pc.card(1, 0x10DE, 0x2786, slot="0000:01:00.0")
-    pc.write(pc.nvidia / "0000:01:00.0" / "information", NVIDIA_INFORMATION)
+    pc.write(pc.nvidia / "gpu0" / "information", NVIDIA_INFORMATION)  # "Bus Location" says which
     pc.card(2, 0x1002, 0x744C, revision=0xCC, vram=24 * 2**30)  # in AMD's list
     pc.card(3, 0x1002, 0x744C, revision=0x01)  # not there: pci.ids has it, with its siblings
     pc.card(4, 0x1002, 0xFFFF)  # nobody knows it
@@ -328,8 +328,21 @@ def test_a_card_without_the_nvidia_driver_is_named_by_pci_ids_and_is_a_card_of_i
 def test_the_only_name_the_nvidia_driver_has_is_the_only_cards_whatever_its_address(tmp_path):
     pc = LinuxPC(tmp_path)
     pc.card(0, 0x10DE, 0x2786)  # no uevent: its address is not known
-    pc.write(pc.nvidia / "0000:01:00.0" / "information", NVIDIA_INFORMATION)
+    elsewhere = NVIDIA_INFORMATION.replace("0000:01:00.0", "0000:65:00.0")
+    pc.write(pc.nvidia / "gpu0" / "information", elsewhere)
     assert linux_adapters(pc) == [Adapter("NVIDIA GeForce RTX 4070", 0, True)]
+
+
+def test_the_nvidia_driver_names_two_cards_each_by_its_address_or_its_folder(tmp_path):
+    pc = LinuxPC(tmp_path)
+    pc.card(0, 0x10DE, 0x2786, slot="0000:01:00.0")
+    pc.card(1, 0x10DE, 0x1C82, slot="slot-b")
+    pc.write(pc.nvidia / "a" / "information", NVIDIA_INFORMATION)  # its Bus Location
+    pc.write(pc.nvidia / "slot-b" / "information", "Model: NVIDIA GeForce GTX 1050 Ti\nIRQ: 9\n")
+    assert [a.name for a in linux_adapters(pc)] == [
+        "NVIDIA GeForce RTX 4070",
+        "NVIDIA GeForce GTX 1050 Ti",  # no Bus Location: the folder's name is the address
+    ]
 
 
 def test_linux_without_cards_or_a_list_has_nothing_to_name(tmp_path):

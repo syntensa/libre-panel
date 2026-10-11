@@ -271,17 +271,21 @@ def amdgpu_name(path: Path, device: int, revision: int | None) -> str:
 
 
 def _nvidia_models(folder: Path) -> dict[str, str]:
-    """The names the NVIDIA driver gives its cards, by their PCI address."""
+    """The names the NVIDIA driver gives its cards, by their PCI address (its "Bus Location",
+    else the name of the card's folder, which is the same)."""
     models = {}
     try:
         folders = sorted(folder.iterdir())
     except OSError:
         return models
     for gpu in folders:
+        found = {}
         for line in _text(gpu / "information").splitlines():
             key, colon, value = line.partition(":")
-            if colon and key.strip() == "Model" and value.strip():
-                models[gpu.name.lower()] = value.strip()
+            if colon and key.strip() in ("Model", "Bus Location"):
+                found[key.strip()] = value.strip()
+        if found.get("Model"):
+            models[(found.get("Bus Location") or gpu.name).lower()] = found["Model"]
     return models
 
 
