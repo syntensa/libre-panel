@@ -2,8 +2,11 @@
 by the settings, and never looked for in the user's Downloads. No download is needed here; a
 program folder is made, and the program is told it is a release build."""
 
+import hashlib
+import importlib.util
 import shutil
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -122,3 +125,34 @@ def test_a_folder_in_place_of_a_program_is_not_one(tmp_path, monkeypatch):
     assert bundled.find("ffmpeg") is None
     with pytest.raises(DeviceError, match="needs ffmpeg"):
         find_ffmpeg()
+
+
+def test_pawnios_installer_is_handed_out_only_as_it_was_fetched(tmp_path, monkeypatch):
+    """It is run with administrator rights from a folder the installing user may write to."""
+    program = release_build(tmp_path, monkeypatch, "win32")
+    assert bundled.pawnio_installer() is None  # not carried
+    setup = program / "tools" / bundled.PAWNIO_SETUP
+    setup.write_bytes(b"MZ another program")
+    assert bundled.pawnio_installer() is None  # replaced
+    setup.unlink()
+    setup.mkdir()
+    assert bundled.pawnio_installer() is None  # not a file
+    setup.rmdir()
+    monkeypatch.setattr(
+        bundled, "PAWNIO_SETUP_SHA256", hashlib.sha256(b"MZ the real one").hexdigest()
+    )
+    setup.write_bytes(b"MZ the real one")
+    assert bundled.pawnio_installer() == str(setup)
+    monkeypatch.delattr(sys, "frozen")
+    assert bundled.pawnio_installer() is None  # a pip install carries none
+
+
+def test_the_pin_the_app_checks_is_the_one_the_download_was_fetched_by():
+    spec = importlib.util.spec_from_file_location(
+        "fetch_tools_pin", Path(__file__).resolve().parent.parent / "packaging" / "fetch_tools.py"
+    )
+    fetch_tools = importlib.util.module_from_spec(spec)
+    sys.modules["fetch_tools_pin"] = fetch_tools
+    spec.loader.exec_module(fetch_tools)
+    pawnio = [tool for tool in fetch_tools.TOOLS if tool.file == bundled.PAWNIO_SETUP]
+    assert [tool.sha256 for tool in pawnio] == [bundled.PAWNIO_SETUP_SHA256]

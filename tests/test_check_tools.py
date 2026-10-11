@@ -143,6 +143,7 @@ def test_presentmon_has_to_start_and_say_its_version(tmp_path, capsys, shown, wa
 
 def test_a_windows_folder_checks_each_program_it_lists(tmp_path, capsys, monkeypatch):
     monkeypatch.setattr(sys, "platform", "win32")  # the names the app looks for there
+    monkeypatch.setattr(bundled, "PAWNIO_SETUP_SHA256", hashlib.sha256(b"MZ3").hexdigest())
     program = program_folder(
         tmp_path,
         {"ffmpeg.exe": b"MZ1", "PresentMon.exe": b"MZ2", "PawnIO_setup.exe": b"MZ3"},
@@ -162,6 +163,10 @@ def test_a_windows_folder_checks_each_program_it_lists(tmp_path, capsys, monkeyp
     assert "PawnIO_setup.exe is the file that was fetched" in out
     assert "started from LibrePanel.exe, the app finds ffmpeg.exe in tools" in out
     assert "the app finds PresentMon.exe in tools" in out
+    assert "the app finds PawnIO_setup.exe in tools" in out
+    (program / "tools" / "PawnIO_setup.exe").write_bytes(b"MZ replaced")  # not the pinned file
+    with pytest.raises(check_tools.CheckError, match="the app finds None and not PawnIO_setup.exe"):
+        check_tools.check_discovery(program, program / "tools", ["PawnIO_setup.exe"])
 
 
 def test_the_app_has_to_find_the_programs_in_the_folder_and_not_somewhere_else(

@@ -326,9 +326,9 @@ def test_a_program_for_another_system_is_refused(tmp_path):
 @pytest.mark.parametrize(
     "files, wanted",
     [
-        (
+        (  # and it says what the archive holds, to put the table right
             {"ffmpeg-x/bin/ffprobe.exe": b"MZ", "ffmpeg-x/LICENSE.txt": GPL_3},
-            "has 0 files that match",
+            r"has 0 files that match .*ffmpeg.* \(it holds, among others: ffmpeg-x/bin/ffprobe.exe",
         ),
         (
             {"a/bin/ffmpeg.exe": b"MZ", "b/bin/ffmpeg.exe": b"MZ", "a/LICENSE.txt": GPL_3},

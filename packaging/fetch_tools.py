@@ -215,15 +215,25 @@ def _check(what: str, data: bytes, expected: str) -> None:
         )
 
 
-def _members(tool: Tool, data: bytes, patterns: list[str]) -> dict[str, list[tuple[str, bytes]]]:
-    """The files of an archive whose whole name matches one of the patterns (name, content),
-    per pattern. Nothing is unpacked by the name an archive gives."""
-    found: dict[str, list[tuple[str, bytes]]] = {pattern: [] for pattern in patterns}
+@dataclass
+class Found:
+    """What was found in an archive."""
+
+    matches: dict[str, list[tuple[str, bytes]]]  # per pattern: (name, content) of each match
+    sample: list[str]  # the first names in the archive, for a message
+
+
+def _members(tool: Tool, data: bytes, patterns: list[str]) -> Found:
+    """The files of an archive whose whole name matches one of the patterns. Nothing is
+    unpacked by the name an archive gives."""
+    found = Found({pattern: [] for pattern in patterns}, [])
 
     def take(name: str, read: Callable[[], bytes]) -> None:
+        if len(found.sample) < 8:
+            found.sample.append(name)
         for pattern in patterns:
             if re.fullmatch(pattern, name):
-                found[pattern].append((name, read()))
+                found.matches[pattern].append((name, read()))
 
     try:
         if tool.filename.endswith(".zip"):
@@ -243,9 +253,12 @@ def _members(tool: Tool, data: bytes, patterns: list[str]) -> dict[str, list[tup
     return found
 
 
-def _one(tool: Tool, pattern: str, matches: list[tuple[str, bytes]]) -> bytes:
+def _one(tool: Tool, pattern: str, found: Found) -> bytes:
+    matches = found.matches[pattern]
     if len(matches) != 1:
-        names = ", ".join(name for name, _ in matches[:4]) or "none"
+        names = ", ".join(name for name, _ in matches[:4])
+        if not names:
+            names = "it holds, among others: " + ", ".join(found.sample)
         raise FetchError(
             f"{tool.filename} has {len(matches)} files that match {pattern} ({names}); "
             "the table of fetch_tools.py expects one"
@@ -261,9 +274,9 @@ def _take(tool: Tool, data: bytes) -> tuple[bytes, dict[str, bytes]]:
     if tool.member:
         patterns = [tool.member, *(text.member for text in tool.archive_texts)]
         found = _members(tool, data, patterns)
-        program = _one(tool, tool.member, found[tool.member])
+        program = _one(tool, tool.member, found)
         for text in tool.archive_texts:
-            content = _one(tool, text.member, found[text.member])
+            content = _one(tool, text.member, found)
             missing = [p for p in text.phrases if p.encode() not in content]
             if missing:
                 raise FetchError(

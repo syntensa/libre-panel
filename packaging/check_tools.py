@@ -9,7 +9,8 @@ PROGRAM_FOLDER is the one with ``libre-panel`` in it; its ``tools`` folder is ch
     (its SHA-256);
   * the app finds them there: with the program's executable as ``sys.executable``, the functions
     of libre_panel that look for ffmpeg and PresentMon answer with the files of this folder, and
-    not with what the PATH holds;
+    not with what the PATH holds, and the one that hands out PawnIO's installer (which checks
+    it against the SHA-256 the app has pinned) accepts the file;
   * ffmpeg lists libx264 among its encoders, and encodes pictures the way the video mode asks
     (the command is the app's own, libre_panel.devices.h264), to a stream that the video mode
     cuts into as many pictures, with the parameter sets it needs;
@@ -128,6 +129,7 @@ def check_presentmon(presentmon: Path, run: Runner = run) -> None:
 
 def check_discovery(program: Path, tools: Path, names: list[str]) -> None:
     """The app, started from this build, looks for its programs in this folder first."""
+    from libre_panel.bundled import pawnio_installer
     from libre_panel.devices.base import DeviceError
     from libre_panel.devices.h264 import find_ffmpeg
     from libre_panel.sensors.presentmon import find_presentmon
@@ -136,7 +138,12 @@ def check_discovery(program: Path, tools: Path, names: list[str]) -> None:
     exe = next((program / name for name in executables if (program / name).is_file()), None)
     if exe is None:
         raise CheckError(f"{program} has no program of Libre Panel: {', '.join(executables)}")
-    asked = {"ffmpeg": find_ffmpeg, "ffmpeg.exe": find_ffmpeg, "PresentMon.exe": find_presentmon}
+    asked = {
+        "ffmpeg": find_ffmpeg,
+        "ffmpeg.exe": find_ffmpeg,
+        "PresentMon.exe": find_presentmon,
+        "PawnIO_setup.exe": pawnio_installer,
+    }
     with (
         mock.patch.object(sys, "frozen", True, create=True),
         mock.patch.object(sys, "executable", str(exe)),
