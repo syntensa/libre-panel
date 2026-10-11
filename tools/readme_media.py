@@ -10,10 +10,11 @@ loop muted playsinline>`` (the GIF is its fallback) and a poster PNG. ``--gif-on
 the GIFs. OUT is docs/media unless given; ``--list`` says what there is. Needs ffmpeg for the
 videos; without it Pillow writes the GIFs.
 
-Which theme a panel clip shows is a parameter: ``--theme volume-band=NAME`` (two names, comma
-between, for a clip that goes from one theme to another). A theme is a built-in or user theme,
-a folder with a theme in it, or one of the layouts made of modules in tools/media_panel.py.
-Clips of the panel are in the device frame of tools/readme_images.py; ``--bare`` leaves it out.
+Which theme a clip shows is a parameter: ``--theme volume-band=NAME`` (two names, comma between,
+for a clip that goes from one theme to another; an app clip opens the app with the theme). A
+theme is a built-in or user theme, a folder with a theme in it, or one of the layouts made of
+modules in tools/media_panel.py. Clips of the panel are in the device frame of
+tools/readme_images.py; ``--bare`` leaves it out.
 """
 
 from __future__ import annotations
@@ -50,8 +51,6 @@ def parse_themes(given: list[str], known: dict[str, Clip]) -> dict[str, tuple[st
             raise SystemExit(
                 f"--theme wants CLIP=THEME[,THEME], with a clip of: {', '.join(known)}"
             )
-        if not isinstance(clip, media_panel.PanelClip):
-            raise SystemExit(f"--theme: {name} is a clip of the app, which has no theme to choose")
         found[name] = tuple(t.strip() for t in themes.split(",") if t.strip())
         if len(found[name]) != len(clip.themes):
             raise SystemExit(
@@ -64,17 +63,21 @@ def describe(known: dict[str, Clip]) -> str:
     """The table ``--list`` prints."""
     lines = []
     for name, clip in known.items():
-        shows = ", ".join(clip.themes) if isinstance(clip, media_panel.PanelClip) else "the app"
+        shows = ", ".join(clip.themes)
         lines.append(f"{name:18s} {clip.kind:5s} {clip.seconds:4.1f} s  {clip.about}")
         lines.append(f"{'':18s} shows: {shows}")
     return "\n".join(lines)
 
 
-def record(name: str, clip: Clip, settings: encode.Settings, folder: Path,
-           themes: tuple[str, ...] | None) -> encode.Recorded:  # fmt: skip
-    if isinstance(clip, media_panel.PanelClip):
-        return media_panel.record(name, clip, settings, folder, themes)
-    return media_app.record(name, clip, settings, folder)
+def record(
+    name: str,
+    clip: Clip,
+    settings: encode.Settings,
+    folder: Path,
+    themes: tuple[str, ...] | None,
+) -> encode.Recorded:
+    module = media_panel if isinstance(clip, media_panel.PanelClip) else media_app
+    return module.record(name, clip, settings, folder, themes)
 
 
 def publish(
