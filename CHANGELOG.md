@@ -37,6 +37,14 @@
   found, or the one you name under *Another panel*; *Start empty* and *Open a
   theme file* are there too. What the panel could not read (the sentence the
   tray shows) is on Start with the way to its details
+- *Look*, the theme's look in one place beside the picture of the panel: the
+  six colour worlds and the palette, how rings, bars, graphs, lettering,
+  icons and modules are drawn (light, facet, acrylic, flat) with their glow,
+  the panel light (the sun, its strength, the sweeps and when they run), the
+  grid, the depth dust with its colours and areas, and how notices look
+  (card, band, a plugin's), which the preview can show as a test notice.
+  Every change is one undo step and the preview follows; ridge frames are not
+  offered, a theme that has some can make them flat under *Advanced*
 - Everything in the app is a command: Ctrl+K finds it by a few letters
   (themes, modules, sensors, panels, the language, the panel's controls),
   with the keys it has

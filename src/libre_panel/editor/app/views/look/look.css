@@ -1,0 +1,314 @@
+/* Look: the picture of the theme on a stage, and its colours, finish, light and depth beside it
+   (Look.dc.html) */
+
+.look {
+  display: flex;
+  min-height: 0;
+}
+
+.look-stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  overflow: hidden;
+  background-color: var(--stage);
+  background-image: radial-gradient(var(--stage-dot) 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+
+.look-frame {
+  border-radius: 16px;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--surface-4);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
+}
+
+.look-picture {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #000;
+}
+
+.look-picture.round {
+  border-radius: 50%;
+}
+
+.look-picture img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.look-picture.pixelated img {
+  image-rendering: pixelated;
+}
+
+.look-stage-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.look-stage-actions .btn[aria-checked="true"] {
+  border-color: rgba(46, 230, 214, 0.45);
+  color: var(--accent-hi);
+}
+
+.look-stage-error {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  color: var(--danger-text);
+  font-size: 13px;
+}
+
+/* -- the side ---------------------------------------------------------------------------------- */
+
+.look-side {
+  width: 440px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 20px 22px 28px;
+  overflow-y: auto;
+  border-left: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.look-side .look-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.look-side .look-tile {
+  padding: 11px 12px;
+  gap: 8px;
+}
+
+.look-side .look-dots i {
+  width: 13px;
+  height: 13px;
+}
+
+.look-scope {
+  display: flex;
+  width: 100%;
+}
+
+.look-scope button {
+  flex: 1;
+  justify-content: center;
+  padding: 5px 4px;
+  font-size: 12.5px;
+}
+
+.look-about {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.look-slider {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.look-slider > span:first-child {
+  color: var(--text-2);
+}
+
+.look-sun {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.look-sun .sun-path {
+  flex-shrink: 0;
+  color: var(--dim);
+}
+
+.look-sun-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.look-sun-text small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.look-triggers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.look-triggers > .muted {
+  margin-right: 4px;
+  font-size: 13px;
+}
+
+.look-chip {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-3);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.look-chip:hover {
+  border-color: var(--line-5);
+}
+
+.look-chip[aria-pressed="true"] {
+  border-color: transparent;
+  background: rgba(46, 230, 214, 0.14);
+  color: var(--accent-hi);
+  font-weight: 600;
+}
+
+/* a part of a block that stays folded until it is wanted */
+.look-more {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.look-more > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  padding: 2px 0;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+  border-radius: 4px;
+}
+
+.look-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.look-more > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.12s;
+}
+
+.look-more[open] > summary::before {
+  transform: rotate(45deg);
+}
+
+.look-more > summary:hover {
+  color: var(--accent-hi);
+}
+
+.dust-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.look-notices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.look-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--line-2);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+}
+
+.look-notice span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.look-notice:hover {
+  border-color: var(--line-5);
+}
+
+.look-notice[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent-softer);
+}
+
+.look-all {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* the theme's colours can be dozens: they scroll in their own place */
+.look-more[open] .palette-editor {
+  max-height: 340px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* automatic joins the finishes of a module: five tiles in the width of four */
+.look-side .finish-tiles.five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.look-side .finish-tiles.five .finish-tile {
+  padding: 8px 2px 7px;
+  font-size: 11.5px;
+}
+
+.look-side .finish-tiles.five svg {
+  height: 36px;
+  width: 36px;
+}

@@ -94,7 +94,7 @@ def test_the_app_opens_without_breaking_its_rules(app_url):
         assert page.locator(".theme-name").inner_text() == "Libre Default"
         assert page.locator(".tile").count() > 30  # modules, building blocks, widgets
         assert js(page, "window.libre.store.get().render.size") == [480, 320]
-        for view, root in (("home", ".start"), ("look", ".slot"), ("live", ".slot")):
+        for view, root in (("home", ".start"), ("look", ".look"), ("live", ".slot")):
             page.goto(f"{app_url}#/{view}")
             page.wait_for_selector(f".view {root}")
         page.goto(f"{app_url}#/settings/about")
@@ -391,6 +391,12 @@ def shown_themes(page):
     return page.locator(".theme-card").evaluate_all("cards => cards.map((c) => c.dataset.theme)")
 
 
+def finishes(page, kind):
+    """The finish of each widget of one type."""
+    pick = f"window.libre.doc.widgets().filter((w) => w.type === {kind!r}).map((w) => w.finish)"
+    return js(page, pick)
+
+
 def set_range(locator, value):
     """Move a slider as a hand does: input events while moving, change at the end."""
     locator.evaluate(
@@ -573,3 +579,111 @@ def test_the_launcher_shows_and_controls_the_running_panel(background):
         assert wait_for(lambda: load_config().device.brightness == 35)
         page.locator(".panel-card [role='switch'][aria-label='Upside down']").click()
         assert wait_for(lambda: load_config().device.rotate == 180)
+
+
+def test_look_edits_the_theme_and_the_preview_follows(app_url):
+    with browser_page(app_url, "look") as page:
+        page.wait_for_selector(".look-side .finish-tile")
+        page.wait_for_selector(".look-picture img")
+        first = js(page, "window.libre.store.get().render.png")
+        # a colour world: the look's colours and style in one step, undone in one
+        before = js(page, "window.libre.doc.theme().palette.accent")
+        page.locator(".look-tile", has_text="Neon").click()
+        assert js(page, "window.libre.doc.theme().palette.accent") == "#FF4FD8"
+        expect(page.locator(".look-tile[aria-checked='true']")).to_have_text("Neon")
+        page.wait_for_function(f"window.libre.store.get().render.png !== {first!r}")
+        page.keyboard.press("Control+z")
+        assert js(page, "window.libre.doc.theme().palette.accent") == before
+        # the finish of everything it can draw, then of the bars alone
+        page.locator(".finish-tile", has_text="Light").click()
+        lit = (
+            "w => ['gauge', 'bar', 'graph', 'metric'].includes(w.type) ? w.finish === 'lit' : true"
+        )
+        assert js(page, f"window.libre.doc.widgets().every({lit})")
+        # the clock cannot be lit, which does not keep the tile from showing what is set
+        expect(page.locator(".finish-tile[aria-checked='true']")).to_have_text("Light")
+        page.locator(".look-scope button", has_text="Bars").click()
+        page.locator(".finish-tile", has_text="Facet").click()
+        assert set(finishes(page, "bar")) == {"facet"}
+        assert js(page, "window.libre.doc.widgetById('cpu-ring').finish") == "lit"
+        expect(page.locator(".finish-tile[aria-checked='true']")).to_have_text("Facet")
+        # glow of the bars: every one of them
+        set_range(page.locator(".look-slider input").first, 0.6)
+        glows = js(
+            page, "window.libre.doc.widgets().filter((w) => w.type === 'bar').map((w) => w.glow)"
+        )
+        assert glows and set(glows) == {0.6}
+        assert js(page, "window.libre.doc.widgetById('cpu-ring').glow") != 0.6
+        # one step undoes the glow, not the finish
+        page.keyboard.press("Control+z")
+        assert js(page, "window.libre.doc.widgetById('cpu-bar')?.glow ?? 0") != 0.6
+        assert set(finishes(page, "bar")) == {"facet"}
+
+
+def test_look_blocks_are_on_or_off_and_keep_their_limits(app_url):
+    with browser_page(app_url, "look") as page:
+        page.wait_for_selector(".look-side .finish-tile")
+        assert js(page, "Object.keys(window.libre.doc.theme().look ?? {}).length") == 0
+        light = page.locator(".look-block", has_text="Panel light")
+        light.locator("[role='switch']").first.click()
+        settings = js(page, "window.libre.doc.theme().look.light")
+        assert settings["strength"] == 1 and settings["on_hour"] is True and settings["sun"] is True
+        light.locator(".look-chip", has_text="Full hour").click()
+        assert js(page, "window.libre.doc.theme().look.light.on_hour") is False
+        slider = light.locator(".look-slider input").nth(1)  # how long a sweep takes
+        assert (slider.get_attribute("min"), slider.get_attribute("max")) == ("0.3", "10")
+        set_range(slider, 4.5)
+        assert js(page, "window.libre.doc.theme().look.light.sweep_seconds") == 4.5
+        # the grid, the dust and its areas
+        page.locator(".look-block", has_text="Grid background").locator(
+            "[role='switch']"
+        ).first.click()
+        assert js(page, "window.libre.doc.theme().look.grid.spacing") == 8
+        dust = page.locator(".look-block", has_text="Depth dust")
+        dust.locator("[role='switch']").first.click()
+        dust.locator("summary").click()
+        dust.get_by_role("button", name="+ area").click()
+        area = js(page, "window.libre.doc.theme().look.dust.areas")
+        assert len(area) == 1 and area[0]["dust"] is False and area[0]["w"] > 0
+        dust.locator(".dust-area select").select_option("yes")
+        assert js(page, "window.libre.doc.theme().look.dust.areas[0].dust") is True
+        dust.locator("input[aria-label='dust colours']").fill("#ff8800, @accent")
+        dust.locator("input[aria-label='dust colours']").press("Enter")
+        assert js(page, "window.libre.doc.theme().look.dust.colors") == ["#ff8800", "@accent"]
+        # every block off again: the theme has no look at all
+        for name in ("Panel light", "Grid background", "Depth dust"):
+            block = page.locator(".look-block", has_text=name)
+            block.locator("[role='switch']").first.click()
+        assert js(page, "Object.keys(window.libre.doc.theme().look ?? {}).length") == 0
+        # the server drew all of it: nothing it refused
+        page.wait_for_function("window.libre.store.get().renderError === null")
+
+
+def test_look_notices_and_ridge_frames(app_url):
+    with browser_page(app_url, "look") as page:
+        page.wait_for_selector(".look-notices")
+        page.locator(".look-notice", has_text="Band").click()
+        assert js(page, "window.libre.doc.theme().toast.style") == "band"
+        page.locator(".look-notice", has_text="Card").click()
+        assert not js(page, "window.libre.doc.theme().toast.style")
+        # ridge frames are not offered; a theme that has some can drop them under Advanced
+        assert page.locator(".look-advanced").count() == 0
+        frame = "{type: 'rect', id: 'frame', x: 4, y: 4, w: 60, h: 40, ridge: 'main'}"
+        js(page, f"window.libre.doc.edit(null, (theme) => theme.widgets.push({frame}))")
+        page.locator(".look-advanced summary").click()
+        page.get_by_role("button", name="Make the frames flat").click()
+        assert js(page, "window.libre.doc.widgetById('frame').ridge") == ""
+        expect(page.locator(".look-advanced")).to_have_count(0)
+
+
+def test_look_shows_a_test_notice_on_the_preview(app_url):
+    with browser_page(app_url, "look") as page:
+        page.wait_for_selector(".look-picture img")
+        plain = page.locator(".look-picture img").get_attribute("src")
+        page.get_by_role("button", name="Show a notice").click()
+        page.locator(".popover .menu-item", has_text="Volume").click()
+        page.wait_for_function(f"document.querySelector('.look-picture img').src !== {plain!r}")
+        # a change of the theme shows its preview again
+        js(page, "window.libre.doc.edit('name', (theme) => { theme.name = 'Other'; })")
+        shown = "document.querySelector('.look-picture img').src"
+        page.wait_for_function(f"{shown} === window.libre.store.get().render.png")

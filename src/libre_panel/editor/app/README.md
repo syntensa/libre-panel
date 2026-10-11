@@ -26,7 +26,7 @@ The editor's server (`editor/server.py`) serves `index.html` at `/`, this folder
 | `core/stats.js` | the panel's numbers (`RunStatus.stats`) as tiles: `statTiles(stats)`, and `runtime(seconds)` |
 | `ui/` | controls (`Toggle`, `Segmented`, `Chips`, `NumberField`, `TextField`, `Select`, `Slider`, `Field`, `Row`, `Section`, `IconButton`), `Icon`, `Popover`, `Menu`, dialogs (`openDialog`, `confirmDialog`, `promptDialog`), `toast()`, the palette |
 | `shell/` | views and routes, the header and its parts (`ThemeTitle`, `SearchTrigger`, `PanelChip`, `UndoRedo`, `ApplyButton`), app-wide commands, plugin pages (`#/plugin/<id>`) |
-| `views/<id>/` | one folder per view: `home` is Start (`#/home`, also `#/start`: the launcher, or on a first start the question "How should it look?"; `#/home/themes` the gallery), `design` the editor, `settings` the frame of the settings (sections on the left), the others are empty places to fill |
+| `views/<id>/` | one folder per view: `home` is Start (`#/home`, also `#/start`: the launcher, or on a first start the question "How should it look?"; `#/home/themes` the gallery), `design` the editor, `look` the theme's look and finish, `settings` the frame of the settings (sections on the left), the other is an empty place to fill |
 | `app.css` | colours and fonts (`:root` tokens) and the shared controls; a view brings its own CSS |
 
 ## A view
