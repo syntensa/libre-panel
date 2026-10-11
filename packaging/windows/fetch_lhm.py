@@ -70,7 +70,10 @@ class Library:
 # In the order Libre Panel loads them (libre_panel/sensors/lhm_inprocess.py: LIBRARIES).
 # The newest stable LibreHardwareMonitorLib (0.9.6) with the versions of its companions that
 # its package asks for, which also are what a Libre Panel mod ran with: each file here has the
-# SHA-256 of the one that worked there. HidSharp is its netstandard2.0 build, which the .NET
+# SHA-256 of the one that worked there. DiskInfoToolkit reads the drives (the sensor service
+# opens them) and asks for BlackSharp.Core 1.0.7, as LibreHardwareMonitor 0.9.6 itself ships
+# it; the mod ran 1.0.4, which RAMSPDToolkit names (BlackSharp.Core has no strong name, so the
+# .NET Framework takes 1.0.7 for both). HidSharp is its netstandard2.0 build, which the .NET
 # Framework 4.7.2 and later run (there is a net35 one too).
 LIBRARIES = (
     Library(
@@ -115,13 +118,13 @@ LIBRARIES = (
     ),
     Library(
         "BlackSharp.Core",
-        "1.0.4",
-        "6d1bb863efe7b50e18a96e99ddce18175f3de6eb8afbc791c50ffbde176c4ed7",
+        "1.0.7",
+        "4f713fe18ee7c85a7c49f28309adaa815714333326aa81fd4d4a81619ecaa0ab",
         "lib/net472/BlackSharp.Core.dll",
         "BlackSharp.Core.dll",
-        "9a1a8409bf94104eabb3e0f1ba684a79bc5ca4e5ba9b0449dc53e4faec9f2a78",
+        "cafb93afcc8d8a367e21f619673d05c06887d8964867fed1371f02ded1cd3e23",
         "MPL-2.0",
-        "https://github.com/Blacktempel/BlackSharp/tree/1aded1badeba275f0eab429d2a1959391d04de92",
+        "https://github.com/Blacktempel/BlackSharp/tree/c70b735c6cec123ee8a046ac4a0bc6c606f52cf0",
     ),
     Library(
         "RAMSPDToolkit-NDD",
@@ -132,6 +135,16 @@ LIBRARIES = (
         "b6882354c7c8ec186617e421507743dbfae09c5c1fc24cef76a1d0c0c26651de",
         "MPL-2.0",
         "https://github.com/Blacktempel/RAMSPDToolkit/tree/3b47b960e0830fef344624ad5e389675d5f0a1ce",
+    ),
+    Library(
+        "DiskInfoToolkit",
+        "1.1.2",
+        "a997f0b3701e20b2ab9296e07ee4f74f877e75015277fb6bd314ade1e2c4db13",
+        "lib/net472/DiskInfoToolkit.dll",
+        "DiskInfoToolkit.dll",
+        "1acbf51b3c10c51c986cf43021680d34a2e38d9a5ba652bcfa9a1b5f7fc09800",
+        "MPL-2.0",
+        "https://github.com/Blacktempel/DiskInfoToolkit/tree/25319eae5781e75bcf141e844ceab2afe94d40ea",
     ),
     Library(
         "HidSharp",
