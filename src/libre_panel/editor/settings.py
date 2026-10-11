@@ -625,6 +625,35 @@ class Settings:
             raise SettingsError(str(exc), 500) from exc
         return self.system()
 
+    # -- the sensor service ---------------------------------------------------------------
+
+    def unlock(self) -> dict[str, Any]:
+        """The sensor service and what else "Unlock all sensors" sets up (Windows): whether
+        this download can, what is in place, and how the last run of it went."""
+        from libre_panel.sensorservice import setup
+
+        return {
+            **setup.unlock_state(),
+            "command": cli_command("system-setup --service --pawnio --perf-log-users"),
+        }
+
+    def set_unlock(self, payload: Any) -> dict[str, Any]:
+        """``{"action": "unlock"}`` (or ``"remove"``): ``libre-panel system-setup`` with
+        Windows' own question for administrator rights (UAC). The answer comes at once; the
+        run goes on in the background, and ``job`` of :meth:`unlock` says how it ended."""
+        from libre_panel.sensorservice import setup
+
+        action = payload.get("action") if isinstance(payload, dict) else None
+        if action not in setup.ACTIONS:
+            raise SettingsError('expected {"action": "unlock"} or {"action": "remove"}')
+        program = setup.cli_program()
+        if not self.unlock()["available"] or program is None:
+            raise SettingsError(
+                t("The sensor service comes with the Windows downloads (setup or zip)."), 409
+            )
+        setup.ELEVATOR.start(action, program, setup.current_user())
+        return self.unlock()
+
     # -- the place --------------------------------------------------------------------------
 
     def search_place(self, payload: Any) -> dict[str, Any]:
@@ -742,7 +771,7 @@ RULES: dict[str, Any] = {
     "refresh_ms": lambda n, v, c: _whole(n, v, 100, 3_600_000),
     "sensors.providers": _rule_providers,
     "sensors.librehardwaremonitor.mode": lambda n, v, c: _choice(
-        n, v, ("auto", "inprocess", "webserver")
+        n, v, ("auto", "service", "inprocess", "webserver")
     ),
     "sensors.librehardwaremonitor.url": _rule_url,
     "weather.enabled": lambda n, v, c: _flag(n, v),

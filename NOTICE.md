@@ -52,8 +52,9 @@ download.
 ## Windows downloads: LibreHardwareMonitor and its libraries
 
 The Windows downloads (setup and portable zip) carry LibreHardwareMonitor's .NET
-library and the libraries it needs in the folder `_internal\lhm`, so that nothing
-else has to be installed to read the GPU, temperatures, power and fans. They are
+library and the libraries it needs in the folder `_internal\lhm` (and once more in
+`sensors\_internal\lhm`, for the sensor service), so that nothing else has to be
+installed to read the GPU, temperatures, power and fans. They are
 the files that NuGet publishes, unchanged, for the .NET Framework. They are not in
 this repository: `packaging/windows/fetch_lhm.py` fetches them when a download is
 built and checks every package against a SHA-256 written into the script. The
@@ -63,7 +64,8 @@ licence of each was read before the version was pinned (2026-10-10).
 |---|---|---|---|---|
 | LibreHardwareMonitorLib | 0.9.6 | MPL-2.0 | LibreHardwareMonitor and Contributors; in part Michael Möller and Contributors (OpenHardwareMonitor) | <https://github.com/LibreHardwareMonitor/LibreHardwareMonitor>, commit `3d331e3370efb858411f19511373eff65a218701` |
 | RAMSPDToolkit-NDD | 1.4.2 | MPL-2.0 | Florian K. | <https://github.com/Blacktempel/RAMSPDToolkit>, commit `3b47b960e0830fef344624ad5e389675d5f0a1ce` |
-| BlackSharp.Core | 1.0.4 | MPL-2.0 | Florian K. | <https://github.com/Blacktempel/BlackSharp>, commit `1aded1badeba275f0eab429d2a1959391d04de92` |
+| DiskInfoToolkit | 1.1.2 | MPL-2.0 | Florian K. | <https://github.com/Blacktempel/DiskInfoToolkit>, commit `25319eae5781e75bcf141e844ceab2afe94d40ea` |
+| BlackSharp.Core | 1.0.7 | MPL-2.0 | Florian K. | <https://github.com/Blacktempel/BlackSharp>, commit `c70b735c6cec123ee8a046ac4a0bc6c606f52cf0` |
 | HidSharp | 2.6.4 | Apache-2.0 | James F. Bellinger | <https://software.seekye.com/hidsharp> |
 | System.Memory, System.Runtime.CompilerServices.Unsafe | 4.6.3, 6.1.2 | MIT | .NET Foundation and Contributors | <https://github.com/dotnet/maintenance-packages>, commit `f62ca0009b038cab4725a720f386623a969d73ad` |
 | System.Buffers, System.Numerics.Vectors | 4.6.1, 4.6.1 | MIT | .NET Foundation and Contributors | <https://github.com/dotnet/maintenance-packages>, commit `6b84308c9ad012f53240d72c1d716d7e42546483` |
@@ -72,12 +74,12 @@ The commits are the ones the packages name as their source. The licence texts ar
 in `_internal\lhm\licenses`, the same list with each file's SHA-256 in
 `_internal\lhm\SOURCES.txt`.
 
-- **MPL-2.0** (LibreHardwareMonitorLib, RAMSPDToolkit-NDD, BlackSharp.Core). The
-  libraries are passed on unchanged, in executable form. Their source code is at
-  the addresses above; the text of the licence is `licenses\MPL-2.0.txt`. No file
-  of the three carries the "Incompatible With Secondary Licenses" notice, so
-  section 3.3 of the MPL lets them be combined with a program under the GPL, as
-  Libre Panel is.
+- **MPL-2.0** (LibreHardwareMonitorLib, RAMSPDToolkit-NDD, DiskInfoToolkit,
+  BlackSharp.Core). The libraries are passed on unchanged, in executable form. Their
+  source code is at the addresses above; the text of the licence is
+  `licenses\MPL-2.0.txt`. No file of the four carries the "Incompatible With Secondary
+  Licenses" notice, so section 3.3 of the MPL lets them be combined with a program
+  under the GPL, as Libre Panel is.
 - **Apache-2.0** (HidSharp). Its licence text, with the copyright line, is
   `licenses\HidSharp-LICENSE.txt`, as the package has it.
 - **MIT** (the four System libraries): `licenses\MIT-dotnet-foundation.txt`.
@@ -97,13 +99,12 @@ in `_internal\lhm\licenses`, the same list with each file's SHA-256 in
   exception for modules; <https://pawnio.eu>) that LibreHardwareMonitor uses to
   read the CPU's temperature, power and clock, the RAM temperature and the
   mainboard's fans. The Windows downloads carry its installer, not the driver
-  (next section). Uninstalling Libre Panel leaves the driver on the PC, as other
-  programs may use it.
-- **Not included:** DiskInfoToolkit (MPL-2.0), which LibreHardwareMonitor needs
-  only to read drives, and which Libre Panel does not read; and the
-  System.Management and System.Threading.AccessControl packages that its package
-  lists, which the .NET Framework build does not use (the .NET Framework has its
-  own System.Management).
+  (next section); the setup, or `libre-panel system-setup` from the portable zip,
+  runs it. Uninstalling Libre Panel leaves the driver on the PC, as other programs
+  may use it.
+- **Not included:** the System.Management and System.Threading.AccessControl
+  packages that LibreHardwareMonitorLib's package lists, which the .NET Framework
+  build does not use (the .NET Framework has its own System.Management).
 
 ## Downloads: ffmpeg, PresentMon and PawnIO's installer
 

@@ -411,15 +411,27 @@ def _check_lhm(args: argparse.Namespace) -> int:
     return 0 if worked else 1
 
 
+def _check_service(args: argparse.Namespace) -> int:
+    """Does the sensor service answer this account with readings (Windows)?"""
+    from libre_panel.sensors import lhm_service
+
+    worked, lines = lhm_service.check(platform=_platform())
+    print("\n".join(lines))
+    return 0 if worked else 1
+
+
 def _cmd_sensors(args: argparse.Namespace) -> int:
     import time
 
     from libre_panel.app import build_hub
     from libre_panel.sensors.base import want
     from libre_panel.sensors.librehardwaremonitor import DEFAULT_URL, hardware_hint
+    from libre_panel.sensorservice.setup import unlock_offered
 
     if args.check_lhm:
         return _check_lhm(args)
+    if args.check_service:
+        return _check_service(args)
     config = load_config(args.config)
     hub = build_hub(config, demo=args.demo)
     # Some sources read only while a theme shows their keys. Ask for those that cost
@@ -441,10 +453,23 @@ def _cmd_sensors(args: argparse.Namespace) -> int:
         print(f"{key:<40} {value:>14} {r.unit:<5} {r.label}")
     if not args.demo:
         url = config.sensors.options.get("librehardwaremonitor", {}).get("url", DEFAULT_URL)
-        hint = hardware_hint(snapshot.readings, config.sensors.providers, url, _platform(), status)
+        hint = hardware_hint(
+            snapshot.readings,
+            config.sensors.providers,
+            url,
+            _platform(),
+            status,
+            unlock_offered(_platform()),
+        )
         if hint:
             print(f"\nnote: {hint}", file=sys.stderr)
     return 0
+
+
+def _cmd_system_setup(args: argparse.Namespace) -> int:
+    from libre_panel.sensorservice.setup import run_command
+
+    return run_command(args, platform=_platform())
 
 
 def _cmd_models(args: argparse.Namespace) -> int:
@@ -625,7 +650,32 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Windows: check that LibreHardwareMonitor loads inside Libre Panel, then exit",
     )
+    p.add_argument(
+        "--check-service",
+        action="store_true",
+        help="Windows: check that the sensor service answers with readings, then exit",
+    )
     p.set_defaults(func=_cmd_sensors)
+
+    p = sub.add_parser(
+        "system-setup",
+        help="Windows, as administrator: set up what all sensors need (the setup runs this)",
+    )
+    p.add_argument(
+        "--service",
+        action="store_true",
+        help="the sensor service, which reads the sensors with the rights they need",
+    )
+    p.add_argument("--pawnio", action="store_true", help="the PawnIO driver it reads them through")
+    p.add_argument(
+        "--perf-log-users",
+        action="store_true",
+        help="join Performance Log Users, for game frame rates (from the next sign-in)",
+    )
+    p.add_argument("--remove", action="store_true", help="take away what the others set up")
+    p.add_argument("--user-sid", help="whose group membership (default: who is signed in)")
+    p.add_argument("--status", action="store_true", help="say what is in place (no rights needed)")
+    p.set_defaults(func=_cmd_system_setup)
 
     p = sub.add_parser("plugins", help="list installed plugins and whether they load")
     p.set_defaults(func=_cmd_plugins)

@@ -15,11 +15,15 @@ libre-panel autostart disable
 With the downloads:
 
 - **Windows setup:** the installer offers *Start Libre Panel when I log in*
-  and starts it at the end. The start menu entry is *Libre Panel*. The
-  command-line tool is `libre-panel.exe` in the installation folder
-  (`%LOCALAPPDATA%\Programs\Libre Panel`). Updates and uninstalling quit a
-  running Libre Panel first; uninstalling also removes autostart (your
-  settings and themes stay).
+  and starts it at the end. It installs for all users (`%ProgramFiles%\Libre Panel`)
+  and sets up the [sensor service](#the-sensor-service), the PawnIO driver and what game
+  frame rates need, each a checked box; *Install for me only* puts Libre Panel into
+  `%LOCALAPPDATA%\Programs\Libre Panel` without administrator rights and leaves those to
+  *Unlock all sensors* (an update keeps the way the version before was installed). The
+  start menu entry is *Libre Panel*. The command-line tool is `libre-panel.exe` in the
+  installation folder. Updates and uninstalling quit a running Libre Panel first;
+  uninstalling also removes autostart and the sensor service (your settings and themes
+  stay).
 - **Linux AppImage:** `chmod +x Libre_Panel-*.AppImage`, then double-click
   it or run it without arguments for the tray app; with arguments it is the
   command line (`./Libre_Panel-…AppImage autostart enable`). Autostart
@@ -179,6 +183,104 @@ Anything that runs as you can read the token and change `config.toml`; the token
 programs of *other* users and of websites. That is why a Libre Panel that runs with the highest
 rights (below) trusts your settings folder and nothing else.
 
+## The sensor service
+
+On Windows the processor's temperature, power and clock, the mainboard's temperatures and
+fans and the temperatures of the memory modules and the drives can be read only with
+administrator rights, through the PawnIO driver. Libre Panel itself never runs with those
+rights unless you set that up ([below](#windows-starting-with-the-highest-rights)). A small
+Windows service reads them for it and hands over the readings; this is how it is built and
+why that is safe.
+
+**What it is.** The service `LibrePanelSensors` (*Libre Panel sensors*), the program
+`%ProgramFiles%\Libre Panel\sensors\libre-panel-sensors.exe`, running as LocalSystem. Windows
+starts it a while after it starts itself (automatic, delayed) and starts it again after a
+failure (after 5 s, 10 s, a minute). The setup installs it, a checked box; the portable zip
+has *Unlock all sensors* on Start and in *Settings → Sensors*, which runs the same command,
+`libre-panel system-setup`, after Windows asks once for administrator rights. *Settings →
+Sensors* shows it and removes it; the uninstaller removes it too. In the default `mode` of
+`[sensors.librehardwaremonitor]` Libre Panel reads LibreHardwareMonitor through it wherever
+it is installed, and reads it inside Libre Panel meanwhile if it does not answer.
+
+**What runs as SYSTEM.** The service's program and nothing else: Python, pythonnet,
+LibreHardwareMonitor's .NET libraries (the files NuGet publishes, pinned by SHA-256 like the
+rest of the download) and Libre Panel's code that reads them and answers on the pipe. It is
+a program of its own, built without plugins, renderer, web server or window. It takes no
+arguments and reads no settings, no `config.toml`, nothing of any user's folder: what it does
+is fixed in its program. It loads from its own folder only, and writes only its log, in
+`sensors\logs` next to its program.
+
+**It only reads.** It opens LibreHardwareMonitor on every kind of hardware it knows (CPU,
+graphics cards, memory, mainboard and its chips, drives, network, fan controllers and pumps,
+power supplies, batteries) and asks its sensors for their values. It never sets a control
+(no fan speed, no pump, no light), changes no setting of the hardware and starts no program.
+Reading some devices means sending them the request they answer (a USB fan controller, a
+power supply), as LibreHardwareMonitor itself does.
+
+**What crosses the pipe.** The service answers on the local named pipe
+`\\.\pipe\LibrePanelSensors`, and understands two requests: *hello* (its version) and *read*
+(the readings, and which pieces of hardware the client's themes show, which it then reads for
+the next ten seconds). Anything else gets an error answer. A message is a JSON object after
+its length, at most 4 KiB in and 4 MiB out; a length out of bounds ends the connection, as
+does a client that says nothing for 30 seconds or takes longer than 5 seconds with a message
+it began; a connection may ask four times a second (after a first eight); four clients are
+served at once. A request never touches the hardware: it is answered from what the service
+read last, so no client can make it read more often than once a second, and while nobody asks
+it reads nothing at all.
+
+**Who may talk to it.** The pipe's security descriptor (a protected DACL, set when the
+service makes it):
+
+- SYSTEM and Administrators: everything.
+- People signed in at this PC (INTERACTIVE: at the screen or over Remote Desktop): read and
+  write its data and read its attributes (`0x120083`). Not `FILE_CREATE_PIPE_INSTANCE` (no
+  instance of their own under its name), not `WRITE_DAC` or `WRITE_OWNER`.
+- Network logons: refused, by the first entry, whatever else they are; clients on other
+  computers are turned away by Windows (`PIPE_REJECT_REMOTE_CLIENTS`).
+
+Programs with a low integrity (a browser's sandbox) or in an app container cannot open it
+either. So another person who uses this PC can read the same temperatures and fan speeds that
+Libre Panel shows you, and that is all: there is nothing to change through the pipe.
+
+**Nobody can pose as it.** The service makes its first instance with
+`FILE_FLAG_FIRST_PIPE_INSTANCE`: if a program took the name before it started, the service
+does not join that program's pipe and tries again every few seconds. Libre Panel asks Windows
+which process serves the pipe and talks only to the one that the Service Control Manager names
+for `LibrePanelSensors`. It opens the pipe with `SECURITY_IDENTIFICATION`: the server can tell
+who is asking, not act as them. It checks every answer, as the service checks every request.
+
+**Why a user cannot replace what runs as SYSTEM.** The service's program lies in
+`%ProgramFiles%\Libre Panel\sensors`. `system-setup` gives that folder rights of its own,
+inherited by nothing above it: SYSTEM and Administrators may change it, users may read it and
+run what is in it. The folder above it, `%ProgramFiles%\Libre Panel`, is in Program Files,
+where only administrators create, rename or delete anything, so the folder cannot be swapped
+either. The service is registered with its path in quotes (no `C:\Program.exe`), and its own
+security leaves stopping and reconfiguring it to administrators; signed-in people may only
+start it (Libre Panel does that when its delayed start has not come yet).
+
+**What `system-setup` does with administrator rights.** As administrator, `libre-panel
+system-setup --service --pawnio --perf-log-users` copies the service's folder to Program Files
+(not when the setup has put it there already), sets the folder's rights, registers and starts
+the service with `sc.exe`, installs PawnIO silently from the official installer that the
+download carries (`tools\PawnIO_setup.exe`; not when PawnIO 2 or newer is there) and adds the
+person signed in to *Performance Log Users* (S-1-5-32-559), which game frame rates need
+(PresentMon), from their next sign-in. It finds `sc.exe` and `icacls.exe` in Windows' own
+folder and Program Files in the registry, not in the environment of whoever started it. Each
+step can run again without harm. `--status` says what is in place and needs no rights.
+
+**What is still trusted.** The portable zip's *Unlock all sensors* copies the service from the
+zip's folder, which you (and so any program you run) can change: whatever is there when you
+answer Windows' question runs as SYSTEM afterwards, as with any program you start as
+administrator. The setup copies nothing from a folder of yours. An administrator can always
+change the service, as anything else on the PC.
+
+**Taking it away.** *Settings → Sensors → Remove*, the uninstaller, or `libre-panel
+system-setup --remove` as administrator: the service is stopped and deleted, its folder
+removed (the uninstaller removes the setup's own), and the memberships of *Performance Log
+Users* that `system-setup` gave are taken back (it keeps a list of them in
+`HKLM\SOFTWARE\Libre Panel`; whoever was in the group before stays). PawnIO stays: other
+programs use it too, and it has its own entry under *Settings → Apps*.
+
 ## Autostart, per system
 
 Autostart is per user and needs no administrator rights. Turning it off
@@ -197,9 +299,10 @@ is in the app: *Settings → Start and system*.
 ### Windows: starting with the highest rights
 
 Some sensors (CPU temperature and power, RAM temperature, mainboard fans)
-can be read only with administrator rights. The built-in LibreHardwareMonitor
-source reads them inside Libre Panel, so Libre Panel needs the rights (and the
-PawnIO driver, see [Windows sensors](CONFIGURATION.md#windows-sensors-gpu-power-fans));
+can be read only with administrator rights. The [sensor service](#the-sensor-service)
+reads them without giving Libre Panel those rights; where it is not set up, the built-in
+LibreHardwareMonitor source reads them inside Libre Panel, so Libre Panel needs the rights
+(and the PawnIO driver, see [Windows sensors](CONFIGURATION.md#windows-sensors-gpu-power-fans));
 a sensor plugin that reads the hardware itself needs them too. For that, in a
 terminal opened with *Run as administrator*:
 

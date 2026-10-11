@@ -116,6 +116,15 @@ def no_scheduled_tasks(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_sensor_service(monkeypatch):
+    """The sensor service of the machine running the tests (a Windows PC with Libre Panel
+    installed) stays out of them: it is not installed, until a test says so."""
+    from libre_panel.sensors import lhm_service
+
+    monkeypatch.setattr(lhm_service, "registration", lambda name=None: None)
+
+
+@pytest.fixture(autouse=True)
 def english(monkeypatch):
     """Tests read English texts, whatever language the machine running them has."""
     monkeypatch.setattr(i18n, "system_language", lambda: "en")

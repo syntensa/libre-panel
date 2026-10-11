@@ -8,8 +8,9 @@ import { blankTheme, importTheme, openTheme, showOnPanel, startTheme, themeName 
 import { registerCommands, registerProvider } from "../../core/commands.js";
 import { control, usePolled } from "../../core/console.js";
 import { t } from "../../core/i18n.js";
+import { loadUnlock, runUnlock } from "../../core/settings.js";
 import { firstStart, store, useStore } from "../../core/state.js";
-import { html, useState } from "../../lib/preact.js";
+import { html, useEffect, useState } from "../../lib/preact.js";
 import { panelName } from "../../shell/panel-popover.js";
 import { navigate, registerView } from "../../shell/views.js";
 import { Segmented } from "../../ui/controls.js";
@@ -177,9 +178,37 @@ function Routing() {
   </dl>`;
 }
 
+/** Whether this Windows download can set up the sensor service, and it is not there yet. */
+const unlockable = (info) => Boolean(info?.available && !info.service);
+
+/**
+ * "Unlock all sensors": the sensor service (and PawnIO, and the group game frame rates need),
+ * set up after one question of Windows for administrator rights. Libre Panel itself goes on
+ * without them.
+ */
+function UnlockCard() {
+  const info = useStore((s) => s.unlockInfo);
+  useEffect(() => {
+    loadUnlock();
+  }, []);
+  if (!unlockable(info)) return null;
+  const busy = Boolean(info.job?.running);
+  return html`<aside class="hint-card unlock-card" role="status">
+    <strong>${t("Unlock all sensors")}</strong>
+    <p>
+      ${t(
+        "CPU, GPU and mainboard temperatures, power, fan speeds, memory and drives need a small Windows service with the rights to read them. Libre Panel itself keeps running without administrator rights.",
+      )}
+    </p>
+    <button type="button" class="btn" disabled=${busy} onClick=${() => runUnlock("unlock")}>
+      ${busy ? t("Waiting for Windows…") : t("Unlock all sensors")}
+    </button>
+  </aside>`;
+}
+
 /** What the panel could not read, in one sentence, with the way to the details. */
 function Hint() {
-  const hint = useStore((s) => (s.app.available ? s.app.panel?.hint : ""));
+  const hint = useStore((s) => (s.app.available && !unlockable(s.unlockInfo) ? s.app.panel?.hint : ""));
   if (!hint) return null;
   return html`<aside class="hint-card" role="status">
     <strong>${t("Readings are missing")}</strong>
@@ -233,6 +262,7 @@ function Launcher({ focus }) {
       </div>
       <${Routing} />
       <span class="grow"></span>
+      <${UnlockCard} />
       <${Hint} />
     </aside>
   </div>`;

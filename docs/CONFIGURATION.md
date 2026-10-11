@@ -69,7 +69,7 @@ port = ""                      # serial panels: found by their USB ids; only if 
 providers = ["load", "audio", "psutil"]
 
 [sensors.librehardwaremonitor]
-# mode = "auto"                # "auto", "inprocess" (inside Libre Panel) or "webserver"
+# mode = "auto"                # "auto", "service", "inprocess" (inside Libre Panel), "webserver"
 # dll_dir = ""                 # pip install: the folder with LibreHardwareMonitor's libraries
 # poll_seconds = 1             # how often it is read
 url = "http://127.0.0.1:8085/data.json"   # the web server (mode "webserver", and "auto"
@@ -980,17 +980,45 @@ and the fans, come from
 psutil has none of them there. New configurations list it
 (`providers = ["load", "audio", "librehardwaremonitor", "presentmon", "psutil"]`; a file made
 by an earlier version names `psutil` alone and gets the same list). Libre Panel reads it
-one of two ways, chosen by `mode` under `[sensors.librehardwaremonitor]`:
+one of three ways, chosen by `mode` under `[sensors.librehardwaremonitor]`:
 
 | `mode` | |
 |---|---|
-| `"auto"` (default) | inside Libre Panel where that is possible, else through the web server of a LibreHardwareMonitor that you run yourself |
+| `"auto"` (default) | through the sensor service where it is installed; else inside Libre Panel where that is possible, else through the web server of a LibreHardwareMonitor that you run yourself. A service that does not answer for 20 seconds is replaced by the others until it answers again, and a service installed while Libre Panel runs takes over |
+| `"service"` | the sensor service only |
 | `"inprocess"` | inside Libre Panel only. Where that is not possible, the log says why and those readings show "--" |
 | `"webserver"` | the web server only, as Libre Panel 0.4 did |
 
+### Through the sensor service: every sensor, Libre Panel without administrator rights
+
+The Windows setup installs Libre Panel's **sensor service** (a checked box), and the portable
+zip offers *Unlock all sensors* on Start and in *Settings → Sensors*, which sets up the same
+after one question of Windows. The service runs LibreHardwareMonitor with the rights its
+sensors need and reads every kind of hardware it knows: the processor (temperature, power,
+clock), the graphics cards, the mainboard's temperatures and fans, the memory modules'
+temperature, the drives' temperatures, fan controllers, pumps and power supplies where there
+are any. Libre Panel asks it for the readings over a local pipe, only for the parts a theme on
+show reads, and itself runs without administrator rights. The same command sets it up from a
+terminal opened as administrator:
+
+```
+libre-panel system-setup --service --pawnio --perf-log-users   # all three, or any of them
+libre-panel system-setup --remove                               # the service again
+libre-panel system-setup --status                               # what is in place (no rights)
+libre-panel sensors --check-service                             # does it answer, with what
+```
+
+`--pawnio` installs the PawnIO driver from the download (unless version 2 or newer is there),
+`--perf-log-users` puts you into *Performance Log Users*, which game frame rates
+([PresentMon](#more-sensor-sources)) need. [Running in the background](BACKGROUND.md#the-sensor-service)
+says what the service may and may not do, and why other users of the PC can only read
+readings through it.
+
 ### Inside Libre Panel: no extra program
 
-**The Windows downloads** (setup and zip) carry LibreHardwareMonitor's library.
+Without the sensor service (not set up yet, a pip install, or `mode = "inprocess"`) Libre
+Panel reads LibreHardwareMonitor itself. **The Windows downloads** (setup and zip) carry
+LibreHardwareMonitor's library.
 Nothing else is to be installed or started, and no web server turned on. Libre
 Panel loads the library with [pythonnet](https://pythonnet.github.io/) on the
 .NET Framework that Windows has (4.7.2 or later; Windows 10 from version 1803 and
@@ -1021,8 +1049,8 @@ readings show "--", never 0, and everything else works as it does. In that case
 Libre Panel asks a LibreHardwareMonitor web server (below) once at the start: if
 yours runs as administrator, its readings fill in what is missing.
 
-Drive temperatures (`temp.nvme.*` and the like) are not read inside Libre Panel
-yet; the web server has them.
+Drive temperatures (`temp.nvme.*` and the like) are not read inside Libre Panel;
+the sensor service and the web server have them.
 
 `libre-panel sensors` and `libre-panel doctor` say which of the two is missing.
 `libre-panel sensors --check-lhm` only tests that the library loads and opens.

@@ -1,13 +1,23 @@
 // Settings → Sensors: which sources the readings come from and in which order they are
-// asked, how LibreHardwareMonitor is read and what it says, how often the sensors are
-// read. (The hardware's names are in hardware.js.) The sources are made when the panel
-// starts, so a change here takes effect after a restart; the reading interval at once.
+// asked, the sensor service (Windows), how LibreHardwareMonitor is read and what it says,
+// how often the sensors are read. (The hardware's names are in hardware.js.) The sources
+// are made when the panel starts, so a change here takes effect after a restart; the
+// reading interval at once.
 
 import { formatNumber, t } from "../../core/i18n.js";
-import { loadSettings, loadSourceStates, saveSettings, useCatalog, useConfig } from "../../core/settings.js";
+import {
+  loadSettings,
+  loadSourceStates,
+  loadUnlock,
+  runUnlock,
+  saveSettings,
+  useCatalog,
+  useConfig,
+} from "../../core/settings.js";
 import { useStore } from "../../core/state.js";
 import { html } from "../../lib/preact.js";
 import { IconButton, NumberField, Segmented, Toggle } from "../../ui/controls.js";
+import { confirmDialog } from "../../ui/dialog.js";
 import { Card, CommitField, Note, RestartNote, SettingRow, Status, usePolling } from "./parts.js";
 
 export const loadSensorsSection = () => Promise.all([loadSettings(), loadSourceStates()]);
@@ -166,6 +176,69 @@ function Sources() {
     <//>`;
 }
 
+// -- the sensor service (Windows) ---------------------------------------------------------------
+
+/** The service as Windows has it, as a status mark. */
+function serviceStatus(service) {
+  if (!service) return html`<${Status}>${t("Not set up")}<//>`;
+  if (service.disabled) return html`<${Status} tone="warn">${t("Switched off")}<//>`;
+  if (service.state === "running") return html`<${Status} tone="ok">${t("Running")}<//>`;
+  return html`<${Status} tone="warn">${t("Not running")}<//>`;
+}
+
+async function removeService() {
+  const sure = await confirmDialog({
+    title: t("Remove the sensor service?"),
+    message: t(
+      "CPU temperature and power, the mainboard's fans and the temperatures of memory and drives are then read only while Libre Panel runs as administrator. The PawnIO driver stays installed.",
+    ),
+    confirm: t("Remove"),
+    danger: true,
+  });
+  if (sure) await runUnlock("remove");
+}
+
+function SensorService() {
+  const info = useStore((s) => s.unlockInfo);
+  if (!info || info.platform !== "win32") return null;
+  const busy = Boolean(info.job?.running);
+  const service = info.service;
+  let actions = null;
+  if (info.available && !service) {
+    actions = html`<button type="button" class="btn btn-primary" disabled=${busy} onClick=${() => runUnlock("unlock")}>
+      ${busy ? t("Waiting for Windows…") : t("Unlock all sensors")}
+    </button>`;
+  } else if (info.available) {
+    actions = html`<button type="button" class="btn" disabled=${busy} onClick=${() => runUnlock("unlock")}>${t("Set up again")}</button>
+      <button type="button" class="btn" disabled=${busy} onClick=${removeService}>${t("Remove")}</button>`;
+  }
+  const driver = info.pawnio === null ? html`<${Status} tone="warn">${t("Not installed")}<//>` : html`<${Status} tone="ok">${info.pawnio || t("Installed")}<//>`;
+  const rates = {
+    yes: html`<${Status} tone="ok">${t("Allowed")}<//>`,
+    "sign-in": html`<${Status} tone="warn">${t("From your next sign-in")}<//>`,
+    no: html`<${Status}>${t("Not allowed")}<//>`,
+  }[info.frame_rates];
+  return html`<${Card}
+    id="sensor-service"
+    title=${t("Sensor service")}
+    text=${t("A small Windows service reads the sensors that need administrator rights, so that Libre Panel itself runs without them. It only reads: it changes no hardware setting.")}
+  >
+    <${SettingRow}
+      title=${t("Sensor service")}
+      hint=${info.available || service
+        ? t("Reads CPU, GPU and mainboard temperatures, power, fan speeds, memory and drives with the rights this needs.")
+        : t("The sensor service comes with the Windows downloads (setup or zip).")}
+      status=${serviceStatus(service)}
+    >
+      ${actions}
+    <//>
+    <${SettingRow} title=${t("PawnIO driver")} hint=${t("Signed and open source: the service reads the CPU and the mainboard through it.")} status=${driver} />
+    ${rates
+      ? html`<${SettingRow} title=${t("Game frame rates")} hint=${t("Recording them needs membership in Performance Log Users, which unlocking gives you.")} status=${rates} />`
+      : null}
+  <//>`;
+}
+
 // -- LibreHardwareMonitor ----------------------------------------------------------------------
 
 function LibreHardwareMonitor() {
@@ -184,7 +257,7 @@ function LibreHardwareMonitor() {
   return html`<${Card} id="sensor-lhm" title="LibreHardwareMonitor" text=${t("Where the temperatures, the power and the fans of Windows come from.")}>
     <${SettingRow}
       title=${t("How it is read")}
-      hint=${t("Automatic reads it inside Libre Panel where that works, and otherwise asks the web server of a LibreHardwareMonitor that you run yourself.")}
+      hint=${t("Automatic reads it through the sensor service where that is set up, else inside Libre Panel, and otherwise asks the web server of a LibreHardwareMonitor that you run yourself.")}
     >
       <${Segmented}
         label=${t("How it is read")}
@@ -192,6 +265,7 @@ function LibreHardwareMonitor() {
         onChange=${(value) => saveSettings({ "sensors.librehardwaremonitor.mode": value })}
         options=${[
           { value: "auto", label: t("Automatic") },
+          { value: "service", label: t("Sensor service") },
           { value: "inprocess", label: t("Inside Libre Panel") },
           { value: "webserver", label: t("Web server") },
         ]}
@@ -250,6 +324,7 @@ function Interval() {
 
 export const sensorGroups = [
   { id: "sources", order: 10, component: Sources, load: loadSensorsSection },
+  { id: "service", order: 15, component: SensorService, load: loadUnlock }, // Windows only
   { id: "lhm", order: 20, component: LibreHardwareMonitor },
   { id: "interval", order: 30, component: Interval },
 ];
