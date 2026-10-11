@@ -6,6 +6,8 @@ Each theme as the panel shows it (<theme>.png), the README's hero, gallery,
 "fits your machine" and module pictures, and the 1280x640 social preview
 (upload it in the repository's settings). With Playwright installed, also
 the screenshots of the app. Demo sensor values and a fixed time keep the pictures stable.
+Libre Panel's own themes lead: Lumen in the hero, the gallery and the social preview.
+:func:`pictures` names every file it writes.
 """
 
 from __future__ import annotations
@@ -30,6 +32,21 @@ from libre_panel.theme.modules import LOOKS, look_theme_parts, make_grid, templa
 WHEN = datetime(2026, 10, 9, 10, 8, 24).timestamp()  # a Friday morning
 BG_TOP, BG_BOTTOM = (13, 20, 29), (6, 9, 13)
 TX_1, TX_3, ACCENT = (238, 246, 255), (140, 160, 184), (19, 229, 215)
+
+# Each theme as the panel shows it: Libre Panel's own first, the bars before the small panels.
+THEMES = ("lumen", "studio", "libre-default", "slate", "orbit", "column", "pico", "spur-ii")
+# The pictures made of them, and the screenshots of the app (those need Playwright).
+COMPOSED = ("hero.png", "gallery.png", "social-preview.png", "studio-adapts.png",
+            "module-sizes.png", "weather-sizes.png", "looks.png", "module-layouts.png",
+            "module-catalog.png", "module-layouts-more.png")  # fmt: skip
+APP_SHOTS = ("editor-new.png", "editor.png", "editor-drag.png", "palette.png", "start.png",
+             "settings.png")  # fmt: skip
+
+
+def pictures() -> list[str]:
+    """Every file this script writes into its folder, by name: what the README and the
+    website may show from docs/images."""
+    return [f"{theme_id}.png" for theme_id in THEMES] + list(COMPOSED) + list(APP_SHOTS)
 
 
 def snapshot():
@@ -172,14 +189,18 @@ def hero(bar2x: Image.Image) -> Image.Image:
 
 
 def gallery(shots: dict[str, Image.Image]) -> Image.Image:
+    """Libre Panel's own themes: Lumen and Studio across the width, the smaller panels below."""
     w, margin, gap, border = 2000, 44, 44, 12
     label, sub = font("Barlow-SemiBold", 30), font("Barlow-Regular", 24)
     m = shadow_margin(border)
 
-    # row 1: Lumen across the width
+    # rows 1 and 2: the bars across the width, Lumen first
     bar_w = w - 2 * margin - 2 * border
-    bar = shots["lumen"].resize((bar_w, bar_w // 4), Image.LANCZOS)
-    # row 2: the smaller panels at one screen height (Pico larger than life)
+    bars = [
+        (shots[theme_id].resize((bar_w, bar_w // 4), Image.LANCZOS), name)
+        for theme_id, name in (("lumen", "Lumen"), ("studio", "Studio"))
+    ]
+    # row 3: the smaller panels at one screen height (Pico larger than life)
     hh = 270
     row = [
         ("slate", "Slate", '5" · 800×480'),
@@ -200,20 +221,20 @@ def gallery(shots: dict[str, Image.Image]) -> Image.Image:
     spacing = (w - 2 * margin - total) / (len(screens) - 1)
 
     caption_h = 92
-    row1_h = bar.height + 2 * border
+    bar_h = bars[0][0].height + 2 * border
     row2_h = hh + 2 * border
-    h = margin + row1_h + caption_h + gap // 2 + row2_h + caption_h + margin // 2
+    h = margin + len(bars) * (bar_h + caption_h + gap // 2) + row2_h + caption_h + margin // 2
     img = background(w, h, glow=(0.5, 0.0)).convert("RGBA")
     draw = ImageDraw.Draw(img)
 
     y = margin
-    dev = device(bar, border)
-    img.alpha_composite(dev, (margin - m, y - m))
-    cy = y + row1_h + 22
-    text_center(draw, w / 2, cy, "Lumen", label, TX_1)
-    text_center(draw, w / 2, cy + 38, '8.8" / 9.2" bar · 1920×480', sub, TX_3)
+    for bar, name in bars:
+        img.alpha_composite(device(bar, border), (margin - m, y - m))
+        cy = y + bar_h + 22
+        text_center(draw, w / 2, cy, name, label, TX_1)
+        text_center(draw, w / 2, cy + 38, '8.8" / 9.2" bar · 1920×480', sub, TX_3)
+        y += bar_h + caption_h + gap // 2
 
-    y = margin + row1_h + caption_h + gap // 2
     x = margin
     for scr, name, size, is_round in screens:
         dev = device(scr, border, round_panel=is_round)
@@ -227,7 +248,7 @@ def gallery(shots: dict[str, Image.Image]) -> Image.Image:
 
 
 def social(bar2x: Image.Image) -> Image.Image:
-    """1280x640 for the repository's social preview."""
+    """1280x640 for the repository's social preview: Lumen under the name and the promise."""
     w, h = 1280, 640
     img = background(w, h, glow=(0.5, 1.0)).convert("RGBA")
     draw = ImageDraw.Draw(img)
@@ -238,7 +259,7 @@ def social(bar2x: Image.Image) -> Image.Image:
     draw.text((72, 188), "Free software for USB system-monitor displays", font=tag, fill=TX_1)
     draw.text(
         (72, 240),
-        "Visual theme editor · every panel size · Windows and Linux",
+        "Video mode up to 50 fps · a design app · every panel size · Windows and Linux",
         font=small,
         fill=TX_3,
     )
@@ -251,7 +272,8 @@ def social(bar2x: Image.Image) -> Image.Image:
 
 
 def adapts(variants: list[tuple[Image.Image, str, str]]) -> Image.Image:
-    """Studio on machines without weather or without a GPU sensor."""
+    """Studio where nothing plays and the weather is off, and on a machine without a GPU
+    sensor."""
     w, margin, border = 1800, 48, 14
     label, sub = font("Barlow-SemiBold", 34), font("Barlow-Regular", 28)
     m = shadow_margin(border)
@@ -446,7 +468,9 @@ def module_layouts() -> Image.Image:
     for name, frame, is_round in sized:
         dev = device(frame, border, round_panel=is_round)
         img.alpha_composite(dev, (round(x) - m, y - m))
-        draw.text((x + 4, y + hh + 2 * border + 10), name, font=label, fill=TX_1)
+        # (a caption wider than its panel stays inside the picture)
+        tx = min(x + 4, width - margin - draw.textlength(name, font=label))
+        draw.text((tx, y + hh + 2 * border + 10), name, font=label, fill=TX_1)
         x += frame.width + 2 * border + spacing
     return img.convert("RGB")
 
@@ -557,7 +581,9 @@ def new_module_layouts() -> Image.Image:
     x, y = margin, margin + row1 + caption + gap // 2
     for name, frame in sized:
         img.alpha_composite(device(frame, border), (round(x) - m, y - m))
-        draw.text((x + 4, y + hh + 2 * border + 10), name, font=label, fill=TX_1)
+        # (a caption wider than its panel stays inside the picture)
+        tx = min(x + 4, width - margin - draw.textlength(name, font=label))
+        draw.text((tx, y + hh + 2 * border + 10), name, font=label, fill=TX_1)
         x += frame.width + 2 * border + spacing
     return img.convert("RGB")
 
@@ -683,18 +709,24 @@ def main() -> None:
     parser.add_argument("out", nargs="?", default="docs/images", type=Path)
     out = parser.parse_args().out
     out.mkdir(parents=True, exist_ok=True)
-    ids = ["lumen", "studio", "spur-ii", "libre-default", "orbit", "slate", "column", "pico"]
-    for theme_id in ids:  # true pixels, as the panel shows them
+    for theme_id in THEMES:  # true pixels, as the panel shows them
         render(theme_id).save(out / f"{theme_id}.png", optimize=True)
-    big = {theme_id: render(theme_id, 2) for theme_id in ids}  # sharp when scaled
+    big = {theme_id: render(theme_id, 2) for theme_id in THEMES}  # sharp when scaled
     hero(big["lumen"]).save(out / "hero.png", optimize=True)
-    gallery(big).save(out / "gallery.png", optimize=True)
+    # Studio with nothing playing: the weather in its card, Lumen above it with the track
+    media = tuple(k for k in snapshot().readings if k.startswith("media."))
+    gallery({**big, "studio": render("studio", 2, media)}).save(out / "gallery.png", optimize=True)
     social(big["lumen"]).save(out / "social-preview.png", optimize=True)
-    weather = tuple(k for k in snapshot().readings if k.startswith("weather."))
+    # (the card shows what plays before the weather: without either, it shows the day)
+    quiet = tuple(k for k in snapshot().readings if k.startswith(("weather.", "media.")))
     gpu = tuple(k for k in snapshot().readings if k.startswith("gpu."))
     adapts(
         [
-            (render("studio", 2, weather), "Weather off", "· a calendar sheet takes the card"),
+            (
+                render("studio", 2, quiet),
+                "Nothing playing, weather off",
+                "· the day takes the card",
+            ),
             (render("studio", 2, gpu), "No GPU sensor", "· the disk takes its ring"),
         ]
     ).save(out / "studio-adapts.png", optimize=True)

@@ -1,353 +1,683 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="no-js">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Libre Panel — free software for USB system-monitor displays</title>
-<meta name="description" content="Free, open-source software for the small USB system-monitor displays sold as Turing Smart Screen, TURZX, WeAct, XuanFang and more: a visual theme editor, every panel size, smooth 50 fps video mode. Windows and Linux.">
+<title>Libre Panel: free software for USB system-monitor panels</title>
+<meta name="description" content="Libre Panel drives the small USB system-monitor panels by TURZX, Turing Smart Screen, WeAct, Kipye and others: video mode up to 50 fps, cards, notices, game mode and an app to design your own. Free and open source, for Windows and Linux, no account, no cloud.">
+<link rel="canonical" href="https://syntensa.github.io/libre-panel/">
+<link rel="alternate" hreflang="en" href="https://syntensa.github.io/libre-panel/">
+<link rel="alternate" hreflang="de" href="https://syntensa.github.io/libre-panel/de/">
+<link rel="alternate" hreflang="x-default" href="https://syntensa.github.io/libre-panel/">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Libre Panel">
-<meta property="og:description" content="Free, open-source software for USB system-monitor displays: a visual theme editor, every panel size, Windows and Linux.">
-<meta property="og:image" content="https://syntensa.github.io/libre-panel/images/social-preview.png">
+<meta property="og:site_name" content="Libre Panel">
+<meta property="og:title" content="Libre Panel: your PC's vitals as moving light">
+<meta property="og:description" content="Free, open-source software for USB system-monitor panels: video mode up to 50 fps, cards, notices, game mode and a design app. Windows and Linux, no account, no cloud.">
 <meta property="og:url" content="https://syntensa.github.io/libre-panel/">
+<meta property="og:image" content="https://syntensa.github.io/libre-panel/images/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="Libre Panel, free software for USB system-monitor displays, with the Lumen theme on a 9.2-inch panel">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="de_DE">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#0A1119">
+<meta name="twitter:title" content="Libre Panel: your PC's vitals as moving light">
+<meta name="twitter:description" content="Free, open-source software for USB system-monitor panels. Windows and Linux, no account, no cloud.">
+<meta name="twitter:image" content="https://syntensa.github.io/libre-panel/images/social-preview.png">
+<meta name="twitter:image:alt" content="Libre Panel, free software for USB system-monitor displays, with the Lumen theme on a 9.2-inch panel">
+<meta name="theme-color" content="#0a0e13">
 <link rel="icon" type="image/png" href="images/icon.png">
-<style>
-  @font-face { font-family: Barlow; font-weight: 400; src: url("fonts/Barlow-Regular.ttf") format("truetype"); font-display: swap; }
-  @font-face { font-family: Barlow; font-weight: 500; src: url("fonts/Barlow-Medium.ttf") format("truetype"); font-display: swap; }
-  @font-face { font-family: Barlow; font-weight: 600; src: url("fonts/Barlow-SemiBold.ttf") format("truetype"); font-display: swap; }
-  @font-face { font-family: Barlow; font-weight: 700; src: url("fonts/Barlow-Bold.ttf") format("truetype"); font-display: swap; }
-  @font-face { font-family: "JetBrains Mono"; font-weight: 500; src: url("fonts/JetBrainsMono-Medium.ttf") format("truetype"); font-display: swap; }
-
-  :root {
-    --base: #0A1119; --base-low: #060A0F; --surf: #111B27; --surf-2: #17263A;
-    --rule: #1F3042; --tx-1: #EEF6FF; --tx-2: #B8CAE0; --tx-3: #8CA0B8;
-    --accent: #13E5D7; --accent-deep: #19746E; --mem: #E0A8FF; --gpu: #A3AEFF;
-    --net: #7EE8A6; --warn: #FFCB6B;
-    --radius: 14px; --wide: 1160px;
-  }
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
-  body {
-    margin: 0; background: var(--base-low); color: var(--tx-2);
-    font: 18px/1.6 Barlow, system-ui, -apple-system, "Segoe UI", sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  img { max-width: 100%; height: auto; display: block; }
-  code, pre { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 0.86em; }
-  .wrap { max-width: var(--wide); margin: 0 auto; padding: 0 24px; }
-
-  header.nav { position: sticky; top: 0; z-index: 5; background: rgba(6, 10, 15, 0.82);
-    backdrop-filter: blur(10px); border-bottom: 1px solid var(--rule); }
-  header.nav .wrap { display: flex; align-items: center; gap: 28px; height: 60px; }
-  .brand { display: flex; align-items: center; gap: 10px; color: var(--tx-1); font-weight: 600; font-size: 19px; }
-  .brand img { width: 28px; height: 28px; }
-  .brand:hover { text-decoration: none; }
-  header.nav nav { display: flex; gap: 22px; margin-left: auto; font-size: 16px; }
-  header.nav nav a { color: var(--tx-2); }
-  header.nav nav a:hover { color: var(--tx-1); text-decoration: none; }
-
-  .hero { padding: 72px 0 28px; text-align: center;
-    background: radial-gradient(ellipse 70% 60% at 50% 0%, rgba(19, 229, 215, 0.13), transparent 70%); }
-  .hero h1 { margin: 0; color: var(--tx-1); font-weight: 700; font-size: clamp(40px, 6.4vw, 76px);
-    line-height: 1.05; letter-spacing: -0.5px; }
-  .hero h1 em { font-style: normal; color: var(--accent); text-shadow: 0 0 28px rgba(19, 229, 215, 0.45); }
-  .hero p.lead { max-width: 760px; margin: 22px auto 0; font-size: clamp(18px, 2.1vw, 22px); color: var(--tx-2); }
-  .actions { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin: 34px 0 12px; }
-  .btn { display: inline-flex; align-items: center; gap: 10px; padding: 13px 24px; border-radius: 10px;
-    font-weight: 600; font-size: 17px; border: 1px solid var(--rule); color: var(--tx-1); background: var(--surf); }
-  .btn:hover { text-decoration: none; border-color: var(--tx-3); }
-  .btn.primary { background: var(--accent); color: #04221F; border-color: var(--accent);
-    box-shadow: 0 8px 30px rgba(19, 229, 215, 0.25); }
-  .btn.primary:hover { filter: brightness(1.08); }
-  .fineprint { font-size: 15px; color: var(--tx-3); }
-  .shot { margin: 40px auto 0; }
-
-  section { padding: 76px 0; border-top: 1px solid var(--rule); }
-  .kicker { color: var(--accent); font-weight: 600; letter-spacing: 3px; text-transform: uppercase; font-size: 14px; }
-  h2 { margin: 6px 0 14px; color: var(--tx-1); font-weight: 600; font-size: clamp(28px, 3.6vw, 40px); line-height: 1.15; }
-  .intro { max-width: 760px; margin: 0 0 34px; }
-  h3 { margin: 0 0 6px; color: var(--tx-1); font-weight: 600; font-size: 20px; }
-
-  .grid { display: grid; gap: 18px; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); }
-  .card { background: var(--surf); border: 1px solid var(--rule); border-radius: var(--radius); padding: 22px 22px 18px; }
-  .card p { margin: 0; font-size: 16.5px; }
-  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 9px; vertical-align: 2px; }
-
-  .steps { display: grid; gap: 22px; }
-  .step { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 14px; align-items: start; margin-top: 18px; }
-  .step .n { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--accent);
-    color: #04221F; font-weight: 700; font-size: 18px; }
-  .step p { margin: 2px 0 0; max-width: 70ch; }
-  .split { display: grid; grid-template-columns: 1fr 1.45fr; gap: 44px; align-items: center; }
-  .split ul { margin: 0; padding-left: 20px; }
-  .split li { margin: 6px 0; }
-  .framed { border-radius: 12px; border: 1px solid var(--rule); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45); }
-
-  table { width: 100%; border-collapse: collapse; font-size: 16.5px; }
-  th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
-  th { color: var(--tx-3); font-weight: 500; font-size: 14px; letter-spacing: 1.5px; text-transform: uppercase; }
-  td:first-child { color: var(--tx-1); font-weight: 500; }
-  .chip { display: inline-block; padding: 1px 10px; border-radius: 99px; font-size: 14px; font-weight: 600; white-space: nowrap; }
-  .chip.ok { color: #052119; background: var(--net); }
-  .chip.wait { color: #2A1D00; background: var(--warn); }
-  .note { margin-top: 18px; padding: 16px 20px; border-radius: 12px; background: rgba(19, 229, 215, 0.07);
-    border: 1px solid rgba(19, 229, 215, 0.25); }
-
-  .os { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); margin-bottom: 26px; }
-  .os .card a.btn { margin-top: 14px; }
-  pre { margin: 0; padding: 18px 20px; overflow-x: auto; background: var(--base); border: 1px solid var(--rule);
-    border-radius: 12px; color: var(--tx-1); line-height: 1.7; }
-  pre .c { color: var(--tx-3); }
-
-  footer { padding: 40px 0 56px; border-top: 1px solid var(--rule); font-size: 15px; color: var(--tx-3); }
-  footer p { margin: 6px 0; }
-
-  @media (max-width: 860px) {
-    .split { grid-template-columns: 1fr; gap: 26px; }
-    header.nav nav a.hide-sm { display: none; }
-    section { padding: 56px 0; }
-    .hero { padding-top: 48px; }
-  }
-  @media (max-width: 520px) {
-    .wrap { padding: 0 16px; }
-    header.nav nav { gap: 14px; font-size: 15px; }
-    th:nth-child(3), td:nth-child(3) { display: none; }
-  }
-</style>
+<link rel="preload" href="fonts/Barlow-Regular.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="preload" href="fonts/Barlow-SemiBold.ttf" as="font" type="font/ttf" crossorigin>
+<link rel="preload" href="media/video-mode.png" as="image">
+<link rel="stylesheet" href="site.css">
+<script>document.documentElement.className = "js";</script>
+<script src="site.js" defer></script>
 </head>
 <body>
+<svg width="0" height="0" style="position: absolute" aria-hidden="true">
+  <symbol id="i-logo" viewBox="0 0 24 24"><rect x="2.5" y="7" width="19" height="10" rx="2.5"/><path d="M6 13.5l2.5-3 2 2 3-4 4 5"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 15v4a2 2 0 002 2h12a2 2 0 002-2v-4"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 6v12M15 6v12" stroke-width="2.6"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8.5 5.8v12.4L18.5 12z" fill="currentColor"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.6v.4"/></symbol>
+  <symbol id="i-code" viewBox="0 0 24 24"><path d="M8.5 8l-4 4 4 4M15.5 8l4 4-4 4"/></symbol>
+</svg>
+<a class="skip" href="#main">Skip to content</a>
 
-<header class="nav">
-  <div class="wrap">
-    <a class="brand" href="#top"><img src="images/icon.png" alt="">Libre Panel</a>
-    <nav>
-      <a class="hide-sm" href="#build">Build</a>
-      <a class="hide-sm" href="#modules">Modules</a>
-      <a class="hide-sm" href="#themes">Themes</a>
-      <a class="hide-sm" href="#editor">App</a>
+<header class="topbar">
+  <div class="wrap topbar-in">
+    <a class="brand" href="#top" aria-label="Libre Panel, to the top"><svg class="icon" aria-hidden="true"><use href="#i-logo"/></svg><span>Libre Panel</span></a>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#tour">Tour</a>
+      <a href="#app">App</a>
+      <a href="#themes">Themes</a>
       <a href="#panels">Panels</a>
       <a href="#install">Install</a>
-      <a href="https://github.com/syntensa/libre-panel">GitHub</a>
+      <a href="#faq">FAQ</a>
     </nav>
+    <div class="grow"></div>
+    <a class="lang" href="de/" hreflang="de" lang="de"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg>Deutsch</a>
+    <a class="lang hide-sm" href="https://github.com/syntensa/libre-panel"><svg class="icon" aria-hidden="true"><use href="#i-code"/></svg>GitHub</a>
+    <a class="btn btn-primary" href="#install"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Download</a>
   </div>
 </header>
 
-<main id="top">
-  <div class="hero">
-    <div class="wrap">
-      <h1>Your panel.<br><em>Your design.</em></h1>
-      <p class="lead">Free, open-source software for the small USB system-monitor
-        displays sold as Turing Smart Screen, TURZX, WeAct, XuanFang and under many
-        other names. Pick a theme or build your own, and see your PC at a glance.</p>
+<main id="main">
+  <section class="hero" id="top" aria-labelledby="hero-title">
+    <div class="wrap hero-copy">
+      <p class="news"><span class="dot"></span><span>New in 0.5: video mode, cards, notices and an app of its own</span>
+        <a href="https://github.com/syntensa/libre-panel/releases/latest">What's new</a></p>
+      <h1 id="hero-title">Your PC's vitals as <em>moving light</em>.</h1>
+      <p class="lead">Libre Panel drives the small USB system-monitor panels sold as TURZX, Turing
+        Smart Screen, WeAct, Kipye and more: your processor, graphics card, fans, network, what is
+        playing and the weather, at up to 50 frames a second. Free and open source, for Windows and
+        Linux, without an account or a cloud.</p>
       <div class="actions">
-        <a class="btn primary" href="https://github.com/syntensa/libre-panel/releases/latest">Download</a>
-        <a class="btn" href="https://github.com/syntensa/libre-panel">Source on GitHub</a>
+        <a class="btn btn-primary btn-lg" data-asset="setup" href="https://github.com/syntensa/libre-panel/releases/latest">
+          <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg><span>Download for Windows<small>Setup · Windows 10 and 11, 64-bit</small></span></a>
+        <a class="btn btn-lg" data-asset="appimage" href="https://github.com/syntensa/libre-panel/releases/latest">
+          <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg><span>Download for Linux<small>AppImage · x86-64</small></span></a>
       </div>
-      <p class="fineprint">Windows · Linux — GPL-3.0 — no account, no cloud, no vendor app</p>
-      <img class="shot" src="images/hero.png" width="2000" height="628"
-        alt="Lumen, Libre Panel's own theme, on a 9.2 inch bar: what is playing with its cover, the time with the load of the last minute and the fans, and lit rings for CPU, GPU and RAM named after the hardware">
+      <p class="fineprint"><span data-version="Version {v}">The latest release</span><span class="sep">·</span><a data-asset="zip" href="https://github.com/syntensa/libre-panel/releases/latest">portable zip</a><span class="sep">·</span><a data-asset="tarball" href="https://github.com/syntensa/libre-panel/releases/latest">tarball</a><span class="sep">·</span><a href="https://github.com/syntensa/libre-panel/releases">all releases</a><span class="sep">·</span>GPL-3.0</p>
     </div>
-  </div>
-
-  <section>
-    <div class="wrap">
-      <div class="kicker">Fits your machine</div>
-      <h2>One theme, every PC</h2>
-      <p class="intro">Themes show the names your own CPU and GPU report, the
-        weather for the place in your config and dates in English or German. Where
-        a sensor is missing, its section steps aside: Studio shows a calendar sheet
-        when the weather is off, and the disk on a PC without GPU readings. No
-        editing needed.</p>
-      <img src="images/studio-adapts.png" width="1800" height="1150" loading="lazy"
-        alt="Studio without weather (a calendar sheet in the card) and without GPU readings (a disk ring in the third slot)">
-    </div>
-  </section>
-
-  <section id="build">
-    <div class="wrap">
-      <div class="kicker">Modules</div>
-      <h2>Build your own in two minutes</h2>
-      <p class="intro">Snap a theme together from modules on your panel's grid. They
-        work like widgets on a phone's home screen: the larger, the more they show.</p>
-      <div class="steps">
-        <div class="step"><div class="n">1</div><div><h3>Pick a layout and a look</h3>
-          <p><em>New theme…</em> offers starting layouts made for your panel, in six looks.</p></div></div>
-        <img class="framed" src="images/editor-new.png" width="1290" height="657" loading="lazy"
-        alt="The New theme dialog with three starting layouts and six looks">
-        <div class="step"><div class="n">2</div><div><h3>Drag modules onto the panel</h3>
-          <p>Pick from 25 modules: hardware, clocks, weather, music, your calendar and
-            more. Free cells light up; drop a module on another to swap them.</p></div></div>
-        <img class="framed" src="images/editor-drag.png" width="2400" height="1350" loading="lazy"
-        alt="A History module dragged from the library onto two free cells">
-        <div class="step"><div class="n">3</div><div><h3>Pull a corner</h3>
-          <p>One cell shows the load; two add the processor's name, temperature and
-            power; three a history graph.</p></div></div>
-        <img src="images/module-sizes.png" width="1597" height="902" loading="lazy"
-        alt="A CPU ring module at five sizes, showing more the larger it is">
-        <p>The weather does the same: given room, it shows the next days or hours (or both),
-          as columns when long or big, as rows when tall. A big calendar shows the month.</p>
-        <img src="images/weather-sizes.png" width="1834" height="902" loading="lazy"
-          alt="The weather module at five sizes: now, then the days ahead, then days and hours">
-        <div class="step"><div class="n">4</div><div><h3>Try another look</h3>
-          <p>Colours, cards, corners, glow and fonts of every module change in one click.</p></div></div>
-        <img src="images/looks.png" width="2042" height="1021" loading="lazy"
-        alt="The same layout in the looks Arctic, Neon, Graphite, Paper, Sunset and Mono">
-        <div class="step"><div class="n">5</div><div><h3>On every panel</h3>
-          <p>The grid follows the panel and keeps clear of edges the bezel hides. Switch
-            the panel and the modules move along.</p></div></div>
-        <img src="images/module-layouts.png" width="2056" height="781" loading="lazy"
-        alt="Module layouts on a 9.2 inch bar, 3.5 and 5 inch panels, a portrait panel and a round panel">
-      </div>
-    </div>
-  </section>
-
-  <section id="modules">
-    <div class="wrap">
-      <div class="kicker">25 modules</div>
-      <h2>From every core to your next appointment</h2>
-      <p class="intro">Each module shows more the larger it is, steps aside when its
-        readings are missing, and costs nothing while it is not on the panel.</p>
-      <img src="images/module-catalog.png" width="2072" height="2210" loading="lazy"
-        alt="Every module: ring, big number, history, bars, temperatures, CPU cores, drives, processes, network, network details, battery, game FPS, time, calendar, analog clock, world clock, countdown, sun and moon, weather, music, agenda, dashboard, picture, system and title">
-      <div class="grid" style="margin-top: 26px">
-        <div class="card"><h3><span class="dot" style="background: var(--accent)"></span>Hardware</h3>
-          <p>Every temperature and fan, the load of every core, every drive with its free
-            space, the busiest programs, IP address and ping, the battery, and your
-            game's frame rate with its 1% lows (PresentMon, Windows).</p></div>
-        <div class="card"><h3><span class="dot" style="background: var(--warn)"></span>Time and the sky</h3>
-          <p>Digital and analog clocks for any time zone, a world clock, countdowns to
-            any day, sunrise, sunset and the moon's phase, computed offline for your
-            place.</p></div>
-        <div class="card"><h3><span class="dot" style="background: var(--mem)"></span>Your things</h3>
-          <p>What is playing with its cover, the next events of your calendars, Home
-            Assistant and MQTT values on a dashboard, and your pictures as a
-            slideshow.</p></div>
-      </div>
-      <img src="images/module-layouts-more.png" width="2056" height="781" loading="lazy" style="margin-top: 34px"
-        alt="An everyday bar with music, world clock, agenda, sun and moon and a countdown; a hardware bar with cores, temperatures, game FPS, processes and drives; three smaller panels">
-    </div>
-  </section>
-
-  <section id="themes">
-    <div class="wrap">
-      <div class="kicker">Built in</div>
-      <h2>Seven themes, from 0.96" to 9.2"</h2>
-      <p class="intro">Values as light in milled grooves, a card that shows what is
-        playing or the weather with moving symbols, graphs that scroll and values that
-        glide instead of jumping. Every theme moves to any other panel size in one
-        click.</p>
-      <img src="images/gallery.png" width="2000" height="1062" loading="lazy"
-        alt="Built-in themes: Lumen, Slate, Libre Default, Orbit, Column and Pico on their panels">
-    </div>
-  </section>
-
-  <section id="editor">
-    <div class="wrap split">
-      <div>
-        <div class="kicker">The app</div>
-        <h2>Design it in a window of its own</h2>
-        <p>Design renders with the same engine that drives the panel, so
-          what you see is what you get.</p>
-        <ul>
-          <li>Module library with live pictures in your look</li>
-          <li>Drag, drop, swap and resize modules on the grid</li>
-          <li>Free editing of every widget, with snapping and alignment guides</li>
-          <li>Undo and redo, palettes, bundled fonts, glow, gradients, colour rules</li>
-          <li>Every panel from a menu, portrait or landscape</li>
-          <li><em>To the panel</em> sends it there</li>
-          <li>Ctrl+K finds any command, theme, module or sensor by a few letters</li>
+    <div class="stage">
+      <div class="wrap">
+        <figure class="media media-hero">
+          <video autoplay loop muted playsinline preload="auto" width="2000" height="580" poster="media/video-mode.png" aria-label="Lumen, Libre Panel's own theme, in video mode on a 9.2-inch panel: what is playing with its cover, the time with the load of the last minute scrolling as light, fans turning, and lit rings for CPU, GPU and RAM">
+            <source src="media/video-mode.webm" type="video/webm">
+            <source src="media/video-mode.mp4" type="video/mp4">
+            <img src="media/video-mode.gif" width="960" height="278" alt="Lumen in video mode on a 9.2-inch panel">
+          </video>
+          <button class="toggle" type="button" data-playing="true" data-pause="Pause the clip" data-play="Play the clip" aria-label="Pause the clip"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+        </figure>
+        <p class="caption">Lumen, Libre Panel's own theme, in video mode on a 9.2" panel, with demo values.</p>
+        <ul class="facts" aria-label="At a glance">
+          <li><span class="dot" style="background: var(--cpu)"></span>Up to 50 fps on TURZX USB panels</li>
+          <li><span class="dot" style="background: var(--gpu)"></span>0.96" to 12.3", round and portrait</li>
+          <li><span class="dot" style="background: var(--ram)"></span>Windows and Linux</li>
+          <li><span class="dot" style="background: var(--net)"></span>No account, no cloud</li>
+          <li><span class="dot" style="background: var(--warn)"></span>English and German</li>
         </ul>
       </div>
-      <img class="framed" src="images/editor.png" width="2400" height="1350" loading="lazy"
-        alt="Design with the module library, a 9.2 inch panel and a selected ring module">
     </div>
   </section>
 
-  <section>
+  <section id="tour" aria-labelledby="tour-title">
     <div class="wrap">
-      <div class="kicker">Under the hood</div>
-      <h2>Small screen, serious engine</h2>
-      <div class="grid" style="margin-top: 26px">
-        <div class="card"><h3><span class="dot" style="background: var(--accent)"></span>50 fps video mode</h3>
-          <p>On TURZX USB panels, frames go through the panel's own video decoder: graphs scroll and numbers glide.</p></div>
-        <div class="card"><h3><span class="dot" style="background: var(--gpu)"></span>Sensors</h3>
-          <p>Every core, drive, temperature and fan, network and battery everywhere; on Windows also GPU and power via LibreHardwareMonitor. Calendars, Home Assistant and MQTT too.</p></div>
-        <div class="card"><h3><span class="dot" style="background: var(--net)"></span>Weather</h3>
-          <p>From Open-Meteo for your location. Off by default, no API key.</p></div>
-        <div class="card"><h3><span class="dot" style="background: var(--mem)"></span>Runs in the tray</h3>
-          <p>Theme, brightness, pause and quit from the tray; starts with the system if you want; finds the panel when it is plugged in.</p></div>
-        <div class="card"><h3><span class="dot" style="background: var(--warn)"></span>Safe to share</h3>
-          <p>Themes are plain JSON plus images and fonts. They cannot run code or read files outside their folder.</p></div>
-        <div class="card"><h3><span class="dot" style="background: var(--tx-2)"></span>Plugins</h3>
-          <p>Sensor sources, widget types, display drivers, screens drawn in code and editor pages, installed with pip.</p></div>
+      <div class="head">
+        <p class="kicker">A 30-second tour</p>
+        <h2 id="tour-title">A panel that moves with your PC</h2>
+        <p>Every clip here is Libre Panel itself, recorded frame by frame with demo values: Lumen on the
+          9.2" bar, Studio for the notice, Libre Default on a 3.5" panel.</p>
+      </div>
+
+      <article class="feature feature-wide">
+        <div class="feature-copy">
+          <div><span class="label">Video mode</span><h3>Up to 50 frames a second</h3></div>
+          <p>TURZX USB panels have a video decoder, and Libre Panel feeds it a frame every 20
+            milliseconds. Numbers count to each new reading, rings and bars glide, graphs scroll a
+            little on every frame, and fans turn at their real speed.</p>
+          <p class="note">It needs ffmpeg and turns itself on on the 9.2". Panels without a decoder get
+            still frames, sent where something changed.</p>
+        </div>
+        <div class="pair">
+          <figure class="media">
+            <video loop muted playsinline preload="none" width="1234" height="682" data-lazy data-poster="media/close-up-rings.png" aria-label="A close-up of Lumen's rings for CPU, GPU and RAM: lit arcs fill as the load rises and the numbers count">
+              <source src="media/close-up-rings.webm" type="video/webm">
+              <source src="media/close-up-rings.mp4" type="video/mp4">
+            </video>
+            <noscript><img src="media/close-up-rings.gif" width="960" height="531" loading="lazy" alt="A close-up of Lumen's rings for CPU, GPU and RAM"></noscript>
+            <button class="toggle" type="button" data-playing="false" data-pause="Pause the clip" data-play="Play the clip" aria-label="Play the clip"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+          </figure>
+          <figure class="media">
+            <video loop muted playsinline preload="none" width="1020" height="566" data-lazy data-poster="media/close-up-curves.png" aria-label="A close-up of Lumen's history and fans: the lit curves of CPU and GPU scroll, and four fans speed up">
+              <source src="media/close-up-curves.webm" type="video/webm">
+              <source src="media/close-up-curves.mp4" type="video/mp4">
+            </video>
+            <noscript><img src="media/close-up-curves.gif" width="960" height="533" loading="lazy" alt="A close-up of Lumen's history and fans"></noscript>
+            <button class="toggle" type="button" data-playing="false" data-pause="Pause the clip" data-play="Play the clip" aria-label="Play the clip"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+          </figure>
+        </div>
+      </article>
+
+      <article class="feature flip">
+        <div class="feature-copy">
+          <span class="label">The look</span>
+          <h3>Values drawn as light</h3>
+          <p>Rings, bars and graphs sit as light in a milled groove, lettering as faceted metal or lit
+            acrylic. One light for the whole panel glints on the frames and sweeps across on the hour,
+            and fine dust drifts in the depth behind.</p>
+          <p class="note">Each finish is one click in Look: light, facet, acrylic or flat.</p>
+        </div>
+        <figure class="media">
+          <video loop muted playsinline preload="none" width="1192" height="876" data-lazy data-poster="media/app-ring-style.png" aria-label="In the app, a ring is switched between light, facet and flat">
+            <source src="media/app-ring-style.webm" type="video/webm">
+            <source src="media/app-ring-style.mp4" type="video/mp4">
+          </video>
+          <noscript><img src="media/app-ring-style.gif" width="960" height="706" loading="lazy" alt="A ring switched between light, facet and flat in the app"></noscript>
+          <button class="toggle" type="button" data-playing="false" data-pause="Pause the clip" data-play="Play the clip" aria-label="Play the clip"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+        </figure>
+      </article>
+
+      <article class="feature feature-wide">
+        <div class="feature-copy">
+          <div><span class="label">Cards</span><h3>Cards that change by themselves</h3></div>
+          <p>What is playing, with its cover and its progress; when nothing plays, the weather with
+            moving symbols, the next hours and the rain of the next two hours; when there is neither,
+            the day. A line of light ignites between two cards: one rolls up into it, the next rolls
+            down.</p>
+          <p class="note">With the downloads service on, the network card shows a download in its place
+            while one runs.</p>
+        </div>
+        <figure class="media">
+          <video loop muted playsinline preload="none" width="2000" height="580" data-lazy data-poster="media/card-ignition.png" aria-label="Lumen's card slot: the playing track gives way to the weather card, with a line of light between the two">
+            <source src="media/card-ignition.webm" type="video/webm">
+            <source src="media/card-ignition.mp4" type="video/mp4">
+          </video>
+          <noscript><img src="media/card-ignition.gif" width="960" height="278" loading="lazy" alt="Lumen's card slot changes from the playing track to the weather"></noscript>
+          <button class="toggle" type="button" data-playing="false" data-pause="Pause the clip" data-play="Play the clip" aria-label="Play the clip"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+        </figure>
+      </article>
+
+      <article class="feature feature-wide">
+        <div class="feature-copy">
+          <div><span class="label">Notices</span><h3>A band, or a card</h3></div>
+          <p>Turn the volume and a band rolls down from a glowing edge, its number counting while you
+            turn. A new track with its cover, a sensor past a limit you set, a stick or a game
+            controller plugged in: short notices in the colours of the theme.</p>
+          <p class="note">The notices and devices services are off until you switch them on; devices is
+            for Windows.</p>
+        </div>
+        <figure class="media">
+          <video loop muted playsinline preload="none" width="2000" height="580" data-lazy data-poster="media/volume-band.png" aria-label="The volume key on the Studio theme: a band rolls down from a glowing edge, its number counts and its bar glides">
+            <source src="media/volume-band.webm" type="video/webm">
+            <source src="media/volume-band.mp4" type="video/mp4">
+          </video>
+          <noscript><img src="media/volume-band.gif" width="960" height="278" loading="lazy" alt="A volume notice as a band on the Studio theme"></noscript>
+          <button class="toggle" type="button" data-playing="false" data-pause="Pause the clip" data-play="Play the clip" aria-label="Play the clip"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+        </figure>
+      </article>
+
+      <article class="feature feature-wide">
+        <div class="feature-copy">
+          <div><span class="label">Game mode</span><h3>An entrance for every game</h3></div>
+          <p>Libre Panel finds the game you start, from a list of your own or your Steam library. The
+            screen closes to a line, the game's name lights up, and the game screen opens with the
+            frame rate, its 1% low and who holds it back. After a round, an optional report compares
+            it with your last ten.</p>
+          <p class="note">The frame rate comes from Intel's PresentMon (Windows), which you download and
+            name in the settings.</p>
+        </div>
+        <figure class="media">
+          <video loop muted playsinline preload="none" width="2000" height="580" data-lazy data-poster="media/game-entrance.png" aria-label="A game starts: the screen closes to a line, the game's name lights up, and the game screen opens with the frame rate; when it ends, the same way back">
+            <source src="media/game-entrance.webm" type="video/webm">
+            <source src="media/game-entrance.mp4" type="video/mp4">
+          </video>
+          <noscript><img src="media/game-entrance.gif" width="960" height="278" loading="lazy" alt="Game mode starts with the entrance"></noscript>
+          <button class="toggle" type="button" data-playing="false" data-pause="Pause the clip" data-play="Play the clip" aria-label="Play the clip"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+        </figure>
+      </article>
+
+      <article class="feature feature-wide">
+        <div class="feature-copy">
+          <div><span class="label">Transitions</span><h3>The next screen opens in a line of light</h3></div>
+          <p>One theme for the desk, another while music plays, a third at night: the autopilot picks
+            the theme by rules you write, and a line ignites at mid-height and opens onto the next
+            screen, already live.</p>
+          <p class="note">The autopilot is a service too, off until you switch it on.</p>
+        </div>
+        <figure class="media">
+          <video loop muted playsinline preload="none" width="2000" height="580" data-lazy data-poster="media/theme-tube.png" aria-label="Lumen changes to Studio and back: a line of light ignites at mid-height and opens onto the next screen">
+            <source src="media/theme-tube.webm" type="video/webm">
+            <source src="media/theme-tube.mp4" type="video/mp4">
+          </video>
+          <noscript><img src="media/theme-tube.gif" width="960" height="278" loading="lazy" alt="One theme changes to the next with the tube transition"></noscript>
+          <button class="toggle" type="button" data-playing="false" data-pause="Pause the clip" data-play="Play the clip" aria-label="Play the clip"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+        </figure>
+      </article>
+
+      <article class="feature">
+        <div class="feature-copy">
+          <span class="label">Every panel</span>
+          <h3>From 0.96 inches to 12.3</h3>
+          <p>Every theme moves to every panel and lays itself out for it, round and portrait ones
+            included. Libre Default, shown here on a 3.5" panel, is where every panel but the bars
+            starts: lit rings, a history that scrolls and a small card in the corner.</p>
+        </div>
+        <figure class="media">
+          <video loop muted playsinline preload="none" width="1066" height="774" data-lazy data-poster="media/small-panel.png" aria-label="Libre Default on a 3.5-inch panel: lit rings for CPU and memory fill, a CPU history scrolls, and the corner card changes from the playing track to the weather">
+            <source src="media/small-panel.webm" type="video/webm">
+            <source src="media/small-panel.mp4" type="video/mp4">
+          </video>
+          <noscript><img src="media/small-panel.gif" width="960" height="697" loading="lazy" alt="Libre Default on a 3.5-inch panel"></noscript>
+          <button class="toggle" type="button" data-playing="false" data-pause="Pause the clip" data-play="Play the clip" aria-label="Play the clip"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+        </figure>
+      </article>
+    </div>
+  </section>
+
+  <section id="app" aria-labelledby="app-title">
+    <div class="wrap">
+      <div class="head">
+        <p class="kicker">The app</p>
+        <h2 id="app-title">Everything in one window</h2>
+        <p>Libre Panel's app opens in a window of its own and draws every picture with the panel's own
+          renderer: what you see is what the panel shows.</p>
+        <ul class="views">
+          <li><b>Start</b> the panel and its themes</li>
+          <li><b>Design</b> build a theme</li>
+          <li><b>Look</b> colours, light, notices</li>
+          <li><b>Live</b> how it runs</li>
+          <li><b>Settings</b> all of config.toml</li>
+        </ul>
+      </div>
+      <figure class="tile app-main">
+        <div class="media">
+          <video loop muted playsinline preload="none" width="2560" height="1440" data-lazy data-poster="media/app-drag-module.png" aria-label="Design: a weather module is dragged from the library onto a 3.5-inch panel, made wider, and shows more as it grows">
+            <source src="media/app-drag-module.webm" type="video/webm">
+            <source src="media/app-drag-module.mp4" type="video/mp4">
+          </video>
+          <noscript><img src="media/app-drag-module.gif" width="960" height="540" loading="lazy" alt="Design: a module dragged onto the panel"></noscript>
+          <button class="toggle" type="button" data-playing="false" data-pause="Pause the clip" data-play="Play the clip" aria-label="Play the clip"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+        </div>
+        <figcaption><strong>Design</strong>Drag building blocks onto the panel. A module fits itself to
+          the room you give it and shows more the larger it is: 25 of them, from every core to your
+          next appointment.</figcaption>
+      </figure>
+      <div class="app-grid">
+        <figure class="tile">
+          <div class="media">
+            <video loop muted playsinline preload="none" width="2560" height="1440" data-lazy data-poster="media/app-look.png" aria-label="Look: a click on the colour world Neon recolours the whole of Lumen, and a test notice shows how notices will look">
+              <source src="media/app-look.webm" type="video/webm">
+              <source src="media/app-look.mp4" type="video/mp4">
+            </video>
+            <noscript><img src="media/app-look.gif" width="960" height="540" loading="lazy" alt="Look: a colour world for the whole theme"></noscript>
+            <button class="toggle" type="button" data-playing="false" data-pause="Pause the clip" data-play="Play the clip" aria-label="Play the clip"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+          </div>
+          <figcaption><strong>Look</strong>Six colour worlds, how each part is drawn, the panel light,
+            the dust, and how notices look, tried with a test notice.</figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="media">
+            <video loop muted playsinline preload="none" width="2560" height="1440" data-lazy data-poster="media/app-command-palette.png" aria-label="Ctrl+K: typing neon finds the look Neon, and Enter applies it to the whole panel">
+              <source src="media/app-command-palette.webm" type="video/webm">
+              <source src="media/app-command-palette.mp4" type="video/mp4">
+            </video>
+            <noscript><img src="media/app-command-palette.gif" width="960" height="540" loading="lazy" alt="The command palette finds a look"></noscript>
+            <button class="toggle" type="button" data-playing="false" data-pause="Pause the clip" data-play="Play the clip" aria-label="Play the clip"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+          </div>
+          <figcaption><strong><kbd>Ctrl</kbd> + <kbd>K</kbd></strong>Every command, theme, module,
+            sensor and setting, found by a few letters.</figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="media">
+            <video loop muted playsinline preload="none" width="2560" height="1440" data-lazy data-poster="media/app-hardware-names.png" aria-label="Settings, Sensors: the detected processor name is replaced by a name of one's own">
+              <source src="media/app-hardware-names.webm" type="video/webm">
+              <source src="media/app-hardware-names.mp4" type="video/mp4">
+            </video>
+            <noscript><img src="media/app-hardware-names.gif" width="960" height="540" loading="lazy" alt="Hardware names in the settings"></noscript>
+            <button class="toggle" type="button" data-playing="false" data-pause="Pause the clip" data-play="Play the clip" aria-label="Play the clip"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+          </div>
+          <figcaption><strong>Your hardware, by name</strong>The processor, graphics card and memory
+            are named as they report themselves; type your own and every theme shows it.</figcaption>
+        </figure>
+        <figure class="tile">
+          <div class="media">
+            <img src="images/editor-new.png" width="1290" height="657" loading="lazy" decoding="async" alt="The New theme dialog: starting layouts for the 9.2-inch panel and six looks">
+          </div>
+          <figcaption><strong>A theme of your own</strong>Starting layouts for your panel in six looks,
+            or any theme as the start; everything can be changed later.</figcaption>
+        </figure>
       </div>
     </div>
   </section>
 
-  <section id="panels">
+  <section id="themes" aria-labelledby="themes-title">
     <div class="wrap">
-      <div class="kicker">Hardware</div>
-      <h2>Panels</h2>
-      <table>
-        <thead><tr><th>Panel</th><th>Status</th><th>Notes</th></tr></thead>
+      <div class="head">
+        <p class="kicker">Themes</p>
+        <h2 id="themes-title">Libre Panel's own themes</h2>
+        <p>Made for the panels they run on, and every one moves to every other panel size. The bars
+          start with Lumen, every other panel with Libre Default.</p>
+      </div>
+      <div class="themes">
+        <figure class="theme wide">
+          <div class="theme-picture"><img src="images/lumen.png" width="1920" height="480" loading="lazy" decoding="async" alt="Lumen"></div>
+          <figcaption><span class="theme-name">Lumen <span class="chip chip-accent">Default on the bars</span><span class="size">8.8" and 9.2"</span></span>
+            What plays, else the weather, else the day; the time with the load of the last minute as
+            scrolling light and the fans turning; lit rings for CPU, GPU and RAM named after your
+            hardware.</figcaption>
+        </figure>
+        <figure class="theme wide">
+          <div class="theme-picture"><img src="images/studio.png" width="1920" height="480" loading="lazy" decoding="async" alt="Studio"></div>
+          <figcaption><span class="theme-name">Studio <span class="size">8.8" and 9.2"</span></span>
+            Calm: a large clock, the card slot and lit rings for CPU, RAM and GPU.</figcaption>
+        </figure>
+        <figure class="theme">
+          <div class="theme-picture"><img src="images/libre-default.png" width="480" height="320" loading="lazy" decoding="async" alt="Libre Default"></div>
+          <figcaption><span class="theme-name">Libre Default <span class="chip chip-accent">Default</span><span class="size">3.5"</span></span>
+            Two lit rings, temperature, disk and network, a history that scrolls.</figcaption>
+        </figure>
+        <figure class="theme">
+          <div class="theme-picture"><img src="images/slate.png" width="800" height="480" loading="lazy" decoding="async" alt="Slate"></div>
+          <figcaption><span class="theme-name">Slate <span class="size">5"</span></span>
+            Four cards: CPU, GPU, memory and network.</figcaption>
+        </figure>
+        <figure class="theme">
+          <div class="theme-picture"><img class="round" src="images/orbit.png" width="480" height="480" loading="lazy" decoding="async" alt="Orbit"></div>
+          <figcaption><span class="theme-name">Orbit <span class="size">round 2.1" and 2.8"</span></span>
+            Three rings around a large clock.</figcaption>
+        </figure>
+        <figure class="theme">
+          <div class="theme-picture"><img src="images/column.png" width="320" height="480" loading="lazy" decoding="async" alt="Column"></div>
+          <figcaption><span class="theme-name">Column <span class="size">3.5" portrait</span></span>
+            The clock, a row per resource and the network.</figcaption>
+        </figure>
+        <figure class="theme">
+          <div class="theme-picture"><img class="pixel" src="images/pico.png" width="160" height="80" loading="lazy" decoding="async" alt="Pico"></div>
+          <figcaption><span class="theme-name">Pico <span class="size">0.96"</span></span>
+            CPU with its temperature, and memory, for the smallest stick.</figcaption>
+        </figure>
+        <figure class="theme mine">
+          <div class="theme-picture"><img src="images/looks.png" width="2042" height="1021" loading="lazy" decoding="async" alt="The same layout in six looks: Arctic, Neon, Graphite, Paper, Sunset and Mono"></div>
+          <figcaption><span class="theme-name">Your own <span class="chip chip-quiet">25 modules · 6 looks</span></span>
+            Start from a layout or any theme. Themes are plain JSON with their pictures and fonts,
+            cannot run code, and are easy to share.</figcaption>
+        </figure>
+      </div>
+      <p class="legacy">Also built in: the eight screens of SPUR II, the project Libre Panel grew out
+        of, as a legacy collection, and the round report. <a href="#origin">Where it started</a></p>
+
+      <div class="fits">
+        <div>
+          <span class="label">Fits every PC</span>
+          <h3>Named after your hardware, with nothing left blank</h3>
+          <ul>
+            <li>The processor, graphics card and memory under the names they report, found by Libre
+              Panel itself without administrator rights, or the names you type.</li>
+            <li>A part steps aside when its readings are missing: the disk takes the ring of a graphics
+              card that reports nothing.</li>
+            <li>Nothing playing and no weather: the card shows the day.</li>
+            <li>Dates and weather in English or German, for the place you set.</li>
+          </ul>
+        </div>
+        <figure class="media media-plain">
+          <img src="images/studio-adapts.png" width="1800" height="1150" loading="lazy" decoding="async" alt="Studio with nothing playing and the weather off, where the day takes the card, and on a PC without a GPU sensor, where the disk takes its ring">
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="inside" aria-labelledby="inside-title">
+    <div class="wrap">
+      <div class="head">
+        <p class="kicker">Under the hood</p>
+        <h2 id="inside-title">Sensors in, extras optional</h2>
+        <p>Libre Panel reads what your PC already knows. The extras are services, and each one is off
+          until you switch it on in Settings.</p>
+      </div>
+      <div class="two">
+        <div class="card">
+          <h3>Sensors</h3>
+          <p>Read only while a theme or a service shows them.</p>
+          <ul class="rows">
+            <li><b>LibreHardwareMonitor, built in</b><span class="chip chip-quiet">Windows</span>
+              <span class="desc">GPU, temperatures, power and fans, read inside Libre Panel with no other
+                program. The CPU's temperature and power need administrator rights and the PawnIO
+                driver.</span></li>
+            <li><b>Load ten times a second</b>
+              <span class="desc">CPU and GPU load as it happens, the GPU as Task Manager shows it, and the
+                volume on every frame.</span></li>
+            <li><b>What is playing</b>
+              <span class="desc">Title, cover and the player's icon, from Windows' media controls or any
+                MPRIS player on Linux.</span></li>
+            <li><b>Weather</b><span class="chip off">off</span>
+              <span class="desc">From Open-Meteo, with the next hours and the rain of the next two hours;
+                no API key.</span></li>
+            <li><b>And more</b>
+              <span class="desc">Every core, drive and fan, calendars, Home Assistant, MQTT, sunrise and
+                the moon, and PresentMon for games.</span></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Services</h3>
+          <p>Built in, and each one off until you switch it on.</p>
+          <ul class="rows">
+            <li><b>Notices</b><span class="chip off">off</span><span class="desc">The volume, a new
+              track, sensors past your limits, a panel that restarted.</span></li>
+            <li><b>Game mode</b><span class="chip off">off</span><span class="desc">Finds the game and
+              switches with the entrance.</span></li>
+            <li><b>Memory and round report</b><span class="chip off">off</span><span class="desc">The
+              desk's history in a file on this PC, and a report after each round.</span></li>
+            <li><b>Cooling analysis</b><span class="chip off">off</span><span class="desc">Checks
+              FanControl's curves against what the PC did; reads, never writes.</span></li>
+            <li><b>Downloads</b><span class="chip off">off</span><span class="desc">Steam and browser
+              downloads for the network card.</span></li>
+            <li><b>Autopilot</b><span class="chip off">off</span><span class="desc">Picks the theme by
+              the rules you write.</span></li>
+            <li><b>Devices</b><span class="chip off">off</span><span class="desc">Drives, USB devices and
+              controllers that come and go (Windows).</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="panels" aria-labelledby="panels-title">
+    <div class="wrap">
+      <div class="head">
+        <p class="kicker">Panels</p>
+        <h2 id="panels-title">The panels it drives</h2>
+        <p>Every one plugs in with USB. TURZX USB panels are USB devices with a video decoder; the
+          others show up as a virtual COM port.</p>
+      </div>
+      <table class="table">
+        <thead><tr><th scope="col">Panel</th><th scope="col">Sizes</th><th scope="col">Connects as</th><th scope="col">Status</th></tr></thead>
         <tbody>
-          <tr><td>Turing / TURZX USB 4.6"–12.3", 2.8" round</td><td><span class="chip ok">runs on the 9.2"</span></td>
-            <td>hours of stills and 50 fps video; the other sizes speak the same protocol and wait for a report</td></tr>
-          <tr><td>Turing Smart Screen 2.1", 3.5", 5", 8.8" (USB serial)</td><td><span class="chip wait">unverified</span></td>
-            <td>driver written after turing-smart-screen-python</td></tr>
-          <tr><td>UsbPCMonitor 3.5", 5", 7"</td><td><span class="chip wait">unverified</span></td><td>rev. A protocol</td></tr>
-          <tr><td>XuanFang 3.5" and flagship</td><td><span class="chip wait">unverified</span></td><td>rev. B protocol</td></tr>
-          <tr><td>Kipye Qiye 3.5"</td><td><span class="chip wait">unverified</span></td><td>rev. D protocol</td></tr>
-          <tr><td>WeAct Display FS V1 3.5", 0.96"</td><td><span class="chip wait">unverified</span></td><td>WeAct protocol</td></tr>
+          <tr><th scope="row">Turing / TURZX</th><td data-label="Sizes">2.8" round, 4.6", 5.2", 8", 8.8", 9.2", 12.3"</td><td data-label="Connects as">USB device, video mode</td>
+            <td class="status"><span class="state ok">Runs on the 9.2"</span><small>Hours of stills and 50 fps video; the other sizes speak the same protocol</small></td></tr>
+          <tr><th scope="row">Turing Smart Screen</th><td data-label="Sizes">2.1" round, 3.5", 5", 8.8"</td><td data-label="Connects as">virtual COM port</td><td class="status"><span class="state wait">Unverified</span></td></tr>
+          <tr><th scope="row">UsbPCMonitor</th><td data-label="Sizes">3.5", 5", 7"</td><td data-label="Connects as">virtual COM port</td><td class="status"><span class="state wait">Unverified</span></td></tr>
+          <tr><th scope="row">XuanFang</th><td data-label="Sizes">3.5"</td><td data-label="Connects as">virtual COM port</td><td class="status"><span class="state wait">Unverified</span></td></tr>
+          <tr><th scope="row">Kipye Qiye</th><td data-label="Sizes">3.5"</td><td data-label="Connects as">virtual COM port</td><td class="status"><span class="state wait">Unverified</span></td></tr>
+          <tr><th scope="row">WeAct Display FS V1</th><td data-label="Sizes">0.96", 3.5"</td><td data-label="Connects as">virtual COM port</td><td class="status"><span class="state wait">Unverified</span></td></tr>
         </tbody>
       </table>
-      <div class="note"><strong style="color: var(--tx-1)">Own one of these?</strong>
-        Run <code>libre-panel doctor</code>: it checks the panel end to end and writes a
-        report. Attach it to a <a href="https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml">panel report</a>
-        and your model becomes <em>supported</em> for everyone.
-        <a href="https://github.com/syntensa/libre-panel/blob/main/docs/HARDWARE.md">All panels</a></div>
+      <div class="callout">
+        <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
+        <p><strong>Own one marked unverified?</strong> Its driver follows a protocol proven on real
+          panels, but nobody has confirmed the model with Libre Panel yet. <code>libre-panel doctor</code>
+          checks it end to end and writes a report without serial numbers: attach it to a
+          <a href="https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml">panel report</a>
+          and the model becomes supported for everyone.
+          <a href="https://github.com/syntensa/libre-panel/blob/main/docs/HARDWARE.md">All panels and their setup</a></p>
+      </div>
     </div>
   </section>
 
-  <section id="install">
+  <section id="privacy" aria-labelledby="privacy-title">
     <div class="wrap">
-      <div class="kicker">Get it</div>
-      <h2>Install</h2>
-      <div class="os">
-        <div class="card"><h3>Windows 10 / 11</h3>
-          <p>Setup for your user, no admin rights; optional start at login.</p>
-          <a class="btn" href="https://github.com/syntensa/libre-panel/releases/latest">Setup .exe</a></div>
-        <div class="card"><h3>Linux</h3>
-          <p>x86-64 AppImage: make it executable and start it. A tarball too.</p>
-          <a class="btn" href="https://github.com/syntensa/libre-panel/releases/latest">AppImage</a></div>
+      <div class="promise">
+        <p class="kicker">Privacy</p>
+        <h2 id="privacy-title">Nothing leaves your PC except the weather you turn on.</h2>
+        <p>No account, no telemetry, no update check. The app is served to your own PC only, and
+          only to requests that carry a secret token, new at every start.</p>
+        <ul class="points">
+          <li><b>The weather</b>Off until you set a place; then only its coordinates go to Open-Meteo,
+            every 15 minutes. A place you look up by name is sent when you press Search, and kept to
+            about a kilometre.</li>
+          <li><b>What you connect yourself</b>Calendars, Home Assistant and MQTT talk to the addresses you
+            give them. The ping of the network details module connects to 1.1.1.1 while it is on the
+            panel, and a cover a player names by a web address is loaded from there.</li>
+          <li><b>The optional services</b>Keep what they learn on this PC, in a file you can open or
+            delete. FanControl's configuration is read, never written. No track title, window title or
+            file name is read.</li>
+          <li><b>Your hardware's names</b>Never go to the log, and the report of
+            <code>libre-panel doctor</code> has no serial numbers and no personal paths.</li>
+        </ul>
       </div>
-<pre><span class="c"># or with Python</span>
-pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.4.2"
-libre-panel tray        <span class="c"># background app with tray icon; opens its window</span>
-libre-panel doctor      <span class="c"># check your panel, write a report</span></pre>
-      <p class="fineprint" style="margin-top: 14px">The Windows downloads are not code-signed
-        yet: SmartScreen asks once (<em>More info → Run anyway</em>). Close the vendor app
-        first; it keeps the panel to itself.</p>
+    </div>
+  </section>
+
+  <section id="install" aria-labelledby="install-title">
+    <div class="wrap">
+      <div class="head">
+        <p class="kicker">Install</p>
+        <h2 id="install-title">Install and first start</h2>
+        <p>No Python needed. <span data-version="Version {v}, from GitHub.">From the latest release on GitHub.</span></p>
+      </div>
+      <div class="os">
+        <div class="card">
+          <h3>Windows 10 and 11</h3>
+          <p>A setup for your user, without administrator rights: a start menu entry, an optional start
+            at login, and an uninstaller that keeps only your settings and themes. A portable zip
+            too.</p>
+          <a class="btn btn-primary" data-asset="setup" href="https://github.com/syntensa/libre-panel/releases/latest"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Download the setup</a>
+          <small>Not code-signed yet: SmartScreen asks once (<em>More info → Run anyway</em>).</small>
+        </div>
+        <div class="card">
+          <h3>Linux</h3>
+          <p>An AppImage for x86-64: make it executable and start it, no installation. Allow USB access
+            once with <code>libre-panel udev-rules</code>. A tarball too.</p>
+          <a class="btn btn-primary" data-asset="appimage" href="https://github.com/syntensa/libre-panel/releases/latest"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Download the AppImage</a>
+          <small>The AppImage opens the app in the browser for now.
+            <a href="https://github.com/syntensa/libre-panel/blob/main/docs/HARDWARE.md#setup-per-operating-system">Setup per system</a></small>
+        </div>
+      </div>
+      <ol class="steps">
+        <li><b>Close the vendor app</b>It keeps the panel to itself.</li>
+        <li><b>Start Libre Panel</b>With the panel plugged in. A TURZX USB panel is found by itself.</li>
+        <li><b>Pick a look</b>Start asks "How should it look?" with the themes made for your panel.</li>
+        <li><b>Turn on what you want</b>The weather, video mode and the services in Settings; the tray
+          icon has the rest.</li>
+      </ol>
+      <div class="python">
+        <p>With Python instead:</p>
+<pre><code>pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.5.0"
+libre-panel tray               <span class="c"># the background app with its tray icon</span>
+libre-panel doctor             <span class="c"># check your panel, write a report</span></code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" aria-labelledby="faq-title">
+    <div class="wrap">
+      <div class="head">
+        <p class="kicker">FAQ</p>
+        <h2 id="faq-title">Questions</h2>
+      </div>
+      <div class="faq">
+        <details>
+          <summary>Which panel do I have?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <div class="answer"><p>The product name and the back label usually say it. Plugged in,
+            <code>libre-panel devices</code> lists what it sees: a TURZX USB panel shows up with the USB
+            id <code>1cbe:…</code> and its size, the others as a virtual COM port. Start in the app names
+            the panel it found, and <em>Another panel</em> lets you choose. When in doubt,
+            <code>libre-panel doctor</code> asks and checks.</p></div>
+        </details>
+        <details>
+          <summary>Why do the CPU temperature and power show <code>--</code> on Windows?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <div class="answer"><p>The Windows downloads read the graphics card, power and fans with the
+            LibreHardwareMonitor library built in. The processor's temperature, power and clock, the
+            RAM's temperature and the mainboard's fans also need administrator rights and the
+            <a href="https://pawnio.eu">PawnIO</a> driver; the tray says which one is missing.</p>
+            <p>To start with those rights at every login, run <code>libre-panel autostart enable --elevated</code>
+            in a terminal opened as administrator, but only where only administrators can change Libre
+            Panel's files, such as the portable zip under Program Files
+            (<a href="https://github.com/syntensa/libre-panel/blob/main/docs/BACKGROUND.md#windows-starting-with-the-highest-rights">why</a>).
+            A LibreHardwareMonitor you run yourself with its web server works too.</p></div>
+        </details>
+        <details>
+          <summary>How do I get the smooth video mode? Do I need ffmpeg?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <div class="answer"><p>Video mode is for the TURZX USB panels, which have a video decoder. It
+            needs <a href="https://ffmpeg.org">ffmpeg</a> (Windows: <code>winget install ffmpeg</code>;
+            Linux: your distribution's package) and, in Settings → Panel, the name of the panel's standby
+            clip as the vendor app shows it. On the 9.2" it then turns itself on; on the other TURZX USB
+            panels, set it to on to try it. Nothing is saved on the panel
+            (<a href="https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md#video">details</a>).</p></div>
+        </details>
+        <details>
+          <summary>Do I need LibreHardwareMonitor, FanControl or PresentMon?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <div class="answer"><p>No other program is needed for the basics: LibreHardwareMonitor is built
+            into the Windows downloads. The game's frame rate needs Intel's
+            <a href="https://github.com/GameTechDev/PresentMon/releases">PresentMon</a> (Windows), which
+            you download and name in the settings. The cooling analysis reads FanControl's fan curves, if
+            you use FanControl.</p></div>
+        </details>
+        <details>
+          <summary>Can it harm my panel?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <div class="answer"><p>Libre Panel sends display commands only: pictures, brightness, video. It
+            never touches the firmware and stores nothing on the panel; firmware updates stay the
+            vendor app's job.</p></div>
+        </details>
+        <details>
+          <summary>Does it run on macOS?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
+          <div class="answer"><p>Not since 0.5: Windows and Linux are supported, and nobody downloaded the
+            macOS builds of earlier releases.</p></div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section id="origin" aria-labelledby="origin-title">
+    <div class="wrap origin">
+      <div>
+        <p class="kicker">Where it started</p>
+        <h2 id="origin-title">It began as SPUR II, on one 9.2" panel</h2>
+        <p>Libre Panel grew out of SPUR II, a private dashboard for one panel on one PC. SPUR II proved
+          the panel's USB protocol and its video mode on real hardware, and its ideas (light in milled
+          grooves, the cards, the band, the tube) are now Libre Panel's own, for every panel and every
+          PC.</p>
+        <p>Its eight screens ship as the legacy collection SPUR II, at the end of Start → All.</p>
+      </div>
+      <figure class="media">
+        <video loop muted playsinline preload="none" width="2000" height="580" data-lazy data-poster="media/where-it-started.png" aria-label="SPUR II's classic screen in video mode: the wordmark, fans and clock above, CPU and GPU load charts, and CPU, RAM, GPU and network with values as light">
+          <source src="media/where-it-started.webm" type="video/webm">
+          <source src="media/where-it-started.mp4" type="video/mp4">
+        </video>
+        <noscript><img src="media/where-it-started.gif" width="960" height="278" loading="lazy" alt="SPUR II's classic screen in video mode"></noscript>
+        <button class="toggle" type="button" data-playing="false" data-pause="Pause the clip" data-play="Play the clip" aria-label="Play the clip"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+      </figure>
     </div>
   </section>
 </main>
 
 <footer>
-  <div class="wrap">
-    <p>Libre Panel is free software under the GPL-3.0. It stands on the shoulders of
-      <a href="https://github.com/mathoudebine/turing-smart-screen-python">turing-smart-screen-python</a>,
-      whose reverse-engineering documents these panels, and of the SPUR II project, which
-      verified the USB protocol on real hardware.</p>
-    <p>"TURZX", "Turing Smart Screen" and other product names are trademarks of their owners.
-      Libre Panel is an independent project and not affiliated with them.</p>
-    <p><a href="https://github.com/syntensa/libre-panel">GitHub</a> ·
-      <a href="https://github.com/syntensa/libre-panel/releases">Releases</a> ·
-      <a href="https://github.com/syntensa/libre-panel/blob/main/docs/THEMES.md">Theme format</a> ·
-      <a href="https://github.com/syntensa/libre-panel/blob/main/CONTRIBUTING.md">Contributing</a></p>
+  <div class="wrap foot">
+    <div>
+      <p>Libre Panel is free software under the GPL-3.0. It stands on the shoulders of
+        <a href="https://github.com/mathoudebine/turing-smart-screen-python">turing-smart-screen-python</a>,
+        whose reverse-engineering documents these panels; the Windows downloads carry
+        <a href="https://github.com/LibreHardwareMonitor/LibreHardwareMonitor">LibreHardwareMonitor</a>
+        (MPL-2.0). Fonts: Barlow and JetBrains Mono (SIL OFL). Weather data by
+        <a href="https://open-meteo.com">Open-Meteo.com</a>.</p>
+      <p>"TURZX", "Turing Smart Screen" and other product names are trademarks of their owners. Libre
+        Panel is an independent project and not affiliated with them.</p>
+    </div>
+    <div>
+      <h2>Project</h2>
+      <ul>
+        <li><a href="https://github.com/syntensa/libre-panel">Source on GitHub</a></li>
+        <li><a href="https://github.com/syntensa/libre-panel/releases">Releases</a></li>
+        <li><a href="https://github.com/syntensa/libre-panel/blob/main/CHANGELOG.md">Changelog</a></li>
+        <li><a href="https://github.com/syntensa/libre-panel/discussions">Discussions</a></li>
+        <li><a href="https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml">Report a panel</a></li>
+        <li><a href="de/" hreflang="de" lang="de">Deutsch</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2>Docs</h2>
+      <ul>
+        <li><a href="https://github.com/syntensa/libre-panel/blob/main/docs/HARDWARE.md">Panels</a></li>
+        <li><a href="https://github.com/syntensa/libre-panel/blob/main/docs/BACKGROUND.md">Background app</a></li>
+        <li><a href="https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md">Configuration</a></li>
+        <li><a href="https://github.com/syntensa/libre-panel/blob/main/docs/THEMES.md">Themes</a></li>
+        <li><a href="https://github.com/syntensa/libre-panel/blob/main/docs/PLUGINS.md">Plugins</a></li>
+      </ul>
+    </div>
   </div>
 </footer>
 </body>

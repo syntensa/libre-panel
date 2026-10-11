@@ -1,13 +1,19 @@
 name: Website
 
-# Publishes site/ with the pictures from docs/images to GitHub Pages once
-# Pages is on (Settings → Pages → Source: GitHub Actions); until then the
-# build runs and the deploy is skipped.
+# Publishes site/ (English, and German in site/de) with the pictures from docs/images and the
+# clips from docs/media to GitHub Pages once Pages is on (Settings → Pages → Source: GitHub
+# Actions); until then the build runs and the deploy is skipped. The clips are made for each
+# release (docs/RELEASING.md): without them the build fails and the site stays as it was.
 
 on:
   push:
     branches: [main]
-    paths: ["site/**", "docs/images/**", ".github/workflows/pages.yml"]
+    paths:
+      - "site/**"
+      - "docs/images/**"
+      - "docs/media/**"
+      - "tools/check_pages.py"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
@@ -32,14 +38,14 @@ jobs:
         id: pages
         continue-on-error: true
         uses: actions/configure-pages@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
       - name: Put the site together
-        run: |
-          mkdir -p _site/images _site/fonts
-          cp site/index.html _site/
-          cp docs/images/*.png _site/images/
-          cp src/libre_panel/assets/libre-panel.png _site/images/icon.png
-          cp src/libre_panel/fonts/Barlow-*.ttf src/libre_panel/fonts/JetBrainsMono-Medium.ttf \
-             src/libre_panel/fonts/OFL-*.txt _site/fonts/
+        # site/ with images/ (docs/images), media/ (docs/media), the icon and the fonts the
+        # stylesheet names; then every file a page names must be there, and nothing is loaded
+        # from another site.
+        run: python tools/check_pages.py --build _site
       - if: steps.pages.outcome == 'success'
         uses: actions/upload-pages-artifact@v3
         with:
