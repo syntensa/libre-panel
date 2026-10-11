@@ -219,6 +219,23 @@ def test_a_font_of_bitmaps_is_no_font_to_fall_back_to(tmp_path):
     assert Fallbacks([(emoji, None, 0), (mono, None, 0)]).find("😀") == (str(mono), 0)
 
 
+def test_a_font_freetype_makes_no_face_of_is_no_font_to_fall_back_to(tmp_path, monkeypatch):
+    """Noto Color Emoji has outlines for no size (a bitmap of one): Pillow cannot open it at the
+    size of a text, and the next font that has the emoji is the one."""
+    bitmaps = make_font(tmp_path / "colour.ttf", "😀")
+    mono = make_font(tmp_path / "mono.ttf", "😀")
+    real = ImageFont.truetype
+
+    def truetype_but(path, *args, **kwargs):
+        if str(path) == str(bitmaps):
+            raise OSError("invalid pixel size")
+        return real(path, *args, **kwargs)
+
+    monkeypatch.setattr(ImageFont, "truetype", truetype_but)
+    fonts = Fallbacks([(bitmaps, None, 0), (mono, None, 0)])
+    assert fonts.find("😀") == (str(mono), 0)
+
+
 def test_fontconfig_is_asked_for_what_no_listed_font_has(tmp_path, monkeypatch):
     cjk = make_font(tmp_path / "cjk.ttf", "中日")
     asked = []

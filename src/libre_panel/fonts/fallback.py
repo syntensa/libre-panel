@@ -167,6 +167,18 @@ def coverage(path: str, index: int = 0) -> Coverage | None:
 
 # -- system fonts ------------------------------------------------------------------------------
 
+
+@lru_cache(maxsize=64)
+def _opens(path: str, index: int) -> bool:
+    """Whether FreeType makes a face of the font at a size we ask for: a colour emoji font of
+    bitmaps (Noto Color Emoji) has one size only, and the face of any other would be boxes."""
+    try:
+        ImageFont.truetype(path, 16, index)
+    except (OSError, ValueError):
+        return False
+    return True
+
+
 # Regular file, bold file and index in the file of the system fonts that fill the gaps of the
 # bundled ones, in the order they are tried. Windows: its font folder; Segoe UI and Segoe UI
 # Symbol cover most scripts and symbols, the East Asian fonts the rest of the ideographs.
@@ -274,7 +286,7 @@ class Fallbacks:
     @staticmethod
     def _has(code: int, path: str, index: int) -> bool:
         found = coverage(path, index)
-        return found is not None and found.outlines and code in found
+        return found is not None and found.outlines and code in found and _opens(path, index)
 
 
 def _fontconfig(ch: str, bold: bool) -> list[tuple[str, int]]:
