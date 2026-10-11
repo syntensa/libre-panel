@@ -321,6 +321,15 @@ def settings_app(isolated_home, autostart=None):
     return BackgroundApp(port=0, autostart=auto, autostart_command=["/opt/libre-panel", "tray"])
 
 
+def test_the_settings_open_under_the_strict_csp(app_url):
+    """No section needs what the app's CSP forbids (inline scripts, inline styles)."""
+    with browser_page(app_url, "settings/panel", strict_csp=True) as page:
+        for section in ("panel", "sensors", "services", "weather", "system", "about"):
+            page.goto(f"{app_url}#/settings/{section}")
+            page.wait_for_selector(".settings-main .settings-card")
+            page.wait_for_timeout(200)
+
+
 def test_settings_panel(app_url, isolated_home, monkeypatch):
     """The panel found, the video mode (and its clip name, written only when typed), the
     frame rate, brightness, upside down, another panel, and Advanced."""
@@ -787,7 +796,11 @@ def test_settings_about(app_url, isolated_home, monkeypatch):
         hrefs = [links.nth(i).get_attribute("href") for i in range(links.count())]
         assert "https://github.com/syntensa/libre-panel" in hrefs
         assert any(href.endswith("template=panel_support.yml") for href in hrefs)
-        assert page.locator(".command").inner_text().endswith("doctor")
+        commands = page.locator(".command")
+        assert [commands.nth(i).inner_text().split()[-1] for i in range(commands.count())] == [
+            "doctor",
+            "devices",
+        ]
         assert str(isolated_home) in page.locator("[data-folder='config']").inner_text()
         page.locator("[data-folder='themes'] button").click()
         page.locator("[data-folder='logs'] button").click()

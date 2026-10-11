@@ -661,6 +661,7 @@ def test_about_gives_the_version_the_licence_the_links_and_the_folders(server, i
     assert data["links"]["project"] == "https://github.com/syntensa/libre-panel"
     assert data["links"]["hardware_report"].endswith("template=panel_support.yml")
     assert data["doctor"].endswith("libre-panel doctor") or data["doctor"].endswith("doctor")
+    assert data["devices"].endswith("devices")  # the report form asks for both
     assert data["folders"]["config"] == str(isolated_home)
     assert data["folders"]["themes"] == str(isolated_home / "themes")
     assert data["folders"]["logs"] == str(isolated_home / "logs")

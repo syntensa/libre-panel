@@ -64,6 +64,7 @@ class Restart:
     def __init__(self) -> None:
         self.keys: list[str] = []
         self._run: Any = None
+        self._lock = threading.Lock()  # the requests come in threads of their own
 
     @staticmethod
     def _run_of(controls: Any) -> Any:
@@ -73,13 +74,15 @@ class Restart:
         wanted = [name for name in names if name.startswith(RESTART_PREFIXES)]
         if wanted:
             self.pending(controls)  # a restart since the last change clears that one first
-            self._run = self._run_of(controls)
-            self.keys += [name for name in wanted if name not in self.keys]
+            with self._lock:
+                self._run = self._run_of(controls)
+                self.keys += [name for name in wanted if name not in self.keys]
 
     def pending(self, controls: Any) -> list[str]:
-        if self.keys and self._run is not None and self._run_of(controls) is not self._run:
-            self.keys = []
-        return list(self.keys)
+        with self._lock:
+            if self.keys and self._run is not None and self._run_of(controls) is not self._run:
+                self.keys = []
+            return list(self.keys)
 
 
 # -- what a setting may be -----------------------------------------------------------------------
@@ -577,6 +580,7 @@ class Settings:
                 "hardware_report": f"{PROJECT_URL}/issues/new?template=panel_support.yml",
             },
             "doctor": cli_command("doctor"),
+            "devices": cli_command("devices"),
             "folders": folders(),
         }
 

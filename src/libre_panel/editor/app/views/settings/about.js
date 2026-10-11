@@ -35,6 +35,14 @@ function Version() {
   <//>`;
 }
 
+/** A command to run in a terminal, with the button that copies it. */
+function Command({ command }) {
+  return html`<div class="command-row">
+    <pre class="command" tabindex="0">${command}</pre>
+    <button type="button" class="btn" onClick=${() => copyText(command)}>${t("Copy the command")}</button>
+  </div>`;
+}
+
 function HardwareReport() {
   const info = useStore((s) => s.aboutInfo);
   if (!info) return null;
@@ -45,14 +53,19 @@ function HardwareReport() {
   >
     <${SettingRow}
       stacked
-      title=${t("Run this in a terminal")}
-      hint=${t("Quit Libre Panel first (the tray menu): the doctor needs the panel to itself. It writes a file; attach it to a hardware report.")}
+      title=${t("Check the panel")}
+      hint=${t("Quit Libre Panel first (the tray menu): the doctor needs the panel to itself. It writes a file with what it found.")}
     >
-      <div class="command-row">
-        <pre class="command" tabindex="0">${info.doctor}</pre>
-        <button type="button" class="btn" onClick=${() => copyText(info.doctor)}>${t("Copy the command")}</button>
-        ${external(info.links.hardware_report, t("Open the report form"))}
-      </div>
+      <${Command} command=${info.doctor} />
+    <//>
+    <${SettingRow} stacked title=${t("List what is connected")} hint=${t("Paste what it prints into the report.")}>
+      <${Command} command=${info.devices} />
+    <//>
+    <${SettingRow}
+      title=${t("Send the report")}
+      hint=${t("The form asks for the product name, the doctor's file and this list.")}
+    >
+      ${external(info.links.hardware_report, t("Open the report form"))}
     <//>
   <//>`;
 }
