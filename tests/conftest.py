@@ -54,6 +54,16 @@ def no_machine_names(monkeypatch):
     monkeypatch.setattr(hardware, "_scan_machine", lambda *args: hardware.Found())
 
 
+@pytest.fixture(autouse=True)
+def no_usb_panel(monkeypatch):
+    """A panel plugged into the machine running the tests stays out of them: a config that
+    names no theme looks for one on the USB bus to pick the panel's own. Nothing is on the
+    bus, until a test says so."""
+    from libre_panel.devices import turzx_usb
+
+    monkeypatch.setattr(turzx_usb.UsbTransport, "present", staticmethod(lambda pid: False))
+
+
 class NoTasks:
     """A Task Scheduler without tasks, for tests that do not bring their own."""
 

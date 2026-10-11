@@ -115,8 +115,8 @@ def test_turning_the_panel_follows_the_config_without_reopening_it(
     from libre_panel.config import load_config, set_config_value, write_default_config
 
     path = write_default_config()
-    text = re.sub(r"(?m)^providers = .*$", 'providers = ["demo"]', path.read_text())
-    path.write_text(text.replace('theme = "libre-default"', f'theme = "{static_theme()}"'))
+    path.write_text(re.sub(r"(?m)^providers = .*$", 'providers = ["demo"]', path.read_text()))
+    set_config_value("theme", static_theme(), path)
     panels = []
     monkeypatch.setattr(app_module, "create_display", lambda device: panels.append(
         RecordingPanel(device)) or panels[-1])  # fmt: skip
@@ -199,7 +199,9 @@ def test_set_active_theme_keeps_comments(isolated_home):
     text = path.read_text()
     assert 'theme = "spur-ii"' in text and "# Libre Panel configuration" in text
     assert load_config(path).theme == "spur-ii"
-    assert text.count("theme =") == 1
+    assert [line for line in text.splitlines() if line.startswith("theme =")] == [
+        'theme = "spur-ii"'
+    ]  # one, under the note that explains it
 
 
 def test_running_panel_picks_up_theme_changes(tmp_path, isolated_home):
