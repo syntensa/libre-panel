@@ -99,8 +99,8 @@ export function ThemeTitle() {
         <${Icon} name="chevron-down" size=${14} />
       </button>
       ${dirty
-        ? html`<button type="button" class="unsaved" title=${t("Save (Ctrl+S)")} onClick=${save}>
-            <span class="dot"></span>${t("Not saved")}
+        ? html`<button type="button" class="unsaved" title=${t("Save (Ctrl+S)")} aria-label=${t("Not saved")} onClick=${save}>
+            <span class="dot"></span><span class="unsaved-text">${t("Not saved")}</span>
           </button>`
         : null}
     </div>

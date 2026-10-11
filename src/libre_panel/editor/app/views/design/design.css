@@ -264,12 +264,18 @@
 }
 
 .tile-name {
-  padding: 7px 10px;
+  padding: 7px 9px;
   font-size: 13px;
   font-weight: 600;
+  line-height: 1.25;
+  /* a long name (German's) takes a second line before it is cut off, and a word longer
+     than the tile breaks instead of hiding its end */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 
 .tile.small .tile-picture {
@@ -278,7 +284,7 @@
 
 .tile.small .tile-name {
   font-size: 12px;
-  padding: 6px 8px;
+  padding: 6px 4px;
 }
 
 .drag-ghost {
@@ -1242,6 +1248,18 @@
 
 .size-steps .icon-btn {
   background: var(--surface);
+}
+
+/* in a popover (the toolbar's size) the width and the height have a line each, so the last
+   button is not cut off by the popover's edge */
+.popover .size-steps {
+  display: grid;
+  grid-template-columns: auto auto auto auto;
+  justify-content: start;
+}
+
+.popover .size-steps .muted {
+  margin-left: 0;
 }
 
 /* the sensor */

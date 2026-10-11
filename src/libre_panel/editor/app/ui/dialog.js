@@ -1,6 +1,6 @@
 // Modal dialogs in the app's look, as promises:
 //   if (await confirmDialog({ title, message, confirm: t("Delete"), danger: true })) …
-//   const name = await promptDialog({ title, label, value });   // null when cancelled
+//   const name = await promptDialog({ title, text, label, value });   // null when cancelled
 //   const result = await openDialog((close) => html`…`, { label, wide: true });
 
 import { createStore, useSelector } from "../core/store.js";
@@ -41,7 +41,7 @@ export function confirmDialog({ title, message, confirm = t("OK"), cancel = t("C
   ).then(Boolean);
 }
 
-function PromptBody({ close, title, label, value, placeholder, hint, confirm, validate }) {
+function PromptBody({ close, title, text: about, label, value, placeholder, hint, confirm, validate }) {
   const [text, setText] = useState(value || "");
   const problem = text.trim() && validate ? validate(text.trim()) : null;
   const submit = (event) => {
@@ -50,6 +50,7 @@ function PromptBody({ close, title, label, value, placeholder, hint, confirm, va
   };
   return html`<form onSubmit=${submit}>
     <h2 class="dialog-title">${title}</h2>
+    ${about ? html`<p class="dialog-text">${about}</p>` : null}
     <label class="field">
       <span class="field-label">${label}</span>
       <input

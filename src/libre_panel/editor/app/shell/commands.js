@@ -22,9 +22,11 @@ import { dialogOpen, openDialog } from "../ui/dialog.js";
 import { toastError } from "../ui/toast.js";
 import { pageName, panelName, shownPages } from "./panel-popover.js";
 import { newThemeDialog } from "./theme-menu.js";
-import { allViews, navigate } from "./views.js";
+import { allViews, navigate, showsTheme } from "./views.js";
 
 const hasDoc = () => Boolean(store.get().doc);
+/** Undo and redo change what a view shows, so they act where the theme is shown (not behind Settings). */
+const canEdit = () => hasDoc() && showsTheme();
 const appRuns = () => store.get().app.available && !store.get().app.quit;
 
 /** Shortcuts every view has; a view lists its own in `shortcuts` (shown by "Keyboard shortcuts"). */
@@ -78,8 +80,8 @@ export function registerAppCommands() {
     { id: "theme.import", title: () => t("Import a theme file…"), group: theme, icon: "upload", rank: 22, run: () => importTheme() },
     { id: "theme.export", title: () => t("Export as a file"), group: theme, icon: "download", when: hasDoc, rank: 23, run: exportTheme },
     { id: "theme.apply", title: () => t("To the panel"), hint: () => t("save and show"), group: theme, icon: "to-panel", when: hasDoc, rank: 11, run: applyToPanel },
-    { id: "edit.undo", title: () => t("Undo"), group: theme, icon: "undo", keys: "mod+z", when: () => store.get().canUndo, rank: 12, run: undo },
-    { id: "edit.redo", title: () => t("Redo"), group: theme, icon: "redo", keys: "mod+y", when: () => store.get().canRedo, rank: 13, run: redo },
+    { id: "edit.undo", title: () => t("Undo"), group: theme, icon: "undo", keys: "mod+z", when: () => canEdit() && store.get().canUndo, rank: 12, run: undo },
+    { id: "edit.redo", title: () => t("Redo"), group: theme, icon: "redo", keys: "mod+y", when: () => canEdit() && store.get().canRedo, rank: 13, run: redo },
     {
       id: "app.pause",
       title: () => (store.get().app.panel?.state === "paused" ? t("Resume panel") : t("Pause panel")),
@@ -216,8 +218,8 @@ export function registerAppCommands() {
     })),
   );
 
-  bindKey(["mod+z"], () => undo(), { when: () => !dialogOpen() && hasDoc() });
-  bindKey(["mod+y", "mod+shift+z"], () => redo(), { when: () => !dialogOpen() && hasDoc() });
+  bindKey(["mod+z"], () => undo(), { when: () => !dialogOpen() && canEdit() });
+  bindKey(["mod+y", "mod+shift+z"], () => redo(), { when: () => !dialogOpen() && canEdit() });
   bindKey("?", () => {
     openDialog((close) => html`<${ShortcutsHelp} close=${close} />`, { label: t("Keyboard shortcuts") });
   }, { when: () => !dialogOpen() });

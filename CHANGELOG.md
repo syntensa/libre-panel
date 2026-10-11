@@ -554,6 +554,21 @@
   to the left, a gap between them that closes, as SPUR II's Studio moves on
   to a new track; the parts are made once and each frame moves and cuts them.
   SPUR Studio slides in 0.55 s
+- *Design*, the new theme editor: the panel in the middle; modules, building
+  blocks and widgets from a library with pictures in the theme's colours, to
+  drag onto it; a toolbar over the selection for what it shows, how it is
+  drawn (light, facet, acrylic lettering, flat: those that show on it), its
+  colour and size; a short inspector with the rest under *Fine-tuning*, the
+  six looks in the theme's settings; corners that resize, snapping guides and
+  steps (1, 4, 8 or 16 px), several widgets at once, layers with lock and
+  eye, the theme's pictures and fonts. The panel's pages are tabs over it:
+  the normal theme, game mode's, the round report's and those of plugins'
+  modes, each with its frame rate
+- The panel chip in the header of *Design* and *Look* says how the running panel is
+  doing, as the old editor's did: the frame rate against its target, the data rate and
+  the drawing time (a number nothing counts, such as the data rate of a PNG file, is
+  left out), marked when the panel cannot keep up; *Live* beside them opens the Live
+  view, which has the same numbers, the sources and the log
 
 **Fixes**
 - On Windows the app's local port is held by Libre Panel alone; before, another
@@ -743,6 +758,64 @@
 - A theme moved to another panel kept the size of a graph's end dot (SPUR II Horizon's 9 px dot on
   a curve a sixth as big), of a bar's mark and of the moon. They scale with the panel like the
   other sizes, and a dot never rounds away to none
+- The app's header fits a window of 1280 px, and the window's smallest 1100, with
+  unsaved changes, a longer theme name and German texts: the gear and *To the panel*
+  were pushed out of the window. The search field, the theme's name and the text of the
+  panel chip give way (the *Not saved* mark keeps its dot), and the brand is its icon at
+  the smallest size
+- Design: the size popover of a module in the toolbar cut off its last *+*; the width
+  and the height have a line each now
+- Design: another kind for a module (the *Module* choice) keeps what it shows where the
+  new kind has it too and takes the new kind's first source otherwise: a big number that
+  showed the network no longer stays on *network* as a ring, which has none (the
+  inspector showed no choice, the panel drew the processor)
+- Design and Look: a theme that has just been opened (from Start, the theme menu, a
+  first start) showed the picture of the one before, at its size and with its boxes,
+  until it was drawn, which on a slow computer or for a big theme took seconds. The
+  panel's picture waits with a spinner at the new theme's size, and the pictures of the
+  library, which are drawn on the side, wait for it
+- Ctrl+Z, Ctrl+Y and the palette's *Undo* and *Redo* acted on the theme in every view,
+  so a press in Settings, Live or Start undid a change that could not be seen; they act
+  in Design and Look, where the theme is shown
+- The app says when Libre Panel stops answering (quit from the tray, crashed): a bar
+  under the header, the panel chip "not answering" instead of the last state it knew,
+  and an error says "Libre Panel does not answer." instead of the browser's "Failed to
+  fetch"; Settings no longer blame config.toml for it
+- A view that fails while it is drawn no longer leaves the page blank: its place says
+  so, with *Try again* and the way to Start, and the other views stay reachable; an
+  address such as `#/home/themes/%E0%A4%A` (not a valid text) no longer breaks Start
+- With *Live values* on, the preview was asked for every second in every view, also in
+  Start, Live and Settings, which do not show it; only Design and Look draw it again now
+- The command palette gives the keyboard focus back to where it was when it closes
+  (Escape or a command that opens nothing); the focus was lost to the page
+- *Back* on a plugin's page goes to the view it was opened from (Start where the app was
+  opened on the page) instead of through the browser's history, which could leave the
+  app
+- Design: *Detach into widgets* on a module that was removed or undone before the answer
+  came replaced the last widget of the theme; the answer is ignored when its module or
+  its theme is gone
+- Design: the fan instrument's fan showed as "fan" in its chip, in the inspector and in
+  the toolbar (now "Fan", "Lüfter"), and *Live* names the source of the hardware's names
+- Pressing *To the panel* (or *Save*) on a theme that comes with Libre Panel opened a
+  *Save as…* dialog without a word about why; it now says the theme is built in and that
+  the changes are saved as a theme of your own
+- Design: the library cut off long names (German's *Lüfter mit Drehz…*, *Netzwerk-Det…*,
+  and more in the small tiles of single widgets); a name takes a second line now, and a
+  word that is longer than its tile (*Monatskalender*) breaks instead of losing its end
+- Design: in English the library, the layers and the inspector named the fan, the weather
+  symbol and the download display by their raw types (*fan*, *symbol*, *downloads*); they
+  are *Fan*, *Weather symbol* and *Download display* now
+- The brightness slider (panel chip, Start, Live) went back to the old value the moment it
+  was let go and jumped forward when the panel answered; it stays where it was let go, and
+  goes back only if the change is refused
+- The app's header kept the theme's name whole only in a wide window: at 1280 and 1366 px
+  with unsaved changes it lost a few pixels to the search field and read *Libre Defa…* or
+  *Me…*. The search field gives way first now (and the gaps are narrower up to 1440 px, so
+  that the default window has room for everything in German)
+- A page that stayed open while Libre Panel was started again (a browser tab, which has the
+  token of the run before) said "Libre Panel does not answer … this page tries again by
+  itself", which it never would: the server refuses it, and the bar now shows the server's
+  sentence about how to open Libre Panel again
 
 **Changes**
 - For editor pages and scripts that call the editor's API: every request carries the
@@ -870,6 +943,12 @@
   them, as SPUR Header does: the game's logo or name has the room of a short
   name (51 px, up to 62 for a longer one) in place of 120 px, and the fans
   spread over what was gained
+- On a first start *Start* asks "How should it look?" without the tabs in the header:
+  the views behind them have nothing to show before a theme is on the panel. The tabs
+  come with the choice
+- The Control and Autopilot pages, and the editor pages plugins bring, have the app's
+  colours (its teal and amber, its grey) and its typeface, Barlow, so a page shown
+  inside the app looks like part of it; `/static/editor.css` keeps its names
 
 ## 0.4.2 — 2026-10-10
 

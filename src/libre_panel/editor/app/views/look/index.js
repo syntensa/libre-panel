@@ -27,6 +27,7 @@ const LookActions = () => html`<${PanelChip} /><${UndoRedo} /><${ApplyButton} />
 registerView({
   id: "look",
   title: () => t("Look"),
+  edits: true,
   order: 30,
   icon: "palette",
   component: LookView,

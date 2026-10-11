@@ -25,6 +25,7 @@ import {
   resizeModuleBy,
   selectSameKind,
   setFlag,
+  sourceLabels,
   specOf,
 } from "./ops.js";
 import { SensorButton, sensorName } from "./sensors.js";
@@ -84,7 +85,7 @@ function SourceChip({ widget }) {
   const [open, setOpen] = useState(false);
   const anchor = useRef(null);
   const sources = moduleKinds()[widget.module]?.sources || [];
-  const names = { cpu: "CPU", gpu: "GPU", mem: t("Memory"), disk: t("Disk"), net: t("Network"), sensor: t("Any sensor") };
+  const names = sourceLabels();
   const name = widget.source === "sensor" ? sensorName(widget.sensor) || names.sensor : names[widget.source] || widget.source;
   return html`<button ref=${anchor} type="button" class="tool-sensor" aria-haspopup="dialog" aria-expanded=${String(open)}
       title=${t("What it shows")} onClick=${() => setOpen(!open)}>

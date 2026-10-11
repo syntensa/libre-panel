@@ -16,8 +16,11 @@ export async function pollApp() {
   if (quitting || document.hidden) return;
   try {
     store.set({ app: await endpoints.app() });
-  } catch {
-    store.set((state) => ({ app: { ...state.app, gone: true } }));
+  } catch (error) {
+    // 403: it answers, but not this page, which is from an earlier run (another token); the
+    // server's own sentence says what to do, and waiting for it to answer again is no use
+    const refused = error?.status === 403 ? error.message : "";
+    store.set((state) => ({ app: { ...state.app, gone: true, refused } }));
   }
 }
 

@@ -28,6 +28,8 @@ import {
   renameWidget,
   resizeModuleBy,
   setFlag,
+  setModuleKind,
+  sourceLabels,
   specOf,
 } from "./ops.js";
 import { QUICK_SENSORS, SensorButton, Sparkline, formatValue, sensorName, shortSensorName, useReadings } from "./sensors.js";
@@ -87,8 +89,6 @@ export const MODULE_ICONS = {
 };
 
 export const iconOf = (widget) => (isModule(widget) ? MODULE_ICONS[widget.module] || "module" : TYPE_ICONS[widget.type] || "plugin");
-
-const SOURCE_LABELS = () => ({ cpu: "CPU", gpu: "GPU", mem: t("Memory"), disk: t("Disk"), net: t("Network"), sensor: t("Any sensor") });
 
 // Which section a primary field goes to; others: "behaviour".
 const SECTION_OF = {
@@ -353,7 +353,7 @@ function ModuleInspector({ widget }) {
   const info = moduleKinds()[widget.module] || { sources: [] };
   const kinds = moduleKinds();
   const change = (key) => widgetChange(widget, key);
-  const sources = SOURCE_LABELS();
+  const sources = sourceLabels();
   const sensor = widget.source === "sensor" ? widget.sensor : null;
   const sourceName = info.sources.length ? (widget.source === "sensor" ? null : sources[widget.source]) : null;
 
@@ -416,7 +416,7 @@ function ModuleInspector({ widget }) {
     />
     <div class="inspector-body">
       <${Section} title=${t("Shows")}>
-        <${Select} label=${t("Module")} value=${widget.module} onChange=${change("module")}
+        <${Select} label=${t("Module")} value=${widget.module} onChange=${(kind) => setModuleKind(widget, kind)}
           options=${Object.entries(kinds).map(([kind, item]) => ({ value: kind, label: item.name }))} />
         ${info.sources.length
           ? html`<${Chips} label=${t("Shows")} value=${widget.source} onChange=${change("source")}

@@ -51,6 +51,8 @@ export function Segmented({ options, value, onChange, label, class: className = 
     onChange(next.value);
     requestAnimationFrame(() => event.currentTarget?.querySelector('[aria-checked="true"]')?.focus());
   };
+  // one button is in the tab order: the chosen one, else (a value none of the options has) the first
+  const known = options.some((option) => option.value === value);
   return html`<div class=${`segmented ${className}`} role="radiogroup" aria-label=${label} onKeyDown=${move}>
     ${options.map(
       (option) => html`<button
@@ -58,7 +60,7 @@ export function Segmented({ options, value, onChange, label, class: className = 
         key=${String(option.value)}
         role="radio"
         aria-checked=${String(option.value === value)}
-        tabindex=${option.value === value || (value === undefined && option === options[0]) ? 0 : -1}
+        tabindex=${option.value === value || (!known && option === options[0]) ? 0 : -1}
         title=${option.title}
         disabled=${disabled}
         onClick=${() => onChange(option.value)}
@@ -181,9 +183,14 @@ export function Select({ value, options, onChange, label, class: className = "" 
   </span>`;
 }
 
-/** A slider; `onChange` while it moves, `onCommit` when it is let go. */
+/**
+ * A slider; `onChange` while it moves, `onCommit` when it is let go. Where it was let go it
+ * stays until `onCommit` (it may return a promise) is done, so it does not go back to the old
+ * `value` while a panel or the server takes the new one; after that `value` is what it shows.
+ */
 export function Slider({ value, min = 0, max = 100, step = 1, onChange, onCommit, label, format }) {
   const [moving, setMoving] = useState(null);
+  const moves = useRef(0); // a move that began later keeps the slider where the hand is
   const shown = moving ?? value;
   return html`<span class="slider">
     <input
@@ -195,12 +202,17 @@ export function Slider({ value, min = 0, max = 100, step = 1, onChange, onCommit
       aria-label=${label}
       onInput=${(event) => {
         const next = Number(event.currentTarget.value);
+        moves.current += 1;
         setMoving(next);
         onChange?.(next);
       }}
-      onChange=${(event) => {
-        setMoving(null);
-        onCommit?.(Number(event.currentTarget.value));
+      onChange=${async (event) => {
+        const mine = (moves.current += 1);
+        try {
+          await onCommit?.(Number(event.currentTarget.value));
+        } finally {
+          if (moves.current === mine) setMoving(null);
+        }
       }}
     />
     <output class="mono">${format ? format(shown) : shown}</output>

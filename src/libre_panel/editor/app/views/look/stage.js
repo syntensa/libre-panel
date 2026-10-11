@@ -68,7 +68,7 @@ export function Stage() {
     <div class="look-frame">
       <div class=${`look-picture${round ? " round" : ""}${scale >= 2 ? " pixelated" : ""}`}
         style=${{ width: `${Math.round(width * scale)}px`, height: `${Math.round(height * scale)}px` }}>
-        ${picture ? html`<img src=${picture} alt=${t("Preview of the panel")} draggable="false" />` : html`<span class="spinner"></span>`}
+        ${picture ? html`<img src=${picture} alt=${t("Preview of the panel")} draggable="false" />` : renderError ? null : html`<span class="spinner"></span>`}
       </div>
     </div>
     <div class="look-stage-actions">

@@ -28,9 +28,10 @@ const api = {
 /** Read config.toml (again); resolves to the settings, or null when it cannot be read. */
 export async function loadSettings() {
   try {
-    store.set({ settings: await api.settings(), settingsError: null });
+    store.set({ settings: await api.settings(), settingsError: null, settingsDown: false });
   } catch (error) {
-    store.set({ settingsError: error.message });
+    // no answer at all (status 0) is not a mistake in config.toml
+    store.set({ settingsError: error.message, settingsDown: error.status === 0 });
   }
   return store.get().settings;
 }

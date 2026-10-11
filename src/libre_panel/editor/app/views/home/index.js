@@ -7,8 +7,7 @@ import { blankTheme, importTheme, openTheme, showOnPanel, startTheme, themeName 
 import { registerCommands, registerProvider } from "../../core/commands.js";
 import { control, usePolled } from "../../core/console.js";
 import { t } from "../../core/i18n.js";
-import { store, useStore } from "../../core/state.js";
-import { createStore, useSelector } from "../../core/store.js";
+import { firstStart, store, useStore } from "../../core/state.js";
 import { html, useState } from "../../lib/preact.js";
 import { panelName } from "../../shell/panel-popover.js";
 import { navigate, registerView } from "../../shell/views.js";
@@ -20,9 +19,8 @@ import { Gallery, ThemeRow, collectionsOf, fitsPanel, startThemes } from "./them
 
 // -- what a click does ---------------------------------------------------------------------------
 
-// A first start stays on show while a theme is chosen and taken on to Design, instead of
-// giving way to the launcher the moment config.toml names a theme.
-const flow = createStore({ choosing: false });
+// A first start stays on show while a theme is chosen and taken on to Design (`choosing`),
+// instead of giving way to the launcher the moment config.toml names a theme.
 
 /** Open a theme for editing in Design (asks about unsaved changes first). */
 async function edit(item) {
@@ -35,7 +33,7 @@ async function edit(item) {
  * the picture is then scaled to the panel; `open` takes it on to Design (a first start).
  */
 async function choose(item, { open = false } = {}) {
-  if (open) flow.set({ choosing: true });
+  if (open) store.set({ choosing: true });
   try {
     if (!(await showOnPanel(item.id))) return;
     const { model } = panelModelNow();
@@ -50,7 +48,7 @@ async function choose(item, { open = false } = {}) {
     }
     if (open) await edit(item);
   } finally {
-    flow.set({ choosing: false });
+    store.set({ choosing: false });
   }
 }
 
@@ -236,14 +234,20 @@ function Launcher() {
   </div>`;
 }
 
+/** A part of the address as the text it stands for; what is not valid ("%E0%A4%A") stays as it is. */
+function decoded(part) {
+  try {
+    return decodeURIComponent(part);
+  } catch {
+    return part;
+  }
+}
+
 function HomeView({ rest }) {
-  const { pages, ready } = useStore((s) => ({ pages: s.pages, ready: s.ready }));
-  const choosing = useSelector(flow, (state) => state.choosing);
+  const first = useStore((s) => firstStart(s));
   const [page, asked] = rest.split("/"); // #/home/themes, or #/home/themes/<a collection>
-  if (page === "themes") return html`<${ThemesPage} asked=${asked ? decodeURIComponent(asked) : ""} />`;
-  // pages is null when config.toml cannot be read: nothing is known then, so no first start
-  if (ready && pages && (pages.chosen === false || choosing)) return html`<${FirstStart} />`;
-  return html`<${Launcher} />`;
+  if (page === "themes") return html`<${ThemesPage} asked=${asked ? decoded(asked) : ""} />`;
+  return first ? html`<${FirstStart} />` : html`<${Launcher} />`;
 }
 
 registerView({ id: "home", title: () => t("Start"), order: 10, icon: "home", component: HomeView });

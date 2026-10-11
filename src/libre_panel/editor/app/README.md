@@ -42,6 +42,7 @@ registerView({
   id: "live", // the route: #/live (#/live/more gives the component rest="more")
   title: () => t("Live"),
   order: 40, // among the tabs: Start 10, Design 20, Look 30, Live 40
+  edits: false, // true: shows the theme being edited, so Ctrl+Z and Ctrl+Y act here (Design, Look)
   icon: "pulse",
   component: LiveView,
   header: { lead, center, actions }, // optional components in the header

@@ -5,6 +5,7 @@
 //     id: "look",                     // the route: #/look
 //     title: () => t("Look"),         // the tab's text
 //     tab: true,                      // a tab in the header (settings is reached by its gear)
+//     edits: true,                    // shows the theme being edited: Ctrl+Z and Ctrl+Y act here
 //     order: 30,                      // place among the tabs
 //     icon: "palette",
 //     component: LookView,            // gets {rest}: the route after the view's id
@@ -25,6 +26,9 @@ export function registerView(view) {
 export const allViews = () => [...views.values()].sort((a, b) => a.order - b.order);
 export const viewById = (id) => views.get(id) || views.get(DEFAULT_VIEW) || null;
 
+/** Whether the view on show is one that shows the theme being edited (Design, Look). */
+export const showsTheme = () => Boolean(viewById(store.get().route.view)?.edits);
+
 /** Show a view: navigate("design"), navigate("settings", "panel"). */
 export function navigate(id, rest = "") {
   const hash = `#/${id}${rest ? `/${rest}` : ""}`;
@@ -41,7 +45,10 @@ function route() {
   const view = views.has(id) ? id : DEFAULT_VIEW;
   const current = store.get().route;
   const next = { view, rest: rest.join("/") };
-  if (current.view !== next.view || current.rest !== next.rest) store.set({ route: next });
+  // `from`: where the person came from, for a "Back" that stays in the app
+  if (current.view !== next.view || current.rest !== next.rest) {
+    store.set({ route: { ...next, from: { view: current.view, rest: current.rest } } });
+  }
 }
 
 addEventListener("hashchange", route);

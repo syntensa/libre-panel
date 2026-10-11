@@ -16,6 +16,7 @@ function savedPrefs() {
 export const store = createStore({
   ready: false,
   failed: null, // why the app could not start
+  choosing: false, // a first start: a theme was chosen and is being taken on to Design
   lang: 0, // counts language switches: every text is rendered again
   route: { view: "home", rest: "" },
   specs: null, // /api/specs
@@ -43,13 +44,14 @@ export const store = createStore({
   hardware: null, // the hardware's names (core/hardware.js); false: the server has none
   settings: null, // Settings: {config, catalog, restart} (core/settings.js)
   settingsError: null, // why config.toml cannot be read
+  settingsDown: false, // ... because the server does not answer
   panelInfo: null, // Settings: the panel found, the video mode's state
   systemInfo: null, // Settings: starting with the system
   aboutInfo: null, // Settings: version, licence, notices, folders
   sourceStates: null, // Settings: what the running app says of its sensor sources
   serviceStates: null, // Settings: the services and their states
   prefs: {
-    snap: 4, // px; 0 = off
+    snap: 4, // px: 1, 4, 8 or 16; 0 = off
     guides: true,
     live: false, // previews with this computer's sensors
     panel: "library", // the open side panel of the design view (null: closed)
@@ -58,6 +60,14 @@ export const store = createStore({
 });
 
 export const useStore = (selector) => useSelector(store, selector);
+
+/**
+ * A first start: config.toml names no theme yet (or the one just chosen is being taken on to
+ * Design), so Start asks "How should it look?". Nothing is known while config.toml cannot be
+ * read (`pages` is null then), so it is no first start.
+ */
+export const firstStart = (state = store.get()) =>
+  state.ready && Boolean(state.pages) && (state.pages.chosen === false || state.choosing);
 
 /** Change a preference; it is remembered in this browser (or window). */
 export function setPref(key, value) {

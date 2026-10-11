@@ -78,13 +78,14 @@ registerSettingsGroup("sensors", {
   shows: () => Boolean(store.get().hardware), // not where the server has no names
 });
 
-/** config.toml cannot be read: nothing below it can be shown or changed until it is mended. */
-function ConfigProblem({ message }) {
+/** config.toml cannot be read: nothing below it can be shown or changed until it is mended
+ * (or, with `down`, until the app answers again). */
+function ConfigProblem({ message, down }) {
   return html`<${Note}
     tone="error"
     action=${html`<button type="button" class="btn" onClick=${loadSettings}>${t("Try again")}</button>`}
   >
-    <strong>${t("config.toml has a mistake in it.")}</strong> ${message}
+    ${down ? message : html`<strong>${t("config.toml has a mistake in it.")}</strong> ${message}`}
   <//>`;
 }
 
@@ -101,7 +102,7 @@ function Upcoming({ section }) {
 
 function SettingsView({ rest }) {
   useStore((s) => [s.lang, s.hardware]); // the texts follow the language; groups come and go
-  const problem = useStore((s) => s.settingsError);
+  const { problem, down } = useStore((s) => ({ problem: s.settingsError, down: s.settingsDown }));
   const sections = settingsSections();
   const current = sections.find((section) => section.id === rest) || sections[0];
   const groups = settingsGroups(current.id);
@@ -116,7 +117,7 @@ function SettingsView({ rest }) {
     </nav>
     <main class="settings-main" aria-labelledby="settings-title">
       <h1 id="settings-title">${current.title()}</h1>
-      ${problem && current.id !== "about" ? html`<${ConfigProblem} message=${problem} />` : null}
+      ${problem && current.id !== "about" ? html`<${ConfigProblem} message=${problem} down=${down} />` : null}
       ${showing.map((group) => html`<${group.component} key=${group.id} />`)}
       ${showing.length ? null : html`<${Upcoming} section=${current} />`}
     </main>

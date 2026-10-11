@@ -34,6 +34,7 @@ import {
   resizeBox,
   snapLines,
   snapMove,
+  snapTo,
   unionBox,
 } from "./geometry.js";
 import { addModule, addPicture, addWidget, boxOf, insertPreset, kindName, moduleKinds, setModuleArea, specOf } from "./ops.js";
@@ -290,11 +291,10 @@ export function Canvas() {
       const keep = e.shiftKey || state.mode !== "box";
       const next = resizeBox(state.box, edge, dx, dy, { keep, min: 4 });
       const step = e.altKey ? 0 : store.get().prefs.snap;
-      const snap = (v) => (step > 1 ? Math.round(v / step) * step : v);
       if (state.mode === "box") {
         // a box of 0 × 0 is the picture's own size: start from what is drawn
-        widget.w = Math.max(4, snap(next[2]));
-        widget.h = Math.max(4, snap(next[3]));
+        widget.w = Math.max(4, snapTo(next[2], step));
+        widget.h = Math.max(4, snapTo(next[3], step));
         widget.x = state.fields.x + (next[0] - state.box[0]);
         widget.y = state.fields.y + (next[1] - state.box[1]);
       } else {
@@ -512,7 +512,9 @@ export function Canvas() {
             class=${`panel-canvas${round ? " round" : ""}${z >= 2 ? " pixelated" : ""}`}
             style=${{ width: `${Math.round(width * z)}px`, height: `${Math.round(height * z)}px` }}
           >
-            ${render.png ? html`<img class="preview" src=${render.png} alt=${t("Preview of the panel")} draggable="false" />` : html`<div class="preview-wait"><span class="spinner"></span></div>`}
+            ${render.png
+              ? html`<img class="preview" src=${render.png} alt=${t("Preview of the panel")} draggable="false" />`
+              : html`<div class="preview-wait">${renderError ? null : html`<span class="spinner"></span>`}</div>`}
             <div class="overlay" data-rev=${rev}>
               ${strips}
               ${cells}

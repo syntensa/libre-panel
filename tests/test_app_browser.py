@@ -195,25 +195,31 @@ def set_range(locator, value):
     )
 
 
-def a_panel_app(target='Turing 9.2", video 50 fps', hint=""):
-    """What /api/app says for a connected 9.2" bar in video mode, as a route's handler: Start
-    then sees the model (and what the panel could not read) without a panel on this machine."""
-    import json
-
+def app_answer(target='Turing 9.2", video 50 fps', hint="", brightness=80, **numbers):
+    """What /api/app says for a connected 9.2" bar in video mode (``numbers`` change the
+    panel's stats: ``fps=20.0``)."""
     stats = {
         "fps": 50.0, "target_fps": 50, "streaming": True, "render_ms": 9.8,
         "render_peak_ms": 21.0, "kbps": 248.3, "blocks_per_s": 50.0, "max_depth": 1,
         "waits": 0, "drops": 0, "usb_errors": 0, "panel_restarts": 0, "ffmpeg_restarts": 0,
-        "uptime_s": 10800,
+        "uptime_s": 10800, **numbers,
     }  # fmt: skip
-    answer = {
+    return {
         "available": True,
         "panel": {
             "state": "showing", "detail": "", "hint": hint, "target": target,
             "theme": "libre-default", "frames": 9, "mode": None, "stats": stats,
         },
-        "brightness": 80, "upside_down": False, "autostart": False, "can_quit": True,
+        "brightness": brightness, "upside_down": False, "autostart": False, "can_quit": True,
     }  # fmt: skip
+
+
+def a_panel_app(*args, **kwargs):
+    """``app_answer`` as a route's handler: Start then sees the model (and what the panel could
+    not read) without a panel on this machine."""
+    import json
+
+    answer = app_answer(*args, **kwargs)
 
     def handler(route, request):
         if request.method == "GET":
@@ -326,6 +332,33 @@ def test_a_first_start_asks_how_it_should_look(app_url, isolated_home):
         assert js(page, "window.libre.store.get().doc.id") == choice
         page.goto(f"{app_url}#/home")
         page.wait_for_selector(".start.launcher")  # a theme is chosen: the launcher
+
+
+def test_a_first_start_is_asked_without_the_tabs(app_url, isolated_home):
+    """ "How should it look?" stands alone: the views behind the tabs have nothing to show
+    before a theme is chosen. The tabs come with the choice, and are there in the gallery,
+    in Settings and wherever else the question is not."""
+    assert not (isolated_home / "config.toml").exists()
+    tabs = ".topbar .tabs"
+    with browser_page(app_url, "home", allow=PICTURE) as page:
+        page.wait_for_selector(".start.first .theme-card")
+        expect(page.locator(tabs)).to_have_count(0)
+        assert page.locator(".brand").is_visible() and page.locator(".gear").is_visible()
+        page.goto(f"{app_url}#/home/themes")  # the gallery is not the question
+        page.wait_for_selector(".start.gallery .theme-card")
+        expect(page.locator(tabs)).to_have_count(1)
+        page.goto(f"{app_url}#/settings/panel")
+        expect(page.locator(tabs)).to_have_count(1)
+        page.goto(f"{app_url}#/home")
+        page.wait_for_selector(".start.first .theme-card")
+        expect(page.locator(tabs)).to_have_count(0)
+        choice = shown_themes(page)[0]  # a theme is chosen and taken on to Design, which has them
+        page.locator(f'.theme-card[data-theme="{choice}"] .theme-card-main').click()
+        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design")
+        expect(page.locator(tabs)).to_have_count(1)
+        page.goto(f"{app_url}#/home")
+        page.wait_for_selector(".start.launcher")
+        expect(page.locator(tabs)).to_have_count(1)
 
 
 def test_a_first_start_offers_the_themes_for_the_panel_it_found(app_url, isolated_home):
@@ -616,6 +649,34 @@ def test_look_shows_a_test_notice_on_the_preview(app_url):
         page.wait_for_function(f"{shown} === window.libre.store.get().render.png")
 
 
+def test_live_values_are_drawn_again_only_where_the_picture_is_shown(app_url, page):
+    """With live values on the preview is drawn every second; in Start, Live or Settings,
+    which do not show it, nothing asks the server for it (and in Look it goes on)."""
+    renders = []
+    page.on("request", lambda r: renders.append(r.url) if r.url.endswith("/api/render") else None)
+
+    def waits_for_renders(more, seconds=8):
+        """Until the picture was asked for ``more`` times beyond now."""
+        wanted = len(renders) + more
+        for _ in range(seconds * 20):
+            if len(renders) >= wanted:
+                return True
+            page.wait_for_timeout(50)
+        return False
+
+    js(page, "window.libre.store.set({ prefs: { ...window.libre.store.get().prefs, live: true } })")
+    assert waits_for_renders(2)  # Design: again and again
+    for view in ("settings/panel", "live", "home"):
+        page.goto(f"{app_url}#/{view}")
+        page.wait_for_selector(".view > *")
+        page.wait_for_timeout(300)  # (one that was on its way)
+        asked = len(renders)
+        page.wait_for_timeout(1600)  # more than a turn of the loop (a second)
+        assert len(renders) == asked, view
+    page.goto(f"{app_url}#/look")
+    assert waits_for_renders(2)
+
+
 def test_live_shows_the_panel_and_runs_its_services(background, isolated_home):
     from test_service import wait_for
 
@@ -641,6 +702,8 @@ def test_live_shows_the_panel_and_runs_its_services(background, isolated_home):
         # the sources the panel reads, and the services with their switches
         page.wait_for_selector("[data-source=psutil]")
         page.wait_for_selector("[data-service=notices]")
+        # (the source of the hardware's names has a name for people like the others)
+        expect(page.locator("[data-source=hardware] .live-row-name")).to_have_text("Hardware names")
         services = page.locator("[data-service]").evaluate_all(
             "rows => rows.map((r) => r.dataset.service)"
         )
@@ -680,6 +743,53 @@ def test_live_without_the_panel_says_so_and_keeps_the_switches(app_url, isolated
         page.wait_for_selector("[data-service=game]")
         page.locator("[data-service=game] [role=switch]").click()  # config.toml, as ever
         assert wait_for(lambda: "game" in load_config().services.enabled)
+
+
+WATCH_BLOBS = """
+  // the blob URLs that are made and not revoked yet
+  window.__blobs = new Set();
+  const make = URL.createObjectURL.bind(URL);
+  const revoke = URL.revokeObjectURL.bind(URL);
+  URL.createObjectURL = (blob) => {
+    const url = make(blob);
+    window.__blobs.add(url);
+    return url;
+  };
+  URL.revokeObjectURL = (url) => {
+    window.__blobs.delete(url);
+    revoke(url);
+  };
+  // a picture's body that waits to be let go, as if it were still on its way
+  window.__bodies = [];
+  window.__let_go = 0;
+  const body = Response.prototype.blob;
+  Response.prototype.blob = function () {
+    return new Promise((resolve) => {
+      window.__bodies.push(() =>
+        body.call(this).then((blob) => {
+          resolve(blob);
+          window.__let_go++;
+        }),
+      );
+    });
+  };
+"""
+
+
+def test_a_picture_that_arrives_after_live_was_left_is_not_kept(background):
+    """The picture's body was still on its way when the view went: the URL made for it then
+    was never revoked (a picture of memory kept for every such visit)."""
+    app, url = background
+    with browser_page(url, "home", allow=PICTURE) as page:
+        page.add_init_script(WATCH_BLOBS)
+        page.reload()
+        page.goto(f"{url}#/live")
+        page.wait_for_function("window.__bodies.length > 0")  # a picture is on its way
+        page.goto(f"{url}#/settings/panel")  # Live is gone
+        page.wait_for_selector(".settings-main")
+        js(page, "window.__bodies.forEach((letGo) => letGo())")
+        page.wait_for_function("window.__let_go === window.__bodies.length")  # they came after all
+        assert js(page, "window.__blobs.size") == 0
 
 
 def test_the_new_views_speak_german(app_url, isolated_home):
@@ -838,6 +948,66 @@ def test_the_app_opens_without_breaking_its_rules(app_url):
         assert current.inner_text() == "About Libre Panel"
 
 
+def header_overflow(page):
+    """The parts of the header that reach beyond the window (their classes)."""
+    return js(
+        page,
+        """(() => [...document.querySelectorAll('.topbar > *')]
+          .filter((el) => el.getBoundingClientRect().right > innerWidth + 0.5)
+          .map((el) => el.className))()""",
+    )
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
+def test_the_header_fits_a_small_window_in_either_language(background, language):
+    """At 1280 px, and at the window's smallest 1100, every part of the header is in the window
+    with unsaved changes, a theme name of some length and the running panel's chip: the search
+    field, the name and the chip's text give way, the gear and "To the panel" stay."""
+    from libre_panel import i18n
+
+    app, url = background
+    i18n.set_language(language)
+    with browser_page(url, "design", size=(1280, 800), allow=PICTURE) as page:
+        js(page, "window.libre.doc.edit('n', (theme) => { theme.name = 'A theme with a name'; })")
+        for size in ((1280, 800), (1100, 700)):
+            page.set_viewport_size({"width": size[0], "height": size[1]})
+            for view in ("design", "look", "live", "settings", "home"):
+                page.goto(f"{url}#/{view}")
+                page.wait_for_selector(".view > *")
+                assert header_overflow(page) == [], (size, view)
+        # what gives way keeps its name: the unsaved mark has one without its words
+        page.goto(f"{url}#/look")
+        page.wait_for_selector(".look-side")
+        assert page.locator(".unsaved").get_attribute("aria-label")
+        assert page.locator(".gear").is_visible() and page.locator(".btn-apply").is_visible()
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
+def test_the_search_field_gives_way_before_the_name_of_the_theme(background, language):
+    """Where the header is a few pixels too narrow the theme's name used to give some of them
+    up, which turned "Libre Default" into "Libre Defa…" (and "Meins" into "Me…") at 1280 and
+    1366 px with unsaved changes. The search field gives way, and the name stays whole."""
+    from libre_panel import i18n
+
+    app, url = background
+    i18n.set_language(language)
+    with browser_page(url, "design", size=(1280, 800), allow=PICTURE) as page:
+        js(page, "window.libre.doc.edit('n', (theme) => { theme.description = 'changed'; })")
+        name = page.locator(".theme-name span")
+        expect(name).to_have_text("Libre Default")
+        for size in ((1280, 800), (1366, 768), (1440, 900)):
+            page.set_viewport_size({"width": size[0], "height": size[1]})
+            assert header_overflow(page) == [], size
+            cut = name.evaluate(  # the text against its box, in fractions of a pixel
+                """(el) => {
+                  const range = document.createRange();
+                  range.selectNodeContents(el);
+                  return range.getBoundingClientRect().width - el.getBoundingClientRect().width;
+                }"""
+            )
+            assert cut < 0.1, (size, cut)
+
+
 def test_select_move_undo_redo(page):
     box = page.locator('.overlay .box[data-id="cpu-ring"]').bounding_box()
     start = (widget(page, "cpu-ring")["x"], widget(page, "cpu-ring")["y"])
@@ -858,6 +1028,30 @@ def test_select_move_undo_redo(page):
     assert (widget(page, "cpu-ring")["x"], widget(page, "cpu-ring")["y"]) == moved
     page.keyboard.press("ArrowRight")  # a nudge
     assert widget(page, "cpu-ring")["x"] == moved[0] + 1
+
+
+def test_undo_acts_where_the_theme_is_shown_and_not_behind_other_views(app_url, page):
+    """Ctrl+Z and Ctrl+Y change the theme of Design and Look; pressed in Settings, Live or Start
+    they must not undo what the person cannot see (the palette does not offer them there)."""
+    js(page, "window.libre.doc.edit('n', (theme) => { theme.name = 'Changed'; })")
+    name = "window.libre.doc.theme().name"
+    for view in ("settings/panel", "live", "home"):
+        page.goto(f"{app_url}#/{view}")
+        page.wait_for_selector(".view > *")
+        page.keyboard.press("Control+z")
+        page.keyboard.press("Control+y")
+        page.keyboard.press("Control+k")
+        page.locator(".palette input").fill("undo")
+        expect(page.locator(".palette-item", has_text="Undo")).to_have_count(0)
+        page.keyboard.press("Escape")
+        assert js(page, name) == "Changed", view  # nothing was undone behind the view
+        assert js(page, "window.libre.store.get().canUndo") is True
+    page.goto(f"{app_url}#/look")  # where the theme is shown, it works
+    page.wait_for_selector(".look-side")
+    page.keyboard.press("Control+z")
+    assert js(page, name) == "Libre Default"
+    page.keyboard.press("Control+y")
+    assert js(page, name) == "Changed"
 
 
 def test_toolbar_sensor_and_finish(page):
@@ -905,6 +1099,70 @@ def test_a_module_from_the_library(page):
     assert js(page, "window.libre.doc.single().module") == "clock"
 
 
+def test_the_librarys_long_names_wrap_instead_of_being_cut(page):
+    """German's names are long: "Lüfter mit Drehzahl" took a second line only by being cut
+    ("Lüfter mit Dreh…"), and a single word like "Monatskalender" is longer than a small tile.
+    A name takes a second line, and a word that cannot fit breaks; no name loses its end."""
+    js(page, "window.libre.commands.runCommand('language.de')")
+    page.wait_for_function("document.documentElement.lang === 'de'")
+    page.wait_for_function("document.fonts.status === 'loaded'")  # the lines are the font's
+    expect(page.locator('.tile[data-item="widget:calendar"] .tile-name')).to_have_text(
+        "Monatskalender"
+    )
+    measured = page.locator(".tile-name").evaluate_all(
+        """(names) => names.map((el) => {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          const lines = new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+          return [el.textContent, el.scrollWidth > el.clientWidth + 1, lines];
+        })"""
+    )
+    assert [name for name, beyond, lines in measured if beyond or lines > 2] == []
+    wrapped = {name for name, beyond, lines in measured if lines == 2}
+    assert {"Lüfter mit Drehzahl", "Symbol mit Beschriftung", "Monatskalender"} <= wrapped
+
+
+def test_every_widget_type_has_a_name_in_both_languages(page):
+    """The library, the layers and the inspector name a widget by its type: English knew 16 of
+    the 19 and showed the fan, the weather symbol and the download display as "fan", "symbol"
+    and "downloads"."""
+    types = js(page, "Object.keys(window.libre.store.get().specs.widgets)")
+    types.remove("module")  # a module is named by its kind
+    singles = page.locator('.tile[data-item^="widget:"] .tile-name')
+    for language, names in (
+        ("en", ["Fan", "Weather symbol", "Download display"]),
+        ("de", ["Lüfter", "Wettersymbol", "Download-Anzeige"]),
+    ):
+        js(page, f"window.libre.commands.runCommand('language.{language}')")
+        page.wait_for_function(f"document.documentElement.lang === '{language}'")
+        shown = [
+            page.locator(f'.tile[data-item="widget:{kind}"] .tile-name').inner_text()
+            for kind in ("fan", "symbol", "downloads")
+        ]
+        assert shown == names
+        assert set(singles.all_inner_texts()).isdisjoint(types)  # none shows a raw type name
+        assert singles.count() == len(types)
+
+
+def test_every_source_of_a_module_has_a_name_in_both_languages(page):
+    """The fan instrument can show a fan; its chip read "fan" (the names were kept in two
+    places, the toolbar's and the inspector's, and neither had it)."""
+    page.locator('.tile[data-item="module:instrument"]').click()
+    assert js(page, "window.libre.doc.single().module") == "instrument"
+    chips = page.locator(".inspector .chips .chip")
+    for language, names in (
+        ("en", ["CPU", "GPU", "Memory", "Disk", "Fan"]),
+        ("de", ["CPU", "GPU", "Arbeitsspeicher", "Laufwerk", "Lüfter"]),
+    ):
+        js(page, f"window.libre.commands.runCommand('language.{language}')")
+        page.wait_for_function(f"document.documentElement.lang === '{language}'")
+        assert chips.all_inner_texts() == names
+        chips.last.click()  # its source is the fan: the toolbar says so as well
+        assert js(page, "window.libre.doc.single().source") == "fan"
+        expect(page.locator(".floating-toolbar .tool-sensor")).to_have_text(names[-1])
+        chips.first.click()
+
+
 def test_the_command_palette_finds_and_runs(page):
     count = js(page, "window.libre.doc.widgets().length")
     page.keyboard.press("Control+k")
@@ -929,6 +1187,28 @@ def test_the_command_palette_finds_and_runs(page):
     assert "SPUR Classic" in palette.locator(".palette-item.active").inner_text()
 
 
+def test_the_palette_gives_the_focus_back(page):
+    """After Escape, or a command that opens nothing, the key goes on where it was (it was lost
+    to the page, which a keyboard user then has to tab through from its start)."""
+    layers = page.locator(".rail-item", has_text="Layers")
+    layers.focus()
+    page.keyboard.press("Control+k")
+    expect(page.locator(".palette input")).to_be_focused()
+    page.keyboard.press("Escape")
+    expect(layers).to_be_focused()
+    page.keyboard.press("Control+k")
+    page.locator(".palette input").fill("zoom in")
+    page.keyboard.press("Enter")
+    expect(page.locator(".palette")).to_have_count(0)
+    expect(layers).to_be_focused()
+    # a command that opens a dialog leaves the focus to the dialog
+    page.keyboard.press("Control+k")
+    page.locator(".palette input").fill("keyboard shortcuts")
+    page.keyboard.press("Enter")
+    expect(page.locator(".dialog")).to_be_visible()
+    page.wait_for_function("document.activeElement.closest('.dialog') !== null")
+
+
 def test_save_as_and_to_the_panel(page, isolated_home):
     from test_service import wait_for
 
@@ -949,6 +1229,85 @@ def test_save_as_and_to_the_panel(page, isolated_home):
     # (the save's success toast may still be up: wait for the setting, not for a toast)
     assert wait_for(lambda: load_config().theme == "mine")
     page.wait_for_function("document.querySelector('.toast.success') !== null")
+
+
+def test_save_as_says_why_a_built_in_theme_asks_for_a_name(page, isolated_home):
+    """Someone who pressed "To the panel" on a theme that comes with Libre Panel is asked for a
+    name, which is a surprise; the dialog says why. A theme of one's own has nothing to explain."""
+    js(page, "window.libre.doc.edit('t', (theme) => { theme.name = 'Mine'; })")
+    page.locator(".btn-apply").click()
+    dialog = page.locator(".dialog")
+    expect(dialog.locator(".dialog-text")).to_have_text(
+        "“Libre Default” is built in and cannot be changed: "
+        "your changes are saved as a theme of your own."  # (its name, not the title in the edit)
+    )
+    dialog.locator("input").fill("mine")
+    dialog.locator("button[type='submit']").click()
+    on_the_panel = "window.libre.store.get().pages.pages[0].theme === 'mine'"
+    page.wait_for_function(on_the_panel)  # saved, and on the panel
+    page.keyboard.press("Control+Shift+s")  # now it is one's own
+    expect(dialog.locator("input")).to_have_value("mine")
+    assert dialog.locator(".dialog-text").count() == 0
+    page.keyboard.press("Escape")
+    # in German, too
+    js(page, "window.libre.commands.runCommand('language.de')")
+    page.wait_for_function("document.documentElement.lang === 'de'")
+    page.locator(".theme-name").click()
+    page.locator(".theme-row", has_text="Libre Default").first.click()
+    page.wait_for_function("window.libre.doc.theme().name === 'Libre Default'")
+    js(page, "window.libre.doc.edit('t', (theme) => { theme.name = 'Meins'; })")
+    page.locator(".btn-apply").click()
+    expect(dialog.locator(".dialog-text")).to_have_text(
+        "„Libre Default“ ist eingebaut und lässt sich nicht ändern: "
+        "Deine Änderungen werden als eigenes Theme gespeichert."
+    )
+
+
+def test_every_way_to_another_theme_asks_before_it_drops_unsaved_changes(app_url, page):
+    """The theme menu, the palette and the gallery's pencil all ask; Cancel leaves the work
+    where it was, and only Discard opens the other theme."""
+    js(page, "window.libre.doc.edit('n', (theme) => { theme.name = 'Unsaved work'; })")
+    dialog = page.locator(".dialog")
+
+    def kept():
+        assert js(page, "window.libre.doc.theme().name") == "Unsaved work"
+        assert js(page, "window.libre.store.get().dirty") is True
+        assert js(page, "window.libre.store.get().doc.id") == "libre-default"
+
+    def asked_and_kept(way):
+        way()
+        expect(dialog).to_contain_text("Discard unsaved changes?")
+        dialog.get_by_role("button", name="Cancel").click()
+        expect(dialog).to_have_count(0)
+        kept()
+
+    def from_the_menu():
+        page.locator(".theme-name").click()
+        page.locator(".theme-row", has_text="Column").first.click()
+
+    def from_the_palette():
+        page.keyboard.press("Control+k")
+        page.locator(".palette input").fill("open theme column")
+        page.keyboard.press("Enter")
+
+    asked_and_kept(from_the_menu)
+    asked_and_kept(from_the_palette)
+    page.goto(f"{app_url}#/home/themes")
+    page.wait_for_selector(".start.gallery .theme-card")
+    card = page.locator('.theme-card[data-theme="column"]')
+
+    def from_the_gallery():
+        card.hover()
+        card.locator(".theme-card-edit").click()
+
+    asked_and_kept(from_the_gallery)
+    assert js(page, "window.libre.store.get().route.view") == "home"  # and it stayed on Start
+    from_the_gallery()  # now the work goes
+    dialog.locator(".btn-danger").click()
+    # (the server draws the gallery's pictures meanwhile, so the theme may take a moment)
+    expect(page.locator(".tab[aria-current='page']")).to_have_text("Design", timeout=30000)
+    assert js(page, "window.libre.store.get().doc.id") == "column"
+    assert js(page, "window.libre.store.get().dirty") is False
 
 
 def test_inspector_details_and_theme_settings(page):
@@ -1050,6 +1409,91 @@ def test_the_running_panel_in_the_chip(isolated_home):
         app.shutdown()
 
 
+def test_the_chip_has_the_panels_numbers_and_a_way_to_live(app_url):
+    """The old editor's chip showed how the panel is doing: the frame rate against its target,
+    the data rate and the drawing time; its Control button is the Live view's now."""
+    routes = {"**/api/app": a_panel_app()}
+    with browser_page(app_url, routes=routes, allow=PICTURE) as page:
+        page.locator(".panel-chip").click()
+        rows = page.locator(".popover .run-number")
+        assert rows.evaluate_all("rows => rows.map((r) => r.dataset.number)") == [
+            "fps",
+            "data",
+            "draw",
+        ]
+        fps, data, draw = (
+            page.locator(f"[data-number={name}]") for name in ("fps", "data", "draw")
+        )
+        expect(fps).to_contain_text("Frames per second")
+        expect(fps).to_contain_text("50.0")
+        expect(fps).to_contain_text("target 50")
+        expect(data).to_contain_text("248")
+        expect(data).to_contain_text("KB/s")
+        expect(draw).to_contain_text("9.8")
+        expect(draw).to_contain_text("peak 21")
+        expect(page.locator(".run-number.warn, .run-number.bad")).to_have_count(0)  # as it should
+        page.locator(".popover .pop-head .link-btn").click()  # Live
+        page.wait_for_selector(".view .live")
+        expect(page.locator(".popover")).to_have_count(0)
+    # a panel that cannot keep up is marked, as on Live
+    with browser_page(app_url, routes={"**/api/app": a_panel_app(fps=20.0)}) as page:
+        page.locator(".panel-chip").click()
+        expect(page.locator("[data-number=fps]")).to_have_class("run-number bad")
+
+
+def test_the_chip_numbers_leave_out_what_nothing_counts(background):
+    """A panel that is a PNG file has no data rate: no row with a dash for it."""
+    app, url = background
+    with browser_page(url, allow=PICTURE) as page:
+        page.locator(".panel-chip").click()
+        page.wait_for_selector("[data-number=fps]")
+        page.wait_for_selector("[data-number=draw]")
+        assert page.locator("[data-number=data]").count() == 0
+
+
+def test_brightness_stays_where_it_was_let_go_until_the_panel_answers(app_url):
+    """The slider gave the old value back the moment it was let go, until the background app
+    answered (a panel takes a moment); it keeps the new one, and returns to the old one only
+    when the change is refused."""
+    import json
+
+    held = []
+
+    def handler(route, request):
+        if request.method == "GET":
+            body = json.dumps(app_answer())
+            route.fulfill(status=200, content_type="application/json", body=body)
+        else:
+            held.append((route, json.loads(request.post_data)))
+
+    with browser_page(app_url, routes={"**/api/app": handler}, allow=("/api/app",)) as page:
+        page.locator(".panel-chip").click()
+        slider = page.locator(".popover input[aria-label='Brightness']")
+        shown = page.locator(".popover .slider output")
+        expect(slider).to_have_value("80")
+        set_range(slider, 35)
+        while not held:  # the change is on its way
+            page.wait_for_timeout(20)
+        assert held[0][1] == {"action": "brightness", "value": 35}
+        page.wait_for_timeout(200)  # time enough for the old value to come back, if it would
+        expect(slider).to_have_value("35")
+        expect(shown).to_have_text("35 %")
+        # answered: what the panel says is the same
+        route, _ = held.pop()
+        route.fulfill(
+            status=200, content_type="application/json", body=json.dumps(app_answer(brightness=35))
+        )
+        expect(slider).to_have_value("35")
+        # refused: the slider goes back to what the panel has
+        set_range(slider, 60)
+        while not held:
+            page.wait_for_timeout(20)
+        expect(slider).to_have_value("60")
+        route, _ = held.pop()
+        route.fulfill(status=500, content_type="application/json", body='{"error": "no"}')
+        expect(slider).to_have_value("80")
+
+
 # -- Design: the work of the hand ----------------------------------------------------------------
 # Selecting, aligning, copying, locking, building blocks, the palette, panels of other shapes,
 # the modules on their grid, the pages of the console and the numbers they judge.
@@ -1142,6 +1586,38 @@ def test_a_round_panel_and_the_strip_its_frame_hides(page):
     assert page.locator(".hidden-strip").count() == 0  # a round panel hides nothing
 
 
+def test_a_theme_that_is_opened_shows_no_picture_of_the_one_before(page):
+    """While the new theme is drawn (a slow computer, a big theme) the canvas waits with a
+    spinner at the new theme's size, with no boxes: it showed the old picture, whose boxes
+    could be picked, at the old size."""
+    import json
+
+    from test_editor_server import theme_dict
+
+    held = []
+    page.route("**/api/render", lambda route, request: held.append(route))  # not answered yet
+    theme = theme_dict()
+    theme["display"] = {"model": "turing-9.2-usb", "orientation": "landscape"}
+    theme["display"].update(width=1920, height=480)
+    theme["widgets"] = [
+        {"type": "rect", "id": "probe", "x": 700, "y": 40, "w": 100, "h": 50, "color": "#ff8800"}
+    ]
+    assert page.locator(".panel-canvas img.preview").count() == 1  # the theme before is drawn
+    js(page, f"window.libre.doc.openDoc({{ theme: {json.dumps(theme)}, dirty: true }})")
+    expect(page.locator(".panel-canvas .preview-wait .spinner")).to_be_visible()
+    assert page.locator(".panel-canvas img.preview").count() == 0
+    assert page.locator(".overlay .box").count() == 0
+    assert js(page, "window.libre.store.get().render.size") == [1920, 480]
+    for _ in range(100):  # the request of the new theme is held
+        if held:
+            break
+        page.wait_for_timeout(20)
+    page.unroute("**/api/render")  # lets the held request through
+    page.wait_for_selector(".panel-canvas img.preview")  # drawn at last
+    expect(page.locator('.overlay .box[data-id="probe"]')).to_have_count(1)
+    assert page.locator(".panel-canvas .preview-wait").count() == 0
+
+
 def test_a_widget_snaps_to_the_strip_the_frame_hides(page):
     """The edge of what the bezel hides is a guide like any box's edge."""
     import json
@@ -1180,6 +1656,64 @@ def test_a_corner_resizes_a_widget(page):
         before["w"],
         before["h"],
     )
+
+
+def test_snapping_can_be_to_a_single_pixel(page):
+    """Snap offers 1 px beside off, 4, 8 and 16: a widget then moves in whole pixels where
+    4 px puts it on a step of four."""
+    import json
+
+    from test_editor_server import theme_dict
+
+    theme = theme_dict()
+    theme["widgets"] = [
+        {"type": "rect", "id": "probe", "x": 10, "y": 10, "w": 100, "h": 50, "color": "#ff8800"}
+    ]
+    js(page, f"window.libre.doc.openDoc({{ theme: {json.dumps(theme)}, dirty: true }})")
+    # (no guides: only the step pulls)
+    js(
+        page,
+        "window.libre.store.set({ prefs: { ...window.libre.store.get().prefs, guides: false } })",
+    )
+    page.locator(".rail-gear").click()
+    choices = page.get_by_role("radiogroup", name="Snap")
+    assert choices.get_by_role("radio").all_inner_texts() == ["off", "1", "4", "8", "16"]
+    zoom = page.locator(".panel-canvas").bounding_box()["width"] / 480
+
+    def snapped(step, dx, dy):
+        """Where the probe's corner ends after the pointer moved (dx, dy) screen pixels."""
+        choices.get_by_role("radio", name=str(step) if step else "off", exact=True).click()
+        assert js(page, "window.libre.store.get().prefs.snap") == step
+        page.keyboard.press("Escape")  # the popover
+        box = page.locator('.overlay .box[data-id="probe"]').bounding_box()
+        middle = (box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        drag(page, middle, (middle[0] + dx, middle[1] + dy), steps=6)
+        found = (widget(page, "probe")["x"], widget(page, "probe")["y"])
+        page.keyboard.press("Control+z")
+        assert (widget(page, "probe")["x"], widget(page, "probe")["y"]) == (10, 10)
+        page.locator(".rail-gear").click()
+        return found
+
+    dx, dy = 40, 10  # screen pixels: 28.9 and 7.2 panel pixels, which no step of four makes
+    assert snapped(1, dx, dy) == (round(10 + dx / zoom), round(10 + dy / zoom))
+    assert snapped(4, dx, dy) == (40, 16)
+    assert snapped(0, dx, dy) == (round(10 + dx / zoom), round(10 + dy / zoom))  # (off: the same)
+
+
+def test_a_choice_that_none_of_the_options_has_is_still_in_the_tab_order(app_url):
+    """A group of choices with a value that matches no option (a setting from a version that
+    had other steps) must keep one button reachable by Tab, or the keyboard cannot get in."""
+    with browser_page(app_url, "design") as page:
+        page.add_init_script("localStorage.setItem('libre-panel-prefs', '{\"snap\": 2}')")
+        page.reload()
+        page.wait_for_selector(".panel-canvas .preview")
+        page.locator(".rail-gear").click()
+        radios = page.get_by_role("radiogroup", name="Snap").get_by_role("radio")
+        tab_order = "buttons => buttons.map((b) => b.tabIndex)"
+        assert radios.evaluate_all(tab_order) == [0, -1, -1, -1, -1]
+        assert radios.evaluate_all("buttons => buttons.map((b) => b.ariaChecked)") == ["false"] * 5
+        radios.nth(2).click()  # and a choice made is the one in the tab order
+        assert radios.evaluate_all(tab_order) == [-1, -1, 0, -1, -1]
 
 
 @pytest.fixture
@@ -1273,6 +1807,57 @@ def test_a_plugin_page_opens_in_the_app(page_plugin, page):
     page.frame_locator(".plugin-frame").locator("#out", has_text="1 3").wait_for()
 
 
+def test_back_from_a_plugin_page_stays_in_the_app(app_url):
+    """Back goes to the view the page was opened from, and to Start where the app was opened
+    on the page (history.back() left the app for the page before it)."""
+
+    def back(page):
+        page.locator(".plugin-bar").get_by_role("button", name="Back").click()
+
+    with browser_page(app_url, "plugin/control") as page:
+        back(page)
+        page.wait_for_function("location.hash === '#/home'")
+        page.wait_for_selector(".view .start")
+        page.goto(f"{app_url}#/look")
+        page.wait_for_selector(".look-side")
+        page.goto(f"{app_url}#/plugin/control")
+        page.wait_for_selector(".plugin-bar")
+        back(page)
+        page.wait_for_function("location.hash === '#/look'")
+        page.wait_for_selector(".look-side")
+
+
+def test_a_view_that_cannot_be_drawn_says_so_and_the_others_stay_reachable(app_url):
+    """A view that throws (here: a plugin list that is not a list) left the whole page blank.
+    The view's place says what happened, the header works, and the view can try again."""
+    with browser_page(app_url, "home") as page:
+        page.goto(f"{app_url}#/plugin/anything")
+        page.wait_for_selector(".plugin-view")
+        js(page, "window.libre.store.set({ plugins: null })")
+        alert = page.locator(".view-message.error")
+        expect(alert).to_contain_text("This view could not be drawn")
+        assert page.locator(".topbar").is_visible()
+        js(page, "window.libre.store.set({ plugins: [] })")  # what was wrong is mended
+        alert.get_by_role("button", name="Try again").click()
+        expect(page.locator(".plugin-view .view-message")).to_have_text(
+            "This plugin page is not installed."
+        )
+        assert alert.count() == 0
+        js(page, "window.libre.store.set({ plugins: null })")
+        expect(alert).to_be_visible()
+        page.get_by_role("link", name="Live").click()  # another view is drawn, as it should be
+        page.wait_for_selector(".view .live")
+        assert alert.count() == 0
+
+
+def test_a_bad_address_does_not_break_the_gallery(app_url):
+    """The gallery opens the group the address names; "%E0%A4%A" is no text, and decoding it
+    threw in the middle of drawing Start."""
+    with browser_page(app_url, "home/themes/%E0%A4%A", allow=PICTURE) as page:
+        page.wait_for_selector(".start.gallery .theme-card")
+        assert page.locator(".view-message.error").count() == 0
+
+
 def test_a_plain_editor_has_no_panel_controls(page):
     chip = page.locator(".panel-chip")
     assert "480 × 320" in chip.inner_text()  # no panel runs: the size to design for
@@ -1359,6 +1944,49 @@ def test_modules_from_a_layout_drag_resize_swap_and_look(page):
     expect(page.locator(".inspector .look-tile[aria-checked='true']")).to_have_text("Paper")
 
 
+def test_every_handle_of_a_module_resizes_it_one_cell_further_out(page):
+    """The eight handles of a module: the one pressed must stay under the pointer while it
+    is dragged (it once left with the first move, and the drag never reached the module)."""
+    js(
+        page,
+        """window.libre.doc.edit('grid', (theme) => {
+          const at = { col: 4, row: 3, cols: 1, rows: 1 };
+          theme.widgets = [{ type: 'module', id: 'box', module: 'stat', ...at }];
+          theme.grid = { columns: 9, rows: 7, gap: 0, margin: 0 };
+        })""",
+    )
+    page.wait_for_function("window.libre.store.get().render.grid?.columns === 9")
+    js(page, "window.libre.doc.setSelection(['box'])")
+    cells = "(w => [w.col, w.row, w.cols, w.rows])(window.libre.doc.widgetById('box'))"
+    frames = "new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
+
+    # each handle takes the pointer one cell beyond the module's edge; the module then fills
+    # more of the grid, so the next handle has room (and stands where the module's edge is)
+    steps = [
+        ("e", [4, 3, 2, 1]),
+        ("s", [4, 3, 2, 2]),
+        ("w", [3, 3, 3, 2]),
+        ("n", [3, 2, 3, 3]),
+        ("se", [3, 2, 4, 4]),
+        ("sw", [2, 2, 5, 5]),
+        ("ne", [2, 1, 6, 6]),
+        ("nw", [1, 0, 7, 7]),
+    ]
+    for edge, expected in steps:
+        col, row, cols, rows = js(page, cells)
+        handle = page.locator(f".handle.{edge}").bounding_box()
+        start = (handle["x"] + handle["width"] / 2, handle["y"] + handle["height"] / 2)
+        beyond_col = col + cols if "e" in edge else col - 1 if "w" in edge else None
+        beyond_row = row + rows if "s" in edge else row - 1 if "n" in edge else None
+        end = (
+            cell_center(page, beyond_col, row)[0] if beyond_col is not None else start[0],
+            cell_center(page, col, beyond_row)[1] if beyond_row is not None else start[1],
+        )
+        drag(page, start, end, steps=6)
+        page.wait_for_function(f"({cells}).join() === {expected!r}.join()", timeout=5000)
+        js(page, frames)  # the handles stand where the module's edges are now
+
+
 def test_a_modules_source_and_detaching_it(page):
     new_theme_from_a_layout(page, "Turing 3.5")
     ring = js(page, "window.libre.doc.widgets().find((w) => w.module === 'ring').id")
@@ -1371,6 +1999,79 @@ def test_a_modules_source_and_detaching_it(page):
     assert len(js(page, "window.libre.store.get().selection")) > 2  # its parts, to change each
     page.keyboard.press("Control+z")
     assert widget(page, ring)["source"] == "disk"
+
+
+def test_a_detach_that_is_answered_after_its_module_went_changes_nothing(page):
+    """The server's answer takes a moment; a module removed meanwhile is not there to be
+    replaced (the splice at index -1 replaced the last widget of the theme instead)."""
+    new_theme_from_a_layout(page, "Turing 3.5")
+    ring = js(page, "window.libre.doc.widgets().find((w) => w.module === 'ring').id")
+    js(page, f"window.libre.doc.setSelection([{ring!r}])")
+    held = []
+    page.route("**/api/detach", lambda route, request: held.append(route))
+    page.locator(".details-button").click()
+    page.get_by_role("button", name="Detach into widgets").click()
+    for _ in range(100):  # the request is held
+        if held:
+            break
+        page.wait_for_timeout(20)
+    assert held
+    js(
+        page,
+        f"""window.libre.doc.edit(null, (theme) => {{
+          theme.widgets = theme.widgets.filter((w) => w.id !== {ring!r});
+        }})""",
+    )
+    ids = js(page, "window.libre.doc.widgets().map((w) => w.id)")
+    with page.expect_response("**/api/detach"):
+        page.unroute("**/api/detach")  # lets the request through
+    page.wait_for_timeout(300)  # (the answer is handled, or ignored, in this moment)
+    assert js(page, "window.libre.doc.widgets().map((w) => w.id)") == ids
+
+
+def test_another_kind_keeps_the_source_it_has_or_takes_the_first_it_offers(page):
+    """A big number can show the network, a ring cannot: switched to a ring it does not keep
+    "net" (the inspector would show no choice, the panel would draw the processor), it takes
+    the ring's first source. One that the new kind has too stays."""
+    new_theme_from_a_layout(page, "Turing 3.5")
+    ring = js(page, "window.libre.doc.widgets().find((w) => w.module === 'ring').id")
+    js(page, f"window.libre.doc.setSelection([{ring!r}])")
+    kind = page.get_by_label("Module", exact=True)
+    page.locator(".inspector .chip", has_text="Disk").click()
+    kind.select_option("stat")
+    assert (widget(page, ring)["module"], widget(page, ring)["source"]) == ("stat", "disk")
+    page.locator(".inspector .chip", has_text="Network").click()
+    assert widget(page, ring)["source"] == "net"
+    kind.select_option("ring")
+    assert (widget(page, ring)["module"], widget(page, ring)["source"]) == ("ring", "cpu")
+    chosen = page.locator(".inspector .chip[aria-pressed='true']")
+    expect(chosen).to_have_text("CPU")  # and the inspector shows it
+    page.keyboard.press("Control+z")  # kind and source go back together
+    assert (widget(page, ring)["module"], widget(page, ring)["source"]) == ("stat", "net")
+
+
+def test_the_size_popover_shows_all_its_buttons(page):
+    """The toolbar's size of a module has the width and the height in a line each: the last
+    "+" was cut off by the popover's edge (the German labels are longer still)."""
+    new_theme_from_a_layout(page, "Turing 3.5")
+    ring = js(page, "window.libre.doc.widgets().find((w) => w.module === 'ring').id")
+    js(page, f"window.libre.doc.setSelection([{ring!r}])")
+    inside = """(() => {
+      const frame = document.querySelector('.popover').getBoundingClientRect();
+      return [...document.querySelectorAll('.popover .size-steps .icon-btn')].map((button) => {
+        const box = button.getBoundingClientRect();
+        return box.left >= frame.left && box.right <= frame.right
+          && box.top >= frame.top && box.bottom <= frame.bottom;
+      });
+    })()"""
+    for language in ("en", "de"):
+        js(page, f"window.libre.commands.runCommand('language.{language}')")
+        page.wait_for_function(f"document.documentElement.lang === '{language}'")
+        page.locator(".floating-toolbar .tool-text.mono").click()
+        expect(page.locator(".popover .size-steps")).to_be_visible()
+        assert js(page, inside) == [True] * 4  # Narrower, Wider, Lower, Taller
+        page.keyboard.press("Escape")
+        expect(page.locator(".popover")).to_have_count(0)
 
 
 def test_the_weather_forecast_setting(page):
@@ -1647,6 +2348,44 @@ def test_lives_numbers_are_judged_against_what_the_panel_should_manage(page):
         "fps": ["–", ""], "data": ["–", ""], "draw": ["–", ""], "queue": ["–", ""],
         "faults": ["–", ""],
     }  # fmt: skip
+
+
+# the colours a console or plugin page has (static/editor.css), and the app's (app.css) they are
+CONSOLE_COLOURS = {
+    "--bg": "--bg",
+    "--panel": "--surface",
+    "--panel-2": "--surface-2",
+    "--panel-3": "--surface-3",
+    "--line": "--line-4",
+    "--text": "--text",
+    "--muted": "--muted",
+    "--dim": "--dim",
+    "--accent": "--accent",
+    "--accent-ink": "--accent-ink",
+    "--ok": "--ok",
+    "--warn": "--warn",
+    "--error": "--danger",
+}
+
+
+def test_the_console_pages_have_the_apps_colours_and_typeface(app_url):
+    """The Control and Autopilot pages, and the pages plugins bring, show inside the app: they
+    were a shade off its colours (cyan for its teal, another amber) and had a typeface of the
+    system's."""
+    read = """names => names.map((name) => {
+      const value = getComputedStyle(document.documentElement).getPropertyValue(name);
+      return value.trim().toLowerCase();
+    })"""
+    with browser_page(app_url, "home", allow=PICTURE) as page:
+        app = page.evaluate(read, list(CONSOLE_COLOURS.values()))
+        page.goto(f"{app_url}plugins/control/")
+        page.wait_for_selector("body.plugin-page h1")
+        console = page.evaluate(read, list(CONSOLE_COLOURS))
+        assert dict(zip(CONSOLE_COLOURS, console, strict=True)) == dict(
+            zip(CONSOLE_COLOURS, app, strict=True)
+        )
+        assert js(page, "getComputedStyle(document.body).fontFamily").startswith("Barlow, ")
+        page.wait_for_function("document.fonts.check('14px Barlow')")  # and it is the app's file
 
 
 def test_the_language_switch_keeps_unsaved_work(page_plugin, page, isolated_home):
@@ -2229,8 +2968,60 @@ def test_settings_say_when_config_toml_has_a_mistake(app_url, isolated_home):
         assert page.locator(".settings-card").count() == 0  # nothing to change meanwhile
         (isolated_home / "config.toml").write_text("fps = 10\n", encoding="utf-8")
         page.get_by_role("button", name="Try again").click()
+        expect(page.locator(".note.error")).to_have_count(0)  # (the panel is found before)
         page.wait_for_selector(".panel-found")
-        assert page.locator(".note.error").count() == 0
+
+
+def test_settings_say_when_the_app_does_not_answer_and_not_that_config_toml_is_wrong(app_url):
+    """No answer at all is not a mistake in config.toml: the note says what is the matter."""
+    with browser_page(app_url, "home", allow=("/api/settings",)) as page:
+        page.route("**/api/settings", lambda route, request: route.abort())
+        page.goto(f"{app_url}#/settings/panel")
+        page.wait_for_selector(".note.error")
+        note = page.locator(".note.error").inner_text()
+        assert "Libre Panel does not answer." in note
+        assert "config.toml" not in note  # (the browser's own "Failed to fetch" is not shown)
+        page.unroute("**/api/settings")
+        page.get_by_role("button", name="Try again").click()
+        expect(page.locator(".note.error")).to_have_count(0)  # (the panel is found before)
+        page.wait_for_selector(".panel-found")
+
+
+def test_the_app_says_when_the_server_stops_answering_and_when_it_is_back(app_url):
+    """A background app that quit (from its tray menu, say) leaves the page behind with the
+    last state it knew: a bar says so, the chip is not "Showing" any more, and both go when
+    the app answers again."""
+    with browser_page(app_url, "design", allow=("/api/app",)) as page:
+        assert page.locator(".offline-bar").count() == 0
+        page.route("**/api/app", lambda route, request: route.abort())
+        bar = page.locator(".offline-bar")
+        expect(bar).to_be_visible(timeout=10000)  # the next of the app's polls every two seconds
+        assert "Libre Panel does not answer." in bar.inner_text()
+        expect(page.locator(".panel-chip.gone")).to_contain_text("not answering")
+        page.unroute("**/api/app")
+        expect(bar).to_have_count(0, timeout=10000)
+        expect(page.locator(".panel-chip.preview")).to_have_count(1)
+
+
+def test_a_page_of_an_earlier_run_says_what_to_do_not_that_it_will_recover(app_url):
+    """A tab that stayed open while Libre Panel was started again has the old run's token: the
+    server answers every request with 403 and no waiting helps. The bar says what to do, with
+    the server's own sentence, instead of promising that the page tries again by itself."""
+    import json
+
+    refusal = {"error": "Access token missing or wrong. Open Libre Panel from its tray icon."}
+
+    def refuse(route, request):
+        route.fulfill(status=403, content_type="application/json", body=json.dumps(refusal))
+
+    with browser_page(app_url, "design", allow=("/api/app",)) as page:
+        page.route("**/api/app", refuse)
+        bar = page.locator(".offline-bar")
+        expect(bar).to_be_visible(timeout=10000)
+        assert bar.inner_text().strip() == refusal["error"]
+        assert "tries again" not in bar.inner_text()
+        page.unroute("**/api/app")  # (an answer is an answer: the bar goes)
+        expect(bar).to_have_count(0, timeout=10000)
 
 
 class HardwareNames:

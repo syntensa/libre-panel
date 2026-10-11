@@ -6,6 +6,7 @@ import { endpoints } from "../../core/api.js";
 import {
   clone,
   commit,
+  docSerial,
   edit,
   isModule,
   selectedWidgets,
@@ -36,6 +37,17 @@ export function boxOf(widget) {
   const cells = grid();
   return isModule(widget) && cells ? cellBox(cells, ...placed(cells, widget)) : null;
 }
+
+/** What a module can show, in words ("fan" is the fan instrument's own). */
+export const sourceLabels = () => ({
+  cpu: "CPU",
+  gpu: "GPU",
+  mem: t("Memory"),
+  disk: t("Disk"),
+  net: t("Network"),
+  sensor: t("Any sensor"),
+  fan: t("Fan"),
+});
 
 /** The fields of a widget type: the common ones and its own ({key: [kind, default]}). */
 export const specOf = (type) => ({ ...(specs()?.common || {}), ...(specs()?.widgets?.[type] || {}) });
@@ -141,6 +153,19 @@ export function setModuleArea(widget, [col, row, cols, rows]) {
   const box = cellBox(cells, col, row, cols, rows);
   const render = store.get().render;
   store.set({ render: { ...render, boxes: { ...render.boxes, [widget.id]: box }, moduleBoxes: { ...render.moduleBoxes, [widget.id]: box } } });
+}
+
+/**
+ * Another kind for a module (one undo step). What it shows stays where the new kind has
+ * it too; else it is the new kind's first source, so a big number that showed the network
+ * does not keep that as a ring (which has no network and would draw the processor).
+ */
+export function setModuleKind(widget, kind) {
+  edit(`prop:${widget.id}:module`, () => {
+    widget.module = kind;
+    const sources = moduleKinds()[kind]?.sources || [];
+    if (sources.length && !sources.includes(widget.source)) widget.source = sources[0];
+  });
 }
 
 /** An image widget showing a picture of the theme's folder. */
@@ -381,12 +406,16 @@ export function align(mode) {
 
 /** A module as plain widgets, to change each part. */
 export async function detachModule(widget) {
-  const doc = store.get().doc;
+  const { doc } = store.get();
+  const { id } = widget;
+  const serial = docSerial();
   try {
-    const data = await endpoints.detach(doc.theme, doc.id, widget.id);
+    const data = await endpoints.detach(doc.theme, doc.id, id);
+    // the answer took a moment: another theme was opened, or the module went (removed, undone)
+    if (serial !== docSerial() || !widgetById(id)) return;
     const parts = [];
     edit(null, (current) => {
-      const index = current.widgets.indexOf(widget);
+      const index = current.widgets.findIndex((other) => other.id === id);
       for (const part of data.widgets) {
         part.id = uniqueId(part.id);
         parts.push(part);
