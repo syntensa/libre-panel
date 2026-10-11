@@ -20,7 +20,7 @@ from libre_panel.theme.model import (
 )
 
 SPUR = ["spur-horizon", "spur-header", "spur-focus", "spur-session", "spur-cockpit",
-        "round-report"]  # fmt: skip
+        "round-report", "spur-studio"]  # fmt: skip
 # the game service publishes this one, and a demo value would hide it: the program's name
 # (game.app) stands in on the screens, so the demo leaves it out
 LEFT_OUT = {"game.name"}
@@ -379,3 +379,104 @@ def test_the_round_report_keeps_the_frames_of_the_screens_it_sits_with():
     assert not any(w["id"].endswith("-box-bottom") for w in theme.widgets)  # open at the bottom
     glow = [w for w in theme.widgets if w["type"] == "bar" and w["finish"] == "lit"]
     assert len(glow) == 6 and all(w["glow"] == 0.0 for w in glow)  # a bar's own light is enough
+
+
+# -- Studio (the cards of the Studio screen on one grid) -----------------------------------------
+
+
+def studio():
+    theme = load_theme(find_theme("spur-studio"))
+    return theme, Renderer(theme, preview=True)
+
+
+def test_studio_is_made_of_the_cards_on_one_grid_near_where_spur_ii_has_them():
+    theme, renderer = studio()
+    modules = {w["id"]: w for w in theme.widgets if w["type"] == "module"}
+    assert {m["module"] for m in modules.values()} == {"cards", "instrument", "netcard"}
+    assert [modules[f"{part}-ring"]["source"] for part in ("cpu", "gpu", "mem")] == [
+        "cpu", "gpu", "mem",
+    ]  # fmt: skip
+    rings_and_net = ("cpu-ring", "gpu-ring", "mem-ring", "net")  # no face, no frame line
+    assert all(modules[name]["card"] == "off" for name in rings_and_net)
+    assert modules["card"]["items"].split() == ["playback", "forecast"]
+    assert theme.style["card"] == "outline"  # the slot's frame is a thin flat line, no card face
+    # the boxes of the modules (x, y, w, h): SPUR II's card, rings and NET section
+    box = renderer.module_boxes
+    near = lambda got, want, by: all(abs(a - b) <= by for a, b in zip(got, want, strict=True))  # noqa: E731
+    assert near(box["card"], (620, 96, 706, 376), 14)
+    assert near(box["net"], (10, 300, 596, 131), 24)
+    rings = [box[f"{part}-ring"] for part in ("cpu", "gpu", "mem")]
+    assert [r[0] for r in rings] == sorted(r[0] for r in rings)
+    assert len({(r[1], r[3]) for r in rings}) == 1  # one height, side by side
+    assert max(r[2] for r in rings) - min(r[2] for r in rings) <= 2  # and as wide as each other
+    assert near(rings[0], (1340, 96, 190, 376), 4) and near(rings[2], (1720, 96, 190, 376), 4)
+    # nothing overlaps: the NET section, the card, the rings stand in a row
+    spans = sorted((b[0], b[0] + b[2]) for b in (box["card"], box["net"], *rings))
+    assert all(a[1] <= b[0] for a, b in zip(spans, spans[1:], strict=False))
+
+
+def test_studio_has_the_time_large_the_date_in_capitals_and_the_volume_below_the_network():
+    theme, _ = studio()
+    by = {w["id"]: w for w in theme.widgets}
+    assert (by["clock"]["format"], by["clock"]["font_size"]) == ("%H:%M", 176)
+    assert (by["seconds"]["format"], by["seconds"]["font_size"]) == ("%S", 56)
+    assert by["seconds"]["x"] > by["clock"]["x"] + 400 and by["seconds"]["color"] == "@accent"
+    assert by["date"]["uppercase"] is True and "%A" in by["date"]["format"]
+    assert by["vol-bar"]["sensor"] == "audio.volume" and by["vol-bar"]["finish"] == "lit"
+    assert by["vol-bar"]["y"] > 440 and by["vol-rule"]["y"] < by["vol-bar"]["y"]  # its own row
+    glow_areas_hold_their_bars(theme)
+    # the header has the wordmark and the fans only: the clock is the large one below
+    assert {w["id"] for w in theme.widgets if w["type"] == "clock"} == {"clock", "seconds", "date"}
+    fans = [w for w in theme.widgets if w["type"] == "fan"]
+    assert len(fans) == 5 and fans[0]["x"] == 286 and fans[-1]["x"] > 1600  # across the width
+
+
+def test_studio_shows_what_plays_else_the_weather_and_the_network_else_a_download():
+    from test_slot import RUNNING, demo, downloading
+
+    _, renderer = studio()
+    card, net = renderer._slots["card"], renderer._slots["net"]
+    assert [kind for kind in card.kinds] == ["playback", "forecast"]
+    assert [kind for kind in net.kinds] == ["download", "net"]
+    renderer.render(demo(), 0.0)
+    assert card.shown == 0 and net.shown == 1  # a track plays, and nothing downloads
+    renderer.render(demo(media=False), 1.0)
+    assert card.shown == 1  # the weather, as nothing plays
+    renderer.render(downloading(demo(media=False)), 2.0)
+    assert net.shown == 0 and RUNNING["name"]  # a download runs: it takes the NET section
+
+
+def test_studio_moves_from_one_card_to_the_next_with_a_line_of_light():
+    from test_slot import demo
+
+    theme, _ = studio()
+    assert (find_module(theme, "card")["change"], find_module(theme, "card")["hold"]) == (0.6, 2.0)
+    renderer = Renderer(theme, animate=True, preview=True)
+    card = renderer._slots["card"]
+    for step in range(10):  # a track plays
+        renderer.render(demo(), step * 0.02)
+    assert card.shown == 0 and card.leaving is None
+    renderer.render(demo(media=False), 0.26)  # it stops: the change begins
+    assert card.shown == 1 and card.leaving == 0 and renderer.moving
+    renderer.render(demo(media=False), 0.36)  # the old card rolls up into a line of light
+    height = card.rows[0]
+    assert 0 < height < card._inner()[3] and card.line > 0
+    renderer.render(demo(media=False), 0.9)  # 0.6 s of the frame's time later it is done
+    renderer.render(demo(media=False), 0.92)
+    assert card.leaving is None and card.rows is None
+
+
+def find_module(theme, wid):
+    return next(w for w in theme.widgets if w["id"] == wid)
+
+
+def test_studio_reads_what_the_demo_has_and_a_picture_it_has_none_of():
+    from libre_panel.render.renderer import _reads
+
+    _, renderer = studio()
+    snapshot = demo_snapshot(fixed_time=1_700_000_000)
+    absent = {
+        key for key in _reads(renderer.widgets)
+        if snapshot.value(key) is None and key not in snapshot.images
+    }  # fmt: skip
+    assert absent == {"media.app_icon"}  # the player's icon is a picture: its name stands in

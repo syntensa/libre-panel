@@ -312,6 +312,13 @@
   `report.<peak>_mean` and `_delta` for each highest value and
   `report.level.<n>.mean`; the state `report` and the readings that were
   there are as they were
+- The theme *SPUR Studio* (`spur-studio`, 1920 × 480): SPUR II's Studio screen
+  made of the cards: the card slot in the middle (what plays, else the weather,
+  with the line of light between them), three ring instruments for the CPU, GPU
+  and RAM, the network card (a download while one runs) and, as plain widgets,
+  the large clock with the seconds, the date and the volume. It sits on a grid
+  of 40 × 48 cells that puts the cards within a few pixels of where SPUR II has
+  them
 - `libre_panel.services.fancontrol`: FanControl's curves, fans and the sensor
   each curve reads, from its configuration file (found from the environment or
   `fancontrol = "..."`; opened for reading only)
