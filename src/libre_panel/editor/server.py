@@ -75,7 +75,8 @@ from libre_panel.theme.modules import (
 
 log = logging.getLogger(__name__)
 
-STATIC_DIR = Path(__file__).resolve().parent / "static"  # the classic editor, kit.js
+# What the console's pages and plugins' pages share (kit.js, editor.css, stats.js), and the icon.
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 APP_DIR = Path(__file__).resolve().parent / "app"  # the app: shell, views, vendored libraries
 MAX_JSON = 2 * 1024 * 1024
 MAX_ASSET = 10 * 1024 * 1024
@@ -428,7 +429,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             return self._app_file("index.html")
         if path in ("/classic", "/classic/", "/classic/index.html"):
-            return self._static("index.html")  # the editor before the app, until it is retired
+            return self._redirect("/")  # a bookmark of the old editor leads to the app
         if path.startswith("/app/fonts/"):
             return self._font(path[len("/app/fonts/") :])
         if path.startswith("/app/"):
@@ -534,6 +535,13 @@ class EditorHandler(BaseHTTPRequestHandler):
             log.exception("editor page %s failed", page_id)
             return self._error(f"{page_id}: {exc}", HTTPStatus.INTERNAL_SERVER_ERROR)
         self._send(int(status), payload, content_type)
+
+    def _redirect(self, location: str) -> None:
+        self.send_response(HTTPStatus.MOVED_PERMANENTLY)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
 
     def _static(self, name: str) -> None:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", name) or name.startswith("."):

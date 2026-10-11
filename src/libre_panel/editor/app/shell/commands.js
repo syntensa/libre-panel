@@ -4,7 +4,6 @@
 import {
   adaptPanel,
   applyToPanel,
-  confirmDiscard,
   exportTheme,
   importTheme,
   normalTheme,
@@ -121,17 +120,6 @@ export function registerAppCommands() {
       icon: "keyboard",
       keys: "?",
       run: () => openDialog((close) => html`<${ShortcutsHelp} close=${close} />`, { label: t("Keyboard shortcuts") }),
-    },
-    {
-      id: "help.classic",
-      title: () => t("Open the classic editor"),
-      hint: () => t("the editor before this one"),
-      group: settings,
-      icon: "external",
-      rank: 95,
-      run: async () => {
-        if (await confirmDiscard()) location.assign("/classic/");
-      },
     },
   ]);
 

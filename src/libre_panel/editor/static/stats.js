@@ -1,12 +1,11 @@
 // How the panel is doing: the numbers the main loop measures (RunStatus.stats, as in
-// /api/app), as short rows for the editor's panel menu and as tiles for the Control page.
+// /api/app), as rows for the Control page's tiles. A plugin's page can use them too.
 //
-//   import { describeStats, showStats } from "/static/stats.js";
+//   import { describeStats } from "/static/stats.js";
 //   describeStats(stats, t)  ->  [{ id, label, value, note, level }]   (level: "", "warn", "bad")
-//   showStats(dl, stats, t)  fills a <dl> with them and hides it when there are no numbers
 //
-// `t` is the caller's translate function: the editor's and the pages' catalogs differ in
-// where they live, not in what they say.
+// `t` is the caller's translate function: the app's and the pages' catalogs differ in
+// where they live, not in what they say. (The app's Live view has its own: core/stats.js.)
 
 const num = (value, digits = 1) => Number(value).toFixed(digits).replace(/\.0+$/, "");
 
@@ -75,20 +74,4 @@ export function describeStats(stats, t) {
     level: faults ? "warn" : "",
   });
   return rows;
-}
-
-export function showStats(list, stats, t) {
-  const rows = describeStats(stats, t);
-  list.hidden = rows.length === 0;
-  const cells = [];
-  for (const row of rows) {
-    const label = document.createElement("dt");
-    label.textContent = row.label;
-    const value = document.createElement("dd");
-    value.textContent = row.value;
-    value.title = row.note;
-    value.className = row.level;
-    cells.push(label, value);
-  }
-  list.replaceChildren(...cells);
 }

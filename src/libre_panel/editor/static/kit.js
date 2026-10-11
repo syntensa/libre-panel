@@ -10,7 +10,7 @@
 
 const pageId = () => decodeURIComponent(location.pathname.split("/")[2] || "");
 
-// Editor colours and fonts without the editor's own layout.
+// The colours and fonts of editor.css, on a page that scrolls like any other.
 document.body?.classList.add("plugin-page");
 
 export async function api(path, { method = "GET", body } = {}) {
@@ -60,7 +60,7 @@ export function el(tag, attrs = {}, ...children) {
   return node;
 }
 
-// A labelled control, as in the editor's inspector.
+// A labelled control (editor.css lays it out).
 export function field(label, control, hint) {
   return el("label", { class: "field" }, el("span", { text: label }), control, hint ? el("small", { text: hint }) : null);
 }

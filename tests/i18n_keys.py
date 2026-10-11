@@ -9,12 +9,11 @@ from __future__ import annotations
 import ast
 import json
 import re
-from html.parser import HTMLParser
 from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent / "src" / "libre_panel"
-STATIC = SRC / "editor" / "static"
-PAGES = SRC / "pages" / "web"  # the scripts of the editor's built-in pages
+STATIC = SRC / "editor" / "static"  # what the console's and plugins' pages share (kit.js)
+PAGES = SRC / "pages" / "web"  # the scripts of the built-in pages
 APP = SRC / "editor" / "app"  # the app's modules; not its vendored libraries
 
 _JS_CALL = re.compile(r"""\bt\(\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')""")
@@ -36,7 +35,7 @@ def python_messages() -> set[str]:
 
 
 def script_files() -> list[Path]:
-    """The scripts that show texts: the classic editor's, its built-in pages' and the
+    """The scripts that show texts: those the built-in pages share, the pages' own and the
     app's (not its vendored libraries)."""
     app = (path for path in APP.rglob("*.js") if "vendor" not in path.relative_to(APP).parts)
     return sorted(STATIC.glob("*.js")) + sorted(PAGES.glob("*.js")) + sorted(app)
@@ -54,38 +53,6 @@ def js_messages() -> set[str]:
                 literal = literal.replace("\\'", "'")
             found.add(json.loads(literal))
     return found
-
-
-class _HtmlTexts(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self.found: set[str] = set()
-        self._stack: list[list[str] | None] = []
-
-    def handle_starttag(self, tag, attrs):
-        attrs = dict(attrs)
-        for name in (attrs.get("data-i18n-attr") or "").split():
-            self.found.add(" ".join(attrs[name].split()))
-        if tag in ("img", "input", "meta", "link", "br"):
-            return
-        self._stack.append([] if "data-i18n" in attrs else None)
-
-    def handle_data(self, data):
-        for texts in self._stack:
-            if texts is not None:
-                texts.append(data)
-
-    def handle_endtag(self, tag):
-        if self._stack:
-            texts = self._stack.pop()
-            if texts is not None:
-                self.found.add(" ".join("".join(texts).split()))
-
-
-def html_messages() -> set[str]:
-    parser = _HtmlTexts()
-    parser.feed((STATIC / "index.html").read_text(encoding="utf-8"))
-    return parser.found
 
 
 def dynamic_messages() -> set[str]:
@@ -109,7 +76,7 @@ def dynamic_messages() -> set[str]:
 
 
 def all_messages() -> set[str]:
-    return python_messages() | js_messages() | html_messages() | dynamic_messages()
+    return python_messages() | js_messages() | dynamic_messages()
 
 
 def tables() -> dict[str, set[str]]:
