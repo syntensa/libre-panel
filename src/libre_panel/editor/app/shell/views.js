@@ -45,7 +45,10 @@ function route() {
   const view = views.has(id) ? id : DEFAULT_VIEW;
   const current = store.get().route;
   const next = { view, rest: rest.join("/") };
-  if (current.view !== next.view || current.rest !== next.rest) store.set({ route: next });
+  // `from`: where the person came from, for a "Back" that stays in the app
+  if (current.view !== next.view || current.rest !== next.rest) {
+    store.set({ route: { ...next, from: { view: current.view, rest: current.rest } } });
+  }
 }
 
 addEventListener("hashchange", route);

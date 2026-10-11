@@ -664,6 +664,9 @@
   Start, Live and Settings, which do not show it; only Design and Look draw it again now
 - The command palette gives the keyboard focus back to where it was when it closes
   (Escape or a command that opens nothing); the focus was lost to the page
+- *Back* on a plugin's page goes to the view it was opened from (Start where the app was
+  opened on the page) instead of through the browser's history, which could leave the
+  app
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

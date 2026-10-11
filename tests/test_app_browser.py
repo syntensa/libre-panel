@@ -1404,6 +1404,26 @@ def test_a_plugin_page_opens_in_the_app(page_plugin, page):
     page.frame_locator(".plugin-frame").locator("#out", has_text="1 3").wait_for()
 
 
+def test_back_from_a_plugin_page_stays_in_the_app(app_url):
+    """Back goes to the view the page was opened from, and to Start where the app was opened
+    on the page (history.back() left the app for the page before it)."""
+
+    def back(page):
+        page.locator(".plugin-bar").get_by_role("button", name="Back").click()
+
+    with browser_page(app_url, "plugin/control") as page:
+        back(page)
+        page.wait_for_function("location.hash === '#/home'")
+        page.wait_for_selector(".view .start")
+        page.goto(f"{app_url}#/look")
+        page.wait_for_selector(".look-side")
+        page.goto(f"{app_url}#/plugin/control")
+        page.wait_for_selector(".plugin-bar")
+        back(page)
+        page.wait_for_function("location.hash === '#/look'")
+        page.wait_for_selector(".look-side")
+
+
 def test_a_view_that_cannot_be_drawn_says_so_and_the_others_stay_reachable(app_url):
     """A view that throws (here: a plugin list that is not a list) left the whole page blank.
     The view's place says what happened, the header works, and the view can try again."""
