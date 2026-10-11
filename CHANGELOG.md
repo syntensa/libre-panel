@@ -22,11 +22,6 @@
   several widgets at once, layers with lock and eye, the theme's pictures and
   fonts. The panel's pages are tabs over it: the normal theme, game mode's,
   the round report's and those of plugins' modes, each with its frame rate
-- The hardware's names in the app: *Settings → Sensors → Hardware names*
-  shows the processor, graphics card and memory names the sensors detect, and
-  a text typed there takes their place on the panel (*Automatic* brings the
-  detected one back). In *Design* the same field sits beside a widget that
-  shows one of them
 - *Start*, the first view of the app: the panel at a glance (what it shows,
   its picture, pause, brightness, upside down), the themes made for it to
   switch between with one click, and the way on to Design, Look, Live and
@@ -51,6 +46,11 @@
   readings, the services with a switch each (and *Restart*), test notices of
   every kind with what became of them, and the end of the log; pause and
   brightness are in the header. It polls the console API while it is shown
+- The hardware's names in the app: *Settings → Sensors → Hardware names*
+  shows the processor, graphics card and memory names the sensors detect, and
+  a text typed there takes their place on the panel (*Automatic* brings the
+  detected one back). In *Design* the same field sits beside a widget that
+  shows one of them
 - Everything in the app is a command: Ctrl+K finds it by a few letters
   (themes, modules, sensors, panels, the language, the panel's controls),
   with the keys it has

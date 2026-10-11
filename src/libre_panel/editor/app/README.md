@@ -17,13 +17,13 @@ The editor's server (`editor/server.py`) serves `index.html` at `/`, this folder
 | `core/actions.js` | open, save, save as, import, export, `applyToPanel()`, `adaptPanel()`, `uploadAsset()`, the panel's pages, `themeName(id)` |
 | `core/api.js` | `endpoints.*`, one function per server route |
 | `core/preview.js` | draws the theme with the real renderer, throttled; it follows `rev` by itself |
+| `core/console.js` | the console API (docs/ARCHITECTURE.md): `control.panel()`, `.sources()`, `.services()`, `.probe(kind)`, `.enableService()`, …, and the polling hooks `usePolled(load, ms)` and `useLivePicture()` |
+| `core/stats.js` | the panel's numbers (`RunStatus.stats`) as tiles: `statTiles(stats)`, and `runtime(seconds)` |
 | `core/i18n.js` | `t("English text", { name })`, `fieldLabel`, `widgetLabel`, `enumLabel`, `setLanguage` |
 | `core/shortcuts.js` | `bindKey("mod+k", handler, { when, inInputs })`, `keyLabel()` |
 | `core/commands.js` | the command registry the palette searches |
 | `core/app.js` | the background app (`store.get().app`, polled), `appAction()`, `quitApp()`, the window's bridge |
 | `core/hardware.js` | the hardware's names (`/api/hardware`): `loadHardware()`, `setHardwareName(part, text)`; `store.get().hardware` is `false` where the server has none |
-| `core/console.js` | the console API (docs/ARCHITECTURE.md): `control.panel()`, `.sources()`, `.services()`, `.probe(kind)`, `.enableService()`, …, and the polling hooks `usePolled(load, ms)` and `useLivePicture()` |
-| `core/stats.js` | the panel's numbers (`RunStatus.stats`) as tiles: `statTiles(stats)`, and `runtime(seconds)` |
 | `ui/` | controls (`Toggle`, `Segmented`, `Chips`, `NumberField`, `TextField`, `Select`, `Slider`, `Field`, `Row`, `Section`, `IconButton`), `Icon`, `Popover`, `Menu`, dialogs (`openDialog`, `confirmDialog`, `promptDialog`), `toast()`, the palette |
 | `shell/` | views and routes, the header and its parts (`ThemeTitle`, `SearchTrigger`, `PanelChip`, `UndoRedo`, `ApplyButton`), app-wide commands, plugin pages (`#/plugin/<id>`) |
 | `views/<id>/` | one folder per view: `home` is Start (`#/home`, also `#/start`: the launcher, or on a first start the question "How should it look?"; `#/home/themes` the gallery), `design` the editor, `look` the theme's look and finish, `live` the running panel, `settings` the frame of the settings (sections on the left) |
