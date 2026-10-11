@@ -381,7 +381,7 @@ def test_a_collection_does_not_lead_a_first_start_or_the_quick_list(app_url, iso
     with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
         page.wait_for_selector(".start.first .theme-card")
         assert page.locator(".theme-collection").count() == 0  # nothing of a collection is offered
-        assert set(shown_themes(page)) == {"studio"}  # made for the 9.2" panel: Libre Panel's own
+        assert set(shown_themes(page)) == {"lumen", "studio"}  # made for the 9.2" panel: Libre Panel's own
         page.get_by_role("button", name="See all").click()
         expect(page.locator(".theme-collection")).to_have_count(2)  # closed, at the end
         assert page.locator(".theme-card[data-theme='spur-ii']").count() == 0
