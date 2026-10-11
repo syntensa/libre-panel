@@ -658,6 +658,8 @@ def test_live_shows_the_panel_and_runs_its_services(background, isolated_home):
         # the sources the panel reads, and the services with their switches
         page.wait_for_selector("[data-source=psutil]")
         page.wait_for_selector("[data-service=notices]")
+        # (the source of the hardware's names has a name for people like the others)
+        expect(page.locator("[data-source=hardware] .live-row-name")).to_have_text("Hardware names")
         services = page.locator("[data-service]").evaluate_all(
             "rows => rows.map((r) => r.dataset.service)"
         )
@@ -943,6 +945,25 @@ def test_a_module_from_the_library(page):
     # a click adds one at the first free cells
     page.locator('.tile[data-item="module:clock"]').click()
     assert js(page, "window.libre.doc.single().module") == "clock"
+
+
+def test_every_source_of_a_module_has_a_name_in_both_languages(page):
+    """The fan instrument can show a fan; its chip read "fan" (the names were kept in two
+    places, the toolbar's and the inspector's, and neither had it)."""
+    page.locator('.tile[data-item="module:instrument"]').click()
+    assert js(page, "window.libre.doc.single().module") == "instrument"
+    chips = page.locator(".inspector .chips .chip")
+    for language, names in (
+        ("en", ["CPU", "GPU", "Memory", "Disk", "Fan"]),
+        ("de", ["CPU", "GPU", "Arbeitsspeicher", "Laufwerk", "Lüfter"]),
+    ):
+        js(page, f"window.libre.commands.runCommand('language.{language}')")
+        page.wait_for_function(f"document.documentElement.lang === '{language}'")
+        assert chips.all_inner_texts() == names
+        chips.last.click()  # its source is the fan: the toolbar says so as well
+        assert js(page, "window.libre.doc.single().source") == "fan"
+        expect(page.locator(".floating-toolbar .tool-sensor")).to_have_text(names[-1])
+        chips.first.click()
 
 
 def test_the_command_palette_finds_and_runs(page):

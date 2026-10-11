@@ -36,6 +36,7 @@ const SOURCE_NAMES = () => ({
   presentmon: ["PresentMon", t("frame rates of games")],
   demo: [t("Demo values"), t("made-up readings")],
   services: [t("Services"), t("what the services publish")],
+  hardware: [t("Hardware names"), t("the names of the processor, the graphics card and the memory")],
 });
 
 const SERVICE_NAMES = () => ({

@@ -670,6 +670,8 @@
 - Design: *Detach into widgets* on a module that was removed or undone before the answer
   came replaced the last widget of the theme; the answer is ignored when its module or
   its theme is gone
+- Design: the fan instrument's fan showed as "fan" in its chip, in the inspector and in
+  the toolbar (now "Fan", "Lüfter"), and *Live* names the source of the hardware's names
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

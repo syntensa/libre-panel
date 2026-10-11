@@ -38,6 +38,17 @@ export function boxOf(widget) {
   return isModule(widget) && cells ? cellBox(cells, ...placed(cells, widget)) : null;
 }
 
+/** What a module can show, in words ("fan" is the fan instrument's own). */
+export const sourceLabels = () => ({
+  cpu: "CPU",
+  gpu: "GPU",
+  mem: t("Memory"),
+  disk: t("Disk"),
+  net: t("Network"),
+  sensor: t("Any sensor"),
+  fan: t("Fan"),
+});
+
 /** The fields of a widget type: the common ones and its own ({key: [kind, default]}). */
 export const specOf = (type) => ({ ...(specs()?.common || {}), ...(specs()?.widgets?.[type] || {}) });
 
