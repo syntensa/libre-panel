@@ -8,7 +8,9 @@ shows. The service only decides *when* something is worth a message.
 
 It looks at every new sample (``host.on("sample")``) and asks for the readings
 it needs (``host.want``), so the volume and what is playing are read although
-no theme on the panel shows them.
+no theme on the panel shows them. The volume is also looked at whenever it
+moves between two samples (``host.on("fresh")``), so its message comes within
+a frame or two of the key, not with the next reading.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ from libre_panel.sensors.base import Snapshot
 from libre_panel.services.readings import is_playing, number, readable
 
 VOLUME_STEP = 1.0  # percent: a smaller change is no news
+VOLUME_KEYS = frozenset({"audio.volume", "audio.muted"})
 HINT_AFTER_S = 30.0  # without a volume reading for this long, say what is missing
 COVER = "media.cover"
 APP_ICON = "media.app_icon"  # the icon of the program that plays, if a source brings it
@@ -129,7 +132,7 @@ class Notices(Service):
             parse_limit(e, f"warnings[{n}]", report) for n, e in enumerate(options["warnings"], 1)
         ]
         self.limits = [limit for limit in entries if limit is not None]
-        self._volume: tuple[float, bool] | None = None  # as of the sample before
+        self._volume: tuple[float, bool] | None = None  # at the last message, or the first value
         self._volume_seen = False
         self._hinted = False
         self._track: tuple[str, str] | None = None  # (title, artist) of what plays
@@ -140,11 +143,13 @@ class Notices(Service):
     def start(self) -> None:
         keys = [limit.key for limit in self.limits]
         if self.options["volume"]:
-            keys += ["audio.volume", "audio.muted"]
+            keys += sorted(VOLUME_KEYS)
         if self.options["music"]:
             keys += ["media.*"]
         self.host.want(*keys)
         self.host.on("sample", self.on_sample)
+        if self.options["volume"]:
+            self.host.on("fresh", self.on_fresh)
         if self.options["restarted"]:
             self.host.on("panel-restarted", self.on_restarted)
 
@@ -164,6 +169,12 @@ class Notices(Service):
         for limit in self.limits:
             self._check_limit(limit, snapshot, now)
 
+    def on_fresh(self, snapshot: Snapshot, keys: frozenset[str]) -> None:
+        """The volume moved between two samples: tell it now, not with the next reading."""
+        if self._stopped or VOLUME_KEYS.isdisjoint(keys):
+            return
+        self._check_volume(snapshot, self.clock())
+
     def _check_volume(self, snapshot: Snapshot, now: float) -> None:
         volume = number(snapshot.value("audio.volume"))
         if volume is None:
@@ -175,11 +186,12 @@ class Notices(Service):
             return
         self._volume_seen = True
         muted = bool(snapshot.value("audio.muted"))
-        before, self._volume = self._volume, (volume, muted)
+        before = self._volume
+        if before is not None and muted == before[1] and abs(volume - before[0]) < VOLUME_STEP:
+            return  # the mark stays what was told, so a slow turn still adds up to a step
+        self._volume = (volume, muted)
         if before is None:
             return  # the first value is no change
-        if muted == before[1] and abs(volume - before[0]) < VOLUME_STEP:
-            return
         text, share = (t("Muted"), 0.0) if muted else (f"{volume:.0f}", volume / 100)
         self._tell(VOLUME, text, {"label": t("Volume"), "progress": share})
 

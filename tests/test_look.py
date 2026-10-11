@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import numpy as np
 import pytest
-from PIL import Image
+from PIL import Image, ImageChops
 
 from libre_panel.config import config_dir
 from libre_panel.render import finish as finishes
@@ -734,6 +734,22 @@ def test_spur_classic_is_spur_iis_classic_screen_on_the_bar():
     assert not any(w.get("ridge") for w in theme.widgets) and renderer.light_edges == []
     shown = {w["sensor"] for w in theme.widgets if w["type"] in ("metric", "bar", "graph")}
     assert {key for key in shown if found.value(key) is None} == set()  # the demo has them all
+
+
+def test_spur_classics_ram_heading_is_the_memorys_name_or_else_its_size():
+    theme = load_theme(builtin_themes_dir() / "spur-classic")
+    heading = next(w for w in theme.widgets if w["id"] == "mem-name")
+    assert (heading["sensor"], heading["format"]) == ("mem.name", "{value}")
+    frames = {}
+    for name in ("Kingston DDR5-5600 32 GB", "32 GB"):  # a found name, or the size alone
+        found = demo_snapshot(fixed_time=1_700_000_000)
+        found.readings["mem.name"] = Reading("mem.name", name, "", "Memory")
+        frames[name] = Renderer(theme).render(found, 0.0)[0].convert("RGB")
+    left, top = heading["x"], heading["y"]
+    box = (left, top, left + heading["max_width"], top + 2 * heading["font_size"])
+    changed = ImageChops.difference(*frames.values()).getbbox()
+    assert changed is not None and box[0] <= changed[0] and changed[2] <= box[2]  # only there
+    assert box[1] <= changed[1] and changed[3] <= box[3]
 
 
 @pytest.mark.parametrize("size", [(480, 320), (320, 480), (1920, 480)])

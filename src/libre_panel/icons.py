@@ -54,6 +54,10 @@ ICON_NAMES = (
     "stick",
     "phone",
     "ssd",
+    "play",
+    "pause",
+    "up",
+    "down",
     "weather",
 )
 
@@ -325,6 +329,28 @@ def _music(pen: _Pen) -> None:
     pen.circle(17.3, 16, 2.7, fill=True)
 
 
+def _play(pen: _Pen) -> None:
+    corners = [(7.5, 4.5), (7.5, 19.5), (19, 12)]
+    pen.draw.polygon([pen.p(*c) for c in corners], fill=pen.color)
+    pen.polygon(corners)  # its stroke rounds the corners
+
+
+def _pause(pen: _Pen) -> None:
+    for left in (6.5, 13.5):
+        box = [*pen.p(left, 4.5), *pen.p(left + 4, 19.5)]
+        pen.draw.rounded_rectangle(box, radius=pen.s * 1.1, fill=pen.color)
+
+
+def _up(pen: _Pen) -> None:
+    pen.line((12, 20), (12, 4.5))
+    pen.line((6, 10.5), (12, 4.5), (18, 10.5))
+
+
+def _down(pen: _Pen) -> None:
+    pen.line((12, 4), (12, 19.5))
+    pen.line((6, 13.5), (12, 19.5), (18, 13.5))
+
+
 def _calendar(pen: _Pen) -> None:
     pen.rect(3, 5, 21, 21, 2)
     pen.line((3, 10), (21, 10))
@@ -478,6 +504,10 @@ _ICONS: dict[str, Callable[[_Pen], None]] = {
     "stick": _stick,
     "phone": _phone,
     "ssd": _ssd,
+    "play": _play,
+    "pause": _pause,
+    "up": _up,
+    "down": _down,
 }
 
 

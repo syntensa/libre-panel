@@ -58,5 +58,5 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y xvfb stalonetray
       - run: pip install -e ".[dev,tray]" playwright
       - run: python -m playwright install --with-deps chromium
-      - name: Theme editor in a browser, tray icon on X11
-        run: pytest -q -rs tests/test_editor_browser.py tests/test_tray.py
+      - name: The app and the classic editor in a browser, tray icon on X11
+        run: pytest -q -rs tests/test_app_browser.py tests/test_editor_browser.py tests/test_tray.py

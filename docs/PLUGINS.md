@@ -129,7 +129,7 @@ while Libre Panel runs.
 | `host.show_theme(name, transition=None, priority=0, mode=ANY_MODE)` / `host.restore_theme(transition=None)` | show another theme for a while; `config.toml` stays as it is. `transition`: `cut`, `fade`, `slide`, a plugin's, or `(name, {parameters})`; default from `config.toml`. `mode=None`: only while no mode is on; `mode="game"`: only in that mode |
 | `host.set_mode(name, transition=None)` / `host.mode` | switch to a mode from `[modes.<name>]`; `None` ends it. A transition plays also when the theme stays |
 | `host.notify(text, icon=None, level="info", seconds=None, kind="", rank=0, payload=None, key="")` | a short message on the panel (see *Toasts*). It returns a `Delivery`: true when the message will show, else `reason` says why (`"theme"`, `"screen"`, `"no-panel"`) |
-| `host.on(event, callback)` | `panel-connected`, `panel-lost`, `panel-restarted` (after `panel-connected`, when the panel came back from a restart that cleared a hung video decoder, not from a replug), `theme-changed` (`theme=`), `mode-changed` (`mode=`), `sample` (`snapshot=`, see below), `quit`; callbacks run in an event thread |
+| `host.on(event, callback)` | `panel-connected`, `panel-lost`, `panel-restarted` (after `panel-connected`, when the panel came back from a restart that cleared a hung video decoder, not from a replug), `theme-changed` (`theme=`), `mode-changed` (`mode=`), `sample` (`snapshot=`) and `fresh` (`snapshot=`, `keys=`), see below, `quit`; callbacks run in an event thread |
 | `host.data_dir` | `<settings>/plugins-data/<service>/` for the service's files |
 | `host.log` | a logger named after the service |
 
@@ -174,13 +174,35 @@ def on_sample(self, snapshot):
   not stop the others.
 - Readings from sources that read on every frame (the volume) are brought up
   to date between samples; a `sample` callback sees them as of the sample.
-  For a volume bar that follows the keys closely use a theme with a short
-  `refresh_ms`.
+  To hear of a change when it happens, listen to `fresh` as well (below).
 - Readings you publish reach the next frame, not only the next sample. A
   `set_mode` or `show_theme` right after a `publish` is therefore drawn with
   the value already in; nothing needs to wait for a sample. (Images reach the
   snapshot with the next sample; pass an image a transition needs to it as a
   parameter instead of its key.)
+
+A source that follows on every frame (`every_frame`: the volume, the fast load,
+what services publish) can change between two samples. The main loop then emits
+`fresh` on the frame the change shows in, with the snapshot (its readings
+already up to date) and `keys`, the readings that changed:
+
+```python
+def start(self):
+    self.host.on("sample", self.on_sample)
+    self.host.on("fresh", self.on_fresh)
+
+
+def on_fresh(self, snapshot, keys):
+    if "audio.volume" in keys:  # the volume moved, say so within a frame or two
+        self.on_volume(snapshot.value("audio.volume"))
+```
+
+- Nothing is emitted while the readings stand still, so listening costs nothing
+  between changes. A `fresh` callback only hears readings that follow on every
+  frame; a limit on a temperature is for `sample`.
+- It runs in the thread of `sample`, one callback after the other, never two
+  at once. A slow callback is handed the newest snapshot when it is free again,
+  with the keys that changed meanwhile.
 
 ### States: `host.publish_state(key, value)`
 
@@ -869,7 +891,7 @@ None, so a page says what is missing instead of failing.
 | `restart_service(name)` | stop and start an enabled service again; its new state |
 | `follow_config()` | after a page wrote `config.toml` (`services.enabled`, a service's options): have the running app bring its services in line with it now, instead of when the panel loop next sees the file, which it does not while the panel is paused. Nothing happens in a plain editor |
 | `snapshot()` | the readings and history the panel was last drawn from, or None |
-| `status()` | what the panel is doing, as `/api/app` shows it: `state`, `detail`, `target`, `theme`, `frames`, `mode` and `stats` (frame rate, drawing time, data rate, the video link, faults; see [Running in the background](BACKGROUND.md#how-the-panel-is-doing)); None without the background app |
+| `status()` | what the panel is doing, as `/api/app` shows it: `state`, `detail`, `hint` (what to do when temperatures and power show "--", else `""`), `target`, `theme`, `frames`, `mode` and `stats` (frame rate, drawing time, data rate, the video link, faults; see [Running in the background](BACKGROUND.md#how-the-panel-is-doing)); None without the background app |
 | `sources()` | the sensor sources the panel reads, the first with a reading wins: `[{"name", "readings", "status"}]`, with the number of readings the last snapshot took from the source and, if it has a `status()` (LibreHardwareMonitor does), what it says about itself as a dict |
 | `shown_frame()` | the frame on the panel now, with transitions and messages, as a PIL image in the theme's orientation (not turned for an upside-down panel); None before the first frame and while the panel is paused. Read it only |
 | `notify(text, **options)` | a message on the panel as a service sends it (`ServiceHost.notify`'s arguments), e.g. a test or the answer to an action; returns the `Delivery` (see *Toasts*) |

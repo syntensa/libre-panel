@@ -1,11 +1,12 @@
 # Running in the background
 
 For everyday use Libre Panel runs as a small background app: it drives the
-panel, serves the theme editor and shows an icon in the system tray. It can
-start by itself when you log in.
+panel, shows an icon in the system tray and opens its own window (start,
+theme editor, settings) when you want it. It can start by itself when you log
+in.
 
 ```bash
-libre-panel tray                 # start it (opens the editor the first time)
+libre-panel tray                 # start it (opens its window the first time)
 libre-panel autostart enable     # start it at every login
 libre-panel autostart status
 libre-panel autostart disable
@@ -32,12 +33,15 @@ Installed with pip, add the `tray` extra: `pipx install "libre-panel[usb,serial,
 | Item | What it does |
 |---|---|
 | status line | what the panel shows, or why it waits (e.g. "waiting for the panel") |
-| **Open theme editor** | also a click on the icon |
+| hint line | only on Windows, only while temperatures and power show "--": the one thing to do about it, e.g. "CPU temperature and power need administrator rights: run Libre Panel as administrator." The tooltip of the icon says it too |
+| **Open Libre Panel** | the app's window on *Start*; also a click on the icon |
+| **Theme editor** | the window on *Design* |
 | **Theme** | switch the theme on the panel |
 | **Brightness** | Off, 10–100 %; written to `config.toml` |
 | **Pause panel** | stops sending frames and releases the USB device, e.g. for the vendor app |
 | **Start with system** | the same as `libre-panel autostart enable/disable` |
-| **Open settings folder** / **Open log** | `config.toml`, user themes, `logs/libre-panel.log` |
+| **Settings** | the window on *Settings* |
+| **Open settings folder** / **Open log** | `config.toml`, user themes, `logs/libre-panel.log` (in the file manager) |
 | **Quit Libre Panel** | |
 
 The icon's dot shows the state: green = showing, amber = waiting for the
@@ -45,9 +49,41 @@ panel, grey = paused, red = the config or theme needs attention (the log and
 the editor say why; Libre Panel starts again by itself as soon as the file is
 fixed).
 
-The same controls are in the editor: the **Panel** button at the top right
-shows the state and has pause, brightness, upside down, start with system
-and quit.
+The same controls are in the app: the panel button at the top right of
+*Design* shows the state and has pause, brightness, upside down, start with
+system and quit.
+
+## The app's window
+
+Libre Panel shows its app (*Start*, *Design*, *Look*, *Live*, *Settings*) in a
+window of its own, not in the browser. There is one window at a time: whatever
+asks for the app again (the tray, `libre-panel start`, `libre-panel editor`, a
+second start) brings that window to the front, on the view it asks for. The
+window keeps its size for the next time; with unsaved changes, closing it asks
+first; quitting Libre Panel closes it.
+
+- **Windows:** WebView2 draws the window. Windows 11 has it, Windows 10 gets
+  it with Microsoft Edge; the downloads bring everything else. Installed with
+  pip: `pipx install "libre-panel[usb,serial,tray,window]"`.
+- **Linux:** WebKitGTK draws the window, through pywebview and PyGObject.
+  WebKitGTK and PyGObject come from your distribution:
+
+  | Distribution | Packages |
+  |---|---|
+  | Debian, Ubuntu | `sudo apt install python3-gi gir1.2-webkit2-4.1` |
+  | Fedora | `sudo dnf install python3-gobject webkit2gtk4.1` |
+  | Arch | `sudo pacman -S python-gobject webkit2gtk-4.1` |
+  | openSUSE | `sudo zypper install python3-gobject typelib-1_0-WebKit2-4_1` |
+
+  pywebview goes into the environment Libre Panel runs in, which must see the
+  system's PyGObject: `pipx install --system-site-packages
+  "libre-panel[usb,serial,tray]"`, then `pipx inject libre-panel pywebview`.
+  The AppImage and the Linux archive have no window yet: they open the browser.
+- **Without a window** (no WebView2 runtime, no WebKitGTK, no desktop, an SSH
+  session) the app opens in the browser as it always did. `libre-panel editor
+  --browser` asks for the browser, `libre-panel editor --no-browser` only
+  serves the app. `libre-panel window --check` says whether a window can open
+  here, and why not.
 
 ## How the panel is doing
 
@@ -77,7 +113,7 @@ theme per mode and the log.
 |---|---|
 | **Live picture** | the frame on the panel now, with transitions and messages, about five times a second; it is the theme's way up, not turned for an upside-down panel. Paused, it says so |
 | **How the panel is doing** | the numbers above as tiles, with the panel's state and how long the loop has run |
-| **Sensor sources** | each source in the order it is asked, with the readings it gave last time. LibreHardwareMonitor says how it is read (inside Libre Panel or through its web server), whether Libre Panel has administrator rights, whether the CPU's sensors are within reach and which PawnIO driver is there, and on Windows what to do when no temperature or power arrives |
+| **Sensor sources** | each source in the order it is asked, with the readings it gave last time. LibreHardwareMonitor says how it is read (inside Libre Panel or through its web server), whether Libre Panel has administrator rights, whether the CPU's sensors are within reach and which PawnIO driver is there, and on Windows what to do when the CPU's temperature and power or all of them do not arrive: the same sentence as the tray's hint line |
 | **Services** | each service Libre Panel knows, with its state (running, failed with the reason, stopped, off, or changing while the app follows a change of `config.toml`) and **Restart**, which stops it and starts it again with its settings. A service that is not in `[services] enabled` is off |
 | **Test messages** | sends a test message of each kind (volume, music, warning, panel, device, game) and says whether it shows, or why not: the theme switches the kind off (`toast.off`), the screen shows it itself, or no panel is connected |
 | **Theme per mode** | the theme of the normal mode and of game mode, written to `config.toml` (`theme`, and `theme` under `[modes.game]`); "same as the normal mode" leaves the game mode without a theme of its own |
@@ -104,8 +140,8 @@ only with USB standby power does it stay on at all.
 ## Only one at a time
 
 Only one Libre Panel drives the panel. Starting it a second time (a second
-double-click, `libre-panel tray`, `libre-panel editor`) opens the editor of
-the one that is already running. `libre-panel run` and `libre-panel doctor`
+double-click, `libre-panel tray`, `libre-panel editor`) brings the window of
+the one that is already running to the front. `libre-panel run` and `libre-panel doctor`
 refuse to start while it runs — quit it from the tray first.
 
 ## Autostart, per system
@@ -171,10 +207,11 @@ task, until the next login) still use the old place.
   extension, so the icon appears there; on other distributions install the
   "AppIndicator and KStatusNotifierItem Support" extension.
 - Without PyGObject (e.g. the release download), Linux trays show a plain
-  icon without a menu: a click opens the editor, which has the same controls.
+  icon without a menu: a click opens the app's window, which has the same
+  controls.
   With PyGObject and AppIndicator installed you get the full menu.
 - No tray at all (a server, a minimal window manager): Libre Panel runs
-  without an icon; open the editor with `libre-panel editor`.
+  without an icon; open the app with `libre-panel editor`.
 
 ### Headless (no desktop session)
 

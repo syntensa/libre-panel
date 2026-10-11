@@ -7,7 +7,7 @@ import json
 import pytest
 
 from libre_panel.devices.models import find_model
-from libre_panel.render.renderer import Renderer, _needs
+from libre_panel.render.renderer import Renderer, need_key
 from libre_panel.sensors.base import Snapshot
 from libre_panel.sensors.demo import demo_report, demo_snapshot
 from libre_panel.theme.adapt import adapt_theme
@@ -21,8 +21,6 @@ from libre_panel.theme.model import (
 
 SPUR = ["spur-horizon", "spur-header", "spur-focus", "spur-session", "spur-cockpit",
         "round-report"]  # fmt: skip
-# readings the demo has not got yet: they come with the merge of the sources that add them
-LATER = {"mem.name"}
 # the game service publishes this one, and a demo value would hide it: the program's name
 # (game.app) stands in on the screens, so the demo leaves it out
 LEFT_OUT = {"game.name"}
@@ -46,7 +44,10 @@ def keys_read(theme):
     """The readings a theme asks for, by widgets and by their needs."""
     keys = {w["sensor"] for w in theme.widgets if w.get("sensor")}
     for widget in theme.widgets:
-        keys |= {key for _, key, _ in _needs(widget) if key and not key.startswith("@")}
+        for need in (widget.get("needs") or "").split(","):
+            need = need.strip().lstrip("!").strip()
+            if need and not need.startswith("@"):  # (a picture is no reading)
+                keys.add(need_key(need))
     return keys
 
 
@@ -72,7 +73,7 @@ def test_a_spur_screen_draws_whole_with_the_demo(name):
     # flat frames and no ridges (the user's wish): nothing on the screen catches the panel light
     assert not any(w.get("ridge") for w in theme.widgets) and renderer.light_edges == []
     absent = {key for key in keys_read(theme) if snapshot.value(key) is None}
-    assert absent <= LATER | LEFT_OUT, absent  # the demo has every reading a screen shows
+    assert absent <= LEFT_OUT, absent  # the demo has every reading a screen shows
 
 
 @pytest.mark.parametrize("name", SPUR)

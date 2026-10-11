@@ -17,17 +17,17 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from libre_panel.theme.model import FINISHES
+from libre_panel.theme.model import AUTO, FINISHES
 
 FLAT = FINISHES[0]
 # The types a module hands its finish to (theme.modules): its rings, bars,
 # graphs, icons and texts are drawn with it where the finish has them.
-PART_TYPES = ("bar", "gauge", "graph", "icon", "text", "metric")
-# Built-in finishes: the module that registers them when it is imported.
+PART_TYPES = ("bar", "gauge", "graph", "icon", "symbol", "downloads", "text", "metric")
+# Built-in finishes: the modules that register them when they are imported.
 _BUILT_IN = {
-    "lit": "libre_panel.render.lit",
-    "facet": "libre_panel.render.facet",
-    "acrylic": "libre_panel.render.facet",
+    "lit": ("libre_panel.render.lit", "libre_panel.render.symbols", "libre_panel.render.download"),
+    "facet": ("libre_panel.render.facet",),
+    "acrylic": ("libre_panel.render.facet",),
 }
 
 
@@ -93,14 +93,15 @@ def get(name: str, widget_type: str) -> Finish | None:
     """The finish ``name`` for widgets of ``widget_type``, or None (drawn flat)."""
     if name not in _imported and name in _BUILT_IN:
         _imported.add(name)
-        importlib.import_module(_BUILT_IN[name])
+        for module in _BUILT_IN[name]:
+            importlib.import_module(module)
     return _REGISTERED.get((name, widget_type))
 
 
 def supports(widget: dict[str, Any]) -> bool:
     """Whether ``widget`` is drawn with the finish it names (flat always is)."""
     name = widget.get("finish", FLAT)
-    if name == FLAT:
+    if name in (FLAT, AUTO):
         return True
     if widget["type"] == "module":
         return any(get(name, part) is not None for part in PART_TYPES)

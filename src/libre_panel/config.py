@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import tomllib
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -64,11 +65,13 @@ port = ""
 
 [sensors]
 # Sensor sources, queried in this order: for each reading the first source that
-# has one wins. Available: load (CPU and GPU load ten times a second), psutil,
-# librehardwaremonitor (Windows: GPU, temperatures, power, fans), audio (the
-# volume), calendar, homeassistant, mqtt, presentmon, demo, plus any installed
-# sensor plugin (see the configuration guide for their settings). The sun, the
-# moon and what is playing come by themselves.
+# has one wins. Available: load (CPU and GPU load ten times a second), audio (the
+# volume and mute of the default output: Windows, Linux with wpctl or pactl),
+# psutil, librehardwaremonitor (Windows: GPU, temperatures, power, fans),
+# calendar, homeassistant, mqtt, presentmon, demo, plus any installed sensor
+# plugin (see the configuration guide for their settings). load and audio work
+# only while a theme or a service shows their readings. The sun, the moon and
+# what is playing come by themselves.
 providers = @PROVIDERS@
 
 [sensors.librehardwaremonitor]
@@ -94,6 +97,15 @@ url = "http://127.0.0.1:8085/data.json"
 # What a theme's ping connects to (host:port); only while a theme shows the ping.
 # ping = "1.1.1.1:443"
 
+[hardware]
+# The names a theme shows for the processor (cpu.name), the graphics card (gpu.name) and
+# the memory (mem.name). Libre Panel finds them itself and shortens them: "Ryzen 5 7600",
+# "GeForce RTX 4070", "Kingston DDR5-5600 32 GB". Text of your own is shown instead, as
+# you write it; empty means as found. The names stay on this computer.
+# cpu_name = ""
+# gpu_name = ""
+# memory_name = ""
+
 [weather]
 # Weather is off by default. Turn it on and set your own location.
 enabled = false
@@ -109,11 +121,17 @@ update_minutes = 15
 
 def default_providers(platform: str | None = None) -> list[str]:
     """The sensor sources of a config that names none, in order of priority: the fast
-    load source; on Windows LibreHardwareMonitor, which alone has the GPU, temperatures,
-    power and fans there (and costs nothing while it is not running); psutil."""
-    if (platform or sys.platform) == "win32":
-        return ["load", "librehardwaremonitor", "psutil"]
-    return ["load", "psutil"]
+    load source; the volume where it can be read (Windows, and Linux through ``wpctl`` or
+    ``pactl``; it reads only while a theme or a service shows it); on Windows
+    LibreHardwareMonitor, which alone has the GPU, temperatures, power and fans there (and
+    costs nothing while it is not running); psutil."""
+    where = platform or sys.platform
+    sources = ["load"]
+    if where == "win32" or where.startswith("linux"):
+        sources.append("audio")
+    if where == "win32":
+        sources.append("librehardwaremonitor")
+    return [*sources, "psutil"]
 
 
 def default_config_toml(platform: str | None = None) -> str:
@@ -199,6 +217,15 @@ class SensorsConfig:
 
 
 @dataclass
+class HardwareConfig:
+    """The user's own names for the hardware (``[hardware]``); empty: the one found."""
+
+    cpu_name: str = ""
+    gpu_name: str = ""
+    memory_name: str = ""
+
+
+@dataclass
 class WeatherConfig:
     enabled: bool = False
     provider: str = "open-meteo"
@@ -230,9 +257,10 @@ class Config:
     language: str = "auto"
     refresh_ms: int | None = None
     fps: int = 10
-    transition: str = "fade"  # between themes: cut, fade, slide, or one from a plugin
+    transition: str = "fade"  # between themes: cut, fade, slide, tube, entrance, or a plugin's
     device: DeviceConfig = field(default_factory=DeviceConfig)
     sensors: SensorsConfig = field(default_factory=SensorsConfig)
+    hardware: HardwareConfig = field(default_factory=HardwareConfig)
     weather: WeatherConfig = field(default_factory=WeatherConfig)
     services: ServicesConfig = field(default_factory=ServicesConfig)
     modes: dict[str, ModeConfig] = field(default_factory=dict)
@@ -249,6 +277,19 @@ def _expect(value: Any, kind: type | tuple[type, ...], name: str) -> Any:
     if not isinstance(value, kind):
         raise ConfigError(f"{name}: expected {kind}, got {type(value).__name__}")
     return value
+
+
+HARDWARE_NAME_LENGTH = 100
+
+
+def hardware_name(value: Any, name: str) -> str:
+    """The text of a ``[hardware]`` setting as a heading shows it: on one line, without the
+    spaces around it (empty means "as found")."""
+    text = " ".join(_expect(value, str, name).split())
+    text = "".join(char for char in text if unicodedata.category(char) != "Cc")
+    if len(text) > HARDWARE_NAME_LENGTH:
+        raise ConfigError(f"{name}: at most {HARDWARE_NAME_LENGTH} characters")
+    return text
 
 
 def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
@@ -298,6 +339,13 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     if cfg.sensors.providers == _OLD_DEFAULT_PROVIDERS:
         cfg.sensors.providers = default_providers()
     cfg.sensors.options = {k: v for k, v in sensors.items() if isinstance(v, dict)}
+
+    hw = _expect(data.get("hardware", {}), dict, "hardware")
+    cfg.hardware = HardwareConfig(
+        cpu_name=hardware_name(hw.get("cpu_name", ""), "hardware.cpu_name"),
+        gpu_name=hardware_name(hw.get("gpu_name", ""), "hardware.gpu_name"),
+        memory_name=hardware_name(hw.get("memory_name", ""), "hardware.memory_name"),
+    )
 
     w = data.get("weather", {})
     cfg.weather.enabled = _expect(w.get("enabled", False), bool, "weather.enabled")

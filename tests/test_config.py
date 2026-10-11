@@ -7,6 +7,7 @@ from libre_panel.config import (
     ConfigError,
     config_dir,
     default_providers,
+    hardware_name,
     load_config,
     parse_config,
     write_default_config,
@@ -25,6 +26,82 @@ def test_default_template_parses_to_defaults():
     assert cfg.weather.enabled is False
     assert cfg.sensors.providers == default_providers()
     assert cfg.sensors.options["librehardwaremonitor"]["url"].startswith("http://127.0.0.1")
+
+
+def hardware_names(config):
+    hardware = config.hardware
+    return hardware.cpu_name, hardware.gpu_name, hardware.memory_name
+
+
+def test_the_hardware_names_are_the_found_ones_unless_the_user_writes_them():
+    assert hardware_names(load_config()) == ("", "", "")
+    assert hardware_names(parse_config({})) == ("", "", "")
+    assert hardware_names(parse_config({"hardware": {}})) == ("", "", "")
+    cfg = parse_config({"hardware": {"gpu_name": "My card"}})
+    assert hardware_names(cfg) == ("", "My card", "")
+
+
+def test_the_default_template_has_the_hardware_names_as_comments():
+    assert "[hardware]" in DEFAULT_CONFIG_TOML
+    for key in ("cpu_name", "gpu_name", "memory_name"):
+        assert f'# {key} = ""' in DEFAULT_CONFIG_TOML
+    assert tomllib.loads(DEFAULT_CONFIG_TOML)["hardware"] == {}  # nothing set, nothing written
+    assert hardware_names(parse_config(tomllib.loads(DEFAULT_CONFIG_TOML))) == ("", "", "")
+
+
+def test_the_users_hardware_names_are_text_on_one_line():
+    cfg = parse_config(
+        {"hardware": {"cpu_name": "  My   CPU ", "gpu_name": "Two\nlines\there", "memory_name": ""}}
+    )
+    assert hardware_names(cfg) == ("My CPU", "Two lines here", "")
+    assert hardware_name("a\x07b\x00c", "x") == "abc"  # control characters cannot be drawn
+    assert hardware_name("Ünïcode ✓ 32 GB", "x") == "Ünïcode ✓ 32 GB"
+    assert hardware_name("x" * 100, "x") == "x" * 100
+
+
+@pytest.mark.parametrize(
+    ("data", "message"),
+    [
+        ({"hardware": {"cpu_name": 5}}, "hardware.cpu_name"),
+        ({"hardware": {"gpu_name": True}}, "hardware.gpu_name"),
+        ({"hardware": {"memory_name": ["a"]}}, "hardware.memory_name"),
+        ({"hardware": {"cpu_name": "x" * 101}}, "hardware.cpu_name: at most 100 characters"),
+        ({"hardware": "My CPU"}, "hardware"),
+    ],
+)
+def test_hardware_names_that_are_not_text_or_are_too_long_are_refused(data, message):
+    with pytest.raises(ConfigError, match=message):
+        parse_config(data)
+
+
+def test_set_config_value_writes_a_hardware_name_into_the_template_and_keeps_its_notes(
+    isolated_home,
+):
+    from libre_panel.config import edit_config, set_config_value
+
+    path = write_default_config()
+    set_config_value("hardware.cpu_name", "My CPU")
+    edit_config(("value", "hardware.memory_name", "2x16 GB"), ("value", "hardware.gpu_name", ""))
+    text = path.read_text(encoding="utf-8")
+    assert tomllib.loads(text)["hardware"] == {
+        "cpu_name": "My CPU", "memory_name": "2x16 GB", "gpu_name": ""
+    }  # fmt: skip
+    assert "The names stay on this computer." in text and "[weather]" in text
+    assert hardware_names(load_config()) == ("My CPU", "", "2x16 GB")
+    set_config_value("hardware.cpu_name", "")  # back to the found one
+    assert hardware_names(load_config()) == ("", "", "2x16 GB")
+
+
+def test_a_hardware_name_is_added_to_a_config_that_has_no_such_section(isolated_home):
+    from libre_panel.config import set_config_value
+
+    path = config_dir() / "config.toml"
+    path.parent.mkdir(parents=True)
+    path.write_text('theme = "slate"  # mine\n\n[device]\nbrightness = 40\n', encoding="utf-8")
+    set_config_value("hardware.gpu_name", "My card")
+    assert path.read_text(encoding="utf-8").startswith('theme = "slate"  # mine\n')
+    assert hardware_names(load_config()) == ("", "My card", "")
+    assert load_config().device.brightness == 40
 
 
 def test_weather_needs_a_location():

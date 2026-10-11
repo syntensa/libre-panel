@@ -119,6 +119,7 @@ class DemoProvider(SensorProvider):
         out.update(demo_calendar(t))
         out["cpu.name"] = Reading("cpu.name", "8-Core Processor", "", "CPU")
         out["gpu.name"] = Reading("gpu.name", "Graphics Card", "", "GPU")
+        out["mem.name"] = Reading("mem.name", "DDR5-5600 32 GB", "", "Memory")
         if self.include_weather:
             for key, (label, unit, value) in _WEATHER.items():
                 out[key] = Reading(key, value, unit, label)
@@ -224,6 +225,8 @@ def demo_forecast(t: float) -> dict[str, Reading]:
     local = datetime.fromtimestamp(t).astimezone()
     offset = local.utcoffset()
     midnight = local.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    step_now = (local.replace(tzinfo=None) - midnight) // timedelta(minutes=15)
+    rain = [0.6 if 3 <= n - step_now < 7 else 0.0 for n in range(192)]  # dry now, then an hour
     hours = range(48)
     data = {
         "utc_offset_seconds": int(offset.total_seconds()) if offset else 0,
@@ -240,6 +243,11 @@ def demo_forecast(t: float) -> dict[str, Reading]:
         "daily": {
             "time": [(midnight + timedelta(days=d)).strftime("%Y-%m-%d") for d in range(7)],
             **_DAILY,
+        },
+        "minutely_15": {
+            "time": [(midnight + timedelta(minutes=15 * n)).strftime("%Y-%m-%dT%H:%M")
+                     for n in range(192)],
+            "precipitation": rain,
         },
         "daily_units": {"temperature_2m_max": "°C", "temperature_2m_min": "°C",
                         "precipitation_probability_max": "%"},

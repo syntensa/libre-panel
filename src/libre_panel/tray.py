@@ -2,9 +2,9 @@
 
 Windows gets the full menu. On Linux, pystray uses AppIndicator when
 PyGObject is installed (full menu) and plain X11 tray icons otherwise, which
-only know a click: it opens the editor, which has the same controls (pause,
-brightness, start with system, quit). Without any tray the app keeps running
-without an icon.
+only know a click: it opens the app's window, which has the same controls
+(pause, brightness, start with system, quit). Without any tray the app keeps
+running without an icon.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ import signal
 import subprocess
 import sys
 import threading
-import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -29,6 +28,8 @@ from libre_panel.service import BackgroundApp
 from libre_panel.theme.model import list_themes
 
 log = logging.getLogger(__name__)
+
+TOOLTIP_CHARS = 120  # Windows: at most 127 characters
 
 
 def headline(state: dict[str, Any]) -> str:
@@ -50,7 +51,11 @@ def tooltip(state: dict[str, Any]) -> str:
     text = headline(state)
     if state.get("detail"):
         text += "\n" + state["detail"]
-    return text if len(text) <= 120 else text[:119] + "…"  # Windows: at most 127 characters
+    elif state.get("hint"):  # what to do about missing readings: it gives the headline room
+        text += "\n" + state["hint"]
+        if len(text) > TOOLTIP_CHARS:
+            text = "Libre Panel\n" + state["hint"]
+    return text if len(text) <= TOOLTIP_CHARS else text[: TOOLTIP_CHARS - 1] + "…"
 
 
 def load_pystray() -> Any:
@@ -94,7 +99,14 @@ class Tray:
         app = self.app
         return menu(
             item(lambda _: headline(app.panel.state()), None, enabled=False),
-            item(t("Open theme editor"), self.open_editor, default=True),
+            item(  # temperatures missing: what to do about it, as long as it is the case
+                lambda _: app.panel.state().get("hint", ""),
+                None,
+                enabled=False,
+                visible=lambda _: bool(app.panel.state().get("hint")),
+            ),
+            item(t("Open Libre Panel"), self.open_app, default=True),
+            item(t("Theme editor"), self.open_editor),
             item(t("Theme"), menu(self._theme_items)),
             item(t("Brightness"), menu(self._brightness_items)),
             item(
@@ -107,6 +119,7 @@ class Tray:
                 self.toggle_autostart,
                 checked=lambda _: bool(app.snapshot()["autostart"]),
             ),
+            item(t("Settings"), self.open_settings_view),
             item(t("Open settings folder"), self.open_settings),
             item(t("Open log"), self.open_log, visible=self.log_path is not None),
             menu.SEPARATOR,
@@ -157,8 +170,15 @@ class Tray:
             except Exception:
                 pass
 
+    def open_app(self) -> None:
+        """The app's window on its start view (also a click on the icon)."""
+        self._later(self.app.editor.open, "home")()
+
     def open_editor(self) -> None:
-        self._later(self.app.editor.open)()
+        self._later(self.app.editor.open, "design")()
+
+    def open_settings_view(self) -> None:
+        self._later(self.app.editor.open, "settings")()
 
     def toggle_pause(self) -> None:
         panel = self.app.panel
@@ -205,6 +225,7 @@ class Tray:
             state["state"],
             state["target"],
             state["detail"],
+            state.get("hint"),
             state.get("mode"),
             self.app.active_theme(),
             snapshot["brightness"],
@@ -282,7 +303,7 @@ def run_app(
     """Run until Quit (tray, editor), Ctrl+C, SIGTERM or the end of the Windows session."""
     url = app.start()
     if open_editor:
-        webbrowser.open(url)
+        app.editor.open("home")
     pystray = load_pystray() if use_icon else None
     _quit_on_signals(app)
     stopped = threading.Event()

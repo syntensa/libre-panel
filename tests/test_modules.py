@@ -129,6 +129,25 @@ def test_larger_modules_show_more():
     assert "history" in parts(2, 2) and "history" in parts(1, 2)
 
 
+def test_the_memory_module_shows_the_memorys_name_like_the_others_show_theirs():
+    t = theme({"module": "ring", "source": "mem", "cols": 2, "rows": 2})
+    assert "m0/name" in shown(Renderer(t, preview=True), snapshot())
+    without = snapshot(drop=("mem.name",))
+    assert "m0/name" not in shown(Renderer(t, preview=True), without)  # a missing name is hidden
+    name = [w for w in Renderer(t, preview=True).widgets if w["id"] == "m0/name"]
+    assert [w["sensor"] for w in name] == ["mem.name"]
+
+
+def test_the_system_module_has_the_memory_where_a_fourth_row_fits():
+    def sensors(rows):
+        renderer = Renderer(theme({"module": "system", "cols": 2, "rows": rows}), preview=True)
+        return [w["sensor"] for w in renderer.widgets if w.get("sensor")]
+
+    # as before in a box for three rows (uptime stays), the names together in a taller one
+    assert sensors(1) == ["cpu.name", "gpu.name", "sys.uptime"]
+    assert sensors(2) == ["cpu.name", "gpu.name", "mem.name", "sys.uptime"]
+
+
 def test_the_disk_takes_the_place_of_a_missing_gpu():
     renderer = Renderer(theme({"module": "ring", "source": "gpu", "cols": 2}), preview=True)
     with_gpu = shown(renderer, snapshot())

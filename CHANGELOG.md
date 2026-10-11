@@ -3,6 +3,33 @@
 ## Unreleased
 
 **New**
+- Libre Panel in a window of its own instead of the browser (pywebview:
+  WebView2 on Windows, WebKitGTK on Linux), one window at a time that keeps
+  its size. A click on the tray icon and *Open Libre Panel* show it on
+  *Start*, *Theme editor* and *Settings* on their views; `libre-panel start`,
+  `libre-panel editor` and a second start open the same window or bring it to
+  the front. Where no window can open (no WebView2 runtime, no GTK with
+  WebKit, the Linux AppImage) the browser opens as before, and
+  `libre-panel editor --browser` asks for it. With pip on Windows: `pip
+  install "libre-panel[window]"`; on Linux see
+  [Running in the background](docs/BACKGROUND.md#the-apps-window)
+- *Design*, the new theme editor: the panel in the middle; modules, building
+  blocks and widgets from a library with pictures in the theme's colours, to
+  drag onto it; a toolbar over the selection for what it shows, how it is
+  drawn (light, facet, acrylic lettering, flat: those that show on it), its
+  colour and size; a short inspector with the rest under *Fine-tuning*, the
+  six looks in the theme's settings; corners that resize, snapping guides,
+  several widgets at once, layers with lock and eye, the theme's pictures and
+  fonts. The panel's pages are tabs over it: the normal theme, game mode's,
+  the round report's and those of plugins' modes, each with its frame rate
+- The hardware's names in the app: *Settings → Sensors → Hardware names*
+  shows the processor, graphics card and memory names the sensors detect, and
+  a text typed there takes their place on the panel (*Automatic* brings the
+  detected one back). In *Design* the same field sits beside a widget that
+  shows one of them
+- Everything in the app is a command: Ctrl+K finds it by a few letters
+  (themes, modules, sensors, panels, the language, the panel's controls),
+  with the keys it has
 - `load`, a sensor source for the CPU and GPU load ten times a second: bars
   and graphs follow the load as it happens instead of once a second. The GPU
   load (Windows, any vendor, no administrator rights) is the one Task Manager
@@ -12,7 +39,8 @@
   `audio.muted` of the default output, read on every frame so a volume bar
   follows the volume keys at once. Windows (no extra program; it follows a
   changed default device) and Linux (`wpctl` or `pactl`). It runs only
-  while a theme shows `audio.*`; add `"audio"` to `[sensors] providers`
+  while a theme or a service shows `audio.*`, and is in the default
+  `[sensors] providers` on both; in a list of your own add `"audio"`
 - Messages in the look of SPUR II: the band (`"toast": {"style": "band"}`,
   or *Theme → Messages* in the editor). A glowing edge ignites from the
   centre and the band rolls down from it, with a title, a cover or icon and
@@ -25,6 +53,38 @@
   `entrance` for a game or another mode (the screen closes to a line, the
   game's logo or name lights up while "Game mode" or "Game ended" types
   in, then the new screen opens)
+- Weather symbols that move: the widget type `symbol` follows a weather code
+  (`weather.code`, `weather.hour.3.code` ...) by day or night, and the sun's
+  rays turn, rain, drizzle and snow fall, clouds drift and breathe, stars
+  twinkle, fog sways and a bolt flashes now and then, as on SPUR II's weather
+  card. Flat, or with `"finish": "lit"` from lit bodies; `moving` and `offset`
+  keep a row of them out of step. It moves where the panel is driven faster
+  than once a second, and stands in the editor's preview
+- The cards of SPUR II's Studio screen, as modules that adapt to any panel:
+  `playback` (the cover, the state, title and artist, the app with its icon,
+  the progress), `forecast` (a moving symbol, the day's range, the details, the
+  rain and the sun, the next hours), `instrument` (a ring of light with its
+  number inside and the readings of the part beside or below it, or a fan
+  with its speed), `download`
+  (what loads, its progress, the rate and the time left, the speed of the last
+  minutes: the new widget type `downloads`, which reads the state of the
+  `downloads` service) and `netcard` (the network, with a download in its place
+  while one runs). Cards are lit by themselves (a module's `finish` is `auto`
+  now: its kind's own), their frames are flat thin lines, and where a module is
+  too small for its card the older module of its kind takes over
+- `cards`, a slot that shows one card of several: the first that has something
+  to show (a track that plays or was paused a short while, the weather, a
+  download that runs), or by a rule of its own on a line (`forecast if
+  weather.temperature`). A change is SPUR II's: a line of light ignites at the
+  top edge, the card on show rolls up into it and the new one rolls down out of
+  it, on the frame's own time, so it takes as long at 50 frames a second as at
+  5. The frame of the slot is a thin line in the colour of the card on show: the
+  cover's, the weather's, the network's
+- A `needs` can compare a reading with a number (`media.playing=1`,
+  `cpu.temp>80`) or ask for a picture a source has (`@media.app_icon`), a state
+  that a service has taken back counts as no value, the colour `@cover` is the
+  colour the cover on show carries (bars, rings and icons follow the track), and
+  `play`, `pause`, `up` and `down` are icons
 - Plugins: a toast style says how long a toast stays (`lifetime`) and how
   long one without its own time holds (`hold_s`), and keeps what it knows
   across theme switches; a transition can hide toasts while it plays
@@ -40,6 +100,11 @@
   `context.state(key)` read it back. `host.want("media.*")` tells the sources
   that work on demand (what is playing, the volume, the load) that a service
   reads them
+- Plugins: `host.on("fresh", callback)` (`snapshot=`, `keys=`) tells a service on the
+  frame a reading of a source that follows on every frame (the volume, the fast load, what
+  services publish) changed between two samples, and only then. It comes in the thread of
+  `sample`, one callback after the other, and a slow one gets the newest with all the keys
+  that changed meanwhile
 - Services of its own, built into the app: `notices`, `game` and `autopilot`.
   They are switched on with `[services] enabled` like a plugin's, all are off
   until you list them, they work in the downloads without any package, and
@@ -360,6 +425,28 @@
 - Liberation Sans ships with Libre Panel (`builtin:LiberationSans-Regular`,
   `-Bold`): its letters are as wide as Arial's, so a layout made for Arial
   stays in place
+- The names of the processor, the graphics card and the memory (`cpu.name`,
+  `gpu.name`, `mem.name`) are found by Libre Panel itself, on Windows and
+  Linux, once at the start, with no administrator rights and no other
+  program: from the registry and the firmware's SMBIOS table on Windows, from
+  `/proc`, `/sys` and the system's `pci.ids` on Linux (and the SMBIOS files,
+  where the user may read them). They are shortened for a panel, "Ryzen 5
+  7600", "Core i7-12700K", "GeForce RTX 4070", "Kingston DDR5-5600 32 GB";
+  where the memory modules cannot be read `mem.name` is the size, "32 GB". The
+  new `hardware` source is always on, adds nothing to a frame's time and wins
+  over LibreHardwareMonitor's names, which fill in where it finds none
+- `[hardware]` in `config.toml`: `cpu_name`, `gpu_name` and `memory_name`. Text
+  there is the name, as written (one line, 100 characters at most); empty means
+  the name found. A changed `config.toml` is taken while the panel runs. The
+  names never go to the log or into the report of `libre-panel doctor`
+- The editor's server answers `GET /api/hardware` with the found and the
+  written name of each part (`{"cpu": {"detected": ..., "custom": ""}, "gpu":
+  ..., "memory": ...}`; `?refresh=1` asks the computer again) and
+  `POST /api/hardware` sets any of `cpu`, `gpu` and `memory` (an empty text
+  gives the found name back) through `config.toml`, comments kept
+- Plugins: a sensor source can win over sources before it for some keys
+  (`overrides`), and gets the loaded configuration in `follow_config(config)`,
+  when it is made and whenever `config.toml` changes while the panel runs
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
@@ -385,12 +472,40 @@
 - Video mode: where many widgets move, what lies under a graph was laid anew
   on most frames (the kept layers went oldest first, not least used); the
   ones a frame uses are now kept longest
+- The volume message came with the next reading, up to `refresh_ms` late. It now comes
+  within a frame or two of the volume key, and a slow turn of the volume that moves less
+  than a step between two frames still adds up to one
+- An image widget that shows a picture of a source (`"src": "@media.app_icon"`, or such a
+  line in `slides`) now counts as reading it. Before, the icon of the player was never
+  looked for unless something else asked for it, and the cover of the music module was
+  read only while something else asked for `media.*` too, such as the notices service
+- The editor's sensor picker did not offer the volume, the rain text and the game's slowest
+  frame and what limits it: a source that reads only while a theme shows a key has none of
+  them in a running panel until then, and the demo had none. They are listed from a catalog
+  now, and the demo values of the previews gained the volume (46 %), the game keys and the
+  rain ("Rain in 35 min"). `GET /api/sensors` also lists the pictures a source has
+  (`media.cover`, `media.app_icon`, `game.logo`), marked `"picture": true`, for an image's
+  `"@key"`
+- Windows, when LibreHardwareMonitor gives no temperatures (Libre Panel not run as
+  administrator, no PawnIO driver, its reader did not start, its web server not running), the
+  panel showed "--" and only `libre-panel sensors`, `doctor` and the Control page said why, in
+  technical words. Now one sentence says what to do, in the user's language: a line under the
+  status line of the tray menu and in the tooltip of the icon, `hint` in the panel's state
+  (`/api/app`, `GET control/panel`) and on the LibreHardwareMonitor row of `GET
+  control/sources`. It keeps quiet while LibreHardwareMonitor starts and about what nobody can
+  change. A Windows download that cannot use its library (damaged, or deleted by a virus
+  scanner) reports that as the source's `error` instead of asking a web server that is not there
 - Services follow `config.toml` whenever the panel loop starts. A service switched
   on (or off, or given other options) while the panel was paused, or in a
   `config.toml` that did not load at the start and was fixed later, stayed as it
   was until the file changed once more
+- A change of `[services]` saved together with a theme name that does not exist (a typo, a
+  theme not installed yet) reached the services only with the next save. They now follow
+  `config.toml` whenever it loads, whether or not its theme does; the panel keeps its theme
 
 **Changes**
+- The editor before the app stays at `/classic/` until the app has all its
+  views; plugins' editor pages open inside the app (*Pages*, or Ctrl+K)
 - The video mode turns itself on: `video.mode` is `"auto"` by default, which
   streams to a 9.2" (the panel it is proven on) as soon as ffmpeg is found and
   `local_clip` names the panel's standby clip. `libre-panel doctor` and the log
@@ -404,8 +519,9 @@
   does nothing
 - Windows: the GPU, temperatures, power and fans showed nothing unless
   `librehardwaremonitor` was listed in `config.toml`. New configurations now
-  start with `providers = ["load", "librehardwaremonitor", "psutil"]` (elsewhere
-  `["load", "psutil"]`), and an unset list means the same. Where Libre Panel
+  start with `providers = ["load", "audio", "librehardwaremonitor", "psutil"]`
+  (on Linux `["load", "audio", "psutil"]`, elsewhere `["load", "psutil"]`), and
+  an unset list means the same. Where Libre Panel
   cannot read LibreHardwareMonitor itself (see above), that one must run as
   administrator with *Options → Remote Web Server → Run*; where it does not run,
   asking costs nothing (one second at most, waits that grow to half a minute,
@@ -454,6 +570,12 @@
 - `tools/motion_bench.py` takes `--dust`, `--finish facet` and `--fans N`: it
   runs each theme with and without that look, side by side frame by frame, and
   prints what the look adds to a frame
+- LibreHardwareMonitor's `cpu.name` and `gpu.name` are shortened like the names
+  Libre Panel finds itself ("Ryzen 7 7800X3D" for "AMD Ryzen 7 7800X3D")
+- SPUR Classic's RAM heading names the memory (`mem.name`) instead of giving
+  its size only. The RAM modules (ring, big number, history) show the name
+  under their title as CPU and GPU do, and the System module lists it as a
+  fourth row where there is room
 
 ## 0.4.2 — 2026-10-10
 

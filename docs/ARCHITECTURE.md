@@ -21,7 +21,7 @@
 | `weather` | Open-Meteo provider, background polling, off by default. |
 | `devices` | Panel catalog (`models`), `Display` drivers, USB/serial discovery. |
 | `plugins` | Plugin API: finding plugins (entry points, plugin folders), services and the host they talk to the panel through, modes. See [Plugins](PLUGINS.md). |
-| `services` | Libre Panel's own services, built in and off until `config.toml` lists them: `notices` (messages for the volume, tracks, limits), `game` (game mode) and `autopilot` (theme rules). They use only the plugin API; Steam, the programs that run and the Windows window in front are read in `steam` and `machine`. |
+| `services` | Libre Panel's own services, built in and off until `config.toml` lists them: `notices` (messages for the volume, tracks, limits), `game` (game mode), `autopilot` (theme rules), `devices` (drives, USB devices and controllers that come and go, Windows), `memory` (what happens at the desk in a SQLite file on this PC, and the round report after a game), `cooling` (FanControl's curves checked against what the PC did, read only) and `downloads` (Steam's and the browsers' downloads). They use only the plugin API; Steam, the programs that run and the Windows window in front are read in `steam` and `machine`, FanControl's configuration in `fancontrol` and what Windows says of its devices in `devices_windows`. |
 | `editor` | Local HTTP server (127.0.0.1 only) + vanilla JS editor, no build step. |
 | `pages` | The editor's own pages, built in like the services and written with the plugin API: *Control* (live picture, numbers, sources, services, test messages, theme per mode, log) and *Autopilot* (its rules in `config.toml`). Their scripts and styles are in `pages/web`. |
 | `app` | Main loop (`MainLoop.step`, one frame at a time): sample → render → diff → send; reloads config/theme on change; reports its state (`RunStatus`). |
@@ -76,6 +76,15 @@ frame between the `refresh_ms` snapshots (graphs keep one value per
 snapshot). `every_frame = "video"` does so only in video mode, where every
 frame reaches the panel anyway (the `load` source).
 
+Where two sources have a reading for a key, the one earlier in the list wins.
+A source whose reading must win over those before it (the user said so, or it
+is surely right) names the keys in `overrides = ("cpu.name",)`: the built-in
+`hardware` source does so for `cpu.name`, `gpu.name` and `mem.name`, which come
+from the computer itself or from `[hardware]` in `config.toml`. A source that
+reads settings outside its own `[sensors.<name>]` table gets the loaded
+`Config` in `follow_config(config)`, once when it is made and again whenever
+`config.toml` changes while the panel runs.
+
 ## The console API
 
 The editor's own pages (`pages`) answer under `/api/plugins/<page>/` with JSON, one route
@@ -105,9 +114,9 @@ rules.
 
 | Route | Asks | Answers |
 |---|---|---|
-| `GET control/panel` | | `{background, panel}`; `panel` is `{state, detail, target, theme, frames, mode, stats}`. `state` is `starting`, `showing`, `waiting`, `paused`, `error` or `stopped`; `mode` is `null` or `"game"`; `theme` is the one on show (a service such as the autopilot may choose it). `stats` is `{}` while the panel does not run, else `fps`, `target_fps`, `streaming`, `render_ms`, `render_peak_ms` (milliseconds to draw a frame), `kbps` (KB sent per second), `blocks_per_s`, `max_depth`, `waits`, `drops` (the video link), `usb_errors`, `panel_restarts`, `ffmpeg_restarts`, `uptime_s`; `null` is "nothing counts this" |
+| `GET control/panel` | | `{background, panel}`; `panel` is `{state, detail, hint, target, theme, frames, mode, stats}`. `state` is `starting`, `showing`, `waiting`, `paused`, `error` or `stopped`; `hint` is `""` or one sentence in the user's language about readings that show "--" and what to do (Windows: the CPU's temperature and power need administrator rights and the PawnIO driver, LibreHardwareMonitor did not start, its web server is not running); `mode` is `null` or `"game"`; `theme` is the one on show (a service such as the autopilot may choose it). `stats` is `{}` while the panel does not run, else `fps`, `target_fps`, `streaming`, `render_ms`, `render_peak_ms` (milliseconds to draw a frame), `kbps` (KB sent per second), `blocks_per_s`, `max_depth`, `waits`, `drops` (the video link), `usb_errors`, `panel_restarts`, `ffmpeg_restarts`, `uptime_s`; `null` is "nothing counts this" |
 | `GET control/live` | `w` (160 to 1920, default 960), `format` (`jpeg`, the default, or `png`) | the picture on the panel now (after transitions and messages, the right way up) as that file; 404 before the first frame and while the panel is paused |
-| `GET control/sources` | | `{background, sources}`: each `{name, readings, status, details, hint, problem}`: the readings taken from it in the last snapshot, what it says about itself (`status`, or `null`), the same in words (`details`: `[label, value]` pairs), a hint when readings are missing (`hint`, or `null`) and whether it needs attention. LibreHardwareMonitor's `status` is `{mode, elevated, ring0, pawnio, error}`: `"inprocess"` or `"webserver"`; whether Libre Panel runs as administrator; whether the CPU's sensors give real values; the version of the PawnIO driver (`null`: none installed, `""`: unknown); why it could not start |
+| `GET control/sources` | | `{background, sources}`: each `{name, readings, status, details, hint, problem}`: the readings taken from it in the last snapshot, what it says about itself (`status`, or `null`), the same in words (`details`: `[label, value]` pairs), a hint when readings are missing (`hint`, or `null`: the `hint` of `panel`, on the LibreHardwareMonitor row) and whether it needs attention. LibreHardwareMonitor's `status` is `{mode, elevated, ring0, pawnio, error}`: `"inprocess"` or `"webserver"`; whether Libre Panel runs as administrator; whether the CPU's sensors give real values; the version of the PawnIO driver (`null`: none installed, `""`: unknown); why it could not start |
 | `GET control/services` | | `{background, services, config_problem}`: each service `{name, state, detail, enabled, installed, restartable}`. `enabled` is what config.toml says, `state` what runs: `running`, `stopped`, `failed` (`detail` says why), `not-installed`, `off`, `pending` (config.toml says one thing and the app has not followed yet) or `unknown` (this editor runs no services). `restartable` is true for `running`, `stopped` and `failed` |
 | `GET control/probes` | | `{probes}`: the kinds of test message, each `{kind, label}` |
 | `GET control/themes` | | `{available, normal, game, shown, mode, config_problem}`: the installed themes, the theme in config.toml for the normal mode and for the game mode (`""`: the normal one's), the one on show and the mode now |

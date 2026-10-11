@@ -69,17 +69,19 @@ def test_menu_layout_and_state(tray):
     menu = items(tray.build_menu())
     assert list(menu)[0].startswith("Libre Panel: showing on PNG file")
     assert [
-        "Open theme editor",
+        "Open Libre Panel",
+        "Theme editor",
         "Theme",
         "Brightness",
         "Upside down",
         "Pause panel",
         "Start with system",
+        "Settings",
         "Open settings folder",
         "Open log",
         "Quit Libre Panel",
     ] == list(menu)[1:]
-    assert menu["Open theme editor"].default
+    assert menu["Open Libre Panel"].default  # also a click on the icon
     themes = items(menu["Theme"].submenu)
     assert {"libre-default", "spur-ii", "orbit", "slate", "column"} <= set(themes)
     assert themes["libre-default"].checked and not themes["slate"].checked
@@ -116,6 +118,18 @@ def test_menu_actions(tray):
     assert tray.app.quit_requested.is_set() and tray.icon.stopped
 
 
+def test_menu_opens_the_app_on_its_views(tray, monkeypatch):
+    """The window (or the browser where there is none) shows the view the item names."""
+    from libre_panel import window
+
+    opened = []
+    monkeypatch.setattr(window, "open_window", lambda url, view, **kw: opened.append(view))
+    menu = items(tray.build_menu())
+    for name in ("Open Libre Panel", "Theme editor", "Settings"):
+        menu[name](tray.icon)
+    assert wait_for(lambda: sorted(opened) == ["design", "home", "settings"])
+
+
 def test_refresh_updates_icon_only_on_change(tray):
     assert wait_for(lambda: tray.app.panel.state()["state"] == "showing")
     tray.refresh()
@@ -126,6 +140,46 @@ def test_refresh_updates_icon_only_on_change(tray):
     tray.app.set_brightness(50)
     tray.refresh()
     assert tray.icon.menu_updates == first + 1
+
+
+def test_the_tray_says_what_keeps_the_temperatures_away_while_it_is_the_case(tray):
+    """The hint of the panel's state is a line under the headline of the menu and the second
+    line of the tooltip, and goes with the cause."""
+    from test_console_pages import pretend_windows
+
+    from libre_panel.sensors.librehardwaremonitor import LhmStatus
+
+    assert wait_for(lambda: tray.app.panel.state()["state"] == "showing")
+    tray.refresh()
+    quiet = tray.icon.menu_updates
+    assert list(items(tray.build_menu()))[1] == "Open Libre Panel"  # nothing to say
+    said = "CPU temperature and power need administrator rights: run Libre Panel as administrator."
+    lhm = pretend_windows(tray.app, LhmStatus("inprocess", elevated=False, ring0=False, pawnio="2"))
+    menu = list(items(tray.build_menu()))
+    assert menu[0].startswith("Libre Panel: showing") and menu[1] == said
+    assert menu[2] == "Open Libre Panel"
+    assert tooltip(tray.app.panel.state()) == f"Libre Panel\n{said}"  # the long target gives way
+    tray.refresh()
+    assert tray.icon.menu_updates == quiet + 1 and tray.icon.title == f"Libre Panel\n{said}"
+    tray.refresh()
+    assert tray.icon.menu_updates == quiet + 1  # as it was
+    lhm.state = LhmStatus("inprocess", elevated=True, ring0=True, pawnio="2")  # fixed
+    tray.refresh()
+    assert tray.icon.menu_updates == quiet + 2 and said not in tray.icon.title
+    assert list(items(tray.build_menu()))[1] == "Open Libre Panel"
+
+
+def test_the_tooltip_keeps_the_hint_whole_and_the_trouble_with_the_panel_comes_first():
+    state = {"state": "waiting", "target": "", "detail": "no panel found", "hint": "fix it"}
+    assert tooltip(state) == "Libre Panel: waiting for the panel\nno panel found"
+    assert tooltip({**state, "detail": ""}) == "Libre Panel: waiting for the panel\nfix it"
+    assert tooltip({"state": "showing", "target": "P"}) == "Libre Panel: showing on P"
+    long = "CPU temperature and power need administrator rights: run Libre Panel as administrator."
+    shown = {"state": "showing", "target": 'Turing 9.2" USB panel', "hint": long}
+    assert tooltip(shown) == f"Libre Panel\n{long}" and len(tooltip(shown)) <= 120
+    endless = f"{long} {long}"  # more than a tooltip can take: cut at the end, with …
+    cut = tooltip({**shown, "hint": endless})
+    assert cut.startswith("Libre Panel\nCPU temperature") and cut.endswith("…") and len(cut) == 120
 
 
 def test_failed_action_is_reported(tray, monkeypatch):

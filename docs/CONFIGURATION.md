@@ -23,7 +23,8 @@ theme = "libre-default"        # built-in or user theme
 language = "auto"              # "auto" (system language), "en" or "de"
 # refresh_ms = 1000            # override the theme's refresh interval
 fps = 10                       # 1-60; values glide between readings
-transition = "fade"            # between themes: "cut", "fade", "slide", "tube" or from a plugin
+transition = "fade"            # between themes: "cut", "fade", "slide", "tube", "entrance",
+                               # or a plugin's
 
 [device]
 model = "auto"                 # or an id from `libre-panel models`
@@ -38,9 +39,9 @@ port = ""                      # serial panels: found by their USB ids; only if 
                                # picks the wrong port: "COM5", "/dev/ttyACM0"
 
 [sensors]
-# order = priority. Without this line: ["load", "psutil"], on Windows
-# ["load", "librehardwaremonitor", "psutil"]. More: "audio", "demo", plugins
-providers = ["load", "psutil"]
+# order = priority. Without this line: ["load", "audio", "psutil"], on Windows
+# ["load", "audio", "librehardwaremonitor", "psutil"]. More: "demo", plugins
+providers = ["load", "audio", "psutil"]
 
 [sensors.librehardwaremonitor]
 # mode = "auto"                # "auto", "inprocess" (inside Libre Panel) or "webserver"
@@ -57,6 +58,11 @@ url = "http://127.0.0.1:8085/data.json"   # the web server (mode "webserver", an
 # ping = "1.1.1.1:443"         # what net.ping connects to (host:port), only while a
                                # theme shows the ping
 
+[hardware]
+# cpu_name = ""                # the names themes show (cpu.name, gpu.name, mem.name):
+# gpu_name = ""                # found by Libre Panel itself; text here replaces what is
+# memory_name = ""             # found, as you write it (empty: as found)
+
 [weather]
 enabled = false                # off unless you turn it on
 provider = "open-meteo"
@@ -66,9 +72,10 @@ units = "metric"               # or "imperial"
 update_minutes = 15
 
 [video]
-mode = "off"                   # "on": smooth video mode (TURZX USB panels, needs ffmpeg)
+mode = "auto"                  # "auto": smooth video mode by itself where it is proven (the 9.2");
+                               # "on": on every TURZX USB panel (needs ffmpeg); "off"
 fps = 50                       # frames per second in video mode
-local_clip = ""                # required for "on", see below
+local_clip = ""                # required for "auto" and "on", see below
 ```
 
 ## Sensor sources and their order
@@ -78,18 +85,20 @@ have a value for the same key, the earlier one wins. A quicker or better source
 goes first.
 
 A configuration that names no list (no `config.toml`, or none with `providers`)
-starts with `["load", "psutil"]`, and on Windows with
-`["load", "librehardwaremonitor", "psutil"]`; `libre-panel config init` writes
-that list into a new file. **A list you wrote is never changed.** A
-`config.toml` made by an earlier version names `["psutil"]` alone: put the
-sources you want in front of it.
+starts with `["load", "audio", "psutil"]`, and on Windows with
+`["load", "audio", "librehardwaremonitor", "psutil"]` (elsewhere, where the
+volume cannot be read, `["load", "psutil"]`); `libre-panel config init` writes
+that list into a new file. **A list you wrote is never changed.** The one
+exception is the `["psutil"]` that `config.toml` files up to 0.4 name alone,
+which was the default then and not a choice: it gets today's list too. Put the
+sources you want in front of psutil in any other list.
 
 | Source | Gives | Where |
 |---|---|---|
 | `load` | `cpu.load` and `gpu.load`, measured ten times a second | CPU everywhere, GPU on Windows (any vendor) |
 | `psutil` | CPU, memory, drives, network, battery, the busiest programs; temperatures and fans where the system has them | everywhere |
 | `librehardwaremonitor` | temperatures, power, clocks and fans of CPU, GPU and mainboard | Windows (in its default list); the Windows downloads carry what it needs, see [below](#windows-sensors-gpu-power-fans) |
-| `audio` | `audio.volume` (0 while muted) and `audio.muted` (1 or 0) of the default output | Windows, Linux (`wpctl` or `pactl`) |
+| `audio` | `audio.volume` (0 while muted) and `audio.muted` (1 or 0) of the default output | Windows, Linux (`wpctl` or `pactl`); in the default list of both |
 
 **Fast load** (`load`): `cpu.load` and, on Windows, `gpu.load` are measured in
 a background thread ten times a second and read on every frame, so bars and
@@ -111,8 +120,9 @@ administrator rights.
   LibreHardwareMonitor its readings would never be used.
 
 **Volume** (`audio`): the volume and the mute of the default output device,
-read on every frame, so a volume bar follows the volume keys at once. It is not
-in the default list; add it: `providers = ["load", "psutil", "audio"]`.
+read on every frame, so a volume bar follows the volume keys at once. It is in
+the default list on Windows and Linux; in a list of your own, add it:
+`providers = ["load", "audio", "psutil"]`.
 
 - `audio.volume` is 0 while the sound is muted; `audio.muted` is 1 then, else 0.
 - Windows: Windows' own sound interface, no program needed. Windows reports
@@ -148,8 +158,9 @@ only while a theme or a service reads it:
 
 Two pictures go with it, for an image widget (`"src": "@media.cover"`):
 `media.cover`, the album cover, and `media.app_icon`, the icon of the program
-that plays. The icon is found once per program, never sent anywhere, and the
-notices service puts it on the cover of its "Now playing" message:
+that plays. An image widget that shows one is all it takes for the source to read
+it. The icon is found once per program, never sent anywhere, and the notices
+service puts it on the cover of its "Now playing" message:
 
 - Windows: the logo of a Store app (from its package), else the icon of the
   program that runs under the name Windows gives the player.
@@ -250,6 +261,61 @@ Show these readings with the Dashboard module (`ha.sensor.living_room_temperatur
 = Living room`, one per line), a list, or any widget with a `sensor`.
 `libre-panel sensors` lists what is there.
 
+## Hardware names
+
+`cpu.name`, `gpu.name` and `mem.name` are the names a theme can show for the
+processor, the graphics card and the memory (the headings of SPUR Classic do).
+Libre Panel finds them itself, once, when it starts: with no administrator
+rights, no other program and nothing to install. The source is `hardware`, it is
+always on and needs no place in `[sensors] providers`. It shortens the names for a
+panel: "AMD Ryzen 5 7600 6-Core Processor" is "Ryzen 5 7600", "12th Gen
+Intel(R) Core(TM) i7-12700K" is "Core i7-12700K", "NVIDIA GeForce RTX 4070" is
+"GeForce RTX 4070". The maker, the marks (R) and (TM), "CPU", the clock, the
+number of cores, the generation and "with Radeon Graphics" go.
+
+| | Windows | Linux |
+|---|---|---|
+| `cpu.name` | the registry, where the processor gives its own name | `model name` in `/proc/cpuinfo`; on ARM the board or the chip it names ("Raspberry Pi 4 Model B") |
+| `gpu.name` | the display adapters in the registry, the software and remote ones left out; the one with the most memory of its own: the card, not the chip in the processor | the cards in `/sys/class/drm`, named by the NVIDIA driver, by AMD's `amdgpu.ids` or by the system's `pci.ids`; a card of its own before the chip in the processor |
+| `mem.name` | the memory modules in the firmware's SMBIOS table: "Kingston DDR5-5600 32 GB" | the same where `/sys/firmware/dmi/entries` may be read (usually only by root); else the size |
+
+Where the modules cannot be read, `mem.name` is the size, "32 GB" (rounded up to a
+size sold, so 15.4 GB that the system leaves visible is "16 GB"). A name that
+cannot be found is no reading: the other sources' names (LibreHardwareMonitor
+has `cpu.name` and `gpu.name`, tidied the same way) fill in, else a theme shows
+its fallback. With several graphics cards, `gpu` under
+`[sensors.librehardwaremonitor]` picks the card by its name here too.
+
+**Your own names.** Text under `[hardware]` is the name, as you write it:
+
+```toml
+[hardware]
+cpu_name = "Ryzen 5 7600"
+memory_name = "Kingston Fury Beast DDR5-5600 2 x 16 GB"
+gpu_name = ""                  # empty: the one found
+```
+
+A name is one line of at most 100 characters. It wins over every other source
+(but for the `demo` source, whose made-up names stay when it is in your list).
+A changed `config.toml` is picked up while Libre Panel runs. The editor reads
+and writes the names through `GET /api/hardware`, which answers
+`{"cpu": {"detected": "Ryzen 5 7600", "custom": ""}, "gpu": {...},
+"memory": {...}}`, and `POST /api/hardware` with any of `{"cpu": "text", "gpu":
+"", "memory": "text"}` (an empty text gives the found name back). `POST`
+answers like `GET`, refuses anything else with 400 and, like every write, needs the
+header `X-Libre-Panel: 1`. `GET /api/hardware?refresh=1` asks the computer again
+(a card was changed while Libre Panel ran); Libre Panel asks once per start otherwise.
+
+**Where it can be wrong.** Windows can keep the entry of a graphics card that was
+taken out (Device Manager shows it under *Show hidden devices*); if that card had
+more memory, it may be the one named. Some firmware tells no speed or no maker for
+its memory, and then the name has none. Set the name yourself in these cases.
+
+**The names are yours.** They stay on your computer: Libre Panel does not write
+them to the log, and the report of `libre-panel doctor` has none. `libre-panel
+sensors` lists every reading, these three too; leave them out when you paste its
+output into an issue.
+
 ## Services and modes
 
 Services are helpers that run beside the panel: Libre Panel's own
@@ -290,14 +356,14 @@ something itself leaves its kind out.
 
 | Kind | When | The message |
 |---|---|---|
-| `volume` | the volume changes by at least 1, or is muted or unmuted; the value the service starts with is no change | the level with a bar, or "Muted" |
+| `volume` | the volume has moved by at least 1 since the last message, or is muted or unmuted; the value the service starts with is no change | the level with a bar, or "Muted" |
 | `music` | a new track starts playing; not a pause, a resume, or the track that was playing at the start | title and artist, with the cover and the icon of the player when a source brings them |
 | `warning` | a sensor reaches a limit you set | "CPU temperature 92 °C", in the theme's warning colour at `warn` and its critical one at `crit` |
 | `panel` | the panel is back from a restart that cleared a hung video decoder (not from a replug) | "Panel restarted 21:05" |
 
 ```toml
 [services.notices]
-volume = true          # the volume; needs "audio" in [sensors] providers
+volume = true          # the volume; needs "audio" in [sensors] providers (the default has it)
 music = true           # a new track
 restarted = true       # "Panel restarted"
 quiet_s = 120          # warnings: the same sensor is not told again within this time
@@ -321,8 +387,8 @@ crit = 85
   at once, also in the quiet time. A sensor that is past its limit when the
   service starts is told too.
 - Notices look at every new reading, that is every `refresh_ms` of the theme.
-  For a volume bar that follows the volume keys closely use a theme with a short
-  `refresh_ms` (100 to 250).
+  The volume is looked at on every frame it moves in, too, so its message comes
+  within a frame or two of the volume key, whatever `refresh_ms` is.
 - While the service runs, the sources it needs run too, although no theme shows
   them: what is playing (`media.*`), the volume (`audio.*`) and the warned
   sensors. They cost what they cost otherwise (a player is asked once a
@@ -529,8 +595,9 @@ warnings like those of the notices service (kind `warning`).
 Notes what is downloading: a game or an update that Steam loads, and a file
 that a browser saves in your Downloads folder. It publishes the download that
 matters most, with its progress, speed and the time left, for a screen that
-draws a download card ([Plugins](PLUGINS.md#the-downloads-state)); the service
-shows nothing by itself. Nothing is written and nothing is sent.
+draws a download card ([Plugins](PLUGINS.md#the-downloads-state)); a theme's
+`downloads` widget and its `download` and `netcard` modules are such cards
+([Themes](THEMES.md#downloads)). The service shows nothing by itself. Nothing is written and nothing is sent.
 
 ```toml
 [services]
@@ -779,8 +846,8 @@ On Windows the temperatures and power of the processor and the graphics card,
 and the fans, come from
 [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor);
 psutil has none of them there. New configurations list it
-(`providers = ["load", "librehardwaremonitor", "psutil"]`; a file made by an
-earlier version names `psutil` alone and gets the same list). Libre Panel reads it
+(`providers = ["load", "audio", "librehardwaremonitor", "psutil"]`; a file made
+by an earlier version names `psutil` alone and gets the same list). Libre Panel reads it
 one of two ways, chosen by `mode` under `[sensors.librehardwaremonitor]`:
 
 | `mode` | |
@@ -827,6 +894,8 @@ yet; the web server has them.
 
 `libre-panel sensors` and `libre-panel doctor` say which of the two is missing.
 `libre-panel sensors --check-lhm` only tests that the library loads and opens.
+The tray (a line under its status line, and its tooltip) and the Control page say
+it too, in a sentence in your language, for as long as it is the case.
 
 ### With pip
 

@@ -739,7 +739,7 @@ def test_needs_can_ask_for_what_a_reading_is_or_for_a_picture():
     }  # fmt: skip
     assert shown({"game.limiter": 3}) == {"not-gpu", "no-logo"}  # a number is no text to match
     assert shown({}, {"game.logo": Image.new("RGBA", (4, 4))}) == {"not-gpu", "logo"}
-    # what a theme asks for is what the sources are told to work on, a picture is not a sensor
+    # what a theme asks for is what the sources are told to work on, a picture's source too
     from libre_panel.render.renderer import _reads
 
-    assert _reads(t.widgets) == {"game.limiter", "media.playing"}
+    assert _reads(t.widgets) == {"game.limiter", "media.playing", "game.logo"}

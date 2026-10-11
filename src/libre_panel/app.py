@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -44,6 +45,7 @@ def build_hub(config: Config, demo: bool = False) -> SensorHub:
 
         providers.append(OpenMeteoProvider(config.weather))
     if not demo:
+        from libre_panel.sensors.hardware import HardwareProvider
         from libre_panel.sensors.media import MediaProvider
         from libre_panel.sensors.sky import SkyProvider
 
@@ -53,7 +55,11 @@ def build_hub(config: Config, demo: bool = False) -> SensorHub:
             providers.append(SkyProvider(place))
         if "media" not in given:  # idle until a theme shows what is playing
             providers.append(MediaProvider(config.sensors.options.get("media", {})))
-    return SensorHub(providers)
+        if not given & {"hardware", "demo"}:  # a demo has names of its own, made up
+            providers.append(HardwareProvider())  # the names of this PC, and [hardware]
+    hub = SensorHub(providers)
+    hub.follow_config(config)  # [hardware] and the like, which no source's own table holds
+    return hub
 
 
 def load_configured_theme(config: Config) -> Theme:
@@ -165,6 +171,28 @@ class RunStatus:
     stats: dict[str, Any] = field(default_factory=dict)
     counters: Counters = field(default_factory=Counters)  # what the drivers count (shared)
     hub: SensorHub | None = None  # the sensor sources the loop reads, for the editor's pages
+
+
+def sensor_hint(
+    hub: SensorHub | None, readings: dict[str, Any], platform: str = sys.platform
+) -> str:
+    """What to tell a person who sees "--" where Windows' temperatures and power should be,
+    in their language ("" when nothing is the matter, and off Windows). ``readings`` are what
+    the panel last drew; LibreHardwareMonitor is asked again, so a hint never outlives the
+    fault because the last sample came before it was fixed."""
+    if hub is None or platform != "win32":
+        return ""
+    from libre_panel.sensors.librehardwaremonitor import user_hint
+
+    for provider in list(hub.providers):
+        if provider.name != "librehardwaremonitor":
+            continue
+        try:
+            ready = getattr(provider, "wait_ready", lambda timeout: True)(0)
+            return user_hint({**readings, **provider.read()}, platform, provider.status(), ready)
+        except Exception:  # a hint must not break the state it is part of
+            log.debug("no hint about LibreHardwareMonitor", exc_info=True)
+    return ""
 
 
 class _Link:
@@ -606,13 +634,17 @@ class MainLoop:
             may_switch = may_switch and self._warmed(config, host, shown, refused, watcher, now)
             changed = watcher.changed() if may_switch else False
             if may_switch and (changed or (wanted != shown and wanted != refused)):
+                fresh = config
                 try:
-                    fresh = load_config(config.path) if changed and config.path else config
+                    if changed and config.path:
+                        fresh = load_config(config.path)
                     wanted = _theme_name(fresh, host)
                     new_theme = load_theme(find_theme(wanted))
                 except (ConfigError, ThemeError) as exc:
                     log.warning("keeping theme %r: %s", shown, exc)  # e.g. half-written file
                     refused = wanted
+                    if fresh is not config and on_config is not None:
+                        on_config(fresh)  # the file loaded: services follow it, theme or not
                 else:
                     device = config.device
                     if not _same_device(device, fresh.device):
@@ -628,6 +660,7 @@ class MainLoop:
                     device.rotate = fresh.device.rotate
                     fresh.device, config = device, fresh
                     i18n.set_language(config.language)
+                    hub.follow_config(config)  # taken at the sample that follows (next_sample)
                     renderer.close()
                     theme, renderer = new_theme, self._renderer(new_theme, config)
                     size, previous, next_sample = target_size(config, theme), None, 0.0
@@ -669,7 +702,9 @@ class MainLoop:
                 renderer.new_sample(now, every)
             elif hub.every_frame:  # cheap sources follow on every frame (a new dict:
                 latest = hub.fresh(video=display.streaming)  # helpers may read the old one)
-                snapshot.readings = {**snapshot.readings, **latest}
+                before, snapshot.readings = snapshot.readings, {**snapshot.readings, **latest}
+                if host is not None:  # a service hears of a change at once, not at the sample
+                    host.fresh(snapshot, before, latest)
             was_connected = link.connected
             if link.ensure(started):
                 streaming = display.streaming
