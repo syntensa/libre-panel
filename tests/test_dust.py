@@ -1,5 +1,9 @@
 """Depth dust: the theme's look.dust, its determinism, its sources, and what it costs when off."""
 
+import threading
+import time
+from concurrent.futures import Future, ThreadPoolExecutor
+
 import numpy as np
 import pytest
 from PIL import Image
@@ -330,6 +334,113 @@ def test_a_canvas_that_cannot_be_written_in_place_gives_the_same_picture():
         a = fast.apply(canvas, 50 + n / 50)
         b = slow.apply(canvas, 50 + n / 50)
     assert a.tobytes() == b.tobytes()
+
+
+def test_the_blend_covers_hides_and_adds_as_it_says():
+    """A fine grain adds, a disc takes its share of the pixel over, and an element in front
+    of either lets by only what its brightness allows (105 shows half, 150 nothing)."""
+    dust = Dust((8, 1), {})
+    dark, mid, bright = (10, 20, 30), (105, 105, 105), (200, 200, 200)
+    array = np.zeros((1, 8, 4), np.uint8)
+    for x, color in enumerate([dark, mid, bright] * 2):
+        array[0, x, :3] = color
+    array[..., 3] = 255
+    add = np.array([[40, 40, 40]] * 3 + [[100, 127.5, 0]] * 3, np.float32)  # a colour x opacity
+    cover = np.array([0, 0, 0, 0.5, 0.5, 0.5], np.float32)
+    dust.taps = dust._cover([(np.arange(6), add, cover)])
+    dust._lay(array)
+    assert array[0, :, :3].tolist() == [
+        [50, 60, 70],  # a grain over dark: all of it
+        [125, 125, 125],  # over a mid grey: half
+        [200, 200, 200],  # over a bright element: none
+        [105, 137, 15],  # a disc over dark: half of the pixel gives way to its colour
+        [128, 142, 78],  # over a mid grey: half of that
+        [200, 200, 200],
+        [0, 0, 0],  # not a tap: left alone
+        [0, 0, 0],
+    ]
+    assert (array[..., 3] == 255).all()  # alpha is not touched
+
+
+def test_the_grains_move_in_a_helper_thread_to_the_same_dust():
+    """Whoever moves the grains, the dust is the same: here the helper runs the job at once."""
+
+    def at_once(job):
+        done = Future()
+        done.set_result(job())
+        return done
+
+    canvas = frame()
+    inline, helped = Dust(SIZE, {"count": 2400}, seed=7), Dust(SIZE, {"count": 2400}, seed=7)
+    helped.submit = at_once
+    for n in range(200):
+        a = inline.apply(canvas, 30 + n / 50)
+        b = helped.apply(canvas, 30 + n / 50)
+    assert a.tobytes() == b.tobytes() and (pixels(a) != pixels(canvas)).any()
+
+
+def test_a_slow_helper_thread_leaves_the_frames_the_grains_they_have():
+    """While the helper moves the grains the frames lay the last ones, and there is only
+    ever one move on its way."""
+    running, most, moves = 0, 0, 0
+    gate = threading.Event()
+    pool = ThreadPoolExecutor(1)
+
+    def slow(job):
+        def work():
+            nonlocal running, most, moves
+            running += 1
+            most, moves = max(most, running), moves + 1
+            gate.wait(5)
+            try:
+                return job()
+            finally:
+                running -= 1
+
+        return pool.submit(work)
+
+    canvas = frame()
+    dust = Dust(SIZE, {"count": 2400}, seed=7, submit=slow)
+    try:
+        for n in range(30):  # the helper is held up: no grains yet, the frame goes out as it is
+            assert dust.apply(canvas, 10 + n / 50) is canvas
+        gate.set()
+        pool.submit(lambda: None).result(5)  # the helper has done what was asked
+        for n in range(30, 80):
+            out = dust.apply(canvas, 10 + n / 50)
+            time.sleep(0.002)
+        assert out is not canvas and (pixels(out) != pixels(canvas)).any()
+        assert most == 1 and moves >= 2
+    finally:
+        gate.set()
+        pool.shutdown()
+
+
+def test_a_helper_thread_that_fails_hands_the_work_back_to_the_frame(caplog):
+    def broken(job):
+        failed = Future()
+        failed.set_exception(RuntimeError("no helper"))
+        return failed
+
+    canvas = frame()
+    dust = Dust(SIZE, {"count": 2400}, seed=7, submit=broken)
+    with caplog.at_level("ERROR"):
+        for n in range(100):
+            out = dust.apply(canvas, 10 + n / 50)
+    assert dust.submit is None and "no helper" in caplog.text
+    assert (pixels(out) != pixels(canvas)).any()  # and the dust goes on
+
+
+def test_discs_over_the_edge_of_the_panel_do_not_wrap_round(monkeypatch):
+    """A disc cut by the left edge must not come out on the right: every grain is a disc
+    here, and every source lies on the left edge."""
+    monkeypatch.setattr(dust_module, "NEAR_SHARE", 1.0)
+    canvas = frame(bars=((0, 20, 6, 120),), color=(255, 255, 255))
+    dust = Dust(SIZE, {"count": 3000, "depth": 0})  # depth 0: they stay over their sources
+    out = pixels(run(dust, canvas, seconds=8))
+    added = out - pixels(canvas)
+    assert added[:, :40].any() and not added[:, SIZE[0] - 40 :].any()
+    assert dust.taps is not None
 
 
 def test_the_dust_leaves_the_frame_it_was_given_alone():

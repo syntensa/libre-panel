@@ -15,23 +15,32 @@ is taken from the frame again; a grain remembers where and what colour its
 source was, so a new stock never makes a living grain jump.
 
 It is cheap enough for every frame of a video panel. The grains move ``rate``
-times a second (numpy places them all in one pass: each of the small ones is a
-3 x 3 pixel B-spline, and only the few near ones are discs pasted through a
-mask), and each frame only lays that onto a copy of the composed frame. A
-bright pixel hides the dust over it, as if it lay behind the element.
+times a second, and numpy works out every pixel they cover in one pass: a fine
+grain is a 3 x 3 pixel B-spline, a near one the sprite of a disc. A frame then
+only lays that list onto a copy of the composed frame, in one gather, one blend
+and one scatter, however many grains there are. That matters beyond speed:
+every numpy or Pillow call on a big array gives up the interpreter lock, and
+with the renderer's helper thread at work each call can wait for it, so a
+hundred small pastes cost many times what one big blend does. A bright pixel
+hides the dust over it, as if it lay behind the element.
 """
 
 from __future__ import annotations
 
+import logging
 import math
 import threading
+from collections.abc import Callable
+from concurrent.futures import Future
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any
 
 import numpy as np
 from PIL import Image, ImageChops
 
 from libre_panel.theme.model import DUST_SPEC
+
+log = logging.getLogger(__name__)
 
 ASSETS = Path(__file__).resolve().parent.parent / "assets" / "light3d" / "particle"
 
@@ -53,11 +62,17 @@ SPEED = 1.28  # grains age this much faster than the clock
 OPACITY = 0.70  # the brightest grain, as a share of its source's colour
 NEAR_SHARE = 0.05  # this many grains are soft discs
 DISC_OPACITY = 0.38  # a disc is weaker than a fine grain: it covers far more area
-LEVELS = 24  # brightness steps of the disc masks
+MIN_DISC = 0.0625  # a disc fainter than this share of full is a haze nobody sees
+CUT = 0.03  # the tail of a disc below this share of its peak is left off
 HIDE = (60, 150)  # a pixel this bright hides a grain fully, this dark not at all
 STEP = 4  # sub-pixel positions of a disc, per pixel and axis
-MIN_LEVEL = 2  # a disc fainter than this is a haze nobody sees: not drawn
-MIN_ADD = 3  # nor a pixel of a fine grain that adds less than this
+SUB = 16  # ... and of a fine grain (a power of two)
+SHIFT = SUB.bit_length() - 1
+MIN_ADD = 3  # a pixel of a grain that adds less than this is left out
+MAX_ADD = 255 - HIDE[0]  # ... and one adds at most this: where a grain shows, a pixel is at
+# most HIDE[0] bright, and the brighter it is the less shows, so the sum never passes 255
+CENTRE = 0.5625  # the heaviest tap of a fine grain: 0.75 x 0.75
+CURVE = 1024  # steps of the brightness along a grain's way
 
 # how much of a grain shows over a pixel of each brightness: a bright element covers
 # it, as if the dust lay behind
@@ -65,8 +80,8 @@ _SHOWN = np.clip((HIDE[1] - np.arange(256, dtype=np.float32)) / (HIDE[1] - HIDE[
 
 _lock = threading.Lock()
 _sprites: list[tuple[int, np.ndarray, float]] = []  # per stage: radius, kernel (peak 1), peak ratio
-_masks: dict[tuple[int, int, int, int], Image.Image] = {}
-_STEPS: list[tuple[np.ndarray, np.ndarray]] = []
+_stages: list[Stage] = []
+_PEAKS: list[np.ndarray] = []
 
 
 def sprites() -> list[tuple[int, np.ndarray, float]]:
@@ -93,63 +108,83 @@ def sprites() -> list[tuple[int, np.ndarray, float]]:
     return _sprites
 
 
-def _steps() -> tuple[np.ndarray, np.ndarray]:
-    """Per step of the sprites, the peak ratio and the radius, as arrays (read once)."""
-    if _STEPS:
-        return _STEPS[0]
-    found = sprites()
-    arrays = (
-        np.array([s[2] for s in found], np.float32),
-        np.array([s[0] for s in found], np.int32),
-    )
-    _STEPS.append(arrays)
-    return arrays
+def _peaks() -> np.ndarray:
+    """Per step of the sprites, how bright its centre is next to the first step's (read once)."""
+    if not _PEAKS:
+        _PEAKS.append(np.array([s[2] for s in sprites()], np.float32))
+    return _PEAKS[0]
 
 
-def disc_mask(stage: int, qx: int, qy: int, level: int) -> Image.Image:
-    """The mask (L) of a disc of ``stage``, placed ``qx`` / ``qy`` quarter pixels off its
-    pixel, at brightness ``level`` of :data:`LEVELS`. Kept: a few hundred at most."""
-    key = (stage, qx, qy, level)
-    mask = _masks.get(key)
-    if mask is None:
-        _r, kernel, _peak = sprites()[stage]
-        fx, fy = qx / STEP, qy / STEP
-        p = np.pad(kernel, 1)  # a shift by a fraction of a pixel: the four neighbours' mix
-        moved = (
-            (1 - fx) * (1 - fy) * p[1:-1, 1:-1]
-            + fx * (1 - fy) * p[1:-1, :-2]
-            + (1 - fx) * fy * p[:-2, 1:-1]
-            + fx * fy * p[:-2, :-2]
-        )
-        # each position has its own peak after the shift: level out, or a disc flickers
-        values = moved / max(float(moved.max()), 1e-9) * (level / LEVELS) * DISC_OPACITY * 255
-        mask = Image.fromarray(np.clip(values + 0.5, 0, 255).astype(np.uint8), "L")
-        if len(_masks) > 6000:
-            _masks.clear()
-        _masks[key] = mask
-    return mask
+class Stage:
+    """One step of the sprites as the taps that count: where each lies from the disc's
+    pixel (``dy``, ``dx``), and for each quarter-pixel position (``qx * STEP + qy``) how
+    high the disc is there (peak 1)."""
+
+    def __init__(self, radius: int, dy: np.ndarray, dx: np.ndarray, heights: np.ndarray) -> None:
+        self.radius, self.dy, self.dx, self.heights = radius, dy, dx, heights
+        self._offsets: dict[int, np.ndarray] = {}
+
+    def offsets(self, width: int) -> np.ndarray:
+        """The taps as offsets into a flat frame ``width`` pixels wide."""
+        found = self._offsets.get(width)
+        if found is None:
+            found = self._offsets[width] = (self.dy * width + self.dx).astype(np.int64)
+        return found
 
 
-def _brightest(rgba: np.ndarray) -> np.ndarray:
-    """The brightest of the first three channels of each row of ``(n, 3)`` or ``(n, 4)``
-    (a reduction over so short an axis is several times slower than two ``maximum``s)."""
-    return np.maximum(np.maximum(rgba[:, 0], rgba[:, 1]), rgba[:, 2])
+def stages() -> list[Stage]:
+    """The discs of every step, shifted by every quarter pixel (a few hundred taps each)."""
+    if _stages:
+        return _stages
+    with _lock:
+        if _stages:
+            return _stages
+        built = []
+        for radius, kernel, _peak in sprites():
+            p = np.pad(kernel, 1)  # a shift by a fraction of a pixel: the four neighbours' mix
+            shifted = []
+            for qx in range(STEP):
+                for qy in range(STEP):
+                    fx, fy = qx / STEP, qy / STEP
+                    moved = (
+                        (1 - fx) * (1 - fy) * p[1:-1, 1:-1]
+                        + fx * (1 - fy) * p[1:-1, :-2]
+                        + (1 - fx) * fy * p[:-2, 1:-1]
+                        + fx * fy * p[:-2, :-2]
+                    )
+                    # each position has its own peak after the shift: level out, or a disc flickers
+                    shifted.append(moved / max(float(moved.max()), 1e-9))
+            stack = np.stack(shifted)
+            ys, xs = np.nonzero((stack >= CUT).any(axis=0))
+            built.append(
+                Stage(radius, ys - radius, xs - radius, stack[:, ys, xs].astype(np.float32))
+            )
+        _stages.extend(built)
+    return _stages
 
 
-class Discs(NamedTuple):
-    """The near grains of one update: where each disc's corner goes, its colour and
-    mask, a pixel of its centre (what hides it), and what is needed to make a fainter mask."""
+def _spline() -> np.ndarray:
+    """The nine weights of a fine grain at each of ``SUB`` x ``SUB`` positions inside its
+    pixel, row ``qy * SUB + qx``, rows of the grid first. A quadratic B-spline on 3 x 3
+    pixels, not a bilinear one on 4: a grain of one pixel flickered as it moved, its
+    peak swinging between a quarter and full strength with where it lay; the spline's
+    lies between a half and three quarters, and the grain is softer and looks finer."""
+    t = (np.arange(SUB, dtype=np.float32) + 0.5) / SUB  # the middle of each step
+    taps = np.stack([0.5 * (1 - t) ** 2, 0.75 - (t - 0.5) ** 2, 0.5 * t**2], axis=-1)
+    return (taps[:, None, :, None] * taps[None, :, None, :]).reshape(SUB * SUB, 9)
 
-    x0: list[int]
-    y0: list[int]
-    rgb: list[tuple[int, int, int]]
-    masks: list[Image.Image]
-    inside: np.ndarray
-    stage: np.ndarray
-    qx: np.ndarray
-    qy: np.ndarray
-    level: np.ndarray
-    clips: list[Image.Image | None]  # where an area cuts the disc (L, as large as its mask)
+
+def _curve() -> np.ndarray:
+    """How bright a grain is as a function of its depth ``z`` (1 front, 0 back), in
+    ``CURVE`` steps: faded in at the source and out in the depth, in between dimmer with
+    distance."""
+    z = np.linspace(0.0, 1.0, CURVE + 1, dtype=np.float32)
+    rise = np.clip((1 - z) / 0.08, 0, 1) * np.clip(z / 0.22, 0, 1)
+    return (rise * (0.42 + 0.58 * z**1.1)).astype(np.float32)
+
+
+_SPLINE = _spline()
+_CURVE = _curve()
 
 
 class _Taps(dict):
@@ -165,14 +200,21 @@ class _Taps(dict):
 _TAPS = _Taps()
 
 
+def _brightest(rgba: np.ndarray) -> np.ndarray:
+    """The brightest of the first three channels of each row of ``(n, 3)`` or ``(n, 4)``
+    (a reduction over so short an axis is several times slower than two ``maximum``s)."""
+    return np.maximum(np.maximum(rgba[:, 0], rgba[:, 1]), rgba[:, 2])
+
+
 class Canvas:
     """RGBA memory that numpy and Pillow both write in place.
 
     Pillow keeps an image made from a buffer read-only and copies it on the first
-    change; lifting that makes ``paste`` write into the array. The dust draws
-    discs through Pillow and the small grains through numpy on the same pixels,
-    without a copy of the whole frame in between. Should a Pillow ever not allow
-    it (checked once), ``linked`` is False and :class:`Dust` takes the slower way.
+    change; lifting that makes ``paste`` write into the array. The dust takes the
+    composed frame in through Pillow and lays its grains through numpy on the same
+    pixels, without a second copy of the whole frame in between. Should a Pillow ever
+    not allow it (checked once), ``linked`` is False and :class:`Dust` takes the
+    slower way.
     """
 
     def __init__(self, size: tuple[int, int]) -> None:
@@ -193,8 +235,13 @@ class Dust:
 
     ``config`` is the theme's validated ``look.dust`` (see ``DUST_SPEC``);
     ``colors`` its colours as RGB (none: the colour of the source). Everything
-    random comes from one generator, so a seed and a sequence of times give the
-    same dust.
+    random comes from generators seeded from ``seed``, so a seed and a sequence of
+    times give the same dust.
+
+    ``submit`` (set or cleared at any time) runs a job in a helper thread and gives
+    back its future. With it, the grains are moved there, ahead of the frame that
+    shows them, and a frame lays what was moved last; without it they move in the
+    frame itself. The work is the same either way, and so is the dust.
     """
 
     def __init__(
@@ -203,6 +250,7 @@ class Dust:
         config: dict[str, Any] | None = None,
         colors: list[tuple[int, int, int]] | None = None,
         seed: int = SEED,
+        submit: Callable[[Callable[[], Any]], Future] | None = None,
     ) -> None:
         self.width, self.height = size
         cfg = {**{k: v[1] for k, v in DUST_SPEC.items()}, "areas": [], **(config or {})}
@@ -215,22 +263,24 @@ class Dust:
         self.strength = float(cfg["strength"])
         self.palette = np.asarray(colors, np.float32) if colors else None
         self.allowed = self._allowed(cfg["areas"])
-        self.table: np.ndarray | None = None  # a sum over any box of ``allowed``, in O(1)
-        self.cut: Image.Image | None = None  # ``allowed`` as a mask, to clip discs with
-        if self.allowed is not None:
-            self.table = np.zeros((self.height + 1, self.width + 1), np.int32)
-            self.table[1:, 1:] = self.allowed.cumsum(axis=0).cumsum(axis=1)
-            self.cut = Image.fromarray(self.allowed.astype(np.uint8) * 255, "L")
         self.unit = min(self.width, self.height) / 480  # sizes in px that go with the panel
-        self.rng = np.random.default_rng(seed)
+        self.vanish = VANISH[0] * self.width, VANISH[1] * self.height
+        self.shrink = max(0.0, 1.0 - SHRINK * self.depth)
+        grains, stock = np.random.SeedSequence(seed).spawn(2)  # a helper thread moves the one
+        self.rng, self.stock_rng = np.random.default_rng(grains), np.random.default_rng(stock)
+        self.submit = submit
+        self.pending: Future | None = None  # the grains being moved in the helper thread
         self.sources: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None  # x, y, colour
         self.renewed: float | None = None  # when the stock was taken
         self.renew_at: float | None = None  # a stock to take at this time (a toast came)
         self.toast: Any = None  # the toast whose beginning was seen
-        self.updated: float | None = None  # when the grains last moved
+        self.updated: float | None = None  # when the grains were last asked to move
         self.grains: dict[str, np.ndarray] | None = None
-        self.taps: tuple[np.ndarray, np.ndarray] | None = None  # pixels the small grains cover
-        self.discs: Discs | None = None
+        self.near: np.ndarray = np.zeros(0, np.int64)  # which grains are discs
+        # what the grains cover: the frame's pixel of each tap, what it adds, and how much of
+        # the pixel it covers (a disc: its colour comes over it; a fine grain only adds), both
+        # as RGBA lanes with the alpha lane at 0, to work on whole pixels
+        self.taps: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
         self.canvas = Canvas(size)
         self.renewals = 0  # how often the stock was taken (tests, the bench)
 
@@ -243,11 +293,11 @@ class Dust:
         shown: Image.Image | None = None,
         toast: tuple[Any, float] | None = None,
     ) -> Image.Image:
-        """``canvas`` (RGBA, the composed frame) with the dust over it, at ``now``.
+        """``canvas`` (RGBA, the composed frame) with the dust over it, at ``now``: a new
+        RGB image, or ``canvas`` itself while there is no dust to draw yet.
 
         ``shown`` is the frame the panel showed last (the stock is taken from it,
-        else from ``canvas``), ``toast`` the toast on show and its age. The image
-        returned may be this dust's own memory: convert or copy it before the next call.
+        else from ``canvas``), ``toast`` the toast on show and its age.
         """
         if self.count <= 0 or canvas.size != (self.width, self.height):
             return canvas
@@ -310,234 +360,267 @@ class Dust:
         if xs.size > MAX_SOURCES:
             # drawn with replacement, evenly: weighing by brightness (without) costs
             # 14 ms and a bright wordmark brings plenty of points anyway
-            pick = self.rng.integers(0, xs.size, MAX_SOURCES)
+            pick = self.stock_rng.integers(0, xs.size, MAX_SOURCES)
             ys, xs = ys[pick], xs[pick]
-        x = (xs * 2 + self.rng.random(xs.size) * 2).astype(np.float32)
-        y = (ys * 2 + self.rng.random(ys.size) * 2).astype(np.float32)
+        x = (xs * 2 + self.stock_rng.random(xs.size) * 2).astype(np.float32)
+        y = (ys * 2 + self.stock_rng.random(ys.size) * 2).astype(np.float32)
         return x, y, np.asarray(small, np.uint8)[ys, xs].astype(np.float32)
 
     # -- grains -------------------------------------------------------------------
 
     def _birth(self) -> None:
-        n, rng = self.count, self.rng
-        life = rng.uniform(LIFE[0], LIFE[1], n).astype(np.float32)
-        self.grains = {
-            "life": life,
-            "age": (rng.random(n) * life).astype(np.float32),  # spread over their lives
-            "sway": rng.uniform(-1.0, 1.0, n).astype(np.float32),
-            "phase": rng.uniform(0, 2 * math.pi, n).astype(np.float32),
-            "near": rng.random(n) < NEAR_SHARE,
-            "x": np.zeros(n, np.float32),
-            "y": np.zeros(n, np.float32),
-            "color": np.zeros((n, 3), np.float32),
-        }
-        self._rehome(np.ones(n, bool))
+        n = self.count
+        floats = ("life", "inv", "age", "sway", "phase", "dx", "dy", "peak")
+        self.grains = {name: np.zeros(n, np.float32) for name in floats}
+        self.grains["color"] = np.zeros((n, 3), np.float32)
+        self.grains["near"] = np.zeros(n, bool)
+        self.grains["fine"] = np.zeros(n, bool)
+        self._spawn(np.arange(n), spread=True)
 
-    def _rehome(self, which: np.ndarray) -> None:
-        """Give the grains in ``which`` a new source. Its place and colour go into the
-        grain, not a reference into the stock: the stock may be replaced any time."""
-        n = int(which.sum())
-        if not n or self.sources is None or self.grains is None:
-            return
-        sx, sy, sc = self.sources
-        i = self.rng.integers(0, sx.size, n)
-        g = self.grains
-        g["x"][which], g["y"][which] = sx[i], sy[i]
+    def _spawn(self, which: np.ndarray, spread: bool = False) -> None:
+        """Give the grains ``which`` (their numbers) a new life: how long, how it sways,
+        whether it is near, and a source. Its place and colour go into the grain, not a
+        reference into the stock: the stock may be replaced any time. ``spread`` puts the
+        ages anywhere in the life (the first time), else they start at the front."""
+        assert self.grains is not None and self.sources is not None
+        g, sx, sy, sc = self.grains, *self.sources
+        r = self.rng.random((7, which.size))
+        life = LIFE[0] + r[0] * (LIFE[1] - LIFE[0])
+        g["life"][which] = life
+        g["inv"][which] = 1.0 / life
+        g["age"][which] = r[1] * life if spread else 0.0
+        g["sway"][which] = (r[2] * 2.0 - 1.0) * (WOBBLE * self.unit)
+        g["phase"][which] = r[3] * (2 * math.pi)
+        g["near"][which] = r[4] < NEAR_SHARE
+        g["fine"][which] = r[4] >= NEAR_SHARE
+        source = np.minimum((r[5] * sx.size).astype(np.int64), sx.size - 1)
+        g["dx"][which] = sx[source] - self.vanish[0]
+        g["dy"][which] = sy[source] - self.vanish[1]
         if self.palette is None:
-            g["color"][which] = sc[i]
+            color = sc[source]
         else:
-            g["color"][which] = self.palette[self.rng.integers(0, len(self.palette), n)]
+            color = self.palette[
+                np.minimum((r[6] * len(self.palette)).astype(np.int64), len(self.palette) - 1)
+            ]
+        g["color"][which] = color
+        g["peak"][which] = _brightest(color)
+        self.near = np.flatnonzero(g["near"])
 
     def _move(self, now: float) -> None:
-        """Age the grains (``rate`` times a second at most) and work out what they cover."""
+        """Move the grains when ``rate`` says it is time: here, or in the helper thread,
+        where the frames go on with the grains they have until the new ones are ready."""
+        self._collect()
+        if self.pending is not None:
+            return  # the last move is not done: one at a time, the grains are in its hands
         if self.updated is not None and 0 <= now - self.updated < 1 / self.rate - 1e-6:
             return
-        dt = 0.0 if self.updated is None else min(0.25, max(0.0, now - self.updated))
-        self.updated = now
+        since, self.updated = self.updated, now
+        if self.submit is None:
+            self.taps = self._advance(now, since)
+            return
+        self.pending = self.submit(lambda: self._advance(now, since))
+        self._collect()  # done already, if the helper runs it in the same breath
+
+    def _collect(self) -> None:
+        """Take the grains the helper thread has moved."""
+        if self.pending is None or not self.pending.done():
+            return
+        pending, self.pending = self.pending, None
+        try:
+            self.taps = pending.result()
+        except Exception:
+            log.exception(
+                "dust: moving the grains in the helper thread failed; moving them in the frame"
+            )
+            self.submit = None
+
+    def _advance(
+        self, now: float, since: float | None
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+        """Age the grains to ``now`` (``since`` the last time) and work out what they cover."""
+        dt = 0.0 if since is None else min(0.25, max(0.0, now - since))
         g = self.grains
         assert g is not None
         g["age"] += dt * SPEED
-        done = g["age"] >= g["life"]
-        if done.any():
-            n, rng = int(done.sum()), self.rng
-            g["life"][done] = rng.uniform(LIFE[0], LIFE[1], n)
-            g["age"][done] = 0.0
-            g["sway"][done] = rng.uniform(-1.0, 1.0, n)
-            g["phase"][done] = rng.uniform(0, 2 * math.pi, n)
-            g["near"][done] = rng.random(n) < NEAR_SHARE
-            self._rehome(done)
+        done = np.flatnonzero(g["age"] >= g["life"])
+        if done.size:
+            self._spawn(done)
         x, y, z, light = self._layout(now)
-        self.taps = self._small(x, y, light, ~g["near"])
-        self.discs = self._near(x, y, z, light, g["near"])
+        parts = [self._small(x, y, light), self._discs(x, y, z, light)]
+        return self._cover([p for p in parts if p is not None])
 
     def _layout(self, now: float) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """Where each grain is, how deep (1 front, 0 back) and how bright (0..1)."""
         g, u = self.grains, self.unit
         assert g is not None
-        z = np.clip(1.0 - g["age"] / g["life"], 0.0, 1.0)
-        shrink = max(0.0, 1.0 - SHRINK * self.depth)
-        s = shrink + (1.0 - shrink) * z  # the way left to the vanishing point
-        fx, fy = VANISH[0] * self.width, VANISH[1] * self.height
+        z = np.clip(1.0 - g["age"] * g["inv"], 0.0, 1.0)
+        s = self.shrink + (1.0 - self.shrink) * z  # the way left to the vanishing point
         gone = 1.0 - z
-        sway = WOBBLE * u * g["sway"] * np.sin(g["phase"] + (0.5 * now) % (2 * math.pi))
-        x = fx + (g["x"] - fx) * s + FALL[0] * u * gone + sway
-        y = fy + (g["y"] - fy) * s + FALL[1] * u * gone
-        # fading in at the source and out in the depth; in between dimmer with distance
-        light = (
-            np.clip(gone / 0.08, 0, 1) * np.clip(z / 0.22, 0, 1) * (0.42 + 0.58 * z**1.1)
-        ).astype(np.float32)
-        return x.astype(np.float32), y.astype(np.float32), z, light
+        sway = g["sway"] * np.sin(g["phase"] + (0.5 * now) % (2 * math.pi))
+        x = self.vanish[0] + g["dx"] * s + FALL[0] * u * gone + sway
+        y = self.vanish[1] + g["dy"] * s + FALL[1] * u * gone
+        return x, y, z, _CURVE[(z * CURVE + 0.5).astype(np.int32)]
 
     def _small(
-        self, x: np.ndarray, y: np.ndarray, light: np.ndarray, small: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray] | None:
-        """The pixels the fine grains cover and what each adds (before it is hidden).
-
-        A grain is a quadratic B-spline on 3 x 3 pixels, not a bilinear one on 4: a
-        grain of one pixel flickered as it moved, its peak swinging between a
-        quarter and full strength with where it lay; the spline's lies between a
-        half and three quarters, and the grain is softer and looks finer.
-        """
+        self, x: np.ndarray, y: np.ndarray, light: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+        """The pixels the fine grains cover and what each adds (before it is hidden):
+        only those that add something to see, the spline's corners mostly do not."""
         w, h = self.width, self.height
         g = self.grains
         assert g is not None
-        i = np.nonzero(small & (x > 2) & (x < w - 3) & (y > 2) & (y < h - 3) & (light > 0.015))[0]
+        scale = light * (OPACITY * self.strength)
+        peak = g["peak"] * scale  # the brightest channel of a grain, as it shines
+        ok = g["fine"] & (peak >= MIN_ADD / CENTRE) & (x > 2) & (x < w - 3) & (y > 2) & (y < h - 3)
+        i = np.flatnonzero(ok)
         if i.size == 0:
             return None
-        xi, yi = x[i].astype(np.int32), y[i].astype(np.int32)
-        t = np.stack([x[i] - xi, y[i] - yi])  # (2, m): the position inside the pixel
-        spline = np.stack([0.5 * (1 - t) ** 2, 0.75 - (t - 0.5) ** 2, 0.5 * t**2], axis=-1)
-        weight = (spline[1][:, :, None] * spline[0][:, None, :]).reshape(i.size, 9)  # y, then x
-        value = g["color"][i] * (light[i] * OPACITY * self.strength)[:, None]
-        # only the pixels that add something to see: the spline's corners mostly do not
-        peak = weight * _brightest(value)[:, None]
-        hit = np.flatnonzero(peak.reshape(-1) >= MIN_ADD)
-        rows = hit // 9
-        add = (weight.reshape(-1)[hit][:, None] * value[rows]).astype(np.int16)
-        return (yi * w + xi)[rows] + _TAPS[w][hit - rows * 9], add
+        xq = (x[i] * SUB).astype(np.int32)  # where, in 1 / SUB of a pixel
+        yq = (y[i] * SUB).astype(np.int32)
+        weights = _SPLINE[((yq & (SUB - 1)) << SHIFT) | (xq & (SUB - 1))]  # (grains, 9)
+        hit = np.flatnonzero(weights * peak[i][:, None] >= MIN_ADD)
+        rows, tap = np.divmod(hit, 9)
+        add = (g["color"][i] * scale[i][:, None])[rows] * weights.reshape(-1)[hit][:, None]
+        base = (yq >> SHIFT) * w + (xq >> SHIFT)
+        index = base[rows] + _TAPS[w][tap]
+        return index, add, np.zeros(index.size, np.float32)
 
-    def _near(
-        self, x: np.ndarray, y: np.ndarray, z: np.ndarray, light: np.ndarray, near: np.ndarray
-    ) -> Discs | None:
-        """The soft discs: where, which step, how bright (a level) and what colour."""
+    def _discs(
+        self, x: np.ndarray, y: np.ndarray, z: np.ndarray, light: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+        """The pixels the near grains cover: for each disc the sprite of its step, at its
+        quarter pixel, as tall as its brightness says and in its colour. Discs of a step
+        are worked out together, as boxes of the same shape."""
         w, h = self.width, self.height
         g = self.grains
         assert g is not None
-        i = np.nonzero(near & (light > 0.02) & (x > -20) & (x < w + 20) & (y > -20) & (y < h + 20))[
-            0
-        ]
+        i = self.near
+        i = i[(light[i] > 0.02) & (x[i] > -20) & (x[i] < w + 20) & (y[i] > -20) & (y[i] < h + 20)]
         if i.size == 0:
             return None
-        stage = np.clip((z[i] * STAGES).astype(np.int32), 0, STAGES - 1)
-        peaks, radii = _steps()
+        peaks = _peaks()
+        step = np.minimum((z[i] * STAGES).astype(np.int32), STAGES - 1)
         # the same energy on more area: the peak falls with the step, which is the blur
-        spike = light[i] * peaks[stage]
-        level = (np.minimum(1.0, spike * 1.8 * self.strength) * LEVELS + 0.5).astype(np.int32)
-        ix, iy = np.floor(x[i]).astype(np.int32), np.floor(y[i]).astype(np.int32)
-        qx = ((x[i] - ix) * STEP).astype(np.int32)
-        qy = ((y[i] - iy) * STEP).astype(np.int32)
-        radius = radii[stage]
-        keep = level >= MIN_LEVEL
-        ix, iy, stage, qx, qy, level, radius = (
-            c[keep] for c in (ix, iy, stage, qx, qy, level, radius)
-        )
-        rgb = g["color"][i][keep].astype(np.int32)
-        if not ix.size:
+        level = np.minimum(1.0, light[i] * peaks[step] * (1.8 * self.strength))
+        keep = level >= MIN_DISC
+        i, step, level = i[keep], step[keep], level[keep]
+        if i.size == 0:
             return None
-        keys = zip(stage.tolist(), qx.tolist(), qy.tolist(), level.tolist(), strict=True)
-        masks = [disc_mask(*key) for key in keys]
-        x0, y0 = ix - radius, iy - radius
-        clips = self._clips(x0, y0, 2 * radius)
-        for j, clip in enumerate(clips):
-            if clip is not None:
-                masks[j] = ImageChops.multiply(masks[j], clip)
-        inside = (np.clip(iy, 0, h - 1) * w + np.clip(ix, 0, w - 1)).astype(np.int64)
-        return Discs(
-            x0.tolist(), y0.tolist(), list(map(tuple, rgb.tolist())), masks, inside,
-            stage, qx, qy, level, clips,
-        )  # fmt: skip
-
-    def _clips(self, x0: np.ndarray, y0: np.ndarray, size: np.ndarray) -> list[Image.Image | None]:
-        """For each disc box (corner and size) the part of ``allowed`` under it, or None
-        where the whole box is allowed (almost all of them)."""
-        if self.table is None or self.cut is None:
-            return [None] * len(x0)
-        w, h = self.width, self.height
-        ax0, ay0 = np.clip(x0, 0, w), np.clip(y0, 0, h)
-        ax1, ay1 = np.clip(x0 + size, 0, w), np.clip(y0 + size, 0, h)
-        t = self.table
-        allowed = t[ay1, ax1] - t[ay0, ax1] - t[ay1, ax0] + t[ay0, ax0]
-        partly = allowed < (ax1 - ax0) * (ay1 - ay0)
-        boxes = zip(
-            x0.tolist(), y0.tolist(), (x0 + size).tolist(), (y0 + size).tolist(), strict=True
+        ix, iy = np.floor(x[i]).astype(np.int32), np.floor(y[i]).astype(np.int32)
+        quarter = ((x[i] - ix) * STEP).astype(np.int32) * STEP + ((y[i] - iy) * STEP).astype(
+            np.int32
         )
-        return [
-            self.cut.crop(box) if cut else None
-            for box, cut in zip(boxes, partly.tolist(), strict=True)
-        ]
+        alpha = level * DISC_OPACITY
+        color = g["color"][i]
+        order = np.argsort(step, kind="stable")
+        edges = np.searchsorted(step[order], np.arange(STAGES + 1))
+        found: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = []
+        for n, stage in enumerate(stages()):
+            which = order[edges[n] : edges[n + 1]]
+            if which.size == 0:
+                continue
+            r = stage.radius
+            cx, cy = ix[which], iy[which]
+            inside = (cx >= r) & (cx < w - r) & (cy >= r) & (cy < h - r)
+            if not inside.all():  # a disc over the edge of the panel: a tap at a time
+                found.extend(self._clipped(stage, which[~inside], ix, iy, quarter, alpha, color))
+                which, cx, cy = which[inside], cx[inside], cy[inside]
+                if which.size == 0:
+                    continue
+            height = stage.heights[quarter[which]] * alpha[which][:, None]  # (discs, taps)
+            index = (cy * w + cx)[:, None] + stage.offsets(w)
+            add = height[:, :, None] * color[which][:, None, :]
+            found.append((index.reshape(-1), add.reshape(-1, 3), height.reshape(-1)))
+        if not found:
+            return None
+        return (
+            np.concatenate([f[0] for f in found]),
+            np.concatenate([f[1] for f in found]),
+            np.concatenate([f[2] for f in found]),
+        )
+
+    def _clipped(
+        self,
+        stage: Stage,
+        which: np.ndarray,
+        ix: np.ndarray,
+        iy: np.ndarray,
+        quarter: np.ndarray,
+        alpha: np.ndarray,
+        color: np.ndarray,
+    ) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        """The discs ``which`` of a step that reach over the panel's edge: the taps that
+        fall on it, a disc at a time (there are only ever a few)."""
+        w, h = self.width, self.height
+        found = []
+        for d in which.tolist():
+            px, py = ix[d] + stage.dx, iy[d] + stage.dy
+            inside = (px >= 0) & (px < w) & (py >= 0) & (py < h)
+            height = stage.heights[quarter[d]][inside] * alpha[d]
+            found.append(((py * w + px)[inside], height[:, None] * color[d], height))
+        return found
+
+    def _cover(
+        self, parts: list[tuple[np.ndarray, np.ndarray, np.ndarray]]
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+        """The taps of all the grains as one list, without those outside the areas, with
+        what they add and cover as RGBA lanes (alpha 0: a frame's alpha is left alone)."""
+        if not parts:
+            return None
+        index, add, cover = (np.concatenate([p[n] for p in parts]) for n in range(3))
+        if self.allowed is not None:
+            inside = self.allowed.reshape(-1)[index]
+            index, add, cover = index[inside], add[inside], cover[inside]
+        if not index.size:
+            return None
+        add4 = np.zeros((index.size, 4), np.float32)
+        np.minimum(add, MAX_ADD, out=add4[:, :3])
+        cover4 = np.zeros((index.size, 4), np.float32)
+        cover4[:, :3] = cover[:, None]
+        return index, add4, cover4
 
     # -- drawing ------------------------------------------------------------------
 
     def _draw(self, canvas: Image.Image) -> Image.Image:
+        if self.taps is None:
+            return canvas
         c = self.canvas
         if not c.linked:
-            return self._draw_copy(canvas)
+            array = np.frombuffer(canvas.convert("RGBA").tobytes(), np.uint8).copy()
+            array = array.reshape(self.height, self.width, 4)
+            self._lay(array)
+            return Image.fromarray(array).convert("RGB")
         c.load(canvas)
-        self._lay_discs(c.image, c.array)
-        self._lay_small(c.array)
-        return c.image
+        self._lay(c.array)
+        # pasting RGBA into an RGB image keeps the pixels as they are: a third of the
+        # time Image.convert takes at this size
+        out = Image.new("RGB", (self.width, self.height), None)  # all of it is pasted over
+        out.paste(c.image)
+        return out
 
-    def _lay_small(self, array: np.ndarray) -> None:
-        if self.taps is None:
-            return
-        index, add = self.taps
+    def _lay(self, array: np.ndarray) -> None:
+        """Lay the taps onto the frame ``array`` (RGBA): one gather, one blend, one scatter.
+
+        A tap blends towards what it brings by how much it covers: ``add`` is the colour a
+        disc brings (times its opacity), a fine grain only adds; an element in front lets
+        by ``show`` of either. Whole pixels at a time, as four float lanes: numpy is far
+        slower on the three of four bytes of a pixel, and the alpha lane does not change
+        (its ``add`` and ``cover`` are 0). There is nothing to clamp: ``add`` is at most
+        ``MAX_ADD`` and a pixel it shows on is at most ``HIDE[0]`` bright."""
+        assert self.taps is not None
+        index, add, cover = self.taps
         flat = array.view(np.uint32).reshape(-1)  # a pixel in one word: a gather, not row copies
         pixels = flat[index]
         rgb = pixels.view(np.uint8).reshape(-1, 4)  # the gathered copy, by channel
-        show = _SHOWN[_brightest(rgb)]
-        if self.allowed is not None:
-            show = show * self.allowed.reshape(-1)[index]
-        covered = np.flatnonzero(show < 1.0)  # over an element, or out of bounds: fainter
-        lit = rgb[:, :3] + add
-        if covered.size:
-            lit[covered] = rgb[covered, :3] + (add[covered] * show[covered, None]).astype(np.int16)
-        rgb[:, :3] = np.minimum(lit, 255)
+        bright = np.maximum(rgb[:, 0], rgb[:, 1])
+        np.maximum(bright, rgb[:, 2], out=bright)
+        body = rgb.astype(np.float32)
+        lit = body * cover
+        np.subtract(add, lit, out=lit)
+        lit *= _SHOWN[bright][:, None]
+        lit += body
+        rgb[:] = lit.astype(np.uint8)
         flat[index] = pixels
-
-    def _lay_discs(self, image: Image.Image, array: np.ndarray) -> None:
-        d = self.discs
-        if d is None:
-            return
-        words = array.view(np.uint32).reshape(-1)[d.inside]
-        show = _SHOWN[_brightest(words.view(np.uint8).reshape(-1, 4))]
-        masks = d.masks
-        dim = np.nonzero(show < 0.999)[0]
-        if dim.size:  # over an element: a fainter disc, or none
-            masks = list(masks)
-            for j in dim.tolist():
-                level = int(d.level[j] * show[j] + 0.5)
-                mask = (
-                    disc_mask(int(d.stage[j]), int(d.qx[j]), int(d.qy[j]), level) if level else None
-                )
-                clip = d.clips[j]
-                masks[j] = (
-                    ImageChops.multiply(mask, clip)
-                    if mask is not None and clip is not None
-                    else mask
-                )
-        for x0, y0, rgb, mask in zip(d.x0, d.y0, d.rgb, masks, strict=True):
-            if mask is not None:
-                image.paste(rgb, (x0, y0), mask)
-
-    def _draw_copy(self, canvas: Image.Image) -> Image.Image:
-        """The same through copies, when the canvas cannot be written in place."""
-        size = (self.width, self.height)
-        image = canvas.copy()
-        words = np.frombuffer(image.tobytes(), np.uint32).copy().reshape(self.height, self.width)
-        self._lay_discs(image, words)  # discs through Pillow on the image itself ...
-        words = np.frombuffer(image.tobytes(), np.uint32).copy().reshape(self.height, self.width)
-        self._lay_small(words)  # ... then the small grains on its pixels
-        return Image.frombytes("RGBA", size, words.tobytes())
 
     # -- areas ----------------------------------------------------------------
 

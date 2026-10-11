@@ -902,8 +902,8 @@ class Renderer:
             pieces.insert(0, ("\0screen", self._screen_piece(screen)))  # ids are never empty
         canvas = self._compose(pieces)
         if dust:
-            canvas = self._dusted(canvas, now)
-        return canvas.convert("RGB"), boxes
+            canvas = self._dusted(canvas, now)  # RGB once there is dust on it
+        return (canvas if canvas.mode == "RGB" else canvas.convert("RGB")), boxes
 
     # -- dust --------------------------------------------------------------
 
@@ -919,7 +919,14 @@ class Renderer:
             config = self.theme.look["dust"]  # type: ignore[index]
             colors = [self.color(c)[:3] for c in config["colors"]]  # type: ignore[index]
             self._dust = Dust(canvas.size, config, colors)
+        # where a slow piece must not stall the video, the grains move in the helper thread too
+        self._dust.submit = self._submit if self.background_builds else None
         return self._dust.apply(canvas, now, self.shown, self.toast)
+
+    def _submit(self, job: Callable[[], Any]) -> Future:
+        if self._builder is None:
+            self._builder = _Builder()
+        return self._builder.submit(job)
 
     @staticmethod
     def _missing(widget: dict[str, Any], snapshot: Snapshot) -> bool:

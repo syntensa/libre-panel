@@ -41,8 +41,8 @@ LIGHT /= np.linalg.norm(LIGHT)
 LIGHT_TOP = float(LIGHT[2])
 SIN45 = math.sin(math.radians(45))
 
-# How far a facet lightens towards white where it faces the light (``hell``) and how
-# far it darkens where it faces away (``tief``), per kind of shape
+# How far a facet lightens towards white where it faces the light (the first number)
+# and how far it darkens where it faces away (the second), per kind of shape
 TEXT = (0.85, 0.88)  # lettering: a light touch, the letters are nearly white anyway
 SOLID = (1.35, 0.16)  # bars and rings: narrow, so a hard contrast reads as an edge
 GROOVE = (0.20, 0.55)  # a milled channel is background: it hints at an edge, no more
@@ -227,10 +227,10 @@ def facing(normals: np.ndarray) -> np.ndarray:
 def shade(k: np.ndarray, style: tuple[float, float]) -> tuple[np.ndarray, np.ndarray]:
     """``(A, B)`` with ``rgb = colour * A + B`` (0..255) for light ``k`` (see :func:`facing`):
     a surface facing the light goes towards white, one facing away towards black."""
-    hell, tief = style
+    lighten, darken = style
     lit = k >= 1
-    m = np.clip((k - 1) * hell, 0, 1)
-    a = np.where(lit, 1 - m, tief + (1 - tief) * k).astype(np.float32)
+    m = np.clip((k - 1) * lighten, 0, 1)
+    a = np.where(lit, 1 - m, darken + (1 - darken) * k).astype(np.float32)
     b = np.where(lit, 255 * m, 0).astype(np.float32)
     return a, b
 
