@@ -234,6 +234,34 @@ def test_the_unknown_is_refused(tmp_path):
 # -- what is refused ----------------------------------------------------------------------------
 
 
+def test_a_scanner_that_holds_the_rename_off_for_a_moment_is_waited_for(tmp_path, monkeypatch):
+    downloads, tools = lab()
+    folder = tmp_path / "tools"
+    real = Path.rename
+    refused = []
+
+    def rename(self, target):
+        if self.name.startswith(".tools") and len(refused) < 2:
+            refused.append(self)
+            raise PermissionError("another process has the file open")
+        return real(self, target)
+
+    pauses = []
+    monkeypatch.setattr(Path, "rename", rename)
+    monkeypatch.setattr(fetch_tools.time, "sleep", pauses.append)
+    run(folder, downloads, tools, "windows")
+    assert len(refused) == 2 and pauses == [1.0, 2.0] and (folder / "ffmpeg.exe").exists()
+    # a rename that keeps being refused is a failure, and leaves nothing behind
+    monkeypatch.setattr(
+        Path, "rename", lambda self, target: (_ for _ in ()).throw(PermissionError())
+    )
+    other = tmp_path / "other"
+    with pytest.raises(PermissionError):
+        run(other, downloads, tools, "windows")
+    assert not other.exists()
+    assert not [p for p in tmp_path.iterdir() if p.name.startswith(".other")]
+
+
 def test_a_download_that_is_not_the_checked_one_is_refused(tmp_path):
     downloads, tools = lab()
     downloads["PresentMon.exe"] = b"MZ another program"
@@ -403,7 +431,8 @@ def test_a_server_that_fails_for_a_moment_is_asked_again(monkeypatch):
         return answer
 
     monkeypatch.setattr(fetch_tools.urllib.request, "urlopen", urlopen)
-    assert fetch_tools.download("https://x/a", pause=pauses.append) == b"third time"
+    monkeypatch.setattr(fetch_tools.time, "sleep", pauses.append)
+    assert fetch_tools.download("https://x/a") == b"third time"
     assert pauses == [5.0, 10.0]  # waiting longer each time
 
 
@@ -415,8 +444,9 @@ def test_a_missing_file_is_not_asked_for_again_and_a_dead_server_is_given_up_on(
         raise fetch_tools.urllib.error.HTTPError("u", 404, "Not Found", {}, None)
 
     monkeypatch.setattr(fetch_tools.urllib.request, "urlopen", missing)
+    monkeypatch.setattr(fetch_tools.time, "sleep", lambda seconds: None)
     with pytest.raises(fetch_tools.FetchError, match="the server says 404 Not Found"):
-        fetch_tools.download("https://x/a", pause=lambda seconds: None)
+        fetch_tools.download("https://x/a")
     assert len(calls) == 1
 
     def dead(request, timeout=None):
@@ -426,7 +456,7 @@ def test_a_missing_file_is_not_asked_for_again_and_a_dead_server_is_given_up_on(
     calls.clear()
     monkeypatch.setattr(fetch_tools.urllib.request, "urlopen", dead)
     with pytest.raises(fetch_tools.FetchError, match="cannot be read: timed out"):
-        fetch_tools.download("https://x/a", pause=lambda seconds: None)
+        fetch_tools.download("https://x/a")
     assert len(calls) == 3
 
 

@@ -178,7 +178,7 @@ class FetchError(Exception):
     """Something is not as pinned; the message says what."""
 
 
-def download(url: str, attempts: int = 3, pause: Callable[[float], None] = time.sleep) -> bytes:
+def download(url: str, attempts: int = 3) -> bytes:
     """The bytes at an https address (a redirect to anything else is refused). A server error
     or a broken connection is tried again, a few times; a missing file is not."""
     if not url.startswith("https://"):
@@ -198,7 +198,7 @@ def download(url: str, attempts: int = 3, pause: Callable[[float], None] = time.
         except (OSError, http.client.HTTPException) as exc:
             if attempt == attempts:
                 raise FetchError(f"{url} cannot be read: {exc}") from exc
-        pause(5.0 * attempt)
+        time.sleep(5.0 * attempt)
     raise AssertionError("unreachable")  # the loop returns or raises
 
 
@@ -292,6 +292,22 @@ def _take(tool: Tool, data: bytes) -> tuple[bytes, dict[str, bytes]]:
     return program, texts
 
 
+def _put_in_place(work: Path, folder: Path, attempts: int = 5) -> None:
+    """``work`` becomes ``folder``, which it replaces. On Windows a virus scanner that is still
+    reading the program that was just written (140 MB of ffmpeg) can hold the rename off for a
+    moment: try again."""
+    for attempt in range(1, attempts + 1):
+        try:
+            if folder.exists():
+                shutil.rmtree(folder)
+            work.rename(folder)
+            return
+        except PermissionError:
+            if attempt == attempts:
+                raise
+            time.sleep(float(attempt))
+
+
 def _sources(tools: list[Tool], digests: dict[str, str]) -> str:
     lines = ["Programs that come with Libre Panel, in this folder (see also NOTICE.md).", ""]
     for tool in tools:
@@ -349,9 +365,7 @@ def fetch(
                 f"sha256 {digests[tool.file]}"
             )
         (work / "SOURCES.txt").write_text(_sources(chosen, digests), "utf-8")
-        if folder.exists():
-            shutil.rmtree(folder)
-        work.rename(folder)
+        _put_in_place(work, folder)
     except BaseException:
         shutil.rmtree(work, ignore_errors=True)
         raise
