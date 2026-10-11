@@ -46,6 +46,21 @@ def test_editor_tables_are_complete(table):
     assert set(CATALOG[table]) == tables()[table]
 
 
+def test_a_long_german_widget_name_may_break_at_a_soft_hyphen():
+    """The app's library shows the single widgets in three columns of 75 px: a word of more than
+    11 letters does not fit and broke in the middle of a syllable ("Wettersymb-ol"). The catalog
+    says where a compound may break (a soft hyphen, which is not seen where it does not)."""
+    shy = "\u00ad"
+    for key, name in CATALOG["widgets"].items():
+        pieces = re.split(rf"[\s\-{shy}]+", name)
+        assert all(len(piece) >= 3 for piece in pieces), (key, "a soft hyphen at an end")
+        longest = max(len(piece) for piece in pieces)
+        assert longest <= 11, f"{key}: {name!r} has a piece too long for a tile"
+    assert CATALOG["widgets"]["symbol"].replace(shy, "") == "Wettersymbol"
+    assert CATALOG["widgets"]["calendar"].replace(shy, "") == "Monatskalender"
+    assert shy not in "".join(CATALOG["messages"].values())  # (the panel draws those: no box)
+
+
 def test_placeholders_match():
     for english, german in CATALOG["messages"].items():
         assert set(PLACEHOLDER.findall(english)) == set(PLACEHOLDER.findall(german)), english

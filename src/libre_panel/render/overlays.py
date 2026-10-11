@@ -12,12 +12,13 @@ import logging
 from dataclasses import replace
 from typing import Any
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
+from libre_panel.fonts.fallback import truetype
 from libre_panel.icons import ICON_NAMES, draw_icon
 from libre_panel.plugins.render import RenderContext, ToastStyle, Transition
 from libre_panel.render.band import BandStyle
-from libre_panel.render.light import accent_color, role_value
+from libre_panel.render.light import accent_color, ellipsize, role_value
 from libre_panel.render.transitions import Entrance, Tube
 
 log = logging.getLogger(__name__)
@@ -296,13 +297,15 @@ class CardStyle(ToastStyle):
         unit = max(12, min(size) // 16)  # 30 px on a 480 px high panel
         font = self.context.font("", unit * SS)
         if getattr(font, "path", None):  # a face of its own: the renderer's helper thread
-            font = ImageFont.truetype(font.path, unit * SS)  # may use the shared one
+            font = truetype(font.path, unit * SS)  # may use the shared one
         text = toast.text if len(toast.text) <= 120 else toast.text[:119] + "…"
         pad, gap, bar = unit * SS * 2 // 3, unit * SS // 2, max(3, unit // 8) * SS
         icon_size = unit * SS if toast.icon in ICON_NAMES else 0
-        left, top, right, bottom = font.getbbox(text)
         max_width = size[0] * SS * 2 // 3
-        text_w = min(right - left, max_width - icon_size - 2 * pad - gap - bar)
+        room = max_width - icon_size - 2 * pad - gap - bar  # what the text may take of the card
+        text = ellipsize(text, font, room)  # (it was cut off at the edge of the card)
+        left, top, right, bottom = font.getbbox(text)
+        text_w = max(1, min(right - left, room))
         width = bar + pad + (icon_size + gap if icon_size else 0) + text_w + pad
         height = max(icon_size, unit * SS) + 2 * pad
         card = Image.new("RGBA", (width, height), (0, 0, 0, 0))

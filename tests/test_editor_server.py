@@ -329,6 +329,61 @@ def test_module_previews_follow_the_look(server):
     assert base64.b64decode(data["previews"]["ring"])[:4] == b"\x89PNG"
 
 
+def test_every_renderer_a_preview_makes_is_closed_and_freed(plugin_folder, server, monkeypatch):
+    """The previews of the editor (the building blocks' pictures, a saved theme's, the panel's
+    own, with a plugin's screen and widget type among them) make a renderer each and let go of
+    it: it must be closed, and gone with its last reference, not left to the collector, which
+    the main loop of the background app, which runs the editor, keeps from working for hours
+    (the contexts of a plugin's parts refer to their renderer until it is closed)."""
+    import gc
+    import time
+    import weakref
+
+    from test_plugins import DRAWING, bar, theme_data
+
+    from libre_panel.editor import server as editor
+    from libre_panel.editor.presets import PRESETS
+
+    parts = {"libre_panel.screens": {"tint": "Tint"}, "libre_panel.widgets": {"demo.bar": "Bar"}}
+    plugin_folder(DRAWING, parts=parts)  # (no part that fails to load: its log would keep a frame)
+
+    made, closed = [], []
+
+    class Tracked(editor.Renderer):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            made.append(weakref.ref(self))
+
+        def close(self):
+            closed.append(id(self))
+            super().close()
+
+    monkeypatch.setattr(editor, "Renderer", Tracked)
+    palette = {"bg": "#101010", "accent": "#ff8800"}
+    calls = [
+        ("/api/module-previews", {"palette": palette}, len(MODULE_KINDS)),
+        ("/api/preset-previews", {"palette": palette}, len(PRESETS)),
+        ("/api/render", {"theme": theme_dict(), "notice": "volume"}, 1),
+        ("/api/render", {"theme": theme_data({"name": "tint"}, [bar()])}, 1),  # plugin parts
+        ("/api/themes/libre-default/preview?w=200", None, 1),
+    ]
+    gc.collect()
+    gc.disable()  # the collector must not be what frees them
+    try:
+        for path, body, count in calls:
+            before = len(made)
+            status, _ = request(server, "POST" if body else "GET", path, body)
+            assert status == 200, path
+            assert len(made) - before >= count, path  # (a plugin's presets come too)
+            assert len(closed) == len(made), path
+        deadline = time.monotonic() + 5
+        while any(ref() is not None for ref in made) and time.monotonic() < deadline:
+            time.sleep(0.02)  # (the handler's last frame goes with its answer)
+        assert not [ref for ref in made if ref() is not None]
+    finally:
+        gc.enable()
+
+
 def test_templates_fill_the_panel_grid(server):
     status, data = request(
         server, "POST", "/api/templates", {"width": 480, "height": 320, "model": "turing-3.5"}

@@ -32,6 +32,7 @@ from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont
 
 from libre_panel import clock, i18n, timezones
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
+from libre_panel.fonts.fallback import cursive, truetype
 from libre_panel.icons import draw_icon, weather_icon_name
 from libre_panel.render import cover, fan, lists
 from libre_panel.render import finish as finishes
@@ -574,13 +575,13 @@ class Renderer:
             try:
                 builtin = builtin_font_path(ref)
                 if builtin is not None:
-                    font = ImageFont.truetype(str(builtin), size)
+                    font = truetype(str(builtin), size)
                 elif self.theme.root is not None:
-                    font = ImageFont.truetype(str(resolve_asset(self.theme.root, ref)), size)
+                    font = truetype(str(resolve_asset(self.theme.root, ref)), size)
             except (OSError, ThemeError) as exc:
                 self._warn(f"font {ref!r} could not be loaded ({exc}); using the default font")
             if font is None and ref != DEFAULT_FONT:
-                font = ImageFont.truetype(str(builtin_font_path(DEFAULT_FONT)), size)
+                font = truetype(str(builtin_font_path(DEFAULT_FONT)), size)
             self._fonts[key] = font or ImageFont.load_default(size)
         return self._fonts[key]
 
@@ -1311,8 +1312,11 @@ class Renderer:
             return text, size
         spacing = widget.get("letter_spacing", 0)
         tabular = widget.get("tabular", False)
+        joined = cursive(text)  # (such text is laid out whole: see _text_piece)
 
         def width(candidate: str, font: Any) -> float:
+            if joined:
+                return font.getlength(candidate)
             cell = self._digit_cell(font) if tabular else 0
             advances = [
                 cell if tabular and ch in _DIGITS else font.getlength(ch) for ch in candidate
@@ -1341,6 +1345,8 @@ class Renderer:
         tabular = widget.get("tabular", False)
         finish = self._finishes.get(widget.get("id", ""))  # a finish may letter its own way
         lettered = finish is not None and finish.lettering(self, widget, font, text)
+        if cursive(text):  # letters that join cannot be set one by one: the whole text, as it is
+            spacing, tabular, lettered = 0, False, False
         if "\n" in text or not (
             spacing or lettered or (tabular and any(c in _DIGITS for c in text))
         ):

@@ -1107,7 +1107,7 @@ def test_the_librarys_long_names_wrap_instead_of_being_cut(page):
     page.wait_for_function("document.documentElement.lang === 'de'")
     page.wait_for_function("document.fonts.status === 'loaded'")  # the lines are the font's
     expect(page.locator('.tile[data-item="widget:calendar"] .tile-name')).to_have_text(
-        "Monatskalender"
+        "Monats\u00adkalender"  # (a soft hyphen: where the small tile may break it)
     )
     measured = page.locator(".tile-name").evaluate_all(
         """(names) => names.map((el) => {
@@ -1119,7 +1119,39 @@ def test_the_librarys_long_names_wrap_instead_of_being_cut(page):
     )
     assert [name for name, beyond, lines in measured if beyond or lines > 2] == []
     wrapped = {name for name, beyond, lines in measured if lines == 2}
-    assert {"Lüfter mit Drehzahl", "Symbol mit Beschriftung", "Monatskalender"} <= wrapped
+    assert {"Lüfter mit Drehzahl", "Symbol mit Beschriftung", "Monats\u00adkalender"} <= wrapped
+
+
+def test_a_long_german_name_breaks_at_its_soft_hyphen_in_the_small_tiles(page):
+    """ "Wettersymbol" and "Monatskalender" are longer than a tile of the library's three columns
+    and broke in the middle of a syllable ("Wettersymb-ol"); the catalog marks where a compound
+    may break, and a typed word still finds the name."""
+    js(page, "window.libre.commands.runCommand('language.de')")
+    page.wait_for_function("document.documentElement.lang === 'de'")
+    page.wait_for_function("document.fonts.status === 'loaded'")
+    broken = page.locator('.tile[data-item^="widget:"] .tile-name').evaluate_all(
+        """(names) => names.map((el) => {
+          const node = el.firstChild;
+          const range = document.createRange();
+          const tops = [];
+          for (let i = 0; i < node.length; i++) {
+            range.setStart(node, i);
+            range.setEnd(node, i + 1);
+            const rects = range.getClientRects();  // (the hyphen that a break makes is a box too)
+            tops.push(rects.length ? Math.round(rects[rects.length - 1].top) : null);
+          }
+          const first = tops.find((top) => top !== null);
+          const at = tops.findIndex((top) => top !== null && top > first + 2);
+          return [node.data, at < 0 ? null : node.data.slice(0, at)];
+        })"""
+    )
+    lines = {text.replace("\u00ad", ""): upto for text, upto in broken if upto is not None}
+    assert lines["Wettersymbol"] == "Wetter\u00ad" and lines["Monatskalender"] == "Monats\u00ad"
+    assert lines["Download-Anzeige"] == "Download-"  # (it had its own hyphen)
+    page.get_by_placeholder("Baustein suchen").fill("monatskalender")
+    expect(page.locator('.tile[data-item="widget:calendar"]')).to_have_count(1)
+    page.get_by_placeholder("Baustein suchen").fill("wettersymbol")
+    expect(page.locator('.tile[data-item="widget:symbol"]')).to_have_count(1)
 
 
 def test_every_widget_type_has_a_name_in_both_languages(page):
@@ -1139,7 +1171,7 @@ def test_every_widget_type_has_a_name_in_both_languages(page):
             page.locator(f'.tile[data-item="widget:{kind}"] .tile-name').inner_text()
             for kind in ("fan", "symbol", "downloads")
         ]
-        assert shown == names
+        assert [name.replace("\u00ad", "") for name in shown] == names  # (soft hyphens: invisible)
         assert set(singles.all_inner_texts()).isdisjoint(types)  # none shows a raw type name
         assert singles.count() == len(types)
 

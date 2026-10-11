@@ -22,7 +22,7 @@ import logging
 import threading
 from typing import Any
 
-from libre_panel.sensors.base import Reading, SensorProvider
+from libre_panel.sensors.base import Reading, SensorProvider, as_float
 
 log = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ def _scalar(value: Any) -> float | str | None:
     if isinstance(value, bool):
         return 1.0 if value else 0.0
     if isinstance(value, (int, float)):
-        return float(value)
+        return as_float(value)
     if isinstance(value, str):
         text = value.strip()
         try:

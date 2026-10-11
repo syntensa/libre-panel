@@ -1107,8 +1107,11 @@ class EditorHandler(BaseHTTPRequestHandler):
             except ThemeError as exc:
                 return self._error(str(exc))
             renderer = Renderer(theme, preview=True)
-            frame, _boxes = renderer.render(snapshot)
-            x, y, w, h = renderer.module_boxes["m"]
+            try:
+                frame, _boxes = renderer.render(snapshot)
+                x, y, w, h = renderer.module_boxes["m"]
+            finally:
+                renderer.close()
             buffer = io.BytesIO()
             frame.crop((x, y, x + w, y + h)).save(buffer, format="PNG")
             previews[kind] = base64.b64encode(buffer.getvalue()).decode("ascii")

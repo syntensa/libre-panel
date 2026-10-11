@@ -572,7 +572,9 @@ class Studio(Screen):
   `datetime`, so a seconds clock ticks on the frame that is due.
 - `context` has `size`, `orientation`, `palette`, `model`,
   `hidden_edges()` (pixels the bezel hides, as data: nothing is cropped),
-  `font(ref, size)`, `color(value)`, `fps`, `language`, `t(text)`,
+  `font(ref, size)` (a Pillow font that takes a character it lacks from a font of the
+  computer, see the fonts in [THEMES.md](THEMES.md#themejson)), `color(value)`,
+  `fps`, `language`, `t(text)`,
   `supersample`/`downsample()`, `image(key)` (a picture a service
   published, e.g. `media.cover`, or None), `state(key, default)` (a dict or
   list a service published) and `assets`, the plugin's own folder for

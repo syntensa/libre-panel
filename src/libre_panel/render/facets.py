@@ -346,7 +346,7 @@ def _glyph_geometry(font: Any, ch: str, quarter: int, style: str) -> Glyph | Non
 
 
 def glyph_geometry(font: Any, ch: str, quarter: int, style: str = "metal") -> Glyph | None:
-    key = (str(font.path), font.size, ch, quarter, style)
+    key = (str(font.path), font.size, getattr(font, "chain_id", 0), ch, quarter, style)
     hit = _glyphs.get(key)
     if hit is None:
         hit = _glyphs.put(key, _glyph_geometry(font, ch, quarter, style) or _blank)
@@ -385,7 +385,16 @@ def glyph(
     if g is None:
         return None
     environment = environment or environment_for(None)
-    key = (str(font.path), font.size, ch, quarter, style, tuple(fill), environment)
+    key = (
+        str(font.path),
+        font.size,
+        getattr(font, "chain_id", 0),
+        ch,
+        quarter,
+        style,
+        tuple(fill),
+        environment,
+    )
     patch = _patches.get(key)
     if patch is None:
         builds["patch"] += 1

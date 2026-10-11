@@ -614,6 +614,31 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
   token of the run before) said "Libre Panel does not answer … this page tries again by
   itself", which it never would: the server refuses it, and the bar now shows the server's
   sentence about how to open Libre Panel again
+- A character that the bundled fonts have no glyph for came out as a box: a track, an artist,
+  a hardware or place name or a notice in Cyrillic, Greek, Chinese, Japanese, Korean, Arabic,
+  Hebrew or Thai, an emoji, ♪ or →. It is drawn with a font of the computer now, found once, in
+  the size and weight of the text and on its baseline (Segoe UI, Yu Gothic, Microsoft YaHei,
+  Malgun Gothic and the like on Windows; what fontconfig names, else Noto Sans or DejaVu Sans,
+  on Linux), in widgets, cards, lists, notices and the lettering of `facet` and `acrylic`. Text
+  the bundled fonts have is drawn exactly as before. A computer with no font for a script still
+  shows boxes for it: install one (docs/THEMES.md)
+- The card toast cut a long notice (a track and its artist, a device's name) off at the edge of
+  its card in the middle of a letter; it ends with "…" now, the width counted in the font that
+  draws each letter
+- Arabic is laid out whole: letter spacing, equal-width digits and the lettering of `facet` and
+  `acrylic` took its letters one by one, which cannot join them. Where Pillow has libraqm (the
+  Linux builds; the Windows ones have not) Arabic joins and Hebrew reads from the right; without
+  it the letters of both stand in the order they are written, from the left
+- A whole number of 400 digits in an MQTT message, or in a state or an attribute of Home Assistant,
+  was too large for a float and raised in the thread that reads the broker; it is read as infinity
+  now, as `1e400` always was, and shows as no value
+- The pictures of the library's modules in the app made a renderer each and did not close it, as
+  the other previews do (a renderer that is not closed keeps what its plugin parts hold until the
+  collector runs, which the background app keeps from running for hours); every preview of the
+  editor, plugin screens and widgets among them, closes its renderer and frees it at once
+- Design, in German: *Wettersymbol* and *Monatskalender* broke in the middle of a syllable in the
+  library's three columns of single widgets (*Wettersymb-ol*); the catalog marks where a compound
+  may break now (*Wetter-symbol*, *Monats-kalender*), and a typed word finds the name as before
 
 **Changes**
 - macOS is no longer supported: no download, no tests, no macOS code. Windows and Linux are. Nobody
