@@ -266,6 +266,59 @@
   of speed and the time left, for a screen that draws a download card. Nothing
   below `min_mb` (50) counts, the browser's history is never read, and nothing is
   written
+- The look of SPUR II for any theme: a widget's `finish` and the theme's
+  `look`. `"finish": "lit"` draws a bar's or a ring's value as SPUR II's
+  light in its milled groove (a core running towards white in a soft halo: a
+  pill with round ends on a bar with SPUR II's glow, kept inside a
+  `glow_area` if it has one, a thin arc on a ring), a graph's line as light
+  in a halo, a text's glow as light added over it as on SPUR II's headings
+  (its `opacity` fades the letters, not the light), and the weather symbols
+  from lit bodies, in the widget's colours and at its size (bars, rings,
+  graphs, texts and icons; modules hand it to their parts).
+  `look.grid` lays SPUR II's grid over the backdrop; `look.light` is one
+  light for the panel: the sun, where it stands for the place in
+  `[weather]`, glints on ridges, and a sweep of light runs across at the
+  start, on the hour, on a new track and after a tube or entrance
+  transition. The light layers are prepared before the first frame and kept
+  in the cache folder. The editor sets both (*Grid background* and *Panel
+  light* with the theme, *Finish* for a widget)
+- The theme *SPUR Classic* (`spur-classic`, 1920 × 480): SPUR II's classic
+  screen as it is now, rebuilt from its geometry with the look and the
+  finishes: two load charts with raised curves in ridged frames, the CPU and
+  GPU sections, RAM and network in staggered boxes, values as light in their
+  milled grooves with SPUR II's glow, glowing headings, the faceted wordmark,
+  the turning fans and the clock above, the grid, one light and the depth dust
+- Ridges: a `rect` with a `ridge` name is drawn as SPUR II draws its frames,
+  a ridge with two facets under the guide light, the lit one glowing a
+  little; rects with the same name are one ridge, joined at mitres. Rects
+  without a name stay flat
+- `"finish": "facet"` on `text`, `metric`, `clock`, `weather`, `countdown`,
+  `bar`, `gauge` and `graph`: a flat top in the exact colour and a sharp
+  bevel lit from the top left, like SPUR II's lettering. Lettering is bright
+  metal that mirrors the sky above it (the accent) and the ground below (the
+  background), with a light touch up to 28 px and the full look from 52 px;
+  `"finish": "acrylic"` is the same lettering lit from within, as the "II" of
+  the wordmark. Bars and rings are raised in a milled track, a graph's line
+  becomes a ridge on the plateau of its fill with a halo of its colour (a
+  slimmer ridge on a bar panel; the halo ends where SPUR II's does, and a
+  graph that hangs from its top has it mirrored). Text keeps the pixels of
+  the flat text; shapes are built once per size and colour, so it costs no
+  more than the flat look
+- Graphs: `direction` `down`: the curve hangs from the top edge and is
+  filled from there, as SPUR II draws the download below the upload; and
+  `inset` off: the range spans the whole box, as in SPUR II's charts (the
+  line keeps a line's width inside by default)
+- Format specs `{value:gb}`, a size in GB whatever unit the reading comes
+  in, and `{value:rate}` with `{value:rate_unit}`: a data rate as SPUR II
+  sets it, its number and its unit apart (519 and KB/s, from 1 MB/s 1.2 and
+  MB/s)
+- `tools/compare_reference.py` draws a theme with given readings and
+  compares it with a picture of the same screen: the share of pixels that
+  match, overall and per region, the pictures side by side, their
+  difference and enlarged crops
+- Liberation Sans ships with Libre Panel (`builtin:LiberationSans-Regular`,
+  `-Bold`): its letters are as wide as Arial's, so a layout made for Arial
+  stays in place
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

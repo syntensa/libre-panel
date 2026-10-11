@@ -246,7 +246,7 @@ def variant(name: str, dust: bool, finish: str, fans: int) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("themes", nargs="*", default=["spur-ii", "studio", "lit-demo"])
+    parser.add_argument("themes", nargs="*", default=["spur-ii", "studio", "spur-classic"])
     parser.add_argument("--seconds", type=float, default=6.0)
     parser.add_argument("--warmup", type=float, default=1.0, help="seconds left out at the start")
     parser.add_argument("--switch", help="show this theme halfway and time the switch")

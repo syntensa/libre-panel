@@ -572,11 +572,12 @@ class PresentMonProvider(SensorProvider):
             log.warning("%s", problem)
 
     def _recording(self) -> None:
-        """PresentMon lives: whatever was said before is over."""
-        self.problem, self.blocked = None, False
+        """PresentMon lives: whatever was said before is over (said before the problem is
+        cleared, so whoever sees it cleared finds the line in the log)."""
         if self._said is not None:
             self._said = None
             log.info("PresentMon is recording")
+        self.problem, self.blocked = None, False
 
     # -- ending it -----------------------------------------------------------------------
 

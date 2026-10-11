@@ -21,7 +21,7 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable
 from concurrent.futures import Future
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from functools import lru_cache, partial
 from typing import Any
@@ -67,6 +67,10 @@ class Piece:
     backdrop: Image.Image | None = None  # "L" mask: blur the canvas beneath first
     backdrop_radius: int = 0
     add: bool = False  # light: added onto what lies beneath (the panel light's gloss)
+    light: Piece | None = None  # light added onto the panel after the layer: a glow
+    # what it can change on the canvas, worked out once (Renderer._extent): a frame
+    # asks that of every piece for every region it composes
+    span: tuple[int, int, int, int] | None = field(default=None, init=False, compare=False)
 
 
 class _Builder:
@@ -178,6 +182,14 @@ def _scale_alpha(img: Image.Image, factor: float) -> Image.Image:
     out = img.copy()
     out.putalpha(img.getchannel("A").point(lambda a: int(a * factor)))
     return out
+
+
+def _dimmed(light: Piece | None, factor: float) -> Piece | None:
+    """A light piece ``factor`` as bright (light is added: all its channels scale)."""
+    if light is None or factor >= 0.999:
+        return light
+    table = [int(v * factor) for v in range(256)] * 4
+    return replace(light, layer=light.layer.point(table))
 
 
 @lru_cache(maxsize=128)
@@ -480,13 +492,15 @@ class Renderer:
     # -- effects and compositing ------------------------------------------
 
     def _effects(self, widget: dict[str, Any], piece: Piece) -> Piece:
-        layer = _scale_alpha(piece.layer, widget.get("opacity", 1.0))
+        opacity = widget.get("opacity", 1.0)
+        layer = _scale_alpha(piece.layer, opacity)
         box = piece.box or [piece.x, piece.y, piece.layer.width, piece.layer.height]
+        light = _dimmed(piece.light, opacity)
         out, pad = self._halo(widget, layer)
         if out is None:
-            return Piece(layer, piece.x, piece.y, box, piece.backdrop, piece.backdrop_radius)
+            return replace(piece, layer=layer, box=box, light=light)
         out.alpha_composite(layer, (pad, pad))
-        return Piece(out, piece.x - pad, piece.y - pad, box, piece.backdrop, piece.backdrop_radius)
+        return replace(piece, layer=out, x=piece.x - pad, y=piece.y - pad, box=box, light=light)
 
     def _halo(
         self, widget: dict[str, Any], layer: Image.Image, exact: bool = False
@@ -570,6 +584,9 @@ class Renderer:
             self._add_light(canvas, piece.layer, piece.x - ox, piece.y - oy)
             return
         self._paste(canvas, piece.layer, piece.x - ox, piece.y - oy, opaque)
+        if piece.light is not None:
+            light = piece.light
+            self._add_light(canvas, light.layer, light.x - ox, light.y - oy)
 
     @staticmethod
     def _add_light(canvas: Image.Image, layer: Image.Image, x: int, y: int) -> None:
@@ -585,13 +602,21 @@ class Renderer:
 
     @staticmethod
     def _extent(piece: Piece) -> tuple[int, int, int, int]:
-        """Everything a piece can change on the canvas: its layer, and a backdrop box."""
+        """Everything a piece can change on the canvas: its layer, a backdrop
+        box and its light."""
+        if piece.span is not None:
+            return piece.span
         x0, y0 = piece.x, piece.y
         x1, y1 = x0 + piece.layer.width, y0 + piece.layer.height
         if piece.backdrop is not None and piece.box is not None:
             bx, by, bw, bh = piece.box
             x0, y0, x1, y1 = min(x0, bx), min(y0, by), max(x1, bx + bw), max(y1, by + bh)
-        return x0, y0, x1, y1
+        if piece.light is not None:
+            light = piece.light
+            x0, y0 = min(x0, light.x), min(y0, light.y)
+            x1, y1 = max(x1, light.x + light.layer.width), max(y1, light.y + light.layer.height)
+        piece.span = (x0, y0, x1, y1)
+        return piece.span
 
     @staticmethod
     def _merge(rects: list[list[int]], gap: int = 8) -> list[list[int]]:
@@ -2400,16 +2425,26 @@ class Renderer:
         hi = widget["max"] if widget["max"] is not None else max(numbers)
         return (lo, lo + 1) if hi == lo else (lo, hi)
 
+    @staticmethod
+    def _range_rows(widget: dict[str, Any], s: int) -> tuple[float, float]:
+        """The rows (at ``s``) a graph's top and bottom value lie on: a line's
+        width in from its edges, so the line stays inside, or without
+        ``inset`` the edges themselves, as SPUR II's charts."""
+        if widget.get("inset", True):
+            pad = widget["line_width"] * s
+            return pad, widget["h"] * s - 1 - pad
+        return 0.0, (widget["h"] - 1) * s
+
     def _fade_top(
         self, widget: dict[str, Any], numbers: list[float], bounds: tuple[float, float], s: int
     ) -> int:
         """Where a strip's fill starts to fade: its highest point."""
         if not numbers:
             return 0
-        H, pad = widget["h"] * s, widget["line_width"] * s
+        first, last = self._range_rows(widget, s)
         scale = widget.get("scale", "linear")
         highest = max(_fraction(v, *bounds, scale) for v in numbers)
-        return int(pad + (H - 1 - 2 * pad) * (1 - highest))
+        return int(first + (last - first) * (1 - highest))
 
     def _graph_layer(
         self, widget: dict[str, Any], values: list[float | None], slots: int, width: int,
@@ -2448,43 +2483,45 @@ class Renderer:
         if len(numbers) < 2:
             return layer
         lo, hi = bounds or self._graph_bounds(widget, numbers)
-        pad = widget["line_width"] * s
+        first, last = self._range_rows(widget, s)
         scale_kind = widget.get("scale", "linear")
+        down = widget.get("direction") == "down"  # hangs from the top edge
         runs: list[list[tuple[float, float]]] = [[]]
         for px, v in points:
             if v is None:
                 if runs[-1]:
                     runs.append([])
                 continue
-            runs[-1].append((px, pad + (H - 1 - 2 * pad) * (1 - _fraction(v, lo, hi, scale_kind))))
+            py = first + (last - first) * (1 - _fraction(v, lo, hi, scale_kind))
+            runs[-1].append((px, first + last - py if down else py))
         runs = [run for run in runs if len(run) >= 2]
         if widget["smooth"]:
             runs = [
-                [(px, min(H - 1 - pad, max(pad, py))) for px, py in _catmull_rom(run)]
-                for run in runs
+                [(px, min(last, max(first, py))) for px, py in _catmull_rom(run)] for run in runs
             ]
         color = self.color(widget["color"])
         if widget["fill"] and runs:
             area = Image.new("L", layer.size, 0)
+            base = 0 if down else H - 1 if widget.get("inset", True) else last
             for run in runs:
-                polygon = [*run, (run[-1][0], H - 1), (run[0][0], H - 1)]
+                polygon = [*run, (run[-1][0], base), (run[0][0], base)]
                 ImageDraw.Draw(area).polygon(polygon, fill=255)
             solid = min(1.0, max(0.0, widget.get("fill_alpha", 0)))
             if widget["fill_fade"]:
                 peak = round(255 * solid) if solid else 115
-                if top is None:
-                    top = int(min(py for run in runs for _, py in run))
+                if top is None:  # the peak, counted from where the fill starts
+                    ys = [py for run in runs for _, py in run]
+                    top = int(first + last - max(ys) if down else min(ys))
+                rows = [
+                    int(peak * min(1.0, max(0.0, 1 - (row - top) / max(1, H - top))))
+                    for row in range(H)
+                ]
                 fade = Image.new("L", (1, H), 0)
-                fade.putdata(
-                    [
-                        int(peak * min(1.0, max(0.0, 1 - (row - top) / max(1, H - top))))
-                        for row in range(H)
-                    ]
-                )
+                fade.putdata(rows[::-1] if down else rows)
                 alpha = ImageChops.multiply(area, fade.resize(layer.size))
             else:
                 flat = round(255 * solid) if solid else 64
-                alpha = area.point(lambda v: v * flat // 255)
+                alpha = area.point([v * flat // 255 for v in range(256)])
             tint = Image.new("RGBA", layer.size, (*color[:3], 255))
             if color[3] < 255:
                 alpha = ImageChops.multiply(alpha, Image.new("L", layer.size, color[3]))

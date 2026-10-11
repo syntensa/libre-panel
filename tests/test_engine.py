@@ -181,6 +181,52 @@ def test_graph_options_render_cleanly():
     assert renderer.warnings == []
 
 
+def flat_graph(**kw):
+    return {"type": "graph", "id": "g", "x": 0, "y": 0, "w": 100, "h": 60, "sensor": "v",
+            "history": 10, "min": 0, "max": 100, "color": "#ffffff", "smooth": False,
+            "fill_fade": False, "line_width": 1, **kw}  # fmt: skip
+
+
+def test_without_inset_a_graphs_range_spans_its_box_as_spur_iis_charts():
+    def line(**kw):  # the middle of the line, weighed by its light, at 0, 50 and 100
+        rows = []
+        for value in (0.0, 50.0, 100.0):
+            snap = Snapshot(history={"v": [value] * 10})
+            graph = flat_graph(fill=False, line_width=2, **kw)
+            frame, _ = Renderer(theme(graph, size=(100, 60))).render(snap)
+            column = [(y, frame.getpixel((50, y))[0]) for y in range(60)]
+            lit = [(y + 0.5, v) for y, v in column if v > 0]
+            rows.append(sum(y * v for y, v in lit) / sum(v for _, v in lit))
+        return rows
+
+    bottom, middle, top = line(inset=False)  # values to rows: 59 at 0, 0 at 100
+    assert bottom == pytest.approx(59, abs=0.25) and top == pytest.approx(0.5, abs=0.25)
+    assert middle == pytest.approx(29.5, abs=0.25)  # half of it cut at the edges
+    inside = line()  # the line a line's width inside the box
+    assert inside[0] < bottom - 1 and inside[2] > top + 1
+    frame, _ = Renderer(theme(flat_graph(inset=False), size=(100, 60))).render(
+        Snapshot(history={"v": [50.0] * 10})
+    )
+    assert frame.getpixel((50, 59))[0] < frame.getpixel((50, 50))[0]  # filled down to row 59
+
+
+def test_a_downward_graph_hangs_from_its_top_and_is_filled_from_there():
+    snap = Snapshot(history={"v": [25.0] * 10})
+    up, _ = Renderer(theme(flat_graph(), size=(100, 60))).render(snap)
+    down, _ = Renderer(theme(flat_graph(direction="down"), size=(100, 60))).render(snap)
+
+    def line(frame):  # the middle of the line, weighed by its light
+        rows = [(y, frame.getpixel((50, y))[0]) for y in range(60)]
+        rows = [(y, v) for y, v in rows if v > 100]
+        return sum(y * v for y, v in rows) / sum(v for _, v in rows)
+
+    assert line(down) < 20 and line(up) + line(down) == pytest.approx(59, abs=0.5)  # mirrored
+    assert down.getpixel((50, 5)) == (64,) * 3 and down.getpixel((50, 40)) == BG
+    faded = flat_graph(direction="down", fill_fade=True)
+    frame, _ = Renderer(theme(faded, size=(100, 60))).render(snap)
+    assert 0 < frame.getpixel((50, 1))[0] < frame.getpixel((50, 12))[0]  # it fades upwards
+
+
 def spike_graph(**kw):
     return {"type": "graph", "id": "g", "x": 0, "y": 0, "w": 200, "h": 60, "sensor": "v",
             "history": 11, "min": 0, "max": 100, "fill": False, "color": "#ffffff",
@@ -459,6 +505,12 @@ def test_letter_spacing():
     tight = render(theme(text("CPU", tabular=False)), {"v": 1.0})[1]["m"][2]
     wide = render(theme(text("CPU", tabular=False, letter_spacing=6)), {"v": 1.0})[1]["m"][2]
     assert wide >= tight + 10
+    # in fractions of a pixel too: a word set to a width (SPUR II's wordmark)
+    exact = theme(text("SPUR", tabular=False, letter_spacing=3.62))
+    assert exact.widgets[0]["letter_spacing"] == 3.62
+    spaced = [render(theme(text("SPUR", tabular=False, letter_spacing=gap)), {"v": 1.0})[1]["m"][2]
+              for gap in (3, 3.62, 4)]  # fmt: skip
+    assert spaced[0] < spaced[1] < spaced[2]
 
 
 def test_icons():
@@ -501,12 +553,14 @@ def test_adapt_scales_new_fields():
     data = theme(
         {"type": "icon", "id": "i", "x": 10, "y": 10, "size": 40},
         {"type": "text", "id": "t", "letter_spacing": 4, "glow": 0.5, "glow_radius": 10},
+        {"type": "bar", "id": "b", "x": 20, "y": 30, "glow_area": [10, 20, 220, 40]},
         size=(480, 320),
     ).to_dict()
     out = adapt_theme(data, "turing-5", "landscape")  # 800x480: s = 1.5
     widgets = {w["id"]: w for w in out["widgets"]}
     assert widgets["i"]["size"] == 60
     assert widgets["t"]["letter_spacing"] == 6 and widgets["t"]["glow_radius"] == 15
+    assert widgets["b"]["glow_area"] == [17, 30, 367, 60]  # a box on the panel, as x and w
 
 
 def test_fps_setting():

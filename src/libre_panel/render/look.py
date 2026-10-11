@@ -38,7 +38,7 @@ import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageFilter
 
 from libre_panel.render.finish import Finish
-from libre_panel.render.light import light_layer, plus, role_color, smooth, sun_position
+from libre_panel.render.light import role_color, smooth, sun_position
 from libre_panel.render.renderer import Piece
 
 # The guide light: Blender's sun, top left in front, fixed. It shades facets;
@@ -120,13 +120,11 @@ def ridge_normals(mask: Any, tilt: float = RIDGE_TILT) -> np.ndarray:
     return normals
 
 
-def facets(
-    normals: np.ndarray, colour: tuple[int, ...], shadow: float = RIDGE_SHADOW
-) -> np.ndarray:
+def facets(normals: np.ndarray, colour: Any, shadow: float = RIDGE_SHADOW) -> np.ndarray:
     """RGB (…, 3, 0 to 255) of faces with ``normals`` under the guide light:
-    turned to the viewer they keep ``colour``, towards the light they lighten
-    to white, away from it they darken."""
-    c = np.asarray(colour[:3], np.float32) / 255
+    turned to the viewer they keep ``colour`` (one, or one per face), towards
+    the light they lighten to white, away from it they darken."""
+    c = np.asarray(colour, np.float32)[..., :3] / 255
     k = (np.clip((normals * GUIDE).sum(-1), 0, 1) / GUIDE_TOP)[..., None]
     rgb = np.where(k >= 1, c + (1 - c) * np.minimum(1.0, (k - 1) * FACET_LIGHT),
                    c * (shadow + (1 - shadow) * k))  # fmt: skip
@@ -565,7 +563,7 @@ class PanelLight:
             self.sweeps.start(now, self.settings["sweep_seconds"])
 
 
-# -- frames as ridges ------------------------------------------------------------------
+# -- ridges ----------------------------------------------------------------------------
 
 
 def outline(w: int, h: int, radius: int, width: int) -> np.ndarray:
@@ -577,67 +575,111 @@ def outline(w: int, h: int, radius: int, width: int) -> np.ndarray:
     return np.asarray(mask.reduce(s) if s > 1 else mask, np.float32) / 255
 
 
+def ridges(renderer: Any) -> dict[str, Finish]:
+    """The rects with a ``ridge`` name, by id: rects of the same name are one
+    ridge (render.finish attaches them; nothing else is a ridge)."""
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for widget in renderer.widgets:
+        if widget["type"] == "rect" and widget.get("ridge"):
+            groups.setdefault(widget["ridge"], []).append(widget)
+    found: dict[str, Finish] = {}
+    for members in groups.values():
+        ridge = Ridge(members)
+        found.update(dict.fromkeys((w["id"] for w in members), ridge))
+    return found
+
+
 class Ridge(Finish):
-    """A rect's outline as a ridge (``look.light`` with ``frames``): two facets
-    under the guide light, a soft glow where they catch it, and a light edge
-    for the panel light, as SPUR II's frames. Outlines of 2 px or more."""
+    """Rects that share a ``ridge`` name as one ridge, as SPUR II's frames:
+    every point of their union tilts towards its nearest edge (mitred where
+    bands meet), so two facets catch the guide light or lie in its shadow.
+    The lit facets add a little light to the ridge itself, and the ridge is
+    a light edge the panel light glints on. An outlined rect gives its
+    outline, a filled one its fill. The first rect of the name draws the
+    whole ridge; the others only keep their place for the editor."""
 
     name = "ridge"
     types = ("rect",)
 
-    def __init__(self, unit: float) -> None:
-        self.unit = unit
-        self._edges: dict[tuple[Any, ...], tuple[np.ndarray, np.ndarray, LightEdge]] = {}
-
-    def accepts(self, widget: dict[str, Any]) -> bool:
-        return (
-            bool(widget["outline"])
-            and widget["outline_width"] >= 2
-            and min(widget["w"], widget["h"]) > 2 * widget["outline_width"]
-        )
-
-    def _ridge(self, widget: dict[str, Any]) -> tuple[np.ndarray, np.ndarray, LightEdge]:
-        w, h = widget["w"], widget["h"]
-        key = (widget["x"], widget["y"], w, h, min(widget["radius"], w // 2, h // 2),
-               widget["outline_width"])  # fmt: skip
-        kept = self._edges.get(key)
-        if kept is None:
-            coverage = outline(w, h, key[4], key[5])
-            normals = ridge_normals(coverage > 0)
-            kept = self._edges[key] = (coverage, normals, LightEdge(normals, coverage, *key[:2]))
-        return kept
+    def __init__(self, members: list[dict[str, Any]]) -> None:
+        self.members = members
+        self.first = members[0]["id"]
+        self._built: tuple[Piece, LightEdge] | None = None
+        self._marks: dict[str, Piece] = {}
 
     def draw(self, renderer, widget, snapshot, now):
-        piece = renderer._cached(widget, "ridge", lambda: self._piece(renderer, widget))
-        renderer.add_light_edge(self._ridge(widget)[2])
+        if widget["id"] != self.first:
+            return self._mark(widget)
+        piece, edge = self._ridge(renderer)
+        renderer.add_light_edge(edge)
         return piece
 
     def prepare(self, renderer, widget):
-        self._ridge(widget)
+        if widget["id"] == self.first:
+            self._ridge(renderer)
 
-    def _piece(self, renderer: Any, widget: dict[str, Any]) -> Piece:
-        flat = renderer._rect_piece(widget)
-        coverage, normals, _edge = self._ridge(widget)
-        colour = renderer.color(widget["outline"])
-        layer = np.asarray(flat.layer, np.float32).copy()
-        share = coverage[..., None]
-        layer[..., :3] = layer[..., :3] * (1 - share) + facets(normals, colour) * share
-        image = Image.fromarray(np.clip(layer + 0.5, 0, 255).astype(np.uint8), "RGBA")
-        # The glow comes from the lit facets, a share of the frame's colour:
-        # frames are background, kept quiet.
-        lit = np.clip((normals * GUIDE).sum(-1), 0, 1) * coverage * colour[3] / 255
-        radius = max(2.0, RIDGE_RADIUS * self.unit)
+    def _mark(self, widget: dict[str, Any]) -> Piece:
+        mark = self._marks.get(widget["id"])
+        if mark is None:
+            box = [widget["x"], widget["y"], widget["w"], widget["h"]]
+            mark = Piece(Image.new("RGBA", (1, 1)), widget["x"], widget["y"], box)
+            self._marks[widget["id"]] = mark
+        return mark
+
+    def _ridge(self, renderer: Any) -> tuple[Piece, LightEdge]:
+        if self._built is None:
+            piece, edge = self._build(renderer)
+            self._built = renderer._effects(self.members[0], piece), edge
+        return self._built
+
+    def _build(self, renderer: Any) -> tuple[Piece, LightEdge]:
+        x0 = min(m["x"] for m in self.members)
+        y0 = min(m["y"] for m in self.members)
+        x1 = max(m["x"] + m["w"] for m in self.members)
+        y1 = max(m["y"] + m["h"] for m in self.members)
+        base = Image.new("RGBA", (x1 - x0, y1 - y0), (0, 0, 0, 0))  # fills under outlines
+        ridge = np.zeros((y1 - y0, x1 - x0, 4), np.float32)  # straight colour and alpha
+        for m in self.members:  # a later rect lies over an earlier one, as drawn
+            ox, oy, w, h = m["x"] - x0, m["y"] - y0, m["w"], m["h"]
+            if m["outline"]:
+                if m["color"]:
+                    base.alpha_composite(renderer._rect_piece({**m, "outline": None}).layer,
+                                         (ox, oy))  # fmt: skip
+                colour = renderer.color(m["outline"])
+                layer = np.zeros((h, w, 4), np.float32)
+                layer[..., :3] = colour[:3]
+                layer[..., 3] = outline(w, h, min(m["radius"], w // 2, h // 2),
+                                        m["outline_width"]) * colour[3]  # fmt: skip
+            else:
+                layer = np.asarray(renderer._rect_piece(m).layer, np.float32)
+            region = ridge[oy : oy + h, ox : ox + w]
+            on = layer[..., 3] > 0
+            region[on] = layer[on]
+        alpha = ridge[..., 3] / 255
+        normals = ridge_normals(alpha > 0)
+        rgb = facets(normals, ridge)
+        # SPUR II's frames: light from the lit facets, blurred, a share of their
+        # colour, and only on the ridge itself (beside it stays dark)
+        lit = np.clip((normals * GUIDE).sum(-1), 0, 1) * alpha
+        unit = min(renderer.theme.width, renderer.theme.height) / 480
+        radius = max(2.0, RIDGE_RADIUS * unit)
         pad = math.ceil(2 * radius)
-        w, h = image.size
-        glow = Image.new("L", (w + 2 * pad, h + 2 * pad), 0)
-        glow.paste(Image.fromarray((lit * 255).astype(np.uint8), "L"), (pad, pad))
-        glow = glow.filter(ImageFilter.GaussianBlur(radius))
-        light = np.asarray(glow, np.float32)[..., None] / 255 * np.asarray(colour[:3], np.float32)
-        layer = Image.new("RGBA", glow.size, (0, 0, 0, 0))
-        layer.paste(image, (pad, pad))
-        layer = plus(layer, light_layer(light * RIDGE_GLOW))
-        return Piece(layer, flat.x - pad, flat.y - pad, flat.box or [flat.x, flat.y, w, h],
-                     flat.backdrop, flat.backdrop_radius)  # fmt: skip
+        soft = Image.new("L", (lit.shape[1] + 2 * pad, lit.shape[0] + 2 * pad), 0)
+        soft.paste(Image.fromarray((lit * 255).astype(np.uint8), "L"), (pad, pad))
+        soft = soft.filter(ImageFilter.GaussianBlur(radius)).crop(
+            (pad, pad, pad + lit.shape[1], pad + lit.shape[0])
+        )
+        glow = np.asarray(soft, np.float32)[..., None] / 255 * ridge[..., :3] * RIDGE_GLOW
+        glow = np.clip(glow, 0, 255).astype(np.uint8)  # whole levels, as SPUR II's
+        out = np.concatenate([rgb, ridge[..., 3:4]], -1) + 0.5
+        base.alpha_composite(Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGBA"))
+        light = None
+        if glow.any():  # added over the ridge (light adds up, also where a colour is full)
+            rgba = np.concatenate([glow, glow.max(-1, keepdims=True)], -1)
+            light = Piece(Image.fromarray(rgba, "RGBA"), x0, y0)
+        first = self.members[0]
+        box = [first["x"], first["y"], first["w"], first["h"]]
+        return Piece(base, x0, y0, box, light=light), LightEdge(normals, alpha, x0, y0)
 
 
 # -- the grid --------------------------------------------------------------------------
@@ -718,15 +760,6 @@ class Look:
             if not covers:
                 break
             self._backdrops.add(widget["id"])
-        if self.light is not None and light["frames"]:
-            ridge = Ridge(self.light.unit)
-            for widget in renderer.widgets:
-                if (
-                    widget["type"] == "rect"
-                    and widget["id"] not in self._backdrops
-                    and (ridge.accepts(widget))
-                ):
-                    renderer._finishes.setdefault(widget["id"], ridge)
 
     def _grid_piece(self) -> Piece:
         if self._grid is None:

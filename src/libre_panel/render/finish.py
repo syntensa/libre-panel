@@ -1,8 +1,9 @@
 """Finishes: how a widget's shape is drawn, in the same place and size.
 
 A widget's ``finish`` (theme field) is ``"flat"``, the renderer's own drawing,
-or the name of a finish registered here: ``"lit"`` (render.lit, light baked
-from SPUR II's 3D layers) or ``"facet"``. A finish draws some widget types;
+or the name of a finish registered here: ``"lit"`` (render.lit, SPUR II's
+light) or ``"facet"``. Rects with a ``ridge`` name are drawn by render.look's
+ridges. A finish draws some widget types;
 for any other type, or a widget it cannot draw (``accepts``), the widget is
 drawn flat and the theme loader warns once (theme.model).
 
@@ -21,7 +22,7 @@ from libre_panel.theme.model import FINISHES
 FLAT = FINISHES[0]
 # The types a module hands its finish to (theme.modules): its rings, bars,
 # graphs, icons and texts are drawn with it where the finish has them.
-PART_TYPES = ("bar", "gauge", "graph", "icon", "text", "metric")
+PART_TYPES = ("bar", "gauge", "graph", "icon", "symbol", "text", "metric")
 # Built-in finishes: the modules that register them when they are imported.
 _BUILT_IN = {
     "lit": ("libre_panel.render.lit", "libre_panel.render.symbols"),
@@ -121,6 +122,10 @@ def attach(renderer: Any) -> dict[str, Finish]:
             continue  # drawn flat: the theme loader has warned (module parts quietly)
         renderer.widgets[i] = finish.widget(widget)
         found[widget["id"]] = finish
+    if any(w["type"] == "rect" and w.get("ridge") for w in renderer.widgets):
+        from libre_panel.render.look import ridges  # rects that are ridges, by name
+
+        found.update(ridges(renderer))
     return found
 
 

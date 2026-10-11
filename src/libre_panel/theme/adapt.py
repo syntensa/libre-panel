@@ -37,8 +37,8 @@ def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any
     out = dict(widget)
     for key in _UNIFORM:
         if key in out and isinstance(out[key], (int, float)):
-            if key == "letter_spacing":  # may be negative (tight tracking)
-                out[key] = round(out[key] * s)
+            if key == "letter_spacing":  # may be negative (tight tracking), and a fraction
+                out[key] = round(out[key] * s, 2)
                 continue
             minimum = {"font_size": 6, "thickness": 1, "line_width": 1, "outline_width": 1}
             out[key] = max(minimum.get(key, 0), round(out[key] * s))
@@ -56,6 +56,11 @@ def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any
         out["x"], out["y"] = round(cx - out["w"] / 2), round(cy - out["h"] / 2)
         return out
     out["x"], out["y"] = round(widget["x"] * sx), round(widget["y"] * sy)
+    area = widget.get("glow_area")
+    if isinstance(area, list) and len(area) == 4:  # a box on the panel, as the widget's
+        ax, ay, aw, ah = area
+        out["glow_area"] = [round(ax * sx), round(ay * sy), max(1, round(aw * sx)),
+                            max(1, round(ah * sy))]  # fmt: skip
     if has_box:
         out["w"], out["h"] = max(1, round(widget["w"] * sx)), max(1, round(widget["h"] * sy))
     return out

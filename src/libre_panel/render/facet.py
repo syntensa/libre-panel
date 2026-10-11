@@ -128,12 +128,35 @@ class FacetGraph(Finish):
         mask = ImageDraw.Draw(line)
         for run in runs:
             mask.line(run, fill=255, width=width, joint=joint)
-        facets.curve_halo(layer, line, color, scale)  # the halo is the curve's, under its ridge
+        # the halo is the curve's, under its ridge, and as SPUR II works a curve out in the
+        # rows it reaches (from a little above its highest point down to its base), the
+        # halo ends there: a flat curve keeps a narrow band of it
+        top, bottom = _field(widget, layer.height, runs, scale)
+        if (top, bottom) == (0, layer.height):
+            facets.curve_halo(layer, line, color, scale)
+        else:
+            box = (0, top, layer.width, bottom)
+            part = layer.crop(box)
+            facets.curve_halo(part, line.crop(box), color, scale)
+            layer.paste(part, box[:2])
         draw = ImageDraw.Draw(layer)
+        below = widget.get("direction") != "down"  # where the fill is
         for run in runs:
-            if not facets.curve_ridge(layer, run, width, color, wide, scale):
+            if not facets.curve_ridge(layer, run, width, color, wide, scale, below):
                 draw.line(run, fill=color, width=width, joint=joint)  # not left to right: a line
         return True
+
+
+def _field(widget: dict[str, Any], height: int, runs: list, scale: int) -> tuple[int, int]:
+    """The rows of a graph's layer SPUR II works its curve out in: a line and two pixels
+    beyond its highest and its lowest point, and the base its fill stands on."""
+    ys = [y for run in runs for _x, y in run]
+    if not ys:
+        return 0, height
+    base = 0 if widget.get("direction") == "down" else height - 1
+    reach = (widget["line_width"] + 2) * scale
+    top = max(0, math.floor(min(min(ys), base) - reach))
+    return top, min(height, math.ceil(max(max(ys), base) + reach))
 
 
 for _finish in (FacetText(), AcrylicText(), FacetBar(), FacetGauge(), FacetGraph()):

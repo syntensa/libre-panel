@@ -471,7 +471,7 @@ class Tracker:
     def _browser_step(self, now: float) -> list[Item]:
         seen = self._part_files()
         gone = [self._parts.pop(path) for path in list(self._parts) if path not in seen]
-        for path, (size, name) in seen.items():
+        for path, (size, name) in sorted(seen.items()):  # numbered the same on every system
             part = self._parts.get(path)
             if part is None:
                 self._serial += 1

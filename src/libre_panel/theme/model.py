@@ -73,7 +73,7 @@ def _text_style(tabular: bool) -> dict[str, tuple[str, Any]]:
         "font_size": ("int", 24),
         "color": ("color", "#ffffff"),
         "align": ("enum:left|center|right", "left"),
-        "letter_spacing": ("int", 0),
+        "letter_spacing": ("number", 0),
         "tabular": ("bool", tabular),  # equal-width digits: numbers do not jitter
         "max_width": ("int", 0),  # 0 = any width; wider text is made to fit
         "fit": ("enum:shrink|ellipsis", "shrink"),  # how: a smaller font, or cut with …
@@ -91,8 +91,15 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "outline": ("color?", None),
         "outline_width": ("int", 1),
         "backdrop_blur": ("int", 0),
+        # A ridge with two lit facets, as SPUR II's frames (render.look); rects
+        # with the same name are one ridge, so bands that meet join at mitres
+        "ridge": ("string", ""),
     },
-    "text": {"text": ("text", "Label"), **_text_style(False)},
+    "text": {
+        "text": ("text", "Label"),
+        **_text_style(False),
+        "glow_area": ("box?", None),  # [x, y, w, h]: a lit text's glow stays inside
+    },
     "metric": {
         "sensor": ("sensor", "cpu.load"),
         "format": ("format", "{value:.0f}{unit}"),
@@ -100,6 +107,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         **_text_style(True),
         "smooth": ("bool", False),  # the number glides with bars and rings of its sensor
         "color_rules": ("rules", []),
+        "glow_area": ("box?", None),
     },
     "bar": {
         "sensor": ("sensor", "cpu.load"),
@@ -117,6 +125,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "segment_gap": ("int", 2),
         "smooth": ("bool", True),
         "color_rules": ("rules", []),
+        "glow_area": ("box?", None),  # [x, y, w, h]: a lit bar's glow stays inside
     },
     "gauge": {
         "sensor": ("sensor", "cpu.load"),
@@ -151,6 +160,8 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "fill": ("bool", True),
         "fill_fade": ("bool", True),
         "fill_alpha": ("number", 0),  # how opaque the fill is, 0 to 1 (0: 0.25, a fade 0.45)
+        "direction": ("enum:up|down", "up"),  # down: hangs from the top, filled from there
+        "inset": ("bool", True),  # the line stays inside (off: the range spans the box)
         "smooth": ("bool", True),
         "per_frame": ("bool", False),  # older themes: a point a pixel apart (seconds = w / 25)
         "line_width": ("int", 2),
@@ -309,8 +320,8 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
 }
 
 # How a widget's shape is drawn (render.finish): "flat" (the default), "lit"
-# (light from SPUR II's 3D layers), "facet" or "acrylic". A finish a type does not have
-# draws it flat, with a warning.
+# (SPUR II's light: values as light in their grooves, glows as light), "facet" or
+# "acrylic". A finish a type does not have draws it flat, with a warning.
 FINISHES = ("flat", "lit", "facet", "acrylic")
 FINISH_FIELD = ("enum:" + "|".join(FINISHES), FINISHES[0])
 for _type in (
@@ -333,12 +344,11 @@ LOOK_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "alpha": ("number", 1.0),
     },
     # One light for the panel: the sun at the place in config.toml (else noon)
-    # glints on light edges (outlines of rects with ``frames``), and sweeps of
-    # light run across at moments
+    # glints on light edges (rects with a ``ridge``, plugins' edges), and
+    # sweeps of light run across at moments
     "light": {
         "strength": ("number", 1.0),
         "sun": ("bool", True),
-        "frames": ("bool", True),
         "color": ("color?", None),  # the sweeps' tint; empty: the accent
         "sweep_seconds": ("number", 1.6),
         "on_start": ("bool", True),
@@ -523,6 +533,14 @@ def _coerce(kind: str, value: Any, where: str, palette: dict[str, str] | None = 
         if value not in options:
             raise ThemeError(f"{where}: must be one of {', '.join(options)}")
         return value
+    if base == "box":  # [x, y, w, h] on the panel
+        four = isinstance(value, list) and len(value) == 4
+        if not four or any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in value):
+            raise ThemeError(f"{where}: expected [x, y, w, h]")
+        box = [int(v) for v in value]
+        if box[2] <= 0 or box[3] <= 0:
+            raise ThemeError(f"{where}: its width and height must be above 0")
+        return box
     if base == "rules":
         if not isinstance(value, list):
             raise ThemeError(f"{where}: expected a list of rules")
