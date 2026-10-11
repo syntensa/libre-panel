@@ -607,6 +607,55 @@ class Settings:
             raise SettingsError(str(exc), 500) from exc
         return self.system()
 
+    # -- the Linux setup --------------------------------------------------------------------
+
+    def linux_setup(self) -> dict[str, Any]:
+        """What the one-click setup of Linux (``libre-panel system-setup --linux``) would bring
+        this computer, and how a run of it is going. Only Linux has it."""
+        from libre_panel import linux_rights, linux_setup
+
+        if not sys.platform.startswith("linux"):
+            return {"supported": False}
+        return linux_rights.status(linux_setup.gather())
+
+    def run_linux_setup(self, payload: Any) -> dict[str, Any]:
+        """``{"rapl": true}`` (or false to close the energy counters again, or null) and
+        ``{"remove": true}``: ask for the administrator's rights (pkexec shows the password
+        dialog; the run goes on in the background and ``linux_setup`` tells how it went)."""
+        from libre_panel import linux_rights, linux_setup
+
+        if not sys.platform.startswith("linux"):
+            raise SettingsError("the setup is for Linux", 404)
+        if not isinstance(payload, dict) or set(payload) - {"rapl", "remove"}:
+            raise SettingsError('expected {"rapl": true} or {"remove": true}')
+        rapl, remove = payload.get("rapl"), payload.get("remove", False)
+        if rapl is not None:
+            _flag("rapl", rapl)
+        _flag("remove", remove)
+        options = linux_setup.Options(rapl=rapl, remove=remove)
+        command = linux_rights.program()
+        way = linux_rights.elevation(options, command)
+        if access.elevated():  # a request cannot be told from the person's: no rights are used
+            raise SettingsError(
+                t(
+                    "Libre Panel runs with administrator rights. Run this in a terminal: {command}",
+                    command=way.terminal,
+                ),
+                403,
+            )
+        if not way.argv:
+            raise SettingsError(
+                t(
+                    "Libre Panel cannot ask for the administrator's rights from here. Run this "
+                    "in a terminal: {command}",
+                    command=way.terminal,
+                ),
+                409,
+            )
+        if not linux_rights.JOB.start(way):
+            raise SettingsError(t("The setup is running already."), 409)
+        return self.linux_setup()
+
     # -- the place --------------------------------------------------------------------------
 
     def search_place(self, payload: Any) -> dict[str, Any]:

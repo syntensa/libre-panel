@@ -220,6 +220,12 @@ def _cmd_udev_rules(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_system_setup(args: argparse.Namespace) -> int:
+    from libre_panel import linux_setup
+
+    return linux_setup.run_cli(args)
+
+
 def _cmd_autostart(args: argparse.Namespace) -> int:
     from libre_panel.autostart import (
         Autostart,
@@ -590,6 +596,32 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("udev-rules", help="print the Linux udev rule for USB panel access")
     p.set_defaults(func=_cmd_udev_rules)
+
+    p = sub.add_parser(
+        "system-setup",
+        help="one-time setup of what needs an administrator: sensors and panel access (Linux)",
+    )
+    p.add_argument(
+        "--linux",
+        action="store_true",
+        help="Linux: the panel's USB permission, the mainboard's fan chip, SATA drive "
+        "temperatures, and with --rapl the processor's power; asks for the password with "
+        "pkexec or sudo, prints every step",
+    )
+    power = p.add_mutually_exclusive_group()
+    power.add_argument(
+        "--rapl",
+        action="store_true",
+        help="also let every user read the processor's energy counters (the kernel keeps "
+        "them to root since 2020 because they leak what the processor computes)",
+    )
+    power.add_argument(
+        "--no-rapl", action="store_true", help="close the energy counters to other users again"
+    )
+    p.add_argument("--remove", action="store_true", help="take out everything the setup installed")
+    p.add_argument("--dry-run", action="store_true", help="only say what it would do")
+    p.add_argument("--json", action="store_true", help="print the result as one line of JSON")
+    p.set_defaults(func=_cmd_system_setup)
 
     p = sub.add_parser("run", help="drive the display")
     p.add_argument("--once", action="store_true", help="render a single frame and exit")

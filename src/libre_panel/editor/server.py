@@ -156,10 +156,12 @@ _SETTINGS_GET = {
     "/api/panel": "panel",
     "/api/system": "system",
     "/api/about": "about",
+    "/api/setup": "linux_setup",
 }
 _SETTINGS_POST = {
     "/api/settings": "write",
     "/api/system": "set_system",
+    "/api/setup": "run_linux_setup",
     "/api/location": "search_place",
     "/api/open": "open_folder",
 }

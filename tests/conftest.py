@@ -95,6 +95,21 @@ def no_usb_panel(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_linux_setup(monkeypatch):
+    """The one-click setup of Linux never touches the machine running the tests: it is not
+    asked about the board or the rights, and no test asks for an administrator's password.
+    A test brings a computer (``linux_setup.Facts``) and a stand-in for the rights."""
+    from libre_panel import linux_rights, linux_setup
+
+    def forbidden(argv):
+        raise AssertionError("a test asked for the administrator's rights")
+
+    monkeypatch.setattr(linux_setup, "gather", lambda *args, **kwargs: linux_setup.Facts())
+    monkeypatch.setattr(linux_rights, "JOB", linux_rights.Job(runner=forbidden))
+    monkeypatch.setattr(linux_rights, "imports_isolated", lambda python: False)
+
+
+@pytest.fixture(autouse=True)
 def no_machine_sensors(monkeypatch):
     """The Linux sensor source reads the folder a test lays out, not this machine's /sys."""
     from libre_panel.sensors import linux
