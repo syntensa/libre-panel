@@ -148,8 +148,9 @@ only while a theme or a service reads it:
 
 Two pictures go with it, for an image widget (`"src": "@media.cover"`):
 `media.cover`, the album cover, and `media.app_icon`, the icon of the program
-that plays. The icon is found once per program, never sent anywhere, and the
-notices service puts it on the cover of its "Now playing" message:
+that plays. An image widget that shows one is all it takes for the source to read
+it. The icon is found once per program, never sent anywhere, and the notices
+service puts it on the cover of its "Now playing" message:
 
 - Windows: the logo of a Store app (from its package), else the icon of the
   program that runs under the name Windows gives the player.

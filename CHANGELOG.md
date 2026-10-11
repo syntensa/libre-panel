@@ -292,6 +292,10 @@
 - The volume message came with the next reading, up to `refresh_ms` late. It now comes
   within a frame or two of the volume key, and a slow turn of the volume that moves less
   than a step between two frames still adds up to one
+- An image widget that shows a picture of a source (`"src": "@media.app_icon"`, or such a
+  line in `slides`) now counts as reading it. Before, the icon of the player was never
+  looked for unless something else asked for it, and the cover of the music module was
+  read only while something else asked for `media.*` too, such as the notices service
 - Services follow `config.toml` whenever the panel loop starts. A service switched
   on (or off, or given other options) while the panel was paused, or in a
   `config.toml` that did not load at the start and was fixed later, stayed as it

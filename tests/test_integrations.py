@@ -103,6 +103,65 @@ def test_pictures_of_sources_reach_image_widgets():
     assert "cover" not in boxes  # nothing to show yet
 
 
+def picture_theme(*widgets):
+    from libre_panel.theme.model import parse_theme
+
+    return parse_theme(
+        {
+            "format": "libre-panel-theme/1",
+            "name": "pictures",
+            "display": {"width": 200, "height": 100},
+            "widgets": [
+                {"type": "image", "id": f"p{n}", "w": 40, "h": 40, **widget}
+                for n, widget in enumerate(widgets)
+            ],
+        }
+    )
+
+
+def test_a_picture_of_a_source_is_read_by_the_widget_that_shows_it(monkeypatch):
+    """``"src": "@media.app_icon"`` makes the sources work for it, as a sensor key does:
+    the icon of the player is found, and the cover read, only because a theme shows them."""
+    gc.collect()
+    monkeypatch.setattr(base, "_WANTED", {})
+    assert not base.wanted("media.app_icon") and not base.wanted("media.cover")
+    icon = Renderer(picture_theme({"src": "@media.app_icon"}))
+    assert base.wanted("media.app_icon") and not base.wanted("media.cover")
+    assert base.wanted("media.")  # the source that has them runs
+    slides = Renderer(picture_theme({"slides": "photo.png\n  @media.cover \n\n*.jpg"}))
+    assert base.wanted("media.cover") and base.wanted("media.app_icon")
+    del icon, slides
+    gc.collect()
+    assert not base.wanted("media.app_icon") and not base.wanted("media.cover")
+    plain = Renderer(picture_theme({"src": "logo.png"}, {"src": "@"}))
+    assert not base.wanted("media.") and base.wanted_keys() == frozenset()  # files read nothing
+    del plain
+
+
+def test_the_music_module_reads_its_cover(monkeypatch):
+    """The module's cover is an image widget with ``@media.cover``; before, nothing asked the
+    source for the cover unless a service read ``media.*`` as well."""
+    from libre_panel.theme.model import parse_theme
+
+    gc.collect()
+    monkeypatch.setattr(base, "_WANTED", {})
+    theme = parse_theme(
+        {
+            "format": "libre-panel-theme/1",
+            "name": "music",
+            "display": {"model": "turing-9.2-usb", "orientation": "landscape"},
+            "grid": {"columns": 4, "rows": 1},
+            "widgets": [
+                {"type": "module", "id": "m", "module": "music", "col": 0, "row": 0, "cols": 3}
+            ],
+        }
+    )
+    renderer = Renderer(theme)
+    assert any(w["type"] == "image" and w["src"] == "@media.cover" for w in renderer.widgets)
+    assert base.wanted("media.cover")
+    del renderer
+
+
 def test_song_lengths():
     assert clock_duration(187) == "3:07" and clock_duration(3765) == "1:02:45"
     assert safe_format("{value:clock}", 61.9) == "1:01"
