@@ -455,6 +455,11 @@
 - Plugins: a sensor source can win over sources before it for some keys
   (`overrides`), and gets the loaded configuration in `follow_config(config)`,
   when it is made and whenever `config.toml` changes while the panel runs
+- `media.remaining`, the time left of a track in seconds (its length less
+  where it is; none where a player does not tell the one or the other), and
+  `time` for the playback card and the music module: `remaining` writes it at
+  the right of the progress with a minus (`-2:24`), as SPUR II's Studio does.
+  SPUR Studio counts down
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

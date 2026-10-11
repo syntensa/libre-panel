@@ -182,7 +182,8 @@ def build_forecast(b: _Build, src: M.Source) -> None:
 
 def build_playback(b: _Build, src: M.Source) -> None:
     """What plays: the cover, the state, the title and artist, the app with its icon, the
-    progress with the time played and the length. Nothing playing is a note and a word."""
+    progress with the time played and the length (``time`` ``remaining``: the time left).
+    Nothing playing is a note and a word."""
     ref = _Ref(b, 706, 376, 560)
     if not ref.ok:
         M.build_music(b, src)
@@ -229,8 +230,9 @@ def build_playback(b: _Build, src: M.Source) -> None:
     b.value("position", "media.position", "{value:clock}", strip, ref.cap(340, 22), time,
             color=b.c("text3"), width=(right - strip) / 2, font="text_font",
             hide_if_missing=True)  # fmt: skip
-    b.value("length", "media.duration", "{value:clock}", right, ref.cap(340, 22), time,
-            color=b.c("text3"), align="right", width=(right - strip) / 2, font="text_font",
+    sensor, fmt = M.end_time(b)  # the length, or what is left of it
+    b.value("length", sensor, fmt, right, ref.cap(340, 22), time, color=b.c("text3"),
+            align="right", width=(right - strip) / 2, font="text_font",
             hide_if_missing=True)  # fmt: skip
 
     b.needs = "!media.title"

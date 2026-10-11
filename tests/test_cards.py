@@ -382,6 +382,47 @@ def test_a_small_playback_card_is_the_music_module():
     assert "state" in names and "playing-sign" not in names
 
 
+def texts_drawn(renderer, snap):
+    """What each part of the last frame said, by the part's name (without its module's)."""
+    seen = {}
+    original = renderer._text_widget
+
+    def spy(widget, text, color):
+        seen[widget["id"].split("/")[-1]] = text
+        return original(widget, text, color)
+
+    renderer._text_widget = spy
+    renderer.render(snap, 1.0)
+    return seen
+
+
+def test_the_playback_card_shows_the_length_or_counts_down_to_the_end():
+    assert WIDGET_SPECS["module"]["time"] == ("enum:total|remaining", "total")
+    snap = snapshot_with(
+        media__position=83.0, media__duration=227.0, media__remaining=144.0
+    )  # 1:23 of 3:47
+    for option, right in (("total", "3:47"), ("remaining", "-2:24")):
+        seen = texts_drawn(Renderer(card_theme("playback", time=option), preview=True), snap)
+        assert (seen["position"], seen["length"]) == ("1:23", right), option
+    parts = widgets_of("playback", time="remaining")
+    assert parts["length"]["sensor"] == "media.remaining" and parts["length"]["align"] == "right"
+    assert parts["length"]["format"] == "-{value:clock}" and parts["length"]["hide_if_missing"]
+    assert widgets_of("playback")["length"]["sensor"] == "media.duration"  # the default
+    # a player that does not tell where it is: no time left to show, and no word about it
+    snap = snapshot_with(drop=("media.position", "media.remaining"))
+    seen = texts_drawn(Renderer(card_theme("playback", time="remaining"), preview=True), snap)
+    assert "length" not in seen
+
+
+def test_the_small_card_and_the_music_module_count_down_too():
+    for kind, size in (("playback", (2, 1)), ("music", (3, 2))):
+        parts = widgets_of(kind, *size, time="remaining")
+        assert parts["length"]["sensor"] == "media.remaining", kind
+        assert widgets_of(kind, *size)["length"]["sensor"] == "media.duration", kind
+    slot = widgets_of("cards", time="remaining")  # a slot hands the option to its playback card
+    assert slot["c0-length"]["sensor"] == "media.remaining"
+
+
 # the ring instrument
 
 

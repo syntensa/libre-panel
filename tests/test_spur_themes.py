@@ -415,6 +415,13 @@ def test_studio_is_made_of_the_cards_on_one_grid_near_where_spur_ii_has_them():
     assert all(a[1] <= b[0] for a, b in zip(spans, spans[1:], strict=False))
 
 
+def test_studio_counts_the_track_down_to_its_end_as_spur_ii_does():
+    _, renderer = studio()
+    length = next(w for w in renderer.widgets if w["id"] == "card/c0-length")
+    assert (length["sensor"], length["format"]) == ("media.remaining", "-{value:clock}")
+    assert "media.remaining" in demo_snapshot(fixed_time=1_700_000_000).readings  # the demo too
+
+
 def test_studio_has_the_time_large_the_date_in_capitals_and_the_volume_below_the_network():
     theme, _ = studio()
     by = {w["id"]: w for w in theme.widgets}

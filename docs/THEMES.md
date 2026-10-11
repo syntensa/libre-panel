@@ -151,7 +151,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `calendar` | `w`, `h`, `font`, `font_size`, `color`, `color2`, `muted`, `first_day` | the month as a grid of days, today marked in `color2`; weekday names in `muted` and the language; `first_day` `monday` or `sunday` |
 | `list` | `w`, `h`, `items`, `style`, `columns`, `max_items`, `sort`, `format`, `detail`, `detail_format`, `min`, `max`, `scale`, `levels`, `font`, `font_size`, `label_font`, `uppercase`, `color`, `muted`, `color2`, `background`, `empty`, `color_rules` | readings found by name or pattern, as many as fit, see [Lists](#lists) |
 | `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur`, `ridge` | cards, frames, separators; `backdrop_blur` gives frosted glass, `ridge` a ridge (see [Look and finish](#look-and-finish)) |
-| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `moving`, `hold`, `change` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
+| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `moving`, `hold`, `change`, `time` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
 
 `scale` is `linear`, `sqrt` or `log`: the latter two keep small values visible
 on huge ranges such as network rates.
@@ -426,6 +426,8 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
   [list](#lists); empty shows the module's own. For `world` the places, for
   `image` the pictures, for `cards` the cards.
 - `timezone` (analog), `target` (countdown), `seconds` (image): see the table.
+- `time` (playback, music): the time at the right of the progress, `total` (the track's
+  length, `3:47`; the default) or `remaining` (what is left, `-2:24`).
 - Labels follow the language: "Temp" reads "Temp." in German.
 
 ### Cards
@@ -443,9 +445,11 @@ are flat thin lines in their colour: a card has no ridge, no bevel and no trough
 - **`playback`** (3 × 2): the cover (`media.cover`; a note where there is none),
   a sign and a word for the state (*Now playing* or *Paused*), the title and the
   artist, the app that plays it with its icon (`media.app_icon`) and name, the
-  progress (`media.progress`) with the time played and the length. Without a track:
-  a note and "Nothing playing". The state's sign and the progress are in the colour
-  the cover carries (`@cover`), as in the Studio; `color` sets one.
+  progress (`media.progress`) with the time played and the length, or with `time`
+  `remaining` the time left, counting down with a minus (`-2:24`, from
+  `media.remaining`; SPUR Studio does so). Without a track: a note and "Nothing playing". The state's sign and
+  the progress are in the colour the cover carries (`@cover`), as in the Studio;
+  `color` sets one.
 - **`forecast`** (3 × 2): a moving symbol ([Weather symbols](#weather-symbols)),
   the temperature with the day's high and low, the sky, how it feels, the wind and
   the humidity, the rain of the next two hours (`weather.rain.text`, in the `gpu`
@@ -742,7 +746,7 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `audio.volume`, `audio.muted` | %, 1/0 | the volume of the default output (0 while muted) and whether it is muted; needs `"audio"` in `providers` (the default list has it on Windows and Linux), see [Configuration](CONFIGURATION.md#sensor-sources-and-their-order) |
 | `sun.rise`, `sun.set`, `sun.noon`, `sun.next_rise`, `sun.daylight`, `sun.up`, `sun.progress`, `sun.elevation` | "07:42", s, 1/0, 0–1, ° | computed for the place in `[weather]` (no internet needed); `progress` is how much of the day has passed, empty at night |
 | `moon.phase`, `moon.illumination`, `moon.name`, `moon.age`, `moon.full_in`, `moon.new_in` | 0–1, %, text, days | computed; `phase` 0 new, 0.5 full; `name` in the language |
-| `media.title`, `.artist`, `.album`, `.source`, `.state`, `.playing`, `.position`, `.duration`, `.progress` | text, 1/0, s, 0–1 | what is playing, while a theme shows it; the cover is the picture `@media.cover`, the icon of the player `@media.app_icon` |
+| `media.title`, `.artist`, `.album`, `.source`, `.state`, `.playing`, `.position`, `.duration`, `.remaining`, `.progress` | text, 1/0, s, 0–1 | what is playing, while a theme shows it; the cover is the picture `@media.cover`, the icon of the player `@media.app_icon` |
 | `calendar.<n>.title`, `.when`, `.day`, `.time`, `.location`, `.calendar`, `.start`, `.minutes`, `.now`; `calendar.events`, `calendar.today` | text, s, min | the next events (1 = the next or the one going on), [calendars](CONFIGURATION.md#more-sensor-sources) |
 | `ha.<entity id>`, `ha.<entity id>.<attribute>` | as Home Assistant says | [Home Assistant](CONFIGURATION.md#more-sensor-sources) |
 | `mqtt.<topic with dots>` (`.field` for JSON) | | [MQTT](CONFIGURATION.md#more-sensor-sources) |
