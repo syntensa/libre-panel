@@ -1734,9 +1734,12 @@ class Kind:
     build: Callable[[_Build, Source], None]
     sources: tuple[str, ...] = ()  # which "source" values it takes (empty: none)
     span: tuple[int, int] = (1, 1)  # the size it starts with
+    finish: str = "flat"  # what a module's finish "auto" is: a card is lit by itself
 
 
 def kinds() -> dict[str, Kind]:
+    from libre_panel.theme import cards  # the cards build on this module
+
     readings = ("cpu", "gpu", "mem", "disk", "net", "sensor")
     return {
         "clock": Kind(t("Time"), build_clock, span=(2, 1)),
@@ -1764,6 +1767,19 @@ def kinds() -> dict[str, Kind]:
         "music": Kind(t("Music"), build_music, span=(2, 1)),
         "agenda": Kind(t("Agenda"), build_agenda, span=(2, 2)),
         "game": Kind(t("Game FPS"), build_game, span=(2, 1)),
+        # the cards after SPUR II's Studio screen: lit by themselves (theme.cards)
+        "playback": Kind(t("Playback card"), cards.build_playback, span=(3, 2), finish="lit"),
+        "forecast": Kind(t("Weather card"), cards.build_forecast, span=(3, 2), finish="lit"),
+        "download": Kind(t("Download card"), cards.build_download, span=(2, 1), finish="lit"),
+        "instrument": Kind(
+            t("Ring instrument"),
+            cards.build_instrument,
+            ("cpu", "gpu", "mem", "disk"),
+            span=(1, 2),
+            finish="lit",
+        ),
+        "cards": Kind(t("Card slot"), cards.build_cards, span=(3, 2), finish="lit"),
+        "netcard": Kind(t("Network card"), cards.build_netcard, span=(2, 1), finish="lit"),
     }
 
 
@@ -1771,9 +1787,33 @@ MODULE_KINDS = (
     "clock", "date", "weather", "ring", "stat", "graph", "bars", "network", "system", "text",
     "temps", "cores", "drives", "processes", "netinfo", "battery", "values",
     "sun", "analog", "world", "countdown", "image", "music", "agenda", "game",
+    "playback", "forecast", "download", "instrument", "cards", "netcard",
 )  # fmt: skip
+# Kinds that hold several cards and show one (render.slot); "netcard" is two: a download
+# while one runs, else the network
+SLOT_KINDS = ("cards", "netcard")
 MODULE_SOURCES = ("cpu", "gpu", "mem", "disk", "net", "sensor")
 MODULE_FALLBACKS = ("auto", "none", "cpu", "gpu", "mem", "disk")
+
+
+# -- card slots ----------------------------------------------------------------
+
+DEFAULT_CARDS = "playback\nforecast"
+
+
+def slot_cards(module: dict[str, Any]) -> list[str]:
+    """The cards a slot module holds, in the order they are asked: its ``items``, one kind of
+    module per line (a line that names none is left out), or a download card and the network
+    for "netcard". The first that has something to show is shown; where none has, the
+    first, in its empty look."""
+    if module["module"] == "netcard":
+        return ["download", "network"]
+    names = []
+    for line in (module["items"] or DEFAULT_CARDS).splitlines():
+        name = line.partition("#")[0].strip()
+        if name in MODULE_KINDS and name not in SLOT_KINDS:
+            names.append(name)
+    return names or DEFAULT_CARDS.splitlines()
 
 
 # -- expanding a theme -------------------------------------------------------
@@ -1797,6 +1837,8 @@ def build_module(
 ) -> list[dict[str, Any]]:
     """The plain widgets of one module in ``box`` (raw, not yet checked)."""
     kind = kinds()[module["module"]]
+    if module.get("finish") == "auto":  # the module's own look: a card is lit
+        module = {**module, "finish": kind.finish}
     sources = _sources()
     source = module["source"] if kind.sources else "cpu"
     if source not in kind.sources and kind.sources:
@@ -1861,12 +1903,15 @@ def expand(theme: Any) -> tuple[list[dict[str, Any]], dict[str, list[int]]]:
         boxes[widget["id"]] = box
         for i, raw in enumerate(build_module(placed, box, colors, style)):
             raw["id"] = f"{widget['id']}/{raw['id']}"
+            card = raw.pop("_card", None)  # a slot's part: the card it belongs to
             try:
                 part, _warnings = normalize_widget(raw, i)
             except ThemeError as exc:  # a bug in a module must not break the theme
                 theme.warnings.append(f"module {widget['id']!r}: {exc}")
                 continue
             part["_module"] = widget["id"]
+            if card is not None:
+                part["_card"] = card
             widgets.append(part)
     return widgets, boxes
 
@@ -2010,9 +2055,9 @@ def detach(theme: Any, module_id: str) -> list[dict[str, Any]]:
     widgets, _boxes = expand(theme)
     parts = []
     for widget in widgets:
-        if widget.get("_module") != module_id:
-            continue
-        part = {k: v for k, v in widget.items() if k != "_module"}
+        if widget.get("_module") != module_id or widget.get("_card", 0) != 0:
+            continue  # (the other cards of a slot are not there: it is its first card)
+        part = {k: v for k, v in widget.items() if k not in ("_module", "_card")}
         part["id"] = part["id"].replace("/", "-")
         parts.append(part)
     return parts

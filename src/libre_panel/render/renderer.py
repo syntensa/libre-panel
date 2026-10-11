@@ -16,6 +16,7 @@ import json
 import logging
 import math
 import queue
+import re
 import threading
 import time
 from collections import OrderedDict
@@ -287,6 +288,42 @@ def _catmull_rom(points: list[tuple[float, float]], samples: int = 6) -> list[tu
     return out
 
 
+# "media.playing=1", "sun.up!=0", "cpu.temp>80": a ``needs`` that compares a reading
+_COMPARE = re.compile(
+    r"^(?P<key>[^=<>!]+?)\s*(?P<op>==|=|!=|>=|<=|>|<)\s*(?P<value>-?\d+(?:\.\d+)?)$"
+)
+_OPERATORS = {
+    "=": lambda a, b: a == b, "==": lambda a, b: a == b, "!=": lambda a, b: a != b,
+    ">": lambda a, b: a > b, ">=": lambda a, b: a >= b,
+    "<": lambda a, b: a < b, "<=": lambda a, b: a <= b,
+}  # fmt: skip
+
+
+def need_key(need: str) -> str:
+    """The sensor a condition of ``needs`` reads: ``"!gpu.load"`` and ``"media.playing=1"``
+    read ``gpu.load`` and ``media.playing``."""
+    need = need.strip().lstrip("!").strip()
+    found = _COMPARE.match(need)
+    return found["key"].strip() if found else need
+
+
+def need_holds(need: str, snapshot: Snapshot) -> bool:
+    """Whether one condition of ``needs`` holds: a reading that has a value (``"gpu.load"``),
+    none (``"!gpu.load"``), or compares so (``"media.playing=1"``, ``=``, ``!=``, ``>``, ``>=``,
+    ``<``, ``<=`` with a number; a reading without a number never does; a ``!`` in front says
+    the opposite)."""
+    need = need.strip()
+    body = need.lstrip("!").strip()
+    found = _COMPARE.match(body)
+    if found is None:
+        holds = snapshot.value(body) is not None
+    else:
+        value = snapshot.value(found["key"].strip())
+        number = _number(float(value) if isinstance(value, bool) else value)  # (on is 1)
+        holds = number is not None and _OPERATORS[found["op"]](number, float(found["value"]))
+    return holds != need.startswith("!")
+
+
 def _reads(widgets: list[dict[str, Any]]) -> set[str]:
     """The sensor keys (and patterns) the widgets read."""
     keys: set[str] = set()
@@ -294,7 +331,7 @@ def _reads(widgets: list[dict[str, Any]]) -> set[str]:
         if widget.get("sensor"):
             keys.add(widget["sensor"])
         for need in (widget.get("needs") or "").split(","):
-            need = need.strip().lstrip("!").strip()
+            need = need_key(need)
             if need:
                 keys.add(need)
         if widget["type"] == "weather":
@@ -384,6 +421,7 @@ class Renderer:
         self._dust: Dust | None = None  # the theme's look.dust, once it is drawn (render/dust.py)
         self._rotors: dict[str, fan.Rotor] = {}  # fan widget id -> how it turns (render/fan.py)
         self._fans: OrderedDict[tuple[Any, ...], Piece] = OrderedDict()  # fan pieces, by look
+        self._downloads: dict[str, tuple[Any, Any]] = {}  # download widget id -> what it shows
         self.screen = self._make_screen()
 
     # -- resources ---------------------------------------------------------
@@ -1038,10 +1076,7 @@ class Renderer:
     def _missing(widget: dict[str, Any], snapshot: Snapshot) -> bool:
         for need in (widget.get("needs") or "").split(","):  # all of them must hold
             need = need.strip()
-            if not need:
-                continue
-            has = snapshot.value(need.lstrip("!").strip()) is not None
-            if has == need.startswith("!"):
+            if need and not need_holds(need, snapshot):
                 return True
         if widget["type"] == "module":
             return False
@@ -1422,6 +1457,17 @@ class Renderer:
         from libre_panel.render import symbols
 
         return symbols.draw(self, widget, snapshot, now)
+
+    # -- downloads ---------------------------------------------------------
+
+    def _draw_downloads(
+        self, widget: dict[str, Any], snapshot: Snapshot, now: float
+    ) -> Piece | None:
+        """A download card (render/download.py), its progress a flat bar; the ``lit``
+        finish makes it light in its groove."""
+        from libre_panel.render import download
+
+        return download.draw(self, widget, snapshot, now)
 
     # -- pictures ----------------------------------------------------------
 
