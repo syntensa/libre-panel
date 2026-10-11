@@ -451,7 +451,8 @@ export function Canvas() {
   const zone = libDrag?.zone?.area ? libDrag.zone : interaction?.kind === "cells" ? interaction.zone : null;
   const dropKind = libDrag?.item?.module || (interaction?.kind === "cells" ? widgetById(interaction.id)?.module : null);
   const handles = [];
-  if (one && !one.locked && !interaction?.kind?.startsWith("cell") && !libDrag) {
+  // (the handle being dragged stays: a pointer captured by an element that is gone sends nothing)
+  if (one && !one.locked && interaction?.kind !== "cells" && !libDrag) {
     const box = boxes[one.id] || boxOf(one);
     if (box && isModule(one) && grid) {
       for (const edge of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) {

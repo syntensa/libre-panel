@@ -888,6 +888,37 @@ def test_the_running_panel_in_the_chip(isolated_home):
         app.shutdown()
 
 
+# -- Design: the work of the hand ----------------------------------------------------------------
+# Selecting, aligning, copying, locking, building blocks, the palette, panels of other shapes,
+# the modules on their grid, the pages of the console and the numbers they judge.
+
+
+def drag(page, start, end, steps=8):
+    """Press at ``start``, move to ``end`` and let go (screen pixels)."""
+    page.mouse.move(*start)
+    page.mouse.down()
+    page.mouse.move(*end, steps=steps)
+    page.mouse.up()
+
+
+def test_a_corner_resizes_a_widget(page):
+    js(page, "window.libre.doc.setSelection(['cpu-ring'])")
+    before = widget(page, "cpu-ring")
+    zoom = page.locator(".panel-canvas").bounding_box()["width"] / 480
+    handle = page.locator(".handle.se").bounding_box()
+    start = (handle["x"] + handle["width"] / 2, handle["y"] + handle["height"] / 2)
+    drag(page, start, (start[0] + 30 * zoom, start[1] + 20 * zoom), steps=6)
+    now = widget(page, "cpu-ring")
+    assert now["w"] == pytest.approx(before["w"] + 30, abs=8)  # (a snap step either way)
+    assert now["h"] == pytest.approx(before["h"] + 20, abs=8)
+    assert (now["x"], now["y"]) == (before["x"], before["y"])  # the top left stays
+    page.keyboard.press("Control+z")
+    assert (widget(page, "cpu-ring")["w"], widget(page, "cpu-ring")["h"]) == (
+        before["w"],
+        before["h"],
+    )
+
+
 @pytest.fixture
 def page_plugin(plugin_folder):
     from test_plugins import PAGE, PAGE_FILES, PAGE_PARTS
@@ -895,6 +926,83 @@ def page_plugin(plugin_folder):
     return plugin_folder(PAGE, PAGE_PARTS, files=PAGE_FILES)
 
 
+def new_theme_from_a_layout(page, panel="Turing 9.2"):
+    """Choose a panel, then make a theme from the first layout of the New theme dialog."""
+    page.locator(".panel-chip").click()
+    page.locator(".model-row", has_text=panel).click()
+    page.keyboard.press("Escape")  # the popover
+    page.keyboard.press("Control+k")
+    page.locator(".palette input").fill("new theme")
+    page.keyboard.press("Enter")
+    if js(page, "window.libre.store.get().dirty"):
+        page.locator(".dialog .btn-danger").click()  # a panel change is unsaved: discard it
+    page.wait_for_selector(".dialog .template-card")
+    page.locator(".dialog .btn-primary").click()  # Create: the first layout, in Arctic
+    page.wait_for_function(
+        "window.libre.doc.widgets().filter(window.libre.doc.isModule).length === 5"
+    )
+
+
+def modules(page):
+    cells = "w => [w.id, w.module, w.col, w.row, w.cols, w.rows]"
+    return js(page, f"window.libre.doc.widgets().filter(window.libre.doc.isModule).map({cells})")
+
+
+def cell_center(page, col, row):
+    """The middle of one cell of the module grid, in screen pixels."""
+    grid = js(page, "window.libre.store.get().render.grid")
+    canvas = page.locator(".panel-canvas").bounding_box()
+    zoom = canvas["width"] / js(page, "window.libre.store.get().render.size[0]")
+    x = grid["x"] + col * (grid["cell_w"] + grid["gap"]) + grid["cell_w"] / 2
+    y = grid["y"] + row * (grid["cell_h"] + grid["gap"]) + grid["cell_h"] / 2
+    return canvas["x"] + x * zoom, canvas["y"] + y * zoom
+
+
+def test_modules_from_a_layout_drag_resize_swap_and_look(page):
+    new_theme_from_a_layout(page)
+    page.wait_for_function("window.libre.store.get().render.grid?.columns === 8")
+
+    # a module from the library onto a free cell
+    js(page, "window.libre.doc.setSelection(['network-2'])")
+    page.keyboard.press("Delete")
+    tile = page.locator(".tile[data-item='module:stat']").bounding_box()
+    page.mouse.move(tile["x"] + 20, tile["y"] + 20)
+    page.mouse.down()
+    page.mouse.move(tile["x"] + 60, tile["y"] + 40, steps=4)
+    page.mouse.move(*cell_center(page, 1, 1), steps=8)
+    page.mouse.up()
+    assert ["stat", "stat", 1, 1, 1, 1] in modules(page)
+
+    # a click adds one at the first free spot
+    page.locator(".tile[data-item='module:date']").click()
+    assert ["date", "date", 0, 1, 1, 1] in modules(page)
+
+    # wider at its east edge, then moved by keyboard is blocked by a neighbour
+    js(page, "window.libre.doc.setSelection(['stat'])")
+    handle = page.locator(".handle.e").bounding_box()
+    start = (handle["x"] + handle["width"] / 2, handle["y"] + handle["height"] / 2)
+    drag(page, start, (cell_center(page, 2, 1)[0], start[1]), steps=6)
+    assert ["stat", "stat", 1, 1, 2, 1] in modules(page)
+    page.keyboard.press("ArrowLeft")  # the date is in the way
+    assert ["stat", "stat", 1, 1, 2, 1] in modules(page)
+
+    # dropped on another module of the same size: they swap
+    drag(page, cell_center(page, 5, 0), cell_center(page, 5, 1))
+    rings = {m[0]: m[2:4] for m in modules(page) if m[1] == "ring"}
+    assert rings == {"ring-4": [5, 1], "ring-5": [5, 0]}
+    page.keyboard.press("Control+z")
+    rings = {m[0]: m[2:4] for m in modules(page) if m[1] == "ring"}
+    assert rings == {"ring-4": [5, 0], "ring-5": [5, 1]}
+
+    # a look restyles the theme
+    js(page, "window.libre.doc.setSelection([])")
+    page.locator(".inspector .look-tile", has_text="Paper").click()
+    assert js(page, "window.libre.doc.theme().style.card") == "flat"
+    expect(page.locator(".inspector .look-tile[aria-checked='true']")).to_have_text("Paper")
+
+
+# The Control page's rows (/static/stats.js, which plugins' pages can use too) ...
+# ... and Live's tiles (the app's own core/stats.js)
 def test_the_language_switch_keeps_unsaved_work(page_plugin, page, isolated_home):
     from libre_panel.config import load_config
 
