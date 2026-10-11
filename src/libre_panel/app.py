@@ -802,8 +802,6 @@ class MainLoop:
             if blend is not playing:
                 began_in = mode
             status.mode = host.mode if host is not None else None
-            if host is not None:
-                toasts.add(host.take_toasts())
             if started >= next_sample or snapshot is None:
                 snapshot, self.first = self.first or hub.snapshot(), None
                 if host is not None:
@@ -825,6 +823,8 @@ class MainLoop:
                 renderer.background_builds = streaming
                 renderer.continuous = streaming  # graphs scroll, values glide on
                 renderer.fps = _fps(config, host, display)  # screens may pace animations by it
+                if host is not None:  # (while the panel is away they wait there, the newest)
+                    toasts.add(host.take_toasts())
                 go_on = getattr(blend[0], "toasts", "wait") in ("over", "hide") if blend else True
                 toasts.advance(now, hold=not go_on)
                 renderer.toast = toasts.showing(now)  # screens see a toast the moment it begins

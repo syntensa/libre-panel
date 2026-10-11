@@ -7,6 +7,7 @@ import time
 
 import pytest
 from fake_sensors import wait_for
+from PIL import Image
 
 from libre_panel import app
 from libre_panel.config import Config, SensorsConfig
@@ -318,6 +319,48 @@ def test_the_main_loop_tells_a_change_between_two_samples_on_the_frame_it_shows_
         loop.step(clock.now)  # it stays at 35: nothing new
         time.sleep(0.05)
         assert len(told) == 1
+    finally:
+        loop.close()
+        host.close()
+
+
+def test_messages_wait_for_a_panel_that_is_away_without_piling_up(isolated_home):
+    """While the panel is unplugged the loop goes on, and the messages of the services wait
+    for it: the newest ``MAX_TOASTS`` of them, not every one of hours (a music message
+    carries its cover). When the panel is back they show."""
+    from test_app_cli import StepClock
+
+    from libre_panel.devices.base import DeviceError, Display
+
+    class Panel(Display):
+        away = True
+        shown = 0
+
+        def open(self):
+            if self.away:
+                raise DeviceError("unplugged")
+
+        def show(self, frame, region=None):
+            self.shown += 1
+
+    clock, host, panel = StepClock(1000.0), PluginHost(), Panel(None)
+    loop = app.MainLoop(config_for(isolated_home), host=host, display=panel, clock=clock)
+    music = ServiceHost(host, "music")
+    try:
+        for track in range(200):
+            cover = Image.new("RGB", (64, 64))
+            music.notify(f"Track {track}", kind="music", key=f"t{track}", payload={"image": cover})
+            clock.now += 0.05
+            loop.step(clock.now)
+        assert panel.shown == 0
+        waiting = len(loop.toasts.inbox) + len(loop.toasts.queue) + len(host.take_toasts())
+        assert waiting <= PluginHost.MAX_TOASTS
+        music.notify("Track 200", kind="music")
+        panel.away = False
+        clock.now += 60  # the next try to open it
+        loop.step(clock.now)
+        assert panel.shown == 1
+        assert loop.toasts.current is not None  # a message waited for it
     finally:
         loop.close()
         host.close()
