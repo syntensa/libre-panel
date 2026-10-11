@@ -22,11 +22,11 @@ FLAT = FINISHES[0]
 # The types a module hands its finish to (theme.modules): its rings, bars,
 # graphs, icons and texts are drawn with it where the finish has them.
 PART_TYPES = ("bar", "gauge", "graph", "icon", "text", "metric")
-# Built-in finishes: the module that registers them when it is imported.
+# Built-in finishes: the modules that register them when they are imported.
 _BUILT_IN = {
-    "lit": "libre_panel.render.lit",
-    "facet": "libre_panel.render.facet",
-    "acrylic": "libre_panel.render.facet",
+    "lit": ("libre_panel.render.lit", "libre_panel.render.symbols"),
+    "facet": ("libre_panel.render.facet",),
+    "acrylic": ("libre_panel.render.facet",),
 }
 
 
@@ -92,7 +92,8 @@ def get(name: str, widget_type: str) -> Finish | None:
     """The finish ``name`` for widgets of ``widget_type``, or None (drawn flat)."""
     if name not in _imported and name in _BUILT_IN:
         _imported.add(name)
-        importlib.import_module(_BUILT_IN[name])
+        for module in _BUILT_IN[name]:
+            importlib.import_module(module)
     return _REGISTERED.get((name, widget_type))
 
 

@@ -127,6 +127,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `image` | `src`, `w`, `h`, `fit`, `radius`, `slides`, `seconds` | a picture from the theme folder, or one a sensor source has (`@media.cover`: the album cover); `w`/`h` 0 = original size; `fit` `stretch`, `contain` or `cover`; `slides`: more pictures, one per line (`photos/*.jpg` takes a folder), each shown `seconds` |
 | `weather` | `field`, `format`, `fallback` | `temperature`, `apparent_temperature`, `humidity`, `wind_speed`, `description`, `code` |
 | `icon` | `icon`, `sensor`, `size`, `color`, `stroke` | line icons: cpu, gpu, ram, disk, network, download, upload, temperature, fan, power, clock, sun, moon, cloud, partly, rain, snow, storm, fog, humidity, wind, battery, plug, list, grid, signal — and `weather`, which follows the live weather, or the code in `sensor` (e.g. `weather.day.1.code`), by day or night |
+| `symbol` | `sensor`, `size`, `color`, `moving`, `offset` | a weather symbol that moves (default `weather.code`), see [Weather symbols](#weather-symbols) |
 | `calendar` | `w`, `h`, `font`, `font_size`, `color`, `color2`, `muted`, `first_day` | the month as a grid of days, today marked in `color2`; weekday names in `muted` and the language; `first_day` `monday` or `sunday` |
 | `list` | `w`, `h`, `items`, `style`, `columns`, `max_items`, `sort`, `format`, `detail`, `detail_format`, `min`, `max`, `scale`, `levels`, `font`, `font_size`, `label_font`, `uppercase`, `color`, `muted`, `color2`, `background`, `empty`, `color_rules` | readings found by name or pattern, as many as fit, see [Lists](#lists) |
 | `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur` | cards, frames, separators; `backdrop_blur` gives frosted glass |
@@ -246,6 +247,35 @@ than a running one. It turns where the panel is driven faster than once a
 second (video mode, or `fps` above 1); in the editor's preview and on a
 panel that gets one picture a second it stands, its ring and its blur showing
 the speed. In the editor, *Fan with speed* adds a fan with its name and RPM.
+
+### Weather symbols
+
+A `symbol` draws the weather of a code sensor (`weather.code` by default, or
+`weather.hour.3.code`, `weather.day.1.code` ...) as the weather card of SPUR II
+does, and it moves: the sun's rays turn, rain, drizzle and snow fall, clouds
+drift and breathe, stars twinkle at night, fog sways and a bolt flashes every few
+seconds. It shows a clear sky, mostly clear, partly cloudy, overcast, fog,
+drizzle, rain, snow or a thunderstorm, by day or by night: the forecast's `.day`
+reading says which for its hours, `weather.is_day` for now, else the clock. A
+code it does not know, or no reading at all, is a cloud.
+
+- `size` (64) is its edge; `color` is the colour of the clouds and the moon. The
+  sun and bolts take the palette's `warn`, rain its `accent`, snow its `text`.
+- `moving` off lets it stand. It moves where the panel is driven faster than once
+  a second (video mode, or `fps` above 1); in the editor's preview and on a panel
+  that gets one picture a second it stands, in its resting places.
+- `offset` shifts its motion by that many seconds: give the symbols of a row
+  different ones, or six clouds drift in step.
+- `finish` `lit` draws the sun, moon, clouds, drops and bolt as lit bodies (from
+  Blender's renders, as the lit weather icon); the default draws them flat.
+  `facet` and `acrylic` are not there for a symbol.
+
+A symbol is made of layers drawn once for a kind of weather, a size and the
+colours, and kept; a frame only moves, turns and fades them over each other, and
+the picture of a step of 1/25 s is kept too, so a panel at 50 frames a second
+draws every second frame for free. Small symbols (under 120 px) move a little
+quicker than big ones: the paths are the same share of the size, but of a third of
+the pixels.
 
 ## Modules
 

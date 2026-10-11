@@ -1389,6 +1389,15 @@ class Renderer:
             self._fans.move_to_end(key)
         return piece
 
+    # -- weather symbols ---------------------------------------------------
+
+    def _draw_symbol(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        """A weather symbol drawn flat; the ``lit`` finish draws it from Blender's bodies.
+        Both are layers that move with the planned time of the frame (render/symbols.py)."""
+        from libre_panel.render import symbols
+
+        return symbols.draw(self, widget, snapshot, now)
+
     # -- pictures ----------------------------------------------------------
 
     def _draw_image(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:

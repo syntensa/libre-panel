@@ -42,7 +42,7 @@ def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any
                 continue
             minimum = {"font_size": 6, "thickness": 1, "line_width": 1, "outline_width": 1}
             out[key] = max(minimum.get(key, 0), round(out[key] * s))
-    if widget["type"] == "icon":  # square: keep it square and centred
+    if widget["type"] in ("icon", "symbol"):  # square: keep it square and centred
         size = max(8, round(widget["size"] * s))
         cx = (widget["x"] + widget["size"] / 2) * sx
         cy = (widget["y"] + widget["size"] / 2) * sy

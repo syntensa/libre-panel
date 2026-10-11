@@ -886,8 +886,10 @@
     "min": "Minimum",
     "mirror": "gespiegelt (Südhalbkugel)",
     "module": "Modul",
+    "moving": "bewegt",
     "muted": "gedämpfte Farbe",
     "needs": "nur mit Sensor",
+    "offset": "Zeitversatz",
     "on_hour": "Lauf zur vollen Stunde",
     "on_start": "Lauf beim Start",
     "on_track": "Lauf bei neuem Titel",
@@ -955,6 +957,7 @@
     "module": "Modul",
     "moon": "Mondphase",
     "rect": "Fläche",
+    "symbol": "Wettersymbol",
     "text": "Text",
     "weather": "Wetter"
   },

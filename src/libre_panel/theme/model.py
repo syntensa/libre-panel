@@ -228,6 +228,15 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "color": ("color", "#ffffff"),
         "stroke": ("number", 2.0),
     },
+    # A weather symbol that moves: the sun's rays turn, rain and snow fall, clouds drift.
+    # It follows a weather code ("weather.code", "weather.hour.3.code" ...), by day or night.
+    "symbol": {
+        "sensor": ("sensor", "weather.code"),
+        "size": ("int", 64),
+        "color": ("color", "#ffffff"),  # clouds and the moon (sun, rain, snow: the palette's)
+        "moving": ("bool", True),  # off: it stands (it moves where the panel is driven fast)
+        "offset": ("number", 0.0),  # seconds its motion is shifted: a row is not in step
+    },
     # The month as a grid of days, today marked.
     "calendar": {
         "w": ("int", 280),
@@ -305,7 +314,8 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
 FINISHES = ("flat", "lit", "facet", "acrylic")
 FINISH_FIELD = ("enum:" + "|".join(FINISHES), FINISHES[0])
 for _type in (
-    "text", "metric", "clock", "weather", "countdown", "bar", "gauge", "graph", "icon", "module"
+    "text", "metric", "clock", "weather", "countdown", "bar", "gauge", "graph", "icon", "symbol",
+    "module",
 ):  # fmt: skip
     WIDGET_SPECS[_type]["finish"] = FINISH_FIELD
 

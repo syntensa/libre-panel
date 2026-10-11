@@ -25,6 +25,13 @@
   `entrance` for a game or another mode (the screen closes to a line, the
   game's logo or name lights up while "Game mode" or "Game ended" types
   in, then the new screen opens)
+- Weather symbols that move: the widget type `symbol` follows a weather code
+  (`weather.code`, `weather.hour.3.code` ...) by day or night, and the sun's
+  rays turn, rain, drizzle and snow fall, clouds drift and breathe, stars
+  twinkle, fog sways and a bolt flashes now and then, as on SPUR II's weather
+  card. Flat, or with `"finish": "lit"` from lit bodies; `moving` and `offset`
+  keep a row of them out of step. It moves where the panel is driven faster
+  than once a second, and stands in the editor's preview
 - Plugins: a toast style says how long a toast stays (`lifetime`) and how
   long one without its own time holds (`hold_s`), and keeps what it knows
   across theme switches; a transition can hide toasts while it plays
