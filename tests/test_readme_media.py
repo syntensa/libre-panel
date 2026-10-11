@@ -210,10 +210,12 @@ def clip(panel, encode, tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def short(panel, encode, tmp_path_factory):
-    """A recipe cut to a second and a half, for what needs no more than to see it run."""
+    """A recipe cut to two and a half seconds, for what needs no more than to see it run (the
+    rings of a close-up stand still between two readings, a second apart: a clip of a second and a
+    half had them move in seven or eight frames of fifteen, by the steps of their arcs)."""
 
     def record(name, themes=None, scale=0.15):
-        recipe = replace(panel.CLIPS[name], seconds=1.5, warmup=0.5)
+        recipe = replace(panel.CLIPS[name], seconds=2.5, warmup=0.5)
         settings = encode.Settings(fps=10, scale=scale)
         return panel.record(name, recipe, settings, tmp_path_factory.mktemp(name), themes)
 
@@ -243,7 +245,7 @@ def test_every_panel_recipe_runs_headless_and_makes_a_clip(panel, clip, short):
         recorded, seconds = (
             (clip(name), recipe.seconds)
             if name in LONG
-            else (short(name, scale=0.3 if name == "small-panel" else 0.15), 1.5)
+            else (short(name, scale=0.3 if name == "small-panel" else 0.15), 2.5)
         )
         frames = recorded.frames
         widths[name] = frames.size[0]

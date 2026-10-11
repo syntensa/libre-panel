@@ -1,3 +1,5 @@
+import math
+
 import pytest
 from PIL import Image
 
@@ -376,3 +378,172 @@ def test_in_video_mode_the_dot_glides_with_the_value_at_the_end_of_the_curve():
     assert rows[0] > rows[1] > rows[2] >= rows[3]  # it rises with the value (in quarter pixels)
     assert all(dot[0] == pytest.approx(start[0], abs=0.15) for dot in seen)  # at the edge
     assert rows[3] == pytest.approx(20 + (4 + 0.2 * 111 + 0.5) / scale, abs=0.2)  # arrived at 80 %
+
+
+# -- readings that are not numbers ----------------------------------------------------------------
+
+
+def gliding(**metric):
+    """A bar and a number of the sensor ``v``, a number that hides without it, and a text that
+    needs it."""
+    widgets = [
+        {"type": "bar", "id": "b", "x": 0, "y": 0, "w": 200, "h": 20, "sensor": "v", "radius": 0},
+        {"type": "metric", "id": "m", "x": 0, "y": 30, "sensor": "v", "format": "{value:.0f}",
+         "font_size": 24, "smooth": True, **metric},
+        {"type": "metric", "id": "h", "x": 0, "y": 60, "sensor": "v", "hide_if_missing": True},
+        {"type": "text", "id": "t", "x": 0, "y": 80, "text": "needs v", "needs": "v"},
+    ]  # fmt: skip
+    theme = parse_theme(
+        {"format": THEME_FORMAT, "display": {"width": 200, "height": 120}, "widgets": widgets}
+    )
+    renderer = Renderer(theme, animate=True, motion=None)
+    renderer.fps = 50
+    return renderer
+
+
+@pytest.mark.parametrize(
+    "value",
+    [math.nan, math.inf, -math.inf, 10**400, -(10**400)],
+    ids=["nan", "inf", "-inf", "huge", "-huge"],
+)
+def test_a_reading_that_is_not_a_number_is_no_reading_and_poisons_nothing(value):
+    """A source can send one ("nan" from a payload, a JSON integer of 400 digits that no float
+    holds): it is a reading that is not there, and the value that glides, the bars and the
+    numbers of its sensor come back with the next one."""
+    renderer = gliding()
+    renderer.render(readings(v=10.0), 0.0)
+    _, boxes = renderer.render(readings(v=value), 0.02)
+    assert renderer.motion.value("v", 0.02) is None  # missing, not a value that is not a number
+    assert renderer._cache["m"][0][0] == "--"  # the fallback, not "nan"
+    assert "h" not in boxes and "t" not in boxes  # what hides without the reading hides
+    assert renderer.warnings == []
+    for k in range(2, 100):
+        renderer.render(readings(v=50.0), k / 50)
+    assert renderer.motion.value("v", 99 / 50) == 50.0  # the glide was not poisoned
+    assert renderer._cache["m"][0][0] == "50" and not renderer.moving
+
+
+def test_a_value_that_is_not_a_number_is_a_gap_in_a_graphs_history():
+    """In the PNG path (a graph of ``history`` readings) and in video mode (the motion's
+    history): a gap in the curve, and no range worked out from NaN."""
+    from libre_panel.render.motion import Motion
+
+    history = [10.0, math.nan, 30.0, math.inf, 10**400, 50.0]
+    theme = parse_theme(
+        {
+            "format": THEME_FORMAT,
+            "display": {"width": 100, "height": 40},
+            "widgets": [{"type": "graph", "id": "g", "w": 100, "h": 40, "sensor": "v", "min": None,
+                         "max": None, "history": 6}],
+        }
+    )  # fmt: skip
+    renderer = Renderer(theme)
+    drawn = []
+    made = renderer._graph_piece
+
+    def spy(widget, values, slots):
+        drawn.append(values)
+        return made(widget, values, slots)
+
+    renderer._graph_piece = spy
+    renderer.render(Snapshot(readings={"v": Reading("v", 50.0)}, history={"v": history}))
+    assert drawn == [[10.0, None, 30.0, None, None, 50.0]]
+    kept = Motion().history("v", 10, 100.0, history, 100.0, 1.0, 0.4)
+    assert all(point is None or math.isfinite(point) for point in kept.points)
+
+
+def test_a_weather_code_that_is_no_number_is_a_cloud_not_a_missing_icon():
+    from libre_panel.icons import weather_icon_name
+    from libre_panel.render.symbols import kind_of
+
+    for code in (None, "n/a", "", math.nan, math.inf):
+        assert weather_icon_name(code) == "cloud" and kind_of(code) == "overcast"
+    assert weather_icon_name("63") == "rain" and kind_of(95.0) == "storm"
+
+
+# -- a renderer that is let go of is freed -------------------------------------------------------
+
+
+def lived(name, frames=4):
+    """A renderer of a built-in theme as the main loop drives it in video mode (the helper
+    thread, the dust), a few frames in, and the thread that builds for it."""
+    renderer = Renderer(load_theme(find_theme(name)), animate=True)
+    renderer.continuous = renderer.background_builds = True
+    renderer.fps = 25
+    for k in range(frames):
+        renderer.render(demo_snapshot(fixed_time=1_700_000_000), 10.0 + k / 25)
+    builder = renderer._builder
+    return renderer, builder._thread if builder is not None else None
+
+
+@pytest.mark.parametrize("name", BUILTIN)
+def test_a_renderer_the_loop_lets_go_of_is_freed_with_its_last_reference(name):
+    """What replaces a renderer (a switch of themes) closes it and lets go: nothing may still
+    refer back to it (a slot, the look, a finish's drawing, the dust's helper), or it lives on
+    until the collector runs, which the main loop's guards put off for hours."""
+    import gc
+    import weakref
+
+    renderer, thread = lived(name)
+    renderer.close()
+    if thread is not None:
+        thread.join(10)
+    ref = weakref.ref(renderer)
+    gc.collect()
+    gc.disable()  # the collector must not be what frees it
+    try:
+        del renderer
+        assert ref() is None
+    finally:
+        gc.enable()
+
+
+@pytest.mark.parametrize("name", ["lumen", "studio", "spur-classic"])
+def test_a_renderer_frozen_at_the_first_frame_is_freed_when_it_is_let_go_of(name):
+    """timing.Guards freezes what lives at the first frame (the collector leaves it alone
+    for good): the first theme's renderer, closed at the first switch, must go by reference
+    counting alone."""
+    import gc
+    import weakref
+
+    renderer, thread = lived(name)
+    gc.collect()
+    gc.freeze()
+    try:
+        renderer.close()
+        if thread is not None:
+            thread.join(10)
+        ref = weakref.ref(renderer)
+        del renderer
+        gc.collect()
+        assert ref() is None
+    finally:
+        gc.unfreeze()
+
+
+def test_a_picture_a_widget_shows_stays_known_so_that_no_other_picture_takes_its_id():
+    """A cover is a new object with each track, and the widget knows it by its id: if nothing
+    held the old one, the next could be made where it was and be taken for it (the old track's
+    cover on show with the new track)."""
+    import gc
+    import weakref
+
+    theme = parse_theme(
+        {
+            "format": THEME_FORMAT,
+            "display": {"width": 60, "height": 60},
+            "widgets": [{"type": "image", "id": "cover", "src": "@media.cover", "w": 40, "h": 40}],
+        }
+    )
+    renderer = Renderer(theme, preview=True)
+    red = Image.new("RGBA", (8, 8), (255, 0, 0, 255))
+    frame, _ = renderer.render(Snapshot(images={"media.cover": red}))
+    assert frame.getpixel((20, 20))[:3] == (255, 0, 0)
+    held = weakref.ref(red)
+    renderer.render(Snapshot())  # (no cover for a while: a stream, a pause)
+    del red
+    gc.collect()
+    assert held() is not None  # the renderer keeps what its picture was made from
+    blue = Image.new("RGBA", (8, 8), (0, 0, 255, 255))
+    frame, _ = renderer.render(Snapshot(images={"media.cover": blue}))
+    assert frame.getpixel((20, 20))[:3] == (0, 0, 255)  # a new picture is a new picture

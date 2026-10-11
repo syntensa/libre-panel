@@ -130,11 +130,14 @@ def build_forecast(b: _Build, src: M.Source) -> None:
                ("weather.wind_speed", t("Wind {value:.0f} {unit}"), 148, 144),
                ("weather.humidity", "{value:.0f}%", 292, 70))  # fmt: skip
     squeeze = min(1.0, width / ref.s(362))  # a narrow column draws them closer
+    gap = ref.s(14)  # ... but never into each other: each has its room less this
     for i, (key, fmt, at, room) in enumerate(details):
         if i == 2 and squeeze < 0.9:  # (the last goes first)
             break
-        b.value(f"detail{i}", key, fmt, left + ref.s(at) * squeeze, ref.cap(194, 20), small,
-                color=b.c("text3"), width=ref.s(room) * squeeze, font="text_font",
+        # (places and rooms in the reference's px, not ``s``: its smallest size would move the
+        # first one right of the text column it belongs to)
+        b.value(f"detail{i}", key, fmt, left + at * ref.g * squeeze, ref.cap(194, 20), small,
+                color=b.c("text3"), width=max(8, room * ref.g * squeeze - gap), font="text_font",
                 tabular=False, fallback="", hide_if_missing=True)  # fmt: skip
 
     # the rain of the next two hours (blue when it starts or stops soon), and the sun

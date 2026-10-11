@@ -687,6 +687,62 @@
 - Saving a theme that could not be written (text with half an emoji in it, a full disk)
   emptied its `theme.json` first, and the theme was gone. Such text is refused with a
   message now, and a theme is written whole or not at all
+- A reading that is NaN or infinite (a payload "nan" from MQTT or Home Assistant) made the
+  numbers, bars and rings of its sensor read "nan" and stand empty for good, and kept the
+  PNG path drawing at full rate: it poisoned the value that glides, which only a pause
+  of a quarter of a second cleared. It is no reading now (the numbers show "--", what
+  needs it hides) and the value is back with the next real one. A gap in a graph's history
+  that is NaN is a gap in the curve, not a range worked out from it. A weather code that is
+  no number is a cloud, not a missing icon
+- An integer reading too large for a float (a payload of 400 digits) made every widget that shows
+  it fail with a warning at every frame, and a graph with one in its history too. It is no reading
+  either (a gap in the curve), as NaN is
+- A theme with a slideshow of a folder kept every picture it had shown, each as it was fitted to
+  its box, for as long as the theme was on the panel: 2 000 photos of a bar's size took 7 GB. A
+  renderer keeps up to 64 MB of them now and reads the others again when their turn comes
+- A notice on the card (the default look) with a `payload["color"]` that is a palette name
+  (`"@net"`, as the plugin docs have it) or a colour nobody can read was not shown at all: the
+  card handed the colour to Pillow as it came and failed. The card takes the accent as the band
+  does (`#rrggbb`, `@name` or a tuple), and the level's where it cannot read one
+- The weather card's line of details ("Feels like 12°", "Wind 18 km/h", the humidity) ran
+  together in a card narrower than about 1.75 times its height, and began a few pixels right
+  of the text column above it in every card. Each detail keeps a gap to the next, and the line
+  begins with the column
+- Moving the Pico theme to a bigger panel (the 5.2", 8" and 12.3") failed with "glow_radius:
+  must be between 0 and 64": the glow, shadow and backdrop blur are scaled with the panel and
+  were not held to what a theme may have. They stop at 64 now
+- Every theme the panel switched away from stayed in memory, about 20 MB for Lumen, Studio and
+  the SPUR II screens, and so did every picture the editor drew of one: the renderer, its card
+  slots, its look and its drawing referred to one another, and the garbage collector that frees
+  such a ring is held back by the main loop for hours (and never frees what lived at the first
+  frame). A day of switching to a game's theme and back, or of editing, grew the app by hundreds of
+  megabytes. A renderer that is let go of is freed with its last reference now
+- A fan resized in the editor kept the layers of every size it had passed (17 MB for one of
+  150 px) for as long as the app ran: dragging it from 48 to 150 px took hundreds of megabytes.
+  The sizes in use are kept up to 48 MB, the oldest go
+- The eight SPUR II screens carried a panel light that lit nothing: it glints only on ridges and
+  a plugin's edges, and their frames are flat lines (frame for frame the same with and without
+  it), yet every start, full hour and new track began a sweep of light that kept the PNG path
+  drawing at full rate for a second and a half. The light is gone from those themes (the grid
+  and the dust stay), and a sweep over no edge asks for no frames at all
+- A picture of a source (the cover of the track that plays) was known by its object's number
+  alone, which another picture can get once the first is freed (a stream with no cover between
+  two tracks): the old cover then stayed on show with the new track. The picture is kept for as
+  long as what was made of it
+- A palette colour with alpha (`"track": "#FFFFFF14"`, a translucent `surface` or `line`) was made
+  opaque by the modules, so a translucent track read as a white one; a card's glass added its 90 %
+  to whatever the palette said. A role keeps its alpha now, and the glass takes 90 % of it
+- Lumen, Studio and the SPUR II studio screen on the 0.96" panel (160×80) laid their modules
+  out past the frame, a card 95 px tall in a frame 80 px high: the grid of 48 cells with a margin
+  of 16 px and a gap of 1 px came along as it was, and its cells shrank to a pixel. The margin and
+  gap of the grid scale with the panel now, and a grid has no cells smaller than 4 px (it has
+  fewer of them)
+- A theme moved to a much smaller panel lost the rules at its far edges: the frame line 4 px
+  from the right edge of a 1920 px bar came out one pixel past the last column of the 0.96"
+  panel's 80. A moved widget's corner keeps to the last column and row now
+- A theme moved to another panel kept the size of a graph's end dot (SPUR II Horizon's 9 px dot on
+  a curve a sixth as big), of a bar's mark and of the moon. They scale with the panel like the
+  other sizes, and a dot never rounds away to none
 
 **Changes**
 - For editor pages and scripts that call the editor's API: every request carries the

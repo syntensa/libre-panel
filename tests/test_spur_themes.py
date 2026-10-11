@@ -83,7 +83,8 @@ def test_a_spur_screen_draws_whole_with_the_demo(name):
     theme, snapshot, renderer, frame, boxes = drawn(name)
     assert theme.warnings == [] and renderer.warnings == []
     assert (theme.width, theme.height) == (1920, 480) and frame.size == (1920, 480)
-    assert set(theme.look) == {"grid", "light", "dust"}  # SPUR II's look, as SPUR Classic has it
+    # SPUR II's grid and dust, as SPUR Classic has them (its frames are flat: no panel light)
+    assert set(theme.look) == {"grid", "dust"}
     shown = {w["id"] for w in theme.widgets if w["visible"] and not Renderer._missing(w, snapshot)}
     assert set(boxes) == shown and len(shown) > 0.8 * len(theme.widgets)
     # flat frames and no ridges (the user's wish): nothing on the screen catches the panel light

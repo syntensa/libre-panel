@@ -567,6 +567,43 @@ def test_adapt_scales_new_fields():
     assert {w["id"]: w for w in narrow["widgets"]}["name"]["max_width"] == 80
 
 
+def test_adapt_scales_the_end_dot_the_mark_and_the_moon():
+    """Pixel sizes that came with 0.5 were left as they were: a dot of 9 px on a graph a sixth
+    as big, a mark as wide as the bar was thin, a moon as big as before."""
+    data = theme(
+        {"type": "graph", "id": "dot", "x": 20, "y": 20, "w": 300, "h": 100, "end_dot": 6},
+        {"type": "graph", "id": "small", "x": 20, "y": 140, "w": 300, "h": 100, "end_dot": 2},
+        {"type": "graph", "id": "none", "x": 20, "y": 260, "w": 300, "h": 40},
+        {"type": "bar", "id": "bar", "x": 20, "y": 300, "w": 200, "h": 16, "mark_width": 4},
+        {"type": "moon", "id": "moon", "x": 300, "y": 20, "size": 60},
+        size=(480, 320),
+    ).to_dict()
+    out = adapt_theme(data, "turing-5", "landscape")  # 800x480: s = 1.5
+    widgets = {w["id"]: w for w in out["widgets"]}
+    assert widgets["dot"]["end_dot"] == 9.0 and widgets["bar"]["mark_width"] == 6
+    assert widgets["none"]["end_dot"] == 0  # none stays none
+    moon = widgets["moon"]
+    assert moon["size"] == 90 and moon["x"] + 45 == round((300 + 30) * 800 / 480)
+    tiny = {w["id"]: w for w in adapt_theme(data, "weact-0.96", "landscape")["widgets"]}  # s = 0.25
+    assert tiny["small"]["end_dot"] == 1.0  # a dot is never rounded away
+    assert tiny["bar"]["mark_width"] == 1 and tiny["moon"]["size"] == 15
+
+
+def test_adapt_keeps_a_rule_at_the_far_edge_on_the_frame():
+    """A box 4 px from the right edge of 1920 px was at 80 on a 160 px panel's 80 px: past it,
+    and nothing of the frame line showed."""
+    data = theme(
+        {"type": "rect", "id": "right", "x": 1911, "y": 20, "w": 5, "h": 100},
+        {"type": "rect", "id": "floor", "x": 20, "y": 478, "w": 1000, "h": 2},
+        size=(1920, 480),
+    ).to_dict()
+    for orientation in ("landscape", "portrait"):
+        out = adapt_theme(data, "weact-0.96", orientation)
+        for widget in out["widgets"]:
+            assert widget["x"] < out["display"]["width"], (orientation, widget["id"])
+            assert widget["y"] < out["display"]["height"], (orientation, widget["id"])
+
+
 def test_fps_setting():
     assert parse_config({"fps": 25}).fps == 25
     with pytest.raises(ConfigError):

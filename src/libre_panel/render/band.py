@@ -18,12 +18,13 @@ import weakref
 from collections import OrderedDict
 from typing import Any
 
-from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageOps
+from PIL import Image, ImageChops, ImageDraw, ImageOps
 
 from libre_panel.icons import ICON_NAMES, draw_icon
 from libre_panel.plugins.render import ToastStyle
 from libre_panel.render.light import (
     RGB,
+    accent_color,
     add_line,
     bloom,
     draw_tracked,
@@ -231,19 +232,7 @@ class BandStyle(ToastStyle):
         return layout
 
     def _accent(self, toast: Any) -> RGB:
-        """``payload["color"]`` (``"#rrggbb"``, ``"@name"`` or a tuple), else the level's."""
-        color = toast.payload.get("color")
-        try:
-            if isinstance(color, str) and color:
-                if self.context is not None:  # knows the palette's names
-                    return tuple(self.context.color(color)[:3])  # type: ignore[return-value]
-                return ImageColor.getrgb(color)[:3]
-            if isinstance(color, tuple | list) and len(color) >= 3:
-                return tuple(int(c) for c in color[:3])  # type: ignore[return-value]
-        except (TypeError, ValueError):
-            pass  # a colour nobody can read: the level's
-        level = toast.level if toast.level in ("warning", "error") else "info"
-        return role_color(self.context, level)
+        return accent_color(self.context, toast)
 
     def _band(self, toast: Any, run: _Run, age: float, layout: _Layout, accent: RGB) -> Image.Image:
         """The band of ``toast`` now: its content and bar, and while it takes

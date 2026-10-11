@@ -321,6 +321,48 @@ def test_the_sun_is_told_by_day_and_by_night_and_a_card_without_weather_is_a_cal
     assert {"day", "weekday", "month"} <= none and "temp" not in none and "symbol" not in none
 
 
+def alone(kind, width, height, **more):
+    """A card alone in a frame of its own size (one cell, a small margin)."""
+    module = {"type": "module", "id": "m", "module": kind, "cols": 1, "rows": 1, **more}
+    return parse_theme(
+        {
+            "format": "libre-panel-theme/1",
+            "display": {"width": width, "height": height},
+            "grid": {"columns": 1, "rows": 1, "gap": 1, "margin": 4},
+            "widgets": [module],
+        }
+    )
+
+
+def inked(renderer, *names):
+    """Where the named parts are inked on the frame (x0, y0, x1, y1), those that are drawn."""
+    pieces = dict(renderer._last[0])
+    found = []
+    for name in names:
+        piece = pieces.get(f"m/{name}")
+        box = piece.layer.getbbox() if piece is not None else None
+        if box is not None:
+            found.append((piece.x + box[0], piece.y + box[1], piece.x + box[2], piece.y + box[3]))
+    return found
+
+
+@pytest.mark.parametrize("aspect", [1.5, 1.6, 1.65, 1.75, 2.0, 2.4])
+@pytest.mark.parametrize("height", [240, 376])
+def test_the_weather_cards_details_do_not_run_together_in_a_narrower_card(aspect, height):
+    """The details ("Feels like 12°", "Wind 18 km/h") are one line: in a card narrower than the
+    Studio's it is squeezed, and a gap stays between them (each was shrunk to fit its box, and
+    the next box began where it ended)."""
+    renderer = Renderer(alone("forecast", round(aspect * height), height), preview=True)
+    renderer.render(snapshot_with(), 1.0)
+    details = inked(renderer, "detail0", "detail1", "detail2")
+    assert len(details) >= 2, "the card is the weather module here"
+    for left, right in zip(details, details[1:], strict=False):
+        assert right[0] - left[2] >= round(height / 376 * 8), (aspect, height, details)
+    # and the line begins where the text above it does (its smallest size moved the first right)
+    (sky,) = inked(renderer, "desc")
+    assert abs(details[0][0] - sky[0]) <= round(height / 376 * 3), (aspect, height, sky, details)
+
+
 def M_colors():
     from libre_panel.theme.modules import colors_of
 

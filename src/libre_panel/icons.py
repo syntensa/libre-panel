@@ -513,9 +513,10 @@ _ICONS: dict[str, Callable[[_Pen], None]] = {
 
 def weather_icon_name(code: float | int | None, night: bool = False) -> str:
     """Icon for a WMO weather code as reported by Open-Meteo."""
-    if code is None:
+    try:
+        code = int(code)  # type: ignore[arg-type]
+    except (TypeError, ValueError, OverflowError):  # no code, or one that is no number
         return "cloud"
-    code = int(code)
     if code in (0, 1):
         return "moon" if night else "sun"
     if code == 2:

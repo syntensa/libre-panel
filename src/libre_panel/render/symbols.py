@@ -59,7 +59,7 @@ def kind_of(code: Any) -> str:
     """The kind of weather a WMO code stands for (overcast for a code that is none)."""
     try:
         return _CODES.get(int(code), "overcast")
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return "overcast"
 
 

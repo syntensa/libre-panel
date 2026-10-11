@@ -8,6 +8,7 @@ from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.theme.model import ThemeError, parse_theme
 from libre_panel.theme.modules import (
     LOOKS,
+    MIN_CELL,
     MODULE_KINDS,
     ROLES,
     look_theme_parts,
@@ -182,6 +183,18 @@ def test_a_hidden_module_hides_its_parts():
     assert "m0" not in boxes and "m1" not in boxes
 
 
+@pytest.mark.parametrize("size", [(160, 80), (80, 160), (320, 480), (480, 320), (1920, 480)])
+def test_a_grid_has_no_more_cells_than_fit_in_the_frame(size):
+    """Lumen's grid of 48 x 48 cells with a gap of 1 px and a margin of 16 asks a 0.96" panel for
+    cells of a fraction of a pixel; a cell is at least a few pixels, and the grid keeps within
+    the margins (it ran 40 px past the frame)."""
+    grid = make_grid(*size, {"columns": 48, "rows": 48, "gap": 1, "margin": 16})
+    assert grid.cell_w >= MIN_CELL and grid.cell_h >= MIN_CELL
+    x, y, w, h = grid.box(0, 0, grid.columns, grid.rows)
+    assert (x, y) == (grid.x, grid.y) and x + w <= size[0] - 16 and y + h <= size[1] - 16
+    assert grid.columns <= 48 and grid.rows <= 48
+
+
 def test_modules_outside_the_grid_are_moved_in():
     t = theme({"module": "stat", "col": 7, "cols": 4, "row": 5})
     renderer = Renderer(t, preview=True)
@@ -221,7 +234,30 @@ def test_modules_take_every_colour_a_theme_may_hold(palette, color):
     renderer.render(snapshot())
     assert renderer.warnings == []
     parts = {w["id"]: w for w in renderer.widgets}
-    assert parts["m1/value"]["color"].startswith("#") and len(parts["m1/icon"]["color"]) == 7
+    # written out in full, with the alpha it has
+    assert parts["m1/icon"]["color"] == {"#f80": "#FF8800", "#FF880080": "#FF880080"}[color]
+    assert parts["m1/value"]["color"].startswith("#")
+
+
+def test_a_role_that_has_alpha_keeps_it_in_the_modules():
+    """A translucent track or card (``#FFFFFF14``) is what the theme says: it was made opaque
+    (a white track), and a card's glass came with the 90 % it adds to a colour."""
+    palette = {"surface": "#14202E80", "line": "#FFFFFF22", "track": "#FFFFFF14",
+               "bg2": "#06090F80"}  # fmt: skip
+
+    def parts(*modules, colours=palette, **extra):
+        renderer = Renderer(theme(*modules, palette=colours, **extra), preview=True)
+        return {w["id"]: w for w in renderer.widgets}
+
+    glass = parts({"module": "ring"})
+    assert glass["m0/card"]["color"] == "#14202E73"  # the glass's 90 % of the palette's 50 %
+    assert glass["m0/card"]["outline"] == "#FFFFFF22"
+    assert glass["m0/ring"]["background"] == "#FFFFFF14"
+    assert parts({"module": "ring"}, style={"card": "flat"})["m0/card"]["color"] == "#14202E80"
+    picture = parts({"module": "image", "items": "a.png", "title": "A"})
+    assert picture["m0/shade"]["color2"] == "#06090F66"  # a shade of the ground, 80 % of it
+    plain = parts({"module": "ring"}, colours={"surface": "#14202E", "track": "teal"})
+    assert plain["m0/card"]["color"] == "#14202EE6" and plain["m0/ring"]["background"] == "#008080"
 
 
 def test_every_look_has_every_role():

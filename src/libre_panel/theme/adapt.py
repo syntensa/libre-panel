@@ -11,7 +11,7 @@ from copy import deepcopy
 from typing import Any
 
 from libre_panel.devices.models import get_model
-from libre_panel.theme.model import parse_theme
+from libre_panel.theme.model import BLUR_MAX, parse_theme
 from libre_panel.theme.modules import Grid, make_grid
 
 # Sizes that should grow with the smaller scale factor (not stretched).
@@ -27,6 +27,8 @@ _UNIFORM = (
     "letter_spacing",
     "segment_gap",
     "backdrop_blur",
+    "mark_width",
+    "end_dot",
 )
 # Widgets whose box must keep its aspect ratio.
 _KEEP_ASPECT = ("gauge", "image", "fan")
@@ -40,9 +42,20 @@ def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any
             if key == "letter_spacing":  # may be negative (tight tracking), and a fraction
                 out[key] = round(out[key] * s, 2)
                 continue
-            minimum = {"font_size": 6, "thickness": 1, "line_width": 1, "outline_width": 1}
+            if key == "end_dot":  # a radius, a fraction of a px too; 0 is no dot at all
+                out[key] = max(1.0, round(out[key] * s, 1)) if out[key] > 0 else out[key]
+                continue
+            minimum = {
+                "font_size": 6,
+                "thickness": 1,
+                "line_width": 1,
+                "outline_width": 1,
+                "mark_width": 1,
+            }
             out[key] = max(minimum.get(key, 0), round(out[key] * s))
-    if widget["type"] in ("icon", "symbol"):  # square: keep it square and centred
+            if key in ("glow_radius", "shadow_blur", "backdrop_blur"):
+                out[key] = min(out[key], BLUR_MAX)  # (a theme holds no more than that)
+    if widget["type"] in ("icon", "symbol", "moon"):  # square: keep it square and centred
         size = max(8, round(widget["size"] * s))
         cx = (widget["x"] + widget["size"] / 2) * sx
         cy = (widget["y"] + widget["size"] / 2) * sy
@@ -66,6 +79,14 @@ def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any
     if has_box:
         out["w"], out["h"] = max(1, round(widget["w"] * sx)), max(1, round(widget["h"] * sy))
     return out
+
+
+def _on_frame(widget: dict[str, Any], width: int, height: int) -> dict[str, Any]:
+    """A rule in the last column or row of the old frame rounds onto the first one past a much
+    smaller frame, where nothing shows of it: its origin keeps to the last column and row."""
+    widget["x"] = min(widget["x"], width - 1)
+    widget["y"] = min(widget["y"], height - 1)
+    return widget
 
 
 def _scale_look(look: dict[str, Any], sx: float, sy: float) -> dict[str, Any]:
@@ -151,7 +172,8 @@ def adapt_theme(
     if mode == "scale":
         sx, sy = new_w / old_w, new_h / old_h
         result["widgets"] = [
-            w if w["type"] == "module" else _scale_widget(w, sx, sy) for w in theme.widgets
+            w if w["type"] == "module" else _on_frame(_scale_widget(w, sx, sy), new_w, new_h)
+            for w in theme.widgets
         ]
         if theme.look:
             result["look"] = _scale_look(theme.look, sx, sy)
@@ -159,7 +181,13 @@ def adapt_theme(
         raise ValueError('mode must be "scale" or "keep"')
     if any(w["type"] == "module" for w in theme.widgets):  # modules follow the grid either way
         old = make_grid(old_w, old_h, theme.grid, theme.model)
-        new = make_grid(new_w, new_h, theme.grid, model)
+        if mode == "scale" and theme.grid:  # its margin and gap are pixels too (0: automatic)
+            s = min(new_w / old_w, new_h / old_h)
+            result["grid"] = {
+                key: max(1, round(value * s)) if key in ("margin", "gap") and value else value
+                for key, value in theme.grid.items()
+            }
+        new = make_grid(new_w, new_h, result.get("grid"), model)
         result["widgets"] = _move_modules(result["widgets"], old, new)
     parse_theme(deepcopy(result))  # the adapted theme must still be valid
     return result

@@ -24,6 +24,7 @@ a track plays). The old track is what the card showed last, cut to the card's in
 from __future__ import annotations
 
 import math
+import weakref
 from collections import OrderedDict
 from dataclasses import replace
 from typing import Any
@@ -118,7 +119,7 @@ class Slot:
 
     def __init__(self, renderer: Any, module: dict[str, Any], items: list[tuple[str, str]],
                  box: list[int]) -> None:  # fmt: skip
-        self.renderer = renderer
+        self.renderer = weakref.proxy(renderer)  # (it holds the slot: no cycle)
         self.id = module["id"]
         self.module = module
         self.kinds = [kind for kind, _ in items]

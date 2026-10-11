@@ -36,7 +36,10 @@ def number(value: Any) -> float | None:
     """A reading's value as a number for gliding and graphs, None if it is none."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    value = float(value)
+    try:
+        value = float(value)
+    except OverflowError:  # an integer beyond the range of a float
+        return None
     return value if math.isfinite(value) else None
 
 
@@ -316,10 +319,11 @@ def _replay(readings: list[float], last_at: float, interval: float, glide: float
     spring = Spring()
     omega = 4.74 / glide if glide > 0 else 0.0
     start = last_at - (len(readings) - 1) * interval
-    for i, value in enumerate(readings):
+    for i, reading in enumerate(readings):
+        value = number(reading)  # NaN and infinity are a gap, as no reading is
         at = start + i * interval
         state = spring.state(at)
-        if state is None:
+        if value is None or state is None:
             spring.add(at, value)
         else:
             spring.add(at, value, state[0] - value, state[1], omega)

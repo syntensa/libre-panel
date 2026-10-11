@@ -304,6 +304,20 @@ def test_a_theme_with_fans_has_their_rotors_ready_before_the_first_frame():
     assert all(("rotor", (0x12, 0x34, 0x56), k, p) in fan._images for p in range(POSITIONS))
 
 
+def test_the_rotors_layers_are_kept_for_the_sizes_in_use_not_for_every_size_asked(monkeypatch):
+    """A fan resized in the editor asks for a size at a time, and the layers of a size are some
+    megabytes (a fan of 150 px: 17): the oldest go once more than a budget is kept, the
+    newest always stays."""
+    monkeypatch.setattr(fan, "LAYER_BYTES", 700_000, raising=False)
+    fan._layers.clear()
+    for k in (8, 10, 12, 14, 16, 18, 20):
+        fan.rotor_layers(k)
+        kept = sum(layers.nbytes for layers in fan._layers.values())
+        assert k in fan._layers and (kept <= 700_000 or len(fan._layers) == 1), (k, kept)
+    assert 1 < len(fan._layers) < 7
+    assert 8 not in fan._layers and fan.rotor_layers(8).shape == (POSITIONS, 4, 8, 8)  # made again
+
+
 def test_a_fan_stays_round_when_the_theme_is_adapted():
     data = theme(widget(x=100, y=40, w=48, h=48), size=(480, 320)).to_dict()
     out = adapt_theme(data, "custom", "landscape", "scale", width=1920, height=480)

@@ -19,12 +19,13 @@ import queue
 import re
 import threading
 import time
+import weakref
 from collections import OrderedDict
 from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
-from functools import lru_cache, partial
+from functools import lru_cache
 from typing import Any
 
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont, ImageOps
@@ -113,10 +114,83 @@ def changed_region(
     return ImageChops.difference(previous, current).getbbox()
 
 
+def _drawing(finish: Any, renderer: Renderer) -> Callable[..., Any]:
+    """``finish.draw`` as the renderer calls it for a widget, without the reference to the
+    renderer that a ``partial`` would keep: the renderer holds it, and a cycle is freed only
+    when the collector runs, which the main loop's guards (timing.Guards) put off for hours."""
+    ref = weakref.ref(renderer)
+
+    def draw(widget: dict[str, Any], snapshot: Snapshot, now: float) -> Any:
+        return finish.draw(ref(), widget, snapshot, now)
+
+    return draw
+
+
+def _weakly(method: Callable[..., Any]) -> Callable[..., Any]:
+    """A bound method that does not keep its object alive (for what the renderer hands out)."""
+    ref = weakref.WeakMethod(method)
+
+    def call(*args: Any) -> Any:
+        found = ref()
+        if found is None:
+            raise RuntimeError("the renderer is gone")
+        return found(*args)
+
+    return call
+
+
 def _number(value: Any) -> float | None:
+    """A reading's value as a number; None for none, a text, and NaN or infinity (which are
+    no reading: one would poison the value that glides)."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return float(value)
+    try:
+        number = float(value)
+    except OverflowError:  # an integer too large for a float
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _undrawable(value: Any) -> bool:
+    """Whether ``value`` is a number that cannot be drawn: NaN, infinity, or an integer too large
+    for a float (over 2**1023: a JSON payload of 400 digits)."""
+    if isinstance(value, float):
+        return not math.isfinite(value)
+    return isinstance(value, int) and value.bit_length() > 1023
+
+
+def _finite(snapshot: Snapshot) -> Snapshot:
+    """``snapshot`` with every reading that is NaN, infinite or too large for a float taken for
+    none: a source can send one (a payload "nan"), and no widget, card or list must draw it or
+    glide to it."""
+    bad = []
+    for key, reading in snapshot.readings.items():  # (every frame: no call per reading)
+        value = reading.value
+        if isinstance(value, float):
+            if not math.isfinite(value):
+                bad.append(key)
+        elif isinstance(value, int) and value.bit_length() > 1023:
+            bad.append(key)
+    if not bad:
+        return snapshot
+    readings = {**snapshot.readings}
+    for key in bad:
+        readings[key] = replace(readings[key], value=None)
+    return replace(snapshot, readings=readings)
+
+
+def _gaps(values: list[float]) -> list[float | None]:
+    """A history with a gap (None) where a value is NaN, infinite or too large for a float,
+    else the history itself."""
+    try:
+        if math.isfinite(sum(values)):  # (at C speed: one NaN or infinity makes the sum one)
+            return values
+    except (TypeError, OverflowError):  # a gap in it, or an integer beyond a float
+        pass
+    return [
+        value if isinstance(value, (int, float)) and not _undrawable(value) else None
+        for value in values
+    ]
 
 
 def _fraction(value: float | None, lo: float, hi: float, scale: str = "linear") -> float:
@@ -389,7 +463,9 @@ class Renderer:
         self.moving = False  # True while an animation has not settled yet
         self._fonts: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
         self._digit_width: dict[int, float] = {}
-        self._images: dict[tuple[str, int, int, str, str], Image.Image | None] = {}
+        self._images: OrderedDict[tuple[str, int, int, str, str], Image.Image | None] = (
+            OrderedDict()
+        )
         self._slide_lists: dict[str, tuple[float, list[str]]] = {}  # widget id -> pictures
         self._gauge_parts: dict[tuple[Any, ...], Image.Image] = {}  # static rings, colour fields
         # Video mode (the main loop sets these): every frame goes out, so graphs
@@ -416,7 +492,7 @@ class Renderer:
             from libre_panel.render.look import Look
 
             self.look = Look(self)
-        self._drawers = {wid: partial(f.draw, self) for wid, f in self._finishes.items()
+        self._drawers = {wid: _drawing(f, self) for wid, f in self._finishes.items()
                          if finishes.draws(f)}  # fmt: skip
         self._modules = {w["id"]: w for w in theme.widgets if w["type"] == "module"}
         self._slots = self._make_slots(theme)  # modules that show one card of several
@@ -448,6 +524,7 @@ class Renderer:
         self._plugin_types: dict[str, Any] = {}
         self._screen_last: tuple[Any, Piece] | None = None
         self._dust: Dust | None = None  # the theme's look.dust, once it is drawn (render/dust.py)
+        self._dust_submit: Callable[..., Any] | None = None  # its way to the helper thread
         self._dots: dict[tuple[Any, ...], tuple[Image.Image, int]] = {}  # end dots, by look
         self._rotors: dict[str, fan.Rotor] = {}  # fan widget id -> how it turns (render/fan.py)
         self._fans: OrderedDict[tuple[Any, ...], Piece] = OrderedDict()  # fan pieces, by look
@@ -507,22 +584,38 @@ class Renderer:
             self._fonts[key] = font or ImageFont.load_default(size)
         return self._fonts[key]
 
+    IMAGE_BYTES = 64 << 20  # pictures kept fitted: a slideshow of a folder reads the rest again
+
     def _asset_image(
         self, rel: str, w: int, h: int, fit: str = "stretch", align: str = "center"
     ) -> Image.Image | None:
         key = (rel, w, h, fit, align)
-        if key not in self._images:
-            image = None
-            if rel and self.theme.root is not None:
-                try:
-                    with Image.open(resolve_asset(self.theme.root, rel)) as src:
-                        image = ImageOps.exif_transpose(src).convert("RGBA")
-                    if w > 0 and h > 0:
-                        image = _fitted(image, w, h, fit, align)
-                except (OSError, ThemeError) as exc:
-                    self._warn(f"image {rel!r} could not be loaded ({exc})")
-            self._images[key] = image
-        return self._images[key]
+        if key in self._images:
+            self._images.move_to_end(key)
+            return self._images[key]
+        image = None
+        if rel and self.theme.root is not None:
+            try:
+                with Image.open(resolve_asset(self.theme.root, rel)) as src:
+                    image = ImageOps.exif_transpose(src).convert("RGBA")
+                if w > 0 and h > 0:
+                    image = _fitted(image, w, h, fit, align)
+            except (OSError, ThemeError) as exc:
+                self._warn(f"image {rel!r} could not be loaded ({exc})")
+        self._images[key] = image
+        self._forget_images()
+        return image
+
+    def _forget_images(self) -> None:
+        """Let the oldest pictures go beyond ``IMAGE_BYTES`` (the newest stays): a folder of
+        photos would else be kept whole, each as fitted, for as long as the theme shows."""
+
+        def size(image: Image.Image | None) -> int:  # (a picture that is not there counts too)
+            return 4096 if image is None else max(4096, image.width * image.height * 4)
+
+        total = sum(size(image) for image in self._images.values())
+        while total > self.IMAGE_BYTES and len(self._images) > 1:
+            total -= size(self._images.popitem(last=False)[1])
 
     def _load_background(self) -> Image.Image | None:
         rel = self.theme.background_image
@@ -893,7 +986,9 @@ class Renderer:
         return hit[1]
 
     def close(self) -> None:
-        """Stop the helper thread and the screen (a replaced renderer should call this)."""
+        """Stop the helper thread and the screen, and let go of the contexts of plugin widget types
+        (a replaced renderer should call this; with the back references of its slots, look and
+        drawing weak, it is then freed with its last reference)."""
         if self._builder is not None:
             self._builder.close()
             self._builder = None
@@ -903,6 +998,7 @@ class Renderer:
             except Exception as exc:
                 log.warning("screen %s: %s", self.theme.screen["name"], exc)
             self.screen = None
+        self._plugin_types.clear()  # (their contexts refer to this renderer)
 
     # -- plugins -----------------------------------------------------------
 
@@ -1065,6 +1161,7 @@ class Renderer:
         self, snapshot: Snapshot, now: float | None = None
     ) -> tuple[Image.Image, dict[str, Box]]:
         now = clock() if now is None else now
+        snapshot = _finite(snapshot)
         if self._slots and self.animate and not self.preview and not self._slots_warm:
             self._slots_warm = True  # (once, with the first frame, or with the warm-up's)
             self._warm_slots(snapshot, now)
@@ -1168,8 +1265,9 @@ class Renderer:
             config = self.theme.look["dust"]  # type: ignore[index]
             colors = [self.color(c)[:3] for c in config["colors"]]  # type: ignore[index]
             self._dust = Dust(canvas.size, config, colors)
+            self._dust_submit = _weakly(self._submit)  # (the dust is ours: no cycle back)
         # where a slow piece must not stall the video, the grains move in the helper thread too
-        self._dust.submit = self._submit if self.background_builds else None
+        self._dust.submit = self._dust_submit if self.background_builds else None
         return self._dust.apply(canvas, now, self.shown, self.toast)
 
     def _submit(self, job: Callable[[], Any]) -> Future:
@@ -1611,7 +1709,9 @@ class Renderer:
                 picture = _rounded(picture, widget["radius"])
             return Piece(picture, x, y)
 
-        return self._cached(widget, id(image), build)
+        # (the picture is part of what the piece is made of, so it is kept as long as the piece is:
+        # another picture could else be made where it was, and be taken for it by its id)
+        return self._cached(widget, (id(image), image), build)
 
     def _slides(self, widget: dict[str, Any]) -> list[str]:
         """The picture and the slideshow's others, folders read every half minute."""
@@ -2357,9 +2457,10 @@ class Renderer:
             strip = strips.ready if strips is not None else None
             bounds = strip.bounds if strip is not None else None
         else:
-            values = snapshot.history.get(key, [])[-max(2, widget["history"]) :]
+            values = _gaps(snapshot.history.get(key, [])[-max(2, widget["history"]) :])
             value, scale = (values[-1] if len(values) > 1 else None), SUPERSAMPLE
-            bounds = self._graph_bounds(widget, values) if len(values) > 1 else None
+            known = [v for v in values if v is not None]
+            bounds = self._graph_bounds(widget, known) if known and len(values) > 1 else None
         if value is None or bounds is None:
             return None
         first, last = self._range_rows(widget, scale)
@@ -2399,7 +2500,7 @@ class Renderer:
         if self.continuous:
             return self._timeline(widget, snapshot, now)
         slots = max(2, widget["history"])
-        values = snapshot.history.get(widget["sensor"], [])[-slots:]
+        values = _gaps(snapshot.history.get(widget["sensor"], [])[-slots:])
         key = (len(values), tuple(values[-3:]), values[0] if values else None)
         return self._cached(widget, key, lambda: self._graph_piece(widget, values, slots))
 
