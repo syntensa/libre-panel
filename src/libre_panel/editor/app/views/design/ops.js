@@ -6,6 +6,7 @@ import { endpoints } from "../../core/api.js";
 import {
   clone,
   commit,
+  docSerial,
   edit,
   isModule,
   selectedWidgets,
@@ -394,12 +395,16 @@ export function align(mode) {
 
 /** A module as plain widgets, to change each part. */
 export async function detachModule(widget) {
-  const doc = store.get().doc;
+  const { doc } = store.get();
+  const { id } = widget;
+  const serial = docSerial();
   try {
-    const data = await endpoints.detach(doc.theme, doc.id, widget.id);
+    const data = await endpoints.detach(doc.theme, doc.id, id);
+    // the answer took a moment: another theme was opened, or the module went (removed, undone)
+    if (serial !== docSerial() || !widgetById(id)) return;
     const parts = [];
     edit(null, (current) => {
-      const index = current.widgets.indexOf(widget);
+      const index = current.widgets.findIndex((other) => other.id === id);
       for (const part of data.widgets) {
         part.id = uniqueId(part.id);
         parts.push(part);

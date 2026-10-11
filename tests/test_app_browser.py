@@ -1645,6 +1645,34 @@ def test_a_modules_source_and_detaching_it(page):
     assert widget(page, ring)["source"] == "disk"
 
 
+def test_a_detach_that_is_answered_after_its_module_went_changes_nothing(page):
+    """The server's answer takes a moment; a module removed meanwhile is not there to be
+    replaced (the splice at index -1 replaced the last widget of the theme instead)."""
+    new_theme_from_a_layout(page, "Turing 3.5")
+    ring = js(page, "window.libre.doc.widgets().find((w) => w.module === 'ring').id")
+    js(page, f"window.libre.doc.setSelection([{ring!r}])")
+    held = []
+    page.route("**/api/detach", lambda route, request: held.append(route))
+    page.locator(".details-button").click()
+    page.get_by_role("button", name="Detach into widgets").click()
+    for _ in range(100):  # the request is held
+        if held:
+            break
+        page.wait_for_timeout(20)
+    assert held
+    js(
+        page,
+        f"""window.libre.doc.edit(null, (theme) => {{
+          theme.widgets = theme.widgets.filter((w) => w.id !== {ring!r});
+        }})""",
+    )
+    ids = js(page, "window.libre.doc.widgets().map((w) => w.id)")
+    with page.expect_response("**/api/detach"):
+        page.unroute("**/api/detach")  # lets the request through
+    page.wait_for_timeout(300)  # (the answer is handled, or ignored, in this moment)
+    assert js(page, "window.libre.doc.widgets().map((w) => w.id)") == ids
+
+
 def test_another_kind_keeps_the_source_it_has_or_takes_the_first_it_offers(page):
     """A big number can show the network, a ring cannot: switched to a ring it does not keep
     "net" (the inspector would show no choice, the panel would draw the processor), it takes

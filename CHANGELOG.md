@@ -667,6 +667,9 @@
 - *Back* on a plugin's page goes to the view it was opened from (Start where the app was
   opened on the page) instead of through the browser's history, which could leave the
   app
+- Design: *Detach into widgets* on a module that was removed or undone before the answer
+  came replaced the last widget of the theme; the answer is ignored when its module or
+  its theme is gone
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars
