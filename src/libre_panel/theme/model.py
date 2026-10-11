@@ -191,6 +191,15 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "color2": ("color?", "#2b3242"),  # the dark part
         "mirror": ("bool", False),  # as seen south of the equator
     },
+    # A fan: its rotor turns with the sensor's speed (RPM) inside a ring that shows the load.
+    "fan": {
+        "sensor": ("sensor", "gpu.fan"),
+        "w": ("int", 48),
+        "h": ("int", 48),
+        "color": ("color", "#22d3ee"),
+        "max_rpm": ("number", 3000),  # the speed that fills the ring and turns the rotor fastest
+        "frame": ("enum:ring|square|none", "ring"),  # the load ring, the lit square frame, or none
+    },
     "image": {
         "src": ("asset", ""),
         "w": ("int", 0),
@@ -539,6 +548,8 @@ def normalize_widget(
     for key in ("glow_radius", "shadow_blur", "backdrop_blur"):
         if key in widget and not 0 <= widget[key] <= 64:
             raise ThemeError(f"{where}.{key}: must be between 0 and 64")
+    if wtype == "fan" and widget["max_rpm"] <= 0:
+        raise ThemeError(f"{where}.max_rpm: must be above 0")
     if not widget["id"]:
         widget["id"] = f"{wtype}-{index + 1}"
     if plugin is not None:

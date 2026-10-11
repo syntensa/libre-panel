@@ -29,7 +29,7 @@ _UNIFORM = (
     "backdrop_blur",
 )
 # Widgets whose box must keep its aspect ratio.
-_KEEP_ASPECT = ("gauge", "image")
+_KEEP_ASPECT = ("gauge", "image", "fan")
 
 
 def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any]:
