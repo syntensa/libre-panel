@@ -660,6 +660,8 @@
 - A view that fails while it is drawn no longer leaves the page blank: its place says
   so, with *Try again* and the way to Start, and the other views stay reachable; an
   address such as `#/home/themes/%E0%A4%A` (not a valid text) no longer breaks Start
+- With *Live values* on, the preview was asked for every second in every view, also in
+  Start, Live and Settings, which do not show it; only Design and Look draw it again now
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

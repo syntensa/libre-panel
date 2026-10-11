@@ -605,6 +605,34 @@ def test_look_shows_a_test_notice_on_the_preview(app_url):
         page.wait_for_function(f"{shown} === window.libre.store.get().render.png")
 
 
+def test_live_values_are_drawn_again_only_where_the_picture_is_shown(app_url, page):
+    """With live values on the preview is drawn every second; in Start, Live or Settings,
+    which do not show it, nothing asks the server for it (and in Look it goes on)."""
+    renders = []
+    page.on("request", lambda r: renders.append(r.url) if r.url.endswith("/api/render") else None)
+
+    def waits_for_renders(more, seconds=8):
+        """Until the picture was asked for ``more`` times beyond now."""
+        wanted = len(renders) + more
+        for _ in range(seconds * 20):
+            if len(renders) >= wanted:
+                return True
+            page.wait_for_timeout(50)
+        return False
+
+    js(page, "window.libre.store.set({ prefs: { ...window.libre.store.get().prefs, live: true } })")
+    assert waits_for_renders(2)  # Design: again and again
+    for view in ("settings/panel", "live", "home"):
+        page.goto(f"{app_url}#/{view}")
+        page.wait_for_selector(".view > *")
+        page.wait_for_timeout(300)  # (one that was on its way)
+        asked = len(renders)
+        page.wait_for_timeout(1600)  # more than a turn of the loop (a second)
+        assert len(renders) == asked, view
+    page.goto(f"{app_url}#/look")
+    assert waits_for_renders(2)
+
+
 def test_live_shows_the_panel_and_runs_its_services(background, isolated_home):
     from test_service import wait_for
 

@@ -69,12 +69,14 @@ export function requestRender(delay = THROTTLE_MS) {
   }
 }
 
-/** Live values: draw again every refresh while the page is visible. */
+const VIEWS = ["design", "look"]; // the views that show the picture
+
+/** Live values: draw again every refresh while the page is visible and a view shows the picture. */
 function updateLive() {
-  const { prefs, doc } = store.get();
+  const { prefs, doc, route } = store.get();
   clearInterval(liveTimer);
   liveTimer = null;
-  if (!prefs.live || !doc) return;
+  if (!prefs.live || !doc || !VIEWS.includes(route.view)) return;
   const every = Math.max(1000, doc.theme?.refresh_ms || 1000);
   liveTimer = setInterval(() => {
     if (!document.hidden) requestRender(0);
@@ -95,21 +97,23 @@ function waiting(doc) {
   };
 }
 
-let seen = { rev: -1, serial: -1, live: false };
+let seen = { rev: -1, serial: -1, live: false, view: null };
 store.subscribe((state) => {
   const opened = docSerial() !== seen.serial;
-  seen.serial = docSerial(); // before the store changes below, which come back here
+  const changed = state.rev !== seen.rev;
+  const moved = state.route.view !== seen.view;
+  const liveChanged = state.prefs.live !== seen.live;
+  // (noted first: the store changes below come back here)
+  seen = { rev: state.rev, serial: docSerial(), live: state.prefs.live, view: state.route.view };
   if (opened) {
     if (flying && flying.serial !== seen.serial) flying.controller.abort();
     store.set({ render: waiting(state.doc), renderError: null });
     requestRender(0);
-  } else if (state.rev !== seen.rev) {
+  } else if (changed) {
     requestRender();
   }
-  if (state.prefs.live !== seen.live || opened) {
-    if (state.prefs.live !== seen.live) requestRender(0);
-    seen.live = state.prefs.live;
+  if (liveChanged || opened || moved) {
+    if (liveChanged) requestRender(0);
     updateLive();
   }
-  seen.rev = state.rev;
 });
