@@ -120,8 +120,9 @@
           <p>TURZX-USB-Panels haben einen Videodecoder, und Libre Panel schickt ihm alle 20 Millisekunden
             ein Bild. Zahlen zählen zum nächsten Messwert, Ringe und Balken gleiten, Verläufe scrollen
             mit jedem Bild ein Stück weiter, und Lüfter drehen mit ihrer echten Drehzahl.</p>
-          <p class="note">Er braucht ffmpeg und schaltet sich auf dem 9,2" von selbst ein. Panels ohne
-            Decoder bekommen Standbilder, gesendet nur dort, wo sich etwas ändert.</p>
+          <p class="note">Die Downloads bringen das ffmpeg mit, das er braucht, und er schaltet sich auf
+            dem 9,2" von selbst ein. Panels ohne Decoder bekommen Standbilder, gesendet nur dort, wo
+            sich etwas ändert.</p>
         </div>
         <div class="pair">
           <figure class="media">
@@ -210,8 +211,7 @@
             Steam-Bibliothek. Der Bildschirm schließt sich zu einer Linie, der Name des Spiels leuchtet
             auf, und der Spielbildschirm öffnet sich mit den FPS, den 1-%-Lows und wer sie bremst. Nach
             einer Runde vergleicht ein optionaler Bericht sie mit deinen letzten zehn.</p>
-          <p class="note">Die FPS kommen von Intels PresentMon (Windows), das du herunterlädst und in den
-            Einstellungen angibst.</p>
+          <p class="note">Die FPS kommen von Intels PresentMon (Windows), das der Download mitbringt.</p>
         </div>
         <figure class="media">
           <video loop muted playsinline preload="none" width="2000" height="580" data-lazy data-poster="../media/game-entrance.png" aria-label="Ein Spiel startet: der Bildschirm schließt sich zu einer Linie, der Name des Spiels leuchtet auf, und der Spielbildschirm öffnet sich mit den FPS; am Ende derselbe Weg zurück">
@@ -607,20 +607,23 @@ libre-panel doctor             <span class="c"># das Panel prüfen, Bericht schr
         <details>
           <summary>Wie bekomme ich den flüssigen Videomodus? Brauche ich ffmpeg?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
           <div class="answer"><p>Den Videomodus gibt es für die TURZX-USB-Panels, die einen Videodecoder
-            haben. Er braucht <a href="https://ffmpeg.org">ffmpeg</a> (Windows:
-            <code>winget install ffmpeg</code>; Linux: das Paket deiner Distribution) und, unter
-            Einstellungen → Panel, den Namen des Standby-Clips des Panels, so wie ihn die Hersteller-App
-            zeigt. Auf dem 9,2" schaltet er sich dann von selbst ein; auf den anderen TURZX-USB-Panels
-            stellst du ihn zum Ausprobieren auf an. Auf dem Panel wird nichts gespeichert
+            haben. Die Windows- und Linux-Downloads bringen das <a href="https://ffmpeg.org">ffmpeg</a>
+            mit, das er braucht; du gibst nur unter Einstellungen → Panel den Namen des Standby-Clips des
+            Panels an, so wie ihn die Hersteller-App zeigt. Auf dem 9,2" schaltet er sich dann von selbst
+            ein; auf den anderen TURZX-USB-Panels stellst du ihn zum Ausprobieren auf an. Mit einer
+            Python-Installation installierst du ffmpeg selbst (Windows: <code>winget install ffmpeg</code>;
+            Linux: das Paket deiner Distribution). Auf dem Panel wird nichts gespeichert
             (<a href="https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md#video">Einzelheiten</a>).</p></div>
         </details>
         <details>
           <summary>Brauche ich LibreHardwareMonitor, FanControl oder PresentMon?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
-          <div class="answer"><p>Für das Grundsätzliche braucht es kein weiteres Programm:
-            LibreHardwareMonitor steckt in den Windows-Downloads. Die FPS eines Spiels brauchen Intels
-            <a href="https://github.com/GameTechDev/PresentMon/releases">PresentMon</a> (Windows), das du
-            herunterlädst und in den Einstellungen angibst. Die Kühlungsanalyse liest die Lüfterkurven
-            von FanControl, falls du FanControl nutzt.</p></div>
+          <div class="answer"><p>Es braucht kein weiteres Programm: LibreHardwareMonitor und Intels
+            <a href="https://github.com/GameTechDev/PresentMon">PresentMon</a> stecken in den
+            Windows-Downloads. Für die FPS eines Spiels schaltest du Bildrate im Spiel unter
+            Einstellungen → Sensoren ein; PresentMon braucht Administratorrechte oder dein Konto in der
+            Windows-Gruppe „Performance Log Users“, was das Setup erledigen kann
+            (<a href="https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md#more-sensor-sources">wie</a>).
+            Die Kühlungsanalyse liest die Lüfterkurven von FanControl, falls du FanControl nutzt.</p></div>
         </details>
         <details>
           <summary>Kann es meinem Panel schaden?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
