@@ -292,6 +292,11 @@
   load as charts, RAM and the GPU's temperatures, and below, where the
   network was, a chart of the longest frame of each moment, who holds the
   frame rate down (in the colour of its chart) and the volume
+- The theme *SPUR Focus* (`spur-focus`, 1920 × 480): SPUR II's Focus screen
+  for a game, the frame rate in 150 px with the game's logo or name over it
+  and its course over 35 seconds beside it, the CPU's and GPU's load as small
+  charts, and FRAMES (1% low, frame time, who holds the rate down), CPU, GPU
+  and system below
 - Ridges: a `rect` with a `ridge` name is drawn as SPUR II draws its frames,
   a ridge with two facets under the guide light, the lit one glowing a
   little; rects with the same name are one ridge, joined at mitres. Rects

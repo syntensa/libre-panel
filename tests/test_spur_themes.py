@@ -18,7 +18,7 @@ from libre_panel.theme.model import (
     parse_theme,
 )
 
-SPUR = ["spur-horizon", "spur-header"]
+SPUR = ["spur-horizon", "spur-header", "spur-focus"]
 # readings the demo has not got yet: they come with the merge of the sources that add them
 LATER = {"mem.name"}
 
@@ -37,6 +37,17 @@ def keys_read(theme):
     for widget in theme.widgets:
         keys |= {key for _, key, _ in _needs(widget) if key and not key.startswith("@")}
     return keys
+
+
+def glow_areas_hold_their_bars(theme, widest=420):
+    """Each lit bar's glow is worked out over its own zone: it holds the bar and stays narrow."""
+    bars = [w for w in theme.widgets if w["type"] == "bar" and w["glow_area"]]
+    assert bars
+    for bar in bars:
+        x, y, w, h = bar["glow_area"]
+        assert x <= bar["x"] and bar["x"] + bar["w"] <= x + w, bar["id"]
+        assert y <= bar["y"] and bar["y"] + bar["h"] <= y + h, bar["id"]
+        assert w <= widest, bar["id"]  # a zone as wide as the panel, once for every bar, is slow
 
 
 @pytest.mark.parametrize("name", SPUR)
@@ -142,6 +153,7 @@ def test_header_shows_the_frame_rate_the_limit_and_the_game():
     assert shown_ids(theme, {"game.limiter": "CAP"}) & words == {"limit-cap"}
     assert shown_ids(theme, {}) & words == {"limit-none"}  # PresentMon has not seen a game
     # the logo where the game has one, its name where it has not
+    glow_areas_hold_their_bars(theme)
     assert {"game-name"} <= shown_ids(theme, {"game.name": "Starfall"})
     ids = shown_ids(theme, {"game.name": "Starfall"}, {"game.logo": Image.new("RGBA", (4, 4))})
     assert "game-logo" in ids and "game-name" not in ids
@@ -160,3 +172,33 @@ def test_header_charts_the_longest_frame_of_each_point_with_a_line_at_60_fps():
     assert by["frames-floor"]["y"] == floor
     assert by["frames-60fps"]["y"] == floor - int(16.667 / 33.3 * (graph["h"] - 1))
     assert by["frames-60fps"]["x"] == graph["x"] and by["frames-60fps"]["w"] == graph["w"] - 1
+
+
+# -- Focus (the frame rate first) ----------------------------------------------------------------
+
+
+def test_focus_makes_the_frame_rate_the_largest_thing_with_its_course_beside_it():
+    theme = load_theme(find_theme("spur-focus"))
+    by = {w["id"]: w for w in theme.widgets}
+    number, graph = by["fps-value"], by["fps-graph"]
+    assert number["sensor"] == "game.fps" and number["font_size"] == 150
+    assert max(w["font_size"] for w in theme.widgets if "font_size" in w) == 150
+    assert (graph["sensor"], graph["min"], graph["max"]) == ("game.fps", 0, 175)
+    assert graph["x"] > number["x"] + 250 and graph["w"] == 867  # 35 s at a point a pixel
+    # the guide lines stand where 120 and 60 fps are on that scale (0 below, 175 above)
+    for fps in (120, 60):
+        y = graph["y"] + graph["h"] - 1 - round(fps / 175 * (graph["h"] - 1))
+        assert abs(by[f"fps-rule-{fps}"]["y"] - y) <= 1
+
+
+def test_focus_has_four_sections_whose_light_stays_in_them():
+    theme = load_theme(find_theme("spur-focus"))
+    by = {w["id"]: w for w in theme.widgets}
+    assert [by[f"{n}-title"]["text"] for n in ("frames", "cpu", "gpu", "sys")] == [
+        "FRAMES", "CPU", "GPU", "SYSTEM"
+    ]  # fmt: skip
+    assert by["last-top"]["color"] == "@rule_strong"  # the load block holds two channels: neutral
+    assert by["held-top"]["color"] == "@net_frame" and "held-bottom" in by
+    assert "cpu-box-bottom" not in by  # the boxes below are open at the bottom
+    glow_areas_hold_their_bars(theme)
+    assert shown_ids(theme, {"game.limiter": "cpu"}) & {"limit-gpu", "limit-cpu"} == {"limit-cpu"}
