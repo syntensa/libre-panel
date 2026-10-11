@@ -124,4 +124,5 @@ tools = ROOT / "packaging" / "bundled-tools"
 if (tools / "SOURCES.txt").is_file():
     from libre_panel.bundled import TOOLS_FOLDER
 
-    shutil.copytree(tools, Path(DISTPATH) / "libre-panel" / TOOLS_FOLDER, dirs_exist_ok=True)  # noqa: F821
+    program_folder = Path(DISTPATH) / "libre-panel"  # noqa: F821 - provided by PyInstaller
+    shutil.copytree(tools, program_folder / TOOLS_FOLDER, dirs_exist_ok=True)

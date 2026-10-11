@@ -62,7 +62,8 @@ def test_the_spec_puts_the_fetched_folder_next_to_the_program_under_the_name_the
     assert fetch_tools.DEFAULT_FOLDER.name == "bundled-tools"
     assert 'ROOT / "packaging" / "bundled-tools"' in spec
     assert "from libre_panel.bundled import TOOLS_FOLDER" in spec
-    assert 'Path(DISTPATH) / "libre-panel" / TOOLS_FOLDER' in spec  # next to the program
+    assert 'program_folder = Path(DISTPATH) / "libre-panel"' in spec  # the built folder
+    assert "copytree(tools, program_folder / TOOLS_FOLDER" in spec  # and next to the program
     check_tools = load("check_tools_wiring", PACKAGING / "check_tools.py")
     assert check_tools.TOOLS_FOLDER == bundled.TOOLS_FOLDER == "tools"
     # the setup clears the same folder on an update
