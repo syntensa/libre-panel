@@ -139,12 +139,24 @@ can change it (under *Program Files*): a program in your user folder could
 be replaced by anything you run, which would then get those rights at the
 next login. `enable --elevated` warns about that.
 
-The task reads the settings from `%APPDATA%\LibrePanel` as usual. A program
-from the Microsoft Store or another MSIX package (some desktop apps and
-their terminals) does not write there: Windows redirects what it writes to
-`%APPDATA%` into the package's own folder, so settings changed through such
-a program never reach the task. Then keep the settings in a folder of your
-own and set the user environment variable `LIBRE_PANEL_HOME` to it.
+The task reads the settings from `%APPDATA%\LibrePanel` as usual. **A program
+started from a Microsoft Store app (an MSIX package) writes `%APPDATA%` into
+the package's private folder instead.** Some desktop apps, terminals and
+assistants are packaged that way, and so is everything they start: a setting
+changed, a theme saved or a plugin installed from there never reaches the
+task, which runs outside the package and sees the real `%APPDATA%`. To avoid
+that, keep the settings in a folder outside `%APPDATA%` and point Libre Panel
+at it with the user environment variable `LIBRE_PANEL_HOME`, for example in a
+terminal:
+
+```
+setx LIBRE_PANEL_HOME "C:\LibrePanelData"
+```
+
+Libre Panel then keeps `config.toml`, the themes, the plugins and the log
+there, however it is started. Move what is in `%APPDATA%\LibrePanel` over
+first if you want to keep it; programs that are already running (and the
+task, until the next login) still use the old place.
 
 ### Linux desktops
 
