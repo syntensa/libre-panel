@@ -231,6 +231,8 @@
       "format": "{value:.0f}",
       "font": "builtin:Barlow-SemiBold",
       "font_size": 20,
+      "max_width": 66,
+      "fit": "ellipsis",
       "color": "@text",
       "smooth": true,
       "needs": "gpu.fan"
@@ -273,6 +275,8 @@
       "format": "{value:.0f}",
       "font": "builtin:Barlow-SemiBold",
       "font_size": 20,
+      "max_width": 66,
+      "fit": "ellipsis",
       "color": "@text",
       "smooth": true,
       "needs": "fan.lpc.fan_1"
@@ -315,6 +319,8 @@
       "format": "{value:.0f}",
       "font": "builtin:Barlow-SemiBold",
       "font_size": 20,
+      "max_width": 66,
+      "fit": "ellipsis",
       "color": "@text",
       "smooth": true,
       "needs": "fan.lpc.fan_2"
@@ -357,6 +363,8 @@
       "format": "{value:.0f}",
       "font": "builtin:Barlow-SemiBold",
       "font_size": 20,
+      "max_width": 66,
+      "fit": "ellipsis",
       "color": "@text",
       "smooth": true,
       "needs": "fan.lpc.fan_3"
