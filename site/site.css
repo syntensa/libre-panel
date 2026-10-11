@@ -332,6 +332,8 @@ footer { padding: 52px 0 64px; border-top: 1px solid var(--line); background: va
   .btn-lg { justify-content: flex-start; }
   .stage { margin-top: 36px; padding: 22px 0 34px; }
   .media-hero { border-radius: 12px; }
+  .toggle, .media-hero .toggle { right: 8px; bottom: 8px; width: 28px; height: 28px; }
+  .toggle .icon { width: 13px; height: 13px; }
   .head { margin-bottom: 30px; }
   .app-grid, .pair { grid-template-columns: minmax(0, 1fr); }
   .themes { grid-template-columns: minmax(0, 1fr); }
