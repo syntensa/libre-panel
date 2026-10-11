@@ -26,6 +26,7 @@ classifiers = [
 dependencies = [
     "pillow>=10.1",
     "psutil>=5.9",
+    "numpy>=1.24",  # light, dust and facets: whole layers at a time, cheap enough for 50 fps
     "tzdata; sys_platform == 'win32'",  # time zones for the world clock (Windows has none)
 ]
 
@@ -78,7 +79,7 @@ Issues = "https://github.com/syntensa/libre-panel/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-libre_panel = ["themes/**/*", "editor/static/*", "fonts/*.ttf", "fonts/*.txt", "fonts/*.md", "assets/*", "locale/*.json"]
+libre_panel = ["themes/**/*", "editor/static/*", "fonts/*.ttf", "fonts/*.txt", "fonts/*.md", "assets/**/*", "locale/*.json"]
 
 [tool.ruff]
 line-length = 100
