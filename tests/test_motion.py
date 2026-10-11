@@ -465,3 +465,109 @@ def test_a_theme_comes_on_warmed_up(monkeypatch):
     finally:
         loop.close()
         host.close()
+
+
+# -- the built-in video themes, frame by frame ---------------------------------------
+
+
+class Instant:
+    """The helper thread, run at once: frames that do not depend on timing."""
+
+    def submit(self, job):
+        from concurrent.futures import Future
+
+        future = Future()
+        future.set_result(job())
+        return future
+
+    def close(self):
+        pass
+
+
+def demo_at(clock, epoch):
+    """Demo readings for the planned time of each frame: they move as they would."""
+    from libre_panel.sensors.demo import DemoProvider
+
+    class Planned(DemoProvider):
+        def read(self):
+            self.fixed_time = epoch + clock()
+            return super().read()
+
+    return Planned({})
+
+
+def video_frames(theme_name, seconds, monkeypatch, boxes):
+    """The theme through MainLoop.step at 50 fps for ``seconds`` of planned
+    time: per frame, what it showed in each of ``boxes`` (whole frames would
+    take hundreds of megabytes)."""
+    from libre_panel.app import MainLoop
+    from libre_panel.config import Config, SensorsConfig
+    from libre_panel.render import renderer as renderer_module
+    from libre_panel.sensors.base import SensorHub
+
+    monkeypatch.setattr(renderer_module, "_Builder", Instant)
+    clock = Clock(1000.0)
+    epoch = 17 * 10**8 - 1000.0  # the demo CPU load at its steepest
+    hub = SensorHub([demo_at(clock, epoch)])
+    config = Config(theme=theme_name, sensors=SensorsConfig(providers=["demo"]))
+    loop = MainLoop(config, hub=hub, display=Stream(), clock=clock)
+    frames = []
+    try:
+        for n in range(round(seconds * 50)):
+            clock.now = 1000.0 + n / 50
+            frame = loop.step(clock.now)
+            frames.append({name: frame.crop(box) for name, box in boxes.items()})
+        every = round(loop.theme.refresh_ms / 20)  # frames per reading
+    finally:
+        loop.close()
+    return frames, every
+
+
+def changes(frames, name):
+    """Which frames differ from the one before in box ``name``."""
+    crops = [frame[name].tobytes() for frame in frames]
+    return [n for n in range(1, len(crops)) if crops[n] != crops[n - 1]]
+
+
+def curve_profile(region):
+    """Per column, the row of its brightest pixel: the curve's line."""
+    region = region.convert("L")
+    data, (w, h) = region.load(), region.size
+    rows = []
+    for x in range(w):
+        column = [data[x, y] for y in range(h)]
+        rows.append(column.index(max(column)))
+    return rows
+
+
+def moved(before, after, most=60):
+    """How many pixels to the left the curve moved between two profiles."""
+    span = len(after) - most
+    return min(range(most), key=lambda s: sum(abs(before[x + s] - after[x]) for x in range(span)))
+
+
+def test_spur_ii_moves_on_every_frame_in_video_mode(monkeypatch):
+    """The built-in SPUR II in video mode: its graphs change on (nearly) every
+    frame and move 25 px a second, and its numbers change between readings."""
+    boxes = {
+        "cpu": (43, 150, 945, 276),
+        "gpu": (1003, 150, 1877, 276),
+        "number": (820, 85, 925, 145),
+    }
+    frames, every = video_frames("spur-ii", 4, monkeypatch, boxes)
+    for graph in ("cpu", "gpu"):
+        # nearly every frame: at 0.49 px a frame, a frame now and then lands
+        # on the same half pixel as the one before
+        late = [n for n in changes(frames, graph) if n > 50]
+        assert len(late) >= 0.9 * (len(frames) - 51), (graph, len(late))
+    speed = moved(curve_profile(frames[100]["cpu"]), curve_profile(frames[150]["cpu"]))
+    assert speed >= 20, speed  # in a second
+    between = [n for n in changes(frames, "number") if n % every]  # the CPU load
+    assert len(between) >= 8, (between, every)  # it glides: also between readings
+
+
+def test_studio_glides_between_readings_in_video_mode(monkeypatch):
+    boxes = {"ring": (1190, 34, 1390, 234), "number": (1220, 92, 1360, 150)}  # CPU
+    frames, every = video_frames("studio", 3, monkeypatch, boxes)
+    assert len([n for n in changes(frames, "ring") if n % every]) >= 20
+    assert len([n for n in changes(frames, "number") if n % every]) >= 5
