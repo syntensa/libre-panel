@@ -298,7 +298,7 @@ _DRIVER_STATUS = {
     for protocol in ("usb-turing", "serial-a", "serial-b", "serial-c", "serial-d", "serial-weact")
 }
 # Models confirmed with `libre-panel doctor`; add a model here only with a passing report.
-_CONFIRMED: set[str] = set()
+_CONFIRMED: set[str] = {"turing-9.2-usb"}  # stills and 50 fps video, for hours on end
 MODELS = tuple(
     replace(
         m, driver="supported" if m.id in _CONFIRMED else _DRIVER_STATUS.get(m.protocol, m.driver)
