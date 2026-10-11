@@ -276,3 +276,14 @@ def fitted_text(text: str, name: str, sizes: tuple[int, ...], width: float) -> t
     while len(text) > 1 and font.getlength(text + "…") > width:
         text = text[:-1]
     return text.rstrip() + "…", font
+
+
+def ellipsize(text: str, font: Any, room: float) -> str:
+    """``text`` as it is if ``font`` draws it within ``room`` px, else cut so that it, with "…"
+    after it, does (at least one letter stays). The font measures what it draws, so the runs
+    of a system font that stands in for a missing glyph count at their own width."""
+    if font.getlength(text) <= room:
+        return text
+    while len(text) > 1 and font.getlength(text.rstrip() + "…") > room:
+        text = text[:-1]
+    return text.rstrip() + "…"

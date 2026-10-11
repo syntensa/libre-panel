@@ -88,7 +88,8 @@ to write or review themes by hand.
   rank take over at once and drops lower ones (one after another by
   default), `"off"` lists kinds the theme does not show (`["music"]`), and
   `"style"` with `"options"` names the toast style: the built-in card
-  (the default), `"band"` or one from a plugin.
+  (the default), `"band"` or one from a plugin. The card is as wide as its text
+  needs, at most two thirds of the panel; a longer text ends with "…".
 - The band (`"style": "band"`) is a band across the panel in the look of
   SPUR II: a glowing edge ignites from the centre and the band rolls down
   from it, with a title, a picture or icon, the text and a progress bar

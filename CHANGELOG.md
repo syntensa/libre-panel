@@ -750,6 +750,9 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
   on Linux), in widgets, cards, lists, notices and the lettering of `facet` and `acrylic`. Text
   the bundled fonts have is drawn exactly as before. A computer with no font for a script still
   shows boxes for it: install one (docs/THEMES.md)
+- The card toast cut a long notice (a track and its artist, a device's name) off at the edge of
+  its card in the middle of a letter; it ends with "…" now, the width counted in the font that
+  draws each letter
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars (the
