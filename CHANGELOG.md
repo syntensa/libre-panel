@@ -134,9 +134,10 @@
   `look.grid` lays SPUR II's grid over the backdrop; `look.light` is one
   light for the panel: the sun, where it stands for the place in
   `[weather]`, glints on ridges, and a sweep of light runs across at the
-  start, on the hour, on a new track and after a tube or entrance transition. The light layers are prepared before
-  the first frame and kept in the cache folder. The editor sets both (*Grid
-  background* and *Panel light* with the theme, *Finish* for a widget)
+  start, on the hour, on a new track and after a tube or entrance
+  transition. The light layers are prepared before the first frame and kept
+  in the cache folder. The editor sets both (*Grid background* and *Panel
+  light* with the theme, *Finish* for a widget)
 - The theme *SPUR Classic* (`spur-classic`, 1920 × 480): SPUR II's classic
   screen as it is now, rebuilt from its geometry with the look and the
   finishes: two load charts with raised curves in ridged frames, the CPU and
@@ -180,9 +181,9 @@
   the wordmark. Bars and rings are raised in a milled track, a graph's line
   becomes a ridge on the plateau of its fill with a halo of its colour (a
   slimmer ridge on a bar panel; the halo ends where SPUR II's does, and a
-  graph that hangs from its top has it mirrored). Text keeps the pixels of the flat text;
-  shapes are built once per size and colour, so it costs no more than the
-  flat look
+  graph that hangs from its top has it mirrored). Text keeps the pixels of
+  the flat text; shapes are built once per size and colour, so it costs no
+  more than the flat look
 - `fill_alpha` on a `graph`: how opaque its fill is, 0 to 1 (0: as before, a
   flat fill a quarter, a fade 0.45 at its top)
 - `libre_panel.render.facets.groove_bar` and `groove_ring`: the milled groove
