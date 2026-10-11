@@ -1851,6 +1851,13 @@ class Renderer:
     ) -> Piece:
         """``paint``: the colour where the bar starts, and where a full bar
         ends (None: one colour)."""
+        if widget.get("finish") == "facet":  # render/facets.py; None: too thin, drawn flat
+            raised = facets.bar_layer(
+                w, h, frac, widget["direction"], paint, self.color(widget["background"]),
+                widget["segments"], widget["segment_gap"],
+            )  # fmt: skip
+            if raised is not None:
+                return Piece(raised, x, y, [x, y, w, h])
         s = SUPERSAMPLE
         layer, draw = self._canvas(w, h)
         W, H = w * s, h * s
@@ -1928,6 +1935,8 @@ class Renderer:
         a gliding ring costs a few milliseconds per frame, not tens.
         """
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
+        if widget.get("finish") == "facet":  # render/facets.py
+            return Piece(self._gauge_facets(widget, frac, paint), x, y, [x, y, w, h])
         layer = self._gauge_static(widget).copy()
         if frac > 0:
             a, b = paint
@@ -1942,6 +1951,23 @@ class Renderer:
             )
             layer.alpha_composite(arc)
         return Piece(layer, x, y, [x, y, w, h])
+
+    def _gauge_facets(
+        self, widget: dict[str, Any], frac: float, paint: tuple[RGBA, RGBA | None]
+    ) -> Image.Image:
+        """The ring as a raised, bevelled arc in a milled track; the ticks, if any, as flat."""
+        layer = facets.ring_layer(
+            widget["w"], widget["h"], widget["thickness"], widget["start_angle"],
+            widget["end_angle"], frac, paint, self.color(widget["background"]),
+        )  # fmt: skip
+        if widget["ticks"] > 0:
+            ticks = {
+                **widget,
+                "background": None,
+                "tick_color": widget["tick_color"] or widget["background"],
+            }
+            layer.alpha_composite(self._gauge_static(ticks))
+        return layer
 
     def _gauge_geometry(self, widget: dict[str, Any], scale: int) -> dict[str, Any]:
         W, H = widget["w"] * scale, widget["h"] * scale
@@ -2391,8 +2417,13 @@ class Renderer:
             tint.putalpha(alpha)
             layer.alpha_composite(tint)
         joint = "curve" if widget.get("\0joints", True) else None
+        facet = widget.get("finish") == "facet"  # a ridge for the line (render/facets.py)
+        wide = widget["w"] > facets.CURVE_WIDE
         for run in runs:
-            draw.line(run, fill=color, width=widget["line_width"] * s, joint=joint)
+            if not (
+                facet and facets.curve_ridge(layer, run, widget["line_width"] * s, color, wide)
+            ):
+                draw.line(run, fill=color, width=widget["line_width"] * s, joint=joint)
         return layer
 
 

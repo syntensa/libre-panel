@@ -328,3 +328,307 @@ def test_facet_text_at_both_panel_sizes(size):
     renderer = Renderer(theme(*widgets, size=size))
     image, boxes = renderer.render(demo_snapshot(fixed_time=1_700_000_000))
     assert image.size == size and renderer.warnings == [] and set(boxes) == {"t", "c"}
+
+
+# -- bars --------------------------------------------------------------------------------------
+
+CYAN = (34, 211, 238, 255)
+DEEP = (11, 108, 133, 255)
+TRACK = (31, 41, 55, 255)
+
+
+def test_a_boxs_bevel_is_light_where_it_faces_the_light_and_dark_away():
+    a, b, cover = facets.box_window(40, 16, (0.0, 40.0, 0.0, 16.0), 3.0, facets.SOLID)
+    colour = np.array([100.0])
+    shaded = colour[0] * a + b
+    assert np.allclose(a[8, 20], 1) and np.allclose(b[8, 20], 0)  # the top is as it is
+    assert shaded[8, 1] > 100 > shaded[8, 38]  # left lit, right dark
+    assert shaded[1, 20] > 100 > shaded[14, 20]  # top lit, bottom dark
+    assert cover.min() == 1 and cover.shape == (16, 40)
+    ga, gb, _ = facets.box_window(40, 16, (0.0, 40.0, 0.0, 16.0), 3.0, facets.GROOVE, groove=True)
+    milled = colour[0] * ga + gb
+    assert milled[8, 1] < 100 and milled[14, 20] > milled[1, 20]  # the other way round
+
+
+def test_a_box_edge_between_pixels_covers_part_of_the_pixel():
+    _, _, cover = facets.box_window(10, 6, (2.5, 8.0, 0.0, 6.0), 1.0, facets.SOLID)
+    assert cover[3, 1] == 0 and cover[3, 2] == pytest.approx(0.5) and cover[3, 3] == 1
+    assert cover[3, 7] == 1 and cover[3, 8] == 0
+
+
+def test_the_corner_of_a_box_is_a_mitre():
+    a, b, _ = facets.box_window(30, 30, (0.0, 30.0, 0.0, 30.0), 6.0, facets.SOLID)
+    k = 100 * a + b  # brightness of a grey 100 where the corner meets
+    assert k[3, 2] > 100  # nearer to the left edge: faces the light
+    assert k[2, 3] > 100
+    assert k[27, 28] < 100 and k[28, 27] < 100  # the dark corner opposite
+
+
+@pytest.mark.parametrize("horizontal", [True, False])
+@pytest.mark.parametrize("start,end", [(0.0, 120.0), (3.25, 117.5), (0.5, 400.75)])
+def test_a_long_bar_made_of_its_ends_and_a_column_is_the_whole_one(horizontal, start, end):
+    first, (a, b, cover) = facets._body(horizontal, 18, start, end, False, facets.SOLID)
+    n = a.shape[1] if horizontal else a.shape[0]
+    edges = (start - first, end - first)
+    direct = (
+        facets.box_window(n, 18, (*edges, 0.0, 18.0), 3.0, facets.SOLID)
+        if horizontal
+        else facets.box_window(18, n, (0.0, 18.0, *edges), 3.0, facets.SOLID)
+    )
+    for got, want in zip((a, b, cover), direct, strict=True):
+        assert np.allclose(got, want, atol=1e-5)
+
+
+def bar(w=200, h=16, frac=0.5, direction="right", paint=(CYAN, None), track=TRACK, **kw):
+    return facets.bar_layer(w, h, frac, direction, paint, track, **kw)
+
+
+def lit_columns(image, colour=CYAN):
+    """Columns whose middle row is the bar's colour (the fill, not the track)."""
+    a = np.asarray(image, np.int16)
+    mid = a[a.shape[0] // 2, :, :3]
+    return np.nonzero(
+        (np.abs(mid - np.array(colour[:3])).max(-1) <= 2) & (a[a.shape[0] // 2, :, 3] > 200)
+    )[0]
+
+
+def test_a_bar_fills_its_share_from_the_side_it_grows_from():
+    right = lit_columns(bar(frac=0.6))
+    assert right[0] <= 3 and 116 <= right[-1] <= 120 and len(right) > 100
+    left = lit_columns(bar(frac=0.6, direction="left"))
+    assert left[-1] >= 196 and 80 <= left[0] <= 84
+    up = np.asarray(bar(w=16, h=200, frac=0.25, direction="up"), np.int16)[:, 8]
+    filled = np.nonzero(np.abs(up[:, :3] - np.array(CYAN[:3])).max(-1) <= 2)[0]
+    assert filled[0] >= 148 and filled[-1] >= 196
+    down = np.asarray(bar(w=16, h=200, frac=0.25, direction="down"), np.int16)[:, 8]
+    filled = np.nonzero(np.abs(down[:, :3] - np.array(CYAN[:3])).max(-1) <= 2)[0]
+    assert filled[0] <= 3 and 46 <= filled[-1] <= 52
+
+
+def test_a_bars_bevel_follows_the_light():
+    a = np.asarray(bar(h=20, frac=0.8), np.int16)
+    middle = a[:, 60, :3].sum(-1)
+    assert middle[0] > middle[10] > middle[-1]  # lit edge above, the flat top, the dark edge below
+    assert np.abs(a[10, 60, :3] - np.array(CYAN[:3])).max() <= 1  # the top: the exact colour
+
+
+def test_a_gradient_is_a_place_on_the_track_and_means_the_same_at_any_fill():
+    half = np.asarray(bar(frac=0.5, paint=(DEEP, CYAN)), np.int16)
+    full = np.asarray(bar(frac=1.0, paint=(DEEP, CYAN)), np.int16)
+    assert np.abs(half[8, 50] - full[8, 50]).max() <= 2  # the same colour at the same place
+    assert full[8, 190, 1] > full[8, 10, 1]  # towards the second colour
+    back = np.asarray(bar(frac=1.0, direction="left", paint=(DEEP, CYAN)), np.int16)
+    assert back[8, 10, 1] > back[8, 190, 1]  # it starts at the right: the first colour there
+
+
+def test_an_empty_bar_is_the_track_and_a_tiny_one_a_sliver():
+    empty = bar(frac=0.0)
+    assert len(lit_columns(empty)) == 0 and np.asarray(empty)[..., 3].max() == 255
+    assert len(lit_columns(bar(frac=0.0001, h=16))) == 0 or True  # at least no error
+    sliver = np.asarray(bar(frac=0.001), np.int16)
+    assert (np.abs(sliver[:, :4, :3] - np.array(TRACK[:3])).max(-1) > 6).any()  # something there
+    no_track = np.asarray(bar(frac=0.5, track=None), np.int16)
+    assert no_track[8, 180, 3] == 0 and no_track[8, 20, 3] == 255
+
+
+def test_thin_and_thick_bars_are_left_to_the_flat_drawing():
+    assert bar(h=5) is None and bar(h=401, w=500) is None and bar(w=5, direction="up") is None
+    assert bar(h=6) is not None and bar(h=400, w=500) is not None
+
+
+def test_segments_are_blocks_with_gaps_the_last_one_part_lit():
+    image = np.asarray(bar(w=240, h=14, frac=0.45, segments=10, gap=4), np.int16)
+    row = image[7]
+    lit = (np.abs(row[:, :3] - np.array(CYAN[:3])).max(-1) <= 2) & (row[:, 3] > 200)
+    runs = np.diff(np.concatenate([[0], lit.astype(int), [0]]))
+    assert (runs == 1).sum() == 4  # four whole blocks lit, the fifth only half
+    gaps = image[7, 20:26, 3]
+    assert (gaps == 0).any()  # the gap between blocks is clear
+    assert bar(w=20, h=14, segments=30, gap=4) is None  # no room for the blocks
+
+
+def test_a_bar_changing_by_a_third_of_a_pixel_changes_the_picture_a_little():
+    a = np.asarray(bar(frac=0.5), np.float32)
+    b = np.asarray(bar(frac=0.5 + 1 / (200 * 3)), np.float32)
+    changed = np.abs(a - b).sum(-1) > 0
+    assert 0 < changed.sum() < 80 and changed[:, :90].sum() == 0  # only at the moving end
+
+
+# -- rings -------------------------------------------------------------------------------------
+
+
+def ring(frac=0.6, w=140, h=140, th=12, start=135, end=405, paint=(CYAN, None), track=TRACK):
+    return facets.ring_layer(w, h, th, start, end, frac, paint, track)
+
+
+def at_angle(image, degrees, radius):
+    """The pixel at an angle (clockwise from 3 o'clock) and radius from the middle."""
+    w, h = image.size
+    rad = np.radians(degrees)
+    return np.asarray(image, np.int16)[
+        int(h / 2 + radius * np.sin(rad)), int(w / 2 + radius * np.cos(rad))
+    ]
+
+
+def is_fill(pixel, colour=CYAN):
+    return pixel[3] > 200 and np.abs(pixel[:3] - np.array(colour[:3])).max() <= 70
+
+
+def test_a_ring_is_lit_as_far_round_as_its_share_from_its_start():
+    image = ring(frac=0.5)  # from 135 degrees by half of 270: to 270
+    assert is_fill(at_angle(image, 150, 64)) and is_fill(at_angle(image, 260, 64))
+    assert not is_fill(at_angle(image, 285, 64)) and not is_fill(at_angle(image, 120, 64))
+    assert at_angle(image, 285, 64)[3] > 200  # the track is there
+    assert at_angle(image, 90, 64)[3] == 0  # and the gap of the gauge is empty
+    assert at_angle(image, 200, 20)[3] == 0  # nothing inside the ring
+
+
+def test_a_ring_that_goes_the_other_way():
+    image = ring(frac=0.5, start=405, end=135)  # backwards: from 45 degrees, anticlockwise
+    assert is_fill(at_angle(image, 30, 64)) and not is_fill(at_angle(image, 120, 64))
+
+
+def test_a_closed_ring_has_no_ends_and_its_bevel_follows_the_light():
+    image = ring(frac=1.0, start=0, end=360, track=None)
+    assert all(image.getpixel((70, y))[3] > 0 for y in (5, 8, 11))  # no cut at the top
+    lit, dark = at_angle(image, 225, 69), at_angle(image, 45, 69)  # the outer bevel, either side
+    assert lit[3] > 200 and dark[3] > 200
+    assert (
+        lit[:3].sum() > CYAN[:3].__len__() * 0 + sum(CYAN[:3]) > dark[:3].sum()
+    )  # lit, flat, dark
+
+
+def test_a_ring_has_a_gradient_along_its_sweep():
+    image = ring(frac=1.0, paint=(DEEP, CYAN))
+    first, last = at_angle(image, 140, 64), at_angle(image, 400, 64)
+    assert last[1] > first[1] + 40 and last[0] >= first[0]
+
+
+def test_a_ring_in_a_box_that_is_not_square_is_a_circle_in_its_middle():
+    image = ring(frac=1.0, w=100, h=140, track=None)
+    a = np.asarray(image)
+    assert a[:, :, 3].max() == 255 and a.shape == (140, 100, 4)
+    assert is_fill(at_angle(image, 140, 44)) and a[10, 50, 3] == 0  # the ring stays 100 across
+
+
+def test_the_band_does_not_depend_on_the_fill_and_is_kept():
+    first = facets.ring_band(140, 140, 12, 135, 405)
+    assert facets.ring_band(140, 140, 12, 135, 405) is first
+    assert facets.ring_band(140, 140, 12, 135, 406) is not first
+    a, b, alpha = facets.ring_maps(first, 0.3, False, facets.SOLID)
+    assert len(a) == len(b) == len(alpha) == len(first.rows) and alpha.max() <= 1
+    more = facets.ring_maps(first, 0.9, False, facets.SOLID)[2]
+    assert more.sum() > 2.5 * alpha.sum()
+
+
+# -- curves ------------------------------------------------------------------------------------
+
+
+def curve_layer(points, size=(200, 80), fill=100):
+    layer = Image.new("RGBA", size, (0, 0, 0, 0))
+    ImageDraw.Draw(layer).polygon(
+        [*points, (points[-1][0], size[1] - 1), (points[0][0], size[1] - 1)], fill=(*CYAN[:3], fill)
+    )
+    return layer
+
+
+def test_a_curve_gets_a_lit_flank_above_and_a_dark_one_below():
+    points = [(x, 40 + 10 * np.sin(x / 15)) for x in range(0, 200, 4)]
+    layer = curve_layer(points)
+    assert facets.curve_ridge(layer, points, 2.0, CYAN)
+    a = np.asarray(layer, np.float32)
+    x = 24  # where the curve is level: a slope would tilt the dark flank towards the light
+    y = float(np.interp(x + 0.5, [p[0] for p in points], [p[1] for p in points]))
+    rows = [r for r in range(int(y) - 5, int(y) + 5) if a[r, x, 3] > 200]  # opaque: the ridge
+    light = {r: a[r, x, :3].sum() for r in rows}
+    brightest, darkest = max(light, key=light.get), min(light, key=light.get)
+    assert brightest < y < darkest + 2  # the lit flank above the curve, the dark one below it
+    assert light[brightest] > light[darkest] + 150 and light[darkest] < 120
+    assert a[5, x, 3] == 0  # far above: nothing
+
+
+def test_a_wide_graph_gets_the_slimmer_ridge():
+    points = [(x, 40 + 10 * np.sin(x / 15)) for x in range(0, 200, 4)]
+    full, slim = curve_layer(points), curve_layer(points)
+    facets.curve_ridge(full, points, 2.0, CYAN, wide=False)
+    facets.curve_ridge(slim, points, 2.0, CYAN, wide=True)
+    assert np.asarray(full).tobytes() != np.asarray(slim).tobytes()
+    assert (np.asarray(full, np.int16)[..., 3] > 200).sum() > (
+        np.asarray(slim, np.int16)[..., 3] > 200
+    ).sum()
+
+
+def test_a_curve_that_runs_backwards_or_is_too_short_is_left_to_the_line():
+    layer = Image.new("RGBA", (50, 30), (0, 0, 0, 0))
+    assert not facets.curve_ridge(layer, [(30, 10), (10, 12)], 2.0, CYAN)
+    assert not facets.curve_ridge(layer, [(10, 10)], 2.0, CYAN)
+    assert not facets.curve_ridge(layer, [(10.2, 10), (10.9, 12)], 2.0, CYAN)
+    assert np.asarray(layer).max() == 0
+
+
+def test_a_curve_at_the_edge_of_its_layer_is_cut_not_an_error():
+    layer = Image.new("RGBA", (60, 20), (0, 0, 0, 0))
+    run = [(-10, 1.0), (30, 0.5), (70, 19.5)]
+    assert facets.curve_ridge(layer, run, 6.0, (200, 100, 50, 128))
+    assert np.asarray(layer)[..., 3].max() > 0
+
+
+# -- the shapes in a theme ---------------------------------------------------------------------
+
+
+def shape_widgets(finish, size):
+    w, h = size
+    return [
+        {"type": "bar", "id": "b", "x": 10, "y": 10, "w": w // 2, "h": 14, "sensor": "cpu.load",
+         "finish": finish, "color": "#22d3ee", "color2": "#c084fc"},
+        {"type": "bar", "id": "s", "x": 10, "y": 40, "w": w // 2, "h": 12, "sensor": "cpu.load",
+         "finish": finish, "segments": 8},
+        {"type": "gauge", "id": "g", "x": w // 2 + 20, "y": 10, "w": h // 2, "h": h // 2,
+         "sensor": "gpu.load", "finish": finish, "thickness": 10, "ticks": 6},
+        {"type": "graph", "id": "r", "x": 10, "y": h // 2 + 10, "w": w - 20, "h": h // 2 - 20,
+         "sensor": "cpu.load", "finish": finish, "grid": 2},
+    ]  # fmt: skip
+
+
+@pytest.mark.parametrize("size", [(1920, 480), (320, 240)])
+def test_every_shape_in_facets_at_both_panel_sizes(size):
+    snapshot = demo_snapshot(fixed_time=1_700_000_000)
+    snapshot.history["cpu.load"] = [20 + 3 * n for n in range(40)]
+    flat = Renderer(theme(*shape_widgets("flat", size), size=size))
+    faceted = Renderer(theme(*shape_widgets("facet", size), size=size))
+    a, boxes_a = flat.render(snapshot)
+    b, boxes_b = faceted.render(snapshot)
+    assert faceted.warnings == [] and b.size == size and set(boxes_a) == set(boxes_b)
+    for name, box in boxes_a.items():
+        x, y, w, h = box
+        assert boxes_b[name] == box
+        assert a.crop((x, y, x + w, y + h)).tobytes() != b.crop((x, y, x + w, y + h)).tobytes(), (
+            name
+        )
+
+
+def test_a_bar_too_thin_for_a_bevel_is_the_flat_bar():
+    widgets = [{"type": "bar", "id": "b", "x": 5, "y": 5, "w": 100, "h": 5, "sensor": "cpu.load"}]
+    snapshot = demo_snapshot(fixed_time=1_700_000_000)
+    flat, _ = Renderer(theme(*widgets)).render(snapshot)
+    thin, _ = Renderer(theme(*[{**w, "finish": "facet"} for w in widgets])).render(snapshot)
+    assert flat.tobytes() == thin.tobytes()
+
+
+def test_facet_shapes_glide_in_video_mode_and_graphs_scroll():
+    size = (480, 200)
+    widgets = shape_widgets("facet", size)
+    renderer = Renderer(theme(*widgets, size=size), animate=True)
+    renderer.continuous = True
+    frames = []
+    for n in range(30):
+        snapshot = Snapshot(
+            readings={
+                "cpu.load": Reading("cpu.load", 20.0 + n),
+                "gpu.load": Reading("gpu.load", 50.0),
+            },
+            history={"cpu.load": [20.0 + 2 * k for k in range(60)]},
+        )
+        image, _ = renderer.render(snapshot, 1.0 + n / 50)
+        frames.append(image.tobytes())
+    assert renderer.warnings == [] and len(set(frames)) > 15

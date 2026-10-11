@@ -23,6 +23,7 @@ import math
 import os
 import threading
 from collections import OrderedDict
+from collections.abc import Callable
 from types import SimpleNamespace
 from typing import Any, NamedTuple
 
@@ -395,3 +396,476 @@ def put(layer: Image.Image, patch: Image.Image, x: int, y: int) -> None:
         if left or top:
             patch = patch.crop((left, top, patch.width, patch.height))
         layer.alpha_composite(patch, (x + left, y + top))
+
+
+# -- bars -------------------------------------------------------------------------------
+
+MIN_BAR, MAX_BAR = 6, 400  # thinner bars stay flat (a bevel does not read there), thicker too
+SUB = 4  # a window is worked out this much larger
+_windows = Lru(512)
+
+
+def box_window(
+    width: int,
+    height: int,
+    edges: tuple[float, float, float, float],
+    bevel: float,
+    style: tuple[float, float],
+    groove: bool = False,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Shading of a window ``width`` x ``height`` px on a box whose edges lie at
+    ``(left, right, top, bottom)`` px of the window (``inf`` for one beyond it): the
+    maps ``(A, B, coverage)`` of ``rgb = colour * A + B``, each ``(height, width)``.
+
+    A point of the box within ``bevel`` of an edge is bevelled, tilting 45 degrees
+    away from the nearest edge; where two edges are as near, the corner is a
+    mitre. A ``groove`` is the same milled into the ground: the tilt mirrored.
+    """
+    key = (
+        width,
+        height,
+        tuple(round(e * SUB) if math.isfinite(e) else e for e in edges),
+        round(bevel * SUB),
+        style,
+        groove,
+    )
+    hit = _windows.get(key)
+    if hit is not None:
+        return hit
+    left, right, top, bottom = edges
+    xs = (np.arange(width * SUB, dtype=np.float32) + 0.5) / SUB
+    ys = (np.arange(height * SUB, dtype=np.float32) + 0.5) / SUB
+    to = np.stack(
+        [
+            np.broadcast_to(xs - left, (len(ys), len(xs))),
+            np.broadcast_to(right - xs, (len(ys), len(xs))),
+            np.broadcast_to((ys - top)[:, None], (len(ys), len(xs))),
+            np.broadcast_to((bottom - ys)[:, None], (len(ys), len(xs))),
+        ]
+    )
+    nearest = to.argmin(axis=0)
+    inside = to.min(axis=0) >= 0
+    sides = np.array(
+        [(-SIN45, 0), (SIN45, 0), (0, -SIN45), (0, SIN45)], np.float32
+    )  # out of the box
+    tilt = sides[nearest] * (-1 if groove else 1)
+    flat = to.min(axis=0) >= bevel
+    normals = np.zeros(nearest.shape + (3,), np.float32)
+    normals[..., :2] = np.where(flat[..., None], 0.0, tilt)
+    normals[..., 2] = np.where(flat, 1.0, SIN45)
+    a, b = shade(facing(normals), style)
+    cover = inside.astype(np.float32)
+
+    def small(x: np.ndarray) -> np.ndarray:
+        return x.reshape(height, SUB, width, SUB).mean(axis=(1, 3))
+
+    alpha = small(cover)
+    safe = np.maximum(alpha, 1e-6)
+    return _windows.put(key, (small(a * cover) / safe, small(b * cover) / safe, alpha))
+
+
+RGBA = tuple[int, int, int, int]
+_images = Lru(2048)  # coloured boxes, by what they are made of
+
+
+def _mix(a: RGBA, b: RGBA | None, t: np.ndarray) -> np.ndarray:
+    """Colours ``(n, 4)`` along ``a`` to ``b`` at ``t`` (0..1); ``a`` alone without ``b``."""
+    first = np.asarray(a, np.float32)
+    if b is None:
+        return np.broadcast_to(first, (len(t), 4))
+    return first + (np.asarray(b, np.float32) - first) * np.clip(t, 0, 1)[:, None]
+
+
+def _body(
+    horizontal: bool, thick: int, start: float, end: float, groove: bool, style: tuple[float, float]
+) -> tuple[int, tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """The shading maps of a bar's body from ``start`` to ``end`` px along its length, over
+    the pixels from ``floor(start)`` to ``ceil(end)``: that first pixel, and ``(A, B, coverage)``
+    shaped ``(thick, n)`` (a horizontal bar) or ``(n, thick)``.
+
+    Only the two ends and one column in between are worked out; the column is
+    repeated. A long bar costs what a short one does.
+    """
+    bevel = thick / 6
+    first, last = math.floor(start), math.ceil(end)
+    n = last - first
+    cap = math.ceil(bevel) + 2
+
+    def window(px: int, low: float, high: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        if horizontal:
+            return box_window(px, thick, (low, high, 0.0, float(thick)), bevel, style, groove)
+        return box_window(thick, px, (0.0, float(thick), low, high), bevel, style, groove)
+
+    if n <= 2 * cap + 2:
+        return first, window(n, start - first, end - first)
+    axis = 1 if horizontal else 0
+    ends = (window(cap, start - first, math.inf), window(cap, -math.inf, end - (last - cap)))
+    middle = window(1, -math.inf, math.inf)
+    return first, tuple(  # type: ignore[return-value]
+        np.concatenate([lo, np.repeat(mid, n - 2 * cap, axis=axis), hi], axis=axis)
+        for lo, mid, hi in zip(ends[0], middle, ends[1], strict=True)
+    )
+
+
+def _box_image(
+    horizontal: bool,
+    thick: int,
+    start: float,
+    end: float,
+    colours: Callable[[np.ndarray], np.ndarray],
+    groove: bool,
+    style: tuple[float, float],
+) -> tuple[Image.Image, int]:
+    """A bar's body as an image, and the pixel it starts at along the bar. ``colours``
+    gives the colour (RGBA) of each pixel along the bar from its position."""
+    first, (a, b, alpha) = _body(horizontal, thick, start, end, groove, style)
+    n = alpha.shape[1 if horizontal else 0]
+    c = colours(first + np.arange(n, dtype=np.float32) + 0.5)
+    c = c[None, :, :] if horizontal else c[:, None, :]
+    rgb = c[..., :3] * a[..., None] + b[..., None]
+    out = np.concatenate(
+        [np.clip(rgb + 0.5, 0, 255), (alpha * c[..., 3] + 0.5)[..., None]], axis=-1
+    )
+    return Image.fromarray(out.clip(0, 255).astype(np.uint8), "RGBA"), first
+
+
+def bar_layer(
+    w: int,
+    h: int,
+    frac: float,
+    direction: str,
+    paint: tuple[RGBA, RGBA | None],
+    track: RGBA | None,
+    segments: int = 0,
+    gap: int = 0,
+) -> Image.Image | None:
+    """A bar as RGBA, ``w`` x ``h``: a raised body in ``paint`` (its colour, or a gradient
+    along the whole track to the second one) filled ``frac`` of the way from the side
+    ``direction`` says, with straight, bevelled ends, in a milled track of colour ``track``.
+    Or ``segments`` such blocks with ``gap`` px between. None where a bevel does not read
+    (a bar thinner than 6 px) or the blocks do not fit: the caller draws it flat.
+    """
+    horizontal = direction in ("right", "left")
+    span, thick = (w, h) if horizontal else (h, w)
+    reverse = direction in ("left", "up")
+    if not MIN_BAR <= thick <= MAX_BAR or span < 2:
+        return None
+    a, b = paint
+    layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+
+    def put_at(image: Image.Image, first: int) -> None:
+        layer.alpha_composite(image, (first, 0) if horizontal else (0, first))
+
+    def along(start: float, end: float) -> tuple[float, float]:
+        """A stretch from the start of the track, as the bar's side puts it on the box."""
+        return (span - end, span - start) if reverse else (start, end)
+
+    def gradient(pos: np.ndarray) -> np.ndarray:
+        # the colour is a place on the track, so it means the same value at any fill
+        return _mix(a, b, (span - pos if reverse else pos) / span)
+
+    def solid(colour: RGBA, share: float = 1.0) -> Callable[[np.ndarray], np.ndarray]:
+        c = np.array([*colour[:3], colour[3] * share], np.float32)
+        return lambda pos: np.broadcast_to(c, (len(pos), 4))
+
+    def box(start: float, end: float, colours: Any, groove: bool, key: Any) -> None:
+        start, end = round(start * SUB) / SUB, round(end * SUB) / SUB
+        k = (horizontal, thick, span, start, end, groove, key)
+        hit = _images.get(k)
+        if hit is None:
+            style = GROOVE if groove else SOLID
+            hit = _images.put(k, _box_image(horizontal, thick, start, end, colours, groove, style))
+        put_at(*hit)
+
+    if segments > 0:
+        cell = (span - gap * (segments - 1)) / segments
+        if cell < 1:
+            return None
+        cells = [along(i * (cell + gap), i * (cell + gap) + cell) for i in range(segments)]
+        if track is not None:
+            for start, end in cells:
+                box(start, end, solid(track), True, track)
+        for i, (start, end) in enumerate(cells):
+            amount = min(1.0, max(0.0, frac * segments - i))
+            if amount <= 0:
+                continue
+            colour = tuple(_mix(a, b, np.array([i / max(1, segments - 1)]))[0].round().astype(int))
+            box(start, end, solid(colour, amount), False, (colour, round(amount * 64)))  # type: ignore[arg-type]
+        return layer
+    if track is not None:
+        box(0, span, solid(track), True, track)
+    length = min(float(span), max(0.0, frac * span))
+    if length > 0:
+        start, end = along(0.0, max(length, 1.0))
+        box(start, end, gradient, False, (a, b, reverse))
+    return layer
+
+
+# -- rings ------------------------------------------------------------------------------
+
+RING_SUB = 2  # the band of a ring is worked out this much larger
+_rings = Lru(16)
+_tracks = Lru(16)  # a ring's milled track, coloured: it does not change with the fill
+
+
+class RingBand(NamedTuple):
+    """The pixels a ring covers, and per sample (``RING_SUB`` squared of them to a pixel)
+    where it lies: what a ring of any fill needs, and nothing of its colour."""
+
+    rows: np.ndarray  # (n,) of the pixels
+    cols: np.ndarray
+    along: np.ndarray  # (samples, n): radians from the start of the sweep
+    radius: np.ndarray
+    inner: np.ndarray  # px to the inner edge (negative: outside the ring)
+    outer: np.ndarray
+    tangent: np.ndarray  # the light along the way round, and along the radius (2D parts)
+    radial: np.ndarray
+    place: np.ndarray  # (n,) 0..1: how far along the sweep the pixel's middle is
+    sweep: float  # radians
+    thickness: float
+    inside: np.ndarray  # (samples, n) 1.0 where the sample lies within both edges
+    kept: dict  # shading without ends, by (groove, style): worked out once
+
+
+def ring_band(w: int, h: int, thickness: int, start: float, end: float) -> RingBand:
+    """The band of a ring in a ``w`` x ``h`` box (its circle the largest that fits), its
+    ``thickness`` px wide, from angle ``start`` to ``end`` (degrees, clockwise from 3 o'clock)."""
+    key = (w, h, thickness, start, end)
+    hit = _rings.get(key)
+    if hit is not None:
+        return hit
+    outer_r = min(w, h) / 2
+    inner_r = max(0.0, outer_r - max(1, thickness))
+    sign = 1.0 if end >= start else -1.0
+    sweep = min(2 * math.pi, math.radians(abs(end - start)))
+    yy, xx = np.mgrid[:h, :w]
+    centre = np.hypot(xx + 0.5 - w / 2, yy + 0.5 - h / 2)
+    rows, cols = np.nonzero((centre >= inner_r - 1.5) & (centre <= outer_r + 1.5))
+    offsets = (np.arange(RING_SUB, dtype=np.float32) + 0.5) / RING_SUB
+    sx = (cols[:, None, None] + offsets[None, None, :]).repeat(RING_SUB, axis=1)
+    sy = (rows[:, None, None] + offsets[None, :, None]).repeat(RING_SUB, axis=2)
+    # samples first, pixels last: the mean over a pixel's samples is a sum of rows
+    dx = (sx - w / 2).reshape(len(rows), -1).T.astype(np.float32).copy()
+    dy = (sy - h / 2).reshape(len(rows), -1).T.astype(np.float32).copy()
+    radius = np.hypot(dx, dy)
+    safe = np.maximum(radius, 1e-6)
+    angle = np.arctan2(dy, dx)
+    along = np.mod(sign * (angle - math.radians(start)), 2 * math.pi).astype(np.float32)
+    tangent = (sign * (-dy * LIGHT[0] + dx * LIGHT[1]) / safe).astype(np.float32)
+    radial = ((dx * LIGHT[0] + dy * LIGHT[1]) / safe).astype(np.float32)
+    mid = np.arctan2(rows + 0.5 - h / 2, cols + 0.5 - w / 2)
+    place = np.mod(sign * (mid - math.radians(start)), 2 * math.pi) / max(sweep, 1e-6)
+    inner, outer = (radius - inner_r).astype(np.float32), (outer_r - radius).astype(np.float32)
+    band = RingBand(
+        rows, cols, along, radius, inner, outer, tangent, radial,
+        np.clip(place, 0, 1).astype(np.float32), sweep, outer_r - inner_r,
+        ((inner >= 0) & (outer >= 0)).astype(np.float32), {},
+    )  # fmt: skip
+    return _rings.put(key, band)
+
+
+def _ring_shading(
+    band: RingBand, at: Any, u: Any, left: Any, groove: bool, style: tuple[float, float]
+) -> tuple[np.ndarray, np.ndarray]:
+    """``(A, B)`` for the samples ``at`` (an index, or ``...``) of a ring whose cuts are ``u``
+    px from the start of the sweep and ``left`` px from its end (``inf``: none)."""
+    inner, outer = band.inner[at], band.outer[at]
+    bevel = band.thickness / 6
+    nearest = np.minimum(np.minimum(inner, outer), np.minimum(u, left))
+    flat = nearest >= bevel
+    at_start = (u <= left) & (u <= inner) & (u <= outer)
+    at_end = ~at_start & (left <= inner) & (left <= outer)
+    at_inner = ~at_start & ~at_end & (inner <= outer)
+    n_way = np.where(flat, 0.0, np.where(at_start, -SIN45, np.where(at_end, SIN45, 0.0)))
+    n_out = np.where(flat | at_start | at_end, 0.0, np.where(at_inner, -SIN45, SIN45))
+    if groove:  # milled in: the tilt the other way, the top still facing us
+        n_way, n_out = -n_way, -n_out
+    top = np.where(flat, 1.0, SIN45)
+    k = np.clip(n_way * band.tangent[at] + n_out * band.radial[at] + top * LIGHT[2], 0, 1)
+    return shade(k / LIGHT_TOP, style)
+
+
+def ring_maps(
+    band: RingBand, frac: float, groove: bool, style: tuple[float, float]
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """``(A, B, coverage)`` per pixel of the band, for the ring filled ``frac`` of its sweep.
+
+    The edges are the inner and the outer circle and the two straight cuts at the
+    ends of the sweep. A point within the bevel of the nearest one tilts 45 degrees
+    away from it; the shading is that of :func:`box_window`, on a curve. What the
+    long edges make does not depend on the fill and is kept; each fill works out
+    only the samples near its ends.
+    """
+    arc = band.sweep * min(1.0, max(0.0, frac))
+    closed = band.sweep >= 2 * math.pi - 1e-6 and frac >= 0.999
+    no_ends = band.kept.get((groove, style))
+    if no_ends is None:
+        far = np.float32(np.inf)
+        no_ends = band.kept[(groove, style)] = _ring_shading(band, ..., far, far, groove, style)
+    a, b = no_ends
+    u = band.radius * band.along  # px from the start cut
+    if not closed:
+        left = band.radius * arc - u  # px to the end cut
+        near = np.nonzero(((u < band.thickness / 6) | (left < band.thickness / 6)) & (left >= 0))
+        a, b = a.copy(), b.copy()
+        a[near], b[near] = _ring_shading(band, near, u[near], left[near], groove, style)
+    cover = band.inside * (band.along <= arc)
+    share = 1 / cover.shape[0]
+    alpha = cover.sum(axis=0) * share
+    safe = np.maximum(alpha, 1e-6)
+    return (a * cover).sum(axis=0) * share / safe, (b * cover).sum(axis=0) * share / safe, alpha
+
+
+def ring_layer(
+    w: int,
+    h: int,
+    thickness: int,
+    start: float,
+    end: float,
+    frac: float,
+    paint: tuple[RGBA, RGBA | None],
+    track: RGBA | None,
+) -> Image.Image:
+    """A ring as RGBA, ``w`` x ``h``: a raised arc in ``paint`` (a gradient along the
+    sweep to the second colour), ``frac`` of the sweep from its start, with straight,
+    bevelled ends, in a milled track of colour ``track``. The ends are straight cuts,
+    whatever the gauge's ``cap``."""
+    band = ring_band(w, h, thickness, start, end)
+    layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    if track is not None:
+        key = ("track", w, h, thickness, start, end, track)
+        grooved = _tracks.get(key)
+        if grooved is None:
+            out = np.zeros((h, w, 4), np.uint8)
+            out[band.rows, band.cols] = _band_image(band, 1.0, True, GROOVE, (track, None))
+            grooved = _tracks.put(key, Image.fromarray(out, "RGBA"))
+        layer.paste(grooved)
+    if frac > 0:
+        out = np.zeros((h, w, 4), np.uint8)
+        out[band.rows, band.cols] = _band_image(band, frac, False, SOLID, paint)
+        layer.alpha_composite(Image.fromarray(out, "RGBA"))
+    return layer
+
+
+def _band_image(
+    band: RingBand,
+    frac: float,
+    groove: bool,
+    style: tuple[float, float],
+    paint: tuple[RGBA, RGBA | None],
+) -> np.ndarray:
+    """RGBA bytes ``(n, 4)`` of the band's pixels, coloured by ``paint`` along the sweep."""
+    a, b, alpha = ring_maps(band, frac, groove, style)
+    c = _mix(paint[0], paint[1], band.place)
+    rgb = c[:, :3] * a[:, None] + b[:, None]
+    out = np.concatenate([rgb + 0.5, (alpha * c[:, 3])[:, None] + 0.5], axis=1)
+    return out.clip(0, 255).astype(np.uint8)
+
+
+# -- curves -----------------------------------------------------------------------------
+
+CURVE_WIDE = 1200  # a graph wider than this gets the slimmer ridge: the full one costs ~5 ms there
+RIDGE_TILT = math.radians(62)  # steeper than the bevels elsewhere: more contrast on a thin line
+RIDGE_STEEP = 1.8  # how strongly the slope of the curve turns the ridge towards or from the light
+RIDGE_SHARE = 0.8  # each flank of the ridge, as a share of the line's width
+BAND_SHARE = 2.6  # the band below the ridge reaches this many flanks down at most
+BAND_DEPTH = 3.0  # ... and a third of the way to the bottom of the graph
+
+
+def _over(
+    acc: np.ndarray, alpha: np.ndarray, rows0: int, lo: np.ndarray, hi: np.ndarray,
+    colour: np.ndarray, weight: np.ndarray | None,
+) -> None:  # fmt: skip
+    """Lay the band between rows ``lo`` and ``hi`` (floats, one pair per column) over ``acc``
+    (premultiplied RGB, the strip starting at row ``rows0``) and ``alpha``: each row
+    takes the share of it the band covers, so a curve moving by a fraction of a pixel
+    does not jump. ``colour`` is one RGB per column; ``weight`` (the strip's shape) scales it."""
+    n_rows, n_cols = alpha.shape
+    first = np.floor(lo).astype(np.int64)
+    depth = int(np.ceil((hi - lo).max())) + 1 if lo.size else 0
+    cols = np.arange(n_cols)
+    for j in range(depth):
+        row = first + j
+        ok = (row - rows0 >= 0) & (row - rows0 < n_rows)
+        if not ok.any():
+            continue
+        r, c = row[ok], cols[ok]
+        cover = np.clip(
+            np.minimum(r + 1.0, hi[ok]) - np.maximum(r.astype(np.float32), lo[ok]), 0, 1
+        )
+        if weight is not None:
+            cover = cover * weight[r - rows0, c]
+        at = (r - rows0, c)
+        acc[at] = colour[ok] * cover[:, None] + acc[at] * (1 - cover[:, None])
+        alpha[at] = cover + alpha[at] * (1 - cover)
+
+
+def curve_ridge(
+    layer: Image.Image,
+    run: list[tuple[float, float]],
+    thick: float,
+    color: RGBA,
+    wide: bool = False,
+) -> bool:
+    """Replace the line of a curve by a ridge, on ``layer`` (RGBA, the fill already
+    drawn): a flank lit from the top left on the side away from the fill, a dark one
+    on the side towards it, and a faint band beneath, each tilted by how the curve
+    rises or falls there. ``run`` is the curve's points in the layer's pixels,
+    ``thick`` the line's width in them. A ``wide`` graph gets one band only.
+    False if the points do not run from left to right: the caller draws a line.
+    """
+    xs = np.array([p[0] for p in run], np.float32)
+    ys = np.array([p[1] for p in run], np.float32)
+    width, height = layer.size
+    if len(xs) < 2 or np.any(np.diff(xs) < -1e-3):
+        return False
+    x0, x1 = max(0, math.floor(xs[0])), min(width, math.ceil(xs[-1]))
+    if x1 - x0 < 2:
+        return False
+    y = np.interp(np.arange(x0, x1, dtype=np.float32) + 0.5, xs, ys).astype(np.float32)
+    flank = RIDGE_SHARE * thick
+    steep = np.gradient(y) * (1.0 if wide else RIDGE_STEEP)
+    length = np.sqrt(1 + steep * steep)
+    tilt_sin, tilt_cos = (SIN45, SIN45) if wide else (math.sin(RIDGE_TILT), math.cos(RIDGE_TILT))
+    out = np.stack(
+        [steep / length * tilt_sin, -1 / length * tilt_sin, np.full_like(y, tilt_cos)], -1
+    )
+    base = np.asarray(color[:3], np.float32)
+
+    def paint(normals: np.ndarray, style: tuple[float, float]) -> np.ndarray:
+        a, b = shade(facing(normals), style)
+        return base * a[:, None] + b[:, None]
+
+    scale = color[3] / 255
+    if wide:  # the line itself, shaded by the slope
+        rows0, rows1 = math.floor((y - thick / 2).min()) - 1, math.ceil((y + thick).max()) + 2
+        bands = [(y - thick / 2, y + thick, paint(out, RIDGE_BAND), None)]
+    else:
+        avail = (height - 1) - y
+        end = np.clip(avail / BAND_DEPTH, flank, BAND_SHARE * flank) + flank
+        inner = out * np.array([-1, -1, 1], np.float32)  # tilted the other way
+        rows0, rows1 = math.floor((y - flank).min()) - 1, math.ceil((y + end).max()) + 2
+        bands = []
+        if (end > 2 * flank + 1e-3).any():  # a graph that is high enough has a band below
+            fill = np.asarray(
+                layer.crop((x0, max(0, rows0), x1, min(height, rows1))).getchannel("A")
+            )
+            bands.append((y + flank, end + y - flank, paint(out, RIDGE_BAND), fill / 255.0))
+        bands += [
+            (y, y + flank, paint(inner, RIDGE_FAR), None),
+            (y - flank, y, paint(out, RIDGE), None),
+        ]
+    rows0, rows1 = max(0, rows0), min(height, rows1)
+    if rows1 <= rows0:
+        return False
+    acc = np.zeros((rows1 - rows0, x1 - x0, 3), np.float32)
+    alpha = np.zeros((rows1 - rows0, x1 - x0), np.float32)
+    for lo, hi, colour, weight in bands:
+        _over(acc, alpha, rows0, lo, hi, np.clip(colour, 0, 255), weight)
+    rgba = np.concatenate(
+        [acc / np.maximum(alpha, 1e-6)[..., None], (alpha * 255 * scale)[..., None]], -1
+    )
+    layer.alpha_composite(
+        Image.fromarray(np.clip(rgba + 0.5, 0, 255).astype(np.uint8), "RGBA"), (x0, rows0)
+    )
+    return True
