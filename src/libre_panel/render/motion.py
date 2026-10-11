@@ -316,10 +316,11 @@ def _replay(readings: list[float], last_at: float, interval: float, glide: float
     spring = Spring()
     omega = 4.74 / glide if glide > 0 else 0.0
     start = last_at - (len(readings) - 1) * interval
-    for i, value in enumerate(readings):
+    for i, reading in enumerate(readings):
+        value = number(reading)  # NaN and infinity are a gap, as no reading is
         at = start + i * interval
         state = spring.state(at)
-        if state is None:
+        if value is None or state is None:
             spring.add(at, value)
         else:
             spring.add(at, value, state[0] - value, state[1], omega)

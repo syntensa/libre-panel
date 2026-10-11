@@ -1,3 +1,5 @@
+import math
+
 import pytest
 from PIL import Image
 
@@ -376,3 +378,79 @@ def test_in_video_mode_the_dot_glides_with_the_value_at_the_end_of_the_curve():
     assert rows[0] > rows[1] > rows[2] >= rows[3]  # it rises with the value (in quarter pixels)
     assert all(dot[0] == pytest.approx(start[0], abs=0.15) for dot in seen)  # at the edge
     assert rows[3] == pytest.approx(20 + (4 + 0.2 * 111 + 0.5) / scale, abs=0.2)  # arrived at 80 %
+
+
+# -- readings that are not numbers ----------------------------------------------------------------
+
+
+def gliding(**metric):
+    """A bar and a number of the sensor ``v``, a number that hides without it, and a text that
+    needs it."""
+    widgets = [
+        {"type": "bar", "id": "b", "x": 0, "y": 0, "w": 200, "h": 20, "sensor": "v", "radius": 0},
+        {"type": "metric", "id": "m", "x": 0, "y": 30, "sensor": "v", "format": "{value:.0f}",
+         "font_size": 24, "smooth": True, **metric},
+        {"type": "metric", "id": "h", "x": 0, "y": 60, "sensor": "v", "hide_if_missing": True},
+        {"type": "text", "id": "t", "x": 0, "y": 80, "text": "needs v", "needs": "v"},
+    ]  # fmt: skip
+    theme = parse_theme(
+        {"format": THEME_FORMAT, "display": {"width": 200, "height": 120}, "widgets": widgets}
+    )
+    renderer = Renderer(theme, animate=True, motion=None)
+    renderer.fps = 50
+    return renderer
+
+
+@pytest.mark.parametrize("value", [math.nan, math.inf, -math.inf])
+def test_a_reading_that_is_not_a_number_is_no_reading_and_poisons_nothing(value):
+    """A source can send one ("nan" from a payload): it is a reading that is not there, and the
+    value that glides, the bars and the numbers of its sensor come back with the next one."""
+    renderer = gliding()
+    renderer.render(readings(v=10.0), 0.0)
+    _, boxes = renderer.render(readings(v=value), 0.02)
+    assert renderer.motion.value("v", 0.02) is None  # missing, not a value that is not a number
+    assert renderer._cache["m"][0][0] == "--"  # the fallback, not "nan"
+    assert "h" not in boxes and "t" not in boxes  # what hides without the reading hides
+    assert renderer.warnings == []
+    for k in range(2, 100):
+        renderer.render(readings(v=50.0), k / 50)
+    assert renderer.motion.value("v", 99 / 50) == 50.0  # the glide was not poisoned
+    assert renderer._cache["m"][0][0] == "50" and not renderer.moving
+
+
+def test_a_value_that_is_not_a_number_is_a_gap_in_a_graphs_history():
+    """In the PNG path (a graph of ``history`` readings) and in video mode (the motion's
+    history): a gap in the curve, and no range worked out from NaN."""
+    from libre_panel.render.motion import Motion
+
+    history = [10.0, math.nan, 30.0, math.inf, 50.0]
+    theme = parse_theme(
+        {
+            "format": THEME_FORMAT,
+            "display": {"width": 100, "height": 40},
+            "widgets": [{"type": "graph", "id": "g", "w": 100, "h": 40, "sensor": "v", "min": None,
+                         "max": None, "history": 5}],
+        }
+    )  # fmt: skip
+    renderer = Renderer(theme)
+    drawn = []
+    made = renderer._graph_piece
+
+    def spy(widget, values, slots):
+        drawn.append(values)
+        return made(widget, values, slots)
+
+    renderer._graph_piece = spy
+    renderer.render(Snapshot(readings={"v": Reading("v", 50.0)}, history={"v": history}))
+    assert drawn == [[10.0, None, 30.0, None, 50.0]]
+    kept = Motion().history("v", 10, 100.0, history, 100.0, 1.0, 0.4)
+    assert all(point is None or math.isfinite(point) for point in kept.points)
+
+
+def test_a_weather_code_that_is_no_number_is_a_cloud_not_a_missing_icon():
+    from libre_panel.icons import weather_icon_name
+    from libre_panel.render.symbols import kind_of
+
+    for code in (None, "n/a", "", math.nan, math.inf):
+        assert weather_icon_name(code) == "cloud" and kind_of(code) == "overcast"
+    assert weather_icon_name("63") == "rain" and kind_of(95.0) == "storm"

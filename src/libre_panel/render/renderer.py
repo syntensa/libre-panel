@@ -114,9 +114,38 @@ def changed_region(
 
 
 def _number(value: Any) -> float | None:
+    """A reading's value as a number; None for none, a text, and NaN or infinity (which are
+    no reading: one would poison the value that glides)."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
-    return float(value)
+    try:
+        number = float(value)
+    except OverflowError:  # an integer too large for a float
+        return None
+    return number if math.isfinite(number) else None
+
+
+def _finite(snapshot: Snapshot) -> Snapshot:
+    """``snapshot`` with every reading that is NaN or infinite taken for none: a source can
+    send one (a payload "nan"), and no widget, card or list must draw it or glide to it."""
+    bad = [
+        key
+        for key, reading in snapshot.readings.items()
+        if isinstance(reading.value, float) and not math.isfinite(reading.value)
+    ]
+    if not bad:
+        return snapshot
+    readings = {**snapshot.readings}
+    for key in bad:
+        readings[key] = replace(readings[key], value=None)
+    return replace(snapshot, readings=readings)
+
+
+def _gaps(values: list[float]) -> list[float | None]:
+    """A history with a gap (None) where a value is NaN or infinite, else the history itself."""
+    if all(value is None or math.isfinite(value) for value in values):
+        return values
+    return [value if value is not None and math.isfinite(value) else None for value in values]
 
 
 def _fraction(value: float | None, lo: float, hi: float, scale: str = "linear") -> float:
@@ -1065,6 +1094,7 @@ class Renderer:
         self, snapshot: Snapshot, now: float | None = None
     ) -> tuple[Image.Image, dict[str, Box]]:
         now = clock() if now is None else now
+        snapshot = _finite(snapshot)
         if self._slots and self.animate and not self.preview and not self._slots_warm:
             self._slots_warm = True  # (once, with the first frame, or with the warm-up's)
             self._warm_slots(snapshot, now)
@@ -2357,9 +2387,10 @@ class Renderer:
             strip = strips.ready if strips is not None else None
             bounds = strip.bounds if strip is not None else None
         else:
-            values = snapshot.history.get(key, [])[-max(2, widget["history"]) :]
+            values = _gaps(snapshot.history.get(key, [])[-max(2, widget["history"]) :])
             value, scale = (values[-1] if len(values) > 1 else None), SUPERSAMPLE
-            bounds = self._graph_bounds(widget, values) if len(values) > 1 else None
+            known = [v for v in values if v is not None]
+            bounds = self._graph_bounds(widget, known) if known and len(values) > 1 else None
         if value is None or bounds is None:
             return None
         first, last = self._range_rows(widget, scale)
@@ -2399,7 +2430,7 @@ class Renderer:
         if self.continuous:
             return self._timeline(widget, snapshot, now)
         slots = max(2, widget["history"])
-        values = snapshot.history.get(widget["sensor"], [])[-slots:]
+        values = _gaps(snapshot.history.get(widget["sensor"], [])[-slots:])
         key = (len(values), tuple(values[-3:]), values[0] if values else None)
         return self._cached(widget, key, lambda: self._graph_piece(widget, values, slots))
 

@@ -628,6 +628,13 @@
   is read from), the themes read it, and the demo has it as it has
   `gpu.temp`. A test keeps every key the SPUR themes read from the hardware
   to what the source makes from real output
+- A reading that is NaN or infinite (a payload "nan" from MQTT or Home Assistant) made the
+  numbers, bars and rings of its sensor read "nan" and stand empty for good, and kept the
+  PNG path drawing at full rate: it poisoned the value that glides, which only a pause
+  of a quarter of a second cleared. It is no reading now (the numbers show "--", what
+  needs it hides) and the value is back with the next real one. A gap in a graph's history
+  that is NaN is a gap in the curve, not a range worked out from it. A weather code that is
+  no number is a cloud, not a missing icon
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars
