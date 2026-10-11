@@ -80,19 +80,25 @@ function StartActions({ children }) {
 function useStartThemes() {
   const { themes, models, pages } = useStore((s) => ({ themes: s.themes, models: s.specs?.models || [], pages: s.pages }));
   const { model } = usePanelModel();
-  return { model, items: startThemes({ themes, models, pages, model }) };
+  // what the panel shows until a theme is chosen: the default of the panel the themes are shown
+  // for (a bar gets Lumen, any other panel Libre Default), else the one the app works out
+  const defaultId = model?.default_theme ?? pages?.default ?? null;
+  return { model, items: startThemes({ themes, models, pages, model, defaultId }) };
 }
 
 // -- a first start --------------------------------------------------------------------------------
 
 /**
  * What a first start offers: Libre Panel's own themes (and yours), those made for the panel
- * when it is known. A collection and the theme kept for the round report wait under "See all".
+ * when it is known, and always the panel's default, first. A collection and the theme kept for
+ * the round report wait under "See all".
  */
 function suggestions(items, model) {
   const own = items.filter((item) => !item.collection && !item.special);
   const fitting = model ? own.filter((item) => item.fits) : own;
-  return fitting.length ? fitting : own.length ? own : items;
+  const picks = fitting.length ? fitting : own.length ? own : items;
+  const standard = own.find((item) => item.isDefault);
+  return standard && !picks.includes(standard) ? [standard, ...picks] : picks;
 }
 
 function FirstStart() {

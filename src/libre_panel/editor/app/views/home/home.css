@@ -640,6 +640,13 @@
   color: var(--text-2);
 }
 
+/* what the panel shows until a theme is chosen (a first start) */
+.theme-card-tag.default {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .theme-card-edit {
   position: absolute;
   top: 20px;
