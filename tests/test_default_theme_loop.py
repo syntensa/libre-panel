@@ -87,6 +87,44 @@ def test_the_loop_asks_the_usb_bus_for_an_automatic_model(monkeypatch, isolated_
         loop.close()
 
 
+def renderers_built(monkeypatch):
+    """The folders of the themes that get a renderer, in the order they are built (the first
+    theme is drawn ahead in a thread of its own, a switch draws the next one the same way)."""
+    built = []
+    real = app_module.Renderer
+
+    class Recording(real):
+        def __init__(self, theme, *args, **kwargs):
+            built.append(theme.root.name)
+            super().__init__(theme, *args, **kwargs)
+
+    monkeypatch.setattr(app_module, "Renderer", Recording)
+    return built
+
+
+def test_the_theme_drawn_ahead_is_the_one_worked_out_for_the_panel(monkeypatch, isolated_home):
+    """The first theme is made ready before the first frame: on a bar it is Lumen, whether the
+    config names the panel or the USB bus says which it is, and no other is built to be switched
+    away from."""
+    built = renderers_built(monkeypatch)
+    monkeypatch.setattr(turzx_usb, "present_model", lambda: NINE)
+    for device in (
+        DeviceConfig(model="turing-9.2-usb", driver="virtual"),  # named in config.toml
+        DeviceConfig(),  # found on the bus
+    ):
+        built.clear()
+        loop, clock = loop_for(demo_config(device))
+        try:
+            assert built == ["lumen"] and loop.warmup.key is None  # drawn, and taken
+            assert loop.renderer.theme.root.name == "lumen" and loop.shown == "lumen"
+            for _ in range(10):
+                clock.now += 0.02
+                loop.step(clock.now)
+            assert built == ["lumen"] and loop.status.theme == "lumen"  # nothing switched
+        finally:
+            loop.close()
+
+
 def test_a_display_that_is_open_already_says_which_panel_it_is(monkeypatch, isolated_home):
     nothing_on_the_bus(monkeypatch)
     loop, _ = loop_for(demo_config(), Reporting(NINE))
