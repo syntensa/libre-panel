@@ -579,7 +579,8 @@ def test_a_source_that_says_how_it_is_read_is_explained(running):
     assert lhm["status"] == {  # as the source says it, for a screen that words it itself
         "mode": "inprocess", "elevated": False, "ring0": False, "pawnio": None, "error": "",
     }  # fmt: skip
-    assert all(s["status"] is None for s in sources if s is not lhm)
+    # (on Windows the configured LibreHardwareMonitor is there as well, and says its own)
+    assert all(s["status"] is None for s in sources if s["name"] != "librehardwaremonitor")
     assert lhm["details"][:2] == [["Mode", "inside Libre Panel"], ["Administrator", "no"]]
     assert (lhm["hint"] is not None) is (sys.platform == "win32")  # temperatures come from there
     assert lhm["problem"] is (sys.platform == "win32")
