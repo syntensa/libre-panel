@@ -888,6 +888,41 @@ def test_the_running_panel_in_the_chip(isolated_home):
         app.shutdown()
 
 
+@pytest.fixture
+def page_plugin(plugin_folder):
+    from test_plugins import PAGE, PAGE_FILES, PAGE_PARTS
+
+    return plugin_folder(PAGE, PAGE_PARTS, files=PAGE_FILES)
+
+
+def test_the_language_switch_keeps_unsaved_work(page_plugin, page, isolated_home):
+    from libre_panel.config import load_config
+
+    js(page, "window.libre.doc.edit('t', (theme) => { theme.name = 'Work in progress'; })")
+    assert js(page, "window.libre.store.get().dirty") is True
+    page.keyboard.press("Control+k")
+    page.locator(".palette input").fill("deutsch")
+    page.keyboard.press("Enter")
+    page.wait_for_function("document.documentElement.lang === 'de'")
+    assert load_config().language == "de"
+    assert js(page, "window.libre.doc.theme().name") == "Work in progress"
+    assert js(page, "window.libre.store.get().dirty") is True  # still unsaved, nothing lost
+    assert page.locator(".btn-apply").inner_text() == "Aufs Panel"
+    assert page.locator(".tile[data-item='widget:rect'] .tile-name").inner_text() == "Fläche"
+    # what the server translates came again: a building block's name, a plugin page's title
+    assert page.locator(".tile[data-item='preset:cpu-card'] .tile-name").inner_text() == "CPU-Karte"
+    titles = js(page, "window.libre.store.get().plugins.map((p) => p.title)")
+    assert "Analyse" in titles and "Steuerung" in titles  # also the built-in Control page
+    js(page, "window.libre.doc.setSelection(['clock'])")
+    assert page.locator(".inspector .inspector-title").inner_text() == "Uhr"
+    page.keyboard.press("Control+k")
+    page.locator(".palette input").fill("english")
+    page.keyboard.press("Enter")
+    page.wait_for_function("document.documentElement.lang === 'en'")
+    assert load_config().language == "en"
+    assert page.locator(".btn-apply").inner_text() == "To the panel"
+
+
 # -- Settings: each section's main path, against the real server and config.toml ----------------
 
 
