@@ -141,9 +141,11 @@
   `context.sources()` lists the sensor sources and what they say about
   themselves. Measuring costs a few additions per frame and holds no lock
 - Plugins: `set_config_value` writes lists too (`"services.enabled"`) and
-  replaces a list that runs over several lines, and the new `set_config_tables`
-  writes an array of tables such as `[[services.autopilot.rules]]`, keeping the
-  rest of `config.toml` and refusing what it cannot edit safely
+  replaces a list that runs over several lines, the new `set_config_tables`
+  writes an array of tables such as `[[services.autopilot.rules]]`, and
+  `edit_config` makes several such changes in one write. They keep the rest of
+  `config.toml`, compare the new file with the old one, and refuse what they
+  cannot edit safely
 - The editor has two pages of its own, built in like the services (*Pages* in
   the top bar), written with the plugin API. **Control** shows the live picture
   of the panel, the numbers above as tiles, each sensor source (LibreHardwareMonitor

@@ -10,13 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from libre_panel.config import (
-    Config,
-    ConfigError,
-    load_config,
-    set_config_tables,
-    set_config_value,
-)
+from libre_panel.config import Config, ConfigError, edit_config, load_config
 from libre_panel.i18n import t
 from libre_panel.pages.base import ConsolePage, Refused, Request
 from libre_panel.pages.control import service_state
@@ -160,19 +154,22 @@ class Autopilot(ConsolePage):
             raise Refused(t("enabled is on or off"))
 
         config = self._config()
-        path = self.context.config_path
         given = config.services.options.get(SERVICE, {})
+        changes: list[tuple[str, str, Any]] = []
+        for key, value in (options or {}).items():  # only what differs from what is in effect
+            if key in service.Autopilot.options and key != "rules":
+                if value != given.get(key, service.Autopilot.options[key][1]):
+                    changes.append(("value", f"services.{SERVICE}.{key}", value))
+        if enabled is not None and enabled != (SERVICE in config.services.enabled):
+            names = [name for name in config.services.enabled if name != SERVICE]
+            changes.append(("value", "services.enabled", [*names, SERVICE] if enabled else names))
+        if rules is not None and rules != given.get("rules", []):  # else their comments stay
+            changes.append(("tables", RULES, rules))
         try:
-            if rules is not None:
-                set_config_tables(RULES, rules, path)
-            for key, value in (options or {}).items():
-                if key in service.Autopilot.options and key != "rules":
-                    if value != given.get(key, service.Autopilot.options[key][1]):
-                        set_config_value(f"services.{SERVICE}.{key}", value, path)
-            on = SERVICE in config.services.enabled
-            if enabled is not None and enabled != on:
-                names = [n for n in config.services.enabled if n != SERVICE]
-                set_config_value("services.enabled", [*names, SERVICE] if enabled else names, path)
+            if changes:
+                edit_config(*changes, path=self.context.config_path)  # one write: one restart
         except (ConfigError, OSError, ValueError) as exc:
             raise Refused(str(exc), 409) from exc
+        except TypeError as exc:  # a value config.toml cannot hold (a rule's own extra key)
+            raise Refused(str(exc)) from exc
         return self.read(request)

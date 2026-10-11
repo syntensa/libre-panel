@@ -430,6 +430,47 @@ def test_the_rules_are_written_to_config_toml_and_read_back(editor, isolated_hom
     assert data["rules"] == [] and "rules" not in (load_config().services.options["autopilot"])
 
 
+def test_saving_changes_only_what_changed_in_one_write(editor, isolated_home):
+    """The comments inside the rules survive a save that leaves the rules as they are, and
+    everything that changed reaches the file in one write (one restart of the service)."""
+    write_config(isolated_home)
+    path = isolated_home / "config.toml"
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        + """
+[services]
+enabled = ["notices"]
+
+[services.autopilot]
+hold_s = 5
+
+# my favourite
+[[services.autopilot.rules]]
+name = "Music"
+theme = "studio"   # what plays
+when = { music = true }
+""",
+        encoding="utf-8",
+    )
+    rules = get(editor, "autopilot/autopilot")[1]["rules"]
+    writes = []
+    import libre_panel.config as config_module
+
+    real = config_module._write
+    config_module._write = lambda *args: writes.append(args) or real(*args)
+    try:
+        body = {"enabled": True, "options": {"hold_s": 9, "min_s": 30}, "rules": rules}
+        status, data = post(editor, "autopilot/autopilot", body)
+    finally:
+        config_module._write = real
+    assert status == 200 and len(writes) == 1
+    text = path.read_text(encoding="utf-8")
+    assert "# my favourite" in text and "# what plays" in text  # the rules were not rewritten
+    assert "hold_s = 9" in text and "min_s = 30" in text and "[services.autopilot]" in text
+    assert load_config().services.enabled == ["notices", "autopilot"]
+    assert data["options"]["hold_s"] == 9 and data["rules"] == rules
+
+
 def test_a_rule_that_is_wrong_is_refused_and_nothing_is_written(editor, isolated_home):
     write_config(isolated_home)
     before = (isolated_home / "config.toml").read_text(encoding="utf-8")
@@ -455,6 +496,9 @@ def test_a_rule_that_is_wrong_is_refused_and_nothing_is_written(editor, isolated
     for what, rule in wrong.items():
         status, answer = post(editor, "autopilot/autopilot", {"rules": [good, rule]})
         assert status == 400 and answer["error"].startswith("Rule "), (what, answer)
+    odd = {**good, "extra": None}  # a key config.toml cannot hold
+    status, answer = post(editor, "autopilot/autopilot", {"rules": [odd]})
+    assert status == 400 and "NoneType" in answer["error"]
     for body in (
         {"rules": "all"},
         {"options": {"hold_s": -3}},

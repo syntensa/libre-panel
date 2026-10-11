@@ -521,35 +521,6 @@ def _write(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
-def set_config_value(name: str, value: Any, path: Path | None = None) -> Path:
-    """Change one setting (``"theme"``, ``"device.brightness"``, ``"modes.game.theme"``,
-    ``"services.enabled"``, ...) in config.toml. The value is a boolean, a number, a
-    string, or a list of them.
-
-    The rest of the file, comments included, stays as it is. The new file is
-    checked before it is written (atomically), so a mistake never leaves a
-    config behind that would not load.
-    """
-    path = path or config_dir() / CONFIG_FILENAME
-    if not path.exists():
-        write_default_config(path)
-    table, _, key = name.rpartition(".")
-    text = _with_key(path.read_text(encoding="utf-8"), table or None, key, _toml_literal(value))
-    try:
-        data = tomllib.loads(text)
-    except tomllib.TOMLDecodeError as exc:
-        raise ConfigError(f"{path}: could not set {name} ({exc}); please edit it by hand") from exc
-    written: Any = data
-    for part in table.split(".") if table else ():
-        written = written.get(part, {}) if isinstance(written, dict) else {}
-    wanted = list(value) if isinstance(value, tuple) else value
-    if not isinstance(written, dict) or written.get(key) != wanted:
-        raise ConfigError(f"{path}: could not set {name}; please edit it by hand")
-    parse_config(data, path)
-    _write(path, text)
-    return path
-
-
 def _comments_above(text: str, pos: int) -> int:
     """Where the comment lines directly above the line at ``pos`` begin (``pos`` when
     there are none): they belong to the header on that line."""
@@ -598,11 +569,51 @@ def _pruned(value: Any) -> Any:
     return {key: item for key, item in kept.items() if item != {}}
 
 
-def set_config_tables(name: str, tables: list[dict[str, Any]], path: Path | None = None) -> Path:
-    """Replace the array of tables ``name`` (``"services.autopilot.rules"``) in config.toml
-    with ``tables``, written as ``[[name]]`` blocks. Everything else stays as it is; the
-    comments inside the old blocks go with them. Like :func:`set_config_value`, the new
-    file is checked before it is written, and a layout this cannot handle is refused."""
+def _with_tables(text: str, name: str, tables: list[dict[str, Any]]) -> str:
+    """``text`` with the array of tables ``name`` replaced by ``tables``."""
+    text, at = _without_tables(text, name)
+    head = name.rpartition(".")[0]
+    blocks = "\n".join(
+        f"[[{name}]]\n"
+        + "".join(f"{_toml_key(key)} = {_toml_literal(value)}\n" for key, value in table.items())
+        for table in tables
+    )
+    if not blocks:
+        return text
+    if at is None:  # new: after the parent table's keys, else at the end
+        body = _table_body(text, head) if head else None
+        at = body[1] if body is not None else len(text)
+    ahead, behind = text[:at], text[at:]
+    if not ahead.strip() or ahead.endswith("\n\n"):
+        gap = ""
+    else:
+        gap = "\n" if ahead.endswith("\n") else "\n\n"
+    return ahead + gap + blocks + ("\n" if behind.strip() else "") + behind
+
+
+def _table_of(document: dict[str, Any], parents: list[str], name: str) -> dict[str, Any]:
+    """The table at ``parents`` in ``document``, made where it is not there yet."""
+    node = document
+    for part in parents:
+        node = node.setdefault(part, {})
+        if not isinstance(node, dict):
+            raise ConfigError(f"{name}: {part} is not a table")
+    return node
+
+
+def edit_config(*changes: tuple[str, str, Any], path: Path | None = None) -> Path:
+    """Change config.toml in one write. A change is ``("value", name, value)``, one setting
+    (``"theme"``, ``"device.brightness"``, ``"modes.game.theme"``, ``"services.enabled"``) set
+    to a boolean, a number, a string or a list of them; or ``("tables", name, tables)``, an
+    array of tables (``"services.autopilot.rules"``) replaced by ``tables``, each written as
+    a ``[[name]]`` block.
+
+    The rest of the file, comments included, stays as it is (the comments inside the blocks
+    of a replaced array go with them). The new file is compared with the old one: only what
+    was asked for may differ, and it has to load as a configuration. Else nothing is written
+    and a :class:`ConfigError` says to edit it by hand, so a layout this cannot handle is
+    refused, never mangled. The write is atomic.
+    """
     path = path or config_dir() / CONFIG_FILENAME
     if not path.exists():
         write_default_config(path)
@@ -611,41 +622,41 @@ def set_config_tables(name: str, tables: list[dict[str, Any]], path: Path | None
         before = tomllib.loads(original)
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"{path}: {exc}") from exc
-    text, at = _without_tables(original, name)
-    head, _, last = name.rpartition(".")
-    blocks = "\n".join(
-        f"[[{name}]]\n"
-        + "".join(f"{_toml_key(key)} = {_toml_literal(value)}\n" for key, value in table.items())
-        for table in tables
-    )
-    if blocks:
-        if at is None:  # new: after the parent table's keys, else at the end
-            body = _table_body(text, head) if head else None
-            at = body[1] if body is not None else len(text)
-        ahead, behind = text[:at], text[at:]
-        if not ahead.strip() or ahead.endswith("\n\n"):
-            gap = ""
+    names = ", ".join(name for _, name, _ in changes)
+    text, expected = original, copy.deepcopy(before)
+    for kind, name, value in sorted(changes, key=lambda change: change[0] != "value"):
+        *parents, key = name.split(".")
+        node = _table_of(expected, parents, name)
+        if kind == "tables":  # after the values: its blocks go behind the table's own keys
+            text = _with_tables(text, name, value)
+            if value:
+                node[key] = [dict(table) for table in value]
+            else:
+                node.pop(key, None)  # no key at all
+        elif kind == "value":
+            text = _with_key(text, ".".join(parents) or None, key, _toml_literal(value))
+            node[key] = list(value) if isinstance(value, tuple) else value
         else:
-            gap = "\n" if ahead.endswith("\n") else "\n\n"
-        tail = "\n" if behind.strip() else ""
-        text = ahead + gap + blocks + tail + behind
+            raise ValueError(f"unknown kind of change: {kind!r}")
     try:
         data = tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
-        raise ConfigError(f"{path}: could not set {name} ({exc}); please edit it by hand") from exc
-    expected = copy.deepcopy(before)
-    node: Any = expected
-    for part in head.split(".") if head else ():
-        node = node.setdefault(part, {}) if isinstance(node, dict) else {}
-    if isinstance(node, dict):
-        node.pop(last, None)
-        if tables:
-            node[last] = [dict(table) for table in tables]
+        raise ConfigError(f"{path}: could not set {names} ({exc}); please edit it by hand") from exc
     if _pruned(data) != _pruned(expected):
-        raise ConfigError(f"{path}: could not set {name}; please edit it by hand")
+        raise ConfigError(f"{path}: could not set {names}; please edit it by hand")
     parse_config(data, path)
     _write(path, text)
     return path
+
+
+def set_config_value(name: str, value: Any, path: Path | None = None) -> Path:
+    """Change one setting in config.toml (see :func:`edit_config`)."""
+    return edit_config(("value", name, value), path=path)
+
+
+def set_config_tables(name: str, tables: list[dict[str, Any]], path: Path | None = None) -> Path:
+    """Replace an array of tables in config.toml (see :func:`edit_config`)."""
+    return edit_config(("tables", name, tables), path=path)
 
 
 def set_active_theme(name: str, path: Path | None = None) -> Path:
