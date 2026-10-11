@@ -678,8 +678,9 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
   program folder, the installed setup and the AppImage, that ffmpeg lists libx264 and encodes the
   video mode's stream, that PresentMon starts and that the app finds both before anything on the
   PATH. The licences: ffmpeg GPL-3.0-or-later, PresentMon MIT, PawnIO's driver GPL-2.0-or-later
-  with an exception. Their texts are in `tools/licenses`, the exact sources (FFmpeg's commit and the
-  build recipe's) in `tools/SOURCES.txt` and [NOTICE.md](NOTICE.md). A pip install has none of it:
+  with an exception (its installer says it may be passed on unmodified, which the build checks).
+  Their texts are in `tools/licenses`, the exact sources (FFmpeg's commit and the build recipe's)
+  in `tools/SOURCES.txt` and [NOTICE.md](NOTICE.md). A pip install has none of it:
   install ffmpeg yourself (and PresentMon for game frame rates), or name them in `video.ffmpeg` and
   `[sensors.presentmon] path`, which win over the download's own too. More:
   [docs/CONFIGURATION.md](docs/CONFIGURATION.md#programs-that-come-with-the-downloads)

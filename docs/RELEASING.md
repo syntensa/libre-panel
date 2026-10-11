@@ -134,7 +134,9 @@ To move to other versions:
 2. Change the addresses, versions and source addresses in the table of `fetch_tools.py`, run
    `python packaging/fetch_tools.py --print-pins` and copy the SHA-256 it prints (a release of
    FFmpeg-Builds has the same in its `checksums.sha256`, PresentMon's page shows them next to
-   the files).
+   the files). PawnIO's installer has its SHA-256 a second time, as `PAWNIO_SETUP_SHA256` in
+   `libre_panel/bundled.py`: the app checks the file against it before it is run with
+   administrator rights, and a test says if the two differ.
 3. Run `python packaging/fetch_tools.py` as the job does, build, and run
    `python packaging/check_tools.py dist/libre-panel`. A new PresentMon may name its CSV
    columns differently: `sensors/presentmon.py` reads the names of 2.3 and of 2.6 for the

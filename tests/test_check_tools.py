@@ -74,7 +74,14 @@ def test_the_folder_name_is_the_one_the_app_looks_in():
     assert check_tools.TOOLS_FOLDER == bundled.TOOLS_FOLDER
 
 
-def test_a_good_ffmpeg_passes(tmp_path, capsys):
+@pytest.fixture
+def on_linux(monkeypatch):
+    """The file names of a Linux download (the app looks for ``ffmpeg``, not ``ffmpeg.exe``),
+    whatever system the tests run on."""
+    monkeypatch.setattr(sys, "platform", "linux")
+
+
+def test_a_good_ffmpeg_passes(tmp_path, capsys, on_linux):
     program = program_folder(tmp_path, {"ffmpeg": b"x"})
     check_tools.check(program, stand_in())
     out = capsys.readouterr().out
@@ -170,7 +177,7 @@ def test_a_windows_folder_checks_each_program_it_lists(tmp_path, capsys, monkeyp
 
 
 def test_the_app_has_to_find_the_programs_in_the_folder_and_not_somewhere_else(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, on_linux
 ):
     """A build whose tools folder is not where the app looks is a failure, even where a
     system ffmpeg would make the video mode work."""
@@ -212,7 +219,7 @@ def test_a_folder_without_tools_or_sources_or_ffmpeg_fails(tmp_path):
         check_tools.check(program, stand_in())
 
 
-def test_the_command_says_ok_or_what_failed(tmp_path, capsys):
+def test_the_command_says_ok_or_what_failed(tmp_path, capsys, on_linux):
     assert check_tools.main([str(tmp_path)]) == 1
     assert "FAIL: " in capsys.readouterr().err
     program = program_folder(tmp_path / "good", {"ffmpeg": b"x"})

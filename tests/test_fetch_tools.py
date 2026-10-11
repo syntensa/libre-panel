@@ -29,6 +29,8 @@ SHA256 = re.compile(r"^[0-9a-f]{64}$")
 BUILD = "ffmpeg-n8.1.3-9-g29e619e767-win64-gpl-8.1"  # the folder inside the real archive
 GPL_3 = b"    GNU GENERAL PUBLIC LICENSE\n       Version 3, 29 June 2007\n"
 CONFIGURATION = b"--enable-gpl --enable-version3 --disable-debug --enable-libx264 --enable-libvpx"
+# PawnIO's installer keeps its texts as wide characters, as Windows programs do
+PAWNIO_SETUP = b"MZ pawnio setup " + fetch_tools.PAWNIO_PERMISSION.encode("utf-16-le")
 
 
 def sha(data):
@@ -77,7 +79,7 @@ def lab(**options):
         "windows": ffmpeg_archive("windows", **options),
         "linux": ffmpeg_archive("linux", **options),
         "presentmon": b"MZ presentmon",
-        "pawnio": b"MZ pawnio setup",
+        "pawnio": PAWNIO_SETUP,
     }
     by_file = {
         "ffmpeg.exe": downloads["windows"],
@@ -118,8 +120,8 @@ def test_the_table_pins_what_the_licence_notes_describe():
     assert all(f"/{fetch_tools.FFMPEG_TAG}/{fetch_tools.FFMPEG_BUILD}-" in t.url for t in ffmpeg)
     assert all("-gpl-" in t.url and "shared" not in t.url for t in ffmpeg)
     for tool in ffmpeg:  # GPL with libx264, and nothing that cannot be passed on
-        assert b"--enable-libx264" in tool.marks and b"--enable-gpl" in tool.marks
-        assert b"--enable-nonfree" in tool.forbidden
+        assert "--enable-libx264" in tool.marks and "--enable-gpl" in tool.marks
+        assert "--enable-nonfree" in tool.forbidden
         assert tool.archive_texts and tool.archive_texts[0].phrases == fetch_tools.GPL_3
         assert any("FFmpeg-Builds/tree/" in line for line in tool.source)  # the recipe
         assert any("FFmpeg/FFmpeg/tree/" in line for line in tool.source)  # the source
@@ -128,7 +130,9 @@ def test_the_table_pins_what_the_licence_notes_describe():
     assert presentmon.licence == "MIT" and presentmon.version in presentmon.url
     assert presentmon.url.endswith("PresentMon-2.6.0-x64.exe")  # the console program
     assert windows["PawnIO_setup.exe"].url.endswith("/2.2.0/PawnIO_setup.exe")
-    assert "GPL-2.0-or-later" in windows["PawnIO_setup.exe"].licence
+    pawnio = windows["PawnIO_setup.exe"]
+    assert "GPL-2.0-or-later" in pawnio.licence and "redistributed unmodified" in pawnio.licence
+    assert pawnio.marks == (fetch_tools.PAWNIO_PERMISSION,)  # the permission it states itself
 
 
 def test_the_repository_carries_the_licence_texts_that_ship_with_the_programs():
@@ -144,6 +148,7 @@ def test_the_repository_carries_the_licence_texts_that_ship_with_the_programs():
         names[0]
     )
     assert "special exception" in read(names[1]) and "version 2 of the License" in read(names[1])
+    assert fetch_tools.PAWNIO_PERMISSION in read(names[1])  # what the installer says of itself
     assert read(names[2]).startswith("Copyright (C) 2017-2024 Intel Corporation")
     assert "Permission is hereby granted, free of charge" in read(names[2])
     assert "Notice from NVAPI interface" in read(names[3])
@@ -281,7 +286,7 @@ def test_a_failure_leaves_the_folder_that_was_there(tmp_path):
     downloads["PawnIO_setup.exe"] = b"damaged"
     with pytest.raises(fetch_tools.FetchError):
         run(folder, downloads, tools, "windows")
-    assert (folder / "PawnIO_setup.exe").read_bytes() == b"MZ pawnio setup"  # as it was
+    assert (folder / "PawnIO_setup.exe").read_bytes() == PAWNIO_SETUP  # as it was
 
 
 def test_a_new_run_replaces_the_old_folder_whole(tmp_path):
@@ -299,15 +304,31 @@ def test_a_build_without_libx264_or_the_gpl_is_refused(tmp_path, platform):
     video mode's stream, and would not be the GPL build NOTICE.md describes."""
     for configuration in (b"--enable-gpl --enable-version3", b"--enable-libx264 --enable-gpl"):
         downloads, tools = lab(program=ffmpeg_program(platform, configuration))
-        with pytest.raises(fetch_tools.FetchError, match=r"was not built with --enable-"):
+        with pytest.raises(fetch_tools.FetchError, match=r"does not contain '--enable-"):
             run(tmp_path / "tools", downloads, tools, platform)
 
 
 def test_a_non_free_build_is_refused(tmp_path):
     configuration = CONFIGURATION + b" --enable-nonfree --enable-libfdk-aac"
     downloads, tools = lab(program=ffmpeg_program("windows", configuration))
-    with pytest.raises(fetch_tools.FetchError, match="built with --enable-nonfree"):
+    with pytest.raises(fetch_tools.FetchError, match="contains '--enable-nonfree'"):
         run(tmp_path / "tools", downloads, tools, "windows")
+
+
+def test_an_installer_that_no_longer_says_it_may_be_passed_on_is_refused(tmp_path):
+    """PawnIO's installer says so itself; a version that does not has terms nobody has read."""
+    downloads, tools = lab()
+    other = b"MZ pawnio setup " + "All rights reserved.".encode("utf-16-le")
+    downloads["PawnIO_setup.exe"] = other
+    tools = tuple(
+        dataclasses.replace(t, sha256=sha(other)) if t.file == "PawnIO_setup.exe" else t
+        for t in tools
+    )
+    with pytest.raises(fetch_tools.FetchError, match="PawnIO_setup.exe .* does not contain 'This"):
+        run(tmp_path / "tools", downloads, tools, "windows")
+    # the sentence is found as it is, too, and as wide characters
+    for stated in (fetch_tools.PAWNIO_PERMISSION.encode(), PAWNIO_SETUP):
+        assert fetch_tools._contains(b"MZ " + stated, fetch_tools.PAWNIO_PERMISSION)
 
 
 def test_a_licence_text_that_is_not_the_gpl_3_is_refused(tmp_path):

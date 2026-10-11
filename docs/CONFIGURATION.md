@@ -951,6 +951,9 @@ setup installed to, the unpacked zip, the AppImage), so that nothing else has to
 `tools\SOURCES.txt` lists the files with their SHA-256 and says where their source code is;
 their licence texts are in `tools\licenses`, and [NOTICE.md](../NOTICE.md) says the same.
 They are the files their projects publish, unchanged, fetched when a download is built.
+Uninstalling Libre Panel removes these files. What PawnIO's installer put on the PC, the
+driver, stays, as other programs may use it, and so does your membership in the group
+"Performance Log Users" ([above](#more-sensor-sources)).
 
 A setting always wins: `video.ffmpeg` and `[sensors.presentmon] path` name another program.
 Without them Libre Panel looks in this folder first, then on the `PATH`. It never looks in

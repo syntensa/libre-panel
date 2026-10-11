@@ -125,7 +125,7 @@ SHA-256 and says where each one's source code is; the licence texts are in
 |---|---|---|---|---|
 | ffmpeg | n8.1.3-9-g29e619e767: FFmpeg 8.1.3 and nine more commits of its release branch, as built by FFmpeg-Builds (win64-gpl and linux64-gpl) on 2026-09-30 | GPL-3.0-or-later | the FFmpeg developers; x264: the x264 project (VideoLAN) | <https://github.com/FFmpeg/FFmpeg>, commit `29e619e767cde9045a75c29bc9a8278ae7b3a98b`; more below |
 | PresentMon (console program) | 2.6.0 | MIT | Intel Corporation | <https://github.com/GameTechDev/PresentMon>, commit `e13fce6acdb55a808fd8318175a56863e532d95f` (tag `v2.6.0`) |
-| PawnIO installer (`PawnIO_setup.exe`) | 2.2.0 | the driver: GPL-2.0-or-later with a special exception | namazso | the driver: <https://github.com/namazso/PawnIO>, commit `5cdf470831fdfff3f7f1d06363ca6b230f3bf35a` (tag `2.2.0`) |
+| PawnIO installer (`PawnIO_setup.exe`) | 2.2.0 | the installer may be redistributed unmodified, as it says itself; the driver it installs: GPL-2.0-or-later with a special exception | namazso | the driver: <https://github.com/namazso/PawnIO>, commit `5cdf470831fdfff3f7f1d06363ca6b230f3bf35a` (tag `2.2.0`) |
 
 - **ffmpeg (GPL-3.0-or-later).** The build is configured `--enable-gpl
   --enable-version3`: libx264, which does the encoding, and the other libraries
@@ -150,13 +150,16 @@ SHA-256 and says where each one's source code is; the licence texts are in
   `tools\licenses\PresentMon-LICENSE.txt`; the notices of the third-party parts in
   its source (AMD, NVIDIA, Google, Microsoft) are `PresentMon-THIRD_PARTY.txt`.
   Libre Panel starts it as a program of its own.
-- **PawnIO's installer.** The driver is free software under the GNU General Public
-  License, version 2 or later, with a special exception for programs and modules
-  that talk to it through its device interface. Its licence texts are
-  `tools\licenses\PawnIO-COPYING.txt` and `PawnIO-NOTICE.txt`; its source code is at
-  the address above. The installer is the official `PawnIO_setup.exe` of the PawnIO
-  project, as published on its release page. Libre Panel does not run it unless the
-  user asks for it, and does not remove the driver when it is uninstalled itself.
+- **PawnIO's installer.** The official `PawnIO_setup.exe` of the PawnIO project, as
+  published on its release page, unmodified (it is signed by its author, and the
+  signature stays valid). It says of itself: "This installer can be redistributed
+  unmodified." The build checks that the file still says so. The driver it installs
+  is free software under the GNU General Public License, version 2 or later, with a
+  special exception for programs and modules that talk to it through its device
+  interface. Its licence texts are `tools\licenses\PawnIO-COPYING.txt` and
+  `PawnIO-NOTICE.txt`; its source code is at the address above. Libre Panel does not
+  run the installer unless the user asks for it, and does not remove the driver when
+  it is uninstalled itself.
 
 ## Windows downloads: the app's window
 

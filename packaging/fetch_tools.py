@@ -18,8 +18,10 @@ alone, when anything does not match.
     licence text and the address of the exact source.
   * PresentMon (Windows): Intel's console program for the frame rates of games. MIT.
   * PawnIO_setup.exe (Windows): the official installer of the PawnIO driver, which
-    LibreHardwareMonitor reads the CPU's sensors through. Not run here: the installer of
-    Libre Panel does that. The driver is GPL-2.0-or-later with an exception (NOTICE.md).
+    LibreHardwareMonitor reads the CPU's sensors through. Not run here: Libre Panel's own
+    installer does that. It says of itself "This installer can be redistributed unmodified.",
+    and the build checks that it still does; the driver is GPL-2.0-or-later with an exception
+    (NOTICE.md).
 
 ``--archive-dir`` reads the files (named like the end of their address) from a folder instead
 of the internet, for builds without a network; they are checked all the same.
@@ -80,8 +82,9 @@ class Tool:
     source: tuple[str, ...]  # where the source code is, one line each
     magic: bytes  # how the program begins: MZ or ELF
     member: str = ""  # of an archive: the regular expression for the program's name in it
-    marks: tuple[bytes, ...] = ()  # what has to be inside the program (a build's configuration)
-    forbidden: tuple[bytes, ...] = ()  # what must not be inside it
+    marks: tuple[str, ...] = ()  # what has to be inside the program: its build's configuration, a
+    # permission it states (as text, or as the wide characters Windows programs keep their texts in)
+    forbidden: tuple[str, ...] = ()  # what must not be inside it
     texts: tuple[str, ...] = ()  # files of LICENSES to take along
     archive_texts: tuple[Text, ...] = ()  # licence texts inside the archive to take along
 
@@ -104,9 +107,12 @@ FFMPEG_SOURCE = (
 )
 # An ffmpeg that lacks these is not the GPL build with libx264 that the video mode needs and
 # the licence note describes; one with --enable-nonfree could not be passed on at all.
-FFMPEG_MARKS = (b"--enable-gpl", b"--enable-version3", b"--enable-libx264")
+FFMPEG_MARKS = ("--enable-gpl", "--enable-version3", "--enable-libx264")
 GPL_3 = ("GNU GENERAL PUBLIC LICENSE", "Version 3, 29 June 2007")
 FFMPEG_LICENCE = Text(r"[^/]+/LICENSE\.txt", "FFmpeg-LICENSE.txt", GPL_3)
+# What the installer of PawnIO says of itself, in its own text. A version that does not say it
+# any more is not to be passed on until its licence has been read again.
+PAWNIO_PERMISSION = "This installer can be redistributed unmodified."
 
 # In the order they are listed in SOURCES.txt.
 TOOLS = (
@@ -122,7 +128,7 @@ TOOLS = (
         MZ,
         member=r"[^/]+/bin/ffmpeg\.exe",
         marks=FFMPEG_MARKS,
-        forbidden=(b"--enable-nonfree",),
+        forbidden=("--enable-nonfree",),
         archive_texts=(FFMPEG_LICENCE,),
     ),
     Tool(
@@ -148,12 +154,14 @@ TOOLS = (
         "windows",
         "https://github.com/namazso/PawnIO.Setup/releases/download/2.2.0/PawnIO_setup.exe",
         "1f519a22e47187f70a1379a48ca604981c4fcf694f4e65b734aaa74a9fba3032",
-        "GPL-2.0-or-later WITH a special exception (the driver it installs)",
+        "installer: may be redistributed unmodified (its own text); the driver it installs: "
+        "GPL-2.0-or-later WITH a special exception",
         (
             "The driver: https://github.com/namazso/PawnIO/tree/"
             "5cdf470831fdfff3f7f1d06363ca6b230f3bf35a (tag 2.2.0)",
         ),
         MZ,
+        marks=(PAWNIO_PERMISSION,),
         texts=("PawnIO-COPYING.txt", "PawnIO-NOTICE.txt"),
     ),
     Tool(
@@ -168,7 +176,7 @@ TOOLS = (
         ELF,
         member=r"[^/]+/bin/ffmpeg",
         marks=FFMPEG_MARKS,
-        forbidden=(b"--enable-nonfree",),
+        forbidden=("--enable-nonfree",),
         archive_texts=(FFMPEG_LICENCE,),
     ),
 )
@@ -266,6 +274,12 @@ def _one(tool: Tool, pattern: str, found: Found) -> bytes:
     return matches[0][1]
 
 
+def _contains(program: bytes, text: str) -> bool:
+    """Whether the program has the text, as it is or in wide characters (Windows programs keep
+    most of theirs so)."""
+    return text.encode() in program or text.encode("utf-16-le") in program
+
+
 def _take(tool: Tool, data: bytes) -> tuple[bytes, dict[str, bytes]]:
     """Check one download. Returns the program and the licence texts to take along (by the
     name they are saved under). Raises FetchError."""
@@ -290,16 +304,16 @@ def _take(tool: Tool, data: bytes) -> tuple[bytes, dict[str, bytes]]:
         raise FetchError(
             f"{tool.file} of {tool.program} {tool.version} is not a program for {tool.platform}"
         )
-    absent = [mark.decode() for mark in tool.marks if mark not in program]
+    absent = [mark for mark in tool.marks if not _contains(program, mark)]
     if absent:
         raise FetchError(
-            f"{tool.file} of {tool.program} {tool.version} was not built with {absent[0]}: "
-            f"it is not the {tool.licence} build the licence note describes"
+            f"{tool.file} of {tool.program} {tool.version} does not contain {absent[0]!r}: "
+            "it is not the program the licence note describes"
         )
-    present = [mark.decode() for mark in tool.forbidden if mark in program]
+    present = [mark for mark in tool.forbidden if _contains(program, mark)]
     if present:
         raise FetchError(
-            f"{tool.file} of {tool.program} {tool.version} was built with {present[0]}, "
+            f"{tool.file} of {tool.program} {tool.version} contains {present[0]!r}, "
             "which cannot be passed on"
         )
     return program, texts
