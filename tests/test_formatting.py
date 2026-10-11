@@ -28,6 +28,12 @@ def test_rates_and_sizes_as_spur_ii_sets_them():
     assert safe_format("{value:gb} {unit}", 2048, "MB") == "2.0 MB"  # the unit stays the reading's
 
 
+def test_texts_in_capitals():
+    assert safe_format("{value:upper}", "Round report") == "ROUND REPORT"
+    assert safe_format("{label:upper}: {value:.0f}", 7, label="CPU temp") == "CPU TEMP: 7"
+    assert safe_format("{value:upper}", 4.5) == "4.5"  # nothing to raise in a number
+
+
 @pytest.mark.parametrize(
     "fmt",
     [

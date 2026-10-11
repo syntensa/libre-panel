@@ -338,6 +338,9 @@
   in, and `{value:rate}` with `{value:rate_unit}`: a data rate as SPUR II
   sets it, its number and its unit apart (519 and KB/s, from 1 MB/s 1.2 and
   MB/s)
+- Format spec `{value:upper}`: a text in capitals (`{label:upper}` a reading's
+  name), for headings that follow the language of the panel, as SPUR II sets
+  them
 - `tools/compare_reference.py` draws a theme with given readings and
   compares it with a picture of the same screen: the share of pixels that
   match, overall and per region, the pictures side by side, their
