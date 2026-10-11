@@ -544,6 +544,12 @@
 - A change of `[services]` saved together with a theme name that does not exist (a typo, a
   theme not installed yet) reached the services only with the next save. They now follow
   `config.toml` whenever it loads, whether or not its theme does; the panel keeps its theme
+- The first frame after the start took 200 to 350 ms: the first theme's
+  texts, cards, graph strips and fans were made in it, which held up a video
+  panel's first moments. The theme is drawn once while the loop is built, in
+  a thread of its own, as the next theme is for a switch, so the first frame
+  takes a few milliseconds. The readings of that drawing are the first
+  frame's sample, and the start waits for it two seconds at most
 
 **Changes**
 - The editor before the app stays at `/classic/` until the app has all its

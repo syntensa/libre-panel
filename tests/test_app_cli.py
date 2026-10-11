@@ -427,3 +427,185 @@ def test_one_clock_for_the_loop_the_renderer_and_plugins():
         assert abs((loop.snapshot.now - due).total_seconds()) < 0.2
     finally:
         loop.close()
+
+
+# -- the first theme is drawn before the first frame is due -------------------------------------
+
+
+def write_ahead_theme(home, name="ahead"):
+    """A theme with what takes time to make: texts, a bar, a graph, a ring of numbers, a fan."""
+    import json
+
+    widgets = [
+        {"type": "text", "id": "title", "x": 10, "y": 8, "text": "Processor", "font_size": 28},
+        {"type": "metric", "id": "load", "x": 10, "y": 50, "sensor": "cpu.load", "font_size": 60,
+         "format": "{value:.0f}%", "smooth": True},
+        {"type": "bar", "id": "bar", "x": 10, "y": 130, "w": 300, "h": 18, "sensor": "cpu.load",
+         "smooth": True},
+        {"type": "metric", "id": "used", "x": 340, "y": 150, "sensor": "mem.used", "smooth": True,
+         "format": "{value:.1f}", "font_size": 40},
+        {"type": "graph", "id": "graph", "x": 10, "y": 170, "w": 300, "h": 100,
+         "sensor": "cpu.load", "history": 60, "glow": 0.5},
+        {"type": "fan", "id": "fan", "x": 340, "y": 20, "w": 96, "h": 96, "sensor": "fan.cpu"},
+    ]  # fmt: skip
+    data = {
+        "format": "libre-panel-theme/1",
+        "name": name,
+        "display": {"model": "custom", "width": 480, "height": 320},
+        "background": {"color": "#0a1119"},
+        "widgets": widgets,
+    }
+    folder = home / "themes" / name
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
+
+
+def ahead_loop(clock, **config):
+    """The main loop of the "ahead" theme on a streaming display, its hub asked at ``asked``."""
+    from libre_panel.sensors.base import SensorHub
+    from libre_panel.sensors.demo import DemoProvider
+
+    hub = SensorHub([DemoProvider({"fixed_time": 1_700_000_000})])
+    asked, real = [], hub.snapshot
+    hub.snapshot = lambda: asked.append(clock.now) or real()
+    config = Config(theme="ahead", fps=50, sensors=SensorsConfig(providers=["demo"]), **config)
+    return app_module.MainLoop(config, hub=hub, display=MemoryStream(), clock=clock), asked
+
+
+def test_the_first_theme_is_drawn_ahead_with_the_readings_of_the_first_frame(
+    isolated_home, monkeypatch
+):
+    """The first frame took 200 to 350 ms, for the texts, strips and fans it made. The theme is
+    drawn once as the loop is built, as the next theme is for a switch (in a thread of its own),
+    with the readings the first frame then takes as its sample: the hub is asked once."""
+    import threading
+
+    from libre_panel.render.renderer import Renderer
+
+    write_ahead_theme(isolated_home)
+    drawn, real = [], Renderer.render
+
+    def render(self, snapshot, now=None):
+        drawn.append((threading.current_thread().name, sorted(snapshot.readings), now))
+        return real(self, snapshot, now)
+
+    monkeypatch.setattr(Renderer, "render", render)
+    clock = StepClock(1000.0)
+    loop, asked = ahead_loop(clock)
+    try:
+        assert [(who, now) for who, _, now in drawn] == [("theme-warmup", 1000.0)]
+        assert asked == [1000.0] and loop.first is not None
+        assert loop.renderer.snapshot is not None and loop.renderer.motion is loop.motion
+        assert "mem.used" not in loop.motion.springs  # the numbers' glides are the panel's: they
+        assert set(loop.motion.histories) == {"cpu.load"}  # begin with the first frame; the
+        # graph's history is what was drawn ahead, and is kept
+        out = loop.step(1000.0)  # the first frame: the readings are those it was drawn with
+        assert out is not None and asked == [1000.0] and loop.first is None
+        assert "mem.used" in loop.motion.springs
+        assert [who for who, _, _ in drawn] == ["theme-warmup", threading.current_thread().name]
+        assert drawn[0][1] == drawn[1][1] and loop.snapshot.value("cpu.load") is not None
+        clock.now = 1001.0  # the next sample comes when it is due
+        loop.step(clock.now)
+        assert asked == [1000.0, 1001.0]
+    finally:
+        loop.close()
+
+
+def test_drawing_the_first_theme_ahead_changes_nothing_the_panel_shows(isolated_home, monkeypatch):
+    """The frames of a loop that drew its theme ahead are those of one that did not: numbers,
+    graph, fan and all (what was drawn is the panel's, not a copy that starts the animations)."""
+    write_ahead_theme(isolated_home)
+    shown, draw_ahead = {}, app_module.MainLoop._draw_ahead
+    for ahead in (True, False):
+        monkeypatch.setattr(
+            app_module.MainLoop, "_draw_ahead", draw_ahead if ahead else lambda *args: None
+        )
+        clock = StepClock(1000.0)
+        loop, _ = ahead_loop(clock)
+        try:
+            assert (loop.renderer.snapshot is not None) is ahead
+            frames = []
+            for n in range(40):  # 0.8 s at 50 fps, the fan turning, the first sample's strip
+                clock.now = 1000.0 + n / 50
+                frames.append(loop.step(clock.now).tobytes())
+            shown[ahead] = frames
+        finally:
+            loop.close()
+    assert len(set(shown[True])) > 10  # (it moves: the fan turns, the graph scrolls)
+    assert shown[True] == shown[False]
+
+
+def test_a_first_theme_that_is_not_drawn_in_time_is_left_to_the_first_frame(
+    isolated_home, monkeypatch
+):
+    """The loop waits for the drawing no longer than a switch does (``_Warmup.LIMIT_S``): a
+    theme that takes longer is drawn by the first frame, with a renderer of its own."""
+    import threading
+
+    from libre_panel.render.renderer import Renderer
+
+    write_ahead_theme(isolated_home)
+    stuck, real = threading.Event(), Renderer.warm
+
+    def warm(self, snapshot, now, pause=None):
+        if snapshot is not None:
+            stuck.wait(30)  # a drawing that does not end (until the test says so)
+        return real(self, snapshot, now, pause)
+
+    monkeypatch.setattr(Renderer, "warm", warm)
+    monkeypatch.setattr(app_module._Warmup, "LIMIT_S", 0.05)
+    loop, asked = ahead_loop(StepClock(1000.0))
+    try:
+        assert loop.warmup.busy and loop.renderer.snapshot is None  # not ready: its own renderer
+        out = loop.step(1000.0)
+        assert out is not None and asked == [1000.0]
+    finally:
+        stuck.set()
+        loop.close()
+
+
+def test_the_first_frame_asks_again_when_the_first_readings_failed(isolated_home):
+    from libre_panel.sensors.base import SensorHub
+    from libre_panel.sensors.demo import DemoProvider
+
+    write_ahead_theme(isolated_home)
+    hub = SensorHub([DemoProvider({"fixed_time": 1_700_000_000})])
+    asked, real = [], hub.snapshot
+
+    def snapshot():
+        asked.append(1)
+        if len(asked) == 1:
+            raise RuntimeError("a source broke")
+        return real()
+
+    hub.snapshot = snapshot
+    config = Config(theme="ahead", fps=50, sensors=SensorsConfig(providers=["demo"]))
+    loop = app_module.MainLoop(config, hub=hub, display=MemoryStream(), clock=StepClock(1000.0))
+    try:
+        assert loop.first is None and loop.renderer.snapshot is None  # nothing was drawn ahead
+        assert loop.step(1000.0) is not None and len(asked) == 2  # the first frame has its own
+    finally:
+        loop.close()
+
+
+def test_video_mode_is_expected_from_the_settings_before_a_panel_is_open(tmp_path):
+    """What is drawn ahead depends on video mode (graph strips), which is known when the panel
+    is open: until then the settings are asked, and a panel that streams already says so."""
+    from libre_panel.config import VideoConfig
+
+    program = tmp_path / "ffmpeg"
+    program.write_text("")
+
+    def expects(model="auto", driver="auto", **video):
+        device = DeviceConfig(model=model, driver=driver, video=VideoConfig(**video))
+        return app_module._expects_video(Config(device=device))
+
+    assert expects() is False  # a panel on the bus decides, and nothing asks for video
+    assert expects(mode="on") is True and expects(mode="off") is False
+    assert expects(local_clip="clip.mp4") is True  # "auto" with what the video mode needs
+    assert expects(mode="on", driver="virtual") is False  # a file, whatever the settings say
+    assert expects(model="turing-8.8-usb", local_clip="clip.mp4") is False  # not proven there
+    proven = {"model": "turing-9.2-usb", "local_clip": "clip.mp4"}
+    assert expects(**proven, ffmpeg=str(program)) is True  # proven, and everything is there
+    assert expects(**proven, ffmpeg=str(tmp_path / "missing")) is False  # no ffmpeg
+    assert expects(model="turing-9.2-usb", ffmpeg=str(program)) is False  # no local_clip
