@@ -1360,6 +1360,22 @@ def test_snapping_can_be_to_a_single_pixel(page):
     assert snapped(0, dx, dy) == (round(10 + dx / zoom), round(10 + dy / zoom))  # (off: the same)
 
 
+def test_a_choice_that_none_of_the_options_has_is_still_in_the_tab_order(app_url):
+    """A group of choices with a value that matches no option (a setting from a version that
+    had other steps) must keep one button reachable by Tab, or the keyboard cannot get in."""
+    with browser_page(app_url, "design") as page:
+        page.add_init_script("localStorage.setItem('libre-panel-prefs', '{\"snap\": 2}')")
+        page.reload()
+        page.wait_for_selector(".panel-canvas .preview")
+        page.locator(".rail-gear").click()
+        radios = page.get_by_role("radiogroup", name="Snap").get_by_role("radio")
+        tab_order = "buttons => buttons.map((b) => b.tabIndex)"
+        assert radios.evaluate_all(tab_order) == [0, -1, -1, -1, -1]
+        assert radios.evaluate_all("buttons => buttons.map((b) => b.ariaChecked)") == ["false"] * 5
+        radios.nth(2).click()  # and a choice made is the one in the tab order
+        assert radios.evaluate_all(tab_order) == [-1, -1, 0, -1, -1]
+
+
 @pytest.fixture
 def drawing_plugin(plugin_folder):
     """A plugin with a screen and a widget type, installed before the app starts."""

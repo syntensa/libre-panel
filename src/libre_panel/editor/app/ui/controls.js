@@ -51,6 +51,8 @@ export function Segmented({ options, value, onChange, label, class: className = 
     onChange(next.value);
     requestAnimationFrame(() => event.currentTarget?.querySelector('[aria-checked="true"]')?.focus());
   };
+  // one button is in the tab order: the chosen one, else (a value none of the options has) the first
+  const known = options.some((option) => option.value === value);
   return html`<div class=${`segmented ${className}`} role="radiogroup" aria-label=${label} onKeyDown=${move}>
     ${options.map(
       (option) => html`<button
@@ -58,7 +60,7 @@ export function Segmented({ options, value, onChange, label, class: className = 
         key=${String(option.value)}
         role="radio"
         aria-checked=${String(option.value === value)}
-        tabindex=${option.value === value || (value === undefined && option === options[0]) ? 0 : -1}
+        tabindex=${option.value === value || (!known && option === options[0]) ? 0 : -1}
         title=${option.title}
         disabled=${disabled}
         onClick=${() => onChange(option.value)}
