@@ -260,8 +260,8 @@ class Slot:
         ground = _rgb(colors["bg"])
         kind = self.kinds[self.shown]
         own = self.module.get("color")
-        if own:
-            return light.mix(_rgb(own), ground, MIXED)
+        if own:  # (a colour, or an entry of the palette, or the cover's)
+            return light.mix(self.renderer.color(own)[:3], ground, MIXED)
         if kind in PLAYBACK:
             found = cover.dominant(snapshot.images.get("media.cover"))
             if found is not None:

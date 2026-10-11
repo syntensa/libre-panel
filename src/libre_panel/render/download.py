@@ -92,7 +92,7 @@ def _number(value: Any) -> float | None:
     return float(value)
 
 
-class Reading(NamedTuple):
+class Facts(NamedTuple):
     """What the card shows of a state, as text: it is also what a picture is kept by."""
 
     phase: str
@@ -104,7 +104,7 @@ class Reading(NamedTuple):
     history: tuple[float, ...]  # bytes a second, the oldest first
 
 
-def read(state: dict[str, Any]) -> Reading:
+def read(state: dict[str, Any]) -> Facts:
     """The card's texts from a state; a field that is missing or no number is left out."""
     phase = state.get("phase")
     phase = phase if phase in PHASES else "downloading"
@@ -136,7 +136,7 @@ def read(state: dict[str, Any]) -> Reading:
     more = _number(state.get("more"))
     if more and more >= 1:
         name = f"{name}  +{int(more)}"
-    return Reading(phase, str(state.get("source") or "").upper(), name, share, rows, text, series)
+    return Facts(phase, str(state.get("source") or "").upper(), name, share, rows, text, series)
 
 
 # -- the geometry ------------------------------------------------------------------------------
@@ -296,7 +296,7 @@ class _Base(NamedTuple):
     pad: int
 
 
-def _base(renderer: Any, widget: dict[str, Any], r: Reading, pad: int) -> _Base:
+def _base(renderer: Any, widget: dict[str, Any], r: Facts, pad: int) -> _Base:
     w, h = widget["w"], widget["h"]
     lay = layout(w, h)
     g = lay.g
@@ -427,7 +427,7 @@ def _box(widget: dict[str, Any]) -> list[int]:
     return [widget["x"], widget["y"], widget["w"], widget["h"]]
 
 
-def _bases(renderer: Any, widget: dict[str, Any], r: Reading, pad: int) -> _Base:
+def _bases(renderer: Any, widget: dict[str, Any], r: Facts, pad: int) -> _Base:
     """The part of the card that stays while the state does, kept for the widget."""
     kept = renderer._downloads.get(widget["id"])
     if kept is not None and kept[0] == r:

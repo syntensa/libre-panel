@@ -415,6 +415,18 @@ def test_the_weather_has_its_colour_and_a_module_may_set_its_own():
     for code, role in ((61.0, "gpu"), (73.0, "text"), (95.0, "crit"), (45.0, "text3")):
         day.readings["weather.code"] = Reading("weather.code", code)
         assert box._weather(day) == M._rgb(colors[role]), code
+    named = parse_theme(
+        {
+            "format": "libre-panel-theme/1",
+            "display": {"model": "turing-9.2-usb"},
+            "palette": {"hot": "#ff4400"},
+            "widgets": [{"type": "module", "id": "m", "module": "cards", "color": "@hot"}],
+        }
+    )
+    pal = Renderer(named, animate=False)
+    pal.render(demo(), 0.0)
+    ground = M._rgb(M.colors_of(pal.theme.palette)["bg"])
+    assert frame_colour(pal) == light.mix((255, 68, 0), ground, slot.MIXED)  # (a palette entry)
     own = Renderer(theme_of(color="#ff8800"), animate=False)
     own.render(demo(), 0.0)
     ground = M._rgb(M.colors_of(own.theme.palette)["bg"])

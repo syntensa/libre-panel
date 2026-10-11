@@ -190,8 +190,12 @@ def test_specs_carry_the_panel_look_and_the_finishes(server):
     _, specs = request(server, "GET", "/api/specs")
     assert specs["look"]["grid"]["spacing"] == ["int", 8]
     assert specs["look"]["light"]["sweep_seconds"] == ["number", 1.6]
-    for kind in ("bar", "gauge", "graph", "icon", "text", "metric", "module"):
+    for kind in ("bar", "gauge", "graph", "icon", "text", "metric"):
         assert specs["widgets"][kind]["finish"] == list(FINISH_FIELD)
+    # a module's finish may also be "auto", the default: its kind's own (a card is lit)
+    assert specs["widgets"]["module"]["finish"] == [
+        "enum:auto|" + FINISH_FIELD[0].removeprefix("enum:"), "auto",
+    ]  # fmt: skip
     assert FINISH_FIELD[1] == "flat" and "lit" in FINISH_FIELD[0]
     assert "finish" not in specs["widgets"]["rect"]
 
