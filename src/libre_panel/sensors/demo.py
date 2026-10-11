@@ -98,7 +98,7 @@ class DemoProvider(SensorProvider):
     name = "demo"
 
     def images(self) -> dict[str, Any]:
-        return {"media.cover": _cover(), "game.logo": _logo()}
+        return {"media.cover": _cover(), "media.app_icon": _icon(), "game.logo": _logo()}
 
     def __init__(self, options: dict[str, Any] | None = None) -> None:
         super().__init__(options)
@@ -250,6 +250,43 @@ def demo_logo(width: int = 240, height: int = 144) -> Image.Image:
     return logo.resize((width, height), Image.Resampling.LANCZOS)
 
 
+def demo_app_icon(size: int = 96) -> Image.Image:
+    """The icon of a music player for previews, made up: a note on a rounded square that
+    shades from blue to violet (drawn four times larger and reduced, so its edges are smooth),
+    as large as the icons the media source reads."""
+    from PIL import ImageDraw
+
+    k = 4
+    big = size * k
+    ground = Image.new("RGBA", (big, big))
+    paint = ImageDraw.Draw(ground)
+    for y in range(big):  # blue above, violet below
+        f = y / (big - 1)
+        paint.line([(0, y), (big, y)], fill=(round(86 + 56 * f), round(160 - 72 * f), 250, 255))
+    mask = Image.new("L", (big, big), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, big - 1, big - 1], radius=big * 0.22, fill=255)
+    icon = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    icon.paste(ground, (0, 0), mask)
+    draw = ImageDraw.Draw(icon)
+    white = (244, 248, 255, 255)
+    head = big * 0.085  # two notes joined by a beam
+    stems = []
+    for cx, cy in ((0.35, 0.69), (0.67, 0.61)):
+        draw.ellipse(
+            [big * cx - head, big * cy - head, big * cx + head, big * cy + head], fill=white
+        )
+        stems.append(big * cx + head * 0.86)
+        draw.rectangle(
+            [stems[-1] - big * 0.018, big * 0.28, stems[-1] + big * 0.018, big * cy], fill=white
+        )
+    draw.polygon(
+        [(stems[0] - big * 0.018, big * 0.26), (stems[1] + big * 0.018, big * 0.18),
+         (stems[1] + big * 0.018, big * 0.27), (stems[0] - big * 0.018, big * 0.35)],
+        fill=white,
+    )  # fmt: skip
+    return icon.resize((size, size), Image.Resampling.LANCZOS)
+
+
 _DAILY = {  # high, low, code, rain: a week of autumn
     "temperature_2m_max": [17, 15, 13, 16, 18, 19, 14],
     "temperature_2m_min": [9, 8, 6, 7, 10, 11, 8],
@@ -298,6 +335,7 @@ def demo_forecast(t: float) -> dict[str, Reading]:
 
 _COVER: list[Image.Image] = []
 _LOGO: list[Image.Image] = []
+_ICON: list[Image.Image] = []
 
 
 def _cover() -> Image.Image:
@@ -310,6 +348,12 @@ def _logo() -> Image.Image:
     if not _LOGO:
         _LOGO.append(demo_logo())
     return _LOGO[0]
+
+
+def _icon() -> Image.Image:
+    if not _ICON:
+        _ICON.append(demo_app_icon())
+    return _ICON[0]
 
 
 HISTORY_SAMPLES = 1900  # a graph of SPUR II's panorama (1713 points) is full in a preview
@@ -362,11 +406,35 @@ def demo_session() -> dict[str, Reading]:
     return {key: Reading(key, value, unit, label) for key, (value, unit, label) in found.items()}
 
 
+def demo_downloads(t: float) -> dict[str, Reading]:
+    """A game that downloads (made up): the state the ``downloads`` service publishes while one
+    does, with a speed that wanders about 38 MB/s, so that the card that shows it is complete in
+    a preview. The progress goes on for a quarter of an hour and begins again."""
+    import json
+
+    mb = 1024 * 1024
+
+    def rate(at: float) -> float:  # bytes a second, smoothed as the service has it
+        return (38 + 9 * math.sin(2 * math.pi * at / 23) + 4 * math.sin(2 * math.pi * at / 7)) * mb
+
+    total = 24 * 1024 * mb
+    elapsed = 90.0 + t % 900
+    loaded = total * (0.08 + 0.74 * (t % 900) / 900)
+    state = {
+        "id": "demo:1", "source": "steam", "name": "Space Game", "phase": "downloading",
+        "bytes": round(loaded), "total": total, "rate": round(rate(t)),
+        "remaining_s": round((total - loaded) / rate(t), 1), "elapsed_s": elapsed,
+        "estimated": False, "history": [round(rate(t - 60 + n)) for n in range(1, 61)], "more": 0,
+    }  # fmt: skip
+    text = json.dumps(state, ensure_ascii=False, separators=(",", ":"))
+    return {"downloads": Reading("downloads", text, "", "Downloads")}
+
+
 def demo_snapshot(fixed_time: float | None = None, samples: int = HISTORY_SAMPLES) -> Snapshot:
     """A complete snapshot with filled graph history, for previews and the editor."""
     provider = DemoProvider({"fixed_time": fixed_time})
     when = fixed_time if fixed_time is not None else time.time()
-    readings = {**provider.read(), **demo_report(when), **demo_session()}
+    readings = {**provider.read(), **demo_report(when), **demo_session(), **demo_downloads(when)}
     history = {key: demo_history(provider, key, samples) for key in _WAVES}
     now = datetime.fromtimestamp(fixed_time) if fixed_time is not None else datetime.now()
     return Snapshot(readings=readings, history=history, now=now, images=provider.images())

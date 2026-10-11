@@ -603,7 +603,7 @@ def find_module(theme, wid):
     return next(w for w in theme.widgets if w["id"] == wid)
 
 
-def test_studio_reads_what_the_demo_has_and_a_picture_it_has_none_of():
+def test_studio_reads_only_what_the_demo_has():
     from libre_panel.render.renderer import _reads
 
     _, renderer = studio()
@@ -612,4 +612,4 @@ def test_studio_reads_what_the_demo_has_and_a_picture_it_has_none_of():
         key for key in _reads(renderer.widgets)
         if snapshot.value(key) is None and key not in snapshot.images
     }  # fmt: skip
-    assert absent == {"media.app_icon"}  # the player's icon is a picture: its name stands in
+    assert absent == set()  # (the demo has the player's icon, drawn, and a download that runs)

@@ -183,6 +183,7 @@ def snapshot_with(drop=(), **more):
             del snap.readings[key]
         if prefix.startswith("media"):
             snap.images.pop("media.cover", None)
+            snap.images.pop("media.app_icon", None)
     for key, value in more.items():
         snap.readings[key.replace("__", ".")] = Reading(key.replace("__", "."), value)
     return snap
@@ -330,7 +331,9 @@ def M_colors():
 
 
 def test_the_playback_card_shows_the_track_and_where_it_is():
-    names, _, _ = drawn("playback")
+    bare = snapshot_with()  # (a player that has no icon)
+    bare.images.pop("media.app_icon")
+    names, _, _ = drawn("playback", bare)
     assert {"cover", "playing-sign", "playing", "title", "artist", "app-bare", "progress",
             "position", "length"} <= names  # fmt: skip
     assert not {"paused", "paused-sign", "idle", "idle-icon", "app-icon", "app"} & names
@@ -643,6 +646,7 @@ def test_the_playback_card_has_its_sign_and_progress_in_the_covers_colour():
 
 def test_a_need_can_ask_for_a_picture():
     snap = snapshot_with()
+    snap.images.pop("media.app_icon")  # (the demo's player has an icon: this one has none)
     assert not need_holds("@media.app_icon", snap) and need_holds("!@media.app_icon", snap)
     assert need_holds("@media.cover", snap) and not need_holds("!@media.cover", snap)
     snap.images["media.app_icon"] = Image.new("RGBA", (8, 8))

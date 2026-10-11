@@ -634,6 +634,12 @@
   for a longer one: a name is cut with an ellipsis, a logo made smaller) in
   place of 120 px, and the fans spread over what was gained as SPUR II
   spreads them
+- The demo readings of the editor, the previews and the pictures gained a
+  made-up player icon (`media.app_icon`, drawn when asked, a note on a
+  rounded square) and a game that downloads (`downloads`, in the state the
+  service publishes, 24 GB at about 38 MB/s), so the playback card shows its
+  app with an icon and the Studio's NET section shows a download there, as
+  they do with a player and a download on a real PC
 
 ## 0.4.2 — 2026-10-10
 

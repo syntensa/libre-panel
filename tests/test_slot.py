@@ -40,10 +40,12 @@ def theme_of(items="", kind="cards", cols=3, rows=2, **more):
 
 def demo(playing=1, media=True, weather=True):
     snap = demo_snapshot(fixed_time=1_700_000_000)
+    snap.readings.pop("downloads", None)  # (these tests start a download, with ``downloading``)
     if not media:
         for key in [k for k in snap.readings if k.startswith("media.")]:
             del snap.readings[key]
         snap.images.pop("media.cover", None)
+        snap.images.pop("media.app_icon", None)
     else:
         snap.readings["media.playing"] = Reading("media.playing", playing)
     if not weather:
