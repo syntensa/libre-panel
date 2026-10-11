@@ -628,6 +628,10 @@
   is read from), the themes read it, and the demo has it as it has
   `gpu.temp`. A test keeps every key the SPUR themes read from the hardware
   to what the source makes from real output
+- A panel loop that could not start (an unknown `driver` in `config.toml`: a typo,
+  a display plugin that was removed) left the sensor sources it had started running,
+  and the app tries again every 30 seconds, so their threads piled up. The display is
+  made first now, before any source starts
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

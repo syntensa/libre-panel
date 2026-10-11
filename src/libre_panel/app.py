@@ -504,10 +504,12 @@ class MainLoop:
         # What moves on the panel goes on from theme to theme: every renderer
         # gets this one (gliding values, graph histories).
         self.motion = Motion()
+        # The display first: an unknown driver fails here, before any sensor source has
+        # started (the background app tries again and again; each try would leave them on).
+        self.display = display if display is not None else create_display(config.device)
         self.hub = hub if hub is not None else build_hub(config)
         if host is not None and not once:
             self.hub.providers.append(host.provider())
-        self.display = display if display is not None else create_display(config.device)
         self.first: Snapshot | None = None  # the readings the first theme was drawn with
         if not once:
             self._draw_ahead(theme, config)

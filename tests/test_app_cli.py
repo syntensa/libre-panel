@@ -276,6 +276,36 @@ class MemoryStream(Display):
         self.frames.append((frame, region))
 
 
+def test_a_loop_that_cannot_start_leaves_no_sensor_sources_running(monkeypatch):
+    """An unknown driver (a typo, a plugin that is gone) stops the loop at its start. The
+    background app tries again every 30 seconds: each try must not leave the sources it
+    started (their threads, LibreHardwareMonitor, the polling of a calendar) behind."""
+    from libre_panel.devices.base import DeviceError
+    from libre_panel.sensors.base import SensorHub
+
+    hubs = []
+
+    class Hub(SensorHub):
+        closed = False
+
+        def close(self):
+            self.closed = True
+            super().close()
+
+    def build_hub(config, demo=False):
+        hubs.append(Hub([]))
+        return hubs[-1]
+
+    monkeypatch.setattr(app_module, "build_hub", build_hub)
+    config = Config(
+        device=DeviceConfig(driver="no-such-driver"), sensors=SensorsConfig(providers=["demo"])
+    )
+    for _ in range(3):
+        with pytest.raises(DeviceError, match="no-such-driver"):
+            run(config)
+    assert all(hub.closed for hub in hubs)
+
+
 def test_the_main_loop_goes_one_frame_at_a_time_on_its_own_clock():
     """MainLoop.step draws one frame on the clock it is given: readings come by
     that clock, each frame reaches the streaming display, a requested theme
