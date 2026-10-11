@@ -85,6 +85,7 @@ def test_select_move_undo_redo(page):
     assert js(page, "window.libre.store.get().selection") == ["cpu-ring"]
     assert page.locator(".floating-toolbar").is_visible()
     assert page.locator(".unsaved").is_visible()
+    assert page.title() == "● Libre Default – Libre Panel"  # unsaved, in the tab or window
     page.keyboard.press("Control+z")
     assert (widget(page, "cpu-ring")["x"], widget(page, "cpu-ring")["y"]) == start
     page.locator(".topbar [aria-label^='Redo']").click()

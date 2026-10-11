@@ -68,9 +68,26 @@ function tellDirty() {
   Promise.resolve(api.set_dirty(dirty)).catch(() => (toldDirty = null));
 }
 store.subscribe(tellDirty);
+
+// The page's title: the theme, marked while it has changes that are not saved. The
+// window puts it in its title bar.
+let toldTitle = null;
+function tellTitle() {
+  const { doc, dirty } = store.get();
+  const name = doc?.theme?.name;
+  const title = name ? `${dirty ? "● " : ""}${name} – Libre Panel` : "Libre Panel";
+  if (document.title !== title) document.title = title;
+  const api = native();
+  if (title === toldTitle || typeof api?.set_title !== "function") return;
+  toldTitle = title;
+  Promise.resolve(api.set_title(title)).catch(() => (toldTitle = null));
+}
+store.subscribe(tellTitle);
+
 window.addEventListener("pywebviewready", () => {
-  toldDirty = null;
+  toldDirty = toldTitle = null;
   tellDirty();
+  tellTitle();
 });
 
 export function closeNativeWindow() {

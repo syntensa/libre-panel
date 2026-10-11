@@ -270,7 +270,8 @@ def check() -> tuple[bool, list[str]]:
 
 class Bridge:
     """What the page may call (``window.pywebview.api``): it says when there are unsaved
-    changes (then closing asks first), and it may close its window (after Quit)."""
+    changes (then closing asks first) and what its title is, and it may close its window
+    (after Quit)."""
 
     def __init__(self) -> None:
         self._window: Any = None  # private: pywebview exposes public attributes to the page
@@ -278,6 +279,11 @@ class Bridge:
     def set_dirty(self, dirty: bool) -> None:
         if self._window is not None:
             self._window.confirm_close = bool(dirty)
+
+    def set_title(self, title: str) -> None:
+        """The page's title in the title bar and the taskbar: the theme, unsaved marked."""
+        if self._window is not None and isinstance(title, str):
+            self._window.set_title(" ".join(title.split())[:200] or TITLE)
 
     def close(self) -> None:
         if self._window is not None:

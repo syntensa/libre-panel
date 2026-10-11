@@ -43,6 +43,9 @@ class FakeWindow:
     def evaluate_js(self, script):
         self.calls.append(("js", script))
 
+    def set_title(self, title):
+        self.title = title
+
     def load_url(self, url):
         self.calls.append(("load", url))
 
@@ -201,6 +204,10 @@ def test_the_window(monkeypatch):
         bridge = win.options["js_api"]
         bridge.set_dirty(True)  # unsaved changes: closing asks first
         seen["confirm"] = win.confirm_close
+        bridge.set_title("● Studio – Libre Panel")  # the page's title in the title bar
+        seen["title"] = win.title
+        bridge.set_title("  ")
+        seen["no title"] = win.title
         assert window.open_window(URL, "home") == "focused"  # one window at a time
         win.events.resized.set(1500, 950)
         win.events.closed.set()
@@ -217,6 +224,7 @@ def test_the_window(monkeypatch):
         win.options["min_size"] == window.MIN_SIZE and win.options["background_color"] == "#0A0E13"
     )
     assert seen["running"]["pid"] == os.getpid() and seen["confirm"] is True
+    assert seen["title"] == "● Studio – Libre Panel" and seen["no title"] == "Libre Panel"
     assert fake.settings["ALLOW_DOWNLOADS"] is True
     assert fake.started["private_mode"] is False  # the app's own settings stay
     assert "global.quitConfirmation" in fake.started["localization"]
