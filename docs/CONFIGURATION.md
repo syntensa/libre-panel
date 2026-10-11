@@ -542,9 +542,11 @@ browser = true       # the part files of browsers in the Downloads folder
   it does with an app: preparing, downloading, installing, and how big it is)
   and the app's `appmanifest_<id>.acf` in the libraries (its name and how much
   is loaded). Steam gives a speed in its log only once a minute, so the speed
-  is the network's download (`net.down`); where the manifest stands still
-  although data flows, the amount loaded is worked out from the speed and the
-  state says so (`estimated`). Steam is found as the [`game`](#game-mode)
+  is the network's download (`net.down`, from the `psutil` source; it is all
+  that the PC loads, and without it a Steam download has an amount but no
+  speed); where the manifest stands
+  still although data flows, the amount loaded is worked out from the speed and
+  the state says so (`estimated`). Steam is found as the [`game`](#game-mode)
   service finds it, and `steam_path` works as there.
 - **Browsers**: the part files `.crdownload` (Chrome, Edge, Brave and the other
   Chromium browsers), `.part` (Firefox) and `.partial` in the Downloads folder:

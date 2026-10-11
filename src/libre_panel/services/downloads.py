@@ -368,6 +368,7 @@ class Tracker:
                 app.total = total
             if loaded and loaded != app.manifest_loaded:
                 app.manifest_loaded, app.manifest_at, app.loaded = loaded, now, float(loaded)
+                app.moving_at = now  # data flows, whatever the network reading says
             if app.phase == DOWNLOADING:
                 app.loaded += self._rate * dt
                 if self._rate >= MB / 2:

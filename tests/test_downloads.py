@@ -202,6 +202,20 @@ def test_a_steam_download_that_stands_still_is_not_shown(dirs):
     assert run.step() is not None
 
 
+def test_a_steam_download_stays_while_its_manifest_moves_whatever_the_network_says(dirs):
+    root, _folder = dirs
+    manifest(root, 1000)
+    run = Run(tracker(dirs, browser=False), rate=0.0)  # no network reading at all
+    run.step()
+    log(root, *begin())
+    assert run.step() is not None
+    for n in range(2, 14):  # a minute and more, the manifest moves every 5 s
+        manifest(root, 1000 * n)
+        state = run.step(5)
+    assert state is not None and state["bytes"] == 13_000 and state["rate"] == 0
+    assert run.step(61) is None  # then it stands still
+
+
 def test_a_steam_update_that_is_paused_is_shown_as_paused(dirs):
     root, _folder = dirs
     manifest(root, 1_000_000_000)
