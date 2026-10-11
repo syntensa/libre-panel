@@ -31,6 +31,7 @@ import functools
 import json
 import logging
 import re
+import sys
 import threading
 import time
 import urllib.request
@@ -39,6 +40,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from libre_panel import __version__
+from libre_panel.i18n import t
 from libre_panel.sensors.base import Reading, SensorProvider
 
 log = logging.getLogger(__name__)
@@ -335,6 +337,65 @@ def hardware_hint(
     return text
 
 
+def _old_pawnio(version: str | None) -> bool:
+    """Whether the installed PawnIO driver is older than 2 (a version that is not said is not)."""
+    found = re.match(r"\d+", version or "")
+    return found is not None and int(found.group()) < 2
+
+
+def user_hint(
+    readings: dict[str, Reading],
+    platform: str,
+    status: LhmStatus | None = None,
+    ready: bool = True,
+) -> str:
+    """One sentence for a person who sees "--" where Windows' temperatures and power should
+    be: what is the matter and what to do about it, in their language. Empty when all is
+    well, elsewhere, while LibreHardwareMonitor is still starting (``ready`` False) and for
+    what nobody can change (a PC with no sensors it supports).
+
+    ``hardware_hint`` is the same question for the command line, with the technical words;
+    this one is for the tray and the editor, and speaks of what a person can do.
+    """
+    if platform != "win32" or not ready:
+        return ""
+    nothing = not any(key in readings for key in HARDWARE_KEYS)
+    if status is not None and status.error:  # it did not start inside Libre Panel
+        if not nothing:
+            return ""  # the web server has them
+        return t(
+            "Temperatures and power are missing: their reader did not start. "
+            "Reinstall Libre Panel; the log says why."
+        )
+    if status is None or status.mode != "inprocess":
+        if not nothing:
+            return ""
+        return t(
+            "Temperatures and power need LibreHardwareMonitor: start it as administrator "
+            "and turn on Options > Remote Web Server > Run."
+        )
+    if status.ring0 is not False or "cpu.temp" in readings:  # in reach, unknown, or filled in
+        return ""
+    admin, missing, old = (
+        status.elevated is False,
+        status.pawnio is None,
+        _old_pawnio(status.pawnio),
+    )
+    if admin and (missing or old):
+        return t(
+            "CPU temperature and power need administrator rights and the PawnIO driver (pawnio.eu)."
+        )
+    if admin:
+        return t(
+            "CPU temperature and power need administrator rights: run Libre Panel as administrator."
+        )
+    if missing:
+        return t("CPU temperature and power need the PawnIO driver: install it from pawnio.eu.")
+    if old:
+        return t("CPU temperature and power need PawnIO 2 or newer: update it from pawnio.eu.")
+    return ""
+
+
 def dll_dir_of(options: dict[str, Any]) -> str | None:
     """``dll_dir`` of ``[sensors.librehardwaremonitor]``: the folder with the .NET libraries."""
     value = options.get("dll_dir")
@@ -525,7 +586,9 @@ class LibreHardwareMonitorProvider(SensorProvider):
             return status
         if self.mode == "inprocess":  # inside only: it is not there, and that is the problem
             return LhmStatus("inprocess", error=self._why)
-        return LhmStatus("webserver")
+        # The Windows download carries what is needed: where it cannot be used the install is
+        # broken. With pip the web server is the way (nothing to report).
+        return LhmStatus("webserver", error=self._why if getattr(sys, "frozen", False) else "")
 
     def wait_ready(self, timeout: float) -> bool:
         """Whether the first readings are in (or it has given up) within ``timeout`` seconds.

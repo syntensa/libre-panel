@@ -144,6 +144,29 @@ def test_the_web_server_mode_does_not_even_look(monkeypatch, web_server):
         provider.close()
 
 
+def test_a_download_that_cannot_use_its_library_is_a_fault_but_pip_without_one_is_not(
+    impossible, web_server, monkeypatch
+):
+    """The Windows download carries LibreHardwareMonitor: where it cannot be used the install
+    is broken and the status says why. With pip the web server is the way, no fault."""
+    pip = provider_with()
+    try:
+        assert pip.status() == lhm.LhmStatus("webserver")
+    finally:
+        pip.close()
+    monkeypatch.setattr(lhm.sys, "frozen", True, raising=False)
+    download = provider_with()
+    try:
+        assert download.status() == lhm.LhmStatus("webserver", error=impossible[0])
+    finally:
+        download.close()
+    web = provider_with(mode="webserver")  # asked for: nothing is wrong
+    try:
+        assert web.status() == lhm.LhmStatus("webserver")
+    finally:
+        web.close()
+
+
 def test_the_mode_inside_never_asks_the_web_server(impossible, web_server, caplog):
     provider = provider_with(mode="inprocess")
     try:
@@ -320,6 +343,129 @@ def test_the_hint_is_the_old_one_for_the_web_server_and_nothing_when_readings_ar
     for status in (None, lhm.LhmStatus("inprocess", False, False, None)):
         assert hint(status, {"gpu.temp": Reading("gpu.temp", 50.0)}) is None
     assert lhm.hardware_hint({}, [], URL, "linux", lhm.LhmStatus("inprocess")) is None
+
+
+# -- the same, for the tray and the editor ---------------------------------------------------
+
+BOTH = "CPU temperature and power need administrator rights and the PawnIO driver (pawnio.eu)."
+ADMIN = "CPU temperature and power need administrator rights: run Libre Panel as administrator."
+DRIVER = "CPU temperature and power need the PawnIO driver: install it from pawnio.eu."
+OLD = "CPU temperature and power need PawnIO 2 or newer: update it from pawnio.eu."
+UNSTARTED = (
+    "Temperatures and power are missing: their reader did not start. "
+    "Reinstall Libre Panel; the log says why."
+)
+SERVER = (
+    "Temperatures and power need LibreHardwareMonitor: start it as administrator "
+    "and turn on Options > Remote Web Server > Run."
+)
+GPU_ONLY = {"gpu.temp": Reading("gpu.temp", 50.0)}  # the card's arrive without rights
+
+
+def user(status, readings=None, platform="win32", ready=True):
+    return lhm.user_hint(GPU_ONLY if readings is None else readings, platform, status, ready)
+
+
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (lhm.LhmStatus("inprocess", False, False, None), BOTH),
+        (lhm.LhmStatus("inprocess", False, False, "2.0.1"), ADMIN),
+        (lhm.LhmStatus("inprocess", False, False, ""), ADMIN),  # a driver that says no version
+        (lhm.LhmStatus("inprocess", True, False, None), DRIVER),
+        (lhm.LhmStatus("inprocess", True, False, "1.4.0"), OLD),
+        (lhm.LhmStatus("inprocess", False, False, "1.4.0"), BOTH),
+    ],
+)
+def test_the_user_is_told_what_keeps_the_cpu_out_of_reach(status, expected):
+    """The graphics card's readings arrive, the processor's do not: say what to do about it,
+    in a sentence a person can follow (no command line, no setting)."""
+    assert user(status) == expected
+    assert "libre-panel" not in expected and "config" not in expected
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        lhm.LhmStatus("inprocess"),  # still starting: nothing is known yet
+        lhm.LhmStatus("inprocess", False, None, None),  # the CPU's sensors are not there at all
+        lhm.LhmStatus("inprocess", False, True, None),  # in reach
+        lhm.LhmStatus("inprocess", True, False, "2.0.1"),  # nothing a person could do
+    ],
+)
+def test_nothing_is_said_where_nothing_can_be_done_or_is_not_known_yet(status):
+    assert user(status) == ""
+
+
+def test_nothing_is_said_off_windows_while_starting_or_when_the_readings_are_there():
+    out_of_reach = lhm.LhmStatus("inprocess", False, False, None)
+    assert user(out_of_reach, platform="linux") == "" and user(out_of_reach, ready=False) == ""
+    cpu = {"cpu.temp": Reading("cpu.temp", 45.0)}  # a web server as administrator filled it in
+    assert user(out_of_reach, cpu) == ""
+    assert user(lhm.LhmStatus("webserver"), GPU_ONLY) == ""
+    assert user(lhm.LhmStatus("webserver", error="boom"), GPU_ONLY) == ""
+
+
+def test_when_nothing_arrives_the_user_is_told_to_reinstall_or_to_start_the_web_server():
+    none = {}
+    assert (
+        user(lhm.LhmStatus("webserver", error="LibreHardwareMonitorLib.dll was not found"), none)
+        == UNSTARTED
+    )
+    assert user(lhm.LhmStatus("inprocess", error="pythonnet could not start"), none) == UNSTARTED
+    assert user(lhm.LhmStatus("webserver"), none) == SERVER
+    assert user(None, none) == SERVER  # a source that does not say how it is read
+    # the web server's text is not the CLI's: no address, no setting to edit
+    assert "127.0.0.1" not in SERVER and "config.toml" not in SERVER
+
+
+def test_the_hint_speaks_the_language_of_the_user():
+    from libre_panel import i18n
+
+    i18n.set_language("de")
+    assert user(lhm.LhmStatus("inprocess", False, False, None)) == (
+        "CPU-Temperatur und -Leistung brauchen Administratorrechte und den PawnIO-Treiber "
+        "(pawnio.eu)."
+    )
+    assert user(lhm.LhmStatus("inprocess", False, False, "2.0")) == (
+        "CPU-Temperatur und -Leistung brauchen Administratorrechte: "
+        "Libre Panel als Administrator ausführen."
+    )
+    assert user(lhm.LhmStatus("inprocess", True, False, None)).endswith(
+        "von pawnio.eu installieren."
+    )
+    assert user(lhm.LhmStatus("inprocess", True, False, "1.4")).endswith(
+        "den Treiber von pawnio.eu aktualisieren."
+    )
+    assert user(lhm.LhmStatus("webserver"), {}).startswith("Temperaturen und Leistung brauchen")
+    assert user(lhm.LhmStatus("webserver", error="x"), {}) == (
+        "Temperaturen und Leistung fehlen: Das Auslesen ist nicht gestartet. "
+        "Libre Panel neu installieren; das Protokoll nennt den Grund."
+    )
+
+
+def test_the_run_status_hint_follows_the_source_that_runs_inside(possible, web_server):
+    """What ``sensor_hint`` makes of the hub: asked again with each look, never before the source
+    has started, and gone as soon as the source gives the readings, whatever the last sample."""
+    from libre_panel import app
+
+    provider = provider_with()
+    (source,) = possible.sources
+    source.state = lhm.LhmStatus("inprocess", False, False, "2.0.1")
+    hub = SensorHub([provider])
+    try:
+        source.ready = False  # .NET is still loading
+        assert app.sensor_hint(hub, {}, "win32") == ""
+        source.ready = True
+        assert app.sensor_hint(hub, {}, "win32") == ADMIN
+        assert app.sensor_hint(hub, {}, "linux") == app.sensor_hint(None, {}, "win32") == ""
+        assert app.sensor_hint(SensorHub([]), {}, "win32") == ""  # not in the list of sources
+        source.state = lhm.LhmStatus("inprocess", True, False, None)
+        assert app.sensor_hint(hub, GPU_ONLY, "win32") == DRIVER
+        source.readings = {"cpu.temp": Reading("cpu.temp", 44.0, "°C")}  # in reach at last
+        assert app.sensor_hint(hub, GPU_ONLY, "win32") == ""
+    finally:
+        provider.close()
 
 
 # -- libre-panel sensors ---------------------------------------------------------------

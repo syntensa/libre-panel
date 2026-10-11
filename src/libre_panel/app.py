@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -165,6 +166,28 @@ class RunStatus:
     stats: dict[str, Any] = field(default_factory=dict)
     counters: Counters = field(default_factory=Counters)  # what the drivers count (shared)
     hub: SensorHub | None = None  # the sensor sources the loop reads, for the editor's pages
+
+
+def sensor_hint(
+    hub: SensorHub | None, readings: dict[str, Any], platform: str = sys.platform
+) -> str:
+    """What to tell a person who sees "--" where Windows' temperatures and power should be,
+    in their language ("" when nothing is the matter, and off Windows). ``readings`` are what
+    the panel last drew; LibreHardwareMonitor is asked again, so a hint never outlives the
+    fault because the last sample came before it was fixed."""
+    if hub is None or platform != "win32":
+        return ""
+    from libre_panel.sensors.librehardwaremonitor import user_hint
+
+    for provider in list(hub.providers):
+        if provider.name != "librehardwaremonitor":
+            continue
+        try:
+            ready = getattr(provider, "wait_ready", lambda timeout: True)(0)
+            return user_hint({**readings, **provider.read()}, platform, provider.status(), ready)
+        except Exception:  # a hint must not break the state it is part of
+            log.debug("no hint about LibreHardwareMonitor", exc_info=True)
+    return ""
 
 
 class _Link:

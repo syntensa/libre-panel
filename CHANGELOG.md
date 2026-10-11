@@ -303,6 +303,15 @@
   the demo values of the previews gained the volume (46 %), the game keys and the rain
   ("Rain in 40 min"). `GET /api/sensors` also lists the pictures a source has (`media.cover`,
   `media.app_icon`, `game.logo`), marked `"picture": true`, for an image's `"@key"`
+- Windows, when LibreHardwareMonitor gives no temperatures (Libre Panel not run as
+  administrator, no PawnIO driver, its reader did not start, its web server not running), the
+  panel showed "--" and only `libre-panel sensors`, `doctor` and the Control page said why, in
+  technical words. Now one sentence says what to do, in the user's language: a line under the
+  status line of the tray menu and in the tooltip of the icon, `hint` in the panel's state
+  (`/api/app`, `GET control/panel`) and on the LibreHardwareMonitor row of `GET
+  control/sources`. It keeps quiet while LibreHardwareMonitor starts and about what nobody can
+  change. A Windows download that cannot use its library (damaged, or deleted by a virus
+  scanner) reports that as the source's `error` instead of asking a web server that is not there
 - Services follow `config.toml` whenever the panel loop starts. A service switched
   on (or off, or given other options) while the panel was paused, or in a
   `config.toml` that did not load at the start and was fixed later, stayed as it

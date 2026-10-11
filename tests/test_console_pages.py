@@ -312,7 +312,9 @@ def test_control_shows_the_panel_its_sources_and_its_services(running, isolated_
     status, panel = get(port, "control/panel")
     assert status == 200 and panel["background"] is True
     assert panel["panel"]["state"] == "showing" and panel["panel"]["stats"]["fps"] > 0
-    assert set(panel["panel"]) == {"state", "detail", "target", "theme", "frames", "mode", "stats"}
+    assert set(panel["panel"]) == {
+        "state", "detail", "hint", "target", "theme", "frames", "mode", "stats",
+    }  # fmt: skip
     assert get(port, "control/services")[1]["services"] == data["services"]
     assert get(port, "control/themes")[1]["shown"] == "libre-default"
     sources = get(port, "control/sources")[1]
@@ -583,6 +585,96 @@ def test_a_source_that_says_how_it_is_read_is_explained(running):
     assert lhm["details"][:2] == [["Mode", "inside Libre Panel"], ["Administrator", "no"]]
     assert (lhm["hint"] is not None) is (sys.platform == "win32")  # temperatures come from there
     assert lhm["problem"] is (sys.platform == "win32")
+
+
+class FakeLhm:
+    """Stands in for LibreHardwareMonitor in the hub: what it says of itself, nothing else."""
+
+    name = "librehardwaremonitor"
+    every_frame = False
+
+    def __init__(self, status):
+        self.state = status
+
+    def read(self):
+        return {}
+
+    def images(self):
+        return {}
+
+    def status(self):
+        return self.state
+
+    def close(self):
+        pass
+
+
+def pretend_windows(app, status, readings=None):
+    """The app runs on Windows, LibreHardwareMonitor says ``status`` and the last sample has
+    ``readings`` (a stand-in for the host, so the loop's own samples do not interfere)."""
+    from types import SimpleNamespace
+
+    from libre_panel.sensors.base import Reading, Snapshot
+
+    readings = {"gpu.temp": 50.0} if readings is None else readings
+    found = {key: Reading(key, value) for key, value in readings.items()}
+    app.panel.platform = "win32"
+    app.panel.host = SimpleNamespace(latest=Snapshot(readings=found))
+    lhm = FakeLhm(status)
+    app.panel.status.hub.providers.insert(0, lhm)
+    return lhm
+
+
+def test_missing_temperatures_are_explained_in_the_run_status_and_the_sources(running):
+    """Not run as administrator and no PawnIO: the one sentence is in the panel's state, which
+    the tray and the editor read, and on the LibreHardwareMonitor row of the sources."""
+    from libre_panel.sensors.librehardwaremonitor import LhmStatus
+
+    app, port = running
+    app.panel.platform = "linux"  # nothing to say elsewhere, whatever the sources are
+    assert get(port, "control/panel")[1]["panel"]["hint"] == ""
+    lhm = pretend_windows(app, LhmStatus("inprocess", elevated=False, ring0=False, pawnio=None))
+    said = "CPU temperature and power need administrator rights and the PawnIO driver (pawnio.eu)."
+    assert get(port, "control/panel")[1]["panel"]["hint"] == said
+    assert get(port, "control/status")[1]["panel"]["hint"] == said
+    source = next(s for s in get(port, "control/sources")[1]["sources"] if s["status"])
+    assert (source["name"], source["hint"], source["problem"]) == (lhm.name, said, True)
+    assert source["details"][:2] == [["Mode", "inside Libre Panel"], ["Administrator", "no"]]
+    assert request(port, "GET", "/api/app")[1]["panel"]["hint"] == said  # the editor's chip
+
+    i18n.set_language("de")
+    assert get(port, "control/panel")[1]["panel"]["hint"].startswith("CPU-Temperatur und -Leis")
+    i18n.set_language("en")
+
+    lhm.state = LhmStatus("inprocess", elevated=True, ring0=True, pawnio="2.0.1")  # all well
+    assert get(port, "control/panel")[1]["panel"]["hint"] == ""
+    source = next(s for s in get(port, "control/sources")[1]["sources"] if s["status"])
+    assert source["hint"] is None and source["problem"] is False
+
+    app.panel.pause()  # no panel, no hint: it is about what is shown
+    lhm.state = LhmStatus("inprocess", elevated=False, ring0=False, pawnio=None)
+    assert get(port, "control/panel")[1]["panel"]["hint"] == ""
+
+
+def test_the_hint_waits_until_librehardwaremonitor_has_started(running):
+    from libre_panel.sensors.librehardwaremonitor import LhmStatus
+
+    app, port = running
+    lhm = pretend_windows(app, LhmStatus("webserver"), {})
+    lhm.wait_ready = lambda timeout: False  # still looking for its first answer
+    assert get(port, "control/panel")[1]["panel"]["hint"] == ""
+    lhm.wait_ready = lambda timeout: True
+    assert get(port, "control/panel")[1]["panel"]["hint"].startswith(
+        "Temperatures and power need LibreHardwareMonitor"
+    )
+
+
+def test_a_source_that_breaks_while_it_is_asked_for_a_hint_does_not_break_the_state(running):
+    app, port = running
+    lhm = pretend_windows(app, None)
+    lhm.status = lambda: 1 / 0
+    state = get(port, "control/panel")[1]["panel"]
+    assert state["state"] == "showing" and state["hint"] == ""
 
 
 # -- Autopilot ----------------------------------------------------------------------------------

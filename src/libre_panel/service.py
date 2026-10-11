@@ -12,13 +12,14 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 import threading
 import webbrowser
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from libre_panel.app import RunStatus, _Watcher, run
+from libre_panel.app import RunStatus, _Watcher, run, sensor_hint
 from libre_panel.autostart import Autostart, launch_command
 from libre_panel.config import (
     CONFIG_FILENAME,
@@ -60,6 +61,7 @@ class PanelService:
         self.on_config = on_config
         self.status = RunStatus()
         self.error = ""
+        self.platform = sys.platform  # what the hint about the sensors goes by (tests set it)
         self._paused = False
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -138,6 +140,11 @@ class PanelService:
                 log.exception("panel loop crashed; starting again in %.0f s", self.restart_delay)
                 stop.wait(self.restart_delay)
 
+    def _hint(self) -> str:
+        snapshot = self.host.latest if self.host is not None else None
+        readings = snapshot.readings if snapshot is not None else {}
+        return sensor_hint(self.status.hub, readings, self.platform)
+
     def state(self) -> dict[str, Any]:
         status = self.status
         if self._paused:
@@ -151,6 +158,8 @@ class PanelService:
         return {
             "state": state,
             "detail": self.error or (status.detail if state == "waiting" else ""),
+            # what to do when temperatures and power show "--" (Windows), in the user's language
+            "hint": self._hint() if state in ("showing", "waiting") else "",
             "target": status.target,
             "theme": status.theme,
             "frames": status.frames,
