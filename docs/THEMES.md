@@ -278,7 +278,7 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `graph` | a history graph under its name and value | as `stat` |
 | `bars` | rows with bars for CPU, RAM, disk and GPU, as many as fit | |
 | `network` | download and upload; graphs when wide or large | |
-| `system` | names of processor and graphics card, uptime | |
+| `system` | names of processor and graphics card, uptime; the memory's name too when there is room for a fourth row | |
 | `text` | a title (`text`) with an accent line | |
 | `temps` | every temperature as a bar, CPU and GPU first, warm and hot in `warn` and `crit`; the fans beside them when long, as tiles below when big | `items` |
 | `cores` | the load of every core: tiles when small, columns when wide; the history when big | |
