@@ -13,7 +13,7 @@ from libre_panel.config import Config, SensorsConfig
 from libre_panel.plugins import PluginHost, RenderContext
 from libre_panel.plugins.host import EVENTS, ServiceHost
 from libre_panel.render.renderer import Renderer
-from libre_panel.sensors.base import Reading, SensorHub, Snapshot, wanted
+from libre_panel.sensors.base import Reading, SensorHub, SensorProvider, Snapshot, wanted
 from libre_panel.theme.model import find_theme, load_theme
 
 
@@ -128,6 +128,91 @@ def test_closing_the_host_ends_the_sample_thread(host):
     host.close()  # again: nothing to do
 
 
+# -- the readings that change between two samples ---------------------------------------------
+
+
+def test_fresh_tells_which_readings_changed_and_stays_quiet_when_none_did(host):
+    assert "fresh" in EVENTS
+    seen = []
+    ServiceHost(host, "svc").on(
+        "fresh",
+        lambda snapshot, keys: seen.append((snapshot, keys, threading.current_thread().name)),
+    )
+    snapshot = snapshot_of(a=1, b=2)
+    before = dict(snapshot.readings)
+    latest = {"a": Reading("a", 1), "b": Reading("b", 3), "c": Reading("c", 4)}
+    host.fresh(snapshot, before, latest)  # b changed, c is new, a is as it was
+    assert wait_for(lambda: seen)
+    assert seen == [(snapshot, frozenset({"b", "c"}), "plugin-samples")]
+    seen.clear()
+    host.fresh(snapshot, latest, dict(latest))  # the same values again: nothing to tell
+    host.fresh(snapshot, latest, {})
+    time.sleep(0.05)
+    assert seen == []
+
+
+def test_fresh_costs_nothing_while_nobody_listens(host):
+    class Never(dict):
+        def items(self):
+            raise AssertionError("the readings were compared for nobody")
+
+    host.fresh(snapshot_of(a=1), {}, Never())
+    assert host._sampler is None  # no thread for it either
+
+
+def test_a_slow_listener_gets_what_moved_in_between_not_every_change(host):
+    gate = threading.Event()
+    seen = []
+
+    def slow(snapshot, keys):
+        seen.append(keys)
+        assert gate.wait(10)
+
+    ServiceHost(host, "svc").on("fresh", slow)
+    snapshot = snapshot_of()
+    host.emit("fresh", snapshot=snapshot, keys=frozenset({"one"}))
+    assert wait_for(lambda: seen == [frozenset({"one"})])  # inside the callback, blocked
+    for key in ("two", "three", "two"):
+        host.emit("fresh", snapshot=snapshot, keys=frozenset({key}))
+    gate.set()
+    assert wait_for(lambda: len(seen) == 2)
+    assert seen[1] == {"two", "three"}  # one call, and nothing that moved is lost
+
+
+def test_samples_and_fresh_readings_are_heard_in_one_thread_one_after_the_other(host):
+    inside, seen, clashes = 0, [], []
+
+    def listen(name):
+        def heard(**_):
+            nonlocal inside
+            inside += 1
+            clashes.append(inside > 1)  # two callbacks at once would show here
+            time.sleep(0.01)
+            seen.append(name)
+            inside -= 1
+
+        return heard
+
+    service = ServiceHost(host, "svc")
+    service.on("sample", listen("sample"))
+    service.on("fresh", listen("fresh"))
+    for _ in range(5):
+        host.emit("sample", snapshot=snapshot_of(a=1))
+        host.emit("fresh", snapshot=snapshot_of(a=1), keys=frozenset({"a"}))
+    assert wait_for(lambda: "sample" in seen and "fresh" in seen)
+    time.sleep(0.1)
+    assert not any(clashes)
+
+
+def test_a_stopped_service_hears_no_more_fresh_readings(host):
+    heard = []
+    ServiceHost(host, "svc").on("fresh", lambda snapshot, keys: heard.append(keys))
+    host.forget("svc")
+    host.fresh(snapshot_of(a=1), {}, {"a": Reading("a", 1)})
+    host.emit("fresh", wait=True, snapshot=snapshot_of(a=1), keys=frozenset({"a"}))
+    assert heard == []
+
+
 def config_for(isolated_home, refresh_ms=100):
     config = Config(theme="libre-default", fps=20, sensors=SensorsConfig(providers=["demo"]))
     config.refresh_ms = refresh_ms
@@ -192,6 +277,50 @@ def test_the_main_loop_shows_a_publish_before_the_next_sample(isolated_home):
         assert host.latest is first  # the same sample, its readings brought up to date
     finally:
         finish()
+
+
+def test_the_main_loop_tells_a_change_between_two_samples_on_the_frame_it_shows_in(
+    isolated_home,
+):
+    """A source that follows on every frame (the volume) moves between two samples: the
+    services hear of it on that frame, and of nothing else. No sample is taken for it."""
+    from test_app_cli import MemoryStream, StepClock
+
+    class Level(SensorProvider):
+        name = "level"
+        every_frame = True
+        value = 30.0
+
+        def read(self):
+            return {"zz.level": Reading("zz.level", self.value, "%", "Level")}
+
+    clock, level, host = StepClock(1000.0), Level(), PluginHost()
+    config = config_for(isolated_home, refresh_ms=60_000)  # one sample in this test
+    hub = SensorHub([level])
+    loop = app.MainLoop(config, host=host, hub=hub, display=MemoryStream(), clock=clock)
+    told, samples = [], []
+    service = ServiceHost(host, "svc")
+    service.on("fresh", lambda snapshot, keys: told.append((snapshot.value("zz.level"), keys)))
+    service.on("sample", lambda snapshot: samples.append(snapshot))
+    try:
+        for _ in range(10):  # the first frame takes the sample; the others change nothing
+            clock.now += 0.02
+            loop.step(clock.now)
+        assert wait_for(lambda: len(samples) == 1)
+        time.sleep(0.05)
+        assert told == []  # nothing moved, so nobody was woken
+        level.value = 35.0
+        clock.now += 0.02
+        loop.step(clock.now)
+        assert wait_for(lambda: told)  # on this frame, not at the next sample
+        assert told == [(35.0, frozenset({"zz.level"}))] and len(samples) == 1
+        clock.now += 0.02
+        loop.step(clock.now)  # it stays at 35: nothing new
+        time.sleep(0.05)
+        assert len(told) == 1
+    finally:
+        loop.close()
+        host.close()
 
 
 # -- states -------------------------------------------------------------------------------

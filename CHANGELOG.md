@@ -40,6 +40,11 @@
   `context.state(key)` read it back. `host.want("media.*")` tells the sources
   that work on demand (what is playing, the volume, the load) that a service
   reads them
+- Plugins: `host.on("fresh", callback)` (`snapshot=`, `keys=`) tells a service on the
+  frame a reading of a source that follows on every frame (the volume, the fast load, what
+  services publish) changed between two samples, and only then. It comes in the thread of
+  `sample`, one callback after the other, and a slow one gets the newest with all the keys
+  that changed meanwhile
 - Services of its own, built into the app: `notices`, `game` and `autopilot`.
   They are switched on with `[services] enabled` like a plugin's, all are off
   until you list them, they work in the downloads without any package, and
@@ -284,6 +289,9 @@
 - Video mode: where many widgets move, what lies under a graph was laid anew
   on most frames (the kept layers went oldest first, not least used); the
   ones a frame uses are now kept longest
+- The volume message came with the next reading, up to `refresh_ms` late. It now comes
+  within a frame or two of the volume key, and a slow turn of the volume that moves less
+  than a step between two frames still adds up to one
 - Services follow `config.toml` whenever the panel loop starts. A service switched
   on (or off, or given other options) while the panel was paused, or in a
   `config.toml` that did not load at the start and was fixed later, stayed as it

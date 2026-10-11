@@ -669,7 +669,9 @@ class MainLoop:
                 renderer.new_sample(now, every)
             elif hub.every_frame:  # cheap sources follow on every frame (a new dict:
                 latest = hub.fresh(video=display.streaming)  # helpers may read the old one)
-                snapshot.readings = {**snapshot.readings, **latest}
+                before, snapshot.readings = snapshot.readings, {**snapshot.readings, **latest}
+                if host is not None:  # a service hears of a change at once, not at the sample
+                    host.fresh(snapshot, before, latest)
             was_connected = link.connected
             if link.ensure(started):
                 streaming = display.streaming

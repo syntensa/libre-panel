@@ -5,6 +5,7 @@ import tomllib
 from datetime import datetime
 
 import pytest
+from fake_sensors import wait_for
 from PIL import Image, ImageChops
 
 from libre_panel import i18n
@@ -42,6 +43,14 @@ class Desk:
         self.clock.now += seconds
         snapshot = Snapshot(readings={r.key: r for r in readings}, images=images or {})
         self.host.emit("sample", wait=True, snapshot=snapshot)
+        return self.host.take_toasts()
+
+    def fresh(self, readings, keys=None, seconds=0.02):
+        """A frame between two samples brings these readings; the toasts the service sent."""
+        self.clock.now += seconds
+        snapshot = Snapshot(readings={r.key: r for r in readings})
+        found = frozenset(r.key for r in readings) if keys is None else frozenset(keys)
+        self.host.emit("fresh", wait=True, snapshot=snapshot, keys=found)
         return self.host.take_toasts()
 
     def close(self):
@@ -115,6 +124,55 @@ def test_muting_and_unmuting_are_told(desk):
     assert back.text == "35" and back.payload["progress"] == pytest.approx(0.35)
 
 
+def test_the_volume_is_told_when_it_moves_between_two_samples(desk):
+    """The key is turned between readings: the message comes with that frame, and a sample
+    that finds the same volume afterwards says nothing more."""
+    d = desk(volume=True)
+    assert d.sample(volume(30)) == []
+    [toast] = d.fresh(volume(36))
+    assert (toast.kind, toast.key, toast.text) == ("volume", "volume", "36")
+    assert toast.payload["progress"] == pytest.approx(0.36)
+    assert d.sample(volume(36)) == []  # told already
+    [muted] = d.fresh(volume(36, muted=True))
+    assert muted.text == "Muted"
+    assert d.sample(volume(36, muted=True)) == []
+    [back] = d.fresh(volume(36))
+    assert back.text == "36"
+
+
+def test_only_a_change_of_the_volume_is_looked_at_between_samples(desk):
+    d = desk(volume=True, music=True, warnings=[{"key": "cpu.temp", "crit": 90}])
+    d.sample(volume(30) + temperature(50))
+    # the load moves ten times a second, and the volume is not among what moved
+    assert d.fresh([Reading("cpu.load", 40.0, "%")] + volume(60), keys={"cpu.load"}) == []
+    assert d.fresh(temperature(95), keys={"cpu.temp"}) == []  # warnings wait for the sample
+    assert [t.text for t in d.fresh(volume(60), keys={"audio.volume"})] == ["60"]
+
+
+def test_a_slow_turn_adds_up_to_a_step_whatever_the_rate_of_the_readings(desk):
+    """Looked at on every frame, the volume moves a fraction of a step at a time: the
+    message comes when it has moved a step from the one told, not from the frame before."""
+    d = desk(volume=True)
+    d.sample(volume(30))
+    assert d.fresh(volume(30.4)) == [] and d.fresh(volume(30.8)) == []
+    [toast] = d.fresh(volume(31.2))
+    assert toast.text == "31"
+    assert d.fresh(volume(31.5)) == [] and [t.text for t in d.fresh(volume(32.3))] == ["32"]
+
+
+def test_volume_changes_between_samples_are_not_looked_at_when_the_volume_is_off(desk):
+    d = desk(volume=False, music=True)
+    assert "fresh" not in d.host._listeners or not d.host._listeners["fresh"]
+    assert d.fresh(volume(30)) == [] and d.fresh(volume(60)) == []
+
+
+def test_a_stopped_service_does_not_tell_a_volume_that_moved(desk):
+    d = desk(volume=True)
+    d.sample(volume(30))
+    d.service.stop()
+    assert d.fresh(volume(50)) == []
+
+
 def test_without_a_volume_source_there_is_nothing_to_tell_and_one_hint(desk, caplog):
     d = desk(volume=True)
     with caplog.at_level("INFO", logger="libre_panel.service.notices"):
@@ -135,6 +193,52 @@ def test_notices_follow_the_language(desk):
     d.host.emit("panel-restarted", wait=True)
     [restart] = d.host.take_toasts()
     assert (restart.text, restart.payload["label"]) == ("Panel neu gestartet 21:05", "Panel")
+
+
+def test_the_volume_message_comes_within_a_frame_of_the_key_not_with_the_next_reading():
+    """Through the real main loop: a volume source that follows on every frame, a theme that
+    takes a reading once a minute. The message is sent from the frame the volume moved in."""
+    from test_app_cli import MemoryStream, StepClock
+
+    from libre_panel import app
+    from libre_panel.sensors.base import SensorHub, SensorProvider
+
+    class Audio(SensorProvider):
+        name = "audio"
+        every_frame = True
+        level = 30.0
+
+        def read(self):
+            return {k: r for r in volume(self.level) for k in (r.key,)}
+
+    clock, audio, host = StepClock(1000.0), Audio(), PluginHost()
+    config = Config(theme="pico", services=ServicesConfig(["notices"], {"notices": {
+        "music": False, "restarted": False}}))  # fmt: skip
+    config.refresh_ms = 60_000
+    manager = ServiceManager(host)
+    manager.apply(config)
+    loop = app.MainLoop(config, host=host, hub=SensorHub([audio]), display=MemoryStream(),
+                        clock=clock)  # fmt: skip
+    try:
+        assert manager.state == {"notices": "running"}
+        for _ in range(5):  # the first frame is the one sample; the others see no change
+            clock.now += 0.02
+            loop.step(clock.now)
+        assert wait_for(lambda: manager.running["notices"][0]._volume is not None)
+        assert host.take_toasts() == []  # the first value is no change
+        audio.level = 38.0
+        clock.now += 0.02
+        loop.step(clock.now)  # the frame the volume shows in...
+        assert wait_for(lambda: host.latest.value("audio.volume") == 38.0)
+        assert wait_for(lambda: len(host._toasts) == 1)  # ...sends it
+        assert [(t.kind, t.text) for t in host._toasts] == [("volume", "38")]
+        clock.now += 0.02
+        loop.step(clock.now)  # and the next frame has it on the panel
+        assert loop.toasts.active and not host._toasts
+    finally:
+        loop.close()
+        manager.stop()
+        host.close()
 
 
 # -- what plays -----------------------------------------------------------------------------------

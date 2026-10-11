@@ -290,7 +290,7 @@ something itself leaves its kind out.
 
 | Kind | When | The message |
 |---|---|---|
-| `volume` | the volume changes by at least 1, or is muted or unmuted; the value the service starts with is no change | the level with a bar, or "Muted" |
+| `volume` | the volume has moved by at least 1 since the last message, or is muted or unmuted; the value the service starts with is no change | the level with a bar, or "Muted" |
 | `music` | a new track starts playing; not a pause, a resume, or the track that was playing at the start | title and artist, with the cover and the icon of the player when a source brings them |
 | `warning` | a sensor reaches a limit you set | "CPU temperature 92 °C", in the theme's warning colour at `warn` and its critical one at `crit` |
 | `panel` | the panel is back from a restart that cleared a hung video decoder (not from a replug) | "Panel restarted 21:05" |
@@ -321,8 +321,8 @@ crit = 85
   at once, also in the quiet time. A sensor that is past its limit when the
   service starts is told too.
 - Notices look at every new reading, that is every `refresh_ms` of the theme.
-  For a volume bar that follows the volume keys closely use a theme with a short
-  `refresh_ms` (100 to 250).
+  The volume is looked at on every frame it moves in, too, so its message comes
+  within a frame or two of the volume key, whatever `refresh_ms` is.
 - While the service runs, the sources it needs run too, although no theme shows
   them: what is playing (`media.*`), the volume (`audio.*`) and the warned
   sensors. They cost what they cost otherwise (a player is asked once a

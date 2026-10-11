@@ -37,8 +37,10 @@ EVENTS = (
     "theme-changed",
     "mode-changed",
     "sample",  # a new snapshot of the readings (snapshot=), about every refresh_ms
+    "fresh",  # between two samples, readings that follow on every frame changed (snapshot=, keys=)
     "quit",
 )
+NEWEST = ("sample", "fresh")  # delivered in a thread of their own, only the newest of each
 OPTION_TYPES = {
     "int": int,
     "number": (int, float),
@@ -248,9 +250,11 @@ class ServiceHost:
         (after ``panel-connected`` when the panel came back from a restart that
         cleared a hung decoder, not from a replug), ``theme-changed``,
         ``mode-changed``, ``sample`` (``snapshot=``: a new snapshot of the readings,
-        about every ``refresh_ms``) and ``quit``. Callbacks run in an event thread;
-        a slow ``sample`` callback is handed the newest snapshot when it is free
-        again, not every one."""
+        about every ``refresh_ms``), ``fresh`` (``snapshot=``, ``keys=``: a reading
+        of a source that follows on every frame, the volume, changed between two
+        samples; ``keys`` are the readings that did) and ``quit``. Callbacks run in
+        an event thread; a slow ``sample`` or ``fresh`` callback is handed the newest
+        one when it is free again, not every one."""
         self._hub.listen(event, callback, owner=self.name)
 
 
@@ -305,9 +309,10 @@ class PluginHost:
         self._listeners: dict[str, list[tuple[str | None, Callable[..., None]]]] = {}
         self._events: queue.Queue[tuple[str, dict[str, Any]] | None] = queue.Queue()
         self._dispatcher: threading.Thread | None = None
-        # Samples have a thread of their own and only the newest one is kept: a
-        # slow listener neither holds up the other events nor falls behind.
-        self._sample: dict[str, Any] | None = None
+        # Samples (and the changes between them) have a thread of their own and only the
+        # newest of each is kept: a slow listener neither holds up the other events nor
+        # falls behind. One thread for both, so a service never hears them at once.
+        self._newest: dict[str, dict[str, Any]] = {}
         self._sample_ready = threading.Event()
         self._sampler: threading.Thread | None = None
         self._sampler_stop = False
@@ -414,7 +419,7 @@ class PluginHost:
             raise ValueError(f"unknown event {event!r} (known: {', '.join(EVENTS)})")
         with self._lock:
             self._listeners.setdefault(event, []).append((owner, callback))
-            if event == "sample":
+            if event in NEWEST:
                 if self._sampler is None:
                     self._sampler_stop = False
                     self._sampler = threading.Thread(
@@ -470,12 +475,27 @@ class PluginHost:
             return
         if wait:
             self._deliver(event, data)
-        elif event == "sample":
+        elif event in NEWEST:
             with self._lock:
-                self._sample = data  # one not yet delivered is replaced: the newest counts
+                held = self._newest.get(event)
+                if event == "fresh" and held is not None:  # what moved before is not lost
+                    data = {**data, "keys": held.get("keys", frozenset()) | data["keys"]}
+                self._newest[event] = data  # one not yet delivered is replaced: the newest counts
             self._sample_ready.set()
         else:
             self._events.put((event, data))
+
+    def fresh(
+        self, snapshot: Snapshot, before: dict[str, Reading], latest: dict[str, Reading]
+    ) -> None:
+        """For the main loop, between two samples: ``latest`` (the readings of the sources
+        that follow on every frame) went into ``snapshot``, whose readings were ``before``.
+        Tell the ``fresh`` listeners which readings changed, if any did."""
+        if not self._listeners.get("fresh"):
+            return
+        moved = frozenset(key for key, reading in latest.items() if before.get(key) != reading)
+        if moved:
+            self.emit("fresh", snapshot=snapshot, keys=moved)
 
     def _deliver(self, event: str, data: dict[str, Any]) -> None:
         with self._lock:
@@ -484,7 +504,7 @@ class PluginHost:
             try:
                 callback(**data)
             except Exception as exc:
-                if event == "sample":  # ten times a second: say each failure once
+                if event in NEWEST:  # ten times a second: say each failure once
                     text = f"{type(exc).__name__}: {exc}"
                     if self._failed.get(id(callback)) == text:
                         continue
@@ -496,12 +516,12 @@ class PluginHost:
             self._sample_ready.wait()
             self._sample_ready.clear()
             with self._lock:
-                data, self._sample = self._sample, None
+                newest, self._newest = self._newest, {}
                 stopping = self._sampler_stop
             if stopping:
                 return
-            if data is not None:
-                self._deliver("sample", data)
+            for event, data in newest.items():
+                self._deliver(event, data)
 
     def _dispatch(self) -> None:
         while True:
