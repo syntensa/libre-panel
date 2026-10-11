@@ -1,6 +1,8 @@
-"""The facet finish (``"finish": "facet"``): shapes with a flat top in their own colour
-and a sharp 45-degree bevel, lit from the top left, as SPUR II's lettering and its bars,
-rings and curves. The drawing is render.facets; this registers it with render.finish.
+"""The facet finishes (``"finish": "facet"`` and ``"acrylic"``): shapes with a flat top in
+their own colour and a sharp 45-degree bevel, lit from the top left, as SPUR II's
+lettering and its bars, rings and curves. The drawing is render.facets; this registers
+it with render.finish. ``facet`` is for text, bars, rings and curves; ``acrylic`` for
+lettering only.
 
 Lettering is laid out by the renderer (alignment, spacing, fitting) and only the
 letters come from here; a bar, a ring and a graph's line are drawn here, and fall
@@ -21,22 +23,34 @@ from libre_panel.render.renderer import Piece, _fraction, _number, _steps
 
 
 class FacetText(Finish):
-    """Lettering with a bevel, from 20 px on and on one line."""
+    """Lettering of bright metal with a bevel, from 20 px on and on one line: the bevel
+    mirrors the sky above and the ground below."""
 
     name = "facet"
+    style = "metal"
     types = ("text", "metric", "clock", "weather", "countdown")
 
     def __init__(self) -> None:
-        self._tints: WeakKeyDictionary[Any, Any] = WeakKeyDictionary()  # per renderer's palette
+        self._worlds: WeakKeyDictionary[Any, Any] = WeakKeyDictionary()  # per renderer
 
     def lettering(self, renderer, widget, font, text):
         return "\n" not in text and facets.usable(font)
 
     def glyph(self, renderer, widget, font, ch, fill, at):
-        tints = self._tints.get(renderer)
-        if tints is None:  # the cool and the warm tint a bevel takes on, from the palette
-            tints = self._tints[renderer] = facets.tints_for(renderer.theme.palette)
-        return facets.glyph(font, ch, fill, at, tints)
+        world = self._worlds.get(renderer)
+        if world is None:  # the sky is the palette's accent, the ground the background
+            theme = renderer.theme
+            ground = renderer.color(theme.background_color) or (0, 0, 0, 0)
+            world = self._worlds[renderer] = facets.environment_for(theme.palette, ground)
+        return facets.glyph(font, ch, fill, at, world, self.style)
+
+
+class AcrylicText(FacetText):
+    """Lettering of acrylic lit from within (the "II" of SPUR II): the same bevel, its
+    lit edges lighter still and hardly any shade on the others."""
+
+    name = "acrylic"
+    style = "acrylic"
 
 
 class FacetBar(Finish):
@@ -122,5 +136,5 @@ class FacetGraph(Finish):
         return True
 
 
-for _finish in (FacetText(), FacetBar(), FacetGauge(), FacetGraph()):
+for _finish in (FacetText(), AcrylicText(), FacetBar(), FacetGauge(), FacetGraph()):
     register(_finish)

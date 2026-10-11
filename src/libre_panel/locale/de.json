@@ -403,6 +403,7 @@
     "empty: each grain takes the colour of the element it falls from; else #rrggbb or @name, separated by commas": "leer: jedes Korn nimmt die Farbe des Elements, von dem es fällt; sonst #rrggbb oder @name, durch Kommas getrennt",
     "empty: the look's colour": "leer: die Farbe des Looks",
     "facet: a flat top with a lit, bevelled rim (text from 20 px, bars from 6 px)": "facettiert: eine ebene Oberseite mit beleuchtetem, abgeschrägtem Rand (Text ab 20 px, Balken ab 6 px)",
+    "acrylic: lettering of acrylic lit from within, text from 20 px": "Acryl: Schrift aus von innen beleuchtetem Acryl (Text ab 20 px)",
     "ffmpeg keeps stopping: {reason}": "ffmpeg bricht immer wieder ab: {reason}",
     "ffmpeg not found at {path} (video.ffmpeg in config.toml)": "ffmpeg nicht gefunden unter {path} (video.ffmpeg in config.toml)",
     "fine grains fall from the elements into the depth behind the panel; drawn in video mode and here, not on a panel that is sent pictures": "feine Körner fallen von den Elementen in die Tiefe hinter dem Panel; gezeichnet im Videomodus und hier, nicht auf einem Panel, dem Bilder geschickt werden",
@@ -646,6 +647,7 @@
     "weather": "Wetter"
   },
   "enums": {
+    "acrylic": "Acryl (leuchtend)",
     "agenda": "Termine",
     "analog": "Analoguhr",
     "apparent_temperature": "gefühlte Temperatur",

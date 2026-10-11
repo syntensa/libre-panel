@@ -182,13 +182,25 @@ the sensor's label.
 
 `"finish": "facet"` gives a widget the raised look of SPUR II's lettering: a
 flat top in the exact colour and a sharp 45-degree bevel inside the outline,
-lit from the top left. Where the bevel faces the light it is lighter and
-cooler, where it faces away darker and warmer (the tints come from the
-palette's `accent` and `warn`). `"flat"` is the default and draws as ever.
+lit from the top left. Where the bevel faces the light it is lighter, where it
+faces away darker. `"flat"` is the default and draws as ever.
 
 - Text (`text`, `metric`, `clock`, `weather`, `countdown`) keeps the outline
-  of the flat text pixel for pixel; the bevel lies inside it. Text under 20 px,
-  with line breaks, or in a bitmap font stays flat: a bevel there is only mush.
+  of the flat text pixel for pixel; the bevel lies inside it. It is bright
+  metal that mirrors its surroundings, as the "SPUR" of the wordmark: a bevel
+  that faces up takes on the sky (the palette's `accent`, a third of the way
+  to white), one that faces down the ground (the theme's background colour), so
+  the edges look milled instead of shaded grey. The bevel is about 2 px wide at
+  a font size of 58 and takes at most a half of a stroke. Small text gets a
+  light touch (up to 28 px: a faint highlight and shade, no mirror) and the
+  full look comes at 52 px; use a bold font for it. Text under 20 px, with
+  line breaks, or in a bitmap font stays flat: a bevel there is only mush.
+- `"finish": "acrylic"` is the same lettering lit from within, as the "II" of
+  the wordmark: the bevels that face the light lighter still and the others
+  hardly darker, nothing mirrored. It is for text only; on anything else the
+  theme loader warns and the widget is drawn flat. The glow round the
+  wordmark is not part of either finish: put a copy of the text in the accent
+  colour below it with `glow` and `glow_radius`.
 - A `bar` is raised in a milled track (its `background`), with straight
   bevelled ends (`radius` does not apply), as blocks with `segments`. A `color2`
   gradient runs along the whole track and `color_rules` work as before. A bar
@@ -397,9 +409,10 @@ and so follows any layout.
   helper thread, a frame lays them in one pass); `tools/motion_bench.py --dust`
   measures it on your machine.
 
-**`finish`** is `flat` (the default: the widget as it always looked), `lit`
-or `facet`. A widget keeps its place and size in any finish. `facet` is a flat
-top in the widget's own colour with a sharp bevel, see [Facets](#facets).
+**`finish`** is `flat` (the default: the widget as it always looked), `lit`,
+`facet` or `acrylic`. A widget keeps its place and size in any finish. `facet`
+is a flat top in the widget's own colour with a sharp bevel and `acrylic` its
+lettering lit from within, see [Facets](#facets).
 
 `lit` draws SPUR II's 3D light, baked from Blender renders of real bodies and
 coloured with the widget's colour, at any size:

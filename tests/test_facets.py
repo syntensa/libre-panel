@@ -114,15 +114,18 @@ def test_the_bevel_is_held_to_a_share_of_the_stroke():
 
     thin, thin_deep = across(20, 200)
     fat, fat_deep = across(160, 400)
-    assert (
-        0 < thin_deep <= 2 < fat_deep < 20
-    )  # a pixel from each side of a thin one, a few of a fat
+    thinner, thinner_deep = across(8, 200)
+    # a half of a thin stroke is bevel (a quarter from each side), 24 px from each side of a fat
+    assert thin_deep == 10 and fat_deep == 48 and 0 < thinner_deep <= 4
     assert thin[30, 120, 2] == 1.0 and fat[100, 220, 2] == 1.0  # the middle stays flat
+    assert across(6, 200)[1] / 6 <= facets.STROKE_SHARE  # never more than the share
+    assert facets.STROKE_SHARE == 0.5
 
 
 def test_no_bevel_for_small_text_or_an_empty_mask():
     assert facets.bevel_width(12) == 0 and facets.bevel_width(19.9) == 0
-    assert facets.bevel_width(20) == pytest.approx(1.2)
+    assert facets.bevel_width(20) == pytest.approx(1.0)
+    assert facets.bevel_width(58) == pytest.approx(2.32)  # the wordmark: a bevel of 2 px
     assert facets.bevel_width(1000) == 5.0
     flat = facets.bevel_normals(np.ones((6, 6), np.float32), 0.0)
     assert (flat[..., 2] == 1).all() and (flat[..., :2] == 0).all()
@@ -130,7 +133,7 @@ def test_no_bevel_for_small_text_or_an_empty_mask():
 
 
 def test_the_flat_top_is_the_exact_colour_and_the_bevel_follows_the_light():
-    a, b = facets.shade(np.array([1.0]), facets.TEXT)
+    a, b = facets.shade(np.array([1.0]), facets.METAL)
     assert a[0] == 1 and b[0] == 0  # facing the viewer: unchanged
     toward, away = (
         facets.facing(np.array([[-facets.SIN45, -facets.SIN45, facets.SIN45]]))[0],
@@ -141,17 +144,55 @@ def test_the_flat_top_is_the_exact_colour_and_the_bevel_follows_the_light():
     dark_a, dark_b = facets.shade(np.array([away]), facets.SOLID)
     colour = np.array([100.0])
     assert (colour * lit_a + lit_b)[0] > 100 > (colour * dark_a + dark_b)[0]
-    assert facets.toward_light(np.array([[0.0, 0.0, 1.0]]))[0] == 0
-    assert facets.toward_light(np.array([[-facets.SIN45, -facets.SIN45, facets.SIN45]]))[0] > 0.9
-    assert facets.toward_light(np.array([[facets.SIN45, facets.SIN45, facets.SIN45]]))[0] < -0.9
 
 
-def test_the_tints_come_from_the_palette():
-    cool, warm = facets.tints_for({"accent": "#ff0000", "warn": "#00ff00"})
-    assert cool[0] > cool[1] and warm == (0, 255, 0)
-    assert facets.tints_for(None) == facets.tints_for({})
-    cool, warm = facets.tints_for({"accent": "nonsense"})  # a palette entry that is no colour
-    assert len(cool) == len(warm) == 3
+def test_a_bevel_mirrors_the_sky_above_and_the_ground_below():
+    s = facets.SIN45
+    normals = np.array(
+        [[0, 0, 1], [0, -s, s], [0, s, s], [-s, 0, s], [s, 0, s]], np.float32
+    )  # the top, facing up, down, left, right
+    sky, ground = facets.mirrors(normals)
+    assert sky[0] == ground[0] == 0  # the flat top mirrors nothing
+    assert sky[1] == pytest.approx(facets.MIRROR) and ground[1] == pytest.approx(0, abs=1e-6)
+    assert ground[2] == pytest.approx(facets.MIRROR) and sky[2] == pytest.approx(0, abs=1e-6)
+    assert 0 < sky[3] < ground[3] and sky[3] == pytest.approx(sky[4])  # to a side: mostly ground
+    assert (sky + ground)[1:] == pytest.approx(facets.MIRROR)  # a full bevel: all of it
+    half = np.array([[0, -s / 2, np.sqrt(1 - s * s / 4)]], np.float32)
+    assert 0 < facets.mirrors(half)[0][0] < facets.MIRROR  # a lower bevel mirrors less
+    assert facets.mirrors(normals, 0.0)[0].max() == 0  # no mirror: none
+
+
+def test_acrylic_hardly_shades_and_metal_does():
+    s = facets.SIN45
+    normals = np.array(
+        [[0, 0, 1], [0, -s, s], [-s, 0, s], [s, 0, s], [0, s, s]], np.float32
+    )  # the top, then bevels facing up, left, right and down
+    colour = np.array([100.0, 200.0, 220.0])
+    metal = facets.lettering_terms(normals, "metal").astype(np.float32)
+    acrylic = facets.lettering_terms(normals, "acrylic").astype(np.float32)
+    sky, ground = np.array([200.0, 240.0, 255.0]), np.array([10.0, 17.0, 25.0])
+
+    def paint(terms):  # the terms as bytes: A, S and G of 0 to 1 and B of 0 to 255
+        a, b, u, d = (terms[:, i : i + 1] / (1 if i == 1 else 255) for i in range(4))
+        return (colour * a + b + sky * u + ground * d).sum(-1)
+
+    metal_light, acrylic_light = paint(metal), paint(acrylic)
+    total = colour.sum()
+    assert metal_light[0] == pytest.approx(total, abs=1) == pytest.approx(acrylic_light[0], abs=1)
+    assert (acrylic_light[3:] > 0.75 * total).all()  # acrylic, away from the light: hardly darker
+    assert (metal_light[3:] < 0.6 * total).all()  # metal: much darker
+    assert acrylic_light[1] > total and acrylic_light[2] > total  # towards the light: lighter
+    assert metal_light[1] > total  # metal facing up, towards the sky: lighter too
+    assert acrylic[..., 2:].max() == 0  # acrylic mirrors nothing
+    assert metal[0, 2:].max() == 0  # nor does the flat top of metal
+
+
+def test_the_sky_is_the_palettes_accent_towards_white_and_the_ground_is_given():
+    sky, ground = facets.environment_for({"accent": "#ff0000"}, (1, 2, 3, 255))
+    assert sky == (255, 89, 89) and ground == (1, 2, 3)  # 35 % of the way to white
+    assert facets.environment_for(None) == facets.environment_for({})
+    sky, ground = facets.environment_for({"accent": "nonsense"})  # an entry that is no colour
+    assert len(sky) == len(ground) == 3 and sky[2] > sky[0]  # the default accent: cyan
 
 
 # -- lettering ---------------------------------------------------------------------------------
@@ -170,19 +211,72 @@ def test_a_letters_outline_is_the_flat_texts_and_its_top_the_exact_colour():
     rgb = np.asarray(patch, np.int16)[..., :3]
     on_top = covered == 255
     flat_top = (np.abs(rgb - np.array(WHITE[:3])).max(-1) <= 1) & on_top
-    assert flat_top.sum() > 0.5 * on_top.sum()
-    assert not flat_top.all()  # and there is a bevel
+    assert flat_top.sum() > 0.4 * on_top.sum()  # a stroke is about half flat top ...
+    assert flat_top.sum() < 0.6 * on_top.sum()  # ... and the rest bevel, as the wordmark's
 
 
-def test_the_bevel_is_cooler_towards_the_light_and_warmer_away():
-    patch, _, _ = facets.glyph(font(120, "Barlow-Bold"), "I", (200, 200, 200, 255), 0.0)
+def test_the_bevel_is_lighter_and_cooler_towards_the_light_and_darker_away():
+    grey = (200, 200, 200, 255)
+    world = ((100, 240, 255), (10, 17, 25))  # a sky of cool light, a dark ground
+    patch, _, _ = facets.glyph(font(120, "Barlow-Bold"), "I", grey, 0.0, world)
     a = np.asarray(patch, np.float32)
-    inked = a[..., 3] > 0
-    cool = inked & (a[..., 2] > a[..., 0] + 2)  # bluer than the grey it is made of
-    warm = inked & (a[..., 0] > a[..., 2] + 2)
-    assert cool.sum() > 20 and warm.sum() > 20
-    middle = np.nonzero(inked.any(axis=0))[0][[0, -1]].mean()
-    assert np.nonzero(cool)[1].mean() < middle < np.nonzero(warm)[1].mean()  # cool left, warm right
+    inked = a[..., 3] == 255
+    columns = np.nonzero(inked.any(axis=0))[0]
+    left, right, middle = columns[0], columns[-1], int(columns.mean())
+    row = a.shape[0] // 2
+    assert tuple(a[row, middle, :3]) == (200, 200, 200)  # the top: the exact colour
+    lit, shade = a[row, left + 1, :3], a[row, right - 1, :3]  # the left bevel, the right one
+    assert lit.sum() > shade.sum() + 100 > 100  # the one towards the light is the lighter
+    assert lit[2] > lit[0] + 20  # and bluer than the grey it is made of: some of the sky
+    column = a[:, middle]  # down the stem: the end faces up, the foot faces down
+    rows = np.nonzero(column[:, 3] == 255)[0]
+    up, down = column[rows[0] + 1, :3], column[rows[-1] - 1, :3]
+    assert up[2] > up[0] + 50 and up.sum() > 1.5 * down.sum()  # the upper end mirrors the sky
+    assert down.sum() < 0.6 * 600  # the lower, in shade, is much darker: metal mirrors the ground
+    assert up.sum() > lit.sum() > shade.sum() > down.sum()  # up, left, right, down
+
+
+def test_acrylic_has_the_same_outline_and_bevel_but_no_dark_side():
+    f = font(100, "Barlow-Bold")
+    colour = (19, 229, 215, 255)
+    metal, _, _ = facets.glyph(f, "I", colour, 0.0, None, "metal")
+    acrylic, _, _ = facets.glyph(f, "I", colour, 0.0, None, "acrylic")
+    assert metal.size == acrylic.size
+    assert np.asarray(metal)[..., 3].tobytes() == np.asarray(acrylic)[..., 3].tobytes()
+    m, a = np.asarray(metal, np.float32), np.asarray(acrylic, np.float32)
+    inked = m[..., 3] == 255
+    columns = np.nonzero(inked.any(axis=0))[0]
+    row, right = m.shape[0] // 2, columns[-1] - 1
+    assert a[row, right, :3].sum() > 0.8 * sum(colour[:3]) > 2 * m[row, right, :3].sum() * 0.5
+    assert m[row, right, :3].sum() < 0.7 * a[row, right, :3].sum()  # metal is darker there
+    left = columns[0] + 1
+    assert a[row, left, :3].sum() > sum(colour[:3])  # and the lit side is lit in both
+    assert tuple(a[row, int(columns.mean()), :3]) == colour[:3]
+
+
+def test_the_top_edge_of_a_letter_has_its_bevel_too():
+    """A letter's top bar touches the top of its box: the bevel must still run along it."""
+    world = ((60, 220, 255), (5, 5, 5))
+    patch, _, _ = facets.glyph(font(80, "Barlow-Bold"), "T", WHITE, 0.0, world)
+    a = np.asarray(patch, np.int16)
+    column = a[:, a.shape[1] // 2 + 12]  # through the bar, off the stem
+    rows = np.nonzero(column[:, 3] == 255)[0]
+    top, flat = column[rows[0]], column[rows[0] + 4]
+    assert tuple(flat[:3]) == WHITE[:3]  # the bar's top
+    assert top[0] < flat[0] - 40  # cooler on its upper edge: the sky
+
+
+def test_a_stem_has_a_bevel_of_two_pixels_at_the_wordmarks_size():
+    f = font(58, "Barlow-Bold")
+    patch, _, _ = facets.glyph(f, "I", (238, 246, 255, 255), 0.0, ((102, 238, 229), (10, 17, 25)))
+    a = np.asarray(patch, np.int16)
+    row = a[a.shape[0] // 2]
+    ink = np.nonzero(row[:, 3] == 255)[0]
+    exact = np.abs(row[:, :3] - np.array([238, 246, 255])).max(-1) <= 1
+    on_top = int((exact & (row[:, 3] == 255)).sum())
+    bevelled = len(ink) - on_top
+    assert 6 <= len(ink) <= 10  # a stem about 8 px wide
+    assert 3 <= on_top <= 5 and 3 <= bevelled <= 5  # about two of its pixels on each side
 
 
 def test_the_same_text_twice_builds_each_glyph_once():
@@ -263,7 +357,7 @@ def test_finish_is_a_field_of_the_shapes_that_have_one():
     from libre_panel.theme.model import WIDGET_SPECS
 
     for kind in ("text", "metric", "clock", "weather", "countdown", "bar", "gauge", "graph"):
-        assert WIDGET_SPECS[kind]["finish"] == ("enum:flat|lit|facet", "flat")
+        assert WIDGET_SPECS[kind]["finish"] == ("enum:flat|lit|facet|acrylic", "flat")
     assert "finish" not in WIDGET_SPECS["rect"]
     assert theme({"type": "text", "id": "t"}).widgets[0]["finish"] == "flat"
     with pytest.raises(ThemeError, match="finish"):
@@ -307,15 +401,47 @@ def test_a_changing_number_costs_no_new_glyphs_once_all_digits_were_seen():
     assert facets.builds == {"glyph": 0, "patch": 0}
 
 
-def test_facet_text_with_a_palette_takes_its_tints_from_it():
-    widget = text_widget(finish="facet", font_size=90, font="builtin:Barlow-Bold", text="I")
-    a, _ = Renderer(theme(widget, palette={"accent": "#ff0000", "warn": "#00ff00"})).render(
-        Snapshot()
-    )
-    b, _ = Renderer(theme(widget, palette={"accent": "#0000ff", "warn": "#ff00ff"})).render(
-        Snapshot()
-    )
-    assert a.tobytes() != b.tobytes()
+def metal_i(finish="facet", palette=None, background="#0a1119", **kw):
+    """One big "I" on a plain screen and the picture of it."""
+    widget = text_widget(finish=finish, font_size=90, font="builtin:Barlow-Bold", text="I", **kw)
+    data = theme(widget, palette=palette, size=(120, 160))
+    data.background_color = background
+    renderer = Renderer(data)
+    image, boxes = renderer.render(Snapshot())
+    assert renderer.warnings == []
+    return np.asarray(image, np.int16), boxes["t"]
+
+
+def test_facet_text_takes_its_sky_from_the_palette_and_its_ground_from_the_background():
+    def stem(picture, background):
+        """The columns and rows of the letter's ink, and the middle of its stem."""
+        ink = (picture != np.array(background)).any(-1)
+        columns, rows = np.nonzero(ink.any(axis=0))[0], np.nonzero(ink.any(axis=1))[0]
+        return int(columns.mean()), int(rows.mean()), rows[0], rows[-1]
+
+    red, _ = metal_i(palette={"accent": "#ff0000"})
+    blue, _ = metal_i(palette={"accent": "#0000ff"})
+    ground = (10, 17, 25)
+    x, y, first, last = stem(blue, ground)
+    assert blue[first + 1, x, 2] > blue[first + 1, x, 0] + 40  # the upper end: a blue sky
+    assert red[first + 1, x, 0] > red[first + 1, x, 2] + 40  # or a red one
+    dark, _ = metal_i(background="#000000")
+    grey, _ = metal_i(background="#707070")
+    assert grey[last - 1, x].sum() > dark[last - 1, x].sum() + 30  # the foot mirrors the screen
+    assert (dark[y, x] == grey[y, x]).all() and tuple(dark[y, x]) == (238, 246, 255)  # not the top
+
+
+def test_acrylic_is_a_finish_for_lettering_alone():
+    metal, _ = metal_i("facet")
+    acrylic, _ = metal_i("acrylic")
+    assert (metal != acrylic).any()
+    bar = {"type": "bar", "id": "b", "x": 10, "y": 10, "w": 100, "h": 14, "finish": "acrylic"}
+    loaded = theme(bar)
+    assert loaded.warnings == ["finish 'acrylic' is not available for bar; drawn flat"]
+    flat_bar = {**bar, "finish": "flat"}
+    a, _ = Renderer(loaded).render(Snapshot())
+    b, _ = Renderer(theme(flat_bar)).render(Snapshot())
+    assert a.tobytes() == b.tobytes()
 
 
 @pytest.mark.parametrize("size", [(1920, 480), (320, 240)])

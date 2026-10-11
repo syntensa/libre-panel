@@ -23,7 +23,11 @@ FLAT = FINISHES[0]
 # graphs, icons and texts are drawn with it where the finish has them.
 PART_TYPES = ("bar", "gauge", "graph", "icon", "text", "metric")
 # Built-in finishes: the module that registers them when it is imported.
-_BUILT_IN = {"lit": "libre_panel.render.lit", "facet": "libre_panel.render.facet"}
+_BUILT_IN = {
+    "lit": "libre_panel.render.lit",
+    "facet": "libre_panel.render.facet",
+    "acrylic": "libre_panel.render.facet",
+}
 
 
 class Finish:

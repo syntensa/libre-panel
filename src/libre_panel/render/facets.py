@@ -2,8 +2,10 @@
 along their edges, lit from the top left (after SPUR II's "SPUR II" wordmark).
 
 A letter keeps its outline exactly (the same pixels as the flat text); the
-bevel lies inside it, and where it faces the light it is lighter and cooler,
-where it faces away darker and warmer. The flat top is the exact colour.
+bevel lies inside it, and where it faces the light it is lighter, where it
+faces away darker. Lettering is metal that mirrors its surroundings (the sky
+above it, the ground below) or acrylic lit from within. The flat top is the
+exact colour.
 
 Everything is built to be cached. What costs is the geometry of a glyph (a
 distance transform of its mask), and that depends on the font, its size and
@@ -43,7 +45,11 @@ SIN45 = math.sin(math.radians(45))
 
 # How far a facet lightens towards white where it faces the light (the first number)
 # and how far it darkens where it faces away (the second), per kind of shape
-TEXT = (0.85, 0.88)  # lettering: a light touch, the letters are nearly white anyway
+METAL = (0.85, 0.30)  # lettering of bright metal: lighter towards the light, dark away ...
+ACRYLIC = (1.10, 0.80)  # ... of acrylic lit from within: lighter still, hardly any shade
+MIRROR = 0.55  # how far metal takes on its surroundings: the sky above it, the ground below
+LETTERING = {"metal": (METAL, MIRROR), "acrylic": (ACRYLIC, 0.0)}
+LIGHT_TOUCH = ((0.85, 0.88), 0.0)  # what small lettering gets instead: it must stay legible
 SOLID = (1.35, 0.16)  # bars and rings: narrow, so a hard contrast reads as an edge
 GROOVE = (0.20, 0.55)  # a milled channel is background: it hints at an edge, no more
 RIDGE = (0.85, 0.55)  # the bright flank of a curve's ridge ...
@@ -52,10 +58,13 @@ RIDGE_BAND = (0.85, 0.30)  # ... and the band beneath
 
 # Lettering: the bevel's width grows with the font, but never eats a thin stroke
 MIN_SIZE = 20  # smaller text stays flat: a bevel there is only mush
-BEVEL_SCALE, BEVEL_MIN, BEVEL_MAX = 0.06, 1.2, 5.0
-STROKE_SHARE = 0.12  # at most this much of the local half-stroke becomes bevel
-TINT_STRENGTH = 0.60  # how far a bevel is tinted cool (to the light) or warm (away)
+BEVEL_SCALE, BEVEL_MIN, BEVEL_MAX = 0.04, 1.0, 5.0  # 2.3 px at a font size of 58
+STROKE_SHARE = 0.5  # at most this much of the local half-stroke becomes bevel ...
+STROKE_LIGHT = 0.12  # ... of small lettering only this much
+LIGHT_SIZE, FULL_SIZE = 28, 52  # a light touch up to this size, the full look from this one
+SKY_SHARE = 0.35  # the sky metal mirrors is the accent this far towards white
 SUPER = 4  # glyph geometry is worked out this much larger
+MARGIN = 2  # blank pixels round a glyph: an edge needs an outside for its bevel to follow
 
 GLYPHS = 1500  # glyph geometries kept
 PATCHES = 3000  # coloured glyphs kept
@@ -170,6 +179,17 @@ def bevel_width(size: float) -> float:
     return min(BEVEL_MAX, max(BEVEL_MIN, BEVEL_SCALE * size))
 
 
+def display(size: float) -> float:
+    """How much of the full look lettering has at a font size: 0 (a light touch, up to
+    ``LIGHT_SIZE`` px) to 1 (SPUR II's wordmark, from ``FULL_SIZE`` px)."""
+    return min(1.0, max(0.0, (size - LIGHT_SIZE) / (FULL_SIZE - LIGHT_SIZE)))
+
+
+def bevel_share(size: float) -> float:
+    """The share of a stroke's half that lettering of this font size may make bevel."""
+    return STROKE_LIGHT + (STROKE_SHARE - STROKE_LIGHT) * display(size)
+
+
 def bevel_normals(mask: np.ndarray, bevel: float, stroke: float = STROKE_SHARE) -> np.ndarray:
     """Normals ``(h, w, 3)`` of a bevel running inwards along the edge of ``mask``
     (coverage 0..1, more than a half is inside), ``bevel`` px wide.
@@ -235,36 +255,39 @@ def shade(k: np.ndarray, style: tuple[float, float]) -> tuple[np.ndarray, np.nda
     return a, b
 
 
-def toward_light(normals: np.ndarray) -> np.ndarray:
-    """-1 (a bevel facing away from the light) through 0 (the flat top) to 1 (facing it)."""
-    k = facing(normals)
-    top = (np.hypot(LIGHT[0], LIGHT[1]) * SIN45 + SIN45 * LIGHT[2]) / LIGHT_TOP  # most light
-    low = max(0.0, SIN45 * LIGHT[2] - SIN45 * np.hypot(LIGHT[0], LIGHT[1])) / LIGHT_TOP
-    lit = np.clip((k - 1) / max(top - 1, 1e-6), 0, 1)
-    dark = np.clip((k - 1) / max(1 - low, 1e-6), -1, 0)
-    return np.where(k >= 1, lit, dark)
+def mirrors(normals: np.ndarray, strength: float = MIRROR) -> tuple[np.ndarray, np.ndarray]:
+    """How much of its surroundings a bevel takes on, as shares of sky and ground
+    (``sky + ground`` is 0 on a flat top, ``strength`` on a full 45-degree bevel; a bevel
+    facing up takes the sky, one facing down the ground, one to a side mostly ground)."""
+    steep = np.clip((1 - normals[..., 2]) / (1 - SIN45), 0, 1)
+    up = np.clip(0.5 - normals[..., 1] / SIN45 * 0.5, 0, 1) ** 1.4  # y points down
+    share = steep * strength
+    return share * up, share * (1 - up)
 
 
-def tints_for(palette: dict[str, str] | None) -> tuple[RGB, RGB]:
-    """The cool tint (the theme's accent, a third of the way to white) and the warm one
-    (its warning colour) a bevel takes on towards and away from the light."""
+def environment_for(
+    palette: dict[str, str] | None, ground: tuple[int, ...] = (10, 17, 25)
+) -> tuple[RGB, RGB]:
+    """What metal lettering mirrors: the sky above it (the theme's accent, a third of the
+    way to white, SPUR II's cool light) and the ground below (``ground``, the theme's
+    background)."""
     context = SimpleNamespace(palette=palette or {})
-    cool = light.mix((255, 255, 255), light.role_color(context, "info"), 0.35)
-    return cool, light.role_color(context, "warning")
+    sky = light.mix((255, 255, 255), light.role_color(context, "info"), SKY_SHARE)
+    return sky, (int(ground[0]), int(ground[1]), int(ground[2]))
 
 
 # -- lettering --------------------------------------------------------------------------
 
 
 class Glyph(NamedTuple):
-    """One character at one font size and quarter pixel: where its ink is, its coverage
-    (exactly the flat text's), and the shading terms of its bevel (``A``, ``B`` and the
-    tint, as bytes) without a colour."""
+    """One character at one font size, quarter pixel and style: where its ink is, its
+    coverage (exactly the flat text's), and the shading terms of its bevel without a
+    colour: ``rgb = colour * A + B + sky * S + ground * G``."""
 
     left: int
     top: int
     cover: np.ndarray  # (h, w) uint8
-    terms: np.ndarray  # (h, w, 3) uint8: A * 255, B, tint * 127 / TINT_STRENGTH + 128
+    terms: np.ndarray  # (h, w, 4) uint8: A * 255, B, S * 255, G * 255
 
 
 _glyphs = Lru(GLYPHS)
@@ -278,7 +301,26 @@ def usable(font: Any) -> bool:
     return isinstance(getattr(font, "path", None), (str, os.PathLike)) and font.size >= MIN_SIZE
 
 
-def _glyph_geometry(font: Any, ch: str, quarter: int) -> Glyph | None:
+def lettering_terms(normals: np.ndarray, style: str, size: float = FULL_SIZE) -> np.ndarray:
+    """The shading terms (see :class:`Glyph`) of lettering of a font ``size`` with these
+    ``normals``: the light first, then what a metal bevel takes on from its surroundings.
+    Small lettering gets a light touch, bigger more, the wordmark's look from ``FULL_SIZE``."""
+    t = display(size)
+    (lighten, darken), mirror = LETTERING[style]
+    (soft_lighten, soft_darken), _ = LIGHT_TOUCH
+    shading = (
+        soft_lighten + (lighten - soft_lighten) * t,
+        soft_darken + (darken - soft_darken) * t,
+    )
+    mirror *= t
+    a, b = shade(facing(normals), shading)
+    sky, ground = mirrors(normals, mirror) if mirror else (np.zeros_like(a), np.zeros_like(a))
+    keep = 1 - sky - ground
+    terms = np.stack([a * keep * 255, b * keep, sky * 255, ground * 255], axis=-1)
+    return np.clip(terms + 0.5, 0, 255).astype(np.uint8)
+
+
+def _glyph_geometry(font: Any, ch: str, quarter: int, style: str) -> Glyph | None:
     """The glyph's coverage as the flat text draws it at ``quarter`` / 4 px right of its
     pixel, and its bevel. None for a blank (a space).
 
@@ -289,7 +331,7 @@ def _glyph_geometry(font: Any, ch: str, quarter: int) -> Glyph | None:
     left, top, right, bottom = font.getbbox(ch, anchor="la")
     if right <= left or bottom <= top:
         return None
-    l0, t0 = math.floor(left), math.floor(top)
+    l0, t0 = math.floor(left) - MARGIN, math.floor(top) - MARGIN
     w1, h1 = max(1, math.ceil(right) - l0 + 2), max(1, math.ceil(bottom) - t0 + 2)
     mask = Image.new("L", (w1, h1), 0)
     ImageDraw.Draw(mask).text((-l0 + quarter / 4, -t0), ch, font=font, fill=255, anchor="la")
@@ -298,37 +340,23 @@ def _glyph_geometry(font: Any, ch: str, quarter: int) -> Glyph | None:
         return None
     big = np.asarray(mask.resize((w1 * SUPER, h1 * SUPER), Image.Resampling.BILINEAR), np.float32)
     big /= 255
-    normals = shrink(bevel_normals(big, bevel_width(font.size) * SUPER), big, SUPER)
-    a, b = shade(facing(normals), TEXT)
-    flat = normals[..., 2] >= 0.999
-    way = toward_light(normals)
-    tint = np.where(flat, 0.0, np.sign(way) * np.sqrt(np.abs(way)) * TINT_STRENGTH)
-    terms = np.stack(
-        [
-            np.clip(a * 255 + 0.5, 0, 255),
-            np.clip(b + 0.5, 0, 255),
-            np.clip(tint / TINT_STRENGTH * 127 + 128.5, 0, 255),
-        ],
-        axis=-1,
-    ).astype(np.uint8)
+    bevel = bevel_normals(big, bevel_width(font.size) * SUPER, bevel_share(font.size))
     builds["glyph"] += 1
-    return Glyph(l0, t0, cover, terms)
+    return Glyph(l0, t0, cover, lettering_terms(shrink(bevel, big, SUPER), style, font.size))
 
 
-def glyph_geometry(font: Any, ch: str, quarter: int) -> Glyph | None:
-    key = (str(font.path), font.size, ch, quarter)
+def glyph_geometry(font: Any, ch: str, quarter: int, style: str = "metal") -> Glyph | None:
+    key = (str(font.path), font.size, ch, quarter, style)
     hit = _glyphs.get(key)
     if hit is None:
-        hit = _glyphs.put(key, _glyph_geometry(font, ch, quarter) or _blank)
+        hit = _glyphs.put(key, _glyph_geometry(font, ch, quarter, style) or _blank)
     return None if hit is _blank else hit
 
 
-def _coloured(g: Glyph, fill: tuple[int, ...], tints: tuple[RGB, RGB]) -> Image.Image:
-    c = np.asarray(fill[:3], np.float32)
-    rgb = c * (g.terms[..., 0:1] / 255.0) + g.terms[..., 1:2]
-    tint = (g.terms[..., 2:3].astype(np.float32) - 128) / 127 * TINT_STRENGTH
-    target = np.where(tint > 0, np.asarray(tints[0], np.float32), np.asarray(tints[1], np.float32))
-    rgb = rgb + (target - rgb) * np.abs(tint)
+def _coloured(g: Glyph, fill: tuple[int, ...], environment: tuple[RGB, RGB]) -> Image.Image:
+    sky, ground = (np.asarray(c, np.float32) for c in environment)
+    a, b, s, t = (g.terms[..., i : i + 1].astype(np.float32) for i in range(4))
+    rgb = np.asarray(fill[:3], np.float32) * (a / 255) + b + sky * (s / 255) + ground * (t / 255)
     alpha = g.cover.astype(np.float32) * (fill[3] / 255 if len(fill) > 3 else 1.0)
     out = np.concatenate([np.clip(rgb + 0.5, 0, 255), alpha[..., None] + 0.5], axis=-1)
     return Image.fromarray(out.clip(0, 255).astype(np.uint8), "RGBA")
@@ -339,25 +367,29 @@ def glyph(
     ch: str,
     fill: tuple[int, ...],
     frac: float = 0.0,
-    tints: tuple[RGB, RGB] | None = None,
+    environment: tuple[RGB, RGB] | None = None,
+    style: str = "metal",
 ) -> tuple[Image.Image, int, int] | None:
     """The character as a coloured patch and where it goes: ``(patch, dx, dy)``, from the
     pen's pixel (``frac``, its fraction of a pixel, is rounded to a quarter) and the top
     of the line (anchor ``la``). None for a blank. Built once per font, size,
-    character and quarter; once more per colour."""
+    character, quarter and style; once more per colour and environment.
+
+    ``style`` is ``"metal"`` or ``"acrylic"`` (see :data:`LETTERING`); ``environment``
+    the ``(sky, ground)`` colours metal mirrors (see :func:`environment_for`)."""
     quarter = round(frac * 4)
     shift = 0
     if quarter == 4:
         quarter, shift = 0, 1
-    g = glyph_geometry(font, ch, quarter)
+    g = glyph_geometry(font, ch, quarter, style)
     if g is None:
         return None
-    tints = tints or tints_for(None)
-    key = (str(font.path), font.size, ch, quarter, tuple(fill), tints)
+    environment = environment or environment_for(None)
+    key = (str(font.path), font.size, ch, quarter, style, tuple(fill), environment)
     patch = _patches.get(key)
     if patch is None:
         builds["patch"] += 1
-        patch = _patches.put(key, _coloured(g, fill, tints))
+        patch = _patches.put(key, _coloured(g, fill, environment))
     return patch, g.left + shift, g.top
 
 
@@ -366,7 +398,8 @@ def facet_text(
     font: Any,
     fill: tuple[int, ...],
     tracking: float = 0.0,
-    tints: tuple[RGB, RGB] | None = None,
+    environment: tuple[RGB, RGB] | None = None,
+    style: str = "metal",
 ) -> Image.Image | None:
     """``text`` in one line as an RGBA image, its facets lit; the pen starts at the
     left edge, which is the image's, and the top of the line is its top. None where the
@@ -380,7 +413,7 @@ def facet_text(
     layer = Image.new("RGBA", (max(1, width), ascent + descent), (0, 0, 0, 0))
     pen = float(margin)
     for ch, advance in zip(text, advances, strict=True):
-        placed = glyph(font, ch, fill, pen % 1.0, tints)
+        placed = glyph(font, ch, fill, pen % 1.0, environment, style)
         if placed is not None:
             patch, dx, dy = placed
             put(layer, patch, math.floor(pen) + dx, dy)

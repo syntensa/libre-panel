@@ -1061,7 +1061,11 @@ function hintFor(widget, key, kind) {
   if (key === "seconds" && widget.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = as long as the history readings take");
   if (key === "per_frame") return t("video mode: a point a pixel apart, as SPUR II draws its curves (seconds = width / 25)");
   if (key === "finish") {
-    return [t("lit: SPUR II's light on rings, bars, graph lines and weather icons; glow then sets their glow"), t("facet: a flat top with a lit, bevelled rim (text from 20 px, bars from 6 px)")].join(" · ");
+    return [
+      t("lit: SPUR II's light on rings, bars, graph lines and weather icons; glow then sets their glow"),
+      t("facet: a flat top with a lit, bevelled rim (text from 20 px, bars from 6 px)"),
+      t("acrylic: lettering of acrylic lit from within, text from 20 px"),
+    ].join(" · ");
   }
   if (key === "max_rpm") return t("the speed at which the ring is full; the rotor turns the faster the closer it gets");
   return null;

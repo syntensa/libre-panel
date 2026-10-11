@@ -300,9 +300,9 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
 }
 
 # How a widget's shape is drawn (render.finish): "flat" (the default), "lit"
-# (light from SPUR II's 3D layers) or "facet". A finish a type does not have
+# (light from SPUR II's 3D layers), "facet" or "acrylic". A finish a type does not have
 # draws it flat, with a warning.
-FINISHES = ("flat", "lit", "facet")
+FINISHES = ("flat", "lit", "facet", "acrylic")
 FINISH_FIELD = ("enum:" + "|".join(FINISHES), FINISHES[0])
 for _type in (
     "text", "metric", "clock", "weather", "countdown", "bar", "gauge", "graph", "icon", "module"
