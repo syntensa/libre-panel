@@ -13,7 +13,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from bisect import bisect_left
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from itertools import accumulate
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +30,7 @@ TEMPS = ("cpu_temp", "gpu_temp", "gpu_hotspot")  # the temperatures that have a 
 DEVICE_SENSOR = {"cpu": "cpu_temp", "gpu": "gpu_temp"}  # what the panel shows for a device
 SPAN_NEEDED = 5.0  # K a back-calculated course must have moved before a sensor is judged
 MIN_SAMPLES = 20  # fewer than this many rows in the rising part of a curve judge nothing
+DECODED_MAX = 50_000  # distinct JSON texts of a column that are kept while the rows are read
 
 
 @dataclass
@@ -92,22 +96,16 @@ def load_rows(
         raw = connection.execute(query + " ORDER BY ts", args).fetchall()
     finally:
         connection.close()
+    fans_of, numbers_of = _once(_fans), _once(_numbers)
     rows = []
     for i, r in enumerate(raw):
         held = raw[i + 1]["ts"] - r["ts"] if i + 1 < len(raw) else HEARTBEAT_S
-        fans = {
-            name: (_number(pair[0]), _number(pair[1]))
-            for name, pair in _json(r["fans"]).items()
-            if isinstance(pair, list) and len(pair) == 2
-        }
         rows.append(
             Row(
                 r["ts"], r["mode"] or "normal", r["game"], min(float(held), HEARTBEAT_S),
                 r["cpu_temp"], r["cpu_power"], r["cpu_load"], r["gpu_temp"], r["gpu_hotspot"],
                 r["gpu_power"], r["gpu_load"], r["outside_temp"],
-                {k: v for k, v in _json(r["temps"]).items() if _number(v) is not None},
-                fans,
-                {k: v for k, v in _json(r["sources"]).items() if _number(v) is not None},
+                numbers_of(r["temps"]), fans_of(r["fans"]), numbers_of(r["sources"]),
             )
         )  # fmt: skip
     if mode == "game":
@@ -119,6 +117,37 @@ def load_rows(
 
 def _number(value: Any) -> float | None:
     return float(value) if isinstance(value, int | float) and not isinstance(value, bool) else None
+
+
+def _numbers(raw: dict[str, Any]) -> dict[str, float]:
+    return {k: v for k, v in raw.items() if _number(v) is not None}
+
+
+def _fans(raw: dict[str, Any]) -> dict[str, tuple[float | None, float | None]]:
+    return {
+        name: (_number(pair[0]), _number(pair[1]))
+        for name, pair in raw.items()
+        if isinstance(pair, list) and len(pair) == 2
+    }
+
+
+def _once(make: Callable[[dict[str, Any]], Any]) -> Callable[[Any], Any]:
+    """Decode a column's JSON text with ``make``, once for each distinct text: rows are written
+    when something moves, and then most of what they hold is what the row before held. The rows
+    share what comes back, so it must not be changed."""
+    seen: dict[str, Any] = {}
+
+    def decode(text: Any) -> Any:
+        if not text:
+            return {}
+        found = seen.get(text)
+        if found is None:
+            found = make(_json(text))
+            if len(seen) < DECODED_MAX:
+                seen[text] = found
+        return found
+
+    return decode
 
 
 def fancontrol_states(path: str | Path) -> list[dict[str, Any]]:
@@ -158,16 +187,14 @@ def catalogue(path: str | Path) -> dict[str, Any]:
 def weighted(pairs: list[tuple[float | None, float]], share: float = 0.5) -> float | None:
     """The quantile (the median by default) of [(value, seconds), ...], by time: the value
     below which ``share`` of the time lay."""
-    kept = sorted((v, d) for v, d in pairs if v is not None and d > 0)
+    kept = [(v, d) for v, d in pairs if v is not None and d > 0]
     if not kept:
         return None
-    target = sum(d for _, d in kept) * share
-    run = 0.0
-    for value, seconds in kept:
-        run += seconds
-        if run >= target:
-            return value
-    return kept[-1][0]
+    values = [v for v, _ in kept]
+    weights = [d for _, d in kept]
+    order = sorted(range(len(kept)), key=values.__getitem__)
+    reached = list(accumulate(map(weights.__getitem__, order)))  # the time up to each value
+    return values[order[min(bisect_left(reached, reached[-1] * share), len(order) - 1)]]
 
 
 def correlation(pairs: list[tuple[float, float]]) -> float | None:

@@ -325,7 +325,10 @@ asks it. A page gets the running service with `context.service("cooling")`
 All of it is JSON-able. The texts (`title`, `why`, `findings`, the report) are
 in the language of the panel, English or German. An answer is kept for 5
 minutes, and until FanControl's settings or the language change (the same
-object comes back: do not change it), so a page may ask often. Nothing is
+object comes back: do not change it), so a page may ask often. The first answer
+for a long period of a busy PC takes some seconds (60 days of games, 150 000
+rows: about 5 s for `recommendations()`, twice that for `analysis(days=60)`);
+the default day takes a fraction of a second. Nothing is
 written, neither to the memory's file nor to FanControl. Without data
 `analysis()` and `recommendations()` answer `{"empty": true, "reason": "..."}`
 and `report()` with one line that says so.
