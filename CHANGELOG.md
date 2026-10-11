@@ -103,6 +103,25 @@
   panel goes on showing the one before, so a switch no longer freezes a
   video for a third of a second. Screens from plugins can load what their
   first frames need meanwhile: `Screen.prepare()`
+- Depth dust, after SPUR II: `"look": {"dust": true}` in a theme lets fine
+  grains fall from the letters, rails, rings and bars into the depth behind
+  the panel, in the colour of what they come from, a few of them as soft
+  discs. Nothing in the theme says where the sources are: the dust reads the
+  frame the panel showed. `count`, `rate`, `depth`, `strength`, `colors` and
+  `areas` (rectangles with or without dust) set it, *Theme → Dust* in the
+  editor has them. It is drawn on a video panel and in the editor's preview,
+  never on a panel that is sent changed regions, and costs nothing while the
+  theme has none; at 1920 × 480 it adds a millisecond or two to a frame
+- A `fan` widget: a rotor of nine lit blades that turns with a fan's RPM (calm
+  and with inertia, standing at 0 RPM, dimmed without a reading) in a ring that
+  shows its share of `max_rpm`, or in a square frame; *Fan with speed* in the
+  editor's presets adds one with its name and value
+- `"finish": "facet"` on `text`, `metric`, `clock`, `weather`, `countdown`,
+  `bar`, `gauge` and `graph`: a flat top in the exact colour and a sharp
+  bevel lit from the top left, like SPUR II's lettering. Bars and rings are
+  raised in a milled track, a graph's line becomes a ridge (a slimmer one on
+  a bar panel). Text keeps the pixels of the flat text; shapes are built once
+  per size and colour, so it costs no more than the flat look
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
@@ -161,6 +180,9 @@
 - The main loop draws one frame at a time through `MainLoop.step(now)`, with
   the sensor hub, display, host and clock given: tests and plugins' test
   benches drive the real loop frame by frame instead of copying it
+- `tools/motion_bench.py` takes `--dust`, `--finish facet` and `--fans N`: it
+  runs each theme with and without that look, side by side frame by frame, and
+  prints what the look adds to a frame
 
 ## 0.4.2 — 2026-10-10
 
