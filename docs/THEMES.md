@@ -86,6 +86,9 @@ to write or review themes by hand.
   with a dot in the name (`"myplugin.ring"`) also come from plugins. A theme
   that needs a plugin you do not have still loads; those parts are not drawn.
   See [Plugins](PLUGINS.md).
+- Optional: `"look"` lays SPUR II's grid over the background and lights the
+  panel with one light; a widget's `finish` draws it lit. See
+  [Look and finish](#look-and-finish).
 
 ## Widgets
 
@@ -130,6 +133,9 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 
 `scale` is `linear`, `sqrt` or `log`: the latter two keep small values visible
 on huge ranges such as network rates.
+
+`bar`, `gauge`, `graph`, `icon`, `text`, `metric` and `module` also take
+`finish`: how their shape is drawn, see [Look and finish](#look-and-finish).
 
 `color_rules` change the colour by value; the highest matching threshold wins
 (and replaces a gradient). Crossing a threshold fades the colour in a fifth
@@ -252,6 +258,123 @@ Graphite, Paper, Sunset, Mono) set palette and style in one go.
 
 Modules and plain widgets mix: plain widgets are drawn in their order, a
 module's parts where the module is in the list.
+
+## Look and finish
+
+The look of SPUR II in two parts: the theme's `look` block for the whole
+panel, and a widget's `finish` for its shape. A theme with neither costs
+nothing extra. The built-in *Lit demo* (1920 × 480) shows both.
+
+```json
+"look": {
+  "grid": { "spacing": 8, "major": 5 },
+  "light": { "strength": 1.0, "sweep_seconds": 1.6 }
+}
+```
+
+A block that is missing (or `false`) is off; `true` or `{}` turns it on with
+its defaults. Blocks this version does not know are kept with a warning, so
+a theme from a newer version loses nothing when the editor saves it.
+
+**`grid`** lays thin lines every `spacing` px (2–400, default 8) from the top
+left, every `major`-th one stronger (0: none; default 5). They lie over the
+backdrop (full-panel `rect`s at the start of the widget list) and under every
+other widget, and are drawn once. `color` and `major_color` default to the
+palette's `grid` and `grid_major`, else to a breath away from the background
+colour (the strong lines twice as far); `alpha` (0–1) dims both.
+
+**`light`** is one light for the whole panel. It falls only on *light
+edges*: points with a direction that widgets give it. The outlines of `rect`s
+2 px or wider become ridges with two facets (with `frames`, on by default)
+and catch it; plugins can give their own (see below).
+
+- The sun stands where it stands for the place in `config.toml` (`[weather]`
+  latitude and longitude; without a place, or with `"sun": false`, at noon):
+  from the left in the morning, steep at noon, from the right in the
+  evening, warm near the horizon, a cool weak light at night. A straight
+  frame does not shine along its whole length but where the reflection
+  fits. Its gloss is worked out again when the sun has moved a step (about
+  a minute) and is kept in the frame's background in between.
+- A sweep of light runs across the panel in `sweep_seconds` (0.3–10, default
+  1.6): when the panel starts (`on_start`), on the full hour (`on_hour`), when
+  a new track plays (`on_track`: `media.title` changes) and when a `tube` or
+  `entrance` transition ends (`on_transition`); all on by default. `color`
+  tints it (default: the palette's accent). A new theme does not count as a
+  start, and the editor's previews show no sweeps.
+- `strength` (0–2, default 1) scales both.
+
+**`finish`** is `flat` (the default: the widget as it always looked), `lit`
+or `facet`. A widget keeps its place and size in any finish.
+
+`lit` draws SPUR II's 3D light, baked from Blender renders of real bodies and
+coloured with the widget's colour, at any size:
+
+- A `bar` is a tube with round ends in its groove (`background` is the
+  groove's colour); its end moves in fractions of a pixel, and `segments`
+  are tubes of their own. `color2` and `color_rules` colour the tube as they
+  colour a flat bar. `glow` (with `glow_radius`) is SPUR II's bar glow:
+  dim along the lit part, rising to the head, which runs towards white.
+- A `gauge` is the same tube bent round, from `start_angle` to `end_angle`
+  with `cap` round or flat; `glow` is the light around its arc.
+- A `graph` keeps its fill; its line is light (its core runs towards white)
+  in a soft halo of its colour (`glow`, `glow_radius`).
+- Weather icons (`icon` `weather` and the symbols `sun`, `moon`, `partly`,
+  `cloud`, `fog`, `rain`, `snow`, `storm`) are built of lit bodies: clouds
+  and the moon in the icon's `color`, the sun and bolts in the palette's
+  `warn`, rain in `accent`, snow in `text`. Other icons stay line icons.
+- A `module` hands its finish to its parts: a weather module with
+  `"finish": "lit"` shows a lit symbol, a ring module a lit ring.
+
+Where depth does not read, a widget is drawn flat: bars thinner than 6 px,
+rings with a tube under 4 px, icons under 16 px. A finish a type does not
+have (`lit` on a `text`) draws it flat, and the theme loader warns once per
+type. The light layers are prepared before the first frame and kept in the
+config folder's `cache/light3d`; they are prepared again when the pictures
+they come from change.
+
+### Light edges for plugins
+
+The panel light glints on `LightEdge`s (`libre_panel.render.look`):
+`LightEdge(normals, coverage, x, y, strength=1.0)` with `normals` (h, w, 3:
+x to the right, y down, z towards the viewer; `(0, 0, 1)` faces the viewer
+and shines least) and `coverage` (h, w; 0–1 or 0–255) whose top left lies at
+(`x`, `y`) on the panel. `LightEdge.ridge(mask, x, y)` makes every line of a
+mask a ridge, as frames are.
+
+- A plugin widget type returns its edges from `edges(widget, ctx, snapshot,
+  now)`; a screen calls `context.light_edge(edge)` in `render`.
+  `context.light` says whether the theme has a panel light at all.
+- A finish (code, subclass of `libre_panel.render.finish.Finish`, made
+  available with `register`) calls `renderer.add_light_edge(edge)` while it
+  draws.
+- Give the edges on every frame that shows them, on the render thread, and
+  keep the same objects while nothing about them changes: their gloss is
+  worked out again only when the light moves. The gloss lies right on the
+  piece that gave the edge, under what is drawn after it.
+
+```python
+import numpy as np
+
+from libre_panel.plugins import WidgetType
+from libre_panel.render.look import LightEdge
+
+
+class Plate(WidgetType):
+    type = "myplugin.plate"
+    api = 1
+    spec = {"w": ("int", 200), "h": ("int", 60)}
+    kept = {}
+
+    def draw(self, widget, ctx, snapshot, now): ...
+
+    def edges(self, widget, ctx, snapshot, now):
+        key = (widget["x"], widget["y"], widget["w"], widget["h"])
+        if key not in self.kept:  # a rail along the top and along the bottom
+            mask = np.zeros((widget["h"], widget["w"]))
+            mask[:3] = mask[-3:] = 1
+            self.kept[key] = LightEdge.ridge(mask, widget["x"], widget["y"])
+        return [self.kept[key]]
+```
 
 ## Format strings
 
