@@ -869,7 +869,8 @@ def test_the_running_panel_in_the_chip(isolated_home):
     from libre_panel.service import BackgroundApp
 
     write_config(isolated_home)
-    app = BackgroundApp(port=0, autostart=Autostart("win32", registry=FakeRegistry()))
+    registry = FakeRegistry()
+    app = BackgroundApp(port=0, autostart=Autostart("win32", registry=registry))
     url = app.start()
     try:
         with browser_page(url) as page:
@@ -878,11 +879,27 @@ def test_the_running_panel_in_the_chip(isolated_home):
             assert "Showing" in chip.inner_text()
             chip.click()
             popover = page.locator(".popover")
+            state = popover.locator(".run-state").inner_text()
+            assert "Showing" in state and "libre-default" in state and "PNG file" in state
+            set_range(popover.locator(".slider input"), 30)
+            assert wait_for(lambda: load_config().device.brightness == 30)
             popover.locator("[role='switch'][aria-label='Upside down']").click()
             assert wait_for(lambda: load_config().device.rotate == 180)
+            popover.locator("[role='switch'][aria-label='Start with system']").click()
+            assert wait_for(lambda: "Libre Panel" in registry.values)
             popover.locator(".btn", has_text="Pause panel").click()
             assert wait_for(lambda: app.panel.paused)
             page.wait_for_function("document.querySelector('.panel-chip.paused') !== null")
+            popover.locator(".btn", has_text="Resume panel").click()
+            assert wait_for(lambda: not app.panel.paused)
+            page.wait_for_function("document.querySelector('.panel-chip.showing') !== null")
+            page.keyboard.press("Escape")
+            expect(popover).to_have_count(0)
+            chip.click()
+            page.locator(".popover .btn", has_text="Quit Libre Panel").click()
+            page.locator(".dialog .btn-danger").click()  # asked first
+            assert app.quit_requested.wait(5)
+            page.wait_for_function("window.libre.store.get().app.quit === true")
     finally:
         app.quit()
         app.shutdown()
@@ -899,6 +916,107 @@ def drag(page, start, end, steps=8):
     page.mouse.down()
     page.mouse.move(*end, steps=steps)
     page.mouse.up()
+
+
+def test_marquee_align_copy_paste_delete(page):
+    count = js(page, "window.libre.doc.widgets().length")
+    canvas = page.locator(".panel-canvas").bounding_box()
+    drag(
+        page,
+        (canvas["x"] + 5, canvas["y"] + canvas["height"] * 0.33),
+        (canvas["x"] + canvas["width"] * 0.6, canvas["y"] + canvas["height"] * 0.72),
+    )
+    selected = js(page, "window.libre.store.get().selection")
+    assert len(selected) >= 4 and "backdrop" not in selected  # a locked layer is not picked up
+    page.locator(".floating-toolbar").get_by_label("Align top edges").click()
+    boxes = js(page, "window.libre.store.get().render.boxes")
+    assert len({boxes[id][1] for id in selected}) == 1  # all on one line
+    page.keyboard.press("Control+c")
+    page.keyboard.press("Control+v")
+    assert js(page, "window.libre.doc.widgets().length") == count + len(selected)
+    page.keyboard.press("Delete")  # the pasted ones are the selection
+    assert js(page, "window.libre.doc.widgets().length") == count
+
+
+def test_a_locked_layer_does_not_move_and_is_saved_locked(page, isolated_home):
+    from libre_panel.theme.model import load_theme
+
+    page.locator(".rail-item", has_text="Layers").click()
+    row = page.locator(".layer", has=page.locator('.layer-row[data-id="clock"]'))
+    row.locator(".layer-flag[aria-label='Lock']").click()
+    assert widget(page, "clock")["locked"] is True
+    start = (widget(page, "clock")["x"], widget(page, "clock")["y"])
+    box = page.locator('.overlay .box[data-id="clock"]').bounding_box()
+    drag(page, (box["x"] + 5, box["y"] + 5), (box["x"] + 80, box["y"] + 40), steps=5)
+    assert (widget(page, "clock")["x"], widget(page, "clock")["y"]) == start
+    row.locator(".layer-row").click()  # a locked layer is picked in the list
+    assert js(page, "window.libre.store.get().selection") == ["clock"]
+    page.keyboard.press("ArrowRight")  # and does not nudge either
+    assert (widget(page, "clock")["x"], widget(page, "clock")["y"]) == start
+    page.keyboard.press("Control+s")  # a built-in theme: asks for a new name
+    dialog = page.locator(".dialog")
+    dialog.locator("input").fill("my-test")
+    dialog.locator("button[type='submit']").click()
+    page.wait_for_function("!window.libre.store.get().dirty")
+    saved = load_theme(isolated_home / "themes" / "my-test")
+    assert next(w for w in saved.widgets if w["id"] == "clock")["locked"] is True
+
+
+def test_a_building_block_and_a_renamed_palette_colour(page):
+    count = js(page, "window.libre.doc.widgets().length")
+    page.locator('.tile[data-item="preset:cpu-card"]').click()
+    assert js(page, "window.libre.doc.widgets().length") > count
+    assert len(js(page, "window.libre.store.get().selection")) > 1  # its parts, together
+    js(page, "window.libre.doc.setSelection([])")  # the theme's settings
+    page.locator(".details-button").click()
+    refs = js(page, "JSON.stringify(window.libre.doc.theme()).split('@accent\"').length - 1")
+    assert refs > 0
+    names = js(page, "Object.keys(window.libre.doc.theme().palette)")
+    row = page.locator(".palette-row").nth(names.index("accent"))
+    name = row.get_by_label("Name (a-z, 0-9, - _)")
+    name.fill("signal")
+    name.press("Enter")
+    now = "JSON.stringify(window.libre.doc.theme()).split('@signal\"').length - 1"
+    assert js(page, now) == refs  # every use follows the new name
+    assert js(page, "'accent' in window.libre.doc.theme().palette") is False
+    assert js(page, "JSON.stringify(window.libre.doc.theme()).includes('@accent\"')") is False
+
+
+def test_a_round_panel_and_the_strip_its_frame_hides(page):
+    page.locator(".panel-chip").click()
+    page.locator(".model-row", has_text="Turing 9.2").click()
+    page.wait_for_function("window.libre.store.get().render.size[0] === 1920")
+    zoom = page.locator(".panel-canvas").bounding_box()["width"] / 1920
+    strip = page.locator(".hidden-strip.top")
+    assert strip.bounding_box()["height"] == pytest.approx(18 * zoom, abs=1)
+    assert "18 px" in strip.get_attribute("title")
+    assert page.locator(".panel-canvas.round").count() == 0
+    page.locator(".model-row", has_text="Turing 2.1").click()
+    page.wait_for_function("window.libre.store.get().render.size.join() === '480,480'")
+    assert page.locator(".panel-canvas.round").count() == 1
+    assert page.locator(".hidden-strip").count() == 0  # a round panel hides nothing
+
+
+def test_a_widget_snaps_to_the_strip_the_frame_hides(page):
+    """The edge of what the bezel hides is a guide like any box's edge."""
+    import json
+
+    from test_editor_server import theme_dict
+
+    theme = theme_dict()
+    theme["display"] = {"model": "turing-9.2-usb", "orientation": "landscape"}
+    theme["display"].update(width=1920, height=480)
+    theme["widgets"] = [
+        {"type": "rect", "id": "probe", "x": 700, "y": 40, "w": 100, "h": 50, "color": "#ff8800"}
+    ]
+    js(page, f"window.libre.doc.openDoc({{ theme: {json.dumps(theme)}, dirty: true }})")
+    page.wait_for_function("window.libre.store.get().render.size[0] === 1920")
+    page.wait_for_selector(".hidden-strip.top")
+    zoom = page.locator(".panel-canvas").bounding_box()["width"] / 1920
+    box = page.locator('.overlay .box[data-id="probe"]').bounding_box()
+    middle = (box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    drag(page, middle, (middle[0], middle[1] - 20 * zoom), steps=6)  # its top edge to about y 20
+    assert widget(page, "probe")["y"] == 18  # not 20: it clings to the edge of the strip
 
 
 def test_a_corner_resizes_a_widget(page):
@@ -920,10 +1038,105 @@ def test_a_corner_resizes_a_widget(page):
 
 
 @pytest.fixture
+def drawing_plugin(plugin_folder):
+    """A plugin with a screen and a widget type, installed before the app starts."""
+    from test_plugins import DRAWING, DRAWING_PARTS
+
+    return plugin_folder(DRAWING, DRAWING_PARTS)
+
+
+def test_a_plugins_widget_type_and_screen(drawing_plugin, page):
+    tile = page.locator(".tile[data-item='widget:demo.bar']")
+    assert tile.inner_text() == "Demo bar"
+    assert page.locator(".tile[data-item='preset:demo.bar-1']").count() == 1  # and its block
+    count = js(page, "window.libre.doc.widgets().length")
+    tile.click()
+    assert js(page, "window.libre.doc.widgets().length") == count + 1
+    assert js(page, "window.libre.doc.single().type") == "demo.bar"
+    js(page, "window.libre.doc.setSelection([])")  # the theme's settings: a screen under it all
+    page.locator(".details-button").click()
+    screen = page.locator("select[aria-label='screen']")
+    before = js(page, "window.libre.store.get().render.png")
+    screen.select_option("tint")
+    page.wait_for_function("window.libre.doc.theme().screen?.name === 'tint'")
+    page.get_by_role("group", name="color", exact=True).wait_for()  # its options
+    page.wait_for_function(f"window.libre.store.get().render.png !== {before!r}")  # drawn with it
+    assert js(page, "window.libre.store.get().renderError") is None
+    screen.select_option("")
+    page.wait_for_function("!window.libre.doc.theme().screen")
+
+
+@pytest.fixture
+def toast_plugin(plugin_folder):
+    from test_plugins import TOAST_PARTS, TOAST_STYLE
+
+    return plugin_folder(TOAST_STYLE, TOAST_PARTS)
+
+
+def test_the_notice_settings_with_a_plugins_style(toast_plugin, page, isolated_home):
+    """The theme's Messages: position, hidden kinds, the queue, and a plugin's style with its
+    options, saved with the theme."""
+    from libre_panel.theme.model import load_theme
+
+    page.locator(".details-button").click()
+    page.locator("select[aria-label='position']").select_option("bottom-left")
+    page.get_by_label("hidden kinds").fill("music, volume")
+    page.get_by_role("switch", name="one after another").click()
+    page.locator("select[aria-label='style']").select_option("demo.band")
+    height = page.get_by_label("height", exact=True)
+    height.fill("55")
+    height.press("Enter")
+    assert js(page, "window.libre.doc.theme().toast") == {
+        "anchor": "bottom-left",
+        "queue": False,
+        "off": ["music", "volume"],
+        "style": "demo.band",
+        "options": {"height": 55},
+    }
+    page.keyboard.press("Control+s")  # a built-in theme: asks for a new name
+    dialog = page.locator(".dialog")
+    dialog.locator("input").fill("my-test")
+    dialog.locator("button[type='submit']").click()
+    page.wait_for_function("!window.libre.store.get().dirty")
+    saved = load_theme(isolated_home / "themes" / "my-test")
+    assert saved.toast["style"] == "demo.band" and saved.toast["options"] == {"height": 55}
+    assert saved.toast_anchor == "bottom-left" and saved.toast["off"] == ["music", "volume"]
+    assert saved.toast["queue"] is False
+
+
+@pytest.fixture
 def page_plugin(plugin_folder):
     from test_plugins import PAGE, PAGE_FILES, PAGE_PARTS
 
     return plugin_folder(PAGE, PAGE_PARTS, files=PAGE_FILES)
+
+
+def test_a_plugin_page_opens_in_the_app(page_plugin, page):
+    page.locator(".rail-item", has_text="Pages").click()
+    page.locator(".plugin-pages .list-row", has_text="Analysis").click()
+    page.wait_for_function("location.hash === '#/plugin/analysis'")
+    frame = page.frame_locator(".plugin-frame")
+    frame.locator("#out", has_text="1 3").wait_for()  # kit.js reached the page's own API
+    assert page.locator(".panel-canvas").count() == 0  # the page took the view's place
+    page.locator(".plugin-bar").get_by_role("button", name="Back").click()
+    page.wait_for_selector(".panel-canvas .preview")
+    page.keyboard.press("Control+k")  # and Ctrl+K finds it
+    page.locator(".palette input").fill("analysis")
+    expect(page.locator(".palette-item.active")).to_contain_text("Analysis")
+    page.keyboard.press("Enter")
+    page.wait_for_function("location.hash === '#/plugin/analysis'")
+    page.frame_locator(".plugin-frame").locator("#out", has_text="1 3").wait_for()
+
+
+def test_a_plain_editor_has_no_panel_controls(page):
+    chip = page.locator(".panel-chip")
+    assert "480 × 320" in chip.inner_text()  # no panel runs: the size to design for
+    assert page.locator(".panel-chip.preview").count() == 1
+    chip.click()
+    popover = page.locator(".popover")
+    assert popover.locator(".model-row").count() > 5  # which panel the theme is for
+    assert popover.get_by_role("switch").count() == 0  # but nothing to switch or pause
+    assert popover.get_by_text("On the panel now").count() == 0
 
 
 def new_theme_from_a_layout(page, panel="Turing 9.2"):
@@ -1001,8 +1214,296 @@ def test_modules_from_a_layout_drag_resize_swap_and_look(page):
     expect(page.locator(".inspector .look-tile[aria-checked='true']")).to_have_text("Paper")
 
 
+def test_a_modules_source_and_detaching_it(page):
+    new_theme_from_a_layout(page, "Turing 3.5")
+    ring = js(page, "window.libre.doc.widgets().find((w) => w.module === 'ring').id")
+    js(page, f"window.libre.doc.setSelection([{ring!r}])")
+    page.locator(".inspector .chip", has_text="Disk").click()
+    assert widget(page, ring)["source"] == "disk"
+    page.locator(".details-button").click()
+    page.get_by_role("button", name="Detach into widgets").click()
+    page.wait_for_function(f"!window.libre.doc.widgetById({ring!r})")
+    assert len(js(page, "window.libre.store.get().selection")) > 2  # its parts, to change each
+    page.keyboard.press("Control+z")
+    assert widget(page, ring)["source"] == "disk"
+
+
+def test_the_weather_forecast_setting(page):
+    new_theme_from_a_layout(page)
+    weather = js(page, "window.libre.doc.widgets().find((w) => w.module === 'weather').id")
+    js(page, f"window.libre.doc.setSelection([{weather!r}])")
+    page.locator(".inspector .chip", has_text="hours").first.click()
+    assert widget(page, weather)["forecast"] == "hours"
+    page.locator(".details-button").click()  # how far apart the columns are comes with it
+    hours = page.get_by_label("Hours between columns")
+    hours.fill("2")
+    hours.press("Enter")
+    assert widget(page, weather)["step"] == 2
+    page.locator(".inspector").get_by_label("Back").click()
+    page.locator(".inspector .chip").filter(has_text="off").first.click()
+    assert widget(page, weather)["forecast"] == "off"
+
+
+def test_a_list_modules_settings(page):
+    new_theme_from_a_layout(page)
+    first = js(page, "window.libre.doc.widgets().find(window.libre.doc.isModule).id")
+    js(page, f"window.libre.doc.setSelection([{first!r}])")
+    kind = page.locator(".inspector select[aria-label='Module']")
+    kind.select_option("processes")
+    assert widget(page, first)["module"] == "processes"
+    page.get_by_role("radio", name="memory").click()
+    assert widget(page, first)["sort"] == "memory"
+    kind.select_option("values")
+    readings = page.locator(".inspector .field", has_text="Readings").locator("textarea")
+    assert "cpu.load = CPU" in readings.get_attribute("placeholder")
+    readings.fill("cpu.load = CPU\nfan.*")
+    page.wait_for_function(
+        f"window.libre.doc.widgetById({first!r}).items === 'cpu.load = CPU\\nfan.*'"
+    )
+
+
+def test_a_time_modules_settings(page):
+    new_theme_from_a_layout(page)
+    first = js(page, "window.libre.doc.widgets().find(window.libre.doc.isModule).id")
+    js(page, f"window.libre.doc.setSelection([{first!r}])")
+    kind = page.locator(".inspector select[aria-label='Module']")
+    kind.select_option("countdown")
+    page.get_by_label("Counts down to").fill("12-24")
+    page.wait_for_function(f"window.libre.doc.widgetById({first!r}).target === '12-24'")
+    kind.select_option("analog")
+    page.get_by_label("Time zone").fill("Asia/Tokyo")
+    page.wait_for_function(f"window.libre.doc.widgetById({first!r}).timezone === 'Asia/Tokyo'")
+    kind.select_option("image")
+    page.locator(".details-button").click()
+    seconds = page.get_by_label("Seconds per picture")
+    seconds.fill("30")
+    seconds.press("Enter")
+    assert widget(page, first)["seconds"] == 30
+    page.locator(".inspector").get_by_label("Back").click()
+    kind.select_option("world")
+    places = page.locator(".inspector .field", has_text="Places").locator("textarea")
+    assert "Asia/Tokyo = Tokyo" in places.get_attribute("placeholder")
+
+
+def test_the_look_and_a_finish_are_saved_with_the_theme(app_url, isolated_home):
+    """The grid and the panel light set from their specs, a bar's finish; all of it in the file."""
+    from libre_panel.theme.model import load_theme
+
+    with browser_page(app_url, "look") as page:
+        page.wait_for_selector(".look-side .finish-tile")
+        grid = page.locator(".look-block", has_text="Grid background")
+        grid.locator("[role='switch']").first.click()
+        grid.locator("summary").click()
+        spacing = grid.get_by_label("Spacing")
+        spacing.fill("10")
+        spacing.press("Enter")
+        assert js(page, "window.libre.doc.theme().look.grid") == {
+            "spacing": 10, "major": 5, "color": None, "major_color": None, "alpha": 1,
+        }  # fmt: skip
+        light = page.locator(".look-block", has_text="Panel light")
+        light.locator("[role='switch']").first.click()
+        light.locator(".look-chip", has_text="Full hour").click()
+        assert js(page, "window.libre.doc.theme().look.light.on_hour") is False
+        bar = js(page, "window.libre.doc.widgets().find((w) => w.type === 'bar').id")
+        page.locator(".look-scope button", has_text="Bars").click()
+        page.locator(".finish-tile", has_text="Light").click()
+        assert widget(page, bar)["finish"] == "lit"
+        page.keyboard.press("Control+s")  # a built-in theme: asks for a new name
+        dialog = page.locator(".dialog")
+        dialog.locator("input").fill("my-test")
+        dialog.locator("button[type='submit']").click()
+        page.wait_for_function("!window.libre.store.get().dirty")
+        saved = load_theme(isolated_home / "themes" / "my-test")
+        assert saved.look["grid"]["spacing"] == 10 and saved.look["light"]["on_hour"] is False
+        assert next(w for w in saved.widgets if w["id"] == bar)["finish"] == "lit"
+        grid.locator("[role='switch']").first.click()  # switched off, the block is gone again
+        assert "grid" not in js(page, "window.libre.doc.theme().look")
+
+
+@pytest.fixture
+def console_app(isolated_home):
+    """The background app with its panel and the notices service on, and the address of its app."""
+    from test_autostart import FakeTasks
+    from test_service import FakeRegistry, wait_for, write_config
+
+    from libre_panel.autostart import Autostart
+    from libre_panel.service import BackgroundApp
+
+    write_config(isolated_home)
+    config = isolated_home / "config.toml"
+    config.write_text(config.read_text(encoding="utf-8") + '\n[services]\nenabled = ["notices"]\n')
+    app = BackgroundApp(
+        port=0, autostart=Autostart("win32", registry=FakeRegistry(), tasks=FakeTasks())
+    )
+    url = app.start()
+    assert wait_for(lambda: app.plugin_host.shown is not None and "notices" in app.services.running)
+    yield app, url
+    app.quit()
+    app.shutdown()
+
+
+def open_plugin_page(page, title):
+    """A page of the console (or a plugin's) from Design's Pages, in its frame."""
+    page.locator(".rail-item", has_text="Pages").click()
+    page.locator(".plugin-pages .list-row", has_text=title).click()
+    return page.frame_locator(".plugin-frame")
+
+
+def test_the_control_page_in_the_app(console_app):
+    from test_service import wait_for
+
+    from libre_panel.config import load_config
+
+    app, url = console_app
+    with browser_page(url) as page:
+        frame = open_plugin_page(page, "Control")
+        frame.locator("h1", has_text="Control").wait_for()
+        assert page.locator(".plugin-bar strong").inner_text() == "Control"
+
+        frame.locator("#live").wait_for(state="visible")  # the picture on the panel
+        picture = "document.querySelector('.plugin-frame').contentDocument.querySelector('#live')"
+        page.wait_for_function(f"{picture}.naturalWidth > 0")
+        frame.locator(".tile .label", has_text="Frame rate").wait_for()
+        frame.locator("#sources tr", has_text="psutil").wait_for()
+        row = frame.locator("#services tr", has_text="notices")
+        row.wait_for()
+        assert "running" in row.inner_text()
+
+        frame.get_by_role("button", name="Volume").click()  # a test message
+        frame.locator("#probe-result", has_text="Shown on the panel").wait_for()
+
+        frame.locator("#themes select").nth(1).select_option("slate")  # the game mode's theme
+        assert wait_for(lambda: getattr(load_config().modes.get("game"), "theme", None) == "slate")
+        frame.locator("#themes select").nth(0).select_option("orbit")
+        page.wait_for_function(
+            "document.querySelector('.plugin-frame').contentDocument"
+            ".querySelector('#themes').textContent.includes('Showing now: orbit')",
+            timeout=15000,
+        )
+        assert load_config().theme == "orbit"
+
+        first = app.services.running["notices"][0]
+        row.get_by_role("button", name="Restart").click()
+        assert wait_for(lambda: app.services.running["notices"][0] is not first)
+
+        frame.locator("#log-box summary").click()  # the log of this run (the tray writes it)
+        frame.locator("#log-where").wait_for()
+
+        page.locator(".plugin-bar").get_by_role("button", name="Back").click()
+        page.wait_for_selector(".panel-canvas .preview")
+
+
+def test_the_autopilot_page_in_the_app(console_app):
+    from test_service import wait_for
+
+    from libre_panel.config import load_config
+
+    app, url = console_app
+    with browser_page(url) as page:
+        frame = open_plugin_page(page, "Autopilot")
+        frame.locator("h1", has_text="Autopilot").wait_for()
+        frame.locator("#rules .note", has_text="No rules").wait_for()
+        assert not frame.locator("#enabled").is_checked()
+
+        frame.get_by_role("button", name="Add a rule").click()
+        card = frame.locator("#rules .rule")
+        card.wait_for()
+        name = card.locator("input.name")
+        name.fill("Quiet")
+        card.locator(".rule-head select").first.select_option("slate")
+        card.locator("input[type=checkbox]").first.check()  # a new rule starts switched off
+        frame.locator(".condition", has_text="Music plays").locator("input").uncheck()  # no music
+        frame.locator("#enabled").check()
+        frame.locator("#dirty", has_text="unsaved").wait_for()
+
+        frame.get_by_role("button", name="Save").click()
+        # one write: the rules and the switch together
+        assert wait_for(lambda: load_config().services.enabled == ["notices", "autopilot"])
+        rules = load_config().services.options["autopilot"]["rules"]
+        assert rules == [{"name": "Quiet", "theme": "slate", "when": {"music": False}}]
+        frame.locator("#dirty", has_text="unsaved").wait_for(state="hidden")
+        assert wait_for(lambda: "autopilot" in app.services.running, 15)
+        # the service runs: the page says what it does (and the rule holds: no music here)
+        frame.locator("#now", has_text="Quiet").wait_for(timeout=20000)
+        frame.locator("#signals .chip", has_text="No music").wait_for()
+        assert frame.locator("#rules .rule.holds").count() == 1
+
+        card.locator("button[title='Delete the rule']").click()  # and gone again
+        frame.get_by_role("button", name="Save").click()
+        assert wait_for(
+            lambda: not load_config().services.options.get("autopilot", {}).get("rules")
+        )
+
+
+HEALTHY = {
+    "fps": 49.8, "target_fps": 50, "streaming": True, "render_ms": 7.4, "render_peak_ms": 19.0,
+    "kbps": 251.0, "blocks_per_s": 50.1, "max_depth": 2, "waits": 0, "drops": 0,
+    "usb_errors": 0, "panel_restarts": 0, "ffmpeg_restarts": 0, "uptime_s": 120,
+}  # fmt: skip
+
 # The Control page's rows (/static/stats.js, which plugins' pages can use too) ...
+STATS = """async (stats) => {
+  const { describeStats } = await import("/static/stats.js");
+  const fill = (text, vars = {}) => text.replace(/\\{(\\w+)\\}/g, (all, name) => vars[name] ?? all);
+  const rows = describeStats(stats, fill);
+  return Object.fromEntries(rows.map((row) => [row.id, [row.value, row.level]]));
+}"""
+
 # ... and Live's tiles (the app's own core/stats.js)
+TILES = """async (stats) => {
+  const { statTiles } = await import("/app/core/stats.js");
+  return Object.fromEntries(statTiles(stats).map((tile) => [tile.id, [tile.value, tile.level]]));
+}"""
+
+
+def test_the_control_pages_numbers_are_judged_against_what_the_panel_should_manage(page):
+    def rows(**changes):
+        return page.evaluate(STATS, {**HEALTHY, **changes})
+
+    healthy = rows()
+    assert healthy == {
+        "fps": ["49.8 fps", ""], "render": ["7.4 ms", ""], "data": ["251 KB/s", ""],
+        "video": ["50.1 blocks/s", ""], "faults": ["none", ""],
+    }  # fmt: skip
+    # video mode: under nine tenths of the target is a warning, under half of it bad
+    assert rows(fps=40.0)["fps"] == ["40 fps", "warn"]
+    assert rows(fps=20.0)["fps"][1] == "bad"
+    # (not in video mode a frame is drawn only when something moves)
+    assert rows(streaming=False, fps=2.0, target_fps=10)["fps"] == ["2 fps", ""]
+    assert rows(render_ms=25.0)["render"][1] == "warn"  # more than the 20 ms a frame has
+    assert rows(render_ms=25.0, streaming=False)["render"][1] == ""
+    assert rows(drops=1)["video"][1] == "warn" and rows(max_depth=4)["video"][1] == "warn"
+    assert rows(usb_errors=1, ffmpeg_restarts=2)["faults"] == ["3 so far", "warn"]
+    plain = rows(kbps=None, blocks_per_s=None, max_depth=None, waits=None, drops=None)
+    assert set(plain) == {"fps", "render", "faults"}  # what nobody counted is not shown
+    assert page.evaluate(STATS, {}) == {}  # no numbers: nothing to show
+
+
+def test_lives_numbers_are_judged_against_what_the_panel_should_manage(page):
+    def tiles(**changes):
+        return page.evaluate(TILES, {**HEALTHY, **changes})
+
+    assert tiles() == {
+        "fps": ["49.8", ""], "data": ["251", ""], "draw": ["7.4", ""], "queue": ["2", ""],
+        "faults": ["0", "ok"],
+    }  # fmt: skip
+    # video mode: under nine tenths of the target is a warning, under half of it bad
+    assert tiles(fps=40.0)["fps"] == ["40.0", "warn"]
+    assert tiles(fps=20.0)["fps"][1] == "bad"
+    # (not in video mode a frame is drawn only when something moves)
+    assert tiles(streaming=False, fps=2.0, target_fps=10)["fps"] == ["2.0", ""]
+    assert tiles(render_ms=25.0)["draw"][1] == "warn"  # more than the 20 ms a frame has
+    assert tiles(render_ms=25.0, streaming=False)["draw"][1] == ""
+    assert tiles(drops=1)["queue"][1] == "warn" and tiles(max_depth=4)["queue"][1] == "warn"
+    assert tiles(usb_errors=1, ffmpeg_restarts=2)["faults"] == ["3", "warn"]
+    plain = tiles(kbps=None, blocks_per_s=None, max_depth=None, waits=None, drops=None)
+    assert plain["data"][0] == "–" and plain["queue"][0] == "–"  # what nobody counted
+    assert page.evaluate(TILES, {}) == {
+        "fps": ["–", ""], "data": ["–", ""], "draw": ["–", ""], "queue": ["–", ""],
+        "faults": ["–", ""],
+    }  # fmt: skip
+
+
 def test_the_language_switch_keeps_unsaved_work(page_plugin, page, isolated_home):
     from libre_panel.config import load_config
 
