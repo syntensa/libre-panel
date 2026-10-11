@@ -86,7 +86,7 @@
   while a theme or a service shows `audio.*`, and is in the default
   `[sensors] providers` on both; in a list of your own add `"audio"`
 - Messages in the look of SPUR II: the band (`"toast": {"style": "band"}`,
-  or *Theme → Messages* in the editor). A glowing edge ignites from the
+  or *Look → Notices* in the app). A glowing edge ignites from the
   centre and the band rolls down from it, with a title, a cover or icon and
   a progress bar that glides; turning the volume changes it in place
   without blinking, another message rolls down inside the open band, and
@@ -241,8 +241,8 @@
   `[weather]`, glints on frames (outlines of rects become ridges), and a
   sweep of light runs across at the start, on the hour, on a new track and
   after a tube or entrance transition. The light layers are prepared before
-  the first frame and kept in the cache folder. The editor sets both (*Grid
-  background* and *Panel light* with the theme, *Finish* for a widget); the
+  the first frame and kept in the cache folder. The app sets both (*Grid
+  background* and *Panel light* under *Look*, *Finish* for a widget); the
   *Lit demo* theme (1920 × 480) shows them
 - For plugins: light edges the panel light glints on
   (`libre_panel.render.look.LightEdge`), from a widget type's `edges()` or a
@@ -260,8 +260,8 @@
   the panel, in the colour of what they come from, a few of them as soft
   discs. Nothing in the theme says where the sources are: the dust reads the
   frame the panel showed. `count`, `rate`, `depth`, `strength`, `colors` and
-  `areas` (rectangles with or without dust) set it, *Theme → Dust* in the
-  editor has them. It is drawn on a video panel and in the editor's preview,
+  `areas` (rectangles with or without dust) set it, *Look → Depth dust* in the
+  app has them. It is drawn on a video panel and in the editor's preview,
   never on a panel that is sent changed regions, and costs nothing while the
   theme has none; at 1920 × 480 it adds a millisecond or two to a frame
 - A `fan` widget: a rotor of nine lit blades that turns with a fan's RPM (calm
@@ -298,8 +298,8 @@
   data rate sent to the panel, and in video mode the blocks per second, the
   deepest queue the panel reported, the waits and the pictures thrown away,
   and counts USB errors, restarts of the panel and of ffmpeg. They are in
-  `/api/app` (`panel.stats`), in the editor's **Panel** menu (with a button to
-  the new Control page) and for plugins in `context.status()`;
+  `/api/app` (`panel.stats`), on the app's *Live* view, on the new Control page
+  and for plugins in `context.status()`;
   `context.sources()` lists the sensor sources and what they say about
   themselves. Measuring costs a few additions per frame and holds no lock
 - Plugins: `set_config_value` writes lists too (`"services.enabled"`) and
@@ -308,8 +308,8 @@
   `edit_config` makes several such changes in one write. They keep the rest of
   `config.toml`, compare the new file with the old one, and refuse what they
   cannot edit safely
-- The editor has two pages of its own, built in like the services (*Pages* in
-  the top bar), written with the plugin API. **Control** shows the live picture
+- The app has two pages of its own, built in like the services (*Pages* in
+  *Design*, or Ctrl+K), written with the plugin API. **Control** shows the live picture
   of the panel, the numbers above as tiles, each sensor source (LibreHardwareMonitor
   says how it is read, whether it has administrator rights, whether PawnIO is there)
   and each service with a *Restart*, sends a test message of each kind and says
@@ -401,8 +401,8 @@
   `[weather]`, glints on ridges, and a sweep of light runs across at the
   start, on the hour, on a new track and after a tube or entrance
   transition. The light layers are prepared before the first frame and kept
-  in the cache folder. The editor sets both (*Grid background* and *Panel
-  light* with the theme, *Finish* for a widget)
+  in the cache folder. The app sets both (*Grid background* and *Panel
+  light* under *Look*, *Finish* for a widget)
 - The theme *SPUR Classic* (`spur-classic`, 1920 × 480): SPUR II's classic
   screen as it is now, rebuilt from its geometry with the look and the
   finishes: two load charts with raised curves in flat frames, the CPU and
@@ -660,8 +660,9 @@
   else the weather, else the day
 - The pictures of the README and the website show Lumen (on top, in the gallery, in the
   social preview), and the README lists Libre Panel's own themes first, SPUR II's apart
-- The editor before the app stays at `/classic/` until the app has all its
-  views; plugins' editor pages open inside the app (*Pages*, or Ctrl+K)
+- The old browser editor is gone; the app replaces it. A bookmark of `/classic/`
+  leads to the app, and plugins' editor pages open inside it (*Pages* in
+  *Design*, or Ctrl+K)
 - The video mode turns itself on: `video.mode` is `"auto"` by default, which
   streams to a 9.2" (the panel it is proven on) as soon as ffmpeg is found and
   `local_clip` names the panel's standby clip. `libre-panel doctor` and the log

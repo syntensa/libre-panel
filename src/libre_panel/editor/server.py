@@ -28,7 +28,6 @@ from libre_panel.config import (
     edit_config,
     hardware_name,
     load_config,
-    set_active_theme,
     set_config_value,
     theme_chosen,
     user_themes_dir,
@@ -43,7 +42,7 @@ from libre_panel.sensors.base import SensorHub, Snapshot
 from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.sensors.hardware import detected_names
 from libre_panel.theme.adapt import adapt_theme
-from libre_panel.theme.defaults import default_theme, normal_theme, panel_model
+from libre_panel.theme.defaults import default_theme, panel_model
 from libre_panel.theme.model import (
     COMMON_FIELDS,
     DUST_MAX_AREAS,
@@ -76,7 +75,8 @@ from libre_panel.theme.modules import (
 
 log = logging.getLogger(__name__)
 
-STATIC_DIR = Path(__file__).resolve().parent / "static"  # the classic editor, kit.js
+# What the console's pages and plugins' pages share (kit.js, editor.css, stats.js), and the icon.
+STATIC_DIR = Path(__file__).resolve().parent / "static"
 APP_DIR = Path(__file__).resolve().parent / "app"  # the app: shell, views, vendored libraries
 MAX_JSON = 2 * 1024 * 1024
 MAX_ASSET = 10 * 1024 * 1024
@@ -430,7 +430,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         if path in ("/", "/index.html"):
             return self._app_file("index.html")
         if path in ("/classic", "/classic/", "/classic/index.html"):
-            return self._static("index.html")  # the editor before the app, until it is retired
+            return self._redirect("/")  # a bookmark of the old editor leads to the app
         if path.startswith("/app/fonts/"):
             return self._font(path[len("/app/fonts/") :])
         if path.startswith("/app/"):
@@ -460,14 +460,6 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._get_theme(path[len("/api/themes/") :])
         if path == "/api/sensors":
             return self._json(self._sensors())
-        if path == "/api/active":
-            try:
-                config = load_config(self.state.config_path)
-            except ConfigError as exc:
-                return self._error(str(exc))
-            return self._json(
-                {"theme": normal_theme(config, self._panel_state().get("default_theme"))}
-            )
         if path == "/api/i18n":
             return self._json(self._i18n())
         if path == "/api/app":
@@ -539,6 +531,13 @@ class EditorHandler(BaseHTTPRequestHandler):
             log.exception("editor page %s failed", page_id)
             return self._error(f"{page_id}: {exc}", HTTPStatus.INTERNAL_SERVER_ERROR)
         self._send(int(status), payload, content_type)
+
+    def _redirect(self, location: str) -> None:
+        self.send_response(HTTPStatus.MOVED_PERMANENTLY)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
 
     def _static(self, name: str) -> None:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", name) or name.startswith("."):
@@ -825,8 +824,6 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._templates()
         if path == "/api/detach":
             return self._detach()
-        if path == "/api/activate":
-            return self._activate()
         if path == "/api/app":
             return self._app_action()
         if path == "/api/language":
@@ -1153,18 +1150,6 @@ class EditorHandler(BaseHTTPRequestHandler):
         except (ThemeError, KeyError, ValueError, TypeError) as exc:
             return self._error(str(exc))
         self._json({"theme": result})
-
-    def _activate(self) -> None:
-        payload = self._read_json()
-        if payload is None:
-            return
-        theme_id = payload.get("id")
-        try:
-            find_theme(theme_id if isinstance(theme_id, str) else "")
-            path = set_active_theme(theme_id, self.state.config_path)
-        except (ThemeError, ConfigError, OSError) as exc:
-            return self._error(str(exc))
-        self._json({"ok": True, "theme": theme_id, "config": str(path)})
 
     def _save(self, theme_id: str) -> None:
         payload = self._read_json()

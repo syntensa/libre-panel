@@ -50,14 +50,28 @@ def theme_dict():
 def test_index_and_specs(server):
     status, body = request(server, "GET", "/")
     assert status == 200 and b'src="/app/main.js"' in body  # the app
-    status, body = request(server, "GET", "/classic/")
-    assert status == 200 and b"Theme Editor" in body  # the editor before it, until it is retired
     status, specs = request(server, "GET", "/api/specs")
     assert status == 200
     assert "gauge" in specs["widgets"]
     assert any(m["id"] == "turing-9.2-usb" for m in specs["models"])
     band = specs["toasts"]["band"]  # the built-in styles besides the card, with their options
     assert band["label"] == "Band (built in)" and band["options"]["roll_in"] == ["number", 0.45]
+
+
+def test_a_bookmark_of_the_old_editor_leads_to_the_app(server):
+    for path in ("/classic", "/classic/", "/classic/index.html"):
+        conn = http.client.HTTPConnection("127.0.0.1", server, timeout=10)
+        conn.request("GET", path, headers={"Host": f"127.0.0.1:{server}"})
+        response = conn.getresponse()
+        response.read()
+        conn.close()
+        assert response.status == 301 and response.getheader("Location") == "/", path
+    assert request(server, "GET", "/classic/", host="evil.example")[0] == 403  # as any page
+    # what that editor loaded is gone; what the console's and plugins' pages use is there
+    for name in ("editor.js", "index.html"):
+        assert request(server, "GET", f"/static/{name}")[0] == 404
+    for name in ("kit.js", "editor.css", "stats.js", "icon.png"):
+        assert request(server, "GET", f"/static/{name}")[0] == 200
 
 
 def test_the_sensor_picker_offers_what_sources_read_only_on_demand(server):

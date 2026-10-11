@@ -25,8 +25,8 @@ const groupOf = (kind) => Object.entries(MODULE_GROUPS).find(([, kinds]) => kind
 let pictures = { key: null, modules: {}, presets: {} };
 const listeners = new Set();
 
-async function refreshPictures(palette, style) {
-  const key = JSON.stringify([palette, style]);
+async function refreshPictures(palette, style, lang) {
+  const key = JSON.stringify([palette, style, lang]);
   if (key === pictures.key) return;
   pictures = { ...pictures, key };
   try {
@@ -41,7 +41,8 @@ async function refreshPictures(palette, style) {
 
 function usePictures() {
   const [, rerender] = useState(0);
-  const look = useStore((s) => JSON.stringify([s.doc?.theme?.palette || {}, s.doc?.theme?.style || null]));
+  // (the pictures hold dates and weather: a new language draws them again)
+  const look = useStore((s) => JSON.stringify([s.doc?.theme?.palette || {}, s.doc?.theme?.style || null, s.lang]));
   useEffect(() => {
     const listener = () => rerender((n) => n + 1);
     listeners.add(listener);
@@ -49,8 +50,8 @@ function usePictures() {
   }, []);
   useEffect(() => {
     const timer = setTimeout(() => {
-      const [palette, style] = JSON.parse(look);
-      refreshPictures(palette, style);
+      const [palette, style, lang] = JSON.parse(look);
+      refreshPictures(palette, style, lang);
     }, 250);
     return () => clearTimeout(timer);
   }, [look]);

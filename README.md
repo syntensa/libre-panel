@@ -18,7 +18,7 @@
 <p align="center">
   <a href="https://github.com/syntensa/libre-panel/releases/latest"><b>Download</b></a> ·
   <a href="#themes">Themes</a> ·
-  <a href="#the-theme-editor">Theme editor</a> ·
+  <a href="#the-app">The app</a> ·
   <a href="docs/HARDWARE.md">Supported panels</a> ·
   <a href="#build-your-own-in-two-minutes">Build your own</a>
 </p>
@@ -59,8 +59,9 @@ on a PC that reports no GPU readings. Any widget can do this with one field,
 
 <p align="center"><img src="docs/images/editor-new.png" alt="The New theme dialog: three starting layouts for the 9.2 inch panel and six looks" width="100%"></p>
 
-**1. Pick a layout and a look.** *New* offers starting layouts made for the
-panel you chose, in any of six looks.
+**1. Pick a layout and a look.** *New theme…* (in the theme menu at the top of
+*Design*, or Ctrl+K) offers starting layouts made for the panel you chose, in any
+of six looks.
 
 <p align="center"><img src="docs/images/editor-drag.png" alt="A History module is dragged from the library onto two free cells, which light up" width="100%"></p>
 
@@ -154,19 +155,43 @@ set of screens for the 8.8" and 9.2" bars (`"collection": "SPUR II"`):
 | `spur-studio` | 8.8" / 9.2" bar (1920×480) | SPUR II's Studio screen, made of the cards: a large clock with the seconds and the date, the network and the volume on the left, what plays (the weather when nothing does) in the middle, with a line of light between the cards, and rings for the CPU, GPU and RAM on the right |
 | `round-report` | 8.8" / 9.2" bar (1920×480) | SPUR II's round report, what the `memory` service shows after a game: the average frame rate against your earlier rounds, the share of the round at each frame rate, who held the rate down, and the highest temperatures and power |
 
-Every theme moves to any other panel from the editor's panel menu. Themes
-are plain JSON plus images and fonts — see [docs/THEMES.md](docs/THEMES.md).
+Every theme moves to any other panel from the panel button at the top of
+*Design*. Themes are plain JSON plus images and fonts — see
+[docs/THEMES.md](docs/THEMES.md).
 Made one you like? Share it in
 [Discussions](https://github.com/syntensa/libre-panel/discussions).
 
-## The theme editor
+## The app
 
-<p align="center"><img src="docs/images/editor.png" alt="The theme editor: the module library on the left, a 9.2 inch panel with a selected ring module and its handles, the theme settings on the right" width="100%"></p>
+<p align="center"><img src="docs/images/editor.png" alt="Design: the building blocks on the left, a 9.2 inch panel with a selected ring module, its toolbar and handles, and the module's settings on the right" width="100%"></p>
 
-- **In a window of its own** (WebView2 on Windows, WebKitGTK on Linux), or
-  in the browser where there is none. The panel in the middle, settings where
-  you click: a toolbar over the selection for what it shows, how it is drawn,
-  its colour and size; a short inspector with the rest one click further.
+Libre Panel opens in **a window of its own** (WebView2 on Windows, WebKitGTK on
+Linux), or in the browser where there is none. Five views share one header:
+
+- **Start**: the panel at a glance, and the themes made for it, one click each.
+  *All* is the gallery of every theme, each drawn by the panel's own renderer. On
+  a first start it asks how it should look.
+- **Design**: where you build a theme (below).
+- **Look**: the six colour worlds, how rings, bars, graphs and lettering are drawn
+  (light, facet, acrylic, flat), the panel light, grid, dust and how notices look,
+  beside the picture of the panel.
+- **Live**: what the panel shows now and how it runs: frame rate against the
+  target, drawing time, faults, the sensor sources, the services with a switch
+  each, test notices and the log.
+- **Settings**: everything in `config.toml`, so that nothing needs a text editor.
+
+<p align="center"><img src="docs/images/start.png" alt="Start: the gallery of every theme, each drawn by the panel's own renderer, with the one on the panel marked" width="100%"></p>
+
+**Everything by name.** Ctrl+K finds any command, theme, module, sensor or
+setting by a few letters.
+
+<p align="center"><img src="docs/images/palette.png" alt="The command palette after typing weather: the weather module and widget, the building block, and the weather settings" width="100%"></p>
+
+In *Design*:
+
+- **In the middle, the panel; settings where you click.** A toolbar over the
+  selection for what it shows, how it is drawn, its colour and size; a short
+  inspector with the rest one click further.
 - **Modules** from a library with live pictures in your look, on a grid:
   drag, drop, swap, resize at the edges. Their settings are plain choices:
   what it shows, title, colour, what to show when readings are missing.
@@ -174,14 +199,14 @@ Made one you like? Share it in
 - **Free editing** of every widget: drag and drop with snapping and
   alignment guides, corners that resize, multi-select, align and distribute,
   undo/redo, copy/paste, layers with lock and hide, zoom, palette colours.
-- **Everything by name**: Ctrl+K finds any command, theme, module or sensor.
 - **Every panel size**: 0.96" up to 12.3", round ones too, portrait or
   landscape. Switching the panel rescales your layout.
 - **The panel's pages**: the normal theme, game mode's and the round
   report's, side by side.
-- What you see is what the panel shows: the editor renders with the panel's
-  own engine, with demo values or your live sensors. *To the panel* sends
-  it there.
+- What you see is what the panel shows: Design renders with the panel's own
+  engine, with demo values or your live sensors. *To the panel* sends it there.
+
+<p align="center"><img src="docs/images/settings.png" alt="Settings: the sections on the left, and the services with a switch each" width="100%"></p>
 
 ## Features
 
@@ -211,7 +236,7 @@ Made one you like? Share it in
   off by default, no API key.
 - **Nothing hard-coded**: location, units, sensors and panel live in one
   config file.
-- **English and German** in the editor, the tray and on the panel (dates,
+- **English and German** in the app, the tray and on the panel (dates,
   weather); follows the system language.
 - **Safe to share themes**: themes are plain JSON plus images/fonts and
   cannot run code or read files outside their folder.
@@ -266,8 +291,8 @@ libre-panel autostart enable        # start it whenever you log in
 Other commands:
 
 ```bash
-libre-panel                         # panel + editor in a terminal (Ctrl+C stops)
-libre-panel editor                  # only the theme editor (--browser: in the browser)
+libre-panel                         # panel + app in a terminal (Ctrl+C stops)
+libre-panel editor                  # only the app, without the panel (--browser: in the browser)
 libre-panel run                     # only drive the panel
 libre-panel preview lumen -o lumen.png    # render a theme to an image
 libre-panel models                  # all known panels and their resolutions

@@ -4,6 +4,7 @@
 // calls, so a text built from parts would be missed.
 
 import { endpoints } from "./api.js";
+import { touch } from "./doc.js";
 import { store } from "./state.js";
 
 let catalog = { language: "en", setting: "auto", languages: { en: "English", de: "Deutsch" } };
@@ -65,7 +66,19 @@ export async function loadLanguage() {
   apply(await endpoints.i18n());
 }
 
-/** Switch the language ("auto", "en", "de"); config.toml keeps it, the tray and the panel follow. */
+/**
+ * Switch the language ("auto", "en", "de"); config.toml keeps it, the tray and the panel follow.
+ * The server translates some of what it sends (the building blocks' names, the panels' notes,
+ * the titles of plugins' pages), so that is asked for again before the app changes over; and
+ * the panel's preview has dates and weather in the language, so it is drawn again.
+ */
 export async function setLanguage(setting) {
-  apply(await endpoints.setLanguage(setting));
+  const data = await endpoints.setLanguage(setting);
+  const [specs, plugins] = await Promise.all([
+    endpoints.specs().catch(() => null),
+    endpoints.pluginPages().catch(() => null),
+  ]);
+  store.set({ ...(specs && { specs }), ...(plugins && { plugins }) });
+  apply(data);
+  touch();
 }

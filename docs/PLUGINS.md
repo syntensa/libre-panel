@@ -10,7 +10,7 @@ as a plugin: a Python package that registers parts of these kinds.
 | Widget type | `libre_panel.widgets` | a widget the editor can place, drawn by plugin code |
 | Transition | `libre_panel.transitions` | how the panel goes from one theme (or mode) to the next |
 | Toast style | `libre_panel.toasts` | how messages from services look; a theme selects it by name |
-| Editor page | `libre_panel.editor_pages` | a page of the plugin's own in the theme editor |
+| Editor page | `libre_panel.editor_pages` | a page of the plugin's own in the app |
 | Themes | `libre_panel.themes` | a package whose folder holds theme folders |
 | Sensor source | `libre_panel.sensors` | readings (see [Architecture](ARCHITECTURE.md#plugins)) |
 | Display driver | `libre_panel.devices` | another kind of panel |
@@ -600,8 +600,8 @@ class Studio(Screen):
   waits for it, up to two seconds). Load what the first frames need there
   (pre-rendered layers, caches), so the first frame does not stall a video.
   `render` must work without it too: previews do not call it.
-- The theme editor offers installed screens under *Theme → Look*, with their
-  options.
+- Design offers installed screens in the theme's *Fine-tuning* (select nothing,
+  then *Fine-tuning → screen*), with their options.
 
 ## Widget types
 
@@ -704,8 +704,9 @@ The theme's options for the band are `roll_in` (0.45 s) and `roll_out`
 (0.32 s); the hold time is the theme's `seconds`.
 
 The theme decides the rest (`"toast": {"anchor": "bottom-right",
-"seconds": 5, "style": "myplugin.band", "options": {...}}`; the editor has
-it under *Theme → Messages*). A toast style draws them its own way:
+"seconds": 5, "style": "myplugin.band", "options": {...}}`; the app has the
+style under *Look → Notices* and the rest under *Fine-tuning → Messages*). A toast
+style draws them its own way:
 
 ```python
 from libre_panel.plugins import ToastStyle
@@ -835,9 +836,9 @@ without a transition.
 
 ## Editor pages
 
-A plugin can bring its own page into the theme editor, for settings or an
-analysis. It appears under *Pages* in the editor's top bar and replaces the
-editing area until *Theme editor* goes back.
+A plugin can bring its own page into the app, for settings or an analysis. It is
+listed under *Pages → From plugins* in *Design* and found by Ctrl+K, and takes the
+place of the view until *Back* returns to it.
 
 Libre Panel brings two pages of its own, built in like its services (so they
 work in the downloads, and no plugin can use their names): **Control** (`control`)
@@ -884,7 +885,7 @@ import { api, loadTexts, el, field, button } from "/static/kit.js";
 
 await loadTexts();
 const { points } = await api("curve");
-// ... build the page with el(), field(), button() like the editor does
+// ... build the page with el(), field() and button()
 await api("curve", { method: "POST", body: { points } });
 ```
 
@@ -898,7 +899,8 @@ await api("curve", { method: "POST", body: { points } });
   the editor's header (`kit.js`'s `api()` sends it). The editor listens on
   127.0.0.1 only.
 - `kit.js` exports `api`, `loadTexts`, `t`, `language`, `el`, `field`,
-  `button` and `setStatus`; with `editor.css` the page looks like the editor.
+  `button` and `setStatus`; `editor.css` gives the page Libre Panel's dark
+  colours and controls.
 
 `self.context` gives what the page may need from the running app. Only the
 background app (the tray, `libre-panel start`) runs a panel and services; in a

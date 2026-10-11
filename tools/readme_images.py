@@ -5,7 +5,7 @@
 Each theme as the panel shows it (<theme>.png), the README's hero, gallery,
 "fits your machine" and module pictures, and the 1280x640 social preview
 (upload it in the repository's settings). With Playwright installed, also
-the editor screenshots. Demo sensor values and a fixed time keep the pictures stable.
+the screenshots of the app. Demo sensor values and a fixed time keep the pictures stable.
 """
 
 from __future__ import annotations
@@ -562,19 +562,45 @@ def new_module_layouts() -> Image.Image:
     return img.convert("RGB")
 
 
+def neutral_machine() -> None:
+    """The app of the pictures knows no real computer: no panel on the USB bus, a processor and
+    a graphics card with plain names, the demo's values at the fixed time of the other
+    pictures (not the clock and the sensors of whoever runs this)."""
+    from libre_panel.devices import serial_link, turzx_usb
+    from libre_panel.editor import server
+    from libre_panel.sensors import hardware
+    from libre_panel.sensors.base import Snapshot
+
+    found = hardware.Found(
+        cpu="8-Core Processor", adapters=(hardware.Adapter("Graphics Card", 8 * 2**30, True),)
+    )
+    hardware._found = None
+    hardware._scan_machine = lambda *args: found
+    turzx_usb.present_model = lambda: None
+    serial_link.find_port = lambda model=None, port_name="": None
+    demo = server.demo_snapshot
+    server.demo_snapshot = lambda fixed_time=None, **more: (
+        snapshot() if fixed_time is None else demo(fixed_time=fixed_time, **more)
+    )
+    server.EditorState.live_snapshot = lambda self: Snapshot()
+
+
 def editor_shots(out: Path) -> None:
-    """The editor: a new theme from a layout, dragging a module, resizing one."""
+    """The app in a browser: a new theme from a layout, Design with a ring selected, a module
+    dragged onto free cells, the command palette, Start's gallery and Settings."""
     from playwright.sync_api import sync_playwright
 
-    os.environ["LIBRE_PANEL_HOME"] = tempfile.mkdtemp()  # no user themes or config
+    home = Path(tempfile.mkdtemp()) / "libre-panel"  # a home of its own, with a plain name
+    home.mkdir()
+    (home / "config.toml").write_text('language = "en"\ntheme = "lumen"\n', encoding="utf-8")
+    os.environ["LIBRE_PANEL_HOME"] = str(home)  # no user themes, no config of the user's
     from libre_panel.editor.server import make_server
 
+    neutral_machine()
     server = make_server(port=0)
     threading.Thread(target=server.serve_forever, daemon=True).start()
-    rendered = "document.querySelector('#preview').src.startsWith('data:image/png')"
-    pictures = (
-        "[...document.querySelectorAll('#new-templates img')].every(i => i.src.startsWith('data:'))"
-    )
+    modules = "window.libre.doc.widgets().filter(window.libre.doc.isModule).length"
+    shown = "[...document.querySelectorAll('%s')].every(i => i.complete && i.naturalWidth > 0)"
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch()
@@ -585,39 +611,63 @@ def editor_shots(out: Path) -> None:
                 bypass_csp=True,  # for the waits below
             )
             page = context.new_page()
-            page.on("dialog", lambda d: d.accept())
-            page.goto(f"http://127.0.0.1:{server.server_address[1]}/")
-            page.wait_for_function(rendered)
-            page.select_option("#model-select", "turing-9.2-usb")
-            page.wait_for_function("state.size[0] === 1920")
-            page.click("#btn-new")
-            page.wait_for_selector("#new-dialog[open]")
-            page.wait_for_function(pictures)
+            page.goto(f"http://127.0.0.1:{server.server_address[1]}/#/design")
+            page.wait_for_selector(".panel-canvas .preview")
             page.wait_for_timeout(500)
-            page.locator("#new-dialog").screenshot(path=str(out / "editor-new.png"))
-            page.click("#new-create")
-            page.wait_for_function("state.theme.widgets.filter(isModule).length === 5")
+            # a new theme: starting layouts for this panel (the 9.2" bar) and six looks
+            page.keyboard.press("Control+k")
+            page.locator(".palette input").fill("new theme")
+            page.keyboard.press("Enter")
+            page.wait_for_selector(".dialog .template-card")
+            page.wait_for_function(shown % ".dialog .template-picture img")
+            page.wait_for_function(
+                "document.querySelectorAll('.dialog .template-picture img').length === 4"
+            )
+            page.wait_for_timeout(500)
+            page.locator(".dialog").screenshot(path=str(out / "editor-new.png"))
+            page.locator(".dialog .btn-primary").click()
+            page.wait_for_function(f"{modules} === 5")
+            page.wait_for_timeout(1500)
+            # Design with a ring selected: its handles, the toolbar over it, its settings
+            page.evaluate("window.libre.doc.setSelection(['ring-4'])")
             page.wait_for_timeout(1200)
-            page.evaluate("setSelection(['ring-4'])")
-            page.wait_for_timeout(1000)
             page.screenshot(path=str(out / "editor.png"))
-            # drag a module from the library onto free cells
-            page.evaluate("setSelection(['network-2'])")
+            # a module from the library, dragged onto free cells
+            page.evaluate("window.libre.doc.setSelection(['network-2'])")
             page.keyboard.press("Delete")
             page.wait_for_timeout(1000)
-            tile = page.locator(".module-tile[data-kind='graph']").bounding_box()
-            box = page.evaluate("cellBox(1, 1, 1, 1)")
-            zoom = page.evaluate("state.zoom")
-            wrap = page.locator("#canvas-wrap").bounding_box()
+            tile = page.locator(".tile[data-item='module:graph']").bounding_box()
+            grid = page.evaluate("window.libre.store.get().render.grid")
+            canvas = page.locator(".panel-canvas").bounding_box()
+            zoom = canvas["width"] / page.evaluate("window.libre.store.get().render.size[0]")
+            x = grid["x"] + (grid["cell_w"] + grid["gap"]) + grid["cell_w"] / 2
+            y = grid["y"] + (grid["cell_h"] + grid["gap"]) + grid["cell_h"] / 2
             page.mouse.move(tile["x"] + 30, tile["y"] + 20)
             page.mouse.down()
             page.mouse.move(tile["x"] + 80, tile["y"] + 40, steps=4)
-            page.mouse.move(
-                wrap["x"] + (box[0] + 40) * zoom, wrap["y"] + (box[1] + 60) * zoom, steps=12
-            )
-            page.wait_for_timeout(300)
+            page.mouse.move(canvas["x"] + x * zoom, canvas["y"] + y * zoom, steps=12)
+            page.wait_for_timeout(500)
             page.screenshot(path=str(out / "editor-drag.png"))
             page.mouse.up()
+            # the command palette finds everything by a few letters: blocks, settings, themes
+            page.evaluate("window.libre.doc.setSelection([])")
+            page.keyboard.press("Control+k")
+            page.locator(".palette input").fill("weather")
+            page.wait_for_timeout(500)
+            page.screenshot(path=str(out / "palette.png"))
+            page.keyboard.press("Escape")
+            # Start: every theme, each drawn by the panel's own renderer
+            page.evaluate("location.hash = '#/home/themes'")
+            page.wait_for_selector(".start.gallery .theme-card")
+            page.wait_for_function(shown % ".theme-card img")
+            page.mouse.move(0, 0)  # (a card under the pointer shows its pencil)
+            page.wait_for_timeout(500)
+            page.screenshot(path=str(out / "start.png"))
+            # Settings
+            page.evaluate("location.hash = '#/settings/services'")
+            page.wait_for_selector(".settings-card.service")
+            page.wait_for_timeout(500)
+            page.screenshot(path=str(out / "settings.png"))
             browser.close()
     finally:
         server.shutdown()

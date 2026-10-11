@@ -53,8 +53,6 @@ def test_the_app_says_which_theme_is_the_panels_default(bar_app):
     assert themes["normal"] == "lumen" and themes["shown"] == "lumen"
     status, panel = request(port, "GET", "/api/plugins/control/panel")
     assert panel["panel"]["default_theme"] == "lumen"
-    status, active = request(port, "GET", "/api/active")
-    assert active == {"theme": "lumen"}
 
 
 def test_a_theme_in_config_toml_is_what_the_app_and_the_editor_say(bar_app, isolated_home):
@@ -85,7 +83,6 @@ def test_the_editor_alone_works_the_default_out_from_the_config(isolated_home, m
         (isolated_home / "config.toml").write_text('theme = "slate"\n', encoding="utf-8")
         status, pages = request(port, "GET", "/api/pages")
         assert pages["pages"][0]["theme"] == "slate" and pages["default"] == "lumen"
-        assert request(port, "GET", "/api/active")[1] == {"theme": "slate"}
     finally:
         server.shutdown()
         server.server_close()
