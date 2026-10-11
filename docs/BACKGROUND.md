@@ -148,6 +148,35 @@ double-click, `libre-panel tray`, `libre-panel editor`) brings the window of
 the one that is already running to the front. `libre-panel run` and `libre-panel doctor`
 refuse to start while it runs — quit it from the tray first.
 
+## Who can talk to the app
+
+The app is served on `127.0.0.1`, an address that every program on the PC can reach, those
+of other users too. So the server answers only a request that carries a secret *token*, a
+new one at every start of Libre Panel, in the header `X-Libre-Panel`. Only the app's own
+files (its page, scripts, styles and fonts) come without it; nothing that reads or changes
+anything does. A website cannot guess the token, and no other user of the PC has it.
+
+- The window, the tray, `libre-panel start` and `libre-panel editor` give the token to the
+  page in the address, after a `#` (`http://127.0.0.1:8765/#token=…`). A browser never sends
+  that part to a server, so it is in no log; the page keeps it for its tab and takes it out
+  of the address.
+- A program of your own account that starts later, such as the window the tray opens or
+  `libre-panel quit`, reads the token from `private/editor.json` in the settings folder. Only
+  you can open it: on Linux it has mode 600 in a folder of mode 700, on Windows it is in your
+  profile, whose rights keep other users out. The window process is told the token in its
+  environment, not on its command line, which other users can read on Linux.
+- A page opened without the token, such as a bookmark of an earlier run's address, finds every
+  request refused ("Access token missing or wrong"). Open Libre Panel from the tray, or with
+  the address that `libre-panel editor` prints (a running Libre Panel prints its own). So does
+  a browser tab that was open when Libre Panel started anew: it has the token of the run
+  before. Open Libre Panel again; the window of the tray takes the new token by itself.
+- The browser, where no window can open, gets the address with the token as an argument. On
+  Linux other users can read the arguments of your programs while they run, so on a PC that
+  several people use, prefer the window (pywebview, above) to the browser.
+
+Anything that runs as you can read the token and change `config.toml`; the token keeps out the
+programs of *other* users and of websites.
+
 ## Autostart, per system
 
 Autostart is per user and needs no administrator rights. Turning it off
@@ -248,4 +277,7 @@ loginctl enable-linger "$USER"      # keep it running without a login
 ```
 
 The editor is then at <http://127.0.0.1:8765/> on that machine (reach it
-through an SSH tunnel: `ssh -L 8765:127.0.0.1:8765 host`).
+through an SSH tunnel: `ssh -L 8765:127.0.0.1:8765 host`). It answers only with its
+token ([above](#who-can-talk-to-the-app)): `libre-panel editor --no-browser` on that machine prints
+the running Libre Panel's address with it (`http://127.0.0.1:8765/#token=…`), which is what you
+open in the browser once the tunnel stands.

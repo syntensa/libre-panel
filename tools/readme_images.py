@@ -594,6 +594,7 @@ def editor_shots(out: Path) -> None:
     home.mkdir()
     (home / "config.toml").write_text('language = "en"\ntheme = "lumen"\n', encoding="utf-8")
     os.environ["LIBRE_PANEL_HOME"] = str(home)  # no user themes, no config of the user's
+    from libre_panel.editor import access
     from libre_panel.editor.server import make_server
 
     neutral_machine()
@@ -611,7 +612,11 @@ def editor_shots(out: Path) -> None:
                 bypass_csp=True,  # for the waits below
             )
             page = context.new_page()
-            page.goto(f"http://127.0.0.1:{server.server_address[1]}/#/design")
+            page.goto(
+                access.with_token(
+                    f"http://127.0.0.1:{server.server_address[1]}/#/design", server.token
+                )
+            )
             page.wait_for_selector(".panel-canvas .preview")
             page.wait_for_timeout(500)
             # a new theme: starting layouts for this panel (the 9.2" bar) and six looks

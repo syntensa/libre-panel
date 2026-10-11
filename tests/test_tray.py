@@ -292,10 +292,13 @@ def test_real_tray_icon_on_x11(isolated_home):
         url = running_instance()["editor"]
         import urllib.request
 
+        from libre_panel.editor import access
+
         request = urllib.request.Request(
             url + "api/app",
             data=json.dumps({"action": "quit"}).encode(),
-            headers={"X-Libre-Panel": "1", "Content-Type": "application/json"},
+            # the token the app wrote for this user: the way `libre-panel quit` signs in
+            headers={access.HEADER: access.read_token(url), "Content-Type": "application/json"},
         )
         with urllib.request.urlopen(request, timeout=10) as response:
             assert json.loads(response.read())["available"] is True

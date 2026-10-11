@@ -315,7 +315,12 @@ def run_app(
             except Exception:  # the icon is a convenience; the panel must keep running
                 log.exception("tray icon failed; Libre Panel keeps running without one")
         if not app.quit_requested.is_set():
-            print(t("Libre Panel is running. Theme editor: {url}  (Ctrl+C to stop)", url=url))
+            print(
+                t(
+                    "Libre Panel is running. Theme editor: {url}  (Ctrl+C to stop)",
+                    url=app.editor.address or url,  # with the token: it opens the app
+                )
+            )
             while not app.quit_requested.wait(0.5):  # a timeout keeps Ctrl+C working on Windows
                 pass
     except KeyboardInterrupt:

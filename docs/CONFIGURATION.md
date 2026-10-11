@@ -355,8 +355,9 @@ and writes the names through `GET /api/hardware`, which answers
 `{"cpu": {"detected": "Ryzen 5 7600", "custom": ""}, "gpu": {...},
 "memory": {...}}`, and `POST /api/hardware` with any of `{"cpu": "text", "gpu":
 "", "memory": "text"}` (an empty text gives the found name back). `POST`
-answers like `GET`, refuses anything else with 400 and, like every write, needs the
-header `X-Libre-Panel: 1`. `GET /api/hardware?refresh=1` asks the computer again
+answers like `GET`, refuses anything else with 400 and, like every request, needs the
+access token in the header `X-Libre-Panel` ([Running in the
+background](BACKGROUND.md#who-can-talk-to-the-app)). `GET /api/hardware?refresh=1` asks the computer again
 (a card was changed while Libre Panel ran); Libre Panel asks once per start otherwise.
 
 **Where it can be wrong.** Windows can keep the entry of a graphics card that was

@@ -30,6 +30,7 @@ from libre_panel.config import (
     user_themes_dir,
 )
 from libre_panel.devices.base import DeviceError
+from libre_panel.editor import access
 from libre_panel.theme.defaults import normal_theme
 from libre_panel.theme.model import THEME_FILENAME, ThemeError, find_theme
 
@@ -191,6 +192,17 @@ class EditorService:
             return None
         return f"http://127.0.0.1:{self._server.server_address[1]}/"
 
+    @property
+    def token(self) -> str | None:
+        """What a request to the server must carry (editor/access.py)."""
+        return None if self._server is None else self._server.token
+
+    @property
+    def address(self) -> str | None:
+        """``url`` with the token: the way into the app for the person who started Libre Panel
+        (a terminal may show it; a log never does)."""
+        return access.with_token(self.url, self.token) if self._server is not None else None
+
     def start(self) -> str:
         from libre_panel.editor.server import make_server
 
@@ -201,6 +213,8 @@ class EditorService:
                 except OSError:  # port taken: any free port will do
                     server = make_server(0, self.config_path, controls=self.controls)
                 self._server = server
+                # for the programs of this user that start later: the window, `libre-panel quit`
+                access.publish(server.token, server.server_address[1])
                 self._thread = threading.Thread(
                     target=server.serve_forever, name="editor", daemon=True
                 )
@@ -214,7 +228,7 @@ class EditorService:
         from libre_panel.window import open_window
 
         url = self.start()
-        open_window(url, view, config_path=self.config_path)
+        open_window(url, view, config_path=self.config_path, token=self.token)
         return url
 
     def stop(self) -> None:
@@ -224,6 +238,7 @@ class EditorService:
             from libre_panel.window import close_window
 
             close_window(f"http://127.0.0.1:{server.server_address[1]}/")  # it would show nothing
+            access.forget(server.token)
             server.shutdown()
             server.server_close()
             server.editor_state.close()

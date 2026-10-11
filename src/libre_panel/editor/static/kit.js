@@ -6,7 +6,12 @@
 //   import { api, loadTexts, t, el, field, button, setStatus } from "/static/kit.js";
 //
 // The page runs at /plugins/<id>/; api() talks to the plugin's own handler at
-// /api/plugins/<id>/<path>. Writes (POST) carry the editor's header.
+// /api/plugins/<id>/<path>. Every request carries the editor's access token (token.js):
+// the server answers nothing without it. A picture, which an <img> asks for by itself and
+// cannot send a header with, gets it in its address: img.src = withToken("/api/plugins/...").
+import { authHeaders, withToken } from "./token.js";
+
+export { authHeaders, withToken };
 
 const pageId = () => decodeURIComponent(location.pathname.split("/")[2] || "");
 
@@ -14,9 +19,8 @@ const pageId = () => decodeURIComponent(location.pathname.split("/")[2] || "");
 document.body?.classList.add("plugin-page");
 
 export async function api(path, { method = "GET", body } = {}) {
-  const options = { method, headers: {} };
+  const options = { method, headers: authHeaders() };
   if (method !== "GET") {
-    options.headers["X-Libre-Panel"] = "1";
     options.headers["Content-Type"] = "application/json";
     options.body = JSON.stringify(body ?? {});
   }
@@ -30,7 +34,7 @@ let catalog = { language: "en", messages: {} };
 
 // The editor's language and its texts (the page brings its own texts).
 export async function loadTexts() {
-  const response = await fetch("/api/i18n");
+  const response = await fetch("/api/i18n", { headers: authHeaders() });
   catalog = await response.json();
   document.documentElement.lang = catalog.language || "en";
   return catalog;

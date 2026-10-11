@@ -2,6 +2,7 @@
   "messages": {
     "0: for ever.": "0: für immer.",
     "0: the limit of the drive itself.": "0: die Grenze des Laufwerks selbst.",
+    "Access token missing or wrong. Open Libre Panel from its window or its tray icon, or with the address that libre-panel editor prints.": "Der Zugangsschlüssel fehlt oder ist falsch. Öffne Libre Panel über sein Fenster oder das Symbol im Infobereich, oder mit der Adresse, die libre-panel editor ausgibt.",
     "A bug, an idea, or a question: tell the project.": "Ein Fehler, eine Idee oder eine Frage? Sag es dem Projekt.",
     "A drive is nearly full below": "Ein Laufwerk gilt als fast voll unter",
     "A message when a sensor reaches a limit. The limits are in config.toml.": "Eine Meldung, wenn ein Sensor eine Grenze erreicht. Die Grenzen stehen in config.toml.",
