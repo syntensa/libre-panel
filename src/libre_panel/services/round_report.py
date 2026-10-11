@@ -120,21 +120,35 @@ def readings(report: dict[str, Any]) -> dict[str, tuple[Any, str, str]]:
         "report.low": (session["fps_low_mean"], "fps", t("1% low")),
         "report.low_delta": (against("fps_low_mean"), "fps", t("Against the average")),
         "report.frametime": (session["frametime_mean"], "ms", t("Frame time")),
+        "report.frametime_delta": (against("frametime_mean"), "ms", t("Against the average")),
+        "report.count": (count, "", t("Earlier rounds")),
         "report.limit": (_held_back(session), "", t("Held back by")),
         "report.head.levels": (t("Share of the round at each frame rate"), "", ""),
         "report.head.peaks": (t("Highest values of the round"), "", ""),
     }  # fmt: skip
+    held = {name: session.get(f"limit_{name}_s") or 0 for name in ("gpu", "cpu", "cap")}
+    total_held = sum(held.values())
+    for name, seconds in held.items():  # each one's share, for a bar in up to three colours
+        share = 100 * seconds / total_held if total_held else 0.0
+        out[f"report.limit.{name}"] = (share if share >= 0.5 else None, "%", name.upper())
     labels = {
         "cpu_temp": t("CPU temp"), "gpu_temp": t("GPU temp"), "gpu_hotspot": t("GPU hot spot"),
         "cpu_power": t("CPU power"), "gpu_power": t("GPU power"), "vram_used": t("Video memory"),
     }  # fmt: skip
     for name in SESSION_PEAKS:
-        out[f"report.{name}"] = (session.get(f"{name}_max"), PEAK_UNITS[name], labels[name])
+        unit = PEAK_UNITS[name]
+        out[f"report.{name}"] = (session.get(f"{name}_max"), unit, labels[name])
+        usual = means.get(f"{name}_max")
+        out[f"report.{name}_mean"] = (usual, unit, t("Average of the earlier rounds"))
+        out[f"report.{name}_delta"] = (against(f"{name}_max"), unit, t("Against the average"))
     edges, seconds = session["levels"]["edges"], session["levels"]["seconds"]
     total = sum(seconds)
+    earlier = comparison["levels"] if count else None
     for i, name in enumerate(level_names(edges)):
         share = 100 * seconds[i] / total if total and i < len(seconds) else None
         out[f"report.level.{i}"] = (share, "%", name)
+        before = 100 * earlier[i] if earlier and i < len(earlier) else None
+        out[f"report.level.{i}.mean"] = (before, "%", name)
     return out
 
 

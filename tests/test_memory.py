@@ -447,6 +447,70 @@ def test_the_last_ten_rounds_and_no_more_are_compared(rig):
     assert last["mean"]["fps_mean"] == pytest.approx(129.5, abs=0.01)  # rounds 3, 4 and 5
 
 
+def example_report(count=7):
+    """A round against ``count`` earlier ones: the numbers of the plugin guide."""
+    mean = {
+        "fps_mean": 142.1, "fps_p01": 101.2, "fps_low_mean": 99.0, "frametime_mean": 6.9,
+        "cpu_temp_max": 72.4, "gpu_temp_max": 57.1, "gpu_hotspot_max": 78.0,
+        "cpu_power_max": 94.0, "gpu_power_max": 318.0, "vram_used_max": 14.5,
+    }  # fmt: skip
+    return {
+        "session": {
+            "game": "Space Game", "started": 1760000000, "ended": 1760002700,
+            "duration_s": 2700, "outside_temp": 12.6, "fps_mean": 148.3, "fps_low_mean": 101.0,
+            "frametime_mean": 6.7, "limit_cpu_s": 160, "limit_gpu_s": 2440, "limit_cap_s": 10,
+            "levels": {"edges": [60, 90, 120, 144, 165], "seconds": [26, 52, 235, 1150, 1040, 107]},
+            "cpu_temp_max": 74.1, "gpu_temp_max": 56.0, "gpu_hotspot_max": 80.0,
+            "cpu_power_max": 96.0, "gpu_power_max": 327.0, "vram_used_max": 14.8,
+        },
+        "comparison": {
+            "count": count, "mean": mean if count else {},
+            "levels": [0.02, 0.03, 0.12, 0.40, 0.36, 0.07] if count else None,
+        },
+    }  # fmt: skip
+
+
+def test_the_report_reads_out_its_comparison_for_a_theme_made_of_widgets():
+    got = {
+        key: value
+        for key, (value, _unit, _label) in memory.round_report.readings(example_report()).items()
+    }
+    assert got["report.count"] == 7
+    assert got["report.cpu_temp_mean"] == 72.4 and got["report.cpu_temp_delta"] == pytest.approx(
+        1.7
+    )
+    assert got["report.vram_used_delta"] == pytest.approx(0.3)
+    assert got["report.frametime_delta"] == pytest.approx(-0.2)
+    assert got["report.level.3"] == pytest.approx(100 * 1150 / 2610)
+    assert got["report.level.3.mean"] == pytest.approx(40.0)  # the mean share of the earlier rounds
+    # who held the rate down, each one's share of that time; one that did for under half a
+    # percent (the 10 s of 2610 here) is left out, as in the words of report.limit
+    assert got["report.limit.gpu"] == pytest.approx(100 * 2440 / 2610)
+    assert got["report.limit.cpu"] == pytest.approx(100 * 160 / 2610)
+    assert got["report.limit.cap"] is None and got["report.limit"] == "GPU 93 %  CPU 6 %"
+    report = example_report()
+    report["session"].update(limit_gpu_s=0, limit_cpu_s=0, limit_cap_s=900)  # a frame limit
+    held = {k: v for k, (v, _u, _l) in memory.round_report.readings(report).items()}
+    assert held["report.limit.cap"] == 100.0 and held["report.limit.gpu"] is None
+    report["session"].update(limit_gpu_s=0, limit_cpu_s=0, limit_cap_s=0)  # nothing was counted
+    none = {k: v for k, (v, _u, _l) in memory.round_report.readings(report).items()}
+    assert none["report.limit"] is None
+    assert [none[f"report.limit.{name}"] for name in ("gpu", "cpu", "cap")] == [None] * 3
+
+
+def test_the_first_round_of_a_game_has_nothing_to_compare_and_says_so():
+    readings = memory.round_report.readings(example_report(count=0))
+    got = {key: value for key, (value, _unit, _label) in readings.items()}
+    assert got["report.count"] == 0 and got["report.versus"] == "First round of this game"
+    for key in ("report.cpu_temp_mean", "report.cpu_temp_delta", "report.level.3.mean",
+                "report.frametime_delta", "report.fps_delta"):  # fmt: skip
+        assert got[key] is None, key
+    assert got["report.cpu_temp"] == 74.1  # the round's own numbers are there
+    labels = {key: label for key, (_value, _unit, label) in readings.items()}
+    assert labels["report.level.3.mean"] == labels["report.level.3"] == "120–144"
+    assert labels["report.limit.gpu"] == "GPU" and labels["report.count"] == "Earlier rounds"
+
+
 def test_a_round_without_frame_rates_has_no_report(rig):
     r = rig(report_min_s=60.0)
     for i in range(200):

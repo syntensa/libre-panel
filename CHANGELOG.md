@@ -300,6 +300,25 @@
   `report_theme` for 30 s (priority 10, normal mode only); a new game ends it
   at once. `round-report` is a plain built-in theme (1920×480) for it; the
   data is described in the plugin guide for screens that draw it better
+- The round report in the look of SPUR II: `round-report` is SPUR II's report
+  screen as a theme, with the average frame rate large and its distance from
+  the earlier rounds, the 1% low and the frame time, who held the rate down as
+  a bar in the colours of the GPU, the CPU and the frame limit, the share of
+  the round at each frame rate with a line under each bar for the earlier
+  rounds, and the highest temperatures and power against their average. The
+  first round of a game shows no comparison and says so. For it the report
+  reads out more: `report.count`, `report.frametime_delta`,
+  `report.limit.gpu`, `.cpu` and `.cap` (shares in percent),
+  `report.<peak>_mean` and `_delta` for each highest value and
+  `report.level.<n>.mean`; the state `report` and the readings that were
+  there are as they were
+- The theme *SPUR Studio* (`spur-studio`, 1920 × 480): SPUR II's Studio screen
+  made of the cards: the card slot in the middle (what plays, else the weather,
+  with the line of light between them), three ring instruments for the CPU, GPU
+  and RAM, the network card (a download while one runs) and, as plain widgets,
+  the large clock with the seconds, the date and the volume. It sits on a grid
+  of 40 × 48 cells that puts the cards within a few pixels of where SPUR II has
+  them
 - `libre_panel.services.fancontrol`: FanControl's curves, fans and the sensor
   each curve reads, from its configuration file (found from the environment or
   `fancontrol = "..."`; opened for reading only)
@@ -346,6 +365,33 @@
   GPU sections, RAM and network in staggered boxes, values as light in their
   milled grooves with SPUR II's glow, glowing headings, the faceted wordmark,
   the turning fans and the clock above, the grid, one light and the depth dust
+- The theme *SPUR Horizon* (`spur-horizon`, 1920 × 480): SPUR II's Horizon
+  screen, the CPU's load growing up from a midline and the GPU's down from it
+  across the whole panel, 70 seconds as a landscape with a mark every ten
+  seconds, tiles below for CPU, GPU, RAM, network and what plays, the fans and
+  the clock above
+- The theme *SPUR Header* (`spur-header`, 1920 × 480): SPUR II's game screen
+  with the classic frame: the frame rate large and the 1% low in the header
+  beside the game's logo (its name where it has none), the CPU's and GPU's
+  load as charts, RAM and the GPU's temperatures, and below, where the
+  network was, a chart of the longest frame of each moment, who holds the
+  frame rate down (in the colour of its chart) and the volume
+- The theme *SPUR Focus* (`spur-focus`, 1920 × 480): SPUR II's Focus screen
+  for a game, the frame rate in 150 px with the game's logo or name over it
+  and its course over 35 seconds beside it, the CPU's and GPU's load as small
+  charts, and FRAMES (1% low, frame time, who holds the rate down), CPU, GPU
+  and system below
+- The theme *SPUR Session* (`spur-session`, 1920 × 480): SPUR II's Session
+  screen for a game, as far as the readings go: the frame rate large with its
+  last ten minutes, a chart of the longest frame of each moment, and the
+  CPU's and GPU's temperatures and power with their course over the same ten
+  minutes. SPUR II's sums over a whole session (time played, average frame
+  rate, share of time per frame rate, highest values) need readings Libre
+  Panel does not have
+- The theme *SPUR Cockpit* (`spur-cockpit`, 1920 × 480): SPUR II's Cockpit
+  screen, laid out on its 40 px grid: the CPU's and GPU's load as two equal
+  charts, the RAM as a ring beside them, and CPU, GPU, memory and network in
+  four columns of equal width
 - Ridges: a `rect` with a `ridge` name is drawn as SPUR II draws its frames,
   a ridge with two facets under the guide light, the lit one glowing a
   little; rects with the same name are one ridge, joined at mitres. Rects
@@ -366,10 +412,20 @@
   filled from there, as SPUR II draws the download below the upload; and
   `inset` off: the range spans the whole box, as in SPUR II's charts (the
   line keeps a line's width inside by default)
+- `needs` can ask for more than a value: `key=text` holds while a reading is
+  that (`game.limiter=gpu`; numbers count by value, texts in any case) and
+  `@name` while a source or service has the picture (`@game.logo`), each with
+  `!` in front for the opposite. A game's name can stand where its logo is
+  missing (the game service's, else the program PresentMon counts), and a word
+  in the colour of whoever holds the frame rate down shows only while it does
 - Format specs `{value:gb}`, a size in GB whatever unit the reading comes
   in, and `{value:rate}` with `{value:rate_unit}`: a data rate as SPUR II
   sets it, its number and its unit apart (519 and KB/s, from 1 MB/s 1.2 and
   MB/s)
+- Format spec `{value:upper}`: a text in capitals (`{label:upper}` a reading's
+  name), for headings that follow the language of the panel, as SPUR II sets
+  them; a `clock` sets its weekday and month in capitals with `"uppercase":
+  true` (MONTAG · 28. SEPTEMBER)
 - `tools/compare_reference.py` draws a theme with given readings and
   compares it with a picture of the same screen: the share of pixels that
   match, overall and per region, the pictures side by side, their
@@ -486,6 +542,10 @@
 - Without a queue (`"queue": false`), messages that come at the same moment
   are decided one after the other: a warning that comes with a volume
   change takes over from it at once
+- The demo readings of the editor, the previews and the pictures hold 1900
+  readings of history instead of 600, so the wide graphs of the SPUR themes
+  are full in them, and they carry a made-up round report, so `round-report` is
+  complete in them
 - Windows downloads: with `mode = "auto"` the library inside Libre Panel is read
   first; a LibreHardwareMonitor web server that happens to run only fills in
   what Libre Panel cannot read (the CPU's readings without administrator

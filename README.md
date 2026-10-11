@@ -129,6 +129,13 @@ Calendars, Home Assistant, MQTT and PresentMon are set up in the
 | `studio` | 8.8" / 9.2" bar (1920×480) | after SPUR II's Studio screen: large clock, weather for your location, CPU, RAM and GPU rings named after your hardware |
 | `spur-ii` | 8.8" / 9.2" bar (1920×480) | the SPUR II layout: load charts, four sections, light on every value |
 | `spur-classic` | 8.8" / 9.2" bar (1920×480) | SPUR II's classic screen as it is now: raised load curves in flat frames, RAM and network in staggered boxes, values as light in milled grooves, the faceted wordmark, turning fans and the clock above, the grid, one light and depth dust |
+| `spur-horizon` | 8.8" / 9.2" bar (1920×480) | SPUR II's Horizon: the CPU's load grows up from a midline and the GPU's down from it, 70 seconds side by side, with tiles for values, network and music below |
+| `spur-header` | 8.8" / 9.2" bar (1920×480) | SPUR II's game screen with the familiar frame: the frame rate and the 1% low beside the game's logo, load charts, RAM and the GPU's temperatures, a frame time chart and who holds the rate down |
+| `spur-focus` | 8.8" / 9.2" bar (1920×480) | SPUR II's Focus for a game: the frame rate large with its course over 35 seconds, small load charts beside it, frames, CPU, GPU and system below |
+| `spur-session` | 8.8" / 9.2" bar (1920×480) | SPUR II's Session for a game: the frame rate with its last ten minutes, a chart of the longest frame of each moment, and temperatures and power with their course |
+| `spur-cockpit` | 8.8" / 9.2" bar (1920×480) | SPUR II's Cockpit: the CPU's and GPU's load as two equal charts with the RAM as a ring, and CPU, GPU, memory and network in four equal columns |
+| `spur-studio` | 8.8" / 9.2" bar (1920×480) | SPUR II's Studio screen, made of the cards: a large clock with the seconds and the date, the network and the volume on the left, what plays (the weather when nothing does) in the middle, with a line of light between the cards, and rings for the CPU, GPU and RAM on the right |
+| `round-report` | 8.8" / 9.2" bar (1920×480) | SPUR II's round report, what the `memory` service shows after a game: the average frame rate against your earlier rounds, the share of the round at each frame rate, who held the rate down, and the highest temperatures and power |
 | `slate` | 5" (800×480) | four cards: CPU, GPU, memory, network |
 | `libre-default` | 3.5" (480×320) | two rings, temperature, disk, network and history |
 | `orbit` | round 2.1" / 2.8" (480×480) | three concentric rings around a large clock |
