@@ -305,6 +305,7 @@ class Settings:
                     "mode": video.mode,
                     "fps": video.fps,
                     "local_clip": video.local_clip,
+                    "clip_asked": video.clip_asked,
                     "ffmpeg": video.ffmpeg,
                 },
                 "sensors": {
@@ -519,6 +520,23 @@ class Settings:
             },
         }
 
+    def clip_question(self) -> dict[str, Any]:
+        """Whether Start is to ask for the name of the panel's standby clip, and the name the
+        vendor app keeps it under, which the question offers. Nothing is written by asking: the
+        person's answer is a write of ``video.local_clip`` and ``video.clip_asked``."""
+        from libre_panel.devices import turzx
+        from libre_panel.devices.turzx_usb import present_model
+
+        def on_the_bus() -> Any:
+            try:
+                return present_model()
+            except Exception:  # no USB library is no panel
+                log.debug("looking for a USB panel failed", exc_info=True)
+                return None
+
+        ask = turzx.clip_question(self._config().device, on_the_bus)
+        return {"ask": ask, "name": turzx.VENDOR_CLIP}
+
     @staticmethod
     def _find_panel(config: Config) -> dict[str, Any] | None:
         """A panel on the bus: a TURZX USB one, else a serial one by its USB ids."""
@@ -719,6 +737,7 @@ RULES: dict[str, Any] = {
     "video.mode": lambda n, v, c: _choice(n, v, ("auto", "on", "off")),
     "video.fps": lambda n, v, c: _whole(n, v, 1, 60),
     "video.local_clip": lambda n, v, c: _text(n, v, 200),
+    "video.clip_asked": lambda n, v, c: _flag(n, v),
     "video.ffmpeg": lambda n, v, c: _text(n, v, 260),
     "refresh_ms": lambda n, v, c: _whole(n, v, 100, 3_600_000),
     "sensors.providers": _rule_providers,

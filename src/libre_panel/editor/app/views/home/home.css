@@ -352,6 +352,60 @@
   font-weight: 600;
 }
 
+/* -- the question about the panel's standby clip (clip.js) ------------------------------------ */
+
+.clip-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 18px 22px 20px;
+  border-radius: 16px;
+  background: var(--accent-softer);
+  border: 1px solid rgba(46, 230, 214, 0.25);
+  flex-shrink: 0;
+}
+
+.clip-card-icon {
+  display: flex;
+  flex-shrink: 0;
+  padding-top: 1px;
+  color: var(--accent);
+}
+
+.clip-card-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.clip-card-body h2 {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.clip-card-body p {
+  margin: 4px 0 0;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.clip-card-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  max-width: 640px;
+  margin-top: 14px;
+}
+
+.clip-card-form .input {
+  flex: 1 1 220px;
+}
+
+.clip-card-form .btn {
+  flex-shrink: 0;
+}
+
 /* -- a first start and the gallery ------------------------------------------------------------ */
 
 .start.first,

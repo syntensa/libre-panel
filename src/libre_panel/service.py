@@ -29,7 +29,9 @@ from libre_panel.config import (
     set_config_value,
     user_themes_dir,
 )
+from libre_panel.devices import turzx
 from libre_panel.devices.base import DeviceError
+from libre_panel.devices.models import MODELS, PanelModel
 from libre_panel.editor import access
 from libre_panel.theme.defaults import normal_theme
 from libre_panel.theme.model import THEME_FILENAME, ThemeError, find_theme
@@ -384,6 +386,21 @@ class BackgroundApp:
         except ConfigError:
             return None
         return normal_theme(config, self.panel.status.default_theme)
+
+    def _panel_in_use(self) -> PanelModel | None:
+        """The panel the loop sends frames to, if the video mode is proven on it: what the
+        panel says it shows on starts with the model's label (as the app's Start finds it)."""
+        target = self.panel.status.target
+        return next((m for m in MODELS if m.video and target.startswith(m.label)), None)
+
+    def clip_question(self) -> bool:
+        """Whether the person is still to be asked for the panel's standby clip (Start asks;
+        the tray points to it). Nothing here looks at the USB bus: it is asked once a second."""
+        try:
+            device = load_config(self.config_path).device
+        except ConfigError:
+            return False
+        return turzx.clip_question(device, self._panel_in_use)
 
     def snapshot(self) -> dict[str, Any]:
         try:

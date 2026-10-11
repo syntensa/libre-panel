@@ -154,6 +154,7 @@ _MODE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 _SETTINGS_GET = {
     "/api/settings": "read",
     "/api/panel": "panel",
+    "/api/clip": "clip_question",
     "/api/system": "system",
     "/api/about": "about",
 }

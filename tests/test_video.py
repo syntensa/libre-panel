@@ -164,6 +164,46 @@ def test_what_the_video_mode_lacks_is_told_in_codes_too(tmp_path):
     assert len(video_mode(missing, nine)[1]) == len(video_gaps(missing, nine))
 
 
+def test_the_clip_name_is_asked_for_only_where_it_is_all_that_auto_lacks(tmp_path):
+    """The app asks once for the standby clip's name, which is never made up: where the video
+    mode is proven, ffmpeg is there and only the name is missing, in ``auto``, and the person
+    has not answered. The USB bus is looked at last, and only then."""
+    from libre_panel.devices.models import get_model
+    from libre_panel.devices.turzx import VENDOR_CLIP, clip_question
+
+    nine, eight = get_model("turing-9.2-usb"), get_model("turing-8.8-usb")
+    ffmpeg = tmp_path / "ffmpeg"
+    ffmpeg.write_text("")
+    looked = []
+
+    def asked(model="auto", found=nine, driver="auto", **video):
+        video = {"ffmpeg": str(ffmpeg), **video}
+        device = DeviceConfig(model=model, driver=driver, video=VideoConfig(**video))
+
+        def on_the_bus():
+            looked.append(1)
+            return found
+
+        return clip_question(device, on_the_bus)
+
+    assert VENDOR_CLIP == "usr/data/standby.h264"
+    assert asked() is True and asked(driver="turzx") is True  # the panel on the bus
+    assert asked(model="turing-9.2-usb", found=None) is True  # or the one that is named
+    assert asked(model="turing-8.8-usb") is False  # the named panel counts, not the bus
+    assert asked(found=eight) is False and asked(found=None) is False  # not proven, or none
+    assert asked(ffmpeg=str(tmp_path / "missing")) is False  # ffmpeg first
+    assert asked(mode="on") is False and asked(mode="off") is False  # they decide alone
+    assert asked(driver="virtual") is False and asked(driver="plugin") is False
+    assert asked(local_clip="usr/data/clip.h264") is False  # a name is there
+    assert asked(clip_asked=True) is False  # answered, whichever way
+    # the bus is looked at only when nothing else says no
+    looked.clear()
+    assert not asked(mode="off") and not asked(local_clip="x") and not asked(clip_asked=True)
+    assert not asked(driver="virtual") and not asked(model="turing-9.2-usb", mode="on")
+    assert looked == []
+    assert asked() is True and looked == [1]
+
+
 def test_why_the_video_mode_is_off_is_logged_once_while_auto_looks_for_the_panel(
     tmp_path, monkeypatch, caplog
 ):
@@ -902,6 +942,90 @@ def test_device_changes_open_the_panel_again():
     a = DeviceConfig(brightness=10)
     assert app._same_device(a, DeviceConfig(brightness=90))
     assert not app._same_device(a, DeviceConfig(video=VideoConfig(mode="on")))
+    # the name of the clip is what the video start sends; that the app has asked for it is not
+    assert not app._same_device(a, DeviceConfig(video=VideoConfig(local_clip="usr/x.h264")))
+    assert app._same_device(a, DeviceConfig(video=VideoConfig(clip_asked=True)))
+
+
+def running_panel(home, monkeypatch, panel):
+    """The main loop on a 9.2" of the simulated bus, with a config.toml in ``home`` that has
+    no clip name, as the background app runs it; returns what a test needs to watch and stop it."""
+    from libre_panel.config import load_config
+
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "config.toml").write_text(
+        'theme = "slate"\nfps = 5\n\n[device]\ndriver = "turzx"\nmodel = "turing-9.2-usb"\n\n'
+        '[sensors]\nproviders = ["demo"]\n\n[video]\n',
+        encoding="utf-8",
+    )
+    opened = []
+    real = turzx_usb.UsbTransport.open
+
+    def counted(pid=None):
+        opened.append(pid)
+        return real(pid)
+
+    monkeypatch.setattr(turzx_usb.UsbTransport, "open", staticmethod(counted))
+    stop, status = threading.Event(), app.RunStatus()
+    options = {"stop": stop, "status": status}
+    thread = threading.Thread(target=app.run, args=(load_config(),), kwargs=options)
+    thread.start()
+    return opened, status, stop, thread
+
+
+def wait_until(predicate, timeout=30.0):
+    end = time.monotonic() + timeout  # a busy machine needs longer for the same frames
+    while time.monotonic() < end:
+        if predicate():
+            return True
+        time.sleep(0.05)
+    return False
+
+
+@needs_ffmpeg
+def test_a_clip_name_written_while_the_panel_runs_starts_the_video_mode_without_a_restart(
+    panel, monkeypatch, isolated_home
+):
+    """What "Use it" on Start does: the name goes into config.toml, and the panel loop, which
+    follows that file, opens the panel again in video mode with exactly that name. Nothing is
+    sent to the panel for the clip before."""
+    from libre_panel.config import edit_config
+
+    opened, status, stop, thread = running_panel(isolated_home, monkeypatch, panel)
+    try:
+        assert wait_until(lambda: status.target == 'Turing 9.2"' and status.frames > 2)
+        assert 110 not in panel.commands and panel.clip_names == []  # single pictures, no name
+        assert len(opened) == 1
+        edit_config(
+            ("value", "video.local_clip", "usr/data/standby.h264"),
+            ("value", "video.clip_asked", True),
+        )
+        assert wait_until(lambda: status.target == 'Turing 9.2", video 50 fps')
+        assert panel.clip_names == ["usr/data/standby.h264"]
+        assert len(opened) == 2 and thread.is_alive()  # the same loop, the panel opened again
+    finally:
+        stop.set()
+        thread.join(20)
+    assert not thread.is_alive() and not NEVER & set(panel.commands)
+
+
+@needs_ffmpeg
+def test_saying_not_now_leaves_the_running_panel_as_it_is(panel, monkeypatch, isolated_home):
+    """ "Not now" writes only that the question was asked: the panel is not opened again for it,
+    and no name goes to it. (A theme changed in the same write shows the loop has taken it in.)"""
+    from libre_panel.config import edit_config
+
+    opened, status, stop, thread = running_panel(isolated_home, monkeypatch, panel)
+    try:
+        assert wait_until(lambda: status.target == 'Turing 9.2"' and status.frames > 2)
+        edit_config(("value", "video.clip_asked", True), ("value", "theme", "orbit"))
+        assert wait_until(lambda: status.theme == "orbit")
+        assert len(opened) == 1 and status.target == 'Turing 9.2"'
+        assert 110 not in panel.commands and panel.clip_names == []
+    finally:
+        stop.set()
+        thread.join(20)
+    assert not thread.is_alive()
 
 
 def test_a_mode_sets_the_stream_rate(monkeypatch):
