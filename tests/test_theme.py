@@ -134,6 +134,30 @@ def test_save_copy_brings_assets_along(isolated_home, tmp_path):
     assert find_theme("mine") == folder
 
 
+def test_a_save_that_fails_leaves_the_theme_as_it_was(isolated_home, monkeypatch):
+    """A save that could not be written emptied theme.json first: the theme was gone. Text
+    with half an emoji (a lone surrogate, which a page's script can send) is refused before
+    anything is written, and a write that fails (a full disk) leaves the file as it was."""
+    folder = save_theme("mine", minimal())
+    before = (folder / "theme.json").read_text(encoding="utf-8")
+    with pytest.raises(ThemeError, match="Unicode"):
+        save_theme("mine", {**minimal(), "name": "Mine \ud83d"})
+    assert (folder / "theme.json").read_text(encoding="utf-8") == before
+
+    def full_disk(self, data):
+        with open(self, "wb") as file:
+            file.write(data[:10])
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(Path, "write_bytes", full_disk)
+    monkeypatch.setattr(Path, "write_text", lambda self, text, **kw: full_disk(self, text.encode()))
+    with pytest.raises(OSError):
+        save_theme("mine", {**minimal(), "name": "Mine again"})
+    monkeypatch.undo()
+    assert (folder / "theme.json").read_text(encoding="utf-8") == before
+    assert load_theme(folder).name == "t"
+
+
 def test_invalid_theme_names():
     for name in ["../x", "", "a/b", ".hidden"]:
         with pytest.raises(ThemeError):

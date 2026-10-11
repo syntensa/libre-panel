@@ -652,6 +652,9 @@
 - The open window stopped answering the other starts after one line it could not use on
   its port (a token that is not ASCII, a window call that failed): a click on the tray
   icon then opened a second window, and quitting left the first one open
+- Saving a theme that could not be written (text with half an emoji in it, a full disk)
+  emptied its `theme.json` first, and the theme was gone. Such text is refused with a
+  message now, and a theme is written whole or not at all
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

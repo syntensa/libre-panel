@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import shutil
 from copy import deepcopy
@@ -1116,7 +1117,13 @@ def save_theme(name: str, data: dict[str, Any], source: str | None = None) -> Pa
         shutil.copytree(src_folder, target)
     target.mkdir(parents=True, exist_ok=True)
     theme = parse_theme(data, root=target)
-    (target / THEME_FILENAME).write_text(
-        json.dumps(theme.to_dict(), indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-    )
+    try:
+        text = (json.dumps(theme.to_dict(), indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    except UnicodeEncodeError as exc:  # half of an emoji (a lone surrogate) from a page's script
+        raise ThemeError(f"the theme holds text that is not valid Unicode ({exc.reason})") from exc
+    # a write that fails (a full disk) leaves the theme as it was, and the panel never reads
+    # half a file
+    tmp = target / (THEME_FILENAME + ".tmp")
+    tmp.write_bytes(text)
+    os.replace(tmp, target / THEME_FILENAME)
     return target
