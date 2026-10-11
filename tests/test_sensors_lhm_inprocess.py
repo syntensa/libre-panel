@@ -347,13 +347,28 @@ def test_a_node_that_cannot_be_updated_does_not_stop_the_others(caplog):
     assert cpu.updates == 4 and gpu.updates == 4
     assert source.read()["gpu.temp"].value == 48.0  # as it was last read
     said = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
-    assert len(said) == 1 and "Graphics Card" in said[0] and "driver gone" in said[0]
+    assert len(said) == 1 and "GpuNvidia" in said[0] and "driver gone" in said[0]
     gpu.raises = None
     source.refresh()
     gpu.raises = RuntimeError("again")
     source.refresh()
     assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 2  # said again
     del theme
+
+
+def test_a_part_that_cannot_be_updated_is_not_named_in_the_log(caplog, monkeypatch, tmp_path):
+    """The log goes into issues: it says what kind of part could not be read, never what the
+    part is called (a memory module's name holds its maker and part number)."""
+    caplog.set_level(logging.DEBUG, logger=LOGGER)
+    computer = small_computer()
+    computer.Hardware[4].raises = RuntimeError("SMBus busy")  # the memory module
+    computer.Hardware[3].raises = RuntimeError("driver gone")  # the graphics card
+    opened(computer)
+    monkeypatch.setattr(inside, "availability", lambda dll_dir=None, platform=None: (tmp_path, ""))
+    assert inside.check(opener=lambda folder: computer)[0]  # libre-panel sensors --check-lhm
+    assert "SMBus busy" in caplog.text and "driver gone" in caplog.text
+    names = ["Maker", "PART-1", "Graphics Card"]
+    assert not [name for name in names if name in caplog.text]
 
 
 def test_a_sensor_without_a_value_yet_is_still_known_to_make_its_key():
