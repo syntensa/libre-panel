@@ -206,7 +206,7 @@ def page_plugin(plugin_folder):
 
 def test_plugin_page_opens_in_the_editor(page_plugin, page):
     page.click("#pages-button")
-    page.get_by_role("menuitem", name="Cooling").click()
+    page.get_by_role("menuitem", name="Analysis").click()
     frame = page.frame_locator("#plugin-frame")
     frame.locator("#out", has_text="1 3").wait_for()  # kit.js reached the page's own API
     assert page.locator("main.layout").is_hidden()
@@ -474,3 +474,158 @@ def test_look_and_finish_in_the_editor(page, isolated_home):
     js(page, "setSelection([])")
     props.locator("label.field", has_text="in this theme").nth(0).locator("input").uncheck()
     assert "grid" not in js(page, "state.theme.look")
+
+
+@pytest.fixture
+def background_editor(isolated_home):
+    """The background app with its panel and a service on, and the address of its editor."""
+    from test_autostart import FakeTasks
+    from test_service import FakeRegistry, wait_for, write_config
+
+    from libre_panel.autostart import Autostart
+    from libre_panel.service import BackgroundApp
+
+    write_config(isolated_home)
+    config = isolated_home / "config.toml"
+    config.write_text(config.read_text(encoding="utf-8") + '\n[services]\nenabled = ["notices"]\n')
+    app = BackgroundApp(
+        port=0, autostart=Autostart("win32", registry=FakeRegistry(), tasks=FakeTasks())
+    )
+    url = app.start()
+    assert wait_for(lambda: app.plugin_host.shown is not None and "notices" in app.services.running)
+    yield app, url
+    app.quit()
+    app.shutdown()
+
+
+def test_the_control_page_in_the_editor(background_editor):
+    from test_service import wait_for
+
+    from libre_panel.config import load_config
+
+    app, url = background_editor
+    with browser_page(url) as page:
+        page.click("#app-chip")  # the panel menu shows the numbers, once a second is over
+        page.wait_for_function("!document.querySelector('#app-stats').hidden", timeout=15000)
+        assert "Frame rate" in page.locator("#app-stats dt").all_inner_texts()
+        page.click("#app-control")
+        frame = page.frame_locator("#plugin-frame")
+        frame.locator("h1", has_text="Control").wait_for()
+        assert page.locator("#plugin-title").inner_text() == "Control"
+
+        frame.locator("#live").wait_for(state="visible")  # the picture on the panel
+        picture = "document.querySelector('#plugin-frame').contentDocument.querySelector('#live')"
+        page.wait_for_function(f"{picture}.naturalWidth > 0")
+        frame.locator(".tile .label", has_text="Frame rate").wait_for()
+        frame.locator("#sources tr", has_text="psutil").wait_for()
+        row = frame.locator("#services tr", has_text="notices")
+        row.wait_for()
+        assert "running" in row.inner_text()
+
+        frame.get_by_role("button", name="Volume").click()  # a test message
+        frame.locator("#probe-result", has_text="Shown on the panel").wait_for()
+
+        frame.locator("#themes select").nth(1).select_option("slate")  # the game mode's theme
+        assert wait_for(lambda: getattr(load_config().modes.get("game"), "theme", None) == "slate")
+        frame.locator("#themes select").nth(0).select_option("orbit")
+        page.wait_for_function(
+            "document.querySelector('#plugin-frame').contentDocument"
+            ".querySelector('#themes').textContent.includes('Showing now: orbit')",
+            timeout=15000,
+        )
+        assert load_config().theme == "orbit"
+
+        first = app.services.running["notices"][0]
+        row.get_by_role("button", name="Restart").click()
+        assert wait_for(lambda: app.services.running["notices"][0] is not first)
+
+        frame.locator("#log-box summary").click()  # the log of this run (the tray writes it)
+        frame.locator("#log-where").wait_for()
+
+        page.click("#plugin-back")
+        assert page.locator("main.layout").is_visible()
+
+
+def test_the_autopilot_page_in_the_editor(background_editor):
+    from test_service import wait_for
+
+    from libre_panel.config import load_config
+
+    app, url = background_editor
+    with browser_page(url) as page:
+        page.click("#pages-button")
+        page.get_by_role("menuitem", name="Autopilot").click()
+        frame = page.frame_locator("#plugin-frame")
+        frame.locator("h1", has_text="Autopilot").wait_for()
+        frame.locator("#rules .note", has_text="No rules").wait_for()
+        assert not frame.locator("#enabled").is_checked()
+
+        frame.get_by_role("button", name="Add a rule").click()
+        card = frame.locator("#rules .rule")
+        card.wait_for()
+        name = card.locator("input.name")
+        name.fill("Quiet")
+        card.locator(".rule-head select").first.select_option("slate")
+        card.locator("input[type=checkbox]").first.check()  # a new rule starts switched off
+        frame.locator(".condition", has_text="Music plays").locator("input").uncheck()  # no music
+        frame.locator("#enabled").check()
+        frame.locator("#dirty", has_text="unsaved").wait_for()
+
+        frame.get_by_role("button", name="Save").click()
+        # one write: the rules and the switch together
+        assert wait_for(lambda: load_config().services.enabled == ["notices", "autopilot"])
+        rules = load_config().services.options["autopilot"]["rules"]
+        assert rules == [{"name": "Quiet", "theme": "slate", "when": {"music": False}}]
+        frame.locator("#dirty", has_text="unsaved").wait_for(state="hidden")
+        assert wait_for(lambda: "autopilot" in app.services.running, 15)
+        # the service runs: the page says what it does (and the rule holds: no music here)
+        frame.locator("#now", has_text="Quiet").wait_for(timeout=20000)
+        frame.locator("#signals .chip", has_text="No music").wait_for()
+        assert frame.locator("#rules .rule.holds").count() == 1
+
+        card.locator("button[title='Delete the rule']").click()  # and gone again
+        frame.get_by_role("button", name="Save").click()
+        assert wait_for(
+            lambda: not load_config().services.options.get("autopilot", {}).get("rules")
+        )
+
+
+STATS = """async (stats) => {
+  const { describeStats } = await import("/static/stats.js");
+  const fill = (text, vars = {}) => text.replace(/\\{(\\w+)\\}/g, (all, name) => vars[name] ?? all);
+  const rows = describeStats(stats, fill);
+  return Object.fromEntries(rows.map((row) => [row.id, [row.value, row.level]]));
+}"""
+
+HEALTHY = {
+    "fps": 49.8, "target_fps": 50, "streaming": True, "render_ms": 7.4, "render_peak_ms": 19.0,
+    "kbps": 251.0, "blocks_per_s": 50.1, "max_depth": 2, "waits": 0, "drops": 0,
+    "usb_errors": 0, "panel_restarts": 0, "ffmpeg_restarts": 0, "uptime_s": 120,
+}  # fmt: skip
+
+
+def test_the_numbers_are_judged_against_what_the_panel_should_manage(page):
+    def rows(**changes):
+        return page.evaluate(STATS, {**HEALTHY, **changes})
+
+    healthy = rows()
+    assert healthy == {
+        "fps": ["49.8 fps", ""], "render": ["7.4 ms", ""], "data": ["251 KB/s", ""],
+        "video": ["50.1 blocks/s", ""], "faults": ["none", ""],
+    }  # fmt: skip
+    assert rows(fps=40.0)["fps"] == [
+        "40 fps",
+        "warn",
+    ]  # video mode: under nine tenths of the target
+    assert rows(fps=20.0)["fps"][1] == "bad"  # under half of it
+    assert rows(streaming=False, fps=2.0, target_fps=10)["fps"] == [
+        "2 fps",
+        "",
+    ]  # drawn when it moves
+    assert rows(render_ms=25.0)["render"][1] == "warn"  # more than the 20 ms a frame has
+    assert rows(render_ms=25.0, streaming=False)["render"][1] == ""
+    assert rows(drops=1)["video"][1] == "warn" and rows(max_depth=4)["video"][1] == "warn"
+    assert rows(usb_errors=1, ffmpeg_restarts=2)["faults"] == ["3 so far", "warn"]
+    plain = rows(kbps=None, blocks_per_s=None, max_depth=None, waits=None, drops=None)
+    assert set(plain) == {"fps", "render", "faults"}  # what nobody counted is not shown
+    assert page.evaluate(STATS, {}) == {}  # no numbers: nothing to show

@@ -58,6 +58,10 @@ BUILT_IN_PARTS: dict[str, dict[str, str]] = {
         "game": "libre_panel.services.game:Game",
         "notices": "libre_panel.services.notices:Notices",
     },
+    "editor_pages": {
+        "autopilot": "libre_panel.pages.autopilot:Autopilot",
+        "control": "libre_panel.pages.control:Control",
+    },
 }
 
 

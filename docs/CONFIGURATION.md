@@ -459,6 +459,12 @@ when = { time = "22:00-06:30" }        # may cross midnight
   the system once a second (the list of programs every two seconds).
 - Rules are read when the service starts: change `config.toml` and it restarts
   by itself.
+- **In the editor.** *Pages → Autopilot* edits these rules and the settings above,
+  switches the service on and off, and shows which rule holds and what the
+  autopilot sees (music, microphone, the program in front, the loads). Saving
+  writes the `[[services.autopilot.rules]]` blocks and the keys that changed into
+  `config.toml`; the rest of the file stays as it is, but comments inside the
+  rules do not survive a save.
 
 ### Devices
 

@@ -233,7 +233,7 @@ details > .fields { display: grid; gap: 10px; margin-top: 8px; }
 .popover.menu button:hover { background: var(--panel-3); border-color: var(--line); }
 .layout[hidden], .plugin-view[hidden], .panelbar[hidden] { display: none; }
 /* A plugin's own page (kit.js sets the class): editor colours, no editor grid. */
-body.plugin-page { display: block; height: auto; min-height: 100vh; padding: 20px 28px; }
+body.plugin-page { display: block; height: auto; min-height: 100vh; padding: 20px 28px; overflow: auto; }
 body.plugin-page h1 { font-size: 20px; margin: 0 0 16px; }
 body.plugin-page h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 22px 0 10px; }
 body.showing-page { grid-template-rows: auto 1fr auto; }  /* top bar, page, status bar */
@@ -247,6 +247,8 @@ body.showing-page { grid-template-rows: auto 1fr auto; }  /* top bar, page, stat
 .pop-facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 12px; }
 .pop-facts dt { color: var(--muted); }
 .pop-facts dd { margin: 0; overflow-wrap: anywhere; }
+.pop-facts dd.warn { color: var(--warn); }
+.pop-facts dd.bad { color: var(--error); }
 .popover input[type="range"] { width: 100%; padding: 0; accent-color: var(--accent); }
 .popover small { font-size: 11px; overflow-wrap: anywhere; margin-top: -6px; }
 .pop-actions { display: flex; gap: 8px; justify-content: space-between; }

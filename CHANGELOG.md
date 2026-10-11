@@ -175,6 +175,50 @@
 - `libre_panel.render.facets.groove_bar` and `groove_ring`: the milled groove
   of a bar or a ring (a floor of exactly the colour and a bevel lit from the
   top left), cached, for finishes of their own
+- Plugins: an editor page asks `context.background` whether the background app
+  serves its editor (the panel and the services run only there),
+  `context.shown_frame()` for the picture on the panel now, messages and
+  transitions included, and `context.log_tail(lines)` for the end of the log
+  the tray app writes
+- Plugins: `host.notify` says whether the message will show. It returns a
+  `Delivery`, true when it will, else with the `reason`: the theme switches the
+  kind off (`"theme"`), the screen shows it itself (`"screen"`) or no panel is
+  connected (`"no-panel"`). A page sends one with `context.notify(...)`
+- How the panel is doing: the main loop measures its frame rate against the
+  target, the time to draw a frame (median and slowest of the last 120), the
+  data rate sent to the panel, and in video mode the blocks per second, the
+  deepest queue the panel reported, the waits and the pictures thrown away,
+  and counts USB errors, restarts of the panel and of ffmpeg. They are in
+  `/api/app` (`panel.stats`), in the editor's **Panel** menu (with a button to
+  the new Control page) and for plugins in `context.status()`;
+  `context.sources()` lists the sensor sources and what they say about
+  themselves. Measuring costs a few additions per frame and holds no lock
+- Plugins: `set_config_value` writes lists too (`"services.enabled"`) and
+  replaces a list that runs over several lines, the new `set_config_tables`
+  writes an array of tables such as `[[services.autopilot.rules]]`, and
+  `edit_config` makes several such changes in one write. They keep the rest of
+  `config.toml`, compare the new file with the old one, and refuse what they
+  cannot edit safely
+- The editor has two pages of its own, built in like the services (*Pages* in
+  the top bar), written with the plugin API. **Control** shows the live picture
+  of the panel, the numbers above as tiles, each sensor source (LibreHardwareMonitor
+  says how it is read, whether it has administrator rights, whether PawnIO is there)
+  and each service with a *Restart*, sends a test message of each kind and says
+  whether it shows or why not, sets the theme of the normal and the game mode in
+  `config.toml`, and shows the end of the log. **Autopilot** edits the autopilot's
+  rules and settings in `config.toml`, switches it on and off, and shows which
+  rule holds and what it sees. Without the background app (`libre-panel editor`)
+  they say so. An editor page may answer with a file (`(status, bytes, type)`)
+- The two pages are a JSON API that a screen of any design can call
+  (`/api/plugins/control/` and `/api/plugins/autopilot/`, listed under "The
+  console API" in docs/ARCHITECTURE.md): the live picture as JPEG or PNG, the
+  numbers, the sources (LibreHardwareMonitor's mode, rights and PawnIO driver as
+  data), the services with `enabled` and a state (`running`, `stopped`, `failed`,
+  `not-installed`, `off`, `pending` until the app follows `config.toml`,
+  `unknown`) that can be switched on and off and restarted, test messages with
+  their verdict, the theme per mode, the log, and the autopilot's rules. Plugin
+  pages that write `config.toml` ask the app to follow it with
+  `context.follow_config()`
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
@@ -200,6 +244,10 @@
 - Video mode: where many widgets move, what lies under a graph was laid anew
   on most frames (the kept layers went oldest first, not least used); the
   ones a frame uses are now kept longest
+- Services follow `config.toml` whenever the panel loop starts. A service switched
+  on (or off, or given other options) while the panel was paused, or in a
+  `config.toml` that did not load at the start and was fixed later, stayed as it
+  was until the file changed once more
 
 **Changes**
 - The video mode turns itself on: `video.mode` is `"auto"` by default, which

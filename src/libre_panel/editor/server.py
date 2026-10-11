@@ -333,12 +333,15 @@ class EditorHandler(BaseHTTPRequestHandler):
         if page_id not in pages:
             pages[page_id] = cls(PageContext(self.controls, self.state.config_path))
         try:
-            status, data = pages[page_id].handle(method, path, query, body)
-            payload = json.dumps(data).encode("utf-8")
+            status, data, *kind = pages[page_id].handle(method, path, query, body)
+            if isinstance(data, bytes):  # a file, e.g. a picture: (status, bytes, content type)
+                payload, content_type = data, kind[0] if kind else "application/octet-stream"
+            else:
+                payload, content_type = json.dumps(data).encode("utf-8"), "application/json"
         except Exception as exc:  # a broken page must not take the editor down
             log.exception("editor page %s failed", page_id)
             return self._error(f"{page_id}: {exc}", HTTPStatus.INTERNAL_SERVER_ERROR)
-        self._send(int(status), payload, "application/json")
+        self._send(int(status), payload, content_type)
 
     def _static(self, name: str) -> None:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+", name) or name.startswith("."):

@@ -221,6 +221,10 @@ class SensorHub:
                 images.setdefault(key, image)
         return Snapshot(readings=readings, history=history, images=images)
 
+    def readings_from(self, provider: SensorProvider) -> int:
+        """How many readings of the last snapshot came from ``provider``."""
+        return sum(1 for owner in self._owners.values() if owner is provider)
+
     def fresh(self, video: bool = True) -> dict[str, Reading]:
         """Between snapshots: the latest values of ``every_frame`` providers, for
         the keys they supplied (or that nobody supplied); no history. Without

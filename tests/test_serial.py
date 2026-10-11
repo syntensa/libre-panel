@@ -625,3 +625,24 @@ def test_a_model_of_another_kind_names_the_right_one(ports, no_waiting):
     sleeping_rev_c(ports, FakeRevC("turing-5"))
     with pytest.raises(DeviceError, match='rev. C.*"turing-2.1" or "turing-5"'):
         display(model="usbpcmonitor-5", port="/dev/ttyACM1").open()
+
+
+def test_a_serial_panel_counts_what_it_writes_and_the_errors_that_end_it(ports):
+    from libre_panel.devices.base import Counters
+
+    panel = ports(FakeRevA(), serial_number="USB35INCHIPSV2")
+    counters = Counters()
+    screen = display()
+    screen.counters = counters
+    with screen:
+        screen.show(picture((480, 320)))
+        whole = counters.bytes
+        assert whole >= 480 * 320 * 2  # a full frame in RGB565, and its header
+        screen.show(picture((480, 320), seed=5), (0, 0, 40, 40))  # only a box changed
+        box = counters.bytes - whole
+        assert 40 * 40 * 2 <= box < whole // 20
+        assert counters.usb_errors == 0
+        panel.unplugged = True
+        with pytest.raises(DeviceError):
+            screen.show(picture((480, 320), seed=9), (0, 0, 40, 40))
+        assert counters.usb_errors == 1

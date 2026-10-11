@@ -178,14 +178,19 @@ def test_tray_menu_in_german(isolated_home):
     assert texts[0] == "Libre Panel: angehalten"
 
 
-def test_editor_script_has_no_untranslated_texts():
-    """Visible texts in editor.js go through t(); plain English literals are a slip."""
-    from i18n_keys import STATIC
+def test_editor_scripts_have_no_untranslated_texts():
+    """Visible texts in the editor's scripts and its built-in pages go through t();
+    plain English literals are a slip."""
+    from i18n_keys import script_files
 
-    source = (STATIC / "editor.js").read_text(encoding="utf-8")
     pattern = re.compile(
         r'(?:\b(?:text|title|placeholder|label|alt)|"aria-label"): *"[A-Za-z]'
         r'|\b(?:setStatus|confirm|prompt|alert)\("[A-Za-z]'
     )
-    slips = [line.strip() for line in source.splitlines() if pattern.search(line)]
+    slips = [
+        f"{path.name}: {line.strip()}"
+        for path in script_files()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if pattern.search(line)
+    ]
     assert slips == []

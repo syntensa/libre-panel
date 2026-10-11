@@ -121,6 +121,10 @@ class PanelService:
             try:
                 config = load_config(self.config_path)
                 self.error = ""
+                if self.on_config is not None:
+                    # a change made while the loop did not run (the panel was paused, the
+                    # file was broken) reaches the services now; one in step is left alone
+                    self.on_config(config)
                 run(config, stop=stop, status=status, host=self.host, on_config=self.on_config)
             except (ConfigError, ThemeError, DeviceError) as exc:
                 self.error = str(exc)
@@ -151,6 +155,8 @@ class PanelService:
             "theme": status.theme,
             "frames": status.frames,
             "mode": status.mode,
+            # numbers of the last seconds (see libre_panel.meter); none while it does not run
+            "stats": status.stats if state in ("showing", "waiting") else {},
         }
 
 
@@ -272,6 +278,16 @@ class BackgroundApp:
         threading.Thread(
             target=self.services.apply, args=(config,), name="services", daemon=True
         ).start()
+
+    def follow_config(self) -> None:
+        """Bring the services in line with config.toml now. The panel loop does it when it
+        sees a change; this is for a page that has just written one, so the services follow
+        also while the panel is paused. The file is left as it is if it cannot be read."""
+        try:
+            config = load_config(self.config_path)
+        except ConfigError:
+            return  # the services go on as they are until the file is fixed
+        self._config_loaded(config)
 
     def shutdown(self) -> None:
         self.services.stop()

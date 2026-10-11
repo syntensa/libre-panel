@@ -398,6 +398,7 @@ class TurzxUsbDisplay(Display):
             # A replug, standby or a crashed earlier session leaves the pipe out of
             # step; one fresh connection with a resync usually fixes it (SPUR II).
             log.warning("panel stopped answering (%s); reconnecting", exc)
+            self.counters.usb_errors += 1
             self.close()
             self.open()
             if self.brightness is not None:
@@ -408,6 +409,7 @@ class TurzxUsbDisplay(Display):
         if self.transport is None:
             raise DeviceError("panel not open")
         self.transport.command(CMD_UPLOAD_PNG, struct.pack(">I", len(png)), png, timeout_ms=5000)
+        self.counters.bytes += len(png)
 
     def close(self) -> None:
         if self.transport is not None:

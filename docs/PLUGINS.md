@@ -128,7 +128,7 @@ while Libre Panel runs.
 | `host.want(*keys)` | the readings the service reads (`"media.*"`, `"audio.volume"`): sources that work on demand run for it although no theme shows them |
 | `host.show_theme(name, transition=None, priority=0, mode=ANY_MODE)` / `host.restore_theme(transition=None)` | show another theme for a while; `config.toml` stays as it is. `transition`: `cut`, `fade`, `slide`, a plugin's, or `(name, {parameters})`; default from `config.toml`. `mode=None`: only while no mode is on; `mode="game"`: only in that mode |
 | `host.set_mode(name, transition=None)` / `host.mode` | switch to a mode from `[modes.<name>]`; `None` ends it. A transition plays also when the theme stays |
-| `host.notify(text, icon=None, level="info", seconds=None, kind="", rank=0, payload=None, key="")` | a short message on the panel (see *Toasts*) |
+| `host.notify(text, icon=None, level="info", seconds=None, kind="", rank=0, payload=None, key="")` | a short message on the panel (see *Toasts*). It returns a `Delivery`: true when the message will show, else `reason` says why (`"theme"`, `"screen"`, `"no-panel"`) |
 | `host.on(event, callback)` | `panel-connected`, `panel-lost`, `panel-restarted` (after `panel-connected`, when the panel came back from a restart that cleared a hung video decoder, not from a replug), `theme-changed` (`theme=`), `mode-changed` (`mode=`), `sample` (`snapshot=`, see below), `quit`; callbacks run in an event thread |
 | `host.data_dir` | `<settings>/plugins-data/<service>/` for the service's files |
 | `host.log` | a logger named after the service |
@@ -395,6 +395,15 @@ video mode (a separate overlay would make the video judder).
   `{"image": cover, "progress": 0.4, "color": "#EF4444"}`.
 - While a transition plays, new toasts wait, unless the transition says
   otherwise (see *Transitions*).
+- `host.notify` answers with a `Delivery`, so a service (or the editor's
+  *Control* page, which sends a test message of each kind) can tell whether the
+  message will show. `delivery.shown` (also its truth value) is True when
+  nothing stands in the way; otherwise `delivery.reason` is `"theme"` (the
+  theme switches the kind off), `"screen"` (the screen shows it itself) or
+  `"no-panel"` (the panel is not connected or paused: the message waits for
+  it). It is the answer of the moment: a theme or screen that comes before the
+  message is due changes it, and a message of a higher rank can still take its
+  place. A message that will not show is handed over all the same.
 
 What the band draws besides `text` (other styles may read the same keys):
 
@@ -546,6 +555,14 @@ A plugin can bring its own page into the theme editor, for settings or an
 analysis. It appears under *Pages* in the editor's top bar and replaces the
 editing area until *Theme editor* goes back.
 
+Libre Panel brings two pages of its own, built in like its services (so they
+work in the downloads, and no plugin can use their names): **Control** (`control`)
+and **Autopilot** (`autopilot`), described in
+[Running in the background](BACKGROUND.md#the-control-and-autopilot-pages). They
+are written with the same API, from `libre_panel/pages/`, and a good model for
+a page of your own. Their routes are a JSON API that a screen of any design can
+call: [The console API](ARCHITECTURE.md#the-console-api).
+
 ```python
 from libre_panel.plugins import EditorPage
 
@@ -591,18 +608,33 @@ await api("curve", { method: "POST", body: { points } });
   `.json`; nothing outside the folder). Scripts must be files: the editor's
   security policy allows no inline scripts.
 - `handle(method, path, query, body)` answers `/api/plugins/<id>/<path>` and
-  returns `(status, data)`; `data` is sent as JSON. GET must not change
-  anything: changes go through POST, which needs the editor's header
-  (`kit.js`'s `api()` sends it). The editor listens on 127.0.0.1 only.
-- `self.context` gives what the page may need from the running app (in a
-  plain `libre-panel editor` there is none): `service(name)` (the running
-  service or None), `services()` (each enabled service and its state),
-  `restart_service(name)`, `snapshot()` (the readings the panel was drawn
-  from, or None), `config_path` (change one setting with
-  `libre_panel.config.set_config_value("modes.game.theme", ...)`) and
-  `data_dir(name)`, a service's data folder.
+  returns `(status, data)`; `data` is sent as JSON. `(status, bytes,
+  "image/jpeg")` sends a file instead, e.g. the picture on the panel for an
+  `<img>`. GET must not change anything: changes go through POST, which needs
+  the editor's header (`kit.js`'s `api()` sends it). The editor listens on
+  127.0.0.1 only.
 - `kit.js` exports `api`, `loadTexts`, `t`, `language`, `el`, `field`,
   `button` and `setStatus`; with `editor.css` the page looks like the editor.
+
+`self.context` gives what the page may need from the running app. Only the
+background app (the tray, `libre-panel start`) runs a panel and services; in a
+plain `libre-panel editor` `background` is False and the rest is empty or
+None, so a page says what is missing instead of failing.
+
+| | |
+|---|---|
+| `background` | True when the background app serves this editor |
+| `service(name)` / `services()` | the running service or None / each enabled service and its state (`running`, `failed: …`, `not installed`, `stopped`) |
+| `restart_service(name)` | stop and start an enabled service again; its new state |
+| `follow_config()` | after a page wrote `config.toml` (`services.enabled`, a service's options): have the running app bring its services in line with it now, instead of when the panel loop next sees the file, which it does not while the panel is paused. Nothing happens in a plain editor |
+| `snapshot()` | the readings and history the panel was last drawn from, or None |
+| `status()` | what the panel is doing, as `/api/app` shows it: `state`, `detail`, `target`, `theme`, `frames`, `mode` and `stats` (frame rate, drawing time, data rate, the video link, faults; see [Running in the background](BACKGROUND.md#how-the-panel-is-doing)); None without the background app |
+| `sources()` | the sensor sources the panel reads, the first with a reading wins: `[{"name", "readings", "status"}]`, with the number of readings the last snapshot took from the source and, if it has a `status()` (LibreHardwareMonitor does), what it says about itself as a dict |
+| `shown_frame()` | the frame on the panel now, with transitions and messages, as a PIL image in the theme's orientation (not turned for an upside-down panel); None before the first frame and while the panel is paused. Read it only |
+| `notify(text, **options)` | a message on the panel as a service sends it (`ServiceHost.notify`'s arguments), e.g. a test or the answer to an action; returns the `Delivery` (see *Toasts*) |
+| `log_tail(lines=40)` | the last lines of `logs/libre-panel.log`, the log the tray app writes (nothing for `libre-panel start`, which logs to its terminal) |
+| `config_path` | config.toml; change one setting with `libre_panel.config.set_config_value("modes.game.theme", ...)` (a boolean, number, string or list), a list of tables such as the autopilot's rules with `set_config_tables("services.autopilot.rules", [...])`, or several of either in one write with `edit_config(("value", name, value), ("tables", name, tables))`. They keep the rest of the file, comments included, check the result before writing it and refuse a layout they cannot edit |
+| `data_dir(name)` | a service's data folder |
 
 ## Modes
 
