@@ -485,6 +485,10 @@
   `gpu_temp_max`, `gpu_hotspot_max`, `cpu_power_max`, `gpu_power_max`,
   `vram_used_max`). They are gone with the game. SPUR Session shows them
   where SPUR II does, and the demo has neutral values for them
+- A `graph` takes `end_dot`, a radius in px: the line ends in a dot of its
+  colour at the newest value, with the graph's glow around it, drawn in
+  quarter pixels so that it glides with the value, in video mode too. SPUR
+  Horizon's curves end in a dot as SPUR II's do
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

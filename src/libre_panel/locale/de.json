@@ -1132,6 +1132,7 @@
     "done": "Text, wenn es so weit ist",
     "empty": "Text ohne Werte",
     "end_angle": "Endwinkel",
+    "end_dot": "Punkt am Ende",
     "face": "Zifferblatt",
     "fallback": "Ersatztext",
     "field": "Wert",

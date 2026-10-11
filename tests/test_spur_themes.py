@@ -136,6 +136,22 @@ def test_horizon_grows_the_cpu_up_and_the_gpu_down_from_one_line():
     assert marks[-1] == cpu["x"] + cpu["w"] - 1 - 250  # counted back from the newest point
 
 
+def test_horizon_ends_its_curves_in_a_dot_each_on_its_own_side_of_the_horizon():
+    theme, _, renderer, _, _ = drawn("spur-horizon")
+    by = {w["id"]: w for w in theme.widgets}
+    pieces = dict(renderer._last[0])
+    for name in ("cpu-graph", "gpu-graph", "cpu-light", "gpu-light"):  # the curve and its light
+        assert by[name]["end_dot"] > 0 and f"{name}\0dot" in pieces, name
+    cpu, gpu = pieces["cpu-graph\0dot"], pieces["gpu-graph\0dot"]
+
+    def middle(piece):
+        return piece.x + piece.layer.width / 2, piece.y + piece.layer.height / 2
+
+    assert middle(cpu)[1] < by["gpu-graph"]["y"] < middle(gpu)[1]  # the CPU's up, the GPU's down
+    edge = by["cpu-graph"]["x"] + by["cpu-graph"]["w"]
+    assert abs(middle(cpu)[0] - edge) <= 1 and abs(middle(gpu)[0] - edge) <= 1  # at its end
+
+
 def test_horizon_music_tile_follows_the_player():
     from PIL import Image
 
