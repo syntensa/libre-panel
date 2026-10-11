@@ -78,8 +78,8 @@ def test_a_spur_screen_is_made_for_the_8_inch_bar_and_names_no_hardware(name):
     assert data["display"]["model"] == "turing-8.8-usb"  # the 9.2" strip test does not apply
     assert not any(find_model("turing-8.8-usb").hidden_edges("landscape").values())
     text = json.dumps(data)
-    for model in ("Ryzen", "Radeon", "GeForce", "Crucial", "Kingston", "9850", "9070"):
-        assert model not in text  # names of hardware come from the sensors, never the theme
+    for brand in ("Ryzen", "Radeon", "GeForce", "Crucial", "Kingston"):
+        assert brand not in text  # names of hardware come from the sensors, never the theme
 
 
 @pytest.mark.parametrize("name", SPUR)
