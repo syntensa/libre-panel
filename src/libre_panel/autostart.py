@@ -8,13 +8,13 @@ Everything is per user and needs no administrator rights. Turning it off
 removes exactly what turning it on created.
 
 On Windows some sensors (CPU temperature and power, RAM temperature,
-mainboard fans) can be read only by a process with administrator rights.
-The built-in LibreHardwareMonitor source asks LibreHardwareMonitor's web
-server and needs none, but a plugin that reads the hardware itself does.
-For that, ``enable(..., elevated=True)`` sets up a Task Scheduler task that
-starts Libre Panel at login with the highest rights, instead of the Run
-value. Setting it up and removing it needs an administrator; it is never
-done without being asked.
+mainboard fans) can be read only by a process with administrator rights. The
+built-in LibreHardwareMonitor source reads them inside Libre Panel (so Libre Panel
+itself needs the rights), or asks the web server of a LibreHardwareMonitor that has
+them; a plugin that reads the hardware itself needs them as well. For these,
+``enable(..., elevated=True)`` sets up a Task Scheduler task that starts Libre
+Panel at login with the highest rights, instead of the Run value. Setting it up
+and removing it needs an administrator; it is never done without being asked.
 """
 
 from __future__ import annotations

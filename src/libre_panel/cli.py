@@ -8,6 +8,7 @@ import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from libre_panel import __version__
 from libre_panel.config import ConfigError, config_dir, load_config, write_default_config
@@ -264,6 +265,7 @@ def _cmd_preview(args: argparse.Namespace) -> int:
         hub = build_hub(config)
         try:
             hub.snapshot()  # rates (network, disk) need two samples
+            _wait_for_sources(hub)
             snapshot = hub.snapshot()
         finally:
             hub.close()
@@ -336,6 +338,39 @@ class _Reader:
     """Stands in for a theme on show (``want`` needs something that can be forgotten)."""
 
 
+def _wait_for_sources(hub: Any) -> None:
+    """Sources that start in the background (LibreHardwareMonitor inside Libre Panel loads
+    .NET first) get the moment they need for their first readings."""
+    from libre_panel.sensors.lhm_inprocess import READY_SECONDS
+
+    for provider in hub.providers:
+        wait = getattr(provider, "wait_ready", None)
+        if callable(wait):
+            wait(READY_SECONDS)
+
+
+def _lhm_status(hub: Any) -> Any:
+    from libre_panel.sensors.librehardwaremonitor import LibreHardwareMonitorProvider
+
+    for provider in hub.providers:
+        if isinstance(provider, LibreHardwareMonitorProvider):
+            return provider.status()
+    return None
+
+
+def _check_lhm(args: argparse.Namespace) -> int:
+    """Does LibreHardwareMonitor load and open inside Libre Panel (Windows)? For the build
+    to try the bundled libraries: it needs no administrator rights, and the CPU's sensors
+    being out of reach is not a failure."""
+    from libre_panel.sensors import lhm_inprocess
+    from libre_panel.sensors.librehardwaremonitor import dll_dir_of
+
+    options = load_config(args.config).sensors.options.get("librehardwaremonitor", {})
+    worked, lines = lhm_inprocess.check(dll_dir_of(options))
+    print("\n".join(lines))
+    return 0 if worked else 1
+
+
 def _cmd_sensors(args: argparse.Namespace) -> int:
     import time
 
@@ -343,16 +378,21 @@ def _cmd_sensors(args: argparse.Namespace) -> int:
     from libre_panel.sensors.base import want
     from libre_panel.sensors.librehardwaremonitor import DEFAULT_URL, hardware_hint
 
+    if args.check_lhm:
+        return _check_lhm(args)
     config = load_config(args.config)
     hub = build_hub(config, demo=args.demo)
     # Some sources read only while a theme shows their keys. Ask for those that cost
-    # nothing (not the ping or the game frame rate), as a theme would, so they are listed.
+    # nothing (not the ping or the game frame rate), as a theme would, so they are listed;
+    # "lhm:*" is every sensor of LibreHardwareMonitor.
     reader = _Reader()
-    want(reader, {"cpu.load", "gpu.load", "audio.*"})
+    want(reader, {"cpu.load", "gpu.load", "audio.*", "lhm:*"})
     try:
         hub.snapshot()
         time.sleep(SENSORS_SETTLE_SECONDS)  # rate counters and pollers need time
+        _wait_for_sources(hub)
         snapshot = hub.snapshot()
+        status = _lhm_status(hub)
     finally:
         hub.close()
     for key in sorted(snapshot.readings):
@@ -361,7 +401,7 @@ def _cmd_sensors(args: argparse.Namespace) -> int:
         print(f"{key:<40} {value:>14} {r.unit:<5} {r.label}")
     if not args.demo:
         url = config.sensors.options.get("librehardwaremonitor", {}).get("url", DEFAULT_URL)
-        hint = hardware_hint(snapshot.readings, config.sensors.providers, url, _platform())
+        hint = hardware_hint(snapshot.readings, config.sensors.providers, url, _platform(), status)
         if hint:
             print(f"\nnote: {hint}", file=sys.stderr)
     return 0
@@ -498,8 +538,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--elevated",
         action="store_true",
-        help="Windows: start with the highest rights (Task Scheduler), for sensor "
-        "plugins that read the hardware themselves; run as administrator",
+        help="Windows: start with the highest rights (Task Scheduler), for the CPU's "
+        "temperature and power and for sensor plugins that read the hardware themselves; "
+        "run as administrator",
     )
     p.set_defaults(func=_cmd_autostart)
 
@@ -532,6 +573,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("sensors", help="list sensor keys and current values")
     p.add_argument("--demo", action="store_true")
+    p.add_argument(
+        "--check-lhm",
+        action="store_true",
+        help="Windows: check that LibreHardwareMonitor loads inside Libre Panel, then exit",
+    )
     p.set_defaults(func=_cmd_sensors)
 
     p = sub.add_parser("plugins", help="list installed plugins and whether they load")

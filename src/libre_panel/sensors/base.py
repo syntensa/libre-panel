@@ -42,6 +42,12 @@ def wanted(prefix: str) -> bool:
     return False
 
 
+def wanted_keys() -> frozenset[str]:
+    """Every key (or pattern) that themes on show read; compare two to see whether
+    that changed, instead of asking ``wanted`` for each key again."""
+    return frozenset().union(*list(_WANTED.values()))
+
+
 @dataclass(frozen=True)
 class Reading:
     """One sensor value. ``key`` uses dotted names such as ``cpu.load``."""

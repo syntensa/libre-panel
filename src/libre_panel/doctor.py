@@ -4,8 +4,8 @@ Runs only display commands (sync, brightness, frames): the same ones normal
 operation uses. Shows test cards for both orientations, asks what the panel
 shows, measures speed and writes a report without personal data (no serial
 numbers, user names or paths) that can be attached to an issue. On Windows it
-also asks LibreHardwareMonitor's web server once, to say whether the
-temperatures and power that only it gives arrive.
+also asks LibreHardwareMonitor (inside Libre Panel, else its web server) once, to say
+whether the temperatures and power that only it gives arrive.
 """
 
 from __future__ import annotations
@@ -31,12 +31,18 @@ ISSUE_URL = "https://github.com/syntensa/libre-panel/issues/new?template=panel_s
 
 
 def sensors_check(
-    config_path: Path | None = None, platform: str = sys.platform, fetch: Callable | None = None
+    config_path: Path | None = None,
+    platform: str = sys.platform,
+    fetch: Callable | None = None,
+    provider: Callable | None = None,
 ) -> tuple[str, str] | None:
     """Windows: do the temperatures and power that need LibreHardwareMonitor arrive?
 
     (result, what to say) for the report; None elsewhere, where psutil has them.
-    ``fetch(url)`` asks the web server (tests give their own)."""
+    Where Libre Panel can read LibreHardwareMonitor itself it does that; otherwise it
+    asks the web server. ``fetch(url)`` asks the web server (tests give their own, and
+    then only it is asked); ``provider(options)`` makes the source that reads inside Libre
+    Panel (also for tests)."""
     if platform != "win32":
         return None
     from libre_panel.sensors.librehardwaremonitor import (
@@ -54,6 +60,10 @@ def sensors_check(
     url = options.get("url", DEFAULT_URL)
     # a report goes to a public issue: no address of the user's network in it
     shown = url if url == DEFAULT_URL else "the address in [sensors.librehardwaremonitor]"
+    if fetch is None and options.get("mode", "auto") != "webserver":
+        found = _inside_check(options, config.sensors.providers, shown, platform, provider)
+        if found is not None:
+            return found
     try:
         readings = readings_from_tree((fetch or fetch_tree)(url), options.get("gpu"))
         answers = True
@@ -64,6 +74,39 @@ def sensors_check(
         return "info", f"LibreHardwareMonitor answers at {shown}: temperature and power arrive"
     state = "answers, but sends no temperatures or power" if answers else "does not answer"
     return "info", f"LibreHardwareMonitor {state} at {shown}. {hint}"
+
+
+def _inside_check(
+    options: dict, providers: list[str], shown: str, platform: str, make: Callable | None
+) -> tuple[str, str] | None:
+    """The same question when LibreHardwareMonitor runs inside Libre Panel; None where
+    it cannot (then the web server is asked, unless it was asked for by ``mode``)."""
+    from libre_panel.sensors import lhm_inprocess
+    from libre_panel.sensors.librehardwaremonitor import (
+        LibreHardwareMonitorProvider,
+        dll_dir_of,
+        hardware_hint,
+        ring0_steps,
+    )
+
+    folder, why = lhm_inprocess.availability(dll_dir_of(options))
+    if folder is None:
+        if options.get("mode") == "inprocess":
+            return "info", f"LibreHardwareMonitor cannot run inside Libre Panel: {why}"
+        return None
+    source = (make or LibreHardwareMonitorProvider)(options)
+    try:
+        source.wait_ready(lhm_inprocess.READY_SECONDS)
+        readings, status = source.read(), source.status()
+    finally:
+        source.close()
+    hint = hardware_hint(readings, providers, shown, platform, status)
+    if hint is not None:
+        return "info", hint
+    text = "LibreHardwareMonitor runs inside Libre Panel: temperature and power arrive"
+    if status.ring0 is False:  # the graphics card's do, the processor's do not
+        text += f", but not the CPU's: {' and '.join(ring0_steps(status))}"
+    return "info", text
 
 
 @dataclass

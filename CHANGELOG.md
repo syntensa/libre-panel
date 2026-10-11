@@ -65,6 +65,25 @@
   load over a time, a program in front, the time of day. A new choice must
   hold for 8 s and a theme stays for 20 s, the load does not count for the
   first four minutes after the system started, and it rests in game mode
+- LibreHardwareMonitor inside Libre Panel (Windows): the downloads carry its
+  library and read it themselves, so the GPU, temperatures, power and fans no
+  longer need a LibreHardwareMonitor that runs as administrator with its web
+  server turned on. `mode` under `[sensors.librehardwaremonitor]` is `"auto"`
+  (the default: inside Libre Panel where that is possible, else the web server
+  as before), `"inprocess"` or `"webserver"`. With pip: `pip install
+  "libre-panel[lhm]"`, `packaging/windows/fetch_lhm.py` and `dll_dir`. Only the
+  hardware a theme on the panel shows is read, once a second
+- The CPU's temperature, power and clock, the RAM temperature and the
+  mainboard's fans need Libre Panel to run as administrator
+  (`libre-panel autostart enable --elevated`) and LibreHardwareMonitor's
+  driver PawnIO ([pawnio.eu](https://pawnio.eu)). Without them those readings
+  show "--", never 0, and a LibreHardwareMonitor web server that does have them
+  fills in. `libre-panel sensors` and `libre-panel doctor` say which of the two
+  is missing; `libre-panel sensors --check-lhm` tests that the library loads
+- The libraries (LibreHardwareMonitor, MPL-2.0, and its companions under
+  Apache-2.0 and MIT; see NOTICE.md) are fetched from NuGet when the Windows
+  downloads are built, each checked against a fixed SHA-256; they are not in the
+  repository
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
@@ -81,10 +100,11 @@
 - Windows: the GPU, temperatures, power and fans showed nothing unless
   `librehardwaremonitor` was listed in `config.toml`. New configurations now
   start with `providers = ["load", "librehardwaremonitor", "psutil"]` (elsewhere
-  `["load", "psutil"]`), and an unset list means the same. LibreHardwareMonitor
-  must run as administrator with *Options → Remote Web Server → Run*; where it
-  does not run, asking costs nothing (one second at most, waits that grow to
-  half a minute, one line in the log) and those readings show "--". A
+  `["load", "psutil"]`), and an unset list means the same. Where Libre Panel
+  cannot read LibreHardwareMonitor itself (see above), that one must run as
+  administrator with *Options → Remote Web Server → Run*; where it does not run,
+  asking costs nothing (one second at most, waits that grow to half a minute,
+  one line in the log) and those readings show "--". A
   `config.toml` from 0.4 or earlier that names psutil alone (what those
   versions wrote) gets the new list too; any other list is left as it is
 - `libre-panel sensors` lists the load and the volume too, and on Windows
@@ -93,6 +113,11 @@
 - Without a queue (`"queue": false`), messages that come at the same moment
   are decided one after the other: a warning that comes with a volume
   change takes over from it at once
+- Windows downloads: with `mode = "auto"` the library inside Libre Panel is read
+  first; a LibreHardwareMonitor web server that happens to run only fills in
+  what Libre Panel cannot read (the CPU's readings without administrator
+  rights). Drive temperatures (`temp.nvme.*`) come only from the web server for
+  now: set `mode = "webserver"` to keep them, or to read only it
 
 ## 0.4.2 — 2026-10-10
 
