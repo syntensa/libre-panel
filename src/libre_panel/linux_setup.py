@@ -117,6 +117,11 @@ class Facts:
     tools: Mapping[str, str] = field(default_factory=dict)  # udevadm, modprobe, chmod: their paths
 
 
+def supported() -> bool:
+    """Whether this system has the setup: Linux does."""
+    return sys.platform.startswith("linux")
+
+
 def udev_rules_text() -> str:
     """The rule for the panels, the file ``libre-panel udev-rules`` prints."""
     return (Path(__file__).resolve().parent / "assets" / "60-libre-panel.rules").read_text(
@@ -745,7 +750,7 @@ def run_cli(
     """``libre-panel system-setup --linux``: say what it will do, ask for the rights (pkexec
     where there is a desktop, else sudo), do it, say what became of each step."""
     out, err = stdout or sys.stdout, stderr or sys.stderr
-    if not sys.platform.startswith("linux"):
+    if not supported():
         print(t("This setup is for Linux."), file=err)
         return 2
     options = Options(

@@ -621,7 +621,7 @@ def test_where_no_rights_can_be_asked_for_the_terminal_command_is_given(monkeypa
 
 
 def test_the_command_is_not_for_other_systems(monkeypatch, capsys):
-    monkeypatch.setattr(setup.sys, "platform", "win32")
+    monkeypatch.setattr(setup, "supported", lambda: False)
     args = SimpleNamespace(rapl=False, no_rapl=False, remove=False, dry_run=True, json=False)
     assert setup.run_cli(args, facts=facts()) == 2
     assert "for Linux" in capsys.readouterr().err

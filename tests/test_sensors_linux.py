@@ -614,7 +614,7 @@ def test_the_source_has_a_name_and_says_what_it_found(sysfs, make):
         "temperatures": 4,
         "fans": 3,
         "graphics": "amdgpu",
-        "nvml": None,
+        "nvidia driver": None,
         "cpu power": "RAPL",
     }
     assert base.available_providers()["linux"] == "built in"

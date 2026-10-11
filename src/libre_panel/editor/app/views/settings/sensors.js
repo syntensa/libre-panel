@@ -26,6 +26,10 @@ const SOURCES = {
     title: () => "LibreHardwareMonitor",
     hint: () => t("Temperatures, power, clocks and fans of the processor, the graphics card and the mainboard (Windows)."),
   },
+  linux: {
+    title: () => t("Linux sensors"),
+    hint: () => t("Temperatures, power and fans of the processor, the graphics card, the mainboard and the drives, read from the kernel and from NVIDIA's driver (Linux)."),
+  },
   psutil: {
     title: () => t("System"),
     hint: () => t("Processor, memory, drives, network, battery and the busiest programs; temperatures and fans where the system has them."),
@@ -50,11 +54,12 @@ const SOURCES = {
   media: { title: () => t("What is playing"), hint: () => t("The title, the cover and the player of the music that plays.") },
   sky: { title: () => t("Sun and moon"), hint: () => t("Sunrise, sunset and the phase of the moon.") },
 };
-const ORDER = ["load", "audio", "librehardwaremonitor", "psutil", "presentmon", "calendar", "homeassistant", "mqtt", "demo"];
+const ORDER = ["load", "audio", "librehardwaremonitor", "linux", "psutil", "presentmon", "calendar", "homeassistant", "mqtt", "demo"];
 
 /** Whether a source can work on this system (`platform` is Python's sys.platform). */
 function worksHere(name, platform) {
   if (name === "librehardwaremonitor" || name === "presentmon") return platform === "win32";
+  if (name === "linux") return platform.startsWith("linux");
   if (name === "audio") return platform === "win32" || platform.startsWith("linux");
   return true;
 }

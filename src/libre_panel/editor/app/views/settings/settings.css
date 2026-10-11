@@ -688,3 +688,118 @@ a.btn:hover {
   background: var(--surface);
   color: var(--text);
 }
+
+/* -- set up sensors and panel access (Linux), here and on Start ----------------------------------- */
+
+.setup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.setup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.setup-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.setup-list li strong,
+.hint-card .setup-list li strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.setup-missing {
+  color: var(--warn);
+  font-style: normal;
+}
+
+.setup-list li.setup-power {
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.setup-power-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.setup-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+.setup-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.setup-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.setup-line .icon {
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.setup-line.ok .icon {
+  color: var(--ok);
+}
+
+.setup-line.warn .icon {
+  color: var(--warn);
+}
+
+.setup-line.error {
+  color: var(--danger-text);
+}
+
+.setup-terminal summary {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.hint-card.setup-card {
+  align-items: stretch;
+}
+
+.hint-card.setup-card .note {
+  background: var(--panel-2);
+}
+
+.hint-card.setup-card .btn-primary {
+  border: none;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.hint-card.setup-card .link-btn {
+  align-self: flex-start;
+}

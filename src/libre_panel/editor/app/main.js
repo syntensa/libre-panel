@@ -8,6 +8,7 @@ import * as commands from "./core/commands.js";
 import * as doc from "./core/doc.js";
 import { loadLanguage, t } from "./core/i18n.js";
 import "./core/preview.js";
+import { loadSetup } from "./core/setup.js";
 import { store } from "./core/state.js";
 import { html, render } from "./lib/preact.js";
 import { App } from "./shell/app.js";
@@ -28,6 +29,7 @@ async function start() {
     await Promise.all([refreshThemes(), refreshPages()]);
     endpoints.sensors().then((sensors) => store.set({ sensors }), () => {});
     endpoints.pluginPages().then((plugins) => store.set({ plugins }), () => {});
+    loadSetup(); // what the setup of Linux would bring (Start's card, Settings, Ctrl+K)
     startAppPolling();
     registerAppCommands();
     // the theme on the panel, else the default one, else any

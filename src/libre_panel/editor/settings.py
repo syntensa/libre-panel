@@ -614,7 +614,7 @@ class Settings:
         this computer, and how a run of it is going. Only Linux has it."""
         from libre_panel import linux_rights, linux_setup
 
-        if not sys.platform.startswith("linux"):
+        if not linux_setup.supported():
             return {"supported": False}
         return linux_rights.status(linux_setup.gather())
 
@@ -624,7 +624,7 @@ class Settings:
         dialog; the run goes on in the background and ``linux_setup`` tells how it went)."""
         from libre_panel import linux_rights, linux_setup
 
-        if not sys.platform.startswith("linux"):
+        if not linux_setup.supported():
             raise SettingsError("the setup is for Linux", 404)
         if not isinstance(payload, dict) or set(payload) - {"rapl", "remove"}:
             raise SettingsError('expected {"rapl": true} or {"remove": true}')

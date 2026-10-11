@@ -6,6 +6,7 @@
 import { registerProvider } from "../../core/commands.js";
 import { t } from "../../core/i18n.js";
 import { loadSettings } from "../../core/settings.js";
+import { loadSetup } from "../../core/setup.js";
 import { store, useStore } from "../../core/state.js";
 import { loadHardware } from "../../core/hardware.js";
 import { html, useEffect } from "../../lib/preact.js";
@@ -18,6 +19,7 @@ import { Note } from "./parts.js";
 import { registerSettingsGroup, registerSettingsSection, settingsGroups, settingsSections } from "./sections.js";
 import { sensorGroups } from "./sensors.js";
 import { serviceGroups } from "./services.js";
+import { SetupCard, setupShows } from "./setup.js";
 import { systemGroups } from "./system.js";
 import { weatherGroups } from "./weather.js";
 
@@ -71,6 +73,14 @@ for (const [section, groups] of Object.entries({
 }
 
 registerSettingsGroup("sensors", {
+  id: "setup",
+  order: 15, // after the sources, before the rest: it is what mends missing readings
+  component: SetupCard,
+  load: loadSetup,
+  shows: setupShows, // Linux only, and only while it has something to bring or to take out
+});
+
+registerSettingsGroup("sensors", {
   id: "hardware",
   order: 40,
   component: HardwareNames,
@@ -101,7 +111,7 @@ function Upcoming({ section }) {
 }
 
 function SettingsView({ rest }) {
-  useStore((s) => [s.lang, s.hardware]); // the texts follow the language; groups come and go
+  useStore((s) => [s.lang, s.hardware, s.setup]); // the texts follow the language; groups come and go
   const { problem, down } = useStore((s) => ({ problem: s.settingsError, down: s.settingsDown }));
   const sections = settingsSections();
   const current = sections.find((section) => section.id === rest) || sections[0];

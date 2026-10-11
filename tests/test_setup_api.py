@@ -29,7 +29,7 @@ def port():
 def linux(monkeypatch):
     """A Linux desktop whose polkit can be asked, with a PC that has a fan chip to load and
     energy counters nobody may read."""
-    monkeypatch.setattr("libre_panel.editor.settings.sys.platform", "linux")
+    monkeypatch.setattr("libre_panel.linux_setup.supported", lambda: True)
     monkeypatch.setattr(rights, "program", lambda *a, **k: [APPIMAGE])
     monkeypatch.setattr(rights.shutil, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setenv("DISPLAY", ":0")
@@ -50,7 +50,7 @@ def wait_done(port):
 
 
 def test_off_linux_there_is_nothing_to_set_up(port, monkeypatch):
-    monkeypatch.setattr("libre_panel.editor.settings.sys.platform", "win32")
+    monkeypatch.setattr("libre_panel.linux_setup.supported", lambda: False)
     assert request(port, "GET", "/api/setup") == (200, {"supported": False})
     status, data = request(port, "POST", "/api/setup", {})
     assert status == 404 and "Linux" in data["error"]

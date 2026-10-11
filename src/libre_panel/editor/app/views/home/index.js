@@ -16,6 +16,7 @@ import { Icon } from "../../ui/icons.js";
 import { toast } from "../../ui/toast.js";
 import { PanelCard, PanelStrip, panelModelNow, usePanelModel } from "./panel.js";
 import { Gallery, ThemeRow, collectionsOf, fitsPanel, startThemes } from "./themes.js";
+import { SetupCard } from "./setup.js";
 
 // -- what a click does ---------------------------------------------------------------------------
 
@@ -229,6 +230,7 @@ function Launcher() {
       </div>
       <${Routing} />
       <span class="grow"></span>
+      <${SetupCard} />
       <${Hint} />
     </aside>
   </div>`;

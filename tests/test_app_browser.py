@@ -21,6 +21,14 @@ class AppUrl(str):
     token: str | None = None
 
 
+@pytest.fixture(autouse=True)
+def no_setup_card(monkeypatch):
+    """Settings and Start show the card of the Linux setup only in the tests that bring a Linux
+    PC (``linux_pc``). The others see the app as on any other system, whatever this machine is:
+    one without polkit would add a note of its own to the page of the sensors."""
+    monkeypatch.setattr("libre_panel.linux_setup.supported", lambda: False)
+
+
 @pytest.fixture
 def app_url():
     srv = make_server(port=0)
@@ -2645,16 +2653,18 @@ def test_settings_sensors(app_url, isolated_home):
         page.locator(".source-row[data-source='audio'] [role='switch']").click()
         waits_for(page, lambda: "audio" in settings_config().sensors.providers)
         # a source that is switched on goes before psutil, which fills in the rest
-        waits_for(page, lambda: settings_config().sensors.providers == ["load", "audio", "psutil"])
+        usual = default_providers()
+        others = [name for name in usual if name not in ("audio", "psutil")]
+        waits_for(page, lambda: settings_config().sensors.providers == [*others, "audio", "psutil"])
         page.get_by_role("button", name="Ask Fast load later").click()
-        waits_for(page, lambda: settings_config().sensors.providers[:2] == ["audio", "load"])
+        waits_for(page, lambda: settings_config().sensors.providers[:2] == [others[1], "load"])
         page.get_by_role("button", name="Back to the usual").click()
-        waits_for(page, lambda: settings_config().sensors.providers == default_providers())
+        waits_for(page, lambda: settings_config().sensors.providers == usual)
         playwright.expect(page.get_by_role("button", name="Back to the usual")).to_have_count(0)
         # psutil alone would be read as the usual list again (config.py), so that switch is
         # not offered: quick clicks follow each other, and the last one is refused
-        page.locator(".source-row[data-source='audio'] [role='switch']").click()
-        page.locator(".source-row[data-source='demo'] [role='switch']").click()
+        for name in ("audio", "linux", "demo"):
+            page.locator(f".source-row[data-source='{name}'] [role='switch']").click()
         waits_for(page, lambda: settings_config().sensors.providers == ["load", "demo", "psutil"])
         page.locator(".source-row[data-source='demo'] [role='switch']").click()
         waits_for(page, lambda: settings_config().sensors.providers == ["load", "psutil"])
@@ -2674,6 +2684,21 @@ def test_settings_sensors(app_url, isolated_home):
         page.locator(".row-action .link-btn", has_text="Automatic").click()
         waits_for(page, lambda: settings_config().refresh_ms is None)
     assert "refresh_ms = 500" not in (isolated_home / "config.toml").read_text(encoding="utf-8")
+
+
+def test_settings_sensors_names_the_linux_source(app_url, isolated_home):
+    """The source of Linux is called and explained like the others, and is in use only where the
+    usual list has it (on other systems it waits under "Not in use" and says it does not work)."""
+    from libre_panel.config import default_providers
+
+    with browser_page(app_url, "settings/sensors") as page:
+        row = page.locator(".source-row[data-source='linux']")
+        playwright.expect(row).to_contain_text("Linux sensors")
+        playwright.expect(row).to_contain_text("read from the kernel and from NVIDIA's driver")
+        in_use = "linux" in default_providers()
+        assert ("unused" not in (row.get_attribute("class") or "")) is in_use
+        if not in_use:
+            playwright.expect(row).to_contain_text("Not on this system")
 
 
 def test_settings_sensors_of_the_running_app(isolated_home):
@@ -3121,3 +3146,274 @@ def test_without_hardware_names_nothing_shows(app_url):
         assert page.locator(".hardware-name").count() == 0
         assert page.locator("#sensor-sources").is_visible()
         assert page.locator(".settings-upcoming").count() == 0
+
+
+# -- Set up sensors and panel access (Linux) -----------------------------------------------------
+# The server is the real one; the computer is made up (a board with a fan chip to load, a panel
+# the user may not open, energy counters nobody may read) and the password window is a stand-in
+# that records what pkexec is asked to run.
+
+APPIMAGE = "/home/someone/Apps/Libre_Panel-x86_64.AppImage"
+
+
+class Pkexec:
+    """The administrator's rights: ``answer`` is what the run ends with (exit code, standard
+    output, standard error); ``gate`` holds it back while the "password window" is open."""
+
+    def __init__(self, answer=None):
+        import json
+        import threading
+
+        self.asked = []
+        self.gate = threading.Event()
+        self.gate.set()
+        report = {
+            "ok": True,
+            "results": [
+                {
+                    "id": "udev",
+                    "status": "done",
+                    "items": {"/etc/udev/rules.d/60.rules": "written"},
+                },
+                {"id": "modules", "status": "done", "items": {"it87": "none", "nct6775": "loaded"}},
+                {"id": "reload", "status": "done", "items": {}},
+            ],
+        }
+        self.answer = answer or (0, json.dumps(report), "")
+
+    def __call__(self, argv):
+        self.asked.append(tuple(argv))
+        assert self.gate.wait(30)
+        return self.answer
+
+
+@pytest.fixture
+def linux_pc(monkeypatch):
+    """A Linux desktop with polkit, whose setup is not done: ``linux_pc(...)`` changes the facts
+    and the answer; it gives the stand-in for pkexec."""
+    from libre_panel import linux_rights as rights
+    from libre_panel import linux_setup as setup
+
+    def make(answer=None, method=True, **changes):
+        facts = {
+            "dmi": {"board_vendor": "ASUSTeK COMPUTER INC.", "chassis_type": "3"},
+            "available": frozenset({"nct6775", "it87", "drivetemp"}),
+            "tools": {"udevadm": "/usr/bin/udevadm", "chmod": "/usr/bin/chmod"},
+            "files": dict.fromkeys(setup.OWN_FILES),
+            "panel": True,
+            "panel_denied": True,
+            "rapl": ("/sys/class/powercap/intel-rapl:0/energy_uj",),
+            "rapl_closed": ("/sys/class/powercap/intel-rapl:0/energy_uj",),
+            **changes,
+        }
+        computer = setup.Facts(**facts)
+        monkeypatch.setattr(setup, "gather", lambda *args, **kwargs: computer)
+        monkeypatch.setattr("libre_panel.linux_setup.supported", lambda: True)
+        monkeypatch.setattr(rights, "program", lambda *args, **kwargs: [APPIMAGE])
+        monkeypatch.setattr(
+            rights.shutil, "which", lambda name: f"/usr/bin/{name}" if method else None
+        )
+        monkeypatch.setenv("DISPLAY", ":0")
+        pkexec = Pkexec(answer)
+        monkeypatch.setattr(rights, "JOB", rights.Job(pkexec))
+        return pkexec
+
+    return make
+
+
+def start_with_setup(app_url, isolated_home, **kwargs):
+    choose_theme(isolated_home)
+    return browser_page(
+        app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE, **kwargs
+    )
+
+
+def test_start_offers_the_setup_while_something_is_missing(app_url, isolated_home, linux_pc):
+    linux_pc()
+    with start_with_setup(app_url, isolated_home) as page:
+        card = page.locator(".setup-card")
+        expect(card).to_be_visible()
+        text = card.inner_text()
+        assert "Your user may not use the USB panel yet." in text
+        assert "No fan readings: the driver for the chip on the mainboard is not loaded." in text
+        assert "The processor's power cannot be read" in text
+        # what the button does, said exactly
+        assert "A rule for udev lets your user use the TURZX USB panels" in text
+        assert "it tries nct6775" in text and "nothing is forced" in text
+        assert "Linux has kept the energy counters of the processor from everyone but root" in text
+        power = card.get_by_role("switch", name="Let Libre Panel read the processor's power")
+        assert power.get_attribute("aria-checked") == "false"  # off unless turned on
+        expect(card.get_by_role("button", name="Set up")).to_be_enabled()
+
+
+def test_start_stays_quiet_where_nothing_is_missing(app_url, isolated_home, linux_pc):
+    linux_pc(rule_elsewhere=True, dmi={}, panel=False, panel_denied=False, rapl=(), rapl_closed=())
+    with start_with_setup(app_url, isolated_home) as page:
+        page.wait_for_function("window.libre.store.get().setup !== null")
+        assert page.locator(".setup-card").count() == 0
+
+
+def test_another_system_has_no_setup(app_url, isolated_home, linux_pc, monkeypatch):
+    linux_pc()
+    monkeypatch.setattr("libre_panel.linux_setup.supported", lambda: False)
+    with start_with_setup(app_url, isolated_home) as page:
+        page.wait_for_function("window.libre.store.get().setup === false")
+        assert page.locator(".setup-card").count() == 0
+        page.goto(f"{app_url}#/settings/sensors")
+        page.wait_for_selector("#sensor-sources")
+        assert page.locator("#sensor-setup").count() == 0
+
+
+def test_one_click_asks_pkexec_and_tells_how_it_went(app_url, isolated_home, linux_pc):
+    pkexec = linux_pc()
+    with start_with_setup(app_url, isolated_home) as page:
+        page.locator(".setup-card").get_by_role("button", name="Set up").click()
+        waits_for(page, lambda: len(pkexec.asked) == 1)
+        assert pkexec.asked[0] == (
+            "/usr/bin/pkexec",
+            "--disable-internal-agent",
+            APPIMAGE,
+            "system-setup",
+            "--linux",
+            "--json",  # (the energy counters stay closed: they were not asked for)
+        )
+        result = page.locator(".setup-card .setup-result")
+        expect(result).to_contain_text("The rule for the USB panel is installed.")
+        expect(result).to_contain_text("The driver nct6775 is loaded now and at every start.")
+        expect(result).to_contain_text("it87: no such chip on this board.")
+        page.locator(".setup-card").get_by_role("button", name="Close").click()
+        expect(page.locator(".setup-card")).to_have_count(0)
+
+
+def test_the_processors_power_is_asked_for_only_when_its_switch_is_on(
+    app_url, isolated_home, linux_pc
+):
+    pkexec = linux_pc()
+    with start_with_setup(app_url, isolated_home) as page:
+        card = page.locator(".setup-card")
+        card.get_by_role("switch", name="Let Libre Panel read the processor's power").click()
+        card.get_by_role("button", name="Set up").click()
+        waits_for(page, lambda: len(pkexec.asked) == 1)
+        assert pkexec.asked[0][-2:] == ("--rapl", "--json")
+
+
+def test_the_run_shows_that_the_password_is_asked_for(app_url, isolated_home, linux_pc):
+    pkexec = linux_pc()
+    pkexec.gate.clear()  # the password window is open
+    with start_with_setup(app_url, isolated_home) as page:
+        page.locator(".setup-card").get_by_role("button", name="Set up").click()
+        waiting = page.locator(".setup-card .note")
+        expect(waiting).to_contain_text("Your system is asking for the administrator's password")
+        expect(page.locator(".setup-card .btn-primary")).to_be_disabled()
+        assert page.locator(".setup-card .link-btn").is_disabled()  # "Not now" waits too
+        pkexec.gate.set()
+        expect(page.locator(".setup-card .setup-result")).to_be_visible()
+
+
+def test_closing_the_password_window_changes_nothing(app_url, isolated_home, linux_pc):
+    pkexec = linux_pc(answer=(126, "", "Error executing command as another user: Not authorized"))
+    with start_with_setup(app_url, isolated_home) as page:
+        page.locator(".setup-card").get_by_role("button", name="Set up").click()
+        expect(page.locator(".setup-card")).to_contain_text("Cancelled. Nothing was changed.")
+        expect(
+            page.locator(".setup-card .btn-primary")
+        ).to_be_enabled()  # and it can be tried again
+        assert len(pkexec.asked) == 1
+
+
+def test_not_now_keeps_the_card_away_until_something_else_is_missing(
+    app_url, isolated_home, linux_pc
+):
+    linux_pc()
+    with start_with_setup(app_url, isolated_home) as page:
+        page.locator(".setup-card").get_by_role("button", name="Not now").click()
+        expect(page.locator(".setup-card")).to_have_count(0)
+        assert js(page, "localStorage.getItem('libre-panel-setup-dismissed')") == "usb,fans,power"
+        page.goto(f"{app_url}#/settings/sensors")  # Settings has it all the same
+        expect(page.locator("#sensor-setup")).to_be_visible()
+
+
+def test_without_a_way_to_ask_the_terminal_command_is_all_there_is(
+    app_url, isolated_home, linux_pc
+):
+    pkexec = linux_pc(method=False)
+    with start_with_setup(app_url, isolated_home) as page:
+        card = page.locator(".setup-card")
+        expect(card.get_by_role("button", name="Set up")).to_be_disabled()
+        expect(card).to_contain_text("This system cannot show a password window from here")
+        command = card.locator(".command")
+        assert command.inner_text() == f"sudo {APPIMAGE} system-setup --linux"
+        assert pkexec.asked == []
+
+
+def test_settings_sensors_has_the_setup_beside_the_sources(app_url, linux_pc):
+    pkexec = linux_pc()
+    with browser_page(app_url, "settings/sensors") as page:
+        card = page.locator("#sensor-setup")
+        expect(card).to_be_visible()
+        assert page.locator(".settings-card").evaluate_all("cards => cards.map((c) => c.id)")[
+            :2
+        ] == [
+            "sensor-sources",
+            "sensor-setup",
+        ]
+        expect(card.locator("h2")).to_have_text("Set up sensors and panel access")
+        assert "Nothing else is changed" in card.inner_text()
+        card.locator("summary", has_text="Or in a terminal").click()  # always there, never needed
+        expect(card.locator(".command")).to_have_text(f"sudo {APPIMAGE} system-setup --linux")
+        card.get_by_role("button", name="Set up").click()
+        waits_for(page, lambda: len(pkexec.asked) == 1)
+        expect(card.locator(".setup-result")).to_be_visible()
+        assert card.get_by_role("button", name="Remove again").count() == 0  # nothing of ours yet
+
+
+def test_what_the_setup_put_in_can_be_taken_out_again(app_url, linux_pc):
+    from libre_panel import linux_setup as setup
+
+    own = {path: "x\n" for path in setup.OWN_FILES}
+    pkexec = linux_pc(files=own, rule_elsewhere=True, dmi={}, rapl_closed=())
+    with browser_page(app_url, "settings/sensors") as page:
+        card = page.locator("#sensor-setup")
+        # the counters are open, as the setup left them: the switch says so, and it can close them
+        power = card.get_by_role("switch", name="Let Libre Panel read the processor's power")
+        assert power.get_attribute("aria-checked") == "true"
+        power.click()
+        card.get_by_role("button", name="Set up").click()
+        waits_for(page, lambda: len(pkexec.asked) == 1)
+        assert pkexec.asked[0][-2:] == ("--no-rapl", "--json")
+        card.get_by_role("button", name="Remove again").click()
+        waits_for(page, lambda: len(pkexec.asked) == 2)
+        assert pkexec.asked[1][-2:] == ("--remove", "--json")
+
+
+def test_settings_say_nothing_where_there_is_nothing_to_set_up(app_url, linux_pc):
+    linux_pc(rule_elsewhere=True, dmi={}, panel=False, panel_denied=False, rapl=(), rapl_closed=())
+    with browser_page(app_url, "settings/sensors") as page:
+        page.wait_for_function("window.libre.store.get().setup !== null")
+        assert page.locator("#sensor-setup").count() == 0
+        assert page.locator("#sensor-sources").is_visible()
+
+
+def test_the_setup_speaks_german(app_url, isolated_home, linux_pc):
+    from libre_panel import i18n
+
+    linux_pc()
+    i18n.set_language("de")
+    with browser_page(app_url, "settings/sensors") as page:
+        card = page.locator("#sensor-setup")
+        expect(card.locator("h2")).to_have_text("Sensoren und Panel-Zugriff einrichten")
+        expect(card.get_by_role("button", name="Einrichten")).to_be_visible()
+        assert "Das USB-Panel benutzen" in card.inner_text()
+        assert "Lüfter und Temperaturen des Mainboards" in card.inner_text()
+        assert "Oder in einem Terminal" in card.inner_text()
+
+
+def test_the_palette_finds_the_setup(app_url, linux_pc):
+    linux_pc()
+    with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
+        page.wait_for_function("window.libre.store.get().setup")
+        found = js(
+            page,
+            "window.libre.commands.availableCommands().map((c) => c.id).includes('setup.open')",
+        )
+        assert found is True

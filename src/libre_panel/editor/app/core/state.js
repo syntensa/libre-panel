@@ -50,6 +50,7 @@ export const store = createStore({
   aboutInfo: null, // Settings: version, licence, notices, folders
   sourceStates: null, // Settings: what the running app says of its sensor sources
   serviceStates: null, // Settings: the services and their states
+  setup: null, // Start and Settings: the one-click setup of Linux (core/setup.js); false: none here
   prefs: {
     snap: 4, // px: 1, 4, 8 or 16; 0 = off
     guides: true,

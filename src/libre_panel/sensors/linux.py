@@ -472,7 +472,7 @@ class LinuxProvider(SensorProvider):
             "temperatures": sum(1 for i in plan.items if i.channel.kind == "temp"),
             "fans": sum(1 for i in plan.items if i.channel.kind == "fan"),
             "graphics": plan.card.driver if plan.card is not None else None,
-            "nvml": bool(plan.nvidia) or None,
+            "nvidia driver": "NVML" if plan.nvidia else None,
             "cpu power": power,
         }
 
