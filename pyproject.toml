@@ -61,6 +61,7 @@ libre-panel = "libre_panel.cli:main"
 # touching the core, e.g. an optional fan-analysis plugin.
 [project.entry-points."libre_panel.sensors"]
 psutil = "libre_panel.sensors.psutil_provider:PsutilProvider"
+linux = "libre_panel.sensors.linux:LinuxProvider"
 librehardwaremonitor = "libre_panel.sensors.librehardwaremonitor:LibreHardwareMonitorProvider"
 load = "libre_panel.sensors.load:LoadProvider"
 audio = "libre_panel.sensors.audio:AudioProvider"

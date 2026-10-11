@@ -2,6 +2,7 @@ import itertools
 import os
 import sys
 import textwrap
+from pathlib import Path
 
 import pytest
 
@@ -91,6 +92,14 @@ def no_usb_panel(monkeypatch):
     from libre_panel.devices import turzx_usb
 
     monkeypatch.setattr(turzx_usb.UsbTransport, "present", staticmethod(lambda pid: False))
+
+
+@pytest.fixture(autouse=True)
+def no_machine_sensors(monkeypatch):
+    """The Linux sensor source reads the folder a test lays out, not this machine's /sys."""
+    from libre_panel.sensors import linux
+
+    monkeypatch.setattr(linux, "ROOT", Path("/no/such/root"))
 
 
 class NoTasks:

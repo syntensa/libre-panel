@@ -31,7 +31,7 @@ import re
 import sys
 import threading
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -92,6 +92,7 @@ class Adapter:
     name: str
     memory: int = 0  # bytes of its own; 0: not told
     discrete: bool = False  # known to be a card of its own where its memory is not told
+    slot: str = field(default="", compare=False)  # its PCI address (Linux): where its sensors are
 
 
 @dataclass(frozen=True)
@@ -330,7 +331,7 @@ def linux_adapters(
         name = name or pci_name(pci_ids, vendor, product)
         if name:
             memory = _number(device / "mem_info_vram_total") or 0  # amdgpu tells it
-            adapters.append(Adapter(name, memory, vendor == _NVIDIA_VENDOR))
+            adapters.append(Adapter(name, memory, vendor == _NVIDIA_VENDOR, _slot(device)))
     return adapters
 
 

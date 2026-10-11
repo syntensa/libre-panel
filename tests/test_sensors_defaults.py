@@ -27,7 +27,7 @@ from libre_panel.sensors.base import Reading, SensorHub, SensorProvider
 LHM_TREE = json.loads((Path(__file__).parent / "data" / "lhm_data.json").read_text("utf-8"))
 URL = "http://127.0.0.1:8085/data.json"
 WINDOWS = ["load", "audio", "librehardwaremonitor", "psutil"]
-LINUX = ["load", "audio", "psutil"]
+LINUX = ["load", "audio", "linux", "psutil"]
 ELSEWHERE = ["load", "psutil"]  # no way to read the volume there
 
 
@@ -83,7 +83,7 @@ def test_the_generated_config_tells_what_the_volume_source_is():
     words = " ".join(line.removeprefix("# ") for line in text.splitlines())
     assert "audio (the volume and mute of the default output: Windows, Linux with wpctl" in words
     assert "load and audio work only while a theme or a service shows their readings" in words
-    assert '\nproviders = ["load", "audio", "psutil"]\n' in text
+    assert f"\nproviders = {json.dumps(LINUX)}\n" in text
 
 
 def test_the_written_config_file_has_the_list(isolated_home):
@@ -129,6 +129,54 @@ def test_psutil_alone_as_0_4_wrote_it_means_todays_default(monkeypatch, platform
     monkeypatch.setattr("libre_panel.config.sys.platform", platform)
     old = default_config_toml().replace(json.dumps(default_providers()), '["psutil"]')
     assert parse_config(tomllib.loads(old)).sensors.providers == expected
+
+
+def test_the_list_0_5_wrote_before_linux_had_a_source_means_todays_default_there_only(
+    monkeypatch,
+):
+    """A config.toml of a 0.5 build before the Linux source named ``load``, ``audio`` and
+    ``psutil``: the default then, as 0.4's ``psutil`` was. Elsewhere that list is a choice."""
+    earlier = {"sensors": {"providers": ["load", "audio", "psutil"]}}
+    monkeypatch.setattr("libre_panel.config.sys.platform", "linux")
+    assert parse_config(earlier).sensors.providers == LINUX
+    monkeypatch.setattr("libre_panel.config.sys.platform", "win32")
+    assert parse_config(earlier).sensors.providers == ["load", "audio", "psutil"]
+    monkeypatch.setattr("libre_panel.config.sys.platform", "linux")
+    other = {"sensors": {"providers": ["audio", "load", "psutil"]}}
+    assert parse_config(other).sensors.providers == ["audio", "load", "psutil"]
+
+
+def test_psutil_leaves_the_kernels_chips_to_the_linux_source_when_that_runs(monkeypatch):
+    def hub_of(providers):
+        config = Config()
+        config.sensors.providers = providers
+        return build_hub(config)
+
+    hub = hub_of(["linux", "psutil"])
+    try:
+        assert next(p for p in hub.providers if p.name == "psutil").hwmon is False
+    finally:
+        hub.close()
+    hub = hub_of(["psutil"])
+    try:
+        assert next(p for p in hub.providers if p.name == "psutil").hwmon is True
+    finally:
+        hub.close()
+
+    real = base.create_provider
+
+    def without_linux(name, options=None):
+        if name == "linux":
+            raise RuntimeError("it did not start")
+        return real(name, options)
+
+    monkeypatch.setattr("libre_panel.app.create_provider", without_linux)
+    hub = hub_of(["linux", "psutil"])  # a source that did not start reads nothing: psutil does
+    try:
+        assert [p.name for p in hub.providers][:1] == ["psutil"]
+        assert hub.providers[0].hwmon is True
+    finally:
+        hub.close()
 
 
 def test_the_hub_of_a_default_config_starts_with_the_default_sources():

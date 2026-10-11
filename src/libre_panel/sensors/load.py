@@ -8,11 +8,13 @@ every frame (``every_frame``). Put it before the other sources in
 
 - ``cpu.load``: on Windows ``GetSystemTimes`` (idle time against total time
   between two samples, about 60 µs a sample), elsewhere ``psutil.cpu_percent``.
-- ``gpu.load`` (Windows only, any vendor): the performance counters that Task
+- ``gpu.load`` (Windows, any vendor): the performance counters that Task
   Manager shows, read through PDH. There is one 3D engine counter per process
   and engine; they are summed per engine, and the card's load is its busiest
   engine. The card is the one with the most dedicated memory in use (the
   discrete one, even when idle), chosen again every minute.
+- ``gpu.load`` (Linux): AMD's own counter in sysfs (``gpu_busy_percent``) and NVIDIA's
+  library (NVML), for the card ``gpu.name`` names. Intel's drivers tell no load.
 
 The thread runs only while a theme on show reads one of the keys, and ends
 when the provider closes. Where a source cannot measure (no counters, a
@@ -28,8 +30,10 @@ import sys
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, Protocol
 
+from libre_panel.sensors import gpus, nvml
 from libre_panel.sensors.base import Reading, SensorProvider, wanted
 
 log = logging.getLogger(__name__)
@@ -231,6 +235,46 @@ class _PdhGpu:
             self._query = None
 
 
+class _LinuxGpu:
+    """The load of the graphics card in use: AMD's counter, or NVIDIA's library for the card.
+    A card that is powered down (a laptop's second one) is not asked: that would switch it on."""
+
+    def __init__(self, card: gpus.Card, device: nvml.Device | None = None) -> None:
+        self._card = card
+        self._device = device
+
+    def read(self) -> float | None:
+        if gpus.suspended(self._card):
+            return None
+        if self._device is not None:
+            return self._device.utilization()
+        return gpus.busy_percent(self._card)
+
+    def close(self) -> None:
+        pass
+
+
+def _linux_gpu(root: Path = Path("/"), prefer: str = "") -> _Sampler | None:
+    """The sampler for the card ``gpu.name`` names (``prefer``: a part of the name picks
+    another), or None where no card tells its load: Intel's, the open drivers, a PC without."""
+    from libre_panel.sensors import hardware
+
+    cards = gpus.find_cards(root)
+    card = gpus.primary(cards, hardware.scan().adapters, prefer)
+    if card is None or gpus.suspended(card):
+        return None
+    if card.vendor == gpus.NVIDIA and card.driver == "nvidia":
+        library = nvml.shared()
+        device = None
+        if library is not None:
+            device = library.by_slot(card.slot) if card.slot else None
+            device = device or library.by_index(0)
+        return None if device is None else _LinuxGpu(card, device)
+    if card.driver == "amdgpu" and (card.device / "gpu_busy_percent").exists():
+        return _LinuxGpu(card)
+    return None
+
+
 def _cpu_sampler(platform: str = sys.platform) -> _Sampler:
     """The CPU sampler of this machine; raises if it has none."""
     if platform == "win32":
@@ -254,16 +298,20 @@ def _load_pdh() -> Any:
     return pdh
 
 
-def _gpu_sampler(platform: str = sys.platform) -> _Sampler | None:
-    """The GPU sampler of this machine. None where it cannot have one (only Windows
-    has the counters); raises where it should and does not (no counters yet)."""
+def _gpu_sampler(platform: str = sys.platform, prefer: str = "") -> _Sampler | None:
+    """The GPU sampler of this machine. None where it cannot have one (macOS, a Linux card
+    that tells no load); raises where it should and does not (Windows: no counters yet)."""
+    if platform.startswith("linux"):
+        return _linux_gpu(prefer=prefer)
     if platform != "win32":
         return None
     return _PdhGpu(_load_pdh())
 
 
-def _open(key: str) -> _Sampler | None:
-    return _cpu_sampler() if key == "cpu.load" else _gpu_sampler()
+def _open(key: str, prefer: str = "") -> _Sampler | None:
+    if key == "cpu.load":
+        return _cpu_sampler()
+    return _gpu_sampler(prefer=prefer) if prefer else _gpu_sampler()
 
 
 def _measure(sampler: _Sampler) -> float | None:
@@ -293,6 +341,20 @@ class LoadProvider(SensorProvider):
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        self._prefer = ""  # a part of the name of the graphics card to measure (Linux)
+        self._chose_again = threading.Event()  # the card to measure was changed
+
+    def follow_config(self, config: Any) -> None:
+        """The card the ``gpu.*`` readings come from is the one ``[sensors.linux] gpu`` (or, as
+        everywhere, ``[sensors.librehardwaremonitor] gpu``) names; the load is that card's."""
+        tables = config.sensors.options
+        prefer = ""
+        for table in ("linux", "librehardwaremonitor"):
+            found = tables.get(table, {}).get("gpu")
+            prefer = prefer or (found.strip() if isinstance(found, str) else "")
+        if prefer != self._prefer:
+            self._prefer = prefer
+            self._chose_again.set()
 
     def _start(self) -> None:
         with self._lock:
@@ -308,7 +370,7 @@ class LoadProvider(SensorProvider):
     def _make(self, key: str) -> _Sampler | None:
         """A new sampler for ``key``; None if this machine has none (said once)."""
         try:
-            return _open(key)
+            return _open(key, self._prefer) if key == "gpu.load" else _open(key)
         except Exception as exc:  # noqa: BLE001 - never raise
             what = _NO_SAMPLER[key]
             if key in self._said:
@@ -330,6 +392,12 @@ class LoadProvider(SensorProvider):
                     looked = now
                 elif now - looked > IDLE_SECONDS:
                     return
+                if self._chose_again.is_set():  # another card is to be measured
+                    self._chose_again.clear()
+                    gone = samplers.pop("gpu.load", None)
+                    retry_at.pop("gpu.load", None)
+                    if gone is not None:
+                        gone.close()
                 for key in shown:
                     if now < retry_at.get(key, 0.0):
                         continue

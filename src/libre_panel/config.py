@@ -74,11 +74,12 @@ port = ""
 # Sensor sources, queried in this order: for each reading the first source that
 # has one wins. Available: load (CPU and GPU load ten times a second), audio (the
 # volume and mute of the default output: Windows, Linux with wpctl or pactl),
-# psutil, librehardwaremonitor (Windows: GPU, temperatures, power, fans),
-# calendar, homeassistant, mqtt, presentmon, demo, plus any installed sensor
-# plugin (see the configuration guide for their settings). load and audio work
-# only while a theme or a service shows their readings. The sun, the moon and
-# what is playing come by themselves.
+# psutil, librehardwaremonitor (Windows: GPU, temperatures, power, fans), linux
+# (Linux: temperatures, fans, power and the graphics card, read from the kernel
+# and NVIDIA's driver), calendar, homeassistant, mqtt, presentmon, demo, plus any
+# installed sensor plugin (see the configuration guide for their settings). load
+# and audio work only while a theme or a service shows their readings. The sun,
+# the moon and what is playing come by themselves.
 providers = @PROVIDERS@
 
 [sensors.librehardwaremonitor]
@@ -99,6 +100,13 @@ url = "http://127.0.0.1:8085/data.json"
 # Without an answer for this many seconds its readings disappear ("--" on the
 # panel) instead of staying as they were; 0 keeps the last ones.
 # stale_seconds = 5
+
+[sensors.linux]
+# Linux: with several graphics cards, the one whose name has this in it gives the gpu.*
+# readings ("RX 7900", "RTX 4070"); by default the one gpu.name names. Libre Panel reads
+# NVIDIA cards through the driver's library (NVML); "off" never loads it.
+# gpu = ""
+# nvidia = "auto"
 
 [sensors.psutil]
 # What a theme's ping connects to (host:port); only while a theme shows the ping.
@@ -133,13 +141,16 @@ def default_providers(platform: str | None = None) -> list[str]:
     load source; the volume where it can be read (Windows, and Linux through ``wpctl`` or
     ``pactl``; it reads only while a theme or a service shows it); on Windows
     LibreHardwareMonitor, which alone has the GPU, temperatures, power and fans there (and
-    costs nothing while it is not running); psutil."""
+    costs nothing while it is not running), on Linux ``linux``, which reads them from the
+    kernel and NVIDIA's driver; psutil."""
     where = platform or sys.platform
     sources = ["load"]
     if where == "win32" or where.startswith("linux"):
         sources.append("audio")
     if where == "win32":
         sources.append("librehardwaremonitor")
+    elif where.startswith("linux"):
+        sources.append("linux")
     return [*sources, "psutil"]
 
 
@@ -153,6 +164,8 @@ DEFAULT_CONFIG_TOML = default_config_toml()
 # What every config.toml written up to 0.4 named: the default then, not a choice,
 # so it means today's default (a Windows panel gets its GPU and temperatures).
 _OLD_DEFAULT_PROVIDERS = ["psutil"]
+# ... and what the builds of 0.5 wrote on Linux before it had a source of its own.
+_EARLIER_LINUX_PROVIDERS = ["load", "audio", "psutil"]
 
 
 class ConfigError(ValueError):
@@ -356,7 +369,9 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     sensors = dict(_expect(data.get("sensors", {}), dict, "sensors"))
     providers = _expect(sensors.pop("providers", cfg.sensors.providers), list, "sensors.providers")
     cfg.sensors.providers = [_expect(p, str, "sensors.providers[]") for p in providers]
-    if cfg.sensors.providers == _OLD_DEFAULT_PROVIDERS:
+    if cfg.sensors.providers == _OLD_DEFAULT_PROVIDERS or (
+        sys.platform.startswith("linux") and cfg.sensors.providers == _EARLIER_LINUX_PROVIDERS
+    ):
         cfg.sensors.providers = default_providers()
     cfg.sensors.options = {k: v for k, v in sensors.items() if isinstance(v, dict)}
 
