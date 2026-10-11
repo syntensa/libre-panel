@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from fake_sensors import FakeSource, Scripted, wait_for
 
-from libre_panel import cli, config, doctor
+from libre_panel import cli, config, doctor, linux_setup
 from libre_panel.app import build_hub
 from libre_panel.config import (
     Config,
@@ -287,6 +287,26 @@ def test_the_note_knows_the_address_in_the_config_and_a_listed_source(
     assert "http://nas:8085/data.json" in note and "Add " not in note  # it is listed
 
 
+def test_sensors_says_on_linux_what_the_setup_brings_and_how(
+    isolated_home, quick_sensors, monkeypatch, capsys
+):
+    path = write_providers(isolated_home, ["fixed"])
+    monkeypatch.setattr(
+        "libre_panel.app.build_hub",
+        lambda config, demo=False: SensorHub([Fixed({"cpu.load": 5.0})]),
+    )
+    monkeypatch.setattr(cli, "_platform", lambda: "linux")
+    needs = linux_setup.Facts(
+        panel=True, panel_denied=True, files=dict.fromkeys(linux_setup.OWN_FILES)
+    )
+    monkeypatch.setattr(linux_setup, "gather", lambda *args, **kwargs: needs)
+    assert cli.main(["--config", str(path), "sensors"]) == 0
+    captured = capsys.readouterr()
+    assert "cpu.load" in captured.out and "note:" not in captured.out
+    assert "note: Your user may not use the USB panel yet. This mends it: sudo " in captured.err
+    assert "system-setup --linux" in captured.err
+
+
 @pytest.mark.parametrize(
     ("platform", "values", "demo"),
     [
@@ -323,6 +343,22 @@ def fetch_of(answer):
 def test_doctor_says_nothing_about_sensors_where_psutil_has_them(isolated_home):
     assert doctor.sensors_check(None, "linux") is None
     assert doctor.sensors_check(None, "linux", fetch_of(OSError("never asked"))) is None
+
+
+def test_doctor_says_on_linux_what_the_setup_would_bring(isolated_home, monkeypatch):
+    needs = linux_setup.Facts(
+        dmi={"board_vendor": "ASUSTeK COMPUTER INC.", "chassis_type": "3"},
+        available=frozenset({"nct6775"}),
+        panel=True,
+        panel_denied=True,
+        files=dict.fromkeys(linux_setup.OWN_FILES),
+    )
+    monkeypatch.setattr(linux_setup, "gather", lambda *args, **kwargs: needs)
+    result, said = doctor.sensors_check(None, "linux")
+    assert result == "info"
+    assert "may not use the USB panel" in said and "fan and temperature chip" in said
+    assert said.endswith("libre-panel system-setup --linux")
+    assert "ASUS" not in said  # (a report goes into a public issue: no names of the PC)
 
 
 def test_doctor_says_plainly_that_librehardwaremonitor_does_not_answer(isolated_home):

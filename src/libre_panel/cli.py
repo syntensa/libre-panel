@@ -430,9 +430,10 @@ def _cmd_sensors(args: argparse.Namespace) -> int:
     hub = build_hub(config, demo=args.demo)
     # Some sources read only while a theme shows their keys. Ask for those that cost
     # nothing (not the ping or the game frame rate), as a theme would, so they are listed;
-    # "lhm:*" is every sensor of LibreHardwareMonitor.
+    # "lhm:*" is every sensor of LibreHardwareMonitor, "temp.*" the SATA drives of Linux (a drive
+    # in standby may wake when it is read, so they are read only while something shows them).
     reader = _Reader()
-    want(reader, {"cpu.load", "gpu.load", "audio.*", "lhm:*"})
+    want(reader, {"cpu.load", "gpu.load", "audio.*", "lhm:*", "temp.*"})
     try:
         hub.snapshot()
         time.sleep(SENSORS_SETTLE_SECONDS)  # rate counters and pollers need time
@@ -448,9 +449,20 @@ def _cmd_sensors(args: argparse.Namespace) -> int:
     if not args.demo:
         url = config.sensors.options.get("librehardwaremonitor", {}).get("url", DEFAULT_URL)
         hint = hardware_hint(snapshot.readings, config.sensors.providers, url, _platform(), status)
+        if not hint and _platform().startswith("linux"):
+            hint = _linux_hint()
         if hint:
             print(f"\nnote: {hint}", file=sys.stderr)
     return 0
+
+
+def _linux_hint() -> str:
+    """What is missing on Linux that ``system-setup --linux`` brings, in a sentence and with
+    the command that does it; empty when nothing is."""
+    from libre_panel import linux_rights, linux_setup
+
+    command = linux_rights.terminal_command(linux_setup.Options(), linux_rights.program())
+    return linux_setup.hint(linux_setup.gather(), command)
 
 
 def _cmd_models(args: argparse.Namespace) -> int:
