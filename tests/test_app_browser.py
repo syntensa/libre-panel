@@ -2010,9 +2010,15 @@ def test_every_handle_of_a_module_resizes_it_one_cell_further_out(page):
         start = (handle["x"] + handle["width"] / 2, handle["y"] + handle["height"] / 2)
         beyond_col = col + cols if "e" in edge else col - 1 if "w" in edge else None
         beyond_row = row + rows if "s" in edge else row - 1 if "n" in edge else None
+        # three quarters into the cell beyond: its middle is exactly half a cell from the edge,
+        # where rounding the pointer's way into cells could go either way
+        step_x = cell_center(page, 1, 0)[0] - cell_center(page, 0, 0)[0]
+        step_y = cell_center(page, 0, 1)[1] - cell_center(page, 0, 0)[1]
+        out_x = step_x / 4 if "e" in edge else -step_x / 4
+        out_y = step_y / 4 if "s" in edge else -step_y / 4
         end = (
-            cell_center(page, beyond_col, row)[0] if beyond_col is not None else start[0],
-            cell_center(page, col, beyond_row)[1] if beyond_row is not None else start[1],
+            cell_center(page, beyond_col, row)[0] + out_x if beyond_col is not None else start[0],
+            cell_center(page, col, beyond_row)[1] + out_y if beyond_row is not None else start[1],
         )
         drag(page, start, end, steps=6)
         page.wait_for_function(f"({cells}).join() === {expected!r}.join()", timeout=5000)
