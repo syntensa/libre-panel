@@ -12,7 +12,8 @@
   `audio.muted` of the default output, read on every frame so a volume bar
   follows the volume keys at once. Windows (no extra program; it follows a
   changed default device) and Linux (`wpctl` or `pactl`). It runs only
-  while a theme shows `audio.*`; add `"audio"` to `[sensors] providers`
+  while a theme or a service shows `audio.*`, and is in the default
+  `[sensors] providers` on both; in a list of your own add `"audio"`
 - Messages in the look of SPUR II: the band (`"toast": {"style": "band"}`,
   or *Theme → Messages* in the editor). A glowing edge ignites from the
   centre and the band rolls down from it, with a title, a cover or icon and
@@ -315,8 +316,9 @@
   does nothing
 - Windows: the GPU, temperatures, power and fans showed nothing unless
   `librehardwaremonitor` was listed in `config.toml`. New configurations now
-  start with `providers = ["load", "librehardwaremonitor", "psutil"]` (elsewhere
-  `["load", "psutil"]`), and an unset list means the same. Where Libre Panel
+  start with `providers = ["load", "audio", "librehardwaremonitor", "psutil"]`
+  (on Linux `["load", "audio", "psutil"]`, elsewhere `["load", "psutil"]`), and
+  an unset list means the same. Where Libre Panel
   cannot read LibreHardwareMonitor itself (see above), that one must run as
   administrator with *Options → Remote Web Server → Run*; where it does not run,
   asking costs nothing (one second at most, waits that grow to half a minute,

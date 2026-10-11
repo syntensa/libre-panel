@@ -64,11 +64,13 @@ port = ""
 
 [sensors]
 # Sensor sources, queried in this order: for each reading the first source that
-# has one wins. Available: load (CPU and GPU load ten times a second), psutil,
-# librehardwaremonitor (Windows: GPU, temperatures, power, fans), audio (the
-# volume), calendar, homeassistant, mqtt, presentmon, demo, plus any installed
-# sensor plugin (see the configuration guide for their settings). The sun, the
-# moon and what is playing come by themselves.
+# has one wins. Available: load (CPU and GPU load ten times a second), audio (the
+# volume and mute of the default output: Windows, Linux with wpctl or pactl),
+# psutil, librehardwaremonitor (Windows: GPU, temperatures, power, fans),
+# calendar, homeassistant, mqtt, presentmon, demo, plus any installed sensor
+# plugin (see the configuration guide for their settings). load and audio work
+# only while a theme or a service shows their readings. The sun, the moon and
+# what is playing come by themselves.
 providers = @PROVIDERS@
 
 [sensors.librehardwaremonitor]
@@ -109,11 +111,17 @@ update_minutes = 15
 
 def default_providers(platform: str | None = None) -> list[str]:
     """The sensor sources of a config that names none, in order of priority: the fast
-    load source; on Windows LibreHardwareMonitor, which alone has the GPU, temperatures,
-    power and fans there (and costs nothing while it is not running); psutil."""
-    if (platform or sys.platform) == "win32":
-        return ["load", "librehardwaremonitor", "psutil"]
-    return ["load", "psutil"]
+    load source; the volume where it can be read (Windows, and Linux through ``wpctl`` or
+    ``pactl``; it reads only while a theme or a service shows it); on Windows
+    LibreHardwareMonitor, which alone has the GPU, temperatures, power and fans there (and
+    costs nothing while it is not running); psutil."""
+    where = platform or sys.platform
+    sources = ["load"]
+    if where == "win32" or where.startswith("linux"):
+        sources.append("audio")
+    if where == "win32":
+        sources.append("librehardwaremonitor")
+    return [*sources, "psutil"]
 
 
 def default_config_toml(platform: str | None = None) -> str:
