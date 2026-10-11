@@ -1,17 +1,15 @@
-// The one-click setup of Linux (`libre-panel system-setup --linux`): what it would bring this
-// computer (/api/setup), and a run of it. `store.get().setup` is the server's answer, null until
-// asked and false where there is nothing to set up (another system, or an app without the
-// route). A run makes the person's system ask for the administrator's password (polkit's own
-// window), which takes as long as the person wants, so the run is polled until it ends.
+// The one-click setup of Linux (`libre-panel system-setup --linux`) in the app. What it would
+// bring this computer, and how a run of it goes, is what /api/unlock tells where the system is
+// Linux (`store.get().unlockInfo`, core/settings.js: the same route and the same polling that
+// Windows' "Unlock all sensors" uses). A run makes the person's system ask for the administrator's
+// password (polkit's own window), which takes as long as the person wants, and is followed until
+// it ends. This file is what only Linux needs besides: the question "Not now" on Start, and the
+// card there that stays to show how a run ended.
 
-import { toastError } from "../ui/toast.js";
-import { get, post } from "./api.js";
-import { pollApp } from "./app.js";
-import { loadSourceStates } from "./settings.js";
+import { loadUnlock, runUnlock } from "./settings.js";
 import { store, useStore } from "./state.js";
 
 const DISMISSED = "libre-panel-setup-dismissed";
-const POLL_MS = 800;
 
 function remembered() {
   try {
@@ -21,20 +19,22 @@ function remembered() {
   }
 }
 
-store.set({ setup: null, setupDismissed: remembered(), setupRan: false });
+store.set({ setupDismissed: remembered(), setupRan: false });
 
-/** Ask what the setup would bring this computer (again); resolves to `store.get().setup`. */
-export async function loadSetup() {
-  try {
-    const setup = await get("/api/setup");
-    store.set({ setup: setup.supported ? setup : false });
-  } catch {
-    store.set({ setup: false }); // an older background app, or no answer: nothing to offer
-  }
-  return store.get().setup;
-}
+/**
+ * The setup of Linux out of what /api/unlock told: the answer where the system is Linux (it has
+ * `offers`), null until it was asked and false where it is another system (Windows has a card of
+ * its own).
+ */
+export const linuxSetup = (info) => {
+  if (info === null || info === undefined) return null;
+  return info.platform === "linux" && Array.isArray(info.offers) ? info : false;
+};
 
-export const useSetup = () => useStore((s) => s.setup);
+export const useSetup = () => useStore((s) => linuxSetup(s.unlockInfo));
+
+/** Ask what the setup would bring this computer (again). */
+export const loadSetup = () => loadUnlock().then((info) => linuxSetup(info));
 
 /** What is missing now that the setup brings: the ids of the offers that are `needed`. */
 export const setupNeeds = (setup) => (setup ? setup.offers.filter((offer) => offer.needed).map((offer) => offer.id) : []);
@@ -53,36 +53,14 @@ export function dismissSetup(needs) {
 /** The card on Start has shown a run, and stays until it is closed. */
 export const closeSetupRun = () => store.set({ setupRan: false });
 
-const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 /**
  * Ask for the rights and set it up: `{rapl: true}` opens the energy counters, `{rapl: false}`
- * closes them, `{remove: true}` takes the setup out. Resolves to how the run ended: "done",
- * "failed", "cancelled" (the password window was closed), "unavailable" (there is none), or
- * "refused" (the server would not start it; the person is told why).
+ * closes them, `{remove: true}` takes the setup out. Resolves to whether the run was started (the
+ * server may refuse it, and the person is told why); how it ends is in `job` of the setup.
  */
 export async function runSetup(options = {}) {
-  try {
-    const started = await post("/api/setup", options);
-    store.set({ setup: started, setupRan: true });
-  } catch (error) {
-    toastError(error);
-    return "refused";
-  }
-  let setup = store.get().setup;
-  while (setup && setup.job.state === "running") {
-    await pause(POLL_MS);
-    setup = await loadSetup();
-  }
-  const state = setup ? setup.job.state : "failed";
-  if (state === "done") {
-    // the chips the drivers brought are found by the next rescan of the sensors: a few seconds
-    loadSourceStates();
-    pollApp();
-    setTimeout(() => {
-      loadSourceStates();
-      pollApp();
-    }, 4000);
-  }
-  return state;
+  store.set({ setupRan: true });
+  const started = options.remove ? await runUnlock("remove") : await runUnlock("unlock", { rapl: options.rapl ?? null });
+  if (!started) store.set({ setupRan: false });
+  return started;
 }

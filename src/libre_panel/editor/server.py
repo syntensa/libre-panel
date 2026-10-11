@@ -154,14 +154,15 @@ _MODE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 _SETTINGS_GET = {
     "/api/settings": "read",
     "/api/panel": "panel",
+    "/api/clip": "clip_question",
     "/api/system": "system",
+    "/api/unlock": "unlock",
     "/api/about": "about",
-    "/api/setup": "linux_setup",
 }
 _SETTINGS_POST = {
     "/api/settings": "write",
     "/api/system": "set_system",
-    "/api/setup": "run_linux_setup",
+    "/api/unlock": "set_unlock",
     "/api/location": "search_place",
     "/api/open": "open_folder",
 }

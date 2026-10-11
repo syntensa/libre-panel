@@ -753,6 +753,13 @@ def run_cli(
     if not supported():
         print(t("This setup is for Linux."), file=err)
         return 2
+    if getattr(args, "status", False):  # what the app shows: no rights needed
+        from libre_panel import linux_rights
+
+        found = linux_rights.status(gather() if facts is None else facts)
+        found.pop("job", None)  # a run belongs to the app that started it
+        print(json.dumps(found, indent=2), file=out)
+        return 0
     options = Options(
         rapl=True if args.rapl else False if args.no_rapl else None, remove=args.remove
     )

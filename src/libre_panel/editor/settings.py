@@ -305,6 +305,7 @@ class Settings:
                     "mode": video.mode,
                     "fps": video.fps,
                     "local_clip": video.local_clip,
+                    "clip_asked": video.clip_asked,
                     "ffmpeg": video.ffmpeg,
                 },
                 "sensors": {
@@ -519,6 +520,23 @@ class Settings:
             },
         }
 
+    def clip_question(self) -> dict[str, Any]:
+        """Whether Start is to ask for the name of the panel's standby clip, and the name the
+        vendor app keeps it under, which the question offers. Nothing is written by asking: the
+        person's answer is a write of ``video.local_clip`` and ``video.clip_asked``."""
+        from libre_panel.devices import turzx
+        from libre_panel.devices.turzx_usb import present_model
+
+        def on_the_bus() -> Any:
+            try:
+                return present_model()
+            except Exception:  # no USB library is no panel
+                log.debug("looking for a USB panel failed", exc_info=True)
+                return None
+
+        ask = turzx.clip_question(self._config().device, on_the_bus)
+        return {"ask": ask, "name": turzx.VENDOR_CLIP}
+
     @staticmethod
     def _find_panel(config: Config) -> dict[str, Any] | None:
         """A panel on the bus: a TURZX USB one, else a serial one by its USB ids."""
@@ -607,34 +625,64 @@ class Settings:
             raise SettingsError(str(exc), 500) from exc
         return self.system()
 
-    # -- the Linux setup --------------------------------------------------------------------
+    # -- the one-click setup of the system (Windows' sensor service, Linux' rights) -------------
 
-    def linux_setup(self) -> dict[str, Any]:
-        """What the one-click setup of Linux (``libre-panel system-setup --linux``) would bring
-        this computer, and how a run of it is going. Only Linux has it."""
+    def unlock(self) -> dict[str, Any]:
+        """What the setup of this system would bring and how a run of it is going. Windows: the
+        sensor service and what else "Unlock all sensors" sets up (whether this download can,
+        what is in place). Linux: the panel's permission, the mainboard's sensor driver and the
+        processor's power (``libre-panel system-setup --linux``). Both have ``platform``,
+        ``available``, ``command`` and ``job``."""
         from libre_panel import linux_rights, linux_setup
 
-        if not linux_setup.supported():
-            return {"supported": False}
-        return linux_rights.status(linux_setup.gather())
+        if linux_setup.supported():
+            return linux_rights.status(linux_setup.gather())
+        from libre_panel.sensorservice import setup
 
-    def run_linux_setup(self, payload: Any) -> dict[str, Any]:
-        """``{"rapl": true}`` (or false to close the energy counters again, or null) and
-        ``{"remove": true}``: ask for the administrator's rights (pkexec shows the password
-        dialog; the run goes on in the background and ``linux_setup`` tells how it went)."""
+        return {
+            **setup.unlock_state(),
+            "command": cli_command("system-setup --service --pawnio --perf-log-users"),
+        }
+
+    def set_unlock(self, payload: Any) -> dict[str, Any]:
+        """``{"action": "unlock"}`` (or ``"remove"``): ``libre-panel system-setup`` with the
+        system's own question for administrator rights (UAC on Windows, polkit's password window
+        on Linux, where ``"rapl": true`` or ``false`` also opens or closes the processor's energy
+        counters). The answer comes at once; the run goes on in the background, and ``job`` of
+        :meth:`unlock` says how it ended."""
+        from libre_panel import linux_setup
+
+        if linux_setup.supported():
+            return self._unlock_linux(payload)
+        from libre_panel.sensorservice import setup
+
+        action = payload.get("action") if isinstance(payload, dict) else None
+        if action not in setup.ACTIONS:
+            raise SettingsError('expected {"action": "unlock"} or {"action": "remove"}')
+        program = setup.cli_program()
+        if not self.unlock()["available"] or program is None:
+            raise SettingsError(
+                t("The sensor service comes with the Windows downloads (setup or zip)."), 409
+            )
+        setup.ELEVATOR.start(action, program, setup.current_user())
+        return self.unlock()
+
+    def _unlock_linux(self, payload: Any) -> dict[str, Any]:
+        """The Linux side of :meth:`set_unlock`: pkexec shows the password dialog, and what the
+        run is to do is only ever the two switches of ``system-setup --linux``."""
         from libre_panel import linux_rights, linux_setup
 
-        if not linux_setup.supported():
-            raise SettingsError("the setup is for Linux", 404)
-        if not isinstance(payload, dict) or set(payload) - {"rapl", "remove"}:
-            raise SettingsError('expected {"rapl": true} or {"remove": true}')
-        rapl, remove = payload.get("rapl"), payload.get("remove", False)
+        valid = isinstance(payload, dict) and not set(payload) - {"action", "rapl"}
+        action = payload.get("action") if valid else None
+        if action not in ("unlock", "remove"):
+            raise SettingsError('expected {"action": "unlock"} or {"action": "remove"}')
+        rapl = payload.get("rapl")
         if rapl is not None:
             _flag("rapl", rapl)
-        _flag("remove", remove)
-        options = linux_setup.Options(rapl=rapl, remove=remove)
-        command = linux_rights.program()
-        way = linux_rights.elevation(options, command)
+            if action == "remove":
+                raise SettingsError('expected {"action": "unlock", "rapl": true}')
+        options = linux_setup.Options(rapl=rapl, remove=action == "remove")
+        way = linux_rights.elevation(options, linux_rights.program())
         if access.elevated():  # a request cannot be told from the person's: no rights are used
             raise SettingsError(
                 t(
@@ -652,9 +700,9 @@ class Settings:
                 ),
                 409,
             )
-        if not linux_rights.JOB.start(way):
+        if not linux_rights.JOB.start(way, action=action):
             raise SettingsError(t("The setup is running already."), 409)
-        return self.linux_setup()
+        return self.unlock()
 
     # -- the place --------------------------------------------------------------------------
 
@@ -768,11 +816,12 @@ RULES: dict[str, Any] = {
     "video.mode": lambda n, v, c: _choice(n, v, ("auto", "on", "off")),
     "video.fps": lambda n, v, c: _whole(n, v, 1, 60),
     "video.local_clip": lambda n, v, c: _text(n, v, 200),
+    "video.clip_asked": lambda n, v, c: _flag(n, v),
     "video.ffmpeg": lambda n, v, c: _text(n, v, 260),
     "refresh_ms": lambda n, v, c: _whole(n, v, 100, 3_600_000),
     "sensors.providers": _rule_providers,
     "sensors.librehardwaremonitor.mode": lambda n, v, c: _choice(
-        n, v, ("auto", "inprocess", "webserver")
+        n, v, ("auto", "service", "inprocess", "webserver")
     ),
     "sensors.librehardwaremonitor.url": _rule_url,
     "weather.enabled": lambda n, v, c: _flag(n, v),

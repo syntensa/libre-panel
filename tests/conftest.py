@@ -104,7 +104,15 @@ def no_linux_setup(monkeypatch):
     def forbidden(argv):
         raise AssertionError("a test asked for the administrator's rights")
 
+    class Untouchable:
+        """The computer a test runs on, which a test may not change (not even one that runs as
+        root, as CI containers do): the first thing a setup does to it fails the test."""
+
+        def __getattr__(self, name):
+            raise AssertionError(f"a test changed the machine it runs on ({name})")
+
     monkeypatch.setattr(linux_setup, "gather", lambda *args, **kwargs: linux_setup.Facts())
+    monkeypatch.setattr(linux_setup, "RealSystem", Untouchable)
     monkeypatch.setattr(linux_rights, "JOB", linux_rights.Job(runner=forbidden))
     monkeypatch.setattr(linux_rights, "imports_isolated", lambda python: False)
 
@@ -137,6 +145,15 @@ def no_scheduled_tasks(monkeypatch):
     from libre_panel import autostart
 
     monkeypatch.setattr(autostart, "WindowsTasks", NoTasks)
+
+
+@pytest.fixture(autouse=True)
+def no_sensor_service(monkeypatch):
+    """The sensor service of the machine running the tests (a Windows PC with Libre Panel
+    installed) stays out of them: it is not installed, until a test says so."""
+    from libre_panel.sensors import lhm_service
+
+    monkeypatch.setattr(lhm_service, "registration", lambda name=None: None)
 
 
 @pytest.fixture(autouse=True)

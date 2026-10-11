@@ -104,6 +104,30 @@ def test_a_hardware_name_is_added_to_a_config_that_has_no_such_section(isolated_
     assert load_config().device.brightness == 40
 
 
+def test_the_standby_clip_is_asked_for_until_it_is_answered(isolated_home):
+    """``clip_asked`` is a note of the app's (it asked, and was answered either way), not a
+    setting of the panel: it is false until the app writes it, and the template only mentions it."""
+    from libre_panel.config import DeviceConfig, edit_config
+
+    assert load_config().device.video.clip_asked is False
+    assert parse_config(tomllib.loads(DEFAULT_CONFIG_TOML)).device.video.clip_asked is False
+    assert "# clip_asked = false" in DEFAULT_CONFIG_TOML
+    assert parse_config({"video": {"clip_asked": True}}).device.video.clip_asked is True
+    for bad in (1, "yes", None):
+        with pytest.raises(ConfigError, match="video.clip_asked"):
+            parse_config({"video": {"clip_asked": bad}})
+    # it goes under its note in the template, and the rest of the file stays the person's
+    path = write_default_config()
+    edit_config(("value", "video.clip_asked", True))
+    text = path.read_text(encoding="utf-8")
+    assert tomllib.loads(text)["video"] == {"clip_asked": True}
+    assert text.index("# clip_asked = false") < text.index("clip_asked = true")
+    assert "# Libre Panel configuration" in text and load_config().device.video.clip_asked is True
+    # a note is no difference to the open panel: only the settings of the panel are compared
+    shown = DeviceConfig(video=load_config().device.video)
+    assert shown == DeviceConfig(video=parse_config({}).device.video)
+
+
 def test_weather_needs_a_location():
     with pytest.raises(ConfigError, match="no location"):
         parse_config({"weather": {"enabled": True}})

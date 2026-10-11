@@ -281,6 +281,18 @@ def test_a_run_ends_as_the_exit_code_and_the_report_say(answer, state):
         assert snapshot["result"]["results"][0]["id"] == "udev" and snapshot["detail"] == ""
     if state in ("failed", "unavailable") and answer[0] in (2, 127):
         assert answer[2].split("\n")[0] in snapshot["detail"]
+    # and in the words of Windows' run, which the app follows for either system
+    assert snapshot["running"] is False and snapshot["code"] == answer[0]
+    assert snapshot["cancelled"] is (state == "cancelled")
+    assert snapshot["error"] == (snapshot["detail"] if state in ("failed", "unavailable") else "")
+
+
+def test_a_run_remembers_what_it_was_for():
+    job = rights.Job(Runner((0, GOOD, ""), (0, GOOD, "")))
+    assert job.snapshot()["action"] == "" and job.snapshot()["code"] is None
+    assert job.start(PKEXEC) and finished(job) and job.snapshot()["action"] == "unlock"
+    assert job.start(PKEXEC, action="remove") and finished(job)
+    assert job.snapshot()["action"] == "remove"
 
 
 def test_a_second_run_waits_for_the_first():
@@ -346,13 +358,24 @@ def test_the_status_says_what_could_be_brought_and_how_to_ask(monkeypatch):
         files={Path(f).as_posix(): None for f in ("/etc/udev/rules.d/60-libre-panel.rules",)},
     )
     status = rights.status(found, rights.Job(Runner()))
-    assert status["supported"] is True and status["method"] == "pkexec"
+    assert status["platform"] == "linux" and status["available"] is True
+    assert status["method"] == "pkexec"
     assert [offer["id"] for offer in status["offers"]] == ["usb", "fans", "power"]
     assert status["offers"][2] == {"id": "power", "needed": True, "modules": (), "opt_in": True}
     assert status["command"] == f"sudo {APPIMAGE} system-setup --linux"
     assert status["removal"] == f"sudo {APPIMAGE} system-setup --linux --remove"
     assert status["installed"] == [] and status["granted"] is False
-    assert status["job"] == {"state": "idle", "result": None, "detail": "", "method": ""}
+    assert status["job"] == {
+        "action": "",
+        "running": False,
+        "code": None,
+        "cancelled": False,
+        "error": "",
+        "state": "idle",
+        "result": None,
+        "detail": "",
+        "method": "",
+    }
 
 
 def test_the_status_knows_what_is_installed_and_granted():

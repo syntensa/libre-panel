@@ -220,12 +220,6 @@ def _cmd_udev_rules(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_system_setup(args: argparse.Namespace) -> int:
-    from libre_panel import linux_setup
-
-    return linux_setup.run_cli(args)
-
-
 def _cmd_autostart(args: argparse.Namespace) -> int:
     from libre_panel.autostart import (
         Autostart,
@@ -417,15 +411,27 @@ def _check_lhm(args: argparse.Namespace) -> int:
     return 0 if worked else 1
 
 
+def _check_service(args: argparse.Namespace) -> int:
+    """Does the sensor service answer this account with readings (Windows)?"""
+    from libre_panel.sensors import lhm_service
+
+    worked, lines = lhm_service.check(platform=_platform())
+    print("\n".join(lines))
+    return 0 if worked else 1
+
+
 def _cmd_sensors(args: argparse.Namespace) -> int:
     import time
 
     from libre_panel.app import build_hub
     from libre_panel.sensors.base import want
     from libre_panel.sensors.librehardwaremonitor import DEFAULT_URL, hardware_hint
+    from libre_panel.sensorservice.setup import unlock_offered
 
     if args.check_lhm:
         return _check_lhm(args)
+    if args.check_service:
+        return _check_service(args)
     config = load_config(args.config)
     hub = build_hub(config, demo=args.demo)
     # Some sources read only while a theme shows their keys. Ask for those that cost
@@ -448,7 +454,14 @@ def _cmd_sensors(args: argparse.Namespace) -> int:
         print(f"{key:<40} {value:>14} {r.unit:<5} {r.label}")
     if not args.demo:
         url = config.sensors.options.get("librehardwaremonitor", {}).get("url", DEFAULT_URL)
-        hint = hardware_hint(snapshot.readings, config.sensors.providers, url, _platform(), status)
+        hint = hardware_hint(
+            snapshot.readings,
+            config.sensors.providers,
+            url,
+            _platform(),
+            status,
+            unlock_offered(_platform()),
+        )
         if not hint and _platform().startswith("linux"):
             hint = _linux_hint()
         if hint:
@@ -463,6 +476,47 @@ def _linux_hint() -> str:
 
     command = linux_rights.terminal_command(linux_setup.Options(), linux_rights.program())
     return linux_setup.hint(linux_setup.gather(), command)
+
+
+def _cmd_system_setup(args: argparse.Namespace) -> int:
+    """What the system needs an administrator for, one command on both systems. Windows: the
+    sensor service, the PawnIO driver and the group game frame rates need (``--service`` ...).
+    Linux: the panel's permission, the mainboard's sensor driver and the processor's power
+    (``--linux``, which Linux takes for granted unless a flag of Windows' is given)."""
+    windows = [
+        flag
+        for flag, given in (
+            ("--service", args.service),
+            ("--pawnio", args.pawnio),
+            ("--perf-log-users", args.perf_log_users),
+            ("--user-sid", args.user_sid),
+        )
+        if given
+    ]
+    system = _platform()
+    if args.linux or (system.startswith("linux") and not windows):
+        if windows:
+            print(f"error: {', '.join(windows)} is for Windows, not for --linux", file=sys.stderr)
+            return 2
+        from libre_panel import linux_setup
+
+        return linux_setup.run_cli(args)
+    linux = [
+        flag
+        for flag, given in (
+            ("--rapl", args.rapl),
+            ("--no-rapl", args.no_rapl),
+            ("--dry-run", args.dry_run),
+            ("--json", args.json),
+        )
+        if given
+    ]
+    if linux:
+        print(f"error: {', '.join(linux)} is for Linux (--linux)", file=sys.stderr)
+        return 2
+    from libre_panel.sensorservice.setup import run_command
+
+    return run_command(args, platform=system)
 
 
 def _cmd_models(args: argparse.Namespace) -> int:
@@ -609,32 +663,6 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("udev-rules", help="print the Linux udev rule for USB panel access")
     p.set_defaults(func=_cmd_udev_rules)
 
-    p = sub.add_parser(
-        "system-setup",
-        help="one-time setup of what needs an administrator: sensors and panel access (Linux)",
-    )
-    p.add_argument(
-        "--linux",
-        action="store_true",
-        help="Linux: the panel's USB permission, the mainboard's fan chip, SATA drive "
-        "temperatures, and with --rapl the processor's power; asks for the password with "
-        "pkexec or sudo, prints every step",
-    )
-    power = p.add_mutually_exclusive_group()
-    power.add_argument(
-        "--rapl",
-        action="store_true",
-        help="also let every user read the processor's energy counters (the kernel keeps "
-        "them to root since 2020 because they leak what the processor computes)",
-    )
-    power.add_argument(
-        "--no-rapl", action="store_true", help="close the energy counters to other users again"
-    )
-    p.add_argument("--remove", action="store_true", help="take out everything the setup installed")
-    p.add_argument("--dry-run", action="store_true", help="only say what it would do")
-    p.add_argument("--json", action="store_true", help="print the result as one line of JSON")
-    p.set_defaults(func=_cmd_system_setup)
-
     p = sub.add_parser("run", help="drive the display")
     p.add_argument("--once", action="store_true", help="render a single frame and exit")
     p.add_argument("--driver", help="override device.driver")
@@ -669,7 +697,59 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Windows: check that LibreHardwareMonitor loads inside Libre Panel, then exit",
     )
+    p.add_argument(
+        "--check-service",
+        action="store_true",
+        help="Windows: check that the sensor service answers with readings, then exit",
+    )
     p.set_defaults(func=_cmd_sensors)
+
+    p = sub.add_parser(
+        "system-setup",
+        help="as administrator: set up what the sensors need, and on Linux the panel's access "
+        "(Windows: the setup runs this; Linux: --linux)",
+    )
+    p.add_argument(
+        "--service",
+        action="store_true",
+        help="Windows: the sensor service, which reads the sensors with the rights they need",
+    )
+    p.add_argument(
+        "--pawnio", action="store_true", help="Windows: the PawnIO driver it reads them through"
+    )
+    p.add_argument(
+        "--perf-log-users",
+        action="store_true",
+        help="Windows: join Performance Log Users, for game frame rates (from the next sign-in)",
+    )
+    p.add_argument("--user-sid", help="Windows: whose group membership (default: who is signed in)")
+    p.add_argument(
+        "--linux",
+        action="store_true",
+        help="Linux: the panel's USB permission, the mainboard's fan chip, SATA drive "
+        "temperatures, and with --rapl the processor's power; asks for the password with "
+        "pkexec or sudo, prints every step (taken for granted on Linux unless a flag of "
+        "Windows' is given)",
+    )
+    power = p.add_mutually_exclusive_group()
+    power.add_argument(
+        "--rapl",
+        action="store_true",
+        help="Linux: also let every user read the processor's energy counters (the kernel "
+        "keeps them to root since 2020 because they leak what the processor computes)",
+    )
+    power.add_argument(
+        "--no-rapl",
+        action="store_true",
+        help="Linux: close the energy counters to other users again",
+    )
+    p.add_argument("--remove", action="store_true", help="take away what was set up")
+    p.add_argument("--status", action="store_true", help="say what is in place (no rights needed)")
+    p.add_argument("--dry-run", action="store_true", help="Linux: only say what it would do")
+    p.add_argument(
+        "--json", action="store_true", help="Linux: print the result as one line of JSON"
+    )
+    p.set_defaults(func=_cmd_system_setup)
 
     p = sub.add_parser("plugins", help="list installed plugins and whether they load")
     p.set_defaults(func=_cmd_plugins)

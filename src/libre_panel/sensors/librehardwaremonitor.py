@@ -1,8 +1,12 @@
 """Windows sensors from LibreHardwareMonitor: the GPU, temperatures, power and fans.
 
-LibreHardwareMonitor (MPL-2.0) is read one of two ways, chosen by ``mode`` in
+LibreHardwareMonitor (MPL-2.0) is read one of three ways, chosen by ``mode`` in
 ``[sensors.librehardwaremonitor]``:
 
+- **The sensor service** (``lhm_service``): Libre Panel's Windows service reads it with the
+  rights that the CPU's, the mainboard's, the memory's and the drives' sensors need, and
+  hands the readings over a local pipe. The Windows setup installs it; the portable download
+  offers "Unlock all sensors" (``libre-panel system-setup``).
 - **Inside Libre Panel** (``lhm_inprocess``): its .NET library is loaded through pythonnet
   and read in a thread. The Windows downloads carry it; with pip it needs
   ``pip install "libre-panel[lhm]"`` and a ``dll_dir``. CPU temperature and power then need
@@ -11,7 +15,9 @@ LibreHardwareMonitor (MPL-2.0) is read one of two ways, chosen by ``mode`` in
   with Options -> Remote Web Server; Libre Panel reads its ``data.json`` (format checked
   against real output, see tests/data/lhm_data.json).
 
-``auto`` (the default) takes the first way where it is possible and the second otherwise.
+``auto`` (the default) takes the service where it is installed, else the second way where it
+is possible and the third otherwise. A service that stops answering is replaced by the other
+ways after a while (``lhm_service.WAIT_SECONDS``), and takes over again when it answers.
 Either way every sensor is exposed under its raw id (``lhm:/amdcpu/0/temperature/2``) and
 the common ones also get friendly aliases such as ``cpu.temp``, ``gpu.load`` or ``mem.temp``
 (the hottest memory module), made by the same code. With several GPUs the dedicated one is
@@ -28,6 +34,7 @@ waits that grow to half a minute while nothing answers, and one line in the log.
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import json
 import logging
@@ -54,9 +61,10 @@ DEFAULT_URL = "http://127.0.0.1:8085/data.json"
 STALE_SECONDS = 5.0  # without an answer for this long the readings are dropped
 REQUEST_SECONDS = 1.0  # one request, connecting included: it answers in milliseconds or not at all
 BACKOFF_SECONDS = 30.0  # the longest wait between two requests while nothing answers
+SERVICE_LOOK_SECONDS = 10.0  # auto without the sensor service: how often to look for it
 # What on Windows only LibreHardwareMonitor gives (psutil has no sensors there).
 HARDWARE_KEYS = ("cpu.temp", "gpu.temp", "cpu.power", "gpu.power")
-MODES = ("auto", "inprocess", "webserver")
+MODES = ("auto", "service", "inprocess", "webserver")
 PAWNIO_URL = "https://pawnio.eu"  # the driver LibreHardwareMonitor reads the CPU through
 
 # alias -> (sensor type, preferred sensor names in order), per device kind.
@@ -319,16 +327,27 @@ def fetch_tree(url: str, timeout: float = REQUEST_SECONDS) -> dict[str, Any]:
 class LhmStatus:
     """How LibreHardwareMonitor is read, and what keeps its CPU sensors away."""
 
-    mode: str  # "inprocess" (inside Libre Panel) or "webserver"
-    elevated: bool | None = None  # Libre Panel runs as administrator (inprocess only)
+    mode: str  # "service" (the sensor service), "inprocess" (inside Libre Panel) or "webserver"
+    elevated: bool | None = None  # it runs with administrator rights (service, inprocess)
     ring0: bool | None = None  # the CPU's sensors give real values; None: no such sensors / unknown
     pawnio: str | None = None  # version of the installed PawnIO driver ("" unknown), None: none
-    error: str = ""  # why it could not start (inprocess only)
+    error: str = ""  # why it could not start, or does not answer (service, inprocess)
+    service: str = ""  # why the installed sensor service is not what is read now
 
 
-def ring0_steps(status: LhmStatus) -> list[str]:
+# What sets up the sensor service, which reads the CPU with the rights it needs (and PawnIO).
+SERVICE_STEP = (
+    "set up the sensor service (Unlock all sensors in the app, or as administrator: "
+    "libre-panel system-setup --service --pawnio)"
+)
+
+
+def ring0_steps(status: LhmStatus, unlock: bool = False) -> list[str]:
     """What stands between the CPU's sensors and Libre Panel, from what is known: it has
-    to run as administrator, and the PawnIO driver (2.0 or newer) has to be installed."""
+    to run as administrator, and the PawnIO driver (2.0 or newer) has to be installed.
+    ``unlock``: this download can set up the sensor service, which brings both."""
+    if unlock and status.elevated is False:
+        return [SERVICE_STEP]
     steps = []
     if status.elevated is False:
         steps.append("run Libre Panel as administrator (libre-panel autostart enable --elevated)")
@@ -345,17 +364,35 @@ def hardware_hint(
     url: str,
     platform: str,
     status: LhmStatus | None = None,
+    unlock: bool = False,
 ) -> str | None:
     """What to do on Windows when no CPU or GPU temperature or power arrives; None
     when it does, and elsewhere (psutil has temperatures and fans on Linux).
-    ``status`` says how LibreHardwareMonitor is read, when Libre Panel reads it itself."""
+    ``status`` says how LibreHardwareMonitor is read, when Libre Panel reads it itself;
+    ``unlock``, whether this download can set up the sensor service."""
     if platform != "win32" or any(key in readings for key in HARDWARE_KEYS):
         return None
     text = "No CPU or GPU temperature or power readings. "
+    if status is not None and status.service:
+        return f"{text}The sensor service does not answer: {status.service}."
+    if status is not None and status.mode == "service":
+        if status.error:
+            return f"{text}The sensor service does not answer: {status.error}."
+        steps = ring0_steps(status)
+        if not steps:
+            return (
+                f"{text}The sensor service runs, but LibreHardwareMonitor finds no sensors "
+                "it supports."
+            )
+        return (
+            f"{text}The sensor service runs, but the CPU's sensors are out of reach: "
+            f"{' and '.join(steps)}."
+        )
     if status is not None and status.mode == "inprocess":
         if status.error:
-            return f"{text}LibreHardwareMonitor could not start inside Libre Panel: {status.error}"
-        steps = ring0_steps(status)
+            said = f"{text}LibreHardwareMonitor could not start inside Libre Panel: {status.error}"
+            return f"{said}. Instead: {SERVICE_STEP}." if unlock else said
+        steps = ring0_steps(status, unlock)
         if not steps:
             return (
                 f"{text}LibreHardwareMonitor runs inside Libre Panel, "
@@ -373,6 +410,8 @@ def hardware_hint(
         text += ' Add "librehardwaremonitor" to providers under [sensors] in config.toml.'
     if status is not None and status.error:  # it tried to start inside Libre Panel first
         text += f" (Inside Libre Panel it could not start: {status.error}.)"
+        if unlock:
+            text += f" Or {SERVICE_STEP}."
     return text
 
 
@@ -387,11 +426,13 @@ def user_hint(
     platform: str,
     status: LhmStatus | None = None,
     ready: bool = True,
+    unlock: bool = False,
 ) -> str:
     """One sentence for a person who sees "--" where Windows' temperatures and power should
     be: what is the matter and what to do about it, in their language. Empty when all is
     well, elsewhere, while LibreHardwareMonitor is still starting (``ready`` False) and for
-    what nobody can change (a PC with no sensors it supports).
+    what nobody can change (a PC with no sensors it supports). ``unlock``: this download can
+    set up the sensor service ("Unlock all sensors"), which is then what to do.
 
     ``hardware_hint`` is the same question for the command line, with the technical words;
     this one is for the tray and the editor, and speaks of what a person can do.
@@ -399,14 +440,27 @@ def user_hint(
     if platform != "win32" or not ready:
         return ""
     nothing = not any(key in readings for key in HARDWARE_KEYS)
+    unlocks = t(
+        "CPU temperature, power and fans need the sensor service: "
+        "choose “Unlock all sensors” on Start."
+    )
+    if status is not None and (status.service or (status.mode == "service" and status.error)):
+        if "cpu.temp" in readings:
+            return ""
+        return t(
+            "CPU temperature and power are missing: the sensor service does not answer. "
+            "Set it up again in Settings → Sensors, or restart Windows."
+        )
     if status is not None and status.error:  # it did not start inside Libre Panel
         if not nothing:
             return ""  # the web server has them
+        if unlock:
+            return unlocks
         return t(
             "Temperatures and power are missing: their reader did not start. "
             "Reinstall Libre Panel; the log says why."
         )
-    if status is None or status.mode != "inprocess":
+    if status is None or status.mode not in ("inprocess", "service"):
         if not nothing:
             return ""
         return t(
@@ -420,6 +474,8 @@ def user_hint(
         status.pawnio is None,
         _old_pawnio(status.pawnio),
     )
+    if admin and unlock:
+        return unlocks
     if admin and (missing or old):
         return t(
             "CPU temperature and power need administrator rights and the PawnIO driver (pawnio.eu)."
@@ -446,12 +502,19 @@ def dll_dir_of(options: dict[str, Any]) -> str | None:
     return value
 
 
+def _service_installed() -> bool:
+    """Whether Libre Panel's sensor service is installed (and not switched off) here."""
+    from libre_panel.sensors import lhm_service
+
+    return lhm_service.installed()
+
+
 def _mode(value: Any) -> str:
     if isinstance(value, str) and value.lower() in MODES:
         return value.lower()
     log.warning(
-        '[sensors.librehardwaremonitor] mode must be "auto", "inprocess" or "webserver", '
-        'not %r: using "auto"',
+        '[sensors.librehardwaremonitor] mode must be "auto", "service", "inprocess" or '
+        '"webserver", not %r: using "auto"',
         value,
     )
     return "auto"
@@ -477,12 +540,103 @@ class LibreHardwareMonitorProvider(SensorProvider):
         self._polled = threading.Event()  # the web server was asked once, answer or not
         self._web = threading.Lock()  # starting and stopping the poller
         self._thread: threading.Thread | None = None  # the poller of the web server
+        self._web_off: threading.Event | None = None  # that poller is no longer wanted
         self._source: Any = None  # LibreHardwareMonitor inside Libre Panel (lhm_inprocess)
         self._why = ""  # why it is not inside Libre Panel
-        if self.mode != "webserver":
+        self._service: Any = None  # the sensor service (lhm_service)
+        self._fallback = False  # auto: the service does not answer, the other ways read meanwhile
+        self._silent = ""  # why the service does not answer, once it was given up for now
+        self._looked = time.monotonic()  # auto: when it was last looked whether it is installed
+        if self.mode == "service" or (self.mode == "auto" and _service_installed()):
+            self._start_service()
+        else:
+            self._start_others()
+
+    def _start_others(self) -> None:
+        """Inside Libre Panel where that is possible (and asked for), else the web server."""
+        if self.mode != "webserver" and self._source is None:
             self._start_inprocess()
         if self._source is None and self.mode != "inprocess":
             self._start_web()
+
+    # -- the sensor service -------------------------------------------------------------------
+
+    def _start_service(self) -> None:
+        from libre_panel.sensors import lhm_service
+
+        source = lhm_service.ServiceSource(
+            poll_seconds=self.poll_seconds,
+            stale_seconds=self.stale_seconds,
+            gpu=self.gpu,
+            on_ready=self._service_ready,
+            on_failure=self._service_failed,
+        )
+        with self._web:
+            if self._stop.is_set():  # closed meanwhile: nothing more to start
+                return
+            self._service = source
+        source.start()
+
+    def _look_for_service(self) -> None:
+        """``auto`` without the service: was it installed meanwhile ("Unlock all sensors", the
+        setup)? Then it takes over as soon as it answers. A look at the registry, now and then."""
+        now = time.monotonic()
+        if now - self._looked < SERVICE_LOOK_SECONDS:
+            return
+        self._looked = now
+        if not _service_installed():
+            return
+        with self._web:
+            if self._stop.is_set() or self._service is not None:
+                return
+            self._fallback = True  # what reads now goes on until the service answers
+        log.info("the sensor service is installed now: it takes over as soon as it answers")
+        self._start_service()
+
+    def _service_failed(self, why: str) -> None:
+        """The service has not answered for a while: in ``auto``, read the other ways until
+        it does (its status says why, so the hints speak of the service). One that was
+        removed is let go, as if it had never been there (and looked for again)."""
+        if self.mode != "auto":
+            return
+        removed = not _service_installed()
+        with self._web:
+            if self._stop.is_set():
+                return
+            service = self._service
+            if removed:
+                self._service, self._fallback, self._silent = None, False, ""
+                self._looked = time.monotonic()
+            else:
+                self._silent = why
+                if self._fallback:
+                    return
+                self._fallback = True
+        if removed:
+            log.info("the sensor service was removed: LibreHardwareMonitor is read another way")
+            service.close()  # (from its own thread: it ends when this returns)
+        else:
+            log.info(
+                "the sensor service does not answer (%s): LibreHardwareMonitor is read another "
+                "way until it does",
+                why,
+            )
+        self._start_others()
+
+    def _service_ready(self, status: LhmStatus) -> None:
+        """The service answers (again): what read meanwhile stops."""
+        with self._web:
+            self._silent = ""
+            if not self._fallback:
+                return
+            self._fallback = False
+            source, self._source = self._source, None
+        if source is not None:
+            source.close()
+        self._stop_web()
+        log.info("the sensor service answers again: LibreHardwareMonitor is read through it")
+
+    # -- inside Libre Panel -------------------------------------------------------------------
 
     def _start_inprocess(self) -> None:
         from libre_panel.sensors import lhm_inprocess
@@ -528,18 +682,34 @@ class LibreHardwareMonitorProvider(SensorProvider):
         if self.mode == "auto":
             self._start_web()
 
+    # -- the web server -----------------------------------------------------------------------
+
     def _start_web(self) -> None:
         with self._web:
             if self._thread is not None or self._stop.is_set():
                 return
-            self._thread = threading.Thread(target=self._poll, name="lhm-poll", daemon=True)
+            self._web_off = threading.Event()
+            self._thread = threading.Thread(
+                target=self._poll, args=(self._web_off,), name="lhm-poll", daemon=True
+            )
             self._thread.start()
+
+    def _stop_web(self) -> None:
+        """The poller ends at its next turn, and what it read is forgotten."""
+        with self._web:
+            if self._thread is None:
+                return
+            if self._web_off is not None:
+                self._web_off.set()
+            self._thread = None
+        with self._lock:
+            self._latest, self._answered_at = {}, None
 
     def _fetch(self) -> dict[str, Any]:
         return fetch_tree(self.url)
 
-    def _poll(self) -> None:
-        while not self._stop.is_set():
+    def _poll(self, off: threading.Event | None = None) -> None:
+        while not self._stop.is_set() and not (off is not None and off.is_set()):
             started = time.monotonic()
             delay = self._poll_once()
             self._polled.set()
@@ -603,6 +773,12 @@ class LibreHardwareMonitorProvider(SensorProvider):
         return True
 
     def read(self) -> dict[str, Reading]:
+        if self._service is not None:
+            readings = self._service.read()
+            if readings or not self._fallback:
+                return readings
+        elif self.mode == "auto":
+            self._look_for_service()
         with self._lock:
             readings = dict(self._latest)
         if self._source is None:
@@ -618,6 +794,15 @@ class LibreHardwareMonitorProvider(SensorProvider):
 
     def status(self) -> LhmStatus:
         """How the readings come, and what keeps the CPU's from coming."""
+        if self._service is not None:
+            service = self._service.status()
+            if not self._fallback or self._service.live():
+                return service
+            if self._silent:  # given up for now: the other ways read, and the hints say why
+                return dataclasses.replace(self._other_status(), service=self._silent)
+        return self._other_status()
+
+    def _other_status(self) -> LhmStatus:
         if self._source is not None:
             status = self._source.status()
             if status.error and self.mode == "auto":  # it did not start: the web server it is
@@ -633,7 +818,14 @@ class LibreHardwareMonitorProvider(SensorProvider):
         """Whether the first readings are in (or it has given up) within ``timeout`` seconds.
         For a command that asks once and must not ask too early."""
         end = time.monotonic() + timeout
-        if self._source is not None and not self._source.wait_ready(timeout):
+        if self._service is not None:
+            if not self._service.wait_ready(timeout):
+                return False
+            if not self._fallback:
+                return True
+            timeout = max(0.0, end - time.monotonic())  # it gave up: the other ways get the rest
+        source = self._source
+        if source is not None and not source.wait_ready(timeout):
             return False
         if self._thread is None:
             return True
@@ -642,5 +834,9 @@ class LibreHardwareMonitorProvider(SensorProvider):
     def close(self) -> None:
         with self._web:
             self._stop.set()
+            if self._web_off is not None:
+                self._web_off.set()
+        if self._service is not None:
+            self._service.close()  # its thread is the one that starts the other ways
         if self._source is not None:
             self._source.close()

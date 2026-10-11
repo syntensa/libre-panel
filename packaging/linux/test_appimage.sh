@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Check the AppImage: start it as autostart does (without and with a tray),
-# the autostart entry, the udev rule, and the system setup as pkexec starts it.
+# the autostart entry, the udev rule, the ffmpeg it carries, and the system setup as pkexec
+# starts it.
 set -euo pipefail
 appimage="$(realpath "$1")"
 root="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -9,7 +10,7 @@ export APPIMAGE_EXTRACT_AND_RUN=1  # CI and containers have no FUSE
 "$appimage" --version
 
 echo "== without a desktop"
-env -u DISPLAY python3 "$root/packaging/smoke_test.py" "$appimage" tray --background
+env -u DISPLAY python3 "$root/packaging/smoke_test.py" --tools "$appimage" tray --background
 
 if command -v xvfb-run >/dev/null && command -v stalonetray >/dev/null; then
     echo "== with an X11 tray"
@@ -18,10 +19,17 @@ if command -v xvfb-run >/dev/null && command -v stalonetray >/dev/null; then
         set -o pipefail
         stalonetray >/dev/null 2>&1 &
         sleep 1
-        python3 '$root/packaging/smoke_test.py' '$appimage' tray --background | tee '$log'
+        python3 '$root/packaging/smoke_test.py' --tools '$appimage' tray --background | tee '$log'
     "
     grep -q "tray icon ready" "$log"
 fi
+
+echo "== the programs it carries: ffmpeg encodes the video mode's stream, the app finds it"
+# The AppImage is read-only while it runs: take its files out and check them where they are.
+unpacked="$(mktemp -d)"
+(cd "$unpacked" && env -u APPIMAGE_EXTRACT_AND_RUN "$appimage" --appimage-extract > /dev/null)
+python3 "$root/packaging/check_tools.py" "$unpacked/squashfs-root/usr/lib/libre-panel"
+rm -rf "$unpacked"
 
 echo "== autostart entry"
 home="$(mktemp -d)"

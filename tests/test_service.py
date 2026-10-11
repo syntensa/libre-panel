@@ -280,6 +280,46 @@ def test_background_app_controls_through_the_editor(app, isolated_home):
     assert running_instance() is None
 
 
+def test_the_app_knows_when_the_standby_clip_is_to_be_asked_for(isolated_home, monkeypatch):
+    """The tray's line asks once a second, so it never looks at the USB bus: it goes by the
+    panel that is named in config.toml, or the one the panel loop says it is driving."""
+    from test_editor_settings import lacking_ffmpeg
+
+    from libre_panel.devices import turzx_usb
+
+    def on_the_bus():
+        raise AssertionError("the tray looked at the USB bus")
+
+    monkeypatch.setattr(turzx_usb, "present_model", on_the_bus)
+    lacking_ffmpeg(monkeypatch, found=True)
+    app = BackgroundApp(port=0, autostart=Autostart("win32", registry=FakeRegistry()))
+    assert app.clip_question() is False  # no panel is known
+    app.panel.status.target = "PNG file frame.png"
+    assert app.clip_question() is False
+    app.panel.status.target = 'Turing 8.8"'  # a panel the video mode is not proven on
+    assert app.clip_question() is False
+    app.panel.status.target = 'Turing 9.2"'  # the loop drives a 9.2"
+    assert app.clip_question() is True
+    app.panel.status.target = 'Turing 9.2", video 50 fps'  # (as it says in video mode)
+    assert app.clip_question() is True
+    set_config_value("video.clip_asked", True)  # answered, whichever way
+    assert app.clip_question() is False
+    set_config_value("video.clip_asked", False)
+    set_config_value("video.local_clip", "usr/data/standby.h264")
+    assert app.clip_question() is False
+    set_config_value("video.local_clip", "")
+    assert app.clip_question() is True
+    set_config_value("device.driver", "virtual")
+    assert app.clip_question() is False
+    set_config_value("device.driver", "auto")
+    app.panel.status.target = ""  # nothing is driven, but the 9.2" is the panel that is named
+    assert app.clip_question() is False
+    set_config_value("device.model", "turing-9.2-usb")
+    assert app.clip_question() is True
+    (isolated_home / "config.toml").write_text("fps = 'fast'\n", encoding="utf-8")
+    assert app.clip_question() is False  # a config that cannot be read asks nothing
+
+
 def test_plain_editor_has_no_app_controls():
     import threading
 

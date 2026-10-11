@@ -111,7 +111,7 @@ function Upcoming({ section }) {
 }
 
 function SettingsView({ rest }) {
-  useStore((s) => [s.lang, s.hardware, s.setup]); // the texts follow the language; groups come and go
+  useStore((s) => [s.lang, s.hardware, s.unlockInfo]); // the texts follow the language; groups come and go
   const { problem, down } = useStore((s) => ({ problem: s.settingsError, down: s.settingsDown }));
   const sections = settingsSections();
   const current = sections.find((section) => section.id === rest) || sections[0];

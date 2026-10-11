@@ -581,6 +581,7 @@ def test_a_source_that_says_how_it_is_read_is_explained(running):
     lhm = next(s for s in sources if s["name"] == "librehardwaremonitor")
     assert lhm["status"] == {  # as the source says it, for a screen that words it itself
         "mode": "inprocess", "elevated": False, "ring0": False, "pawnio": None, "error": "",
+        "service": "",
     }  # fmt: skip
     # (on Windows the configured LibreHardwareMonitor is there as well, and says its own; on Linux
     # the source of the kernel's chips says what it found; the others say nothing)

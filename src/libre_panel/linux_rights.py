@@ -202,16 +202,24 @@ class Job:
         self._runner = runner
         self._lock = threading.Lock()
         self.state = "idle"
+        self.action = ""  # "unlock" (set up) or "remove": what the last run was for
+        self.code: int | None = None  # the exit code of the last run, None while it goes on
         self.result: dict[str, Any] | None = None
         self.detail = ""
         self.method = ""
 
-    def start(self, elevation: Elevation, after: Callable[[], None] | None = None) -> bool:
+    def start(
+        self,
+        elevation: Elevation,
+        after: Callable[[], None] | None = None,
+        action: str = "unlock",
+    ) -> bool:
         """Begin; False if a run is going on already or there is no way to ask for rights."""
         with self._lock:
             if self.state == "running" or not elevation.argv:
                 return False
-            self.state, self.result, self.detail = "running", None, ""
+            self.state, self.result, self.detail, self.code = "running", None, "", None
+            self.action = action
             self.method = elevation.method
         threading.Thread(
             target=self._run, args=(elevation, after), name="linux-setup", daemon=True
@@ -225,6 +233,7 @@ class Job:
             code, out, err = 1, "", f"{type(exc).__name__}: {exc}"
         report = parse_result(out)
         with self._lock:
+            self.code = code
             self.result = report
             if report is not None:
                 self.state = "done" if report.get("ok") else "failed"
@@ -243,8 +252,16 @@ class Job:
                 log.debug("linux setup: following up failed", exc_info=True)
 
     def snapshot(self) -> dict[str, Any]:
+        """How it is going, in the words the run of Windows' sensor service uses (``action``,
+        ``running``, ``code``, ``cancelled``, ``error``), which the app follows for either, and
+        what only a run here has to tell (``state``, ``result``, ``detail``, ``method``)."""
         with self._lock:
             return {
+                "action": self.action,
+                "running": self.state == "running",
+                "code": self.code,
+                "cancelled": self.state == "cancelled",
+                "error": self.detail if self.state in ("failed", "unavailable") else "",
                 "state": self.state,
                 "result": self.result,
                 "detail": self.detail,
@@ -260,7 +277,8 @@ def status(facts: Facts, job: Job | None = None) -> dict[str, Any]:
     in, how it is started, and how a run is going."""
     way = elevation(Options(), program())
     return {
-        "supported": True,
+        "platform": "linux",  # (/api/unlock answers for Windows' sensor service the same way)
+        "available": True,
         "offers": [dataclasses.asdict(offer) for offer in offers(facts)],
         "installed": [path for path in OWN_FILES if facts.files.get(path) is not None],
         "granted": facts.files.get(RAPL_RULES) is not None,

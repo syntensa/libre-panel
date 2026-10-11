@@ -29,6 +29,7 @@ from libre_panel.linux_setup import (
 )
 
 REAL_GATHER = setup.gather  # (conftest.py puts a computer with nothing in its place)
+REAL_SYSTEM = setup.RealSystem  # (... and one that no test may change)
 
 TOOLS = {
     "udevadm": "/usr/bin/udevadm",
@@ -456,7 +457,7 @@ def test_a_write_that_fails_says_so_and_goes_on():
 
 
 def test_the_real_system_writes_whole_files_and_takes_them_out(tmp_path):
-    real = setup.RealSystem()
+    real = REAL_SYSTEM()
     target = str(tmp_path / "etc" / "udev" / "60-test.rules")
     assert real.read(target) is None
     real.write(target, "one\n", 0o644)
@@ -470,7 +471,7 @@ def test_the_real_system_writes_whole_files_and_takes_them_out(tmp_path):
 
 @pytest.mark.skipif(os.name != "posix", reason="runs a shell")
 def test_the_real_system_runs_commands_with_a_plain_path(tmp_path):
-    real = setup.RealSystem()
+    real = REAL_SYSTEM()
     assert real.run(["sh", "-c", "echo hello; exit 3"]) == (3, "hello\n")
     code, text = real.run(["sh", "-c", "echo $PATH; echo $LC_ALL"])
     assert text.splitlines() == [setup.SYSTEM_PATH, "C"]
@@ -643,6 +644,69 @@ def test_the_parser_has_the_command(monkeypatch, capsys):
     assert stop.value.code == 2
     parsed = cli.build_parser().parse_args(["system-setup", "--linux", "--remove", "--json"])
     assert (parsed.linux, parsed.remove, parsed.json, parsed.rapl) == (True, True, True, False)
+
+
+def windows_run(monkeypatch):
+    """Windows' side of the command, recorded: ``(arguments, platform)`` of each call."""
+    from libre_panel.sensorservice import setup as windows
+
+    seen = []
+    monkeypatch.setattr(
+        windows, "run_command", lambda args, platform=None: seen.append((args, platform)) or 0
+    )
+    return seen
+
+
+def test_it_is_one_command_for_both_systems_and_linux_takes_its_side_for_granted(
+    monkeypatch, capsys
+):
+    monkeypatch.setattr(setup, "gather", lambda *a, **k: facts())
+    seen = windows_run(monkeypatch)
+    monkeypatch.setattr(cli, "_platform", lambda: "linux")
+    assert cli.main(["system-setup", "--dry-run"]) == 0  # no --linux needed on Linux
+    assert "USB panels" in capsys.readouterr().out and seen == []
+    installed = {**dict.fromkeys(setup.OWN_FILES), UDEV_RULES: setup.udev_rules_text()}
+    monkeypatch.setattr(setup, "gather", lambda *a, **k: facts(files=installed))
+    assert cli.main(["system-setup", "--remove", "--dry-run"]) == 0
+    assert "Remove the rule" in capsys.readouterr().out and seen == []
+    assert cli.main(["system-setup", "--service", "--pawnio"]) == 0  # a flag of Windows': its side
+    [(args, system)] = seen
+    assert (args.service, args.pawnio, system) == (True, True, "linux")  # (which says so)
+
+
+def test_windows_gets_its_own_side_and_the_flags_of_linux_are_refused_there(monkeypatch, capsys):
+    seen = windows_run(monkeypatch)
+    monkeypatch.setattr(cli, "_platform", lambda: "win32")
+    assert cli.main(["system-setup", "--service"]) == 0 and seen[0][1] == "win32"
+    for flags in (["--rapl"], ["--no-rapl"], ["--dry-run"], ["--json"], ["--service", "--json"]):
+        assert cli.main(["system-setup", *flags]) == 2
+        assert "is for Linux (--linux)" in capsys.readouterr().err
+    assert len(seen) == 1
+    monkeypatch.setattr(setup, "supported", lambda: False)
+    assert cli.main(["system-setup", "--linux"]) == 2  # asked for Linux's, on another system
+    assert "for Linux" in capsys.readouterr().err
+
+
+def test_the_flags_of_windows_are_refused_with_linux(monkeypatch, capsys):
+    seen = windows_run(monkeypatch)
+    monkeypatch.setattr(cli, "_platform", lambda: "linux")
+    for flags in (["--service"], ["--pawnio", "--perf-log-users"], ["--user-sid", "S-1-5-21-1"]):
+        assert cli.main(["system-setup", "--linux", *flags]) == 2
+        assert "is for Windows, not for --linux" in capsys.readouterr().err
+    assert seen == []
+
+
+def test_the_status_says_what_is_in_place_and_asks_for_nothing(monkeypatch, capsys):
+    monkeypatch.setattr(linux_rights, "program", lambda *a, **k: ["/opt/lp/libre-panel"])
+    args = SimpleNamespace(rapl=False, no_rapl=False, remove=False, dry_run=False, json=False)
+    args.status = True
+    code = setup.run_cli(args, facts=facts(panel=True, panel_denied=True), root=False)
+    said = json.loads(capsys.readouterr().out)
+    assert code == 0 and said["platform"] == "linux" and said["available"] is True
+    assert [offer["id"] for offer in said["offers"]] == ["usb", "fans"]
+    assert said["installed"] == []
+    assert said["command"] == "sudo /opt/lp/libre-panel system-setup --linux"
+    assert "job" not in said  # (a run belongs to the app that started it)
 
 
 def test_the_rules_are_the_ones_the_udev_rules_command_prints(capsys):

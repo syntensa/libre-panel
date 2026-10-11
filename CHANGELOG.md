@@ -7,9 +7,9 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
 ![Lumen, Libre Panel's own theme, in video mode on a 9.2" panel](https://raw.githubusercontent.com/syntensa/libre-panel/v0.5.0/docs/media/video-mode.gif)
 
 **Highlights**
-- **Video mode up to 50 frames a second**, on by itself on the 9.2" once ffmpeg is found and the
-  panel's standby clip is named: numbers count, rings and bars glide, graphs scroll on every
-  frame, fans turn at their speed.
+- **Video mode up to 50 frames a second**, on by itself on the 9.2" once the panel's standby clip
+  is named (the downloads carry the ffmpeg it needs): numbers count, rings and bars glide, graphs
+  scroll on every frame, fans turn at their speed.
 - **Lumen**, Libre Panel's own theme, is the default on the 8.8" and 9.2" bars, and Libre
   Default (every other panel) and Studio are renewed in its look: values as light in milled
   grooves, faceted lettering, depth dust.
@@ -209,6 +209,15 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
   administrator; the language) and *About* (the version, the licence, the notices, how to report a
   panel, the folders with *Open folder*). What the running app cannot take in by itself, the sources
   and the weather, says so and has a *Restart the panel* button; everything else is followed at once
+- The video mode starts without editing `config.toml`: where the name of the panel's standby clip is
+  all it lacks (a panel it is proven on, the 9.2", and ffmpeg found), *Start* asks for it once, on a
+  first start and afterwards as a card, with the name the vendor app uses, `usr/data/standby.h264`, in
+  the field. *Use it* writes `video.local_clip`, and the running panel switches to video mode by
+  itself, without a restart; *Not now* writes no name. Nothing is written before the click, and
+  either answer sets `clip_asked = true` under `[video]`, so it is not asked again. While it waits,
+  the tray menu has a line, *Smooth motion: confirm the clip name…*, that opens Start at the card.
+  *Live* says whether the video mode is on (with its frame rate) or what it lacks, as *Settings →
+  Panel* does. `GET /api/clip` gives `{ask, name}`
 - A Libre Panel that runs with the highest rights (as administrator or root) obeys what
   `config.toml` names, so there Settings do not change a setting that names a program, a library or
   a file (`video.ffmpeg`, the picture file `device.output`, a path under `[sensors.*]`, the files
@@ -359,6 +368,34 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
   (`/api/app`, `GET control/panel`) and on the LibreHardwareMonitor row of `GET control/sources`. It
   keeps quiet while LibreHardwareMonitor starts and about what nobody can change.
   `libre-panel sensors --check-lhm` tests that the library loads
+- The sensor service (Windows): `LibrePanelSensors`, a small Windows service that runs
+  LibreHardwareMonitor as LocalSystem on every kind of hardware it knows (the CPU's temperature,
+  power and clock, the mainboard's temperatures and fans, the memory's and the drives'
+  temperatures, fan controllers, pumps, power supplies) and hands the readings to Libre Panel over
+  a local pipe, so Libre Panel itself needs no administrator rights for them. It only reads: two
+  requests (hello, read) as length-prefixed JSON with bounded sizes and a rate limit; people
+  signed in at the PC may ask for readings, nobody can change anything through it, network logons
+  and other computers are refused, and Libre Panel talks only to the service's own process. It
+  reads only the hardware the themes show, and nothing while nobody asks. `mode = "service"`
+  under `[sensors.librehardwaremonitor]` asks it alone; `"auto"` prefers it wherever it is
+  installed, reads the other ways while it does not answer and lets a service installed later
+  take over. What it may do and why it is safe: [the sensor
+  service](docs/BACKGROUND.md#the-sensor-service)
+- The Windows setup installs for all users and sets up what the sensors need, in three checked
+  boxes that say what each is (English and German): the sensor service, the PawnIO driver (from
+  the download) and *Performance Log Users*, which game frame rates need. *Install for me only*
+  installs without administrator rights as before, and an update keeps the way it was installed.
+  The uninstaller stops and removes the service and takes back the group membership it gave
+- `libre-panel system-setup --service --pawnio --perf-log-users` (as administrator; `--remove`
+  takes it back, `--status` needs no rights): the one way the setup and the portable zip set these
+  up, which may run again without harm
+- *Unlock all sensors*: where a Windows download runs without the sensor service (the portable
+  zip, an install for one user), a card on Start and *Settings → Sensors* run `system-setup` after
+  one question of Windows (UAC). *Settings → Sensors* shows the service, the PawnIO driver and
+  whether game frame rates may be recorded, and sets the service up again or removes it.
+  `libre-panel sensors --check-service` asks it for readings
+- Drive temperatures (`temp.nvme.*` and the like) through the sensor service: the Windows
+  downloads carry LibreHardwareMonitor's DiskInfoToolkit 1.1.2 (MPL-2.0) and BlackSharp.Core 1.0.7
 - The names of the processor, the graphics card and the memory (`cpu.name`, `gpu.name`, `mem.name`)
   are found by Libre Panel itself, on Windows and Linux, once at the start, with no administrator
   rights and no other program: from the registry and the firmware's SMBIOS table on Windows, from
@@ -418,24 +455,26 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
   `gpu.fan` stays RPM and is missing then, not made up), `gpu.mem.total`, `gpu.mem.freq`,
   `gpu.mem.temp`. A card that is powered down to save energy, as a laptop's second one, is never
   asked; `gpu.load` is measured ten times a second by `load` here too (AMD, NVIDIA)
-- **`libre-panel system-setup --linux`**: one command, one password, for what needs root. It lets
-  your user use the TURZX USB panels (the udev rule, applied to a panel that is plugged in, so
-  nobody replugs), loads the Super I/O driver of the mainboard (`nct6775`, `it87` or `nct6683`,
-  tried in the order that fits the maker, only on a desktop board, the first that finds its chip
-  stays) and `drivetemp` for SATA drives, and keeps them in `/etc/modules-load.d/libre-panel.conf`.
-  A driver is never given a parameter or forced (a firmware that keeps its chip, "resource
-  busy", is said, not overridden); what `sensors-detect` recorded counts more than the guess. The
-  processor's energy counters open only with `--rapl`. `--remove` takes it all out, `--dry-run`
-  says what it would do, `--json` reports every step; a second run changes nothing. It asks with
-  `pkexec` (polkit's own password window) or, in a terminal, `sudo`; the root side works out its
-  plan itself and takes nothing but its switches
-- The app offers it: *Start* shows a card while the panel may not be used, there are no fan
+- **`libre-panel system-setup --linux`**: one command, one password, for what needs root. It is
+  the command of Windows' sensor service too, with the flags of its own system (`--linux` is taken
+  for granted on Linux unless a flag of Windows' is given; `--remove` and `--status` mean the same
+  on both). It lets your user use the TURZX USB panels (the udev rule, applied to a panel that is
+  plugged in, so nobody replugs), loads the Super I/O driver of the mainboard (`nct6775`, `it87`
+  or `nct6683`, tried in the order that fits the maker, only on a desktop board, the first that
+  finds its chip stays) and `drivetemp` for SATA drives, and keeps them in
+  `/etc/modules-load.d/libre-panel.conf`. A driver is never given a parameter or forced (a
+  firmware that keeps its chip, "resource busy", is said, not overridden); what `sensors-detect`
+  recorded counts more than the guess. The processor's energy counters open only with `--rapl`.
+  `--remove` takes it all out, `--dry-run` says what it would do, `--json` reports every step; a
+  second run changes nothing. It asks with `pkexec` (polkit's own password window) or, in a
+  terminal, `sudo`; the root side works out its plan itself and takes nothing but its switches
+- The app offers it where it offers *Unlock all sensors* on Windows, through the same route
+  (`/api/unlock`): *Start* shows a card while the panel may not be used, there are no fan
   readings or the processor's power is not readable (with *Not now*), and *Settings → Sensors*
   has *Set up sensors and panel access*, always (also *Remove again* and Ctrl+K). Both say
   exactly what the button does, in your language, and give the command for a terminal where
   there is no password window. The AppImage asks for rights as the AppImage file itself (its
-  mount is closed to root), with the environment of its bundle left out. Route: `GET`/`POST
-  /api/setup`
+  mount is closed to root), with the environment of its bundle left out
 
 **New: themes and widgets**
 - `needs` can compare a reading with a number (`media.playing=1`, `cpu.temp>80`) or a text
@@ -680,6 +719,8 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
   may break now (*Wetter-symbol*, *Monats-kalender*), and a typed word finds the name as before
 
 **Changes**
+- Windows: game frame rates are on by default (`presentmon` among the default
+  sources); PresentMon runs only while a theme shows `game.*`
 - macOS is no longer supported: no download, no tests, no macOS code. Windows and Linux are. Nobody
   downloaded the macOS builds of any release. Gone with it: the disk image and the menu bar app, the
   LaunchAgent, and reading the volume and the player through `osascript`. A system that has no
@@ -704,9 +745,28 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
   wrote, and `libre-panel run --theme` always win. The app, the tray and the console API report the
   theme the panel really shows (`default_theme` in the panel's state, `default` in `GET /api/pages`)
 - The video mode turns itself on: `video.mode` is `"auto"` by default, which streams to a 9.2"
-  (the panel it is proven on) as soon as ffmpeg is found and `local_clip` names the panel's
-  standby clip. `libre-panel doctor` and the log say what is missing. A `mode = "off"` in
-  `config.toml` stays off
+  (the panel it is proven on) as soon as ffmpeg is found (the downloads carry one) and
+  `local_clip` names the panel's standby clip. `libre-panel doctor` and the log say what is
+  missing. A `mode = "off"` in `config.toml` stays off
+- The downloads carry the programs their features run, in a `tools` folder next to the program,
+  so that nothing else has to be installed: **ffmpeg** (a GPL build with libx264) in all of them
+  for the video mode, **PresentMon** 2.6 for the game's frame rate and the installer of the
+  **PawnIO** driver for the CPU's sensors in the Windows ones. The programs are not in the
+  repository: `packaging/fetch_tools.py` fetches them when a download is built and checks every
+  file against a SHA-256 written into the script (ffmpeg also for being the GPL build with libx264
+  and without non-free parts, with its licence text). The release's CI then proves, for the
+  program folder, the installed setup and the AppImage, that ffmpeg lists libx264 and encodes the
+  video mode's stream, that PresentMon starts and that the app finds both before anything on the
+  PATH. The licences: ffmpeg GPL-3.0-or-later, PresentMon MIT, PawnIO's driver GPL-2.0-or-later
+  with an exception (its installer says it may be passed on unmodified, which the build checks).
+  Their texts are in `tools/licenses`, the exact sources (FFmpeg's commit and the build recipe's)
+  in `tools/SOURCES.txt` and [NOTICE.md](NOTICE.md). A pip install has none of it:
+  install ffmpeg yourself (and PresentMon for game frame rates), or name them in `video.ffmpeg` and
+  `[sensors.presentmon] path`, which win over the download's own too. More:
+  [docs/CONFIGURATION.md](docs/CONFIGURATION.md#programs-that-come-with-the-downloads)
+- PresentMon 2.6 names the per-frame waits `MsCPUBusy` and so on by default: both that and the
+  names of 2.3 and `--v2_metrics` are read, so `game.limiter` works with the PresentMon that comes
+  with the download and with the one you name yourself
 - Windows: the GPU, temperatures, power and fans showed nothing unless `librehardwaremonitor` was
   listed in `config.toml`. New configurations now start with
   `providers = ["load", "audio", "librehardwaremonitor", "psutil"]` (on Linux

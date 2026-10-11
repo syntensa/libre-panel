@@ -75,7 +75,7 @@ function StartCard() {
     ${windows
       ? html`<${SettingRow}
           title=${t("With administrator rights")}
-          hint=${t("Needed for the temperature and power of the processor and for the fans on the mainboard. Off unless you turn it on.")}
+          hint=${t("Needed for the temperature and power of the processor and for the fans on the mainboard only where the sensor service is not set up (Settings → Sensors), and for sensor plugins that read the hardware themselves. Off unless you turn it on.")}
           status=${!info.elevated && !info.can_elevate
             ? html`<${Status}>${t("Setting it up needs Libre Panel to run as administrator.")}<//>`
             : null}

@@ -435,6 +435,239 @@ def test_a_first_start_leads_with_the_default_of_the_panel(app_url, isolated_hom
         expect(page.locator(".theme-card.current")).to_have_attribute("data-theme", "libre-default")
 
 
+# -- Start: the question about the panel's standby clip ----------------------------------------
+# The video mode needs the clip's name, which Libre Panel never makes up: where that is all it
+# lacks, Start asks once, with the name the vendor app uses in the field. Nothing is written
+# before a click, and once it is answered it is not asked again.
+
+CLIP = "usr/data/standby.h264"
+
+
+def clip_ready(monkeypatch, model="turing-9.2-usb", ffmpeg=True):
+    """A panel the video mode is proven on is on the bus, and ffmpeg is there."""
+    from test_editor_settings import lacking_ffmpeg, panel_on_the_bus
+
+    panel_on_the_bus(monkeypatch, model)
+    lacking_ffmpeg(monkeypatch, found=ffmpeg)
+
+
+def asks_for_the_clip(page):
+    """Whether the card is there, once Start has heard whether to ask (it asks the server a
+    moment after it shows, so "no card" is only known then)."""
+    page.wait_for_function("window.libre.store.get().clipQuestion !== null")
+    page.wait_for_timeout(100)
+    return page.locator(".clip-card").count() == 1
+
+
+def config_file_text(home):
+    path = home / "config.toml"
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+def test_a_first_start_asks_for_the_standby_clip_and_writes_it_when_told_to(
+    app_url, isolated_home, monkeypatch
+):
+    clip_ready(monkeypatch)
+    assert not (isolated_home / "config.toml").exists()
+    with browser_page(app_url, "home", allow=PICTURE) as page:
+        page.wait_for_selector(".start.first .clip-card")
+        card = page.locator(".clip-card")
+        assert card.locator("h2").inner_text() == "Smooth motion"
+        assert card.locator("p").inner_text() == (
+            "Smooth motion at up to 50 frames a second needs the name of the panel's own "
+            "standby clip. The vendor app keeps it as usr/data/standby.h264."
+        )
+        # the name is in the field, as a value to confirm; it sits between the panel and the themes
+        field = page.get_by_label("Name of the standby clip")
+        assert field.input_value() == CLIP
+        assert page.locator(".panel-strip + .clip-card + .start-head").count() == 1
+        # asking writes nothing, nor does looking at it for a while
+        page.wait_for_timeout(400)
+        assert not (isolated_home / "config.toml").exists()
+        page.get_by_role("button", name="Use it").click()
+        waits_for(page, lambda: settings_config().device.video.local_clip == CLIP)
+        text = config_file_text(isolated_home)
+        assert f'local_clip = "{CLIP}"' in text  # exactly the name that was in the field
+        assert settings_config().device.video.clip_asked is True
+        expect(card).to_have_count(0)  # answered
+        # (a plain editor does not run the panel: it says when the video mode starts)
+        expect(page.locator(".toast")).to_contain_text(
+            "Saved. Smooth motion starts after Libre Panel is started again."
+        )
+        page.goto(f"{app_url}#/home")
+        page.reload()
+        page.wait_for_selector(".start.first .theme-card")
+        assert asks_for_the_clip(page) is False  # not again
+
+
+def test_the_launcher_asks_too_and_writes_the_name_that_was_typed(
+    app_url, isolated_home, monkeypatch
+):
+    clip_ready(monkeypatch)
+    choose_theme(isolated_home)
+    with browser_page(app_url, "home", allow=PICTURE) as page:
+        page.wait_for_selector(".start.launcher .clip-card")
+        assert page.locator(".start-main > :first-child").evaluate(
+            "e => e.matches('.clip-card')"
+        )  # on top of the panel's card
+        field = page.get_by_label("Name of the standby clip")
+        use = page.get_by_role("button", name="Use it")
+        assert field.input_value() == CLIP
+        # no name, no "use it": nothing is made up for an empty field either
+        before = config_file_text(isolated_home)
+        field.fill("   ")
+        expect(use).to_be_disabled()
+        field.press("Enter")
+        page.wait_for_timeout(300)
+        assert config_file_text(isolated_home) == before
+        # a name of the person's own is written as typed (Enter is a click on "Use it")
+        field.fill("usr/data/other-clip.h264")
+        expect(use).to_be_enabled()
+        field.press("Enter")
+        other = "usr/data/other-clip.h264"
+        waits_for(page, lambda: settings_config().device.video.local_clip == other)
+        assert settings_config().device.video.clip_asked is True
+        expect(page.locator(".clip-card")).to_have_count(0)
+
+
+def test_not_now_writes_no_name_and_the_question_is_not_asked_again(
+    app_url, isolated_home, monkeypatch
+):
+    clip_ready(monkeypatch)
+    choose_theme(isolated_home)
+    with browser_page(app_url, "home", allow=PICTURE) as page:
+        page.wait_for_selector(".start.launcher .clip-card")
+        page.get_by_role("button", name="Not now").click()
+        waits_for(page, lambda: settings_config().device.video.clip_asked is True)
+        expect(page.locator(".clip-card")).to_have_count(0)
+        # only that it was asked: no name is written, and the video mode waits for one
+        assert settings_config().device.video.local_clip == ""
+        assert "local_clip" not in config_file_text(isolated_home)
+        assert not page.locator(".toast").count()  # nothing was saved to say
+        # it does not come back: not on Start, not after a start of the app, not on the tray
+        page.goto(f"{app_url}#/settings/panel")
+        page.reload()
+        page.goto(f"{app_url}#/home")
+        page.wait_for_selector(".start.launcher")
+        assert asks_for_the_clip(page) is False
+        # the field in Settings is still there for when the person wants it
+        page.goto(f"{app_url}#/settings/panel")
+        clip = page.get_by_label("Name of the standby clip")
+        assert clip.input_value() == "" and clip.get_attribute("placeholder") == CLIP
+        expect(page.locator("#main .settings-row-status").first).to_have_text(
+            "Off for now. Missing: the name of the standby clip."
+        )
+
+
+@pytest.mark.parametrize(
+    ("extra", "model", "ffmpeg"),
+    [
+        pytest.param(f'[video]\nlocal_clip = "{CLIP}"\n', "turing-9.2-usb", True, id="clip-set"),
+        pytest.param("", "turing-9.2-usb", False, id="no-ffmpeg"),
+        pytest.param("", "turing-8.8-usb", True, id="not-proven"),
+        pytest.param("", None, True, id="no-panel"),
+        pytest.param('[video]\nmode = "off"\n', "turing-9.2-usb", True, id="mode-off"),
+        pytest.param('[video]\nmode = "on"\n', "turing-9.2-usb", True, id="mode-on"),
+        pytest.param("[video]\nclip_asked = true\n", "turing-9.2-usb", True, id="asked"),
+        pytest.param('[device]\ndriver = "virtual"\n', "turing-9.2-usb", True, id="no-hardware"),
+    ],
+)
+def test_start_does_not_ask_for_the_standby_clip_unless_it_is_all_that_is_missing(
+    app_url, isolated_home, monkeypatch, extra, model, ffmpeg
+):
+    from test_editor_settings import lacking_ffmpeg, panel_on_the_bus
+
+    panel_on_the_bus(monkeypatch, model)
+    lacking_ffmpeg(monkeypatch, found=ffmpeg)
+    choose_theme(isolated_home)
+    with isolated_home.joinpath("config.toml").open("a", encoding="utf-8") as config:
+        config.write("\n" + extra)
+    with browser_page(app_url, "home", allow=PICTURE) as page:
+        page.wait_for_selector(".start.launcher")
+        assert asks_for_the_clip(page) is False
+    (isolated_home / "config.toml").write_text(extra, encoding="utf-8")  # a first start: no theme
+    with browser_page(app_url, "home", allow=PICTURE) as page:
+        page.wait_for_selector(".start.first")
+        assert asks_for_the_clip(page) is False
+
+
+def test_the_trays_line_opens_start_at_the_question(app_url, isolated_home, monkeypatch):
+    clip_ready(monkeypatch)
+    choose_theme(isolated_home)
+    with browser_page(app_url, "home/clip", allow=PICTURE) as page:
+        page.wait_for_selector(".start.launcher .clip-card")
+        expect(page.get_by_role("button", name="Use it")).to_be_focused()
+    with browser_page(app_url, "home", allow=PICTURE) as page:  # (Start alone does not take it)
+        page.wait_for_selector(".start.launcher .clip-card")
+        expect(page.get_by_role("button", name="Use it")).not_to_be_focused()
+
+
+def test_the_question_about_the_standby_clip_is_asked_in_german_too(
+    app_url, isolated_home, monkeypatch
+):
+    from libre_panel import i18n
+
+    clip_ready(monkeypatch)
+    choose_theme(isolated_home)
+    i18n.set_language("de")  # (the app's language is the server's: the fixture sets it back)
+    with browser_page(app_url, "home", allow=PICTURE) as page:
+        page.wait_for_selector(".start.launcher .clip-card")
+        card = page.locator(".clip-card")
+        assert card.locator("h2").inner_text() == "Flüssige Bewegung"
+        assert card.locator("p").inner_text() == (
+            "Flüssige Bewegung mit bis zu 50 Bildern pro Sekunde braucht den Namen des "
+            "Standby-Clips, den das Panel selbst hat. Die Hersteller-App kennt ihn als "
+            "usr/data/standby.h264."
+        )
+        assert page.get_by_label("Name des Standby-Clips").input_value() == CLIP
+        expect(page.get_by_role("button", name="Jetzt nicht")).to_be_visible()
+        page.get_by_role("button", name="Übernehmen").click()
+        waits_for(page, lambda: settings_config().device.video.local_clip == CLIP)
+        expect(page.locator(".toast")).to_contain_text(
+            "Gespeichert. Die flüssige Bewegung beginnt, sobald Libre Panel neu gestartet wird."
+        )
+
+
+def test_a_running_panel_switches_by_itself_and_the_trays_line_goes(isolated_home, monkeypatch):
+    """With the background app a name is taken in at once (the panel loop follows config.toml),
+    so Start says so, and the line in the tray's menu is gone as soon as the question is."""
+    from test_editor_settings import lacking_ffmpeg
+    from test_service import FakeRegistry, wait_for
+
+    from libre_panel.autostart import Autostart
+    from libre_panel.devices import turzx_usb
+    from libre_panel.devices.base import DeviceError
+    from libre_panel.service import BackgroundApp
+
+    def no_panel(pid=None):
+        raise DeviceError("no panel")
+
+    monkeypatch.setattr(turzx_usb.UsbTransport, "open", staticmethod(no_panel))
+    lacking_ffmpeg(monkeypatch, found=True)
+    isolated_home.mkdir(parents=True, exist_ok=True)
+    (isolated_home / "config.toml").write_text(
+        'theme = "libre-default"\nfps = 5\n\n[device]\nmodel = "turing-9.2-usb"\n'
+        f'output = "{(isolated_home / "frame.png").as_posix()}"\n',
+        encoding="utf-8",
+    )
+    app = BackgroundApp(port=0, autostart=Autostart("win32", registry=FakeRegistry()))
+    url = app.start()
+    try:
+        assert app.clip_question() is True  # the tray shows its line
+        with browser_page(url, "home", allow=PICTURE) as page:
+            page.wait_for_selector(".start.launcher .clip-card")
+            page.get_by_role("button", name="Use it").click()
+            waits_for(page, lambda: settings_config().device.video.local_clip == CLIP)
+            expect(page.locator(".toast")).to_contain_text(
+                "Saved. The panel switches to smooth motion in a moment."
+            )
+            expect(page.locator(".clip-card")).to_have_count(0)
+        assert wait_for(lambda: app.clip_question() is False)
+    finally:
+        app.quit()
+        app.shutdown()
+
+
 def test_a_collection_waits_closed_at_the_end_of_the_gallery(app_url, isolated_home):
     """Libre Panel's own themes and yours come first; each collection the themes name is a
     group of its own (A to Z) that opens on a click or a key. Nothing names SPUR: a second
@@ -547,6 +780,102 @@ def test_the_launcher_says_what_the_panel_could_not_read(app_url, isolated_home)
         expect(page.locator(".hint-card")).to_contain_text(hint)
         page.get_by_role("button", name="Show details").click()
         page.wait_for_selector(".live")
+
+
+def unlock_route(answer, posted):
+    """``/api/unlock`` as a Windows download answers it, ``answer`` changed by what the
+    tests do; a POST is kept in ``posted`` and its run ends at once, with the service set up
+    (or removed)."""
+    import json
+
+    def handler(route, request):
+        if request.method == "POST":
+            asked = json.loads(request.post_data)
+            posted.append(asked)
+            answer["job"] = {
+                "action": asked["action"], "running": False, "code": 0,
+                "cancelled": False, "error": "",
+            }  # fmt: skip
+            removed = asked["action"] == "remove"
+            answer["service"] = None if removed else {"state": "running", "disabled": False}
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
+
+    return handler
+
+
+def windows_download(**changes):
+    return {
+        "platform": "win32",
+        "available": True,
+        "service": None,
+        "pawnio": None,
+        "frame_rates": "no",
+        "job": None,
+        "command": "libre-panel system-setup --service --pawnio --perf-log-users",
+        **changes,
+    }
+
+
+def test_the_launcher_offers_to_unlock_all_sensors(app_url, isolated_home):
+    """Without the sensor service, Start says what it reads and sets it up after Windows' one
+    question; the card goes once the service is there (and the hint with it)."""
+    choose_theme(isolated_home)
+    answer, posted = windows_download(), []
+    routes = {
+        "**/api/unlock": unlock_route(answer, posted),
+        "**/api/app": a_panel_app(hint="CPU temperature, power and fans need the sensor service."),
+    }
+    with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
+        card = page.locator(".unlock-card")
+        card.wait_for()
+        expect(card).to_contain_text("keeps running without administrator rights")
+        expect(page.locator(".hint-card:not(.unlock-card)")).to_have_count(0)  # one card
+        card.get_by_role("button", name="Unlock all sensors").click()
+        expect(page.locator(".unlock-card")).to_have_count(0)
+        page.wait_for_selector(".toast.success")
+    assert posted == [{"action": "unlock"}]
+
+
+def test_the_launcher_does_not_offer_what_is_there_or_cannot_be(app_url, isolated_home):
+    choose_theme(isolated_home)
+    for answer in (
+        windows_download(service={"state": "running", "disabled": False}),
+        windows_download(available=False),
+    ):
+        routes = {"**/api/unlock": unlock_route(answer, [])}
+        with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
+            page.wait_for_selector(".start.launcher")
+            page.wait_for_function("window.libre.store.get().unlockInfo !== null")
+            expect(page.locator(".unlock-card")).to_have_count(0)
+
+
+def test_the_sensor_settings_show_the_service_and_take_it_away_after_asking(app_url):
+    answer = windows_download(
+        service={"state": "running", "disabled": False}, pawnio="2.0.1", frame_rates="sign-in"
+    )
+    posted = []
+    routes = {"**/api/unlock": unlock_route(answer, posted)}
+    with browser_page(app_url, "settings/sensors", routes=routes) as page:
+        card = page.locator("#sensor-service")
+        card.wait_for()
+        for text in ("Running", "2.0.1", "From your next sign-in"):
+            expect(card).to_contain_text(text)
+        card.get_by_role("button", name="Remove").click()
+        dialog = page.locator(".btn-danger")
+        expect(dialog).to_have_text("Remove")
+        dialog.click()
+        expect(card).to_contain_text("Not set up")
+        expect(card.get_by_role("button", name="Unlock all sensors")).to_be_visible()
+    assert posted == [{"action": "remove"}]
+
+
+def test_the_sensor_settings_name_the_service_as_a_way_to_read(app_url):
+    with browser_page(app_url, "settings/sensors") as page:
+        page.wait_for_selector("#sensor-lhm, .settings-main")
+        if not page.locator("#sensor-lhm").count():  # (not on Windows, and not in the list)
+            return
+        labels = page.locator("#sensor-lhm .segmented button").all_inner_texts()
+        assert labels == ["Automatic", "Sensor service", "Inside Libre Panel", "Web server"]
 
 
 def test_look_edits_the_theme_and_the_preview_follows(app_url):
@@ -734,6 +1063,59 @@ def test_live_shows_the_panel_and_runs_its_services(background, isolated_home):
         expect(page.locator(".live-picture-note")).to_contain_text("paused")
         set_range(page.locator(".topbar .slider input"), 30)
         assert wait_for(lambda: load_config().device.brightness == 30)
+
+
+def test_live_says_whether_the_video_mode_is_on_or_what_it_lacks(
+    app_url, isolated_home, monkeypatch
+):
+    """The state is the server's own (``video_mode()``, as Settings has it), and "on" is said
+    of a panel that is driven in video mode now."""
+    import json
+
+    from test_editor_settings import lacking_ffmpeg, panel_on_the_bus
+
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+
+    def running(streaming):
+        """The console's answer for a panel that runs (``streaming``: in video mode)."""
+        answer = {"background": True, "panel": app_answer(streaming=streaming)["panel"]}
+
+        def handler(route, request):
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
+
+        return {"**/api/plugins/control/panel": handler}
+
+    def state(config="", ffmpeg=True, streaming=False, app=True):
+        lacking_ffmpeg(monkeypatch, found=ffmpeg)
+        choose_theme(isolated_home)
+        with (isolated_home / "config.toml").open("a", encoding="utf-8") as file:
+            file.write(config)
+        with browser_page(
+            app_url, "live", routes=running(streaming) if app else None, allow=PICTURE
+        ) as page:
+            page.wait_for_selector(".live-tile")
+            if not app:
+                page.wait_for_timeout(500)
+                return None, page.locator(".live-video").count()
+            video = page.locator(".live-video")
+            expect(video).to_be_visible()
+            link = page.locator(".live-video a").all_inner_texts()
+            return video.get_attribute("data-video-state"), video.inner_text().strip(), link
+
+    missing = "Off for now. Missing: the name of the standby clip"
+    tone, text, link = state(ffmpeg=False)
+    assert (tone, link) == ("warn", ["Panel settings"])
+    assert text.startswith(f"{missing}, ffmpeg.")
+    tone, text, link = state()
+    assert tone == "warn" and text.startswith(f"{missing}.")
+    with_clip = f'\n[video]\nlocal_clip = "{CLIP}"\n'
+    tone, text, link = state(with_clip, streaming=True)
+    assert (tone, text, link) == ("ok", "On, 50 fps", [])  # at the rate the panel runs at
+    tone, text, link = state(with_clip, streaming=False)
+    assert (tone, text) == ("off", "Starts when a panel it runs on is connected.")  # not yet
+    tone, text, link = state('\n[video]\nmode = "off"\n')
+    assert (tone, text) == ("off", "Off. The panel gets single pictures, about nine a second.")
+    assert state(app=False) == (None, 0)  # a plain editor runs no panel: nothing to say
 
 
 def test_live_without_the_panel_says_so_and_keeps_the_switches(app_url, isolated_home):
@@ -2547,6 +2929,7 @@ def test_settings_panel(app_url, isolated_home, monkeypatch):
         waits_for(
             page, lambda: settings_config().device.video.local_clip == "usr/data/standby.h264"
         )
+        assert settings_config().device.video.clip_asked is True  # typed here: Start need not ask
         video = page.locator("#main .settings-row-status").first
         playwright.expect(video).to_contain_text("On, 50 fps")
         radio(page, "Frames per second", "30").click()
@@ -3249,7 +3632,7 @@ def test_start_offers_the_setup_while_something_is_missing(app_url, isolated_hom
 def test_start_stays_quiet_where_nothing_is_missing(app_url, isolated_home, linux_pc):
     linux_pc(rule_elsewhere=True, dmi={}, panel=False, panel_denied=False, rapl=(), rapl_closed=())
     with start_with_setup(app_url, isolated_home) as page:
-        page.wait_for_function("window.libre.store.get().setup !== null")
+        page.wait_for_function("window.libre.store.get().unlockInfo !== null")
         assert page.locator(".setup-card").count() == 0
 
 
@@ -3257,7 +3640,10 @@ def test_another_system_has_no_setup(app_url, isolated_home, linux_pc, monkeypat
     linux_pc()
     monkeypatch.setattr("libre_panel.linux_setup.supported", lambda: False)
     with start_with_setup(app_url, isolated_home) as page:
-        page.wait_for_function("window.libre.store.get().setup === false")
+        page.wait_for_function(
+            "window.libre.store.get().unlockInfo !== null"
+            " && !window.libre.store.get().unlockInfo.offers"
+        )
         assert page.locator(".setup-card").count() == 0
         page.goto(f"{app_url}#/settings/sensors")
         page.wait_for_selector("#sensor-sources")
@@ -3389,7 +3775,7 @@ def test_what_the_setup_put_in_can_be_taken_out_again(app_url, linux_pc):
 def test_settings_say_nothing_where_there_is_nothing_to_set_up(app_url, linux_pc):
     linux_pc(rule_elsewhere=True, dmi={}, panel=False, panel_denied=False, rapl=(), rapl_closed=())
     with browser_page(app_url, "settings/sensors") as page:
-        page.wait_for_function("window.libre.store.get().setup !== null")
+        page.wait_for_function("window.libre.store.get().unlockInfo !== null")
         assert page.locator("#sensor-setup").count() == 0
         assert page.locator("#sensor-sources").is_visible()
 
@@ -3411,7 +3797,7 @@ def test_the_setup_speaks_german(app_url, isolated_home, linux_pc):
 def test_the_palette_finds_the_setup(app_url, linux_pc):
     linux_pc()
     with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
-        page.wait_for_function("window.libre.store.get().setup")
+        page.wait_for_function("Boolean(window.libre.store.get().unlockInfo?.offers)")
         found = js(
             page,
             "window.libre.commands.availableCommands().map((c) => c.id).includes('setup.open')",

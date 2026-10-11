@@ -26,7 +26,7 @@ from libre_panel.sensors.base import Reading, SensorHub, SensorProvider
 
 LHM_TREE = json.loads((Path(__file__).parent / "data" / "lhm_data.json").read_text("utf-8"))
 URL = "http://127.0.0.1:8085/data.json"
-WINDOWS = ["load", "audio", "librehardwaremonitor", "psutil"]
+WINDOWS = ["load", "audio", "librehardwaremonitor", "presentmon", "psutil"]
 LINUX = ["load", "audio", "linux", "psutil"]
 ELSEWHERE = ["load", "psutil"]  # no way to read the volume there
 

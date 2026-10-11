@@ -7,7 +7,7 @@
 
 import { registerCommand } from "../../core/commands.js";
 import { t } from "../../core/i18n.js";
-import { runSetup, useSetup } from "../../core/setup.js";
+import { linuxSetup, runSetup, useSetup } from "../../core/setup.js";
 import { store } from "../../core/state.js";
 import { html, useState } from "../../lib/preact.js";
 import { navigate } from "../../shell/views.js";
@@ -175,7 +175,7 @@ export function SetupCard() {
 
 /** Whether the card has anything to say: something to bring, or something that was put in. */
 export const setupShows = () => {
-  const setup = store.get().setup;
+  const setup = linuxSetup(store.get().unlockInfo);
   return Boolean(setup) && (setup.offers.length > 0 || setup.installed.length > 0 || setup.granted);
 };
 
@@ -187,6 +187,6 @@ registerCommand({
   group: () => t("Settings"),
   icon: "sensor",
   rank: 87,
-  when: () => Boolean(store.get().setup),
+  when: () => Boolean(linuxSetup(store.get().unlockInfo)),
   run: () => navigate("settings", "sensors"),
 });

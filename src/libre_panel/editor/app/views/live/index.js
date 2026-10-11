@@ -8,8 +8,10 @@ import { appAction } from "../../core/app.js";
 import { registerProvider } from "../../core/commands.js";
 import { control, useLivePicture, usePolled } from "../../core/console.js";
 import { t } from "../../core/i18n.js";
+import { loadPanelInfo } from "../../core/settings.js";
 import { store, useStore } from "../../core/state.js";
 import { statTiles } from "../../core/stats.js";
+import { videoState } from "../../core/video.js";
 import { html, useEffect, useRef, useState } from "../../lib/preact.js";
 import { modeName, panelName, stateText } from "../../shell/panel-popover.js";
 import { registerView } from "../../shell/views.js";
@@ -126,6 +128,27 @@ function LogBox() {
       return html`<div key=${index} class=${line.level} title=${line.title}>${line.text}</div>`;
     })}
   </div>`;
+}
+
+/**
+ * Whether the video mode is on, or what it is missing: as Settings says it, from the server's
+ * own `video_mode()`, and "on" at the rate the panel is driven at while it is.
+ */
+function VideoMode({ background, stats }) {
+  const info = useStore((s) => s.panelInfo);
+  usePolled(loadPanelInfo, 8000, { on: background });
+  if (!background || !info) return null;
+  const { video } = info;
+  const streaming = Boolean(stats?.streaming);
+  const state = videoState(video, video.mode, streaming && stats.target_fps ? stats.target_fps : video.fps, streaming);
+  return html`<section>
+    <h3 class="section-title">${t("Video mode")}</h3>
+    <p class="live-video" data-video-state=${state.tone}>
+      <span class=${`dot ${state.tone === "off" ? "idle" : state.tone}`} aria-hidden="true"></span>
+      <span class="live-video-text">${state.text}</span>
+      ${state.tone === "warn" ? html`<a class="link-btn" href="#/settings/panel">${t("Panel settings")}</a>` : null}
+    </p>
+  </section>`;
 }
 
 // -- sources, services, notices -----------------------------------------------------------------------
@@ -287,6 +310,7 @@ function LiveView() {
       <${LogBox} />
     </div>
     <aside class="live-side" aria-label=${t("Sources and services")}>
+      <${VideoMode} background=${background} stats=${status?.stats} />
       <section>
         <h3 class="section-title">${t("Sources")}</h3>
         <${Sources} data=${sources.data} background=${background} />

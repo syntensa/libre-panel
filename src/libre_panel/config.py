@@ -69,6 +69,9 @@ port = ""
 # guide, Video); "on" and "off" decide by themselves.
 # mode = "auto"
 # local_clip = ""
+# The app asks for that name once, on Start (the tray points to it), and sets this to true when
+# it was answered, whichever way. Put false to be asked again.
+# clip_asked = false
 
 [sensors]
 # Sensor sources, queried in this order: for each reading the first source that
@@ -141,14 +144,15 @@ def default_providers(platform: str | None = None) -> list[str]:
     load source; the volume where it can be read (Windows, and Linux through ``wpctl`` or
     ``pactl``; it reads only while a theme or a service shows it); on Windows
     LibreHardwareMonitor, which alone has the GPU, temperatures, power and fans there (and
-    costs nothing while it is not running), on Linux ``linux``, which reads them from the
-    kernel and NVIDIA's driver; psutil."""
+    costs nothing while it is not running), and PresentMon for a game's frame rate; on Linux
+    ``linux``, which reads them from the kernel and NVIDIA's driver; psutil."""
     where = platform or sys.platform
     sources = ["load"]
     if where == "win32" or where.startswith("linux"):
         sources.append("audio")
     if where == "win32":
-        sources.append("librehardwaremonitor")
+        # PresentMon (in the downloads) runs only while a theme shows a game's frame rate
+        sources += ["librehardwaremonitor", "presentmon"]
     elif where.startswith("linux"):
         sources.append("linux")
     return [*sources, "psutil"]
@@ -213,10 +217,13 @@ class VideoConfig:
     preset: str = "superfast"
     keyframe_s: float = 10.0
     maxrate: str = "2M"
-    ffmpeg: str = ""  # path to ffmpeg; empty = search PATH
+    ffmpeg: str = ""  # path to ffmpeg; empty = the download's own (bundled.py), else PATH
     # The name the video start command (110) needs: the panel's own standby
     # clip, so its standby behaviour stays as it was.
     local_clip: str = ""
+    # Whether the app has asked for ``local_clip`` and been answered, yes or no. A note for the
+    # app, not a setting of the panel: a change of it leaves the open panel as it is.
+    clip_asked: bool = field(default=False, compare=False)
 
 
 @dataclass
@@ -453,6 +460,7 @@ def _parse_video(v: dict[str, Any]) -> VideoConfig:
     video.local_clip = _expect(v.get("local_clip", video.local_clip), str, "video.local_clip")
     if len(video.local_clip.encode("utf-8")) > 200:
         raise ConfigError("video.local_clip: at most 200 bytes")
+    video.clip_asked = _expect(v.get("clip_asked", video.clip_asked), bool, "video.clip_asked")
     return video
 
 

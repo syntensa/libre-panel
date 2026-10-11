@@ -83,6 +83,7 @@ def test_the_settings_are_the_config_with_its_defaults_filled_in(server):
         50,
         "",
     )
+    assert config["video"]["clip_asked"] is False  # nobody has asked yet
     assert config["sensors"]["providers"] == default_providers()
     assert config["sensors"]["librehardwaremonitor"] == {
         "mode": "auto",
@@ -127,7 +128,7 @@ def test_the_catalog_names_the_sources_the_drivers_and_the_services_with_their_o
     assert catalog["implicit_providers"] == ["media", "sky", "hardware"]
     assert catalog["default_providers"] == default_providers()
     assert {"auto", "turzx", "virtual"} <= set(catalog["drivers"])
-    assert catalog["lhm_modes"] == ["auto", "inprocess", "webserver"]
+    assert catalog["lhm_modes"] == ["auto", "service", "inprocess", "webserver"]
     services = catalog["services"]
     assert [service["name"] for service in services] == [
         "notices", "game", "autopilot", "devices", "memory", "cooling", "downloads",
@@ -267,6 +268,8 @@ def test_a_refused_setting_leaves_all_of_them_as_they_were(server):
         {"video.fps": 61},
         {"video.local_clip": "x" * 201},
         {"video.local_clip": 5},
+        {"video.clip_asked": "yes"},
+        {"video.clip_asked": 1},
         {"refresh_ms": 99},
         {"sensors.providers": []},
         {"sensors.providers": ["psutil"]},  # config.py reads that as the usual list
@@ -521,6 +524,96 @@ def test_the_running_app_tells_how_its_panel_is_doing(make, monkeypatch):
     assert data["running"] == {"state": "waiting", "detail": "no panel"}
 
 
+# -- the question about the standby clip -----------------------------------------------------
+
+
+def asks(server):
+    status, data = request(server, "GET", "/api/clip")
+    assert status == 200
+    return data["ask"]
+
+
+def test_the_standby_clip_is_asked_for_where_only_its_name_keeps_the_video_mode_off(
+    server, monkeypatch
+):
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    lacking_ffmpeg(monkeypatch, found=True)
+    status, data = request(server, "GET", "/api/clip")
+    # the name is the one the vendor app uses: offered, and never written by asking
+    assert status == 200 and data == {"ask": True, "name": "usr/data/standby.h264"}
+    assert not (config_dir() / "config.toml").exists()
+    _, panel = request(server, "GET", "/api/panel")
+    assert panel["video"]["gaps"] == ["clip"]  # that is all that is missing, as Settings says
+
+
+def test_the_standby_clip_is_not_asked_for_unless_all_the_rest_is_there(server, monkeypatch):
+    panel_on_the_bus(monkeypatch)
+    lacking_ffmpeg(monkeypatch, found=True)
+    assert asks(server) is False  # no panel
+    panel_on_the_bus(monkeypatch, "turing-8.8-usb")
+    assert asks(server) is False  # the video mode is not proven on it
+    panel_on_the_bus(monkeypatch, serial="turing-3.5")
+    assert asks(server) is False  # a serial panel gets still pictures
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    lacking_ffmpeg(monkeypatch)
+    assert asks(server) is False  # nothing to encode with: ffmpeg first
+    lacking_ffmpeg(monkeypatch, found=True)
+    assert asks(server) is True
+    for mode in ("on", "off"):  # those decide by themselves, without a question
+        write(server, **{"video.mode": mode})
+        assert asks(server) is False, mode
+    write(server, **{"video.mode": "auto"})
+    assert asks(server) is True
+    write(server, **{"device.driver": "virtual"})
+    assert asks(server) is False  # never the panel
+    write(server, **{"device.driver": "auto"})
+    assert asks(server) is True
+
+
+def test_the_standby_clip_is_asked_for_once(server, monkeypatch):
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    lacking_ffmpeg(monkeypatch, found=True)
+    assert asks(server) is True
+    # a name that is there answers it, and so does "not now" (a flag of its own)
+    write(server, **{"video.local_clip": "usr/data/standby.h264"})
+    assert asks(server) is False
+    write(server, **{"video.local_clip": ""})
+    assert asks(server) is True
+    assert write(server, **{"video.clip_asked": True})[0] == 200
+    assert load_config().device.video.clip_asked is True
+    assert load_config().device.video.local_clip == ""  # nothing was made up for it
+    assert asks(server) is False
+    write(server, **{"video.clip_asked": False})  # false asks again
+    assert asks(server) is True
+
+
+def test_a_panel_that_is_named_in_config_toml_is_asked_about_before_it_is_connected(
+    server, monkeypatch
+):
+    panel_on_the_bus(monkeypatch)
+    lacking_ffmpeg(monkeypatch, found=True)
+    write(server, **{"device.model": "turing-9.2-usb"})
+    assert asks(server) is True
+    write(server, **{"device.model": "turing-8.8-usb"})
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    assert asks(server) is False  # the panel that is named is the one that counts
+
+
+def test_looking_for_the_panel_that_fails_asks_nothing(server, monkeypatch):
+    from libre_panel.devices import turzx_usb
+
+    def broken():
+        raise RuntimeError("no libusb")
+
+    monkeypatch.setattr(turzx_usb, "present_model", broken)
+    lacking_ffmpeg(monkeypatch, found=True)
+    assert asks(server) is False
+    config_dir().mkdir(parents=True)
+    (config_dir() / "config.toml").write_text("this is not toml", encoding="utf-8")
+    status, data = request(server, "GET", "/api/clip")
+    assert status == 409 and "error" in data  # the app says so elsewhere
+
+
 # -- the system ------------------------------------------------------------------------------
 
 
@@ -540,7 +633,12 @@ def test_starting_with_the_system_on_a_desktop(make, isolated_home):
     assert data["enabled"] is False and not entry.exists()
 
 
-def test_the_highest_rights_are_set_up_only_when_asked_and_only_by_an_administrator(make):
+def test_the_highest_rights_are_set_up_only_when_asked_and_only_by_an_administrator(
+    make, monkeypatch, tmp_path
+):
+    # (a home of its own: on Linux the Windows path below is relative, so it resolves under
+    # the working folder, which on CI lies in the home folder and would read as risky)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     registry, tasks = FakeRegistry(), FakeTasks()
     windows = Autostart("win32", registry=registry, tasks=tasks, admin=lambda: False)
     app = App(autostart=windows, autostart_command=[r"C:\Tools\libre-panel.exe", "tray"])
@@ -845,7 +943,8 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
 
     names = {
         "device.model", "device.driver", "device.brightness", "device.rotate", "device.port",
-        "video.mode", "video.fps", "video.local_clip", "refresh_ms", "sensors.providers",
+        "video.mode", "video.fps", "video.local_clip", "video.clip_asked", "refresh_ms",
+        "sensors.providers",
         "sensors.librehardwaremonitor.mode", "sensors.librehardwaremonitor.url",
         "weather.enabled", "weather.units", "weather.update_minutes", "weather.latitude",
         "weather.longitude", "weather.place",

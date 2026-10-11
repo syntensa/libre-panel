@@ -57,10 +57,11 @@ LIBRARIES = (
     "System.Runtime.CompilerServices.Unsafe",
     "BlackSharp.Core",  # without it no memory module is found, and no RAM temperature
     "RAMSPDToolkit-NDD",
-    "HidSharp",  # only for USB controllers and power supplies, which are not opened
+    "DiskInfoToolkit",  # only for drives, which the sensor service opens (not this source)
+    "HidSharp",  # only for USB controllers and power supplies, which the sensor service opens
     LIBRARY,
 )
-OPTIONAL = {"HidSharp"}
+OPTIONAL = {"DiskInfoToolkit", "HidSharp"}
 BUNDLED_FOLDER = "lhm"  # in the Windows downloads, next to the program's own files
 PAUSE_SECONDS = 0.002  # between two hardware nodes of a round: the renderer gets its turn
 READY_SECONDS = 20.0  # how long `sensors` and `doctor` wait for the first readings

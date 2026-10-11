@@ -130,6 +130,49 @@ def test_menu_opens_the_app_on_its_views(tray, monkeypatch):
     assert wait_for(lambda: sorted(opened) == ["design", "home", "settings"])
 
 
+def test_the_menu_points_to_the_standby_clip_question_while_start_asks_it(tray, monkeypatch):
+    """One line, only while Start has the question about the panel's standby clip; it opens the
+    app there (#/home/clip), and the menu is told when the question is answered."""
+    from libre_panel import window
+
+    line = "Smooth motion: confirm the clip name…"
+    asking = [False]
+    monkeypatch.setattr(tray.app, "clip_question", lambda: asking[0])
+    assert wait_for(lambda: tray.app.panel.state()["state"] == "showing")
+    assert line not in items(tray.build_menu())
+    tray.refresh()
+    quiet = tray.icon.menu_updates
+    asking[0] = True
+    menu = items(tray.build_menu())
+    assert list(menu)[1:3] == ["Open Libre Panel", line]
+    tray.refresh()
+    assert tray.icon.menu_updates == quiet + 1  # a menu that is built when it changes hears of it
+    opened = []
+    monkeypatch.setattr(window, "open_window", lambda url, view, **kw: opened.append(view))
+    menu[line](tray.icon)
+    assert wait_for(lambda: opened == ["home/clip"])
+    asking[0] = False  # answered on Start
+    tray.refresh()
+    assert tray.icon.menu_updates == quiet + 2 and line not in items(tray.build_menu())
+
+
+def test_the_line_about_the_standby_clip_is_in_german_too(tray, monkeypatch):
+    from libre_panel import i18n
+
+    monkeypatch.setattr(tray.app, "clip_question", lambda: True)
+    i18n.set_language("de")
+    assert "Flüssige Bewegung: Clip-Namen bestätigen …" in items(tray.build_menu())
+
+
+def test_a_menu_that_cannot_tell_whether_to_ask_asks_nothing(tray, monkeypatch):
+    def broken():
+        raise RuntimeError("no way to tell")
+
+    monkeypatch.setattr(tray.app, "clip_question", broken)
+    assert tray.asks_for_clip() is False
+    tray.refresh()  # and the icon goes on
+
+
 def test_refresh_updates_icon_only_on_change(tray):
     assert wait_for(lambda: tray.app.panel.state()["state"] == "showing")
     tray.refresh()

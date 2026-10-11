@@ -65,11 +65,11 @@ port = ""                      # serial panels: found by their USB ids; only if 
 
 [sensors]
 # order = priority. Without this line: ["load", "audio", "linux", "psutil"], on Windows
-# ["load", "audio", "librehardwaremonitor", "psutil"]. More: "demo", plugins
+# ["load", "audio", "librehardwaremonitor", "presentmon", "psutil"]. More: "demo", plugins
 providers = ["load", "audio", "linux", "psutil"]
 
 [sensors.librehardwaremonitor]
-# mode = "auto"                # "auto", "inprocess" (inside Libre Panel) or "webserver"
+# mode = "auto"                # "auto", "service", "inprocess" (inside Libre Panel), "webserver"
 # dll_dir = ""                 # pip install: the folder with LibreHardwareMonitor's libraries
 # poll_seconds = 1             # how often it is read
 url = "http://127.0.0.1:8085/data.json"   # the web server (mode "webserver", and "auto"
@@ -107,6 +107,7 @@ mode = "auto"                  # "auto": smooth video mode by itself where it is
                                # "on": on every TURZX USB panel (needs ffmpeg); "off"
 fps = 50                       # frames per second in video mode
 local_clip = ""                # required for "auto" and "on", see below
+clip_asked = false             # true once the app has asked for local_clip (on Start)
 ```
 
 ## The theme on the panel
@@ -141,7 +142,7 @@ goes first.
 
 A configuration that names no list (no `config.toml`, or none with `providers`)
 starts with `["load", "audio", "linux", "psutil"]` on Linux and
-`["load", "audio", "librehardwaremonitor", "psutil"]` on Windows (elsewhere, where the
+`["load", "audio", "librehardwaremonitor", "presentmon", "psutil"]` on Windows (elsewhere, where the
 volume cannot be read, `["load", "psutil"]`); `libre-panel config init` writes
 that list into a new file. **A list you wrote is never changed.** The exceptions are
 the `["psutil"]` that `config.toml` files up to 0.4 name alone, and on Linux the
@@ -278,23 +279,42 @@ units = { "home/+/temperature" = "°C" }
 [PresentMon](https://github.com/GameTechDev/PresentMon/releases) counts the
 frames of the game you play. It listens to what Windows reports about the
 frames it shows: nothing is put into the game, nothing hooks it, there is no
-overlay. Download its console version (MIT license) and name it. PresentMon
-needs administrator rights or your account in the "Performance Log Users"
-group (Computer Management → Local Users and Groups → Groups; sign out and in
-again).
+overlay. The Windows downloads carry its console version (MIT license) in their
+`tools` folder ([below](#programs-that-come-with-the-downloads)), and Libre Panel uses
+that one before any other. On Windows the source is on by default (it starts PresentMon
+only while a theme shows `game.*`); a list of your own names it:
 
 ```toml
 [sensors]
-providers = ["load", "librehardwaremonitor", "psutil", "presentmon"]
+providers = ["load", "librehardwaremonitor", "presentmon", "psutil"]
+```
 
+PresentMon needs administrator rights or your account in the "Performance Log Users"
+group. The Windows setup can add you to the group (sign out and in again afterwards).
+Without the setup, with the zip or a pip install, do it once in a PowerShell opened as
+administrator; the group is named by its well-known id, so this works in every language of
+Windows:
+
+```powershell
+Add-LocalGroupMember -SID S-1-5-32-559 -Member "$env:USERDOMAIN\$env:USERNAME"
+```
+
+Uninstalling Libre Panel leaves your account in the group. With a pip install there is no
+PresentMon: download its console version (`PresentMon-…-x64.exe`, MIT license) from the
+[releases page](https://github.com/GameTechDev/PresentMon/releases) and name it, or put it
+on the `PATH`:
+
+```toml
 [sensors.presentmon]
-path = "C:/Tools/PresentMon-2.3.0-x64.exe"
+path = "C:/Tools/PresentMon-2.6.0-x64.exe"
 ```
 
 Libre Panel starts this program, with the rights it has itself. If it runs as administrator,
 keep PresentMon where only administrators can change it (a folder under *Program Files*, not
 one you or another user may write to), and name it here in `config.toml`: the app does not
-change `path` then.
+change `path` then. The one in the `tools` folder lies where Libre Panel does, and is as safe
+as that installation is
+([why](BACKGROUND.md#windows-starting-with-the-highest-rights)).
 
 | Reading | |
 |---|---|
@@ -890,13 +910,25 @@ proven, today the 9.2", as soon as ffmpeg is found and `local_clip` is set.
 every TURZX USB panel; `"off"` keeps single PNG frames. In the app, *Settings →
 Panel* shows the same (on with its frame rate, or what is still missing), sets the
 mode and the frame rate (25, 30 or 50), and has a field for the clip's name. That
-field is empty until you type a name; nothing is ever filled in for you.
+field is empty until you type a name.
 
-- **ffmpeg** encodes the video. Install it (Windows: `winget install ffmpeg`;
-  Linux: the `ffmpeg` package), or set `ffmpeg = "C:/path/to/ffmpeg.exe"`. It
-  must include libx264, which the usual builds do. It uses one CPU core,
-  lightly. When Libre Panel runs as administrator, the app does not change this path
-  (it starts that program with those rights): set it in `config.toml`.
+Where the clip's name is all that the video mode lacks (a panel it is proven on, ffmpeg
+found, `mode = "auto"`), *Start* asks for it once, in a card (on a first start too), and
+the tray menu has a line, *Smooth motion: confirm the clip name…*, that opens it. The
+field in the card holds the name the vendor app uses, `usr/data/standby.h264`; nothing is
+written until you press *Use it* (which writes `local_clip`; a panel that Libre Panel is
+running switches to video mode by itself, without a restart) or *Not now* (which writes no
+name). Either answer sets `clip_asked = true`, so it is not asked again; put
+`clip_asked = false` back to be asked once more. A name typed in *Settings → Panel* is an
+answer too.
+
+- **ffmpeg** encodes the video. The Windows and Linux downloads carry one, with libx264, in
+  their `tools` folder ([below](#programs-that-come-with-the-downloads)), and Libre Panel uses
+  it before any other. With a pip install, install ffmpeg yourself (Windows: `winget install
+  ffmpeg`; Linux: the `ffmpeg` package; it must include libx264, which the usual builds do),
+  or set `ffmpeg = "C:/path/to/ffmpeg.exe"`, which wins over all of them, in a download too.
+  It uses one CPU core, lightly. When Libre Panel runs as administrator, the app does not
+  change this path (it starts that program with those rights): set it in `config.toml`.
 - **`local_clip`** is the name the panel's video start command carries: the
   clip the panel plays by itself while the PC is off, if it has one (vendor
   app: standby video) and the mainboard keeps USB powered then. The command
@@ -918,11 +950,36 @@ field is empty until you type a name; nothing is ever filled in for you.
 | `preset` | `"superfast"` | x264 speed preset |
 | `keyframe_s` | 10 | seconds between keyframes; below 3 flat backgrounds visibly pulse |
 | `maxrate` | `"2M"` | highest bit rate, e.g. `"1500k"` |
-| `ffmpeg` | `""` | path to ffmpeg; empty = look in `PATH` |
+| `ffmpeg` | `""` | path to ffmpeg; empty = the download's own, else look in `PATH` |
 | `local_clip` | `""` | see above |
+| `clip_asked` | `false` | `true` once the app has asked for `local_clip` (a name written there, or *Not now*); then it does not ask again |
 
 The settings were measured on the 9.2" panel; the details are in
 [the protocol notes](protocol/turzx-usb.md#two-layers-h264-video--png-overlay-smooth-path).
+
+## Programs that come with the downloads
+
+The Windows and Linux downloads (setup, zip, AppImage, tarball) carry the programs that
+Libre Panel's features run, in the folder `tools` next to the program (in the folder the
+setup installed to, the unpacked zip, the AppImage), so that nothing else has to be installed:
+
+| File | For | Licence |
+|---|---|---|
+| `ffmpeg`, `ffmpeg.exe` | the [video mode](#video) | GPL-3.0-or-later (a GPL build with libx264) |
+| `PresentMon.exe` (Windows) | the [game frame rate](#more-sensor-sources) | MIT |
+| `PawnIO_setup.exe` (Windows) | the installer of the PawnIO driver, through which LibreHardwareMonitor reads the CPU's temperature and power ([Windows sensors](#windows-sensors-gpu-power-fans)) | the driver: GPL-2.0-or-later with an exception |
+
+`tools\SOURCES.txt` lists the files with their SHA-256 and says where their source code is;
+their licence texts are in `tools\licenses`, and [NOTICE.md](../NOTICE.md) says the same.
+They are the files their projects publish, unchanged, fetched when a download is built.
+Uninstalling Libre Panel removes these files. What PawnIO's installer put on the PC, the
+driver, stays, as other programs may use it, and so does your membership in the group
+"Performance Log Users" ([above](#more-sensor-sources)).
+
+A setting always wins: `video.ffmpeg` and `[sensors.presentmon] path` name another program.
+Without them Libre Panel looks in this folder first, then on the `PATH`. It never looks in
+your Downloads folder. A pip install has no such folder: install ffmpeg yourself, and
+PresentMon if you want game frame rates.
 
 ## Windows sensors (GPU, power, fans)
 
@@ -930,19 +987,47 @@ On Windows the temperatures and power of the processor and the graphics card,
 and the fans, come from
 [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor);
 psutil has none of them there. New configurations list it
-(`providers = ["load", "audio", "librehardwaremonitor", "psutil"]`; a file made
+(`providers = ["load", "audio", "librehardwaremonitor", "presentmon", "psutil"]`; a file made
 by an earlier version names `psutil` alone and gets the same list). Libre Panel reads it
-one of two ways, chosen by `mode` under `[sensors.librehardwaremonitor]`:
+one of three ways, chosen by `mode` under `[sensors.librehardwaremonitor]`:
 
 | `mode` | |
 |---|---|
-| `"auto"` (default) | inside Libre Panel where that is possible, else through the web server of a LibreHardwareMonitor that you run yourself |
+| `"auto"` (default) | through the sensor service where it is installed; else inside Libre Panel where that is possible, else through the web server of a LibreHardwareMonitor that you run yourself. A service that does not answer for 20 seconds is replaced by the others until it answers again, and a service installed while Libre Panel runs takes over |
+| `"service"` | the sensor service only |
 | `"inprocess"` | inside Libre Panel only. Where that is not possible, the log says why and those readings show "--" |
 | `"webserver"` | the web server only, as Libre Panel 0.4 did |
 
+### Through the sensor service: every sensor, Libre Panel without administrator rights
+
+The Windows setup installs Libre Panel's **sensor service** (a checked box), and the portable
+zip offers *Unlock all sensors* on Start and in *Settings → Sensors*, which sets up the same
+after one question of Windows. The service runs LibreHardwareMonitor with the rights its
+sensors need and reads every kind of hardware it knows: the processor (temperature, power,
+clock), the graphics cards, the mainboard's temperatures and fans, the memory modules'
+temperature, the drives' temperatures, fan controllers, pumps and power supplies where there
+are any. Libre Panel asks it for the readings over a local pipe, only for the parts a theme on
+show reads, and itself runs without administrator rights. The same command sets it up from a
+terminal opened as administrator:
+
+```
+libre-panel system-setup --service --pawnio --perf-log-users   # all three, or any of them
+libre-panel system-setup --remove                               # the service again
+libre-panel system-setup --status                               # what is in place (no rights)
+libre-panel sensors --check-service                             # does it answer, with what
+```
+
+`--pawnio` installs the PawnIO driver from the download (unless version 2 or newer is there),
+`--perf-log-users` puts you into *Performance Log Users*, which game frame rates
+([PresentMon](#more-sensor-sources)) need. [Running in the background](BACKGROUND.md#the-sensor-service)
+says what the service may and may not do, and why other users of the PC can only read
+readings through it.
+
 ### Inside Libre Panel: no extra program
 
-**The Windows downloads** (setup and zip) carry LibreHardwareMonitor's library.
+Without the sensor service (not set up yet, a pip install, or `mode = "inprocess"`) Libre
+Panel reads LibreHardwareMonitor itself. **The Windows downloads** (setup and zip) carry
+LibreHardwareMonitor's library.
 Nothing else is to be installed or started, and no web server turned on. Libre
 Panel loads the library with [pythonnet](https://pythonnet.github.io/) on the
 .NET Framework that Windows has (4.7.2 or later; Windows 10 from version 1803 and
@@ -973,8 +1058,8 @@ readings show "--", never 0, and everything else works as it does. In that case
 Libre Panel asks a LibreHardwareMonitor web server (below) once at the start: if
 yours runs as administrator, its readings fill in what is missing.
 
-Drive temperatures (`temp.nvme.*` and the like) are not read inside Libre Panel
-yet; the web server has them.
+Drive temperatures (`temp.nvme.*` and the like) are not read inside Libre Panel;
+the sensor service and the web server have them.
 
 `libre-panel sensors` and `libre-panel doctor` say which of the two is missing.
 `libre-panel sensors --check-lhm` only tests that the library loads and opens.
@@ -1067,11 +1152,15 @@ Three things cannot be done without root, and the app offers them in one step. *
 a card while something is missing (the panel may not be used, no fan readings, no processor
 power), and *Settings → Sensors* has the same under *Set up sensors and panel access*. The
 button asks your system for the administrator's password in its own window (polkit's
-`pkexec`), then runs **`libre-panel system-setup --linux`** as root. The same in a terminal:
+`pkexec`), then runs **`libre-panel system-setup --linux`** as root. It is the command that
+sets up Windows' [sensor service](#through-the-sensor-service-every-sensor-libre-panel-without-administrator-rights)
+too, with the flags of each system; on Linux `--linux` is taken for granted unless a flag of
+Windows' is given. The same in a terminal:
 
 ```
 libre-panel system-setup --linux              # AppImage: ./Libre_Panel-x86_64.AppImage system-setup --linux
 libre-panel system-setup --linux --dry-run    # only say what it would do
+libre-panel system-setup --linux --status     # what is in place and what it would bring (no rights)
 libre-panel system-setup --linux --remove     # take it all out again
 ```
 

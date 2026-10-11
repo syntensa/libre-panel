@@ -59,9 +59,10 @@ TURZX-USB-Panels haben einen Videodecoder, und Libre Panel füttert ihn mit bis 
 pro Sekunde. Zahlen zählen zum nächsten Messwert, Ringe und Balken gleiten, Verläufe scrollen
 mit jedem Bild ein Stück weiter, und Lüfter drehen mit ihrer echten Drehzahl. Werte liegen als
 Licht in gefrästen Rillen; Schrift kann facettiertes Metall sein, und feiner Staub treibt in
-der Tiefe dahinter. Der Videomodus braucht ffmpeg und schaltet sich auf dem 9,2" von selbst
-ein ([was er braucht](#faq)); alle anderen Panels bekommen Standbilder, gesendet nur dort, wo
-sich etwas ändert.
+der Tiefe dahinter. Die Downloads bringen das ffmpeg mit, das er braucht, und er schaltet sich
+auf dem 9,2" von selbst ein, sobald der Standby-Clip des Panels benannt ist
+([was er braucht](#faq)); alle anderen Panels bekommen Standbilder, gesendet nur dort, wo sich
+etwas ändert.
 
 ### Karten, die von selbst wechseln
 
@@ -178,11 +179,20 @@ Marken: [docs/HARDWARE.md](docs/HARDWARE.md) (englisch).
 Aus dem [neuesten Release](https://github.com/syntensa/libre-panel/releases/latest), ohne
 Python:
 
-- **Windows 10 und 11:** `libre-panel-…-windows-x64-setup.exe` installiert für deinen Benutzer
-  ohne Administratorrechte, mit Startmenü-Eintrag und auf Wunsch Start bei der Anmeldung. Ein
-  portables Zip gibt es auch.
+- **Windows 10 und 11:** `libre-panel-…-windows-x64-setup.exe` installiert für alle Benutzer,
+  mit Startmenü-Eintrag, auf Wunsch Start bei der Anmeldung und, in angehakten Kästchen, die
+  sagen, was jedes ist, dem Sensordienst, dem Treiber PawnIO und dem, was Bildraten in Spielen
+  brauchen; Windows fragt einmal nach Administratorrechten, Libre Panel selbst läuft ohne sie.
+  Ein portables Zip gibt es auch: Sein *Alle Sensoren freischalten* richtet dasselbe ein.
 - **Linux (x86-64):** `Libre_Panel-…-x86_64.AppImage`: ausführbar machen und starten, ohne
   Installation. Ein Tarball gibt es auch.
+
+Die Downloads bringen mit, was die Funktionen ausführen, in einem Ordner `tools` neben dem
+Programm: ffmpeg für den Videomodus und unter Windows PresentMon für die FPS von Spielen und
+den Installer des PawnIO-Treibers für die Sensoren der CPU. Sonst muss nichts installiert
+werden; ffmpeg steht unter der GPL-3.0, die anderen unter MIT und GPL-2.0
+([welche Programme](docs/CONFIGURATION.md#programs-that-come-with-the-downloads), und
+[NOTICE.md](NOTICE.md) für ihre Quellen).
 
 1. **Hersteller-App beenden.** Sie hält das Panel für sich fest.
 2. **Libre Panel starten**, mit angestecktem Panel. Die Windows-Downloads sind noch nicht
@@ -195,8 +205,9 @@ Python:
    Dienste (alle aus, bis du sie einschaltest). Das Tray-Symbol hat Theme, Helligkeit, Pause
    und *Mit dem System starten*.
 
-Unter Windows brauchen Temperatur und Leistung des Prozessors und die Mainboard-Lüfter
-Administratorrechte und den Treiber PawnIO ([FAQ](#faq)); alles andere geht ohne. Unter Linux
+Unter Windows kommen Temperatur und Leistung des Prozessors, die Mainboard-Lüfter und die
+Temperaturen von Arbeitsspeicher und Laufwerken über den Sensordienst von Libre Panel, der sie
+mit den nötigen Rechten liest ([FAQ](#faq)); die App selbst läuft ohne diese Rechte. Unter Linux
 brauchen die Sensoren keine Rechte, außer den Mainboard-Lüftern und der Leistung des
 Prozessors: *Start* bietet beides mit einem Klick an ([FAQ](#faq)). Die App
 öffnet sich in einem eigenen Fenster (WebView2 unter Windows, WebKitGTK unter Linux); das
@@ -270,17 +281,17 @@ das gefundene Panel; unter *Anderes Panel* wählst du selbst. Im Zweifel fragt u
 <summary><b>Warum zeigen CPU-Temperatur und -Leistung unter Windows „--“?</b></summary>
 <br>
 
-Die Windows-Downloads bringen die Bibliothek von LibreHardwareMonitor mit und lesen
-Grafikkarte, Leistung und Lüfter in Libre Panel selbst, ohne weiteres Programm. Temperatur,
-Leistung und Takt des Prozessors, die RAM-Temperatur und die Mainboard-Lüfter brauchen
-zusätzlich **Administratorrechte** und den Treiber **PawnIO**
-([pawnio.eu](https://pawnio.eu)); das Tray sagt, was davon fehlt. Damit Libre Panel bei jeder
-Anmeldung mit diesen Rechten startet, führ `libre-panel autostart enable --elevated` in einem
-Terminal als Administrator aus, aber nur, wo allein Administratoren die Dateien von Libre
-Panel ändern können, etwa beim portablen Zip unter *Programme*
-([warum](docs/BACKGROUND.md#windows-starting-with-the-highest-rights)). Ein
-LibreHardwareMonitor, den du selbst mit Webserver laufen lässt, geht auch und füllt aus, was
-fehlt ([Einzelheiten](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans)).
+Die Windows-Downloads bringen die Bibliothek von LibreHardwareMonitor mit und lesen die
+Grafikkarte und ihre Lüfter ohne weiteres Programm. Temperatur, Leistung und Takt des
+Prozessors, die Temperaturen von RAM und Laufwerken und die Mainboard-Lüfter brauchen
+**Administratorrechte** und den Treiber **PawnIO** ([pawnio.eu](https://pawnio.eu)). Der
+**Sensordienst** von Libre Panel hat beides: Das Setup installiert ihn (das angehakte Kästchen
+*Sensordienst*), das portable Zip bietet auf Start *Alle Sensoren freischalten* an (eine Frage
+von Windows), und Libre Panel selbst läuft weiter ohne Administratorrechte
+([wie das sicher bleibt](docs/BACKGROUND.md#the-sensor-service)). *Einstellungen → Sensoren*
+sagt, ob er läuft. Ohne ihn gehen `libre-panel autostart enable --elevated` (als
+Administrator) oder ein LibreHardwareMonitor, den du selbst mit Webserver laufen lässt, wie
+bisher ([Einzelheiten](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans)).
 </details>
 
 <details>
@@ -302,23 +313,26 @@ Leistung, mit `--remove` wird alles zurückgenommen). Mehr:
 <summary><b>Wie bekomme ich den flüssigen Videomodus? Brauche ich ffmpeg?</b></summary>
 <br>
 
-Den Videomodus gibt es für die TURZX-USB-Panels, die einen Videodecoder haben. Er braucht
-[ffmpeg](https://ffmpeg.org) (Windows: `winget install ffmpeg`; Linux: das Paket deiner
-Distribution) und, unter *Einstellungen → Panel*, den Namen des Standby-Clips des Panels, so
-wie ihn die Hersteller-App zeigt. Auf dem 9,2" schaltet er sich dann von selbst ein; auf den
-anderen TURZX-USB-Panels stellst du ihn zum Ausprobieren auf *an*. Auf dem Panel wird nichts
-gespeichert. Die seriellen Panels bekommen Standbilder, von denen nur die geänderten Teile
-gesendet werden ([Einzelheiten](docs/CONFIGURATION.md#video)).
+Den Videomodus gibt es für die TURZX-USB-Panels, die einen Videodecoder haben. Die Windows-
+und Linux-Downloads bringen das [ffmpeg](https://ffmpeg.org) mit, das er braucht; du gibst nur
+unter *Einstellungen → Panel* den Namen des Standby-Clips des Panels an, so wie ihn die
+Hersteller-App zeigt. Auf dem 9,2" schaltet er sich dann von selbst ein; auf den anderen
+TURZX-USB-Panels stellst du ihn zum Ausprobieren auf *an*. Mit einer Python-Installation
+installierst du ffmpeg selbst (Windows: `winget install ffmpeg`; Linux: das Paket deiner
+Distribution) oder nennst es an derselben Stelle. Auf dem Panel wird nichts gespeichert. Die
+seriellen Panels bekommen Standbilder, von denen nur die geänderten Teile gesendet werden
+([Einzelheiten](docs/CONFIGURATION.md#video)).
 </details>
 
 <details>
 <summary><b>Brauche ich LibreHardwareMonitor, FanControl oder PresentMon?</b></summary>
 <br>
 
-Für das Grundsätzliche braucht es kein weiteres Programm: LibreHardwareMonitor steckt in den
-Windows-Downloads. Die FPS eines Spiels brauchen Intels
-[PresentMon](https://github.com/GameTechDev/PresentMon/releases) (Windows, MIT-Lizenz), das
-du herunterlädst und in den Einstellungen angibst
+Es braucht kein weiteres Programm: LibreHardwareMonitor und Intels
+[PresentMon](https://github.com/GameTechDev/PresentMon) (Windows, MIT-Lizenz) stecken in den
+Windows-Downloads. Für die FPS eines Spiels schaltest du *Bildrate im Spiel* unter
+*Einstellungen → Sensoren* ein; PresentMon braucht Administratorrechte oder dein Konto in der
+Windows-Gruppe „Performance Log Users“, was das Setup erledigen kann
 ([wie](docs/CONFIGURATION.md#more-sensor-sources)). Die Kühlungsanalyse liest die
 Lüfterkurven von FanControl, falls du FanControl nutzt.
 </details>
@@ -373,8 +387,10 @@ haben ihre eigene Lizenz, angegeben in jeder `theme.json`. Es steht auf den Schu
 [turing-smart-screen-python](https://github.com/mathoudebine/turing-smart-screen-python)
 (GPL-3.0), dessen Reverse Engineering diese Panels dokumentiert; die Windows-Downloads bringen
 [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) mit
-(MPL-2.0); die Schriften sind Barlow, JetBrains Mono und Liberation Sans (SIL OFL 1.1);
-Wetterdaten von [Open-Meteo.com](https://open-meteo.com) (CC BY 4.0). Alles in
+(MPL-2.0), [PresentMon](https://github.com/GameTechDev/PresentMon) (MIT) und den Installer des
+Treibers [PawnIO](https://pawnio.eu) (GPL-2.0-or-later mit Ausnahme), und jeder Download
+[ffmpeg](https://ffmpeg.org) (GPL-3.0-or-later); die Schriften sind Barlow, JetBrains Mono und
+Liberation Sans (SIL OFL 1.1); Wetterdaten von [Open-Meteo.com](https://open-meteo.com) (CC BY 4.0). Alles in
 [NOTICE.md](NOTICE.md).
 
 „TURZX“, „Turing Smart Screen“ und andere Produktnamen sind Marken ihrer Inhaber. Libre Panel

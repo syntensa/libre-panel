@@ -5,17 +5,21 @@
 // running Libre Panel follows. `store.get().settings` is `{config, catalog, restart}`
 // once loaded; `settingsError` says why not (config.toml with a mistake in it).
 
-import { toastError } from "../ui/toast.js";
+import { toast, toastError } from "../ui/toast.js";
 import { get, post } from "./api.js";
 import { appAction, pollApp } from "./app.js";
+import { t } from "./i18n.js";
 import { store, useStore } from "./state.js";
 
 const api = {
   settings: () => get("/api/settings"),
   write: (changes) => post("/api/settings", { set: changes }),
   panel: () => get("/api/panel"),
+  clipQuestion: () => get("/api/clip"),
   system: () => get("/api/system"),
   setSystem: (change) => post("/api/system", change),
+  unlock: () => get("/api/unlock"),
+  setUnlock: (action, options = {}) => post("/api/unlock", { action, ...options }),
   about: () => get("/api/about"),
   open: (folder) => post("/api/open", { folder }),
   place: (query) => post("/api/location", { query }),
@@ -80,6 +84,36 @@ export async function loadPanelInfo() {
     store.set({ panelInfo: null });
     if (error.status !== 409) toastError(error); // 409: config.toml is broken, said by the settings
   }
+}
+
+let asking = 0; // the question asked last: an older answer that comes late is not kept
+
+/**
+ * Whether Start is to ask for the name of the panel's standby clip (/api/clip):
+ * `store.get().clipQuestion` is `{ask, name}`, the name being the one the vendor app uses, which
+ * is only offered. Null while config.toml cannot be read: then there is nothing to ask.
+ */
+export async function loadClipQuestion() {
+  const mine = ++asking;
+  let question = null;
+  try {
+    question = await api.clipQuestion();
+  } catch {
+    // no answer is no question
+  }
+  if (mine === asking) store.set({ clipQuestion: question });
+}
+
+/**
+ * The answer to the question about the standby clip: the name to use, or null for "not now".
+ * Either way the question is not asked again (`video.clip_asked`). Nothing is written before this.
+ * Resolves to whether it was written.
+ */
+export async function answerClipQuestion(name) {
+  const changes = name ? { "video.local_clip": name, "video.clip_asked": true } : { "video.clip_asked": true };
+  const written = await saveSettings(changes);
+  await loadClipQuestion();
+  return written;
 }
 
 /** Starting with the system (/api/system). */
@@ -185,4 +219,81 @@ export async function restartPanel() {
   const resumed = await appAction("resume");
   await loadSettings(); // the server knows the loop started again
   return resumed;
+}
+
+// -- the one-click setup of the system: the sensor service (Windows), the rights (Linux) -----------
+
+/**
+ * What the setup of this system would bring and how a run of it goes (/api/unlock): on Windows
+ * the sensor service and what "Unlock all sensors" sets up, on Linux the permission for the panel,
+ * the mainboard's sensor driver and the processor's power (core/setup.js); null where nothing
+ * answers. `platform` says which.
+ */
+export async function loadUnlock() {
+  try {
+    store.set({ unlockInfo: await api.unlock() });
+  } catch {
+    store.set({ unlockInfo: null });
+  }
+  return store.get().unlockInfo;
+}
+
+/** How a run of system-setup ended, in a sentence. */
+function tellUnlock(info) {
+  const job = info?.job;
+  if (!job || job.running || info.platform === "linux") return; // Linux's card tells it itself
+  if (job.cancelled) {
+    toast(t("Nothing was changed: Windows' question was answered with no."), { kind: "warn" });
+  } else if (job.error) {
+    toast(t("Windows did not start the setup: {error}", { error: job.error }), { kind: "error" });
+  } else if (job.code !== 0) {
+    toast(t("Not everything could be set up. In a terminal opened as administrator, this command says why: {command}", { command: info.command }), {
+      kind: "error",
+    });
+  } else if (job.action === "remove") {
+    toast(t("The sensor service is removed."), { kind: "success" });
+  } else {
+    const later = info.frame_rates === "sign-in" ? ` ${t("Game frame rates count from your next sign-in.")}` : "";
+    toast(t("All sensors are unlocked: the readings arrive within a few seconds.") + later, { kind: "success", timeout: 9000 });
+  }
+}
+
+let following = null;
+
+/** Follow a run until it is over, then say how it went. */
+function followUnlock() {
+  if (following) return;
+  following = setInterval(async () => {
+    const info = await loadUnlock();
+    if (info?.job?.running) return;
+    clearInterval(following);
+    following = null;
+    tellUnlock(info);
+    loadSourceStates(); // the sources say how LibreHardwareMonitor is read now
+    if (info?.platform === "linux" && info.job?.state === "done") {
+      // the chips of a driver that was loaded are found by the next rescan of the sensors
+      pollApp();
+      setTimeout(() => {
+        loadSourceStates();
+        pollApp();
+      }, 4000);
+    }
+  }, 1000);
+}
+
+/**
+ * "unlock" or "remove": libre-panel system-setup, after the system asks for administrator rights
+ * (one UAC prompt on Windows, polkit's password window on Linux, where `{rapl: true}` or
+ * `{rapl: false}` also opens or closes the processor's energy counters). Resolves to whether it
+ * was started; how it ended is said when it has.
+ */
+export async function runUnlock(action, options = {}) {
+  try {
+    store.set({ unlockInfo: await api.setUnlock(action, options) });
+  } catch (error) {
+    toastError(error);
+    return false;
+  }
+  followUnlock();
+  return true;
 }

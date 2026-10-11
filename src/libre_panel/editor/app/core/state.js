@@ -46,11 +46,12 @@ export const store = createStore({
   settingsError: null, // why config.toml cannot be read
   settingsDown: false, // ... because the server does not answer
   panelInfo: null, // Settings: the panel found, the video mode's state
+  clipQuestion: null, // Start: {ask, name}, whether to ask for the panel's standby clip (core/settings.js)
   systemInfo: null, // Settings: starting with the system
+  unlockInfo: null, // Start and Settings: "Unlock all sensors" (Windows), the one-click setup (Linux)
   aboutInfo: null, // Settings: version, licence, notices, folders
   sourceStates: null, // Settings: what the running app says of its sensor sources
   serviceStates: null, // Settings: the services and their states
-  setup: null, // Start and Settings: the one-click setup of Linux (core/setup.js); false: none here
   prefs: {
     snap: 4, // px: 1, 4, 8 or 16; 0 = off
     guides: true,

@@ -14,7 +14,7 @@ first. Each hardware step needs a tester with the panel.
 - [x] `libre-panel doctor`: hardware check with test cards and report
 - [x] Built-in themes: Libre Default, SPUR II, Orbit, Slate, Column
 - [x] H.264 video mode for V1.x USB panels (up to 50 fps, protocol documented in
-      [turzx-usb.md](protocol/turzx-usb.md)); needs `ffmpeg`
+      [turzx-usb.md](protocol/turzx-usb.md)); needs `ffmpeg`, which the downloads carry
 - [x] Plugin API 1: services, modes, screens, widgets, toasts, transitions,
       sensor sources, themes, editor pages ([PLUGINS.md](PLUGINS.md))
 - [x] Tray app with autostart; Windows setup, Linux AppImage

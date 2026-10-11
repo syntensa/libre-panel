@@ -1,19 +1,22 @@
 // Start (#/home, #/home/themes): the launcher. The panel at a glance with its picture and
 // controls, the themes to switch between, and the way into the other views. On a first start
 // (no theme in config.toml yet) it asks "How should it look?" with the themes made for the
-// panel. Built on the shell: see ../../README.md.
+// panel. Where the video mode only lacks the name of the panel's standby clip, a card at the top
+// asks for it once (clip.js). Built on the shell: see ../../README.md.
 
 import { blankTheme, importTheme, openTheme, showOnPanel, startTheme, themeName } from "../../core/actions.js";
 import { registerCommands, registerProvider } from "../../core/commands.js";
 import { control, usePolled } from "../../core/console.js";
 import { t } from "../../core/i18n.js";
+import { loadUnlock, runUnlock } from "../../core/settings.js";
 import { firstStart, store, useStore } from "../../core/state.js";
-import { html, useState } from "../../lib/preact.js";
+import { html, useEffect, useState } from "../../lib/preact.js";
 import { panelName } from "../../shell/panel-popover.js";
 import { navigate, registerView } from "../../shell/views.js";
 import { Segmented } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { toast } from "../../ui/toast.js";
+import { ClipQuestion } from "./clip.js";
 import { PanelCard, PanelStrip, panelModelNow, usePanelModel } from "./panel.js";
 import { Gallery, ThemeRow, collectionsOf, fitsPanel, startThemes } from "./themes.js";
 import { SetupCard } from "./setup.js";
@@ -100,7 +103,7 @@ function suggestions(items, model) {
   return standard && !picks.includes(standard) ? [standard, ...picks] : picks;
 }
 
-function FirstStart() {
+function FirstStart({ focus }) {
   const { model, items } = useStartThemes();
   const [everything, setEverything] = useState(false);
   const picks = suggestions(items, model);
@@ -108,6 +111,7 @@ function FirstStart() {
   const shown = everything ? items : picks;
   return html`<div class="start first">
     <${PanelStrip} />
+    <${ClipQuestion} focus=${focus} />
     <div class="start-head">
       <h1>${t("How should it look?")}</h1>
       <span class="muted">${t("Everything can be changed freely afterwards.")}</span>
@@ -175,9 +179,37 @@ function Routing() {
   </dl>`;
 }
 
+/** Whether this Windows download can set up the sensor service, and it is not there yet. */
+const unlockable = (info) => Boolean(info?.platform === "win32" && info.available && !info.service);
+
+/**
+ * "Unlock all sensors": the sensor service (and PawnIO, and the group game frame rates need),
+ * set up after one question of Windows for administrator rights. Libre Panel itself goes on
+ * without them.
+ */
+function UnlockCard() {
+  const info = useStore((s) => s.unlockInfo);
+  useEffect(() => {
+    loadUnlock();
+  }, []);
+  if (!unlockable(info)) return null;
+  const busy = Boolean(info.job?.running);
+  return html`<aside class="hint-card unlock-card" role="status">
+    <strong>${t("Unlock all sensors")}</strong>
+    <p>
+      ${t(
+        "CPU, GPU and mainboard temperatures, power, fan speeds, memory and drives need a small Windows service with the rights to read them. Libre Panel itself keeps running without administrator rights.",
+      )}
+    </p>
+    <button type="button" class="btn" disabled=${busy} onClick=${() => runUnlock("unlock")}>
+      ${busy ? t("Waiting for Windows…") : t("Unlock all sensors")}
+    </button>
+  </aside>`;
+}
+
 /** What the panel could not read, in one sentence, with the way to the details. */
 function Hint() {
-  const hint = useStore((s) => (s.app.available ? s.app.panel?.hint : ""));
+  const hint = useStore((s) => (s.app.available && !unlockable(s.unlockInfo) ? s.app.panel?.hint : ""));
   if (!hint) return null;
   return html`<aside class="hint-card" role="status">
     <strong>${t("Readings are missing")}</strong>
@@ -186,7 +218,7 @@ function Hint() {
   </aside>`;
 }
 
-function Launcher() {
+function Launcher({ focus }) {
   const { model, items } = useStartThemes();
   // the quick switch: what is on the panel and what is made for it, of Libre Panel's own and
   // yours (not a collection's, nor a theme kept for a page of its own, such as the round
@@ -197,6 +229,7 @@ function Launcher() {
   const sets = collectionsOf(items.filter((item) => item.fits || !model));
   return html`<div class="start launcher">
     <div class="start-main">
+      <${ClipQuestion} focus=${focus} />
       <${PanelCard} />
       <nav class="start-tiles" aria-label=${t("Area")}>
         ${TILES().map(
@@ -230,6 +263,7 @@ function Launcher() {
       </div>
       <${Routing} />
       <span class="grow"></span>
+      <${UnlockCard} />
       <${SetupCard} />
       <${Hint} />
     </aside>
@@ -249,7 +283,8 @@ function HomeView({ rest }) {
   const first = useStore((s) => firstStart(s));
   const [page, asked] = rest.split("/"); // #/home/themes, or #/home/themes/<a collection>
   if (page === "themes") return html`<${ThemesPage} asked=${asked ? decoded(asked) : ""} />`;
-  return first ? html`<${FirstStart} />` : html`<${Launcher} />`;
+  const focus = page === "clip"; // #/home/clip: the tray points to the question about the clip
+  return first ? html`<${FirstStart} focus=${focus} />` : html`<${Launcher} focus=${focus} />`;
 }
 
 registerView({ id: "home", title: () => t("Start"), order: 10, icon: "home", component: HomeView });

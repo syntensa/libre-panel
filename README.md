@@ -58,9 +58,9 @@ yourself. It runs quietly in the tray and takes the vendor app's place.
 TURZX USB panels have a video decoder, and Libre Panel feeds it up to 50 frames a second.
 Numbers count to each new reading, rings and bars glide, graphs scroll a little on every
 frame and fans turn at their own speed. Values sit as light in milled grooves; lettering can
-be faceted metal, and fine dust drifts in the depth behind. Video mode needs ffmpeg and turns
-itself on on the 9.2" ([what it needs](#faq)); every other panel gets still frames, sent
-where something changed.
+be faceted metal, and fine dust drifts in the depth behind. The downloads carry the ffmpeg it
+needs, and it turns itself on on the 9.2" once the panel's standby clip is named
+([what it needs](#faq)); every other panel gets still frames, sent where something changed.
 
 ### Cards that change by themselves
 
@@ -172,11 +172,19 @@ others have no video decoder. Details, Linux permissions and the panels of other
 From the [latest release](https://github.com/syntensa/libre-panel/releases/latest), no
 Python needed:
 
-- **Windows 10 and 11:** `libre-panel-…-windows-x64-setup.exe` installs for your user without
-  administrator rights, with a start menu entry and an optional start at login. A portable
-  zip is there too.
+- **Windows 10 and 11:** `libre-panel-…-windows-x64-setup.exe` installs for all users, with
+  a start menu entry, an optional start at login and, in checked boxes that say what each
+  is, the sensor service, the PawnIO driver and what game frame rates need; Windows asks
+  once for administrator rights, Libre Panel itself runs without them. A portable zip is
+  there too: its *Unlock all sensors* sets up the same.
 - **Linux (x86-64):** `Libre_Panel-…-x86_64.AppImage`: make it executable and start it, no
   installation. A tarball is there too.
+
+The downloads carry what the features run, in a `tools` folder next to the program: ffmpeg
+for the video mode, and on Windows PresentMon for game frame rates and the installer of the
+PawnIO driver for the CPU's sensors. Nothing else has to be installed; ffmpeg is GPL-3.0, the
+others are MIT and GPL-2.0 ([which programs](docs/CONFIGURATION.md#programs-that-come-with-the-downloads),
+and [NOTICE.md](NOTICE.md) for their sources).
 
 1. **Close the vendor app.** It keeps the panel to itself.
 2. **Start Libre Panel** with the panel plugged in. The Windows downloads are not code-signed
@@ -188,8 +196,9 @@ Python needed:
    services (all off until you switch them on). The tray icon has the theme, brightness,
    pause and *Start with system*.
 
-On Windows, the processor's temperature and power and the mainboard's fans need
-administrator rights and the PawnIO driver ([FAQ](#faq)); everything else works without. On
+On Windows, the processor's temperature and power, the mainboard's fans and the
+temperatures of memory and drives come through Libre Panel's sensor service, which reads
+them with the rights they need ([FAQ](#faq)); the app itself runs without those rights. On
 Linux the sensors need no rights, except the mainboard's fans and the processor's power:
 *Start* offers both with one click ([FAQ](#faq)).
 The app opens in a window of its own (WebView2 on Windows, WebKitGTK on Linux); the AppImage
@@ -260,16 +269,16 @@ as a virtual COM port (`COM3`, `/dev/ttyACM0`). *Start* in the app names the pan
 <summary><b>Why do the CPU temperature and power show "--" on Windows?</b></summary>
 <br>
 
-The Windows downloads carry LibreHardwareMonitor's library and read the graphics card,
-power and fans inside Libre Panel, with no other program. The processor's temperature, power
-and clock, the RAM's temperature and the mainboard's fans also need **administrator rights**
-and the **PawnIO** driver ([pawnio.eu](https://pawnio.eu)); the tray says which one is
-missing. To start with those rights at every login, run `libre-panel autostart enable
---elevated` in a terminal opened as administrator, but only where only administrators can
-change Libre Panel's files, such as the portable zip unpacked under *Program Files*
-([why](docs/BACKGROUND.md#windows-starting-with-the-highest-rights)). A LibreHardwareMonitor
-that you run yourself with its web server works too and fills in what is missing
-([details](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans)).
+The Windows downloads carry LibreHardwareMonitor's library and read the graphics card and
+its fans with no other program. The processor's temperature, power and clock, the RAM's and
+the drives' temperatures and the mainboard's fans need **administrator rights** and the
+**PawnIO** driver ([pawnio.eu](https://pawnio.eu)). Libre Panel's **sensor service** has
+both: the setup installs it (the checked box *Sensor service*), the portable zip offers
+*Unlock all sensors* on Start (one question of Windows), and Libre Panel itself goes on
+without administrator rights ([how it is kept safe](docs/BACKGROUND.md#the-sensor-service)).
+*Settings → Sensors* says whether it runs. Without it, `libre-panel autostart enable
+--elevated` (as administrator) or a LibreHardwareMonitor that you run yourself with its web
+server work as before ([details](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans)).
 </details>
 
 <details>
@@ -290,23 +299,26 @@ asks for the password once, and the card says exactly what is changed. In a term
 <summary><b>How do I get the smooth video mode? Do I need ffmpeg?</b></summary>
 <br>
 
-Video mode is for the TURZX USB panels, which have a video decoder. It needs
-[ffmpeg](https://ffmpeg.org) (Windows: `winget install ffmpeg`; Linux: your distribution's
-package) and, in *Settings → Panel*, the name of the panel's standby clip as the vendor app
-shows it. On the 9.2" it then turns itself on; on the other TURZX USB panels set it to *on*
-to try it. Nothing is saved on the panel. The serial panels get still frames, with only the
-changed parts sent ([details](docs/CONFIGURATION.md#video)).
+Video mode is for the TURZX USB panels, which have a video decoder. The Windows and Linux
+downloads carry the [ffmpeg](https://ffmpeg.org) it needs, so you only name the panel's
+standby clip, as the vendor app shows it, in *Settings → Panel*. On the 9.2" it then turns
+itself on; on the other TURZX USB panels set it to *on* to try it. With a pip install, install
+ffmpeg yourself (Windows: `winget install ffmpeg`; Linux: your distribution's package) or
+name it in the same place. Nothing is saved on the panel. The serial panels get still frames,
+with only the changed parts sent ([details](docs/CONFIGURATION.md#video)).
 </details>
 
 <details>
 <summary><b>Do I need LibreHardwareMonitor, FanControl or PresentMon?</b></summary>
 <br>
 
-No other program is needed for the basics: LibreHardwareMonitor is built into the Windows
-downloads. The game's frame rate needs Intel's
-[PresentMon](https://github.com/GameTechDev/PresentMon/releases) (Windows, MIT licence),
-which you download and name in the settings ([how](docs/CONFIGURATION.md#more-sensor-sources)).
-The cooling analysis reads FanControl's fan curves, if you use FanControl.
+No other program is needed: LibreHardwareMonitor and Intel's
+[PresentMon](https://github.com/GameTechDev/PresentMon) (Windows, MIT licence) are in the
+Windows downloads. For the game's frame rate switch *Game frame rate* on in *Settings →
+Sensors*; PresentMon needs administrator rights or your account in the Windows group
+"Performance Log Users", which the setup can arrange
+([how](docs/CONFIGURATION.md#more-sensor-sources)). The cooling analysis reads FanControl's
+fan curves, if you use FanControl.
 </details>
 
 <details>
@@ -358,7 +370,10 @@ their own licence, stated in each `theme.json`. It stands on the shoulders of
 [turing-smart-screen-python](https://github.com/mathoudebine/turing-smart-screen-python)
 (GPL-3.0), whose reverse-engineering documents these panels; the Windows downloads carry
 [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor)
-(MPL-2.0); the fonts are Barlow, JetBrains Mono and Liberation Sans (SIL OFL 1.1); weather
+(MPL-2.0), [PresentMon](https://github.com/GameTechDev/PresentMon) (MIT) and the installer of
+the [PawnIO](https://pawnio.eu) driver (GPL-2.0-or-later with an exception), and every
+download [ffmpeg](https://ffmpeg.org) (GPL-3.0-or-later); the fonts are Barlow, JetBrains Mono
+and Liberation Sans (SIL OFL 1.1); weather
 data by [Open-Meteo.com](https://open-meteo.com) (CC BY 4.0). All of it in
 [NOTICE.md](NOTICE.md).
 

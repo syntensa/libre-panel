@@ -9,9 +9,11 @@ docs/HARDWARE.md.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from PIL import Image
 
+from libre_panel.config import DeviceConfig
 from libre_panel.devices.base import DeviceError, Display
 from libre_panel.devices.models import PROTOCOLS, PanelModel, find_model
 from libre_panel.i18n import t
@@ -21,6 +23,10 @@ log = logging.getLogger(__name__)
 # Why "auto" left the video mode off, as last logged: kept per process, for the default driver
 # makes a new display each time it looks for a panel (every 5 s while one cannot be opened).
 _told = ""
+
+# What the vendor app calls the panel's standby clip. Only ever offered to the person, who
+# confirms it: the video start command copies the name into the panel's settings.
+VENDOR_CLIP = "usr/data/standby.h264"
 
 SERIAL_DRIVERS = {
     "serial-a": "libre_panel.devices.turing_rev_a:RevADisplay",
@@ -66,11 +72,26 @@ def video_mode(video, model: PanelModel | None) -> tuple[bool, list[str]]:
         # said without the path: doctor reports are shared
         "ffmpeg-path": t("ffmpeg is not at the path in video.ffmpeg (config.toml)"),
         "ffmpeg": t(
-            "the video mode needs ffmpeg: install it, or set video.ffmpeg in config.toml "
-            "to the ffmpeg program"
+            "the video mode needs ffmpeg: the downloads of Libre Panel carry it; "
+            "with pip install it, or set video.ffmpeg in config.toml to the ffmpeg program"
         ),
     }
     return not gaps, [texts[gap] for gap in gaps]
+
+
+def clip_question(device: DeviceConfig, connected: Callable[[], PanelModel | None]) -> bool:
+    """Whether the person is still to be asked for the standby clip's name: ``auto`` waits for
+    nothing but that on a panel it is proven on (the one named in ``device.model``, else the one
+    ``connected`` finds), and the person has not answered yet. The name is never made up; this
+    only says that it is time to offer one. ``connected`` is called last: it may look at the
+    USB bus."""
+    video = device.video
+    if device.driver not in ("auto", "turzx") or video.mode != "auto":
+        return False
+    if video.local_clip or video.clip_asked:
+        return False
+    model = find_model(device.model) or connected()
+    return model is not None and video_gaps(video, model) == ["clip"]
 
 
 class TurzxDisplay(Display):

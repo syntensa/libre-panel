@@ -46,6 +46,10 @@ USB (V1.x) panels identify as VID `0x1CBE` with a size-specific PID; see
 [protocol notes](protocol/turzx-usb.md). The 9.2" panel is 480×1920, not the
 462×1920 listed elsewhere — measured on the device.
 
+Their video mode (up to 50 frames a second) encodes with ffmpeg, which the Windows and Linux
+downloads carry; nothing else is to be installed. With a pip install, install ffmpeg yourself
+([Video](CONFIGURATION.md#video)).
+
 ## Compatible panels from other brands
 
 Same electronics, different sticker:
