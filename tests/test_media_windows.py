@@ -12,7 +12,10 @@ from fake_sensors import show, wait_for
 from fake_winrt import FakeSession, FakeThumbnail, FakeWinrt
 from PIL import Image
 
+from libre_panel.config import Config, ServicesConfig
+from libre_panel.plugins import PluginHost, ServiceManager
 from libre_panel.sensors import appicon, base, media
+from libre_panel.sensors.base import SensorHub
 
 
 @pytest.fixture
@@ -364,6 +367,43 @@ def test_the_icon_is_not_looked_for_while_nobody_reads_it(winrt, provider):
     assert wait_for(lambda: title_of(provider) == "Song")
     assert asked == [] and "media.app_icon" not in provider.images()
     assert theme is not None
+
+
+def test_the_notices_service_puts_the_cover_and_the_icon_on_a_new_track(winrt, provider):
+    """Through the hub and the sample signal, as in the app: media.* is asked for by the
+    service alone, and what the source brings reaches the message."""
+    import io
+
+    picture = io.BytesIO()
+    Image.new("RGB", (40, 40), "red").save(picture, "PNG")
+    icon = Image.new("RGBA", (96, 96), "blue")
+    provider._icons = appicon.AppIcons(lambda app: icon)
+    session = winrt.manager.current = FakeSession(
+        title="One", artist="Band", thumbnail=FakeThumbnail(picture.getvalue())
+    )
+    host = PluginHost()
+    manager = ServiceManager(host)
+    options = {"volume": False, "restarted": False}
+    manager.apply(Config(services=ServicesConfig(["notices"], {"notices": options})))
+    hub = SensorHub([provider])
+    try:
+        assert manager.state == {"notices": "running"}
+        hub.snapshot()  # starts the source: the service wants media.*
+        assert wait_for(lambda: "media.cover" in hub.snapshot().images)
+        host.emit("sample", wait=True, snapshot=hub.snapshot())
+        assert host.take_toasts() == []  # what plays when the service starts is no news
+        session.title = "Two"
+        session.fire("media_properties_changed")
+        assert wait_for(lambda: hub.snapshot().value("media.title") == "Two")
+        host.emit("sample", wait=True, snapshot=hub.snapshot())
+        [toast] = host.take_toasts()
+        assert toast.text == "Two – Band" and toast.kind == "music"
+        assert toast.payload["badge"] is icon  # the player's icon, as found once
+        assert toast.payload["image"].size == (40, 40)  # and the cover
+    finally:
+        manager.stop()
+        host.close()
+        hub.close()
 
 
 def test_close_ends_the_thread_and_lets_go_of_windows_events(winrt, provider):
