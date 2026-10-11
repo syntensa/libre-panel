@@ -760,6 +760,10 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
 - A whole number of 400 digits in an MQTT message, or in a state or an attribute of Home Assistant,
   was too large for a float and raised in the thread that reads the broker; it is read as infinity
   now, as `1e400` always was, and shows as no value
+- The pictures of the library's modules in the app made a renderer each and did not close it, as
+  the other previews do (a renderer that is not closed keeps what its plugin parts hold until the
+  collector runs, which the background app keeps from running for hours); every preview of the
+  editor, plugin screens and widgets among them, closes its renderer and frees it at once
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars (the
