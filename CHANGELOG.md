@@ -633,6 +633,8 @@
   were pushed out of the window. The search field, the theme's name and the text of the
   panel chip give way (the *Not saved* mark keeps its dot), and the brand is its icon at
   the smallest size
+- Design: the size popover of a module in the toolbar cut off its last *+*; the width
+  and the height have a line each now
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

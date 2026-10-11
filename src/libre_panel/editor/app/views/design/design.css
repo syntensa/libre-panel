@@ -1244,6 +1244,18 @@
   background: var(--surface);
 }
 
+/* in a popover (the toolbar's size) the width and the height have a line each, so the last
+   button is not cut off by the popover's edge */
+.popover .size-steps {
+  display: grid;
+  grid-template-columns: auto auto auto auto;
+  justify-content: start;
+}
+
+.popover .size-steps .muted {
+  margin-left: 0;
+}
+
 /* the sensor */
 .sensor-button {
   height: 40px;

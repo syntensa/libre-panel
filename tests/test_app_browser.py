@@ -1313,6 +1313,30 @@ def test_a_modules_source_and_detaching_it(page):
     assert widget(page, ring)["source"] == "disk"
 
 
+def test_the_size_popover_shows_all_its_buttons(page):
+    """The toolbar's size of a module has the width and the height in a line each: the last
+    "+" was cut off by the popover's edge (the German labels are longer still)."""
+    new_theme_from_a_layout(page, "Turing 3.5")
+    ring = js(page, "window.libre.doc.widgets().find((w) => w.module === 'ring').id")
+    js(page, f"window.libre.doc.setSelection([{ring!r}])")
+    inside = """(() => {
+      const frame = document.querySelector('.popover').getBoundingClientRect();
+      return [...document.querySelectorAll('.popover .size-steps .icon-btn')].map((button) => {
+        const box = button.getBoundingClientRect();
+        return box.left >= frame.left && box.right <= frame.right
+          && box.top >= frame.top && box.bottom <= frame.bottom;
+      });
+    })()"""
+    for language in ("en", "de"):
+        js(page, f"window.libre.commands.runCommand('language.{language}')")
+        page.wait_for_function(f"document.documentElement.lang === '{language}'")
+        page.locator(".floating-toolbar .tool-text.mono").click()
+        expect(page.locator(".popover .size-steps")).to_be_visible()
+        assert js(page, inside) == [True] * 4  # Narrower, Wider, Lower, Taller
+        page.keyboard.press("Escape")
+        expect(page.locator(".popover")).to_have_count(0)
+
+
 def test_the_weather_forecast_setting(page):
     new_theme_from_a_layout(page)
     weather = js(page, "window.libre.doc.widgets().find((w) => w.module === 'weather').id")
