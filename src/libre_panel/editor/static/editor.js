@@ -1060,6 +1060,8 @@ function hintFor(widget, key, kind) {
   if (key === "smooth" && widget.type === "metric") return t("the number glides between readings, together with the bars and rings of its sensor");
   if (key === "seconds" && widget.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = as long as the history readings take");
   if (key === "per_frame") return t("video mode: a point a pixel apart, as SPUR II draws its curves (seconds = width / 25)");
+  if (key === "finish") return t("facet: a flat top with a lit, bevelled rim (text from 20 px, bars from 6 px)");
+  if (key === "max_rpm") return t("the speed at which the ring is full; the rotor turns the faster the closer it gets");
   return null;
 }
 
@@ -1187,6 +1189,7 @@ function buildThemeProps(form) {
     field(t("background image"), assetInput(theme.background.image, set("bgimg", (v) => (theme.background.image = v || null)))),
     ...buildScreenFields(),
     ...buildModuleThemeFields(),
+    ...buildDustFields(),
     el("h2", { class: "section-title", text: t("Palette") }),
     buildPaletteEditor(),
     el("h2", { class: "section-title", text: t("Timing") }),
@@ -1235,6 +1238,116 @@ function buildModuleThemeFields() {
     field(t("numbers font"), fontInput(style.display_font, setStyle("display_font"))),
     field(t("labels font"), fontInput(style.text_font, setStyle("text_font"))),
   ];
+}
+
+// The depth dust (look.dust). The model's table says which fields there are, what
+// they start at and how far they go; the form only draws them.
+function buildDustFields() {
+  const info = state.specs.dust;
+  if (!info) return [];
+  const dust = state.theme.look?.dust;
+  const edit = (key, apply) => (value) => {
+    commit(`dust:${key}`);
+    const look = (state.theme.look = state.theme.look || {});
+    look.dust = look.dust || { ...Object.fromEntries(Object.entries(info.fields).map(([k, [, d]]) => [k, d])), colors: [], areas: [] };
+    apply(look.dust, value);
+    scheduleRender();
+  };
+  const number = (key, label, hint, step) => {
+    const [low, high] = info.limits[key];
+    const value = dust ? dust[key] : info.fields[key][1];
+    const save = (d, v) => (d[key] = Math.max(low, Math.min(high, v ?? low)));
+    return field(label, numberInput(value, edit(key, save), { step, min: low, max: high }), hint);
+  };
+  const names = Object.keys(state.theme.palette || {});
+  const colour = (v) => /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v) || (v.startsWith("@") && names.includes(v.slice(1)));
+  const colours = el("input", {
+    type: "text",
+    value: (dust?.colors || []).join(", "),
+    placeholder: t("each from its element"),
+    onchange: (event) => {
+      const list = event.target.value.split(",").map((c) => c.trim()).filter(Boolean);
+      const bad = list.find((c) => !colour(c));
+      if (bad || list.length > info.max_colors) return setStatus(t("Not a usable colour list: {text}", { text: bad || event.target.value }), "warn");
+      edit("colors", (d, v) => (d.colors = v))(list);
+    },
+  });
+  return [
+    el("h2", { class: "section-title", text: t("Dust") }),
+    field(t("depth dust"), controlFor("enabled", "bool", !!dust && dust.enabled, edit("enabled", (d, v) => (d.enabled = v))), t("fine grains fall from the elements into the depth behind the panel; drawn in video mode and here, not on a panel that is sent pictures")),
+    number("count", t("grains"), t("on a 1920 × 480 panel; other sizes scale with their area"), "1"),
+    number("rate", t("moves a second"), t("how often the grains move; 25 is calm and cheap"), "1"),
+    number("depth", t("depth"), t("how far they fall; 0 = they hang where they are"), "0.1"),
+    number("strength", t("strength"), t("how bright they are"), "0.1"),
+    field(t("dust colours"), colours, t("empty: each grain takes the colour of the element it falls from; else #rrggbb or @name, separated by commas")),
+    field(t("dust areas"), areasInput(dust?.areas || [], (areas) => edit("areas", (d, v) => (d.areas = v))(areas), info.max_areas), t("rectangles; with a \"dust here\" area there is dust only inside, else everywhere but in a \"no dust\" area")),
+  ];
+}
+
+// Rectangles for the dust: where it may fall, or where it may not.
+function areasInput(areas, onChange, limit) {
+  const box = el("div", { class: "rules" });
+  const redraw = () => {
+    box.replaceChildren(
+      ...areas.map((area, i) =>
+        el(
+          "div",
+          { class: "rules" },
+          el(
+            "div",
+            { class: "quad" },
+            ...["x", "y", "w", "h"].map((key) =>
+              field(fieldLabel(key), numberInput(area[key], (v) => {
+                area[key] = Math.max(key === "w" || key === "h" ? 1 : -9999, v ?? 0);
+                onChange(areas);
+              })),
+            ),
+          ),
+          el(
+            "div",
+            { class: "row" },
+            el(
+              "select",
+              {
+                onchange: (e) => {
+                  area.dust = e.target.value === "yes";
+                  onChange(areas);
+                },
+              },
+              el("option", { value: "yes", text: t("dust here"), selected: area.dust !== false }),
+              el("option", { value: "no", text: t("no dust here"), selected: area.dust === false }),
+            ),
+            el("button", {
+              type: "button",
+              class: "small danger",
+              text: "✕",
+              title: t("Remove area"),
+              onclick: () => {
+                areas.splice(i, 1);
+                onChange(areas);
+                redraw();
+              },
+            }),
+          ),
+        ),
+      ),
+      areas.length < limit
+        ? el("button", {
+            type: "button",
+            class: "small",
+            text: t("+ area"),
+            onclick: () => {
+              const [width, height] = state.size;
+              areas.push({ x: 0, y: 0, w: Math.round(width / 2), h: height, dust: false });
+              onChange(areas);
+              redraw();
+            },
+          })
+        : null,
+    );
+  };
+  redraw();
+  return box;
 }
 
 // Messages from services (toasts): where, how long, which kinds not, and their look.

@@ -39,6 +39,10 @@ from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import (
     COMMON_FIELDS,
+    DUST_LIMITS,
+    DUST_MAX_AREAS,
+    DUST_MAX_COLORS,
+    DUST_SPEC,
     EFFECT_FIELDS,
     TOAST_ANCHORS,
     WIDGET_SPECS,
@@ -385,6 +389,12 @@ class EditorHandler(BaseHTTPRequestHandler):
             "default_font": DEFAULT_FONT,
             "icons": list(ICON_NAMES),
             "modules": module_info(),
+            "dust": {
+                "fields": {k: list(v) for k, v in DUST_SPEC.items()},
+                "limits": {k: list(v) for k, v in DUST_LIMITS.items()},
+                "max_colors": DUST_MAX_COLORS,
+                "max_areas": DUST_MAX_AREAS,
+            },
             **presets,
         }
 
