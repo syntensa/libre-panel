@@ -410,6 +410,24 @@ def test_demo_has_a_calendar_and_a_song():
     assert snap.now + timedelta(0) == datetime(2026, 10, 9, 10, 8)
 
 
+@pytest.mark.parametrize("hour", [0, 3, 9, 14, 23])
+def test_demo_has_a_volume_a_game_and_rain_at_any_time_of_day(hour):
+    """The editor's previews show a bar for the volume, the game's keys and the rain text; the
+    values are neutral and the rain is always half an hour or so away."""
+    from libre_panel.sensors.demo import demo_snapshot
+
+    snap = demo_snapshot(fixed_time=datetime(2026, 10, 9, hour, 8).timestamp())
+    volume, muted = snap.readings["audio.volume"], snap.readings["audio.muted"]
+    assert (volume.value, volume.unit, muted.value) == (46.0, "%", 0)
+    assert len(snap.history["audio.volume"]) == 600
+    assert snap.readings["game.frametime_peak"].unit == "ms"
+    assert snap.readings["game.limiter"].value in ("cpu", "gpu", "cap")
+    assert snap.readings["game.name"].value == snap.readings["game.app"].value
+    rain = snap.readings["weather.rain.minutes"]
+    assert 30 < rain.value <= 45 and rain.unit == "min"
+    assert snap.readings["weather.rain.text"].value == f"Rain in {rain.value} min"
+
+
 # -- game frame rate -----------------------------------------------------------------
 
 

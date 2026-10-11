@@ -44,6 +44,8 @@ _WAVES: dict[str, tuple[str, str, float, float, float]] = {
     "game.fps": ("Frames per second", "fps", 141, 12, 7),
     "game.frametime": ("Frame time", "ms", 7.1, 0.6, 7),
     "game.low": ("1% low", "fps", 104, 4, 19),
+    "game.frametime_peak": ("Frame time peak", "ms", 9.4, 1.8, 7),
+    "audio.volume": ("Volume", "%", 46, 0, 1),
     "temp.cpu.ccd1": ("CPU CCD1", "°C", 52, 12, 29),
     "temp.gpu.hot_spot": ("GPU Hot Spot", "°C", 71, 12, 31),
     "temp.nvme.composite": ("NVMe SSD", "°C", 41, 3, 61),
@@ -140,6 +142,9 @@ def demo_details(t: float, waves: dict[str, Reading]) -> dict[str, Reading]:
     out["battery.left"] = Reading("battery.left", 2 * 3600 + 40 * 60, "s", "Battery time left")
     out["net.ip"] = Reading("net.ip", "192.168.1.20", "", "IP address")
     out["game.app"] = Reading("game.app", "Starfall", "", "Game")
+    out["game.name"] = Reading("game.name", "Starfall", "", "Game")
+    out["game.limiter"] = Reading("game.limiter", "gpu", "", "Limited by")
+    out["audio.muted"] = Reading("audio.muted", 0, "", "Muted")
     out["net.today.down"] = Reading("net.today.down", 3.42e9, "B", "Received today")
     out["net.today.up"] = Reading("net.today.up", 6.1e8, "B", "Sent today")
     return out
@@ -212,6 +217,8 @@ def demo_forecast(t: float) -> dict[str, Reading]:
     local = datetime.fromtimestamp(t).astimezone()
     offset = local.utcoffset()
     midnight = local.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+    step_now = (local.replace(tzinfo=None) - midnight) // timedelta(minutes=15)
+    rain = [0.6 if 3 <= n - step_now < 7 else 0.0 for n in range(192)]  # dry now, then an hour
     hours = range(48)
     data = {
         "utc_offset_seconds": int(offset.total_seconds()) if offset else 0,
@@ -228,6 +235,11 @@ def demo_forecast(t: float) -> dict[str, Reading]:
         "daily": {
             "time": [(midnight + timedelta(days=d)).strftime("%Y-%m-%d") for d in range(7)],
             **_DAILY,
+        },
+        "minutely_15": {
+            "time": [(midnight + timedelta(minutes=15 * n)).strftime("%Y-%m-%dT%H:%M")
+                     for n in range(192)],
+            "precipitation": rain,
         },
         "daily_units": {"temperature_2m_max": "°C", "temperature_2m_min": "°C",
                         "precipitation_probability_max": "%"},

@@ -297,6 +297,12 @@
   line in `slides`) now counts as reading it. Before, the icon of the player was never
   looked for unless something else asked for it, and the cover of the music module was
   read only while something else asked for `media.*` too, such as the notices service
+- The editor's sensor picker did not offer what a source reads only while a theme shows it
+  (the volume, the rain text, the game's slowest frame and what limits it, the player's
+  title): a running panel has none of them until then. They are listed from a catalog now, and
+  the demo values of the previews gained the volume (46 %), the game keys and the rain
+  ("Rain in 40 min"). `GET /api/sensors` also lists the pictures a source has (`media.cover`,
+  `media.app_icon`, `game.logo`), marked `"picture": true`, for an image's `"@key"`
 - Services follow `config.toml` whenever the panel loop starts. A service switched
   on (or off, or given other options) while the panel was paused, or in a
   `config.toml` that did not load at the start and was fixed later, stayed as it

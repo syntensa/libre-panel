@@ -54,6 +54,60 @@ def test_index_and_specs(server):
     assert band["label"] == "Band (built in)" and band["options"]["roll_in"] == ["number", 0.45]
 
 
+def test_the_sensor_picker_offers_what_sources_read_only_on_demand(server):
+    status, sensors = request(server, "GET", "/api/sensors")
+    assert status == 200
+    keys = [sensor["key"] for sensor in sensors]
+    assert keys == sorted(set(keys))  # each once, in order
+    wanted = (
+        "audio.volume", "audio.muted", "cpu.load", "gpu.load", "media.title", "media.progress",
+        "game.fps", "game.frametime_peak", "game.limiter", "game.name",
+        "weather.rain.minutes", "weather.rain.text", "net.ping",
+    )  # fmt: skip
+    assert set(wanted) <= set(keys)
+    pictures = {sensor["key"] for sensor in sensors if sensor.get("picture")}
+    assert pictures == {"media.cover", "media.app_icon", "game.logo"}  # for an image's "@key"
+    assert not any(sensor.get("picture") for sensor in sensors if sensor["key"] not in pictures)
+    volume = next(sensor for sensor in sensors if sensor["key"] == "audio.volume")
+    assert (volume["unit"], volume["label"]) == ("%", "Volume")
+
+
+def test_the_picker_does_not_wait_for_the_demo_or_the_panel_to_have_them(server, monkeypatch):
+    """A running panel has no volume until a theme shows it: the keys come from the catalog."""
+    from libre_panel.editor import server as editor_server
+    from libre_panel.sensors.base import Snapshot
+
+    monkeypatch.setattr(editor_server, "demo_snapshot", lambda: Snapshot())
+    status, sensors = request(server, "GET", "/api/sensors")
+    keys = {sensor["key"] for sensor in sensors}
+    assert status == 200 and {"audio.volume", "weather.rain.text", "media.app_icon"} <= keys
+
+
+def test_the_catalog_of_on_demand_keys_says_what_the_sources_and_the_demo_say():
+    from libre_panel.editor.server import ON_DEMAND
+    from libre_panel.sensors import load
+    from libre_panel.sensors.audio import AudioProvider
+    from libre_panel.sensors.base import Reading
+    from libre_panel.sensors.demo import demo_snapshot
+    from libre_panel.sensors.media import Track
+
+    catalog = {key: (unit, label) for key, unit, label in ON_DEMAND}
+    assert len(catalog) == len(ON_DEMAND)  # no key twice
+    spoken = {}
+    track = Track("playing", "Song", "Band", "Album", 1.0, 2.0, None, "Player", at=0.0)
+    spoken.update(track.readings(0.0))
+    audio = AudioProvider()
+    audio._publish(40.0, False)
+    spoken.update(audio._state[1])
+    spoken.update({key: Reading(key, 1.0, "%", label) for key, label in load._LABELS.items()})
+    assert spoken.keys() >= {"audio.volume", "media.title", "cpu.load", "gpu.load"}
+    for key, reading in spoken.items():
+        assert catalog[key] == (reading.unit, reading.label), key
+    demo = demo_snapshot().readings  # the previews show a value for every one of them
+    for key, (unit, label) in catalog.items():
+        assert key in demo and (demo[key].unit, demo[key].label) == (unit, label), key
+
+
 def test_the_preview_is_never_turned(server, isolated_home):
     """Upside down is for the panel; the editor shows the theme the right way up."""
     from io import BytesIO

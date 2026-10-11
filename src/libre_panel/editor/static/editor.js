@@ -2597,7 +2597,7 @@ async function init() {
     api("GET", "/api/sensors")
       .then((sensors) => {
         const list = el("datalist", { id: "sensor-keys" });
-        for (const s of sensors) list.append(el("option", { value: s.key, label: `${s.label}${s.unit ? ` (${s.unit})` : ""}` }));
+        for (const s of sensors) if (!s.picture) list.append(el("option", { value: s.key, label: `${s.label}${s.unit ? ` (${s.unit})` : ""}` }));
         document.body.append(list);
       })
       .catch(() => {});
