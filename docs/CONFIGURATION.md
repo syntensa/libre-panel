@@ -131,15 +131,29 @@ the moon and what is playing come by themselves; the others are listed in
 needed. Sunrise and sunset need your place: `latitude` and `longitude` in
 `[weather]` (also when the weather itself is off).
 
-**What is playing** (`media.*` and the cover) is read only while a theme
-shows it:
+**What is playing** (`media.*`, the cover and the icon of the player) is read
+only while a theme or a service reads it:
 
 - Windows: the media controls of Windows, whatever the volume pop-up shows
-  (Spotify, browsers, media players). The installer brings what it needs; a
-  pip install needs `pip install "libre-panel[media]"`.
+  (Spotify, browsers, media players). Windows reports a new track, a pause or
+  another player at once, so the panel follows without delay; a look every
+  five seconds is only the safety net, and the position moves on by itself in
+  between. The cover is read when the track changes. The installer brings what
+  it needs; a pip install needs `pip install "libre-panel[media]"`.
 - Linux: any MPRIS player through `playerctl` (install it from your
-  distribution).
-- macOS: Spotify or Music.
+  distribution), asked once a second.
+- macOS: Spotify or Music, asked once a second.
+
+Two pictures go with it, for an image widget (`"src": "@media.cover"`):
+`media.cover`, the album cover, and `media.app_icon`, the icon of the program
+that plays. The icon is found once per program, never sent anywhere, and the
+notices service puts it on the cover of its "Now playing" message:
+
+- Windows: the logo of a Store app (from its package), else the icon of the
+  program that runs under the name Windows gives the player.
+- Linux: the PNG that the player's desktop entry names; a player whose icon
+  exists only as an SVG has none.
+- macOS: the `.icns` file of the app.
 
 **Calendars** (`calendar.*`): the secret address of a calendar (Google:
 settings of the calendar → "Secret address in iCal format"; Outlook:

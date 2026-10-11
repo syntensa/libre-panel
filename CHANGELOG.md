@@ -65,6 +65,12 @@
   load over a time, a program in front, the time of day. A new choice must
   hold for 8 s and a theme stays for 20 s, the load does not count for the
   first four minutes after the system started, and it rests in game mode
+- `media.app_icon`, the icon of the program that plays, next to `media.cover`
+  (an image widget: `"src": "@media.app_icon"`), and the small badge on the
+  cover of the "Now playing" message. Windows: the logo of a Store app, else
+  the icon of the running program; Linux: the PNG of the player's desktop
+  entry; macOS: the app's `.icns`. Found once per program and nothing is sent
+  anywhere
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
@@ -78,6 +84,11 @@
   kind itself; now it goes on unseen and comes back with the next screen
 
 **Changes**
+- Windows: what is playing follows Windows' own reports of a new track, a
+  pause or another player instead of asking once a second, so a new track
+  shows at once. The cover is read when the track changes, not at every look;
+  a look every five seconds is the safety net, and the position still moves on
+  by itself. Linux and macOS ask once a second as before
 - Windows: the GPU, temperatures, power and fans showed nothing unless
   `librehardwaremonitor` was listed in `config.toml`. New configurations now
   start with `providers = ["load", "librehardwaremonitor", "psutil"]` (elsewhere
