@@ -750,7 +750,8 @@ def test_the_service_runs_through_the_manager_and_publishes_while_it_is_there(di
         assert state_of(host) is None
         part = folder / "big.iso.part"
         sparse(part, 60 * MB)
-        assert wait_for(lambda: state_of(host) is not None)
+        # (Windows fills a file it lengthens step by step: the service may see it growing first)
+        assert wait_for(lambda: (state_of(host) or {}).get("bytes") == 60 * MB)
         found = state_of(host)
         assert (found["source"], found["name"], found["phase"]) == (
             "browser",
