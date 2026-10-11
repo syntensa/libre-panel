@@ -1,7 +1,8 @@
 // The server's API (editor/server.py). Writes carry the header that browsers
 // never send cross-origin without a preflight, which the server refuses.
 
-/** A request; resolves to the JSON answer, rejects with the server's error text. */
+/** A request; resolves to the JSON answer, rejects with the server's error text (and
+ * the HTTP status as `error.status`). */
 export async function api(method, url, body, { raw = false, signal } = {}) {
   const options = { method, headers: {}, signal };
   if (method !== "GET") options.headers["X-Libre-Panel"] = "1";
@@ -11,7 +12,11 @@ export async function api(method, url, body, { raw = false, signal } = {}) {
   }
   const response = await fetch(url, options);
   const data = await response.json().catch(() => ({ error: response.statusText }));
-  if (!response.ok) throw new Error(data.error || response.statusText || String(response.status));
+  if (!response.ok) {
+    const error = new Error(data.error || response.statusText || String(response.status));
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
@@ -48,4 +53,6 @@ export const endpoints = {
   app: () => get("/api/app"),
   appAction: (action, value) => post("/api/app", { action, value }),
   pluginPages: () => get("/api/plugins/pages"),
+  hardware: () => get("/api/hardware"),
+  setHardware: (names) => post("/api/hardware", names),
 };

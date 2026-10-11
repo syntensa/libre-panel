@@ -1,0 +1,160 @@
+/* Settings: the sections on the left, the chosen one's groups as cards (Settings.dc.html) */
+
+.settings {
+  display: flex;
+  min-height: 0;
+}
+
+.settings-nav {
+  width: 250px;
+  flex-shrink: 0;
+  padding: 20px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-right: 1px solid var(--line);
+  background: var(--panel-2);
+  overflow-y: auto;
+}
+
+.settings-nav button {
+  height: 40px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+}
+
+.settings-nav button:hover {
+  background: var(--surface);
+  color: var(--text-2);
+}
+
+.settings-nav button[aria-current="page"] {
+  background: var(--surface-3);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.settings-main {
+  flex: 1;
+  min-width: 0;
+  padding: 30px 40px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  overflow-y: auto;
+}
+
+.settings-main > * {
+  width: 100%;
+  max-width: 860px;
+}
+
+.settings-main h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+}
+
+.settings-card {
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.settings-card-head {
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-card-head:last-child {
+  border-bottom: none;
+}
+
+.settings-card-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-card-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-row:last-child {
+  border-bottom: none;
+}
+
+.settings-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-row-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-row-hint {
+  color: var(--muted);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-row-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.settings-row-control .input {
+  width: 340px;
+}
+
+.settings-upcoming {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 20px;
+}
+
+.settings-upcoming p {
+  margin: 0 0 6px;
+  line-height: 1.5;
+}
+
+.settings-upcoming p:last-child {
+  margin-bottom: 0;
+  font-size: 13px;
+}
+
+/* the place of a small action after a control, kept while there is none: the controls
+   stay in line */
+.row-action {
+  min-width: 84px;
+}

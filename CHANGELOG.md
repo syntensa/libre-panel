@@ -22,6 +22,11 @@
   several widgets at once, layers with lock and eye, the theme's pictures and
   fonts. The panel's pages are tabs over it: the normal theme, game mode's,
   the round report's and those of plugins' modes, each with its frame rate
+- The hardware's names in the app: *Settings → Sensors → Hardware names*
+  shows the processor, graphics card and memory names the sensors detect, and
+  a text typed there takes their place on the panel (*Automatic* brings the
+  detected one back). In *Design* the same field sits beside a widget that
+  shows one of them
 - Everything in the app is a command: Ctrl+K finds it by a few letters
   (themes, modules, sensors, panels, the language, the panel's controls),
   with the keys it has

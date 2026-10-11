@@ -22,8 +22,16 @@ def app_url():
     srv.editor_state.close()
 
 
+def expected_404(message):
+    """The app asks for the hardware's names; a server without them answers 404 (the app
+    then hides them), which Chromium logs as an error."""
+    return message.text.startswith("Failed to load resource") and message.location.get(
+        "url", ""
+    ).endswith("/api/hardware")
+
+
 @contextlib.contextmanager
-def browser_page(url, view="design", strict_csp=False, size=(1440, 900)):
+def browser_page(url, view="design", strict_csp=False, size=(1440, 900), routes=None):
     with playwright.sync_playwright() as p:
         try:
             browser = p.chromium.launch()
@@ -37,7 +45,12 @@ def browser_page(url, view="design", strict_csp=False, size=(1440, 900)):
         page = context.new_page()
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
-        page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+        page.on(
+            "console",
+            lambda m: errors.append(m.text) if m.type == "error" and not expected_404(m) else None,
+        )
+        for pattern, handler in (routes or {}).items():  # stand-ins for the server's answers
+            page.route(pattern, handler)
         page.goto(f"{url}#/{view}")
         page.wait_for_selector(".panel-canvas .preview" if view == "design" else ".view > *")
         page.wait_for_timeout(300)
@@ -67,9 +80,12 @@ def test_the_app_opens_without_breaking_its_rules(app_url):
         assert page.locator(".theme-name").inner_text() == "Libre Default"
         assert page.locator(".tile").count() > 30  # modules, building blocks, widgets
         assert js(page, "window.libre.store.get().render.size") == [480, 320]
-        for view in ("home", "look", "live", "settings"):  # the other views' places
+        for view in ("home", "look", "live"):  # the other views' places
             page.goto(f"{app_url}#/{view}")
             page.wait_for_selector(".view .slot")
+        page.goto(f"{app_url}#/settings/about")
+        current = page.locator(".settings-nav [aria-current='page']")
+        assert current.inner_text() == "About Libre Panel"
 
 
 def test_select_move_undo_redo(page):
@@ -262,3 +278,61 @@ def test_the_running_panel_in_the_chip(isolated_home):
     finally:
         app.quit()
         app.shutdown()
+
+
+class HardwareNames:
+    """A stand-in for the server's /api/hardware: the names, and what the app posts."""
+
+    def __init__(self):
+        self.names = {
+            "cpu": {"detected": "8-Core Processor", "custom": ""},
+            "gpu": {"detected": "Graphics Card", "custom": ""},
+            "memory": {"detected": "", "custom": ""},
+        }
+        self.posted = []
+
+    def __call__(self, route, request):
+        import json
+
+        if request.method == "POST":
+            change = json.loads(request.post_data or "{}")
+            self.posted.append(change)
+            for part, text in change.items():
+                self.names[part]["custom"] = text
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(self.names))
+
+
+def test_hardware_names_in_settings_and_where_they_show(app_url):
+    names = HardwareNames()
+    with browser_page(app_url, "settings/sensors", routes={"**/api/hardware": names}) as page:
+        cpu = page.locator("#hardware-cpu-row")
+        assert cpu.get_attribute("placeholder") == "8-Core Processor"  # the detected name
+        assert page.locator("#hardware-memory-row").get_attribute("placeholder") == "not detected"
+        cpu.fill("Workstation")
+        cpu.press("Enter")
+        page.wait_for_function("window.libre.store.get().hardware.cpu.custom === 'Workstation'")
+        page.locator(".settings-row", has_text="Processor").locator(".link-btn").click()
+        page.wait_for_function("window.libre.store.get().hardware.cpu.custom === ''")
+        assert names.posted == [{"cpu": "Workstation"}, {"cpu": ""}]
+        # in Design: beside a widget that shows a name
+        page.goto(f"{app_url}#/design")
+        page.wait_for_selector(".panel-canvas .preview")
+        shows_name = "{type: 'metric', id: 'gpu-name', x: 10, y: 10, sensor: 'gpu.name'}"
+        js(page, f"window.libre.doc.edit(null, (theme) => theme.widgets.push({shows_name}))")
+        js(page, "window.libre.doc.setSelection(['gpu-name'])")
+        field = page.locator(".inspector .hardware-name input")
+        assert field.get_attribute("placeholder") == "Graphics Card"
+        field.fill("Mine")
+        field.press("Enter")
+        page.wait_for_function("window.libre.store.get().hardware.gpu.custom === 'Mine'")
+        assert names.posted[-1] == {"gpu": "Mine"}
+        js(page, "window.libre.doc.setSelection(['cpu-ring'])")  # shows no name
+        assert page.locator(".inspector .hardware-name").count() == 0
+
+
+def test_without_hardware_names_nothing_shows(app_url):
+    """A server without /api/hardware: no fields, and the section says what is to come."""
+    with browser_page(app_url, "settings/sensors") as page:
+        page.wait_for_function("window.libre.store.get().hardware === false")
+        assert page.locator(".hardware-name").count() == 0
+        assert page.locator(".settings-upcoming").is_visible()

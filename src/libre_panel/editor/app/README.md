@@ -21,9 +21,10 @@ The editor's server (`editor/server.py`) serves `index.html` at `/`, this folder
 | `core/shortcuts.js` | `bindKey("mod+k", handler, { when, inInputs })`, `keyLabel()` |
 | `core/commands.js` | the command registry the palette searches |
 | `core/app.js` | the background app (`store.get().app`, polled), `appAction()`, `quitApp()`, the window's bridge |
+| `core/hardware.js` | the hardware's names (`/api/hardware`): `loadHardware()`, `setHardwareName(part, text)`; `store.get().hardware` is `false` where the server has none |
 | `ui/` | controls (`Toggle`, `Segmented`, `Chips`, `NumberField`, `TextField`, `Select`, `Slider`, `Field`, `Row`, `Section`, `IconButton`), `Icon`, `Popover`, `Menu`, dialogs (`openDialog`, `confirmDialog`, `promptDialog`), `toast()`, the palette |
 | `shell/` | views and routes, the header and its parts (`ThemeTitle`, `SearchTrigger`, `PanelChip`, `UndoRedo`, `ApplyButton`), app-wide commands, plugin pages (`#/plugin/<id>`) |
-| `views/<id>/` | one folder per view; `design` is the editor, the others are empty places to fill |
+| `views/<id>/` | one folder per view; `design` is the editor, `settings` the frame of the settings (sections on the left), the others are empty places to fill |
 | `app.css` | colours and fonts (`:root` tokens) and the shared controls; a view brings its own CSS |
 
 ## A view
@@ -71,6 +72,21 @@ module) each time the palette searches.
 gallery lists these, not a fixed set; `endpoints.previewUrl(id, width)` is a theme's
 picture (the server keeps it until the theme changes), and `openTheme(id)` opens one for
 Design.
+
+## A group in Settings
+
+Settings has sections (Panel, Sensors, Services, Weather and place, Start and system,
+About); a part of the app adds its group to one without touching the others:
+
+```js
+registerSettingsGroup("sensors", {
+  id: "hardware",
+  order: 10,
+  component: HardwareNames, // a .settings-card with .settings-row rows
+  load: () => loadHardware(true), // when the section opens
+  shows: () => Boolean(store.get().hardware), // nothing to show: the section says what is to come
+});
+```
 
 ## A field in the inspector
 

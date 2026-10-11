@@ -32,7 +32,9 @@ import {
 } from "./ops.js";
 import { QUICK_SENSORS, SensorButton, Sparkline, formatValue, sensorName, shortSensorName, useReadings } from "./sensors.js";
 import { uploadAsset } from "../../core/actions.js";
+import { hardwareParts, partOfSensor } from "../../core/hardware.js";
 import { panelName, currentModel } from "../../shell/panel-popover.js";
+import { HardwareNameField } from "../settings/hardware.js";
 
 const cap = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : text);
 const label = (key) => cap(fieldLabel(key));
@@ -218,6 +220,26 @@ function QuickSensors({ value, onPick }) {
 
 // -- a widget --------------------------------------------------------------------------------
 
+/** The hardware's names a widget shows (cpu, gpu, memory): changed where they are seen. */
+function namesShown(widget) {
+  if (isModule(widget)) {
+    if (widget.module === "system") return ["cpu", "gpu"];
+    if (widget.source === "sensor") return [partOfSensor(widget.sensor)?.id].filter(Boolean);
+    return widget.module === "ring" && ["cpu", "gpu"].includes(widget.source) ? [widget.source] : [];
+  }
+  return [partOfSensor(widget.sensor)?.id].filter(Boolean);
+}
+
+function NameFields({ widget }) {
+  const parts = namesShown(widget);
+  const labels = Object.fromEntries(hardwareParts().map((part) => [part.id, part.label]));
+  return parts.map(
+    (part, index) => html`<${HardwareNameField} key=${part} part=${part}
+      label=${parts.length > 1 ? `${t("Change the name")}: ${labels[part]}` : t("Change the name")}
+      hint=${index === parts.length - 1 ? t("For every theme, not just this one") : null} />`,
+  );
+}
+
 function widgetChange(widget, key) {
   return (value) => {
     if (key === "id") return renameWidget(widget, value);
@@ -242,10 +264,11 @@ function PrimarySections({ widget, keys, spec }) {
         const change = widgetChange(widget, key);
         if (kind === "sensor") {
           return html`<div class="field" key=${key}>
-            ${fields.length > 1 ? html`<span class="field-label">${label(key)}</span>` : null}
-            <${SensorButton} value=${widget[key]} onPick=${change} />
-            <${QuickSensors} value=${widget[key]} onPick=${change} />
-          </div>`;
+              ${fields.length > 1 ? html`<span class="field-label">${label(key)}</span>` : null}
+              <${SensorButton} value=${widget[key]} onPick=${change} />
+              <${QuickSensors} value=${widget[key]} onPick=${change} />
+            </div>
+            ${key === "sensor" ? html`<${NameFields} key="names" widget=${widget} />` : null}`;
         }
         if (key === "finish") {
           return html`<${FinishTiles} key=${key} widget=${widget} value=${widget.finish} options=${enumOptions(kind)} onChange=${change} />`;
@@ -403,6 +426,7 @@ function ModuleInspector({ widget }) {
           ? html`<${FieldRow} widget=${widget} name="sensor" kind="sensor" value=${widget.sensor} onChange=${change("sensor")} />
               <${FieldRow} widget=${widget} name="format" kind="format" value=${widget.format} onChange=${change("format")} />`
           : null}
+        <${NameFields} widget=${widget} />
         ${widget.module === "weather"
           ? html`<${Field} label=${t("Forecast")} hint=${t("shown when the module is large enough: wider or taller shows more")}>
               <${Chips} label=${t("Forecast")} value=${widget.forecast} onChange=${change("forecast")}

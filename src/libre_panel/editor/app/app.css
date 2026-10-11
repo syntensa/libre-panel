@@ -851,6 +851,32 @@ textarea.input {
   font-size: 12px;
 }
 
+/* a small action in text, beside a field's name */
+.link-btn {
+  border: none;
+  background: none;
+  padding: 2px 0;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.link-btn:hover {
+  color: var(--accent-hi);
+  text-decoration: underline;
+}
+
+.field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.field-head .link-btn {
+  font-size: 12px;
+}
+
 .field-hint {
   color: var(--muted);
   font-size: 12px;

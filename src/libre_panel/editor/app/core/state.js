@@ -40,6 +40,7 @@ export const store = createStore({
   pages: null, // the panel's pages: /api/pages
   page: null, // the page the open theme is shown on ("normal" or a mode), if any
   plugins: [], // plugin editor pages: /api/plugins/pages
+  hardware: null, // the hardware's names (core/hardware.js); false: the server has none
   prefs: {
     snap: 4, // px; 0 = off
     guides: true,
