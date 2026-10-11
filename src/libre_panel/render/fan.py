@@ -57,12 +57,16 @@ FRICTION = 0.35  # turns a second lost every second while it runs out
 BLUR = 0.8  # how far the blades blur into a disc at full speed
 LIGHT = {"running": 1.0, "stopped": 0.5, "missing": 0.25}  # how bright it shows
 
-_lock = threading.Lock()  # the coloured images, held for a moment
+_lock = threading.Lock()  # the coloured images and the kept layers, held for a moment
 _load = threading.Lock()  # reading the layers, held for as long as that takes
 _images: OrderedDict[tuple[Any, ...], Image.Image] = OrderedDict()
-_layers: dict[int, np.ndarray] = {}  # size -> (positions, 4, k, k): shape, core, gloss, alpha
-_frames: dict[int, np.ndarray] = {}
+# size -> (positions, 4, k, k): shape, core, gloss, alpha; the sizes in use, the oldest first
+_layers: OrderedDict[int, np.ndarray] = OrderedDict()
+_frames: OrderedDict[int, np.ndarray] = OrderedDict()
 IMAGES = 768  # coloured images kept
+# The layers of a size are a few megabytes (17 for a fan of 150 px), and a fan that is resized in
+# the editor asks for one size after the other: the sizes kept are as many as this holds.
+LAYER_BYTES = 48 << 20
 
 
 def turns(rpm: float | None, max_rpm: float) -> float:
@@ -166,23 +170,42 @@ def _reduced(planes: list[np.ndarray], size: int) -> np.ndarray:
     )
 
 
+def _kept_layers(cache: OrderedDict[int, np.ndarray], size: int) -> np.ndarray | None:
+    """The layers of ``size`` if they are kept (they are then the newest)."""
+    with _lock:
+        layers = cache.get(size)
+        if layers is not None:
+            cache.move_to_end(size)
+        return layers
+
+
+def _keep_layers(cache: OrderedDict[int, np.ndarray], size: int, layers: np.ndarray) -> None:
+    """Keep ``layers`` as the newest; the oldest go while more than ``LAYER_BYTES`` are kept."""
+    with _lock:
+        cache[size] = layers
+        cache.move_to_end(size)
+        while len(cache) > 1 and sum(kept.nbytes for kept in cache.values()) > LAYER_BYTES:
+            cache.popitem(last=False)
+
+
 def rotor_layers(size: int) -> np.ndarray:
     """All positions of the rotor at ``size`` px: ``(POSITIONS, 4, size, size)``. The
     first call per size reads 144 small pictures (about 150 ms): do it off the
     render thread (``Renderer.warm``) or at the very start."""
-    layers = _layers.get(size)
+    layers = _kept_layers(_layers, size)
     if layers is not None:
         return layers
     with _load:
-        layers = _layers.get(size)
+        layers = _kept_layers(_layers, size)
         if layers is None:
             kinds = ("shape", "core", "gloss")
-            layers = _layers[size] = np.stack(
+            layers = np.stack(
                 [
                     _reduced([_plane(f"rotor_{kind}_{p:02d}.png") for kind in kinds], size)
                     for p in range(POSITIONS)
                 ]
             )
+            _keep_layers(_layers, size, layers)
     return layers
 
 
@@ -296,11 +319,12 @@ def ring_image(color: tuple[int, int, int], size: int, steps: int, canvas: int) 
 
 def frame_layers(size: int) -> np.ndarray:
     """The square frame's layers at ``size`` px: ``(4, size, size)``, like a rotor's."""
-    layers = _frames.get(size)
+    layers = _kept_layers(_frames, size)
     if layers is None:
         with _load:
             planes = [_plane(f"frame_{kind}.png") for kind in ("shape", "core", "gloss")]
-            layers = _frames[size] = _reduced(planes, size)
+            layers = _reduced(planes, size)
+            _keep_layers(_frames, size, layers)
     return layers
 
 

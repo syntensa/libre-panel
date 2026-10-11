@@ -648,6 +648,9 @@
   such a ring is held back by the main loop for hours (and never frees what lived at the first
   frame). A day of switching to a game's theme and back, or of editing, grew the app by hundreds of
   megabytes. A renderer that is let go of is freed with its last reference now
+- A fan resized in the editor kept the layers of every size it had passed (17 MB for one of
+  150 px) for as long as the app ran: dragging it from 48 to 150 px took hundreds of megabytes.
+  The sizes in use are kept up to 48 MB, the oldest go
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars
