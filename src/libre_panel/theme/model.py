@@ -120,6 +120,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "segment_gap": ("int", 2),
         "smooth": ("bool", True),
         "color_rules": ("rules", []),
+        "glow_area": ("box?", None),  # [x, y, w, h]: a lit bar's glow stays inside
     },
     "gauge": {
         "sensor": ("sensor", "cpu.load"),
@@ -489,6 +490,14 @@ def _coerce(kind: str, value: Any, where: str, palette: dict[str, str] | None = 
         if value not in options:
             raise ThemeError(f"{where}: must be one of {', '.join(options)}")
         return value
+    if base == "box":  # [x, y, w, h] on the panel
+        four = isinstance(value, list) and len(value) == 4
+        if not four or any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in value):
+            raise ThemeError(f"{where}: expected [x, y, w, h]")
+        box = [int(v) for v in value]
+        if box[2] <= 0 or box[3] <= 0:
+            raise ThemeError(f"{where}: its width and height must be above 0")
+        return box
     if base == "rules":
         if not isinstance(value, list):
             raise ThemeError(f"{where}: expected a list of rules")

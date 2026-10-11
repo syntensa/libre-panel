@@ -181,7 +181,6 @@ def test_graph_options_render_cleanly():
     assert renderer.warnings == []
 
 
-
 def flat_graph(**kw):
     return {"type": "graph", "id": "g", "x": 0, "y": 0, "w": 100, "h": 60, "sensor": "v",
             "history": 10, "min": 0, "max": 100, "color": "#ffffff", "smooth": False,
@@ -541,12 +540,14 @@ def test_adapt_scales_new_fields():
     data = theme(
         {"type": "icon", "id": "i", "x": 10, "y": 10, "size": 40},
         {"type": "text", "id": "t", "letter_spacing": 4, "glow": 0.5, "glow_radius": 10},
+        {"type": "bar", "id": "b", "x": 20, "y": 30, "glow_area": [10, 20, 220, 40]},
         size=(480, 320),
     ).to_dict()
     out = adapt_theme(data, "turing-5", "landscape")  # 800x480: s = 1.5
     widgets = {w["id"]: w for w in out["widgets"]}
     assert widgets["i"]["size"] == 60
     assert widgets["t"]["letter_spacing"] == 6 and widgets["t"]["glow_radius"] == 15
+    assert widgets["b"]["glow_area"] == [17, 30, 367, 60]  # a box on the panel, as x and w
 
 
 def test_fps_setting():

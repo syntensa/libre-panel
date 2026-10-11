@@ -66,6 +66,7 @@ class Piece:
     backdrop: Image.Image | None = None  # "L" mask: blur the canvas beneath first
     backdrop_radius: int = 0
     add: bool = False  # light: added onto what lies beneath (the panel light's gloss)
+    light: Piece | None = None  # light added onto the panel after the layer: a glow
 
 
 class _Builder:
@@ -177,6 +178,14 @@ def _scale_alpha(img: Image.Image, factor: float) -> Image.Image:
     out = img.copy()
     out.putalpha(img.getchannel("A").point(lambda a: int(a * factor)))
     return out
+
+
+def _dimmed(light: Piece | None, factor: float) -> Piece | None:
+    """A light piece ``factor`` as bright (light is added: all its channels scale)."""
+    if light is None or factor >= 0.999:
+        return light
+    table = [int(v * factor) for v in range(256)] * 4
+    return replace(light, layer=light.layer.point(table))
 
 
 @lru_cache(maxsize=128)
@@ -476,13 +485,15 @@ class Renderer:
     # -- effects and compositing ------------------------------------------
 
     def _effects(self, widget: dict[str, Any], piece: Piece) -> Piece:
-        layer = _scale_alpha(piece.layer, widget.get("opacity", 1.0))
+        opacity = widget.get("opacity", 1.0)
+        layer = _scale_alpha(piece.layer, opacity)
         box = piece.box or [piece.x, piece.y, piece.layer.width, piece.layer.height]
+        light = _dimmed(piece.light, opacity)
         out, pad = self._halo(widget, layer)
         if out is None:
-            return Piece(layer, piece.x, piece.y, box, piece.backdrop, piece.backdrop_radius)
+            return replace(piece, layer=layer, box=box, light=light)
         out.alpha_composite(layer, (pad, pad))
-        return Piece(out, piece.x - pad, piece.y - pad, box, piece.backdrop, piece.backdrop_radius)
+        return replace(piece, layer=out, x=piece.x - pad, y=piece.y - pad, box=box, light=light)
 
     def _halo(
         self, widget: dict[str, Any], layer: Image.Image, exact: bool = False
@@ -566,6 +577,9 @@ class Renderer:
             self._add_light(canvas, piece.layer, piece.x - ox, piece.y - oy)
             return
         self._paste(canvas, piece.layer, piece.x - ox, piece.y - oy, opaque)
+        if piece.light is not None:
+            light = piece.light
+            self._add_light(canvas, light.layer, light.x - ox, light.y - oy)
 
     @staticmethod
     def _add_light(canvas: Image.Image, layer: Image.Image, x: int, y: int) -> None:
@@ -581,12 +595,17 @@ class Renderer:
 
     @staticmethod
     def _extent(piece: Piece) -> tuple[int, int, int, int]:
-        """Everything a piece can change on the canvas: its layer, and a backdrop box."""
+        """Everything a piece can change on the canvas: its layer, a backdrop
+        box and its light."""
         x0, y0 = piece.x, piece.y
         x1, y1 = x0 + piece.layer.width, y0 + piece.layer.height
         if piece.backdrop is not None and piece.box is not None:
             bx, by, bw, bh = piece.box
             x0, y0, x1, y1 = min(x0, bx), min(y0, by), max(x1, bx + bw), max(y1, by + bh)
+        if piece.light is not None:
+            light = piece.light
+            x0, y0 = min(x0, light.x), min(y0, light.y)
+            x1, y1 = max(x1, light.x + light.layer.width), max(y1, light.y + light.layer.height)
         return x0, y0, x1, y1
 
     @staticmethod

@@ -118,7 +118,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 |---|---|---|
 | `text` | `text` | static label, may contain line breaks |
 | `metric` | `sensor`, `format`, `fallback`, `smooth`, `color_rules` | a sensor value as text; with `smooth` the number glides between readings together with the sensor's bars and rings (give `format` a precision, e.g. `{value:.0f}`) |
-| `bar` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `color`, `color2`, `background`, `radius`, `direction`, `segments`, `segment_gap`, `smooth`, `color_rules` | progress bar; `color2` makes a gradient along the track, `segments` an LED-style bar |
+| `bar` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `color`, `color2`, `background`, `radius`, `direction`, `segments`, `segment_gap`, `smooth`, `color_rules`, `glow_area` | progress bar; `color2` makes a gradient along the track, `segments` an LED-style bar; `glow_area` see [Look and finish](#look-and-finish) |
 | `gauge` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `start_angle`, `end_angle`, `thickness`, `color`, `color2`, `background`, `cap`, `ticks`, `tick_color`, `smooth`, `color_rules` | ring; angles clockwise from 3 o'clock, default 135→405; `cap` round or flat |
 | `graph` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `history`, `seconds`, `color`, `fill`, `fill_fade`, `fill_opacity`, `direction`, `smooth`, `per_frame`, `line_width`, `grid`, `grid_color`, `background` | history; `min`/`max` `null` = automatic, `smooth` draws a curve, `seconds` and `per_frame` see above; without `fill_fade` the fill has `fill_opacity` (0 to 1); `direction` `down` hangs the curve from the top edge and fills it from there (upload above a line, download below it) |
 | `clock` | `format`, `timezone` | date/time with [strftime codes](https://strftime.org), e.g. `%H:%M:%S`, `%A %d %B`; `timezone` e.g. `Asia/Tokyo` (empty: this computer's) |
@@ -323,13 +323,19 @@ its colour, lying in a groove (the widget's `background`), its scale.
 - A `bar`'s value is a pill of light with round ends along the middle of its
   groove (0.62 of its thickness); its end moves in fractions of a pixel, and
   `segments` are pills of their own. `color2` and `color_rules` colour it as
-  they colour a flat bar. `glow` (with `glow_radius`) is SPUR II's bar glow:
-  dim along the lit part, rising to the head, which runs towards white.
+  they colour a flat bar. `glow` (with `glow_radius`) is SPUR II's bar glow,
+  light added over the bar: dim along the lit part, rising to the head,
+  which runs towards white. `glow_area` (`[x, y, w, h]` on the panel) keeps
+  it inside that box, worked out over it at a quarter of the size, as SPUR
+  II's glow zones; without it, the glow lies around the bar.
 - A `gauge`'s value is a thin arc of the same light on the middle of its
   groove (0.6 of `thickness`), from `start_angle`, with square ends; the
   glow is the arc's own halo.
 - A `graph` keeps its fill; its line is light (its core runs towards white)
   in a soft halo of its colour (`glow`, `glow_radius`).
+- A `text` or `metric` glows as SPUR II's headings and labels do: its
+  colours, blurred by `glow_radius` and `glow` of them, are light added over
+  the text and around it (flat, the glow lies beneath the text).
 - Weather icons (`icon` `weather` and the symbols `sun`, `moon`, `partly`,
   `cloud`, `fog`, `rain`, `snow`, `storm`) are built of lit bodies, baked
   from Blender renders and coloured: clouds and the moon in the icon's
@@ -340,7 +346,7 @@ its colour, lying in a groove (the widget's `background`), its scale.
 
 Where light does not read, a widget is drawn flat: bars and rings thinner
 than 2 px, icons under 16 px. A finish a type does not have (`lit` on a
-`text`) draws it flat, and the theme loader warns once per type. The weather
+line icon) draws it flat, and the theme loader warns once per type. The weather
 symbols' layers are prepared before the first frame and kept in the config
 folder's `cache/light3d`; they are prepared again when the pictures they come
 from change.

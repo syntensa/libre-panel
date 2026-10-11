@@ -98,6 +98,98 @@ def test_a_lit_bar_is_brightest_at_its_head():
     assert bar[230:300].max() < bar[120:150].mean() / 3  # past the head: the dark groove
 
 
+def schein_balken(length, thick, frac, colour):
+    """SPUR II's glow source for a bar (licht.schein_balken in its frame), drawn
+    as SPUR II draws it: the reference for lit.bar_piece's glow."""
+    from PIL import ImageDraw
+
+    layer = Image.new("RGB", (length, thick))
+    draw = ImageDraw.Draw(layer)
+    x0, x1, y0, y1 = 1, int((length - 2) * frac), 1, thick - 2
+    tail = 0.55 * 0.34
+
+    def shade(share, white=0.0):
+        rgb = [int(c * share) for c in colour]
+        return tuple(int(c + (255 - c) * white) for c in rgb) if white > 0 else tuple(rgb)
+
+    head = min(30, x1 - x0)
+    if x1 - head > x0:
+        draw.rectangle([x0, y0, x1 - head, y1], fill=shade(tail))
+    for i in range(7):
+        a0, a1, t = x1 - head + head * i / 7, x1 - head + head * (i + 1) / 7, (i + 1) / 7
+        draw.rectangle([a0, y0, a1, y1], fill=shade(tail + (1 - tail) * t**1.4, 0.65 * t**2))
+    return np.asarray(layer)
+
+
+@pytest.mark.parametrize("frac", [0.615, 0.08, 1.0])
+def test_a_lit_bars_glow_comes_from_spur_iis_source(frac):
+    colour = (19, 229, 215)
+    unit = np.asarray(colour, np.float32) / 255
+    spans = [(0.0, frac * 194, 1.0)]
+    ours = lit._glow_source(194, 12, spans, unit, 30.0, False)
+    assert np.array_equal(ours, schein_balken(194, 12, frac, colour))
+    mirrored = lit._glow_source(194, 12, [(194 - frac * 194, 194.0, 1.0)], unit, 30.0, True)
+    assert np.array_equal(mirrored, ours[:, ::-1])  # filling from the far end
+
+
+def test_a_lit_bars_glow_is_light_added_over_it():
+    bar = lit_widgets()[1]
+    theme = theme_of([bar])
+    renderer = Renderer(theme)
+    frame, _ = renderer.render(snap(50.0), 0.0)
+    piece = dict(renderer._last[0])["bar"]
+    light = piece.light
+    assert light is not None and light.layer.mode == "RGBA"
+    plain, _ = Renderer(theme_of([{**bar, "glow": 0.0}])).render(snap(50.0), 0.0)
+    for x, y in ((200, 14), (205, 27), (150, 40)):  # above, on and below the bar
+        added = light.layer.getpixel((x - light.x, y - light.y))[:3]
+        under = plain.getpixel((x, y))
+        expected = tuple(min(255, a + b) for a, b in zip(under, added, strict=True))
+        assert frame.getpixel((x, y)) == expected  # light adds up
+
+
+def test_a_glow_area_keeps_a_bars_glow_inside_it():
+    bar = {**lit_widgets()[1], "glow_radius": 12}
+    area = [100, 24, 230, 30]  # from below the bar's top: none of its glow above that
+    inside, _ = Renderer(theme_of([{**bar, "glow_area": area}])).render(snap(50.0), 0.0)
+    around, _ = Renderer(theme_of([bar])).render(snap(50.0), 0.0)
+    plain, _ = Renderer(theme_of([{**bar, "glow": 0.0}])).render(snap(50.0), 0.0)
+    a, b, c = (np.asarray(f, np.int16) for f in (inside, around, plain))
+    assert (a[:24] == c[:24]).all() and (b[10:20, 150:210] > c[10:20, 150:210]).any()
+    assert (a[24:54, 150:210] > c[24:54, 150:210]).any()  # inside: it glows
+    assert (a[54:] == c[54:]).all()  # below the area, nothing either
+
+
+@pytest.mark.parametrize(
+    ("area", "message"),
+    [([1, 2, 3], r"expected \[x, y, w, h\]"), ([0, 0, True, 4], r"expected \[x, y, w, h\]"),
+     ([0, 0, 0, 10], "its width and height must be above 0")],
+)  # fmt: skip
+def test_a_glow_area_is_a_box_on_the_panel(area, message):
+    with pytest.raises(ThemeError, match=message):
+        theme_of([{**lit_widgets()[1], "glow_area": area}])
+    assert theme_of([{**lit_widgets()[1], "glow_area": [1.0, 2, 3, 4]}]).widgets[0][
+        "glow_area"
+    ] == [1, 2, 3, 4]
+
+
+def test_a_lit_texts_glow_is_light_over_it_and_around_it():
+    text = {"type": "text", "id": "t", "x": 20, "y": 20, "text": "CPU", "font_size": 40,
+            "color": "#13E5D7", "glow": 0.6, "glow_radius": 8}  # fmt: skip
+    lit_theme = theme_of([{**text, "finish": "lit"}])
+    assert lit_theme.warnings == []
+    shine, _ = Renderer(lit_theme).render(snap(), 0.0)
+    halo, _ = Renderer(theme_of([text])).render(snap(), 0.0)  # the renderer's glow
+    bare, _ = Renderer(theme_of([{**text, "glow": 0.0}])).render(snap(), 0.0)
+    a, b, c = (np.asarray(f, np.int16) for f in (shine, halo, bare))
+    letters = (c == (0x13, 0xE5, 0xD7)).all(-1)  # where the letters cover all
+    assert letters.sum() > 100
+    assert (a[letters] >= c[letters]).all() and (a[letters] > c[letters]).any()  # over it
+    assert (b[letters] == c[letters]).all()  # the renderer's glow lies beneath the letters
+    top = np.flatnonzero(letters.any(1))[0]
+    assert a[top - 4, 20:100].sum() > c[top - 4, 20:100].sum()  # and around it
+
+
 def test_too_small_for_light_is_drawn_flat():
     thin = [{**lit_widgets()[1], "h": 1}, {**lit_widgets()[0], "thickness": 1},
             {**lit_widgets()[4], "size": 12}]  # fmt: skip
@@ -109,16 +201,14 @@ def test_too_small_for_light_is_drawn_flat():
 
 def test_a_finish_a_type_does_not_have_is_drawn_flat_with_one_warning():
     widgets = [
-        {"type": "text", "id": "a", "x": 10, "y": 10, "text": "CPU", "finish": "lit"},
-        {"type": "text", "id": "b", "x": 10, "y": 40, "text": "GPU", "finish": "lit"},
-        {"type": "metric", "id": "m", "x": 10, "y": 70, "sensor": "cpu.load", "finish": "lit"},
-        {"type": "icon", "id": "i", "x": 100, "y": 10, "icon": "cpu", "finish": "lit"},
+        {"type": "icon", "id": "a", "x": 10, "y": 10, "icon": "cpu", "finish": "lit"},
+        {"type": "icon", "id": "b", "x": 10, "y": 60, "icon": "cpu", "finish": "lit"},
+        {"type": "icon", "id": "i", "x": 100, "y": 10, "icon": "gpu", "finish": "lit"},
     ]
     theme = theme_of(widgets)
     assert theme.warnings == [
-        "finish 'lit' is not available for text; drawn flat",
-        "finish 'lit' is not available for metric; drawn flat",
         "finish 'lit' is not available for the icon 'cpu'; drawn flat",
+        "finish 'lit' is not available for the icon 'gpu'; drawn flat",
     ]
     flat = theme_of([{**widget, "finish": "flat"} for widget in widgets])
     a, _ = Renderer(theme).render(snap(), 0.0)

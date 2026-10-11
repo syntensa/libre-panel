@@ -1026,6 +1026,18 @@ function rulesInput(rules, onChange) {
   return box;
 }
 
+function boxInput(value, onChange, optional) {
+  // x, y, w, h on the panel; empty for none
+  const input = el("input", { type: "text", value: Array.isArray(value) ? value.join(", ") : "", placeholder: t("x, y, w, h") });
+  input.addEventListener("change", () => {
+    const parts = input.value.split(",").map((v) => v.trim()).filter((v) => v !== "");
+    if (!parts.length && optional) return onChange(null);
+    const box = parts.map(Number);
+    if (box.length === 4 && box.every(Number.isFinite) && box[2] > 0 && box[3] > 0) onChange(box.map(Math.round));
+  });
+  return input;
+}
+
 function controlFor(key, kind, value, onChange) {
   const optional = kind.endsWith("?");
   const base = kind.replace(/\?$/, "");
@@ -1037,6 +1049,7 @@ function controlFor(key, kind, value, onChange) {
   if (base === "bool") return el("label", { class: "check" }, el("input", { type: "checkbox", checked: !!value, onchange: (e) => onChange(e.target.checked) }), t("on"));
   if (base === "color") return colorInput(value, onChange, optional);
   if (base === "rules") return rulesInput(value || [], (rules) => onChange(rules));
+  if (base === "box") return boxInput(value, onChange, optional);
   if (base === "font") return fontInput(value, onChange);
   if (base === "asset") return assetInput(value, onChange);
   if (base === "icon") {
@@ -1060,7 +1073,8 @@ function hintFor(widget, key, kind) {
   if (key === "smooth" && widget.type === "metric") return t("the number glides between readings, together with the bars and rings of its sensor");
   if (key === "seconds" && widget.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = as long as the history readings take");
   if (key === "per_frame") return t("video mode: a point a pixel apart, as SPUR II draws its curves (seconds = width / 25)");
-  if (key === "finish") return t("lit: SPUR II's light on rings, bars, graph lines and weather icons; glow then sets their glow");
+  if (key === "finish") return t("lit: SPUR II's light on rings, bars, graph lines, texts and weather icons; glow then sets their glow");
+  if (key === "glow_area") return t("x, y, w, h on the panel: a lit bar's glow stays inside, worked out as SPUR II's glow zones; empty: around the bar");
   if (key === "ridge") return t("a name makes the rect a ridge that catches the light; rects with the same name are one ridge");
   if (key === "fill_opacity") return t("how strongly the area under the curve is filled when it does not fade (0 to 1)");
   if (key === "direction" && widget.type === "graph") return t("down: the curve hangs from the top and is filled from there, below an upward one it mirrors it");

@@ -4,13 +4,16 @@ weather symbols built of lit bodies.
 - A bar's value is light (SPUR II since 2026-09-20): a pill with round ends
   in the middle of its groove, its core running towards white, a soft halo
   in its colour (or gradient, or a threshold's colour); segments are pills
-  of their own. Its ``glow`` is SPUR II's bar glow on top: brightest at the
-  head and fading back along the bar, so a full bar reads as light, not as a
-  block that glows.
+  of their own. Its ``glow`` is SPUR II's bar glow, light added on top:
+  brightest at the head and fading back along the bar, so a full bar reads
+  as light, not as a block that glows; worked out over its ``glow_area`` as
+  SPUR II's glow zones are, and nothing of it outside.
 - A ring gauge's value is an arc of the same light on the middle of its
   groove, from ``start_angle`` with square ends: the glow is the arc.
 - A graph keeps its fill; its line is light (its core runs towards white)
   in a soft halo of its colour.
+- A text's glow is light: its colours blurred and added over it and around
+  it, as SPUR II's headings glow.
 - A weather icon is built of lit bodies (render.light3d): a glowing sun with
   rays, clouds, glass drops, a bolt.
 
@@ -23,6 +26,7 @@ from __future__ import annotations
 
 import math
 import threading
+from dataclasses import replace
 from functools import lru_cache
 from typing import Any
 
@@ -76,7 +80,8 @@ LIGHT_WHITE = 0.75  # the core runs this far towards white
 LIGHT_HALO = 1.45  # how strongly the halo stands beside the core
 BAR_CORE = 0.62  # a bar's light is this share of its groove's thickness ...
 BAR_CORE_MIN = 3  # ... and at least this many pixels
-BAR_HALO = 4.5  # the halo's softness (px): a bar is flatter than a ring
+BAR_HALO = 4.5  # the halo's softness (px): a bar is flatter than a ring ...
+BAR_ROOM = 9  # ... and where it ends, around the light (px)
 RING_CORE = 0.6  # a ring's light: this share of its groove (6 of 10 px)
 RING_HALO = 6.0
 GLOW_HEAD = 30  # the bar glow rises over this many px (on a panel 480 high) to the head
@@ -86,7 +91,7 @@ def light(mask: np.ndarray, colour: Any, halo: float) -> np.ndarray:
     """SPUR II's light from a coverage ``mask`` (h, w; 0 to 1) in ``colour``
     (RGB 0 to 255, one or one per column): straight RGBA uint8, the core
     towards white, the halo in the colour."""
-    soft = Image.fromarray(np.round(mask * 255).astype(np.uint8), "L")
+    soft = Image.fromarray((mask * 255).astype(np.uint8), "L")  # cut to whole levels, as SPUR II
     soft = np.asarray(soft.filter(ImageFilter.GaussianBlur(halo)), np.float32) / 255
     core = mask**0.7
     c = np.broadcast_to(np.asarray(colour, np.float32)[..., :3], (*mask.shape, 3))
@@ -163,66 +168,98 @@ def _groove(renderer: Any, widget: dict[str, Any], length: int, thick: int,
     return _PICTURES.get(key, lambda: Image.new("RGBA", (length, thick), tuple(track)))
 
 
-def _gauss(sigma: float) -> np.ndarray:
-    """A Gaussian kernel of standard deviation ``sigma`` (as PIL's GaussianBlur)."""
-    n = max(1, math.ceil(3 * sigma))
-    x = np.arange(-n, n + 1, dtype=np.float32)
-    kernel = np.exp(-0.5 * (x / sigma) ** 2)
-    return kernel / kernel.sum()
-
-
-def _blurred(values: np.ndarray, kernel: np.ndarray) -> np.ndarray:
-    n = (len(kernel) - 1) // 2
-    return np.convolve(values, kernel, mode="full")[n : n + len(values)]
-
-
-def _bar_glow(length: int, thick: int, spans, colours: np.ndarray, pad: int, radius: float,
-              head_px: float, reverse: bool = False) -> tuple[np.ndarray, np.ndarray]:  # fmt: skip
-    """SPUR II's bar glow, lying, as light: dim along the lit part, rising
-    over ``head_px`` to the head, the head running towards white. Its source
-    is a band across the bar times a level along it, so its blur is the blur
-    along times the blur across: two short convolutions. Returned as those
-    two factors, the light along (length + 2 pad, 3) and across (thick + 2 pad)."""
-    if reverse:  # filling from the far end, its head is on the left: worked out mirrored
+def _glow_source(length: int, thick: int, spans, colours: np.ndarray, head_px: float,
+                 reverse: bool) -> np.ndarray:  # fmt: skip
+    """SPUR II's bar glow before it is blurred, lying (thick, length, RGB 0
+    to 255), as schein_balken draws it: on the bar a pixel in from each edge,
+    dim along the lit part and rising in steps over ``head_px`` to the head,
+    which runs towards white; whole pixels and whole colour levels."""
+    if reverse:  # filling from the far end: worked out mirrored
         spans = [(length - b, length - a, amount) for a, b, amount in spans]
         colours = colours[::-1] if np.ndim(colours) == 2 else colours
-        along, across = _bar_glow(length, thick, spans, colours, pad, radius, head_px)
-        return along[::-1], across
-    start = min(a for a, _b, _amount in spans)
+        return _glow_source(length, thick, spans, colours, head_px, False)[:, ::-1]
+    start = round(min(a for a, _b, _amount in spans))
     head = max(b for _a, b, _amount in spans)
-    rise = max(2.0, min(head - start, head_px))
-    xs = np.arange(length + 2 * pad, dtype=np.float32) + 0.5 - pad  # along the bar
-    t = np.ceil(np.clip((xs - (head - rise)) / rise, 0, 1) * GLOW_STEPS) / GLOW_STEPS  # in steps
-    level = np.where(xs >= head - rise, GLOW_TAIL + (1 - GLOW_TAIL) * t**1.4, GLOW_TAIL)
-    level = np.where((xs >= start) & (xs <= head), level, 0.0)
-    white = np.where(level > 0, GLOW_WHITE * t**2, 0.0)
-    c = np.asarray(colours, np.float32)
-    if c.ndim == 2:  # a colour per column
-        c = c[np.clip(xs.astype(np.intp), 0, length - 1)]
-    colour = c * level[:, None]
-    colour = (colour + (1 - colour) * white[:, None]).astype(np.float32)
-    kernel = _gauss(radius)
-    along = np.stack([_blurred(colour[:, i], kernel) for i in range(3)], -1)
-    rows = np.arange(thick + 2 * pad, dtype=np.float32) + 0.5 - pad
-    across = _blurred(((rows >= 1) & (rows <= thick - 1)).astype(np.float32), kernel)
-    return along, across
+    first, last = start + 1, math.floor((length - 2) * head / length)  # both lit
+    out = np.zeros((thick, length, 3), np.uint8)
+    if last < first:
+        return out
+    c = np.round(np.asarray(colours, np.float64) * 255)  # whole levels, as the theme gave them
+    columns = np.arange(length)
+    if c.ndim == 1:
+        c = np.broadcast_to(c, (length, 3))
+    source = np.zeros((length, 3), np.float64)
+    rise = min(head_px, last - first)
+    if last - rise > first:  # the tail
+        tail = columns[first : math.floor(last - rise) + 1]
+        source[tail] = np.floor(c[tail] * GLOW_TAIL)
+    for i in range(GLOW_STEPS):  # the rise; a later step covers the column they share
+        a = math.floor(last - rise + rise * i / GLOW_STEPS)
+        b = math.floor(last - rise + rise * (i + 1) / GLOW_STEPS)
+        t = (i + 1) / GLOW_STEPS
+        level = GLOW_TAIL + (1 - GLOW_TAIL) * t**1.4
+        step = np.floor(c[a : b + 1] * level)
+        source[a : b + 1] = np.floor(step + (255 - step) * (GLOW_WHITE * t**2))
+    rows = slice(1, thick - 1) if thick > 2 else slice(0, thick)
+    out[rows] = source[None]
+    return out
+
+
+def _glow_piece(renderer: Any, widget: dict[str, Any], frac: float, paint, lit,
+                strength: float) -> Piece | None:  # fmt: skip
+    """SPUR II's bar glow as light to add over the bar: its source blurred
+    over the widget's ``glow_area`` (else around the bar), worked out at a
+    fraction of the size as SPUR II's glow zones are, nothing outside it."""
+    x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
+    length, thick, upright, reverse = _layout(widget)
+    unit = min(renderer.theme.width, renderer.theme.height) / 480
+    radius = max(1.0, float(widget.get("glow_radius", 10)))
+    colours = _bar_colours(widget, length, paint, reverse)
+    source = _glow_source(length, thick, lit, colours, GLOW_HEAD * unit, reverse)
+    if upright:
+        source = source.transpose(1, 0, 2)
+    if not source.any():
+        return None
+    area = widget.get("glow_area") or []
+    if len(area) == 4 and area[2] > 0 and area[3] > 0:
+        ax, ay, aw, ah = (int(v) for v in area)
+    else:
+        pad = math.ceil(2.5 * radius)
+        ax, ay, aw, ah = x - pad, y - pad, w + 2 * pad, h + 2 * pad
+    plane = np.zeros((ah, aw, 3), np.uint8)  # the source where it lies inside the area
+    x0, y0 = max(x, ax), max(y, ay)
+    x1, y1 = min(x + source.shape[1], ax + aw), min(y + source.shape[0], ay + ah)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    plane[y0 - ay : y1 - ay, x0 - ax : x1 - ax] = source[y0 - y : y1 - y, x0 - x : x1 - x]
+    scale = max(1, min(4, math.floor(radius / 3)))  # SPUR II: a quarter of the size
+    small = Image.fromarray(plane, "RGB")
+    if scale > 1:
+        small = small.reduce(scale)
+    glow = small.filter(ImageFilter.GaussianBlur(radius / scale))
+    if scale > 1:
+        glow = glow.resize((aw, ah), Image.Resampling.BILINEAR)
+    rgb = np.asarray(glow, np.float32)
+    if strength < 0.999:
+        rgb = rgb * np.float32(strength)
+    alpha = rgb.max(-1, keepdims=True)
+    out = np.concatenate([rgb, alpha], -1).astype(np.uint8)
+    return Piece(Image.fromarray(out, "RGBA"), ax, ay)
 
 
 def bar_piece(renderer: Any, widget: dict[str, Any], frac: float, paint) -> Piece:
     """The lit bar, lying: the groove, the light of each lit span over it
-    (a pill centred in the groove), the glow added (light adds up)."""
+    (a pill centred in the groove); its glow is light added over it."""
     x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
     length, thick, upright, reverse = _layout(widget)
     unit = min(renderer.theme.width, renderer.theme.height) / 480
     lit, _cells = _spans(widget, length, frac, reverse)
-    glow = widget.get("glow", 0.0)
-    radius = max(1.0, float(widget.get("glow_radius", 10)))
-    room = math.ceil(3 * BAR_HALO * unit)  # the halo's room around the light
-    pad = max(room, math.ceil(2 * radius) if glow > 0 and lit else 0)
+    pad = math.ceil(BAR_ROOM * unit)  # the halo's room around the light
     canvas = Image.new("RGBA", (length + 2 * pad, thick + 2 * pad), (0, 0, 0, 0))
     track = renderer.color(widget["background"])
     if track:
         canvas.paste(_groove(renderer, widget, length, thick, track), (pad, pad))
+    glow = None
     if lit:
         colours = _bar_colours(widget, length, paint, reverse)
         alpha = paint[0][3] / 255
@@ -231,32 +268,22 @@ def bar_piece(renderer: Any, widget: dict[str, Any], frac: float, paint) -> Piec
         for a, b, _amount in lit:
             start = round(a)
             span = max(1, round(b - a))
-            mask = _pill(span, core, room)
-            columns = np.clip(np.arange(start - room, start + span + room), 0, length - 1)
+            mask = _pill(span, core, pad)
+            columns = np.clip(np.arange(start - pad, start + span + pad), 0, length - 1)
             c = (colours[columns] if np.ndim(colours) == 2 else colours) * 255
-            key = ("bar-light", span, core, room, _key(paint[0]), _key(paint[1]),
+            key = ("bar-light", span, core, pad, _key(paint[0]), _key(paint[1]),
                    start if np.ndim(colours) == 2 else 0)  # fmt: skip
             rgba = _PICTURES.get(key, lambda m=mask, c=c: light(m, c, BAR_HALO * unit))
             image = Image.fromarray(rgba, "RGBA")
             if alpha < 0.999:
                 image = _alpha_scaled(image, alpha)
-            canvas.alpha_composite(image, (pad + start - room, pad + offset - room))
-        if glow > 0:
-            along, across = _bar_glow(length, thick, lit, colours, pad, radius,
-                                      GLOW_HEAD * unit, reverse)  # fmt: skip
-            along *= np.float32(glow)
-            light_rgb = across[:, None, None] * along[None]  # the glow, as light
-            layer = np.asarray(canvas, np.float32) / 255
-            premul = layer[..., :3] * layer[..., 3:4] + light_rgb
-            brightest = np.maximum(np.maximum(along[:, 0], along[:, 1]), along[:, 2])
-            a_out = np.minimum(layer[..., 3] + across[:, None] * brightest[None], 1.0)
-            out = np.empty(layer.shape, np.float32)
-            out[..., :3] = np.minimum(premul, 1.0) / np.maximum(a_out, 1e-4)[..., None]
-            out[..., 3] = a_out
-            canvas = Image.fromarray(np.clip(out * 255 + 0.5, 0, 255).astype(np.uint8), "RGBA")
+            canvas.alpha_composite(image, (start, offset))  # the pill's room is the pad
+        strength = widget.get("glow", 0.0)
+        if strength > 0:
+            glow = _glow_piece(renderer, widget, frac, paint, lit, min(1.0, strength))
     if upright:  # drawn lying: its start at the top, its light from the left
         canvas = canvas.transpose(Image.Transpose.TRANSPOSE)
-    return Piece(canvas, x - pad, y - pad, [x, y, w, h])
+    return Piece(canvas, x - pad, y - pad, [x, y, w, h], light=glow)
 
 
 class LitBar(Finish):
@@ -351,6 +378,61 @@ class LitGauge(Finish):
         return renderer._cached(
             widget, ("lit", frac, paint), lambda: gauge_piece(renderer, widget, frac, paint)
         )
+
+
+# -- texts --------------------------------------------------------------------
+
+
+def text_light(piece: Piece, radius: float, strength: float) -> Piece | None:
+    """A text's glow as light (SPUR II's headings): the text in its colours,
+    blurred, ``strength`` of it, to add over the text and around it."""
+    layer = piece.layer
+    pad = math.ceil(3 * radius) + 2
+    rgba = np.asarray(layer, np.float32)
+    shown = rgba[..., :3] * (rgba[..., 3:4] / 255)  # the text on black, as SPUR II draws it
+    plane = Image.new("RGB", (layer.width + 2 * pad, layer.height + 2 * pad))
+    plane.paste(Image.fromarray(np.round(shown).astype(np.uint8), "RGB"), (pad, pad))
+    blurred = np.asarray(plane.filter(ImageFilter.GaussianBlur(radius)), np.float32)
+    rgb = np.floor(blurred * np.float32(strength))  # whole levels, as SPUR II's blend
+    if not rgb.any():
+        return None
+    out = np.concatenate([rgb, rgb.max(-1, keepdims=True)], -1).astype(np.uint8)
+    return Piece(Image.fromarray(out, "RGBA"), piece.x - pad, piece.y - pad)
+
+
+class LitText(Finish):
+    """A text's glow is light, as SPUR II's headings and labels glow: its
+    colours blurred and added over the text and around it (the renderer's
+    own glow lies beneath the text)."""
+
+    name = "lit"
+    types = ("text", "metric")
+    KEPT = 512
+
+    def __init__(self) -> None:
+        self._lit: dict[int, tuple[Piece, Piece]] = {}  # by text piece: the piece with light
+        self._lock = threading.Lock()
+
+    def widget(self, widget):
+        return {**widget, "glow": 0.0, "\0light": widget.get("glow", 0.0)}
+
+    def draw(self, renderer, widget, snapshot, now):
+        drawn = renderer._draw_text if widget["type"] == "text" else renderer._draw_metric
+        piece = drawn(widget, snapshot, now)
+        strength = widget.get("\0light", 0.0)
+        if piece is None or strength <= 0:
+            return piece
+        with self._lock:
+            hit = self._lit.get(id(piece))
+            if hit is not None and hit[0] is piece:
+                return hit[1]
+        radius = max(1.0, float(widget.get("glow_radius", 10)))
+        lit = replace(piece, light=text_light(piece, radius, strength))
+        with self._lock:
+            self._lit[id(piece)] = (piece, lit)
+            while len(self._lit) > self.KEPT:
+                del self._lit[next(iter(self._lit))]
+        return lit
 
 
 # -- graphs -------------------------------------------------------------------
@@ -558,5 +640,5 @@ class LitIcon(Finish):
         light3d.WEATHER_BODIES.get()
 
 
-for _finish in (LitBar(), LitGauge(), LitGraph(), LitIcon()):
+for _finish in (LitBar(), LitGauge(), LitText(), LitGraph(), LitIcon()):
     register(_finish)
