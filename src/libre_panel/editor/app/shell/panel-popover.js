@@ -28,6 +28,17 @@ export const stateText = (state) =>
 /** The name of a mode for people: "game" → "In game". */
 export const modeName = (mode) => (mode === "game" ? t("In game") : mode ? mode.charAt(0).toUpperCase() + mode.slice(1) : t("Normal"));
 
+/** The name of a page of the panel: "normal", "report" (the round report) or a mode. */
+export const pageName = (id) => (id === "report" ? t("Round report") : modeName(id === "normal" ? null : id));
+
+/**
+ * The pages that have a theme of their own (/api/pages): the normal one, each mode
+ * with its own theme, and the round report while the memory service makes one.
+ */
+export function shownPages(data = store.get().pages) {
+  return (data?.pages || []).filter((page) => page.id === "normal" || (page.service ? page.on && page.theme : page.theme));
+}
+
 function PanelChoice({ theme, models }) {
   const display = theme.display || {};
   const current = models.some((m) => m.id === display.model) ? display.model : "custom";

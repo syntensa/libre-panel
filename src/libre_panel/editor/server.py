@@ -95,7 +95,7 @@ _ASSET_TYPES = {
     ".ttf": "font/ttf",
     ".otf": "font/otf",
 }
-# [modes.<name>] in config.toml: a theme and a frame rate while a service switches it on.
+# A page of the panel: "normal", "report" or a mode ([modes.<name>] in config.toml).
 _MODE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 # What a plugin's editor page may serve from its folder.
 _PAGE_TYPES = {
@@ -300,8 +300,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._theme_preview(match.group(1), parse_qs(urlparse(self.path).query))
         if path == "/api/readings":
             return self._json(self._readings(parse_qs(urlparse(self.path).query)))
-        if path == "/api/modes":
-            return self._modes()
+        if path == "/api/pages":
+            return self._pages()
         if path.startswith("/api/themes/"):
             return self._get_theme(path[len("/api/themes/") :])
         if path == "/api/sensors":
@@ -492,26 +492,42 @@ class EditorHandler(BaseHTTPRequestHandler):
                 history[key] = [plain(round(v, 3)) for v in values[-60:]]
         return {"live": live, "readings": readings, "history": history}
 
-    def _modes(self) -> None:
-        """The panel's pages: config.toml's theme, and each mode with its own theme
-        and frame rate ([modes.<name>]); which mode a service has on now."""
+    def _pages(self) -> None:
+        """The pages of the panel: the theme it shows normally, the theme of each mode
+        ([modes.<name>], game mode's among them, with its frame rate; None: the normal
+        one) and the round report's (the memory service's ``report_theme``), and which
+        page is on show now. The console's ``control/themes`` has the first two."""
         from libre_panel.services.game import MODE as GAME_MODE
+        from libre_panel.services.memory import Memory
 
         try:
             config = load_config(self.state.config_path)
         except ConfigError as exc:
-            return self._error(str(exc))
-        active = None
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        pages = [{"id": "normal", "theme": config.theme}]
+        names = [GAME_MODE, *sorted(name for name in config.modes if name != GAME_MODE)]
+        for name in names:
+            mode = config.modes.get(name)
+            theme, fps = (mode.theme or None, mode.fps) if mode else (None, None)
+            pages.append({"id": name, "mode": name, "theme": theme, "fps": fps})
+        memory = config.services.options.get(Memory.name, {})
+        report = memory.get("report_theme", Memory.options["report_theme"][1])
+        pages.append(
+            {
+                "id": "report",
+                "service": Memory.name,
+                "theme": report if isinstance(report, str) and report else None,
+                "on": Memory.name in config.services.enabled and memory.get("report", True) is True,
+            }
+        )
+        shown = mode_now = None
         if self.controls is not None:
             try:
-                active = self.controls.snapshot()["panel"].get("mode")
+                panel = self.controls.snapshot()["panel"]
+                shown, mode_now = panel.get("theme"), panel.get("mode")
             except Exception as exc:  # the panel's state is a nice-to-have here
                 log.debug("no panel state: %s", exc)
-        modes = {
-            name: {"theme": mode.theme or None, "fps": mode.fps}
-            for name, mode in sorted(config.modes.items())
-        }
-        self._json({"theme": config.theme, "modes": modes, "known": [GAME_MODE], "active": active})
+        self._json({"pages": pages, "shown": shown, "mode": mode_now})
 
     def _i18n(self) -> dict[str, Any]:
         try:
@@ -624,8 +640,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._app_action()
         if path == "/api/language":
             return self._set_language()
-        if path == "/api/modes":
-            return self._set_mode()
+        if path == "/api/pages":
+            return self._set_page()
         if path == "/api/preset-previews":
             return self._preset_previews()
         match = re.fullmatch(r"/api/plugins/([^/]+)/(.*)", path)
@@ -656,31 +672,40 @@ class EditorHandler(BaseHTTPRequestHandler):
         i18n.set_language(setting)  # the tray and the panel follow at once
         self._json(self._i18n())
 
-    def _set_mode(self) -> None:
-        """``{"mode": "game", "theme": "slate"}`` (``""``: the normal theme) and/or
-        ``{"fps": 30}``: a page of the panel, written to config.toml."""
+    def _set_page(self) -> None:
+        """``{"page": ..., "theme": ...}`` and, for a mode, ``{"fps": ...}``: what a page of
+        the panel shows, written to config.toml. ``page`` is "normal", "report" (the round
+        report) or a mode's name; a mode's empty theme is the normal one's."""
+        from libre_panel.services.memory import Memory
+
         payload = self._read_json()
         if payload is None:
             return
-        name = payload.get("mode") if isinstance(payload, dict) else None
-        if not isinstance(name, str) or not _MODE_NAME.fullmatch(name):
-            return self._error('expected {"mode": "<name>", ...}: a-z, 0-9, - and _')
+        page = payload.get("page") if isinstance(payload, dict) else None
+        if not isinstance(page, str) or not _MODE_NAME.fullmatch(page):
+            return self._error('expected {"page": "normal", "report" or a mode, ...}')
         theme = payload.get("theme")
         fps = payload.get("fps")
         if theme is not None and not isinstance(theme, str):
             return self._error("theme must be a theme name")
         if fps is not None and (isinstance(fps, bool) or not isinstance(fps, int)):
             return self._error("fps must be a whole number")
+        if page in ("normal", "report") and (fps is not None or not theme):
+            return self._error(f"the page {page} needs a theme and has no frame rate of its own")
+        keys = {"normal": "theme", "report": f"services.{Memory.name}.report_theme"}
+        key = keys.get(page, f"modes.{page}.theme")
         try:
             if theme:
                 find_theme(theme)
             if theme is not None:
-                set_config_value(f"modes.{name}.theme", theme, self.state.config_path)
+                set_config_value(key, theme, self.state.config_path)
             if fps is not None:
-                set_config_value(f"modes.{name}.fps", fps, self.state.config_path)
-        except (ThemeError, ConfigError, OSError) as exc:
+                set_config_value(f"modes.{page}.fps", fps, self.state.config_path)
+        except ThemeError as exc:
             return self._error(str(exc))
-        self._modes()
+        except (ConfigError, OSError) as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        self._pages()
 
     def _preset_previews(self) -> None:
         """Each building block (presets.py and plugins') drawn in the given palette,

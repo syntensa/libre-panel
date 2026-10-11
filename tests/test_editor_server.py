@@ -256,21 +256,39 @@ def test_readings_with_history(server):
     assert status == 200 and "gpu.temp" in data["readings"]  # without keys: every reading
 
 
-def test_pages_of_the_panel_are_modes(server, isolated_home):
+def test_pages_of_the_panel(server, isolated_home):
+    """The normal theme, each mode's (game mode's always) and the round report's."""
     from libre_panel.config import load_config
 
-    status, data = request(server, "GET", "/api/modes")
-    assert status == 200 and data["theme"] == "libre-default" and data["modes"] == {}
-    assert "game" in data["known"] and data["active"] is None
-    page = {"mode": "game", "theme": "slate", "fps": 30}
-    status, data = request(server, "POST", "/api/modes", page)
-    assert status == 200 and data["modes"]["game"] == {"theme": "slate", "fps": 30}
-    assert load_config().modes["game"].theme == "slate"
-    status, data = request(server, "POST", "/api/modes", {"mode": "game", "theme": ""})
-    assert status == 200 and data["modes"]["game"] == {"theme": None, "fps": 30}  # the normal one
-    assert request(server, "POST", "/api/modes", {"mode": "Not A Name", "theme": "slate"})[0] == 400
-    assert request(server, "POST", "/api/modes", {"mode": "game", "theme": "nope"})[0] == 400
-    assert request(server, "POST", "/api/modes", {"mode": "game", "fps": True})[0] == 400
+    status, data = request(server, "GET", "/api/pages")
+    assert status == 200 and data["shown"] is None and data["mode"] is None
+    pages = {page["id"]: page for page in data["pages"]}
+    assert pages["normal"]["theme"] == "libre-default"
+    assert pages["game"] == {"id": "game", "mode": "game", "theme": None, "fps": None}
+    assert pages["report"]["theme"] == "round-report" and pages["report"]["on"] is False
+
+    game = {"page": "game", "theme": "slate", "fps": 30}
+    status, data = request(server, "POST", "/api/pages", game)
+    pages = {page["id"]: page for page in data["pages"]}
+    assert status == 200 and (pages["game"]["theme"], pages["game"]["fps"]) == ("slate", 30)
+    status, data = request(server, "POST", "/api/pages", {"page": "report", "theme": "orbit"})
+    assert status == 200 and data["pages"][-1]["theme"] == "orbit"
+    status, data = request(server, "POST", "/api/pages", {"page": "vr", "theme": "pico"})
+    assert status == 200 and [p["id"] for p in data["pages"]] == ["normal", "game", "vr", "report"]
+    status, data = request(server, "POST", "/api/pages", {"page": "game", "theme": ""})
+    assert status == 200 and data["pages"][1]["theme"] is None  # the normal one again
+    config = load_config()
+    assert config.modes["game"].fps == 30 and config.modes["vr"].theme == "pico"
+    assert config.services.options["memory"]["report_theme"] == "orbit"
+
+    for wrong in (
+        {"page": "Not A Name", "theme": "slate"},
+        {"page": "game", "theme": "nope"},
+        {"page": "game", "fps": True},
+        {"page": "normal", "theme": "slate", "fps": 20},
+        {"page": "report", "theme": ""},
+    ):
+        assert request(server, "POST", "/api/pages", wrong)[0] == 400, wrong
 
 
 def test_theme_pictures_and_files(server, isolated_home):

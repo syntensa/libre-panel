@@ -1,7 +1,7 @@
 // Libre Panel's app: the shell, its views (Start, Design, Look, Live,
 // Settings) and the theme being edited. See README.md in this folder.
 
-import { blankTheme, openTheme, refreshModes, refreshThemes } from "./core/actions.js";
+import { blankTheme, normalTheme, openTheme, refreshPages, refreshThemes } from "./core/actions.js";
 import { endpoints } from "./core/api.js";
 import { startAppPolling } from "./core/app.js";
 import * as commands from "./core/commands.js";
@@ -26,14 +26,14 @@ async function start() {
     await loadLanguage();
     document.title = "Libre Panel";
     store.set({ specs: await endpoints.specs() });
-    await Promise.all([refreshThemes(), refreshModes()]);
+    await Promise.all([refreshThemes(), refreshPages()]);
     endpoints.sensors().then((sensors) => store.set({ sensors }), () => {});
     endpoints.pluginPages().then((plugins) => store.set({ plugins }), () => {});
     startAppPolling();
     registerAppCommands();
     // the theme on the panel, else the default one, else any
-    const { themes, modes, specs } = store.get();
-    const first = [modes?.theme, "libre-default", themes[0]?.id].find((id) => id && themes.some((theme) => theme.id === id));
+    const { themes, specs } = store.get();
+    const first = [normalTheme(), "libre-default", themes[0]?.id].find((id) => id && themes.some((theme) => theme.id === id));
     if (first) await openTheme(first, { ask: false });
     if (!store.get().doc) doc.openDoc({ theme: blankTheme(specs.models[0]), dirty: true });
     store.set({ ready: true });

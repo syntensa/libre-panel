@@ -1565,3 +1565,15 @@
 .palette-row .mono {
   font-size: 11px;
 }
+
+.page-card.empty .page-card-main {
+  cursor: default;
+}
+
+.page-card-blank {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 1;
+  border-radius: 6px;
+  border: 1px dashed var(--line-5);
+}

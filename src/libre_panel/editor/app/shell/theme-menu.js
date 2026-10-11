@@ -18,7 +18,7 @@ const sourceText = (theme) =>
   theme.source === "plugin" ? t("from a plugin") : theme.builtin ? t("built in") : t("yours");
 
 function ThemeList({ onClose }) {
-  const { themes, current, active } = useStore((s) => ({ themes: s.themes, current: s.doc?.id, active: s.modes?.theme }));
+  const { themes, current, active } = useStore((s) => ({ themes: s.themes, current: s.doc?.id, active: s.pages?.pages?.[0]?.theme }));
   const [query, setQuery] = useState("");
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();

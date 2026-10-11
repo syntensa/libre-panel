@@ -26,13 +26,16 @@ export async function refreshThemes() {
   }
 }
 
-export async function refreshModes() {
+export async function refreshPages() {
   try {
-    store.set({ modes: await endpoints.modes() });
+    store.set({ pages: await endpoints.pages() });
   } catch {
-    store.set({ modes: null }); // a broken config.toml: the pages are not shown
+    store.set({ pages: null }); // a broken config.toml: the pages are not shown
   }
 }
+
+/** The theme the panel shows normally (config.toml's), if known. */
+export const normalTheme = () => store.get().pages?.pages?.[0]?.theme ?? null;
 
 /** The images and fonts in the open theme's folder. */
 export async function refreshAssets() {
@@ -43,13 +46,10 @@ export async function refreshAssets() {
   if (serial === docSerial()) updateDoc({ assets });
 }
 
-/** The page of the panel a theme is shown on: "normal", a mode's name, or null. */
+/** The page of the panel a theme is shown on: "normal", "report", a mode's name, or null. */
 export function pageOf(id) {
-  const { modes } = store.get();
-  if (!modes || !id) return null;
-  if (modes.theme === id) return "normal";
-  const found = Object.entries(modes.modes || {}).find(([, mode]) => mode.theme === id);
-  return found ? found[0] : null;
+  const pages = store.get().pages?.pages || [];
+  return (id && pages.find((page) => page.theme === id)?.id) || null;
 }
 
 /** Nothing unsaved, or the user agrees to lose it. */
@@ -164,22 +164,17 @@ export async function saveAs() {
   }
 }
 
-/** Save the theme and show it: on the page it belongs to (a mode), else as the panel's theme. */
+/** Save the theme and show it: on the page it was opened for (a mode, the round report), else
+ * as the panel's theme. */
 export async function applyToPanel() {
   const { doc, dirty } = store.get();
   if (!doc) return false;
   if ((dirty || !doc.id) && !(await save())) return false;
   const { doc: saved, page } = store.get();
   try {
-    if (page && page !== "normal") {
-      await endpoints.setMode(page, { theme: saved.id });
-      toast(t('"{id}" is shown in the mode "{mode}"', { id: saved.id, mode: page }), { kind: "success" });
-    } else {
-      await endpoints.activate(saved.id);
-      store.set({ page: "normal" });
-      toast(t('"{id}" is now shown on the panel', { id: saved.id }), { kind: "success" });
-    }
-    refreshModes();
+    store.set({ pages: await endpoints.setPage(page || "normal", { theme: saved.id }) });
+    if (!page) store.set({ page: "normal" });
+    toast(t('"{id}" is now shown on the panel', { id: saved.id }), { kind: "success" });
     return true;
   } catch (error) {
     toastError(error);

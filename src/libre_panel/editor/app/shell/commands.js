@@ -7,6 +7,7 @@ import {
   confirmDiscard,
   exportTheme,
   importTheme,
+  normalTheme,
   openTheme,
   save,
   saveAs,
@@ -20,7 +21,7 @@ import { setPref, store } from "../core/state.js";
 import { html } from "../lib/preact.js";
 import { dialogOpen, openDialog } from "../ui/dialog.js";
 import { toastError } from "../ui/toast.js";
-import { modeName, panelName } from "./panel-popover.js";
+import { pageName, panelName, shownPages } from "./panel-popover.js";
 import { newThemeDialog } from "./theme-menu.js";
 import { allViews, navigate } from "./views.js";
 
@@ -139,7 +140,7 @@ export function registerAppCommands() {
     store.get().themes.map((item) => ({
       id: `theme.open.${item.id}`,
       title: () => t("Open theme {name}", { name: item.id }),
-      hint: () => (item.id === store.get().modes?.theme ? t("shown on the panel") : item.builtin ? t("built in") : t("yours")),
+      hint: () => (item.id === normalTheme() ? t("shown on the panel") : item.builtin ? t("built in") : t("yours")),
       group: theme,
       icon: "file",
       rank: 30,
@@ -212,24 +213,19 @@ export function registerAppCommands() {
       run: () => navigate("plugin", page.id),
     })),
   );
-  registerProvider(() => {
-    const modes = store.get().modes;
-    if (!modes) return [];
-    const pages = [["normal", modes.theme], ...Object.entries(modes.modes || {}).map(([name, mode]) => [name, mode.theme])];
-    return pages
-      .filter(([, id]) => id)
-      .map(([page, id]) => ({
-        id: `page.${page}`,
-        title: () => t("Page: {name}", { name: modeName(page === "normal" ? null : page) }),
-        hint: () => id,
-        group: () => t("Pages"),
-        icon: "pages",
-        rank: 40,
-        run: async () => {
-          if (await openTheme(id, { page })) navigate("design");
-        },
-      }));
-  });
+  registerProvider(() =>
+    shownPages().map((page) => ({
+      id: `page.${page.id}`,
+      title: () => t("Page: {name}", { name: pageName(page.id) }),
+      hint: () => page.theme,
+      group: () => t("Pages"),
+      icon: "pages",
+      rank: 40,
+      run: async () => {
+        if (await openTheme(page.theme, { page: page.id })) navigate("design");
+      },
+    })),
+  );
 
   bindKey(["mod+z"], () => undo(), { when: () => !dialogOpen() && hasDoc() });
   bindKey(["mod+y", "mod+shift+z"], () => redo(), { when: () => !dialogOpen() && hasDoc() });

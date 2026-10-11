@@ -37,7 +37,7 @@ export const store = createStore({
     warnings: [],
   },
   app: { available: false }, // the background app (tray), when it serves the app
-  modes: null, // the panel's pages: /api/modes
+  pages: null, // the panel's pages: /api/pages
   page: null, // the page the open theme is shown on ("normal" or a mode), if any
   plugins: [], // plugin editor pages: /api/plugins/pages
   prefs: {

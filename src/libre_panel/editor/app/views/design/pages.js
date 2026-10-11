@@ -1,14 +1,15 @@
-// The panel's pages: the theme it shows normally (config.toml's theme) and the
+// The panel's pages: the theme it shows normally (config.toml's theme), the
 // theme of each mode ([modes.<name>]: game mode switches to "game" while you
-// play). The tabs over the canvas open a page's theme; "+" puts the open theme
-// on a page. The pages panel also lists the pages that plugins bring.
+// play) and the round report's (the memory service shows it after a game). The
+// tabs over the canvas open a page's theme; "+" puts the open theme on a page.
+// The pages panel also lists the pages that plugins bring to the editor.
 
-import { openTheme, refreshModes, save } from "../../core/actions.js";
+import { openTheme, refreshPages, save } from "../../core/actions.js";
 import { endpoints } from "../../core/api.js";
 import { t } from "../../core/i18n.js";
 import { store, useStore } from "../../core/state.js";
 import { html, useRef, useState } from "../../lib/preact.js";
-import { modeName } from "../../shell/panel-popover.js";
+import { pageName, shownPages } from "../../shell/panel-popover.js";
 import { navigate } from "../../shell/views.js";
 import { NumberField } from "../../ui/controls.js";
 import { promptDialog } from "../../ui/dialog.js";
@@ -18,15 +19,14 @@ import { toast, toastError } from "../../ui/toast.js";
 
 const MODE_NAME = /^[a-z][a-z0-9_-]{0,31}$/;
 
-/** The pages with a theme: [{id: "normal" | mode, theme, fps}]. */
-export function pagesOf(modes) {
-  if (!modes) return [];
-  const pages = [{ id: "normal", theme: modes.theme, fps: null }];
-  for (const [name, mode] of Object.entries(modes.modes || {})) if (mode.theme) pages.push({ id: name, theme: mode.theme, fps: mode.fps });
-  return pages;
+/** The page on show now, if the panel runs: a mode, the round report, or the normal one. */
+function pageNow(data) {
+  if (!data || !store.get().app.available) return null;
+  if (data.mode) return data.mode;
+  const report = data.pages.find((page) => page.id === "report");
+  if (report?.on && data.shown && data.shown === report.theme) return "report";
+  return "normal";
 }
-
-export const pageName = (id) => modeName(id === "normal" ? null : id);
 
 async function openPage(page) {
   const { doc } = store.get();
@@ -34,17 +34,14 @@ async function openPage(page) {
   else await openTheme(page.theme, { page: page.id });
 }
 
-/** Show the open theme (saved first) on a page: "normal" or a mode. */
+/** Show the open theme (saved first) on a page: "normal", "report" or a mode. */
 export async function putOnPage(page) {
   const { doc, dirty } = store.get();
   if (!doc) return;
   if ((dirty || !doc.id) && !(await save())) return;
   const id = store.get().doc.id;
   try {
-    if (page === "normal") await endpoints.activate(id);
-    else await endpoints.setMode(page, { theme: id });
-    store.set({ page });
-    await refreshModes();
+    store.set({ pages: await endpoints.setPage(page, { theme: id }), page });
     toast(t('"{id}" is on the page "{page}"', { id, page: pageName(page) }), { kind: "success" });
   } catch (error) {
     toastError(error);
@@ -56,18 +53,22 @@ async function askForMode() {
     title: t("Another page"),
     label: t("Name of the mode"),
     hint: t("A mode a service switches to, as a plugin names it: a-z, 0-9, - and _"),
-    validate: (value) => (MODE_NAME.test(value) ? null : t("a-z, 0-9, - and _, starting with a letter")),
+    validate: (value) => (MODE_NAME.test(value) && !["normal", "report"].includes(value) ? null : t("a-z, 0-9, - and _, starting with a letter")),
     confirm: t("Add"),
   });
   if (name) putOnPage(name);
 }
 
 function addItems() {
-  const { modes } = store.get();
-  const used = new Set(pagesOf(modes).map((page) => page.id));
-  const known = (modes?.known || []).filter((name) => !used.has(name));
+  const data = store.get().pages;
+  const shown = new Set(shownPages(data).map((page) => page.id));
+  const more = (data?.pages || []).filter((page) => !shown.has(page.id) && page.id !== "normal");
   return [
-    ...known.map((name) => ({ icon: name === "game" ? "game" : "pages", label: t("Show this theme: {page}", { page: pageName(name) }), run: () => putOnPage(name) })),
+    ...more.map((page) => ({
+      icon: page.id === "game" ? "game" : page.id === "report" ? "graph" : "pages",
+      label: t("Show this theme: {page}", { page: pageName(page.id) }),
+      run: () => putOnPage(page.id),
+    })),
     { icon: "plus", label: t("Another mode…"), run: askForMode },
     "-",
     { icon: "to-panel", label: t("As the normal theme"), run: () => putOnPage("normal") },
@@ -76,75 +77,88 @@ function addItems() {
 
 /** The tabs over the canvas. */
 export function PageTabs() {
-  const { modes, page, active } = useStore((s) => ({ modes: s.modes, page: s.page, active: s.app.panel?.mode }));
+  const { data, page } = useStore((s) => ({ data: s.pages, page: s.page, app: s.app.available }));
   const [open, setOpen] = useState(false);
   const anchor = useRef(null);
-  if (!modes) return null;
-  const pages = pagesOf(modes);
+  if (!data) return null;
+  const now = pageNow(data);
   return html`<div class="page-tabs" role="tablist" aria-label=${t("Pages of the panel")} onPointerDown=${(event) => event.stopPropagation()}>
-    ${pages.map(
+    ${shownPages(data).map(
       (item) => html`<button type="button" role="tab" key=${item.id} class="page-tab" aria-selected=${String(page === item.id)}
         title=${t("Shows {theme}", { theme: item.theme })} onClick=${() => openPage(item)}>
         ${pageName(item.id)}
-        ${(active || "normal") === item.id && store.get().app.available ? html`<span class="page-live" title=${t("on the panel now")}></span>` : null}
+        ${now === item.id ? html`<span class="page-live" title=${t("on the panel now")}></span>` : null}
       </button>`,
     )}
     <button ref=${anchor} type="button" class="page-add" aria-label=${t("Add a page")} title=${t("Add a page")}
       aria-haspopup="menu" aria-expanded=${String(open)} onClick=${() => setOpen(!open)}>
       <${Icon} name="plus" size=${15} />
     </button>
-    <${Popover} anchor=${anchor} open=${open} onClose=${() => setOpen(false)} label=${t("Add a page")} width=${280}>
+    <${Popover} anchor=${anchor} open=${open} onClose=${() => setOpen(false)} label=${t("Add a page")} width=${290}>
       <${Menu} items=${addItems()} onClose=${() => setOpen(false)} />
     <//>
   </div>`;
 }
 
-/** The side panel: every page with its theme and frame rate, and the plugins' pages. */
+function PageCard({ item, current, open }) {
+  const setFps = async (fps) => {
+    try {
+      store.set({ pages: await endpoints.setPage(item.id, { fps }) });
+    } catch (error) {
+      toastError(error);
+    }
+  };
+  const remove = async () => {
+    try {
+      store.set({ pages: await endpoints.setPage(item.id, { theme: "" }) });
+      if (store.get().page === item.id) store.set({ page: null });
+    } catch (error) {
+      toastError(error);
+    }
+  };
+  const note = item.service
+    ? item.on
+      ? t("after a game")
+      : t("the memory service is off")
+    : item.mode && !item.theme
+      ? t("shows the normal theme")
+      : item.theme;
+  return html`<div class=${`page-card${current ? " current" : ""}${item.theme ? "" : " empty"}`}>
+    <button type="button" class="page-card-main" disabled=${!item.theme} onClick=${() => item.theme && open(item)}
+      title=${item.theme ? t("Open its theme") : null}>
+      ${item.theme ? html`<img alt="" src=${endpoints.previewUrl(item.theme, 240)} loading="lazy" />` : html`<span class="page-card-blank"></span>`}
+      <span class="page-card-text">
+        <strong>${pageName(item.id)}</strong>
+        <span class="muted">${note}</span>
+      </span>
+    </button>
+    ${item.mode
+      ? html`<div class="page-card-tools">
+          <label class="inline-field"><span class="muted">${t("Frames per second")}</span>
+            <${NumberField} label=${t("Frames per second")} value=${item.fps} min=${1} max=${60} allowEmpty placeholder=${t("auto")}
+              onChange=${(fps) => fps && setFps(fps)} /></label>
+          ${item.theme
+            ? html`<button type="button" class="icon-btn" aria-label=${t("Show the normal theme here")} title=${t("Show the normal theme here")}
+                onClick=${remove}><${Icon} name="close" size=${14} /></button>`
+            : null}
+        </div>`
+      : null}
+  </div>`;
+}
+
+/** The side panel: every page with its theme, and the plugins' pages. */
 export function PagesPanel() {
-  const { modes, page, plugins, docId } = useStore((s) => ({ modes: s.modes, page: s.page, plugins: s.plugins, docId: s.doc?.id }));
-  const setFps = async (name, fps) => {
-    try {
-      store.set({ modes: await endpoints.setMode(name, { fps }) });
-    } catch (error) {
-      toastError(error);
-    }
-  };
-  const remove = async (name) => {
-    try {
-      store.set({ modes: await endpoints.setMode(name, { theme: "" }) });
-      if (store.get().page === name) store.set({ page: null });
-    } catch (error) {
-      toastError(error);
-    }
-  };
+  const { data, page, plugins } = useStore((s) => ({ data: s.pages, page: s.page, plugins: s.plugins }));
   return html`<div class="side-scroll">
     <h2 class="side-title">${t("Pages of the panel")}</h2>
-    ${modes
+    ${data
       ? html`<div class="page-cards">
-          ${pagesOf(modes).map(
-            (item) => html`<div key=${item.id} class=${`page-card${page === item.id ? " current" : ""}`}>
-              <button type="button" class="page-card-main" onClick=${() => openPage(item)} title=${t("Open its theme")}>
-                <img alt="" src=${endpoints.previewUrl(item.theme, 240)} loading="lazy" />
-                <span class="page-card-text">
-                  <strong>${pageName(item.id)}</strong>
-                  <span class="muted">${item.theme}${item.theme === docId ? ` · ${t("open")}` : ""}</span>
-                </span>
-              </button>
-              ${item.id !== "normal"
-                ? html`<div class="page-card-tools">
-                    <label class="inline-field"><span class="muted">${t("Frames per second")}</span>
-                      <${NumberField} label=${t("Frames per second")} value=${item.fps} min=${1} max=${60} allowEmpty placeholder=${t("auto")}
-                        onChange=${(fps) => fps && setFps(item.id, fps)} /></label>
-                    <button type="button" class="icon-btn" aria-label=${t("Remove the page")} title=${t("Remove the page")}
-                      onClick=${() => remove(item.id)}><${Icon} name="close" size=${14} /></button>
-                  </div>`
-                : null}
-            </div>`,
-          )}
+          ${data.pages.map((item) => html`<${PageCard} key=${item.id} item=${item} current=${page === item.id} open=${openPage} />`)}
         </div>
         <${AddPage} />
         <p class="side-hint">${t("A page is shown while a service switches its mode on: game mode shows “In game” while you play.")}</p>`
-      : html`<p class="side-hint">${t("The pages come from config.toml, which could not be read.")}</p>`}
+      : html`<p class="side-hint">${t("The pages come from config.toml, which could not be read.")}</p>
+          <button type="button" class="btn" onClick=${refreshPages}>${t("Try again")}</button>`}
     ${plugins.length
       ? html`<h2 class="side-title">${t("From plugins")}</h2>
           <div class="plugin-pages">
@@ -163,7 +177,7 @@ function AddPage() {
   const anchor = useRef(null);
   return html`<button ref=${anchor} type="button" class="btn btn-dashed" aria-haspopup="menu" aria-expanded=${String(open)}
       onClick=${() => setOpen(!open)}><${Icon} name="plus" size=${15} /> ${t("Add a page")}</button>
-    <${Popover} anchor=${anchor} open=${open} onClose=${() => setOpen(false)} label=${t("Add a page")} width=${280}>
+    <${Popover} anchor=${anchor} open=${open} onClose=${() => setOpen(false)} label=${t("Add a page")} width=${290}>
       <${Menu} items=${addItems()} onClose=${() => setOpen(false)} />
     <//>`;
 }
