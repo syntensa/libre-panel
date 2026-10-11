@@ -657,6 +657,9 @@
   under the header, the panel chip "not answering" instead of the last state it knew,
   and an error says "Libre Panel does not answer." instead of the browser's "Failed to
   fetch"; Settings no longer blame config.toml for it
+- A view that fails while it is drawn no longer leaves the page blank: its place says
+  so, with *Try again* and the way to Start, and the other views stay reachable; an
+  address such as `#/home/themes/%E0%A4%A` (not a valid text) no longer breaks Start
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

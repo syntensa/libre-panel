@@ -236,11 +236,20 @@ function Launcher() {
   </div>`;
 }
 
+/** A part of the address as the text it stands for; what is not valid ("%E0%A4%A") stays as it is. */
+function decoded(part) {
+  try {
+    return decodeURIComponent(part);
+  } catch {
+    return part;
+  }
+}
+
 function HomeView({ rest }) {
   const { pages, ready } = useStore((s) => ({ pages: s.pages, ready: s.ready }));
   const choosing = useSelector(flow, (state) => state.choosing);
   const [page, asked] = rest.split("/"); // #/home/themes, or #/home/themes/<a collection>
-  if (page === "themes") return html`<${ThemesPage} asked=${asked ? decodeURIComponent(asked) : ""} />`;
+  if (page === "themes") return html`<${ThemesPage} asked=${asked ? decoded(asked) : ""} />`;
   // pages is null when config.toml cannot be read: nothing is known then, so no first start
   if (ready && pages && (pages.chosen === false || choosing)) return html`<${FirstStart} />`;
   return html`<${Launcher} />`;

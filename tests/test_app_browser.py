@@ -1354,6 +1354,37 @@ def test_a_plugin_page_opens_in_the_app(page_plugin, page):
     page.frame_locator(".plugin-frame").locator("#out", has_text="1 3").wait_for()
 
 
+def test_a_view_that_cannot_be_drawn_says_so_and_the_others_stay_reachable(app_url):
+    """A view that throws (here: a plugin list that is not a list) left the whole page blank.
+    The view's place says what happened, the header works, and the view can try again."""
+    with browser_page(app_url, "home") as page:
+        page.goto(f"{app_url}#/plugin/anything")
+        page.wait_for_selector(".plugin-view")
+        js(page, "window.libre.store.set({ plugins: null })")
+        alert = page.locator(".view-message.error")
+        expect(alert).to_contain_text("This view could not be drawn")
+        assert page.locator(".topbar").is_visible()
+        js(page, "window.libre.store.set({ plugins: [] })")  # what was wrong is mended
+        alert.get_by_role("button", name="Try again").click()
+        expect(page.locator(".plugin-view .view-message")).to_have_text(
+            "This plugin page is not installed."
+        )
+        assert alert.count() == 0
+        js(page, "window.libre.store.set({ plugins: null })")
+        expect(alert).to_be_visible()
+        page.get_by_role("link", name="Live").click()  # another view is drawn, as it should be
+        page.wait_for_selector(".view .live")
+        assert alert.count() == 0
+
+
+def test_a_bad_address_does_not_break_the_gallery(app_url):
+    """The gallery opens the group the address names; "%E0%A4%A" is no text, and decoding it
+    threw in the middle of drawing Start."""
+    with browser_page(app_url, "home/themes/%E0%A4%A", allow=PICTURE) as page:
+        page.wait_for_selector(".start.gallery .theme-card")
+        assert page.locator(".view-message.error").count() == 0
+
+
 def test_a_plain_editor_has_no_panel_controls(page):
     chip = page.locator(".panel-chip")
     assert "480 × 320" in chip.inner_text()  # no panel runs: the size to design for
