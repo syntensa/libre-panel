@@ -483,6 +483,26 @@ def test_a_themes_dust_renders_at_both_sizes(size):
     assert 0 < (diff.sum(axis=-1) > 0).sum() < 0.2 * diff.shape[0] * diff.shape[1]
 
 
+def test_the_renderer_moves_the_grains_in_its_helper_thread_when_it_builds_there():
+    """With background builds (a video panel) the renderer's one helper thread moves the
+    grains too; a frame still shows them."""
+    snapshot = demo_snapshot(fixed_time=1_700_000_000)
+    plain = Renderer(theme(), animate=True)
+    plain.continuous = True
+    base, _ = plain.render(snapshot, 1.0)
+    renderer = Renderer(theme(look={"dust": {"count": 4000}}), animate=True)
+    renderer.continuous = renderer.background_builds = True
+    try:
+        for n in range(150):
+            out, _ = renderer.render(snapshot, 1.0 + n / 50)
+            renderer.shown = out
+            time.sleep(0.003)
+        assert renderer._dust.submit is not None and renderer._builder is not None
+        assert out.mode == "RGB" and (np.asarray(out) != np.asarray(base)).any()
+    finally:
+        renderer.close()
+
+
 def test_the_dust_goes_under_the_toast_the_loop_adds():
     """The dust is part of the frame the renderer returns: the toast comes after it."""
     renderer = Renderer(theme(look={"dust": True}), animate=True)
