@@ -9,6 +9,9 @@ and switches to the mode ``game`` (``[modes.game]``: its own frame rate and
 theme) with an entrance that shows the logo. A few seconds after the game ends
 it switches back, with the entrance for the end.
 
+The logo stays after the game, until the next one comes: the round report that
+follows shows it beside the game's name.
+
 Without the entrance a message ("Game mode") says that the panel changed.
 """
 
@@ -288,7 +291,8 @@ class Game(Service):
         self.waiting, self.in_mode, self.found, self.logo = None, False, None, None
         presentmon.set_target(None)
         self.host.publish(NAME, None, "", "Game")
-        self.host.publish_image(LOGO, None)
+        if not was_in_mode:  # a game that was played leaves its logo for the round report
+            self.host.publish_image(LOGO, None)
 
     def _transition(self, kind: str) -> tuple[str, dict[str, Any]] | None:
         """The entrance with the game's name and logo (a picture, not its key: it

@@ -20,6 +20,7 @@ from PIL import Image, ImageDraw
 from libre_panel.render import facets
 from libre_panel.render.finish import Finish, register
 from libre_panel.render.renderer import Piece, _fraction, _number, _steps
+from libre_panel.sensors.base import Snapshot
 
 
 class FacetText(Finish):
@@ -43,6 +44,19 @@ class FacetText(Finish):
             ground = renderer.color(theme.background_color) or (0, 0, 0, 0)
             world = self._worlds[renderer] = facets.environment_for(theme.palette, ground)
         return facets.glyph(font, ch, fill, at, world, self.style)
+
+    def prepare(self, renderer, widget):
+        """The letters of a text, or of the time a clock shows now, before the first frame:
+        at a clock's size a letter's bevel takes some 30 ms to build. (Readings and the
+        clock's next minutes are lettered as they come: on a video panel in the helper
+        thread, while the frames go on.)"""
+        if widget["type"] == "text":
+            text = widget["text"]
+        elif widget["type"] == "clock":
+            text = renderer._clock_text(widget, Snapshot())
+        else:
+            return
+        renderer._text_piece(widget, text, widget["color"])
 
 
 class AcrylicText(FacetText):

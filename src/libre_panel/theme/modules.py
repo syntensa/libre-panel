@@ -1358,6 +1358,14 @@ def _cover(b: _Build, x: float, y: float, d: float) -> None:
           fit="cover", radius=radius)  # fmt: skip
 
 
+def end_time(b: _Build) -> tuple[str, str]:
+    """What the time at the right of a track's progress shows: its length, or (``time``
+    ``remaining``) what is left of it with a minus in front, as a player counts down."""
+    if b.module.get("time") == "remaining":
+        return "media.remaining", "-{value:clock}"
+    return "media.duration", "{value:clock}"
+
+
 def _song(b: _Build, x: float, y: float, w: float, h: float, color: str,
           state: bool = True) -> None:  # fmt: skip
     """Title, artist (album) and the progress, filling the height."""
@@ -1394,8 +1402,9 @@ def _song(b: _Build, x: float, y: float, w: float, h: float, color: str,
         times = top + b.ts * 0.9
         b.value("position", "media.position", "{value:clock}", x, times, b.ts * 0.95,
                 color=b.c("text3"), width=w / 2, hide_if_missing=True)  # fmt: skip
-        b.value("length", "media.duration", "{value:clock}", x + w, times, b.ts * 0.95,
-                color=b.c("text3"), align="right", width=w / 2, hide_if_missing=True)  # fmt: skip
+        sensor, fmt = end_time(b)
+        b.value("length", sensor, fmt, x + w, times, b.ts * 0.95, color=b.c("text3"),
+                align="right", width=w / 2, hide_if_missing=True)  # fmt: skip
 
 
 def build_agenda(b: _Build, _src: Source) -> None:

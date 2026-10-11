@@ -13,7 +13,7 @@
   <img alt="Windows, Linux" src="https://img.shields.io/badge/runs_on-Windows%20%C2%B7%20Linux-E0A8FF?labelColor=0A1119">
 </p>
 
-<p align="center"><img src="docs/images/hero.png" alt="The Studio theme on a 9.2 inch bar: a large clock, the local weather in a card, and rings for CPU, RAM and GPU" width="100%"></p>
+<p align="center"><img src="docs/images/hero.png" alt="Lumen, Libre Panel's own theme, on a 9.2 inch bar: what is playing with its cover, the time with the load of the last minute and the fans, and lit rings for CPU, GPU and RAM named after the hardware" width="100%"></p>
 
 <p align="center">
   <a href="https://github.com/syntensa/libre-panel/releases/latest"><b>Download</b></a> ·
@@ -28,9 +28,10 @@ temperatures, memory, network and the weather outside, in a design you pick
 or build yourself. It runs quietly in the tray on Windows and Linux.
 No account, no cloud, no vendor app.
 
-- **Looks good out of the box.** Seven built-in themes from the 0.96" stick
-  to the 9.2" bar, with glow, soft gradients, smooth graphs and values that
-  glide instead of jumping.
+- **Looks good out of the box.** Seven themes of its own from the 0.96" stick
+  to the 9.2" bar: values as light in milled grooves, a card that shows what
+  is playing or the weather with moving symbols, graphs that scroll and
+  values that glide instead of jumping.
 - **Fits your machine without editing.** The names your own CPU and GPU
   report, the weather for the place in *your* config, dates in English or
   German, and sections that step aside where a sensor is missing.
@@ -123,25 +124,36 @@ Calendars, Home Assistant, MQTT and PresentMon are set up in the
 
 ## Themes
 
-<p align="center"><img src="docs/images/gallery.png" alt="Built-in themes: SPUR II (1920x480), Slate (5 inch), Libre Default (3.5 inch), Orbit (round), Column (3.5 inch portrait) and Pico (0.96 inch)" width="100%"></p>
+<p align="center"><img src="docs/images/gallery.png" alt="Built-in themes: Lumen (1920x480), Slate (5 inch), Libre Default (3.5 inch), Orbit (round), Column (3.5 inch portrait) and Pico (0.96 inch)" width="100%"></p>
 
 | Theme | Panel | |
 |---|---|---|
-| `studio` | 8.8" / 9.2" bar (1920×480) | after SPUR II's Studio screen: large clock, weather for your location, CPU, RAM and GPU rings named after your hardware |
+| `lumen` | 8.8" / 9.2" bar (1920×480) | Libre Panel's signature screen: what is playing (the weather with its moving symbols when nothing is, a calendar sheet when there is neither), the time with the load of the last minute scrolling as light and the fans turning, lit rings for CPU, GPU and RAM named after your hardware, and the network with a download in its place while one runs |
+| `studio` | 8.8" / 9.2" bar (1920×480) | a calm screen: large clock, a card with what is playing, else the weather for your location, else the day, and lit CPU, RAM and GPU rings named after your hardware |
+| `slate` | 5" (800×480) | four cards: CPU, GPU, memory, network |
+| `libre-default` | 3.5" (480×320) | two lit rings, temperature, disk, network and a history that scrolls; what is playing, the weather or the day in the corner |
+| `orbit` | round 2.1" / 2.8" (480×480) | three concentric rings around a large clock |
+| `column` | 3.5" portrait (320×480) | clock, resource rows and network |
+| `pico` | 0.96" (160×80) | CPU with temperature and memory, large numbers and slim bars |
+
+A new install starts with `lumen` on the 8.8" and 9.2" bars and with `libre-default` on every
+other panel. The app asks "How should it look?" on the first start, and a `theme` in
+`config.toml` decides for good ([how](docs/CONFIGURATION.md#the-theme-on-the-panel)).
+
+SPUR II, the private project Libre Panel grew out of, lives on as a legacy
+set of screens for the 8.8" and 9.2" bars (`"collection": "SPUR II"`):
+
+| Theme | Panel | |
+|---|---|---|
 | `spur-ii` | 8.8" / 9.2" bar (1920×480) | the SPUR II layout: load charts, four sections, light on every value |
 | `spur-classic` | 8.8" / 9.2" bar (1920×480) | SPUR II's classic screen as it is now: raised load curves in flat frames, RAM and network in staggered boxes, values as light in milled grooves, the faceted wordmark, turning fans and the clock above, the grid, one light and depth dust |
 | `spur-horizon` | 8.8" / 9.2" bar (1920×480) | SPUR II's Horizon: the CPU's load grows up from a midline and the GPU's down from it, 70 seconds side by side, with tiles for values, network and music below |
 | `spur-header` | 8.8" / 9.2" bar (1920×480) | SPUR II's game screen with the familiar frame: the frame rate and the 1% low beside the game's logo, load charts, RAM and the GPU's temperatures, a frame time chart and who holds the rate down |
 | `spur-focus` | 8.8" / 9.2" bar (1920×480) | SPUR II's Focus for a game: the frame rate large with its course over 35 seconds, small load charts beside it, frames, CPU, GPU and system below |
-| `spur-session` | 8.8" / 9.2" bar (1920×480) | SPUR II's Session for a game: the frame rate with its last ten minutes, a chart of the longest frame of each moment, and temperatures and power with their course |
+| `spur-session` | 8.8" / 9.2" bar (1920×480) | SPUR II's Session for a game: the time played, the average frame rate, the share of time at each frame rate and the highest temperatures and power since the game began |
 | `spur-cockpit` | 8.8" / 9.2" bar (1920×480) | SPUR II's Cockpit: the CPU's and GPU's load as two equal charts with the RAM as a ring, and CPU, GPU, memory and network in four equal columns |
 | `spur-studio` | 8.8" / 9.2" bar (1920×480) | SPUR II's Studio screen, made of the cards: a large clock with the seconds and the date, the network and the volume on the left, what plays (the weather when nothing does) in the middle, with a line of light between the cards, and rings for the CPU, GPU and RAM on the right |
 | `round-report` | 8.8" / 9.2" bar (1920×480) | SPUR II's round report, what the `memory` service shows after a game: the average frame rate against your earlier rounds, the share of the round at each frame rate, who held the rate down, and the highest temperatures and power |
-| `slate` | 5" (800×480) | four cards: CPU, GPU, memory, network |
-| `libre-default` | 3.5" (480×320) | two rings, temperature, disk, network and history |
-| `orbit` | round 2.1" / 2.8" (480×480) | three concentric rings around a large clock |
-| `column` | 3.5" portrait (320×480) | clock, resource rows and network |
-| `pico` | 0.96" (160×80) | CPU with temperature and memory, large numbers and slim bars |
 
 Every theme moves to any other panel from the panel button at the top of
 *Design*. Themes are plain JSON plus images and fonts — see
@@ -282,7 +294,7 @@ Other commands:
 libre-panel                         # panel + app in a terminal (Ctrl+C stops)
 libre-panel editor                  # only the app, without the panel (--browser: in the browser)
 libre-panel run                     # only drive the panel
-libre-panel preview spur-ii -o spur.png   # render a theme to an image
+libre-panel preview lumen -o lumen.png    # render a theme to an image
 libre-panel models                  # all known panels and their resolutions
 libre-panel devices                 # which panel is connected?
 libre-panel doctor                  # check the panel end to end, write a report

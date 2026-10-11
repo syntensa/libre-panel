@@ -87,7 +87,10 @@ themes that name no `collection` (Libre Panel's own, and yours) first and keeps 
 collection closed at the end, whatever its name; `endpoints.previewUrl(id, width)` is a theme's
 picture (the server keeps it until the theme changes), `openTheme(id)` opens one for
 Design and `showOnPanel(id)` puts one on the panel. `store.get().pages.chosen` is false
-until config.toml names a theme: Start then asks which look the panel should have.
+until config.toml names a theme: Start then asks which look the panel should have, and
+marks the panel's own default (`pages.default`, or `default_theme` of the model the themes
+are shown for: Lumen on a bar, Libre Default elsewhere) as the first card. The normal
+page's theme (`pages.pages[0]`) is that default as long as config.toml names none.
 
 ## A group in Settings
 

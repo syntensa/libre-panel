@@ -421,6 +421,7 @@
       "line_width": 7,
       "per_frame": true,
       "inset": false,
+      "end_dot": 9,
       "glow": 0.6,
       "glow_radius": 3
     },
@@ -441,6 +442,7 @@
       "line_width": 7,
       "per_frame": true,
       "inset": false,
+      "end_dot": 9,
       "glow": 0.6,
       "glow_radius": 3,
       "direction": "down"
@@ -464,7 +466,8 @@
       "line_width": 2,
       "finish": "facet",
       "per_frame": true,
-      "inset": false
+      "inset": false,
+      "end_dot": 5.5
     },
     {
       "type": "graph",
@@ -486,7 +489,8 @@
       "line_width": 2,
       "finish": "facet",
       "per_frame": true,
-      "inset": false
+      "inset": false,
+      "end_dot": 5.5
     },
     {
       "type": "metric",
@@ -675,7 +679,7 @@
       "id": "gpu-1-value",
       "x": 567,
       "y": 432,
-      "sensor": "temp.gpu.hot_spot",
+      "sensor": "gpu.hotspot",
       "format": "{value:.0f}",
       "font": "builtin:LiberationSans-Bold",
       "font_size": 34,

@@ -13,8 +13,9 @@ LibreHardwareMonitor (MPL-2.0) is read one of two ways, chosen by ``mode`` in
 
 ``auto`` (the default) takes the first way where it is possible and the second otherwise.
 Either way every sensor is exposed under its raw id (``lhm:/amdcpu/0/temperature/2``) and
-the common ones also get friendly aliases such as ``cpu.temp`` or ``gpu.load``, made by the
-same code. With several GPUs the dedicated one is used; ``gpu = "RTX 4080"`` picks one by name.
+the common ones also get friendly aliases such as ``cpu.temp``, ``gpu.load`` or ``mem.temp``
+(the hottest memory module), made by the same code. With several GPUs the dedicated one is
+used; ``gpu = "RTX 4080"`` picks one by name.
 
 When the web server stops answering, its readings are kept for
 ``stale_seconds`` (5 by default) and then dropped, so the panel shows "--"
@@ -67,6 +68,7 @@ _CPU_ALIASES = {
 }
 _GPU_ALIASES = {
     "gpu.temp": ("temperature", ("GPU Core", "GPU Hot Spot")),
+    "gpu.hotspot": ("temperature", ("GPU Hot Spot",)),  # the hottest spot of the chip
     "gpu.load": ("load", ("GPU Core", "D3D 3D")),
     # Board power (TBP), as SPUR II verified against HWiNFO.
     "gpu.power": ("power", ("GPU Package", "GPU Power", "GPU Core")),
@@ -232,12 +234,15 @@ def readings_from_sensors(
     if gpus:
         out["gpu.name"] = Reading("gpu.name", tidy_gpu(gpus[0].name), "", "GPU")
     _temperatures_and_fans(list(devices.values()), out)
+    modules = _memory_temperature(list(devices.values()), out)
     if sources is not None:
         for key, reading in out.items():
             origin = reading.origin or (key if key.startswith("lhm:") else "")
             sources[key] = (origin[4:],) if origin else ()
         if averaged:
             sources["cpu.freq"] = averaged
+        if modules:  # whichever module is the hottest: all of them are read
+            sources["mem.temp"] = modules
     return out
 
 
@@ -269,6 +274,30 @@ def _temperatures_and_fans(devices: list[_Device], out: dict[str, Reading]) -> N
             else:
                 name = label
             out.setdefault(key, Reading(key, reading.value, reading.unit, name, reading.key))
+
+
+def _memory_temperature(devices: list[_Device], out: dict[str, Reading]) -> tuple[str, ...]:
+    """``mem.temp``: the temperature of the hottest memory module (DDR4 and DDR5 have a thermal
+    sensor on the module). LibreHardwareMonitor puts each module under ``/memory/dimm/<n>``
+    and names its sensor "DIMM #<n>"; the module's limits are temperatures too ("Thermal
+    Sensor High Limit"), but they never change, so only the "DIMM" ones count. Returns the ids
+    of the sensors it was made from."""
+    found = [
+        reading
+        for device in devices
+        if device.kind in ("memory", "ram")
+        for (sensor_type, label), reading in device.sensors.items()
+        if sensor_type == "temperature"
+        and label.upper().startswith("DIMM")
+        and isinstance(reading.value, float)
+    ]
+    if not found:
+        return ()
+    hottest = max(found, key=lambda reading: reading.value)
+    out["mem.temp"] = Reading(
+        "mem.temp", hottest.value, hottest.unit or "°C", "Memory temperature", hottest.key
+    )
+    return tuple(reading.key[4:] for reading in found)
 
 
 def fetch_tree(url: str, timeout: float = REQUEST_SECONDS) -> dict[str, Any]:

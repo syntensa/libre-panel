@@ -32,6 +32,20 @@ def test_a_song_moves_on_while_it_plays():
     assert Track("playing", "Live", position=5.0, at=0).readings(9999)["media.position"].value
 
 
+def test_the_time_left_is_the_length_less_where_the_song_is():
+    song = Track("playing", "Song", "Band", "", 60.0, 200.0, None, "Spotify", at=100.0)
+    left = song.readings(110.0)["media.remaining"]  # it moves on with the position
+    assert (left.value, left.unit) == (130.0, "s")
+    assert song.readings(130.0)["media.remaining"].value == 110.0
+    paused = Track("paused", "Song", position=60.0, duration=200.0, at=100.0)
+    assert paused.readings(500.0)["media.remaining"].value == 140.0  # a paused song stands
+    over = Track("playing", "Song", position=190.0, duration=200.0, at=0.0)
+    assert over.readings(50.0)["media.remaining"].value == 0.0  # never less than nothing
+    # a live stream has no length, a player may not tell where it is: nothing is left to tell
+    assert "media.remaining" not in Track("playing", "Live", position=5.0, at=0).readings(9)
+    assert "media.remaining" not in Track("playing", "Song", duration=200.0, at=0).readings(9)
+
+
 def test_players_on_linux():
     sep = "\x1f"
     line = sep.join(["Playing", "Band", "Song", "Album", "61000000", "200000000",

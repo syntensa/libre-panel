@@ -30,7 +30,10 @@ _WAVES: dict[str, tuple[str, str, float, float, float]] = {
     "gpu.fan": ("GPU fan", "RPM", 1400, 400, 41),
     "mem.load": ("Memory usage", "%", 47, 6, 43),
     "mem.used": ("Memory used", "GiB", 15, 2, 43),
+    "mem.free": ("Memory free", "GiB", 17, -2, 43),  # what mem.used leaves of mem.total
     "mem.total": ("Memory total", "GiB", 32, 0, 1),
+    "mem.temp": ("Memory temperature", "°C", 46, 2, 67),
+    "mem.speed": ("Memory speed", "MT/s", 5600, 0, 1),
     "swap.load": ("Swap usage", "%", 3, 2, 53),
     "disk.load": ("Disk usage", "%", 63, 0, 1),
     "disk.used": ("Disk used", "GiB", 600, 0, 1),
@@ -47,7 +50,7 @@ _WAVES: dict[str, tuple[str, str, float, float, float]] = {
     "game.low": ("1% low", "fps", 104, 4, 19),
     "game.frametime_peak": ("Frame time peak", "ms", 9.4, 1.8, 7),
     "temp.cpu.ccd1": ("CPU CCD1", "°C", 52, 12, 29),
-    "temp.gpu.hot_spot": ("GPU Hot Spot", "°C", 71, 12, 31),
+    "gpu.hotspot": ("GPU hot spot", "°C", 71, 12, 31),
     "temp.nvme.composite": ("NVMe SSD", "°C", 41, 3, 61),
     "temp.board.system": ("Motherboard", "°C", 34, 2, 71),
     "fan.board.case_1": ("Case fan 1", "RPM", 820, 120, 47),
@@ -55,7 +58,6 @@ _WAVES: dict[str, tuple[str, str, float, float, float]] = {
     "fan.board.pump": ("Pump", "RPM", 2100, 150, 59),
     # as LibreHardwareMonitor names them, around SPUR II's sample values
     "gpu.mem.used": ("GPU memory used", "MB", 13824, 400, 37),
-    "temp.memory.temperature": ("Memory", "°C", 46, 2, 67),
     "fan.lpc.fan_1": ("Fan #1", "RPM", 820, 40, 47),
     "fan.lpc.fan_2": ("Fan #2", "RPM", 1140, 60, 41),
     "fan.lpc.fan_3": ("Fan #3", "RPM", 900, 50, 53),
@@ -73,6 +75,7 @@ for _n, (_base, _amp, _period) in enumerate(
 _COPIES = {
     "temp.cpu.package": ("cpu.temp", "CPU Package"),
     "temp.gpu.core": ("gpu.temp", "GPU Core"),
+    "temp.gpu.gpu_hot_spot": ("gpu.hotspot", "GPU Hot Spot"),
     "fan.gpu.fan_1": ("gpu.fan", "GPU Fan"),
     "fan.cpu.fan": ("fan.cpu", "CPU Fan"),
 }
@@ -96,7 +99,7 @@ class DemoProvider(SensorProvider):
     name = "demo"
 
     def images(self) -> dict[str, Any]:
-        return {"media.cover": _cover()}
+        return {"media.cover": _cover(), "media.app_icon": _icon(), "game.logo": _logo()}
 
     def __init__(self, options: dict[str, Any] | None = None) -> None:
         super().__init__(options)
@@ -209,6 +212,82 @@ def demo_cover(size: int = 320) -> Image.Image:
     return cover.convert("RGBA")
 
 
+def demo_logo(width: int = 240, height: int = 144) -> Image.Image:
+    """A game's logo for previews, made up: a star over a word on a clear ground, the way
+    Steam's cut-out logos come, in about the proportions of one (drawn three times larger and
+    reduced, so its edges are smooth)."""
+    from PIL import ImageDraw, ImageFont
+
+    from libre_panel.fonts import builtin_font_path
+
+    k = 3
+    logo = Image.new("RGBA", (width * k, height * k), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(logo)
+    cx, cy, r = width * k / 2, height * k * 0.34, height * k * 0.30
+    # a four-pointed star: points on the axes, waists between them
+    waist = r * 0.28
+    star = [
+        (cx + dx * (r if i % 2 == 0 else waist), cy + dy * (r if i % 2 == 0 else waist))
+        for i, (dx, dy) in enumerate(
+            [(0, -1), (0.7, -0.7), (1, 0), (0.7, 0.7), (0, 1), (-0.7, 0.7), (-1, 0), (-0.7, -0.7)]
+        )
+    ]
+    amber, white = (255, 176, 74, 255), (242, 247, 255, 255)
+    draw.polygon(star, fill=amber)
+    core = r * 0.2  # a pale centre
+    draw.ellipse([cx - core, cy - core, cx + core, cy + core], fill=(255, 244, 214, 255))
+    path = builtin_font_path("builtin:Barlow-Bold")
+    word = "STARFALL"
+    size = round(height * k * 0.27)
+    font = ImageFont.truetype(str(path), size) if path else ImageFont.load_default(size)
+    gap = size * 0.12  # letters apart, as a logo sets them
+    total = sum(font.getlength(c) + gap for c in word) - gap
+    pen, top = (width * k - total) / 2, height * k * 0.70
+    for c in word:
+        draw.text((pen, top), c, font=font, fill=white, anchor="lm")
+        pen += font.getlength(c) + gap
+    line = height * k * 0.88  # a thin rule under it
+    draw.rectangle([width * k * 0.18, line, width * k * 0.82, line + k * 2], fill=amber)
+    return logo.resize((width, height), Image.Resampling.LANCZOS)
+
+
+def demo_app_icon(size: int = 96) -> Image.Image:
+    """The icon of a music player for previews, made up: a note on a rounded square that
+    shades from blue to violet (drawn four times larger and reduced, so its edges are smooth),
+    as large as the icons the media source reads."""
+    from PIL import ImageDraw
+
+    k = 4
+    big = size * k
+    ground = Image.new("RGBA", (big, big))
+    paint = ImageDraw.Draw(ground)
+    for y in range(big):  # blue above, violet below
+        f = y / (big - 1)
+        paint.line([(0, y), (big, y)], fill=(round(86 + 56 * f), round(160 - 72 * f), 250, 255))
+    mask = Image.new("L", (big, big), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, big - 1, big - 1], radius=big * 0.22, fill=255)
+    icon = Image.new("RGBA", (big, big), (0, 0, 0, 0))
+    icon.paste(ground, (0, 0), mask)
+    draw = ImageDraw.Draw(icon)
+    white = (244, 248, 255, 255)
+    head = big * 0.085  # two notes joined by a beam
+    stems = []
+    for cx, cy in ((0.35, 0.69), (0.67, 0.61)):
+        draw.ellipse(
+            [big * cx - head, big * cy - head, big * cx + head, big * cy + head], fill=white
+        )
+        stems.append(big * cx + head * 0.86)
+        draw.rectangle(
+            [stems[-1] - big * 0.018, big * 0.28, stems[-1] + big * 0.018, big * cy], fill=white
+        )
+    draw.polygon(
+        [(stems[0] - big * 0.018, big * 0.26), (stems[1] + big * 0.018, big * 0.18),
+         (stems[1] + big * 0.018, big * 0.27), (stems[0] - big * 0.018, big * 0.35)],
+        fill=white,
+    )  # fmt: skip
+    return icon.resize((size, size), Image.Resampling.LANCZOS)
+
+
 _DAILY = {  # high, low, code, rain: a week of autumn
     "temperature_2m_max": [17, 15, 13, 16, 18, 19, 14],
     "temperature_2m_min": [9, 8, 6, 7, 10, 11, 8],
@@ -256,12 +335,26 @@ def demo_forecast(t: float) -> dict[str, Reading]:
 
 
 _COVER: list[Image.Image] = []
+_LOGO: list[Image.Image] = []
+_ICON: list[Image.Image] = []
 
 
 def _cover() -> Image.Image:
     if not _COVER:
         _COVER.append(demo_cover())
     return _COVER[0]
+
+
+def _logo() -> Image.Image:
+    if not _LOGO:
+        _LOGO.append(demo_logo())
+    return _LOGO[0]
+
+
+def _icon() -> Image.Image:
+    if not _ICON:
+        _ICON.append(demo_app_icon())
+    return _ICON[0]
 
 
 HISTORY_SAMPLES = 1900  # a graph of SPUR II's panorama (1713 points) is full in a preview
@@ -295,11 +388,54 @@ def demo_report(t: float, earlier: int = 7) -> dict[str, Reading]:
     return {key: Reading(key, value, unit, label) for key, (value, unit, label) in found.items()}
 
 
+def demo_session() -> dict[str, Reading]:
+    """A game under way for 1:23:45 (made up), as the memory service publishes the totals of a
+    round while it is played: ``session.*``, so that the screen that shows them is complete in a
+    preview."""
+    from libre_panel.services import round_report
+
+    totals = {
+        "duration_s": 5025.0,
+        "fps_mean": 156.0,
+        "levels": {"edges": [60, 90, 120, 144, 165], "seconds": [50, 55, 20, 700, 2865, 1335]},
+        "peaks": {
+            "cpu_temp": 81.0, "gpu_temp": 71.0, "gpu_hotspot": 89.0,
+            "cpu_power": 118.0, "gpu_power": 318.0, "vram_used": 14.2,
+        },
+    }  # fmt: skip
+    found = round_report.session_readings(totals)
+    return {key: Reading(key, value, unit, label) for key, (value, unit, label) in found.items()}
+
+
+def demo_downloads(t: float) -> dict[str, Reading]:
+    """A game that downloads (made up): the state the ``downloads`` service publishes while one
+    does, with a speed that wanders about 38 MB/s, so that the card that shows it is complete in
+    a preview. The progress goes on for a quarter of an hour and begins again."""
+    import json
+
+    mb = 1024 * 1024
+
+    def rate(at: float) -> float:  # bytes a second, smoothed as the service has it
+        return (38 + 9 * math.sin(2 * math.pi * at / 23) + 4 * math.sin(2 * math.pi * at / 7)) * mb
+
+    total = 24 * 1024 * mb
+    elapsed = 90.0 + t % 900
+    loaded = total * (0.08 + 0.74 * (t % 900) / 900)
+    state = {
+        "id": "demo:1", "source": "steam", "name": "Space Game", "phase": "downloading",
+        "bytes": round(loaded), "total": total, "rate": round(rate(t)),
+        "remaining_s": round((total - loaded) / rate(t), 1), "elapsed_s": elapsed,
+        "estimated": False, "history": [round(rate(t - 60 + n)) for n in range(1, 61)], "more": 0,
+    }  # fmt: skip
+    text = json.dumps(state, ensure_ascii=False, separators=(",", ":"))
+    return {"downloads": Reading("downloads", text, "", "Downloads")}
+
+
 def demo_snapshot(fixed_time: float | None = None, samples: int = HISTORY_SAMPLES) -> Snapshot:
     """A complete snapshot with filled graph history, for previews and the editor."""
     provider = DemoProvider({"fixed_time": fixed_time})
     when = fixed_time if fixed_time is not None else time.time()
-    readings = {**provider.read(), **demo_report(when)}
+    readings = {**provider.read(), **demo_report(when), **demo_session(), **demo_downloads(when)}
     history = {key: demo_history(provider, key, samples) for key in _WAVES}
     now = datetime.fromtimestamp(fixed_time) if fixed_time is not None else datetime.now()
     return Snapshot(readings=readings, history=history, now=now, images=provider.images())

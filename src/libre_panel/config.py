@@ -19,13 +19,19 @@ from pathlib import Path
 from typing import Any
 
 CONFIG_FILENAME = "config.toml"
+# The theme of every panel but the bars, and what ``Config.theme`` is where nothing better is
+# known (libre_panel.theme.defaults has the panel's own default).
+DEFAULT_THEME = "libre-default"
 
 _DEFAULT_CONFIG_TEMPLATE = """\
 # Libre Panel configuration
 # Docs: https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md
 
-# Name of a built-in theme or of a folder in the user themes directory.
-theme = "libre-default"
+# The theme on the panel: a built-in theme or a folder in the user themes directory.
+# Without a theme line each panel shows its own default: Lumen on the 1920x480 bars (the
+# 8.8" and 9.2"), Libre Default on every other panel. To pick another, take out the # and
+# put its name there (or choose one in the app, on Start).
+# theme = "slate"
 
 # "auto" (the system language), "en" or "de": editor, tray and the date and
 # weather texts on the panel.
@@ -256,7 +262,9 @@ class ModeConfig:
 
 @dataclass
 class Config:
-    theme: str = "libre-default"
+    # The theme config.toml names; without one the panel's own default shows, and this is
+    # only the fallback (see ``theme_given``).
+    theme: str = DEFAULT_THEME
     language: str = "auto"
     refresh_ms: int | None = None
     fps: int = 10
@@ -271,6 +279,13 @@ class Config:
     # config.toml's modification time when it was read: a change made while
     # the program starts up is noticed too.
     stamp: int | None = None
+    # Whether config.toml (or --theme) names a theme. A config made in code that is left to
+    # say (None) names one when it passes a theme of its own.
+    theme_given: bool | None = None
+
+    def __post_init__(self) -> None:
+        if self.theme_given is None:
+            self.theme_given = self.theme != DEFAULT_THEME
 
 
 def _expect(value: Any, kind: type | tuple[type, ...], name: str) -> Any:
@@ -299,6 +314,7 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     cfg = Config(path=path)
     if "theme" in data:
         cfg.theme = _expect(data["theme"], str, "theme")
+        cfg.theme_given = True
     if "language" in data:
         cfg.language = _expect(data["language"], str, "language")
         if cfg.language not in ("auto", "en", "de"):
@@ -576,6 +592,16 @@ def _key_span(text: str, body: tuple[int, int], key: str) -> tuple[int, int, int
     return found.start(), found.end(1), _value_end(text, found.end())
 
 
+def _placeholder_end(text: str, body: tuple[int, int], key: str) -> int | None:
+    """Where the line ends that holds ``# key = ...`` last in a table body (the commented
+    setting that the default config.toml shows), just past its line break; None if none."""
+    pattern = re.compile(rf"^[ \t]*#[ \t]*{re.escape(key)}[ \t]*=.*$\n?", re.MULTILINE)
+    last = None
+    for found in pattern.finditer(text, *body):
+        last = found.end()
+    return last
+
+
 def _with_key(text: str, table: str | None, key: str, literal: str) -> str:
     line = f"{key} = {literal}"
     body = _table_body(text, table)
@@ -583,6 +609,12 @@ def _with_key(text: str, table: str | None, key: str, literal: str) -> str:
         return text.rstrip("\n") + f"\n\n[{table}]\n{line}\n"
     found = _key_span(text, body, key)
     if found is None:
+        # a new setting goes under its commented line (the explanation it belongs to),
+        # else first in its table
+        after = _placeholder_end(text, body, key)
+        if after is not None:
+            lead = "" if text[:after].endswith("\n") else "\n"
+            return text[:after] + lead + line + "\n" + text[after:]
         return text[: body[0]] + line + "\n" + text[body[0] :]
     _, indent_end, value_end = found
     return text[:indent_end] + line + text[value_end:]  # what follows the value stays

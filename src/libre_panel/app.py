@@ -18,7 +18,8 @@ from libre_panel import clock as loop_clock
 from libre_panel import i18n, timing
 from libre_panel.config import Config, ConfigError, load_config
 from libre_panel.devices.base import Counters, DeviceError, Display, FrameError, create_display
-from libre_panel.devices.models import find_model
+from libre_panel.devices.models import PanelModel, find_model
+from libre_panel.devices.turzx import video_mode
 from libre_panel.devices.virtual import VirtualDisplay
 from libre_panel.meter import Meter
 from libre_panel.plugins.host import LEFT_OUT, NO_PANEL, OFF_IN_THEME, Delivery, Toast
@@ -27,6 +28,7 @@ from libre_panel.render.motion import Motion
 from libre_panel.render.overlays import ToastLayer, switch_policy, transition
 from libre_panel.render.renderer import Renderer, changed_region
 from libre_panel.sensors.base import SensorHub, SensorProvider, Snapshot, create_provider
+from libre_panel.theme.defaults import default_theme, panel_model
 from libre_panel.theme.model import THEME_FILENAME, Theme, ThemeError, find_theme, load_theme
 
 log = logging.getLogger(__name__)
@@ -62,12 +64,14 @@ def build_hub(config: Config, demo: bool = False) -> SensorHub:
     return hub
 
 
-def load_configured_theme(config: Config) -> Theme:
-    return load_theme(find_theme(config.theme))
+def load_configured_theme(config: Config, default: str | None = None) -> Theme:
+    """The theme config.toml names; where it names none, ``default`` (the panel's own)."""
+    return load_theme(find_theme(_theme_name(config, None, default)))
 
 
-def target_size(config: Config, theme: Theme) -> tuple[int, int]:
-    """Frame size the configured panel expects, in the theme's orientation."""
+def target_size(config: Config, theme: Theme, name: str | None = None) -> tuple[int, int]:
+    """Frame size the configured panel expects, in the theme's orientation. ``name`` is the
+    theme's id for the log (the one config.toml names, if not given)."""
     panel = find_model(config.device.model)
     if panel is None:
         return theme.width, theme.height
@@ -76,7 +80,7 @@ def target_size(config: Config, theme: Theme) -> tuple[int, int]:
         log.warning(
             "theme %r is %dx%d but %s is %dx%d; the frame will be scaled to fit. "
             "Adapt the theme to this panel in the editor for a sharp result.",
-            config.theme,
+            name or config.theme,
             theme.width,
             theme.height,
             panel.label,
@@ -163,6 +167,9 @@ class RunStatus:
     state: str = "starting"  # starting | showing | waiting
     target: str = ""  # where frames go: a panel model, or a PNG file
     theme: str = ""
+    # What a config.toml without a theme shows on this panel (Lumen on a bar, Libre Default
+    # elsewhere), as the loop worked it out; empty until it has.
+    default_theme: str = ""
     detail: str = ""  # why the panel is not available
     frames: int = 0
     mode: str | None = None  # set by a service, e.g. "game"
@@ -262,15 +269,16 @@ class _Link:
         self.retry_at = now + delay
 
 
-def _theme_name(config: Config, host: Any) -> str:
-    """A theme a service shows, else the active mode's theme, else config.toml's."""
+def _theme_name(config: Config, host: Any, default: str | None = None) -> str:
+    """A theme a service shows, else the active mode's theme, else config.toml's; where that
+    names none, the panel's own ``default``."""
     if host is not None:
         if host.theme:
             return host.theme
         mode = config.modes.get(host.mode or "")
         if mode is not None and mode.theme:
             return mode.theme
-    return config.theme
+    return config.theme if config.theme_given or default is None else default
 
 
 def _fps(config: Config, host: Any, display: Any = None) -> int:
@@ -366,6 +374,19 @@ def _begin(
     return (kind, old, now)
 
 
+def _expects_video(config: Config) -> bool:
+    """Whether the panel will probably be driven in video mode, which decides what a frame
+    draws ahead (the graphs' strips): a guess before the panel is open. A wrong one costs a
+    little time at the first frame, nothing more."""
+    device = config.device
+    if device.driver not in ("auto", "turzx"):
+        return False
+    model = find_model(device.model)
+    if model is None and device.video.mode == "auto":  # the panel on the bus decides: the
+        return bool(device.video.local_clip)  # setup says whether it is meant for video
+    return video_mode(device.video, model)[0]
+
+
 class _Warmup:
     """The next theme's renderer, built in a thread of its own while the panel
     goes on showing the current theme (SPUR II preloads the same way): its
@@ -453,15 +474,29 @@ class MainLoop:
         self.warmup = _Warmup()  # the next theme, built while this one shows
         self.idle = threading.Event()  # set between frames: the warm-up works then
         i18n.set_language(config.language)
-        shown = _theme_name(config, host) if not once else config.theme
+        # A config that names no theme shows its panel's own: worked out from the config (or
+        # the USB bus) now, and again when the display says which panel it is (step).
+        told = getattr(display, "model", None)  # (a display that is open says so already)
+        self.reported: PanelModel | None = told if isinstance(told, PanelModel) else None
+        self.worked_out: tuple[Any, str] | None = None  # the default for a changed model or driver
+        panel = panel_model(config.device, self.reported)
+        self.default = status.default_theme = default_theme(panel)
+        named = config.theme if config.theme_given else self.default
+        shown = _theme_name(config, host, self.default) if not once else named
         try:
             theme = load_theme(find_theme(shown))
         except ThemeError:
-            if shown == config.theme:
+            if shown == named:
                 raise
-            log.warning("theme %r not found; showing %r", shown, config.theme)
-            shown = config.theme
-            theme = load_configured_theme(config)
+            log.warning("theme %r not found; showing %r", shown, named)
+            shown = named
+            theme = load_configured_theme(config, self.default)
+        if not config.theme_given:
+            log.info(
+                "no theme in config.toml: %r, the default for %s",
+                self.default,
+                panel.label if panel else "a panel that is not known yet",
+            )
         self.refused: str | None = None  # a requested theme that failed to load
         status.theme = shown
         for warning in theme.warnings:
@@ -469,17 +504,20 @@ class MainLoop:
         # What moves on the panel goes on from theme to theme: every renderer
         # gets this one (gliding values, graph histories).
         self.motion = Motion()
-        self.renderer = renderer = self._renderer(theme, config)
         self.hub = hub if hub is not None else build_hub(config)
         if host is not None and not once:
             self.hub.providers.append(host.provider())
         self.display = display if display is not None else create_display(config.device)
+        self.first: Snapshot | None = None  # the readings the first theme was drawn with
+        if not once:
+            self._draw_ahead(theme, config)
+        self.renderer = renderer = self._renderer(theme, config)
         status.counters, status.stats = Counters(), {}  # a new loop counts from zero
         self.display.counters = status.counters  # the drivers count into these
         status.hub = self.hub
         self.meter = Meter(status, self.clock())
         self.config, self.shown, self.theme = config, shown, theme
-        self.size = target_size(config, theme)
+        self.size = target_size(config, theme, shown)
         known = {config.path: config.stamp} if config.path and config.stamp else None
         self.watcher = _Watcher(config.path, _theme_file(theme), known=known)
         self.link = _Link(self.display, config.device.brightness, status)
@@ -496,10 +534,39 @@ class MainLoop:
         self.snapshot: Snapshot | None = None
         self.next_sample = 0.0
         self.started = 0.0  # when the last step began, on the clock
-        if not once and renderer.prepares:  # prepare() and light layers before the first frame
+        drawn = renderer.snapshot is not None  # (drawn ahead: prepared, and its widgets made)
+        if not once and renderer.prepares and not drawn:  # prepare() and light layers at least
             prepare = threading.Thread(target=renderer.warm, args=(None, 0.0), daemon=True)
             prepare.start()
             prepare.join(_Warmup.LIMIT_S)
+
+    def _draw_ahead(self, theme: Theme, config: Config) -> None:
+        """Draw the first theme once before the loop starts, as a switch draws the next one
+        (:class:`_Warmup`): its texts, cards, graph strips and fans are made here, in a thread
+        of its own, and not in the first frame, which took 200 to 350 ms. It is drawn with the
+        first readings, which the first frame takes as its sample (the hub is asked once). A
+        theme that is not ready after ``_Warmup.LIMIT_S`` is drawn by the first frame."""
+        try:
+            first = self.hub.snapshot()
+        except Exception:  # the first frame asks again, and says what is wrong
+            log.exception("the first readings failed")
+            return
+        if self.host is not None:
+            first.images = {**first.images, **self.host.images()}
+        self.first, now = first, self.clock()
+        streaming = self.display.streaming  # a panel that is open already says so ...
+        video = streaming or _expects_video(config)  # ... else the settings are asked
+        fps = _fps(config, self.host, self.display)
+        if video and not streaming:
+            fps = config.device.video.fps  # what a video panel is driven at
+        every = (config.refresh_ms or theme.refresh_ms) / 1000
+        how = video, fps, (now, every)
+        self.idle.set()  # no frame is under way: the drawing need not wait for one
+        key = self._warm_key(theme, config)
+        self.warmup.start(key, self._warm_job(theme, config, now, first, how), now)
+        give_up = time.monotonic() + self.warmup.LIMIT_S  # (wall time, whatever the clock is)
+        while not self.warmup.ready(key, now) and time.monotonic() < give_up:
+            time.sleep(0.005)
 
     def _renderer(self, theme: Theme, config: Config) -> Renderer:
         """The renderer for ``theme``: warmed up if it was, else a new one."""
@@ -527,12 +594,12 @@ class MainLoop:
         warmed up in a thread of its own first (:class:`_Warmup`) while this
         one goes on; nothing to switch to, or a theme that fails, goes ahead."""
         pending = watcher.pending()
-        wanted = _theme_name(config, host)
+        wanted = _theme_name(config, host, self.default)
         if not pending and wanted in (shown, refused):
             return True
         try:
             fresh = load_config(config.path) if pending and config.path else config
-            theme = load_theme(find_theme(_theme_name(fresh, host)))
+            theme = load_theme(find_theme(_theme_name(fresh, host, self._default_for(fresh))))
         except (ConfigError, ThemeError):
             return True  # the switch says why
         if fresh.language != config.language:
@@ -545,18 +612,29 @@ class MainLoop:
         return False
 
     def _warm_job(
-        self, theme: Theme, config: Config, now: float
+        self,
+        theme: Theme,
+        config: Config,
+        now: float,
+        snapshot: Snapshot | None = None,
+        how: tuple[bool, int, tuple[float, float]] | None = None,
     ) -> Callable[[], tuple[Renderer, Motion]]:
         """Building and drawing ``theme`` once, with copies of what the panel's
-        drawing keeps (it goes on meanwhile)."""
+        drawing keeps (it goes on meanwhile). It is drawn with the readings the panel
+        has now and as it is driven now (video mode or not, its frame rate, when the
+        readings were taken), unless ``snapshot`` and ``how`` say so: the first theme
+        has neither yet."""
         motion = self.motion.copy()
-        snapshot = self.snapshot
+        snapshot = self.snapshot if snapshot is None else snapshot
         if snapshot is not None:  # dicts of its own: this thread goes on replacing them
             snapshot = Snapshot(
                 dict(snapshot.readings), snapshot.history, snapshot.now, dict(snapshot.images)
             )
-        current, animate = self.renderer, config.fps > 1
-        continuous, fps, sample = current.continuous, current.fps, current.sample
+        animate = config.fps > 1
+        if how is None:
+            current = self.renderer
+            how = current.continuous, current.fps, current.sample
+        continuous, fps, sample = how
 
         def build() -> tuple[Renderer, Motion]:
             renderer = Renderer(theme, animate=animate, motion=motion)
@@ -566,6 +644,34 @@ class MainLoop:
             return renderer, motion
 
         return build
+
+    def _default_for(self, fresh: Config) -> str:
+        """The default theme for a config just read: the one now, unless it names another
+        panel or driver, which are worked out again (once for a change: a switch asks at
+        every frame while its theme is warmed up)."""
+        now = self.config.device
+        if (fresh.device.model, fresh.device.driver) == (now.model, now.driver):
+            return self.default
+        reported = self.reported if _same_device(now, fresh.device) else None  # same display
+        asked = fresh.device.model, fresh.device.driver, reported
+        if self.worked_out is None or self.worked_out[0] != asked:
+            self.worked_out = asked, default_theme(panel_model(fresh.device, reported))
+        return self.worked_out[1]
+
+    def _follow_panel(self) -> None:
+        """A display that has connected says which panel it is. Where config.toml does not
+        name the model, that settles the default theme (a bar gets Lumen); a changed default
+        is switched to by the usual way, once. A display that says nothing, or nothing new
+        (the panel was unplugged), changes nothing."""
+        reported = getattr(self.display, "model", None)  # (a plugin's display may not say)
+        if not isinstance(reported, PanelModel) or reported == self.reported:
+            return
+        self.reported = reported
+        default = default_theme(panel_model(self.config.device, reported))
+        if default != self.default:
+            if not self.config.theme_given:
+                log.info("the panel is a %s: its default theme is %r", reported.label, default)
+            self.default = self.status.default_theme = default
 
     @property
     def streaming(self) -> bool:
@@ -606,10 +712,12 @@ class MainLoop:
         now). Returns the frame as the display gets it (turned as the panel
         is mounted), or None while the panel is not connected.
         """
+        self._follow_panel()  # a panel that has connected may change the default theme
         config, host, status, hub, on_config = (
             self.config, self.host, self.status, self.hub, self.on_config
         )  # fmt: skip
         shown, refused, theme, renderer = self.shown, self.refused, self.theme, self.renderer
+        default, reported = self.default, self.reported
         display, size, watcher, link, toasts = (
             self.display, self.size, self.watcher, self.link, self.toasts
         )  # fmt: skip
@@ -626,7 +734,7 @@ class MainLoop:
         try:  # the frame's state is kept whatever happens
             # While a transition plays, a switch waits for its end, unless the
             # transition says otherwise (Transition.on_switch: follow or restart).
-            wanted = _theme_name(config, host)
+            wanted = _theme_name(config, host, default)
             mode = host.mode if host is not None else None
             playing = blend
             policy = switch_policy(blend[0], wanted, mode, began_in) if blend else None
@@ -638,7 +746,8 @@ class MainLoop:
                 try:
                     if changed and config.path:
                         fresh = load_config(config.path)
-                    wanted = _theme_name(fresh, host)
+                    fresh_default = self._default_for(fresh)
+                    wanted = _theme_name(fresh, host, fresh_default)
                     new_theme = load_theme(find_theme(wanted))
                 except (ConfigError, ThemeError) as exc:
                     log.warning("keeping theme %r: %s", shown, exc)  # e.g. half-written file
@@ -654,16 +763,18 @@ class MainLoop:
                         display.counters = status.counters
                         link = _Link(display, fresh.device.brightness, status)
                         device = fresh.device
+                        reported = None  # the new display has not said which panel it is
                     elif fresh.device.brightness != device.brightness:
                         link.set_brightness(fresh.device.brightness)
                         device.brightness = fresh.device.brightness
                     device.rotate = fresh.device.rotate
                     fresh.device, config = device, fresh
+                    default = status.default_theme = fresh_default
                     i18n.set_language(config.language)
                     hub.follow_config(config)  # taken at the sample that follows (next_sample)
                     renderer.close()
                     theme, renderer = new_theme, self._renderer(new_theme, config)
-                    size, previous, next_sample = target_size(config, theme), None, 0.0
+                    size, previous, next_sample = target_size(config, theme, wanted), None, 0.0
                     known = {config.path: config.stamp} if config.path and config.stamp else None
                     watcher = _Watcher(config.path, _theme_file(theme), known=known)
                     toasts.set_renderer(renderer)
@@ -692,7 +803,7 @@ class MainLoop:
             if host is not None:
                 toasts.add(host.take_toasts())
             if started >= next_sample or snapshot is None:
-                snapshot = hub.snapshot()
+                snapshot, self.first = self.first or hub.snapshot(), None
                 if host is not None:
                     snapshot.images = {**snapshot.images, **host.images()}
                     host.latest = snapshot
@@ -752,6 +863,7 @@ class MainLoop:
         finally:
             self.idle.set()
             self.config, self.shown, self.refused, self.theme = config, shown, refused, theme
+            self.default, self.reported = default, reported
             self.renderer, self.display, self.size, self.watcher = renderer, display, size, watcher
             self.link, self.blend, self.began_in = link, blend, began_in
             self.shown_frame, self.switches, self.last_frame = shown_frame, switches, last_frame

@@ -182,7 +182,8 @@ def build_forecast(b: _Build, src: M.Source) -> None:
 
 def build_playback(b: _Build, src: M.Source) -> None:
     """What plays: the cover, the state, the title and artist, the app with its icon, the
-    progress with the time played and the length. Nothing playing is a note and a word."""
+    progress with the time played and the length (``time`` ``remaining``: the time left).
+    Nothing playing is a note and a word."""
     ref = _Ref(b, 706, 376, 560)
     if not ref.ok:
         M.build_music(b, src)
@@ -229,8 +230,9 @@ def build_playback(b: _Build, src: M.Source) -> None:
     b.value("position", "media.position", "{value:clock}", strip, ref.cap(340, 22), time,
             color=b.c("text3"), width=(right - strip) / 2, font="text_font",
             hide_if_missing=True)  # fmt: skip
-    b.value("length", "media.duration", "{value:clock}", right, ref.cap(340, 22), time,
-            color=b.c("text3"), align="right", width=(right - strip) / 2, font="text_font",
+    sensor, fmt = M.end_time(b)  # the length, or what is left of it
+    b.value("length", sensor, fmt, right, ref.cap(340, 22), time, color=b.c("text3"),
+            align="right", width=(right - strip) / 2, font="text_font",
             hide_if_missing=True)  # fmt: skip
 
     b.needs = "!media.title"
@@ -321,7 +323,8 @@ def _build_fan(b: _Build, src: M.Source) -> None:
 
 # The readings under a ring, as the Studio screen shows them: the processor's temperature, power
 # and clock; the graphics card's temperature, power and memory (its fans have instruments of
-# their own); the memory's. A source that is not here shows the rows its module has.
+# their own); what is free of the memory, its modules' temperature and the speed they run at.
+# A source that is not here shows the rows its module has.
 def _rows() -> dict[str, tuple[tuple[str, str, str], ...]]:
     heat = ("{value:.0f}°C", t("Temp"))
     return {
@@ -329,7 +332,23 @@ def _rows() -> dict[str, tuple[tuple[str, str, str], ...]]:
                 ("cpu.freq", "{value:.0f} MHz", t("Freq"))),
         "gpu": (("gpu.temp", heat[0], heat[1]), ("gpu.power", "{value:.0f} W", t("Watt")),
                 ("gpu.mem.used", "{value:gb} GB", t("VRAM"))),
+        "mem": (("mem.free", "{value:.1f} GB", t("Free")), ("mem.temp", heat[0], heat[1]),
+                ("mem.speed", "{value:.0f} MT/s", t("Freq"))),
     }  # fmt: skip
+
+
+# What a PC often cannot tell stays on show as "--" with its name, so the column keeps its
+# shape: the modules' temperature needs administrator rights, their speed a readable SMBIOS
+# table. The other sources leave a row out that has no reading.
+_KEPT = ("mem",)
+
+
+def _heat_of(b: _Build, sensor: str) -> list[dict[str, Any]]:
+    """The colours a temperature row turns to: a memory module runs cooler than a processor
+    (about 40 to 55 °C, 85 °C is its limit)."""
+    if sensor == "mem.temp":
+        return M._heat_rules(b, warn=58, crit=66)
+    return M._heat(b) if sensor.endswith(".temp") else []
 
 
 def build_instrument(b: _Build, src: M.Source) -> None:
@@ -436,6 +455,7 @@ def build_instrument(b: _Build, src: M.Source) -> None:
     total = names_w + gap * k + number_w + (5 * u * k + unit_w if unit_w else 0)
     left = x0 if wide else cx - total / 2
     edge = left + names_w + gap * k + number_w
+    kept = src.role in _KEPT
     for i, (sensor, _fmt, name) in enumerate(shown):
         number, suffix = parts[i]
         cap = row_top + i * 0.268 * d
@@ -443,22 +463,23 @@ def build_instrument(b: _Build, src: M.Source) -> None:
         first = len(b.out)
         b.label(f"r{i}-label", name, left, base - CAP * label_k, label_k, width=names_w + 2 * u)
         b.value(f"r{i}", sensor, number, edge, base - CAP * value_k, value_k, align="right",
-                width=number_w * 1.15, hide_if_missing=True,
-                color_rules=M._heat(b) if sensor.endswith(".temp") else [])  # fmt: skip
+                width=number_w * 1.15, hide_if_missing=not kept, fallback="--",
+                color_rules=_heat_of(b, sensor))  # fmt: skip
         if suffix:
             b.add("text", f"r{i}-unit", text=suffix, x=round(edge + 5 * u * k),
                   **b._text_fields(note_k, base - CAP * note_k, "text_font", color=b.c("text3"),
                                    max_width=round(unit_w * 1.2), tabular=False))  # fmt: skip
         for widget in b.out[first:]:
-            if widget["id"] != f"r{i}":
-                _need(widget, sensor)
+            if widget["id"] != f"r{i}" and not (kept and widget["id"] == f"r{i}-label"):
+                _need(widget, sensor)  # (no unit where there is no number)
 
 
 def _sample(number: str, unit: str) -> str:
-    """The widest a reading may be, as text to measure: a clock or a fan in four digits."""
+    """The widest a reading may be, as text to measure: a clock, a fan or the memory's speed in
+    four digits."""
     if ".1f" in number:
         return "00.0"
-    return "0000" if unit in ("MHz", "RPM") else "000"
+    return "0000" if unit in ("MHz", "RPM", "MT/s") else "000"
 
 
 # -- the other cards (made next) ---------------------------------------------------------------

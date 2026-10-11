@@ -292,6 +292,18 @@ def test_warming_up_loads_every_position_off_the_render_thread():
     assert paused
 
 
+def test_a_theme_with_fans_has_their_rotors_ready_before_the_first_frame():
+    """The main loop warms a new theme without readings before its first frame: the
+    rotor's pictures are read then, not in the frame (about 200 ms)."""
+    renderer = Renderer(theme(widget(w=58, h=58, color="#123456")), animate=True)
+    assert renderer.prepares  # a fan alone is something to prepare
+    k = fan.rotor_size(58)
+    fan._layers.pop(k, None)
+    renderer.warm(None, 0.0)
+    assert k in fan._layers
+    assert all(("rotor", (0x12, 0x34, 0x56), k, p) in fan._images for p in range(POSITIONS))
+
+
 def test_a_fan_stays_round_when_the_theme_is_adapted():
     data = theme(widget(x=100, y=40, w=48, h=48), size=(480, 320)).to_dict()
     out = adapt_theme(data, "custom", "landscape", "scale", width=1920, height=480)

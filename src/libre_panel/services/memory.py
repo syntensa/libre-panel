@@ -389,6 +389,7 @@ class _Session:
         self.started = self.written = sample.at
         self.edges = edges
         self.fps: list[float] = []
+        self.total = 0.0  # the sum of ``fps``, for its mean
         self.low: list[float] = []
         self.frametime: list[float] = []
         self.levels: Counter[int] = Counter()
@@ -401,6 +402,7 @@ class _Session:
             self.program = sample.program
         if sample.fps is not None:
             self.fps.append(sample.fps)
+            self.total += sample.fps
             self.levels[bisect.bisect_right(self.edges, sample.fps)] += 1
             if sample.low is not None:
                 self.low.append(sample.low)
@@ -414,6 +416,18 @@ class _Session:
                 self.peaks[key] = value
         if self.outside is None:
             self.outside = sample.outside
+
+    def totals(self, at: float) -> dict[str, Any]:
+        """What the round has come to at ``at``, for ``round_report.session_readings``."""
+        return {
+            "duration_s": max(0.0, at - self.started),
+            "fps_mean": self.total / len(self.fps) if self.fps else None,
+            "levels": {
+                "edges": list(self.edges),
+                "seconds": [self.levels[i] for i in range(len(self.edges) + 1)],
+            },
+            "peaks": dict(self.peaks),
+        }
 
     def row(self, at: float, closed: bool) -> list[Any]:
         ranked = sorted(self.fps)
@@ -497,6 +511,11 @@ class Recorder:
 
     def due(self, at: float) -> bool:
         return at >= self._due
+
+    @property
+    def running(self) -> _Session | None:
+        """The game being played, if one is (read only)."""
+        return self._session
 
     def add(self, sample: Sample) -> None:
         if not self.due(sample.at):
@@ -661,6 +680,7 @@ class Memory(Service):
         self._game = ""  # the game now under way, for the status
         self._shown = False  # a report is on the panel
         self._keys: set[str] = set()  # the readings it published
+        self._round: set[str] = set()  # the readings of the round under way (``session.*``)
         self._until = 0.0  # on `clock`: when it goes
         self._gone_at = 0.0  # on `clock`: when its readings go, after it has ended
         self._games = 0  # how many times a mode began: a report is stale when a game came since
@@ -705,7 +725,19 @@ class Memory(Service):
                 sample = self.reader.read(snapshot, now)
                 self._game = sample.game or ""
                 self.recorder.add(sample)
+                self._publish_round(sample.at)
                 self._note_sensors(snapshot, now)
+
+    def _publish_round(self, at: float) -> None:
+        """The totals of the game being played as ``session.*`` readings, once a second; gone
+        when the game is (their ranges may change with the options, so none is kept)."""
+        game = self.recorder.running if self.recorder is not None else None
+        readings = round_report.session_readings(game.totals(at)) if game is not None else {}
+        for key in self._round - set(readings):
+            self.host.unpublish(key)
+        for key, (value, unit, label) in readings.items():
+            self.host.publish(key, value, unit, label)
+        self._round = set(readings)
 
     def _note_sensors(self, snapshot: Snapshot, now: float) -> None:
         """Keep the names of the sensors, for the cooling analysis; written when they change."""

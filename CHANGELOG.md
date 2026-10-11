@@ -499,6 +499,61 @@
 - Plugins: a sensor source can win over sources before it for some keys
   (`overrides`), and gets the loaded configuration in `follow_config(config)`,
   when it is made and whenever `config.toml` changes while the panel runs
+- Lumen, Libre Panel's own signature screen for the 8.8" and 9.2" bars, in
+  the app's colours and type on the dot grid of the editor's stage. On the
+  left what plays (the weather with its moving symbols and the next hours when
+  nothing does, a calendar sheet when there is neither), in the middle the
+  time with its seconds, the load of the CPU and GPU over the last minute as
+  light that scrolls, and the fans turning with their speed, on the right lit
+  rings for the CPU, GPU and RAM named after your hardware, over the network
+  (a download in its place while one runs). Frames are flat lines; it keeps
+  clear of the 9.2"'s hidden strip and moves to the other panels
+- The theme *SPUR Session* (`spur-session`, 1920 × 480): SPUR II's Session
+  screen for a game: the time played, the average frame rate large with the
+  frame rate now, the 1% low, who holds it down and the last ten minutes of
+  the rate, the share of the time at each frame rate, and the highest
+  temperatures, power and video memory since the game began beside what they
+  are now (the `memory` service's `session.*`, below)
+- `media.remaining`, the time left of a track in seconds (its length less
+  where it is; none where a player does not tell the one or the other), and
+  `time` for the playback card and the music module: `remaining` writes it at
+  the right of the progress with a minus (`-2:24`), as SPUR II's Studio does.
+  SPUR Studio counts down
+- The RAM column of SPUR Studio shows FREE, TEMP and FREQ as SPUR II does, in
+  place of USED, TOTAL and SWAP: `mem.free` (psutil, what programs can still
+  take; used and free add up to the total), `mem.temp` (LibreHardwareMonitor:
+  the hottest memory module's own thermal sensor, with the administrator
+  rights and PawnIO the CPU's temperature needs) and `mem.speed` (what the
+  memory runs at in MT/s, from the firmware's SMBIOS table, the same one that
+  names the memory; Linux where it may be read). What a PC cannot give shows
+  as `--` with its name. The RAM instrument card has these rows; SPUR Classic
+  and SPUR Header read the memory temperature from `mem.temp`
+- The round report shows what SPUR II's does: the game's logo at the top
+  right beside its name (`game.logo`, which the `game` service now keeps
+  after the game, until the next one; the name has the whole width where
+  there is none) and, on each bar of the chart, a white tick where the
+  earlier rounds' average stands, in place of the line under it. For that a
+  `bar` takes a `mark`, a second reading drawn as a thin line across it at
+  its value on the bar's scale (`mark_color`, `mark_width`), in any finish,
+  and an `image` takes `align` (`left`, `center`, `right`) for a picture that
+  does not fill its box. The demo has a made-up logo, drawn when asked
+- The `memory` service adds up the game while it is played and publishes the
+  totals once a second as `session.*`: `session.time` (seconds played),
+  `session.fps` (the mean frame rate so far), `session.level.<n>` (the share
+  of the time at each frame-rate range in percent, as `report.level.<n>`) and
+  the highest value since the game began (`session.cpu_temp_max`,
+  `gpu_temp_max`, `gpu_hotspot_max`, `cpu_power_max`, `gpu_power_max`,
+  `vram_used_max`). They are gone with the game. SPUR Session shows them
+  where SPUR II does, and the demo has neutral values for them
+- A `graph` takes `end_dot`, a radius in px: the line ends in a dot of its
+  colour at the newest value, with the graph's glow around it, drawn in
+  quarter pixels so that it glides with the value, in video mode too. SPUR
+  Horizon's curves end in a dot as SPUR II's do
+- A card slot takes `slide` (seconds, 0: none): a new track on the playback
+  card that stays on show moves in from the right while the old one moves out
+  to the left, a gap between them that closes, as SPUR II's Studio moves on
+  to a new track; the parts are made once and each frame moves and cuts them.
+  SPUR Studio slides in 0.55 s
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
@@ -554,12 +609,57 @@
 - A change of `[services]` saved together with a theme name that does not exist (a typo, a
   theme not installed yet) reached the services only with the next save. They now follow
   `config.toml` whenever it loads, whether or not its theme does; the panel keeps its theme
+- A theme's first frame read the pictures of its fans' rotors (about 200 ms) and built the
+  bevels of a faceted or acrylic clock (some 30 ms a letter). The warm-up before the first
+  frame does both now: SPUR II's screens show their first frame in about half the time
+- Moving a theme to a narrower panel (*adapt*) kept the room each text may take
+  (`max_width`): a hardware name kept the width it had on a 9.2" bar and ran into its
+  neighbours. It narrows with the panel now
+- The first frame after the start took 200 to 350 ms: the first theme's
+  texts, cards, graph strips and fans were made in it, which held up a video
+  panel's first moments. The theme is drawn once while the loop is built, in
+  a thread of its own, as the next theme is for a switch, so the first frame
+  takes a few milliseconds. The readings of that drawing are the first
+  frame's sample, and the start waits for it two seconds at most
+- SPUR Horizon, SPUR Header and SPUR Session read the GPU's hot spot by a key
+  that no source made (`temp.gpu.hot_spot`): on a PC they showed "--", while
+  the demo, which had made the key up, showed a value. LibreHardwareMonitor
+  now gives `gpu.hotspot` (the "GPU Hot Spot" sensor of the card `gpu.temp`
+  is read from), the themes read it, and the demo has it as it has
+  `gpu.temp`. A test keeps every key the SPUR themes read from the hardware
+  to what the source makes from real output
 
 **Changes**
+- The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars
+  (the 8.8" and 9.2"), Libre Default on every other panel. A `config.toml` without a
+  `theme` means "the panel's own default", so `libre-panel config init` and the app's
+  first write no longer put `theme = "libre-default"` into it; a comment says what the
+  default is and how to name another. The panel is the one `device.model` names, else
+  (with `model = "auto"`) the TURZX USB panel on the bus, found by its ids and not opened,
+  else the panel that connects: the theme then changes once, with the usual transition.
+  A theme in `config.toml`, also the `theme = "libre-default"` that 0.4 wrote, and
+  `libre-panel run --theme` always win. *Start* asks "How should it look?" with the
+  panel's default first, marked *Default*; the app, the tray and the console API report
+  the theme the panel really shows (`default_theme` in the panel's state, `default` in
+  `GET /api/pages`)
+- A setting that `config.toml` gets for the first time, such as the theme chosen in the
+  app, is written under the commented line that explains it (`# theme = "slate"`) and no
+  longer above the title of the file
 - SPUR II's screens are kept as a legacy set: their themes carry
   `"collection": "SPUR II"`, and galleries show Libre Panel's own themes
   first and SPUR II's apart, for those who want to see where Libre Panel
   started
+- Studio's card shows what plays, else the weather (the weather card, with its moving
+  symbol and the next hours), else a calendar sheet, and changes with a line of light. It
+  is wider than the old card, and the rings move 25 px to the right for it; they are light
+  in milled grooves now, with the names of the processor, the memory and the graphics card
+  under them. The clock, the date and the network keep their places
+- Libre Default, the theme a new install starts with on every panel but the bars: lit
+  rings and disk segments, a CPU history that scrolls through the last 30 seconds, numbers
+  that glide and the app's colours; the corner where the weather was shows what plays,
+  else the weather, else the day
+- The pictures of the README and the website show Lumen (on top, in the gallery, in the
+  social preview), and the README lists Libre Panel's own themes first, SPUR II's apart
 - The old browser editor is gone; the app replaces it. A bookmark of `/classic/`
   leads to the app, and plugins' editor pages open inside it (*Pages* in
   *Design*, or Ctrl+K)
@@ -633,6 +733,21 @@
   its size only. The RAM modules (ring, big number, history) show the name
   under their title as CPU and GPU do, and the System module lists it as a
   fourth row where there is room
+- SPUR Header sets the frame rate, the 1% low and the fans where SPUR II has
+  them: the game's logo or name has the room of a short name (51 px, up to 72
+  for a longer one: a name is cut with an ellipsis, a logo made smaller) in
+  place of 120 px, and the fans spread over what was gained as SPUR II
+  spreads them
+- The demo readings of the editor, the previews and the pictures gained a
+  made-up player icon (`media.app_icon`, drawn when asked, a note on a
+  rounded square) and a game that downloads (`downloads`, in the state the
+  service publishes, 24 GB at about 38 MB/s), so the playback card shows its
+  app with an icon and the Studio's NET section shows a download there, as
+  they do with a player and a download on a real PC
+- SPUR Session sets the rule and the fans of its header where SPUR II has
+  them, as SPUR Header does: the game's logo or name has the room of a short
+  name (51 px, up to 62 for a longer one) in place of 120 px, and the fans
+  spread over what was gained
 
 ## 0.4.2 — 2026-10-10
 

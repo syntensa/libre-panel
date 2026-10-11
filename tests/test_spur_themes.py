@@ -8,7 +8,7 @@ import pytest
 
 from libre_panel.devices.models import find_model
 from libre_panel.render.renderer import Renderer, need_key
-from libre_panel.sensors.base import Snapshot
+from libre_panel.sensors.base import Reading, Snapshot
 from libre_panel.sensors.demo import demo_report, demo_snapshot
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import (
@@ -60,6 +60,22 @@ def glow_areas_hold_their_bars(theme, widest=420):
         assert x <= bar["x"] and bar["x"] + bar["w"] <= x + w, bar["id"]
         assert y <= bar["y"] and bar["y"] + bar["h"] <= y + h, bar["id"]
         assert w <= widest, bar["id"]  # a zone as wide as the panel, once for every bar, is slow
+
+
+@pytest.mark.parametrize("name", [*SPUR, "spur-classic"])
+def test_a_spur_screen_reads_the_hardware_by_keys_librehardwaremonitor_makes(name):
+    """A key that no source makes shows "--" on a real PC, and everything in the demo, which has
+    it: the GPU's hot spot was one (``temp.gpu.hot_spot``: the source makes ``gpu.hotspot`` and
+    ``temp.gpu.gpu_hot_spot``). The fixture is real output; it has no motherboard to give fans."""
+    from pathlib import Path
+
+    from libre_panel.sensors.librehardwaremonitor import readings_from_tree
+
+    tree = json.loads((Path(__file__).parent / "data" / "lhm_data.json").read_text("utf-8"))
+    made = set(readings_from_tree(tree))
+    keys = keys_read(load_theme(find_theme(name)))
+    hardware = {k for k in keys if k.startswith(("cpu.", "gpu.", "temp."))}
+    assert hardware and hardware <= made, sorted(hardware - made)
 
 
 @pytest.mark.parametrize("name", SPUR)
@@ -136,6 +152,22 @@ def test_horizon_grows_the_cpu_up_and_the_gpu_down_from_one_line():
     assert marks[-1] == cpu["x"] + cpu["w"] - 1 - 250  # counted back from the newest point
 
 
+def test_horizon_ends_its_curves_in_a_dot_each_on_its_own_side_of_the_horizon():
+    theme, _, renderer, _, _ = drawn("spur-horizon")
+    by = {w["id"]: w for w in theme.widgets}
+    pieces = dict(renderer._last[0])
+    for name in ("cpu-graph", "gpu-graph", "cpu-light", "gpu-light"):  # the curve and its light
+        assert by[name]["end_dot"] > 0 and f"{name}\0dot" in pieces, name
+    cpu, gpu = pieces["cpu-graph\0dot"], pieces["gpu-graph\0dot"]
+
+    def middle(piece):
+        return piece.x + piece.layer.width / 2, piece.y + piece.layer.height / 2
+
+    assert middle(cpu)[1] < by["gpu-graph"]["y"] < middle(gpu)[1]  # the CPU's up, the GPU's down
+    edge = by["cpu-graph"]["x"] + by["cpu-graph"]["w"]
+    assert abs(middle(cpu)[0] - edge) <= 1 and abs(middle(gpu)[0] - edge) <= 1  # at its end
+
+
 def test_horizon_music_tile_follows_the_player():
     from PIL import Image
 
@@ -201,6 +233,32 @@ def test_header_shows_the_frame_rate_the_limit_and_the_game():
                                                           for w in theme.widgets)  # fmt: skip
 
 
+def test_header_gives_the_game_the_room_spur_ii_gives_a_short_name_and_a_little_more():
+    """SPUR II sets the frame rate 34 px behind the game's logo or name, wherever that ends: for
+    a name of 51 px (as the reference shows one) at 371. A theme cannot move things about, so
+    the frame rate stands there, and a logo or name that is wider takes up to 21 px of the gap."""
+    theme = load_theme(find_theme("spur-header"))
+    by = {w["id"]: w for w in theme.widgets}
+    slot = by["game-logo"]
+    assert slot["align"] == "left" and by["fps-label"]["x"] == slot["x"] + 51 + 34
+    assert slot["w"] == by["game-name"]["max_width"] == by["game-app"]["max_width"] == 72
+    assert slot["x"] + slot["w"] < by["fps-label"]["x"]
+    # the fans take the room the slot gave up, spread as SPUR II spreads them: twice as far
+    # between the groups of fans (CPU, case, GPU) as inside a group, the last one by the clock
+    wheels = [by[f"fan-{k}-wheel"]["x"] for k in range(1, 6)]
+    assert wheels[0] == by["hud-rule"]["x"] + by["hud-rule"]["w"] + 22
+    assert [b - a for a, b in zip(wheels, wheels[1:], strict=False)] == [166, 200, 200, 166]
+    # a short name is drawn whole, a long one is cut with … and never reaches the frame rate
+    renderer = Renderer(theme)
+    assert renderer._fit(by["game-name"], "Spiel")[0] == "Spiel"
+    assert renderer._fit(by["game-name"], "Starfall")[0] == "Starfall"  # (71.6 of the 72 px)
+    long = "A Game With A Very Long Name"
+    assert renderer._fit(by["game-name"], long)[0].endswith("…")
+    renderer.render(Snapshot(readings={"game.name": Reading("game.name", long)}), 0.0)
+    piece = dict(renderer._last[0])["game-name"]
+    assert piece.x + piece.layer.width < by["fps-label"]["x"]
+
+
 def test_header_charts_the_longest_frame_of_each_point_with_a_line_at_60_fps():
     theme = load_theme(find_theme("spur-header"))
     by = {w["id"]: w for w in theme.widgets}
@@ -245,21 +303,81 @@ def test_focus_has_four_sections_whose_light_stays_in_them():
 # -- Session (the last ten minutes of what a game does) ------------------------------------------
 
 
-def test_session_shows_the_last_ten_minutes_of_the_frame_rate_the_frames_and_the_peaks():
-    from libre_panel.render.motion import MAX_POINTS, RATE
+def test_session_adds_the_game_up_time_played_average_shares_and_highest_values():
+    from libre_panel.sensors.demo import demo_session
 
     theme = load_theme(find_theme("spur-session"))
     by = {w["id"]: w for w in theme.widgets}
+    played, average = by["played-value"], by["fps-value"]
+    assert (played["sensor"], played["format"]) == ("session.time", "{value:clock}")  # 1:23:45
+    assert (average["sensor"], average["font_size"]) == ("session.fps", 120)
+    assert by["fps-label"]["text"] == "Ø FPS" and by["played-label"]["text"] == "PLAYED"
+    # the moment, in a row under it: the frame rate now, the 1% low, who holds the rate down
+    row = [by[name]["sensor"] for name in ("now-value", "low-value")]
+    assert row == ["game.fps", "game.low"]
+    assert by["now-label"]["x"] < by["now-value"]["x"] < by["low-label"]["x"] < by["low-value"]["x"]
+    assert by["low-value"]["x"] < by["limit-label"]["x"] < by["limit-gpu"]["x"]
+    # the distribution: the share of the time at each frame rate, the fastest on top
+    bars = [by[f"level-{n}-bar"] for n in (5, 4, 3, 2, 1, 0)]
+    assert [bar["sensor"] for bar in bars] == [f"session.level.{n}" for n in (5, 4, 3, 2, 1, 0)]
+    assert [b["y"] - a["y"] for a, b in zip(bars, bars[1:], strict=False)] == [56] * 5
+    assert bars[0]["color"] == "@net" and bars[-1]["color"] == "@crit"  # slow time is a warning
+    assert all(not bar["mark"] for bar in bars)  # nothing earlier to be against
+    # the highest values since the game began, and what they are now
+    names = ("cpu_temp", "cpu_power", "gpu_temp", "gpu_hotspot", "gpu_power", "vram_used")
+    for n, name in enumerate(names):
+        value, unit, now = by[f"peak-{n}-value"], by[f"peak-{n}-unit"], by[f"peak-{n}-now"]
+        assert value["sensor"] == f"session.{name}_max" and value["align"] == "right"
+        assert value["x"] < unit["x"] < by["max-head"]["x"]  # the unit ends the column
+        assert (now["x"], now["align"]) == (by["now-head"]["x"], "right")
+    warm = [bool(by[f"peak-{n}-value"]["color_rules"]) for n in range(6)]
+    assert warm == [True, False, True, False, False, False]  # as SPUR II: the processor's and
+    # the card's temperatures turn warm and hot, the rest stays white
+    # everything the memory service publishes about the round is on the screen, and nothing else
+    read = {key for key in keys_read(theme) if key.startswith("session.")}
+    assert read == set(demo_session())
+    # the last ten minutes of the frame rate stay under the numbers: the longest a graph holds
+    from libre_panel.render.motion import MAX_POINTS, RATE
+
     graphs = [w for w in theme.widgets if w["type"] == "graph"]
-    assert {g["sensor"] for g in graphs} == {
-        "game.fps", "game.frametime_peak", "cpu.temp", "cpu.power", "gpu.temp",
-        "temp.gpu.hot_spot", "gpu.power", "gpu.mem.used",
-    }  # fmt: skip
-    # the longest window the core keeps in video mode: nothing here claims a whole session
-    assert {g["seconds"] for g in graphs} == {596} and 596 <= (MAX_POINTS - 4 * RATE) / RATE
-    assert by["peaks-box-top"]["color"] == "@rule_strong"  # two channels: neutral
-    rows = [by[f"peak-{n}-graph"]["y"] for n in range(6)]
-    assert [b - a for a, b in zip(rows, rows[1:], strict=False)] == [56] * 5
+    assert [g["id"] for g in graphs] == ["session-graph"] and graphs[0]["sensor"] == "game.fps"
+    assert graphs[0]["seconds"] == 596 and 596 <= (MAX_POINTS - 4 * RATE) / RATE
+
+
+def test_session_shows_dashes_until_the_memory_service_has_counted_something():
+    theme = load_theme(find_theme("spur-session"))
+    renderer = Renderer(theme, preview=True)
+    snapshot = demo_snapshot(fixed_time=1_700_000_000)
+    full, _ = renderer.render(snapshot)
+    for key in [k for k in snapshot.readings if k.startswith("session.")]:
+        del snapshot.readings[key]  # no memory service
+    bare, _ = renderer.render(snapshot)
+    assert renderer.warnings == [] and full.tobytes() != bare.tobytes()
+    ids = shown_ids(theme, {"game.fps": 90.0})
+    assert {"played-value", "fps-value", "peak-0-value", "peak-3-now"} <= ids  # as "--"
+    assert not any(wid.startswith("level-") and wid.endswith(("-bar", "-name")) for wid in ids)
+
+
+def test_session_sets_the_rule_and_the_fans_where_spur_ii_does_behind_a_short_name():
+    """As in the header: the rule stands 24 px behind a name of 51 px (at 361), and the fans take
+    the room that gives them, in groups; a longer name or a wider logo takes up to 11 px of it."""
+    theme = load_theme(find_theme("spur-session"))
+    by = {w["id"]: w for w in theme.widgets}
+    slot = by["game-logo"]
+    assert slot["align"] == "left" and by["hud-rule"]["x"] == slot["x"] + 51 + 24
+    assert (
+        slot["w"] == by["header-game-name"]["max_width"] == by["header-game-app"]["max_width"] == 62
+    )
+    assert slot["x"] + slot["w"] < by["hud-rule"]["x"]
+    wheels = [by[f"fan-{k}-wheel"]["x"] for k in range(1, 6)]
+    assert wheels[0] == by["hud-rule"]["x"] + by["hud-rule"]["w"] + 22
+    gaps = [b - a for a, b in zip(wheels, wheels[1:], strict=False)]
+    assert gaps == pytest.approx([237.5, 297.5, 297.5, 237.5], abs=1)  # (groups of two, one, two)
+    for k in range(1, 6):  # the number and its unit stay where they were to the wheel
+        assert (
+            by[f"fan-{k}-rpm"]["x"] - wheels[k - 1] == 132
+            and by[f"fan-{k}-unit"]["x"] - wheels[k - 1] == 140
+        )
 
 
 # -- Cockpit (building blocks on a 40 px grid) ---------------------------------------------------
@@ -336,7 +454,7 @@ def test_the_round_report_sets_the_round_against_the_earlier_ones_when_there_wer
         for w in theme.widgets
         if w["id"].endswith(("-mean", "-delta", "-delta-label")) or w["id"] in heads
     }
-    assert len(compared) == 24  # six rows of the levels, six of the peaks (two each), four, two
+    assert len(compared) == 18  # six rows of the peaks (two each), four, two (a tick has none)
     ids = report_ids(theme, 7)
     assert compared <= ids and "first-round" not in ids
     ids = report_ids(theme, 0)  # the first round of a game: the round alone, and it says so
@@ -344,6 +462,46 @@ def test_the_round_report_sets_the_round_against_the_earlier_ones_when_there_wer
     assert {"fps", "low-value", "frame-value", "limit-gpu-bar", "round-head"} <= ids
     assert {f"level-{n}-bar" for n in range(6)} <= ids  # the spread of the round is still there
     assert {f"{peak}-value" for peak in ("cpu_temp", "gpu_hotspot", "vram_used")} <= ids
+
+
+def test_the_round_report_marks_the_earlier_rounds_with_a_tick_on_each_bar():
+    theme = load_theme(find_theme("round-report"))
+    by = {w["id"]: w for w in theme.widgets}
+    for n in range(6):  # SPUR II's: a white tick across the bar, not a line under it
+        bar = by[f"level-{n}-bar"]
+        assert (bar["mark"], bar["mark_color"], bar["mark_width"]) == (
+            f"report.level.{n}.mean", "@text", 2,
+        )  # fmt: skip
+        assert f"level-{n}-mean" not in by
+    renderer = Renderer(theme, preview=True)
+    snapshot = demo_snapshot(fixed_time=1_700_000_000)  # a round against seven earlier ones
+    renderer.render(snapshot)
+    marks = [wid for wid, _ in renderer._last[0] if wid.endswith("\0mark")]
+    assert marks == [f"level-{n}-bar\0mark" for n in (5, 4, 3, 2, 1, 0)]
+    snapshot.readings.update(demo_report(1_700_000_000, earlier=0))  # the first round: no ticks
+    renderer.render(snapshot)
+    assert not [wid for wid, _ in renderer._last[0] if wid.endswith("\0mark")]
+    assert {f"level-{n}-bar" for n in range(6)} <= {wid for wid, _ in renderer._last[0]}
+
+
+def test_the_round_report_shows_the_games_logo_at_the_top_right_and_leaves_its_name_room():
+    from PIL import Image
+
+    theme = load_theme(find_theme("round-report"))
+    by = {w["id"]: w for w in theme.widgets}
+    logo = by["game-logo"]
+    assert (logo["src"], logo["fit"], logo["align"]) == ("@game.logo", "contain", "right")
+    box = by["round-box-right"]
+    assert (logo["w"], logo["h"]) == (220, 52)  # SPUR II's slot: no wider, no taller
+    assert logo["x"] + logo["w"] == box["x"] - 11  # at the right of the round's box
+    name = by["game-with-logo"]
+    assert name["x"] + name["max_width"] + 20 == logo["x"]  # the name stops 20 px short of it
+    assert by["game"]["max_width"] > name["max_width"] and by["game"]["x"] == name["x"]
+    alone = {"report.game": "Starfall"}
+    ids = shown_ids(theme, alone)  # a game without a logo has the whole width for its name
+    assert "game" in ids and not ids & {"game-logo", "game-with-logo"}
+    ids = shown_ids(theme, alone, {"game.logo": Image.new("RGBA", (4, 4))})
+    assert {"game-logo", "game-with-logo"} <= ids and "game" not in ids
 
 
 def test_the_round_report_names_who_held_the_rate_down_as_the_service_counts_it():
@@ -415,6 +573,19 @@ def test_studio_is_made_of_the_cards_on_one_grid_near_where_spur_ii_has_them():
     assert all(a[1] <= b[0] for a, b in zip(spans, spans[1:], strict=False))
 
 
+def test_studio_counts_the_track_down_to_its_end_as_spur_ii_does():
+    _, renderer = studio()
+    length = next(w for w in renderer.widgets if w["id"] == "card/c0-length")
+    assert (length["sensor"], length["format"]) == ("media.remaining", "-{value:clock}")
+    assert "media.remaining" in demo_snapshot(fixed_time=1_700_000_000).readings  # the demo too
+
+
+def test_studio_moves_a_new_track_in_from_the_right_as_spur_ii_does():
+    theme = load_theme(find_theme("spur-studio"))
+    card = next(w for w in theme.widgets if w["id"] == "card")
+    assert card["slide"] == 0.55 and card["change"] == 0.6  # (a slide of 0.55 s, a change 0.6)
+
+
 def test_studio_has_the_time_large_the_date_in_capitals_and_the_volume_below_the_network():
     theme, _ = studio()
     by = {w["id"]: w for w in theme.widgets}
@@ -470,7 +641,7 @@ def find_module(theme, wid):
     return next(w for w in theme.widgets if w["id"] == wid)
 
 
-def test_studio_reads_what_the_demo_has_and_a_picture_it_has_none_of():
+def test_studio_reads_only_what_the_demo_has():
     from libre_panel.render.renderer import _reads
 
     _, renderer = studio()
@@ -479,4 +650,4 @@ def test_studio_reads_what_the_demo_has_and_a_picture_it_has_none_of():
         key for key in _reads(renderer.widgets)
         if snapshot.value(key) is None and key not in snapshot.images
     }  # fmt: skip
-    assert absent == {"media.app_icon"}  # the player's icon is a picture: its name stands in
+    assert absent == set()  # (the demo has the player's icon, drawn, and a download that runs)

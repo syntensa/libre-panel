@@ -565,7 +565,7 @@ def test_the_check_opens_the_library_and_reports(library):
     worked, lines = inside.check()
     assert worked
     assert lines[1] == f"libraries found: {len(inside.LIBRARIES)} of {len(inside.LIBRARIES)}"
-    assert "opened: 5 devices with 11 sensors" in lines
+    assert "opened: 6 devices with 12 sensors" in lines
     assert "administrator rights: yes" in lines and "PawnIO driver: 2.0.1" in lines
     assert "CPU temperature, power and clock: available" in lines
     assert library["computer"].closed == 1
@@ -597,7 +597,7 @@ def test_the_check_goes_on_when_one_chip_cannot_be_updated(library):
     library["computer"] = small_computer()
     library["computer"].Hardware[0].SubHardware[0].raises = RuntimeError("no port")
     worked, lines = inside.check()
-    assert worked and "opened: 5 devices with 11 sensors" in lines
+    assert worked and "opened: 6 devices with 12 sensors" in lines
 
 
 def test_the_check_on_the_command_line(isolated_home, library, capsys):
@@ -606,7 +606,7 @@ def test_the_check_on_the_command_line(isolated_home, library, capsys):
     path.write_text('[sensors.librehardwaremonitor]\ndll_dir = "my libs"\n')
     assert cli.main(["--config", str(path), "sensors", "--check-lhm"]) == 0
     out = capsys.readouterr().out
-    assert "opened: 5 devices" in out and "administrator rights: yes" in out
+    assert "opened: 6 devices" in out and "administrator rights: yes" in out
     library["error"] = RuntimeError("boom")
     assert cli.main(["--config", str(path), "sensors", "--check-lhm"]) == 1
     assert "boom" in capsys.readouterr().out

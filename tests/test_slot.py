@@ -40,10 +40,12 @@ def theme_of(items="", kind="cards", cols=3, rows=2, **more):
 
 def demo(playing=1, media=True, weather=True):
     snap = demo_snapshot(fixed_time=1_700_000_000)
+    snap.readings.pop("downloads", None)  # (these tests start a download, with ``downloading``)
     if not media:
         for key in [k for k in snap.readings if k.startswith("media.")]:
             del snap.readings[key]
         snap.images.pop("media.cover", None)
+        snap.images.pop("media.app_icon", None)
     else:
         snap.readings["media.playing"] = Reading("media.playing", playing)
     if not weather:
@@ -356,6 +358,207 @@ def test_what_the_old_card_showed_is_what_rolls_up():
     ids = [wid for wid, _ in renderer._last[0]]
     assert "m/c0-title" in ids and "m/c0-progress" in ids
     assert not any(wid.startswith("m/c1-") for wid in ids)  # nothing of the new one yet
+
+
+# -- a new track ------------------------------------------------------------------------------
+
+RED, BLUE = (230, 20, 20), (20, 20, 230)
+
+
+def song(title, colour, artist="Artist"):
+    """The demo's snapshot with a track of ``title`` and a cover of one ``colour``."""
+    snap = demo()
+    snap.readings["media.title"] = Reading("media.title", title)
+    snap.readings["media.artist"] = Reading("media.artist", artist)
+    snap.images["media.cover"] = Image.new("RGBA", (200, 200), (*colour, 255))
+    return snap
+
+
+def cover_columns(frame, box, colour):
+    """The first and last column inside the card where ``colour`` is drawn (the cover, which is
+    the one thing of that colour at the card's left), or None."""
+    x, y, w, h = (round(v) for v in box._inner())
+    inside = np.asarray(frame.convert("RGB").crop((x, y, x + w, y + h))).astype(int)
+    near = np.abs(inside - np.array(colour)).max(axis=2) <= 14
+    found = np.flatnonzero(near.any(axis=0))
+    return (int(found.min()) + x, int(found.max()) + x) if found.size else None
+
+
+def sliding(items="playback", **more):
+    """A renderer that has shown the first track (a red cover) for a second, and the box."""
+    renderer = Renderer(theme_of(items, **{"slide": 0.5, **more}), animate=True)
+    for t in (0.0, 0.3, 0.6):
+        frame = renderer.render(song("First Song", RED), t)[0]
+    box = renderer._slots["m"]
+    return renderer, box, cover_columns(frame, box, RED)
+
+
+def test_a_new_track_moves_in_from_the_right_as_the_old_one_moves_out_to_the_left():
+    renderer, box, home = sliding()
+    assert box.slide == 0.5 and home is not None and box.shift is None
+    x, _, width, _ = box._inner()
+    reach = width + slot.GAP  # the gap closes as the new track arrives
+    new = song("Second Song", BLUE)
+    for p in (0.0, 0.1, 0.3, 0.6, 0.9, 0.99):
+        frame = renderer.render(new, 1.0 + p * 0.5)[0]
+        away = round(reach * light.ease_out(p))
+        assert box.shift == (-away, reach - away) and renderer.moving, p
+        old, coming = cover_columns(frame, box, RED), cover_columns(frame, box, BLUE)
+        if home[1] - away > x:  # (a part of the old cover is still inside the card)
+            assert old is not None and old[0] == max(round(x), home[0] - away), p
+        else:
+            assert old is None, p
+        arrives = home[0] + reach - away  # the new cover's left edge, where it comes in from
+        if arrives < x + width - 8:
+            assert coming is not None and coming[0] == pytest.approx(arrives, abs=2), p
+        else:
+            assert coming is None or coming[0] >= x + width - 12, p  # not in yet
+    frame = renderer.render(new, 1.5)[0]  # over: the new track at rest, the old one gone
+    assert box.shift is None and box.sliding is None
+    assert cover_columns(frame, box, RED) is None
+    assert cover_columns(frame, box, BLUE) == pytest.approx(home, abs=1)
+    ids = [wid for wid, _ in renderer._last[0]]
+    assert not any(wid.endswith("\0old") for wid in ids)
+
+
+def test_the_first_frame_of_a_slide_still_shows_the_old_track_whole():
+    renderer, box, home = sliding()
+    frame = renderer.render(song("Second Song", BLUE), 1.0)[0]  # p = 0: nothing has moved
+    assert cover_columns(frame, box, RED) == home and cover_columns(frame, box, BLUE) is None
+    assert box.shift == (0, box._inner()[2] + slot.GAP)
+
+
+def test_the_old_track_is_what_the_card_showed_last_moving_with_its_light_under_the_frame():
+    renderer, box, _ = sliding()
+    shown = {wid: piece for wid, piece in renderer._last[0] if wid.startswith("m/c0-")}
+    renderer.render(song("Second Song", BLUE), 1.0)  # the slide begins ...
+    renderer.render(song("Second Song", BLUE), 1.15)  # ... and 0.3 of it later: the old track's
+    pieces = dict(renderer._last[0])  # right end is still in, the new track's left end comes in
+    ids = [wid for wid, _ in renderer._last[0]]
+    old = [wid for wid in ids if wid.endswith("\0old")]
+    assert {wid[: -len("\0old")] for wid in old} <= set(shown)  # parts of what was on show
+    assert "m/c0-length\0old" in old and "m/c0-cover\0old" not in old  # (the cover is out)
+    assert "m/c0-title" in ids and "m/c0-length" not in ids  # the new track's title is coming in
+    assert box.sliding is not None and set(box.sliding[1]) >= {"m/c0-title", "m/c0-cover"}
+    assert ids.index("m/\0frame") > max(ids.index(wid) for wid in old)  # the frame on top
+    assert min(ids.index(wid) for wid in old) > ids.index("m/c0-title")  # over the card's parts
+    x, _, w, _ = box._inner()
+    for wid in [*old, "m/c0-title"]:
+        piece = pieces[wid]  # nothing of it lies outside the card's inside
+        assert piece.x >= round(x) and piece.x + piece.layer.width <= round(x + w) + 1, wid
+
+
+def test_a_slide_takes_the_planned_time_not_the_number_of_frames():
+    a, box_a, _ = sliding()
+    b, box_b, _ = sliding()
+    new = song("Second Song", BLUE)
+    for t in (1.0, 1.1, 1.2, 1.3):  # a frame now and then ...
+        a.render(new, t)
+    b.render(new, 1.0)
+    b.render(new, 1.3)  # ... or two: the same place at the same time
+    assert box_a.shift == box_b.shift
+    a.render(new, 1.5)
+    b.render(new, 1.5)
+    assert box_a.shift is None and box_b.shift is None
+
+
+def test_a_slide_needs_the_option_a_panel_that_animates_and_a_card_that_was_on_show():
+    off, box, _ = sliding(slide=0)  # (the theme's own option is 0: no slide)
+    frame = off.render(song("Second Song", BLUE), 1.0)[0]
+    assert box.sliding is None and box.shift is None  # (the frame's colour still fades)
+    assert cover_columns(frame, box, RED) is None and cover_columns(frame, box, BLUE) is not None
+    cut = Renderer(theme_of("playback", slide=0.5), animate=False)  # the PNG path: a cut
+    for t in (0.0, 0.3):
+        cut.render(song("First Song", RED), t)
+    cut.render(song("Second Song", BLUE), 1.0)
+    assert cut._slots["m"].sliding is None and not cut.moving
+    first = Renderer(theme_of("playback", slide=0.5), animate=True)
+    first.render(song("First Song", RED), 0.0)  # the first frame is no change of track
+    assert first._slots["m"].sliding is None and first._slots["m"].track is not None
+    assert Renderer(theme_of(), animate=True)._slots["m"].slide == 0  # unless a theme asks
+
+
+def test_the_same_track_does_not_slide_when_it_is_paused_or_its_cover_comes_late():
+    renderer, box, _ = sliding()
+    renderer.render(song("First Song", RED), 1.0)
+    paused = song("First Song", RED)
+    paused.readings["media.playing"] = Reading("media.playing", 0)
+    renderer.render(paused, 1.1)
+    late = song("First Song", BLUE)  # (the same track, its cover read a moment later)
+    renderer.render(late, 1.2)
+    assert box.sliding is None and box.shift is None
+    other = song("First Song", RED, artist="Somebody Else")  # a new artist is a new track
+    renderer.render(other, 1.3)
+    assert box.sliding is not None
+
+
+def test_a_slide_ends_where_the_card_changes_and_does_not_begin_in_a_change():
+    renderer, box, _ = sliding("playback\nforecast")
+    renderer.render(song("Second Song", BLUE), 1.0)
+    assert box.sliding is not None
+    renderer.render(demo(media=False), 1.1)  # the weather takes over mid-slide: the card rolls up
+    assert box.leaving == 0 and box.shown == 1 and box.sliding is None and box.shift is None
+    assert not any(wid.endswith("\0old") for wid, _ in renderer._last[0])
+    renderer.render(song("Third Song", RED), 1.3)  # the track comes back in the change: no slide
+    assert box.sliding is None
+    renderer.render(song("Third Song", RED), 1.8)  # the change is over: the playback card rolls in
+    renderer.render(song("Fourth Song", BLUE), 2.0)  # (a track in a change of cards: no slide)
+    assert box.leaving == 1 and box.sliding is None
+    renderer.render(song("Fourth Song", BLUE), 2.5)  # over: the card is on show with its track
+    assert box.leaving is None and box.shown == 0 and box.sliding is None
+    renderer.render(song("Fifth Song", RED), 2.6)  # a new track on the card on show: it slides
+    assert box.sliding is not None
+
+
+def test_a_slide_restarts_at_a_track_that_comes_before_it_ends():
+    renderer, box, _ = sliding()
+    renderer.render(song("Second Song", BLUE), 1.0)
+    renderer.render(song("Second Song", BLUE), 1.2)
+    assert box.sliding is not None and box.sliding[0] == 1.0
+    renderer.render(song("Third Song", RED), 1.3)  # skipped on: the second track is the old one
+    assert box.sliding[0] == 1.3 and set(box.sliding[1]) >= {"m/c0-title"}
+    renderer.render(song("Third Song", RED), 1.8)  # 0.5 s after: over
+    assert box.sliding is None
+
+
+def test_a_slide_makes_nothing_again_for_every_frame(monkeypatch):
+    """The parts are made once with the new track; the frames of the slide move and cut them."""
+    renderer, box, _ = sliding()
+    built = []
+    real = renderer._text_piece
+    monkeypatch.setattr(
+        renderer, "_text_piece", lambda *a, **k: built.append(a[1]) or real(*a, **k)
+    )
+    new = song("Second Song", BLUE)
+    renderer.render(new, 1.0)
+    made = len(built)
+    assert made > 0  # (the new track's words)
+    for n in range(1, 25):
+        renderer.render(new, 1.0 + n * 0.02)  # 0.48 s: a slide at 50 frames a second
+    assert box.sliding is not None and len(built) == made
+
+
+def test_a_piece_moved_and_cut_to_the_columns_of_the_card():
+    red = Image.new("RGBA", (10, 4), (255, 0, 0, 255))
+    piece = Piece(red, 20, 5)
+    moved = slot.slid(piece, 5, 0, 100)
+    assert (moved.x, moved.y, moved.layer.size) == (25, 5, (10, 4)) and moved is not piece
+    cut = slot.slid(piece, -18, 4, 100)  # x 2 to 12: the first two columns are outside
+    assert (cut.x, cut.layer.size) == (4, (8, 4))
+    assert slot.slid(piece, 100, 0, 100) is None and slot.slid(piece, -40, 0, 100) is None
+    right = slot.slid(piece, 75, 0, 100)  # x 95 to 105: cut at 100
+    assert (right.x, right.layer.size) == (95, (5, 4))
+    assert slot.slid(None, 3, 0, 10) is None
+    lit = replace_light(piece, Piece(Image.new("RGBA", (30, 4), (0, 0, 255, 255)), 10, 5, add=True))
+    out = slot.slid(lit, -35, 0, 100)  # the layer has left, the light that reaches further stays
+    assert out.layer.size == (1, 1) and out.light.x == 0 and out.light.layer.width == 5
+    assert slot.slid(lit, 50, 0, 100).light.x == 60
+
+
+def replace_light(piece, light):
+    from dataclasses import replace
+
+    return replace(piece, light=light)
 
 
 # -- the frame -------------------------------------------------------------------------------

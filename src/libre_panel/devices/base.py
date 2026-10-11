@@ -14,6 +14,7 @@ from typing import Any
 from PIL import Image
 
 from libre_panel.config import DeviceConfig
+from libre_panel.devices.models import PanelModel
 
 
 class DeviceError(RuntimeError):
@@ -53,6 +54,9 @@ class Display:
     # True once open() brought the panel back after the driver restarted it
     # (a hung video decoder): the main loop tells the services, unlike a replug.
     restarted = False
+    # The panel this is, once it is open and the driver knows (a panel found by its USB ids
+    # learns its model when it connects); None before, and for drivers that do not say.
+    model: PanelModel | None = None
 
     def __init__(self, config: DeviceConfig) -> None:
         self.config = config
