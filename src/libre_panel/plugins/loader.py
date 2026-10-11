@@ -54,6 +54,7 @@ BUILT_IN = "built in"  # the source of what Libre Panel brings itself
 BUILT_IN_PARTS: dict[str, dict[str, str]] = {
     "services": {
         "autopilot": "libre_panel.services.autopilot:Autopilot",
+        "devices": "libre_panel.services.devices:Devices",
         "game": "libre_panel.services.game:Game",
         "notices": "libre_panel.services.notices:Notices",
     },

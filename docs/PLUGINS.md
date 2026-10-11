@@ -230,6 +230,7 @@ do. Their names cannot be used by a plugin.
 | `notices` | messages for the volume, a new track, sensors that cross a limit and a panel that restarted |
 | `game` | game mode: finds the game you play (a list of programs, Steam's library) and switches the mode with an entrance, and back |
 | `autopilot` | picks the theme by rules: music, microphone, load, program, time of day |
+| `devices` | messages for drives, USB devices and controllers that come and go, a full drive and a hot SSD (Windows) |
 
 Their options are in the [configuration guide](CONFIGURATION.md#built-in-services).
 They talk to the panel only through the host described here, so they are also

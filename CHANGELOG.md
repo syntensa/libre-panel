@@ -65,6 +65,16 @@
   load over a time, a program in front, the time of day. A new choice must
   hold for 8 s and a theme stays for 20 s, the load does not count for the
   first four minutes after the system started, and it rests in game mode
+- `devices`, a built-in service for Windows (off until listed in
+  `[services] enabled`): messages when a removable or USB/SD/MMC drive, a USB
+  device (a phone with its maker's name) or a game controller comes or goes, a
+  controller's battery runs low, a drive is nearly full (`min_free_gb`,
+  `min_free_percent`) and an SSD runs hot (`ssd_warn_c`). Only changes are told,
+  never what is plugged in at the start; a stick is one message, not two; four
+  changes at once (waking from sleep) are taken in silently; Windows' own
+  notices bring the look at once, with a slow poll for what was missed. Nothing
+  is opened for data. The messages have drawn icons (`usb`, `stick`, `phone`,
+  `ssd`, with the existing `gamepad`) that also go in any icon widget
 - `media.app_icon`, the icon of the program that plays, next to `media.cover`
   (an image widget: `"src": "@media.app_icon"`), and the small badge on the
   cover of the "Now playing" message. Windows: the logo of a Store app, else

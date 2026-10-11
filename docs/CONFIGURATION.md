@@ -459,6 +459,64 @@ when = { time = "22:00-06:30" }        # may cross midnight
 - Rules are read when the service starts: change `config.toml` and it restarts
   by itself.
 
+### Devices
+
+Short messages when a drive, a USB device or a game controller comes or goes,
+when a controller's battery runs low, when a drive is nearly full and when an
+SSD runs hot. Windows only: elsewhere the service starts, says so in the log
+and does nothing.
+
+```toml
+[services]
+enabled = ["devices"]
+
+[services.devices]
+drives = true          # removable drives, and drives on a USB, SD or MMC bus
+usb = true             # USB devices that plug in directly: phones, adapters, ...
+controllers = true     # game controllers (Xbox and compatible), with their battery
+storage = true         # free space and SSD temperature of the fixed drives, every minute
+# usb_ignore = ["1a86:7523"]  # USB devices to say nothing about, as VID:PID
+min_free_gb = 25       # "nearly full" below this much free space, or below...
+min_free_percent = 5   # ...this share of the drive, whichever is more
+# ssd_warn_c = 70      # "hot" from this temperature (default: the drive's own limit, else 70)
+```
+
+| What | When | The message |
+|---|---|---|
+| a drive | a removable drive, or a drive on a USB, SD or MMC bus, comes or goes | "Kingston DataTraveler · 20 GB free of 30 GB", titled "USB drive E:", with a bar for how full it is |
+| a controller | it connects, disconnects, or its battery runs low | "Connected · Battery full", "Disconnected", or "Battery low" (a warning), titled "Controller · player 1" |
+| a USB device | one that is no hub, no storage and no Xbox controller comes or goes | its name; a phone shows a phone and its maker |
+| a full drive | free space falls below the limit | "Only 20 GB free" with a bar; an error when less than a third of the limit is left |
+| a hot SSD | a fixed drive reaches its temperature limit | "88 °C · limit 70 °C" with a bar; an error from the drive's critical temperature |
+
+Drives, controllers and USB devices are messages of the kind `device`
+(`"toast": {"off": ["device"]}` switches them off in a theme), and each has a
+drawn icon (`stick`, `gamepad`, `phone`, `usb`). Full drives and hot SSDs are
+warnings like those of the notices service (kind `warning`).
+
+- **Only changes.** What is plugged in when the service starts is no news, so a
+  controller that has been connected for hours does not pop up at every start.
+  Four changes at once (the computer woke up, a hub reset) are taken in
+  silently too. A controller is told once it has stood there a moment, and one
+  that comes and goes at once is not told at all.
+- **One message for a stick.** A USB stick is a drive and a USB device; it is
+  told once, as a drive. Hubs, mass storage and Xbox controllers are not told as
+  USB devices, and neither is any panel Libre Panel drives: its own USB device
+  never makes a message (`usb_ignore` adds more).
+- **When it looks.** Windows reports every device that comes or goes and the
+  service looks at once; a look every ten seconds catches what was missed, and
+  where Windows does not report (before Windows 8) it looks every two seconds.
+  Controllers' batteries and the storage (once a minute) are looked at on a
+  clock. The first look at the storage can already find a full drive; that is
+  told once.
+- **Told once.** A full drive is told again only after its free space has risen
+  more than 20 % above the limit; a hot SSD only after it has been 5 °C below
+  its limit, or when it gets worse (from "hot" to critical). A battery is told
+  when it reaches "low" and not again until it was "medium" or "full" in between.
+- **It only looks.** A drive is asked with no access rights at all, so nothing is
+  read off the disk; USB devices are read from the system's own list and never
+  opened; nothing is written, and nothing is sent anywhere.
+
 ## Language
 
 Libre Panel speaks English and German. `language = "auto"` follows the
