@@ -755,6 +755,35 @@ def test_a_changed_config_gives_the_panel_other_names_without_a_restart(isolated
         loop.close()
 
 
+def test_a_name_written_in_the_editor_reaches_the_panel_that_runs(isolated_home, machine):
+    """The whole way: the editor's POST writes config.toml, the running panel loop sees the
+    file, the sensors take the text, and what the panel draws from has it."""
+    from test_autostart import FakeTasks
+    from test_editor_server import request
+    from test_service import FakeRegistry, wait_for, write_config
+
+    from libre_panel.autostart import Autostart
+    from libre_panel.service import BackgroundApp
+
+    machine(PC)
+    write_config(isolated_home, theme="pico")
+    app = BackgroundApp(
+        port=0, autostart=Autostart("win32", registry=FakeRegistry(), tasks=FakeTasks())
+    )
+    port = int(app.start().rsplit(":", 1)[1].strip("/"))
+    try:
+        assert wait_for(lambda: app.panel.state()["state"] == "showing", 30)
+        shown = app.plugin_host
+        assert wait_for(lambda: shown.latest and shown.latest.value("gpu.name") == TIDY["gpu"], 30)
+        assert request(port, "POST", "/api/hardware", {"gpu": "My card"})[0] == 200
+        assert wait_for(lambda: shown.latest.value("gpu.name") == "My card", 30)
+        assert request(port, "POST", "/api/hardware", {"gpu": ""})[0] == 200
+        assert wait_for(lambda: shown.latest.value("gpu.name") == TIDY["gpu"], 30)
+    finally:
+        app.quit()
+        app.shutdown()
+
+
 # -- what stays on this computer -----------------------------------------------------------------
 
 
