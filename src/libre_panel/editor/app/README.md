@@ -4,7 +4,9 @@ Libre Panel's app: Start, Design, Look, Live and Settings in one page, shown in 
 window (`libre_panel/window.py`) or a browser. No build step: plain ES modules with
 Preact and htm, vendored in `vendor/` (versions and SHA-256 in `vendor/SOURCES.txt`).
 The editor's server (`editor/server.py`) serves `index.html` at `/`, this folder at
-`/app/` and the bundled fonts at `/app/fonts/`.
+`/app/` and the bundled fonts at `/app/fonts/`. What the console's pages (`pages/web`)
+and plugins' editor pages share is in `editor/static/`, served at `/static/`: `kit.js`,
+`stats.js`, `editor.css` and the icon (the app itself uses only the icon).
 
 ## What is where
 

@@ -106,10 +106,11 @@ and counts, and makes the numbers once a second; nothing waits for it.
 
 ## The Control and Autopilot pages
 
-*Pages → Control* in the editor (also the **Control page** button in the Panel
-menu) is the console of the background app. In a plain `libre-panel editor`
-there is no panel, so the page says so and keeps what works without one: the
-theme per mode and the log.
+The **Control** page is the console of the background app. It is under *Pages →
+From plugins* in *Design* and found by Ctrl+K; *Live* shows the same numbers,
+sources, services and test messages in the app's own look. In a plain
+`libre-panel editor` there is no panel, so the page says so and keeps what works
+without one: the theme per mode and the log.
 
 | Part | What it does |
 |---|---|
@@ -121,8 +122,9 @@ theme per mode and the log.
 | **Theme per mode** | the theme of the normal mode and of game mode, written to `config.toml` (`theme`, and `theme` under `[modes.game]`); "same as the normal mode" leaves the game mode without a theme of its own |
 | **Log** | the last lines of `logs/libre-panel.log`, which the tray app writes (`libre-panel start` logs to its terminal instead) |
 
-*Pages → Autopilot* edits the rules of the `autopilot` service, switches it on
-and off, and shows which rule holds and what it sees; see
+The **Autopilot** page (found the same way, or by *Edit* under the autopilot in
+*Settings → Services*) edits the rules of the `autopilot` service, switches it
+on and off, and shows which rule holds and what it sees; see
 [the autopilot](CONFIGURATION.md#autopilot).
 
 Both pages are a skin over a JSON API (the live picture, the numbers, the

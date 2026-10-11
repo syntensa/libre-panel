@@ -27,7 +27,7 @@ invalid is refused with the reason, and nothing is written.
 |---|---|
 | Panel | `[device]` (`model`, `brightness`, `rotate`; under *Advanced* `driver`, `output`, `port`) and `[video]` (`mode`, `fps`, `local_clip`; under *Advanced* `ffmpeg`) |
 | Sensors | `[sensors] providers` (which sources, and their order), `[sensors.librehardwaremonitor]` (`mode`, `url`), `refresh_ms`, and the hardware's names |
-| Services | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Pages → Autopilot*), the warnings of `notices` and the limits of `cooling` are still written here |
+| Services | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
 | Start and system | `language`, and starting with the system (`libre-panel autostart`) |
 | About | nothing: the version, the licence, the notices, how to report a panel, and the folders (with *Open folder*) |
@@ -52,8 +52,8 @@ model = "auto"                 # or an id from `libre-panel models`
 driver = "auto"                # panel if connected, else PNG; "turzx" or "virtual" to force
 brightness = 60                # 0-100
 rotate = 0                     # 180: upside down, for a panel mounted the other way
-                               # round (also in the tray menu and the editor); the
-                               # editor's preview and the PNG file stay upright
+                               # round (also in the tray menu and the app); Design's
+                               # preview and the PNG file stay upright
 output = "libre-panel-frame.png"   # frames go here when no panel is used;
                                    # a relative path is inside the settings folder
 port = ""                      # serial panels: found by their USB ids; only if that
@@ -547,8 +547,9 @@ when = { time = "22:00-06:30" }        # may cross midnight
   the system once a second (the list of programs every two seconds).
 - Rules are read when the service starts: change `config.toml` and it restarts
   by itself.
-- **In the editor.** *Pages → Autopilot* edits these rules and the settings above,
-  switches the service on and off, and shows which rule holds and what the
+- **In the app.** *Settings → Services*, *Edit* under the autopilot, opens the
+  page that edits these rules and the settings above, switches the service on
+  and off, and shows which rule holds and what the
   autopilot sees (music, microphone, the program in front, the loads). Saving
   writes the `[[services.autopilot.rules]]` blocks and the keys that changed into
   `config.toml`; the rest of the file stays as it is, but comments inside the
@@ -801,8 +802,8 @@ limits = [
 ## Language
 
 Libre Panel speaks English and German. `language = "auto"` follows the
-system language; the editor has a switch at the bottom right, which writes
-this setting. It covers the editor, the tray menu, messages about the panel,
+system language; *Settings → Start and system → Language* (and Ctrl+K) writes
+this setting. It covers the app, the tray menu, messages about the panel,
 and the panel itself: weekday and month names (in German with "27."), and
 weather descriptions. Texts that are part of a theme (such as "CPU TEMP")
 stay as the theme's author wrote them. Command-line output for diagnostics

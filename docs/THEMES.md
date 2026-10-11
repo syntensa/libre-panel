@@ -68,8 +68,9 @@ to write or review themes by hand.
   of, kept as a legacy set). Leave it out for a theme of your own.
 - Widgets are drawn in list order: later ones are on top.
 - Unknown fields are ignored with a warning, so newer themes still load.
-- Optional: `"toast"` sets how messages from services show (editor:
-  *Theme → Messages*): `"anchor"` places them (`top-right` by default; also
+- Optional: `"toast"` sets how messages from services show (in the app: *Look →
+  Notices* for the style, *Fine-tuning → Messages* for the rest): `"anchor"`
+  places them (`top-right` by default; also
   `top-left`, `bottom-right`, `bottom-left`, `top`, `bottom`; they keep
   clear of the strip a panel's bezel hides), `"seconds"` is how long each
   stays (4), `"queue": false` lets a new message of the same or a higher

@@ -128,7 +128,7 @@
       <a class="hide-sm" href="#build">Build</a>
       <a class="hide-sm" href="#modules">Modules</a>
       <a class="hide-sm" href="#themes">Themes</a>
-      <a class="hide-sm" href="#editor">Editor</a>
+      <a class="hide-sm" href="#editor">App</a>
       <a href="#panels">Panels</a>
       <a href="#install">Install</a>
       <a href="https://github.com/syntensa/libre-panel">GitHub</a>
@@ -175,8 +175,8 @@
         work like widgets on a phone's home screen: the larger, the more they show.</p>
       <div class="steps">
         <div class="step"><div class="n">1</div><div><h3>Pick a layout and a look</h3>
-          <p><em>New</em> offers starting layouts made for your panel, in six looks.</p></div></div>
-        <img class="framed" src="images/editor-new.png" width="1470" height="495" loading="lazy"
+          <p><em>New theme…</em> offers starting layouts made for your panel, in six looks.</p></div></div>
+        <img class="framed" src="images/editor-new.png" width="1290" height="657" loading="lazy"
         alt="The New theme dialog with three starting layouts and six looks">
         <div class="step"><div class="n">2</div><div><h3>Drag modules onto the panel</h3>
           <p>Pick from 25 modules: hardware, clocks, weather, music, your calendar and
@@ -247,9 +247,9 @@
   <section id="editor">
     <div class="wrap split">
       <div>
-        <div class="kicker">Theme editor</div>
-        <h2>Design it in your browser</h2>
-        <p>The editor renders with the same engine that drives the panel, so
+        <div class="kicker">The app</div>
+        <h2>Design it in a window of its own</h2>
+        <p>Design renders with the same engine that drives the panel, so
           what you see is what you get.</p>
         <ul>
           <li>Module library with live pictures in your look</li>
@@ -257,11 +257,12 @@
           <li>Free editing of every widget, with snapping and alignment guides</li>
           <li>Undo and redo, palettes, bundled fonts, glow, gradients, colour rules</li>
           <li>Every panel from a menu, portrait or landscape</li>
-          <li><em>Show on panel</em> sends it there</li>
+          <li><em>To the panel</em> sends it there</li>
+          <li>Ctrl+K finds any command, theme, module or sensor by a few letters</li>
         </ul>
       </div>
       <img class="framed" src="images/editor.png" width="2400" height="1350" loading="lazy"
-        alt="The theme editor with the module library, a 9.2 inch panel and a selected ring module">
+        alt="Design with the module library, a 9.2 inch panel and a selected ring module">
     </div>
   </section>
 
@@ -325,7 +326,7 @@
       </div>
 <pre><span class="c"># or with Python</span>
 pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.4.2"
-libre-panel tray        <span class="c"># background app with tray icon; opens the editor</span>
+libre-panel tray        <span class="c"># background app with tray icon; opens its window</span>
 libre-panel doctor      <span class="c"># check your panel, write a report</span></pre>
       <p class="fineprint" style="margin-top: 14px">The Windows downloads are not code-signed
         yet: SmartScreen asks once (<em>More info → Run anyway</em>). Close the vendor app
