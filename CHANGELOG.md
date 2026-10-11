@@ -747,6 +747,10 @@
   with unsaved changes it lost a few pixels to the search field and read *Libre Defa…* or
   *Me…*. The search field gives way first now (and the gaps are narrower up to 1440 px, so
   that the default window has room for everything in German)
+- A page that stayed open while Libre Panel was started again (a browser tab, which has the
+  token of the run before) said "Libre Panel does not answer … this page tries again by
+  itself", which it never would: the server refuses it, and the bar now shows the server's
+  sentence about how to open Libre Panel again
 
 **Changes**
 - For editor pages and scripts that call the editor's API: every request carries the

@@ -3003,6 +3003,27 @@ def test_the_app_says_when_the_server_stops_answering_and_when_it_is_back(app_ur
         expect(page.locator(".panel-chip.preview")).to_have_count(1)
 
 
+def test_a_page_of_an_earlier_run_says_what_to_do_not_that_it_will_recover(app_url):
+    """A tab that stayed open while Libre Panel was started again has the old run's token: the
+    server answers every request with 403 and no waiting helps. The bar says what to do, with
+    the server's own sentence, instead of promising that the page tries again by itself."""
+    import json
+
+    refusal = {"error": "Access token missing or wrong. Open Libre Panel from its tray icon."}
+
+    def refuse(route, request):
+        route.fulfill(status=403, content_type="application/json", body=json.dumps(refusal))
+
+    with browser_page(app_url, "design", allow=("/api/app",)) as page:
+        page.route("**/api/app", refuse)
+        bar = page.locator(".offline-bar")
+        expect(bar).to_be_visible(timeout=10000)
+        assert bar.inner_text().strip() == refusal["error"]
+        assert "tries again" not in bar.inner_text()
+        page.unroute("**/api/app")  # (an answer is an answer: the bar goes)
+        expect(bar).to_have_count(0, timeout=10000)
+
+
 class HardwareNames:
     """A stand-in for the server's /api/hardware: the names, and what the app posts."""
 
