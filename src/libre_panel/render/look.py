@@ -451,7 +451,7 @@ class PanelLight:
         tint = renderer.color(settings["color"]) if settings["color"] else None
         accent = tint[:3] if tint else role_color(theme, "info")
         self.sweep_colour = tuple(a / 255 + (1 - a / 255) * 0.55 for a in accent)
-        self._pieces: dict[int, tuple[list[Light], Any, Piece | None]] = {}  # by edge
+        self._pieces: dict[int, tuple[LightEdge, list[Light], Any, Piece | None]] = {}
         self._standing_at: tuple[int, list[Light]] | None = None
         self._joined: tuple[tuple[int, ...], list[LightEdge], LightEdge] | None = None
 
@@ -536,11 +536,13 @@ class PanelLight:
         """The standing light's gloss on ``edge``: one piece of light, the same
         object while the gloss stays the same."""
         kept = self._pieces.get(id(edge))
-        if kept is not None and kept[0] is lights:
-            return kept[2]
+        if kept is not None and kept[0] is not edge:
+            kept = None  # another edge where a gone one was: ids come again
+        if kept is not None and kept[1] is lights:
+            return kept[3]
         strips = edge.gloss(lights, "fixed", self.reach)
-        piece = kept[2] if kept is not None and kept[1] is strips else _light_piece(strips)
-        self._pieces[id(edge)] = (lights, strips, piece)
+        piece = kept[3] if kept is not None and kept[2] is strips else _light_piece(strips)
+        self._pieces[id(edge)] = (edge, lights, strips, piece)
         return piece
 
     def sweep(self, frame: Image.Image, now: float) -> Image.Image:
