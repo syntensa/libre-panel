@@ -504,7 +504,8 @@ class Devices(Service):
                 if self._ended.is_set():
                     break
                 if woken:
-                    self._ended.wait(WAKE_SETTLE)  # a dozen notices for one device: gather them
+                    if self._ended.wait(WAKE_SETTLE):  # a dozen notices for one device: gather them
+                        break
                     self._wake.clear()
                     self.watcher.hurry()
                 try:
