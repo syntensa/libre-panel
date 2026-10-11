@@ -65,7 +65,7 @@ port = ""                      # serial panels: found by their USB ids; only if 
 
 [sensors]
 # order = priority. Without this line: ["load", "audio", "psutil"], on Windows
-# ["load", "audio", "librehardwaremonitor", "psutil"]. More: "demo", plugins
+# ["load", "audio", "librehardwaremonitor", "presentmon", "psutil"]. More: "demo", plugins
 providers = ["load", "audio", "psutil"]
 
 [sensors.librehardwaremonitor]
@@ -137,7 +137,7 @@ goes first.
 
 A configuration that names no list (no `config.toml`, or none with `providers`)
 starts with `["load", "audio", "psutil"]`, and on Windows with
-`["load", "audio", "librehardwaremonitor", "psutil"]` (elsewhere, where the
+`["load", "audio", "librehardwaremonitor", "presentmon", "psutil"]` (elsewhere, where the
 volume cannot be read, `["load", "psutil"]`); `libre-panel config init` writes
 that list into a new file. **A list you wrote is never changed.** The one
 exception is the `["psutil"]` that `config.toml` files up to 0.4 name alone,
@@ -272,12 +272,12 @@ frames of the game you play. It listens to what Windows reports about the
 frames it shows: nothing is put into the game, nothing hooks it, there is no
 overlay. The Windows downloads carry its console version (MIT license) in their
 `tools` folder ([below](#programs-that-come-with-the-downloads)), and Libre Panel uses
-that one before any other. Switch *Game frame rate* on under *Settings → Sensors*, or list
-the source:
+that one before any other. On Windows the source is on by default (it starts PresentMon
+only while a theme shows `game.*`); a list of your own names it:
 
 ```toml
 [sensors]
-providers = ["load", "librehardwaremonitor", "psutil", "presentmon"]
+providers = ["load", "librehardwaremonitor", "presentmon", "psutil"]
 ```
 
 PresentMon needs administrator rights or your account in the "Performance Log Users"
@@ -978,7 +978,7 @@ On Windows the temperatures and power of the processor and the graphics card,
 and the fans, come from
 [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor);
 psutil has none of them there. New configurations list it
-(`providers = ["load", "audio", "librehardwaremonitor", "psutil"]`; a file made
+(`providers = ["load", "audio", "librehardwaremonitor", "presentmon", "psutil"]`; a file made
 by an earlier version names `psutil` alone and gets the same list). Libre Panel reads it
 one of two ways, chosen by `mode` under `[sensors.librehardwaremonitor]`:
 

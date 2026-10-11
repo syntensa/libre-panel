@@ -136,13 +136,14 @@ def default_providers(platform: str | None = None) -> list[str]:
     load source; the volume where it can be read (Windows, and Linux through ``wpctl`` or
     ``pactl``; it reads only while a theme or a service shows it); on Windows
     LibreHardwareMonitor, which alone has the GPU, temperatures, power and fans there (and
-    costs nothing while it is not running); psutil."""
+    costs nothing while it is not running), and PresentMon for a game's frame rate; psutil."""
     where = platform or sys.platform
     sources = ["load"]
     if where == "win32" or where.startswith("linux"):
         sources.append("audio")
     if where == "win32":
-        sources.append("librehardwaremonitor")
+        # PresentMon (in the downloads) runs only while a theme shows a game's frame rate
+        sources += ["librehardwaremonitor", "presentmon"]
     return [*sources, "psutil"]
 
 

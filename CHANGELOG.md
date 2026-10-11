@@ -650,6 +650,8 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
   may break now (*Wetter-symbol*, *Monats-kalender*), and a typed word finds the name as before
 
 **Changes**
+- Windows: game frame rates are on by default (`presentmon` among the default
+  sources); PresentMon runs only while a theme shows `game.*`
 - macOS is no longer supported: no download, no tests, no macOS code. Windows and Linux are. Nobody
   downloaded the macOS builds of any release. Gone with it: the disk image and the menu bar app, the
   LaunchAgent, and reading the volume and the player through `osascript`. A system that has no
