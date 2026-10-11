@@ -2410,16 +2410,26 @@ class Renderer:
         hi = widget["max"] if widget["max"] is not None else max(numbers)
         return (lo, lo + 1) if hi == lo else (lo, hi)
 
+    @staticmethod
+    def _range_rows(widget: dict[str, Any], s: int) -> tuple[float, float]:
+        """The rows (at ``s``) a graph's top and bottom value lie on: a line's
+        width in from its edges, so the line stays inside, or without
+        ``inset`` the edges themselves, as SPUR II's charts."""
+        if widget.get("inset", True):
+            pad = widget["line_width"] * s
+            return pad, widget["h"] * s - 1 - pad
+        return 0.0, (widget["h"] - 1) * s
+
     def _fade_top(
         self, widget: dict[str, Any], numbers: list[float], bounds: tuple[float, float], s: int
     ) -> int:
         """Where a strip's fill starts to fade: its highest point."""
         if not numbers:
             return 0
-        H, pad = widget["h"] * s, widget["line_width"] * s
+        first, last = self._range_rows(widget, s)
         scale = widget.get("scale", "linear")
         highest = max(_fraction(v, *bounds, scale) for v in numbers)
-        return int(pad + (H - 1 - 2 * pad) * (1 - highest))
+        return int(first + (last - first) * (1 - highest))
 
     def _graph_layer(
         self, widget: dict[str, Any], values: list[float | None], slots: int, width: int,
@@ -2458,7 +2468,7 @@ class Renderer:
         if len(numbers) < 2:
             return layer
         lo, hi = bounds or self._graph_bounds(widget, numbers)
-        pad = widget["line_width"] * s
+        first, last = self._range_rows(widget, s)
         scale_kind = widget.get("scale", "linear")
         down = widget.get("direction") == "down"  # hangs from the top edge
         runs: list[list[tuple[float, float]]] = [[]]
@@ -2467,18 +2477,17 @@ class Renderer:
                 if runs[-1]:
                     runs.append([])
                 continue
-            py = pad + (H - 1 - 2 * pad) * (1 - _fraction(v, lo, hi, scale_kind))
-            runs[-1].append((px, H - 1 - py if down else py))
+            py = first + (last - first) * (1 - _fraction(v, lo, hi, scale_kind))
+            runs[-1].append((px, first + last - py if down else py))
         runs = [run for run in runs if len(run) >= 2]
         if widget["smooth"]:
             runs = [
-                [(px, min(H - 1 - pad, max(pad, py))) for px, py in _catmull_rom(run)]
-                for run in runs
+                [(px, min(last, max(first, py))) for px, py in _catmull_rom(run)] for run in runs
             ]
         color = self.color(widget["color"])
         if widget["fill"] and runs:
             area = Image.new("L", layer.size, 0)
-            base = 0 if down else H - 1
+            base = 0 if down else H - 1 if widget.get("inset", True) else last
             for run in runs:
                 polygon = [*run, (run[-1][0], base), (run[0][0], base)]
                 ImageDraw.Draw(area).polygon(polygon, fill=255)
@@ -2487,7 +2496,7 @@ class Renderer:
                 peak = round(255 * solid) if solid else 115
                 if top is None:  # the peak, counted from where the fill starts
                     ys = [py for run in runs for _, py in run]
-                    top = int(H - 1 - max(ys) if down else min(ys))
+                    top = int(first + last - max(ys) if down else min(ys))
                 rows = [
                     int(peak * min(1.0, max(0.0, 1 - (row - top) / max(1, H - top))))
                     for row in range(H)

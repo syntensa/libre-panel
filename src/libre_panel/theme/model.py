@@ -156,6 +156,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "fill_fade": ("bool", True),
         "fill_alpha": ("number", 0),  # how opaque the fill is, 0 to 1 (0: 0.25, a fade 0.45)
         "direction": ("enum:up|down", "up"),  # down: hangs from the top, filled from there
+        "inset": ("bool", True),  # the line stays inside (off: the range spans the box)
         "smooth": ("bool", True),
         "per_frame": ("bool", False),  # older themes: a point a pixel apart (seconds = w / 25)
         "line_width": ("int", 2),

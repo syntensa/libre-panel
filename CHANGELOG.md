@@ -186,7 +186,9 @@
   of a bar or a ring (a floor of exactly the colour and a bevel lit from the
   top left), cached, for finishes of their own
 - Graphs: `direction` `down`: the curve hangs from the top edge and is
-  filled from there, as SPUR II draws the download below the upload
+  filled from there, as SPUR II draws the download below the upload; and
+  `inset` off: the range spans the whole box, as in SPUR II's charts (the
+  line keeps a line's width inside by default)
 - Format specs `{value:gb}`, a size in GB whatever unit the reading comes
   in, and `{value:rate}` with `{value:rate_unit}`: a data rate as SPUR II
   sets it, its number and its unit apart (519 and KB/s, from 1 MB/s 1.2 and

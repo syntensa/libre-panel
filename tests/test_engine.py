@@ -187,6 +187,29 @@ def flat_graph(**kw):
             "fill_fade": False, "line_width": 1, **kw}  # fmt: skip
 
 
+def test_without_inset_a_graphs_range_spans_its_box_as_spur_iis_charts():
+    def line(**kw):  # the middle of the line, weighed by its light, at 0, 50 and 100
+        rows = []
+        for value in (0.0, 50.0, 100.0):
+            snap = Snapshot(history={"v": [value] * 10})
+            graph = flat_graph(fill=False, line_width=2, **kw)
+            frame, _ = Renderer(theme(graph, size=(100, 60))).render(snap)
+            column = [(y, frame.getpixel((50, y))[0]) for y in range(60)]
+            lit = [(y + 0.5, v) for y, v in column if v > 0]
+            rows.append(sum(y * v for y, v in lit) / sum(v for _, v in lit))
+        return rows
+
+    bottom, middle, top = line(inset=False)  # values to rows: 59 at 0, 0 at 100
+    assert bottom == pytest.approx(59, abs=0.25) and top == pytest.approx(0.5, abs=0.25)
+    assert middle == pytest.approx(29.5, abs=0.25)  # half of it cut at the edges
+    inside = line()  # the line a line's width inside the box
+    assert inside[0] < bottom - 1 and inside[2] > top + 1
+    frame, _ = Renderer(theme(flat_graph(inset=False), size=(100, 60))).render(
+        Snapshot(history={"v": [50.0] * 10})
+    )
+    assert frame.getpixel((50, 59))[0] < frame.getpixel((50, 50))[0]  # filled down to row 59
+
+
 def test_a_downward_graph_hangs_from_its_top_and_is_filled_from_there():
     snap = Snapshot(history={"v": [25.0] * 10})
     up, _ = Renderer(theme(flat_graph(), size=(100, 60))).render(snap)
