@@ -112,8 +112,8 @@ DRIVES = {
     "E": {
         "kind": 2,
         "bus": 7,
-        "vendor": "Kingston",
-        "product": "DataTraveler",
+        "vendor": "Generic",
+        "product": "Flash Drive",
         "label": "STICK",
         "free": 20 * GB,
         "total": 30 * GB,
@@ -126,9 +126,9 @@ DRIVES = {
 
 
 def test_the_descriptors_are_read_by_their_layout():
-    assert windows.parse_device(descriptor("Kingston ", " DataTraveler", 7)) == (
+    assert windows.parse_device(descriptor("Generic ", " Flash Drive", 7)) == (
         7,
-        "Kingston DataTraveler",
+        "Generic Flash Drive",
     )
     assert windows.parse_device(descriptor("", "Only product", 12)) == (12, "Only product")
     assert windows.parse_device(descriptor("", "", 17)) == (17, "")
@@ -153,7 +153,7 @@ def test_drives_that_come_and_go_are_removable_ones_and_external_fixed_ones():
         "F",
     ]  # not the internal NVMe, an empty reader, a disc, the network
     assert found["E"] == {
-        "name": "Kingston DataTraveler", "label": "STICK", "free": 20 * GB,
+        "name": "Generic Flash Drive", "label": "STICK", "free": 20 * GB,
         "total": 30 * GB, "bus": "USB",
     }  # fmt: skip
     assert found["D"]["bus"] == "USB" and found["F"]["bus"] == "SD" and found["F"]["name"] == ""
@@ -305,37 +305,37 @@ def device(ident, name="", klass="", service="", friendly="", desc=""):
             "friendly": friendly, "desc": desc}  # fmt: skip
 
 
-PHONE = "USB\\VID_18D1&PID_4EE1\\0123456789ABCDEF"
+PHONE = "USB\\VID_18D1&PID_0001\\0123456789ABCDEF"
 USB_DEVICES = [
     device(PHONE, "Android Phone", "WPD", "WUDFWpdMtp"),
-    device("USB\\VID_8087&PID_0024\\5&2A3B4C5D&0&1", "Generic USB Hub", "USB", "USBHUB3"),
-    device("USB\\VID_0781&PID_5567\\4C530001", "USB Mass Storage Device", "USB", "USBSTOR"),
-    device("USB\\VID_045E&PID_028E\\1&2&3", "Controller", "XnaComposite", "xusb22"),
-    device("USB\\VID_18D1&PID_4EE1&MI_00\\6&1A2B3C4D&0&0000", "Phone (interface)", "WPD"),
+    device("USB\\VID_1235&PID_0002\\5&2A3B4C5D&0&1", "Generic USB Hub", "USB", "USBHUB3"),
+    device("USB\\VID_1236&PID_0003\\4C530001", "USB Mass Storage Device", "USB", "USBSTOR"),
+    device("USB\\VID_1237&PID_0004\\1&2&3", "Controller", "XnaComposite", "xusb22"),
+    device("USB\\VID_18D1&PID_0001&MI_00\\6&1A2B3C4D&0&0000", "Phone (interface)", "WPD"),
     device("USB\\VID_1CBE&PID_0092\\ABCDEF", "Display Panel", "USB"),
     device("USB\\ROOT_HUB30\\4&1A2B&0&0", "USB Root Hub (USB 3.0)", "USB", "USBHUB3"),
     device(
-        "USB\\VID_046D&PID_C31C\\7&88", "", "HIDClass", "kbdhid", "USB Keyboard", "USB Input Device"
+        "USB\\VID_1234&PID_0001\\7&88", "", "HIDClass", "kbdhid", "USB Keyboard", "USB Input Device"
     ),
     device("USB\\VID_1A2B&PID_3C4D\\SER", "", "USB", "winusb", "", "Some Gadget"),
-    device("USB\\VID_0A5C&PID_21E8\\6&2&1", "Wireless Hub Dongle", "Bluetooth", "BTHUSB"),
+    device("USB\\VID_1238&PID_0005\\6&2&1", "Wireless Hub Dongle", "Bluetooth", "BTHUSB"),
 ]
 
 
 def test_the_usb_devices_that_plug_into_the_machine_are_listed_without_the_rest():
     api = FakeSetupApi(USB_DEVICES)
     found = windows.read_usb({"1CBE:0092"}, api)
-    assert sorted(entry["vid"] for entry in found.values()) == ["046D", "0A5C", "18D1", "1A2B"]
+    assert sorted(entry["vid"] for entry in found.values()) == ["1234", "1238", "18D1", "1A2B"]
     phone = found[PHONE]
     assert phone == {
         "vid": "18D1",
-        "pid": "4EE1",
+        "pid": "0001",
         "name": "Android Phone",
         "klass": "WPD",
         "service": "WUDFWpdMtp",
     }
     # no hub, no mass storage, no Xbox controller, no part of a composite device, no panel
-    assert not any(key.startswith(("USB\\ROOT", "USB\\VID_1CBE", "USB\\VID_8087")) for key in found)
+    assert not any(key.startswith(("USB\\ROOT", "USB\\VID_1CBE", "USB\\VID_1235")) for key in found)
     assert "&MI_" not in "".join(found)
     assert api.asked == [("USB", windows.DIGCF_PRESENT | windows.DIGCF_ALLCLASSES)]
     assert api.destroyed == [77]  # the list is always given back
@@ -343,10 +343,10 @@ def test_the_usb_devices_that_plug_into_the_machine_are_listed_without_the_rest(
 
 def test_a_usb_device_is_named_by_what_it_says_then_by_the_system():
     found = windows.read_usb((), FakeSetupApi(USB_DEVICES))
-    assert found["USB\\VID_046D&PID_C31C\\7&88"]["name"] == "USB Keyboard"  # the friendly name
+    assert found["USB\\VID_1234&PID_0001\\7&88"]["name"] == "USB Keyboard"  # the friendly name
     assert found["USB\\VID_1A2B&PID_3C4D\\SER"]["name"] == "Some Gadget"  # the description
     assert (
-        found["USB\\VID_0A5C&PID_21E8\\6&2&1"]["name"] == "Wireless Hub Dongle"
+        found["USB\\VID_1238&PID_0005\\6&2&1"]["name"] == "Wireless Hub Dongle"
     )  # a "hub" that is not USB class
 
 
@@ -366,12 +366,12 @@ def test_no_device_list_means_no_devices_and_nothing_to_give_back():
 def test_what_is_kept_of_the_usb_devices():
     keep = windows.keep_usb
     assert keep(
-        {"vid": "18D1", "pid": "4EE1", "name": "Phone", "klass": "WPD", "service": ""}, set()
+        {"vid": "18D1", "pid": "0001", "name": "Phone", "klass": "WPD", "service": ""}, set()
     )
-    assert not keep({"vid": "18D1", "pid": "4EE1", "name": "Phone"}, {"18D1:4EE1"})
-    assert not keep({"vid": "0781", "pid": "5567", "service": "UASPStor"}, set())  # any case
-    assert not keep({"vid": "8087", "pid": "0024", "name": "Root HUB", "klass": "usb"}, set())
-    assert keep({"vid": "8087", "pid": "0024", "name": "Hub of Things", "klass": "Other"}, set())
+    assert not keep({"vid": "18D1", "pid": "0001", "name": "Phone"}, {"18D1:0001"})
+    assert not keep({"vid": "1236", "pid": "0003", "service": "UASPStor"}, set())  # any case
+    assert not keep({"vid": "1235", "pid": "0002", "name": "Root HUB", "klass": "usb"}, set())
+    assert keep({"vid": "1235", "pid": "0002", "name": "Hub of Things", "klass": "Other"}, set())
 
 
 # -- Windows' notices of a device that comes or goes -----------------------------------------------

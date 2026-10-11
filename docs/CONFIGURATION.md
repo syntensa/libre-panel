@@ -483,7 +483,7 @@ min_free_percent = 5   # ...this share of the drive, whichever is more
 
 | What | When | The message |
 |---|---|---|
-| a drive | a removable drive, or a drive on a USB, SD or MMC bus, comes or goes | "Kingston DataTraveler · 20 GB free of 30 GB", titled "USB drive E:", with a bar for how full it is |
+| a drive | a removable drive, or a drive on a USB, SD or MMC bus, comes or goes | "USB Flash Drive · 20 GB free of 30 GB", titled "USB drive E:", with a bar for how full it is |
 | a controller | it connects, disconnects, or its battery runs low | "Connected · Battery full", "Disconnected", or "Battery low" (a warning), titled "Controller · player 1" |
 | a USB device | one that is no hub, no storage and no Xbox controller comes or goes | its name; a phone shows a phone and its maker |
 | a full drive | free space falls below the limit | "Only 20 GB free" with a bar; an error when less than a third of the limit is left |

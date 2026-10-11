@@ -27,7 +27,7 @@ def pad(battery=3, level=3, wireless=True):
     return {"wireless": wireless, "battery": battery, "level": level}
 
 
-def usb(vid="18D1", pid="4EE1", name="Android Phone"):
+def usb(vid="18D1", pid="0001", name="Android Phone"):
     return {"vid": vid, "pid": pid, "name": name, "klass": "WPD", "service": ""}
 
 
@@ -122,15 +122,15 @@ def test_a_weak_battery_at_the_start_is_not_told_but_one_that_weakens_is():
 def test_a_drive_that_comes_and_goes_is_told_with_what_it_is():
     b = Bench()
     b.step()
-    b.scene.state["drives"]["E"] = drive("Kingston DataTraveler", "USB", 20, 30)
+    b.scene.state["drives"]["E"] = drive("USB Flash Drive", "USB", 20, 30)
     [came] = b.step(2)
     assert (came.what, came.key) == ("drive-in", "drive:E")
-    assert came.data["letter"] == "E" and came.data["name"] == "Kingston DataTraveler"
+    assert came.data["letter"] == "E" and came.data["name"] == "USB Flash Drive"
     assert (came.data["bus"], came.data["free"], came.data["total"]) == ("USB", 20 * GB, 30 * GB)
     assert b.step(2) == []  # and once
     del b.scene.state["drives"]["E"]
     [went] = b.step(2)
-    assert (went.what, went.data["name"]) == ("drive-out", "Kingston DataTraveler")  # as it was
+    assert (went.what, went.data["name"]) == ("drive-out", "USB Flash Drive")  # as it was
 
 
 def test_drives_are_looked_at_as_often_as_the_poll_says():
@@ -297,7 +297,7 @@ def test_a_usb_stick_is_told_as_a_drive_and_not_again_as_a_usb_device():
     b = Bench()
     b.step()
     b.scene.state["drives"]["E"] = drive()
-    b.scene.state["usb"]["stick"] = usb("0951", "1666", "DataTraveler")
+    b.scene.state["usb"]["stick"] = usb("1239", "0006", "Flash Drive")
     assert b.names(2.0) == ["drive-in"]  # the drive is looked at first
     assert b.step(2.0) == [] and b.step(2.0) == [] and b.step(2.0) == []  # and no second message
     del b.scene.state["drives"]["E"], b.scene.state["usb"]["stick"]
@@ -308,7 +308,7 @@ def test_with_windows_notices_the_stick_is_one_message_too():
     b = Bench(events=True)
     b.step()
     b.scene.state["drives"]["E"] = drive()
-    b.scene.state["usb"]["stick"] = usb("0951", "1666", "DataTraveler")
+    b.scene.state["usb"]["stick"] = usb("1239", "0006", "Flash Drive")
     b.watcher.last_notice = b.now
     assert b.names(0.2, hurry=True) == ["drive-in"]
     for _ in range(6):
@@ -484,11 +484,9 @@ def toast(event):
 
 def test_a_drive_plugged_in_says_what_it_is_and_how_full_it_is():
     came = toast(
-        Event(
-            "drive-in", "drive:E", {"letter": "E", **drive("Kingston DataTraveler", "USB", 20, 30)}
-        )
+        Event("drive-in", "drive:E", {"letter": "E", **drive("USB Flash Drive", "USB", 20, 30)})
     )
-    assert came.text == "Kingston DataTraveler · 20 GB free of 30 GB"
+    assert came.text == "USB Flash Drive · 20 GB free of 30 GB"
     assert came.payload["label"] == "USB drive E:"
     assert came.payload["progress"] == pytest.approx(10 / 30)
     assert (came.kind, came.rank, came.key, came.icon, came.seconds, came.level) == (
@@ -534,17 +532,17 @@ def test_a_weak_battery_is_a_warning_of_higher_rank():
 
 
 def test_usb_devices_are_phones_by_their_maker_and_other_devices_by_their_name():
-    phone = toast(Event("usb-in", "usb:x", {"id": "x", **usb("18D1", "4EE1", "Android Phone")}))
+    phone = toast(Event("usb-in", "usb:x", {"id": "x", **usb("18D1", "0001", "Android Phone")}))
     assert (phone.text, phone.icon, phone.payload["label"]) == (
         "Android Phone",
         "phone",
         "Phone · Google",
     )
-    other = toast(Event("usb-in", "usb:y", {"id": "y", **usb("046D", "C31C", "USB Keyboard")}))
+    other = toast(Event("usb-in", "usb:y", {"id": "y", **usb("1234", "0001", "USB Keyboard")}))
     assert (other.icon, other.payload["label"], other.rank) == ("usb", "USB device", 1)
     nameless = toast(Event("usb-in", "usb:z", {"id": "z", **usb("1A2B", "3C4D", "")}))
     assert nameless.text == "1A2B:3C4D"
-    gone = toast(Event("usb-out", "usb:y", {"id": "y", **usb("046D", "C31C", "USB Keyboard")}))
+    gone = toast(Event("usb-out", "usb:y", {"id": "y", **usb("1234", "0001", "USB Keyboard")}))
     assert (gone.text, gone.seconds, gone.key) == (
         "USB Keyboard disconnected",
         devices.UNPLUGGED_S,
@@ -576,7 +574,7 @@ def test_every_icon_a_message_names_exists():
         Event("drive-in", "k", {"letter": "E", **drive()}),
         Event("controller-in", "k", {"slot": 0, **pad()}),
         Event("usb-in", "k", {"id": "k", **usb()}),
-        Event("usb-in", "k", {"id": "k", **usb("046D", "C31C", "Keyboard")}),
+        Event("usb-in", "k", {"id": "k", **usb("1234", "0001", "Keyboard")}),
         Event("space", "k", {"letter": "C", "critical": False, **disk(1)}),
         Event("heat", "k", {"letter": "C", "critical": False, "limit": 70.0, **disk(1, temp=80.0)}),
     ]
