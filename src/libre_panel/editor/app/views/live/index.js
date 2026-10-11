@@ -26,6 +26,7 @@ import { connectedModel } from "../home/panel.js";
 // (a plugin's) keeps the name it has. Written as texts the catalog finds, not looked up.
 const SOURCE_NAMES = () => ({
   librehardwaremonitor: ["LibreHardwareMonitor", t("temperatures, power and fans")],
+  linux: [t("Linux sensors"), t("temperatures, fans and power from the kernel")],
   load: [t("Load"), t("CPU and GPU load, ten times a second")],
   audio: [t("Volume"), t("what the default output plays at")],
   psutil: [t("System"), t("processor, memory, disk and network")],

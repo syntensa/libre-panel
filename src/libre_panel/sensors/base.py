@@ -146,6 +146,7 @@ class SensorProvider:
 # Built in; plugins bring more (``libre_panel.sensors``, see docs/PLUGINS.md).
 _BUILTIN_PROVIDERS = {
     "psutil": "libre_panel.sensors.psutil_provider:PsutilProvider",
+    "linux": "libre_panel.sensors.linux:LinuxProvider",
     "librehardwaremonitor": "libre_panel.sensors.librehardwaremonitor:LibreHardwareMonitorProvider",
     "load": "libre_panel.sensors.load:LoadProvider",
     "audio": "libre_panel.sensors.audio:AudioProvider",

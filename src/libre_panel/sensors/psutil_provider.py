@@ -16,6 +16,9 @@ from typing import Any
 import psutil
 
 from libre_panel.sensors.base import Reading, SensorProvider, wanted
+from libre_panel.sensors.hwmon import CHIP_NAMES as _CHIP_NAMES
+from libre_panel.sensors.hwmon import slug as _slug
+from libre_panel.sensors.hwmon import unique as _unique
 
 GIB = 1024**3
 
@@ -23,13 +26,6 @@ GIB = 1024**3
 _CPU_CHIPS = ("coretemp", "k10temp", "zenpower", "cpu_thermal", "acpitz")
 _CPU_LABELS = ("Package id 0", "Tctl", "Tdie", "")
 _GPU_CHIPS = ("amdgpu", "nouveau", "radeon")
-# Names people know for the chips Linux reports.
-_CHIP_NAMES = {
-    "coretemp": "CPU", "k10temp": "CPU", "zenpower": "CPU", "cpu_thermal": "CPU",
-    "amdgpu": "GPU", "nouveau": "GPU", "radeon": "GPU", "nvme": "NVMe", "acpitz": "ACPI",
-    "iwlwifi_1": "Wi-Fi", "pch_cannonlake": "Chipset", "thinkpad": "ThinkPad",
-}  # fmt: skip
-
 
 # File systems that are not drives a user thinks of (Linux).
 _PSEUDO_FS = {
@@ -78,6 +74,8 @@ class PsutilProvider(SensorProvider):
         self._day_start = None  # counters at midnight (or start)
         self.ping_target = str(self.options.get("ping", "1.1.1.1:443"))
         self._background: dict[str, dict[str, Reading]] = {"proc": {}, "ping": {}}
+        # False where the Linux source reads the kernel's chips (build_hub): the same files
+        self.hwmon = True
         self._threads: dict[str, threading.Thread] = {}
         self._stop = threading.Event()
 
@@ -331,8 +329,9 @@ class PsutilProvider(SensorProvider):
             pass
 
         self._rates(out)
-        self._temperatures(out)
-        self._fans(out)
+        if self.hwmon:
+            self._temperatures(out)
+            self._fans(out)
         self._cores(out)
         self._drives(out)
         self._network(out)
@@ -382,14 +381,3 @@ def _local_ip() -> str:
 def _program_name(name: str) -> str:
     """'chrome.exe' -> 'chrome'."""
     return name[:-4] if name.lower().endswith(".exe") else name
-
-
-def _slug(key: str) -> str:
-    return key.replace(" ", "_").lower()
-
-
-def _unique(key: str, name: str, used: dict[str, int]) -> tuple[str, str]:
-    """``key`` and ``name``, numbered from the second sensor that has them on: Linux
-    names the sensors of two NVMe drives (or two GPUs) alike."""
-    used[key] = count = used.get(key, 0) + 1
-    return (key, name) if count == 1 else (f"{key}_{count}", f"{name} {count}")

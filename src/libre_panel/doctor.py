@@ -53,13 +53,20 @@ def sensors_check(
     fetch: Callable | None = None,
     provider: Callable | None = None,
 ) -> tuple[str, str] | None:
-    """Windows: do the temperatures and power that need LibreHardwareMonitor arrive?
+    """Windows: do the temperatures and power that need LibreHardwareMonitor arrive? Linux: is
+    something missing that the one-click setup brings (the panel's permission, the mainboard's
+    fans, the processor's power)?
 
-    (result, what to say) for the report; None elsewhere, where psutil has them.
+    (result, what to say) for the report; None elsewhere, and on Linux when nothing is missing.
     Where Libre Panel can read LibreHardwareMonitor itself it does that; otherwise it
     asks the web server. ``fetch(url)`` asks the web server (tests give their own, and
     then only it is asked); ``provider(options)`` makes the source that reads inside Libre
     Panel (also for tests)."""
+    if platform.startswith("linux"):
+        from libre_panel import linux_setup
+
+        said = linux_setup.hint(linux_setup.gather(), "libre-panel system-setup --linux")
+        return ("info", said) if said else None
     if platform != "win32":
         return None
     from libre_panel.sensors.librehardwaremonitor import (

@@ -19,6 +19,7 @@ import { toast } from "../../ui/toast.js";
 import { ClipQuestion } from "./clip.js";
 import { PanelCard, PanelStrip, panelModelNow, usePanelModel } from "./panel.js";
 import { Gallery, ThemeRow, collectionsOf, fitsPanel, startThemes } from "./themes.js";
+import { SetupCard } from "./setup.js";
 
 // -- what a click does ---------------------------------------------------------------------------
 
@@ -179,7 +180,7 @@ function Routing() {
 }
 
 /** Whether this Windows download can set up the sensor service, and it is not there yet. */
-const unlockable = (info) => Boolean(info?.available && !info.service);
+const unlockable = (info) => Boolean(info?.platform === "win32" && info.available && !info.service);
 
 /**
  * "Unlock all sensors": the sensor service (and PawnIO, and the group game frame rates need),
@@ -263,6 +264,7 @@ function Launcher({ focus }) {
       <${Routing} />
       <span class="grow"></span>
       <${UnlockCard} />
+      <${SetupCard} />
       <${Hint} />
     </aside>
   </div>`;

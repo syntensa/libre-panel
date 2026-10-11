@@ -625,11 +625,18 @@ class Settings:
             raise SettingsError(str(exc), 500) from exc
         return self.system()
 
-    # -- the sensor service ---------------------------------------------------------------
+    # -- the one-click setup of the system (Windows' sensor service, Linux' rights) -------------
 
     def unlock(self) -> dict[str, Any]:
-        """The sensor service and what else "Unlock all sensors" sets up (Windows): whether
-        this download can, what is in place, and how the last run of it went."""
+        """What the setup of this system would bring and how a run of it is going. Windows: the
+        sensor service and what else "Unlock all sensors" sets up (whether this download can,
+        what is in place). Linux: the panel's permission, the mainboard's sensor driver and the
+        processor's power (``libre-panel system-setup --linux``). Both have ``platform``,
+        ``available``, ``command`` and ``job``."""
+        from libre_panel import linux_rights, linux_setup
+
+        if linux_setup.supported():
+            return linux_rights.status(linux_setup.gather())
         from libre_panel.sensorservice import setup
 
         return {
@@ -638,9 +645,15 @@ class Settings:
         }
 
     def set_unlock(self, payload: Any) -> dict[str, Any]:
-        """``{"action": "unlock"}`` (or ``"remove"``): ``libre-panel system-setup`` with
-        Windows' own question for administrator rights (UAC). The answer comes at once; the
-        run goes on in the background, and ``job`` of :meth:`unlock` says how it ended."""
+        """``{"action": "unlock"}`` (or ``"remove"``): ``libre-panel system-setup`` with the
+        system's own question for administrator rights (UAC on Windows, polkit's password window
+        on Linux, where ``"rapl": true`` or ``false`` also opens or closes the processor's energy
+        counters). The answer comes at once; the run goes on in the background, and ``job`` of
+        :meth:`unlock` says how it ended."""
+        from libre_panel import linux_setup
+
+        if linux_setup.supported():
+            return self._unlock_linux(payload)
         from libre_panel.sensorservice import setup
 
         action = payload.get("action") if isinstance(payload, dict) else None
@@ -652,6 +665,43 @@ class Settings:
                 t("The sensor service comes with the Windows downloads (setup or zip)."), 409
             )
         setup.ELEVATOR.start(action, program, setup.current_user())
+        return self.unlock()
+
+    def _unlock_linux(self, payload: Any) -> dict[str, Any]:
+        """The Linux side of :meth:`set_unlock`: pkexec shows the password dialog, and what the
+        run is to do is only ever the two switches of ``system-setup --linux``."""
+        from libre_panel import linux_rights, linux_setup
+
+        valid = isinstance(payload, dict) and not set(payload) - {"action", "rapl"}
+        action = payload.get("action") if valid else None
+        if action not in ("unlock", "remove"):
+            raise SettingsError('expected {"action": "unlock"} or {"action": "remove"}')
+        rapl = payload.get("rapl")
+        if rapl is not None:
+            _flag("rapl", rapl)
+            if action == "remove":
+                raise SettingsError('expected {"action": "unlock", "rapl": true}')
+        options = linux_setup.Options(rapl=rapl, remove=action == "remove")
+        way = linux_rights.elevation(options, linux_rights.program())
+        if access.elevated():  # a request cannot be told from the person's: no rights are used
+            raise SettingsError(
+                t(
+                    "Libre Panel runs with administrator rights. Run this in a terminal: {command}",
+                    command=way.terminal,
+                ),
+                403,
+            )
+        if not way.argv:
+            raise SettingsError(
+                t(
+                    "Libre Panel cannot ask for the administrator's rights from here. Run this "
+                    "in a terminal: {command}",
+                    command=way.terminal,
+                ),
+                409,
+            )
+        if not linux_rights.JOB.start(way, action=action):
+            raise SettingsError(t("The setup is running already."), 409)
         return self.unlock()
 
     # -- the place --------------------------------------------------------------------------

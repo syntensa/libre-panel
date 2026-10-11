@@ -2,6 +2,7 @@ import itertools
 import os
 import sys
 import textwrap
+from pathlib import Path
 
 import pytest
 
@@ -91,6 +92,37 @@ def no_usb_panel(monkeypatch):
     from libre_panel.devices import turzx_usb
 
     monkeypatch.setattr(turzx_usb.UsbTransport, "present", staticmethod(lambda pid: False))
+
+
+@pytest.fixture(autouse=True)
+def no_linux_setup(monkeypatch):
+    """The one-click setup of Linux never touches the machine running the tests: it is not
+    asked about the board or the rights, and no test asks for an administrator's password.
+    A test brings a computer (``linux_setup.Facts``) and a stand-in for the rights."""
+    from libre_panel import linux_rights, linux_setup
+
+    def forbidden(argv):
+        raise AssertionError("a test asked for the administrator's rights")
+
+    class Untouchable:
+        """The computer a test runs on, which a test may not change (not even one that runs as
+        root, as CI containers do): the first thing a setup does to it fails the test."""
+
+        def __getattr__(self, name):
+            raise AssertionError(f"a test changed the machine it runs on ({name})")
+
+    monkeypatch.setattr(linux_setup, "gather", lambda *args, **kwargs: linux_setup.Facts())
+    monkeypatch.setattr(linux_setup, "RealSystem", Untouchable)
+    monkeypatch.setattr(linux_rights, "JOB", linux_rights.Job(runner=forbidden))
+    monkeypatch.setattr(linux_rights, "imports_isolated", lambda python: False)
+
+
+@pytest.fixture(autouse=True)
+def no_machine_sensors(monkeypatch):
+    """The Linux sensor source reads the folder a test lays out, not this machine's /sys."""
+    from libre_panel.sensors import linux
+
+    monkeypatch.setattr(linux, "ROOT", Path("/no/such/root"))
 
 
 class NoTasks:

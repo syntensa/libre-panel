@@ -318,12 +318,13 @@ A few things they do that a theme of your own can do too:
   "!weather.temperature, media.title"`: the date shows while the card shows
   something else, and steps aside while the card shows the day.
 - **Fans by the names they have.** Lumen turns `gpu.fan` and the board's
-  first three fans as LibreHardwareMonitor names them (`fan.lpc.fan_1` ...),
+  first three fans as LibreHardwareMonitor names them (`fan.lpc.fan_1` ...;
+  Linux names the fans of the mainboard's Super I/O chip the same way),
   each with `"needs"` on its own reading, so a fan that is not there leaves
   no gap behind; their names come from the readings (`"format":
-  "{label:upper}"`). Where a PC names its fans otherwise (Linux), a
-  [list](#lists) of `fan.*` with `"needs": "!gpu.fan, !fan.lpc.fan_1"` shows
-  them instead.
+  "{label:upper}"`). Where a PC names its fans otherwise (the board's
+  controller, a cooler on USB), a [list](#lists) of `fan.*` with `"needs":
+  "!gpu.fan, !fan.lpc.fan_1"` shows them instead.
 - **A backdrop of their own.** Lumen's background is a picture in its folder
   (`assets/backdrop.png`): the dark gradient of the app with a dot every 22 px,
   as the editor's stage has it.
@@ -814,14 +815,16 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 
 | Key | Unit | Source |
 |---|---|---|
-| `cpu.load`, `cpu.freq`, `cpu.temp`, `cpu.power` | %, MHz, °C, W | psutil (temp on Linux), LibreHardwareMonitor; `cpu.load` also ten times a second from `load` |
-| `gpu.load`, `gpu.temp`, `gpu.power`, `gpu.fan`, `gpu.mem.load` | %, °C, W, RPM, % | LibreHardwareMonitor; `gpu.temp` also Linux AMD; `gpu.load` also from `load` (Windows, any vendor) |
-| `gpu.hotspot` | °C | LibreHardwareMonitor: the hottest spot of the graphics chip ("GPU Hot Spot", as AMD and NVIDIA cards give it; none where the card has no such sensor), the one of the card `gpu.temp` is read from |
+| `cpu.load`, `cpu.freq`, `cpu.temp`, `cpu.power` | %, MHz, °C, W | psutil (`cpu.load`, `cpu.freq`), LibreHardwareMonitor (Windows), the `linux` source (`cpu.temp`, and `cpu.power` from the energy counters, see [Linux](CONFIGURATION.md#linux-sensors-and-panel-access)); `cpu.load` also ten times a second from `load` |
+| `gpu.load`, `gpu.temp`, `gpu.power`, `gpu.fan`, `gpu.mem.load` | %, °C, W, RPM, % | LibreHardwareMonitor (Windows), the `linux` source (AMD, Intel and NVIDIA); `gpu.load` also from `load` (Windows, any vendor; Linux, AMD and NVIDIA) |
+| `gpu.freq`, `gpu.mem.freq`, `gpu.mem.used`, `gpu.mem.total` | MHz, MHz, MB, MB | the card's clocks and video memory: LibreHardwareMonitor (`gpu.freq`, `gpu.mem.used`), the `linux` source |
+| `gpu.fan.percent`, `gpu.mem.temp` | %, °C | the `linux` source: the fan's speed in per cent, for the drivers that tell only that (NVIDIA's before 555; `gpu.fan` is then missing, not made up), and the temperature of the card's memory (AMD) |
+| `gpu.hotspot` | °C | the hottest spot of the graphics chip ("GPU Hot Spot" in LibreHardwareMonitor, "junction" in AMD's Linux driver; none where the card has no such sensor), the one of the card `gpu.temp` is read from |
 | `mem.load`, `mem.used`, `mem.free`, `mem.total`, `swap.load` | %, GiB | psutil; `free` is what programs can still take without the system swapping, so used and free add up to the total |
-| `mem.temp`, `mem.speed` | °C, MT/s | the memory: the temperature of its hottest module (LibreHardwareMonitor, from the module's own thermal sensor: DDR4 and DDR5, with administrator rights and the PawnIO driver as for the CPU's temperature) and the speed it runs at (the firmware's SMBIOS table, the slowest module's: see [Configuration](CONFIGURATION.md#hardware-names)) |
+| `mem.temp`, `mem.speed` | °C, MT/s | the memory: the temperature of its hottest module (from the module's own thermal sensor, DDR4 and DDR5: LibreHardwareMonitor with administrator rights and the PawnIO driver as for the CPU's temperature; on Linux the `spd5118` and `jc42` drivers) and the speed it runs at (the firmware's SMBIOS table, the slowest module's: see [Configuration](CONFIGURATION.md#hardware-names)) |
 | `disk.load`, `disk.used`, `disk.total`, `disk.read`, `disk.write` | %, GiB, B/s | psutil |
 | `net.down`, `net.up` | B/s | psutil |
-| `fan.<device>.<name>`, `temp.<device>.<name>` | RPM, °C | every fan and temperature: psutil (Linux), LibreHardwareMonitor (e.g. `temp.cpu.package`, `fan.gpu.gpu_fan_1`) |
+| `fan.<device>.<name>`, `temp.<device>.<name>` | RPM, °C | every fan and temperature: the `linux` source (`temp.k10temp.tctl`, `temp.nvme.composite`, `fan.amdgpu.0`, and the mainboard's fans as `fan.lpc.fan_1` ...), LibreHardwareMonitor (e.g. `temp.cpu.package`, `fan.gpu.gpu_fan_1`) |
 | `cpu.core.<n>.load` | % | each core (thread), from 1 |
 | `disk.<n>.name`, `.load`, `.used`, `.free`, `.total` | text, %, GiB | each drive, the system drive first |
 | `proc.cpu.<n>.name`, `.value`; `proc.mem.<n>.name`, `.value` | text, % | the eight busiest programs by processor time (of the whole processor) and by memory; counted only while a theme shows them |

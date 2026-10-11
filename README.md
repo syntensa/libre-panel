@@ -188,8 +188,8 @@ and [NOTICE.md](NOTICE.md) for their sources).
 
 1. **Close the vendor app.** It keeps the panel to itself.
 2. **Start Libre Panel** with the panel plugged in. The Windows downloads are not code-signed
-   yet: SmartScreen asks once (*More info → Run anyway*). On Linux, give your user access to
-   the panel once ([how](docs/HARDWARE.md#setup-per-operating-system)).
+   yet: SmartScreen asks once (*More info → Run anyway*). On Linux, *Start* offers to give your
+   user access to the panel with one click ([what it does](docs/CONFIGURATION.md#linux-sensors-and-panel-access)).
 3. **Pick a look.** *Start* asks "How should it look?" with the themes made for the panel it
    found: Lumen on the 8.8" and 9.2" bars, Libre Default on the others.
 4. **Turn on what you want.** In *Settings*: the weather and your place, video mode, the
@@ -198,7 +198,9 @@ and [NOTICE.md](NOTICE.md) for their sources).
 
 On Windows, the processor's temperature and power, the mainboard's fans and the
 temperatures of memory and drives come through Libre Panel's sensor service, which reads
-them with the rights they need ([FAQ](#faq)); the app itself runs without those rights.
+them with the rights they need ([FAQ](#faq)); the app itself runs without those rights. On
+Linux the sensors need no rights, except the mainboard's fans and the processor's power:
+*Start* offers both with one click ([FAQ](#faq)).
 The app opens in a window of its own (WebView2 on Windows, WebKitGTK on Linux); the AppImage
 opens it in the browser for now ([details](docs/BACKGROUND.md#the-apps-window)).
 
@@ -224,6 +226,7 @@ libre-panel doctor                  # check the panel end to end, write a report
 libre-panel sensors                 # every sensor key with its current value
 libre-panel config init             # write a commented config.toml
 libre-panel location "Berlin"       # coordinates for the weather
+libre-panel system-setup --linux    # Linux: one step for the panel's permission, the board's fans
 libre-panel udev-rules              # Linux: the rule that gives your user USB access
 libre-panel quit                    # quit the background app
 ```
@@ -276,6 +279,20 @@ without administrator rights ([how it is kept safe](docs/BACKGROUND.md#the-senso
 *Settings → Sensors* says whether it runs. Without it, `libre-panel autostart enable
 --elevated` (as administrator) or a LibreHardwareMonitor that you run yourself with its web
 server work as before ([details](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans)).
+</details>
+
+<details>
+<summary><b>Why are the fans or the CPU power missing on Linux?</b></summary>
+<br>
+
+Most sensors need no rights on Linux (processor, graphics card, NVMe drives, memory). Three
+things do: the **panel's USB permission**, the **driver for the chip that reads the mainboard's
+fans** (the kernel has it, but nobody loads it), and, only if you want it, the **processor's
+power** (the kernel has kept those counters from everyone but root since 2020). *Start* shows a
+card when one of them is missing, *Settings → Sensors* always has it: one click, your system
+asks for the password once, and the card says exactly what is changed. In a terminal:
+`libre-panel system-setup --linux` (add `--rapl` for the power, `--remove` to undo it all). More:
+[Linux sensors and panel access](docs/CONFIGURATION.md#linux-sensors-and-panel-access).
 </details>
 
 <details>

@@ -13,9 +13,12 @@ import time
 
 import pytest
 from fake_sensors import Rounds, Scripted, show, wait_for
+from fake_sysfs import Sysfs, amd_card
+from test_sensors_nvml import FakeLibrary
 
-from libre_panel.sensors import base, load
+from libre_panel.sensors import base, hardware, load, nvml
 from libre_panel.sensors.base import Reading, SensorHub, SensorProvider
+from libre_panel.sensors.hardware import Adapter
 
 # Instance names as PDH gives them: a card is named by its LUID, an engine counter
 # also by the process (pid_...) that uses the engine.
@@ -271,8 +274,11 @@ def test_missing_counters_raise_after_closing_the_query():
     assert pdh.closed == [1000]  # the query is not left open
 
 
-def test_only_windows_has_the_gpu_counters(monkeypatch):
-    assert load._gpu_sampler("linux") is None
+def test_only_windows_and_linux_have_a_gpu_sampler(monkeypatch):
+    assert load._gpu_sampler("darwin") is None and load._gpu_sampler("freebsd14") is None
+    monkeypatch.setattr(load, "_linux_gpu", lambda prefer="": ("linux", prefer))
+    assert load._gpu_sampler("linux") == ("linux", "")
+    assert load._gpu_sampler("linux", prefer="big") == ("linux", "big")
 
 
 def test_windows_without_the_counters_fails_loudly_for_the_provider_to_say(monkeypatch):
@@ -344,6 +350,108 @@ def test_windows_gets_its_gpu_sampler(monkeypatch):
     monkeypatch.setattr(load, "_load_pdh", lambda: pdh)
     gpu = load._gpu_sampler("win32")
     assert isinstance(gpu, load._PdhGpu) and gpu.read() == pytest.approx(55.5)
+
+
+# -- Linux: the driver's own counters ---------------------------------------------------
+
+
+@pytest.fixture
+def sysfs(tmp_path):
+    return Sysfs(tmp_path / "root")
+
+
+def test_an_amd_card_tells_its_load_in_sysfs(sysfs):
+    amd_card(sysfs)
+    gpu = load._linux_gpu(sysfs.root)
+    assert gpu is not None and gpu.read() == 37.0
+    sysfs.set("sys/class/drm/card0/device/gpu_busy_percent", 94)
+    assert gpu.read() == 94.0
+    sysfs.set("sys/class/drm/card0/device/gpu_busy_percent", 250)
+    assert gpu.read() == 100.0  # (a counter that says more than all)
+    gpu.close()
+
+
+def test_a_card_that_sleeps_is_not_asked_for_its_load(sysfs):
+    amd_card(sysfs)
+    gpu = load._linux_gpu(sysfs.root)
+    sysfs.write("sys/class/drm/card0/device/power/runtime_status", "suspended")
+    assert gpu.read() is None
+    assert load._linux_gpu(sysfs.root) is None  # and none is made while it is off
+
+
+def test_an_nvidia_card_tells_its_load_through_nvml(sysfs, monkeypatch):
+    sysfs.card(0, 0x10DE, 0x2786, "nvidia", "0000:01:00.0")
+    library = FakeLibrary({"0000:01:00.0": {"load": 64}})
+    monkeypatch.setattr(nvml, "shared", lambda: nvml.Nvml(library))
+    gpu = load._linux_gpu(sysfs.root)
+    assert gpu.read() == 64.0
+    library.devices["0000:01:00.0"]["load"] = 7
+    assert gpu.read() == 7.0
+    monkeypatch.setattr(nvml, "shared", lambda: None)  # no library: nothing to measure with
+    assert load._linux_gpu(sysfs.root) is None
+
+
+@pytest.mark.parametrize("driver", ["i915", "xe", "nouveau", "radeon", "simpledrm"])
+def test_cards_that_tell_no_load_have_no_sampler(sysfs, driver):
+    sysfs.card(0, 0x8086, 0x4680, driver, "0000:00:02.0")
+    assert load._linux_gpu(sysfs.root) is None
+
+
+def test_no_card_no_sampler(sysfs):
+    assert load._linux_gpu(sysfs.root) is None
+
+
+def test_the_card_is_the_one_gpu_name_names_or_the_one_asked_for(sysfs, monkeypatch):
+    amd_card(sysfs, number=0, hwmon=3, slot="0000:06:00.0")  # 16 GB of its own
+    sysfs.hwmon(7, "amdgpu", temp1_input=40000)
+    sysfs.card(1, 0x1002, 0x1681, "amdgpu", "0000:0c:00.0", vram=512 * 1024**2, hwmon=7)
+    sysfs.write("sys/class/drm/card1/device/gpu_busy_percent", 5)
+    monkeypatch.setattr(
+        hardware,
+        "scan",
+        lambda: hardware.Found(
+            adapters=(
+                Adapter("Big Card", 16 * 1024**3, slot="0000:06:00.0"),
+                Adapter("Small Graphics", 512 * 1024**2, slot="0000:0c:00.0"),
+            )
+        ),
+    )
+    assert load._linux_gpu(sysfs.root).read() == 37.0
+    assert load._linux_gpu(sysfs.root, prefer="small").read() == 5.0
+
+
+def test_the_card_to_measure_follows_the_settings_while_the_thread_runs(monkeypatch):
+    seen = []
+    samplers = []
+
+    def sampler(prefer=""):
+        seen.append(prefer)
+        samplers.append(Scripted(40.0 if not prefer else 80.0))
+        return samplers[-1]
+
+    monkeypatch.setattr(load, "_cpu_sampler", lambda: Scripted(10.0))
+    monkeypatch.setattr(load, "_gpu_sampler", sampler)
+    theme = show("gpu.load")
+    provider = load.LoadProvider()
+    try:
+        provider.read()
+        assert wait_for(lambda: provider.read().get("gpu.load", Reading("", 0)).value == 40.0)
+
+        def settings(**tables):
+            from types import SimpleNamespace
+
+            return SimpleNamespace(sensors=SimpleNamespace(options=tables))
+
+        provider.follow_config(settings(librehardwaremonitor={"gpu": " Second "}))
+        assert wait_for(lambda: provider.read().get("gpu.load", Reading("", 0)).value == 80.0)
+        assert seen == ["", "Second"] and samplers[0].closed.is_set()  # the old one is let go
+        provider.follow_config(settings(linux={"gpu": "First"}, librehardwaremonitor={"gpu": "x"}))
+        assert wait_for(lambda: seen[-1] == "First")
+        provider.follow_config(settings())
+        assert wait_for(lambda: seen[-1] == "" and len(seen) == 4)
+    finally:
+        provider.close()
+    del theme
 
 
 # -- the thread ---------------------------------------------------------------------

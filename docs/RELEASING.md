@@ -59,7 +59,8 @@ Every download is tested on its own system before it is attached:
   and autostart (`packaging/windows/test_installer.py`, Inno Setup script
   `packaging/windows/libre-panel.iss`);
 - Linux: the AppImage runs without a desktop and on an X11 tray, the ffmpeg in it
-  works (below), and its autostart entry points at the AppImage file
+  works (below), its autostart entry points at the AppImage file, and
+  `system-setup --linux` finds its way in the bare environment pkexec runs a program in
   (`packaging/linux/test_appimage.sh`).
 
 **Dry run:** start *Release* by hand (Actions → Release → Run workflow). It

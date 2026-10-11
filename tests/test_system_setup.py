@@ -525,7 +525,10 @@ def test_a_no_to_windows_question_is_kept_apart_from_a_failure(tmp_path):
 
 
 @pytest.fixture
-def server(isolated_home):
+def server(isolated_home, monkeypatch):
+    # The route answers for the system it runs on: these tests are about the sensor service, so
+    # the system is not Linux, which has a setup of its own (test_setup_api.py).
+    monkeypatch.setattr("libre_panel.linux_setup.supported", lambda: False)
     made = make_server(port=0)
     threading.Thread(target=made.serve_forever, daemon=True).start()
     yield made.server_address[1]

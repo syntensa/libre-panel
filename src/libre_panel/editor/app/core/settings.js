@@ -19,7 +19,7 @@ const api = {
   system: () => get("/api/system"),
   setSystem: (change) => post("/api/system", change),
   unlock: () => get("/api/unlock"),
-  setUnlock: (action) => post("/api/unlock", { action }),
+  setUnlock: (action, options = {}) => post("/api/unlock", { action, ...options }),
   about: () => get("/api/about"),
   open: (folder) => post("/api/open", { folder }),
   place: (query) => post("/api/location", { query }),
@@ -221,9 +221,14 @@ export async function restartPanel() {
   return resumed;
 }
 
-// -- the sensor service (Windows) ----------------------------------------------------------------
+// -- the one-click setup of the system: the sensor service (Windows), the rights (Linux) -----------
 
-/** The sensor service and what "Unlock all sensors" sets up (/api/unlock); null off Windows. */
+/**
+ * What the setup of this system would bring and how a run of it goes (/api/unlock): on Windows
+ * the sensor service and what "Unlock all sensors" sets up, on Linux the permission for the panel,
+ * the mainboard's sensor driver and the processor's power (core/setup.js); null where nothing
+ * answers. `platform` says which.
+ */
 export async function loadUnlock() {
   try {
     store.set({ unlockInfo: await api.unlock() });
@@ -236,7 +241,7 @@ export async function loadUnlock() {
 /** How a run of system-setup ended, in a sentence. */
 function tellUnlock(info) {
   const job = info?.job;
-  if (!job || job.running) return;
+  if (!job || job.running || info.platform === "linux") return; // Linux's card tells it itself
   if (job.cancelled) {
     toast(t("Nothing was changed: Windows' question was answered with no."), { kind: "warn" });
   } else if (job.error) {
@@ -265,16 +270,26 @@ function followUnlock() {
     following = null;
     tellUnlock(info);
     loadSourceStates(); // the sources say how LibreHardwareMonitor is read now
+    if (info?.platform === "linux" && info.job?.state === "done") {
+      // the chips of a driver that was loaded are found by the next rescan of the sensors
+      pollApp();
+      setTimeout(() => {
+        loadSourceStates();
+        pollApp();
+      }, 4000);
+    }
   }, 1000);
 }
 
 /**
- * "unlock" or "remove": libre-panel system-setup, after Windows asks for administrator rights
- * (one UAC prompt). Resolves to whether it was started; how it ended is said when it has.
+ * "unlock" or "remove": libre-panel system-setup, after the system asks for administrator rights
+ * (one UAC prompt on Windows, polkit's password window on Linux, where `{rapl: true}` or
+ * `{rapl: false}` also opens or closes the processor's energy counters). Resolves to whether it
+ * was started; how it ended is said when it has.
  */
-export async function runUnlock(action) {
+export async function runUnlock(action, options = {}) {
   try {
-    store.set({ unlockInfo: await api.setUnlock(action) });
+    store.set({ unlockInfo: await api.setUnlock(action, options) });
   } catch (error) {
     toastError(error);
     return false;

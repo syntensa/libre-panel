@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from fake_sensors import FakeSource, Scripted, wait_for
 
-from libre_panel import cli, config, doctor
+from libre_panel import cli, config, doctor, linux_setup
 from libre_panel.app import build_hub
 from libre_panel.config import (
     Config,
@@ -27,7 +27,7 @@ from libre_panel.sensors.base import Reading, SensorHub, SensorProvider
 LHM_TREE = json.loads((Path(__file__).parent / "data" / "lhm_data.json").read_text("utf-8"))
 URL = "http://127.0.0.1:8085/data.json"
 WINDOWS = ["load", "audio", "librehardwaremonitor", "presentmon", "psutil"]
-LINUX = ["load", "audio", "psutil"]
+LINUX = ["load", "audio", "linux", "psutil"]
 ELSEWHERE = ["load", "psutil"]  # no way to read the volume there
 
 
@@ -83,7 +83,7 @@ def test_the_generated_config_tells_what_the_volume_source_is():
     words = " ".join(line.removeprefix("# ") for line in text.splitlines())
     assert "audio (the volume and mute of the default output: Windows, Linux with wpctl" in words
     assert "load and audio work only while a theme or a service shows their readings" in words
-    assert '\nproviders = ["load", "audio", "psutil"]\n' in text
+    assert f"\nproviders = {json.dumps(LINUX)}\n" in text
 
 
 def test_the_written_config_file_has_the_list(isolated_home):
@@ -129,6 +129,54 @@ def test_psutil_alone_as_0_4_wrote_it_means_todays_default(monkeypatch, platform
     monkeypatch.setattr("libre_panel.config.sys.platform", platform)
     old = default_config_toml().replace(json.dumps(default_providers()), '["psutil"]')
     assert parse_config(tomllib.loads(old)).sensors.providers == expected
+
+
+def test_the_list_0_5_wrote_before_linux_had_a_source_means_todays_default_there_only(
+    monkeypatch,
+):
+    """A config.toml of a 0.5 build before the Linux source named ``load``, ``audio`` and
+    ``psutil``: the default then, as 0.4's ``psutil`` was. Elsewhere that list is a choice."""
+    earlier = {"sensors": {"providers": ["load", "audio", "psutil"]}}
+    monkeypatch.setattr("libre_panel.config.sys.platform", "linux")
+    assert parse_config(earlier).sensors.providers == LINUX
+    monkeypatch.setattr("libre_panel.config.sys.platform", "win32")
+    assert parse_config(earlier).sensors.providers == ["load", "audio", "psutil"]
+    monkeypatch.setattr("libre_panel.config.sys.platform", "linux")
+    other = {"sensors": {"providers": ["audio", "load", "psutil"]}}
+    assert parse_config(other).sensors.providers == ["audio", "load", "psutil"]
+
+
+def test_psutil_leaves_the_kernels_chips_to_the_linux_source_when_that_runs(monkeypatch):
+    def hub_of(providers):
+        config = Config()
+        config.sensors.providers = providers
+        return build_hub(config)
+
+    hub = hub_of(["linux", "psutil"])
+    try:
+        assert next(p for p in hub.providers if p.name == "psutil").hwmon is False
+    finally:
+        hub.close()
+    hub = hub_of(["psutil"])
+    try:
+        assert next(p for p in hub.providers if p.name == "psutil").hwmon is True
+    finally:
+        hub.close()
+
+    real = base.create_provider
+
+    def without_linux(name, options=None):
+        if name == "linux":
+            raise RuntimeError("it did not start")
+        return real(name, options)
+
+    monkeypatch.setattr("libre_panel.app.create_provider", without_linux)
+    hub = hub_of(["linux", "psutil"])  # a source that did not start reads nothing: psutil does
+    try:
+        assert [p.name for p in hub.providers][:1] == ["psutil"]
+        assert hub.providers[0].hwmon is True
+    finally:
+        hub.close()
 
 
 def test_the_hub_of_a_default_config_starts_with_the_default_sources():
@@ -239,6 +287,26 @@ def test_the_note_knows_the_address_in_the_config_and_a_listed_source(
     assert "http://nas:8085/data.json" in note and "Add " not in note  # it is listed
 
 
+def test_sensors_says_on_linux_what_the_setup_brings_and_how(
+    isolated_home, quick_sensors, monkeypatch, capsys
+):
+    path = write_providers(isolated_home, ["fixed"])
+    monkeypatch.setattr(
+        "libre_panel.app.build_hub",
+        lambda config, demo=False: SensorHub([Fixed({"cpu.load": 5.0})]),
+    )
+    monkeypatch.setattr(cli, "_platform", lambda: "linux")
+    needs = linux_setup.Facts(
+        panel=True, panel_denied=True, files=dict.fromkeys(linux_setup.OWN_FILES)
+    )
+    monkeypatch.setattr(linux_setup, "gather", lambda *args, **kwargs: needs)
+    assert cli.main(["--config", str(path), "sensors"]) == 0
+    captured = capsys.readouterr()
+    assert "cpu.load" in captured.out and "note:" not in captured.out
+    assert "note: Your user may not use the USB panel yet. This mends it: sudo " in captured.err
+    assert "system-setup --linux" in captured.err
+
+
 @pytest.mark.parametrize(
     ("platform", "values", "demo"),
     [
@@ -275,6 +343,22 @@ def fetch_of(answer):
 def test_doctor_says_nothing_about_sensors_where_psutil_has_them(isolated_home):
     assert doctor.sensors_check(None, "linux") is None
     assert doctor.sensors_check(None, "linux", fetch_of(OSError("never asked"))) is None
+
+
+def test_doctor_says_on_linux_what_the_setup_would_bring(isolated_home, monkeypatch):
+    needs = linux_setup.Facts(
+        dmi={"board_vendor": "ASUSTeK COMPUTER INC.", "chassis_type": "3"},
+        available=frozenset({"nct6775"}),
+        panel=True,
+        panel_denied=True,
+        files=dict.fromkeys(linux_setup.OWN_FILES),
+    )
+    monkeypatch.setattr(linux_setup, "gather", lambda *args, **kwargs: needs)
+    result, said = doctor.sensors_check(None, "linux")
+    assert result == "info"
+    assert "may not use the USB panel" in said and "fan and temperature chip" in said
+    assert said.endswith("libre-panel system-setup --linux")
+    assert "ASUS" not in said  # (a report goes into a public issue: no names of the PC)
 
 
 def test_doctor_says_plainly_that_librehardwaremonitor_does_not_answer(isolated_home):

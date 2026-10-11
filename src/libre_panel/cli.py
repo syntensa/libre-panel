@@ -436,9 +436,10 @@ def _cmd_sensors(args: argparse.Namespace) -> int:
     hub = build_hub(config, demo=args.demo)
     # Some sources read only while a theme shows their keys. Ask for those that cost
     # nothing (not the ping or the game frame rate), as a theme would, so they are listed;
-    # "lhm:*" is every sensor of LibreHardwareMonitor.
+    # "lhm:*" is every sensor of LibreHardwareMonitor, "temp.*" the SATA drives of Linux (a drive
+    # in standby may wake when it is read, so they are read only while something shows them).
     reader = _Reader()
-    want(reader, {"cpu.load", "gpu.load", "audio.*", "lhm:*"})
+    want(reader, {"cpu.load", "gpu.load", "audio.*", "lhm:*", "temp.*"})
     try:
         hub.snapshot()
         time.sleep(SENSORS_SETTLE_SECONDS)  # rate counters and pollers need time
@@ -461,15 +462,61 @@ def _cmd_sensors(args: argparse.Namespace) -> int:
             status,
             unlock_offered(_platform()),
         )
+        if not hint and _platform().startswith("linux"):
+            hint = _linux_hint()
         if hint:
             print(f"\nnote: {hint}", file=sys.stderr)
     return 0
 
 
+def _linux_hint() -> str:
+    """What is missing on Linux that ``system-setup --linux`` brings, in a sentence and with
+    the command that does it; empty when nothing is."""
+    from libre_panel import linux_rights, linux_setup
+
+    command = linux_rights.terminal_command(linux_setup.Options(), linux_rights.program())
+    return linux_setup.hint(linux_setup.gather(), command)
+
+
 def _cmd_system_setup(args: argparse.Namespace) -> int:
+    """What the system needs an administrator for, one command on both systems. Windows: the
+    sensor service, the PawnIO driver and the group game frame rates need (``--service`` ...).
+    Linux: the panel's permission, the mainboard's sensor driver and the processor's power
+    (``--linux``, which Linux takes for granted unless a flag of Windows' is given)."""
+    windows = [
+        flag
+        for flag, given in (
+            ("--service", args.service),
+            ("--pawnio", args.pawnio),
+            ("--perf-log-users", args.perf_log_users),
+            ("--user-sid", args.user_sid),
+        )
+        if given
+    ]
+    system = _platform()
+    if args.linux or (system.startswith("linux") and not windows):
+        if windows:
+            print(f"error: {', '.join(windows)} is for Windows, not for --linux", file=sys.stderr)
+            return 2
+        from libre_panel import linux_setup
+
+        return linux_setup.run_cli(args)
+    linux = [
+        flag
+        for flag, given in (
+            ("--rapl", args.rapl),
+            ("--no-rapl", args.no_rapl),
+            ("--dry-run", args.dry_run),
+            ("--json", args.json),
+        )
+        if given
+    ]
+    if linux:
+        print(f"error: {', '.join(linux)} is for Linux (--linux)", file=sys.stderr)
+        return 2
     from libre_panel.sensorservice.setup import run_command
 
-    return run_command(args, platform=_platform())
+    return run_command(args, platform=system)
 
 
 def _cmd_models(args: argparse.Namespace) -> int:
@@ -659,22 +706,49 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser(
         "system-setup",
-        help="Windows, as administrator: set up what all sensors need (the setup runs this)",
+        help="as administrator: set up what the sensors need, and on Linux the panel's access "
+        "(Windows: the setup runs this; Linux: --linux)",
     )
     p.add_argument(
         "--service",
         action="store_true",
-        help="the sensor service, which reads the sensors with the rights they need",
+        help="Windows: the sensor service, which reads the sensors with the rights they need",
     )
-    p.add_argument("--pawnio", action="store_true", help="the PawnIO driver it reads them through")
+    p.add_argument(
+        "--pawnio", action="store_true", help="Windows: the PawnIO driver it reads them through"
+    )
     p.add_argument(
         "--perf-log-users",
         action="store_true",
-        help="join Performance Log Users, for game frame rates (from the next sign-in)",
+        help="Windows: join Performance Log Users, for game frame rates (from the next sign-in)",
     )
-    p.add_argument("--remove", action="store_true", help="take away what the others set up")
-    p.add_argument("--user-sid", help="whose group membership (default: who is signed in)")
+    p.add_argument("--user-sid", help="Windows: whose group membership (default: who is signed in)")
+    p.add_argument(
+        "--linux",
+        action="store_true",
+        help="Linux: the panel's USB permission, the mainboard's fan chip, SATA drive "
+        "temperatures, and with --rapl the processor's power; asks for the password with "
+        "pkexec or sudo, prints every step (taken for granted on Linux unless a flag of "
+        "Windows' is given)",
+    )
+    power = p.add_mutually_exclusive_group()
+    power.add_argument(
+        "--rapl",
+        action="store_true",
+        help="Linux: also let every user read the processor's energy counters (the kernel "
+        "keeps them to root since 2020 because they leak what the processor computes)",
+    )
+    power.add_argument(
+        "--no-rapl",
+        action="store_true",
+        help="Linux: close the energy counters to other users again",
+    )
+    p.add_argument("--remove", action="store_true", help="take away what was set up")
     p.add_argument("--status", action="store_true", help="say what is in place (no rights needed)")
+    p.add_argument("--dry-run", action="store_true", help="Linux: only say what it would do")
+    p.add_argument(
+        "--json", action="store_true", help="Linux: print the result as one line of JSON"
+    )
     p.set_defaults(func=_cmd_system_setup)
 
     p = sub.add_parser("plugins", help="list installed plugins and whether they load")

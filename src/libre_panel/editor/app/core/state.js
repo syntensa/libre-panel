@@ -48,7 +48,7 @@ export const store = createStore({
   panelInfo: null, // Settings: the panel found, the video mode's state
   clipQuestion: null, // Start: {ask, name}, whether to ask for the panel's standby clip (core/settings.js)
   systemInfo: null, // Settings: starting with the system
-  unlockInfo: null, // Start and Settings: the sensor service, "Unlock all sensors" (Windows)
+  unlockInfo: null, // Start and Settings: "Unlock all sensors" (Windows), the one-click setup (Linux)
   aboutInfo: null, // Settings: version, licence, notices, folders
   sourceStates: null, // Settings: what the running app says of its sensor sources
   serviceStates: null, // Settings: the services and their states

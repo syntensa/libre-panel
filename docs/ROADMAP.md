@@ -56,7 +56,7 @@ first. Each hardware step needs a tester with the panel.
 - [ ] Lian Li LCD driver (separate package, protocol from lian-li-linux)
 - [ ] Optional plugins: HWiNFO shared memory (what is playing, PresentMon's frame
       rate and the volume are sensor sources of the app: `media`, `presentmon`, `audio`)
-- [ ] NVIDIA sensors without LibreHardwareMonitor (NVML) on Linux
+- [x] NVIDIA sensors without LibreHardwareMonitor (NVML) on Linux
 
 What SPUR II had for everyone comes into the app with 0.5: messages, transitions,
 game mode, the autopilot and more (see [SPUR2_MIGRATION.md](SPUR2_MIGRATION.md)).

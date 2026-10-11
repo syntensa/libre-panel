@@ -42,6 +42,10 @@ def build_hub(config: Config, demo: bool = False) -> SensorHub:
             providers.append(create_provider(name, config.sensors.options.get(name, {})))
         except Exception as exc:  # a misspelt or misconfigured source must not stop the panel
             log.error("sensor source %r not started: %s", name, exc)
+    if any(provider.name == "linux" for provider in providers):
+        for provider in providers:  # the Linux source reads the kernel's chips: psutil leaves them
+            if provider.name == "psutil":
+                provider.hwmon = False
     if config.weather.enabled and not demo:
         from libre_panel.weather.open_meteo import OpenMeteoProvider
 
