@@ -620,6 +620,46 @@ def test_the_question_about_the_standby_clip_is_asked_in_german_too(
         )
 
 
+def test_a_running_panel_switches_by_itself_and_the_trays_line_goes(isolated_home, monkeypatch):
+    """With the background app a name is taken in at once (the panel loop follows config.toml),
+    so Start says so, and the line in the tray's menu is gone as soon as the question is."""
+    from test_editor_settings import lacking_ffmpeg
+    from test_service import FakeRegistry, wait_for
+
+    from libre_panel.autostart import Autostart
+    from libre_panel.devices import turzx_usb
+    from libre_panel.devices.base import DeviceError
+    from libre_panel.service import BackgroundApp
+
+    def no_panel(pid=None):
+        raise DeviceError("no panel")
+
+    monkeypatch.setattr(turzx_usb.UsbTransport, "open", staticmethod(no_panel))
+    lacking_ffmpeg(monkeypatch, found=True)
+    isolated_home.mkdir(parents=True, exist_ok=True)
+    (isolated_home / "config.toml").write_text(
+        'theme = "libre-default"\nfps = 5\n\n[device]\nmodel = "turing-9.2-usb"\n'
+        f'output = "{(isolated_home / "frame.png").as_posix()}"\n',
+        encoding="utf-8",
+    )
+    app = BackgroundApp(port=0, autostart=Autostart("win32", registry=FakeRegistry()))
+    url = app.start()
+    try:
+        assert app.clip_question() is True  # the tray shows its line
+        with browser_page(url, "home", allow=PICTURE) as page:
+            page.wait_for_selector(".start.launcher .clip-card")
+            page.get_by_role("button", name="Use it").click()
+            waits_for(page, lambda: settings_config().device.video.local_clip == CLIP)
+            expect(page.locator(".toast")).to_contain_text(
+                "Saved. The panel switches to smooth motion in a moment."
+            )
+            expect(page.locator(".clip-card")).to_have_count(0)
+        assert wait_for(lambda: app.clip_question() is False)
+    finally:
+        app.quit()
+        app.shutdown()
+
+
 def test_a_collection_waits_closed_at_the_end_of_the_gallery(app_url, isolated_home):
     """Libre Panel's own themes and yours come first; each collection the themes name is a
     group of its own (A to Z) that opens on a click or a key. Nothing names SPUR: a second

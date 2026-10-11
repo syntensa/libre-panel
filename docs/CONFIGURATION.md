@@ -102,6 +102,7 @@ mode = "auto"                  # "auto": smooth video mode by itself where it is
                                # "on": on every TURZX USB panel (needs ffmpeg); "off"
 fps = 50                       # frames per second in video mode
 local_clip = ""                # required for "auto" and "on", see below
+clip_asked = false             # true once the app has asked for local_clip (on Start)
 ```
 
 ## The theme on the panel
@@ -881,7 +882,17 @@ proven, today the 9.2", as soon as ffmpeg is found and `local_clip` is set.
 every TURZX USB panel; `"off"` keeps single PNG frames. In the app, *Settings →
 Panel* shows the same (on with its frame rate, or what is still missing), sets the
 mode and the frame rate (25, 30 or 50), and has a field for the clip's name. That
-field is empty until you type a name; nothing is ever filled in for you.
+field is empty until you type a name.
+
+Where the clip's name is all that the video mode lacks (a panel it is proven on, ffmpeg
+found, `mode = "auto"`), *Start* asks for it once, in a card (on a first start too), and
+the tray menu has a line, *Smooth motion: confirm the clip name…*, that opens it. The
+field in the card holds the name the vendor app uses, `usr/data/standby.h264`; nothing is
+written until you press *Use it* (which writes `local_clip`; a panel that Libre Panel is
+running switches to video mode by itself, without a restart) or *Not now* (which writes no
+name). Either answer sets `clip_asked = true`, so it is not asked again; put
+`clip_asked = false` back to be asked once more. A name typed in *Settings → Panel* is an
+answer too.
 
 - **ffmpeg** encodes the video. Install it (Windows: `winget install ffmpeg`;
   Linux: the `ffmpeg` package), or set `ffmpeg = "C:/path/to/ffmpeg.exe"`. It
@@ -911,6 +922,7 @@ field is empty until you type a name; nothing is ever filled in for you.
 | `maxrate` | `"2M"` | highest bit rate, e.g. `"1500k"` |
 | `ffmpeg` | `""` | path to ffmpeg; empty = look in `PATH` |
 | `local_clip` | `""` | see above |
+| `clip_asked` | `false` | `true` once the app has asked for `local_clip` (a name written there, or *Not now*); then it does not ask again |
 
 The settings were measured on the 9.2" panel; the details are in
 [the protocol notes](protocol/turzx-usb.md#two-layers-h264-video--png-overlay-smooth-path).

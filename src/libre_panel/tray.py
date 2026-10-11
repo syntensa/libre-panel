@@ -106,6 +106,11 @@ class Tray:
                 visible=lambda _: bool(app.panel.state().get("hint")),
             ),
             item(t("Open Libre Panel"), self.open_app, default=True),
+            item(  # only until the question on Start is answered
+                t("Smooth motion: confirm the clip name…"),
+                self.open_clip_question,
+                visible=lambda _: self.asks_for_clip(),
+            ),
             item(t("Theme editor"), self.open_editor),
             item(t("Theme"), menu(self._theme_items)),
             item(t("Brightness"), menu(self._brightness_items)),
@@ -174,6 +179,10 @@ class Tray:
         """The app's window on its start view (also a click on the icon)."""
         self._later(self.app.editor.open, "home")()
 
+    def open_clip_question(self) -> None:
+        """The app's window on Start, at the card that asks for the clip's name."""
+        self._later(self.app.editor.open, "home/clip")()
+
     def open_editor(self) -> None:
         self._later(self.app.editor.open, "design")()
 
@@ -201,6 +210,14 @@ class Tray:
 
     def quit(self) -> None:
         self.app.quit()
+
+    def asks_for_clip(self) -> bool:
+        """Whether the menu points to the question about the panel's standby clip."""
+        try:
+            return self.app.clip_question()
+        except Exception:  # a line of the menu must not take the menu down
+            log.debug("could not tell whether the clip name is asked for", exc_info=True)
+            return False
 
     # -- icon ------------------------------------------------------------------
 
@@ -231,6 +248,7 @@ class Tray:
             snapshot["brightness"],
             snapshot["upside_down"],
             snapshot["autostart"],
+            self.asks_for_clip(),
         )
         if signature == self._last:
             return
