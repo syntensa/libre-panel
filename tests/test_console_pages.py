@@ -582,8 +582,15 @@ def test_a_source_that_says_how_it_is_read_is_explained(running):
     assert lhm["status"] == {  # as the source says it, for a screen that words it itself
         "mode": "inprocess", "elevated": False, "ring0": False, "pawnio": None, "error": "",
     }  # fmt: skip
-    # (on Windows the configured LibreHardwareMonitor is there as well, and says its own)
-    assert all(s["status"] is None for s in sources if s["name"] != "librehardwaremonitor")
+    # (on Windows the configured LibreHardwareMonitor is there as well, and says its own; on Linux
+    # the source of the kernel's chips says what it found; the others say nothing)
+    tells = {"librehardwaremonitor", "linux"}
+    assert all(s["status"] is None for s in sources if s["name"] not in tells)
+    kernel = [s for s in sources if s["name"] == "linux"]
+    assert bool(kernel) is sys.platform.startswith("linux")  # (it is in the default list there)
+    for source in kernel:  # (no chips here: the numbers are there, what is missing is left out)
+        assert source["status"]["chips"] == 0 and source["status"]["graphics"] is None
+        assert source["details"] == [["chips", "0"], ["temperatures", "0"], ["fans", "0"]]
     assert lhm["details"][:2] == [["Mode", "inside Libre Panel"], ["Administrator", "no"]]
     assert (lhm["hint"] is not None) is (sys.platform == "win32")  # temperatures come from there
     assert lhm["problem"] is (sys.platform == "win32")
