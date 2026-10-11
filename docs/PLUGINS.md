@@ -555,6 +555,13 @@ A plugin can bring its own page into the theme editor, for settings or an
 analysis. It appears under *Pages* in the editor's top bar and replaces the
 editing area until *Theme editor* goes back.
 
+Libre Panel brings two pages of its own, built in like its services (so they
+work in the downloads, and no plugin can use their names): **Control** (`control`)
+and **Autopilot** (`autopilot`), described in
+[Running in the background](BACKGROUND.md#the-control-and-autopilot-pages). They
+are written with the same API, from `libre_panel/pages/`, and a good model for
+a page of your own.
+
 ```python
 from libre_panel.plugins import EditorPage
 
@@ -600,9 +607,11 @@ await api("curve", { method: "POST", body: { points } });
   `.json`; nothing outside the folder). Scripts must be files: the editor's
   security policy allows no inline scripts.
 - `handle(method, path, query, body)` answers `/api/plugins/<id>/<path>` and
-  returns `(status, data)`; `data` is sent as JSON. GET must not change
-  anything: changes go through POST, which needs the editor's header
-  (`kit.js`'s `api()` sends it). The editor listens on 127.0.0.1 only.
+  returns `(status, data)`; `data` is sent as JSON. `(status, bytes,
+  "image/jpeg")` sends a file instead, e.g. the picture on the panel for an
+  `<img>`. GET must not change anything: changes go through POST, which needs
+  the editor's header (`kit.js`'s `api()` sends it). The editor listens on
+  127.0.0.1 only.
 - `kit.js` exports `api`, `loadTexts`, `t`, `language`, `el`, `field`,
   `button` and `setStatus`; with `editor.css` the page looks like the editor.
 

@@ -439,7 +439,8 @@ class MainLoop:
         if host is not None and not once:
             self.hub.providers.append(host.provider())
         self.display = display if display is not None else create_display(config.device)
-        self.display.counters = status.counters  # the drivers count into the run's
+        status.counters, status.stats = Counters(), {}  # a new loop counts from zero
+        self.display.counters = status.counters  # the drivers count into these
         status.hub = self.hub
         self.meter = Meter(status, self.clock())
         self.config, self.shown, self.theme = config, shown, theme

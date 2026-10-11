@@ -1374,7 +1374,11 @@ def test_editor_pages_are_served(editor):
     from test_editor_server import request
 
     status, pages = request(editor, "GET", "/api/plugins/pages")
-    assert pages == [{"id": "cooling", "title": "Cooling", "icon": "fan"}]
+    assert pages == [  # the editor's own pages, and the plugin's
+        {"id": "autopilot", "title": "Autopilot", "icon": ""},
+        {"id": "control", "title": "Control", "icon": ""},
+        {"id": "cooling", "title": "Cooling", "icon": "fan"},
+    ]
     status, html = request(editor, "GET", "/plugins/cooling/")
     assert status == 200 and b"Cooling" in html
     assert request(editor, "GET", "/plugins/cooling/app.js")[0] == 200

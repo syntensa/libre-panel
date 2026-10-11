@@ -233,7 +233,7 @@ details > .fields { display: grid; gap: 10px; margin-top: 8px; }
 .popover.menu button:hover { background: var(--panel-3); border-color: var(--line); }
 .layout[hidden], .plugin-view[hidden], .panelbar[hidden] { display: none; }
 /* A plugin's own page (kit.js sets the class): editor colours, no editor grid. */
-body.plugin-page { display: block; height: auto; min-height: 100vh; padding: 20px 28px; }
+body.plugin-page { display: block; height: auto; min-height: 100vh; padding: 20px 28px; overflow: auto; }
 body.plugin-page h1 { font-size: 20px; margin: 0 0 16px; }
 body.plugin-page h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 22px 0 10px; }
 body.showing-page { grid-template-rows: auto 1fr auto; }  /* top bar, page, status bar */

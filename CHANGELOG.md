@@ -144,6 +144,16 @@
   replaces a list that runs over several lines, and the new `set_config_tables`
   writes an array of tables such as `[[services.autopilot.rules]]`, keeping the
   rest of `config.toml` and refusing what it cannot edit safely
+- The editor has two pages of its own, built in like the services (*Pages* in
+  the top bar), written with the plugin API. **Control** shows the live picture
+  of the panel, the numbers above as tiles, each sensor source (LibreHardwareMonitor
+  says how it is read, whether it has administrator rights, whether PawnIO is there)
+  and each service with a *Restart*, sends a test message of each kind and says
+  whether it shows or why not, sets the theme of the normal and the game mode in
+  `config.toml`, and shows the end of the log. **Autopilot** edits the autopilot's
+  rules and settings in `config.toml`, switches it on and off, and shows which
+  rule holds and what it sees. Without the background app (`libre-panel editor`)
+  they say so. An editor page may answer with a file (`(status, bytes, type)`)
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

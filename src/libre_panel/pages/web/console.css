@@ -1,0 +1,76 @@
+/* The built-in pages (Control, Autopilot) in the editor's look: only additions to
+   /static/editor.css, with its colours. */
+
+/* the status line stays at the bottom, also on a short page */
+body.plugin-page { display: flex; flex-direction: column; }
+main#page { flex: 1; width: 100%; max-width: 1080px; margin: 0 auto; padding-bottom: 36px; }
+code { font: 12px ui-monospace, Consolas, monospace; color: var(--muted); }
+[hidden] { display: none !important; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.spacer { flex: 1; }
+.number { text-align: right; font-variant-numeric: tabular-nums; }
+.warn-text { color: var(--warn); }
+.check.small, .inline { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+
+.block { margin-bottom: 26px; }
+body.plugin-page .block > h2 { margin-top: 0; }
+
+/* The line at the bottom: messages about what the page just did. */
+.page-status { position: sticky; bottom: 0; display: flex; min-height: 30px; align-items: center; margin: 0 -28px -20px; padding: 4px 28px; background: var(--panel); border-top: 1px solid var(--line); }
+
+.note { margin: 0 0 14px; padding: 8px 12px; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.note.warn { color: var(--warn); border-color: rgba(251, 191, 36, 0.4); }
+.note.error { color: var(--error); border-color: rgba(248, 113, 113, 0.4); }
+
+/* The picture on the panel, in the frame of the editor's stage */
+.screen { position: relative; max-width: 960px; min-height: 64px; background: #000; border-radius: 2px; box-shadow: 0 0 0 1px var(--line), 0 12px 40px rgba(0, 0, 0, 0.6); }
+.screen img { display: block; width: 100%; height: auto; }
+.screen .empty { margin: 0; padding: 24px 16px; text-align: center; color: var(--muted); font-size: 12px; }
+
+/* The numbers */
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 8px; }
+.tile { display: grid; gap: 1px; padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.tile .label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.tile b { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tile small { min-height: 1.4em; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.tile.warn b { color: var(--warn); }
+.tile.bad b { color: var(--error); }
+
+/* Sources and services */
+.list { width: 100%; border-collapse: collapse; font-size: 13px; }
+.list th { padding: 5px 8px; text-align: left; font-size: 12px; font-weight: 500; color: var(--muted); border-bottom: 1px solid var(--line); }
+.list td { padding: 6px 8px; vertical-align: top; border-bottom: 1px solid var(--panel-3); overflow-wrap: anywhere; }
+.list th.number { text-align: right; }
+.list .detail { color: var(--muted); font-size: 12px; }
+.list .hint-row { padding-top: 0; color: var(--warn); font-size: 12px; }
+.list td:first-child { width: 22px; }
+.list td.number { width: 90px; }
+.list td.action { text-align: right; white-space: nowrap; }
+.state { display: inline-flex; align-items: center; }
+
+/* Messages and themes */
+#probes button { min-width: 84px; }
+#probe-result { min-height: 1.4em; margin: 10px 0 0; font-size: 13px; }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px 18px; }
+#themes .muted { font-size: 12px; }
+pre.log { margin: 8px 0 0; padding: 8px 10px; max-height: 320px; overflow: auto; font: 11px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; color: var(--muted); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+pre.log:empty { display: none; }
+#log-where { margin: 8px 0 0; font-size: 12px; overflow-wrap: anywhere; }
+
+/* Autopilot */
+.switch-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 10px; }
+#now { color: var(--warn); font-size: 13px; }
+#signals { margin-bottom: 18px; }
+.rule { display: grid; gap: 8px; padding: 10px 12px; margin-bottom: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+.rule.holds { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
+.rule.invalid { border-color: var(--error); }
+.rule-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rule-head input.name { width: 170px; font-weight: 600; }
+.rule-head input[type="number"] { width: 110px; }
+.conditions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.condition { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 9px; font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
+.condition input[type="number"] { width: 72px; padding: 2px 5px; }
+.condition input[type="text"] { width: 190px; padding: 2px 5px; }
+.condition input[type="time"] { width: 112px; padding: 2px 5px; }
+.actions { margin-top: 10px; }
+#dirty { font-size: 12px; }

@@ -66,6 +66,27 @@ page (below).
 Measuring costs next to nothing: the main loop keeps a ring of drawing times
 and counts, and makes the numbers once a second; nothing waits for it.
 
+## The Control and Autopilot pages
+
+*Pages → Control* in the editor (also the **Control page** button in the Panel
+menu) is the console of the background app. In a plain `libre-panel editor`
+there is no panel, so the page says so and keeps what works without one: the
+theme per mode and the log.
+
+| Part | What it does |
+|---|---|
+| **Live picture** | the frame on the panel now, with transitions and messages, about five times a second; it is the theme's way up, not turned for an upside-down panel. Paused, it says so |
+| **How the panel is doing** | the numbers above as tiles, with the panel's state and how long the loop has run |
+| **Sensor sources** | each source in the order it is asked, with the readings it gave last time. LibreHardwareMonitor says how it is read (inside Libre Panel or through its web server), whether Libre Panel has administrator rights, whether the CPU's sensors are within reach and which PawnIO driver is there, and on Windows what to do when no temperature or power arrives |
+| **Services** | each service Libre Panel knows, with its state (running, failed with the reason, stopped, off) and **Restart**, which stops it and starts it again with its settings. A service that is not in `[services] enabled` is off |
+| **Test messages** | sends a test message of each kind (volume, music, warning, panel, device, game) and says whether it shows, or why not: the theme switches the kind off (`toast.off`), the screen shows it itself, or no panel is connected |
+| **Theme per mode** | the theme of the normal mode and of game mode, written to `config.toml` (`theme`, and `theme` under `[modes.game]`); "same as the normal mode" leaves the game mode without a theme of its own |
+| **Log** | the last lines of `logs/libre-panel.log`, which the tray app writes (`libre-panel start` logs to its terminal instead) |
+
+*Pages → Autopilot* edits the rules of the `autopilot` service, switches it on
+and off, and shows which rule holds and what it sees; see
+[the autopilot](CONFIGURATION.md#autopilot).
+
 ## Shutting down
 
 Quit, signing out and shutting the PC down all end Libre Panel cleanly: it

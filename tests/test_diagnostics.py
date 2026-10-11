@@ -342,6 +342,29 @@ def test_the_main_loop_publishes_its_numbers_in_the_status():
     assert status.hub is None  # the sources are closed with the loop
 
 
+def test_a_new_loop_counts_from_zero():
+    """A loop that starts again on the same status (after a crash) leaves the numbers of
+    the one before behind."""
+    clock, host, status = StepClock(1000.0), PluginHost(), app_module.RunStatus()
+    status.counters.usb_errors = 3
+    status.stats = {"fps": 1.0}
+    old = status.counters
+    loop = app_module.MainLoop(
+        Config(theme="pico", sensors=SensorsConfig(providers=["demo"])),
+        status=status,
+        host=host,
+        hub=SensorHub([DemoProvider({"fixed_time": 1_700_000_000})]),
+        display=MemoryStream(),
+        clock=clock,
+    )
+    try:
+        assert status.stats == {} and status.counters is not old
+        assert status.counters.usb_errors == 0 and loop.display.counters is status.counters
+    finally:
+        loop.close()
+        host.close()
+
+
 def test_every_display_the_loop_makes_counts_into_the_same_numbers(isolated_home, monkeypatch):
     """When the device settings change the loop makes a new display; what was counted
     so far stays."""
