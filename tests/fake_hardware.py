@@ -126,8 +126,9 @@ class FakeRegistry:
 
     HKEY_LOCAL_MACHINE = "HKLM"
 
-    def __init__(self, keys):
+    def __init__(self, keys, denied=()):
         self.keys = dict(keys)
+        self.denied = set(denied)  # keys that are there but may not be opened
 
     def _exists(self, path):
         return path in self.keys or any(key.startswith(path + "\\") for key in self.keys)
@@ -136,6 +137,8 @@ class FakeRegistry:
         path = sub if parent == self.HKEY_LOCAL_MACHINE else f"{parent.path}\\{sub}"
         if not self._exists(path):
             raise FileNotFoundError(path)
+        if path in self.denied:
+            raise PermissionError(path)
         return FakeKey(path)
 
     def EnumKey(self, key, index):  # noqa: N802

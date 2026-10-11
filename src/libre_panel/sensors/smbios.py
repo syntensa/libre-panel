@@ -5,8 +5,8 @@ memory it is, how fast it runs and how big it is. Windows hands the table over w
 (``GetSystemFirmwareTable``: no WMI, no program, no administrator rights); Linux has a file
 per structure under ``/sys/firmware/dmi/entries``, which most systems let only root read.
 
-Only what names the kind of memory is read. Serial numbers, asset tags and part numbers
-(they name one module) are never looked at.
+Of a structure only what names the kind of memory is taken: serial numbers, asset tags and
+part numbers (they name one module) stay where they are.
 """
 
 from __future__ import annotations

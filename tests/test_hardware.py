@@ -8,6 +8,7 @@ them is the name of the machine the tests run on (a fixture in conftest.py sees 
 import json
 import logging
 import platform
+import sys
 import time
 from pathlib import Path
 
@@ -15,6 +16,7 @@ import pytest
 from fake_hardware import (
     DDR4,
     DDR5,
+    DISPLAY,
     LPDDR5,
     NVIDIA_INFORMATION,
     PC,
@@ -223,6 +225,16 @@ def test_windows_gives_the_display_adapters_without_the_software_ones():
     ]
 
 
+def test_windows_leaves_out_an_adapter_whose_key_it_may_not_open():
+    registry = windows_registry(
+        "",
+        ("AMD Radeon RX 6800", {}),
+        ("NVIDIA GeForce RTX 4070", {}),
+    )
+    registry.denied.add(DISPLAY + "\\0000")
+    assert hardware.windows_adapters(registry) == [Adapter("NVIDIA GeForce RTX 4070", 0)]
+
+
 @pytest.mark.parametrize(
     ("values", "memory"),
     [
@@ -423,6 +435,31 @@ def test_the_computer_is_asked_once_and_again_only_when_asked_to(machine):
     assert scan() is PC and len(machine.asked) == 1
     assert scan(refresh=True) is other and scan() is other
     assert len(machine.asked) == 2
+
+
+def test_the_computer_running_the_tests_can_be_asked():
+    """The real readers answer and do not fail, whatever this computer is (a runner may be a
+    virtual machine with no card to find and no memory modules to read). What they found is
+    not looked at: it is the name of this computer's owner."""
+    found = REAL_SCAN()
+    assert isinstance(found, Found) and found.memory > 0
+    names = describe(found)
+    assert set(names) == set(hardware.PARTS) and all(isinstance(n, str) for n in names.values())
+    assert names["memory"]  # at the least its size
+
+
+@pytest.mark.skipif(
+    sys.platform != "win32", reason="the registry and the firmware table are Windows'"
+)
+def test_the_real_registry_and_firmware_table_of_windows():
+    assert hardware.windows_cpu_name().strip()  # every Windows has its processor's name
+    for adapter in hardware.windows_adapters():  # (none in a virtual machine without a driver)
+        assert adapter.name and not hardware.is_software(adapter.name) and adapter.memory >= 0
+    try:
+        modules = hardware.windows_modules()
+    except OSError:  # a virtual machine can have no SMBIOS table
+        return
+    assert all(module.megabytes > 0 for module in modules)
 
 
 # -- what is shown --------------------------------------------------------------------------------
@@ -741,7 +778,8 @@ def test_no_name_is_written_to_the_log(machine, monkeypatch, caplog):
         assert names_of(hub)["cpu.name"] == "My own CPU"
     finally:
         hub.close()
-    assert "hardware:" in caplog.text  # it did say something
+    # it did say something: that a processor and a card were found, no module could be read
+    assert "hardware: processor named, 1 graphics card(s), 0 memory module(s)" in caplog.text
     names = [PC.cpu, "Ryzen 5 7600", "RTX 4070", "GeForce", "My own CPU", "My own GPU"]
     assert not [name for name in names if name in caplog.text]
 

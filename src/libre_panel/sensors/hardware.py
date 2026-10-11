@@ -385,6 +385,13 @@ def scan(refresh: bool = False) -> Found:
     with _lock:
         if _found is None or refresh:
             _found = _scan_machine()
+            log.debug(  # what was found, never what it is called: logs go into issues
+                "hardware: processor %s, %d graphics card(s), %d memory module(s), memory %s",
+                "named" if _found.cpu else "not named",
+                len(_found.adapters),
+                len(_found.modules),
+                "seen" if _found.memory else "not seen",
+            )
         return _found
 
 
