@@ -41,6 +41,13 @@ export const store = createStore({
   page: null, // the page the open theme is shown on ("normal" or a mode), if any
   plugins: [], // plugin editor pages: /api/plugins/pages
   hardware: null, // the hardware's names (core/hardware.js); false: the server has none
+  settings: null, // Settings: {config, catalog, restart} (core/settings.js)
+  settingsError: null, // why config.toml cannot be read
+  panelInfo: null, // Settings: the panel found, the video mode's state
+  systemInfo: null, // Settings: starting with the system
+  aboutInfo: null, // Settings: version, licence, notices, folders
+  sourceStates: null, // Settings: what the running app says of its sensor sources
+  serviceStates: null, // Settings: the services and their states
   prefs: {
     snap: 4, // px; 0 = off
     guides: true,

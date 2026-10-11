@@ -135,3 +135,21 @@ rules.
 | `GET autopilot/settings` | | `{background, enabled, state, detail, status, options, rules, problems, themes, transitions}`: whether the service is switched on, its settings and its rules, what is wrong with each rule (`problems`, `""` when nothing), the installed themes and the transitions it may use |
 | `POST autopilot/settings` | `{enabled, options, rules}`, each optional | the same as `GET`. Every rule is checked first; one that is wrong refuses everything (400, `"Rule <name>: ..."`). Changes reach the file in one write, and rules that did not change keep their comments |
 | `GET autopilot/status` | | `{background, enabled, state, detail, status}`: `state` as for a service; `status` is what the service does now, `{rule, theme, since_s, candidate, resting, signals}` (`null` while it does not run) |
+
+## The settings routes
+
+The app's *Settings* talk to the editor's server (`editor/settings.py`) through these
+routes. The rules of the console API above hold: `POST` needs the header
+`X-Libre-Panel: 1`; an error is `{"error": "<text>"}` with **400** (the request is wrong),
+**409** (config.toml cannot be read, or the change would break it), **501** (a folder
+that cannot be opened here) or **502** (the place search cannot be reached); nothing is
+written on an error.
+
+| Route | Methods | What it is |
+|---|---|---|
+| `/api/settings` | GET, POST | `GET` gives `{config, catalog, restart}`: config.toml's values with the defaults filled in (`device`, `video`, `sensors.providers`, `sensors.librehardwaremonitor`, `refresh_ms`, `weather`, `services.enabled` and `services.options`, `language`); the `catalog` to choose from (the sources, the drivers, the services with the `options` each declares); and `restart`, the written settings that wait for the panel to start again (`sensors.*` and `weather.*`, which are made when it starts; a new start of the panel loop clears them). `POST {"set": {"device.brightness": 70, "refresh_ms": null}}` writes any number of settings in one go, each by its name in config.toml; `null` takes a setting out where that is a thing (`refresh_ms`, `weather.latitude`, `weather.longitude`, `weather.place`, any option of a service). Each setting has a rule (type, range, the choices; `psutil` alone is refused, since config.py reads it as the usual list), and one that fails refuses them all. The answer is that of `GET` |
+| `/api/panel` | GET | the panel on the bus, looked for without opening it (`found`), the one the settings go by (`model`: the chosen one, else the found one), `configured` (`"auto"` or a model), `running` (what the app says of the panel) and the video mode `{mode, fps, on, usb, gaps}`, where `gaps` are what it still needs: `clip`, `ffmpeg`, `ffmpeg-path`, or `model` (not proven on this panel) |
+| `/api/system` | GET, POST | starting with the system: `{kind, enabled, elevated, can_elevate, location, command, program, risky, language}`. `POST {"autostart": true}` or `{"elevated": true}` do what `libre-panel autostart enable` does; the highest rights only for an administrator (409 and the reason otherwise) |
+| `/api/location` | POST | `{"query": "name"}` gives up to six places `{name, latitude, longitude}` from Open-Meteo's place search, the coordinates kept to about a kilometre. It is the one route that goes out to the internet, and only when the person asks |
+| `/api/about` | GET | `{version, license, notice, links, doctor, folders}`; `notice` is NOTICE.md, of which the package keeps a copy in `assets/` (a test makes sure it is the same) |
+| `/api/open` | POST | `{"folder": "config"}` (or `themes`, `logs`) shows that folder in the file manager |

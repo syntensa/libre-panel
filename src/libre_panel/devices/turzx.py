@@ -27,6 +27,23 @@ SERIAL_DRIVERS = {
 }
 
 
+def video_gaps(video, model: PanelModel | None, *, proven: bool = True) -> list[str]:
+    """What the video mode lacks, as codes: ``"model"`` (not proven on this panel; it is then
+    the only one), ``"clip"`` (``local_clip`` is not set), ``"ffmpeg"`` (not found) and
+    ``"ffmpeg-path"`` (``video.ffmpeg`` names no program). ``proven=False`` does not ask for a
+    proven model, as ``mode = "on"`` does not."""
+    if proven and model is not None and not model.video:
+        return ["model"]
+    gaps = [] if video.local_clip else ["clip"]
+    from libre_panel.devices.h264 import find_ffmpeg
+
+    try:
+        find_ffmpeg(video.ffmpeg)
+    except DeviceError:
+        gaps.append("ffmpeg-path" if video.ffmpeg else "ffmpeg")
+    return gaps
+
+
 def video_mode(video, model: PanelModel | None) -> tuple[bool, list[str]]:
     """Whether a TURZX USB panel runs in video mode, and what keeps ``auto`` from it.
 
@@ -38,26 +55,18 @@ def video_mode(video, model: PanelModel | None) -> tuple[bool, list[str]]:
         return video.mode == "on", []
     if model is None:
         return False, []
-    if not model.video:
-        return False, [t("the video mode is not proven on the {panel} yet", panel=model.label)]
-    missing = []
-    if not video.local_clip:
-        missing.append(t("video.local_clip is not set (see docs/CONFIGURATION.md, Video)"))
-    from libre_panel.devices.h264 import find_ffmpeg
-
-    try:
-        find_ffmpeg(video.ffmpeg)
-    except DeviceError:  # said without the path: doctor reports are shared
-        if video.ffmpeg:
-            missing.append(t("ffmpeg is not at the path in video.ffmpeg (config.toml)"))
-        else:
-            missing.append(
-                t(
-                    "the video mode needs ffmpeg: install it, or set video.ffmpeg in config.toml "
-                    "to the ffmpeg program"
-                )
-            )
-    return not missing, missing
+    gaps = video_gaps(video, model)
+    texts = {
+        "model": t("the video mode is not proven on the {panel} yet", panel=model.label),
+        "clip": t("video.local_clip is not set (see docs/CONFIGURATION.md, Video)"),
+        # said without the path: doctor reports are shared
+        "ffmpeg-path": t("ffmpeg is not at the path in video.ffmpeg (config.toml)"),
+        "ffmpeg": t(
+            "the video mode needs ffmpeg: install it, or set video.ffmpeg in config.toml "
+            "to the ffmpeg program"
+        ),
+    }
+    return not gaps, [texts[gap] for gap in gaps]
 
 
 class TurzxDisplay(Display):

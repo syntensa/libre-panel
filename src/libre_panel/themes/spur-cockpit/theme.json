@@ -4,6 +4,7 @@
   "author": "Libre Panel",
   "license": "GPL-3.0-or-later",
   "description": "SPUR II's Cockpit screen for 1920x480 bar panels: the CPU's and the GPU's load as two equal charts with the RAM as a ring beside them, and below four columns of equal width: CPU, GPU, memory and network.",
+  "collection": "SPUR II",
   "display": {
     "model": "turing-8.8-usb",
     "orientation": "landscape",

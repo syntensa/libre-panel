@@ -312,7 +312,10 @@ def test_language_switch_keeps_unsaved_work(page, isolated_home):
     js(page, "state.theme.name = 'Work in progress'; markDirty()")
     page.select_option("#lang-select", "de")
     page.wait_for_function("document.documentElement.lang === 'de'")
-    page.wait_for_function("state.theme && state.theme.name === 'Work in progress'")
+    # (restored after the reload: the theme first, its unsaved mark a moment later)
+    page.wait_for_function(
+        "state.theme && state.theme.name === 'Work in progress' && state.dirty === true"
+    )
     assert load_config().language == "de"
     assert page.locator("#btn-save").inner_text() == "Speichern"
     assert page.locator("#btn-activate").get_attribute("title").startswith("Theme speichern")

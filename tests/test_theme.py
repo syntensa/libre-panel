@@ -129,3 +129,21 @@ def test_builtin_theme_files_are_plain_json():
     root = Path(__file__).resolve().parents[1] / "src" / "libre_panel" / "themes"
     for file in root.glob("*/theme.json"):
         json.loads(file.read_text(encoding="utf-8"))
+
+
+def test_a_collection_groups_themes_and_the_spur_screens_are_one():
+    """SPUR II's screens are kept as a legacy set: galleries show Libre Panel's own first."""
+    from libre_panel.theme.model import builtin_themes_dir
+
+    data = minimal()
+    assert "collection" not in parse_theme(data).to_dict()
+    data["collection"] = "SPUR II"
+    assert parse_theme(data).to_dict()["collection"] == "SPUR II"
+    tagged = {
+        folder.name
+        for folder in builtin_themes_dir().iterdir()
+        if (folder / "theme.json").is_file() and load_theme(folder).collection == "SPUR II"
+    }
+    assert tagged == {f"spur-{n}" for n in (
+        "ii", "classic", "horizon", "header", "focus", "session", "cockpit", "studio"
+    )}  # fmt: skip

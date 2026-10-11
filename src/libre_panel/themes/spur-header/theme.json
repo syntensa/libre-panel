@@ -4,6 +4,7 @@
   "author": "Libre Panel",
   "license": "GPL-3.0-or-later",
   "description": "SPUR II's game screen with the familiar frame, for 1920x480 bar panels: the frame rate and the 1% low in the header beside the game's logo, the CPU's and GPU's load as charts, RAM, the GPU's temperatures and a frame time chart with who holds the rate down below.",
+  "collection": "SPUR II",
   "display": {
     "model": "turing-8.8-usb",
     "orientation": "landscape",

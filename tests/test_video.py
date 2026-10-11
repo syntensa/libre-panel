@@ -147,6 +147,23 @@ def test_auto_video_mode_needs_a_proven_panel_the_clip_name_and_ffmpeg(tmp_path)
     )
 
 
+def test_what_the_video_mode_lacks_is_told_in_codes_too(tmp_path):
+    """The app's settings word the gaps themselves; the texts of ``video_mode`` come from them."""
+    from libre_panel.devices.models import get_model
+    from libre_panel.devices.turzx import video_gaps, video_mode
+
+    nine, eight = get_model("turing-9.2-usb"), get_model("turing-8.8-usb")
+    ffmpeg = tmp_path / "ffmpeg"
+    ffmpeg.write_text("")
+    missing = VideoConfig(ffmpeg=str(tmp_path / "missing"))
+    assert video_gaps(VideoConfig(local_clip="x", ffmpeg=str(ffmpeg)), nine) == []
+    assert video_gaps(missing, nine) == ["clip", "ffmpeg-path"]
+    assert video_gaps(missing, eight) == ["model"]  # the panel decides before anything else
+    assert video_gaps(missing, eight, proven=False) == ["clip", "ffmpeg-path"]  # "on" asks for no
+    assert video_gaps(missing, None) == ["clip", "ffmpeg-path"]  # proof: there is no panel yet
+    assert len(video_mode(missing, nine)[1]) == len(video_gaps(missing, nine))
+
+
 # -- the session against the simulated panel ------------------------------------
 
 
