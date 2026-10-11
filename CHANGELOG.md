@@ -529,6 +529,10 @@
   `config.toml` whenever it loads, whether or not its theme does; the panel keeps its theme
 
 **Changes**
+- SPUR II's screens are kept as a legacy set: their themes carry
+  `"collection": "SPUR II"`, and galleries show Libre Panel's own themes
+  first and SPUR II's apart, for those who want to see where Libre Panel
+  started
 - The editor before the app stays at `/classic/` until the app has all its
   views; plugins' editor pages open inside the app (*Pages*, or Ctrl+K)
 - The video mode turns itself on: `video.mode` is `"auto"` by default, which

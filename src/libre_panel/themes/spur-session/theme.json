@@ -4,6 +4,7 @@
   "author": "Libre Panel",
   "license": "GPL-3.0-or-later",
   "description": "SPUR II's Session screen for the game, on 1920x480 bar panels: the frame rate with its last ten minutes, a chart of the longest frame of each moment, and the CPU's and GPU's temperatures and power with their course over the same ten minutes.",
+  "collection": "SPUR II",
   "display": {
     "model": "turing-8.8-usb",
     "orientation": "landscape",

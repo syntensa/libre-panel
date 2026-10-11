@@ -386,6 +386,7 @@ def test_the_theme_list_names_each_theme(server, isolated_home):
     classic = found["spur-classic"]
     assert classic["name"] == "SPUR Classic" and classic["builtin"]
     assert classic["size"] == [1920, 480] and classic["model"]
+    assert classic["collection"] == "SPUR II" and found["studio"]["collection"] == ""
     assert found["broken"]["name"] == "broken" and found["broken"]["size"] is None
 
 

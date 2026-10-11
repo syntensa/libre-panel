@@ -4,6 +4,7 @@
   "author": "Libre Panel",
   "license": "GPL-3.0-or-later",
   "description": "SPUR II's Horizon screen for 1920x480 bar panels: the CPU's load grows up from a midline and the GPU's down from it, about 70 seconds side by side as a landscape; below it five tiles for the values, network and music, the fans and the clock above.",
+  "collection": "SPUR II",
   "display": {
     "model": "turing-8.8-usb",
     "orientation": "landscape",

@@ -4,6 +4,7 @@
   "author": "Libre Panel contributors",
   "license": "CC-BY-4.0",
   "description": "The SPUR II classic layout for 1920x480 bar panels (8.8\"/9.2\"): two load charts over four sections, arctic base with the teal signature and light on every value.",
+  "collection": "SPUR II",
   "display": {
     "model": "turing-9.2-usb",
     "orientation": "landscape",

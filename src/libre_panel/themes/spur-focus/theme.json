@@ -4,6 +4,7 @@
   "author": "Libre Panel",
   "license": "GPL-3.0-or-later",
   "description": "SPUR II's Focus screen for the game, on 1920x480 bar panels: the frame rate large, with its course over 35 seconds, the CPU's and GPU's load as small charts beside it, and below four sections: the frames, CPU, GPU and system.",
+  "collection": "SPUR II",
   "display": {
     "model": "turing-8.8-usb",
     "orientation": "landscape",

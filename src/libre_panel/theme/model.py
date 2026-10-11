@@ -440,6 +440,9 @@ class Theme:
     author: str = ""
     license: str = ""
     description: str = ""
+    # A set the theme belongs to, for galleries ("SPUR II": the screens Libre Panel
+    # grew out of); "" = Libre Panel's own or the user's.
+    collection: str = ""
     background_color: str = "#000000"
     background_image: str | None = None
     refresh_ms: int = 1000
@@ -474,6 +477,7 @@ class Theme:
             "author": self.author,
             "license": self.license,
             "description": self.description,
+            **({"collection": self.collection} if self.collection else {}),
             "display": {
                 "model": self.model,
                 "orientation": self.orientation,
@@ -1002,6 +1006,7 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         author=_coerce("string", data.get("author", ""), "author"),
         license=_coerce("string", data.get("license", ""), "license"),
         description=_coerce("string", data.get("description", ""), "description"),
+        collection=_coerce("string", data.get("collection", ""), "collection"),
         width=width,
         height=height,
         background_color=bg_color,

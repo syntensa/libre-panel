@@ -4,6 +4,7 @@
   "author": "Libre Panel",
   "license": "GPL-3.0-or-later",
   "description": "SPUR II's classic screen for 1920x480 bar panels: two load charts with their sections, RAM and network in staggered boxes, fans and the clock in the header; light bars, flat frames, the grid and one light.",
+  "collection": "SPUR II",
   "display": {
     "model": "turing-8.8-usb",
     "orientation": "landscape",

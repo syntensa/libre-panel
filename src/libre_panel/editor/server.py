@@ -177,6 +177,8 @@ def _theme_list() -> list[dict[str, Any]]:
         name = data.get("name") if isinstance(data, dict) else None
         item["name"] = name if isinstance(name, str) and name.strip() else item["id"]
         item["model"] = display.get("model") if isinstance(display.get("model"), str) else None
+        collection = data.get("collection") if isinstance(data, dict) else None
+        item["collection"] = collection if isinstance(collection, str) else ""
         item["size"] = (
             [display["width"], display["height"]]
             if all(isinstance(display.get(k), int) for k in ("width", "height"))

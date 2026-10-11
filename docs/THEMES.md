@@ -63,6 +63,9 @@ to write or review themes by hand.
   `"per_frame": true` (older themes) means a point a pixel apart, `w / 25`
   seconds. Without video mode a graph shows `history` readings. While its
   sensor has no value, a graph in video mode moves on with a gap.
+- Optional: `"collection"` names a set the theme belongs to, and galleries
+  group by it (`"SPUR II"`: the screens of the project Libre Panel grew out
+  of, kept as a legacy set). Leave it out for a theme of your own.
 - Widgets are drawn in list order: later ones are on top.
 - Unknown fields are ignored with a warning, so newer themes still load.
 - Optional: `"toast"` sets how messages from services show (editor:

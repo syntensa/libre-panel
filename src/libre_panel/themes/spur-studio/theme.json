@@ -4,6 +4,7 @@
   "author": "Libre Panel",
   "license": "GPL-3.0-or-later",
   "description": "SPUR II's Studio screen for 1920x480 bar panels, made of the cards: a large clock with the seconds and the date, the network and the volume on the left, what plays (the weather when nothing does) in the middle, with a line of light between the two cards, and rings for the CPU, the GPU and the RAM with their readings on the right.",
+  "collection": "SPUR II",
   "display": {
     "model": "turing-8.8-usb",
     "orientation": "landscape",
