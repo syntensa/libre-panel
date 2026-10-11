@@ -119,6 +119,46 @@ def shown_themes(page):
     return page.locator(".theme-card").evaluate_all("cards => cards.map((c) => c.dataset.theme)")
 
 
+def open_collections(page):
+    """Open every collection's group: its cards are not there before."""
+    for toggle in page.locator(".theme-collection-toggle[aria-expanded='false']").all():
+        toggle.click()
+
+
+def own_themes(page):
+    """The ids of Libre Panel's own themes and yours that Start leads with: not a collection's,
+    and not one kept for a page of its own (the round report)."""
+    return js(
+        page,
+        """(() => {
+          const { themes, pages } = window.libre.store.get();
+          const apart = pages.pages.filter((p) => p.id !== "normal" && p.theme);
+          const kept = new Set(apart.map((p) => p.theme));
+          return themes.filter((t) => !t.collection && !kept.has(t.id)).map((t) => t.id);
+        })()""",
+    )
+
+
+def a_set(theme_id):
+    """The collection a theme is in, for the tests: SPUR II's screens (as the built-in themes
+    of v0.5 name it) and one made-up set; Libre Panel's own themes are in none."""
+    return "SPUR II" if theme_id.startswith("spur-") else "Old Set" if theme_id == "pico" else ""
+
+
+def with_collections(collection=a_set):
+    """/api/themes with each theme in the collection ``collection(id)`` names, as a route's
+    handler: the list of a server whose themes are in sets, whatever this one has."""
+    import json
+
+    def handler(route, request):
+        listed = route.fetch().json()
+        for item in listed:
+            item["collection"] = collection(item["id"])
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(listed))
+
+    return handler
+
+
 def finishes(page, kind):
     """The finish of each widget of one type."""
     pick = f"window.libre.doc.widgets().filter((w) => w.type === {kind!r}).map((w) => w.finish)"
@@ -199,6 +239,7 @@ def test_start_has_a_gallery_of_every_theme(app_url, isolated_home):
     with browser_page(app_url, "home", allow=PICTURE) as page:
         page.locator(".start-side-head a").click()  # "All"
         page.wait_for_selector(".start.gallery .theme-card")
+        open_collections(page)  # (where the themes name one)
         shown = shown_themes(page)
         assert sorted(shown) == sorted(theme_ids(page))  # whatever is installed, nothing fixed
         assert page.locator(".theme-card.current").get_attribute("data-theme") == "libre-default"
@@ -251,10 +292,10 @@ def test_a_first_start_asks_how_it_should_look(app_url, isolated_home):
         page.wait_for_selector(".start.first .theme-card")
         assert page.locator(".start-head h1").inner_text() == "How should it look?"
         assert page.locator(".panel-strip").inner_text().startswith("No panel found yet")
-        ids = theme_ids(page)  # no panel known: every theme is on offer
-        assert page.locator(".theme-card").count() == len(ids)
+        # no panel known: Libre Panel's own themes (and yours) are on offer, all sizes
+        assert sorted(shown_themes(page)) == sorted(own_themes(page))
         assert page.locator(".theme-card .theme-card-badge").count() == 0  # none is chosen yet
-        choice = ids[0]
+        choice = shown_themes(page)[0]
         page.locator(f'.theme-card[data-theme="{choice}"] .theme-card-main').click()
         expect(page.locator(".tab[aria-current='page']")).to_have_text("Design")  # on to Design
         assert wait_for(lambda: load_config().theme == choice)
@@ -270,21 +311,104 @@ def test_a_first_start_offers_the_themes_for_the_panel_it_found(app_url, isolate
         expect(strip).to_contain_text("Your panel is here: Turing 9.2″")
         expect(strip).to_contain_text("1920 × 480")
         themes = js(page, "window.libre.store.get().themes")
-        fits = {i["id"] for i in themes if i["size"] == [1920, 480]}
-        assert set(shown_themes(page)) == fits and len(fits) < len(themes)
+        own = set(own_themes(page))
+        fits = {i["id"] for i in themes if i["id"] in own and i["size"] == [1920, 480]}
+        assert fits and set(shown_themes(page)) == fits and len(fits) < len(themes)
         # the way to the others, and back
         expect(page.locator(".start-actions")).to_contain_text(f"{len(themes) - len(fits)}")
         page.get_by_role("button", name="See all").click()
-        expect(page.locator(".theme-card")).to_have_count(len(themes))
-        page.get_by_role("button", name="Only those for this panel").click()
+        loose = [i for i in themes if not i.get("collection")]  # a collection is a closed group
+        expect(page.locator(".theme-card")).to_have_count(len(loose))
+        page.get_by_role("button", name="Show fewer").click()
         expect(page.locator(".theme-card")).to_have_count(len(fits))
         # another panel can be named
         page.get_by_role("button", name="Another panel").click()
         page.locator(".popover .model-row", has_text="Turing 3.5").first.click()
         expect(strip).to_contain_text("Themes for Turing 3.5″")
-        small = {i["id"] for i in themes if i["size"] in ([480, 320], [320, 480])}
+        small = {
+            i["id"] for i in themes if i["id"] in own and i["size"] in ([480, 320], [320, 480])
+        }
         expect(page.locator(".theme-card")).to_have_count(len(small))
         assert set(shown_themes(page)) == small
+
+
+def test_a_collection_waits_closed_at_the_end_of_the_gallery(app_url, isolated_home):
+    """Libre Panel's own themes and yours come first; each collection the themes name is a
+    group of its own (A to Z) that opens on a click or a key. Nothing names SPUR: a second
+    collection is a group as well."""
+    choose_theme(isolated_home)
+    with browser_page(
+        app_url, "home/themes", routes={"**/api/themes": with_collections()}, allow=PICTURE
+    ) as page:
+        page.wait_for_selector(".start.gallery .theme-card")
+        ids = [i["id"] for i in js(page, "window.libre.store.get().themes")]
+        spur = sorted(i for i in ids if i.startswith("spur-"))
+        loose = [i for i in ids if i != "pico" and i not in spur]
+        assert sorted(shown_themes(page)) == sorted(loose)  # the collections' cards are not there
+        groups = page.locator(".theme-collection")
+        assert groups.locator(".theme-collection-title strong").all_inner_texts() == [
+            "Old Set · Legacy",
+            "SPUR II · Legacy",
+        ]
+        assert groups.locator(".theme-collection-count").all_inner_texts() == ["1", str(len(spur))]
+        note = "The screens of the project Libre Panel grew out of"
+        expect(groups.first.locator(".theme-collection-note")).to_have_text(note)
+        # the groups follow the grid in the page
+        assert page.locator(".theme-gallery > :last-child").evaluate(
+            "e => e.matches('.theme-collection')"
+        )
+        toggle = groups.nth(1).locator(".theme-collection-toggle")
+        assert toggle.get_attribute("aria-expanded") == "false"
+        toggle.focus()
+        page.keyboard.press("Enter")  # opens it by a key
+        expect(toggle).to_have_attribute("aria-expanded", "true")
+        body = groups.nth(1).locator(".theme-collection-body")
+        cards = body.locator(".theme-card").evaluate_all("c => c.map((e) => e.dataset.theme)")
+        assert sorted(cards) == spur
+        assert toggle.get_attribute("aria-controls") == body.get_attribute("id")
+        page.keyboard.press("Space")  # and closes it again
+        expect(toggle).to_have_attribute("aria-expanded", "false")
+        expect(page.locator(".theme-card[data-theme='spur-ii']")).to_have_count(0)
+        # a card of a collection is chosen like any other
+        toggle.click()
+        page.locator(".theme-card[data-theme='spur-ii'] .theme-card-main").click()
+        page.wait_for_function("window.libre.store.get().pages.pages[0].theme === 'spur-ii'")
+        expect(page.locator(".theme-card.current")).to_have_attribute("data-theme", "spur-ii")
+
+
+def test_a_collection_does_not_lead_a_first_start_or_the_quick_list(app_url, isolated_home):
+    routes = {"**/api/themes": with_collections(), "**/api/app": a_panel_app()}
+    with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
+        page.wait_for_selector(".start.first .theme-card")
+        assert page.locator(".theme-collection").count() == 0  # nothing of a collection is offered
+        assert set(shown_themes(page)) == {"studio"}  # made for the 9.2" panel: Libre Panel's own
+        page.get_by_role("button", name="See all").click()
+        expect(page.locator(".theme-collection")).to_have_count(2)  # closed, at the end
+        assert page.locator(".theme-card[data-theme='spur-ii']").count() == 0
+        page.get_by_role("button", name="Show fewer").click()
+        expect(page.locator(".theme-collection")).to_have_count(0)
+    choose_theme(isolated_home, "libre-default")
+    with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
+        page.wait_for_selector(".quick-theme")
+        ids = page.locator(".quick-theme").evaluate_all("rows => rows.map((r) => r.dataset.theme)")
+        assert "studio" in ids and not [i for i in ids if a_set(i)]
+        link = page.locator(".quick-collection")  # one line for the collection made for this panel
+        expect(link).to_have_count(1)
+        expect(link).to_contain_text("SPUR II · Legacy")
+        link.click()  # the way into its group
+        page.wait_for_selector(".start.gallery")
+        expect(page.locator(".theme-collection-toggle[aria-expanded='true']")).to_have_count(1)
+        expect(page.locator(".theme-collection-body .theme-card").first).to_be_visible()
+    # what is on the panel is shown first, whichever group it is in
+    choose_theme(isolated_home, "spur-classic")
+    with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
+        page.wait_for_selector(".quick-theme")
+        ids = page.locator(".quick-theme").evaluate_all("rows => rows.map((r) => r.dataset.theme)")
+        assert ids[0] == "spur-classic" and not [i for i in ids[1:] if a_set(i)]
+        page.goto(f"{app_url}#/home/themes")
+        page.wait_for_selector(".theme-collection")
+        badge = page.locator(".theme-collection", has_text="SPUR II").locator(".theme-card-badge")
+        expect(badge).to_have_text("On the panel")  # the group says what is in it
 
 
 def test_the_launcher_shows_and_controls_the_running_panel(background):
@@ -500,7 +624,8 @@ def test_the_new_views_speak_german(app_url, isolated_home):
 
     choose_theme(isolated_home)
     i18n.set_language("de")
-    with browser_page(app_url, "home", allow=PICTURE) as page:
+    sets = {"**/api/themes": with_collections()}
+    with browser_page(app_url, "home", routes=sets, allow=PICTURE) as page:
         page.wait_for_selector(".start-tile")
         assert page.locator(".start-tile strong").all_inner_texts() == [
             "Gestalten",
@@ -509,6 +634,12 @@ def test_the_new_views_speak_german(app_url, isolated_home):
             "Einstellungen",
         ]
         assert page.locator(".panel-card .btn-primary").inner_text() == "Gestalten"
+        page.goto(f"{app_url}#/home/themes")
+        page.wait_for_selector(".theme-collection")
+        group = page.locator(".theme-collection").last
+        assert group.locator("strong").inner_text() == "SPUR II · Legacy"
+        german = "Die Bildschirme des Projekts, aus dem Libre Panel entstand"
+        assert group.locator(".theme-collection-note").inner_text() == german
         page.goto(f"{app_url}#/look")
         page.wait_for_selector(".look-side")
         titles = page.locator(".look-side .section-title").all_text_contents()

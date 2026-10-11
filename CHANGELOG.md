@@ -26,12 +26,15 @@
   its picture, pause, brightness, upside down), the themes made for it to
   switch between with one click, and the way on to Design, Look, Live and
   Settings. *All* is the gallery of every installed theme, built in, from
-  plugins and your own, each drawn by the panel's own renderer; its pencil
-  opens a theme in Design. On a first start (no `theme` in `config.toml`
-  yet) Start asks "How should it look?" with the themes for the panel it
-  found, or the one you name under *Another panel*; *Start empty* and *Open a
-  theme file* are there too. What the panel could not read (the sentence the
-  tray shows) is on Start with the way to its details
+  plugins and your own, each drawn by the panel's own renderer; Libre
+  Panel's own themes and yours come first, and a set of themes that belongs
+  together (a theme's `collection`, such as the SPUR II screens: *SPUR II ·
+  Legacy*) waits closed at the end; its pencil opens a theme in Design. On a
+  first start (no `theme` in `config.toml` yet) Start asks "How should it
+  look?" with Libre Panel's own themes for the panel it found, or the one
+  you name under *Another panel*; *Start empty* and *Open a theme file* are
+  there too. What the panel could not read (the sentence the tray shows) is
+  on Start with the way to its details
 - *Look*, the theme's look in one place beside the picture of the panel: the
   six colour worlds and the palette, how rings, bars, graphs, lettering,
   icons and modules are drawn (light, facet, acrylic, flat) with their glow,

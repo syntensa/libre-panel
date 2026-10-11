@@ -16,7 +16,7 @@ import { Segmented } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { toast } from "../../ui/toast.js";
 import { PanelCard, PanelStrip, panelModelNow, usePanelModel } from "./panel.js";
-import { Gallery, ThemeRow, fitsPanel, startThemes } from "./themes.js";
+import { Gallery, ThemeRow, collectionsOf, fitsPanel, startThemes } from "./themes.js";
 
 // -- what a click does ---------------------------------------------------------------------------
 
@@ -85,12 +85,22 @@ function useStartThemes() {
 
 // -- a first start --------------------------------------------------------------------------------
 
+/**
+ * What a first start offers: Libre Panel's own themes (and yours), those made for the panel
+ * when it is known. A collection and the theme kept for the round report wait under "See all".
+ */
+function suggestions(items, model) {
+  const own = items.filter((item) => !item.collection && !item.special);
+  const fitting = model ? own.filter((item) => item.fits) : own;
+  return fitting.length ? fitting : own.length ? own : items;
+}
+
 function FirstStart() {
   const { model, items } = useStartThemes();
   const [everything, setEverything] = useState(false);
-  const fitting = items.filter((item) => item.fits);
-  const others = items.length - fitting.length;
-  const shown = everything || !model || !fitting.length ? items : fitting;
+  const picks = suggestions(items, model);
+  const more = items.length - picks.length;
+  const shown = everything ? items : picks;
   return html`<div class="start first">
     <${PanelStrip} />
     <div class="start-head">
@@ -99,10 +109,10 @@ function FirstStart() {
     </div>
     <${Gallery} big=${shown.length <= 4} items=${shown} label=${themeLabel} onChoose=${(item) => choose(item, { open: true })} />
     <${StartActions}>
-      ${model && others > 0 && fitting.length
-        ? html`<span class="muted">${t("More themes for other panel sizes: {n}", { n: others })}</span>
+      ${more > 0
+        ? html`<span class="muted">${t("More themes: {n}", { n: more })}</span>
             <button type="button" class="link-btn" onClick=${() => setEverything(!everything)}>
-              ${everything ? t("Only those for this panel") : t("See all")}
+              ${everything ? t("Show fewer") : t("See all")}
             </button>`
         : null}
     <//>
@@ -111,7 +121,7 @@ function FirstStart() {
 
 // -- all themes -------------------------------------------------------------------------------------
 
-function ThemesPage() {
+function ThemesPage({ asked }) {
   const { model, items } = useStartThemes();
   const [scope, setScope] = useState("fits");
   const fitting = items.filter((item) => item.fits);
@@ -131,7 +141,7 @@ function ThemesPage() {
             ]} />`
         : null}
     </div>
-    <${Gallery} items=${filtered} label=${themeLabel} onChoose=${(item) => choose(item)} onEdit=${edit} />
+    <${Gallery} items=${filtered} asked=${asked} label=${themeLabel} onChoose=${(item) => choose(item)} onEdit=${edit} />
     <${StartActions} />
   </div>`;
 }
@@ -173,10 +183,13 @@ function Hint() {
 
 function Launcher() {
   const { model, items } = useStartThemes();
-  // the quick switch: what is on the panel and what is made for it (not a theme kept for a
-  // page of its own, such as the round report); the rest is under "All"
-  const wanted = items.filter((item) => item.shown || (!item.special && (item.fits || !model)));
-  const quick = (wanted.length > 1 ? wanted : items).slice(0, 5);
+  // the quick switch: what is on the panel and what is made for it, of Libre Panel's own and
+  // yours (not a collection's, nor a theme kept for a page of its own, such as the round
+  // report); the rest is under "All", and a collection has a line of its own under them
+  const own = items.filter((item) => !item.collection && !item.special);
+  const wanted = items.filter((item) => item.shown || (own.includes(item) && (item.fits || !model)));
+  const quick = (wanted.length ? wanted : own.length ? own : items).slice(0, 5);
+  const sets = collectionsOf(items.filter((item) => item.fits || !model));
   return html`<div class="start launcher">
     <div class="start-main">
       <${PanelCard} />
@@ -197,6 +210,14 @@ function Launcher() {
       </div>
       <div class="quick-themes">
         ${quick.map((item) => html`<${ThemeRow} key=${item.id} item=${item} onChoose=${(chosen) => choose(chosen)} />`)}
+        ${sets.map(
+          ({ name, count }) => html`<a key=${name} class="quick-collection" href=${`#/home/themes/${encodeURIComponent(name)}`}
+            title=${t("The screens of the project Libre Panel grew out of")}>
+            <strong>${t("{collection} · Legacy", { collection: name })}</strong>
+            <span class="theme-collection-count">${count}</span>
+            <${Icon} name="chevron-right" size=${16} />
+          </a>`,
+        )}
       </div>
       <div class="start-side-actions">
         <button type="button" class="btn" onClick=${startEmpty}><${Icon} name="plus" size=${15} /> ${t("Start empty")}</button>
@@ -212,7 +233,8 @@ function Launcher() {
 function HomeView({ rest }) {
   const { pages, ready } = useStore((s) => ({ pages: s.pages, ready: s.ready }));
   const choosing = useSelector(flow, (state) => state.choosing);
-  if (rest === "themes") return html`<${ThemesPage} />`;
+  const [page, asked] = rest.split("/"); // #/home/themes, or #/home/themes/<a collection>
+  if (page === "themes") return html`<${ThemesPage} asked=${asked ? decodeURIComponent(asked) : ""} />`;
   // pages is null when config.toml cannot be read: nothing is known then, so no first start
   if (ready && pages && (pages.chosen === false || choosing)) return html`<${FirstStart} />`;
   return html`<${Launcher} />`;
@@ -231,7 +253,7 @@ registerProvider(() =>
   store.get().themes.map((item) => ({
     id: `theme.show.${item.id}`,
     title: () => t("Show {name} on the panel", { name: item.name || item.id }),
-    keywords: () => item.id,
+    keywords: () => [item.id, item.collection].filter(Boolean).join(" "),
     group: () => t("Theme"),
     icon: "to-panel",
     rank: 31,

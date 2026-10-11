@@ -78,8 +78,10 @@ background app's state every two seconds, for what needs no more.
 ## Themes in a list
 
 `store.get().themes` is the theme list (`/api/themes`, again after `refreshThemes()`):
-`{id, name, builtin, source, model, size}` for every built-in, plugin and own theme. A
-gallery lists these, not a fixed set; `endpoints.previewUrl(id, width)` is a theme's
+`{id, name, builtin, source, model, size, collection}` for every built-in, plugin and own
+theme. A gallery lists these, not a fixed set: `Gallery` (views/home/themes.js) shows the
+themes that name no `collection` (Libre Panel's own, and yours) first and keeps each
+collection closed at the end, whatever its name; `endpoints.previewUrl(id, width)` is a theme's
 picture (the server keeps it until the theme changes), `openTheme(id)` opens one for
 Design and `showOnPanel(id)` puts one on the panel. `store.get().pages.chosen` is false
 until config.toml names a theme: Start then asks which look the panel should have.

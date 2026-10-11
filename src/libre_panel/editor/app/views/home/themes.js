@@ -1,9 +1,12 @@
 // The themes Start shows: the theme list (/api/themes) in the order that helps most, and the
-// cards and rows they come in. Nothing here names a theme: what is installed is what shows.
+// cards and rows they come in. Nothing here names a theme: what is installed is what shows. A
+// theme that names a `collection` (a set that belongs together, such as the screens of the
+// project Libre Panel grew out of) is kept apart: Libre Panel's own themes and yours come first,
+// each collection waits closed at the end.
 
 import { endpoints } from "../../core/api.js";
 import { t } from "../../core/i18n.js";
-import { html } from "../../lib/preact.js";
+import { html, useEffect, useRef, useState } from "../../lib/preact.js";
 import { panelName } from "../../shell/panel-popover.js";
 import { Icon } from "../../ui/icons.js";
 
@@ -16,9 +19,10 @@ const sourceText = (theme) => (theme.source === "plugin" ? t("from a plugin") : 
 
 /**
  * The themes with what Start says about each: whether it is on the panel (`shown`), made for
- * the panel (`fits`) or kept for another page (`special`: the round report), and a short
- * `note`. Order: the one on the panel, then those that fit (yours, built in, kept for a
- * page), then the rest.
+ * the panel (`fits`) or kept for another page (`special`: the round report), the `collection`
+ * it belongs to ("" for Libre Panel's own and yours), and a short `note`. Order: the one on the
+ * panel, then Libre Panel's own and yours (those that fit first: yours, built in, kept for a
+ * page), then the collections' the same way.
  */
 export function startThemes({ themes, models, pages, model }) {
   // on a first start the theme config.toml names is the default, not a choice
@@ -33,13 +37,21 @@ export function startThemes({ themes, models, pages, model }) {
       ...theme,
       shown,
       fits: fitsPanel(theme, model),
+      collection: typeof theme.collection === "string" ? theme.collection : "",
       special: special.has(theme.id) && !shown,
       note: where || sourceText(theme),
       own: !theme.builtin && theme.source !== "plugin",
     };
   });
-  const order = (item) => (item.shown ? 0 : (item.fits ? 0 : 10) + (item.special ? 3 : item.own ? 1 : 2));
+  const order = (item) => (item.shown ? 0 : (item.collection ? 20 : 0) + (item.fits ? 0 : 10) + (item.special ? 3 : item.own ? 1 : 2));
   return items.sort((a, b) => order(a) - order(b) || (a.name || a.id).localeCompare(b.name || b.id));
+}
+
+/** The collections the themes name, A to Z, with how many themes each has: [{name, count}]. */
+export function collectionsOf(items) {
+  const found = new Map();
+  for (const item of items) if (item.collection) found.set(item.collection, (found.get(item.collection) || 0) + 1);
+  return [...found].sort(([a], [b]) => a.localeCompare(b)).map(([name, count]) => ({ name, count }));
 }
 
 /** A theme's picture, drawn by the server (it keeps the picture until the theme changes). */
@@ -86,13 +98,59 @@ export function ThemeRow({ item, onChoose }) {
   </button>`;
 }
 
-/** The cards in a grid. */
-export function Gallery({ items, big = false, onChoose, onEdit, label }) {
-  return html`<div class=${`theme-grid${big ? " big" : ""}`} role="list" aria-label=${t("Themes")}>
+function Grid({ items, big, onChoose, onEdit, label, name }) {
+  return html`<div class=${`theme-grid${big ? " big" : ""}`} role="list" aria-label=${name || t("Themes")}>
     ${items.map(
       (item) => html`<div role="listitem" key=${item.id} class="theme-grid-item">
         <${ThemeCard} item=${item} big=${big} label=${label(item)} onChoose=${onChoose} onEdit=${onEdit} />
       </div>`,
+    )}
+  </div>`;
+}
+
+/**
+ * A collection of themes, apart from the rest and closed until it is opened: its pictures are
+ * not asked for before. It opens by itself where there is nothing else to show, or when a link
+ * leads to it (`asked`), and then comes into view.
+ */
+function Collection({ name, items, alone, asked, ...more }) {
+  const [open, setOpen] = useState(alone || asked);
+  const section = useRef(null);
+  useEffect(() => {
+    if (asked) section.current?.scrollIntoView({ block: "start" });
+  }, []);
+  const body = `collection-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  const title = t("{collection} · Legacy", { collection: name });
+  return html`<section class="theme-collection" ref=${section}>
+    <button type="button" class="theme-collection-toggle" aria-expanded=${String(open)} aria-controls=${open ? body : undefined} onClick=${() => setOpen(!open)}>
+      <${Icon} name=${open ? "chevron-down" : "chevron-right"} size=${16} />
+      <span class="theme-collection-text">
+        <span class="theme-collection-title">
+          <strong>${title}</strong>
+          ${items.some((item) => item.shown)
+            ? html`<span class="theme-card-badge"><${Icon} name="check" size=${12} strokeWidth=${3} /> ${t("On the panel")}</span>`
+            : null}
+        </span>
+        <span class="theme-collection-note">${t("The screens of the project Libre Panel grew out of")}</span>
+      </span>
+      <span class="theme-collection-count">${items.length}</span>
+    </button>
+    ${open ? html`<div id=${body} class="theme-collection-body"><${Grid} items=${items} name=${title} ...${more} /></div>` : null}
+  </section>`;
+}
+
+/**
+ * The cards: Libre Panel's own themes and yours in a grid, then one closed group for each
+ * collection the themes name (A to Z; `asked` opens one). `big` makes the cards of the grid large.
+ */
+export function Gallery({ items, big = false, asked = "", onChoose, onEdit, label }) {
+  const own = items.filter((item) => !item.collection);
+  const names = collectionsOf(items).map((set) => set.name);
+  return html`<div class="theme-gallery">
+    ${own.length ? html`<${Grid} items=${own} big=${big} onChoose=${onChoose} onEdit=${onEdit} label=${label} />` : null}
+    ${names.map(
+      (name) => html`<${Collection} key=${name} name=${name} items=${items.filter((item) => item.collection === name)}
+        alone=${!own.length && names.length === 1} asked=${name === asked} onChoose=${onChoose} onEdit=${onEdit} label=${label} />`,
     )}
   </div>`;
 }
