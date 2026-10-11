@@ -1061,6 +1061,38 @@ def test_save_as_and_to_the_panel(page, isolated_home):
     page.wait_for_function("document.querySelector('.toast.success') !== null")
 
 
+def test_save_as_says_why_a_built_in_theme_asks_for_a_name(page, isolated_home):
+    """Someone who pressed "To the panel" on a theme that comes with Libre Panel is asked for a
+    name, which is a surprise; the dialog says why. A theme of one's own has nothing to explain."""
+    js(page, "window.libre.doc.edit('t', (theme) => { theme.name = 'Mine'; })")
+    page.locator(".btn-apply").click()
+    dialog = page.locator(".dialog")
+    expect(dialog.locator(".dialog-text")).to_have_text(
+        "“Libre Default” is built in and cannot be changed: "
+        "your changes are saved as a theme of your own."  # (its name, not the title in the edit)
+    )
+    dialog.locator("input").fill("mine")
+    dialog.locator("button[type='submit']").click()
+    on_the_panel = "window.libre.store.get().pages.pages[0].theme === 'mine'"
+    page.wait_for_function(on_the_panel)  # saved, and on the panel
+    page.keyboard.press("Control+Shift+s")  # now it is one's own
+    expect(dialog.locator("input")).to_have_value("mine")
+    assert dialog.locator(".dialog-text").count() == 0
+    page.keyboard.press("Escape")
+    # in German, too
+    js(page, "window.libre.commands.runCommand('language.de')")
+    page.wait_for_function("document.documentElement.lang === 'de'")
+    page.locator(".theme-name").click()
+    page.locator(".theme-row", has_text="Libre Default").first.click()
+    page.wait_for_function("window.libre.doc.theme().name === 'Libre Default'")
+    js(page, "window.libre.doc.edit('t', (theme) => { theme.name = 'Meins'; })")
+    page.locator(".btn-apply").click()
+    expect(dialog.locator(".dialog-text")).to_have_text(
+        "„Libre Default“ ist eingebaut und lässt sich nicht ändern: "
+        "Deine Änderungen werden als eigenes Theme gespeichert."
+    )
+
+
 def test_inspector_details_and_theme_settings(page):
     js(page, "window.libre.doc.setSelection(['cpu-ring'])")
     page.locator(".details-button").click()

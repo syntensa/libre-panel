@@ -672,6 +672,9 @@
   its theme is gone
 - Design: the fan instrument's fan showed as "fan" in its chip, in the inspector and in
   the toolbar (now "Fan", "Lüfter"), and *Live* names the source of the hardware's names
+- Pressing *To the panel* (or *Save*) on a theme that comes with Libre Panel opened a
+  *Save as…* dialog without a word about why; it now says the theme is built in and that
+  the changes are saved as a theme of your own
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

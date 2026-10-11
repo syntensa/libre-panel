@@ -140,6 +140,10 @@ export async function saveAs() {
   const suggestion = slug(doc.theme.name) + (doc.builtin ? "-custom" : "") || "my-theme";
   const id = await promptDialog({
     title: t("Save as…"),
+    // why a person who only wanted it on the panel is asked for a name
+    text: doc.builtin
+      ? t("“{name}” is built in and cannot be changed: your changes are saved as a theme of your own.", { name: themeName(doc.id) })
+      : null,
     label: t("Name of the theme's folder"),
     hint: t("Letters, digits, - _ and ."),
     value: doc.builtin || !doc.id ? suggestion : doc.id,
