@@ -103,6 +103,11 @@ def main(command):
                 s["name"] == "notices" for s in control["services"]
             ):
                 raise SystemExit(f"FAIL: the Control page does not see the app: {control}")
+            # the live picture (Pillow's JPEG and PNG writers are in the build)
+            live = url + "api/plugins/control/live"
+            wait(lambda: fetch(live).startswith(b"\xff\xd8"), 20, "live picture (JPEG)")
+            png = live + "?format=png"
+            wait(lambda: fetch(png).startswith(b"\x89PNG"), 20, "live picture (PNG)")
             api(url, "quit")
             code = proc.wait(30)
             if code != 0:
