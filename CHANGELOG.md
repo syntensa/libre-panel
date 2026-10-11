@@ -641,6 +641,10 @@
 - A theme with a slideshow of a folder kept every picture it had shown, each as it was fitted to
   its box, for as long as the theme was on the panel: 2 000 photos of a bar's size took 7 GB. A
   renderer keeps up to 64 MB of them now and reads the others again when their turn comes
+- A notice on the card (the default look) with a `payload["color"]` that is a palette name
+  (`"@net"`, as the plugin docs have it) or a colour nobody can read was not shown at all: the
+  card handed the colour to Pillow as it came and failed. The card takes the accent as the band
+  does (`#rrggbb`, `@name` or a tuple), and the level's where it cannot read one
 - The weather card's line of details ("Feels like 12°", "Wind 18 km/h", the humidity) ran
   together in a card narrower than about 1.75 times its height, and began a few pixels right
   of the text column above it in every card. Each detail keeps a gap to the next, and the line

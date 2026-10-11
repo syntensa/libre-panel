@@ -311,6 +311,36 @@ def test_without_a_queue_what_waited_for_a_transition_comes_first(timed):
     assert layer.current[0].text == "b" and not layer.queue
 
 
+# -- the card ----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("color", "edge"),
+    [
+        ("#ff8000", (255, 128, 0)),
+        ("@net", (10, 200, 30)),  # a name from the theme's palette, as the plugin docs have it
+        ((12, 34, 56), (12, 34, 56)),
+        ([300, -4, 56.7], (255, 0, 56)),
+        ("not-a-colour", (0, 255, 255)),  # a colour nobody can read: the level's (the accent)
+        (7, (0, 255, 255)),
+        (math.inf, (0, 255, 255)),
+    ],
+)
+def test_the_card_takes_the_accent_a_toast_names_or_the_levels(color, edge):
+    """``payload["color"]`` was handed to Pillow as it came: "@net" and a colour nobody can
+    read raised, and the toast was not shown at all."""
+    made = renderer(480, 320, palette={"accent": "#00ffff", "bg": "#000000", "net": "#0AC81E"})
+    layer = ToastLayer(made)
+    layer.add([Toast("hello", seconds=3, payload={"color": color})])
+    layer.advance(0.0)
+    frame = layer.apply(Image.new("RGB", (480, 320)), 1.0)
+    assert layer._failed is None
+    box = frame.getbbox()
+    assert box is not None
+    shown = frame.getpixel((box[0] + 1, (box[1] + box[3]) // 2))  # on the card's coloured edge
+    assert max(abs(a - b) for a, b in zip(shown, edge, strict=True)) <= 8  # (resampled)
+
+
 # -- the band ----------------------------------------------------------------------
 
 

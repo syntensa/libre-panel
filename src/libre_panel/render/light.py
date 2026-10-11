@@ -51,6 +51,23 @@ def role_color(context: Any, role: str) -> RGB:
         return ImageColor.getrgb(ROLES[role][1])[:3]
 
 
+def accent_color(context: Any, toast: Any) -> RGB:
+    """A toast's accent: ``payload["color"]`` (``"#rrggbb"``, ``"@name"`` or a tuple), else the
+    level's, which is also what a colour nobody can read is taken for."""
+    color = toast.payload.get("color")
+    try:
+        if isinstance(color, str) and color:
+            if context is not None:  # knows the palette's names
+                return tuple(context.color(color)[:3])  # type: ignore[return-value]
+            return ImageColor.getrgb(color)[:3]
+        if isinstance(color, tuple | list) and len(color) >= 3:
+            return tuple(max(0, min(255, int(c))) for c in color[:3])  # type: ignore[return-value]
+    except (TypeError, ValueError, OverflowError):
+        pass
+    level = toast.level if toast.level in ("warning", "error") else "info"
+    return role_color(context, level)
+
+
 def mix(a: RGB, b: RGB, share: float) -> RGB:
     """``a`` over ``b`` by ``share`` (0: all ``b``, 1: all ``a``)."""
     return tuple(round(b[i] + (a[i] - b[i]) * share) for i in range(3))  # type: ignore[return-value]

@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw, ImageFont
 from libre_panel.icons import ICON_NAMES, draw_icon
 from libre_panel.plugins.render import RenderContext, ToastStyle, Transition
 from libre_panel.render.band import BandStyle
-from libre_panel.render.light import role_value
+from libre_panel.render.light import accent_color, role_value
 from libre_panel.render.transitions import Entrance, Tube
 
 log = logging.getLogger(__name__)
@@ -313,9 +313,7 @@ class CardStyle(ToastStyle):
         draw.rounded_rectangle(
             [0, 0, width - 1, height - 1], radius, outline="#ffffff1c", width=max(1, SS)
         )
-        accent = toast.payload.get("color") or self._role(
-            toast.level if toast.level in ("warning", "error") else "info"
-        )
+        accent = accent_color(self.context, toast)
         mask = Image.new("L", card.size, 0)
         ImageDraw.Draw(mask).rounded_rectangle([0, 0, width - 1, height - 1], radius, fill=255)
         stripe = Image.new("RGBA", (bar, height), accent)
