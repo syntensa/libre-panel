@@ -418,7 +418,7 @@ def test_demo_has_a_volume_a_game_and_rain_at_any_time_of_day(hour):
 
     snap = demo_snapshot(fixed_time=datetime(2026, 10, 9, hour, 8).timestamp())
     volume, muted = snap.readings["audio.volume"], snap.readings["audio.muted"]
-    assert (volume.value, volume.unit, muted.value) == (46.0, "%", 0)
+    assert (volume.value, volume.unit, muted.value) == (30.0, "%", 0)
     assert len(snap.history["audio.volume"]) == 600
     assert snap.readings["game.frametime_peak"].unit == "ms"
     assert snap.readings["game.limiter"].value in ("cpu", "gpu", "cap")

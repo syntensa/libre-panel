@@ -45,7 +45,6 @@ _WAVES: dict[str, tuple[str, str, float, float, float]] = {
     "game.frametime": ("Frame time", "ms", 7.1, 0.6, 7),
     "game.low": ("1% low", "fps", 104, 4, 19),
     "game.frametime_peak": ("Frame time peak", "ms", 9.4, 1.8, 7),
-    "audio.volume": ("Volume", "%", 46, 0, 1),
     "temp.cpu.ccd1": ("CPU CCD1", "°C", 52, 12, 29),
     "temp.gpu.hot_spot": ("GPU Hot Spot", "°C", 71, 12, 31),
     "temp.nvme.composite": ("NVMe SSD", "°C", 41, 3, 61),
