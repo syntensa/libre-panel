@@ -311,36 +311,6 @@ def test_set_config_tables_never_writes_a_broken_config(isolated_home):
     assert path.read_text(encoding="utf-8") == ""
 
 
-def test_edit_config_makes_several_changes_in_one_write(isolated_home):
-    from libre_panel.config import edit_config
-
-    path = config_dir() / "config.toml"
-    path.parent.mkdir(parents=True)
-    path.write_text('theme = "slate"\n\n[weather]\nenabled = false\n', encoding="utf-8")
-    rules = [{"name": "Night", "theme": "pico", "when": {"time": "22:00-06:30"}}]
-    edit_config(  # the rules first: the settings of their table still come before them
-        ("tables", "services.autopilot.rules", rules),
-        ("value", "services.autopilot.hold_s", 3),
-        ("value", "services.enabled", ["autopilot"]),
-        ("value", "theme", "orbit"),
-        path=path,
-    )
-    config = load_config()
-    assert config.theme == "orbit" and config.services.enabled == ["autopilot"]
-    assert config.services.options["autopilot"] == {"hold_s": 3, "rules": rules}
-    text = path.read_text(encoding="utf-8")
-    assert text.index("[services.autopilot]") < text.index("[[services.autopilot.rules]]")
-
-    before = path.read_text(encoding="utf-8")
-    with pytest.raises(ConfigError):  # one part is wrong: none is written
-        edit_config(("value", "theme", "slate"), ("value", "device.brightness", 500), path=path)
-    with pytest.raises(ConfigError, match="not a table"):
-        edit_config(("value", "theme.deeper", 1), path=path)
-    with pytest.raises(ValueError, match="kind of change"):
-        edit_config(("rename", "theme", "x"), path=path)
-    assert path.read_text(encoding="utf-8") == before
-
-
 def test_edit_config_takes_a_setting_out(isolated_home):
     from libre_panel.config import edit_config
 
@@ -388,3 +358,33 @@ def test_the_place_has_a_name(isolated_home):
         parse_config({"weather": {"place": 5}})
     with pytest.raises(ConfigError, match="at most 120"):
         parse_config({"weather": {"place": "x" * 121}})
+
+
+def test_edit_config_makes_several_changes_in_one_write(isolated_home):
+    from libre_panel.config import edit_config
+
+    path = config_dir() / "config.toml"
+    path.parent.mkdir(parents=True)
+    path.write_text('theme = "slate"\n\n[weather]\nenabled = false\n', encoding="utf-8")
+    rules = [{"name": "Night", "theme": "pico", "when": {"time": "22:00-06:30"}}]
+    edit_config(  # the rules first: the settings of their table still come before them
+        ("tables", "services.autopilot.rules", rules),
+        ("value", "services.autopilot.hold_s", 3),
+        ("value", "services.enabled", ["autopilot"]),
+        ("value", "theme", "orbit"),
+        path=path,
+    )
+    config = load_config()
+    assert config.theme == "orbit" and config.services.enabled == ["autopilot"]
+    assert config.services.options["autopilot"] == {"hold_s": 3, "rules": rules}
+    text = path.read_text(encoding="utf-8")
+    assert text.index("[services.autopilot]") < text.index("[[services.autopilot.rules]]")
+
+    before = path.read_text(encoding="utf-8")
+    with pytest.raises(ConfigError):  # one part is wrong: none is written
+        edit_config(("value", "theme", "slate"), ("value", "device.brightness", 500), path=path)
+    with pytest.raises(ConfigError, match="not a table"):
+        edit_config(("value", "theme.deeper", 1), path=path)
+    with pytest.raises(ValueError, match="kind of change"):
+        edit_config(("rename", "theme", "x"), path=path)
+    assert path.read_text(encoding="utf-8") == before

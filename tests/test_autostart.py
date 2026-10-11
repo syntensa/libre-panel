@@ -162,6 +162,13 @@ class FakeTasks:
         self.tasks.pop(name, None)
 
 
+def test_only_an_administrator_can_set_up_the_start_with_the_highest_rights():
+    """The app asks, so it can tell a person to open a terminal as administrator."""
+    assert Autostart("win32", registry=FakeRegistry(), admin=lambda: True).can_elevate()
+    assert not Autostart("win32", registry=FakeRegistry(), admin=lambda: False).can_elevate()
+    assert not Autostart("linux", admin=lambda: True).can_elevate()  # Windows only
+
+
 def test_windows_elevated_start_is_a_task_with_the_highest_rights():
     import xml.etree.ElementTree as ET
 
@@ -317,10 +324,3 @@ def test_launch_command_from_the_windows_build_takes_the_one_without_a_console(
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.delenv("APPIMAGE", raising=False)
     assert launch_command() == [str(tmp_path / "LibrePanel.exe"), "tray", "--background"]
-
-
-def test_only_an_administrator_can_set_up_the_start_with_the_highest_rights():
-    """The app asks, so it can tell a person to open a terminal as administrator."""
-    assert Autostart("win32", registry=FakeRegistry(), admin=lambda: True).can_elevate()
-    assert not Autostart("win32", registry=FakeRegistry(), admin=lambda: False).can_elevate()
-    assert not Autostart("linux", admin=lambda: True).can_elevate()  # Windows only
