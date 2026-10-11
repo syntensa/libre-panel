@@ -84,6 +84,7 @@ def test_lhm_real_output():
         "cpu.load": (0.4, "%"),
         "cpu.power": (25.6, "W"),
         "gpu.temp": (27.0, "°C"),
+        "gpu.hotspot": (35.3, "°C"),  # "GPU Hot Spot"
         "gpu.load": (0.0, "%"),
         "gpu.power": (10.9, "W"),  # "GPU Package" = board power
         "gpu.freq": (210.0, "MHz"),

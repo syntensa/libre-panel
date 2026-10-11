@@ -745,6 +745,7 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 |---|---|---|
 | `cpu.load`, `cpu.freq`, `cpu.temp`, `cpu.power` | %, MHz, °C, W | psutil (temp on Linux), LibreHardwareMonitor; `cpu.load` also ten times a second from `load` |
 | `gpu.load`, `gpu.temp`, `gpu.power`, `gpu.fan`, `gpu.mem.load` | %, °C, W, RPM, % | LibreHardwareMonitor; `gpu.temp` also Linux AMD; `gpu.load` also from `load` (Windows, any vendor) |
+| `gpu.hotspot` | °C | LibreHardwareMonitor: the hottest spot of the graphics chip ("GPU Hot Spot", as AMD and NVIDIA cards give it; none where the card has no such sensor), the one of the card `gpu.temp` is read from |
 | `mem.load`, `mem.used`, `mem.free`, `mem.total`, `swap.load` | %, GiB | psutil; `free` is what programs can still take without the system swapping, so used and free add up to the total |
 | `mem.temp`, `mem.speed` | °C, MT/s | the memory: the temperature of its hottest module (LibreHardwareMonitor, from the module's own thermal sensor: DDR4 and DDR5, with administrator rights and the PawnIO driver as for the CPU's temperature) and the speed it runs at (the firmware's SMBIOS table, the slowest module's: see [Configuration](CONFIGURATION.md#hardware-names)) |
 | `disk.load`, `disk.used`, `disk.total`, `disk.read`, `disk.write` | %, GiB, B/s | psutil |

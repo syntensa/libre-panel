@@ -1014,7 +1014,7 @@
       "id": "peak-3-now",
       "x": 1896,
       "y": 324,
-      "sensor": "temp.gpu.hot_spot",
+      "sensor": "gpu.hotspot",
       "format": "{value:.0f} °C",
       "font": "builtin:LiberationSans-Regular",
       "font_size": 24,

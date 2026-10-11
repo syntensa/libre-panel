@@ -68,6 +68,7 @@ _CPU_ALIASES = {
 }
 _GPU_ALIASES = {
     "gpu.temp": ("temperature", ("GPU Core", "GPU Hot Spot")),
+    "gpu.hotspot": ("temperature", ("GPU Hot Spot",)),  # the hottest spot of the chip
     "gpu.load": ("load", ("GPU Core", "D3D 3D")),
     # Board power (TBP), as SPUR II verified against HWiNFO.
     "gpu.power": ("power", ("GPU Package", "GPU Power", "GPU Core")),

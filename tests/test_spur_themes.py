@@ -62,6 +62,22 @@ def glow_areas_hold_their_bars(theme, widest=420):
         assert w <= widest, bar["id"]  # a zone as wide as the panel, once for every bar, is slow
 
 
+@pytest.mark.parametrize("name", [*SPUR, "spur-classic"])
+def test_a_spur_screen_reads_the_hardware_by_keys_librehardwaremonitor_makes(name):
+    """A key that no source makes shows "--" on a real PC, and everything in the demo, which has
+    it: the GPU's hot spot was one (``temp.gpu.hot_spot``: the source makes ``gpu.hotspot`` and
+    ``temp.gpu.gpu_hot_spot``). The fixture is real output; it has no motherboard to give fans."""
+    from pathlib import Path
+
+    from libre_panel.sensors.librehardwaremonitor import readings_from_tree
+
+    tree = json.loads((Path(__file__).parent / "data" / "lhm_data.json").read_text("utf-8"))
+    made = set(readings_from_tree(tree))
+    keys = keys_read(load_theme(find_theme(name)))
+    hardware = {k for k in keys if k.startswith(("cpu.", "gpu.", "temp."))}
+    assert hardware and hardware <= made, sorted(hardware - made)
+
+
 @pytest.mark.parametrize("name", SPUR)
 def test_a_spur_screen_draws_whole_with_the_demo(name):
     theme, snapshot, renderer, frame, boxes = drawn(name)

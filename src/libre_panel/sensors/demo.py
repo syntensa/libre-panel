@@ -50,7 +50,7 @@ _WAVES: dict[str, tuple[str, str, float, float, float]] = {
     "game.low": ("1% low", "fps", 104, 4, 19),
     "game.frametime_peak": ("Frame time peak", "ms", 9.4, 1.8, 7),
     "temp.cpu.ccd1": ("CPU CCD1", "°C", 52, 12, 29),
-    "temp.gpu.hot_spot": ("GPU Hot Spot", "°C", 71, 12, 31),
+    "gpu.hotspot": ("GPU hot spot", "°C", 71, 12, 31),
     "temp.nvme.composite": ("NVMe SSD", "°C", 41, 3, 61),
     "temp.board.system": ("Motherboard", "°C", 34, 2, 71),
     "fan.board.case_1": ("Case fan 1", "RPM", 820, 120, 47),
@@ -75,6 +75,7 @@ for _n, (_base, _amp, _period) in enumerate(
 _COPIES = {
     "temp.cpu.package": ("cpu.temp", "CPU Package"),
     "temp.gpu.core": ("gpu.temp", "GPU Core"),
+    "temp.gpu.gpu_hot_spot": ("gpu.hotspot", "GPU Hot Spot"),
     "fan.gpu.fan_1": ("gpu.fan", "GPU Fan"),
     "fan.cpu.fan": ("fan.cpu", "CPU Fan"),
 }

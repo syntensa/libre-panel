@@ -555,6 +555,13 @@
   a thread of its own, as the next theme is for a switch, so the first frame
   takes a few milliseconds. The readings of that drawing are the first
   frame's sample, and the start waits for it two seconds at most
+- SPUR Horizon, SPUR Header and SPUR Session read the GPU's hot spot by a key
+  that no source made (`temp.gpu.hot_spot`): on a PC they showed "--", while
+  the demo, which had made the key up, showed a value. LibreHardwareMonitor
+  now gives `gpu.hotspot` (the "GPU Hot Spot" sensor of the card `gpu.temp`
+  is read from), the themes read it, and the demo has it as it has
+  `gpu.temp`. A test keeps every key the SPUR themes read from the hardware
+  to what the source makes from real output
 
 **Changes**
 - The editor before the app stays at `/classic/` until the app has all its

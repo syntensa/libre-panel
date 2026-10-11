@@ -678,7 +678,7 @@
       "id": "gpu-1-value",
       "x": 567,
       "y": 432,
-      "sensor": "temp.gpu.hot_spot",
+      "sensor": "gpu.hotspot",
       "format": "{value:.0f}",
       "font": "builtin:LiberationSans-Bold",
       "font_size": 34,
