@@ -556,6 +556,8 @@
   SPUR Studio slides in 0.55 s
 
 **Fixes**
+- On Windows the app's local port is held by Libre Panel alone; before, another
+  program could bind the same port and receive its requests
 - PresentMon is no longer looked for in the downloads folder: Libre Panel may
   run as administrator, and it started any `PresentMon*.exe` found there. Name
   it in `[sensors.presentmon] path`, put it in `PATH`, or install it

@@ -15,6 +15,8 @@ import json
 import logging
 import math
 import re
+import socket
+import sys
 import threading
 import webbrowser
 from collections.abc import Callable
@@ -1271,12 +1273,26 @@ ROUTES: tuple[Route, ...] = (
 )
 
 
+def hold_port(sock: Any, platform: str = sys.platform) -> bool:
+    """On Windows, keep the port to this server alone: there SO_REUSEADDR (Python's
+    default for HTTP servers) lets another program bind it too and take requests, and
+    the token in them. Returns whether the address may be reused (elsewhere it may)."""
+    if platform != "win32":
+        return True
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    return False
+
+
 class EditorServer(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, address: tuple[str, int], handler: type[EditorHandler]) -> None:
         super().__init__(address, handler)
         self.token = handler.token  # what a request must carry (access.py)
+
+    def server_bind(self) -> None:
+        self.allow_reuse_address = hold_port(self.socket)
+        super().server_bind()
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         # A browser that closes a tab mid-request is normal, not an error.
