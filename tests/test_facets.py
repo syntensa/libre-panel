@@ -756,6 +756,38 @@ def test_a_wide_graph_gets_the_slimmer_ridge():
     ).sum()
 
 
+def test_a_curve_on_an_enlarged_layer_is_worked_out_at_the_pictures_size():
+    """A graph is drawn larger and scaled down: its ridge is worked out at the picture's size
+    and laid on the layer enlarged, so scaling the layer down gives it back as it was."""
+    points = [(x, 40 + 10 * np.sin(x / 15)) for x in range(0, 200, 2)]
+
+    def ridge(scale, wide):
+        layer = Image.new("RGBA", (200 * scale, 80 * scale), (0, 0, 0, 0))
+        run = [(x * scale, y * scale) for x, y in points]
+        assert facets.curve_ridge(layer, run, 2.0 * scale, CYAN, wide, scale)
+        return layer
+
+    for wide in (False, True):
+        plain = ridge(1, wide)
+        for scale in (2, 3):
+            enlarged = plain.resize((200 * scale, 80 * scale), Image.Resampling.NEAREST)
+            big = np.asarray(ridge(scale, wide), np.int16)
+            assert np.abs(big - np.asarray(enlarged, np.int16)).max() <= 1, (scale, wide)
+            assert big[..., 3].any()
+
+
+def test_a_layer_that_does_not_divide_by_the_scale_has_a_ridge_to_its_edge():
+    layer = Image.new("RGBA", (201, 81), (0, 0, 0, 0))  # not a multiple of 2
+    run = [(0.0, 20.0), (100.0, 60.0), (201.0, 78.0)]
+    assert facets.curve_ridge(layer, run, 4.0, CYAN, False, 2)
+    a = np.asarray(layer)
+    assert a[..., 3].any() and a[
+        ...,
+        3,
+    ].shape == (81, 201)
+    assert a[:, 200, 3].max() > 0 and a[78, 198:, 3].max() > 0  # to the last column and rows
+
+
 def test_a_curve_that_runs_backwards_or_is_too_short_is_left_to_the_line():
     layer = Image.new("RGBA", (50, 30), (0, 0, 0, 0))
     assert not facets.curve_ridge(layer, [(30, 10), (10, 12)], 2.0, CYAN)

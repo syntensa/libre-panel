@@ -131,7 +131,7 @@ class FacetGraph(Finish):
         facets.curve_halo(layer, line, color, scale)  # the halo is the curve's, under its ridge
         draw = ImageDraw.Draw(layer)
         for run in runs:
-            if not facets.curve_ridge(layer, run, width, color, wide):
+            if not facets.curve_ridge(layer, run, width, color, wide, scale):
                 draw.line(run, fill=color, width=width, joint=joint)  # not left to right: a line
         return True
 

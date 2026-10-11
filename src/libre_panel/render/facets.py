@@ -870,25 +870,24 @@ def _over(
     """Lay the band between rows ``lo`` and ``hi`` (floats, one pair per column) over ``acc``
     (premultiplied RGB, the strip starting at row ``rows0``) and ``alpha``: each row
     takes the share of it the band covers, so a curve moving by a fraction of a pixel
-    does not jump. ``colour`` is one RGB per column; ``weight`` (the strip's shape) scales it."""
+    does not jump. ``colour`` is one RGB per column; ``weight`` (the strip's shape) scales it.
+    A column's rows are all different, so the band goes on in one step."""
     n_rows, n_cols = alpha.shape
-    first = np.floor(lo).astype(np.int64)
     depth = int(np.ceil((hi - lo).max())) + 1 if lo.size else 0
-    cols = np.arange(n_cols)
-    for j in range(depth):
-        row = first + j
-        ok = (row - rows0 >= 0) & (row - rows0 < n_rows)
-        if not ok.any():
-            continue
-        r, c = row[ok], cols[ok]
-        cover = np.clip(
-            np.minimum(r + 1.0, hi[ok]) - np.maximum(r.astype(np.float32), lo[ok]), 0, 1
-        )
-        if weight is not None:
-            cover = cover * weight[r - rows0, c]
-        at = (r - rows0, c)
-        acc[at] = colour[ok] * cover[:, None] + acc[at] * (1 - cover[:, None])
-        alpha[at] = cover + alpha[at] * (1 - cover)
+    if depth <= 0:
+        return
+    rows = np.floor(lo).astype(np.int64)[None, :] + np.arange(depth)[:, None]  # (depth, columns)
+    cover = np.clip(np.minimum(rows + 1.0, hi) - np.maximum(rows.astype(np.float32), lo), 0, 1)
+    local = rows - rows0
+    ok = (local >= 0) & (local < n_rows) & (cover > 0)
+    if not ok.any():
+        return
+    r, c, cover = local[ok], np.nonzero(ok)[1], cover[ok]
+    if weight is not None:
+        cover = cover * weight[r, c]
+    share = cover[:, None]
+    acc[r, c] = colour[c] * share + acc[r, c] * (1 - share)
+    alpha[r, c] = cover + alpha[r, c] * (1 - cover)
 
 
 def curve_halo(layer: Image.Image, line: Image.Image, color: RGBA, scale: int = 1) -> None:
@@ -919,6 +918,7 @@ def curve_ridge(
     thick: float,
     color: RGBA,
     wide: bool = False,
+    scale: int = 1,
 ) -> bool:
     """Replace the line of a curve by a ridge, on ``layer`` (RGBA, the fill already
     drawn): a flank lit from the top left on the side away from the fill, a dark one
@@ -926,10 +926,16 @@ def curve_ridge(
     rises or falls there. ``run`` is the curve's points in the layer's pixels,
     ``thick`` the line's width in them. A ``wide`` graph gets one band only.
     False if the points do not run from left to right: the caller draws a line.
+
+    ``scale`` is the layer's pixels to a pixel of the picture it will be (a graph is drawn
+    larger and scaled down). A ridge needs no more than the picture's pixels: it is worked
+    out there, with the rows a flank covers in fractions, and laid on the layer enlarged,
+    which scaling down gives back exactly (a third of the cost at 2, a ninth at 3).
     """
-    xs = np.array([p[0] for p in run], np.float32)
-    ys = np.array([p[1] for p in run], np.float32)
-    width, height = layer.size
+    xs = np.array([p[0] for p in run], np.float32) / scale
+    ys = np.array([p[1] for p in run], np.float32) / scale
+    thick = thick / scale
+    width, height = -(-layer.width // scale), -(-layer.height // scale)  # the picture's size
     if len(xs) < 2 or np.any(np.diff(xs) < -1e-3):
         return False
     x0, x1 = max(0, math.floor(xs[0])), min(width, math.ceil(xs[-1]))
@@ -949,7 +955,6 @@ def curve_ridge(
         a, b = shade(facing(normals), style)
         return base * a[:, None] + b[:, None]
 
-    scale = color[3] / 255
     if wide:  # the line itself, shaded by the slope
         rows0, rows1 = math.floor((y - thick / 2).min()) - 1, math.ceil((y + thick).max()) + 2
         bands = [(y - thick / 2, y + thick, paint(out, RIDGE_BAND), None)]
@@ -960,9 +965,10 @@ def curve_ridge(
         rows0, rows1 = math.floor((y - flank).min()) - 1, math.ceil((y + end).max()) + 2
         bands = []
         if (end > 2 * flank + 1e-3).any():  # a graph that is high enough has a band below
-            fill = np.asarray(
-                layer.crop((x0, max(0, rows0), x1, min(height, rows1))).getchannel("A")
-            )
+            above = max(0, rows0)
+            cover = layer.crop((x0 * scale, above * scale, x1 * scale, min(height, rows1) * scale))
+            cover = cover.getchannel("A")
+            fill = np.asarray(cover.reduce(scale) if scale > 1 else cover)
             bands.append((y + flank, end + y - flank, paint(out, RIDGE_BAND), fill / 255.0))
         bands += [
             (y, y + flank, paint(inner, RIDGE_FAR), None),
@@ -975,10 +981,13 @@ def curve_ridge(
     alpha = np.zeros((rows1 - rows0, x1 - x0), np.float32)
     for lo, hi, colour, weight in bands:
         _over(acc, alpha, rows0, lo, hi, np.clip(colour, 0, 255), weight)
+    opacity = color[3] / 255
     rgba = np.concatenate(
-        [acc / np.maximum(alpha, 1e-6)[..., None], (alpha * 255 * scale)[..., None]], -1
+        [acc / np.maximum(alpha, 1e-6)[..., None], (alpha * 255 * opacity)[..., None]], -1
     )
-    layer.alpha_composite(
-        Image.fromarray(np.clip(rgba + 0.5, 0, 255).astype(np.uint8), "RGBA"), (x0, rows0)
-    )
+    picture = np.clip(rgba + 0.5, 0, 255).astype(np.uint8)
+    if scale > 1:
+        picture = picture.repeat(scale, 0).repeat(scale, 1)
+    picture = picture[: layer.height - rows0 * scale, : layer.width - x0 * scale]
+    layer.alpha_composite(Image.fromarray(picture, "RGBA"), (x0 * scale, rows0 * scale))
     return True

@@ -1060,6 +1060,7 @@ function hintFor(widget, key, kind) {
   if (key === "smooth" && widget.type === "metric") return t("the number glides between readings, together with the bars and rings of its sensor");
   if (key === "seconds" && widget.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = as long as the history readings take");
   if (key === "per_frame") return t("video mode: a point a pixel apart, as SPUR II draws its curves (seconds = width / 25)");
+  if (key === "fill_alpha") return t("how opaque the fill is, 0 to 1; 0 = as before (a flat fill 0.25, a fade 0.45 at its top)");
   if (key === "finish") {
     return [
       t("lit: SPUR II's light on rings, bars, graph lines and weather icons; glow then sets their glow"),
