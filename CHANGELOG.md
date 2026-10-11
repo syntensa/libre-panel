@@ -795,6 +795,9 @@
 - On a first start *Start* asks "How should it look?" without the tabs in the header:
   the views behind them have nothing to show before a theme is on the panel. The tabs
   come with the choice
+- The Control and Autopilot pages, and the editor pages plugins bring, have the app's
+  colours (its teal and amber, its grey) and its typeface, Barlow, so a page shown
+  inside the app looks like part of it; `/static/editor.css` keeps its names
 
 ## 0.4.2 — 2026-10-10
 

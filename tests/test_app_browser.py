@@ -2058,6 +2058,44 @@ def test_lives_numbers_are_judged_against_what_the_panel_should_manage(page):
     }  # fmt: skip
 
 
+# the colours a console or plugin page has (static/editor.css), and the app's (app.css) they are
+CONSOLE_COLOURS = {
+    "--bg": "--bg",
+    "--panel": "--surface",
+    "--panel-2": "--surface-2",
+    "--panel-3": "--surface-3",
+    "--line": "--line-4",
+    "--text": "--text",
+    "--muted": "--muted",
+    "--dim": "--dim",
+    "--accent": "--accent",
+    "--accent-ink": "--accent-ink",
+    "--ok": "--ok",
+    "--warn": "--warn",
+    "--error": "--danger",
+}
+
+
+def test_the_console_pages_have_the_apps_colours_and_typeface(app_url):
+    """The Control and Autopilot pages, and the pages plugins bring, show inside the app: they
+    were a shade off its colours (cyan for its teal, another amber) and had a typeface of the
+    system's."""
+    read = """names => names.map((name) => {
+      const value = getComputedStyle(document.documentElement).getPropertyValue(name);
+      return value.trim().toLowerCase();
+    })"""
+    with browser_page(app_url, "home", allow=PICTURE) as page:
+        app = page.evaluate(read, list(CONSOLE_COLOURS.values()))
+        page.goto(f"{app_url}plugins/control/")
+        page.wait_for_selector("body.plugin-page h1")
+        console = page.evaluate(read, list(CONSOLE_COLOURS))
+        assert dict(zip(CONSOLE_COLOURS, console, strict=True)) == dict(
+            zip(CONSOLE_COLOURS, app, strict=True)
+        )
+        assert js(page, "getComputedStyle(document.body).fontFamily").startswith("Barlow, ")
+        page.wait_for_function("document.fonts.check('14px Barlow')")  # and it is the app's file
+
+
 def test_the_language_switch_keeps_unsaved_work(page_plugin, page, isolated_home):
     from libre_panel.config import load_config
 
