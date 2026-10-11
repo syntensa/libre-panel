@@ -45,7 +45,9 @@ def theme_dict():
 
 def test_index_and_specs(server):
     status, body = request(server, "GET", "/")
-    assert status == 200 and b"Theme Editor" in body
+    assert status == 200 and b'src="/app/main.js"' in body  # the app
+    status, body = request(server, "GET", "/classic/")
+    assert status == 200 and b"Theme Editor" in body  # the editor before it, until it is retired
     status, specs = request(server, "GET", "/api/specs")
     assert status == 200
     assert "gauge" in specs["widgets"]
@@ -227,3 +229,84 @@ def test_detach_gives_plain_widgets(server):
     assert status == 200
     ids = [w["id"] for w in data["widgets"]]
     assert "m0-time" in ids and all("_module" not in w for w in data["widgets"])
+
+
+def test_the_app_and_its_fonts_are_served(server):
+    status, body = request(server, "GET", "/app/main.js")
+    assert status == 200 and b"import" in body
+    status, body = request(server, "GET", "/app/vendor/preact.module.js")
+    assert status == 200 and len(body) > 5000
+    conn = http.client.HTTPConnection("127.0.0.1", server, timeout=10)
+    conn.request("GET", "/app/fonts/Barlow-Medium.ttf", headers={"Host": f"127.0.0.1:{server}"})
+    response = conn.getresponse()
+    assert response.status == 200 and response.getheader("Content-Type") == "font/ttf"
+    assert len(response.read()) > 10_000
+    conn.close()
+    refused = ("/app/fonts/nope.ttf", "/app/../server.py", "/app/%2E%2E/x.py", "/app/README.md")
+    for path in refused:
+        assert request(server, "GET", path)[0] == 404, path
+
+
+def test_readings_with_history(server):
+    status, data = request(server, "GET", "/api/readings?keys=cpu.load,nope&history=cpu.load")
+    assert status == 200 and set(data["readings"]) == {"cpu.load"}
+    assert data["readings"]["cpu.load"]["unit"] == "%"
+    assert 1 < len(data["history"]["cpu.load"]) <= 60
+    status, data = request(server, "GET", "/api/readings")
+    assert status == 200 and "gpu.temp" in data["readings"]  # without keys: every reading
+
+
+def test_pages_of_the_panel_are_modes(server, isolated_home):
+    from libre_panel.config import load_config
+
+    status, data = request(server, "GET", "/api/modes")
+    assert status == 200 and data["theme"] == "libre-default" and data["modes"] == {}
+    assert "game" in data["known"] and data["active"] is None
+    page = {"mode": "game", "theme": "slate", "fps": 30}
+    status, data = request(server, "POST", "/api/modes", page)
+    assert status == 200 and data["modes"]["game"] == {"theme": "slate", "fps": 30}
+    assert load_config().modes["game"].theme == "slate"
+    status, data = request(server, "POST", "/api/modes", {"mode": "game", "theme": ""})
+    assert status == 200 and data["modes"]["game"] == {"theme": None, "fps": 30}  # the normal one
+    assert request(server, "POST", "/api/modes", {"mode": "Not A Name", "theme": "slate"})[0] == 400
+    assert request(server, "POST", "/api/modes", {"mode": "game", "theme": "nope"})[0] == 400
+    assert request(server, "POST", "/api/modes", {"mode": "game", "fps": True})[0] == 400
+
+
+def test_theme_pictures_and_files(server, isolated_home):
+    from io import BytesIO
+
+    from PIL import Image
+
+    status, body = request(server, "GET", "/api/themes/spur-ii/preview?w=320")
+    assert status == 200 and Image.open(BytesIO(body)).size[0] == 320
+    assert request(server, "GET", "/api/themes/nope/preview")[0] == 404
+    request(server, "POST", "/api/themes/mine", {"theme": theme_dict(), "source": "libre-default"})
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    )
+    request(server, "POST", "/api/themes/mine/assets?name=logo.png", png,
+            {"Content-Type": "application/octet-stream"})  # fmt: skip
+    status, body = request(server, "GET", "/api/themes/mine/assets/assets/logo.png")
+    assert status == 200 and body == png
+    (isolated_home / "themes" / "mine" / "notes.txt").write_text("not an asset")
+    assert request(server, "GET", "/api/themes/mine/assets/notes.txt")[0] == 404
+    assert request(server, "GET", "/api/themes/mine/assets/..%2F..%2Fconfig.toml")[0] == 404
+
+
+def test_building_blocks_in_the_theme_colours(server):
+    from libre_panel.editor.presets import PRESETS
+
+    palette = {"bg": "#101010", "accent": "#ff8800"}
+    status, data = request(server, "POST", "/api/preset-previews", {"palette": palette})
+    assert status == 200 and set(data["previews"]) == {p["id"] for p in PRESETS}
+    assert base64.b64decode(data["previews"]["ring"])[:4] == b"\x89PNG"
+
+
+def test_specs_name_the_primary_fields(server):
+    _, specs = request(server, "GET", "/api/specs")
+    assert specs["primary"]["gauge"][:3] == ["sensor", "finish", "color"]
+    for kind, keys in specs["primary"].items():
+        fields = {**specs["common"], **specs["widgets"][kind]}
+        assert set(keys) <= set(fields), kind
+        assert not set(keys) & {"x", "y", "w", "h"}, kind  # set on the canvas

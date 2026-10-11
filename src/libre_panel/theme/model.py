@@ -297,6 +297,28 @@ FINISH_FIELD = ("enum:" + "|".join(FINISHES), FINISHES[0])
 for _type in ("text", "metric", "bar", "gauge", "graph", "icon", "module"):
     WIDGET_SPECS[_type]["finish"] = FINISH_FIELD
 
+# The few fields the editor's inspector shows first for each widget type, in
+# this order; the others are one click further ("Details"). Position and size
+# are set on the canvas, so they are never among them.
+PRIMARY_FIELDS: dict[str, tuple[str, ...]] = {
+    "rect": ("color", "color2", "radius", "outline"),
+    "text": ("text", "finish", "color", "font_size"),
+    "metric": ("sensor", "format", "finish", "color", "smooth", "color_rules"),
+    "bar": ("sensor", "finish", "color", "smooth", "color_rules"),
+    "gauge": ("sensor", "finish", "color", "smooth", "color_rules"),
+    "graph": ("sensor", "finish", "color", "fill", "seconds"),
+    "clock": ("format", "timezone", "color", "font_size"),
+    "analog": ("timezone", "color", "color2", "seconds"),
+    "countdown": ("target", "part", "color", "font_size"),
+    "moon": ("color", "color2", "mirror"),
+    "image": ("src", "fit", "slides", "seconds"),
+    "weather": ("field", "format", "color", "font_size"),
+    "icon": ("icon", "finish", "color", "sensor"),
+    "calendar": ("first_day", "color", "color2", "muted"),
+    "list": ("items", "style", "sort", "color2", "color_rules"),
+    "module": ("module", "source", "finish", "color", "card"),
+}
+
 # The look of the whole panel, block by block (render.look); a block that is
 # missing is off. The editor builds its settings from this table.
 LOOK_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
