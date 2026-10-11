@@ -51,7 +51,18 @@ to write or review themes by hand.
   `-SemiBold`, `-Bold`, `builtin:BarlowCondensed-Medium`, `-SemiBold`,
   `builtin:JetBrainsMono-Medium`, `-Bold`, `builtin:LiberationSans-Regular`,
   `-Bold` (the widths of Arial's letters) ship with Libre Panel (SIL OFL), or
-  use a `.ttf`/`.otf` inside the theme folder.
+  use a `.ttf`/`.otf` inside the theme folder. A character the font has no glyph for
+  is drawn with a font of the computer, in the size, weight and baseline of the text,
+  wherever text is drawn (widgets, cards, lists, notices, `facet` and `acrylic`
+  lettering): a track in Cyrillic, Greek, Chinese, Japanese, Korean, Arabic, Hebrew or
+  Thai, a hardware name in any of them, an emoji (monochrome) or a symbol such as ♪ or →
+  no longer comes out as boxes. The bundled fonts carry Latin, Liberation Sans and
+  JetBrains Mono also Greek and Cyrillic, Liberation Sans also Hebrew; the rest is found
+  once among the fonts of the system: on Windows Segoe UI, Segoe UI Symbol, Yu Gothic, Microsoft
+  YaHei, Malgun Gothic, Nirmala UI, Ebrima and Segoe UI Emoji, on Linux what fontconfig
+  names for the character (`fc-match`), else Noto Sans and DejaVu Sans. A computer with no
+  font for a script (a Linux without Noto CJK) shows boxes for it: install one. A theme
+  needs no setting for this, and a font of the theme that has the glyph draws it.
 - `refresh_ms` is how often sensors are read; `animation.smoothing_ms` is how
   long bars, rings and numbers with `smooth` glide to a new value (0 = jump).
   In video mode values glide until the next reading, so they never stand

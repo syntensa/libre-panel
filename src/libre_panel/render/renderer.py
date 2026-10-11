@@ -32,6 +32,7 @@ from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont
 
 from libre_panel import clock, i18n, timezones
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
+from libre_panel.fonts.fallback import truetype
 from libre_panel.icons import draw_icon, weather_icon_name
 from libre_panel.render import cover, fan, lists
 from libre_panel.render import finish as finishes
@@ -574,13 +575,13 @@ class Renderer:
             try:
                 builtin = builtin_font_path(ref)
                 if builtin is not None:
-                    font = ImageFont.truetype(str(builtin), size)
+                    font = truetype(str(builtin), size)
                 elif self.theme.root is not None:
-                    font = ImageFont.truetype(str(resolve_asset(self.theme.root, ref)), size)
+                    font = truetype(str(resolve_asset(self.theme.root, ref)), size)
             except (OSError, ThemeError) as exc:
                 self._warn(f"font {ref!r} could not be loaded ({exc}); using the default font")
             if font is None and ref != DEFAULT_FONT:
-                font = ImageFont.truetype(str(builtin_font_path(DEFAULT_FONT)), size)
+                font = truetype(str(builtin_font_path(DEFAULT_FONT)), size)
             self._fonts[key] = font or ImageFont.load_default(size)
         return self._fonts[key]
 

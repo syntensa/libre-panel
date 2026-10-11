@@ -742,6 +742,14 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
   token of the run before) said "Libre Panel does not answer … this page tries again by
   itself", which it never would: the server refuses it, and the bar now shows the server's
   sentence about how to open Libre Panel again
+- A character that the bundled fonts have no glyph for came out as a box: a track, an artist,
+  a hardware or place name or a notice in Cyrillic, Greek, Chinese, Japanese, Korean, Arabic,
+  Hebrew or Thai, an emoji, ♪ or →. It is drawn with a font of the computer now, found once, in
+  the size and weight of the text and on its baseline (Segoe UI, Yu Gothic, Microsoft YaHei,
+  Malgun Gothic and the like on Windows; what fontconfig names, else Noto Sans or DejaVu Sans,
+  on Linux), in widgets, cards, lists, notices and the lettering of `facet` and `acrylic`. Text
+  the bundled fonts have is drawn exactly as before. A computer with no font for a script still
+  shows boxes for it: install one (docs/THEMES.md)
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars (the

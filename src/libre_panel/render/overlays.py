@@ -12,8 +12,9 @@ import logging
 from dataclasses import replace
 from typing import Any
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
+from libre_panel.fonts.fallback import truetype
 from libre_panel.icons import ICON_NAMES, draw_icon
 from libre_panel.plugins.render import RenderContext, ToastStyle, Transition
 from libre_panel.render.band import BandStyle
@@ -296,7 +297,7 @@ class CardStyle(ToastStyle):
         unit = max(12, min(size) // 16)  # 30 px on a 480 px high panel
         font = self.context.font("", unit * SS)
         if getattr(font, "path", None):  # a face of its own: the renderer's helper thread
-            font = ImageFont.truetype(font.path, unit * SS)  # may use the shared one
+            font = truetype(font.path, unit * SS)  # may use the shared one
         text = toast.text if len(toast.text) <= 120 else toast.text[:119] + "…"
         pad, gap, bar = unit * SS * 2 // 3, unit * SS // 2, max(3, unit // 8) * SS
         icon_size = unit * SS if toast.icon in ICON_NAMES else 0

@@ -16,6 +16,7 @@ from typing import Any
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont
 
 from libre_panel.fonts import builtin_font_path
+from libre_panel.fonts.fallback import truetype
 
 RGB = tuple[int, int, int]
 
@@ -242,7 +243,7 @@ def paste_top(image: Image.Image, layer: Image.Image, x: int, y: int, rows: floa
 def face(name: str, size: int) -> ImageFont.FreeTypeFont:
     """A built-in face (``"Barlow-Bold"``) of its own: the renderer's fonts may
     be in use by its helper thread."""
-    return ImageFont.truetype(str(builtin_font_path("builtin:" + name)), max(6, int(size)))
+    return truetype(builtin_font_path("builtin:" + name), max(6, int(size)))
 
 
 def tracked_width(font: ImageFont.FreeTypeFont, text: str, tracking: float) -> float:
