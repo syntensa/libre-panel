@@ -180,6 +180,8 @@ def test_the_command_palette_finds_and_runs(page):
 
 
 def test_save_as_and_to_the_panel(page, isolated_home):
+    from test_service import wait_for
+
     from libre_panel.config import load_config
     from libre_panel.theme.model import load_theme
 
@@ -194,8 +196,9 @@ def test_save_as_and_to_the_panel(page, isolated_home):
     assert load_theme(isolated_home / "themes" / "mine").name == "Mine"
     assert page.locator(".unsaved").count() == 0
     page.locator(".btn-apply").click()
+    # (the save's success toast may still be up: wait for the setting, not for a toast)
+    assert wait_for(lambda: load_config().theme == "mine")
     page.wait_for_function("document.querySelector('.toast.success') !== null")
-    assert load_config().theme == "mine"
 
 
 def test_inspector_details_and_theme_settings(page):
