@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Libre Panel — free software for USB system-monitor displays</title>
-<meta name="description" content="Free, open-source software for the small USB system-monitor displays sold as Turing Smart Screen, TURZX, WeAct, XuanFang and more: a visual theme editor, every panel size, smooth 50 fps video mode. Windows, Linux, macOS.">
+<meta name="description" content="Free, open-source software for the small USB system-monitor displays sold as Turing Smart Screen, TURZX, WeAct, XuanFang and more: a visual theme editor, every panel size, smooth 50 fps video mode. Windows and Linux.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Libre Panel">
-<meta property="og:description" content="Free, open-source software for USB system-monitor displays: a visual theme editor, every panel size, Windows, Linux and macOS.">
+<meta property="og:description" content="Free, open-source software for USB system-monitor displays: a visual theme editor, every panel size, Windows and Linux.">
 <meta property="og:image" content="https://syntensa.github.io/libre-panel/images/social-preview.png">
 <meta property="og:url" content="https://syntensa.github.io/libre-panel/">
 <meta name="twitter:card" content="summary_large_image">
@@ -147,7 +147,7 @@
         <a class="btn primary" href="https://github.com/syntensa/libre-panel/releases/latest">Download</a>
         <a class="btn" href="https://github.com/syntensa/libre-panel">Source on GitHub</a>
       </div>
-      <p class="fineprint">Windows · Linux · macOS — GPL-3.0 — no account, no cloud, no vendor app</p>
+      <p class="fineprint">Windows · Linux — GPL-3.0 — no account, no cloud, no vendor app</p>
       <img class="shot" src="images/hero.png" width="2000" height="628"
         alt="The Studio theme on a 9.2 inch bar: a large clock, the local weather in a card, and rings for CPU, RAM and GPU">
     </div>
@@ -319,9 +319,6 @@
         <div class="card"><h3>Windows 10 / 11</h3>
           <p>Setup for your user, no admin rights; optional start at login.</p>
           <a class="btn" href="https://github.com/syntensa/libre-panel/releases/latest">Setup .exe</a></div>
-        <div class="card"><h3>macOS 11+</h3>
-          <p>Apple silicon. Drag to Applications; lives in the menu bar.</p>
-          <a class="btn" href="https://github.com/syntensa/libre-panel/releases/latest">Disk image .dmg</a></div>
         <div class="card"><h3>Linux</h3>
           <p>x86-64 AppImage: make it executable and start it. A tarball too.</p>
           <a class="btn" href="https://github.com/syntensa/libre-panel/releases/latest">AppImage</a></div>
@@ -330,10 +327,9 @@
 pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.4.2"
 libre-panel tray        <span class="c"># background app with tray icon; opens the editor</span>
 libre-panel doctor      <span class="c"># check your panel, write a report</span></pre>
-      <p class="fineprint" style="margin-top: 14px">The downloads are not code-signed yet:
-        Windows SmartScreen asks once (<em>More info → Run anyway</em>); on macOS open the
-        app the first time with right-click → <em>Open</em>. Close the vendor app first;
-        it keeps the panel to itself.</p>
+      <p class="fineprint" style="margin-top: 14px">The Windows downloads are not code-signed
+        yet: SmartScreen asks once (<em>More info → Run anyway</em>). Close the vendor app
+        first; it keeps the panel to itself.</p>
     </div>
   </section>
 </main>

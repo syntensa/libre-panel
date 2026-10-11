@@ -18,7 +18,6 @@ classifiers = [
     "Intended Audience :: End Users/Desktop",
     "Operating System :: Microsoft :: Windows",
     "Operating System :: POSIX :: Linux",
-    "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
     "Topic :: System :: Monitoring",
     "Topic :: System :: Hardware",
@@ -34,7 +33,7 @@ dependencies = [
 serial = ["pyserial>=3.5"]
 usb = ["pyusb>=1.2", "pycryptodome>=3.19", "libusb-package>=1.0"]
 tray = ["pystray>=0.19.5"]
-# what is playing, on Windows (Linux uses playerctl, macOS osascript)
+# what is playing, on Windows (Linux uses playerctl)
 media = [
     "winrt-runtime>=2; sys_platform == 'win32'",
     "winrt-Windows.Foundation>=2; sys_platform == 'win32'",

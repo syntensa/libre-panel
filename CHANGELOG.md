@@ -11,7 +11,7 @@
 - `audio`, a sensor source for the volume: `audio.volume` (0 while muted) and
   `audio.muted` of the default output, read on every frame so a volume bar
   follows the volume keys at once. Windows (no extra program; it follows a
-  changed default device), Linux (`wpctl` or `pactl`) and macOS. It runs only
+  changed default device) and Linux (`wpctl` or `pactl`). It runs only
   while a theme shows `audio.*`; add `"audio"` to `[sensors] providers`
 - Messages in the look of SPUR II: the band (`"toast": {"style": "band"}`,
   or *Theme → Messages* in the editor). A glowing edge ignites from the
@@ -54,7 +54,7 @@
   them (card or band) and `toast.off` leaves kinds out
 - `game` is game mode: it finds the game you play, from a list of programs or
   Steam's library (read from `libraryfolders.vdf` and the `appmanifest` files
-  on Windows, Linux and macOS; on Windows a game counts once its window has
+  on Windows and Linux; on Windows a game counts once its window has
   been in front), publishes `game.name` and `game.logo` (Steam's logo, cut out
   and not scaled), and switches to `[modes.game]` with the entrance; six
   seconds after the game's program ended it switches back. Without the
@@ -116,8 +116,7 @@
   (an image widget: `"src": "@media.app_icon"`), and the small badge on the
   cover of the "Now playing" message. Windows: the logo of a Store app, else
   the icon of the running program; Linux: the PNG of the player's desktop
-  entry; macOS: the app's `.icns`. Found once per program and nothing is sent
-  anywhere
+  entry. Found once per program and nothing is sent anywhere
 - `game.frametime_peak`, the longest frame time since the last reading (so a
   stutter between two readings shows, and a graph of it never stops while a
   game runs), and `game.limiter`, `cpu`, `gpu` or `cap`: who holds the frame
@@ -147,6 +146,13 @@
   instead of trying again at every reading
 
 **Changes**
+- macOS is no longer supported: no download, no tests, no macOS code. Windows
+  and Linux are. Nobody downloaded the macOS builds of any release. Gone with
+  it: the disk image and the menu bar app, the LaunchAgent, and reading the
+  volume and the player through `osascript`. A system that has no autostart
+  (neither Windows nor an XDG desktop) now says "not supported on this system"
+  to `libre-panel autostart` and in the editor, instead of getting a file that
+  does nothing
 - Windows: the GPU, temperatures, power and fans showed nothing unless
   `librehardwaremonitor` was listed in `config.toml`. New configurations now
   start with `providers = ["load", "librehardwaremonitor", "psutil"]` (elsewhere
@@ -191,7 +197,7 @@
   pause or another player instead of asking once a second, so a new track
   shows at once. The cover is read when the track changes, not at every look;
   a look every five seconds is the safety net, and the position still moves on
-  by itself. Linux and macOS ask once a second as before
+  by itself. Linux asks once a second as before
 
 ## 0.4.2 — 2026-10-10
 

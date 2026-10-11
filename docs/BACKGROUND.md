@@ -1,8 +1,8 @@
 # Running in the background
 
 For everyday use Libre Panel runs as a small background app: it drives the
-panel, serves the theme editor and shows an icon in the system tray (menu bar
-on macOS). It can start by itself when you log in.
+panel, serves the theme editor and shows an icon in the system tray. It can
+start by itself when you log in.
 
 ```bash
 libre-panel tray                 # start it (opens the editor the first time)
@@ -19,12 +19,6 @@ With the downloads:
   (`%LOCALAPPDATA%\Programs\Libre Panel`). Updates and uninstalling quit a
   running Libre Panel first; uninstalling also removes autostart (your
   settings and themes stay).
-- **macOS:** open the disk image and drag *Libre Panel* to *Applications*.
-  The download is not signed yet, so macOS refuses the first start: open
-  *System Settings → Privacy & Security* and choose *Open Anyway* (or run
-  `xattr -dr com.apple.quarantine "/Applications/Libre Panel.app"`). The
-  command-line tool is `"/Applications/Libre Panel.app/Contents/MacOS/libre-panel"`.
-  Autostart points at the app, so keep it in *Applications*.
 - **Linux AppImage:** `chmod +x Libre_Panel-*.AppImage`, then double-click
   it or run it without arguments for the tray app; with arguments it is the
   command line (`./Libre_Panel-…AppImage autostart enable`). Autostart
@@ -38,7 +32,7 @@ Installed with pip, add the `tray` extra: `pipx install "libre-panel[usb,serial,
 | Item | What it does |
 |---|---|
 | status line | what the panel shows, or why it waits (e.g. "waiting for the panel") |
-| **Open theme editor** | on Windows and Linux also a click on the icon |
+| **Open theme editor** | also a click on the icon |
 | **Theme** | switch the theme on the panel |
 | **Brightness** | Off, 10–100 %; written to `config.toml` |
 | **Pause panel** | stops sending frames and releases the USB device, e.g. for the vendor app |
@@ -80,7 +74,6 @@ removes exactly what turning it on created.
 |---|---|
 | Windows | registry value `Libre Panel` under `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` |
 | Linux (and other XDG desktops) | `~/.config/autostart/libre-panel.desktop` |
-| macOS | `~/Library/LaunchAgents/io.github.syntensa.libre-panel.plist` (restarted after a crash, not after Quit) |
 
 The entry starts `libre-panel tray --background`, which does not open the
 editor. If a panel is not ready yet at login (USB still starting), Libre

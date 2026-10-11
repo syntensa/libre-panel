@@ -238,7 +238,7 @@ def social(studio2x: Image.Image) -> Image.Image:
     draw.text((72, 188), "Free software for USB system-monitor displays", font=tag, fill=TX_1)
     draw.text(
         (72, 240),
-        "Visual theme editor · every panel size · Windows, Linux, macOS",
+        "Visual theme editor · every panel size · Windows and Linux",
         font=small,
         fill=TX_3,
     )

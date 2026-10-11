@@ -26,7 +26,7 @@ whether it loads.
 pipx inject libre-panel libre-panel-myplugin     # or: pip install libre-panel-myplugin
 ```
 
-**As a folder**, for the downloads (Windows setup, macOS app, AppImage),
+**As a folder**, for the downloads (Windows setup, AppImage),
 which have no pip: copy the plugin into the settings folder,
 
 ```

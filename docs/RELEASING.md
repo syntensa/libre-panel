@@ -4,9 +4,9 @@ Libre Panel ships three ways; one git tag produces all of them.
 
 | Channel | For | Built by |
 |---|---|---|
-| PyPI (`pipx install libre-panel`) | Linux/macOS users, developers | `release.yml` → trusted publishing |
-| GitHub Release downloads | everyone, no Python needed | `release.yml`: Windows setup + portable zip, macOS disk image, Linux AppImage + tarball |
-| Distribution packages (winget, Flathub, AUR, Homebrew) | later | community / follow-up |
+| PyPI (`pipx install libre-panel`) | Linux users, developers | `release.yml` → trusted publishing |
+| GitHub Release downloads | everyone, no Python needed | `release.yml`: Windows setup + portable zip, Linux AppImage + tarball |
+| Distribution packages (winget, Flathub, AUR) | later | community / follow-up |
 
 ## One-time setup
 
@@ -21,11 +21,6 @@ Libre Panel ships three ways; one git tag produces all of them.
    SmartScreen warnings. Free signing for open source is available through
    [SignPath Foundation](https://signpath.org); add the signing step to the
    Windows job once approved.
-4. **Code signing (macOS):** Gatekeeper blocks unsigned downloads, including
-   when the LaunchAgent starts them at login. Until the bundle is signed and
-   notarized (needs a paid Apple Developer ID), users run once:
-   `xattr -dr com.apple.quarantine libre-panel` in the unpacked folder, or
-   install with `pipx` instead.
 
 ## Cutting a release
 
@@ -59,9 +54,6 @@ Every download is tested on its own system before it is attached:
   runs, and the uninstaller quits a running app and removes files, shortcut
   and autostart (`packaging/windows/test_installer.py`, Inno Setup script
   `packaging/windows/libre-panel.iss`);
-- macOS: the disk image mounts, the app is a menu bar app, it runs as the
-  LaunchAgent starts it and when opened like a double-click
-  (`packaging/macos/test_app.sh`);
 - Linux: the AppImage runs without a desktop and on an X11 tray, and its
   autostart entry points at the AppImage file (`packaging/linux/test_appimage.sh`).
 
