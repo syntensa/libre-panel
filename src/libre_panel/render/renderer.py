@@ -1672,7 +1672,9 @@ class Renderer:
                 picture = _rounded(picture, widget["radius"])
             return Piece(picture, x, y)
 
-        return self._cached(widget, id(image), build)
+        # (the picture is part of what the piece is made of, so it is kept as long as the piece is:
+        # another picture could else be made where it was, and be taken for it by its id)
+        return self._cached(widget, (id(image), image), build)
 
     def _slides(self, widget: dict[str, Any]) -> list[str]:
         """The picture and the slideshow's others, folders read every half minute."""

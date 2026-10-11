@@ -656,6 +656,10 @@
   it), yet every start, full hour and new track began a sweep of light that kept the PNG path
   drawing at full rate for a second and a half. The light is gone from those themes (the grid
   and the dust stay), and a sweep over no edge asks for no frames at all
+- A picture of a source (the cover of the track that plays) was known by its object's number
+  alone, which another picture can get once the first is freed (a stream with no cover between
+  two tracks): the old cover then stayed on show with the new track. The picture is kept for as
+  long as what was made of it
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

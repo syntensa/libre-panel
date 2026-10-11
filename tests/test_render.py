@@ -514,3 +514,31 @@ def test_a_renderer_frozen_at_the_first_frame_is_freed_when_it_is_let_go_of(name
         assert ref() is None
     finally:
         gc.unfreeze()
+
+
+def test_a_picture_a_widget_shows_stays_known_so_that_no_other_picture_takes_its_id():
+    """A cover is a new object with each track, and the widget knows it by its id: if nothing
+    held the old one, the next could be made where it was and be taken for it (the old track's
+    cover on show with the new track)."""
+    import gc
+    import weakref
+
+    theme = parse_theme(
+        {
+            "format": THEME_FORMAT,
+            "display": {"width": 60, "height": 60},
+            "widgets": [{"type": "image", "id": "cover", "src": "@media.cover", "w": 40, "h": 40}],
+        }
+    )
+    renderer = Renderer(theme, preview=True)
+    red = Image.new("RGBA", (8, 8), (255, 0, 0, 255))
+    frame, _ = renderer.render(Snapshot(images={"media.cover": red}))
+    assert frame.getpixel((20, 20))[:3] == (255, 0, 0)
+    held = weakref.ref(red)
+    renderer.render(Snapshot())  # (no cover for a while: a stream, a pause)
+    del red
+    gc.collect()
+    assert held() is not None  # the renderer keeps what its picture was made from
+    blue = Image.new("RGBA", (8, 8), (0, 0, 255, 255))
+    frame, _ = renderer.render(Snapshot(images={"media.cover": blue}))
+    assert frame.getpixel((20, 20))[:3] == (0, 0, 255)  # a new picture is a new picture
