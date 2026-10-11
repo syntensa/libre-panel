@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import threading
 import time
 import urllib.parse
@@ -48,6 +49,9 @@ _DAILY_FIELDS = {
 }
 HOURS = 24  # weather.hour.1 ... weather.hour.24: the next hours
 DAYS = 7  # weather.day.0 (today) ... weather.day.6
+RAIN_STEP = timedelta(minutes=15)  # the steps of Open-Meteo's minutely_15 answer
+RAIN_STEPS = 8  # the steps after the current one: the next two hours
+RAIN_MM = 0.1  # a step with at least this much precipitation is rain
 
 # WMO weather interpretation codes as used by Open-Meteo.
 _WMO = {
@@ -126,6 +130,7 @@ def build_params(cfg: WeatherConfig) -> dict[str, Any]:
         "current": ",".join(_CURRENT_FIELDS),
         "hourly": ",".join(_HOURLY_FIELDS),
         "daily": ",".join(_DAILY_FIELDS),
+        "minutely_15": "precipitation",  # the rain of the next hours, in 15-minute steps
         "forecast_days": DAYS,
         "timezone": "auto",
     }
@@ -156,8 +161,9 @@ def forecast_readings(data: dict[str, Any], now: float | None = None) -> dict[st
 
     ``weather.hour.<n>.temperature|code|rain|day|time`` for the next hours
     (1 = the coming full hour) and ``weather.day.<n>.high|low|code|rain|day|name``
-    for today (0) and the next days. Times and day names are local to the
-    weather's place; names follow the language.
+    for today (0) and the next days, plus the rain of the next two hours (see
+    ``_rain_readings``). Times and day names are local to the weather's place;
+    names follow the language.
     """
     out: dict[str, Reading] = {}
     offset = timedelta(seconds=int(data.get("utc_offset_seconds") or 0))
@@ -215,6 +221,52 @@ def forecast_readings(data: dict[str, Any], now: float | None = None) -> dict[st
             else i18n.format_date(datetime.combine(date, datetime.min.time()), "%a")
         )
         out[f"weather.day.{n}.name"] = Reading(f"weather.day.{n}.name", label, "", day)
+    out.update(_rain_readings(data, local_now))
+    return out
+
+
+def _rain_readings(data: dict[str, Any], local_now: datetime) -> dict[str, Reading]:
+    """The rain of the next two hours, from the 15-minute precipitation.
+
+    ``weather.rain.minutes`` counts to the moment the rain starts (dry now) or
+    stops (raining now); it is missing when neither happens in those two hours.
+    ``weather.rain.text`` says it in words, and also when the rain stays or
+    stays away. Nothing is said while the answer ends before the two hours do.
+    """
+    minutely = data.get("minutely_15") or {}
+    times = minutely.get("time") or []
+    amounts = minutely.get("precipitation") or []
+    if not times:
+        return {}
+    try:
+        first = datetime.fromisoformat(times[0])
+    except ValueError:
+        return {}
+    now_index = (local_now - first) // RAIN_STEP  # the step that holds the present moment
+    end = min(now_index + RAIN_STEPS + 1, len(times), len(amounts))
+    if not 0 <= now_index < end:
+        return {}
+    wet = [(amounts[i] or 0) >= RAIN_MM for i in range(now_index, end)]
+    raining = wet[0]
+    change = next((i for i in range(1, len(wet)) if wet[i] != raining), None)
+    if change is None and len(wet) <= RAIN_STEPS:
+        return {}  # nothing changes yet, and the answer ends before the two hours do
+
+    out: dict[str, Reading] = {}
+    if change is not None:
+        moment = first + RAIN_STEP * (now_index + change)
+        minutes = math.ceil((moment - local_now) / timedelta(minutes=1))
+        key = "weather.rain.minutes"
+        out[key] = Reading(key, minutes, "min", "Rain starts or stops")
+        if raining:
+            text = t("Rain stops in {minutes} min", minutes=minutes)
+        else:
+            text = t("Rain in {minutes} min", minutes=minutes)
+    elif raining:
+        text = t("Rain for the next 2 h")
+    else:
+        text = t("No rain for the next 2 h")
+    out["weather.rain.text"] = Reading("weather.rain.text", text, "", "Rain")
     return out
 
 

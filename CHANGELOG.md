@@ -141,6 +141,11 @@
   `libre_panel.render.finish.register`
 - `tools/motion_bench.py` leaves the warm-up out (`--warmup`) and times the
   frames a sweep of light runs over on their own line
+- `weather.rain.minutes` and `weather.rain.text`: the rain of the next two
+  hours from Open-Meteo's 15-minute precipitation. The minutes count to the
+  rain starting or stopping; the text says so ("Rain in 20 min", "Rain stops
+  in 40 min", "No rain for the next 2 h"), in German too. The request still
+  carries only your coordinates; the answer is a little larger
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

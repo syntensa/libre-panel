@@ -684,5 +684,7 @@ of the library inside Libre Panel if its thread ever stops.
 
 Weather is off by default and nothing is sent anywhere until you enable it.
 When enabled, only your coordinates go to Open-Meteo every `update_minutes`.
+The answer includes the rain in 15-minute steps, for the `weather.rain.*`
+readings of the [theme guide](THEMES.md#sensor-keys).
 Weather data by [Open-Meteo.com](https://open-meteo.com), CC BY 4.0, free for
 non-commercial use.

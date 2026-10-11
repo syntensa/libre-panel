@@ -228,3 +228,87 @@ def test_weather_forecast_day_names_in_german():
         i18n.set_language("en")
     assert out["weather.day.0.name"].value == "Heute"
     assert out["weather.day.1.name"].value == "Fr"
+
+
+def _minutely(amounts):
+    """Open-Meteo's 15-minute precipitation (mm) from 14:00 local time on."""
+    from datetime import datetime, timedelta
+
+    start = datetime(2026, 10, 8, 14)
+    times = [
+        (start + timedelta(minutes=15 * i)).isoformat(timespec="minutes")
+        for i in range(len(amounts))
+    ]
+    return {"minutely_15": {"time": times, "precipitation": amounts}}
+
+
+def test_weather_params_ask_for_the_rain_and_the_hours():
+    params = build_params(WeatherConfig(enabled=True, latitude=1, longitude=2))
+    assert params["minutely_15"] == "precipitation"
+    assert {"weather_code", "precipitation_probability", "is_day"} <= set(
+        params["hourly"].split(",")
+    )
+
+
+def test_weather_rain_starts_and_stops():
+    from datetime import UTC, datetime
+
+    from libre_panel.weather.open_meteo import forecast_readings
+
+    data = {**_forecast_data(), **_minutely([0, 0, 0, 0.4, 1.2, 0.8, 0.5, 0, 0, 0, 0, 0])}
+    # 14:32 local (the place is UTC+2): dry, rain from 14:45, counted from now
+    out = forecast_readings(data, datetime(2026, 10, 8, 12, 32, tzinfo=UTC).timestamp())
+    assert out["weather.rain.minutes"].value == 13 and out["weather.rain.minutes"].unit == "min"
+    assert out["weather.rain.text"].value == "Rain in 13 min"
+    # 15:10 local: raining, dry from 15:45
+    out = forecast_readings(data, datetime(2026, 10, 8, 13, 10, tzinfo=UTC).timestamp())
+    assert out["weather.rain.minutes"].value == 35
+    assert out["weather.rain.text"].value == "Rain stops in 35 min"
+    # the hours keep their code, chance of rain and day or night
+    assert out["weather.hour.1.code"].value == 61
+    assert out["weather.hour.1.rain"].value == 40
+    assert out["weather.hour.1.day"].value == 1  # 16:00: day
+
+
+def test_weather_rain_when_nothing_changes():
+    from datetime import UTC, datetime
+
+    from libre_panel.weather.open_meteo import forecast_readings
+
+    at_1432 = datetime(2026, 10, 8, 12, 32, tzinfo=UTC).timestamp()
+    dry = forecast_readings({**_forecast_data(), **_minutely([0] * 12)}, at_1432)
+    assert "weather.rain.minutes" not in dry
+    assert dry["weather.rain.text"].value == "No rain for the next 2 h"
+    wet = forecast_readings({**_forecast_data(), **_minutely([1.0] * 12)}, at_1432)
+    assert "weather.rain.minutes" not in wet
+    assert wet["weather.rain.text"].value == "Rain for the next 2 h"
+    # the window ends at 16:30: rain at 16:30 counts, rain at 16:45 does not
+    edge = forecast_readings({**_forecast_data(), **_minutely([0] * 10 + [1.0])}, at_1432)
+    assert edge["weather.rain.minutes"].value == 118
+    assert edge["weather.rain.text"].value == "Rain in 118 min"
+    late = forecast_readings({**_forecast_data(), **_minutely([0] * 11 + [1.0])}, at_1432)
+    assert "weather.rain.minutes" not in late
+    assert late["weather.rain.text"].value == "No rain for the next 2 h"
+    # an answer that ends before the two hours do says nothing about the rain
+    short = forecast_readings({**_forecast_data(), **_minutely([0, 0, 0])}, at_1432)
+    assert "weather.rain.text" not in short
+    assert "weather.rain.text" not in forecast_readings(_forecast_data(), at_1432)
+
+
+def test_weather_rain_text_in_german():
+    from datetime import UTC, datetime
+
+    from libre_panel import i18n
+    from libre_panel.weather.open_meteo import forecast_readings
+
+    at_1432 = datetime(2026, 10, 8, 12, 32, tzinfo=UTC).timestamp()
+    i18n.set_language("de")
+    try:
+        stops = forecast_readings({**_forecast_data(), **_minutely([0.5] * 3 + [0] * 9)}, at_1432)
+        starts = forecast_readings({**_forecast_data(), **_minutely([0] * 3 + [0.4] * 9)}, at_1432)
+        dry = forecast_readings({**_forecast_data(), **_minutely([0] * 12)}, at_1432)
+    finally:
+        i18n.set_language("en")
+    assert stops["weather.rain.text"].value == "Regen endet in 13 min"
+    assert starts["weather.rain.text"].value == "Regen in 13 min"
+    assert dry["weather.rain.text"].value == "Kein Regen in den nächsten 2 Std."

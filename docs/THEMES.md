@@ -424,13 +424,14 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `weather.temperature`, `.apparent_temperature`, `.humidity`, `.wind_speed`, `.code`, `.description`, `.is_day` | °C, %, km/h | Open-Meteo, when enabled |
 | `weather.hour.<n>.temperature`, `.code`, `.rain`, `.day`, `.time` | °C, %, 1/0, "15:00" | the hour `n` hours ahead (1 = the next full hour, up to 24) |
 | `weather.day.<n>.high`, `.low`, `.code`, `.rain`, `.name` | °C, % | day `n` (0 = today, up to 6); `name` is "Today" or the short weekday |
+| `weather.rain.minutes`, `weather.rain.text` | min, text | the rain of the next two hours: `minutes` counts to the rain starting (dry now) or stopping (raining now), and is absent when neither happens in those two hours; `text` says it in the language: "Rain in 20 min", "Rain stops in 40 min", "No rain for the next 2 h" |
 | `lhm:/<sensor id>` | | any LibreHardwareMonitor sensor |
 
 `gpu.power` is the whole board (TBP), like LibreHardwareMonitor's "GPU Package".
 
 The forecast keys are counted from the moment they are read, so "the next
 hour" stays true between two weather updates. `rain` is the chance of
-rain in percent.
+rain in percent, and `weather.rain.minutes` is counted the same way.
 
 ## Sharing themes
 
