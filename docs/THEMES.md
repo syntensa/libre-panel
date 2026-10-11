@@ -316,31 +316,34 @@ look.
 **`finish`** is `flat` (the default: the widget as it always looked), `lit`
 or `facet`. A widget keeps its place and size in any finish.
 
-`lit` draws SPUR II's 3D light, baked from Blender renders of real bodies and
-coloured with the widget's colour, at any size:
+`lit` draws SPUR II's light, in the widget's colours and at its size. A
+value is light, not a body: a core that runs towards white in a soft halo of
+its colour, lying in a groove (the widget's `background`), its scale.
 
-- A `bar` is a tube with round ends in its groove (`background` is the
-  groove's colour); its end moves in fractions of a pixel, and `segments`
-  are tubes of their own. `color2` and `color_rules` colour the tube as they
-  colour a flat bar. `glow` (with `glow_radius`) is SPUR II's bar glow:
+- A `bar`'s value is a pill of light with round ends along the middle of its
+  groove (0.62 of its thickness); its end moves in fractions of a pixel, and
+  `segments` are pills of their own. `color2` and `color_rules` colour it as
+  they colour a flat bar. `glow` (with `glow_radius`) is SPUR II's bar glow:
   dim along the lit part, rising to the head, which runs towards white.
-- A `gauge` is the same tube bent round, from `start_angle` to `end_angle`
-  with `cap` round or flat; `glow` is the light around its arc.
+- A `gauge`'s value is a thin arc of the same light on the middle of its
+  groove (0.6 of `thickness`), from `start_angle`, with square ends; the
+  glow is the arc's own halo.
 - A `graph` keeps its fill; its line is light (its core runs towards white)
   in a soft halo of its colour (`glow`, `glow_radius`).
 - Weather icons (`icon` `weather` and the symbols `sun`, `moon`, `partly`,
-  `cloud`, `fog`, `rain`, `snow`, `storm`) are built of lit bodies: clouds
-  and the moon in the icon's `color`, the sun and bolts in the palette's
-  `warn`, rain in `accent`, snow in `text`. Other icons stay line icons.
+  `cloud`, `fog`, `rain`, `snow`, `storm`) are built of lit bodies, baked
+  from Blender renders and coloured: clouds and the moon in the icon's
+  `color`, the sun and bolts in the palette's `warn`, rain in `accent`, snow
+  in `text`; fog is bands of mist. Other icons stay line icons.
 - A `module` hands its finish to its parts: a weather module with
   `"finish": "lit"` shows a lit symbol, a ring module a lit ring.
 
-Where depth does not read, a widget is drawn flat: bars thinner than 6 px,
-rings with a tube under 4 px, icons under 16 px. A finish a type does not
-have (`lit` on a `text`) draws it flat, and the theme loader warns once per
-type. The light layers are prepared before the first frame and kept in the
-config folder's `cache/light3d`; they are prepared again when the pictures
-they come from change.
+Where light does not read, a widget is drawn flat: bars and rings thinner
+than 2 px, icons under 16 px. A finish a type does not have (`lit` on a
+`text`) draws it flat, and the theme loader warns once per type. The weather
+symbols' layers are prepared before the first frame and kept in the config
+folder's `cache/light3d`; they are prepared again when the pictures they come
+from change.
 
 ### Light edges for plugins
 

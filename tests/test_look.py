@@ -92,13 +92,15 @@ def test_a_lit_bar_is_brightest_at_its_head():
     frame, _ = Renderer(theme).render(snap(50.0), 0.0)
     light = np.asarray(frame.convert("L"), np.int16)
     bar, beside = light[27], light[15]  # its middle, and 5 px above it
-    assert bar[195:210].max() > bar[120:150].mean() + 15  # the head runs towards white
+    assert bar[120:150].mean() > 200  # the value is light
+    assert bar[195:210].max() > bar[120:150].mean() + 5  # the head runs whiter still
     assert beside[195:210].max() > 1.6 * beside[120:150].mean()  # its glow rises to the head
-    assert bar[230:300].max() < bar[120:150].mean()  # past the head: the dark groove
+    assert bar[230:300].max() < bar[120:150].mean() / 3  # past the head: the dark groove
 
 
-def test_too_small_for_depth_is_drawn_flat():
-    thin = [{**lit_widgets()[1], "h": light3d.MIN_BAR - 1}, {**lit_widgets()[4], "size": 12}]
+def test_too_small_for_light_is_drawn_flat():
+    thin = [{**lit_widgets()[1], "h": 1}, {**lit_widgets()[0], "thickness": 1},
+            {**lit_widgets()[4], "size": 12}]  # fmt: skip
     flat = [{**widget, "finish": "flat"} for widget in thin]
     a, _ = Renderer(theme_of(thin)).render(history(), 0.0)
     b, _ = Renderer(theme_of(flat)).render(history(), 0.0)
@@ -173,25 +175,48 @@ def test_a_theme_without_a_look_pays_nothing_for_it():
 # -- light layers ---------------------------------------------------------------------
 
 
-def test_a_colour_is_coloured_once_per_step(monkeypatch):
+def test_a_colour_is_lit_once_per_step(monkeypatch):
     lit._PICTURES.clear()
     built = []
-    real = light3d.Bar.image
+    real = lit.light
 
-    def image(self, *args, **kwargs):
+    def light(*args, **kwargs):
         built.append(1)
-        return real(self, *args, **kwargs)
+        return real(*args, **kwargs)
 
-    monkeypatch.setattr(light3d.Bar, "image", image)
+    monkeypatch.setattr(lit, "light", light)
     bar = lit_widgets()[1]
     theme = theme_of([bar, {**bar, "id": "twin", "y": 60}])
     renderer = Renderer(theme)
     renderer.render(snap(40.0), 0.0)
-    assert len(built) == 2  # the groove and the value: once for both bars
+    assert len(built) == 1  # the value's light: once for both bars
     Renderer(theme).render(snap(40.0), 0.0)  # another renderer, the same colour and step
-    assert len(built) == 2
+    assert len(built) == 1
     renderer.render(snap(70.0), 1.0)
-    assert len(built) == 3  # a new step: its value, the groove stays
+    assert len(built) == 2  # a new step
+
+
+def test_light_runs_towards_white_in_a_halo_of_its_colour():
+    mask = np.zeros((20, 40), np.float32)
+    mask[8:12, 5:35] = 1
+    rgba = lit.light(mask, (19, 229, 215), 4.5).astype(np.int16)
+    core, halo, away = rgba[10, 20], rgba[6, 20], rgba[0, 20]
+    assert core[3] == 255 and core[0] > 19 + 150  # the core: opaque, most of the way to white
+    assert 0 < halo[3] < 255 and tuple(halo[:3]) == (19, 229, 215)  # the halo: its colour
+    assert away[3] < halo[3]
+
+
+def test_a_lit_ring_is_a_thin_arc_of_light_on_the_middle_of_its_groove():
+    ring = {**lit_widgets()[0], "x": 20, "y": 20, "w": 120, "h": 120, "start_angle": -90,
+            "end_angle": 270}  # fmt: skip
+    frame, _ = Renderer(theme_of([ring], size=(160, 160))).render(snap(50.0), 0.0)
+    pixels = np.asarray(frame, np.int16)
+    across = pixels[80, 128:142].sum(1)  # three o'clock, half way along the arc: the groove
+    bright = np.flatnonzero(across > across.max() / 2)  # is 130 to 139, the light ...
+    assert 133 <= 128 + bright.mean() <= 136  # ... lies on its middle
+    assert bright.size <= 7  # a thin arc (6 of the groove's 10 px), not a tube
+    assert pixels[80, 128 + bright[bright.size // 2], 0] > 0x22 + 100  # its core runs to white
+    assert tuple(pixels[80, 25]) == (0x16, 0x23, 0x32)  # nine o'clock: past its end, the groove
 
 
 def test_kept_pictures_stay_within_their_budget():
@@ -266,11 +291,10 @@ def test_a_warmed_up_renderer_loads_no_layers_in_its_first_frame(monkeypatch):
     for part in light3d.PARTS.values():
         part.reset()
     lit._PICTURES.clear()
-    lit._RINGS.clear()
     renderer = Renderer(theme_of(lit_widgets(), look={"grid": {}, "light": {}}))
     assert renderer.prepares
     renderer.warm(None, 0.0)
-    assert sorted(loads) == ["bar", "ring", "weather"]
+    assert loads == ["weather"]  # bars and rings are light worked out as they come
     loads.clear()
     renderer.render(history(), 0.0)
     assert loads == []
@@ -278,7 +302,7 @@ def test_a_warmed_up_renderer_loads_no_layers_in_its_first_frame(monkeypatch):
     for part in light3d.PARTS.values():
         part.reset()
     Renderer(theme_of(lit_widgets())).render(history(), 0.0)  # not warmed up: in the frame
-    assert sorted(loads) == ["bar", "ring", "weather"]
+    assert loads == ["weather"]
 
 
 # -- the look block ---------------------------------------------------------------------

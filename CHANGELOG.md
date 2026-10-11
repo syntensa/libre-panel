@@ -123,10 +123,12 @@
   rate down, judged from how long the CPU and the GPU wait for each other
   (PresentMon 2)
 - The look of SPUR II for any theme: a widget's `finish` and the theme's
-  `look`. `"finish": "lit"` draws bars and rings as tubes in their groove
-  with round ends and SPUR II's glow, a graph's line as light in a halo and
-  the weather symbols from lit bodies, in the widget's colours and at its
-  size (bars, rings, graphs and icons; modules hand it to their parts).
+  `look`. `"finish": "lit"` draws a bar's or a ring's value as SPUR II's
+  light in its groove (a core running towards white in a soft halo: a pill
+  with round ends on a bar with SPUR II's glow, a thin arc on a ring), a
+  graph's line as light in a halo and the weather symbols from lit bodies,
+  in the widget's colours and at its size (bars, rings, graphs and icons;
+  modules hand it to their parts).
   `look.grid` lays SPUR II's grid over the backdrop; `look.light` is one
   light for the panel: the sun, where it stands for the place in
   `[weather]`, glints on ridges, and a sweep of light runs across at the

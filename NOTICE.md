@@ -12,9 +12,9 @@ Libre Panel's implementation is its own code, released under the same license.
 **SPUR II** — the private project that verified the V1.x USB protocol on a 9.2"
 panel, found the zero-length-packet fix, the RGBA requirement, the 480×1920
 resolution and the video-mode init, and whose classic layout is the `spur-ii`
-theme. Its light layers (`src/libre_panel/assets/light3d/`: rings, bars, fan
-rotors, weather symbols and the SPUR II letters, rendered once in Blender, without
-colour) are its author's work, given to Libre Panel under GPL-3.0-or-later.
+theme. Its light layers (`src/libre_panel/assets/light3d/`: fan rotors, weather
+symbols and the SPUR II letters, rendered once in Blender, without colour) are
+its author's work, given to Libre Panel under GPL-3.0-or-later.
 
 **LibreHardwareMonitor** (MPL-2.0) — the sensor source for the GPU,
 temperatures, power and fans on Windows. The Windows downloads carry its
