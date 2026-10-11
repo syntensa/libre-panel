@@ -392,6 +392,24 @@ def test_a_service_installed_while_libre_panel_runs_takes_over_when_it_answers(
     assert service.closed
 
 
+def test_a_service_that_was_removed_is_let_go_and_looked_for_again(installed, monkeypatch):
+    provider = provider_with()
+    (service,) = installed.services
+    try:
+        monkeypatch.setattr(lhm_service, "registration", lambda name=None: None)  # "Remove"
+        service.options["on_failure"]("the sensor service is not installed")
+        (fallback,) = installed.inside
+        assert service.closed and provider._service is None
+        assert provider.status() == fallback.state  # nothing to say about a service now
+        assert provider.read() == fallback.readings
+        monkeypatch.setattr(lhm_service, "registration", lambda name=None: {"Start": 2})
+        provider._looked -= lhm.SERVICE_LOOK_SECONDS  # and unlocked again later
+        provider.read()
+        assert len(installed.services) == 2 and len(installed.inside) == 1
+    finally:
+        provider.close()
+
+
 def test_waiting_for_the_service_and_then_for_what_replaces_it(installed):
     provider = provider_with()
     (service,) = installed.services

@@ -554,7 +554,7 @@ class LibreHardwareMonitorProvider(SensorProvider):
 
     def _start_others(self) -> None:
         """Inside Libre Panel where that is possible (and asked for), else the web server."""
-        if self.mode != "webserver":
+        if self.mode != "webserver" and self._source is None:
             self._start_inprocess()
         if self._source is None and self.mode != "inprocess":
             self._start_web()
@@ -564,14 +564,18 @@ class LibreHardwareMonitorProvider(SensorProvider):
     def _start_service(self) -> None:
         from libre_panel.sensors import lhm_service
 
-        self._service = lhm_service.ServiceSource(
+        source = lhm_service.ServiceSource(
             poll_seconds=self.poll_seconds,
             stale_seconds=self.stale_seconds,
             gpu=self.gpu,
             on_ready=self._service_ready,
             on_failure=self._service_failed,
         )
-        self._service.start()
+        with self._web:
+            if self._stop.is_set():  # closed meanwhile: nothing more to start
+                return
+            self._service = source
+        source.start()
 
     def _look_for_service(self) -> None:
         """``auto`` without the service: was it installed meanwhile ("Unlock all sensors", the
@@ -591,19 +595,32 @@ class LibreHardwareMonitorProvider(SensorProvider):
 
     def _service_failed(self, why: str) -> None:
         """The service has not answered for a while: in ``auto``, read the other ways until
-        it does (its status says why, so the hints speak of the service)."""
+        it does (its status says why, so the hints speak of the service). One that was
+        removed is let go, as if it had never been there (and looked for again)."""
         if self.mode != "auto":
             return
+        removed = not _service_installed()
         with self._web:
-            self._silent = why
-            if self._fallback or self._stop.is_set():
+            if self._stop.is_set():
                 return
-            self._fallback = True
-        log.info(
-            "the sensor service does not answer (%s): LibreHardwareMonitor is read another way "
-            "until it does",
-            why,
-        )
+            service = self._service
+            if removed:
+                self._service, self._fallback, self._silent = None, False, ""
+                self._looked = time.monotonic()
+            else:
+                self._silent = why
+                if self._fallback:
+                    return
+                self._fallback = True
+        if removed:
+            log.info("the sensor service was removed: LibreHardwareMonitor is read another way")
+            service.close()  # (from its own thread: it ends when this returns)
+        else:
+            log.info(
+                "the sensor service does not answer (%s): LibreHardwareMonitor is read another "
+                "way until it does",
+                why,
+            )
         self._start_others()
 
     def _service_ready(self, status: LhmStatus) -> None:

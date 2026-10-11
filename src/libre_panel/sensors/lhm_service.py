@@ -318,7 +318,7 @@ class ServiceSource:
 
     def close(self) -> None:
         self._stop.set()
-        if self._thread.is_alive():
+        if self._thread.is_alive() and threading.current_thread() is not self._thread:
             self._thread.join(10)
         self._done.set()
 

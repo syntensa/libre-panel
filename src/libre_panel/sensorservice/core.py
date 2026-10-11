@@ -14,6 +14,7 @@ pipe; the tests give it bytes.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import threading
 import time
@@ -86,6 +87,7 @@ class Reader:
         self._clock = clock
         self._nodes: list[Any] = []  # lhm_inprocess._Node, read by the thread only
         self._asked: dict[str, float] = {}  # hardware id -> when a client last named it
+        self._last_request: float | None = None  # when a client last asked at all
         self._everything = False  # every piece in the next round
         self._full: float | None = None  # when every piece was last read
         self._failed: set[str] = set()  # hardware whose update raised (said once)
@@ -161,8 +163,15 @@ class Reader:
             recent = {hw for hw, at in self._asked.items() if now - at <= self.request_seconds}
             self._asked = {hw: at for hw, at in self._asked.items() if hw in recent}
             everything, self._everything = self._everything, False
-        if not recent and not everything:
-            return False
+            asking = (
+                self._last_request is not None and now - self._last_request <= self.request_seconds
+            )
+            if not recent and not everything:
+                if asking and self._snapshot.state == "running":
+                    # clients ask, for none of the hardware: what was read stays good (as
+                    # Libre Panel's own source keeps it), only nobody reads anything now
+                    self._snapshot = dataclasses.replace(self._snapshot, stamp=now)
+                return False
         full = everything or self._full is None or now - self._full >= self.refresh_seconds
         nodes = [n for n in self._nodes if n.entries and (full or n.hardware_id in recent)]
         for position, node in enumerate(nodes):
@@ -190,7 +199,8 @@ class Reader:
         request after a quiet time reads everything at once: what was read last is old."""
         now = self._clock()
         with self._lock:
-            quiet = not any(now - at <= self.request_seconds for at in self._asked.values())
+            last, self._last_request = self._last_request, now
+            quiet = last is None or now - last > self.request_seconds
             for hardware_id in hardware:
                 self._asked[hardware_id] = now
             if len(self._asked) > MAX_ASKED:  # a client that names ever new ids: the oldest go

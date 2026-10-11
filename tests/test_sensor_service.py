@@ -268,6 +268,28 @@ def test_only_what_was_asked_for_is_read_and_for_a_while_only():
     assert updates(computer) == counts
 
 
+def test_a_client_that_asks_for_no_hardware_keeps_what_was_read_but_reads_nothing():
+    """A theme that shows none of these sensors: nothing is read, and what was read stays good
+    for the lists of sensors (as Libre Panel's own source keeps it); after a quiet time, the
+    first request reads everything once more, so nothing hours old passes for new."""
+    reader, computer, clock = begun()
+    reader.ask([])  # the first request: everything, once
+    reader.refresh()
+    counts = updates(computer)
+    for _ in range(5):
+        clock.now += 1
+        reader.ask([])
+        assert reader.refresh() is False
+        assert reader.snapshot().stamp == clock.now  # (the readings' age stays small)
+    assert updates(computer) == counts
+    clock.now += core.REQUEST_SECONDS + 5  # nobody asks: the stamp ages
+    reader.refresh()
+    assert clock.now - reader.snapshot().stamp > core.REQUEST_SECONDS
+    reader.ask([])
+    reader.refresh()
+    assert set(updates(computer).values()) == {count + 1 for count in counts.values()}
+
+
 def test_while_anyone_asks_everything_is_read_now_and_then():
     reader, computer, clock = begun(refresh_seconds=30)
     reader.ask([CPU])
