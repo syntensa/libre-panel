@@ -64,7 +64,10 @@ def test_the_two_steps_make_what_readings_from_tree_makes():
     assert lhm.readings_from_sensors(sensors) == lhm.readings_from_tree(TREE)
     first = sensors[0]
     assert (first.sensor_id, first.hardware_id) == ("/amdcpu/0/voltage/2", "/amdcpu/0")
-    assert (first.hardware_name, first.sensor_type) == ("AMD Ryzen 7 7800X3D", "Voltage")
+    assert (first.hardware_name, first.sensor_type) == (
+        "AMD Ryzen 5 7600 6-Core Processor",
+        "Voltage",
+    )
     assert (first.label, first.value, first.unit) == ("VDDCR", 0.643, "V")
 
 

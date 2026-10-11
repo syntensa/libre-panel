@@ -73,7 +73,7 @@ url = "http://127.0.0.1:8085/data.json"   # the web server (mode "webserver", an
                                # where it cannot be read inside Libre Panel)
 # stale_seconds = 5            # no answer for this long: its readings are hidden
                                # ("--" on the panel); 0 keeps the last ones
-# gpu = "RTX 4080"             # with several graphics cards: the one whose name has this
+# gpu = "RTX 4070"             # with several graphics cards: the one whose name has this
 
 [sensors.psutil]
 # disk = "C:\\"                # the drive behind disk.load (default: the system drive)

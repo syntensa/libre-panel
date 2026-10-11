@@ -728,7 +728,7 @@
   runs each theme with and without that look, side by side frame by frame, and
   prints what the look adds to a frame
 - LibreHardwareMonitor's `cpu.name` and `gpu.name` are shortened like the names
-  Libre Panel finds itself ("Ryzen 7 7800X3D" for "AMD Ryzen 7 7800X3D")
+  Libre Panel finds itself ("Ryzen 5 7600" for "AMD Ryzen 5 7600 6-Core Processor")
 - SPUR Classic's RAM heading names the memory (`mem.name`) instead of giving
   its size only. The RAM modules (ring, big number, history) show the name
   under their title as CPU and GPU do, and the System module lists it as a

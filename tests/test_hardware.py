@@ -603,12 +603,12 @@ def test_a_refresh_reaches_the_source_at_its_next_reading(machine):
     provider = HardwareProvider()
     assert provider.read()["gpu.name"].value == "GeForce RTX 4070"
     swapped = Found(
-        PC.cpu, (Adapter("NVIDIA GeForce RTX 4080 SUPER", gigabytes(16)),), PC.modules, PC.memory
+        PC.cpu, (Adapter("NVIDIA GeForce RTX 4070 SUPER", gigabytes(16)),), PC.modules, PC.memory
     )
     machine(swapped, keep=True)  # the card was changed while Libre Panel ran...
     assert provider.read()["gpu.name"].value == "GeForce RTX 4070"  # ...and nobody asked
     scan(refresh=True)
-    assert provider.read()["gpu.name"].value == "GeForce RTX 4080 SUPER"
+    assert provider.read()["gpu.name"].value == "GeForce RTX 4070 SUPER"
 
 
 # -- the hub --------------------------------------------------------------------------------------
@@ -849,5 +849,5 @@ def test_no_name_is_in_the_report_of_doctor(machine):
     ).run()
     text = report.text()
     assert "temperature and power readings" in text  # the step that reads LibreHardwareMonitor
-    names = ["Ryzen", "7800X3D", "RTX 4080", "GeForce", "Kingston", "DDR5", "32 GB", PC.cpu]
+    names = ["Ryzen", "RTX 4070", "GeForce", "Kingston", "DDR5", "32 GB", PC.cpu]
     assert not [name for name in names if name in text]

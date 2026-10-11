@@ -9,7 +9,7 @@
  "Children": [
   {
    "id": 1,
-   "Text": "TEST-PC",
+   "Text": "EXAMPLE-PC",
    "Min": "",
    "Value": "",
    "Max": "",
@@ -17,7 +17,7 @@
    "Children": [
     {
      "id": 45,
-     "Text": "AMD Ryzen 7 7800X3D",
+     "Text": "AMD Ryzen 5 7600 6-Core Processor",
      "Min": "",
      "Value": "",
      "Max": "",
@@ -890,7 +890,7 @@
     },
     {
      "id": 125,
-     "Text": "NVIDIA GeForce RTX 4080 SUPER",
+     "Text": "NVIDIA GeForce RTX 4070",
      "Min": "",
      "Value": "",
      "Max": "",
