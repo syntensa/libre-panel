@@ -389,6 +389,23 @@ def test_facet_text_below_twenty_pixels_is_the_flat_text():
         assert a.tobytes() == b.tobytes()
 
 
+def test_a_texts_and_a_clocks_letters_are_built_before_the_first_frame():
+    """A bevelled letter at a clock's size takes tens of milliseconds: the warm-up builds
+    those of a text and of the time a clock shows, so the first frame builds none."""
+    clock = {"type": "clock", "id": "c", "x": 10, "y": 80, "format": "%Y", "font_size": 61,
+             "font": "builtin:Barlow-SemiBold", "finish": "acrylic"}  # fmt: skip
+    renderer = Renderer(theme(text_widget(finish="acrylic", font_size=61), clock))
+    assert renderer.prepares
+    facets._glyphs.clear()
+    facets._patches.clear()
+    facets.builds.update(glyph=0, patch=0)
+    renderer.warm(None, 0.0)
+    assert facets.builds["glyph"] >= 8  # the letters of "SPUR 4059" and of the year
+    facets.builds.update(glyph=0, patch=0)
+    renderer.render(Snapshot())
+    assert facets.builds == {"glyph": 0, "patch": 0}
+
+
 def test_a_changing_number_costs_no_new_glyphs_once_all_digits_were_seen():
     metric = {"type": "metric", "id": "m", "x": 10, "y": 10, "sensor": "v", "font_size": 60,
               "format": "{value:.0f}", "finish": "facet", "color": "#eef6ff"}  # fmt: skip

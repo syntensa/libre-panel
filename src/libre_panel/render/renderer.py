@@ -985,8 +985,22 @@ class Renderer:
     @property
     def prepares(self) -> bool:
         """Whether :meth:`warm` has something to load before the first frame
-        (a screen's ``prepare()``, light layers)."""
-        return self.screen is not None or self.look is not None or bool(self._finishes)
+        (a screen's ``prepare()``, light layers, the rotors of fans)."""
+        return (
+            self.screen is not None
+            or self.look is not None
+            or bool(self._finishes)
+            or any(w["type"] == "fan" for w in self.widgets)
+        )
+
+    def _prepare_fans(self) -> None:
+        """Every position of the theme's fans: the first frame would read their rotor's
+        144 pictures (render/fan.py), about 200 ms."""
+        for widget in self.widgets:
+            if widget["type"] == "fan":
+                color = self.color(widget["color"])
+                if color is not None:
+                    fan.preload(color[:3], widget["w"], widget["h"])
 
     def _prepare_look(self) -> None:
         """Load the light layers and build what the finishes and the look draw
@@ -1008,9 +1022,10 @@ class Renderer:
     ) -> None:
         """Build what the first frames need, away from the render thread: the
         screen's ``prepare()``, the light layers of the look and the finishes,
-        and one frame of the widgets (cards, texts, icons, graph strips). The
-        screen does not draw here: its frames belong to the render thread.
-        ``pause`` runs between widgets (to wait while the render thread draws)."""
+        the fans' rotors, and one frame of the widgets (cards, texts, icons,
+        graph strips). The screen does not draw here: its frames belong to the
+        render thread. ``pause`` runs between widgets (to wait while the render
+        thread draws)."""
         screen = self.screen
         if screen is not None:
             try:
@@ -1019,6 +1034,7 @@ class Renderer:
                 self._warn(f"screen {self.theme.screen['name']!r} failed to prepare: {exc}")
         if self.look is not None or self._finishes:
             self._prepare_look()
+        self._prepare_fans()
         if snapshot is None:
             return
         self.screen, self._breathe = None, pause
@@ -1384,13 +1400,14 @@ class Renderer:
         return self._text_widget(widget, text, widget["color"])
 
     def _draw_clock(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        return self._text_widget(widget, self._clock_text(widget, snapshot), widget["color"])
+
+    def _clock_text(self, widget: dict[str, Any], snapshot: Snapshot) -> str:
         try:
             text = i18n.format_date(self._time(widget, snapshot), widget["format"])[:100]
         except ValueError:
             text = "--:--"
-        if widget.get("uppercase"):
-            text = text.upper()
-        return self._text_widget(widget, text, widget["color"])
+        return text.upper() if widget.get("uppercase") else text
 
     def _time(self, widget: dict[str, Any], snapshot: Snapshot) -> datetime:
         """The time in the widget's time zone (empty: the computer's)."""
@@ -1509,8 +1526,6 @@ class Renderer:
         else:  # a preview or a picture: how it looks at this speed, standing
             rotor.settle(rpm, widget["max_rpm"])
         color = self.color(widget["color"])[:3]
-        if self._breathe is not None:  # warming up: every position now, not one at a time
-            fan.preload(color, w, h)
         key = (self._keys[wid], rotor.phase, rotor.blur, rotor.dim, round(rotor.ring * 120))
         piece = self._fans.get(key)
         if piece is None:
