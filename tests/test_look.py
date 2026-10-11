@@ -727,11 +727,11 @@ def test_spur_classic_is_spur_iis_classic_screen_on_the_bar():
     frame, _ = renderer.render(found, 0.0)
     assert renderer.warnings == [] and frame.size == (1920, 480)
     assert {type(f).__name__ for f in renderer._finishes.values()} == {
-        "LitBar", "LitText", "FacetGraph", "FacetText", "AcrylicText", "Ridge"
+        "LitBar", "LitText", "FacetGraph", "FacetText", "AcrylicText"
     }  # fmt: skip
     assert sum(w["type"] == "fan" for w in theme.widgets) == 5
-    owners = {renderer.edge_owners[id(edge)] for edge in renderer.light_edges}
-    assert owners == {"cpu-frame-top", "gpu-frame-top", "mem-box-left", "net-box-left"}
+    # its frames are flat bands, no ridges (the user's wish): nothing on them catches light
+    assert not any(w.get("ridge") for w in theme.widgets) and renderer.light_edges == []
     shown = {w["sensor"] for w in theme.widgets if w["type"] in ("metric", "bar", "graph")}
     assert {key for key in shown if found.value(key) is None} == set()  # the demo has them all
 
