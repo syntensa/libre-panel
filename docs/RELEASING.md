@@ -57,8 +57,10 @@ Every download is tested on its own system before it is attached:
   runs, and the uninstaller quits a running app and removes files, shortcut
   and autostart (`packaging/windows/test_installer.py`, Inno Setup script
   `packaging/windows/libre-panel.iss`);
-- Linux: the AppImage runs without a desktop and on an X11 tray, and its
-  autostart entry points at the AppImage file (`packaging/linux/test_appimage.sh`).
+- Linux: the AppImage runs without a desktop and on an X11 tray, its
+  autostart entry points at the AppImage file, and `system-setup --linux` finds
+  its way in the bare environment pkexec runs a program in
+  (`packaging/linux/test_appimage.sh`).
 
 **Dry run:** start *Release* by hand (Actions → Release → Run workflow). It
 builds and tests everything but publishes nothing; the bundles are attached to
