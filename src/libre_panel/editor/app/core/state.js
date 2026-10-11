@@ -43,6 +43,7 @@ export const store = createStore({
   hardware: null, // the hardware's names (core/hardware.js); false: the server has none
   settings: null, // Settings: {config, catalog, restart} (core/settings.js)
   settingsError: null, // why config.toml cannot be read
+  settingsDown: false, // ... because the server does not answer
   panelInfo: null, // Settings: the panel found, the video mode's state
   systemInfo: null, // Settings: starting with the system
   aboutInfo: null, // Settings: version, licence, notices, folders

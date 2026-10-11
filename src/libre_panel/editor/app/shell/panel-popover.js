@@ -214,12 +214,11 @@ export function PanelChip() {
   if (!theme) return null;
   const model = modelOf(theme, models);
   const panel = app.available ? app.panel || {} : null;
-  const state = app.quit ? "gone" : panel ? panel.state : "preview";
-  const detail = panel
-    ? panel.mode
-      ? `${stateText(panel.state)} · ${modeName(panel.mode)}`
-      : stateText(panel.state)
-    : `${size[0]} × ${size[1]}`;
+  const gone = app.quit || app.gone; // it quit, or does not answer: what it said last is not true now
+  const state = gone ? "gone" : panel ? panel.state : "preview";
+  let detail = `${size[0]} × ${size[1]}`;
+  if (app.gone && !app.quit) detail = t("not answering");
+  else if (panel) detail = panel.mode ? `${stateText(panel.state)} · ${modeName(panel.mode)}` : stateText(panel.state);
   return html`
     <button
       ref=${anchor}

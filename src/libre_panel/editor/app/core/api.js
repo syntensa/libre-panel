@@ -1,8 +1,10 @@
 // The server's API (editor/server.py). Writes carry the header that browsers
 // never send cross-origin without a preflight, which the server refuses.
 
+import { t } from "./i18n.js";
+
 /** A request; resolves to the JSON answer, rejects with the server's error text (and
- * the HTTP status as `error.status`). */
+ * the HTTP status as `error.status`; 0 when the server did not answer at all). */
 export async function api(method, url, body, { raw = false, signal } = {}) {
   const options = { method, headers: {}, signal };
   if (method !== "GET") options.headers["X-Libre-Panel"] = "1";
@@ -10,7 +12,15 @@ export async function api(method, url, body, { raw = false, signal } = {}) {
     options.body = raw ? body : JSON.stringify(body);
     options.headers["Content-Type"] = raw ? "application/octet-stream" : "application/json";
   }
-  const response = await fetch(url, options);
+  let response;
+  try {
+    response = await fetch(url, options);
+  } catch (failure) {
+    if (failure?.name === "AbortError") throw failure;
+    const error = new Error(t("Libre Panel does not answer.")); // the browser says "Failed to fetch"
+    error.status = 0;
+    throw error;
+  }
   const data = await response.json().catch(() => ({ error: response.statusText }));
   if (!response.ok) {
     const error = new Error(data.error || response.statusText || String(response.status));

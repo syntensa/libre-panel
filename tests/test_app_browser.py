@@ -2402,6 +2402,37 @@ def test_settings_say_when_config_toml_has_a_mistake(app_url, isolated_home):
         assert page.locator(".note.error").count() == 0
 
 
+def test_settings_say_when_the_app_does_not_answer_and_not_that_config_toml_is_wrong(app_url):
+    """No answer at all is not a mistake in config.toml: the note says what is the matter."""
+    with browser_page(app_url, "home", allow=("/api/settings",)) as page:
+        page.route("**/api/settings", lambda route, request: route.abort())
+        page.goto(f"{app_url}#/settings/panel")
+        page.wait_for_selector(".note.error")
+        note = page.locator(".note.error").inner_text()
+        assert "Libre Panel does not answer." in note
+        assert "config.toml" not in note  # (the browser's own "Failed to fetch" is not shown)
+        page.unroute("**/api/settings")
+        page.get_by_role("button", name="Try again").click()
+        page.wait_for_selector(".panel-found")
+        assert page.locator(".note.error").count() == 0
+
+
+def test_the_app_says_when_the_server_stops_answering_and_when_it_is_back(app_url):
+    """A background app that quit (from its tray menu, say) leaves the page behind with the
+    last state it knew: a bar says so, the chip is not "Showing" any more, and both go when
+    the app answers again."""
+    with browser_page(app_url, "design", allow=("/api/app",)) as page:
+        assert page.locator(".offline-bar").count() == 0
+        page.route("**/api/app", lambda route, request: route.abort())
+        bar = page.locator(".offline-bar")
+        expect(bar).to_be_visible(timeout=10000)  # the next of the app's polls every two seconds
+        assert "Libre Panel does not answer." in bar.inner_text()
+        expect(page.locator(".panel-chip.gone")).to_contain_text("not answering")
+        page.unroute("**/api/app")
+        expect(bar).to_have_count(0, timeout=10000)
+        expect(page.locator(".panel-chip.preview")).to_have_count(1)
+
+
 class HardwareNames:
     """A stand-in for the server's /api/hardware: the names, and what the app posts."""
 

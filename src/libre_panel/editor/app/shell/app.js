@@ -24,8 +24,17 @@ function Failure({ message }) {
   </div>`;
 }
 
+/** The background app stopped answering (it quit, or crashed): the page says so and goes on asking. */
+function Offline() {
+  return html`<div class="offline-bar" role="alert">
+    <${Icon} name="warning" size=${16} />
+    <span>${t("Libre Panel does not answer. If it has quit, start it again: this page tries again by itself.")}</span>
+  </div>`;
+}
+
 export function App() {
   useStore((s) => s.lang); // a new language: everything is drawn again
+  const gone = useStore((s) => Boolean(s.app.gone));
   const { ready, failed, route } = useStore((s) => ({ ready: s.ready, failed: s.failed, route: s.route }));
   const view = viewById(route.view);
   const View = view?.component;
@@ -34,6 +43,7 @@ export function App() {
   else if (ready && View) body = html`<${View} key=${view.id} rest=${route.rest} />`;
   return html`<div class="app" data-view=${route.view}>
     <${Header} view=${ready ? view : null} />
+    ${gone ? html`<${Offline} />` : null}
     <main class="view" id="main">${body}</main>
     <${CommandPalette} />
     <${Dialogs} />

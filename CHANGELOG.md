@@ -653,6 +653,10 @@
 - Ctrl+Z, Ctrl+Y and the palette's *Undo* and *Redo* acted on the theme in every view,
   so a press in Settings, Live or Start undid a change that could not be seen; they act
   in Design and Look, where the theme is shown
+- The app says when Libre Panel stops answering (quit from the tray, crashed): a bar
+  under the header, the panel chip "not answering" instead of the last state it knew,
+  and an error says "Libre Panel does not answer." instead of the browser's "Failed to
+  fetch"; Settings no longer blame config.toml for it
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars
