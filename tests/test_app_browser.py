@@ -888,6 +888,32 @@ def test_the_header_fits_a_small_window_in_either_language(background, language)
         assert page.locator(".gear").is_visible() and page.locator(".btn-apply").is_visible()
 
 
+@pytest.mark.parametrize("language", ["en", "de"])
+def test_the_search_field_gives_way_before_the_name_of_the_theme(background, language):
+    """Where the header is a few pixels too narrow the theme's name used to give some of them
+    up, which turned "Libre Default" into "Libre Defa…" (and "Meins" into "Me…") at 1280 and
+    1366 px with unsaved changes. The search field gives way, and the name stays whole."""
+    from libre_panel import i18n
+
+    app, url = background
+    i18n.set_language(language)
+    with browser_page(url, "design", size=(1280, 800), allow=PICTURE) as page:
+        js(page, "window.libre.doc.edit('n', (theme) => { theme.description = 'changed'; })")
+        name = page.locator(".theme-name span")
+        expect(name).to_have_text("Libre Default")
+        for size in ((1280, 800), (1366, 768), (1440, 900)):
+            page.set_viewport_size({"width": size[0], "height": size[1]})
+            assert header_overflow(page) == [], size
+            cut = name.evaluate(  # the text against its box, in fractions of a pixel
+                """(el) => {
+                  const range = document.createRange();
+                  range.selectNodeContents(el);
+                  return range.getBoundingClientRect().width - el.getBoundingClientRect().width;
+                }"""
+            )
+            assert cut < 0.1, (size, cut)
+
+
 def test_select_move_undo_redo(page):
     box = page.locator('.overlay .box[data-id="cpu-ring"]').bounding_box()
     start = (widget(page, "cpu-ring")["x"], widget(page, "cpu-ring")["y"])

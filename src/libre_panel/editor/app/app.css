@@ -379,8 +379,11 @@ a:hover {
   text-overflow: ellipsis;
 }
 
-/* In a narrow window what can give way does, in this order: the search field, the theme's
-   name, the text of the panel chip; the tabs, the undo buttons and "To the panel" stay. */
+/* In a narrow window what can give way does, in this order: the search field, down to its
+   smallest; then the theme's name; the text of the panel chip goes at 1180 px. The tabs, the
+   undo buttons and "To the panel" stay. A flex item gives up room in proportion to its
+   factor, so the search field's is so much bigger than the name's that the name keeps its
+   width (a few pixels short turn "Meins" into "Me…") until the search field has nothing left. */
 .topbar > * {
   flex-shrink: 0;
 }
@@ -390,7 +393,7 @@ a:hover {
 }
 
 .topbar > .search-trigger.wide {
-  flex-shrink: 4;
+  flex-shrink: 100;
 }
 
 .topbar > .panel-chip {
@@ -398,15 +401,19 @@ a:hover {
 }
 
 .topbar > .theme-title {
-  flex-shrink: 1;
+  flex-shrink: 0.01;
   min-width: 90px; /* the name stays readable, as far as a line can be made out of it */
 }
 
-@media (max-width: 1360px) {
+/* the window's default size (1440 px) with everything the header can show, in German, has no
+   room to spare at the usual gap */
+@media (max-width: 1440px) {
   .topbar {
     gap: 12px;
   }
+}
 
+@media (max-width: 1360px) {
   .tabs {
     margin-left: 4px;
   }

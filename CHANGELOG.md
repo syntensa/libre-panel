@@ -684,6 +684,10 @@
 - The brightness slider (panel chip, Start, Live) went back to the old value the moment it
   was let go and jumped forward when the panel answered; it stays where it was let go, and
   goes back only if the change is refused
+- The app's header kept the theme's name whole only in a wide window: at 1280 and 1366 px
+  with unsaved changes it lost a few pixels to the search field and read *Libre Defa…* or
+  *Me…*. The search field gives way first now (and the gaps are narrower up to 1440 px, so
+  that the default window has room for everything in German)
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars
