@@ -119,7 +119,7 @@ function PanelChoice({ theme, models }) {
           ]}
         />
       <//>
-      <${Row} label=${t("On size change")}>
+      <${Row} class="stacked" label=${t("On size change")}>
         <${Segmented}
           label=${t("On size change")}
           value=${adapt}

@@ -914,6 +914,23 @@ textarea.input {
   flex-shrink: 0;
 }
 
+/* a row whose control needs the whole width: the name above it */
+.row.stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.row.stacked .segmented {
+  display: flex;
+  width: 100%;
+}
+
+.row.stacked .segmented button {
+  flex: 1;
+  justify-content: center;
+}
+
 .row-box {
   padding: 10px 12px;
   border-radius: 10px;
