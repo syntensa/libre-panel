@@ -283,6 +283,27 @@ def test_cli_prints_the_udev_rule(capsys):
     assert 'ATTRS{idVendor}=="1cbe"' in out and 'TAG+="uaccess"' in out
 
 
+def test_open_path_starts_the_default_program_or_says_it_cannot(monkeypatch, tmp_path):
+    from libre_panel import tray as tray_module
+
+    started, opened = [], []
+    monkeypatch.setattr(tray_module.subprocess, "Popen", started.append)
+    monkeypatch.setattr(tray_module.os, "startfile", opened.append, raising=False)
+    monkeypatch.setattr(tray_module.sys, "platform", "win32")
+    tray_module.open_path(tmp_path)
+    assert opened == [tmp_path] and not started
+
+    monkeypatch.setattr(tray_module.sys, "platform", "linux")
+    monkeypatch.setattr(tray_module.shutil, "which", lambda name: "/usr/bin/" + name)
+    tray_module.open_path(tmp_path)
+    assert started == [["xdg-open", str(tmp_path)]]
+
+    monkeypatch.setattr(tray_module.shutil, "which", lambda name: None)  # nothing to ask
+    with pytest.raises(OSError, match="not supported on this system"):
+        tray_module.open_path(tmp_path)
+    assert len(started) == 1
+
+
 def test_no_icon_update_during_or_after_the_stop(tray):
     """On X11 an update that meets the stop waits forever: stop waits for a
     running update, and nothing updates the icon afterwards."""

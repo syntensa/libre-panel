@@ -1,4 +1,3 @@
-import plistlib
 import sys
 from pathlib import Path
 
@@ -7,8 +6,8 @@ import pytest
 from libre_panel import autostart as autostart_module
 from libre_panel.autostart import (
     APP_NAME,
-    MAC_LABEL,
     Autostart,
+    AutostartError,
     WindowsTasks,  # the real one: conftest swaps the module's for one without tasks
     desktop_exec,
     launch_command,
@@ -101,17 +100,37 @@ def test_desktop_exec_quotes_only_when_needed():
         desktop_exec(["a\nb"])
 
 
-def test_macos_launch_agent(tmp_path):
-    auto = Autostart("darwin", home=tmp_path)
-    auto.enable(COMMAND)
-    path = tmp_path / "Library" / "LaunchAgents" / f"{MAC_LABEL}.plist"
-    agent = plistlib.loads(path.read_bytes())
-    assert agent["Label"] == MAC_LABEL
-    assert agent["ProgramArguments"] == COMMAND
-    assert agent["RunAtLoad"] is True
-    assert agent["KeepAlive"] == {"SuccessfulExit": False}  # Quit stays quit
-    assert auto.is_enabled()
-    assert auto.disable() and not path.exists()
+@pytest.mark.parametrize("platform", ["linux", "freebsd14", "openbsd7", "netbsd10"])
+def test_linux_and_the_bsds_use_desktop_entries(platform, tmp_path):
+    auto = Autostart(platform, home=tmp_path, environ={})
+    assert auto.kind == "xdg"
+    assert auto.path() == tmp_path / ".config" / "autostart" / "libre-panel.desktop"
+
+
+def test_a_system_without_autostart_says_so_and_writes_nothing(tmp_path):
+    auto = Autostart("sunos5", home=tmp_path, environ={})
+    assert auto.kind == "unsupported" and auto.path() is None
+    assert "not supported on this system" in auto.location()
+    calls = [
+        lambda: auto.enable(COMMAND),
+        lambda: auto.enable(COMMAND, elevated=True),
+        auto.is_enabled,
+        auto.disable,
+    ]
+    for call in calls:
+        with pytest.raises(AutostartError, match="not supported on this system"):
+            call()
+    assert not list(tmp_path.iterdir())
+
+
+def test_the_command_line_says_when_a_system_has_no_autostart(monkeypatch, tmp_path, capsys):
+    from libre_panel import cli
+
+    monkeypatch.setattr(autostart_module, "Autostart", lambda: Autostart("sunos5", home=tmp_path))
+    for action in ("status", "enable", "disable"):
+        assert cli.main(["autostart", action]) == 1
+        assert "not supported on this system" in capsys.readouterr().err
+    assert not list(tmp_path.iterdir())
 
 
 def test_windows_run_key_with_fake_registry():
@@ -146,7 +165,7 @@ class FakeTasks:
 def test_windows_elevated_start_is_a_task_with_the_highest_rights():
     import xml.etree.ElementTree as ET
 
-    from libre_panel.autostart import WINDOWS_TASK, AutostartError
+    from libre_panel.autostart import WINDOWS_TASK
 
     registry, tasks = FakeRegistry(), FakeTasks()
     environ = {"USERNAME": "gamer", "USERDOMAIN": "PC"}
@@ -288,13 +307,13 @@ def test_launch_command_from_an_appimage(tmp_path, monkeypatch):
     assert launch_command() == ["/home/u/Apps/Libre_Panel-x86_64.AppImage", "tray", "--background"]
 
 
-def test_launch_command_from_the_mac_app(tmp_path, monkeypatch):
-    macos = tmp_path / "Libre Panel.app" / "Contents" / "MacOS"
-    macos.mkdir(parents=True)
-    (macos / "libre-panel").write_text("")
-    (macos / "LibrePanel").write_text("")
+def test_launch_command_from_the_windows_build_takes_the_one_without_a_console(
+    tmp_path, monkeypatch
+):
+    for name in ("libre-panel.exe", "LibrePanel.exe"):
+        (tmp_path / name).write_text("")
     monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(sys, "executable", str(macos / "libre-panel"))
-    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "libre-panel.exe"))
+    monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.delenv("APPIMAGE", raising=False)
-    assert launch_command() == [str(macos / "LibrePanel"), "tray", "--background"]
+    assert launch_command() == [str(tmp_path / "LibrePanel.exe"), "tray", "--background"]

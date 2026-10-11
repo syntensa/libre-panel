@@ -6,7 +6,6 @@
   playback changes, so a new track shows at once; a slow poll is the safety
   net. The cover is read when the track changes, not on every look.
 - Linux: any MPRIS player (Spotify, browsers, VLC, ...) through ``playerctl``.
-- macOS: Spotify or Music, asked through ``osascript``.
 
 Only read while a theme shows ``media.*`` readings; a cover is fetched only
 when a theme shows it, and the icon of the player (``media.app_icon``, see
@@ -38,7 +37,7 @@ from libre_panel.sensors.base import Reading, SensorProvider, wanted
 
 log = logging.getLogger(__name__)
 
-POLL_SECONDS = 1.0  # playerctl and osascript cannot tell what changes: they are asked this often
+POLL_SECONDS = 1.0  # playerctl cannot tell what changes: it is asked this often
 SAFETY_SECONDS = 5.0  # Windows tells what changes; this only catches a notice that went missing
 SETTLE_SECONDS = 1.0  # after a notice, once more: players fill in the cover and the position later
 MIN_GAP_SECONDS = 0.05  # two looks are at least this far apart, whatever the notices
@@ -61,7 +60,7 @@ class Track:
     cover: str | bytes | None = None  # a file, a web address, or the picture itself
     source: str = ""
     at: float = 0.0  # time.monotonic() of the position
-    app_id: str = ""  # what finds the player's icon: the AppUserModelID, the MPRIS name, the app
+    app_id: str = ""  # what finds the player's icon: the AppUserModelID or the MPRIS name
 
     def readings(self, now: float) -> dict[str, Reading]:
         out = {
@@ -342,68 +341,9 @@ class _PlayerctlBackend:
         return parse_playerctl(result.stdout, time.monotonic())
 
 
-# -- macOS ---------------------------------------------------------------------
-
-_APPLESCRIPT = """
-set sep to ASCII character 31
-if application "Spotify" is running then
-  tell application "Spotify"
-    if player state is not stopped then
-      set t to current track
-      return (player state as text) & sep & (artist of t) & sep & (name of t) & sep & \
-(album of t) & sep & (player position as text) & sep & ((duration of t) / 1000 as text) & \
-sep & (artwork url of t) & sep & "Spotify"
-    end if
-  end tell
-end if
-if application "Music" is running then
-  tell application "Music"
-    if player state is not stopped then
-      set t to current track
-      return (player state as text) & sep & (artist of t) & sep & (name of t) & sep & \
-(album of t) & sep & (player position as text) & sep & (duration of t as text) & sep & "" & \
-sep & "Music"
-    end if
-  end tell
-end if
-return ""
-"""
-
-
-def parse_osascript(text: str, at: float) -> Track | None:
-    parts = text.strip().split(_SEP)
-    if len(parts) != 8 or not parts[2]:
-        return None
-    status, artist, title, album, position, length, art, player = parts
-
-    def number(value: str) -> float | None:
-        try:
-            return float(value.replace(",", "."))
-        except ValueError:
-            return None
-
-    return Track(
-        status if status in ("playing", "paused") else "stopped", title, artist, album,
-        number(position), number(length), art or None, player, at, player,
-    )  # fmt: skip
-
-
-class _AppleScriptBackend:
-    async def poll(self, want_cover: bool) -> Track | None:
-        result = subprocess.run(
-            ["osascript", "-e", _APPLESCRIPT], capture_output=True, text=True, timeout=3,
-            check=False,
-        )  # fmt: skip
-        if result.returncode != 0:
-            return None
-        return parse_osascript(result.stdout, time.monotonic())
-
-
 def _backend() -> Any:
     if sys.platform == "win32":
         return _WindowsBackend()
-    if sys.platform == "darwin":
-        return _AppleScriptBackend()
     return _PlayerctlBackend()
 
 

@@ -1,8 +1,8 @@
 """A display that writes frames to a PNG file. No hardware needed.
 
 A relative ``device.output`` is inside the settings folder: a program started
-by autostart or a double-click has no meaningful working directory (``/`` on
-macOS, the system folder on Windows).
+by autostart or a double-click has no meaningful working directory (the system
+folder on Windows).
 """
 
 from __future__ import annotations

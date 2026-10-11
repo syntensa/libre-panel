@@ -173,7 +173,7 @@ def access_hint(exc: Exception) -> str | None:
 
 def _backend() -> Any:
     try:
-        import libusb_package  # bundles libusb-1.0 for Windows/macOS
+        import libusb_package  # bundles libusb-1.0 for Windows
 
         return libusb_package.get_libusb1_backend()
     except ImportError:

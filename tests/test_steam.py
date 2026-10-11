@@ -149,8 +149,6 @@ def test_steam_is_found_where_it_usually_is(tmp_path, monkeypatch):
         tmp_path / "other" / ".var/app/com.valvesoftware.Steam/.local/share/Steam"
     )
     assert steam.find_root(platform="linux", home=tmp_path / "other") == flatpak
-    mac = make_library(tmp_path / "mac" / "Library" / "Application Support" / "Steam")
-    assert steam.find_root(platform="darwin", home=tmp_path / "mac") == mac
     given = make_library(tmp_path / "mine")
     assert steam.find_root(str(given), platform="linux", home=home) == given
     assert steam.find_root(str(tmp_path / "nowhere"), platform="linux", home=home) is None

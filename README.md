@@ -10,7 +10,7 @@
   <a href="https://github.com/syntensa/libre-panel/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/syntensa/libre-panel?color=13E5D7&labelColor=0A1119"></a>
   <a href="https://github.com/syntensa/libre-panel/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/syntensa/libre-panel/actions/workflows/ci.yml/badge.svg"></a>
   <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-A3AEFF?labelColor=0A1119"></a>
-  <img alt="Windows, Linux, macOS" src="https://img.shields.io/badge/runs_on-Windows%20%C2%B7%20Linux%20%C2%B7%20macOS-E0A8FF?labelColor=0A1119">
+  <img alt="Windows, Linux" src="https://img.shields.io/badge/runs_on-Windows%20%C2%B7%20Linux-E0A8FF?labelColor=0A1119">
 </p>
 
 <p align="center"><img src="docs/images/hero.png" alt="The Studio theme on a 9.2 inch bar: a large clock, the local weather in a card, and rings for CPU, RAM and GPU" width="100%"></p>
@@ -25,7 +25,7 @@
 
 Plug in your panel, start Libre Panel, and it shows your PC's load,
 temperatures, memory, network and the weather outside, in a design you pick
-or build yourself. It runs quietly in the tray on Windows, Linux and macOS.
+or build yourself. It runs quietly in the tray on Windows and Linux.
 No account, no cloud, no vendor app.
 
 - **Looks good out of the box.** Seven built-in themes from the 0.96" stick
@@ -105,10 +105,10 @@ the panel and the modules move along.
   phase, computed for your place without the internet; the weather with
   its forecast.
 - **Your things.** What is playing, with the cover (Windows media controls,
-  Spotify, browsers, MPRIS players on Linux, Music on macOS); the next
-  events of your calendars (Google, Outlook, iCloud, Nextcloud, any .ics);
-  a dashboard of any readings, Home Assistant and MQTT included; pictures
-  from the theme folder as a slideshow.
+  Spotify, browsers, MPRIS players on Linux); the next events of your
+  calendars (Google, Outlook, iCloud, Nextcloud, any .ics); a dashboard of
+  any readings, Home Assistant and MQTT included; pictures from the theme
+  folder as a slideshow.
 
 Like the others, each new module shows more the larger it is, steps aside
 when its readings are missing ("Nothing playing", "No battery"), and costs
@@ -217,15 +217,12 @@ Download from the [releases](https://github.com/syntensa/libre-panel/releases)
 | System | Download | |
 |---|---|---|
 | Windows 10/11 | `libre-panel-…-windows-x64-setup.exe` | installs for your user (no admin rights), start menu entry, optional start at login; uninstall in *Settings → Apps* |
-| macOS 11+ (Apple silicon) | `libre-panel-…-macos-arm64.dmg` | drag *Libre Panel* to *Applications*; lives in the menu bar |
 | Linux (x86-64) | `Libre_Panel-…-x86_64.AppImage` | make it executable and double-click; no installation |
 
-A portable Windows zip and a Linux tarball are there too. The downloads are
-not code-signed yet: Windows SmartScreen asks once (*More info → Run
-anyway*), and on macOS you open the app the first time with right-click →
-*Open* (on macOS 15: *System Settings → Privacy & Security → Open Anyway*).
-After the first start, the icon in the tray (menu bar) opens the theme editor; *Start with
-system* makes it start at every login. More in
+A portable Windows zip and a Linux tarball are there too. The Windows
+downloads are not code-signed yet: SmartScreen asks once (*More info → Run
+anyway*). After the first start, the icon in the tray opens the theme editor;
+*Start with system* makes it start at every login. More in
 [Running in the background](docs/BACKGROUND.md).
 
 With Python instead:

@@ -6,8 +6,8 @@ Two ways to install, same package:
   (``[project.entry-points."libre_panel.services"]`` and so on);
 - a folder ``<settings>/plugins/<name>/`` with the package and a
   ``plugin.toml`` holding the same entry point table. That is how plugins get
-  into the downloads (Windows setup, macOS app, AppImage), which cannot pip
-  install. The folder goes onto ``sys.path`` when one of its parts is used.
+  into the downloads (Windows setup, AppImage), which cannot pip install. The
+  folder goes onto ``sys.path`` when one of its parts is used.
 
 Libre Panel never downloads or installs code itself. Its own services are
 registered here too (source "built in"): they work in the downloads, which

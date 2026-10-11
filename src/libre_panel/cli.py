@@ -500,7 +500,7 @@ def _cmd_location(args: argparse.Namespace) -> int:
 
 def _threads_on_signal() -> None:
     """``kill -USR1 <pid>`` prints where every thread is: what to look at when the
-    panel stops changing and nothing is logged (Linux, macOS)."""
+    panel stops changing and nothing is logged (Linux)."""
     import faulthandler
     import signal
 

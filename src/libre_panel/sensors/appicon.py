@@ -9,7 +9,6 @@ from that id to a picture. Everything here only reads; no program is touched.
   icon comes from the file of the running program of that name.
 - Linux: the MPRIS player name (``spotify``) finds ``spotify.desktop`` and the
   PNG its ``Icon=`` line names. Icons that only exist as SVG are left out.
-- macOS: the app bundle's ``.icns`` file.
 
 An icon is looked for once per app. The Windows calls are loaded on first use.
 """
@@ -21,7 +20,6 @@ import functools
 import glob
 import logging
 import os
-import plistlib
 import re
 import sys
 import time
@@ -79,8 +77,6 @@ def finder(platform: str | None = None) -> Callable[[str], Image.Image | None]:
     platform = platform or sys.platform
     if platform == "win32":
         return windows_icon
-    if platform == "darwin":
-        return macos_icon
     return linux_icon
 
 
@@ -498,30 +494,3 @@ def linux_icon(player: str, dirs: list[Path] | None = None) -> Image.Image | Non
     name = desktop_icon_name(entry) if entry else None
     file = icon_file(name, dirs) if name else None
     return load_file(file) if file else None
-
-
-# -- macOS ---------------------------------------------------------------------------
-
-
-def macos_icon(app: str, roots: list[Path] | None = None) -> Image.Image | None:
-    """The icon of an application by its name (``Spotify``, ``Music``): the ``.icns`` file
-    its ``Info.plist`` names."""
-    roots = roots or [
-        Path("/Applications"),
-        Path("/System/Applications"),
-        Path.home() / "Applications",
-    ]
-    for root in roots:
-        contents = root / f"{app}.app" / "Contents"
-        try:
-            with (contents / "Info.plist").open("rb") as file:
-                info = plistlib.load(file)
-        except (OSError, plistlib.InvalidFileException, ValueError):
-            continue
-        name = info.get("CFBundleIconFile") or info.get("CFBundleIconName")
-        if not isinstance(name, str) or not name:
-            continue
-        for candidate in (contents / "Resources" / name, contents / "Resources" / f"{name}.icns"):
-            if candidate.is_file():
-                return load_file(candidate)
-    return None

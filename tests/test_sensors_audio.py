@@ -2,7 +2,7 @@
 
 Windows is faked below the code under test: Core Audio objects are real tables of C
 functions (so the code calls them the way it calls Windows', reference counts
-included), and the tools of Linux and macOS are fake subprocess runs.
+included), and the tools of Linux are fake subprocess runs.
 """
 
 import ctypes
@@ -32,7 +32,7 @@ def nothing_is_shown(monkeypatch):
     monkeypatch.setattr(audio, "RETRY_SECONDS", 0.005)
 
 
-# -- the tools of Linux and macOS ----------------------------------------------------
+# -- the tools of Linux --------------------------------------------------------------
 
 
 def test_wpctl_prints_the_volume_as_a_fraction():
@@ -54,18 +54,6 @@ def test_pactl_prints_percent_per_channel_and_the_mute_apart():
     assert audio.parse_pactl_mute("Mute: no\n") is False
     assert audio.parse_pactl_mute("Mute: yes\n") is True
     assert audio.parse_pactl_mute("") is None
-
-
-def test_osascript_prints_a_record():
-    line = "output volume:37, input volume:75, alert volume:100, output muted:false\n"
-    assert audio.parse_osascript(line) == (37.0, False)
-    assert audio.parse_osascript(line.replace("false", "true")) == (37.0, True)
-    assert audio.parse_osascript("output volume:0, output muted:true") == (0.0, True)
-    hdmi = (
-        "output volume:missing value, input volume:75, alert volume:100, output muted:missing value"
-    )
-    assert audio.parse_osascript(hdmi) is None  # an output without a volume of its own
-    assert audio.parse_osascript("") is None
 
 
 class FakeTools:
@@ -97,7 +85,6 @@ class FakeTools:
 WPCTL = ("/usr/bin/wpctl", "get-volume", "@DEFAULT_AUDIO_SINK@")
 PACTL_VOLUME = ("/usr/bin/pactl", "get-sink-volume", "@DEFAULT_SINK@")
 PACTL_MUTE = ("/usr/bin/pactl", "get-sink-mute", "@DEFAULT_SINK@")
-OSASCRIPT = ("/usr/bin/osascript", "-e", "get volume settings")
 PACTL_PRINTS = {
     PACTL_VOLUME: "Volume: front-left: 24248 /  37% / -26.45 dB\n",
     PACTL_MUTE: "Mute: yes\n",
@@ -141,21 +128,10 @@ def test_a_volume_without_a_mute_answer_is_not_muted(monkeypatch):
     assert source.sample() == (37.0, False)
 
 
-def test_macos_is_asked_with_osascript(monkeypatch):
-    line = "output volume:37, input volume:75, alert volume:100, output muted:false\n"
-    tools = FakeTools(monkeypatch, {"osascript"}, {OSASCRIPT: line})
-    source = audio._open_source(lambda level, muted: None, "darwin")
-    assert source.sample() == (37.0, False)
-    assert tools.commands == [list(OSASCRIPT)]
-    assert source.interval == audio.MACOS_POLL_SECONDS == 0.5  # twice a second
-
-
 def test_without_the_tools_there_is_no_source(monkeypatch):
     FakeTools(monkeypatch, set(), {})
     with pytest.raises(OSError, match="needs wpctl or pactl"):
         audio._open_source(lambda level, muted: None, "linux")
-    with pytest.raises(OSError, match="needs osascript"):
-        audio._open_source(lambda level, muted: None, "darwin")
     with pytest.raises(OSError, match="needs wpctl or pactl"):  # the other Unixes
         audio._open_source(lambda level, muted: None, "freebsd14")
 

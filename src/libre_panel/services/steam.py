@@ -102,8 +102,6 @@ def find_root(
         for name in WINDOWS_STEAM_FOLDERS:
             if os.environ.get(name):
                 candidates.append(Path(os.environ[name]) / "Steam")
-    elif platform == "darwin":
-        candidates.append(home / "Library" / "Application Support" / "Steam")
     else:
         candidates += [home / folder for folder in LINUX_STEAM_FOLDERS]
     return next((path for path in candidates if (path / "steamapps").is_dir()), None)

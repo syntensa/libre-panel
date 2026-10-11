@@ -777,13 +777,13 @@ def test_main_loop_sends_every_frame_at_the_stream_rate(monkeypatch, tmp_path):
     assert all(region is None for _, region in shown)  # whole frames, changed or not
     rate = (len(shown) - 1) / (shown[-1][0] - shown[0][0])
     # The display's 50 fps, not config.fps = 5, as far as this machine's timer allows
-    # (virtual macOS runners coalesce short sleeps).
+    # (virtual runners coalesce short sleeps).
     started = time.perf_counter()
     for _ in range(10):
         time.sleep(0.018)
     timer_rate = min(50, 10 / (time.perf_counter() - started))
     # Well above config.fps, as close to the timer as a busy machine manages (a
-    # loaded macOS runner drew 20 fps with a timer good for 26).
+    # loaded runner drew 20 fps with a timer good for 26).
     assert max(2 * config.fps, 0.6 * timer_rate) < rate < 55, (rate, timer_rate)
     assert renderers[0].background_builds
 
@@ -797,7 +797,7 @@ def test_device_changes_open_the_panel_again():
 def test_a_mode_sets_the_stream_rate(monkeypatch):
     """A mode's fps replaces the display's 50 (SPUR II runs slower in game mode).
 
-    10 fps, not a realistic 25-30: virtual macOS runners coalesce short sleeps,
+    10 fps, not a realistic 25-30: virtual runners coalesce short sleeps,
     so "50" may come out near 30 there, while 10 is far from both 50 and
     config.fps = 5 on any machine.
     """
@@ -837,5 +837,5 @@ def test_a_mode_sets_the_stream_rate(monkeypatch):
         host.close()
     assert 8 < game < 12, (normal, game)  # the mode's 10
     # and before it, faster than 12: neither the mode's rate nor config.fps (a
-    # loaded macOS runner managed only 15 of the display's 50)
+    # loaded runner managed only 15 of the display's 50)
     assert normal > 12, (normal, game)

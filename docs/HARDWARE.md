@@ -10,8 +10,8 @@ USB-C. They differ in how they show up on the computer:
   own; Libre Panel talks to them directly.
 - **USB serial panels** (Turing rev. A–D, UsbPCMonitor, XuanFang, Kipye,
   WeAct) have a USB-to-serial chip inside and show up as a virtual COM port
-  (USB CDC): `COM3` on Windows, `/dev/ttyACM0` on Linux,
-  `/dev/cu.usbmodem…` on macOS. "Serial" means this, not an RS-232 cable.
+  (USB CDC): `COM3` on Windows, `/dev/ttyACM0` on Linux. "Serial" means
+  this, not an RS-232 cable.
 
 `libre-panel devices` lists both kinds.
 
@@ -92,11 +92,11 @@ USB serial panels appear as `/dev/ttyACM*`; add yourself to the `dialout` (Debia
 Ubuntu) or `uucp` (Arch) group.
 
 **USB serial panels** (Turing 2.1", 3.5", 5" and 8.8", UsbPCMonitor, XuanFang,
-Kipye, WeAct) need no driver on Windows 10/11, Linux or macOS; they show up as
-a virtual COM port, `/dev/ttyACM*` or `/dev/cu.usbmodem*`. Libre Panel finds the port by the panel's USB ids
-(`libre-panel devices` lists what it sees). Only if several devices share
-those ids, name the port: `port = "COM5"` under `[device]`. Libre Panel sends
-display commands only: no reset, nothing the panel stores
+Kipye, WeAct) need no driver on Windows 10/11 or Linux; they show up as a
+virtual COM port or `/dev/ttyACM*`. Libre Panel finds the port by the panel's
+USB ids (`libre-panel devices` lists what it sees). Only if several devices
+share those ids, name the port: `port = "COM5"` under `[device]`. Libre Panel
+sends display commands only: no reset, nothing the panel stores
 ([serial protocols](protocol/serial.md)).
 
 The Turing 2.1", 5" and 8.8" (rev. C) sleep when no program uses them and
@@ -117,17 +117,13 @@ Unlike turing-smart-screen-python, Libre Panel does not send the rev. C
 a rev. C panel stays dark with Libre Panel, please report it with the
 `libre-panel doctor` result.
 
-**macOS:** nothing to install; libusb comes with Libre Panel (the release
-download and `pip install "libre-panel[usb]"` alike).
-
 ## Check your panel
 
 With a download, in a terminal:
 
 ```bash
-"%LOCALAPPDATA%\Programs\Libre Panel\libre-panel.exe" doctor     # Windows (cmd)
-"/Applications/Libre Panel.app/Contents/MacOS/libre-panel" doctor  # macOS
-./Libre_Panel-*-x86_64.AppImage doctor                             # Linux
+"%LOCALAPPDATA%\Programs\Libre Panel\libre-panel.exe" doctor  # Windows (cmd)
+./Libre_Panel-*-x86_64.AppImage doctor                         # Linux
 ```
 
 With Python:

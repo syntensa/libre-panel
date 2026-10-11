@@ -15,7 +15,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import subprocess
 import sys
 from datetime import datetime
 from functools import cache
@@ -36,20 +35,6 @@ def catalog(language: str) -> dict[str, Any]:
     return json.loads((LOCALE_DIR / f"{language}.json").read_text(encoding="utf-8"))
 
 
-def _macos_language() -> str:
-    try:
-        result = subprocess.run(
-            ["defaults", "read", "-g", "AppleLanguages"],
-            capture_output=True,
-            text=True,
-            timeout=2,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return ""
-    match = re.search(r"[A-Za-z]{2}", result.stdout)
-    return match.group(0) if match else ""
-
-
 def _windows_language() -> str:
     try:
         import ctypes
@@ -67,8 +52,6 @@ def system_language() -> str:
     candidates += os.environ.get("LANGUAGE", "").split(":")
     if sys.platform == "win32":
         candidates.insert(0, _windows_language())
-    elif sys.platform == "darwin":
-        candidates.insert(0, _macos_language())
     for value in candidates:
         code = value[:2].lower()
         if code in LANGUAGES:

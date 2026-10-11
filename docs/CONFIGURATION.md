@@ -11,7 +11,6 @@ libre-panel config path     # where it is
 | System | Location |
 |---|---|
 | Windows | `%APPDATA%\LibrePanel\config.toml` |
-| macOS | `~/Library/Application Support/LibrePanel/config.toml` |
 | Linux | `~/.config/libre-panel/config.toml` |
 
 Set `LIBRE_PANEL_HOME` to use another folder (portable installs). Changes to
@@ -90,7 +89,7 @@ sources you want in front of it.
 | `load` | `cpu.load` and `gpu.load`, measured ten times a second | CPU everywhere, GPU on Windows (any vendor) |
 | `psutil` | CPU, memory, drives, network, battery, the busiest programs; temperatures and fans where the system has them | everywhere |
 | `librehardwaremonitor` | temperatures, power, clocks and fans of CPU, GPU and mainboard | Windows (in its default list); the Windows downloads carry what it needs, see [below](#windows-sensors-gpu-power-fans) |
-| `audio` | `audio.volume` (0 while muted) and `audio.muted` (1 or 0) of the default output | Windows, Linux (`wpctl` or `pactl`), macOS |
+| `audio` | `audio.volume` (0 while muted) and `audio.muted` (1 or 0) of the default output | Windows, Linux (`wpctl` or `pactl`) |
 
 **Fast load** (`load`): `cpu.load` and, on Windows, `gpu.load` are measured in
 a background thread ten times a second and read on every frame, so bars and
@@ -122,7 +121,6 @@ in the default list; add it: `providers = ["load", "psutil", "audio"]`.
 - Linux: `wpctl` (PipeWire), else `pactl` (PulseAudio), asked four times a
   second. Without either tool installed there are no readings, and the log
   says so.
-- macOS: `osascript`, asked twice a second.
 - It runs only while a theme on the panel shows `audio.volume` or
   `audio.muted`.
 
@@ -147,7 +145,6 @@ only while a theme or a service reads it:
   it needs; a pip install needs `pip install "libre-panel[media]"`.
 - Linux: any MPRIS player through `playerctl` (install it from your
   distribution), asked once a second.
-- macOS: Spotify or Music, asked once a second.
 
 Two pictures go with it, for an image widget (`"src": "@media.cover"`):
 `media.cover`, the album cover, and `media.app_icon`, the icon of the program
@@ -158,7 +155,6 @@ notices service puts it on the cover of its "Now playing" message:
   program that runs under the name Windows gives the player.
 - Linux: the PNG that the player's desktop entry names; a player whose icon
   exists only as an SVG has none.
-- macOS: the `.icns` file of the app.
 
 **Calendars** (`calendar.*`): the secret address of a calendar (Google:
 settings of the calendar → "Secret address in iCal format"; Outlook:
@@ -366,13 +362,13 @@ theme = "slate"        # optional: another theme
   matter; `name = A Better Name` sets the name to show), and with `steam` any
   program of a game installed through Steam. Steam's libraries are found
   from its own files (`libraryfolders.vdf`, `appmanifest_*.acf`), on Windows,
-  Linux (also Flatpak and Snap) and macOS. Tools in a library, such as Proton,
+  Linux (also Flatpak and Snap). Tools in a library, such as Proton,
   the Steam Linux Runtime or SteamVR, are not games; `ignore` adds more.
   Windows programs under Wine and Proton are found by the folder they work in.
 - **The window in front.** On Windows a Steam game counts only once its window
   has been in front, because a library also holds programs that run all day (a
-  wallpaper). Where Libre Panel cannot tell which window is in front (Linux,
-  macOS), a running program of a Steam game is enough.
+  wallpaper). Where Libre Panel cannot tell which window is in front (Linux),
+  a running program of a Steam game is enough.
 - **The beginning.** The service shows the name (`game.name`) and the logo
   (`game.logo`, an image: `"src": "@game.logo"` in an image widget) to the
   screens, then switches. The logo comes from Steam's picture cache, cut out
@@ -552,9 +548,9 @@ local_clip = "usr/data/standby.h264"
 ```
 
 - **ffmpeg** encodes the video. Install it (Windows: `winget install ffmpeg`;
-  macOS: `brew install ffmpeg`; Linux: the `ffmpeg` package), or set
-  `ffmpeg = "C:/path/to/ffmpeg.exe"`. It must include libx264, which the
-  usual builds do. It uses one CPU core, lightly.
+  Linux: the `ffmpeg` package), or set `ffmpeg = "C:/path/to/ffmpeg.exe"`. It
+  must include libx264, which the usual builds do. It uses one CPU core,
+  lightly.
 - **`local_clip`** is the name the panel's video start command carries: the
   clip the panel plays by itself while the PC is off, if it has one (vendor
   app: standby video) and the mainboard keeps USB powered then. The command

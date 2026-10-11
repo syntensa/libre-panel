@@ -1,8 +1,7 @@
 """The icon of the program that plays: the cache, Windows (the logo of a package, the icon of a
-program file, with the system calls faked), desktop entries on Linux and app bundles on macOS."""
+program file, with the system calls faked) and desktop entries on Linux."""
 
 import ctypes
-import plistlib
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -64,7 +63,6 @@ def test_a_finder_that_fails_gives_no_icon_and_no_error():
 
 def test_every_system_has_a_finder():
     assert appicon.finder("win32") is appicon.windows_icon
-    assert appicon.finder("darwin") is appicon.macos_icon
     assert appicon.finder("linux") is appicon.linux_icon
     assert appicon.finder("freebsd14") is appicon.linux_icon
 
@@ -473,33 +471,3 @@ def test_an_icon_that_only_exists_as_a_vector_is_left_out(share):
     assert appicon.linux_icon("vlc", [share]) is None
     entry(share, "mpv.desktop", str(svg))  # named by path: Pillow cannot read it either
     assert appicon.linux_icon("mpv", [share]) is None
-
-
-# -- macOS --------------------------------------------------------------------------------------
-
-
-def bundle(root, name, icon_key, icon_value, make_icon=None):
-    contents = root / f"{name}.app" / "Contents"
-    (contents / "Resources").mkdir(parents=True)
-    with (contents / "Info.plist").open("wb") as file:
-        plistlib.dump({icon_key: icon_value}, file)
-    if make_icon:
-        solid((64, 64), "red").save(contents / "Resources" / make_icon, format="PNG")
-    return contents
-
-
-def test_an_app_has_the_icon_its_bundle_names(tmp_path):
-    bundle(tmp_path / "Applications", "Spotify", "CFBundleIconFile", "Icon.icns", "Icon.icns")
-    bundle(tmp_path / "System", "Music", "CFBundleIconFile", "AppIcon", "AppIcon.icns")
-    roots = [tmp_path / "Applications", tmp_path / "System"]
-    assert appicon.macos_icon("Spotify", roots).getpixel((40, 40)) == (255, 0, 0, 255)
-    assert appicon.macos_icon("Music", roots).size == (appicon.ICON_SIZE,) * 2  # without ".icns"
-    assert appicon.macos_icon("Other", roots) is None
-
-
-def test_an_app_whose_icon_is_not_a_file_gives_none(tmp_path):
-    bundle(tmp_path, "Catalog", "CFBundleIconName", "AppIcon")  # kept in Assets.car
-    assert appicon.macos_icon("Catalog", [tmp_path]) is None
-    contents = bundle(tmp_path, "Broken", "CFBundleIconFile", "x.icns")
-    (contents / "Info.plist").write_bytes(b"not a plist")
-    assert appicon.macos_icon("Broken", [tmp_path]) is None
