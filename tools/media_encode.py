@@ -20,7 +20,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -82,6 +82,14 @@ class Frames:
     def size(self) -> tuple[int, int]:
         with Image.open(self.path(0)) as picture:
             return picture.size
+
+
+@dataclass(frozen=True)
+class Recorded:
+    """What a recipe gives: the frames of a clip, and the number of the one that is its poster."""
+
+    frames: Frames
+    poster: int
 
 
 class FrameSink:
@@ -310,3 +318,22 @@ def write_poster(frames: Frames, number: int, out: Path) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     frames.image(max(0, min(number, frames.count - 1))).save(out, optimize=True)
     return out
+
+
+def fade_loop(frames: Frames, overlap: int) -> Frames:
+    """Make a clip loop without a jump.
+
+    The last ``overlap`` frames are the clip's own continuation past its end. They are blended
+    into its first ``overlap`` frames, and then dropped: the clip now starts where its end
+    would have gone on, and gives way to its real start over those frames."""
+    count = frames.count - overlap
+    if overlap < 1 or count < overlap:
+        raise EncodeError(f"cannot fade {overlap} frames of a clip of {frames.count}")
+    for number in range(overlap):
+        x = number / overlap
+        share = x * x * (3 - 2 * x)  # from the continuation (0) to the start (1)
+        blended = Image.blend(frames.image(count + number), frames.image(number), share)
+        blended.save(frames.path(number), compress_level=1)
+    for number in range(count, frames.count):
+        frames.path(number).unlink()
+    return replace(frames, count=count)
