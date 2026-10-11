@@ -33,6 +33,7 @@ from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
 from libre_panel.icons import draw_icon, weather_icon_name
 from libre_panel.render import lists
 from libre_panel.render.countdown import countdown_text
+from libre_panel.render.dust import Dust
 from libre_panel.render.formatting import FormatError, auto_format, safe_format
 from libre_panel.render.motion import MAX_POINTS, RATE, History, Motion, Spring, grid
 from libre_panel.render.motion import number as motion_number
@@ -352,6 +353,7 @@ class Renderer:
         self._breathe: Callable[[], None] | None = None  # between widgets (warming up)
         self._plugin_types: dict[str, Any] = {}
         self._screen_last: tuple[Any, Piece] | None = None
+        self._dust: Dust | None = None  # the theme's look.dust, once it is drawn (render/dust.py)
         self.screen = self._make_screen()
 
     # -- resources ---------------------------------------------------------
@@ -883,13 +885,38 @@ class Renderer:
                 piece.layer.width,
                 piece.layer.height,
             ]
+        dust = self._dust_on()
         if screen is not None:
-            if not pieces and screen.mode == "RGB" and screen.size == (theme.width, theme.height):
+            if (
+                not pieces
+                and screen.mode == "RGB"
+                and screen.size == (theme.width, theme.height)
+                and not dust
+            ):
                 # an opaque screen alone is the frame: nothing to compose
                 self._last = None
                 return screen, boxes
             pieces.insert(0, ("\0screen", self._screen_piece(screen)))  # ids are never empty
-        return self._compose(pieces).convert("RGB"), boxes
+        canvas = self._compose(pieces)
+        if dust:
+            canvas = self._dusted(canvas, now)
+        return canvas.convert("RGB"), boxes
+
+    # -- dust --------------------------------------------------------------
+
+    def _dust_on(self) -> bool:
+        """Whether the theme's dust is drawn: on a video panel (where every frame
+        goes out) and in previews. On the PNG path it would change the whole frame at
+        every update, and the link sends what changed."""
+        dust = (self.theme.look or {}).get("dust")
+        return bool(dust and dust["enabled"] and (self.continuous or self.preview))
+
+    def _dusted(self, canvas: Image.Image, now: float) -> Image.Image:
+        if self._dust is None:
+            config = self.theme.look["dust"]  # type: ignore[index]
+            colors = [self.color(c)[:3] for c in config["colors"]]  # type: ignore[index]
+            self._dust = Dust(canvas.size, config, colors)
+        return self._dust.apply(canvas, now, self.shown, self.toast)
 
     @staticmethod
     def _missing(widget: dict[str, Any], snapshot: Snapshot) -> bool:

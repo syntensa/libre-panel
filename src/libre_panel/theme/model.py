@@ -291,6 +291,19 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
 
 _PALETTE_NAME = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 
+# The theme's "look" (render/dust.py): fine dust falling from the elements into
+# the depth behind the panel. Missing means off. The editor builds its form from
+# this table, so it is the single source of truth for the dust.
+DUST_SPEC: dict[str, tuple[str, Any]] = {
+    "enabled": ("bool", True),  # false keeps the settings but draws nothing
+    "count": ("int", 1800),  # grains on a 1920 x 480 panel; other sizes scale with their area
+    "rate": ("number", 25),  # how often the grains move, per second
+    "depth": ("number", 1.0),  # how far they fall towards the vanishing point (0: not at all)
+    "strength": ("number", 1.0),  # how bright they are
+}
+DUST_LIMITS = {"count": (0, 8000), "rate": (1, 60), "depth": (0, 3), "strength": (0, 3)}
+DUST_MAX_COLORS, DUST_MAX_AREAS = 8, 64
+
 
 @dataclass
 class Theme:
@@ -315,6 +328,7 @@ class Theme:
     # corners, glow, fonts); None = not set in the theme.
     grid: dict[str, int] | None = None
     style: dict[str, Any] | None = None
+    look: dict[str, Any] | None = None  # {"dust": {...}}: what the panel adds to the widgets
     root: Path | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -350,6 +364,8 @@ class Theme:
             data["grid"] = dict(self.grid)
         if self.style is not None:
             data["style"] = dict(self.style)
+        if self.look is not None:
+            data["look"] = deepcopy(self.look)
         if self.screen is not None:
             data["screen"] = deepcopy(self.screen)
         toast = {k: deepcopy(v) for k, v in self.toast.items() if v != TOAST_DEFAULTS[k]}
@@ -671,6 +687,65 @@ def _parse_style(raw: Any, root: Path | None) -> dict[str, Any] | None:
     return style
 
 
+def _parse_dust(raw: Any, palette: dict[str, str]) -> dict[str, Any] | None:
+    """``"look": {"dust": {"count": 1800, "colors": ["@accent"], "areas": [...]}}``.
+
+    ``colors`` (empty: each grain takes the colour of the element it falls from) and
+    ``areas`` (rectangles ``{"x", "y", "w", "h", "dust": true|false}``: dust only where
+    an area says so, or everywhere but where one says not) are lists; the rest is
+    :data:`DUST_SPEC`. ``true`` is all defaults, ``false`` or nothing is no dust.
+    """
+    if raw is None or raw is False:
+        return None
+    if raw is True:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise ThemeError("look.dust: expected an object (or true)")
+    dust: dict[str, Any] = {}
+    for key, (kind, default) in DUST_SPEC.items():
+        value = _coerce(kind, raw.get(key, default), f"look.dust.{key}")
+        if key in DUST_LIMITS and not DUST_LIMITS[key][0] <= value <= DUST_LIMITS[key][1]:
+            raise ThemeError(f"look.dust.{key}: must be between {DUST_LIMITS[key][0]} "
+                             f"and {DUST_LIMITS[key][1]}")  # fmt: skip
+        dust[key] = value
+    colors = raw.get("colors", [])
+    if not isinstance(colors, list) or len(colors) > DUST_MAX_COLORS:
+        raise ThemeError(f"look.dust.colors: expected a list of at most {DUST_MAX_COLORS} colours")
+    dust["colors"] = [
+        _check_color(color, f"look.dust.colors[{i}]", False, palette)
+        for i, color in enumerate(colors)
+    ]
+    areas = raw.get("areas", [])
+    if not isinstance(areas, list) or len(areas) > DUST_MAX_AREAS:
+        raise ThemeError(f"look.dust.areas: expected a list of at most {DUST_MAX_AREAS} areas")
+    dust["areas"] = []
+    for i, area in enumerate(areas):
+        where = f"look.dust.areas[{i}]"
+        if not isinstance(area, dict):
+            raise ThemeError(f"{where}: expected an object with x, y, w, h")
+        checked = {k: _coerce("int", area.get(k, 0), f"{where}.{k}") for k in ("x", "y", "w", "h")}
+        if checked["w"] < 1 or checked["h"] < 1:
+            raise ThemeError(f"{where}: w and h must be at least 1")
+        checked["dust"] = _coerce("bool", area.get("dust", True), f"{where}.dust")
+        dust["areas"].append(checked)
+    return dust
+
+
+def _parse_look(raw: Any, palette: dict[str, str], warnings: list[str]) -> dict[str, Any] | None:
+    """``"look"``: what the panel adds to the widgets. Today the dust; None while
+    there is nothing in it."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ThemeError("look must be an object")
+    look: dict[str, Any] = {}
+    dust = _parse_dust(raw.get("dust"), palette)
+    if dust is not None:
+        look["dust"] = dust
+    warnings.extend(f"look: ignoring unknown field {k!r}" for k in sorted(set(raw) - {"dust"}))
+    return look or None
+
+
 def parse_theme(data: Any, root: Path | None = None) -> Theme:
     if not isinstance(data, dict):
         raise ThemeError("theme.json must contain an object")
@@ -762,6 +837,7 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         widgets=widgets,
         grid=_parse_grid(data.get("grid")),
         style=_parse_style(data.get("style"), root),
+        look=_parse_look(data.get("look"), palette, warnings),
         screen=_parse_screen(data.get("screen"), palette, root, warnings),
         toast=_parse_toast(data.get("toast"), palette, root, warnings),
         root=root,
