@@ -209,6 +209,15 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
   administrator; the language) and *About* (the version, the licence, the notices, how to report a
   panel, the folders with *Open folder*). What the running app cannot take in by itself, the sources
   and the weather, says so and has a *Restart the panel* button; everything else is followed at once
+- The video mode starts without editing `config.toml`: where the name of the panel's standby clip is
+  all it lacks (a panel it is proven on, the 9.2", and ffmpeg found), *Start* asks for it once, on a
+  first start and afterwards as a card, with the name the vendor app uses, `usr/data/standby.h264`, in
+  the field. *Use it* writes `video.local_clip`, and the running panel switches to video mode by
+  itself, without a restart; *Not now* writes no name. Nothing is written before the click, and
+  either answer sets `clip_asked = true` under `[video]`, so it is not asked again. While it waits,
+  the tray menu has a line, *Smooth motion: confirm the clip name…*, that opens Start at the card.
+  *Live* says whether the video mode is on (with its frame rate) or what it lacks, as *Settings →
+  Panel* does. `GET /api/clip` gives `{ask, name}`
 - A Libre Panel that runs with the highest rights (as administrator or root) obeys what
   `config.toml` names, so there Settings do not change a setting that names a program, a library or
   a file (`video.ffmpeg`, the picture file `device.output`, a path under `[sensors.*]`, the files
