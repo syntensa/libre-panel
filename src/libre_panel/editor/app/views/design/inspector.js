@@ -15,12 +15,15 @@ import { inspectorState } from "./inspector-state.js";
 import { ColorSwatches } from "./color.js";
 import { FieldRow, FontControl, AssetControl, FinishTiles, enumOptions } from "./fields.js";
 import {
+  activeLook,
   align,
+  applyLook,
   deleteSelection,
   detachModule,
   duplicateSelection,
   copySelection,
   kindName,
+  looks,
   moduleKinds,
   renameWidget,
   resizeModuleBy,
@@ -600,6 +603,23 @@ function PaletteEditor({ theme }) {
   </div>`;
 }
 
+/** The looks: one click puts a look's colours and module style on the theme. */
+function LookTiles({ theme }) {
+  const active = activeLook(theme);
+  return html`<div class="look-grid" role="radiogroup" aria-label=${t("Look")}>
+      ${Object.entries(looks()).map(
+        ([key, item]) => html`<button type="button" role="radio" key=${key} aria-checked=${String(active === key)} class="look-tile"
+          title=${t("Use the {name} look", { name: item.name })} onClick=${() => applyLook(key)}>
+          <span class="look-dots">
+            ${["accent", "mem", "net", "surface"].map((role) => html`<i key=${role} style=${{ background: item.palette[role] || item.palette.accent }}></i>`)}
+          </span>
+          <span>${item.name}</span>
+        </button>`,
+      )}
+    </div>
+    <small class="field-hint">${t("A look sets the palette's colours and the modules' style.")}</small>`;
+}
+
 function PluginOptions({ options, values, onChange }) {
   return Object.entries(options || {}).map(([key, [kind, fallback]]) => html`<${FieldRow} key=${key} name=${key} kind=${kind}
     value=${values?.[key] ?? fallback} onChange=${(value) => onChange(key, value)} />`);
@@ -735,6 +755,7 @@ function ThemeInspector({ theme }) {
           <${AssetControl} value=${background.image} onChange=${themeChange("bgimg", (th, v) => (th.background = { ...(th.background || {}), image: v || null }))} />
         <//>
       <//>
+      ${Object.keys(looks()).length ? html`<${Section} title=${t("Look")}><${LookTiles} theme=${theme} /><//>` : null}
       <${Section} title=${t("Font")}>
         <${FontControl} value=${theme.font === specs.default_font ? "" : theme.font} empty=${t("Default (Barlow Medium)")}
           onChange=${themeChange("font", (th, v) => (th.font = v || specs.default_font))} />

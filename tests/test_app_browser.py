@@ -187,6 +187,14 @@ def test_inspector_details_and_theme_settings(page):
     name = page.locator(".inspector input[aria-label='Name']")
     name.fill("Renamed")
     assert page.locator(".theme-name").inner_text() == "Renamed"
+    # a look: its colours and module style in one step, undone in one
+    before = js(page, "window.libre.doc.theme().palette.accent")
+    page.locator(".inspector .look-tile", has_text="Neon").click()
+    assert js(page, "window.libre.doc.theme().palette.accent") == "#FF4FD8"
+    assert js(page, "window.libre.doc.theme().style.card") == "outline"
+    assert page.locator(".inspector .look-tile[aria-checked='true']").inner_text() == "Neon"
+    page.keyboard.press("Control+z")
+    assert js(page, "window.libre.doc.theme().palette.accent") == before
 
 
 def test_pages_of_the_panel(app_url, isolated_home):

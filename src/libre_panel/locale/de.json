@@ -1046,7 +1046,10 @@
     "Show the normal theme here": "Hier das normale Theme zeigen",
     "Close the window? Changes that are not saved are lost.": "Fenster schließen? Was nicht gespeichert ist, geht verloren.",
     "after a game": "nach einem Spiel",
-    "Time and date": "Zeit"
+    "Time and date": "Zeit",
+    "colours and module style": "Farben und Modulstil",
+    "colours palette": "Farben Farbpalette",
+    "A look sets the palette's colours and the modules' style.": "Ein Look setzt die Farben der Palette und den Stil der Module."
   },
   "fields": {
     "align": "Ausrichtung",

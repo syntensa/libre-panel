@@ -1,6 +1,6 @@
 // What can be done to the widgets of the theme: add, insert building blocks
 // and modules, duplicate, copy, paste, delete, lock, hide, order, align,
-// rename, detach. Every change is one undo step.
+// rename, detach; and its look. Every change is one undo step.
 
 import { endpoints } from "../../core/api.js";
 import {
@@ -398,4 +398,30 @@ export async function detachModule(widget) {
   } catch (error) {
     toastError(error);
   }
+}
+
+// -- looks -----------------------------------------------------------------------------
+
+export const looks = () => specs()?.modules?.looks || {};
+
+/** The look the theme wears now: its background, accent and cards are the look's. */
+export function activeLook(current = theme()) {
+  const palette = current?.palette || {};
+  const style = current?.style || {};
+  for (const [key, look] of Object.entries(looks())) {
+    if (look.palette.bg === palette.bg && look.palette.accent === palette.accent && look.style.card === style.card) return key;
+  }
+  return null;
+}
+
+/** A look's colours and module style for the theme; its own palette names stay. */
+export function applyLook(key) {
+  const look = looks()[key];
+  if (!look || !store.get().doc) return;
+  edit(null, (current) => {
+    current.palette = { ...(current.palette || {}), ...clone(look.palette) };
+    current.style = clone(look.style);
+    current.background = { ...(current.background || {}), color: "@bg" };
+  });
+  toast(t("Look: {name}", { name: look.name }));
 }

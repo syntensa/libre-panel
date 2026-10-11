@@ -1145,6 +1145,23 @@
   gap: 22px;
 }
 
+/* the looks of the theme, three to a row */
+.inspector .look-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.inspector .look-tile {
+  padding: 9px 10px;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+.inspector .look-dots i {
+  width: 11px;
+  height: 11px;
+}
+
 .inspector-foot {
   padding: 14px 20px 18px;
   border-top: 1px solid var(--line);

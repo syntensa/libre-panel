@@ -24,7 +24,6 @@ render(html`<${App} />`, document.getElementById("root"));
 async function start() {
   try {
     await loadLanguage();
-    document.title = "Libre Panel";
     store.set({ specs: await endpoints.specs() });
     await Promise.all([refreshThemes(), refreshPages()]);
     endpoints.sensors().then((sensors) => store.set({ sensors }), () => {});
@@ -43,6 +42,14 @@ async function start() {
 }
 
 start();
+
+// the tab's title: the theme, marked while it has changes that are not saved
+store.subscribe(() => {
+  const { doc: open, dirty } = store.get();
+  const name = open?.theme?.name;
+  const title = name ? `${dirty ? "● " : ""}${name} – Libre Panel` : "Libre Panel";
+  if (document.title !== title) document.title = title;
+});
 
 // for the tests and for looking around in the developer tools
 window.libre = { store, doc, commands };

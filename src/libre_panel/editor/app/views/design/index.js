@@ -25,13 +25,16 @@ import { Inspector, MODULE_ICONS, TYPE_ICONS } from "./inspector.js";
 import { Layers } from "./layers.js";
 import { Library } from "./library.js";
 import {
+  activeLook,
   align,
+  applyLook,
   canPaste,
   copySelection,
   deleteSelection,
   detachModule,
   duplicateSelection,
   kindName,
+  looks,
   moduleKinds,
   moveLayer,
   nudge,
@@ -206,6 +209,24 @@ registerProvider(() => {
       run: toDesign(() => dropItem({ kind: "widget", type }, null)),
     }));
   return [...modules, ...presets, ...types];
+});
+
+// the looks: a palette and a module style in one go
+registerProvider(() => {
+  if (!store.get().doc) return [];
+  const active = activeLook();
+  return Object.entries(looks())
+    .filter(([key]) => key !== active)
+    .map(([key, look]) => ({
+      id: `look.${key}`,
+      title: () => t("Look: {name}", { name: look.name }),
+      hint: () => t("colours and module style"),
+      keywords: () => t("colours palette"),
+      group: () => t("Theme"),
+      icon: "palette",
+      rank: 60,
+      run: () => applyLook(key),
+    }));
 });
 
 // "select all of a kind", with how many there are
