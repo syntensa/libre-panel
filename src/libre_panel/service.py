@@ -30,6 +30,7 @@ from libre_panel.config import (
     user_themes_dir,
 )
 from libre_panel.devices.base import DeviceError
+from libre_panel.theme.defaults import normal_theme
 from libre_panel.theme.model import THEME_FILENAME, ThemeError, find_theme
 
 log = logging.getLogger(__name__)
@@ -112,7 +113,8 @@ class PanelService:
     def _watch_paths(self) -> list[Path]:
         paths = [self._config_path(), user_themes_dir()]
         try:
-            paths.append(find_theme(load_config(self.config_path).theme) / THEME_FILENAME)
+            normal = normal_theme(load_config(self.config_path), self.status.default_theme)
+            paths.append(find_theme(normal) / THEME_FILENAME)
         except (ConfigError, ThemeError):
             pass
         return paths
@@ -161,6 +163,8 @@ class PanelService:
             "hint": self._hint() if state in ("showing", "waiting") else "",
             "target": status.target,
             "theme": status.theme,
+            # what a config.toml without a theme shows on this panel (see theme.defaults)
+            "default_theme": status.default_theme,
             "frames": status.frames,
             "mode": status.mode,
             # numbers of the last seconds (see libre_panel.meter); none while it does not run
@@ -339,10 +343,12 @@ class BackgroundApp:
         set_config_value("device.rotate", 180 if on else 0, self.config_path)
 
     def active_theme(self) -> str | None:
+        """The theme of the normal page: config.toml's, else the panel's own default."""
         try:
-            return load_config(self.config_path).theme
+            config = load_config(self.config_path)
         except ConfigError:
             return None
+        return normal_theme(config, self.panel.status.default_theme)
 
     def snapshot(self) -> dict[str, Any]:
         try:

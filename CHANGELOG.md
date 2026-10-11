@@ -630,6 +630,21 @@
   to what the source makes from real output
 
 **Changes**
+- The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars
+  (the 8.8" and 9.2"), Libre Default on every other panel. A `config.toml` without a
+  `theme` means "the panel's own default", so `libre-panel config init` and the app's
+  first write no longer put `theme = "libre-default"` into it; a comment says what the
+  default is and how to name another. The panel is the one `device.model` names, else
+  (with `model = "auto"`) the TURZX USB panel on the bus, found by its ids and not opened,
+  else the panel that connects: the theme then changes once, with the usual transition.
+  A theme in `config.toml`, also the `theme = "libre-default"` that 0.4 wrote, and
+  `libre-panel run --theme` always win. *Start* asks "How should it look?" with the
+  panel's default first, marked *Default*; the app, the tray and the console API report
+  the theme the panel really shows (`default_theme` in the panel's state, `default` in
+  `GET /api/pages`)
+- A setting that `config.toml` gets for the first time, such as the theme chosen in the
+  app, is written under the commented line that explains it (`# theme = "slate"`) and no
+  longer above the title of the file
 - SPUR II's screens are kept as a legacy set: their themes carry
   `"collection": "SPUR II"`, and galleries show Libre Panel's own themes
   first and SPUR II's apart, for those who want to see where Libre Panel
@@ -639,10 +654,10 @@
   is wider than the old card, and the rings move 25 px to the right for it; they are light
   in milled grooves now, with the names of the processor, the memory and the graphics card
   under them. The clock, the date and the network keep their places
-- Libre Default, the theme a new install starts with: lit rings and disk segments, a CPU
-  history that scrolls through the last 30 seconds, numbers that glide and the app's
-  colours; the corner where the weather was shows what plays, else the weather, else the
-  day
+- Libre Default, the theme a new install starts with on every panel but the bars: lit
+  rings and disk segments, a CPU history that scrolls through the last 30 seconds, numbers
+  that glide and the app's colours; the corner where the weather was shows what plays,
+  else the weather, else the day
 - The pictures of the README and the website show Lumen (on top, in the gallery, in the
   social preview), and the README lists Libre Panel's own themes first, SPUR II's apart
 - The editor before the app stays at `/classic/` until the app has all its

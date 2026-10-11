@@ -286,6 +286,9 @@ light. Each is plain JSON; none names a piece of hardware.
 | `studio` | 8.8" / 9.2" bar | a large clock with the date and the network, a slot of cards (what plays, the weather, the day) and lit rings for the CPU, RAM and GPU (the disk on a PC without GPU readings) with the hardware's names |
 | `libre-default` | 3.5" | two lit rings, the CPU's temperature, the disk and the network, a history that scrolls through the last 30 seconds, and a small slot in the corner: what plays, the weather or the day |
 
+A `config.toml` without a `theme` shows `lumen` on the 1920×480 bars and `libre-default` on
+every other panel ([the theme on the panel](CONFIGURATION.md#the-theme-on-the-panel)).
+
 A few things they do that a theme of your own can do too:
 
 - **What plays, else the weather, else the day.** A `cards` slot with the

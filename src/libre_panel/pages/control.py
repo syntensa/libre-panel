@@ -25,6 +25,7 @@ from libre_panel.pages.base import ConsolePage, Refused, Request
 from libre_panel.plugins.host import LEFT_OUT, OFF_IN_THEME
 from libre_panel.plugins.loader import registry
 from libre_panel.services.game import MODE as GAME_MODE
+from libre_panel.theme.defaults import normal_theme
 from libre_panel.theme.model import ThemeError, find_theme, list_themes
 
 LIVE_WIDTH = 960  # the live picture is this wide unless asked otherwise
@@ -240,7 +241,7 @@ class Control(ConsolePage):
         game = config.modes.get(GAME_MODE) if config else None
         return {
             "available": [theme["id"] for theme in list_themes()],
-            "normal": config.theme if config else None,
+            "normal": normal_theme(config, (panel or {}).get("default_theme")) if config else None,
             "game": (game.theme or "") if game else "",  # "": the normal mode's
             "shown": panel["theme"] if panel else None,
             "mode": panel["mode"] if panel else None,

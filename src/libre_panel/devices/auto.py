@@ -14,6 +14,7 @@ from collections.abc import Callable
 from PIL import Image
 
 from libre_panel.devices.base import Display
+from libre_panel.devices.models import PanelModel
 from libre_panel.devices.turzx import TurzxDisplay
 from libre_panel.devices.virtual import VirtualDisplay
 from libre_panel.i18n import t
@@ -36,6 +37,11 @@ class AutoDisplay(Display):
     @property
     def using_panel(self) -> bool:
         return self._impl is not None and not isinstance(self._impl, VirtualDisplay)
+
+    @property
+    def model(self) -> PanelModel | None:  # type: ignore[override]
+        """The panel in use (None while frames go to the PNG file)."""
+        return getattr(self._impl, "model", None) if self.using_panel else None
 
     def _try_panel(self) -> Display | None:
         self._next_probe = self._clock() + self.PROBE_INTERVAL_S

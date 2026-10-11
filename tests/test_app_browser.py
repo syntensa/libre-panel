@@ -119,6 +119,12 @@ def shown_themes(page):
     return page.locator(".theme-card").evaluate_all("cards => cards.map((c) => c.dataset.theme)")
 
 
+def default_theme_card(page):
+    """The ids of the cards marked as the panel's default (a first start marks one)."""
+    marked = page.locator(".theme-card:has(.theme-card-tag.default)")
+    return marked.evaluate_all("cards => cards.map((c) => c.dataset.theme)")
+
+
 def open_collections(page):
     """Open every collection's group: its cards are not there before."""
     for toggle in page.locator(".theme-collection-toggle[aria-expanded='false']").all():
@@ -295,6 +301,12 @@ def test_a_first_start_asks_how_it_should_look(app_url, isolated_home):
         # no panel known: Libre Panel's own themes (and yours) are on offer, all sizes
         assert sorted(shown_themes(page)) == sorted(own_themes(page))
         assert page.locator(".theme-card .theme-card-badge").count() == 0  # none is chosen yet
+        # the panel's own default leads, marked: Libre Default where no bar is known
+        assert shown_themes(page)[0] == "libre-default"
+        assert default_theme_card(page) == ["libre-default"]
+        mark = page.locator(".theme-card-tag.default")
+        expect(mark).to_have_text("Default")
+        assert mark.get_attribute("title") == "Shown on the panel until you choose another"
         choice = shown_themes(page)[0]
         page.locator(f'.theme-card[data-theme="{choice}"] .theme-card-main').click()
         expect(page.locator(".tab[aria-current='page']")).to_have_text("Design")  # on to Design
@@ -314,6 +326,7 @@ def test_a_first_start_offers_the_themes_for_the_panel_it_found(app_url, isolate
         own = set(own_themes(page))
         fits = {i["id"] for i in themes if i["id"] in own and i["size"] == [1920, 480]}
         assert fits and set(shown_themes(page)) == fits and len(fits) < len(themes)
+        assert shown_themes(page)[0] == "lumen" and default_theme_card(page) == ["lumen"]
         # the way to the others, and back
         expect(page.locator(".start-actions")).to_contain_text(f"{len(themes) - len(fits)}")
         page.get_by_role("button", name="See all").click()
@@ -330,6 +343,43 @@ def test_a_first_start_offers_the_themes_for_the_panel_it_found(app_url, isolate
         }
         expect(page.locator(".theme-card")).to_have_count(len(small))
         assert set(shown_themes(page)) == small
+        assert shown_themes(page)[0] == "libre-default"  # the default of the panel named now
+        assert default_theme_card(page) == ["libre-default"]
+
+
+def test_a_first_start_leads_with_the_default_of_the_panel(app_url, isolated_home):
+    """A bar is offered Lumen first and Lumen is marked as the default; every other panel is
+    offered Libre Default first. The app knows a panel that is not connected from config.toml;
+    a theme that is named is a choice, and nothing is marked then."""
+    isolated_home.mkdir(parents=True)
+    config = isolated_home / "config.toml"
+    config.write_text('[device]\nmodel = "turing-9.2-usb"\n', encoding="utf-8")
+    with browser_page(app_url, "home", allow=PICTURE) as page:
+        page.wait_for_selector(".start.first .theme-card")
+        expect(page.locator(".panel-strip")).to_contain_text("No panel found yet")  # not connected
+        assert js(page, "window.libre.store.get().pages.default") == "lumen"
+        assert shown_themes(page)[0] == "lumen" and default_theme_card(page) == ["lumen"]
+        page.get_by_role("button", name="Choose a panel").click()
+        for panel, first in (
+            ("Turing 3.5", "libre-default"),
+            ("Turing 8.8", "lumen"),
+            ("Turing 12.3", "libre-default"),  # nothing is made for it: the default leads anyway
+            ("Turing 9.2", "lumen"),
+        ):
+            page.locator(".popover .model-row", has_text=panel).first.click()
+            expect(page.locator(".panel-strip")).to_contain_text(f"Themes for {panel}")
+            assert shown_themes(page)[0] == first, panel
+            assert default_theme_card(page) == [first], panel
+            page.get_by_role("button", name="Another panel").click()
+    # a theme in config.toml (0.4 wrote libre-default) is a choice, whatever the panel
+    config.write_text(
+        'theme = "libre-default"\n[device]\nmodel = "turing-9.2-usb"\n', encoding="utf-8"
+    )
+    with browser_page(app_url, "home/themes", allow=PICTURE) as page:
+        page.wait_for_selector(".start.gallery .theme-card")
+        assert default_theme_card(page) == []
+        assert js(page, "window.libre.store.get().pages.default") == "lumen"
+        expect(page.locator(".theme-card.current")).to_have_attribute("data-theme", "libre-default")
 
 
 def test_a_collection_waits_closed_at_the_end_of_the_gallery(app_url, isolated_home):
@@ -381,8 +431,8 @@ def test_a_collection_does_not_lead_a_first_start_or_the_quick_list(app_url, iso
     with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
         page.wait_for_selector(".start.first .theme-card")
         assert page.locator(".theme-collection").count() == 0  # nothing of a collection is offered
-        # made for the 9.2" panel: Libre Panel's own
-        assert set(shown_themes(page)) == {"lumen", "studio"}
+        # made for the 9.2" panel: Libre Panel's own, its default first
+        assert shown_themes(page) == ["lumen", "studio"]
         page.get_by_role("button", name="See all").click()
         expect(page.locator(".theme-collection")).to_have_count(2)  # closed, at the end
         assert page.locator(".theme-card[data-theme='spur-ii']").count() == 0

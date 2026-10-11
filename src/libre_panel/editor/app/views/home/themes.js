@@ -20,13 +20,15 @@ const sourceText = (theme) => (theme.source === "plugin" ? t("from a plugin") : 
 /**
  * The themes with what Start says about each: whether it is on the panel (`shown`), made for
  * the panel (`fits`) or kept for another page (`special`: the round report), the `collection`
- * it belongs to ("" for Libre Panel's own and yours), and a short `note`. Order: the one on the
- * panel, then Libre Panel's own and yours (those that fit first: yours, built in, kept for a
- * page), then the collections' the same way.
+ * it belongs to ("" for Libre Panel's own and yours), and a short `note`. On a first start the
+ * theme `defaultId` is the panel's own default (`isDefault`: what it shows until another is
+ * chosen). Order: the one on the panel or the default, then Libre Panel's own and yours (those
+ * that fit first: yours, built in, kept for a page), then the collections' the same way.
  */
-export function startThemes({ themes, models, pages, model }) {
+export function startThemes({ themes, models, pages, model, defaultId = null }) {
   // on a first start the theme config.toml names is the default, not a choice
-  const normal = pages?.chosen === false ? null : (pages?.pages?.find((page) => page.id === "normal")?.theme ?? null);
+  const first = pages?.chosen === false;
+  const normal = first ? null : (pages?.pages?.find((page) => page.id === "normal")?.theme ?? null);
   const special = new Set((pages?.pages || []).filter((page) => page.id !== "normal" && page.theme).map((page) => page.theme));
   const items = themes.map((theme) => {
     const made = models.find((item) => item.id === theme.model);
@@ -39,11 +41,12 @@ export function startThemes({ themes, models, pages, model }) {
       fits: fitsPanel(theme, model),
       collection: typeof theme.collection === "string" ? theme.collection : "",
       special: special.has(theme.id) && !shown,
+      isDefault: first && theme.id === defaultId,
       note: where || sourceText(theme),
       own: !theme.builtin && theme.source !== "plugin",
     };
   });
-  const order = (item) => (item.shown ? 0 : (item.collection ? 20 : 0) + (item.fits ? 0 : 10) + (item.special ? 3 : item.own ? 1 : 2));
+  const order = (item) => (item.shown || item.isDefault ? 0 : (item.collection ? 20 : 0) + (item.fits ? 0 : 10) + (item.special ? 3 : item.own ? 1 : 2));
   return items.sort((a, b) => order(a) - order(b) || (a.name || a.id).localeCompare(b.name || b.id));
 }
 
@@ -72,6 +75,9 @@ export function ThemeCard({ item, big = false, label, onChoose, onEdit }) {
         <span class="theme-card-title">
           <span class="theme-card-name">${item.name || item.id}</span>
           ${item.shown ? html`<span class="theme-card-badge"><${Icon} name="check" size=${12} strokeWidth=${3} /> ${t("On the panel")}</span>` : null}
+          ${item.isDefault
+            ? html`<span class="theme-card-tag default" title=${t("Shown on the panel until you choose another")}>${t("Default")}</span>`
+            : null}
           ${item.own || item.source === "plugin" ? html`<span class="theme-card-tag">${sourceText(item)}</span>` : null}
         </span>
         <span class="theme-card-note">${item.note}</span>

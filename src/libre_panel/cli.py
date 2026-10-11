@@ -24,7 +24,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if args.driver:
         config.device.driver = args.driver
     if args.theme:
-        config.theme = args.theme
+        config.theme, config.theme_given = args.theme, True  # asked for: not the panel's default
     with InstanceLock():
         if args.once:
             run(config, once=True)

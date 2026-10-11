@@ -40,7 +40,8 @@ a restart, and its *Restart the panel* button does that without quitting Libre P
 ## Reference
 
 ```toml
-theme = "libre-default"        # built-in or user theme
+# theme = "slate"              # built-in or user theme; without one the panel's own
+                               # default shows (see "The theme on the panel")
 language = "auto"              # "auto" (system language), "en" or "de"
 # refresh_ms = 1000            # override the theme's refresh interval
 fps = 10                       # 1-60; values glide between readings
@@ -99,6 +100,30 @@ mode = "auto"                  # "auto": smooth video mode by itself where it is
 fps = 50                       # frames per second in video mode
 local_clip = ""                # required for "auto" and "on", see below
 ```
+
+## The theme on the panel
+
+Without a `theme` in `config.toml` each panel shows its own default: **Lumen** on the
+1920×480 bars (the 8.8" and 9.2"), **Libre Default** on every other panel. A bar is a panel
+whose frame is at least 3.5 times as long as it is high; the 12.3" (1920×720) is not one.
+`libre-panel config init` and the app's first write leave the line out, and a comment in
+the file says so.
+
+```toml
+theme = "slate"                # any built-in theme, or a folder in the user themes directory
+```
+
+- **A theme you name always wins**, and so does `libre-panel run --theme NAME`. The
+  `theme = "libre-default"` that a `config.toml` up to 0.4 carries is such a choice and
+  stays as it is; take the line out to get the panel's default.
+- **Which panel it is** is the one `device.model` names. With `model = "auto"` Libre Panel
+  looks for a TURZX USB panel on the bus (by its ids, without opening it); a panel that is
+  known only once it connects (a serial 8.8", or one plugged in later) is taken from the
+  connection, and the theme then changes once, with the `transition` of `config.toml`.
+  Unplugging the panel changes nothing.
+- **In the app**, *Start* asks "How should it look?" on a first start (no `theme` in
+  `config.toml` yet) with the panel's default first, marked *Default*. Choosing a theme
+  there, in the tray's *Theme* menu or in Design writes `theme`.
 
 ## Sensor sources and their order
 
