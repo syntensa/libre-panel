@@ -636,6 +636,9 @@
   message with its cover among them, piled up in the main loop for as long as that
   lasted. They wait in the services' queue now, the newest 20, and show when the panel
   is back
+- Two changes to `config.toml` at the same moment (the tray's brightness while the app
+  saves a setting) both started from the file as it was, and the one that finished last
+  undid the other. A change now waits for the one under way
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

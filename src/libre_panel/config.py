@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import threading
 import tomllib
 import unicodedata
 from dataclasses import dataclass, field
@@ -724,9 +725,19 @@ def edit_config(*changes: tuple[str, str, Any], path: Path | None = None) -> Pat
     of a replaced array go with them). The new file is compared with the old one: only what
     was asked for may differ, and it has to load as a configuration. Else nothing is written
     and a :class:`ConfigError` says to edit it by hand, so a layout this cannot handle is
-    refused, never mangled. The write is atomic.
+    refused, never mangled. The write is atomic, and it waits for one under way in this
+    program (the tray and each request of the app write from threads of their own): else
+    both would start from the same file, and the last to finish would undo the other.
     """
     path = path or config_dir() / CONFIG_FILENAME
+    with _EDITING:
+        return _edit(path, changes)
+
+
+_EDITING = threading.Lock()
+
+
+def _edit(path: Path, changes: tuple[tuple[str, str, Any], ...]) -> Path:
     if not path.exists():
         write_default_config(path)
     original = path.read_text(encoding="utf-8")
