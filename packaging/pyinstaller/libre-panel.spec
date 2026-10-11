@@ -2,7 +2,9 @@
 #
 # libre-panel(.exe)   the command-line program (all commands)
 # LibrePanel.exe      Windows: the tray app without a console window
+# sensors\libre-panel-sensors.exe   Windows: the sensor service, a program of its own
 import importlib.util
+import shutil
 import sys
 from pathlib import Path
 
@@ -113,3 +115,51 @@ if sys.platform == "win32":
     parts += program("libre_panel_tray.py", "LibrePanel", console=False)
 
 COLLECT(*parts, name="libre-panel")  # noqa: F821
+
+if sys.platform == "win32":
+    # The sensor service (libre_panel/sensorservice) runs as LocalSystem, so it is a program of
+    # its own with only what it needs: Python, pythonnet and LibreHardwareMonitor's libraries,
+    # no plugins, no renderer, no GUI. It goes into the folder "sensors" of the program's
+    # folder, which libre-panel system-setup copies to Program Files for the portable zip.
+    service_datas, service_binaries = [], []
+    service_hidden = ["libre_panel.sensorservice.winservice", "winreg"]
+    for package in ("pythonnet", "clr_loader"):
+        try:
+            found_datas, found_binaries, found_hidden = collect_all(package)
+        except Exception:  # not installed: pip install ".[lhm]"
+            continue
+        service_datas += found_datas
+        service_binaries += found_binaries
+        service_hidden += found_hidden
+        service_hidden += ["clr", "_cffi_backend"] if package == "pythonnet" else []
+    if (lhm_libs / "LibreHardwareMonitorLib.dll").is_file():
+        service_datas.append((str(lhm_libs), "lhm"))
+    service = Analysis(  # noqa: F821
+        [str(HERE / "libre_panel_sensors.py")],
+        datas=service_datas,
+        binaries=service_binaries,
+        hiddenimports=service_hidden,
+        # what the service never imports (a function of a module it uses may, for Libre Panel)
+        excludes=[
+            "libre_panel.plugins", "libre_panel.render", "libre_panel.editor",
+            "libre_panel.theme", "libre_panel.devices", "libre_panel.services",
+            "libre_panel.pages", "libre_panel.weather", "PIL", "numpy", "tkinter", "webview",
+            "winrt", "pystray", "usb", "libusb_package", "serial", "paho",
+        ],  # fmt: skip
+    )
+    service_exe = EXE(  # noqa: F821
+        PYZ(service.pure),  # noqa: F821
+        service.scripts,
+        [],
+        exclude_binaries=True,
+        name="libre-panel-sensors",
+        console=True,  # a service has no window; errors go to its log, not to a dialog
+        icon=icon,
+    )
+    COLLECT(service_exe, service.binaries, service.datas, name="libre-panel-sensors")  # noqa: F821
+    # COLLECT builds into DISTPATH only: move it into the program's folder
+    built = Path(DISTPATH) / "libre-panel-sensors"  # noqa: F821
+    target = Path(DISTPATH) / "libre-panel" / "sensors"  # noqa: F821
+    if target.exists():
+        shutil.rmtree(target)
+    shutil.move(str(built), str(target))
