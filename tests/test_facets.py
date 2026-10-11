@@ -521,6 +521,78 @@ def test_the_band_does_not_depend_on_the_fill_and_is_kept():
     assert more.sum() > 2.5 * alpha.sum()
 
 
+# -- grooves -----------------------------------------------------------------------------------
+
+
+def test_a_bars_groove_has_a_floor_of_its_colour_and_a_bevel_milled_into_the_ground():
+    groove = facets.groove_bar(200, 18, TRACK)
+    a = np.asarray(groove, np.int16)
+    assert groove.size == (200, 18) and (a[..., 3] == 255).all()
+    assert tuple(a[9, 100]) == TRACK  # the floor is exactly the colour
+    down = a[:, 100, :3].sum(-1)
+    assert down[0] < down[9] < down[-1]  # in shade at the top, a catch of light at the bottom
+    along = a[9, :, :3].sum(-1)
+    assert along[0] < along[100] < along[-1]  # and so left against right
+    assert (a[:2, 20:-20, :3].sum(-1) < down[9]).all()  # the whole top edge, bar its ends
+
+
+def test_a_vertical_groove_is_lit_the_same_way():
+    groove = facets.groove_bar(18, 200, TRACK, vertical=True)
+    a = np.asarray(groove, np.int16)
+    assert groove.size == (18, 200) and tuple(a[100, 9]) == TRACK
+    across = a[100, :, :3].sum(-1)
+    assert across[0] < across[9] < across[-1]  # shade at the left edge, light at the right
+    assert a[0, 9, :3].sum() < a[100, 9, :3].sum() < a[-1, 9, :3].sum()  # the ends: same
+
+
+def test_a_groove_is_kept_and_a_bar_too_thin_or_too_thick_has_none():
+    groove = facets.groove_bar(200, 18, TRACK)
+    assert facets.groove_bar(200, 18, TRACK) is groove  # the same picture, not a copy
+    assert facets.groove_bar(200, 18, (*TRACK[:3], 200)) is not groove
+    assert facets.groove_bar(200, 18, TRACK, vertical=True) is not groove
+    assert facets.groove_bar(200, facets.MIN_BAR - 1, TRACK) is None
+    assert facets.groove_bar(200, facets.MAX_BAR + 1, TRACK) is None
+    assert facets.groove_bar(200, facets.MIN_BAR, TRACK).size == (200, facets.MIN_BAR)
+
+
+def test_a_groove_takes_the_alpha_of_its_colour():
+    a = np.asarray(facets.groove_bar(120, 14, (31, 41, 55, 100)), np.int16)
+    assert a[7, 60, 3] == 100 and tuple(a[7, 60, :3]) == (31, 41, 55)
+
+
+def test_a_rings_groove_is_a_band_with_the_light_on_its_lower_and_right_edges():
+    groove = facets.groove_ring(140, 140, 12)
+    a = np.asarray(groove, np.int16)
+    assert groove.size == (140, 140)
+    column = a[:, 70]
+    top = [column[y] for y in range(70) if column[y, 3]]  # from the outer edge inwards
+    bottom = [column[y] for y in range(139, 69, -1) if column[y, 3]]  # likewise from below
+    assert len(top) == len(bottom) == 12 and column[70, 3] == 0  # the band, not the middle
+    assert tuple(top[len(top) // 2]) == tuple(bottom[len(bottom) // 2]) == (22, 35, 50, 255)
+    assert top[0][:3].sum() < top[-1][:3].sum()  # at the top the outer edge is in shade
+    assert bottom[0][:3].sum() > bottom[-1][:3].sum()  # at the bottom the outer edge catches it
+
+
+def test_an_open_rings_groove_has_ends_and_a_closed_one_has_none():
+    closed = np.asarray(facets.groove_ring(140, 140, 12, 0, 360), np.int16)
+    arc = np.asarray(facets.groove_ring(140, 140, 12, 135, 405, TRACK), np.int16)
+    assert closed[..., 3].sum() > arc[..., 3].sum()  # the open ring leaves the gap at the bottom
+    assert closed[140 - 6, 70, 3] == 255 and arc[140 - 6, 70, 3] == 0
+    gap = arc[(70 + 56) : (70 + 60), 62:79, 3]
+    assert gap.max() == 0
+    assert tuple(arc[70, 134]) == TRACK and tuple(closed[70, 134]) == (22, 35, 50, 255)  # floors
+
+
+def test_a_rings_groove_is_kept_and_is_what_the_ring_lies_in():
+    groove = facets.groove_ring(140, 140, 12, 135, 405, TRACK)
+    assert facets.groove_ring(140, 140, 12, 135, 405, TRACK) is groove
+    assert facets.groove_ring(140, 140, 12, 135, 405, CYAN) is not groove
+    empty = ring(frac=0, track=TRACK)  # no value: nothing but the groove
+    assert np.asarray(empty).tobytes() == np.asarray(groove).tobytes()
+    full = np.asarray(ring(frac=1.0, track=TRACK), np.int16)
+    assert (full[..., 3] >= np.asarray(groove, np.int16)[..., 3]).all()
+
+
 # -- curves ------------------------------------------------------------------------------------
 
 
@@ -571,6 +643,96 @@ def test_a_curve_at_the_edge_of_its_layer_is_cut_not_an_error():
     run = [(-10, 1.0), (30, 0.5), (70, 19.5)]
     assert facets.curve_ridge(layer, run, 6.0, (200, 100, 50, 128))
     assert np.asarray(layer)[..., 3].max() > 0
+
+
+def test_a_halo_lies_round_the_line_and_fades_with_the_distance():
+    layer = Image.new("RGBA", (200, 80), (0, 0, 0, 0))
+    line = Image.new("L", layer.size, 0)
+    ImageDraw.Draw(line).line([(0, 40), (199, 40)], fill=255, width=2)
+    facets.curve_halo(layer, line, CYAN)
+    alpha = np.asarray(layer, np.int16)[..., 3]
+    middle = alpha[:, 100]
+    peak = int(middle.argmax())
+    assert 36 <= peak <= 44 and 0 < middle[peak] < 100  # at the line, and soft: the ridge goes over
+    for side in (1, -1):  # on both sides it fades with the distance, to nothing
+        assert middle[peak] > middle[peak + 6 * side] > middle[peak + 14 * side] > 0
+        assert middle[peak + 14 * side] >= middle[peak + 28 * side]
+    assert middle[0] == middle[-1] == 0
+    assert tuple(np.asarray(layer)[peak, 100, :3]) == CYAN[:3]  # in the line's colour
+    assert alpha[:, 100].sum() == alpha[:, 50].sum()  # as far as the line goes
+
+
+def test_the_halo_takes_the_alpha_of_the_colour_and_leaves_small_layers_alone():
+    line = Image.new("L", (200, 80), 0)
+    ImageDraw.Draw(line).line([(0, 40), (199, 40)], fill=255, width=2)
+    full, half = (Image.new("RGBA", line.size, (0, 0, 0, 0)) for _ in range(2))
+    facets.curve_halo(full, line, CYAN)
+    facets.curve_halo(half, line, (*CYAN[:3], 128))
+    a, b = (np.asarray(x, np.int16)[..., 3].max() for x in (full, half))
+    assert abs(b - a / 2) <= 1
+    tiny = Image.new("RGBA", (6, 6), (0, 0, 0, 0))
+    facets.curve_halo(tiny, Image.new("L", (6, 6), 255), CYAN)
+    assert np.asarray(tiny).max() == 0  # too small to be soft
+    nothing = Image.new("RGBA", line.size, (0, 0, 0, 0))
+    facets.curve_halo(nothing, Image.new("L", line.size, 0), CYAN)
+    assert np.asarray(nothing).max() == 0  # no line, no halo
+
+
+def test_the_halo_of_a_layer_at_twice_the_scale_has_the_same_reach_in_the_picture():
+    def reach(scale):
+        line = Image.new("L", (200 * scale, 80 * scale), 0)
+        ImageDraw.Draw(line).line(
+            [(0, 40 * scale), (199 * scale, 40 * scale)], fill=255, width=2 * scale
+        )
+        layer = Image.new("RGBA", line.size, (0, 0, 0, 0))
+        facets.curve_halo(layer, line, CYAN, scale)
+        column = np.asarray(layer, np.int16)[:, 100 * scale, 3]
+        return int((column > 3).sum()) / scale
+
+    assert abs(reach(1) - reach(2)) <= 4
+
+
+def graph_pixels(**fields):
+    """A flat graph of a steady 50 % on a black screen, rendered once."""
+    widget = {
+        "type": "graph", "id": "g", "x": 0, "y": 0, "w": 120, "h": 60, "sensor": "cpu.load",
+        "min": 0, "max": 100, "color": "#ffffff", "history": 120, "smooth": False,
+        "line_width": 2, **fields,
+    }  # fmt: skip
+    data = {
+        "format": THEME_FORMAT, "display": {"width": 120, "height": 60},
+        "background": {"color": "#000000"}, "widgets": [widget],
+    }  # fmt: skip
+    snapshot = Snapshot()
+    snapshot.history["cpu.load"] = [50.0] * 120
+    renderer = Renderer(parse_theme(data), preview=True)
+    image, _ = renderer.render(snapshot)
+    assert renderer.warnings == []
+    return np.asarray(image, np.int16)[..., 0]
+
+
+def test_a_fill_is_as_opaque_as_the_graph_says():
+    default = graph_pixels(fill_fade=False)
+    assert default[50, 60] == 64  # a flat fill: a quarter
+    assert graph_pixels(fill_fade=False, fill_alpha=0)[50, 60] == 64  # 0 is the default
+    assert 99 <= graph_pixels(fill_fade=False, fill_alpha=0.4)[50, 60] <= 104
+    assert graph_pixels(fill_fade=False, fill_alpha=7)[50, 60] == 255  # up to the whole
+    assert graph_pixels(fill_fade=False, fill_alpha=-1)[50, 60] == 64  # not under 0
+
+
+def test_a_fade_starts_as_opaque_as_the_graph_says():
+    default = graph_pixels(fill_fade=True)
+    assert 100 <= default[32, 60] <= 115 > default[58, 60]  # 0.45 under the curve, fading
+    strong = graph_pixels(fill_fade=True, fill_alpha=0.8)
+    assert strong[32, 60] > 1.6 * default[32, 60] and strong[58, 60] < strong[32, 60]
+
+
+def test_a_facet_graph_has_a_halo_above_its_curve_and_a_flat_one_has_none():
+    flat = graph_pixels(fill_fade=False)
+    facet = graph_pixels(fill_fade=False, finish="facet")
+    assert flat[24, 60] == 0 < facet[24, 60]  # a few pixels above the curve, which is at row 30
+    assert facet[24, 60] > facet[16, 60] >= 0  # the farther, the fainter
+    assert facet[:, 0].max() > 0  # to the left edge too: the layer is cut, not an error
 
 
 # -- the shapes in a theme ---------------------------------------------------------------------

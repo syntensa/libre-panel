@@ -118,7 +118,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `metric` | `sensor`, `format`, `fallback`, `smooth`, `color_rules` | a sensor value as text; with `smooth` the number glides between readings together with the sensor's bars and rings (give `format` a precision, e.g. `{value:.0f}`) |
 | `bar` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `color`, `color2`, `background`, `radius`, `direction`, `segments`, `segment_gap`, `smooth`, `color_rules` | progress bar; `color2` makes a gradient along the track, `segments` an LED-style bar |
 | `gauge` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `start_angle`, `end_angle`, `thickness`, `color`, `color2`, `background`, `cap`, `ticks`, `tick_color`, `smooth`, `color_rules` | ring; angles clockwise from 3 o'clock, default 135→405; `cap` round or flat |
-| `graph` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `history`, `seconds`, `color`, `fill`, `fill_fade`, `smooth`, `per_frame`, `line_width`, `grid`, `grid_color`, `background` | history; `min`/`max` `null` = automatic, `smooth` draws a curve, `seconds` and `per_frame` see above |
+| `graph` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `history`, `seconds`, `color`, `fill`, `fill_fade`, `fill_alpha`, `smooth`, `per_frame`, `line_width`, `grid`, `grid_color`, `background` | history; `min`/`max` `null` = automatic, `smooth` draws a curve, `fill_alpha` 0 to 1 sets how opaque the fill is (0: the default, a flat fill 0.25, a fade 0.45 at its top), `seconds` and `per_frame` see above |
 | `clock` | `format`, `timezone` | date/time with [strftime codes](https://strftime.org), e.g. `%H:%M:%S`, `%A %d %B`; `timezone` e.g. `Asia/Tokyo` (empty: this computer's) |
 | `analog` | `w`, `h`, `timezone`, `color`, `color2`, `face`, `marks`, `seconds` | a clock face with hands; `color2` the second hand |
 | `countdown` | `target`, `part`, `done` | the time left until `target` (`2026-12-24`, `2026-12-24 18:00`, or `12-24` for every year); `part`: `number` (76, 5:12, 12:33), `unit` (days, hours, minutes), `clock` (05:12:33 left in the day), `text` ("76 days"), `days`, `date`; `done` is shown once it is there ("Today", "Now") |
@@ -195,13 +195,27 @@ palette's `accent` and `warn`). `"flat"` is the default and draws as ever.
   under 6 px thick stays flat.
 - A `gauge`'s arc is raised in a milled track with straight bevelled ends,
   whatever its `cap`; `ticks` stay flat.
-- A `graph`'s line becomes a ridge: bright on the flank away from the fill,
-  dark on the one towards it. A graph wider than 1200 px (a bar panel) gets a
-  slimmer, single-band ridge.
+- A `graph`'s line becomes a ridge on the plateau of its fill: bright on the
+  flank away from the fill, dark on the one towards it, then a band a little
+  brighter than the fill, and a soft halo of the line's colour round it all.
+  `fill_alpha` (0 to 1) sets how opaque the plateau is: SPUR II's is 0.41 with
+  `fill_fade` off. A graph wider than 1200 px (a bar panel) gets a slimmer,
+  single-band ridge.
 
 Every shape is built once per font, size and colour and kept, so a gliding
 bar or a changing number costs no more than a flat one (`tools/motion_bench.py
 --finish facet` compares).
+
+The milled groove a value lies in is there for other finishes to use, in
+`libre_panel.render.facets`: `groove_bar(w, h, color, vertical=False)` and
+`groove_ring(w, h, thickness, start=0, end=360, color=(22, 35, 50))`. Each
+returns an RGBA picture whose floor is exactly `color`, with a sharp bevel of a
+sixth of the thickness that is in shade on the upper and left edges and
+catches the light on the lower and right ones; a bar's ends are straight and
+its corners mitred, an open ring has straight ends too. They are kept by size
+and colour and give the same picture on every call: copy it before drawing on
+it. `groove_bar` returns `None` for a bar under 6 px or over 400 px thick,
+where a flat track is drawn instead.
 
 ### Fans
 

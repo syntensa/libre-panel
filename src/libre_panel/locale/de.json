@@ -536,6 +536,7 @@
     "fallback": "Ersatztext",
     "field": "Wert",
     "fill": "Füllung",
+    "fill_alpha": "Deckkraft der Füllung",
     "fill_fade": "Füllung mit Verlauf",
     "finish": "Oberfläche",
     "first_day": "erster Wochentag",

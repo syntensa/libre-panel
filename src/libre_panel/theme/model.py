@@ -150,6 +150,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "color": ("color", "#22d3ee"),
         "fill": ("bool", True),
         "fill_fade": ("bool", True),
+        "fill_alpha": ("number", 0),  # how opaque the fill is, 0 to 1 (0: 0.25, a fade 0.45)
         "smooth": ("bool", True),
         "per_frame": ("bool", False),  # older themes: a point a pixel apart (seconds = w / 25)
         "line_width": ("int", 2),

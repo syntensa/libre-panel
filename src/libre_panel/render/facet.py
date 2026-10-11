@@ -110,6 +110,11 @@ class FacetGraph(Finish):
         wide = widget["w"] > facets.CURVE_WIDE
         width = widget["line_width"] * scale
         joint = "curve" if widget.get("\0joints", True) else None
+        line = Image.new("L", layer.size, 0)
+        mask = ImageDraw.Draw(line)
+        for run in runs:
+            mask.line(run, fill=255, width=width, joint=joint)
+        facets.curve_halo(layer, line, color, scale)  # the halo is the curve's, under its ridge
         draw = ImageDraw.Draw(layer)
         for run in runs:
             if not facets.curve_ridge(layer, run, width, color, wide):

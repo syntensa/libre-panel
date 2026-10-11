@@ -157,9 +157,15 @@
 - `"finish": "facet"` on `text`, `metric`, `clock`, `weather`, `countdown`,
   `bar`, `gauge` and `graph`: a flat top in the exact colour and a sharp
   bevel lit from the top left, like SPUR II's lettering. Bars and rings are
-  raised in a milled track, a graph's line becomes a ridge (a slimmer one on
-  a bar panel). Text keeps the pixels of the flat text; shapes are built once
-  per size and colour, so it costs no more than the flat look
+  raised in a milled track, a graph's line becomes a ridge on the plateau of
+  its fill with a halo of its colour (a slimmer ridge on a bar panel). Text
+  keeps the pixels of the flat text; shapes are built once per size and
+  colour, so it costs no more than the flat look
+- `fill_alpha` on a `graph`: how opaque its fill is, 0 to 1 (0: as before, a
+  flat fill a quarter, a fade 0.45 at its top)
+- `libre_panel.render.facets.groove_bar` and `groove_ring`: the milled groove
+  of a bar or a ring (a floor of exactly the colour and a bevel lit from the
+  top left), cached, for finishes of their own
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

@@ -28,7 +28,7 @@ from types import SimpleNamespace
 from typing import Any, NamedTuple
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 from libre_panel.render import light
 
@@ -605,7 +605,8 @@ def bar_layer(
 
 RING_SUB = 2  # the band of a ring is worked out this much larger
 _rings = Lru(16)
-_tracks = Lru(16)  # a ring's milled track, coloured: it does not change with the fill
+_tracks = Lru(16)  # a ring's milled groove, coloured: it does not change with the fill
+_grooves = Lru(64)  # a bar's milled groove, coloured
 
 
 class RingBand(NamedTuple):
@@ -733,18 +734,71 @@ def ring_layer(
     band = ring_band(w, h, thickness, start, end)
     layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     if track is not None:
-        key = ("track", w, h, thickness, start, end, track)
-        grooved = _tracks.get(key)
-        if grooved is None:
-            out = np.zeros((h, w, 4), np.uint8)
-            out[band.rows, band.cols] = _band_image(band, 1.0, True, GROOVE, (track, None))
-            grooved = _tracks.put(key, Image.fromarray(out, "RGBA"))
-        layer.paste(grooved)
+        layer.paste(groove_ring(w, h, thickness, start, end, track))
     if frac > 0:
         out = np.zeros((h, w, 4), np.uint8)
         out[band.rows, band.cols] = _band_image(band, frac, False, SOLID, paint)
         layer.alpha_composite(Image.fromarray(out, "RGBA"))
     return layer
+
+
+# -- grooves ----------------------------------------------------------------------------
+# A groove is the channel a value lies in: milled into the ground, so the light from the
+# top left leaves its upper and left edges in shade and catches the lower and right ones.
+# It is background, not a lit body: its bevel is kept faint (GROOVE), no groove point is
+# brighter than a faint hint of an edge. Other finishes use these as the track they put
+# their value in.
+
+
+def _rgba(color: tuple[int, ...]) -> RGBA:
+    return (int(color[0]), int(color[1]), int(color[2]), int(color[3]) if len(color) > 3 else 255)
+
+
+def groove_bar(
+    w: int, h: int, color: tuple[int, ...], vertical: bool = False
+) -> Image.Image | None:
+    """The milled groove of a bar, RGBA ``w`` x ``h``, lying along ``w`` (``vertical``: along
+    ``h``): a floor of exactly ``color`` and a sharp 45-degree bevel all round, ``thickness
+    / 6`` px wide (``thickness`` the smaller side), straight at the ends, mitred at the
+    corners. ``color`` is RGB or RGBA, the colour of the floor.
+
+    None where a bevel does not read (a thickness under ``MIN_BAR`` px, or over ``MAX_BAR``):
+    the caller draws a flat track. The image is kept by size and colour and is the same
+    object on every call: copy it before drawing on it.
+    """
+    horizontal = not vertical
+    thick, span = (h, w) if horizontal else (w, h)
+    if not MIN_BAR <= thick <= MAX_BAR or span < 2:
+        return None
+    key = ("bar", w, h, vertical, _rgba(color))
+    hit = _grooves.get(key)
+    if hit is None:
+        layer = bar_layer(w, h, 0.0, "right" if horizontal else "down", (_rgba(color), None),
+                          _rgba(color))  # fmt: skip
+        assert layer is not None
+        hit = _grooves.put(key, layer)
+    return hit
+
+
+def groove_ring(
+    w: int, h: int, thickness: int, start: float = 0.0, end: float = 360.0,
+    color: tuple[int, ...] = (22, 35, 50),
+) -> Image.Image:  # fmt: skip
+    """The milled groove of a ring, RGBA ``w`` x ``h``: a band ``thickness`` px wide on the
+    largest circle the box holds, from angle ``start`` to ``end`` (degrees, clockwise from
+    3 o'clock; a sweep of 360 is closed), with a floor of exactly ``color`` (RGB or RGBA)
+    and a sharp 45-degree bevel ``thickness / 6`` px wide along both edges and, in an open
+    ring, at its two straight ends. Kept by what it is made of and the same object on
+    every call: copy it before drawing on it."""
+    colour = _rgba(color)
+    key = ("track", w, h, thickness, start, end, colour)
+    hit = _tracks.get(key)
+    if hit is None:
+        band = ring_band(w, h, thickness, start, end)
+        out = np.zeros((h, w, 4), np.uint8)
+        out[band.rows, band.cols] = _band_image(band, 1.0, True, GROOVE, (colour, None))
+        hit = _tracks.put(key, Image.fromarray(out, "RGBA"))
+    return hit
 
 
 def _band_image(
@@ -765,6 +819,10 @@ def _band_image(
 # -- curves -----------------------------------------------------------------------------
 
 CURVE_WIDE = 1200  # a graph wider than this gets the slimmer ridge: the full one costs ~5 ms there
+HALO = 0.9  # how strong the halo around a curve's line stands (0: none)
+HALO_DIVIDER = 4  # it is worked out at this share of the size (final pixels per pixel) ...
+HALO_BLUR = 2.0  # ... with this blur there: about eight pixels in the picture
+_halo_table = [min(255, int(v * HALO + 0.5)) for v in range(256)]
 RIDGE_TILT = math.radians(62)  # steeper than the bevels elsewhere: more contrast on a thin line
 RIDGE_STEEP = 1.8  # how strongly the slope of the curve turns the ridge towards or from the light
 RIDGE_SHARE = 0.8  # each flank of the ridge, as a share of the line's width
@@ -798,6 +856,28 @@ def _over(
         at = (r - rows0, c)
         acc[at] = colour[ok] * cover[:, None] + acc[at] * (1 - cover[:, None])
         alpha[at] = cover + alpha[at] * (1 - cover)
+
+
+def curve_halo(layer: Image.Image, line: Image.Image, color: RGBA, scale: int = 1) -> None:
+    """A soft halo of ``color`` around a curve's line, over ``layer`` (RGBA): ``line`` is
+    the line's coverage ("L", as large as the layer), ``scale`` the layer's pixels to a
+    pixel of the picture it will be. The halo lies under what is drawn next (the ridge)
+    and is worked out small: the line at a quarter of the size, blurred, and raised again."""
+    w, h = layer.size
+    divider = HALO_DIVIDER * scale
+    if w <= 2 * divider or h <= 2 * divider or HALO <= 0:
+        return
+    soft = (
+        line.resize((max(1, w // divider), max(1, h // divider)), Image.Resampling.BOX)
+        .filter(ImageFilter.GaussianBlur(HALO_BLUR))
+        .point(_halo_table)
+        .resize((w, h), Image.Resampling.BILINEAR)
+    )
+    if color[3] < 255:
+        soft = soft.point([v * color[3] // 255 for v in range(256)])
+    halo = Image.new("RGBA", (w, h), (*color[:3], 0))
+    halo.putalpha(soft)
+    layer.alpha_composite(halo)
 
 
 def curve_ridge(

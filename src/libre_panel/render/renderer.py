@@ -2460,19 +2460,22 @@ class Renderer:
             for run in runs:
                 polygon = [*run, (run[-1][0], H - 1), (run[0][0], H - 1)]
                 ImageDraw.Draw(area).polygon(polygon, fill=255)
+            solid = min(1.0, max(0.0, widget.get("fill_alpha", 0)))
             if widget["fill_fade"]:
+                peak = round(255 * solid) if solid else 115
                 if top is None:
                     top = int(min(py for run in runs for _, py in run))
                 fade = Image.new("L", (1, H), 0)
                 fade.putdata(
                     [
-                        int(115 * min(1.0, max(0.0, 1 - (row - top) / max(1, H - top))))
+                        int(peak * min(1.0, max(0.0, 1 - (row - top) / max(1, H - top))))
                         for row in range(H)
                     ]
                 )
                 alpha = ImageChops.multiply(area, fade.resize(layer.size))
             else:
-                alpha = area.point(lambda v: v * 64 // 255)
+                flat = round(255 * solid) if solid else 64
+                alpha = area.point(lambda v: v * flat // 255)
             tint = Image.new("RGBA", layer.size, (*color[:3], 255))
             if color[3] < 255:
                 alpha = ImageChops.multiply(alpha, Image.new("L", layer.size, color[3]))
