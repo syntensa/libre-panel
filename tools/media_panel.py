@@ -752,7 +752,7 @@ CLIPS: dict[str, PanelClip] = {
     ),
     "card-ignition": PanelClip(
         "the card slot changes from playback to the weather and back, with its line of light",
-        ("lumen",), 6.6, card_ignition, poster=2.1, periodic=False,
+        ("lumen",), 6.6, card_ignition, poster=3.4, periodic=False,
     ),
     "small-panel": PanelClip(
         "the small panel: lit rings filling, a history that scrolls, a card that changes",
@@ -768,7 +768,7 @@ CLIPS: dict[str, PanelClip] = {
     ),
     "game-entrance": PanelClip(
         "a game starts and ends with the entrance: the screen closes to a line, a band opens",
-        ("lumen", "layout-game"), 7.8, game_entrance, poster=2.6, periodic=False,
+        ("lumen", "layout-game"), 7.8, game_entrance, poster=4.2, periodic=False,
     ),
     "close-up-rings": PanelClip(
         "a close-up of the rings: lit arcs that fill, numbers that glide, at twice the size",

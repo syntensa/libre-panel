@@ -60,6 +60,28 @@ INIT_SCRIPT = """
     return realFetch.apply(this, args).finally(() => { pending--; touch(); });
   };
   window.__idle = (ms) => pending === 0 && performance.now() - last >= ms;
+  // A long timer (a message that goes away after four seconds) runs on the clip's own time, which
+  // moves with its pictures: on the wall clock it would go at a different picture on a slower
+  // machine. The short ones (the app's throttles and debounces) are left alone.
+  const realSetTimeout = window.setTimeout.bind(window);
+  const realClearTimeout = window.clearTimeout.bind(window);
+  const slow = new Map();
+  let clipTime = 0;
+  let slowId = -1;
+  window.setTimeout = (fn, ms, ...args) => {
+    if (typeof fn !== "function" || !(ms >= 1500)) return realSetTimeout(fn, ms, ...args);
+    slow.set(slowId, { at: clipTime + ms / 1000, fn, args });
+    return slowId--;
+  };
+  window.clearTimeout = (id) => (slow.delete(id) ? undefined : realClearTimeout(id));
+  window.__advance = (seconds) => {
+    clipTime += seconds;
+    for (const [id, timer] of [...slow]) {
+      if (timer.at > clipTime) continue;
+      slow.delete(id);
+      try { timer.fn(...timer.args); } catch (error) { console.error(error); }
+    }
+  };
   const start = () => {
     const keys = document.createElement("div");
     keys.id = "__keys";
@@ -148,8 +170,10 @@ class Camera:
             pass
 
     def shot(self, copies: int = 1) -> None:
+        """A picture of the window, for ``copies`` frames; the clip's time goes on by that."""
         png = self.page.screenshot(clip=self.box)
         self.sink.add(Image.open(io.BytesIO(png)), copies)
+        self.page.evaluate("(seconds) => window.__advance(seconds)", copies / FPS)
 
     def frames(self, seconds: float) -> int:
         return max(1, round(seconds * FPS / (5 if self.quick else 1)))
@@ -162,6 +186,19 @@ class Camera:
     def mark(self) -> None:
         """The next picture is the clip's poster."""
         self.poster = self.sink.count
+
+    def toasts_away(self, limit: float = 4.5) -> None:
+        """Hold still until the app's messages have gone (they go by the clip's own time), so
+        that a clip ends as it began. In a quick clip the time just passes."""
+        if self.quick:
+            self.page.evaluate("(seconds) => window.__advance(seconds)", limit)
+            self.settle()
+            self.shot()
+            return
+        waited = 0.0
+        while waited < limit and self.page.locator(".toasts .toast").count():
+            self.hold(0.2)
+            waited += 0.2
 
     # -- the page
 
@@ -460,6 +497,7 @@ def record(
             camera.open(clip.route, clip.ready)
             camera.box = window_box(page, clip.crop)
             clip.script(camera)
+            camera.toasts_away()
             camera.park()
         finally:
             browser.close()
@@ -570,6 +608,29 @@ def palette(camera: Camera) -> None:
     camera.hold(0.7)
 
 
+def look(camera: Camera) -> None:
+    """Look: a colour world for the whole screen, the notices in the band style, and a notice
+    as the theme draws it; then the two changes undone."""
+    page = camera.page
+    camera.hold(0.5)
+    camera.click(*camera.point(page.get_by_role("radio", name="Neon")), 0.6)
+    camera.mark()
+    camera.hold(0.9)
+    band = page.get_by_role("radio", name="Band")
+    camera.glide(1050.0, 400.0, 0.4)  # (the wheel turns what is under the mouse)
+    down = band.bounding_box()["y"] - 400
+    camera.scroll(down, 0.7)  # to the notices
+    camera.click(*camera.point(band), 0.45)
+    camera.hold(0.2)
+    camera.click(*camera.point(page.get_by_role("button", name="Show a notice")), 0.6)
+    camera.hold(0.2)
+    camera.click(*camera.point(page.get_by_role("menuitem", name="Volume")), 0.35)
+    camera.hold(1.3)
+    for _ in range(2):  # (the notice goes with the first, the colours with the second)
+        camera.key("Control+z", 0.4, "Ctrl Z")
+    camera.scroll(-down, 0.6)  # and up again
+
+
 def settings_names(camera: Camera) -> None:
     """Settings, Sensors, Hardware names: a name of your own for the processor, and back."""
     page = camera.page
@@ -591,6 +652,11 @@ def settings_names(camera: Camera) -> None:
 
 
 CLIPS: dict[str, AppClip] = {
+    "app-look": AppClip(
+        "the app: Look, a colour world for the whole screen, notices as a band, and one shown",
+        8.5, look, themes=("lumen",), route="look", ready=".look-stage img",
+        cursor=(0.4, 0.82),
+    ),
     "app-drag-module": AppClip(
         "the app: a module from the library onto the panel, and wider by its size",
         7.0, drag_module, room=True,

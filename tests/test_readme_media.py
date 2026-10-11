@@ -441,13 +441,17 @@ def app_clips(panel):
 
 
 def test_the_app_recipes_are_listed_with_a_panel_each_to_open_them_on(app_clips, panel):
-    assert list(app_clips.CLIPS) == ["app-drag-module", "app-ring-style", "app-command-palette",
-                                     "app-hardware-names"]  # fmt: skip
+    assert list(app_clips.CLIPS) == [
+        "app-look", "app-drag-module", "app-ring-style", "app-command-palette",
+        "app-hardware-names",
+    ]  # fmt: skip
     for name, recipe in app_clips.CLIPS.items():
         assert recipe.kind == "app" and recipe.about and recipe.seconds > 0, name
         data, folder = panel.theme_data(recipe.themes[0])  # (made without a browser)
-        assert folder is None and data["display"]["model"] == "turing-3.5", name  # the 3.5" panel
-        assert data["name"] == "My panel"  # a name of its own: nothing of this computer
+        assert data["widgets"], name
+        if recipe.themes[0].startswith("layout-"):  # the 3.5" panel Libre Panel starts with
+            assert data["display"]["model"] == "turing-3.5", name
+            assert data["name"] == "My panel" and folder is None  # a name: nobody's
     assert app_clips.CLIPS["app-drag-module"].room  # there is room on its grid for a module
 
 
@@ -533,7 +537,7 @@ def test_the_list_says_what_there_is_and_what_each_shows(cli, capsys):
     shown = capsys.readouterr().out
     for name in ("video-mode", "volume-band", "theme-tube", "game-entrance", "card-ignition",
                  "small-panel", "close-up-rings", "close-up-curves", "where-it-started",
-                 "app-drag-module", "app-ring-style", "app-command-palette",
+                 "app-look", "app-drag-module", "app-ring-style", "app-command-palette",
                  "app-hardware-names"):  # fmt: skip
         assert name in shown
     assert "shows: lumen, studio" in shown  # (the tube goes from one theme to another)
