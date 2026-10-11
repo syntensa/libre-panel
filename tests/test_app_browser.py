@@ -1093,6 +1093,53 @@ def test_save_as_says_why_a_built_in_theme_asks_for_a_name(page, isolated_home):
     )
 
 
+def test_every_way_to_another_theme_asks_before_it_drops_unsaved_changes(app_url, page):
+    """The theme menu, the palette and the gallery's pencil all ask; Cancel leaves the work
+    where it was, and only Discard opens the other theme."""
+    js(page, "window.libre.doc.edit('n', (theme) => { theme.name = 'Unsaved work'; })")
+    dialog = page.locator(".dialog")
+
+    def kept():
+        assert js(page, "window.libre.doc.theme().name") == "Unsaved work"
+        assert js(page, "window.libre.store.get().dirty") is True
+        assert js(page, "window.libre.store.get().doc.id") == "libre-default"
+
+    def asked_and_kept(way):
+        way()
+        expect(dialog).to_contain_text("Discard unsaved changes?")
+        dialog.get_by_role("button", name="Cancel").click()
+        expect(dialog).to_have_count(0)
+        kept()
+
+    def from_the_menu():
+        page.locator(".theme-name").click()
+        page.locator(".theme-row", has_text="Column").first.click()
+
+    def from_the_palette():
+        page.keyboard.press("Control+k")
+        page.locator(".palette input").fill("open theme column")
+        page.keyboard.press("Enter")
+
+    asked_and_kept(from_the_menu)
+    asked_and_kept(from_the_palette)
+    page.goto(f"{app_url}#/home/themes")
+    page.wait_for_selector(".start.gallery .theme-card")
+    card = page.locator('.theme-card[data-theme="column"]')
+
+    def from_the_gallery():
+        card.hover()
+        card.locator(".theme-card-edit").click()
+
+    asked_and_kept(from_the_gallery)
+    assert js(page, "window.libre.store.get().route.view") == "home"  # and it stayed on Start
+    from_the_gallery()  # now the work goes
+    dialog.locator(".btn-danger").click()
+    # (the server draws the gallery's pictures meanwhile, so the theme may take a moment)
+    expect(page.locator(".tab[aria-current='page']")).to_have_text("Design", timeout=30000)
+    assert js(page, "window.libre.store.get().doc.id") == "column"
+    assert js(page, "window.libre.store.get().dirty") is False
+
+
 def test_inspector_details_and_theme_settings(page):
     js(page, "window.libre.doc.setSelection(['cpu-ring'])")
     page.locator(".details-button").click()
