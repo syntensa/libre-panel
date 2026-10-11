@@ -649,6 +649,9 @@
   of being refused like any other mistake in a theme. Named by an autopilot rule or a
   mode, it took the panel down every few seconds; now the panel keeps its theme and the
   log says why
+- The open window stopped answering the other starts after one line it could not use on
+  its port (a token that is not ASCII, a window call that failed): a click on the tray
+  icon then opened a second window, and quitting left the first one open
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

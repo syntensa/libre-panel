@@ -172,6 +172,24 @@ def test_an_open_window_comes_to_the_front_on_the_view(monkeypatch):
         listener.close()
 
 
+def test_a_garbled_request_leaves_the_window_answering(monkeypatch):
+    """Anything on this machine can connect to the window's port. A line it cannot use (a
+    token that is not ASCII, a window call that fails) is refused, and the next request is
+    answered: else a second start opened a second window, and quitting could not close it."""
+    fake = FakeWindow("Libre Panel", URL)
+    listener, _shown = answering_window(fake)
+    monkeypatch.setattr(window.time, "sleep", lambda s: None)
+    info = window.running()
+    try:
+        assert not window._ask({**info, "token": "géheim"}, ["close"])
+        monkeypatch.setattr(fake, "show", lambda: 1 / 0)  # the window says no
+        assert not window._ask(info, ["focus", URL + "#/look"])
+        assert window.close_window(URL)
+        assert ("destroy",) in fake.calls
+    finally:
+        listener.close()
+
+
 def test_closing_only_a_window_of_this_server(monkeypatch):
     fake = FakeWindow("Libre Panel", URL)
     listener, _shown = answering_window(fake)
