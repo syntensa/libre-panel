@@ -556,6 +556,11 @@
   SPUR Studio slides in 0.55 s
 
 **Fixes**
+- PresentMon is no longer looked for in the downloads folder: Libre Panel may
+  run as administrator, and it started any `PresentMon*.exe` found there. Name
+  it in `[sensors.presentmon] path`, put it in `PATH`, or install it
+- LibreHardwareMonitor's web server on this PC is asked directly, past a proxy
+  set for the system, which could not reach it
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
   showing the last numbers for ever. After 5 seconds (`stale_seconds` under
   `[sensors.librehardwaremonitor]`; 0 keeps them) the readings go and the
