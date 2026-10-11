@@ -8,7 +8,7 @@ import pytest
 
 from libre_panel.devices.models import find_model
 from libre_panel.render.renderer import Renderer, need_key
-from libre_panel.sensors.base import Snapshot
+from libre_panel.sensors.base import Reading, Snapshot
 from libre_panel.sensors.demo import demo_report, demo_snapshot
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import (
@@ -215,6 +215,32 @@ def test_header_shows_the_frame_rate_the_limit_and_the_game():
     fans = [w for w in theme.widgets if w["type"] == "fan"]
     assert fans[0]["x"] > by["low-value"]["x"] and not any("-name" in w["id"] and "fan" in w["id"]
                                                           for w in theme.widgets)  # fmt: skip
+
+
+def test_header_gives_the_game_the_room_spur_ii_gives_a_short_name_and_a_little_more():
+    """SPUR II sets the frame rate 34 px behind the game's logo or name, wherever that ends: for
+    a name of 51 px (as the reference shows one) at 371. A theme cannot move things about, so
+    the frame rate stands there, and a logo or name that is wider takes up to 21 px of the gap."""
+    theme = load_theme(find_theme("spur-header"))
+    by = {w["id"]: w for w in theme.widgets}
+    slot = by["game-logo"]
+    assert slot["align"] == "left" and by["fps-label"]["x"] == slot["x"] + 51 + 34
+    assert slot["w"] == by["game-name"]["max_width"] == by["game-app"]["max_width"] == 72
+    assert slot["x"] + slot["w"] < by["fps-label"]["x"]
+    # the fans take the room the slot gave up, spread as SPUR II spreads them: twice as far
+    # between the groups of fans (CPU, case, GPU) as inside a group, the last one by the clock
+    wheels = [by[f"fan-{k}-wheel"]["x"] for k in range(1, 6)]
+    assert wheels[0] == by["hud-rule"]["x"] + by["hud-rule"]["w"] + 22
+    assert [b - a for a, b in zip(wheels, wheels[1:], strict=False)] == [166, 200, 200, 166]
+    # a short name is drawn whole, a long one is cut with … and never reaches the frame rate
+    renderer = Renderer(theme)
+    assert renderer._fit(by["game-name"], "Spiel")[0] == "Spiel"
+    assert renderer._fit(by["game-name"], "Starfall")[0] == "Starfall"  # (71.6 of the 72 px)
+    long = "A Game With A Very Long Name"
+    assert renderer._fit(by["game-name"], long)[0].endswith("…")
+    renderer.render(Snapshot(readings={"game.name": Reading("game.name", long)}), 0.0)
+    piece = dict(renderer._last[0])["game-name"]
+    assert piece.x + piece.layer.width < by["fps-label"]["x"]
 
 
 def test_header_charts_the_longest_frame_of_each_point_with_a_line_at_60_fps():

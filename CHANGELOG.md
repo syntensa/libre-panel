@@ -618,6 +618,11 @@
   its size only. The RAM modules (ring, big number, history) show the name
   under their title as CPU and GPU do, and the System module lists it as a
   fourth row where there is room
+- SPUR Header sets the frame rate, the 1% low and the fans where SPUR II has
+  them: the game's logo or name has the room of a short name (51 px, up to 72
+  for a longer one: a name is cut with an ellipsis, a logo made smaller) in
+  place of 120 px, and the fans spread over what was gained as SPUR II
+  spreads them
 
 ## 0.4.2 — 2026-10-10
 
