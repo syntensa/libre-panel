@@ -75,3 +75,54 @@ at once (a volume) sets `every_frame = True`: it is then also read on every
 frame between the `refresh_ms` snapshots (graphs keep one value per
 snapshot). `every_frame = "video"` does so only in video mode, where every
 frame reaches the panel anyway (the `load` source).
+
+## The console API
+
+The editor's own pages (`pages`) answer under `/api/plugins/<page>/` with JSON, one route
+for each thing a screen shows or does, so a screen of any design can use them. They are
+plain editor-page routes ([Plugins](PLUGINS.md#editor-pages)): the same server, the same
+rules.
+
+- **Reading** is `GET`. **Writing** is `POST`, with the header `X-Libre-Panel: 1` and a
+  JSON object as the body (`{}` when there is nothing to say). The server answers only
+  to the host name it listens on (`127.0.0.1:<port>`, `localhost:<port>`).
+- An answer is an object with named keys. An error is `{"error": "<text in the user's
+  language>"}` with the status **400** (the request is wrong; nothing was written),
+  **404** (not there: no picture yet, an unknown service, no services in this editor) or
+  **409** (config.toml cannot be read or written).
+- `background` is true when the running app (the tray, `libre-panel start`) serves the
+  editor. In a plain `libre-panel editor` there is no panel, no sources and no running
+  service: `panel` is `null`, `sources` is empty, a service's `state` is `unknown`. The
+  theme per mode, the switches in config.toml and the log work all the same.
+- What a screen changes goes into config.toml, so it is kept, and the running app
+  follows within a second or two.
+- Polling: `panel` once a second (the numbers are made once a second), `services` and
+  `sources` every two, `log` while it is open. Ask for the next `live` picture when the
+  last one has come (the panel draws `target_fps` at most). Answers are sent with
+  `Cache-Control: no-store`; no cache-buster is needed.
+
+`/api/plugins/control/`:
+
+| Route | Asks | Answers |
+|---|---|---|
+| `GET control/panel` | | `{background, panel}`; `panel` is `{state, detail, target, theme, frames, mode, stats}`. `state` is `starting`, `showing`, `waiting`, `paused`, `error` or `stopped`; `mode` is `null` or `"game"`; `theme` is the one on show (a service such as the autopilot may choose it). `stats` is `{}` while the panel does not run, else `fps`, `target_fps`, `streaming`, `render_ms`, `render_peak_ms` (milliseconds to draw a frame), `kbps` (KB sent per second), `blocks_per_s`, `max_depth`, `waits`, `drops` (the video link), `usb_errors`, `panel_restarts`, `ffmpeg_restarts`, `uptime_s`; `null` is "nothing counts this" |
+| `GET control/live` | `w` (160 to 1920, default 960), `format` (`jpeg`, the default, or `png`) | the picture on the panel now (after transitions and messages, the right way up) as that file; 404 before the first frame and while the panel is paused |
+| `GET control/sources` | | `{background, sources}`: each `{name, readings, status, details, hint, problem}`: the readings taken from it in the last snapshot, what it says about itself (`status`, or `null`), the same in words (`details`: `[label, value]` pairs), a hint when readings are missing (`hint`, or `null`) and whether it needs attention. LibreHardwareMonitor's `status` is `{mode, elevated, ring0, pawnio, error}`: `"inprocess"` or `"webserver"`; whether Libre Panel runs as administrator; whether the CPU's sensors give real values; the version of the PawnIO driver (`null`: none installed, `""`: unknown); why it could not start |
+| `GET control/services` | | `{background, services, config_problem}`: each service `{name, state, detail, enabled, installed, restartable}`. `enabled` is what config.toml says, `state` what runs: `running`, `stopped`, `failed` (`detail` says why), `not-installed`, `off`, `pending` (config.toml says one thing and the app has not followed yet) or `unknown` (this editor runs no services). `restartable` is true for `running`, `stopped` and `failed` |
+| `GET control/probes` | | `{probes}`: the kinds of test message, each `{kind, label}` |
+| `GET control/themes` | | `{available, normal, game, shown, mode, config_problem}`: the installed themes, the theme in config.toml for the normal mode and for the game mode (`""`: the normal one's), the one on show and the mode now |
+| `GET control/log` | `lines` (1 to 1000, default 60) | `{lines, path, exists}`: the end of the log the tray app writes |
+| `GET control/status` | | the parts above in one answer, for a page that polls once: `{background, panel, config_problem, services, sources, probes, themes, log}` (`log` is `{path, exists}`) |
+| `POST control/probe` | `{kind}` | `{kind, name, shown, reason, message}`: a message of that kind goes to the panel the way a service's does, and the answer says whether it will show. `reason` is `""`, `"theme"` (the theme switches that kind off), `"screen"` (the screen shows the kind itself) or `"no-panel"`; `message` says it in words |
+| `POST control/services/enable` | `{service, enabled}` | `{service, enabled, state, detail}`: writes `services.enabled`; the state is `pending` until the app has followed. Asking twice writes once; an unknown service cannot be switched on (404) |
+| `POST control/services/restart` | `{service}` | `{service, state, detail}`: stops the service and starts it again (404 when it is not enabled or this editor runs no services) |
+| `POST control/theme` | `{mode, theme}` | `{mode, theme}`: `mode` is `"normal"` or `"game"`; for `"game"` an empty `theme` means the normal one's |
+
+`/api/plugins/autopilot/` (the rules are `[[services.autopilot.rules]]` in config.toml,
+[Configuration](CONFIGURATION.md)):
+
+| Route | Asks | Answers |
+|---|---|---|
+| `GET autopilot/settings` | | `{background, enabled, state, detail, status, options, rules, problems, themes, transitions}`: whether the service is switched on, its settings and its rules, what is wrong with each rule (`problems`, `""` when nothing), the installed themes and the transitions it may use |
+| `POST autopilot/settings` | `{enabled, options, rules}`, each optional | the same as `GET`. Every rule is checked first; one that is wrong refuses everything (400, `"Rule <name>: ..."`). Changes reach the file in one write, and rules that did not change keep their comments |
+| `GET autopilot/status` | | `{background, enabled, state, detail, status}`: `state` as for a service; `status` is what the service does now, `{rule, theme, since_s, candidate, resting, signals}` (`null` while it does not run) |

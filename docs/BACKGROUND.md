@@ -78,7 +78,7 @@ theme per mode and the log.
 | **Live picture** | the frame on the panel now, with transitions and messages, about five times a second; it is the theme's way up, not turned for an upside-down panel. Paused, it says so |
 | **How the panel is doing** | the numbers above as tiles, with the panel's state and how long the loop has run |
 | **Sensor sources** | each source in the order it is asked, with the readings it gave last time. LibreHardwareMonitor says how it is read (inside Libre Panel or through its web server), whether Libre Panel has administrator rights, whether the CPU's sensors are within reach and which PawnIO driver is there, and on Windows what to do when no temperature or power arrives |
-| **Services** | each service Libre Panel knows, with its state (running, failed with the reason, stopped, off) and **Restart**, which stops it and starts it again with its settings. A service that is not in `[services] enabled` is off |
+| **Services** | each service Libre Panel knows, with its state (running, failed with the reason, stopped, off, or changing while the app follows a change of `config.toml`) and **Restart**, which stops it and starts it again with its settings. A service that is not in `[services] enabled` is off |
 | **Test messages** | sends a test message of each kind (volume, music, warning, panel, device, game) and says whether it shows, or why not: the theme switches the kind off (`toast.off`), the screen shows it itself, or no panel is connected |
 | **Theme per mode** | the theme of the normal mode and of game mode, written to `config.toml` (`theme`, and `theme` under `[modes.game]`); "same as the normal mode" leaves the game mode without a theme of its own |
 | **Log** | the last lines of `logs/libre-panel.log`, which the tray app writes (`libre-panel start` logs to its terminal instead) |
@@ -86,6 +86,11 @@ theme per mode and the log.
 *Pages → Autopilot* edits the rules of the `autopilot` service, switches it on
 and off, and shows which rule holds and what it sees; see
 [the autopilot](CONFIGURATION.md#autopilot).
+
+Both pages are a skin over a JSON API (the live picture, the numbers, the
+sources, switching and restarting services, test messages, the theme per mode,
+the log, the autopilot's rules), so a screen of another design can show and do
+the same: [The console API](ARCHITECTURE.md#the-console-api).
 
 ## Shutting down
 

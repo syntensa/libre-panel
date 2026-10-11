@@ -156,6 +156,14 @@
   rules and settings in `config.toml`, switches it on and off, and shows which
   rule holds and what it sees. Without the background app (`libre-panel editor`)
   they say so. An editor page may answer with a file (`(status, bytes, type)`)
+- The two pages are a JSON API that a screen of any design can call
+  (`/api/plugins/control/` and `/api/plugins/autopilot/`, listed under "The
+  console API" in docs/ARCHITECTURE.md): the live picture as JPEG or PNG, the
+  numbers, the sources (LibreHardwareMonitor's mode, rights and PawnIO driver as
+  data), the services with `enabled` and a state (`running`, `stopped`, `failed`,
+  `not-installed`, `off`, `pending` until the app follows `config.toml`,
+  `unknown`) that can be switched on and off and restarted, test messages with
+  their verdict, the theme per mode, the log, and the autopilot's rules
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
