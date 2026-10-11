@@ -38,7 +38,7 @@ MAX_NOTICE = 200_000
 # The built-in services in the order the app lists them; plugins' come after them.
 SERVICE_ORDER = ("notices", "game", "autopilot", "devices", "memory", "cooling", "downloads")
 # Sources that start by themselves; they are listed only where config.toml names them.
-IMPLICIT_SOURCES = ("media", "sky")
+IMPLICIT_SOURCES = ("media", "sky", "hardware")  # hardware: the names of this PC
 # The sensors and the weather are made once when the panel loop starts.
 RESTART_PREFIXES = ("sensors.", "weather.")
 FOLDERS = ("config", "themes", "logs")

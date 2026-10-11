@@ -124,7 +124,7 @@ def test_the_catalog_names_the_sources_the_drivers_and_the_services_with_their_o
     catalog = data["catalog"]
     sources = {source["name"]: source for source in catalog["providers"]}
     assert sources["psutil"]["builtin"] and {"load", "audio", "calendar", "demo"} <= set(sources)
-    assert catalog["implicit_providers"] == ["media", "sky"]
+    assert catalog["implicit_providers"] == ["media", "sky", "hardware"]
     assert catalog["default_providers"] == default_providers()
     assert {"auto", "turzx", "virtual"} <= set(catalog["drivers"])
     assert catalog["lhm_modes"] == ["auto", "inprocess", "webserver"]
