@@ -720,7 +720,8 @@ def test_the_work_is_kept_for_five_minutes_and_until_fancontrol_changes(db):
     assert analyst.recommendations() is first
     clock.now += 2  # five minutes
     second = analyst.recommendations()
-    assert second is not first and second == first
+    # the same advice; only when it was computed (the wall clock's second) may differ
+    assert second is not first and {**second, "computed": 0} == {**first, "computed": 0}
     mark[0] = "y"  # FanControl's configuration changed
     third = analyst.recommendations()
     assert third is not second
