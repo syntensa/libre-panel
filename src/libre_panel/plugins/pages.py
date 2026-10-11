@@ -66,10 +66,10 @@ def _status_of(provider: Any) -> dict[str, Any] | None:
 
 
 class PageContext:
-    """What a page gets: the panel's readings and picture, the services (in the
-    background app), config.toml and data folders. In a plain ``libre-panel
-    editor`` no panel runs: ``background`` is False, ``snapshot``, ``service`` and
-    ``shown_frame`` give None, ``services`` is empty."""
+    """What a page gets: the panel's readings, picture and state, the services (in the
+    background app), config.toml and data folders. In a plain ``libre-panel editor`` no
+    panel runs: ``background`` is False, ``snapshot``, ``shown_frame``, ``status`` and
+    ``service`` give None, ``services`` and ``sources`` are empty."""
 
     def __init__(self, controls: Any = None, config_path: Path | None = None) -> None:
         self._controls = controls
@@ -192,7 +192,8 @@ class EditorPage:
         self.context = context
 
     def handle(self, method: str, path: str, query: dict[str, list[str]], body: Any):
-        """Answer ``/api/plugins/<id>/<path>``: return (status, JSON-able data)."""
+        """Answer ``/api/plugins/<id>/<path>``: return (status, JSON-able data), or
+        (status, bytes, content type) to send a file (a picture)."""
         return 404, {"error": "not found"}
 
     @classmethod

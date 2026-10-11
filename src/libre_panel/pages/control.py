@@ -58,43 +58,42 @@ def why_not(reason: str) -> str:
 
 
 def probes() -> dict[str, tuple[str, dict[str, Any]]]:
-    """A test message of each kind: its name in the page and the arguments of ``notify``.
-    They are made as the services make theirs (rank, time, the label and bar a style
-    draws), so a theme and a screen treat them alike."""
+    """A test message of each kind: the name the page gives it and the arguments of
+    ``notify``. They are made as the services make theirs (rank, time, the label and the
+    bar a style draws), so the theme and the screen treat them alike."""
     test = t("Test message")
+
+    def probe(kind: str, name: str, text: str = test, label: str = "", **options: Any):
+        payload = {"label": label or name, **options.pop("payload", {})}
+        return name, {"text": text, "kind": kind, "payload": payload, **options}
+
+    time = datetime.now().strftime("%H:%M")
     return {
-        "volume": (
-            t("Volume"),
-            dict(text="42", kind="volume", rank=0, key="volume",
-                 payload={"label": t("Volume"), "progress": 0.42}),
-        ),
-        "music": (
+        "volume": probe("volume", t("Volume"), "42", rank=0, payload={"progress": 0.42}),
+        "music": probe(
+            "music",
             t("Music"),
-            dict(text=test, kind="music", rank=1, seconds=5.0, key="music", icon="music",
-                 payload={"label": t("Now playing"), "progress": 0.4}),
+            label=t("Now playing"),
+            rank=1,
+            seconds=5.0,
+            icon="music",
+            payload={"progress": 0.4},
         ),
-        "warning": (
+        "warning": probe(
+            "warning",
             t("Warning"),
-            dict(text=test, kind="warning", rank=2, seconds=5.0, key="warning:test",
-                 icon="temperature", level="warning",
-                 payload={"label": t("Warning"), "progress": 0.9}),
+            rank=2,
+            seconds=5.0,
+            icon="temperature",
+            level="warning",
+            payload={"progress": 0.9},
         ),
-        "panel": (
-            t("Panel"),
-            dict(text=t("Panel restarted {time}", time=datetime.now().strftime("%H:%M")),
-                 kind="panel", rank=2, seconds=8.0, key="panel", payload={"label": t("Panel")}),
+        "panel": probe(
+            "panel", t("Panel"), t("Panel restarted {time}", time=time), rank=2, seconds=8.0
         ),
-        "device": (
-            t("Device"),
-            dict(text=test, kind="device", rank=1, seconds=4.0, key="device:test", icon="usb",
-                 payload={"label": t("Device")}),
-        ),
-        "game": (
-            t("Game"),
-            dict(text=test, kind="game", rank=1, seconds=3.0, key="game", icon="gamepad",
-                 payload={"label": t("Game mode")}),
-        ),
-    }  # fmt: skip
+        "device": probe("device", t("Device"), rank=1, seconds=4.0, icon="usb"),
+        "game": probe("game", t("Game"), label=t("Game mode"), rank=1, seconds=3.0, icon="gamepad"),
+    }
 
 
 def yes_no(value: bool | None) -> str:
@@ -107,12 +106,10 @@ def lhm_rows(status: dict[str, Any]) -> list[list[str]]:
     rows = [[t("Mode"), t("inside Libre Panel") if inside else t("web server")]]
     if inside:
         rows.append([t("Administrator"), yes_no(status.get("elevated"))])
-        ring0 = status.get("ring0")
-        rows.append([t("CPU sensors"), t("unknown") if ring0 is None
-                     else t("reachable") if ring0 else t("out of reach")])  # fmt: skip
-        pawnio = status.get("pawnio")
-        rows.append([t("PawnIO driver"), t("not installed") if pawnio is None
-                     else pawnio or t("unknown")])  # fmt: skip
+        ring0, pawnio = status.get("ring0"), status.get("pawnio")
+        reach = t("unknown") if ring0 is None else t("reachable") if ring0 else t("out of reach")
+        driver = t("not installed") if pawnio is None else pawnio or t("unknown")
+        rows += [[t("CPU sensors"), reach], [t("PawnIO driver"), driver]]
     if status.get("error"):
         rows.append([t("Error"), str(status["error"])])
     return rows
@@ -195,9 +192,14 @@ class Control(ConsolePage):
                 rows = [[k.replace("_", " "), str(v)] for k, v in status.items() if v is not None]
             problem = bool(hint) or bool(status and status.get("error"))
             found.append(
-                {"name": source["name"], "readings": source["readings"], "details": rows,
-                 "hint": hint, "problem": problem}
-            )  # fmt: skip
+                {
+                    "name": source["name"],
+                    "readings": source["readings"],
+                    "details": rows,
+                    "hint": hint,
+                    "problem": problem,
+                }
+            )
         return found
 
     def live(self, request: Request):
@@ -222,15 +224,18 @@ class Control(ConsolePage):
         if made is None:
             raise Refused(t("unknown kind of message: {kind}", kind=kind))
         name, options = made
-        options = dict(options)
-        delivery = self.context.notify(options.pop("text"), **options)
-        message = (
-            t("Shown on the panel.")
-            if delivery.shown
-            else t("Not shown: {why}.", why=why_not(delivery.reason))
-        )
-        return {"kind": kind, "name": name, "shown": delivery.shown,
-                "reason": delivery.reason, "message": message}  # fmt: skip
+        delivery = self.context.notify(**options)
+        if delivery.shown:
+            message = t("Shown on the panel.")
+        else:
+            message = t("Not shown: {why}.", why=why_not(delivery.reason))
+        return {
+            "kind": kind,
+            "name": name,
+            "shown": delivery.shown,
+            "reason": delivery.reason,
+            "message": message,
+        }
 
     def restart(self, request: Request) -> dict[str, Any]:
         name = request.text("service")

@@ -313,7 +313,7 @@ def test_a_test_message_is_made_like_the_real_one(running):
     (toast,) = seen
     assert (toast.kind, toast.rank, toast.service, toast.icon) == ("music", 1, "editor", "music")
     assert toast.payload["label"] == "Now playing" and toast.text == "Test message"
-    assert (toast.key, toast.seconds) == ("music", 5.0)
+    assert toast.seconds == 5.0 and toast.payload["progress"] == 0.4
 
 
 def test_a_service_is_restarted_from_the_page(running):

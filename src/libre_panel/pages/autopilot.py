@@ -121,8 +121,10 @@ class Autopilot(ConsolePage):
         for rule in rules:
             problem = rule_problem(rule)
             if not problem and rule.get("theme") not in themes:
-                problem = t("theme {theme} is not installed: the autopilot skips this rule",
-                            theme=rule.get("theme"))  # fmt: skip
+                theme = rule.get("theme")
+                problem = t(
+                    "theme {theme} is not installed: the autopilot skips this rule", theme=theme
+                )
             problems.append(problem)
         return {
             **self.status(request),
