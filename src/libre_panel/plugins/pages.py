@@ -9,6 +9,7 @@ the editor. The editor listens on 127.0.0.1 only and writes need its
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import os
 import sys
@@ -47,6 +48,23 @@ def tail(path: Path, lines: int) -> list[str]:
     return rows[-lines:]
 
 
+def _status_of(provider: Any) -> dict[str, Any] | None:
+    """What a sensor source says about itself: its ``status()`` as a dict, or None."""
+    status = getattr(provider, "status", None)
+    if not callable(status):
+        return None
+    try:
+        found = status()
+        if dataclasses.is_dataclass(found) and not isinstance(found, type):
+            return dataclasses.asdict(found)
+        return dict(found) if isinstance(found, dict) else None
+    except Exception:  # a source that cannot say must not break the page
+        log.debug(
+            "status of sensor source %s failed", getattr(provider, "name", "?"), exc_info=True
+        )
+        return None
+
+
 class PageContext:
     """What a page gets: the panel's readings and picture, the services (in the
     background app), config.toml and data folders. In a plain ``libre-panel
@@ -76,6 +94,34 @@ class PageContext:
         """config.toml (change single settings with ``libre_panel.config.set_config_value``)."""
         path = getattr(self._controls, "config_path", None) or self._config_path
         return path or config_dir() / CONFIG_FILENAME
+
+    def status(self) -> dict[str, Any] | None:
+        """What the panel is doing and how it runs, as ``/api/app`` shows it: ``state``
+        (``showing``, ``waiting``, ``paused``, ``error``, ``stopped``, ``starting``),
+        ``detail``, ``target``, ``theme``, ``frames``, ``mode`` and ``stats`` (frame rate,
+        drawing time, data rate, the video link and faults; empty while the panel does
+        not run). None without the background app."""
+        panel = getattr(self._controls, "panel", None)
+        return panel.state() if panel is not None else None
+
+    def sources(self) -> list[dict[str, Any]]:
+        """The sensor sources the panel reads, the first that has a reading wins: each
+        ``{"name", "readings", "status"}`` with the number of readings the last snapshot
+        took from it and what the source says about itself, as a dict, if it has a
+        ``status()`` (LibreHardwareMonitor does), else None. Empty without the
+        background app."""
+        panel = getattr(self._controls, "panel", None)
+        hub = getattr(getattr(panel, "status", None), "hub", None)
+        if hub is None:
+            return []
+        return [
+            {
+                "name": provider.name,
+                "readings": hub.readings_from(provider),
+                "status": _status_of(provider),
+            }
+            for provider in list(hub.providers)
+        ]
 
     def snapshot(self) -> Any:
         """The readings and history the panel was last drawn from, or None."""

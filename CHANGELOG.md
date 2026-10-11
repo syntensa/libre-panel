@@ -131,6 +131,15 @@
   `Delivery`, true when it will, else with the `reason`: the theme switches the
   kind off (`"theme"`), the screen shows it itself (`"screen"`) or no panel is
   connected (`"no-panel"`). A page sends one with `context.notify(...)`
+- How the panel is doing: the main loop measures its frame rate against the
+  target, the time to draw a frame (median and slowest of the last 120), the
+  data rate sent to the panel, and in video mode the blocks per second, the
+  deepest queue the panel reported, the waits and the pictures thrown away,
+  and counts USB errors, restarts of the panel and of ffmpeg. They are in
+  `/api/app` (`panel.stats`), in the editor's **Panel** menu (with a button to
+  the new Control page) and for plugins in `context.status()`;
+  `context.sources()` lists the sensor sources and what they say about
+  themselves. Measuring costs a few additions per frame and holds no lock
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

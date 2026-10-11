@@ -151,6 +151,8 @@ class PanelService:
             "theme": status.theme,
             "frames": status.frames,
             "mode": status.mode,
+            # numbers of the last seconds (see libre_panel.meter); none while it does not run
+            "stats": status.stats if state in ("showing", "waiting") else {},
         }
 
 

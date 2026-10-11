@@ -617,6 +617,8 @@ None, so a page says what is missing instead of failing.
 | `service(name)` / `services()` | the running service or None / each enabled service and its state (`running`, `failed: …`, `not installed`, `stopped`) |
 | `restart_service(name)` | stop and start an enabled service again; its new state |
 | `snapshot()` | the readings and history the panel was last drawn from, or None |
+| `status()` | what the panel is doing, as `/api/app` shows it: `state`, `detail`, `target`, `theme`, `frames`, `mode` and `stats` (frame rate, drawing time, data rate, the video link, faults; see [Running in the background](BACKGROUND.md#how-the-panel-is-doing)); None without the background app |
+| `sources()` | the sensor sources the panel reads, the first with a reading wins: `[{"name", "readings", "status"}]`, with the number of readings the last snapshot took from the source and, if it has a `status()` (LibreHardwareMonitor does), what it says about itself as a dict |
 | `shown_frame()` | the frame on the panel now, with transitions and messages, as a PIL image in the theme's orientation (not turned for an upside-down panel); None before the first frame and while the panel is paused. Read it only |
 | `notify(text, **options)` | a message on the panel as a service sends it (`ServiceHost.notify`'s arguments), e.g. a test or the answer to an action; returns the `Delivery` (see *Toasts*) |
 | `log_tail(lines=40)` | the last lines of `logs/libre-panel.log`, the log the tray app writes (nothing for `libre-panel start`, which logs to its terminal) |

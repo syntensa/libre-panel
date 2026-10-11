@@ -49,6 +49,23 @@ The same controls are in the editor: the **Panel** button at the top right
 shows the state and has pause, brightness, upside down, start with system
 and quit.
 
+## How the panel is doing
+
+Below the state, the **Panel** menu shows numbers measured over the last few
+seconds. They are also in `/api/app` (`panel.stats`) and on the *Control*
+page (below).
+
+| Row | What it says |
+|---|---|
+| **Frame rate** | frames drawn per second, and the rate Libre Panel aims for (the mode's, the display's, else `fps`). In video mode every frame goes out, so a rate below the target means the PC or the panel cannot keep up. Without video mode a frame is drawn only when something moves, so a lower rate is normal there |
+| **Drawing** | the median time to draw a frame, and the slowest of the last 120. It has to stay below the time one frame has (20 ms at 50 fps) |
+| **Data rate** | what goes to the panel, in KB/s (1 KB = 1000 bytes); not shown for the PNG file |
+| **Video** | video mode only: pictures (blocks) sent per second, the deepest queue the panel reported (it holds five, and the driver waits above two), how often the driver waited for room, and how many pictures it threw away unsent when the stream restarted |
+| **Faults** | since the panel loop started: errors on the panel's link that made the driver reconnect, restarts of the panel to clear a hung video decoder, and restarts of ffmpeg |
+
+Measuring costs next to nothing: the main loop keeps a ring of drawing times
+and counts, and makes the numbers once a second; nothing waits for it.
+
 ## Shutting down
 
 Quit, signing out and shutting the PC down all end Libre Panel cleanly: it

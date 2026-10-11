@@ -6,7 +6,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -16,9 +16,10 @@ from PIL import Image, ImageOps
 from libre_panel import clock as loop_clock
 from libre_panel import i18n, timing
 from libre_panel.config import Config, ConfigError, load_config
-from libre_panel.devices.base import DeviceError, Display, FrameError, create_display
+from libre_panel.devices.base import Counters, DeviceError, Display, FrameError, create_display
 from libre_panel.devices.models import find_model
 from libre_panel.devices.virtual import VirtualDisplay
+from libre_panel.meter import Meter
 from libre_panel.plugins.host import LEFT_OUT, NO_PANEL, OFF_IN_THEME, Delivery, Toast
 from libre_panel.plugins.render import RenderContext
 from libre_panel.render.motion import Motion
@@ -152,6 +153,11 @@ class RunStatus:
     detail: str = ""  # why the panel is not available
     frames: int = 0
     mode: str | None = None  # set by a service, e.g. "game"
+    # The numbers the meter makes about every second (a new dict each time): frame rate,
+    # drawing time, data rate, the video link, faults. Empty until the first second is over.
+    stats: dict[str, Any] = field(default_factory=dict)
+    counters: Counters = field(default_factory=Counters)  # what the drivers count (shared)
+    hub: SensorHub | None = None  # the sensor sources the loop reads, for the editor's pages
 
 
 class _Link:
@@ -433,6 +439,9 @@ class MainLoop:
         if host is not None and not once:
             self.hub.providers.append(host.provider())
         self.display = display if display is not None else create_display(config.device)
+        self.display.counters = status.counters  # the drivers count into the run's
+        status.hub = self.hub
+        self.meter = Meter(status, self.clock())
         self.config, self.shown, self.theme = config, shown, theme
         self.size = target_size(config, theme)
         known = {config.path: config.stamp} if config.path and config.stamp else None
@@ -600,6 +609,7 @@ class MainLoop:
                         log.info("device settings changed; opening the panel again")
                         display.close()
                         display = create_display(fresh.device)
+                        display.counters = status.counters
                         link = _Link(display, fresh.device.brightness, status)
                         device = fresh.device
                     elif fresh.device.brightness != device.brightness:
@@ -662,6 +672,7 @@ class MainLoop:
                 renderer.toast = toasts.showing(now)  # screens see a toast the moment it begins
                 # the clock ticks between readings too, at the planned frame's time
                 snapshot.now = datetime.fromtimestamp(time.time() - (self.clock() - now))
+                drawing = self.clock()
                 frame, _ = renderer.render(snapshot, now)
                 frame = fit_frame(frame, size, background_of(renderer))
                 if blend is not None:
@@ -670,6 +681,7 @@ class MainLoop:
                 # decided after _blend: the frame a hiding transition ends shows the toast
                 hidden = blend is not None and getattr(blend[0], "toasts", "wait") == "hide"
                 frame = shown_frame = renderer.shown = toasts.draw(frame, now, hidden=hidden)
+                self.meter.drew(self.clock() - drawing)
                 if host is not None:
                     host.shown = frame  # for the editor's pages: never drawn on from here on
                 upside = config.device.rotate if _on_panel(display) else 0
@@ -697,6 +709,7 @@ class MainLoop:
             self.shown_frame, self.switches, self.last_frame = shown_frame, switches, last_frame
             self.previous = previous
             self.turn, self.snapshot, self.next_sample = turn, snapshot, next_sample
+        self.meter.tick(started, self.fps, self.streaming)
         return out
 
     def pause(self) -> float:
@@ -716,6 +729,7 @@ class MainLoop:
         if self.host is not None:
             self.host.shown = None  # a paused panel shows no live picture...
             self.host.judge = None  # ...and no message
+        self.status.hub = None
         self.display.close()
         self.toasts.close()
         self.warmup.close()

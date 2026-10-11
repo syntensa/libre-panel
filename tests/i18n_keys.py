@@ -14,6 +14,7 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent / "src" / "libre_panel"
 STATIC = SRC / "editor" / "static"
+PAGES = SRC / "pages" / "web"  # the scripts of the editor's built-in pages
 
 _JS_CALL = re.compile(r"""\bt\(\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')""")
 _JS_TEMPLATE_CALL = re.compile(r"\bt\(\s*`")
@@ -33,16 +34,22 @@ def python_messages() -> set[str]:
     return found
 
 
+def script_files() -> list[Path]:
+    """The scripts that show texts: the editor's and those of its built-in pages."""
+    return sorted(STATIC.glob("*.js")) + sorted(PAGES.glob("*.js"))
+
+
 def js_messages() -> set[str]:
-    source = (STATIC / "editor.js").read_text(encoding="utf-8")
-    if _JS_TEMPLATE_CALL.search(source):
-        raise AssertionError('t(`...`) in editor.js: use t("... {name}", { name })')
     found = set()
-    for literal in _JS_CALL.findall(source):
-        if literal.startswith("'"):
-            literal = '"' + literal[1:-1].replace('\\"', '"').replace('"', '\\"') + '"'
-            literal = literal.replace("\\'", "'")
-        found.add(json.loads(literal))
+    for path in script_files():
+        source = path.read_text(encoding="utf-8")
+        if _JS_TEMPLATE_CALL.search(source):
+            raise AssertionError(f't(`...`) in {path.name}: use t("... {{name}}", {{ name }})')
+        for literal in _JS_CALL.findall(source):
+            if literal.startswith("'"):
+                literal = '"' + literal[1:-1].replace('\\"', '"').replace('"', '\\"') + '"'
+                literal = literal.replace("\\'", "'")
+            found.add(json.loads(literal))
     return found
 
 

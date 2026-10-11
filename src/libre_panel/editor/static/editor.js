@@ -1630,6 +1630,7 @@ function renderApp(app) {
   $("#app-theme").textContent = panel.theme || "–";
   $("#app-mode").textContent = panel.mode || "";
   $("#app-mode").hidden = $("#app-mode-label").hidden = !panel.mode;
+  import("/static/stats.js").then((stats) => stats.showStats($("#app-stats"), panel.stats, t));
   const slider = $("#app-brightness");
   if (document.activeElement !== slider && app.brightness !== null) slider.value = app.brightness;
   slider.disabled = app.brightness === null;
@@ -1721,6 +1722,10 @@ function setupApp() {
   $("#app-chip").addEventListener("click", () => toggleAppPopover());
   $("#app-pause").addEventListener("click", () => appAction(state.app?.panel.state === "paused" ? "resume" : "pause"));
   $("#app-quit").addEventListener("click", quitApp);
+  $("#app-control").addEventListener("click", () => {
+    toggleAppPopover(false);
+    openPage({ id: "control", title: t("Control") });
+  });
   $("#app-upside-down").addEventListener("change", (event) => appAction("upside_down", event.target.checked));
   $("#app-autostart").addEventListener("change", (event) => appAction("autostart", event.target.checked));
   const slider = $("#app-brightness");

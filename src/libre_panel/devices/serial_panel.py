@@ -94,7 +94,14 @@ class SerialDisplay(Display):
         x0, y0, x1, y1 = region or (0, 0, *size)
         if x1 <= x0 or y1 <= y0:
             return
-        self.send_bitmap(x0, y0, x1 - 1, y1 - 1, frame.crop((x0, y0, x1, y1)))
+        link, before = self.link, self.link.written
+        try:
+            self.send_bitmap(x0, y0, x1 - 1, y1 - 1, frame.crop((x0, y0, x1, y1)))
+        except DeviceError:
+            self.counters.usb_errors += 1  # the main loop connects again
+            raise
+        finally:
+            self.counters.bytes += link.written - before
 
     def close(self) -> None:
         if self.link is not None:

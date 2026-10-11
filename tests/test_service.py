@@ -6,6 +6,7 @@ import time
 
 import pytest
 from PIL import Image
+from test_autostart import FakeTasks
 
 from libre_panel.autostart import Autostart
 from libre_panel.config import config_dir, load_config
@@ -111,7 +112,7 @@ def app(isolated_home):
     registry = FakeRegistry()
     background = BackgroundApp(
         port=0,
-        autostart=Autostart("win32", registry=registry),
+        autostart=Autostart("win32", registry=registry, tasks=FakeTasks()),  # not the real one
         autostart_command=["LibrePanel.exe", "tray", "--background"],
     )
     background.registry = registry
@@ -131,6 +132,21 @@ def call(url, method="GET", body=None, header=True):
     data = json.loads(response.read())
     conn.close()
     return response.status, data
+
+
+def test_the_editor_gets_the_numbers_of_the_panel(app):
+    url = app.start()
+    assert app.panel.state()["stats"] == {}  # the first second is not over
+    assert wait_for(lambda: app.panel.state()["stats"], timeout=15)
+    status, data = call(url)
+    stats = data["panel"]["stats"]
+    assert status == 200 and stats["target_fps"] == 5 and stats["streaming"] is False
+    assert stats["fps"] > 0 and stats["render_ms"] > 0 and stats["uptime_s"] >= 1
+    assert stats["kbps"] is None  # the PNG file counts no bytes
+    assert stats["blocks_per_s"] is None  # and there is no video link
+    assert (stats["usb_errors"], stats["panel_restarts"], stats["ffmpeg_restarts"]) == (0, 0, 0)
+    status, data = call(url, "POST", {"action": "pause"})
+    assert data["panel"]["stats"] == {}  # nothing runs, so nothing to measure
 
 
 def test_the_editor_gets_no_autostart_toggle_where_there_is_no_autostart(isolated_home):

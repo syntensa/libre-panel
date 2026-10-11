@@ -50,7 +50,7 @@ class TurzxDisplay(Display):
                 from libre_panel.devices.turzx_video import TurzxVideoDisplay as Impl
             else:
                 from libre_panel.devices.turzx_usb import TurzxUsbDisplay as Impl
-            return Impl(self.config, model)
+            return self._counted(Impl(self.config, model))
         target = SERIAL_DRIVERS.get(protocol)
         if target is None:
             raise DeviceError(
@@ -61,7 +61,11 @@ class TurzxDisplay(Display):
             log.info("video mode is for TURZX USB panels; %s gets single frames", model.label)
         module_name, _, attr = target.partition(":")
         module = __import__(module_name, fromlist=[attr])
-        return getattr(module, attr)(self.config, model, configured=configured)
+        return self._counted(getattr(module, attr)(self.config, model, configured=configured))
+
+    def _counted(self, impl: Display) -> Display:
+        impl.counters = self.counters  # what it counts goes where the main loop looks
+        return impl
 
     def _open_any(self) -> Display:
         """A USB panel, else a serial one (``device.model = "auto"``)."""

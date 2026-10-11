@@ -247,6 +247,8 @@ body.showing-page { grid-template-rows: auto 1fr auto; }  /* top bar, page, stat
 .pop-facts { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 12px; }
 .pop-facts dt { color: var(--muted); }
 .pop-facts dd { margin: 0; overflow-wrap: anywhere; }
+.pop-facts dd.warn { color: var(--warn); }
+.pop-facts dd.bad { color: var(--error); }
 .popover input[type="range"] { width: 100%; padding: 0; accent-color: var(--accent); }
 .popover small { font-size: 11px; overflow-wrap: anywhere; margin-top: -6px; }
 .pop-actions { display: flex; gap: 8px; justify-content: space-between; }

@@ -39,12 +39,14 @@
           <dt data-i18n>Theme</dt><dd id="app-theme">–</dd>
           <dt data-i18n id="app-mode-label" hidden>Mode</dt><dd id="app-mode" hidden></dd>
         </dl>
+        <dl class="pop-facts" id="app-stats" hidden></dl>
         <label class="field"><span><span data-i18n>Brightness</span> <output id="app-brightness-value"></output></span>
           <input type="range" id="app-brightness" min="0" max="100" step="5">
         </label>
         <label class="check"><input type="checkbox" id="app-upside-down"> <span data-i18n>Upside down</span></label>
         <label class="check"><input type="checkbox" id="app-autostart"> <span data-i18n>Start with system</span></label>
         <small id="app-autostart-where" class="muted"></small>
+        <button id="app-control" type="button" data-i18n>Control page</button>
         <div class="pop-actions">
           <button id="app-pause" type="button" data-i18n>Pause panel</button>
           <button id="app-quit" type="button" class="danger" data-i18n>Quit Libre Panel</button>

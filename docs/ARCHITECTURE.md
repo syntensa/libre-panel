@@ -24,6 +24,7 @@
 | `services` | Libre Panel's own services, built in and off until `config.toml` lists them: `notices` (messages for the volume, tracks, limits), `game` (game mode) and `autopilot` (theme rules). They use only the plugin API; Steam, the programs that run and the Windows window in front are read in `steam` and `machine`. |
 | `editor` | Local HTTP server (127.0.0.1 only) + vanilla JS editor, no build step. |
 | `app` | Main loop (`MainLoop.step`, one frame at a time): sample → render → diff → send; reloads config/theme on change; reports its state (`RunStatus`). |
+| `meter` | How the main loop is doing: frame rate, drawing time, data rate, the video link and faults, made once a second from a ring of timings and the counters the drivers keep (`devices.base.Counters`). Nothing in it holds a lock. |
 | `service` | Background app: the main loop in a thread (pause/resume, restarts after a broken config is fixed), the editor server, and the controls shared by tray and editor. |
 | `tray` | Tray icon and menu (pystray); runs without an icon where there is no tray. |
 | `autostart` | Login start per system: Windows `Run` key (or, asked for, a Task Scheduler task with the highest rights), XDG autostart entry. |

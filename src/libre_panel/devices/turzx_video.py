@@ -54,7 +54,7 @@ from collections.abc import Callable
 from PIL import Image
 
 from libre_panel import timing
-from libre_panel.devices.base import DeviceError, FrameError
+from libre_panel.devices.base import Counters, DeviceError, FrameError
 from libre_panel.devices.h264 import (
     Encoder,
     EncoderSettings,
@@ -184,6 +184,7 @@ class VideoSession:
         local_clip: str,
         sleep: Callable[[float], None] = time.sleep,
         clock: Callable[[], float] = time.perf_counter,
+        counters: Counters | None = None,
     ) -> None:
         self.transport = transport
         self.native_size = native_size
@@ -192,7 +193,8 @@ class VideoSession:
         self.local_clip = local_clip
         self.sleep, self.clock = sleep, clock
         self.block_size = DEFAULT_BLOCK
-        self.blocks = self.bytes = self.waits = self.max_depth = 0
+        self.blocks = self.bytes = self.waits = self.max_depth = 0  # of this session
+        self.counters = counters or Counters()  # of the whole run, shared with the display
         self.send_times: deque[float] = deque(maxlen=self.HANG_WINDOW)
 
     def start(self) -> None:
@@ -224,6 +226,8 @@ class VideoSession:
             self.send_times.append(self.clock() - began)
             self.blocks += 1
             self.bytes += len(block)
+            self.counters.blocks += 1
+            self.counters.bytes += len(block)
             if self.blocks % self.POLL_EVERY == 0:
                 depth = self.depth()
                 if depth is not None and depth > self.HIGH:
@@ -235,10 +239,12 @@ class VideoSession:
         if reply is None or len(reply) <= 8:
             return None
         self.max_depth = max(self.max_depth, reply[8])
+        self.counters.max_depth = max(self.counters.max_depth, reply[8])
         return reply[8]
 
     def _wait_for_room(self) -> None:
         self.waits += 1
+        self.counters.waits += 1
         started = self.clock()
         while self.clock() - started < self.GIVE_UP_S:
             self.sleep(self.WAIT_S)
@@ -351,6 +357,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             self.video.device_fps,
             self.brightness if self.brightness is not None else self.config.brightness,
             self.video.local_clip,
+            counters=self.counters,
         )
         self.session.start()
         self._error = None
@@ -369,8 +376,16 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         if self._sender is not None:
             self._sender.join(10)
             self._sender = None
-        while not self._pictures.empty():
-            self._pictures.get_nowait()
+        self._discard_pictures()
+
+    def _discard_pictures(self) -> None:
+        """Throw away the pictures waiting for the sender: those of a stream that ended."""
+        while True:
+            try:
+                self._pictures.get_nowait()
+            except queue.Empty:
+                return
+            self.counters.drops += 1
 
     def _send_loop(self, session: VideoSession, stop: threading.Event) -> None:
         timing.raise_priority()  # a busy PC must not starve the panel (SPUR II)
@@ -383,6 +398,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                 session.send(picture)
             except DeviceError as exc:
                 self._error = exc
+                if not isinstance(exc, DecoderHung):  # that is not the link
+                    self.counters.usb_errors += 1
                 return
 
     # -- encoder ---------------------------------------------------------------
@@ -406,6 +423,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                     return
                 except queue.Full:
                     continue
+            self.counters.drops += 1  # the stream was replaced, or the panel failed meanwhile
 
         self.encoder = Encoder(command, size, deliver)
 
@@ -414,8 +432,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             self._generation += 1  # pictures of the old stream are dropped
             self.encoder.close()
             self.encoder = None
-            while not self._pictures.empty():  # the new stream starts with a keyframe
-                self._pictures.get_nowait()
+            self._discard_pictures()  # the new stream starts with a keyframe
 
     # -- frames ------------------------------------------------------------------
 
@@ -468,6 +485,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
     def _restarting(self, reason: str) -> None:
         """Count an ffmpeg that stopped by itself (not one closed for a reconnect)."""
         now = time.monotonic()
+        self.counters.ffmpeg_restarts += 1
         self._restarts = [t0 for t0 in self._restarts if now - t0 < 60] + [now]
         if len(self._restarts) > self.RESTARTS_PER_MINUTE:
             raise DeviceError(t("ffmpeg keeps stopping: {reason}", reason=reason))
@@ -480,6 +498,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         if not RESTART.allowed():
             raise hung
         RESTART.begin(self.transport.pid)
+        self.counters.panel_restarts += 1
         log.warning(
             "the panel's video decoder hangs; restarting the panel (%d of %d in a row)",
             RESTART.count,
