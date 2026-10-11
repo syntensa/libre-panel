@@ -3,11 +3,12 @@
 The app (src/libre_panel/editor/app/, served by the editor's server) runs in headless
 Chromium under Playwright, in a settings folder of its own (named LibrePanel, one theme in it,
 English) and with the preview's clock and values standing still. A clip is a script of what a
-person does: the mouse glides, keys are pressed, and a picture is taken after each step, once
-the page has stopped changing (no request in flight and nothing changed on the page for a
-moment). So a clip does not depend on how fast the machine is, and nothing in it is
-animated by the clock: the app's own transitions are switched off (a hover or a menu changes
-in one frame).
+person does: the mouse glides, keys are pressed (and shown on the screen), and a picture is
+taken after each step, once the page has stopped changing (no request in flight and nothing
+changed on the page for a moment). So a clip does not depend on how fast the machine is: the
+page's long timers (a message that goes away after four seconds) run on the clip's own time,
+which moves with its pictures, and the app's own transitions are switched off (a hover or a
+menu changes in one frame).
 
 Playwright and Chromium are optional (``pip install playwright``, then ``playwright install
 chromium``): without them an app clip is skipped, with a word about it.

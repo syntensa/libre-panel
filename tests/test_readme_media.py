@@ -237,6 +237,7 @@ def test_every_panel_recipe_runs_headless_and_makes_a_clip(panel, clip, short):
         "video-mode", "card-ignition", "small-panel", "volume-band", "theme-tube",
         "game-entrance", "close-up-rings", "close-up-curves", "where-it-started",
     ]  # fmt: skip
+    widths = {}
     for name, recipe in panel.CLIPS.items():
         # (a 3.5" panel at 0.15 is 72 pixels wide: too small for the card in its corner)
         recorded, seconds = (
@@ -245,6 +246,7 @@ def test_every_panel_recipe_runs_headless_and_makes_a_clip(panel, clip, short):
             else (short(name, scale=0.3 if name == "small-panel" else 0.15), 1.5)
         )
         frames = recorded.frames
+        widths[name] = frames.size[0]
         assert frames.count == round(seconds * 10) and frames.fps == 10, name
         assert 0 <= recorded.poster < frames.count, name
         assert (
@@ -253,6 +255,8 @@ def test_every_panel_recipe_runs_headless_and_makes_a_clip(panel, clip, short):
         assert recipe.about and recipe.kind == "panel" and recipe.themes, name
         for theme in recipe.themes:  # every theme a recipe names is there
             assert panel.theme_data(theme)[0]["widgets"], name
+    # the small panel is drawn at twice its size (480 pixels is small in a README), in its frame
+    assert widths["small-panel"] > 480 * 0.3 * 2
 
 
 def test_a_close_up_is_a_crop_without_the_device_frame(panel, clip, short):

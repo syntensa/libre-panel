@@ -612,7 +612,7 @@ class PanelClip:
     seconds: float
     setup: Callable[[Stage, tuple[str, ...]], None]
     poster: float = 0.0  # the second the poster is taken at
-    zoom: int = 1  # drawn at this many times the panel's size: a close-up is sharp
+    zoom: int = 1  # drawn at this many times the panel's size: a small panel or a close-up is sharp
     # of the panel's own pixels: (x, y, width, height), or a :class:`Focus` that finds the box in
     # the theme; a theme that has none of them is shown whole
     crop: tuple[int, int, int, int] | Focus | None = None
@@ -642,9 +642,10 @@ def record(
         raise ValueError(f"{name} shows {len(clip.themes)} theme(s), not {len(themes)}")
     with workshop():
         box = clip.crop
-        if isinstance(box, Focus):  # (a theme without what it looks for is shown whole)
+        if isinstance(box, Focus):
             box = box.box(theme_data(themes[0])[0])
-        stage = Stage(settings, clip.zoom if box else 1, clip.seconds if clip.periodic else None)
+        whole = box is None and clip.crop is not None  # a close-up of what the theme lacks
+        stage = Stage(settings, 1 if whole else clip.zoom, clip.seconds if clip.periodic else None)
         clip.setup(stage, themes)
         fps = settings.fps
         overlap = round(FADE_S * fps) if clip.loop == "fade" else 0
@@ -756,7 +757,7 @@ CLIPS: dict[str, PanelClip] = {
     ),
     "small-panel": PanelClip(
         "the small panel: lit rings filling, a history that scrolls, a card that changes",
-        ("libre-default",), 8.0, small_panel, poster=1.6, periodic=False,
+        ("libre-default",), 8.0, small_panel, poster=1.6, zoom=2, periodic=False,
     ),
     "volume-band": PanelClip(
         "the volume key: a notice in the band style, its number counting and its bar gliding",
