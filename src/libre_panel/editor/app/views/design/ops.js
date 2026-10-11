@@ -143,6 +143,19 @@ export function setModuleArea(widget, [col, row, cols, rows]) {
   store.set({ render: { ...render, boxes: { ...render.boxes, [widget.id]: box }, moduleBoxes: { ...render.moduleBoxes, [widget.id]: box } } });
 }
 
+/**
+ * Another kind for a module (one undo step). What it shows stays where the new kind has
+ * it too; else it is the new kind's first source, so a big number that showed the network
+ * does not keep that as a ring (which has no network and would draw the processor).
+ */
+export function setModuleKind(widget, kind) {
+  edit(`prop:${widget.id}:module`, () => {
+    widget.module = kind;
+    const sources = moduleKinds()[kind]?.sources || [];
+    if (sources.length && !sources.includes(widget.source)) widget.source = sources[0];
+  });
+}
+
 /** An image widget showing a picture of the theme's folder. */
 export function addPicture(path, at = null) {
   const widget = newWidget("image", at);

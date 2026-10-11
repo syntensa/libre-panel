@@ -19,9 +19,10 @@
   drawn (light, facet, acrylic lettering, flat: those that show on it), its
   colour and size; a short inspector with the rest under *Fine-tuning*, the
   six looks in the theme's settings; corners that resize, snapping guides and
-  steps (1, 4, 8 or 16 px), several widgets at once, layers with lock and eye, the theme's pictures and
-  fonts. The panel's pages are tabs over it: the normal theme, game mode's,
-  the round report's and those of plugins' modes, each with its frame rate
+  steps (1, 4, 8 or 16 px), several widgets at once, layers with lock and
+  eye, the theme's pictures and fonts. The panel's pages are tabs over it:
+  the normal theme, game mode's, the round report's and those of plugins'
+  modes, each with its frame rate
 - *Start*, the first view of the app: the panel at a glance (what it shows,
   its picture, pause, brightness, upside down), the themes made for it to
   switch between with one click, and the way on to Design, Look, Live and
@@ -635,6 +636,10 @@
   the smallest size
 - Design: the size popover of a module in the toolbar cut off its last *+*; the width
   and the height have a line each now
+- Design: another kind for a module (the *Module* choice) keeps what it shows where the
+  new kind has it too and takes the new kind's first source otherwise: a big number that
+  showed the network no longer stays on *network* as a ring, which has none (the
+  inspector showed no choice, the panel drew the processor)
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars

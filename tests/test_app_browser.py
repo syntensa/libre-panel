@@ -1398,6 +1398,27 @@ def test_a_modules_source_and_detaching_it(page):
     assert widget(page, ring)["source"] == "disk"
 
 
+def test_another_kind_keeps_the_source_it_has_or_takes_the_first_it_offers(page):
+    """A big number can show the network, a ring cannot: switched to a ring it does not keep
+    "net" (the inspector would show no choice, the panel would draw the processor), it takes
+    the ring's first source. One that the new kind has too stays."""
+    new_theme_from_a_layout(page, "Turing 3.5")
+    ring = js(page, "window.libre.doc.widgets().find((w) => w.module === 'ring').id")
+    js(page, f"window.libre.doc.setSelection([{ring!r}])")
+    kind = page.get_by_label("Module", exact=True)
+    page.locator(".inspector .chip", has_text="Disk").click()
+    kind.select_option("stat")
+    assert (widget(page, ring)["module"], widget(page, ring)["source"]) == ("stat", "disk")
+    page.locator(".inspector .chip", has_text="Network").click()
+    assert widget(page, ring)["source"] == "net"
+    kind.select_option("ring")
+    assert (widget(page, ring)["module"], widget(page, ring)["source"]) == ("ring", "cpu")
+    chosen = page.locator(".inspector .chip[aria-pressed='true']")
+    expect(chosen).to_have_text("CPU")  # and the inspector shows it
+    page.keyboard.press("Control+z")  # kind and source go back together
+    assert (widget(page, ring)["module"], widget(page, ring)["source"]) == ("stat", "net")
+
+
 def test_the_size_popover_shows_all_its_buttons(page):
     """The toolbar's size of a module has the width and the height in a line each: the last
     "+" was cut off by the popover's edge (the German labels are longer still)."""

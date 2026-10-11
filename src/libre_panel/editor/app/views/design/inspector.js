@@ -28,6 +28,7 @@ import {
   renameWidget,
   resizeModuleBy,
   setFlag,
+  setModuleKind,
   specOf,
 } from "./ops.js";
 import { QUICK_SENSORS, SensorButton, Sparkline, formatValue, sensorName, shortSensorName, useReadings } from "./sensors.js";
@@ -416,7 +417,7 @@ function ModuleInspector({ widget }) {
     />
     <div class="inspector-body">
       <${Section} title=${t("Shows")}>
-        <${Select} label=${t("Module")} value=${widget.module} onChange=${change("module")}
+        <${Select} label=${t("Module")} value=${widget.module} onChange=${(kind) => setModuleKind(widget, kind)}
           options=${Object.entries(kinds).map(([kind, item]) => ({ value: kind, label: item.name }))} />
         ${info.sources.length
           ? html`<${Chips} label=${t("Shows")} value=${widget.source} onChange=${change("source")}
