@@ -25,7 +25,7 @@ import urllib.request
 from typing import Any
 
 from libre_panel import __version__
-from libre_panel.sensors.base import Reading, SensorProvider
+from libre_panel.sensors.base import Reading, SensorProvider, as_float
 
 log = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ def _value(raw: Any) -> float | str | None:
     if raw is None or isinstance(raw, bool):
         return None if raw is None else (1.0 if raw else 0.0)
     if isinstance(raw, (int, float)):
-        return float(raw)
+        return as_float(raw)
     text = str(raw).strip()
     if text.lower() in _MISSING:
         return None
@@ -66,7 +66,7 @@ def readings_from_states(states: list[dict[str, Any]], patterns: list[str]) -> d
                 continue
             if isinstance(raw, (int, float)):
                 sub = f"{key}.{attribute}"
-                out[sub] = Reading(sub, float(raw), "", f"{name} {attribute.replace('_', ' ')}")
+                out[sub] = Reading(sub, as_float(raw), "", f"{name} {attribute.replace('_', ' ')}")
     return out
 
 

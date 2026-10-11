@@ -757,6 +757,9 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
   `acrylic` took its letters one by one, which cannot join them. Where Pillow has libraqm (the
   Linux builds; the Windows ones have not) Arabic joins and Hebrew reads from the right; without
   it the letters of both stand in the order they are written, from the left
+- A whole number of 400 digits in an MQTT message, or in a state or an attribute of Home Assistant,
+  was too large for a float and raised in the thread that reads the broker; it is read as infinity
+  now, as `1e400` always was, and shows as no value
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars (the

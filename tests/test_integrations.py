@@ -2,6 +2,7 @@
 
 import gc
 import json
+import math
 import threading
 from datetime import datetime, timedelta
 
@@ -11,7 +12,14 @@ from PIL import Image
 from libre_panel.render.formatting import clock_duration, safe_format
 from libre_panel.render.renderer import Renderer
 from libre_panel.sensors import base, media
-from libre_panel.sensors.base import Reading, SensorHub, SensorProvider, create_provider, want
+from libre_panel.sensors.base import (
+    Reading,
+    SensorHub,
+    SensorProvider,
+    as_float,
+    create_provider,
+    want,
+)
 from libre_panel.sensors.calendar import calendar_readings, events_from_ics
 from libre_panel.sensors.homeassistant import readings_from_states
 from libre_panel.sensors.media import Track, load_cover, parse_playerctl
@@ -227,6 +235,52 @@ def test_mqtt_messages():
     assert nested["mqtt.zigbee2mqtt.door.battery"].value == 87.0
     assert nested["mqtt.zigbee2mqtt.door.name"].value == "Front"
     assert readings_from_message("status/v1.2", b"online")["mqtt.status.v1_2"].value == "online"
+
+
+def test_a_number_beyond_a_float_is_infinity_not_an_error():
+    """A 400-digit integer in a JSON payload made ``float()`` raise in the MQTT client's thread,
+    and so did one in a state or attribute of Home Assistant; it reads as 1e400 does."""
+    huge = "9" * 400
+    assert readings_from_message("t/x", huge.encode())["mqtt.t.x"].value == math.inf
+    assert readings_from_message("t/x", b"-" + huge.encode())["mqtt.t.x"].value == -math.inf
+    nested = readings_from_message("t/x", f'{{"big": {huge}, "small": 3}}'.encode())
+    assert (nested["mqtt.t.x.big"].value, nested["mqtt.t.x.small"].value) == (math.inf, 3.0)
+    assert readings_from_message("t/x", b"1e400")["mqtt.t.x"].value == math.inf  # (as before)
+    assert readings_from_message("t/x", b'"' + huge.encode() + b'"')["mqtt.t.x"].value == math.inf
+    big = int(huge)
+    states = [
+        {"entity_id": "climate.hall", "state": big, "attributes": {"current_temperature": -big}}
+    ]
+    found = readings_from_states(states, ["climate.*"])
+    assert found["ha.climate.hall"].value == math.inf
+    assert found["ha.climate.hall.current_temperature"].value == -math.inf
+    assert (
+        as_float(2**1023) == float(2**1023) and as_float(7) == 7.0
+    )  # (the others are as they were)
+
+
+def test_a_reading_beyond_a_float_goes_through_the_hub_and_the_renderer():
+    from libre_panel.theme.model import parse_theme
+
+    class Huge(SensorProvider):
+        name = "huge"
+
+        def read(self):
+            return readings_from_message("t/x", b"9" * 400)
+
+    snapshot = SensorHub([Huge()]).snapshot()
+    assert snapshot.value("mqtt.t.x") == math.inf
+    metric = {"type": "metric", "id": "m", "x": 4, "y": 4, "sensor": "mqtt.t.x", "font_size": 24,
+              "format": "{value:.0f}", "fallback": "--", "color": "#ffffff"}  # fmt: skip
+    display = {"width": 120, "height": 40}
+    theme = parse_theme({"format": "libre-panel-theme/1", "name": "h", "widgets": [metric],
+                         "display": display, "background": {"color": "#000"}})  # fmt: skip
+    renderer = Renderer(theme, preview=True)
+    shown, _boxes = renderer.render(snapshot)
+    snapshot.readings["mqtt.t.x"] = Reading("mqtt.t.x", None)
+    nothing, _boxes = renderer.render(snapshot)
+    assert renderer.warnings == [] and shown.tobytes() == nothing.tobytes()  # no reading: "--"
+    renderer.close()
 
 
 def test_the_new_sources_are_built_in():

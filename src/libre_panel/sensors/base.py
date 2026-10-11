@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 from collections import deque
 from dataclasses import dataclass, field
@@ -13,6 +14,17 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 HISTORY_LENGTH = 600
+
+
+def as_float(value: int | float) -> float:
+    """``value`` as a float; an integer too large for one (a payload of 400 digits) is infinity
+    with its sign, as the text "1e400" reads. No widget draws that (the renderer takes it for
+    no reading), where the conversion would raise in the thread that reads the source."""
+    try:
+        return float(value)
+    except OverflowError:
+        return -math.inf if value < 0 else math.inf
+
 
 # Sensor keys the themes on show read, by whoever shows them (a renderer).
 # Providers ask ``wanted("proc.")`` before costly work nobody looks at.
