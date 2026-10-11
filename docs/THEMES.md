@@ -287,7 +287,7 @@ bands in the colour of what they frame.
 | `spur-header` | for a game: the classic frame with the frame rate and the 1% low in the header beside the game's logo (its name where there is none), load charts, who holds the frame rate down and a chart of the longest frame of each moment; needs the `game` service and PresentMon |
 | `spur-focus` | for a game: the frame rate large (150 px) with its course over 35 s beside it, the CPU's and GPU's load as small charts, then FRAMES, CPU, GPU and system with bars; the game's logo or name above the number; needs the `game` service and PresentMon |
 | `spur-session` | for a game: the frame rate with its last ten minutes, a chart of the longest frame of each moment, and the CPU's and GPU's temperatures and power with their course over the same ten minutes (SPUR II adds up a whole session: time played, average frame rate, share of time per frame rate, highest values; Libre Panel has no readings for those, so this screen shows the last ten minutes, the longest a graph can show); needs the `game` service and PresentMon |
-| `spur-studio` | SPUR II's Studio screen, for the desk, made of the [cards](#cards) on one grid: a large clock with the seconds and the date, the network (a download while one runs) and the volume on the left, the playback card in the middle (the weather card when nothing plays, with the line of light between them), and rings for the CPU, GPU and RAM; it needs `media` for the playback card, the weather for the forecast, and shows the volume with the `audio` source |
+| `spur-studio` | SPUR II's Studio screen, for the desk, made of the [cards](#cards) on one grid: a large clock with the seconds and the date, the network (a download while one runs) and the volume on the left, the playback card in the middle (the weather card when nothing plays, with the line of light between them), and rings for the CPU, GPU and RAM (the RAM's readings: free, temperature, speed); it needs `media` for the playback card, the weather for the forecast, and shows the volume with the `audio` source |
 | `round-report` | what the `memory` service shows after a game (`report_theme`): the round's average frame rate with its distance from the average of the earlier rounds, the 1% low and the frame time, who held the rate down as a bar in the colours of the GPU and CPU (and the frame limit's), the share of the round at each frame rate with a line under each bar for the earlier rounds, and the highest temperatures and power against their average; it reads the `report.*` readings ([Plugins](PLUGINS.md#the-round-report)), so its title, heading hints and note follow the language of the panel, and a first round says so and shows no comparison; needs the `memory` service and PresentMon |
 
 The fans in the header need their sensors (`fan.lpc.fan_1` ... , `gpu.fan`) and show
@@ -461,7 +461,10 @@ are flat thin lines in their colour: a card has no ridge, no bevel and no trough
   `disk`) as light in its groove, the number inside with a small unit, the name
   under it and the part's readings (temperature, power, clock ...) as rows, as many
   as fit; a wide module puts the name and rows beside the ring. The temperature
-  goes warm and hot. `source` `fan` makes it a fan: the rotor of the
+  goes warm and hot. The RAM's rows are what is free (`mem.free`), the modules'
+  temperature (`mem.temp`) and the speed they run at (`mem.speed`, in MT/s); a
+  reading the PC cannot give stays on show as `--` with its name, as in the Studio,
+  where the other parts leave such a row out. `source` `fan` makes it a fan: the rotor of the
   [`fan` widget](#fans) in its ring, which turns with the speed, with the fan's
   name and its speed in RPM beside it or under it; `sensor` names the fan
   (`fan.cpu`; default `gpu.fan`), `color` sets its colour.
@@ -734,7 +737,8 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 |---|---|---|
 | `cpu.load`, `cpu.freq`, `cpu.temp`, `cpu.power` | %, MHz, °C, W | psutil (temp on Linux), LibreHardwareMonitor; `cpu.load` also ten times a second from `load` |
 | `gpu.load`, `gpu.temp`, `gpu.power`, `gpu.fan`, `gpu.mem.load` | %, °C, W, RPM, % | LibreHardwareMonitor; `gpu.temp` also Linux AMD; `gpu.load` also from `load` (Windows, any vendor) |
-| `mem.load`, `mem.used`, `mem.total`, `swap.load` | %, GiB | psutil |
+| `mem.load`, `mem.used`, `mem.free`, `mem.total`, `swap.load` | %, GiB | psutil; `free` is what programs can still take without the system swapping, so used and free add up to the total |
+| `mem.temp`, `mem.speed` | °C, MT/s | the memory: the temperature of its hottest module (LibreHardwareMonitor, from the module's own thermal sensor: DDR4 and DDR5, with administrator rights and the PawnIO driver as for the CPU's temperature) and the speed it runs at (the firmware's SMBIOS table, the slowest module's: see [Configuration](CONFIGURATION.md#hardware-names)) |
 | `disk.load`, `disk.used`, `disk.total`, `disk.read`, `disk.write` | %, GiB, B/s | psutil |
 | `net.down`, `net.up` | B/s | psutil |
 | `fan.<device>.<name>`, `temp.<device>.<name>` | RPM, °C | every fan and temperature: psutil (Linux), LibreHardwareMonitor (e.g. `temp.cpu.package`, `fan.gpu.gpu_fan_1`) |

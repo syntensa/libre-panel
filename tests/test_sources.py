@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from libre_panel.config import WeatherConfig
 from libre_panel.sensors.base import Reading, SensorHub, SensorProvider
 from libre_panel.sensors.librehardwaremonitor import parse_value, readings_from_tree
@@ -130,6 +132,71 @@ def test_lhm_prefers_the_dedicated_gpu():
     assert "lhm:/gpu-amd/1/temperature/0" in readings_from_tree(tree)
 
 
+def memory_modules(*temperatures):
+    """Memory modules as LibreHardwareMonitor lists them (its DimmMemory): each is a piece of
+    hardware under /memory/dimm/<n>, its thermal sensor is "DIMM #<n>" and the limits it tells
+    are temperatures too (which never change). The Total Memory beside them has none."""
+
+    def sensor(n, index, label, value):
+        return {
+            "Text": label,
+            "Value": f"{value:.1f} °C".replace(".", ","),
+            "SensorId": f"/memory/dimm/{n}/temperature/{index}",
+            "Type": "Temperature",
+            "Children": [],
+        }
+
+    return [
+        {
+            "Text": f"Maker - PART-{n} (#{n})",
+            "HardwareId": f"/memory/dimm/{n}",
+            "Children": [
+                {
+                    "Text": "Temperatures",
+                    "Children": [
+                        sensor(n, 0, f"DIMM #{n}", value),
+                        sensor(n, 3, "Thermal Sensor High Limit", 85.0),
+                        sensor(n, 5, "Thermal Sensor Critical High Limit", 95.0),
+                    ],
+                }
+            ],
+        }
+        for n, value in enumerate(temperatures, start=1)
+    ]
+
+
+def test_lhm_memory_temperature_is_the_hottest_module_and_never_a_limit():
+    tree = lhm_fixture()
+    tree["Children"][0]["Children"] += memory_modules(41.5, 44.0, 43.0)
+    out = readings_from_tree(tree)
+    hottest = out["mem.temp"]
+    assert (hottest.value, hottest.unit, hottest.label) == (44.0, "°C", "Memory temperature")
+    assert hottest.origin == "lhm:/memory/dimm/2/temperature/0"
+    assert out["temp.memory1.dimm_1"].value == 41.5  # (the modules are told apart by number)
+    assert out["temp.memory2.thermal_sensor_high_limit"].value == 85.0  # a limit, not heat
+    one = lhm_fixture()
+    one["Children"][0]["Children"] += memory_modules(39.0)
+    alone = readings_from_tree(one)
+    assert alone["mem.temp"].value == 39.0
+    assert alone["temp.memory.dimm_1"].origin == "lhm:/memory/dimm/1/temperature/0"
+    # no module with a thermal sensor (DDR3, no driver, a laptop): no reading, not a zero
+    assert "mem.temp" not in readings_from_tree(lhm_fixture())
+
+
+def test_lhm_memory_temperature_is_made_from_every_module_so_all_are_read():
+    from libre_panel.sensors.librehardwaremonitor import readings_from_sensors, sensors_from_tree
+
+    tree = lhm_fixture()
+    tree["Children"][0]["Children"] += memory_modules(41.5, 44.0)
+    sources = {}
+    readings_from_sensors(sensors_from_tree(tree), None, sources)
+    assert sources["mem.temp"] == (
+        "/memory/dimm/1/temperature/0",
+        "/memory/dimm/2/temperature/0",
+    )  # whichever is the hottest next time: both have to be updated
+    assert sources["cpu.temp"] == ("/amdcpu/0/temperature/2",)  # the others are as they were
+
+
 def test_lhm_throughput_uses_raw_bytes():
     leaf = {
         "Text": "Download Speed",
@@ -157,6 +224,13 @@ def test_weather_parsing_and_params():
     assert out["weather.temperature"].unit == "°F"
     assert out["weather.description"].value == "Light rain"
     assert describe_weather_code(None) == ""
+
+
+def test_psutil_memory_used_free_and_total_add_up():
+    values = PsutilProvider().read()
+    used, free, total = (values[f"mem.{part}"] for part in ("used", "free", "total"))
+    assert (free.unit, free.label) == ("GiB", "Memory free") and 0 < free.value <= total.value
+    assert used.value + free.value == pytest.approx(total.value)
 
 
 def test_psutil_provider_without_cpu_freq(monkeypatch):

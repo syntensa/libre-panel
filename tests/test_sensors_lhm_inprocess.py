@@ -140,6 +140,20 @@ def test_a_sensor_without_a_number_is_left_out():
     assert list(opened(FakeComputer([chip])).read()) == ["lhm:/x/0/a/4"]
 
 
+def test_the_memory_temperature_is_the_modules_and_a_theme_that_reads_it_updates_them():
+    computer = small_computer()
+    source = opened(computer)
+    first = updates(computer)
+    out = source.read()
+    assert out["mem.temp"].value == 38.0
+    assert out["mem.temp"].origin == "lhm:/memory/dimm/1/temperature/0"
+    assert out["temp.memory.dimm_1"].value == 38.0
+    theme = show("mem.temp")  # only the module is updated: the Total Memory has no thermal sensor
+    source.refresh()
+    assert updates(computer) == {**first, "/memory/dimm/1": 2}
+    del theme
+
+
 # -- ring0: zero is not a reading ------------------------------------------------------
 
 
@@ -157,9 +171,10 @@ def test_zero_from_a_ring0_driver_that_does_not_work_is_missing_not_zero():
     source = opened(ring0_off(small_computer()))
     out = source.read()
     gone = [
-        "cpu.temp", "cpu.power", "cpu.freq", "temp.cpu.core_tctl_tdie", "temp.ram.dimm_1",
+        "cpu.temp", "cpu.power", "cpu.freq", "temp.cpu.core_tctl_tdie", "temp.memory.dimm_1",
+        "mem.temp",
         "fan.lpc.fan_1", "temp.lpc.system", "lhm:/amdcpu/0/temperature/2",
-        "lhm:/lpc/nct0000/0/fan/1", "lhm:/ram/temperature/0",
+        "lhm:/lpc/nct0000/0/fan/1", "lhm:/memory/dimm/1/temperature/0",
     ]  # fmt: skip
     assert [key for key in gone if key in out] == []
     # what needs no driver is there; a stopped fan of the graphics card is a measurement
@@ -183,9 +198,10 @@ def test_with_a_working_driver_zero_is_a_reading():
 
 def test_a_chip_temperature_of_zero_is_never_a_measurement():
     computer = small_computer()
-    computer.Hardware[2].sensor("DIMM #1").Value = 0.0  # a module that could not be read
+    computer.Hardware[4].sensor("DIMM #1").Value = 0.0  # a module that could not be read
     out = opened(computer).read()
-    assert "temp.ram.dimm_1" not in out and out["cpu.temp"].value == 55.0
+    assert "temp.memory.dimm_1" not in out and "mem.temp" not in out
+    assert out["cpu.temp"].value == 55.0
 
 
 def test_without_sensors_that_need_ring0_nothing_is_taken_away():
@@ -229,6 +245,7 @@ def test_only_the_nodes_a_theme_reads_are_updated():
         "/amdcpu/0": 1,
         "/ram": 1,
         "/gpu-nvidia/0": 1,
+        "/memory/dimm/1": 1,
     }
     source.refresh()  # no theme reads anything
     assert updates(computer) == first
@@ -249,14 +266,15 @@ def test_only_the_nodes_a_theme_reads_are_updated():
         **first,
         "/lpc/nct0000/0": 3,
         "/amdcpu/0": 2,
-        "/ram": 2,
+        "/memory/dimm/1": 2,
         "/gpu-nvidia/0": 3,
     }
     del theme
 
+    before = updates(computer)
     theme = show("lhm:*")  # every sensor, as `libre-panel sensors` asks
     source.refresh()
-    assert min(n for i, n in updates(computer).items() if i != "/motherboard") >= 3
+    assert all(n == before[i] + 1 for i, n in updates(computer).items() if i != "/motherboard")
     del theme
 
 

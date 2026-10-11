@@ -30,7 +30,10 @@ _WAVES: dict[str, tuple[str, str, float, float, float]] = {
     "gpu.fan": ("GPU fan", "RPM", 1400, 400, 41),
     "mem.load": ("Memory usage", "%", 47, 6, 43),
     "mem.used": ("Memory used", "GiB", 15, 2, 43),
+    "mem.free": ("Memory free", "GiB", 17, -2, 43),  # what mem.used leaves of mem.total
     "mem.total": ("Memory total", "GiB", 32, 0, 1),
+    "mem.temp": ("Memory temperature", "°C", 46, 2, 67),
+    "mem.speed": ("Memory speed", "MT/s", 5600, 0, 1),
     "swap.load": ("Swap usage", "%", 3, 2, 53),
     "disk.load": ("Disk usage", "%", 63, 0, 1),
     "disk.used": ("Disk used", "GiB", 600, 0, 1),
@@ -55,7 +58,6 @@ _WAVES: dict[str, tuple[str, str, float, float, float]] = {
     "fan.board.pump": ("Pump", "RPM", 2100, 150, 59),
     # as LibreHardwareMonitor names them, around SPUR II's sample values
     "gpu.mem.used": ("GPU memory used", "MB", 13824, 400, 37),
-    "temp.memory.temperature": ("Memory", "°C", 46, 2, 67),
     "fan.lpc.fan_1": ("Fan #1", "RPM", 820, 40, 47),
     "fan.lpc.fan_2": ("Fan #2", "RPM", 1140, 60, 41),
     "fan.lpc.fan_3": ("Fan #3", "RPM", 900, 50, 53),

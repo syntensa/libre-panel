@@ -1106,7 +1106,8 @@
     "The version, the licence and where to find help.": "Die Version, die Lizenz und wo es Hilfe gibt.",
     "Free software for USB system-monitor panels, under the GNU General Public License 3.0.": "Freie Software für USB-Systemmonitor-Panels, unter der GNU General Public License 3.0.",
     "This part of the settings is being built; until then config.toml and the tray menu have it.": "Dieser Teil der Einstellungen entsteht gerade; bis dahin gibt es ihn in config.toml und im Menü des Infobereichs.",
-    "processor, graphics card, memory": "Prozessor, Grafikkarte, Arbeitsspeicher"
+    "processor, graphics card, memory": "Prozessor, Grafikkarte, Arbeitsspeicher",
+    "Free": "Frei"
   },
   "fields": {
     "align": "Ausrichtung",

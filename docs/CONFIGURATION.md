@@ -286,6 +286,12 @@ has `cpu.name` and `gpu.name`, tidied the same way) fill in, else a theme shows
 its fallback. With several graphics cards, `gpu` under
 `[sensors.librehardwaremonitor]` picks the card by its name here too.
 
+The same table gives `mem.speed`, the speed the memory runs at in MT/s (5600 for
+DDR5-5600; the slowest module's where they differ). Where the modules cannot be
+read it is no reading, and a theme shows "--". The memory's temperature,
+`mem.temp`, comes from LibreHardwareMonitor and needs what the processor's does
+(see [Windows sensors](#windows-sensors-gpu-power-fans)).
+
 **Your own names.** Text under `[hardware]` is the name, as you write it:
 
 ```toml
@@ -871,7 +877,7 @@ What it needs:
 | Reading | Needs |
 |---|---|
 | everything of the graphics card (temperature, load, power, clock, fan, memory), the loads of CPU and memory, memory use, network | nothing |
-| **CPU temperature, power and clock**, RAM temperature (DDR5), **the fans on the mainboard** | Libre Panel runs **as administrator**, and the **PawnIO** driver is installed |
+| **CPU temperature, power and clock**, RAM temperature (`mem.temp`; DDR4 and DDR5), **the fans on the mainboard** | Libre Panel runs **as administrator**, and the **PawnIO** driver is installed |
 
 PawnIO is the small signed driver that LibreHardwareMonitor uses to talk to the
 chips on the mainboard and in the CPU. It is a separate program, not part of

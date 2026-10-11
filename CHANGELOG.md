@@ -460,6 +460,15 @@
   `time` for the playback card and the music module: `remaining` writes it at
   the right of the progress with a minus (`-2:24`), as SPUR II's Studio does.
   SPUR Studio counts down
+- The RAM column of SPUR Studio shows FREE, TEMP and FREQ as SPUR II does, in
+  place of USED, TOTAL and SWAP: `mem.free` (psutil, what programs can still
+  take; used and free add up to the total), `mem.temp` (LibreHardwareMonitor:
+  the hottest memory module's own thermal sensor, with the administrator
+  rights and PawnIO the CPU's temperature needs) and `mem.speed` (what the
+  memory runs at in MT/s, from the firmware's SMBIOS table, the same one that
+  names the memory; Linux where it may be read). What a PC cannot give shows
+  as `--` with its name. The RAM instrument card has these rows; SPUR Classic
+  and SPUR Header read the memory temperature from `mem.temp`
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

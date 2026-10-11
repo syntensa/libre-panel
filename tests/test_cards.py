@@ -454,6 +454,34 @@ def test_every_source_has_a_ring_instrument(source):
     }[source]  # fmt: skip
 
 
+def test_the_memory_instrument_shows_what_is_free_its_temperature_and_its_speed():
+    parts = widgets_of("instrument", 1, 2, source="mem")
+    assert [parts[f"r{i}"]["sensor"] for i in range(3)] == ["mem.free", "mem.temp", "mem.speed"]
+    assert [parts[f"r{i}-label"]["text"] for i in range(3)] == ["FREE", "TEMP", "FREQ"]
+    assert [parts[f"r{i}-unit"]["text"] for i in range(3)] == ["GB", "°C", "MT/s"]
+    assert parts["r0"]["format"] == "{value:.1f}" and parts["r2"]["format"] == "{value:.0f}"
+    assert parts["r1"]["color_rules"][0]["above"] < 75  # warm sooner than a processor is
+    snap = snapshot_with()
+    seen = texts_drawn(Renderer(card_theme("instrument", 1, 2, source="mem"), preview=True), snap)
+    assert seen["r0"] == f"{snap.value('mem.free'):.1f}" and seen["r2"] == "5600"
+    assert seen["r1"] == f"{snap.value('mem.temp'):.0f}"
+
+
+def test_a_memory_reading_a_pc_cannot_give_stays_on_show_as_dashes_with_its_name():
+    # the modules' temperature needs administrator rights, their speed a readable SMBIOS table
+    snap = snapshot_with(drop=("mem.temp", "mem.speed"))
+    renderer = Renderer(card_theme("instrument", 1, 2, source="mem"), preview=True)
+    seen = texts_drawn(renderer, snap)
+    assert (seen["r1"], seen["r2"]) == ("--", "--")
+    assert {"r0-label", "r1-label", "r2-label"} <= set(seen)  # the column keeps its shape
+    assert not {"r1-unit", "r2-unit"} & set(seen)  # a unit with no number would be noise
+    assert "r0-unit" in seen
+    # a processor's missing reading leaves its row out, as it always did
+    cpu = Renderer(card_theme("instrument", 1, 2, source="cpu"), preview=True)
+    seen = texts_drawn(cpu, snapshot_with(drop=("cpu.temp",)))
+    assert "r0" not in seen and "r0-label" not in seen and "r1" in seen
+
+
 def test_the_readings_fit_in_their_rows_and_never_run_into_their_names():
     for size in ((1, 2), (2, 1), (3, 2)):
         parts = widgets_of("instrument", *size, source="gpu")
