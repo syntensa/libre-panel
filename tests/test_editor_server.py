@@ -249,7 +249,10 @@ def test_the_preview_can_show_a_test_notice(server):
 
 
 def test_render_reports_the_grid_and_module_cells(server):
-    status, data = request(server, "POST", "/api/render", {"theme": theme_dict()})
+    plain = theme_dict()  # without modules
+    plain["widgets"] = [w for w in plain["widgets"] if w["type"] != "module"]
+    plain.pop("grid", None)
+    status, data = request(server, "POST", "/api/render", {"theme": plain})
     assert status == 200 and data["grid_active"] is False and data["module_boxes"] == {}
     theme = module_theme(
         {"module": "ring", "cols": 2},

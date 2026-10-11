@@ -567,7 +567,28 @@ def test_spur_ii_moves_on_every_frame_in_video_mode(monkeypatch):
 
 
 def test_studio_glides_between_readings_in_video_mode(monkeypatch):
-    boxes = {"ring": (1190, 34, 1390, 234), "number": (1220, 92, 1360, 150)}  # CPU
+    boxes = {"ring": (1215, 34, 1415, 234), "number": (1245, 92, 1385, 150)}  # CPU
     frames, every = video_frames("studio", 3, monkeypatch, boxes)
     assert len([n for n in changes(frames, "ring") if n % every]) >= 20
     assert len([n for n in changes(frames, "number") if n % every]) >= 5
+
+
+def test_lumen_moves_on_every_frame_in_video_mode(monkeypatch):
+    """Libre Panel's signature screen in video mode: the load of the last minute scrolls,
+    the fans turn and the rings glide, also between readings."""
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.theme.model import find_theme, load_theme
+
+    widgets = {w["id"]: w for w in Renderer(load_theme(find_theme("lumen"))).widgets}
+
+    def box(wid):
+        w = widgets[wid]
+        return w["x"], w["y"], w["x"] + w["w"], w["y"] + w["h"]
+
+    boxes = {"graph": box("cpu-graph"), "fan": box("fan-1"), "ring": box("cpu-ring/ring")}
+    frames, every = video_frames("lumen", 3, monkeypatch, boxes)
+    late = range(51, len(frames))  # after the first second
+    graph = [n for n in changes(frames, "graph") if n in late]
+    assert len(graph) >= 0.25 * len(late)  # 60 s across 470 px: a half pixel every 3 frames
+    assert len([n for n in changes(frames, "fan") if n in late]) >= 0.8 * len(late)  # it turns
+    assert len([n for n in changes(frames, "ring") if n % every]) >= 20

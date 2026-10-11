@@ -56,6 +56,8 @@ def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any
         out["x"], out["y"] = round(cx - out["w"] / 2), round(cy - out["h"] / 2)
         return out
     out["x"], out["y"] = round(widget["x"] * sx), round(widget["y"] * sy)
+    if out.get("max_width"):  # the room a text has across: it narrows with the panel
+        out["max_width"] = max(1, round(widget["max_width"] * sx))
     area = widget.get("glow_area")
     if isinstance(area, list) and len(area) == 4:  # a box on the panel, as the widget's
         ax, ay, aw, ah = area
