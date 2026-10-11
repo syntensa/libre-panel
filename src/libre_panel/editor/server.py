@@ -155,11 +155,13 @@ _SETTINGS_GET = {
     "/api/settings": "read",
     "/api/panel": "panel",
     "/api/system": "system",
+    "/api/unlock": "unlock",
     "/api/about": "about",
 }
 _SETTINGS_POST = {
     "/api/settings": "write",
     "/api/system": "set_system",
+    "/api/unlock": "set_unlock",
     "/api/location": "search_place",
     "/api/open": "open_folder",
 }

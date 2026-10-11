@@ -127,7 +127,7 @@ def test_the_catalog_names_the_sources_the_drivers_and_the_services_with_their_o
     assert catalog["implicit_providers"] == ["media", "sky", "hardware"]
     assert catalog["default_providers"] == default_providers()
     assert {"auto", "turzx", "virtual"} <= set(catalog["drivers"])
-    assert catalog["lhm_modes"] == ["auto", "inprocess", "webserver"]
+    assert catalog["lhm_modes"] == ["auto", "service", "inprocess", "webserver"]
     services = catalog["services"]
     assert [service["name"] for service in services] == [
         "notices", "game", "autopilot", "devices", "memory", "cooling", "downloads",

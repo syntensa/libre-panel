@@ -190,13 +190,17 @@ def sensor_hint(
     if hub is None or platform != "win32":
         return ""
     from libre_panel.sensors.librehardwaremonitor import user_hint
+    from libre_panel.sensorservice.setup import unlock_offered
 
     for provider in list(hub.providers):
         if provider.name != "librehardwaremonitor":
             continue
         try:
             ready = getattr(provider, "wait_ready", lambda timeout: True)(0)
-            return user_hint({**readings, **provider.read()}, platform, provider.status(), ready)
+            status = provider.status()
+            return user_hint(
+                {**readings, **provider.read()}, platform, status, ready, unlock_offered(platform)
+            )
         except Exception:  # a hint must not break the state it is part of
             log.debug("no hint about LibreHardwareMonitor", exc_info=True)
     return ""

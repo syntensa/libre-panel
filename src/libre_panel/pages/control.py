@@ -130,14 +130,18 @@ def yes_no(value: bool | None) -> str:
 
 def lhm_rows(status: dict[str, Any]) -> list[list[str]]:
     """How LibreHardwareMonitor is read and what keeps the CPU's sensors out of reach."""
-    inside = status.get("mode") == "inprocess"
-    rows = [[t("Mode"), t("inside Libre Panel") if inside else t("web server")]]
-    if inside:
-        rows.append([t("Administrator"), yes_no(status.get("elevated"))])
+    mode = status.get("mode")
+    names = {"service": t("sensor service"), "inprocess": t("inside Libre Panel")}
+    rows = [[t("Mode"), names.get(mode, t("web server"))]]
+    if mode in names:
+        if mode == "inprocess":  # the service always has the rights
+            rows.append([t("Administrator"), yes_no(status.get("elevated"))])
         ring0, pawnio = status.get("ring0"), status.get("pawnio")
         reach = t("unknown") if ring0 is None else t("reachable") if ring0 else t("out of reach")
         driver = t("not installed") if pawnio is None else pawnio or t("unknown")
         rows += [[t("CPU sensors"), reach], [t("PawnIO driver"), driver]]
+    if status.get("service"):
+        rows.append([t("Sensor service"), str(status["service"])])
     if status.get("error"):
         rows.append([t("Error"), str(status["error"])])
     return rows

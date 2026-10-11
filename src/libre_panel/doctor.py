@@ -96,9 +96,10 @@ def sensors_check(
 def _inside_check(
     options: dict, providers: list[str], shown: str, platform: str, make: Callable | None
 ) -> tuple[str, str] | None:
-    """The same question when LibreHardwareMonitor runs inside Libre Panel; None where
-    it cannot (then the web server is asked, unless it was asked for by ``mode``)."""
-    from libre_panel.sensors import lhm_inprocess
+    """The same question when the sensor service or LibreHardwareMonitor inside Libre Panel
+    reads it; None where neither can (then the web server is asked, unless it was asked for
+    by ``mode``)."""
+    from libre_panel.sensors import lhm_inprocess, lhm_service
     from libre_panel.sensors.librehardwaremonitor import (
         LibreHardwareMonitorProvider,
         dll_dir_of,
@@ -106,11 +107,13 @@ def _inside_check(
         ring0_steps,
     )
 
-    folder, why = lhm_inprocess.availability(dll_dir_of(options))
-    if folder is None:
-        if options.get("mode") == "inprocess":
-            return "info", f"LibreHardwareMonitor cannot run inside Libre Panel: {why}"
-        return None
+    mode = options.get("mode", "auto")
+    if not (mode == "service" or (mode == "auto" and lhm_service.installed())):
+        folder, why = lhm_inprocess.availability(dll_dir_of(options))
+        if folder is None:
+            if mode == "inprocess":
+                return "info", f"LibreHardwareMonitor cannot run inside Libre Panel: {why}"
+            return None
     source = (make or LibreHardwareMonitorProvider)(options)
     try:
         source.wait_ready(lhm_inprocess.READY_SECONDS)
@@ -120,7 +123,8 @@ def _inside_check(
     hint = hardware_hint(readings, providers, shown, platform, status)
     if hint is not None:
         return "info", hint
-    text = "LibreHardwareMonitor runs inside Libre Panel: temperature and power arrive"
+    where = "in the sensor service" if status.mode == "service" else "inside Libre Panel"
+    text = f"LibreHardwareMonitor runs {where}: temperature and power arrive"
     if status.ring0 is False:  # the graphics card's do, the processor's do not
         text += f", but not the CPU's: {' and '.join(ring0_steps(status))}"
     return "info", text
