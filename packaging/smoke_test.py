@@ -4,7 +4,10 @@ A plugin folder with a service that uses sqlite3 checks that folder plugins
 load on the bundled Python. The built-in service "notices" checks that Libre
 Panel's own services start from a build that has no package metadata.
 
-python packaging/smoke_test.py dist/libre-panel/libre-panel tray --background
+python packaging/smoke_test.py [--tools] dist/libre-panel/libre-panel tray --background
+
+--tools: the download carries ffmpeg (packaging/fetch_tools.py), so the app's own account of
+the video mode (the panel page of its API) must miss nothing, not even ffmpeg.
 """
 
 import json
@@ -87,11 +90,14 @@ class Smoke(Service):
 
 
 def main(command):
+    tools = command[:1] == ["--tools"]
+    command = command[1:] if tools else command
     with tempfile.TemporaryDirectory() as folder:
         home = Path(folder)
         frame = home / "frame.png"
         (home / "config.toml").write_text(
             f'theme = "spur-ii"\n\n[device]\ndriver = "virtual"\noutput = "{frame.as_posix()}"\n'
+            '\n[video]\nmode = "on"\nlocal_clip = "smoke.h264"\n'
             '\n[services]\nenabled = ["smoke", "notices"]\n\n[services.notices]\nmusic = false\n',
             encoding="utf-8",
         )
@@ -128,6 +134,11 @@ def main(command):
                 s["name"] == "notices" for s in control["services"]
             ):
                 raise SystemExit(f"FAIL: the Control page does not see the app: {control}")
+            if tools:  # the video mode lacks nothing: the download's ffmpeg is found
+                gaps = json.loads(fetch(url + "api/panel"))["video"]["gaps"]
+                if gaps:
+                    raise SystemExit(f"FAIL: the video mode of the build lacks {gaps}")
+                print("video mode: nothing missing")
             # the live picture (Pillow's JPEG and PNG writers are in the build)
             live = url + "api/plugins/control/live"
             wait(lambda: fetch(live).startswith(b"\xff\xd8"), 20, "live picture (JPEG)")

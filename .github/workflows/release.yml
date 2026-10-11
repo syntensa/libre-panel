@@ -50,7 +50,7 @@ jobs:
     # Build, package and test on each system: the program folder, then what
     # people download (Windows setup, Linux AppImage), which is installed,
     # started as autostart/double-click would, and removed.
-    timeout-minutes: 45
+    timeout-minutes: 60
     needs: test
     strategy:
       fail-fast: false
@@ -89,11 +89,24 @@ jobs:
         run: |
           pip install ".[lhm,window]"
           python packaging/windows/fetch_lhm.py
+      - name: ffmpeg, PresentMon and PawnIO's installer
+        # From the pages of their projects, each file checked against the SHA-256 pinned in the
+        # script, ffmpeg also against the licence it is passed on under (GPL, with libx264, not
+        # non-free); they are not in the repository. The spec puts them next to the program
+        # as "tools". Windows: ffmpeg, PresentMon and PawnIO's installer; Linux: ffmpeg.
+        shell: bash
+        run: python packaging/fetch_tools.py
       - name: Build
         run: pyinstaller --noconfirm --clean packaging/pyinstaller/libre-panel.spec
       - name: Smoke test (render)
         shell: bash
         run: '"$CLI" preview spur-ii -o smoke.png'
+      - name: Smoke test (ffmpeg and PresentMon in the program folder)
+        # Every file is the one that was fetched; ffmpeg lists libx264 and encodes the video
+        # mode's stream; PresentMon starts; the app, started from this folder, finds them there
+        # before anything on the PATH.
+        shell: bash
+        run: python packaging/check_tools.py dist/libre-panel
       - name: Smoke test (LibreHardwareMonitor in the bundle)
         # Loads the bundled libraries through pythonnet and opens them. Needs no
         # administrator rights; the CPU's sensors being out of reach is not a failure.
@@ -117,7 +130,7 @@ jobs:
           if grep -q "is not installed" <<<"$out"; then exit 1; fi
       - name: Smoke test (background app, started as at login)
         shell: bash
-        run: python packaging/smoke_test.py "$GUI" tray --background
+        run: python packaging/smoke_test.py --tools "$GUI" tray --background
 
       - name: Windows setup
         if: runner.os == 'Windows'
@@ -137,7 +150,7 @@ jobs:
       - name: Linux AppImage and archive
         if: runner.os == 'Linux'
         run: |
-          cp LICENSE README.md dist/libre-panel/
+          cp LICENSE README.md NOTICE.md dist/libre-panel/
           tar -C dist -czf "dist/libre-panel-$VERSION-linux-x64.tar.gz" libre-panel
           packaging/linux/build_appimage.sh "$VERSION" "dist/Libre_Panel-$VERSION-x86_64.AppImage"
       - name: Test the AppImage (headless and on an X11 tray)
