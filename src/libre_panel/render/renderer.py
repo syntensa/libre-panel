@@ -31,9 +31,10 @@ from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont
 from libre_panel import clock, i18n, timezones
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
 from libre_panel.icons import draw_icon, weather_icon_name
+from libre_panel.render import fan, lists
 from libre_panel.render import finish as finishes
-from libre_panel.render import lists
 from libre_panel.render.countdown import countdown_text
+from libre_panel.render.dust import Dust
 from libre_panel.render.formatting import FormatError, auto_format, safe_format
 from libre_panel.render.motion import MAX_POINTS, RATE, History, Motion, Spring, grid
 from libre_panel.render.motion import number as motion_number
@@ -368,6 +369,9 @@ class Renderer:
         self._breathe: Callable[[], None] | None = None  # between widgets (warming up)
         self._plugin_types: dict[str, Any] = {}
         self._screen_last: tuple[Any, Piece] | None = None
+        self._dust: Dust | None = None  # the theme's look.dust, once it is drawn (render/dust.py)
+        self._rotors: dict[str, fan.Rotor] = {}  # fan widget id -> how it turns (render/fan.py)
+        self._fans: OrderedDict[tuple[Any, ...], Piece] = OrderedDict()  # fan pieces, by look
         self.screen = self._make_screen()
 
     # -- resources ---------------------------------------------------------
@@ -966,17 +970,44 @@ class Renderer:
                 piece.layer.width,
                 piece.layer.height,
             ]
+        dust = self._dust_on()
         if screen is not None:
-            alone = not pieces and self.look is None
+            alone = not pieces and self.look is None and not dust
             if alone and screen.mode == "RGB" and screen.size == (theme.width, theme.height):
                 # an opaque screen alone is the frame: nothing to compose
                 self._last = None
                 return screen, boxes
             pieces.insert(0, ("\0screen", self._screen_piece(screen)))  # ids are never empty
-        if self.look is None:
-            return self._compose(pieces).convert("RGB"), boxes
-        self.look.compose(pieces, snapshot, now)  # the grid beneath, the sun's gloss on top
-        return self.look.finish(self._compose(pieces).convert("RGB"), now), boxes
+        if self.look is not None:
+            self.look.compose(pieces, snapshot, now)  # the grid beneath, the sun's gloss on top
+        canvas = self._compose(pieces)
+        if dust:
+            canvas = self._dusted(canvas, now)  # RGB once there is dust on it
+        frame = canvas if canvas.mode == "RGB" else canvas.convert("RGB")
+        return (frame if self.look is None else self.look.finish(frame, now)), boxes
+
+    # -- dust --------------------------------------------------------------
+
+    def _dust_on(self) -> bool:
+        """Whether the theme's dust is drawn: on a video panel (where every frame
+        goes out) and in previews. On the PNG path it would change the whole frame at
+        every update, and the link sends what changed."""
+        dust = (self.theme.look or {}).get("dust")
+        return bool(dust and (self.continuous or self.preview))
+
+    def _dusted(self, canvas: Image.Image, now: float) -> Image.Image:
+        if self._dust is None:
+            config = self.theme.look["dust"]  # type: ignore[index]
+            colors = [self.color(c)[:3] for c in config["colors"]]  # type: ignore[index]
+            self._dust = Dust(canvas.size, config, colors)
+        # where a slow piece must not stall the video, the grains move in the helper thread too
+        self._dust.submit = self._submit if self.background_builds else None
+        return self._dust.apply(canvas, now, self.shown, self.toast)
+
+    def _submit(self, job: Callable[[], Any]) -> Future:
+        if self._builder is None:
+            self._builder = _Builder()
+        return self._builder.submit(job)
 
     @staticmethod
     def _missing(widget: dict[str, Any], snapshot: Snapshot) -> bool:
@@ -1045,7 +1076,11 @@ class Renderer:
         align = widget.get("align", "left")
         spacing = widget.get("letter_spacing", 0)
         tabular = widget.get("tabular", False)
-        if "\n" in text or not (spacing or (tabular and any(c in _DIGITS for c in text))):
+        finish = self._finishes.get(widget.get("id", ""))  # a finish may letter its own way
+        lettered = finish is not None and finish.lettering(self, widget, font, text)
+        if "\n" in text or not (
+            spacing or lettered or (tabular and any(c in _DIGITS for c in text))
+        ):
             anchor = _ANCHORS.get(align, "la")
             measure = ImageDraw.Draw(Image.new("L", (1, 1)))
             x0, y0, x1, y1 = measure.textbbox((x, y), text, font=font, anchor=anchor)
@@ -1069,8 +1104,13 @@ class Renderer:
         pen = float(margin)
         for ch, advance in zip(text, advances, strict=True):
             at = pen + (cell - font.getlength(ch)) / 2 if tabular and ch in _DIGITS else pen
-            glyph, gx = self._glyph(font, ch, fill, at, margin, h)
-            self._paste(layer, glyph, gx, 0)
+            if lettered:  # the finish's letter: (image, left, top), or None for a blank
+                placed = finish.glyph(self, widget, font, ch, fill, at % 1.0)
+                if placed is not None:
+                    self._paste(layer, placed[0], math.floor(at) + placed[1], placed[2])
+            else:
+                glyph, gx = self._glyph(font, ch, fill, at, margin, h)
+                self._paste(layer, glyph, gx, 0)
             pen += advance
         left = math.floor(start) - margin
         return Piece(layer, left, y, box=[left + margin, y, math.ceil(total), h])
@@ -1315,6 +1355,39 @@ class Renderer:
             draw.polygon(right + left[::-1], fill=self.color(widget["color"]))
         x, y = widget["x"], widget["y"]
         return Piece(self._down(layer, size, size), x, y, [x, y, size, size])
+
+    # -- fans --------------------------------------------------------------
+
+    FANS = 512  # fan pieces kept: a fan that has turned once round costs a lookup
+
+    def _draw_fan(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        """A rotor that turns with the sensor's RPM, in a ring that shows the load. Its
+        turn is worked out from the planned time of the frame (render/fan.py)."""
+        wid, x, y, w, h = widget["id"], widget["x"], widget["y"], widget["w"], widget["h"]
+        rpm = _number(snapshot.value(widget["sensor"]))
+        rotor = self._rotors.get(wid)
+        if rotor is None:
+            rotor = self._rotors[wid] = fan.Rotor(wid)
+        if self.animate:
+            rotor.advance(rpm, widget["max_rpm"], now)
+            self.moving = self.moving or rotor.turning
+        else:  # a preview or a picture: how it looks at this speed, standing
+            rotor.settle(rpm, widget["max_rpm"])
+        color = self.color(widget["color"])[:3]
+        if self._breathe is not None:  # warming up: every position now, not one at a time
+            fan.preload(color, w, h)
+        key = (self._keys[wid], rotor.phase, rotor.blur, rotor.dim, round(rotor.ring * 120))
+        piece = self._fans.get(key)
+        if piece is None:
+            image = fan.fan_image(color, w, h, rotor, widget["frame"])
+            at = (x + (w - image.width) // 2, y + (h - image.height) // 2)
+            piece = self._effects(widget, Piece(image, at[0], at[1], [x, y, w, h]))
+            self._fans[key] = piece
+            while len(self._fans) > self.FANS:
+                self._fans.popitem(last=False)
+        else:
+            self._fans.move_to_end(key)
+        return piece
 
     # -- pictures ----------------------------------------------------------
 
@@ -2387,19 +2460,22 @@ class Renderer:
             for run in runs:
                 polygon = [*run, (run[-1][0], H - 1), (run[0][0], H - 1)]
                 ImageDraw.Draw(area).polygon(polygon, fill=255)
+            solid = min(1.0, max(0.0, widget.get("fill_alpha", 0)))
             if widget["fill_fade"]:
+                peak = round(255 * solid) if solid else 115
                 if top is None:
                     top = int(min(py for run in runs for _, py in run))
                 fade = Image.new("L", (1, H), 0)
                 fade.putdata(
                     [
-                        int(115 * min(1.0, max(0.0, 1 - (row - top) / max(1, H - top))))
+                        int(peak * min(1.0, max(0.0, 1 - (row - top) / max(1, H - top))))
                         for row in range(H)
                     ]
                 )
                 alpha = ImageChops.multiply(area, fade.resize(layer.size))
             else:
-                alpha = area.point(lambda v: v * 64 // 255)
+                flat = round(255 * solid) if solid else 64
+                alpha = area.point(lambda v: v * flat // 255)
             tint = Image.new("RGBA", layer.size, (*color[:3], 255))
             if color[3] < 255:
                 alpha = ImageChops.multiply(alpha, Image.new("L", layer.size, color[3]))

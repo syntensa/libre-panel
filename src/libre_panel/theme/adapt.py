@@ -29,7 +29,7 @@ _UNIFORM = (
     "backdrop_blur",
 )
 # Widgets whose box must keep its aspect ratio.
-_KEEP_ASPECT = ("gauge", "image")
+_KEEP_ASPECT = ("gauge", "image", "fan")
 
 
 def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any]:
@@ -58,6 +58,16 @@ def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any
     out["x"], out["y"] = round(widget["x"] * sx), round(widget["y"] * sy)
     if has_box:
         out["w"], out["h"] = max(1, round(widget["w"] * sx)), max(1, round(widget["h"] * sy))
+    return out
+
+
+def _scale_look(look: dict[str, Any], sx: float, sy: float) -> dict[str, Any]:
+    """The look on a panel of another size: the dust's areas are places on the panel, and
+    move with it (its count follows the panel's area by itself)."""
+    out = deepcopy(look)
+    for area in out.get("dust", {}).get("areas", []):
+        area["x"], area["y"] = round(area["x"] * sx), round(area["y"] * sy)
+        area["w"], area["h"] = max(1, round(area["w"] * sx)), max(1, round(area["h"] * sy))
     return out
 
 
@@ -136,6 +146,8 @@ def adapt_theme(
         result["widgets"] = [
             w if w["type"] == "module" else _scale_widget(w, sx, sy) for w in theme.widgets
         ]
+        if theme.look:
+            result["look"] = _scale_look(theme.look, sx, sy)
     elif mode != "keep":
         raise ValueError('mode must be "scale" or "keep"')
     if any(w["type"] == "module" for w in theme.widgets):  # modules follow the grid either way

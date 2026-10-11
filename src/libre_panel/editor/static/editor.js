@@ -1060,7 +1060,15 @@ function hintFor(widget, key, kind) {
   if (key === "smooth" && widget.type === "metric") return t("the number glides between readings, together with the bars and rings of its sensor");
   if (key === "seconds" && widget.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = as long as the history readings take");
   if (key === "per_frame") return t("video mode: a point a pixel apart, as SPUR II draws its curves (seconds = width / 25)");
-  if (key === "finish") return t("lit: SPUR II's light on rings, bars, graph lines and weather icons; glow then sets their glow");
+  if (key === "fill_alpha") return t("how opaque the fill is, 0 to 1; 0 = as before (a flat fill 0.25, a fade 0.45 at its top)");
+  if (key === "finish") {
+    return [
+      t("lit: SPUR II's light on rings, bars, graph lines and weather icons; glow then sets their glow"),
+      t("facet: a flat top with a lit, bevelled rim (text from 20 px, bars from 6 px)"),
+      t("acrylic: lettering of acrylic lit from within, text from 20 px"),
+    ].join(" · ");
+  }
+  if (key === "max_rpm") return t("the speed at which the ring is full; the rotor turns the faster the closer it gets");
   return null;
 }
 
@@ -1207,15 +1215,20 @@ const LOOK_HINTS = {
   "light:sun": () => t("the sun where it stands at the weather place in config.toml; off, or without a place: noon"),
   "light:frames": () => t("outlines of 2 px or more become ridges that catch the light"),
   "light:color": () => t("the sweeps' tint; empty: the accent"),
+  "dust:count": () => t("on a 1920 × 480 panel; other sizes scale with their area"),
+  "dust:rate": () => t("how often the grains move; 25 is calm and cheap"),
+  "dust:depth": () => t("how far they fall; 0 = they hang where they are"),
+  "dust:strength": () => t("how bright they are"),
 };
 
 function buildLookFields() {
   const theme = state.theme;
   const blocks = state.specs.look || {};
-  const titles = { grid: t("Grid background"), light: t("Panel light") };
+  const titles = { grid: t("Grid background"), light: t("Panel light"), dust: t("Depth dust") };
   const about = {
     grid: t("thin lines behind the widgets, as on SPUR II's screens"),
     light: t("one light for the whole panel: it glints on frames and sweeps across at start, on the hour, on a new track and after a tube or entrance"),
+    dust: t("fine grains fall from the elements into the depth behind the panel; drawn in video mode and here, not on a panel that is sent pictures"),
   };
   const fields = [];
   for (const [block, spec] of Object.entries(blocks)) {
@@ -1237,15 +1250,16 @@ function buildLookFields() {
     fields.push(el("h2", { class: "section-title", text: titles[block] || fieldLabel(block) }));
     fields.push(field(t("in this theme"), el("label", { class: "check" }, toggle, t("on")), about[block]));
     if (!settings) continue;
+    const change = (key) => (value) => {
+      commit(`look:${block}:${key}`);
+      theme.look[block] = { ...theme.look[block], [key]: value };
+      scheduleRender();
+    };
     for (const [key, [kind, fallback]] of Object.entries(spec)) {
-      const onChange = (value) => {
-        commit(`look:${block}:${key}`);
-        theme.look[block] = { ...theme.look[block], [key]: value };
-        scheduleRender();
-      };
       const hint = LOOK_HINTS[`${block}:${key}`];
-      fields.push(field(fieldLabel(key), controlFor(key, kind, settings[key] ?? fallback, onChange), hint ? hint() : null));
+      fields.push(field(fieldLabel(key), controlFor(key, kind, settings[key] ?? fallback, change(key)), hint ? hint() : null));
     }
+    if (block === "dust") fields.push(...dustLists(settings, change));
   }
   return fields;
 }
@@ -1289,6 +1303,95 @@ function buildModuleThemeFields() {
     field(t("numbers font"), fontInput(style.display_font, setStyle("display_font"))),
     field(t("labels font"), fontInput(style.text_font, setStyle("text_font"))),
   ];
+}
+
+// The dust's two lists, which the specs do not carry as single values: its colours and
+// the areas that have dust or have none.
+function dustLists(dust, change) {
+  const limits = state.specs.look_limits?.dust || { colors: 8, areas: 64 };
+  const names = Object.keys(state.theme.palette || {});
+  const colour = (v) => /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(v) || (v.startsWith("@") && names.includes(v.slice(1)));
+  const colours = el("input", {
+    type: "text",
+    value: (dust.colors || []).join(", "),
+    placeholder: t("each from its element"),
+    onchange: (event) => {
+      const list = event.target.value.split(",").map((c) => c.trim()).filter(Boolean);
+      const bad = list.find((c) => !colour(c));
+      if (bad || list.length > limits.colors) return setStatus(t("Not a usable colour list: {text}", { text: bad || event.target.value }), "warn");
+      change("colors")(list);
+    },
+  });
+  return [
+    field(t("dust colours"), colours, t("empty: each grain takes the colour of the element it falls from; else #rrggbb or @name, separated by commas")),
+    field(t("dust areas"), areasInput(dust.areas || [], change("areas"), limits.areas), t("rectangles; with a \"dust here\" area there is dust only inside, else everywhere but in a \"no dust\" area")),
+  ];
+}
+
+// Rectangles for the dust: where it may fall, or where it may not.
+function areasInput(areas, onChange, limit) {
+  const box = el("div", { class: "rules" });
+  const redraw = () => {
+    box.replaceChildren(
+      ...areas.map((area, i) =>
+        el(
+          "div",
+          { class: "rules" },
+          el(
+            "div",
+            { class: "quad" },
+            ...["x", "y", "w", "h"].map((key) =>
+              field(fieldLabel(key), numberInput(area[key], (v) => {
+                area[key] = Math.max(key === "w" || key === "h" ? 1 : -9999, v ?? 0);
+                onChange(areas);
+              })),
+            ),
+          ),
+          el(
+            "div",
+            { class: "row" },
+            el(
+              "select",
+              {
+                onchange: (e) => {
+                  area.dust = e.target.value === "yes";
+                  onChange(areas);
+                },
+              },
+              el("option", { value: "yes", text: t("dust here"), selected: area.dust !== false }),
+              el("option", { value: "no", text: t("no dust here"), selected: area.dust === false }),
+            ),
+            el("button", {
+              type: "button",
+              class: "small danger",
+              text: "✕",
+              title: t("Remove area"),
+              onclick: () => {
+                areas.splice(i, 1);
+                onChange(areas);
+                redraw();
+              },
+            }),
+          ),
+        ),
+      ),
+      areas.length < limit
+        ? el("button", {
+            type: "button",
+            class: "small",
+            text: t("+ area"),
+            onclick: () => {
+              const [width, height] = state.size;
+              areas.push({ x: 0, y: 0, w: Math.round(width / 2), h: height, dust: false });
+              onChange(areas);
+              redraw();
+            },
+          })
+        : null,
+    );
+  };
+  redraw();
+  return box;
 }
 
 // Messages from services (toasts): where, how long, which kinds not, and their look.
