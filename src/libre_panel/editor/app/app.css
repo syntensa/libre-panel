@@ -279,7 +279,7 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
+  min-width: 0;
 }
 
 .theme-name {
@@ -296,7 +296,12 @@ a:hover {
   font-size: 15px;
 }
 
+.theme-name {
+  min-width: 0;
+}
+
 .theme-name span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -312,6 +317,7 @@ a:hover {
 
 .unsaved {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 6px;
   font-size: 12px;
@@ -349,24 +355,72 @@ a:hover {
 
 .search-trigger.wide {
   width: 260px;
-  min-width: 150px;
-  flex-shrink: 1;
+  min-width: 104px;
   gap: 10px;
   font-size: 14px;
 }
 
 .search-trigger.wide .search-trigger-text {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+/* In a narrow window what can give way does, in this order: the search field, the theme's
+   name, the text of the panel chip; the tabs, the undo buttons and "To the panel" stay. */
 .topbar > * {
   flex-shrink: 0;
 }
 
-.topbar > .search-trigger.wide,
 .topbar > .topbar-flex {
   flex-shrink: 1;
+}
+
+.topbar > .search-trigger.wide {
+  flex-shrink: 4;
+}
+
+.topbar > .panel-chip {
+  flex-shrink: 2;
+}
+
+.topbar > .theme-title {
+  flex-shrink: 1;
+  min-width: 90px; /* the name stays readable, as far as a line can be made out of it */
+}
+
+@media (max-width: 1360px) {
+  .topbar {
+    gap: 12px;
+  }
+
+  .tabs {
+    margin-left: 4px;
+  }
+
+  /* the search field without a hint of its keys is a button of the size of the others */
+  .search-trigger:not(.wide) {
+    width: 34px;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .search-trigger:not(.wide) .kbd,
+  .unsaved-text {
+    display: none;
+  }
+
+  .unsaved {
+    padding: 8px;
+  }
+}
+
+/* the window's smallest size (1100 px): the brand is its icon, the chip a dot and a name */
+@media (max-width: 1180px) {
+  .brand span,
+  .panel-chip-detail {
+    display: none;
+  }
 }
 
 .search-trigger-text {
@@ -418,10 +472,12 @@ a:hover {
 }
 
 .panel-chip-name {
+  flex-shrink: 0;
   font-weight: 600;
 }
 
 .panel-chip-detail {
+  min-width: 0;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;

@@ -744,6 +744,40 @@ def test_the_app_opens_without_breaking_its_rules(app_url):
         assert current.inner_text() == "About Libre Panel"
 
 
+def header_overflow(page):
+    """The parts of the header that reach beyond the window (their classes)."""
+    return js(
+        page,
+        """(() => [...document.querySelectorAll('.topbar > *')]
+          .filter((el) => el.getBoundingClientRect().right > innerWidth + 0.5)
+          .map((el) => el.className))()""",
+    )
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
+def test_the_header_fits_a_small_window_in_either_language(background, language):
+    """At 1280 px, and at the window's smallest 1100, every part of the header is in the window
+    with unsaved changes, a theme name of some length and the running panel's chip: the search
+    field, the name and the chip's text give way, the gear and "To the panel" stay."""
+    from libre_panel import i18n
+
+    app, url = background
+    i18n.set_language(language)
+    with browser_page(url, "design", size=(1280, 800), allow=PICTURE) as page:
+        js(page, "window.libre.doc.edit('n', (theme) => { theme.name = 'A theme with a name'; })")
+        for size in ((1280, 800), (1100, 700)):
+            page.set_viewport_size({"width": size[0], "height": size[1]})
+            for view in ("design", "look", "live", "settings", "home"):
+                page.goto(f"{url}#/{view}")
+                page.wait_for_selector(".view > *")
+                assert header_overflow(page) == [], (size, view)
+        # what gives way keeps its name: the unsaved mark has one without its words
+        page.goto(f"{url}#/look")
+        page.wait_for_selector(".look-side")
+        assert page.locator(".unsaved").get_attribute("aria-label")
+        assert page.locator(".gear").is_visible() and page.locator(".btn-apply").is_visible()
+
+
 def test_select_move_undo_redo(page):
     box = page.locator('.overlay .box[data-id="cpu-ring"]').bounding_box()
     start = (widget(page, "cpu-ring")["x"], widget(page, "cpu-ring")["y"])

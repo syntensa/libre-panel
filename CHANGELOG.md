@@ -628,6 +628,11 @@
   is read from), the themes read it, and the demo has it as it has
   `gpu.temp`. A test keeps every key the SPUR themes read from the hardware
   to what the source makes from real output
+- The app's header fits a window of 1280 px, and the window's smallest 1100, with
+  unsaved changes, a longer theme name and German texts: the gear and *To the panel*
+  were pushed out of the window. The search field, the theme's name and the text of the
+  panel chip give way (the *Not saved* mark keeps its dot), and the brand is its icon at
+  the smallest size
 
 **Changes**
 - The theme a new install starts with depends on the panel: Lumen on the 1920×480 bars
