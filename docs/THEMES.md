@@ -106,6 +106,13 @@ else while the weather is off. Several conditions, separated by commas, must
 all hold: `"needs": "cpu.load, !gpu.load"`. Themes that use it fit each PC
 without editing.
 
+A condition may also compare a reading with a number: `"needs": "media.playing=1"`
+shows a widget only while a track plays, `"cpu.temp>80"` only while the processor
+is hot (`=`, `==`, `!=`, `>`, `>=`, `<`, `<=`). A reading that is no number
+never holds, and `!` in front says the opposite. A state that a service has
+taken back (`null`) has no value, so `"needs": "downloads"` is true only while
+something downloads.
+
 Text-like widgets share `font` (empty = the theme font), `font_size`, `color`,
 `align` (`left`, `center`, `right`; `x` is the left edge, centre or right edge
 accordingly; `y` is the top of the line), `letter_spacing` (pixels, also
@@ -128,19 +135,20 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `fan` | `sensor`, `w`, `h`, `color`, `max_rpm`, `frame` | a fan that turns with its speed (default `gpu.fan`), see [Fans](#fans) |
 | `image` | `src`, `w`, `h`, `fit`, `radius`, `slides`, `seconds` | a picture from the theme folder, or one a sensor source has (`@media.cover`: the album cover); `w`/`h` 0 = original size; `fit` `stretch`, `contain` or `cover`; `slides`: more pictures, one per line (`photos/*.jpg` takes a folder), each shown `seconds` |
 | `weather` | `field`, `format`, `fallback` | `temperature`, `apparent_temperature`, `humidity`, `wind_speed`, `description`, `code` |
-| `icon` | `icon`, `sensor`, `size`, `color`, `stroke` | line icons: cpu, gpu, ram, disk, network, download, upload, temperature, fan, power, clock, sun, moon, cloud, partly, rain, snow, storm, fog, humidity, wind, battery, plug, list, grid, signal — and `weather`, which follows the live weather, or the code in `sensor` (e.g. `weather.day.1.code`), by day or night |
+| `icon` | `icon`, `sensor`, `size`, `color`, `stroke` | line icons: cpu, gpu, ram, disk, network, download, upload, temperature, fan, power, clock, sun, moon, cloud, partly, rain, snow, storm, fog, humidity, wind, battery, plug, list, grid, signal, play, pause, up, down — and `weather`, which follows the live weather, or the code in `sensor` (e.g. `weather.day.1.code`), by day or night |
 | `symbol` | `sensor`, `size`, `color`, `moving`, `offset` | a weather symbol that moves (default `weather.code`), see [Weather symbols](#weather-symbols) |
+| `downloads` | `state`, `w`, `h`, `font`, `label_font`, `color`, `muted`, `color2`, `done`, `background`, `empty` | a download as the Studio's inset shows it: name, progress, rate, time left and the speed of the last minutes; it reads the state of the `downloads` service, see [Downloads](#downloads) |
 | `calendar` | `w`, `h`, `font`, `font_size`, `color`, `color2`, `muted`, `first_day` | the month as a grid of days, today marked in `color2`; weekday names in `muted` and the language; `first_day` `monday` or `sunday` |
 | `list` | `w`, `h`, `items`, `style`, `columns`, `max_items`, `sort`, `format`, `detail`, `detail_format`, `min`, `max`, `scale`, `levels`, `font`, `font_size`, `label_font`, `uppercase`, `color`, `muted`, `color2`, `background`, `empty`, `color_rules` | readings found by name or pattern, as many as fit, see [Lists](#lists) |
 | `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur`, `ridge` | cards, frames, separators; `backdrop_blur` gives frosted glass, `ridge` a ridge (see [Look and finish](#look-and-finish)) |
-| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort` | a building block on the grid, see [Modules](#modules) |
+| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `moving`, `hold`, `change` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
 
 `scale` is `linear`, `sqrt` or `log`: the latter two keep small values visible
 on huge ranges such as network rates.
 
-`bar`, `gauge`, `graph`, `icon`, `text`, `metric`, `clock`, `weather`,
-`countdown` and `module` also take `finish`: how their shape is drawn, see
-[Look and finish](#look-and-finish).
+`bar`, `gauge`, `graph`, `icon`, `symbol`, `downloads`, `text`, `metric`,
+`clock`, `weather`, `countdown` and `module` also take `finish`: how their
+shape is drawn, see [Look and finish](#look-and-finish).
 
 `color_rules` change the colour by value; the highest matching threshold wins
 (and replaces a gradient). Crossing a threshold fades the colour in a fifth
@@ -282,6 +290,39 @@ draws every second frame for free. Small symbols (under 120 px) move a little
 quicker than big ones: the paths are the same share of the size, but of a third of
 the pixels.
 
+### Downloads
+
+A `downloads` widget draws a download as the inset of SPUR II's Studio screen
+does. At the top stand the phase (Download, Paused, Installation, Done), the
+source (Steam or Browser) and, to the right, the name, with `+2` where more
+downloads run; under them a progress, and under that two readings: the rate and
+the time left (or, where the time is not known, what is loaded), and the loaded
+amount against the whole (`9.3 / 24.1 GB`, with a `≈` in front where it is
+worked out from the rate). A finished download shows its size and how long it
+took, one that is being installed what it loaded and how long it took. On the
+right the rate of the last three minutes is a curve that grows from its bottom
+edge, on a scale of its own highest value.
+
+It reads the state that the built-in `downloads` service publishes
+([Plugins](PLUGINS.md#the-downloads-state)); `state` names another state of that
+shape. Where nothing downloads it draws nothing, or `empty` (for example "No
+download running"). A state that is not what the service sends (a missing or odd
+field) is read as far as it goes: the widget never fails.
+
+- The progress is the share of `total` that is loaded, in `color2`; `done`
+  colours a finished download and `muted` a paused one. A download of unknown
+  size (a browser's) has no share: a stretch of light runs to and fro in the
+  groove, and stands while it is paused. `background` is the groove.
+- `font` sets the heading and the numbers, `label_font` the names, `color` the
+  numbers and `muted` their names.
+- The card is laid out in the numbers of the inset (596 × 130 px) and scaled to
+  `w` × `h`. A box that is less than 2.4 times as wide as it is high puts the
+  graph under the readings and the name on a line of its own, so a tall
+  card is as legible as a wide one.
+- `finish` `lit` makes the progress light in its groove (`glow` its glow), as
+  a lit bar; the default draws a flat bar. Everything but a running stretch is
+  drawn once per state (the service publishes one a second) and kept.
+
 ## Modules
 
 A module is a building block that fills cells of the theme's grid and lays
@@ -325,6 +366,12 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `music` | what is playing: cover, title, artist, album, progress and times; "Nothing playing" otherwise | |
 | `agenda` | the next events of your calendars, the one going on marked; two columns when long | |
 | `game` | the frame rate of the game being played, its 1% lows and frame time; the history when long or big; "No game running" otherwise ([PresentMon](CONFIGURATION.md#more-sensor-sources)) | |
+| `playback` | the playback card of SPUR II's Studio screen: cover, state, title, artist, app and progress ([Cards](#cards)); the music module where it is small | |
+| `forecast` | the weather card of the Studio screen: a moving symbol, the temperature and the day's range, the details, the rain and the sun, the next hours ([Cards](#cards)); the weather module where it is small | |
+| `download` | the download card: the Studio's inset for a download ([Cards](#cards)); "No download running" otherwise | |
+| `instrument` | a ring with its number inside and the readings of the part beside or below it ([Cards](#cards)) | `cpu`, `gpu`, `mem`, `disk` |
+| `cards` | a slot that shows one of several cards (`items`) and changes with the ignition line ([Cards](#cards)) | `items` |
+| `netcard` | a slot of a download card and the network card ([Cards](#cards)) | |
 
 - `col`, `row` place the module, `cols`, `rows` give its size in cells. A
   module that would reach past the grid is moved in.
@@ -339,9 +386,80 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
   columns (1–6, default 3).
 - `items` (temps, drives, values): the readings to show, written as for a
   [list](#lists); empty shows the module's own. For `world` the places, for
-  `image` the pictures.
+  `image` the pictures, for `cards` the cards.
 - `timezone` (analog), `target` (countdown), `seconds` (image): see the table.
 - Labels follow the language: "Temp" reads "Temp." in German.
+
+### Cards
+
+The cards of SPUR II's Studio screen are modules. A card is laid out in the numbers
+of the card it comes from (376 px tall on the 1920 × 480 bar) and scaled with its
+module, so it looks as that card does at its size. Where the module is too small or
+too narrow for that, the older module of its kind takes over: the weather card is
+the weather module, the playback card the music module, the network card the
+network module. Cards are lit by themselves: a module's `finish` is `auto` (its
+kind's own: `lit` for a card, flat for the others), and the theme may name one.
+Values are light in their grooves, the weather symbols are lit bodies, and frames
+are flat thin lines in their colour: a card has no ridge, no bevel and no trough.
+
+- **`playback`** (3 × 2): the cover (`media.cover`; a note where there is none),
+  a sign and a word for the state (*Now playing* or *Paused*), the title and the
+  artist, the app that plays it with its icon (`media.app_icon`) and name, the
+  progress (`media.progress`) with the time played and the length. Without a track:
+  a note and "Nothing playing".
+- **`forecast`** (3 × 2): a moving symbol ([Weather symbols](#weather-symbols)),
+  the temperature with the day's high and low, the sky, how it feels, the wind and
+  the humidity, the rain of the next two hours (`weather.rain.text`, in the `gpu`
+  colour where it will rain), the sun (`sun.set` by day, `sun.next_rise` by night),
+  and under them the next hours as columns: time, symbol, temperature and the
+  chance of rain as a bar. As many hours fit as the width allows, `step` hours apart
+  (3); `moving` off lets the symbols stand. Without weather it is a calendar sheet.
+- **`instrument`** (1 × 2): a ring with the load of `source` (`cpu`, `gpu`, `mem`,
+  `disk`) as light in its groove, the number inside with a small unit, the name
+  under it and the part's readings (temperature, power, clock ...) as rows, as many
+  as fit; a wide module puts the name and rows beside the ring. The temperature
+  goes warm and hot.
+- **`download`** (2 × 1): the [download widget](#downloads) in a card, with the
+  `net` colour.
+- **`netcard`** (2 × 1): a slot of the download card and **`net`**, the network
+  as the Studio's NET section has it: UP and DOWN with the rate beside them and the
+  history of both, the upload above a line, the download hanging below it.
+
+**Slots.** `cards` holds the cards its `items` name, one per line (`playback`,
+`forecast`, `download`, `instrument`, `net`, ... any module kind but a slot;
+default `playback` and `forecast`), and shows the first that has something to
+show, else the first one in its empty look:
+
+| card | has something to show |
+|---|---|
+| `playback`, `music` | a track plays, or was paused less than `hold` minutes ago (2): a paused track stays, you will want it again |
+| `forecast`, `weather` | the weather is there (`weather.temperature`) |
+| `download` | a download runs (a finished one for 6 s) |
+| any other | always |
+
+A line brings its own rule after `if`: `forecast if weather.temperature` or
+`playback if media.playing=1, !game.fps`: conditions as `needs` has them, separated
+by commas; the rule replaces the card's own. A line that names no card is left
+out, `#` starts a comment.
+
+**A change** takes `change` seconds (0.6) and moves as the Studio screen does: a line
+of light ignites at the slot's top edge, the card on show rolls up into it, and the
+new card rolls down out of it. What the old card shows while it rolls up is what it
+showed last: its track is gone from the readings, its words are not. The time is the
+frame's planned time, so a change takes as long at 50 frames a second as at 5; on a
+panel that gets one picture a second it is a cut. A change that is under way is
+finished before the next begins.
+
+The slot's frame is a thin flat line in the colour of the card on show: the colour
+that carries the cover, the weather's (the sun's by day, the clouds' by night, rain's,
+snow's, a storm's, grey for overcast), the network's, else `accent`; `color` sets one
+for all cards. It changes its colour over half a second, also for a new track. With
+`"style": {"card": "flat"}` or `"none"` a slot has no frame line, only the light.
+
+Only the card on show is drawn. Every card of a slot is made once with the first
+frame, so the first change does not stall the panel; pieces are kept as for any
+widget. Both paths work: video mode plays the change at the panel's frame rate and
+the picture-a-second path cuts.
 
 **The grid.** `"grid": {"columns": 0, "rows": 0, "gap": 0, "margin": 0}`; 0
 means automatic: cells of about half the panel's short side (8×2 on a 9.2"
@@ -485,8 +603,11 @@ its colour, lying in a groove (the widget's `background`), its scale.
   from Blender renders and coloured: clouds and the moon in the icon's
   `color`, the sun and bolts in the palette's `warn`, rain in `accent`, snow
   in `text`; fog is bands of mist. Other icons stay line icons.
+- A `downloads` widget's progress is light in its groove, as a bar's.
 - A `module` hands its finish to its parts: a weather module with
-  `"finish": "lit"` shows a lit symbol, a ring module a lit ring.
+  `"finish": "lit"` shows a lit symbol, a ring module a lit ring. The default for
+  a module is `auto`: its kind's own, which is `lit` for a [card](#cards) and flat
+  for the rest.
 
 Where light does not read, a widget is drawn flat: bars and rings thinner
 than 2 px, icons under 16 px. A finish a type does not have (`lit` on a
