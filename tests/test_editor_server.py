@@ -6,8 +6,10 @@ import tomllib
 from types import SimpleNamespace
 
 import pytest
+from editor_token import token_of
 from fake_hardware import PC, TIDY
 
+from libre_panel.editor import access
 from libre_panel.editor.server import make_server
 from libre_panel.sensors import hardware
 from libre_panel.theme.model import find_theme, load_theme
@@ -26,12 +28,14 @@ def server():
 
 
 def request(port, method, path, body=None, headers=None, host=None):
+    """A request as the app makes it: with the token of the server on ``port``, unless
+    ``headers`` says otherwise (a header given as None is left out)."""
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
-    hdrs = {"Host": host or f"127.0.0.1:{port}"}
+    hdrs = {"Host": host or f"127.0.0.1:{port}", access.HEADER: token_of(port)}
     if method == "POST":
-        hdrs["X-Libre-Panel"] = "1"
         hdrs["Content-Type"] = "application/json"
     hdrs.update(headers or {})
+    hdrs = {name: value for name, value in hdrs.items() if value is not None}
     data = body if isinstance(body, bytes) or body is None else json.dumps(body).encode()
     conn.request(method, path, body=data, headers=hdrs)
     response = conn.getresponse()
@@ -659,3 +663,30 @@ def test_the_sensor_list_has_the_three_names(server):
     status, sensors = request(server, "GET", "/api/sensors")
     keys = {sensor["key"] for sensor in sensors}
     assert status == 200 and {"cpu.name", "gpu.name", "mem.name"} <= keys
+
+
+def test_on_windows_the_port_is_this_servers_alone():
+    """SO_REUSEADDR on Windows lets another program bind the port and read the token."""
+    from libre_panel.editor.server import hold_port
+
+    class Socket:
+        def __init__(self):
+            self.options = []
+
+        def setsockopt(self, *option):
+            self.options.append(option)
+
+    import socket
+
+    sock = Socket()
+    exclusive = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
+    if exclusive is None:  # not Windows: the constant is not there to set
+        socket.SO_EXCLUSIVEADDRUSE = -5
+    try:
+        assert hold_port(sock, "win32") is False
+        assert sock.options == [(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)]
+    finally:
+        if exclusive is None:
+            del socket.SO_EXCLUSIVEADDRUSE
+    linux = Socket()
+    assert hold_port(linux, "linux") is True and linux.options == []

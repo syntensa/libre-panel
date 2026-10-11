@@ -18,6 +18,10 @@ from libre_panel.i18n import t
 
 log = logging.getLogger(__name__)
 
+# Why "auto" left the video mode off, as last logged: kept per process, for the default driver
+# makes a new display each time it looks for a panel (every 5 s while one cannot be opened).
+_told = ""
+
 SERIAL_DRIVERS = {
     "serial-a": "libre_panel.devices.turing_rev_a:RevADisplay",
     "serial-b": "libre_panel.devices.turing_rev_b:RevBDisplay",
@@ -76,7 +80,6 @@ class TurzxDisplay(Display):
         super().__init__(config)
         self.model = find_model(config.model)
         self._impl: Display | None = None
-        self._told = ""  # why "auto" left the video mode off, as last logged
 
     def open(self) -> None:
         if self.model is None:
@@ -87,6 +90,7 @@ class TurzxDisplay(Display):
         self._impl, self.model = impl, impl.model
 
     def _driver(self, model: PanelModel | None, configured: bool = True) -> Display:
+        global _told
         protocol = model.protocol if model else "usb-turing"
         if protocol == "usb-turing":
             video = self.config.video
@@ -97,9 +101,9 @@ class TurzxDisplay(Display):
                 probed = present_model()
             on, missing = video_mode(video, probed)
             told = "; ".join(missing)
-            if told and told != self._told:
+            if told and told != _told:
                 log.info("video mode off: %s", told)
-            self._told = told
+            _told = told
             if on:
                 from libre_panel.devices.turzx_video import TurzxVideoDisplay as Impl
             else:

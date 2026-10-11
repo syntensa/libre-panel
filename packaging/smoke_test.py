@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -30,11 +31,21 @@ def wait(check, seconds, what):
     raise SystemExit(f"FAIL: {what} (after {seconds} s)")
 
 
+# The app's server answers only requests with its access token (editor/access.py). The app
+# writes it for the programs of its user into a file in the settings folder, as `libre-panel
+# quit` reads it.
+TOKEN = {"value": ""}
+
+
+def read_token(home):
+    return json.loads((home / "private" / "editor.json").read_text(encoding="utf-8"))["token"]
+
+
 def api(url, action=None):
     request = urllib.request.Request(url + "api/app")
+    request.add_header("X-Libre-Panel", TOKEN["value"])
     if action:
         request.data = json.dumps({"action": action}).encode()
-        request.add_header("X-Libre-Panel", "1")
         request.add_header("Content-Type", "application/json")
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # local, no proxy
     with opener.open(request, timeout=10) as response:
@@ -42,9 +53,20 @@ def api(url, action=None):
 
 
 def fetch(url):
+    request = urllib.request.Request(url, headers={"X-Libre-Panel": TOKEN["value"]})
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # local, no proxy
-    with opener.open(url, timeout=10) as response:
+    with opener.open(request, timeout=10) as response:
         return response.read()
+
+
+def refused(url):
+    """Whether the server refuses a request without the token (403)."""
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # local, no proxy
+    try:
+        opener.open(url, timeout=10).read()
+    except urllib.error.HTTPError as error:
+        return error.code == 403
+    return False
 
 
 PLUGIN = """
@@ -88,6 +110,9 @@ def main(command):
             info = wait(lambda: json.loads((home / "instance.json").read_text()), 90, "instance")
             url = info["editor"]
             print("editor:", url)
+            TOKEN["value"] = wait(lambda: read_token(home), 10, "access token file")
+            if not refused(url + "api/app"):
+                raise SystemExit("FAIL: the server answered a request without its access token")
             state = wait(lambda: api(url)["panel"]["state"] == "showing" and api(url), 60, "frames")
             print("panel:", state["panel"])
             wait(frame.exists, 10, "frame file")

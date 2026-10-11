@@ -10,8 +10,10 @@ from types import SimpleNamespace
 import pytest
 
 from libre_panel import window
+from libre_panel.editor import access
 
 URL = "http://127.0.0.1:8765/"
+TOKEN, OTHER = "T" * 43, "O" * 43  # access tokens of the app's server (editor/access.py)
 
 
 class FakeEvent:
@@ -172,6 +174,24 @@ def test_an_open_window_comes_to_the_front_on_the_view(monkeypatch):
         listener.close()
 
 
+def test_a_garbled_request_leaves_the_window_answering(monkeypatch):
+    """Anything on this machine can connect to the window's port. A line it cannot use (a
+    token that is not ASCII, a window call that fails) is refused, and the next request is
+    answered: else a second start opened a second window, and quitting could not close it."""
+    fake = FakeWindow("Libre Panel", URL)
+    listener, _shown = answering_window(fake)
+    monkeypatch.setattr(window.time, "sleep", lambda s: None)
+    info = window.running()
+    try:
+        assert not window._ask({**info, "token": "géheim"}, ["close"])
+        monkeypatch.setattr(fake, "show", lambda: 1 / 0)  # the window says no
+        assert not window._ask(info, ["focus", URL + "#/look"])
+        assert window.close_window(URL)
+        assert ("destroy",) in fake.calls
+    finally:
+        listener.close()
+
+
 def test_closing_only_a_window_of_this_server(monkeypatch):
     fake = FakeWindow("Libre Panel", URL)
     listener, _shown = answering_window(fake)
@@ -281,14 +301,127 @@ def test_cli_window_command(monkeypatch, capsys):
 def test_the_background_app_opens_its_window(monkeypatch, isolated_home):
     from libre_panel.service import EditorService
 
-    opened = []
-    monkeypatch.setattr(window, "open_window", lambda url, view, **kw: opened.append((url, view)))
+    opened, tokens = [], []
+    monkeypatch.setattr(
+        window,
+        "open_window",
+        lambda url, view, **kw: opened.append((url, view)) or tokens.append(kw["token"]),
+    )
     service = EditorService(port=0)
     try:
         url = service.open("settings")
         assert opened == [(url, "settings")]
+        assert tokens == [service.token] and service.token  # (the address has none)
     finally:
         service.stop()
+
+
+# -- the access token of the app's server (editor/access.py) -----------------------------------
+
+
+def test_the_window_process_is_told_the_token_apart_from_its_command_line(monkeypatch):
+    """Other users read a command line (Linux); the environment of a process is its user's."""
+    started = []
+    monkeypatch.setattr(window, "installed", lambda: True)
+    monkeypatch.setattr(window.subprocess, "Popen", lambda cmd, **kw: started.append((cmd, kw)))
+    assert window.open_window(URL, "design", token=TOKEN) == "window"
+    command, options = started[0]
+    assert command[-2:] == ["window", URL + "#/design"]
+    assert TOKEN not in " ".join(command) and options["env"][access.ENV] == TOKEN
+    # a start that knows none finds the token the running app wrote down for its user
+    access.publish(OTHER, 8765)
+    window.open_window(URL, "design")
+    assert started[1][1]["env"][access.ENV] == OTHER
+    window.open_window(URL + "#token=" + TOKEN, "look")  # or has it in the address it is given
+    assert started[2][1]["env"][access.ENV] == TOKEN and TOKEN not in " ".join(started[2][0])
+    access.token_file().unlink()
+    window.open_window(URL, "design")  # none to tell
+    assert started[3][1]["env"] is None
+
+
+def test_the_browser_gets_the_address_with_the_token(monkeypatch):
+    opened = []
+    monkeypatch.setattr(window.webbrowser, "open", opened.append)
+    monkeypatch.setattr(window, "installed", lambda: False)
+    window.open_window(URL, "live", token=TOKEN)
+    window.open_window(URL + "#/look&token=" + OTHER, "live")  # (the view is the one asked for)
+    access.publish(TOKEN, 8765)
+    window.open_window(URL, None)
+    access.publish(TOKEN, 9999)  # the file is about another server
+    window.open_window(URL, "home")
+    assert opened == [
+        URL + "#/live&token=" + TOKEN,
+        URL + "#/live&token=" + OTHER,
+        URL + "#token=" + TOKEN,
+        URL + "#/home",
+    ]
+
+
+def test_an_open_window_is_given_the_token_for_its_page(monkeypatch):
+    fake = FakeWindow("Libre Panel", URL)
+    listener, shown = answering_window(fake)
+    monkeypatch.setattr(window.time, "sleep", lambda s: None)
+    try:
+        assert window.open_window(URL, "design", token=TOKEN) == "focused"
+        # the page moves to the route and takes the token, which it takes out of its address
+        assert ("js", f'location.hash = "#/design&token={TOKEN}"') in fake.calls
+        assert shown["url"] == URL + "#/design"  # (the page is known by its name alone)
+        assert window.focus_window(URL, None, OTHER)  # a token alone leaves the route
+        assert ("js", f'location.hash = "#token={OTHER}"') in fake.calls
+        # another server (the app started anew): the page loads from there, with its token
+        other = "http://127.0.0.1:9999/"
+        assert window.focus_window(other, "look", TOKEN)
+        assert ("load", other + "#/look&token=" + TOKEN) in fake.calls
+        assert shown["url"] == other + "#/look"
+        # asked for a page with no token to give, it loads the page and the page asks for one
+        calls = len(fake.calls)
+        assert window.focus_window(URL)
+        assert fake.calls[calls:][0] == ("load", URL)
+    finally:
+        listener.close()
+
+
+def test_the_window_loads_the_app_with_the_token_in_its_address(monkeypatch):
+    seen = {}
+
+    def session(win):
+        seen["file"] = window._running_file().read_text()
+        seen["running"] = window.running()
+
+    fake = FakeWebview(session)
+    assert window.run_window(URL, "design", webview=fake, token=TOKEN) == 0
+    assert fake.windows[0].url == URL + "#/design&token=" + TOKEN  # (it takes it out of there)
+    assert TOKEN not in seen["file"] and seen["running"]["url"] == URL + "#/design"
+
+
+def test_the_window_finds_the_token_where_the_one_that_started_it_left_it(monkeypatch):
+    """What it is told wins; then what the address has, the environment, the file."""
+
+    def opened(url, **kwargs):
+        fake = FakeWebview()
+        assert window.run_window(url, "look", webview=fake, **kwargs) == 0
+        return fake.windows[0].url
+
+    assert opened(URL, token=TOKEN) == URL + "#/look&token=" + TOKEN
+    assert opened(URL + "#token=" + OTHER) == URL + "#/look&token=" + OTHER
+    assert opened(URL + "#token=" + OTHER, token=TOKEN) == URL + "#/look&token=" + TOKEN
+    monkeypatch.setenv(access.ENV, TOKEN)
+    assert opened(URL) == URL + "#/look&token=" + TOKEN
+    assert access.ENV not in os.environ  # what the window starts does not get it
+    access.publish(OTHER, 8765)
+    assert opened(URL) == URL + "#/look&token=" + OTHER
+    assert opened("http://127.0.0.1:9999/") == "http://127.0.0.1:9999/#/look"  # not its token
+    monkeypatch.setenv(access.ENV, TOKEN)
+    assert opened(URL, token=OTHER) == URL + "#/look&token=" + OTHER
+    assert access.ENV not in os.environ  # (taken out in any case)
+
+
+def test_a_window_without_a_backend_opens_the_browser_with_the_token(monkeypatch):
+    opened = []
+    monkeypatch.setattr(window.webbrowser, "open", opened.append)
+    monkeypatch.setattr(window, "load_backend", lambda: None)
+    assert window.run_window(URL, "settings", token=TOKEN) == 0
+    assert opened == [URL + "#/settings&token=" + TOKEN]
 
 
 def test_the_editor_command(monkeypatch):
@@ -310,11 +443,14 @@ def test_serve_opens_the_window_and_stops_with_it(monkeypatch):
     shown = []
     monkeypatch.setattr(window, "load_backend", lambda: fake)
     monkeypatch.setattr(
-        window, "run_window", lambda url, view, webview: shown.append((url, view, webview))
+        window,
+        "run_window",
+        lambda url, view, webview, token: shown.append((url, view, webview, token)),
     )
     done = threading.Event()
     thread = threading.Thread(target=lambda: (server.serve(port=0), done.set()), daemon=True)
     thread.start()
     assert done.wait(10)  # the window closed: the server stopped too
-    url, view, backend = shown[0]
+    url, view, backend, token = shown[0]
     assert url.startswith("http://127.0.0.1:") and view == "design" and backend is fake
+    assert url.endswith("/") and len(token) >= 40  # the token comes apart from the address

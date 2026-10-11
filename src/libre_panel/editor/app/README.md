@@ -6,7 +6,8 @@ Preact and htm, vendored in `vendor/` (versions and SHA-256 in `vendor/SOURCES.t
 The editor's server (`editor/server.py`) serves `index.html` at `/`, this folder at
 `/app/` and the bundled fonts at `/app/fonts/`. What the console's pages (`pages/web`)
 and plugins' editor pages share is in `editor/static/`, served at `/static/`: `kit.js`,
-`stats.js`, `editor.css` and the icon (the app itself uses only the icon).
+`stats.js`, `token.js`, `editor.css` and the icon (the app itself uses only the icon and
+`token.js`).
 
 ## What is where
 
@@ -17,7 +18,7 @@ and plugins' editor pages share is in `editor/static/`, served at `/static/`: `k
 | `core/state.js` | the one store: `store.get()`, `store.set(patch)`, `useStore(selector)`, `setPref()` |
 | `core/doc.js` | the theme being edited: `theme()`, `widgets()`, `widgetById()`, `selection()`, `setSelection()`, `edit(key, fn)`, `commit()` + `touch()`, `undo()`, `redo()`, `openDoc()` |
 | `core/actions.js` | open, save, save as, import, export, `applyToPanel()`, `adaptPanel()`, `uploadAsset()`, the panel's pages, `themeName(id)` |
-| `core/api.js` | `endpoints.*`, one function per server route |
+| `core/api.js` | `endpoints.*`, one function per server route; every request carries the run's access token (`/static/token.js` takes it from the address, `#token=…`, and keeps it for the tab), pictures have it in their address (`previewUrl`, `assetUrl`), and a request that does not go through `api()` sends `authHeaders()` |
 | `core/preview.js` | draws the theme with the real renderer, throttled; it follows `rev` by itself |
 | `core/console.js` | the console API (docs/ARCHITECTURE.md): `control.panel()`, `.sources()`, `.services()`, `.probe(kind)`, `.enableService()`, …, and the polling hooks `usePolled(load, ms)` and `useLivePicture()` |
 | `core/stats.js` | the panel's numbers (`RunStatus.stats`) as tiles: `statTiles(stats)`, and `runtime(seconds)` |

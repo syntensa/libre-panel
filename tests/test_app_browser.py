@@ -10,7 +10,15 @@ playwright = pytest.importorskip("playwright.sync_api")
 
 from playwright.sync_api import expect  # noqa: E402
 
+from libre_panel.editor import access  # noqa: E402
 from libre_panel.editor.server import make_server  # noqa: E402
+
+
+class AppUrl(str):
+    """The address of an app's server and its access token, which the browser is given apart
+    from the address (in its fragment) as the window gives it; tests add routes to the address."""
+
+    token: str | None = None
 
 
 @pytest.fixture
@@ -18,7 +26,9 @@ def app_url():
     srv = make_server(port=0)
     thread = threading.Thread(target=srv.serve_forever, daemon=True)
     thread.start()
-    yield f"http://127.0.0.1:{srv.server_address[1]}/"
+    url = AppUrl(f"http://127.0.0.1:{srv.server_address[1]}/")
+    url.token = srv.token
+    yield url
     srv.shutdown()
     srv.server_close()
     srv.editor_state.close()
@@ -56,7 +66,9 @@ def browser_page(url, view="design", strict_csp=False, size=(1440, 900), routes=
         )
         for pattern, handler in (routes or {}).items():  # stand-ins for the server's answers
             page.route(pattern, handler)
-        page.goto(f"{url}#/{view}")
+        # the token as the window brings it; a background app wrote it down for its user
+        token = getattr(url, "token", None) or access.read_token(str(url))
+        page.goto(access.with_token(f"{url}#/{view}", token))
         page.wait_for_selector(".panel-canvas .preview" if view == "design" else ".view > *")
         page.wait_for_timeout(300)
         yield page
@@ -837,6 +849,88 @@ def test_start_look_and_live_have_their_commands(app_url, isolated_home):
         expect(page.locator(".palette-item.active")).to_contain_text("Show Slate on the panel")
         page.keyboard.press("Enter")
         assert wait_for(lambda: load_config().theme == "slate")
+
+
+# -- the access token (editor/access.py): it comes in the address and leaves it ----------------
+
+KEPT = "sessionStorage.getItem('libre-panel-token')"
+
+
+def test_the_token_comes_in_the_address_and_leaves_it(app_url):
+    """The window gives it after a ``#``; the page keeps it for its tab and takes it out of the
+    address, where a browser would show it, keep it in its history and give it to a bookmark."""
+    with browser_page(app_url, "look") as page:
+        assert js(page, "location.hash") == "#/look"  # (it was ``#/look&token=...``)
+        assert js(page, KEPT) == app_url.token
+        assert js(page, "window.libre.store.get().ready") is True  # so the requests were let in
+        assert js(page, "window.libre.store.get().themes.length") > 0
+        # a reload has no token in its address and goes on: the tab has it
+        page.reload()
+        page.wait_for_function("window.libre.store.get().ready")
+        assert js(page, KEPT) == app_url.token
+        # a token that comes later (the window brings the new one of an app started anew)
+        # replaces the one kept, and a token alone leaves the route where it was
+        page.evaluate("sessionStorage.setItem('libre-panel-token', 'x'.repeat(43))")
+        page.evaluate(f"location.hash = '#token={app_url.token}'")
+        page.wait_for_function("location.hash === '#/look'")
+        assert js(page, KEPT) == app_url.token
+        # with a route it goes there; the token is out of the address either way
+        page.evaluate(f"location.hash = '#/home&token={app_url.token}'")
+        page.wait_for_function("location.hash === '#/home'")
+        page.wait_for_selector(".view .start")
+        page.evaluate(f"location.hash = '#token={app_url.token}&/live'")
+        page.wait_for_function("location.hash === '#/live'")
+        # and the pictures, which a header cannot be sent with, are asked for with it
+        page.goto(f"{app_url}#/home/themes")
+        page.wait_for_selector(".start.gallery .theme-card img")
+        page.wait_for_function(
+            "[...document.querySelectorAll('.theme-card img')]"
+            ".every((i) => i.complete && i.naturalWidth > 0)"
+        )
+        assert js(page, "document.querySelector('.theme-card img').src").endswith(
+            f"&token={app_url.token}"
+        )
+
+
+def test_a_page_opened_without_the_token_says_what_to_do(app_url):
+    """A bookmark of the address of an earlier run: the page is given, nothing else is."""
+    with browser_page(str(app_url), "home", allow=("/api/i18n",)) as page:
+        message = page.locator(".view-message.error").inner_text()
+        assert "could not start" in message and "Access token missing or wrong" in message
+        assert "libre-panel editor" in message
+        assert js(page, KEPT) is None and js(page, "location.hash") == "#/home"
+
+
+def test_a_page_given_the_wrong_token_says_so_too(app_url):
+    wrong = AppUrl(str(app_url))
+    wrong.token = "w" * 43
+    with browser_page(wrong, "home", allow=("/api/i18n",)) as page:
+        assert "Access token missing or wrong" in page.locator(".view-message.error").inner_text()
+        assert js(page, "location.hash") == "#/home"  # (it is out of the address all the same)
+
+
+def test_a_plugins_page_in_the_app_has_the_token_too(app_url):
+    """The page is in a frame, which shares the tab's storage: it needs no token in its address."""
+    with browser_page(app_url, "plugin/control") as page:
+        frame = page.frame_locator("iframe.plugin-frame")
+        note = frame.locator("#background-note .note")
+        note.wait_for()
+        assert "does not run the panel" in note.inner_text()  # the answer of ``status``
+        assert frame.locator(".note.error").count() == 0
+
+
+def test_the_picture_of_a_plugins_page_is_asked_for_with_the_token(background):
+    from test_service import wait_for
+
+    app, url = background
+    assert wait_for(lambda: app.panel.state()["state"] == "showing")
+    assert wait_for(lambda: app.plugin_host.shown is not None)  # a picture to show
+    with browser_page(url, "plugin/control") as page:
+        picture = page.frame_locator("iframe.plugin-frame").locator("#live")
+        picture.wait_for(state="visible")  # the page shows it when it has come
+        # (it asks for the next one at once: there is a moment with none to measure)
+        assert wait_for(lambda: picture.evaluate("img => img.naturalWidth") > 0)
+        assert "token=" in picture.get_attribute("src")
 
 
 def test_the_app_opens_without_breaking_its_rules(app_url):

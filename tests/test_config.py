@@ -465,3 +465,29 @@ def test_edit_config_makes_several_changes_in_one_write(isolated_home):
     with pytest.raises(ValueError, match="kind of change"):
         edit_config(("rename", "theme", "x"), path=path)
     assert path.read_text(encoding="utf-8") == before
+
+
+def test_a_write_that_comes_while_another_is_under_way_keeps_both(isolated_home, monkeypatch):
+    """The tray and each request of the app write config.toml from threads of their own. A
+    write that came while another was under way started from the file as it was, and the
+    one that finished last undid the other's change (and both used one temporary file)."""
+    import threading
+
+    from libre_panel import config as config_module
+    from libre_panel.config import set_config_value
+
+    path = write_default_config()
+    real_write, other = config_module._write, []
+
+    def write(target, text):
+        if not other:  # the tray sets the brightness while the app writes the rotation
+            other.append(threading.Thread(target=set_config_value, args=("device.brightness", 30)))
+            other[0].start()
+            other[0].join(0.5)  # it finishes first, unless it has to wait for this write
+        real_write(target, text)
+
+    monkeypatch.setattr(config_module, "_write", write)
+    set_config_value("device.rotate", 180)
+    other[0].join(5)
+    config = load_config(path)
+    assert (config.device.rotate, config.device.brightness) == (180, 30)

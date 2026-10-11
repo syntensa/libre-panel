@@ -32,6 +32,35 @@ def isolated_home(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def editor_tokens(monkeypatch):
+    """The token of every editor server a test starts is kept by its port (editor_token.py),
+    for the clients of the tests to send: a server answers nothing without it."""
+    import editor_token
+
+    from libre_panel.editor.server import EditorServer
+
+    made = EditorServer.__init__
+
+    def init(self, *args, **kwargs):
+        made(self, *args, **kwargs)
+        editor_token.TOKENS[self.server_address[1]] = self.token
+
+    monkeypatch.setattr(EditorServer, "__init__", init)
+    yield
+    editor_token.TOKENS.clear()
+
+
+@pytest.fixture(autouse=True)
+def not_elevated(monkeypatch):
+    """The tests run with the rights of an ordinary user, whoever runs them (a CI runner on
+    Windows is an administrator, a container is root): the settings that name a program change
+    unless a test says Libre Panel runs with the highest rights."""
+    from libre_panel.editor import access
+
+    monkeypatch.setattr(access, "elevated", lambda: False)
+
+
+@pytest.fixture(autouse=True)
 def no_installed_plugins(monkeypatch):
     """Plugins installed next to Libre Panel (a mod) stay out of the tests;
     tests install their own as folders."""

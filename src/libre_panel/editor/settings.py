@@ -27,6 +27,7 @@ from libre_panel.config import (
     log_file,
     user_themes_dir,
 )
+from libre_panel.editor import access
 from libre_panel.i18n import t
 
 log = logging.getLogger(__name__)
@@ -43,6 +44,21 @@ RESTART_PREFIXES = ("sensors.", "weather.")
 FOLDERS = ("config", "themes", "logs")
 PLACES = 6
 _WRITING = threading.Lock()  # two writes at once would each start from the same file
+# What a setting names that Libre Panel starts, loads or writes: a program (ffmpeg, PresentMon), the
+# libraries of LibreHardwareMonitor, the file a virtual panel draws to. With administrator rights
+# (root on Linux) it does that with them, so while it runs so these are not changed through the
+# server, whoever asks: they are set in config.toml, which it reads from the user's own folder.
+LOCKED_WHILE_ELEVATED = (
+    "video.ffmpeg",
+    "device.output",
+    "sensors.presentmon.path",
+    "sensors.librehardwaremonitor.dll_dir",
+)
+# An option of a service or a source is one of them when its name says it is a file or a folder.
+PATH_WORDS = (
+    "path", "dir", "folder", "file", "database", "fancontrol", "program", "exe", "command",
+    "script", "dll", "library", "output",
+)  # fmt: skip
 
 
 class SettingsError(ValueError):
@@ -150,6 +166,17 @@ def _option(name: str, value: Any, kind: str) -> Any:
             raise SettingsError(f"{name}: expected a list of texts or numbers")
         return value
     raise SettingsError(f"{name}: an option of a kind the settings do not know ({kind})")
+
+
+def names_a_path(name: str) -> bool:
+    """Whether the setting ``name`` ("video.ffmpeg", "services.cooling.database") names a
+    program, a library, a file or a folder that Libre Panel starts, loads, reads or writes."""
+    if name in LOCKED_WHILE_ELEVATED:
+        return True
+    parts = name.split(".")
+    if len(parts) == 3 and parts[0] in ("sensors", "services"):
+        return any(word in parts[2].lower() for word in PATH_WORDS)
+    return False
 
 
 def _plain(value: Any) -> Any:
@@ -364,10 +391,48 @@ class Settings:
         self._follow()
         return self.read()
 
+    @staticmethod
+    def _current(name: str, config: Config) -> Any:
+        """What config.toml makes of the setting ``name`` now, as far as a rule that locks it
+        needs to know: None for a setting that is not there."""
+        parts = name.split(".")
+        if name == "video.ffmpeg":
+            return config.device.video.ffmpeg
+        if name == "device.output":
+            return config.device.output
+        if len(parts) == 3 and parts[0] in ("sensors", "services"):
+            tables = config.sensors.options if parts[0] == "sensors" else config.services.options
+            return tables.get(parts[1], {}).get(parts[2])
+        return None
+
+    def _check_rights(self, name: str, value: Any, config: Config, default: Any = None) -> None:
+        """Refuse a change of what names a program or a file while Libre Panel runs with
+        administrator rights: it would start or write it with them. What config.toml says
+        already, said again, is no change. (A request cannot be told from the person's, so the
+        person makes such a change in config.toml, in their own folder.)"""
+        if not names_a_path(name) or not access.elevated():
+            return
+        current = self._current(name, config)
+        before = default if current is None else current
+        after = default if value is None else value
+        if after == before:
+            return
+        raise SettingsError(
+            t(
+                "While Libre Panel runs with administrator rights, {name} is not changed here: it "
+                "names a program or a file that would then be started or written with those "
+                "rights. Set it in config.toml in your settings folder; Libre Panel reads it "
+                "from there.",
+                name=name,
+            ),
+            403,
+        )
+
     def _check(self, name: str, value: Any, config: Config) -> tuple[str, Any]:
         """The change ``("value" or "unset", cleaned value)`` for a setting, or the error."""
         if name.startswith("services."):
-            return self._check_option(name, value)
+            return self._check_option(name, value, config)
+        self._check_rights(name, value, config)
         if value is None:
             if name not in UNSETTABLE:
                 raise SettingsError(f"{name}: cannot be taken out")
@@ -377,8 +442,7 @@ class Settings:
             raise SettingsError(f"unknown setting {name!r}")
         return "value", rule(name, value, config)
 
-    @staticmethod
-    def _check_option(name: str, value: Any) -> tuple[str, Any]:
+    def _check_option(self, name: str, value: Any, config: Config) -> tuple[str, Any]:
         """``services.<name>.<option>``, as the service's ``options`` spec says. ``null`` takes
         it out: the service's default holds again."""
         from libre_panel.plugins.loader import registry
@@ -393,6 +457,8 @@ class Settings:
         spec = next((o for o in _declared(cls) if o["key"] == option), None)
         if spec is None:
             raise SettingsError(f"{service} has no option {option!r}")
+        if spec["type"] == "string":  # (a file or a folder is a text)
+            self._check_rights(name, value, config, default=spec["default"])
         if value is None:
             return "unset", None
         return "value", _option(name, value, spec["type"])

@@ -96,7 +96,9 @@ def find_presentmon(path: str = "") -> str | None:
         found = shutil.which(name)
         if found:
             return found
-    for folder in (Path("C:/Program Files/Intel/PresentMon"), Path.home() / "Downloads"):
+    # Only where installing needs administrator rights: Libre Panel may run elevated, and a
+    # PresentMon*.exe anyone can drop into the downloads must not be started with that.
+    for folder in (Path("C:/Program Files/Intel/PresentMon"),):
         if folder.is_dir():
             matches = sorted(folder.glob("PresentMon*.exe"), reverse=True)
             if matches:

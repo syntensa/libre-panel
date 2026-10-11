@@ -307,7 +307,8 @@ def test_weather_forecast_day_names_in_german():
 
 
 def _minutely(amounts):
-    """Open-Meteo's 15-minute precipitation (mm) from 14:00 local time on."""
+    """Open-Meteo's 15-minute precipitation (mm) from 14:00 local time on; a step is the sum
+    of the 15 minutes up to its time (the step of 14:45 is the rain from 14:30 to 14:45)."""
     from datetime import datetime, timedelta
 
     start = datetime(2026, 10, 8, 14)
@@ -331,7 +332,7 @@ def test_weather_rain_starts_and_stops():
 
     from libre_panel.weather.open_meteo import forecast_readings
 
-    data = {**_forecast_data(), **_minutely([0, 0, 0, 0.4, 1.2, 0.8, 0.5, 0, 0, 0, 0, 0])}
+    data = {**_forecast_data(), **_minutely([0, 0, 0, 0, 0.4, 1.2, 0.8, 0.5, 0, 0, 0, 0])}
     # 14:32 local (the place is UTC+2): dry, rain from 14:45, counted from now
     out = forecast_readings(data, datetime(2026, 10, 8, 12, 32, tzinfo=UTC).timestamp())
     assert out["weather.rain.minutes"].value == 13 and out["weather.rain.minutes"].unit == "min"
@@ -346,6 +347,23 @@ def test_weather_rain_starts_and_stops():
     assert out["weather.hour.1.day"].value == 1  # 16:00: day
 
 
+def test_weather_rain_steps_hold_the_quarter_hour_before_their_time():
+    """Open-Meteo's 15-minute precipitation is the sum of the preceding 15 minutes: the step of
+    14:45 is the rain from 14:30 to 14:45. At 14:32 that is the quarter hour under way, and the
+    step of 14:30 is over."""
+    from datetime import UTC, datetime
+
+    from libre_panel.weather.open_meteo import forecast_readings
+
+    at_1432 = datetime(2026, 10, 8, 12, 32, tzinfo=UTC).timestamp()
+    # rain from 14:30 to 15:00 (the steps of 14:45 and 15:00): it rains now, until 15:00
+    now = {**_forecast_data(), **_minutely([0, 0, 0, 0.6, 0.6] + [0] * 7)}
+    assert forecast_readings(now, at_1432)["weather.rain.text"].value == "Rain stops in 28 min"
+    # the rain until 14:30 is over; it rains again from 14:45 (the step of 15:00)
+    over = {**_forecast_data(), **_minutely([0.6, 0.6, 0.6, 0, 0.6] + [0] * 7)}
+    assert forecast_readings(over, at_1432)["weather.rain.text"].value == "Rain in 13 min"
+
+
 def test_weather_rain_when_nothing_changes():
     from datetime import UTC, datetime
 
@@ -358,11 +376,11 @@ def test_weather_rain_when_nothing_changes():
     wet = forecast_readings({**_forecast_data(), **_minutely([1.0] * 12)}, at_1432)
     assert "weather.rain.minutes" not in wet
     assert wet["weather.rain.text"].value == "Rain for the next 2 h"
-    # the window ends at 16:30: rain at 16:30 counts, rain at 16:45 does not
-    edge = forecast_readings({**_forecast_data(), **_minutely([0] * 10 + [1.0])}, at_1432)
+    # the window ends at 16:45: rain from 16:30 counts, rain from 16:45 does not
+    edge = forecast_readings({**_forecast_data(), **_minutely([0] * 11 + [1.0])}, at_1432)
     assert edge["weather.rain.minutes"].value == 118
     assert edge["weather.rain.text"].value == "Rain in 118 min"
-    late = forecast_readings({**_forecast_data(), **_minutely([0] * 11 + [1.0])}, at_1432)
+    late = forecast_readings({**_forecast_data(), **_minutely([0] * 12 + [1.0])}, at_1432)
     assert "weather.rain.minutes" not in late
     assert late["weather.rain.text"].value == "No rain for the next 2 h"
     # an answer that ends before the two hours do says nothing about the rain
@@ -380,8 +398,8 @@ def test_weather_rain_text_in_german():
     at_1432 = datetime(2026, 10, 8, 12, 32, tzinfo=UTC).timestamp()
     i18n.set_language("de")
     try:
-        stops = forecast_readings({**_forecast_data(), **_minutely([0.5] * 3 + [0] * 9)}, at_1432)
-        starts = forecast_readings({**_forecast_data(), **_minutely([0] * 3 + [0.4] * 9)}, at_1432)
+        stops = forecast_readings({**_forecast_data(), **_minutely([0.5] * 4 + [0] * 8)}, at_1432)
+        starts = forecast_readings({**_forecast_data(), **_minutely([0] * 4 + [0.4] * 8)}, at_1432)
         dry = forecast_readings({**_forecast_data(), **_minutely([0] * 12)}, at_1432)
     finally:
         i18n.set_language("en")

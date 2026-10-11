@@ -58,6 +58,7 @@ def _log_file() -> Path:
 
 def _background(args: argparse.Namespace, use_icon: bool, open_editor: bool) -> int:
     """Drive the panel and serve the editor until Quit; one instance at a time."""
+    from libre_panel.editor import access
     from libre_panel.instance import AlreadyRunning, InstanceLock
     from libre_panel.service import BackgroundApp, running_instance
     from libre_panel.tray import run_app
@@ -70,7 +71,8 @@ def _background(args: argparse.Namespace, use_icon: bool, open_editor: bool) -> 
         url = (running_instance() or {}).get("editor")
         if not url:
             raise
-        print(t("Libre Panel is already running. Theme editor: {url}", url=url))
+        address = access.with_token(url, access.read_token(url))  # the way into the app
+        print(t("Libre Panel is already running. Theme editor: {url}", url=address))
         if open_editor:
             open_window(url, "home", config_path=args.config)
         return 0
@@ -172,6 +174,7 @@ def _cmd_quit(args: argparse.Namespace) -> int:
     import time
     import urllib.request
 
+    from libre_panel.editor import access
     from libre_panel.service import running_instance
 
     if not _instance_running():
@@ -180,16 +183,19 @@ def _cmd_quit(args: argparse.Namespace) -> int:
     info = running_instance() or {}
     url, pid = info.get("editor"), info.get("pid")
     if url:
+        token = access.read_token(url)  # the file the running app wrote for this user
         request = urllib.request.Request(
             url + "api/app",
             data=json.dumps({"action": "quit"}).encode(),
-            headers={"X-Libre-Panel": "1", "Content-Type": "application/json"},
+            headers={access.HEADER: token or "", "Content-Type": "application/json"},
         )
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # local, no proxy
         try:
             opener.open(request, timeout=5).read()
         except OSError as exc:
-            logging.getLogger("libre_panel").warning("quit request failed: %s", exc)
+            logging.getLogger("libre_panel").warning(
+                "quit request failed: %s%s", exc, "" if token else " (no access token to send)"
+            )
     import psutil
 
     def gone() -> bool:
@@ -221,6 +227,7 @@ def _cmd_autostart(args: argparse.Namespace) -> int:
         launch_command,
         writable_by_user,
     )
+    from libre_panel.editor import access
 
     autostart = Autostart()
     try:
@@ -233,6 +240,19 @@ def _cmd_autostart(args: argparse.Namespace) -> int:
                         "run could replace it and so get administrator rights at the next "
                         "login. Safer: install Libre Panel under Program Files.",
                         program=command[0],
+                    ),
+                    file=sys.stderr,
+                )
+            why = access.folder_risk(config_dir()) if args.elevated else ""
+            if why:
+                print(
+                    t(
+                        "Warning: with the highest rights Libre Panel runs what config.toml and "
+                        "the plugins in {folder} name, and {why}: any user who can change them "
+                        "can run a program with administrator rights. Keep the settings in your "
+                        "user folder (LIBRE_PANEL_HOME), or take the other users' rights away.",
+                        folder=config_dir(),
+                        why=why,
                     ),
                     file=sys.stderr,
                 )
@@ -281,6 +301,7 @@ def _cmd_preview(args: argparse.Namespace) -> int:
 
 
 def _cmd_editor(args: argparse.Namespace) -> int:
+    from libre_panel.editor import access
     from libre_panel.editor.server import serve
     from libre_panel.instance import AlreadyRunning, InstanceLock
     from libre_panel.service import running_instance
@@ -291,7 +312,8 @@ def _cmd_editor(args: argparse.Namespace) -> int:
     except AlreadyRunning:
         url = (running_instance() or {}).get("editor")
         if url:  # the background app already serves the editor
-            print(t("Libre Panel is already running. Theme editor: {url}", url=url))
+            address = access.with_token(url, access.read_token(url))  # the way into the app
+            print(t("Libre Panel is already running. Theme editor: {url}", url=address))
             if not args.no_browser:
                 open_window(url, "design", browser=args.browser, config_path=args.config)
             return 0

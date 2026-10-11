@@ -5,11 +5,13 @@ import json
 import time
 
 import pytest
+from editor_token import token_of
 from PIL import Image
 from test_autostart import FakeTasks
 
 from libre_panel.autostart import Autostart
 from libre_panel.config import config_dir, load_config, set_config_value
+from libre_panel.editor import access
 from libre_panel.instance import AlreadyRunning, InstanceLock
 from libre_panel.service import BackgroundApp, PanelService, running_instance
 
@@ -143,8 +145,8 @@ def call(url, method="GET", body=None, header=True):
     host = url.split("//")[1].rstrip("/")
     conn = http.client.HTTPConnection(*host.split(":"), timeout=10)
     headers = {"Host": host, "Content-Type": "application/json"}
-    if header and method == "POST":
-        headers["X-Libre-Panel"] = "1"
+    if header:  # the token of the app's editor, as the app sends it
+        headers[access.HEADER] = token_of(host.split(":")[1])
     conn.request(method, "/api/app", body=json.dumps(body) if body else None, headers=headers)
     response = conn.getresponse()
     data = json.loads(response.read())
@@ -162,6 +164,30 @@ def test_services_start_once_a_broken_config_is_fixed(app, isolated_home):
     path.write_text(fixed, encoding="utf-8")
     assert wait_for(lambda: "notices" in app.services.running, 15)
     assert wait_for(lambda: app.panel.state()["state"] == "showing")
+
+
+@pytest.mark.parametrize(
+    ("text", "said"),
+    [
+        (b'device = "turing-5"\n', "device"),  # the model where its table belongs
+        (b"weather = true\n", "weather"),
+        (b'sensors = "psutil"\n', "sensors"),
+        (b'[sensors]\nproviders = "psutil"\n', "sensors.providers"),
+        (b"[sensors]\nproviders = 5\n", "sensors.providers"),
+        ('[weather]\nplace = "Café"\n'.encode("cp1252"), "UTF-8"),  # an old editor's encoding
+    ],
+)
+def test_the_app_starts_with_a_config_of_the_wrong_shape_and_says_what_is_wrong(
+    app, isolated_home, text, said
+):
+    """A table or a list of the wrong kind, or a file that is not UTF-8, ended the app at its
+    start: such a config.toml is an error of the config like any other, which the panel
+    shows until the file is fixed."""
+    (isolated_home / "config.toml").write_bytes(text)
+    app.start()
+    assert wait_for(lambda: app.panel.state()["state"] == "error")
+    assert said in app.panel.state()["detail"]
+    assert app.brightness() is None and app.active_theme() is None  # the tray's menu
 
 
 def test_a_page_has_the_app_follow_config_toml_also_while_the_panel_is_paused(app, isolated_home):

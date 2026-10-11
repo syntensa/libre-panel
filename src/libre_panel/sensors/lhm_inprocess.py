@@ -534,7 +534,10 @@ class InProcessSource:
         except Exception as exc:  # noqa: BLE001 - LibreHardwareMonitor raises .NET exceptions
             if not node.failed:
                 node.failed = True
-                log.warning("LibreHardwareMonitor could not update %s: %s", node.name, exc)
+                # the kind of part, not its name (the log goes into issues)
+                log.warning(
+                    "LibreHardwareMonitor could not update a part (%s): %s", node.hardware_type, exc
+                )
             return
         node.failed = False
 
@@ -625,7 +628,7 @@ def check(
             try:
                 node.update()
             except Exception:  # noqa: BLE001 - one chip failing is not the question
-                log.debug("could not update %s", node.name, exc_info=True)
+                log.debug("could not update a part (%s)", node.hardware_type, exc_info=True)
         state = ring0_state(nodes)
     except Exception as exc:  # noqa: BLE001 - .NET exceptions come as all kinds
         lines.append(f"could not be opened: {type(exc).__name__}: {exc}")

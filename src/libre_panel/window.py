@@ -10,6 +10,11 @@ WebKit, no WebView2 runtime, no desktop), the browser opens instead.
 
 The open window answers on a local port, with a token from a file only this user can
 read, so another start finds it: ``focus <token> <url>`` and ``close <token>``.
+
+The app's server wants a token of its own (editor/access.py): the window brings it to the
+page in the address, after a ``#``. It is not given to a program on its command line, which
+other users of a Linux PC can read: a window process gets it in its environment, or reads it
+from the file the running app wrote.
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from libre_panel.config import config_dir
+from libre_panel.editor import access
 from libre_panel.i18n import t
 
 log = logging.getLogger(__name__)
@@ -132,10 +138,18 @@ def _ask(info: dict[str, Any], words: list[str]) -> bool:
         return False
 
 
-def focus_window(url: str, view: str | None = None) -> bool:
-    """Bring the open window to the front, showing ``view`` of ``url``; False when none is open."""
+def _address(url: str, view: str | None, token: str | None = None) -> str:
+    """The address a window or a browser opens: ``url`` on ``view``, with the access token of
+    the app (the one given, the one in ``url``, or the one the running app wrote down)."""
+    base, inside = access.split_token(url)
+    return access.with_token(view_url(base, view), token or inside or access.read_token(base))
+
+
+def focus_window(url: str, view: str | None = None, token: str | None = None) -> bool:
+    """Bring the open window to the front, showing ``view`` of ``url``; False when none is open.
+    ``token`` is the access token of ``url``'s server, if the caller knows it."""
     info = running()
-    return bool(info) and _ask(info, ["focus", view_url(url, view)])
+    return bool(info) and _ask(info, ["focus", _address(url, view, token)])
 
 
 def close_window(url: str | None = None) -> bool:
@@ -147,22 +161,33 @@ def close_window(url: str | None = None) -> bool:
 
 
 def open_window(
-    url: str, view: str | None = "home", browser: bool = False, config_path: Path | None = None
+    url: str,
+    view: str | None = "home",
+    browser: bool = False,
+    config_path: Path | None = None,
+    token: str | None = None,
 ) -> str:
     """Show the app: the open window comes to the front (on ``view``), or a new one opens,
     or, without pywebview (or with ``browser``), the browser. Returns "focused", "window"
-    or "browser"."""
-    target = view_url(url, view)
+    or "browser". ``token`` is the access token of ``url``'s server (the running app wrote it
+    down for the programs of this user, so a caller in another process needs not know it)."""
+    base, inside = access.split_token(url)
+    target = view_url(base, view)
+    token = token or inside or access.read_token(base)
     if not browser:
-        if focus_window(url, view):
+        if focus_window(base, view, token):
             return "focused"
         if installed():
             try:
-                subprocess.Popen(window_command(target, config_path), **_detached())  # noqa: S603
+                # the token goes in the environment: a command line is for everybody to read
+                env = {**os.environ, access.ENV: token} if token else None
+                subprocess.Popen(  # noqa: S603
+                    window_command(target, config_path), env=env, **_detached()
+                )
                 return "window"
             except OSError as exc:
                 log.warning("could not open Libre Panel's window: %s", exc)
-    webbrowser.open(target)
+    webbrowser.open(access.with_token(target, token))
     return "browser"
 
 
@@ -314,9 +339,13 @@ class _Requests(threading.Thread):
                     conn.sendall(b"ok\n" if answer else b"no\n")
                 except (OSError, UnicodeDecodeError):
                     continue
+                except Exception:  # a window call that failed: this request, not the next
+                    log.debug("a request to the window failed", exc_info=True)
 
     def handle(self, words: list[str]) -> bool:
-        if len(words) < 2 or not secrets.compare_digest(words[1], self.token):
+        # as bytes: compare_digest refuses text that is not ASCII (anyone may send some)
+        given = words[1].encode("utf-8") if len(words) >= 2 else b""
+        if not given or not secrets.compare_digest(given, self.token.encode("utf-8")):
             return False
         if words[0] == "close":
             self.window.destroy()
@@ -324,13 +353,15 @@ class _Requests(threading.Thread):
         if words[0] != "focus" or len(words) != 3 or not local_url(words[2]):
             return False
         url = words[2]
+        page, _token = access.split_token(url)  # the page is shown without the token in its name
         current = self.shown["url"]
-        if view_url(url, None) == view_url(current, None) and "#" in url:
+        if view_url(page, None) == view_url(current, None) and "#" in url:
+            # the same server: the page goes to the route, and takes a new token if there is one
             route = url.split("#", 1)[1]
             self.window.evaluate_js(f"location.hash = {json.dumps('#' + route)}")
-        elif url != current:
+        elif page != current:
             self.window.load_url(url)
-        self.shown["url"] = url
+        self.shown["url"] = page
         if self.shown.get("minimized"):
             self.window.restore()
         self.window.show()
@@ -376,33 +407,40 @@ def _unregister() -> None:
         pass
 
 
-def run_window(url: str, view: str | None = None, webview: Any = None) -> int:
+def run_window(
+    url: str, view: str | None = None, webview: Any = None, token: str | None = None
+) -> int:
     """Show the app in a window on this (main) thread until it is closed. An open window
-    is brought to the front instead; without a backend the browser opens."""
-    target = view_url(url, view) if view else url
+    is brought to the front instead; without a backend the browser opens. ``token`` is the
+    access token of the app's server: else the one in ``url``, the one the process that started
+    this one passed on in its environment, or the one the running app wrote down."""
+    base, inside = access.split_token(url)
+    target = view_url(base, view) if view else base
     if not local_url(target):
         log.error("refusing to open %s in Libre Panel's window", target)
         return 2
-    if focus_window(target):
+    inherited = access.inherited_token()  # (taken out of the environment in any case)
+    token = token or inside or inherited or access.read_token(base)
+    if focus_window(target, token=token):
         return 0
     webview = webview or load_backend()
     if webview is None:
-        webbrowser.open(target)
+        webbrowser.open(access.with_token(target, token))
         return 0
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.bind(("127.0.0.1", 0))
     listener.listen(4)
-    token = secrets.token_hex(16)
+    secret = secrets.token_hex(16)  # what the other starts of the window must say
     try:
-        if not _register(listener, token, target):
+        if not _register(listener, secret, target):  # names the page, not the access token
             return 0
-        return _show(webview, target, listener, token)
+        return _show(webview, access.with_token(target, token), listener, secret)
     finally:
         listener.close()
         _unregister()
 
 
-def _show(webview: Any, url: str, listener: socket.socket, token: str) -> int:
+def _show(webview: Any, url: str, listener: socket.socket, secret: str) -> int:
     state = load_state()
     try:
         screen = webview.screens[0]
@@ -423,7 +461,7 @@ def _show(webview: Any, url: str, listener: socket.socket, token: str) -> int:
         text_select=True,
     )
     bridge._window = window
-    shown = {"url": url, "minimized": False}
+    shown = {"url": access.split_token(url)[0], "minimized": False}
 
     def resized(width: int, height: int) -> None:
         if not state["maximized"] and not shown["minimized"]:
@@ -445,7 +483,7 @@ def _show(webview: Any, url: str, listener: socket.socket, token: str) -> int:
     window.events.minimized += minimized
     window.events.restored += restored
     window.events.closed += lambda: save_state(state)
-    _Requests(listener, token, window, shown).start()
+    _Requests(listener, secret, window, shown).start()
     webview.settings["ALLOW_DOWNLOADS"] = True  # "Export" saves a theme file
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
     storage = config_dir() / "window-data"

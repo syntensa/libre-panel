@@ -14,6 +14,7 @@ from fake_sensors import show, wait_for
 
 from libre_panel.sensors import base, presentmon
 from libre_panel.sensors.presentmon import FrameCounter, JobObject, PresentMonProvider
+from libre_panel.sensors.presentmon import find_presentmon as real_find_presentmon
 
 
 @pytest.fixture(autouse=True)
@@ -744,3 +745,16 @@ def test_threads_of_a_provider_that_was_closed_are_gone(make):
         )
     )
     assert theme is not None
+
+
+def test_presentmon_is_not_looked_for_in_the_downloads(tmp_path, monkeypatch):
+    """Libre Panel may run as administrator: a PresentMon*.exe in the downloads, which any
+    program can put there, is never started without being named."""
+    downloads = tmp_path / "Downloads"
+    downloads.mkdir()
+    (downloads / "PresentMon-2.3.0-x64.exe").write_bytes(b"MZ")
+    monkeypatch.setattr(presentmon.Path, "home", staticmethod(lambda: tmp_path))
+    monkeypatch.setattr(presentmon.shutil, "which", lambda name: None)
+    assert real_find_presentmon() is None
+    named = str(downloads / "PresentMon-2.3.0-x64.exe")
+    assert real_find_presentmon(named) == named  # named in the settings: fine

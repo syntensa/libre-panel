@@ -484,6 +484,23 @@ def test_a_crop_around_an_element_keeps_its_room_inside_the_window(app_clips):
     assert app_clips.window_box(Page(), None)["width"] == app_clips.VIEWPORT[0]
 
 
+def test_the_app_of_the_clips_is_opened_with_the_token_it_wants(app_clips, panel):
+    """The editor's server answers only the token of its run (editor/access.py); the address the
+    recipes open has it after the ``#``, where the app takes it from."""
+    import json
+    import urllib.request
+
+    from libre_panel.editor import access
+
+    data, folder = panel.theme_data("layout-desk")
+    with app_clips.running(data, folder) as url:
+        base, token = access.split_token(url)
+        assert token and url == f"{base}#token={token}" and base.startswith("http://127.0.0.1:")
+        request = urllib.request.Request(base + "api/themes", headers={access.HEADER: token})
+        with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request) as answer:
+            assert any(theme["id"] == app_clips.THEME for theme in json.load(answer))
+
+
 def test_an_app_clip_is_shot_in_a_browser_and_ends_as_it_began(app_clips, encode, tmp_path):
     pytest.importorskip("playwright", reason="Playwright is not installed")
     settings = encode.Settings(quick=True, scale=0.25)  # short holds, half the density

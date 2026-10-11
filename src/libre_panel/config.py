@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+import threading
 import tomllib
 import unicodedata
 from dataclasses import dataclass, field
@@ -330,7 +331,7 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         if cfg.refresh_ms < 100:
             raise ConfigError("refresh_ms: must be at least 100")
 
-    dev = data.get("device", {})
+    dev = _expect(data.get("device", {}), dict, "device")
     cfg.device.model = _expect(dev.get("model", cfg.device.model), str, "device.model")
     if cfg.device.model != "auto":
         from libre_panel.devices.models import find_model
@@ -352,8 +353,8 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     cfg.device.port = _expect(dev.get("port", cfg.device.port), str, "device.port").strip()
     cfg.device.video = _parse_video(_expect(data.get("video", {}), dict, "video"))
 
-    sensors = dict(data.get("sensors", {}))
-    providers = sensors.pop("providers", cfg.sensors.providers)
+    sensors = dict(_expect(data.get("sensors", {}), dict, "sensors"))
+    providers = _expect(sensors.pop("providers", cfg.sensors.providers), list, "sensors.providers")
     cfg.sensors.providers = [_expect(p, str, "sensors.providers[]") for p in providers]
     if cfg.sensors.providers == _OLD_DEFAULT_PROVIDERS:
         cfg.sensors.providers = default_providers()
@@ -366,7 +367,7 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         memory_name=hardware_name(hw.get("memory_name", ""), "hardware.memory_name"),
     )
 
-    w = data.get("weather", {})
+    w = _expect(data.get("weather", {}), dict, "weather")
     cfg.weather.enabled = _expect(w.get("enabled", False), bool, "weather.enabled")
     cfg.weather.provider = _expect(w.get("provider", "open-meteo"), str, "weather.provider")
     for key in ("latitude", "longitude"):
@@ -440,6 +441,15 @@ def _parse_video(v: dict[str, Any]) -> VideoConfig:
     return video
 
 
+def _read(path: Path) -> str:
+    """config.toml's text. One saved in another encoding (an old editor's) is said as an
+    error of the config, which the app shows, like any other."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise ConfigError(f"{path}: not UTF-8 text (byte {exc.start}); save it as UTF-8") from exc
+
+
 def load_config(path: Path | None = None) -> Config:
     """Load config.toml; a missing file means all defaults."""
     path = path or config_dir() / CONFIG_FILENAME
@@ -448,7 +458,7 @@ def load_config(path: Path | None = None) -> Config:
     except OSError:
         return Config(path=path)
     try:
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        data = tomllib.loads(_read(path))
     except tomllib.TOMLDecodeError as exc:
         raise ConfigError(f"{path}: {exc}") from exc
     config = parse_config(data, path)
@@ -461,8 +471,8 @@ def theme_chosen(path: Path | None = None) -> bool:
     ``theme`` line yet, and the app asks which look the panel should have."""
     path = path or config_dir() / CONFIG_FILENAME
     try:
-        return "theme" in tomllib.loads(path.read_text(encoding="utf-8"))
-    except (OSError, tomllib.TOMLDecodeError):
+        return "theme" in tomllib.loads(_read(path))
+    except (OSError, ConfigError, tomllib.TOMLDecodeError):
         return False
 
 
@@ -724,12 +734,22 @@ def edit_config(*changes: tuple[str, str, Any], path: Path | None = None) -> Pat
     of a replaced array go with them). The new file is compared with the old one: only what
     was asked for may differ, and it has to load as a configuration. Else nothing is written
     and a :class:`ConfigError` says to edit it by hand, so a layout this cannot handle is
-    refused, never mangled. The write is atomic.
+    refused, never mangled. The write is atomic, and it waits for one under way in this
+    program (the tray and each request of the app write from threads of their own): else
+    both would start from the same file, and the last to finish would undo the other.
     """
     path = path or config_dir() / CONFIG_FILENAME
+    with _EDITING:
+        return _edit(path, changes)
+
+
+_EDITING = threading.Lock()
+
+
+def _edit(path: Path, changes: tuple[tuple[str, str, Any], ...]) -> Path:
     if not path.exists():
         write_default_config(path)
-    original = path.read_text(encoding="utf-8")
+    original = _read(path)
     try:
         before = tomllib.loads(original)
     except tomllib.TOMLDecodeError as exc:

@@ -1,13 +1,16 @@
-// The server's API (editor/server.py). Writes carry the header that browsers
-// never send cross-origin without a preflight, which the server refuses.
+// The server's API (editor/server.py). Every request carries this run's access token (the
+// header of static/token.js): the server answers nothing without it, to nobody else on this PC.
+// A picture, which an <img> asks for by itself, has the token in its address instead.
 
+import { authHeaders, withToken } from "/static/token.js";
 import { t } from "./i18n.js";
+
+export { authHeaders };
 
 /** A request; resolves to the JSON answer, rejects with the server's error text (and
  * the HTTP status as `error.status`; 0 when the server did not answer at all). */
 export async function api(method, url, body, { raw = false, signal } = {}) {
-  const options = { method, headers: {}, signal };
-  if (method !== "GET") options.headers["X-Libre-Panel"] = "1";
+  const options = { method, headers: authHeaders(), signal };
   if (body !== undefined) {
     options.body = raw ? body : JSON.stringify(body);
     options.headers["Content-Type"] = raw ? "application/octet-stream" : "application/json";
@@ -43,8 +46,9 @@ export const endpoints = {
   theme: (id) => get(`/api/themes/${enc(id)}`),
   saveTheme: (id, theme, source) => post(`/api/themes/${enc(id)}`, { theme, source }),
   assets: (id) => get(`/api/themes/${enc(id)}/assets`),
-  assetUrl: (id, path) => `/api/themes/${enc(id)}/assets/${path.split("/").map(enc).join("/")}`,
-  previewUrl: (id, width = 480) => `/api/themes/${enc(id)}/preview?w=${width}`,
+  assetUrl: (id, path) =>
+    withToken(`/api/themes/${enc(id)}/assets/${path.split("/").map(enc).join("/")}`),
+  previewUrl: (id, width = 480) => withToken(`/api/themes/${enc(id)}/preview?w=${width}`),
   uploadAsset: (id, name, bytes) =>
     api("POST", `/api/themes/${enc(id)}/assets?name=${enc(name)}`, bytes, { raw: true }),
   sensors: () => get("/api/sensors"),

@@ -22,7 +22,7 @@
 | `devices` | Panel catalog (`models`), `Display` drivers, USB/serial discovery. |
 | `plugins` | Plugin API: finding plugins (entry points, plugin folders), services and the host they talk to the panel through, modes. See [Plugins](PLUGINS.md). |
 | `services` | Libre Panel's own services, built in and off until `config.toml` lists them: `notices` (messages for the volume, tracks, limits), `game` (game mode), `autopilot` (theme rules), `devices` (drives, USB devices and controllers that come and go, Windows), `memory` (what happens at the desk in a SQLite file on this PC, and the round report after a game), `cooling` (FanControl's curves checked against what the PC did, read only) and `downloads` (Steam's and the browsers' downloads). They use only the plugin API; Steam, the programs that run and the Windows window in front are read in `steam` and `machine`, FanControl's configuration in `fancontrol` and what Windows says of its devices in `devices_windows`. |
-| `editor` | Local HTTP server (127.0.0.1 only) and the app it serves (`editor/app`: ES modules with Preact and htm, no build step). |
+| `editor` | Local HTTP server (127.0.0.1 only, and only for requests with the secret token of the run: `access`) and the app it serves (`editor/app`: ES modules with Preact and htm, no build step). |
 | `pages` | The editor's own pages, built in like the services and written with the plugin API: *Control* (live picture, numbers, sources, services, test messages, theme per mode, log) and *Autopilot* (its rules in `config.toml`). Their scripts and styles are in `pages/web`. |
 | `app` | Main loop (`MainLoop.step`, one frame at a time): sample → render → diff → send; reloads config/theme on change; works out the panel's own default theme (from `device.model`, the USB bus or the display that connects); reports its state (`RunStatus`). |
 | `meter` | How the main loop is doing: frame rate, drawing time, data rate, the video link and faults, made once a second from a ring of timings and the counters the drivers keep (`devices.base.Counters`). Nothing in it holds a lock. |
@@ -41,6 +41,12 @@
   so a new panel family is one class.
 - **Themes are untrusted input.** No code, no paths outside the theme folder,
   locked-down format strings, size limits in the editor server.
+- **The editor's server answers only the person who started Libre Panel.** It listens
+  on 127.0.0.1, which the programs of every user of the PC and any website can reach.
+  Each run makes a secret token that every request but the app's own files must carry
+  (`editor/access.py`, [the console API](#the-console-api)). Run with the highest rights, it
+  also leaves the settings that name a program or a file to `config.toml`: a request does not
+  change them.
 - **A broken part never blanks the panel.** A failing sensor or widget is
   logged and skipped.
 - **Optional features are plugins.** Anything that serves one setup (special
@@ -92,13 +98,26 @@ for each thing a screen shows or does, so a screen of any design can use them. T
 plain editor-page routes ([Plugins](PLUGINS.md#editor-pages)): the same server, the same
 rules.
 
-- **Reading** is `GET`. **Writing** is `POST`, with the header `X-Libre-Panel: 1` and a
-  JSON object as the body (`{}` when there is nothing to say). The server answers only
-  to the host name it listens on (`127.0.0.1:<port>`, `localhost:<port>`).
+- **Every request carries the run's access token** in the header `X-Libre-Panel: <token>`,
+  `GET` as much as `POST`. The token is new at every start of the server (256 random bits).
+  The window, the tray and `libre-panel editor` give it to the page in the address, after a
+  `#` (`/#token=…`), which a browser does not send; `libre-panel quit` and a window that
+  starts later read it from `private/editor.json` in the settings folder, which only the
+  user can open. A request without it or with another is answered **403**, whatever the
+  route, a route that does not exist included; only the app's own files (`/`, `/app/…`,
+  `/static/…` and the files of plugins' pages under `/plugins/…`) come without it. An
+  `<img>` cannot send a header, so the pictures (`/api/themes/<id>/preview`,
+  `/api/themes/<id>/assets/<file>` and the `GET` routes of a plugin's page) also take it as
+  `?token=<token>`; no other route does.
+- **Reading** is `GET`. **Writing** is `POST`, with a JSON object as the body (`{}` when there
+  is nothing to say). The server answers only to the host name it listens on
+  (`127.0.0.1:<port>`, `localhost:<port>`), and a browser's request only from a page of the
+  app itself (`Origin`).
 - An answer is an object with named keys. An error is `{"error": "<text in the user's
   language>"}` with the status **400** (the request is wrong; nothing was written),
-  **404** (not there: no picture yet, an unknown service, no services in this editor) or
-  **409** (config.toml cannot be read or written).
+  **403** (the access token is missing or wrong), **404** (not there: no picture yet, an
+  unknown service, no services in this editor) or **409** (config.toml cannot be read or
+  written).
 - `background` is true when the running app (the tray, `libre-panel start`) serves the
   editor. In a plain `libre-panel editor` there is no panel, no sources and no running
   service: `panel` is `null`, `sources` is empty, a service's `state` is `unknown`. The
@@ -139,15 +158,16 @@ rules.
 ## The settings routes
 
 The app's *Settings* talk to the editor's server (`editor/settings.py`) through these
-routes. The rules of the console API above hold: `POST` needs the header
-`X-Libre-Panel: 1`; an error is `{"error": "<text>"}` with **400** (the request is wrong),
-**409** (config.toml cannot be read, or the change would break it), **501** (a folder
-that cannot be opened here) or **502** (the place search cannot be reached); nothing is
-written on an error.
+routes. The rules of the console API above hold: every request needs the access token in
+the header `X-Libre-Panel`; an error is `{"error": "<text>"}` with **400** (the request is
+wrong), **403** (Libre Panel runs with administrator rights, and the setting names a program
+or a file, see `/api/settings`), **409** (config.toml cannot be read, or the change would
+break it), **501** (a folder that cannot be opened here) or **502** (the place search cannot
+be reached); nothing is written on an error.
 
 | Route | Methods | What it is |
 |---|---|---|
-| `/api/settings` | GET, POST | `GET` gives `{config, catalog, restart}`: config.toml's values with the defaults filled in (`device`, `video`, `sensors.providers`, `sensors.librehardwaremonitor`, `refresh_ms`, `weather`, `services.enabled` and `services.options`, `language`); the `catalog` to choose from (the sources, the drivers, the services with the `options` each declares); and `restart`, the written settings that wait for the panel to start again (`sensors.*` and `weather.*`, which are made when it starts; a new start of the panel loop clears them). `POST {"set": {"device.brightness": 70, "refresh_ms": null}}` writes any number of settings in one go, each by its name in config.toml; `null` takes a setting out where that is a thing (`refresh_ms`, `weather.latitude`, `weather.longitude`, `weather.place`, any option of a service). Each setting has a rule (type, range, the choices; `psutil` alone is refused, since config.py reads it as the usual list), and one that fails refuses them all. The answer is that of `GET` |
+| `/api/settings` | GET, POST | `GET` gives `{config, catalog, restart}`: config.toml's values with the defaults filled in (`device`, `video`, `sensors.providers`, `sensors.librehardwaremonitor`, `refresh_ms`, `weather`, `services.enabled` and `services.options`, `language`); the `catalog` to choose from (the sources, the drivers, the services with the `options` each declares); and `restart`, the written settings that wait for the panel to start again (`sensors.*` and `weather.*`, which are made when it starts; a new start of the panel loop clears them). `POST {"set": {"device.brightness": 70, "refresh_ms": null}}` writes any number of settings in one go, each by its name in config.toml; `null` takes a setting out where that is a thing (`refresh_ms`, `weather.latitude`, `weather.longitude`, `weather.place`, any option of a service). Each setting has a rule (type, range, the choices; `psutil` alone is refused, since config.py reads it as the usual list), and one that fails refuses them all. The answer is that of `GET`. **While Libre Panel runs with administrator rights (root on Linux) a setting that names a program, a library or a file is not changed** (403, "set it in config.toml"): `video.ffmpeg`, `device.output`, and an option of a service whose name says it is a path (`database`, `fancontrol`, `folder`, `steam_path` and the like); saying what it is already is no change. Anything else is written as before |
 | `/api/panel` | GET | the panel on the bus, looked for without opening it (`found`), the one the settings go by (`model`: the chosen one, else the found one), `configured` (`"auto"` or a model), `running` (what the app says of the panel) and the video mode `{mode, fps, on, usb, gaps}`, where `gaps` are what it still needs: `clip`, `ffmpeg`, `ffmpeg-path`, or `model` (not proven on this panel) |
 | `/api/system` | GET, POST | starting with the system: `{kind, enabled, elevated, can_elevate, location, command, program, risky, language}`. `POST {"autostart": true}` or `{"elevated": true}` do what `libre-panel autostart enable` does; the highest rights only for an administrator (409 and the reason otherwise) |
 | `/api/location` | POST | `{"query": "name"}` gives up to six places `{name, latitude, longitude}` from Open-Meteo's place search, the coordinates kept to about a kilometre. It is the one route that goes out to the internet, and only when the person asks |

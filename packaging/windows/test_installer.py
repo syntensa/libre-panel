@@ -88,7 +88,10 @@ def main(setup):
         info = Path(home, "instance.json")
         check(wait(info.exists, 60), "background app started")
         url = json.loads(info.read_text())["editor"]
-        with urllib.request.urlopen(url + "api/app", timeout=10) as response:
+        # the server answers a request with the access token the app wrote for its user
+        token = json.loads(Path(home, "private", "editor.json").read_text())["token"]
+        request = urllib.request.Request(url + "api/app", headers={"X-Libre-Panel": token})
+        with urllib.request.urlopen(request, timeout=10) as response:
             check(json.loads(response.read())["available"], "editor answers")
 
         subprocess.run(

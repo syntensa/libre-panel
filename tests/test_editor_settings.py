@@ -10,6 +10,7 @@ from test_editor_server import request
 
 from libre_panel.autostart import Autostart
 from libre_panel.config import config_dir, default_providers, load_config
+from libre_panel.editor import access
 from libre_panel.editor.server import make_server
 
 
@@ -756,3 +757,125 @@ def test_the_settings_routes_are_for_this_computer_only(server):
         status, _ = request(server, "POST", path, {"query": "x"}, headers={"X-Libre-Panel": ""})
         assert status == 403, path  # a page on the web cannot write
         assert request(server, "POST", path, {}, host="evil.example")[0] == 403, path
+
+
+# -- with the highest rights, what names a program or a file is set in config.toml ---------------
+
+
+@pytest.fixture
+def elevated(monkeypatch):
+    """Libre Panel runs as administrator (as root on Linux)."""
+    monkeypatch.setattr(access, "elevated", lambda: True)
+
+
+# what a request must not make an elevated Libre Panel start, load or write
+NAMING = {
+    "video.ffmpeg": "/tmp/ffmpeg",
+    "device.output": "/etc/frame.png",
+    "services.cooling.database": "/tmp/cooling.db",
+    "services.cooling.fancontrol": "/tmp/fancontrol.json",
+    "services.memory.database": "/tmp/memory.db",
+    "services.memory.fancontrol": "/tmp/fancontrol.json",
+    "services.downloads.folder": "/tmp/downloads",
+    "services.downloads.steam_path": "/tmp/steam",
+    "services.game.steam_path": "/tmp/steam",
+}
+
+
+def test_an_elevated_libre_panel_does_not_start_what_a_request_names(server, elevated):
+    write(server, **{"device.brightness": 40})  # (the file exists)
+    for name, value in NAMING.items():
+        before = config_text()
+        status, data = write(server, **{name: value})
+        assert status == 403, name
+        assert name in data["error"] and "config.toml" in data["error"], data
+        assert "administrator rights" in data["error"]
+        assert config_text() == before, name  # nothing was written
+    # a request that has one of them among others is refused as a whole
+    before = config_text()
+    status, _ = write(server, **{"device.brightness": 10, "video.ffmpeg": "/tmp/ffmpeg"})
+    assert status == 403 and config_text() == before
+    # and one that takes such an option out, where it is not set, changes nothing
+    status, data = write(server, **{"services.memory.database": None})
+    assert status == 200
+
+
+def test_an_elevated_libre_panel_leaves_alone_what_is_there_already(server, monkeypatch):
+    """The file says it: asked for the same, nothing changes and nothing is refused."""
+    same = {"video.ffmpeg": "/usr/bin/ffmpeg", "services.cooling.database": "/a.db"}
+    assert write(server, **same)[0] == 200
+    monkeypatch.setattr(access, "elevated", lambda: True)
+    status, data = write(server, **same)
+    assert status == 200 and data["config"]["video"]["ffmpeg"] == "/usr/bin/ffmpeg"
+    assert write(server, **{"device.output": "libre-panel-frame.png"})[0] == 200  # the default
+    for changes in (
+        {"video.ffmpeg": ""},
+        {"services.cooling.database": "/b.db"},
+        {"services.cooling.database": None},
+    ):
+        assert write(server, **changes)[0] == 403, changes
+    assert load_config().device.video.ffmpeg == "/usr/bin/ffmpeg"
+    assert load_config().services.options["cooling"]["database"] == "/a.db"
+
+
+def test_an_elevated_libre_panel_changes_everything_else(server, elevated):
+    status, data = write(
+        server,
+        **{
+            "device.brightness": 25,
+            "video.local_clip": "clip",  # (a name for the panel, not a file here)
+            "sensors.librehardwaremonitor.url": "http://127.0.0.1:8085/data.json",
+            "services.autopilot.transition": "fade",
+            "services.notices.quiet_s": 30,
+            "services.game.poll_s": 2,
+        },
+    )
+    assert status == 200 and data["config"]["device"]["brightness"] == 25
+
+
+def test_a_libre_panel_without_the_highest_rights_changes_them_all(server):
+    for name, value in NAMING.items():
+        assert write(server, **{name: value})[0] == 200, name
+
+
+def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
+    """Every setting is told apart here by what it names, so that a new one is a new decision."""
+    from libre_panel.editor.settings import LOCKED_WHILE_ELEVATED, RULES, names_a_path
+    from libre_panel.plugins.loader import registry
+
+    names = {
+        "device.model", "device.driver", "device.brightness", "device.rotate", "device.port",
+        "video.mode", "video.fps", "video.local_clip", "refresh_ms", "sensors.providers",
+        "sensors.librehardwaremonitor.mode", "sensors.librehardwaremonitor.url",
+        "weather.enabled", "weather.units", "weather.update_minutes", "weather.latitude",
+        "weather.longitude", "weather.place",
+    }  # fmt: skip
+    assert set(RULES) == names | {"video.ffmpeg", "device.output"}, "tell what the new one names"
+    assert {name for name in RULES if names_a_path(name)} == {"video.ffmpeg", "device.output"}
+    # what is no rule but a name in config.toml that the sources read
+    assert set(LOCKED_WHILE_ELEVATED) >= {
+        "sensors.presentmon.path",
+        "sensors.librehardwaremonitor.dll_dir",
+    }
+    assert all(names_a_path(name) for name in LOCKED_WHILE_ELEVATED)
+    assert not names_a_path("sensors.mqtt.host") and not names_a_path("services.enabled")
+    assert names_a_path("sensors.something.exe_path") and names_a_path("services.x.Folder")
+    # the options of the services that are files or folders, by their names
+    found = {
+        f"services.{name}.{option}"
+        for name in registry().names("services")
+        for option, (kind, _default) in registry().get("services", name).options.items()
+        if kind == "string" and names_a_path(f"services.{name}.{option}")
+    }
+    assert found == {key for key in NAMING if key.startswith("services.")}
+
+
+def test_the_message_says_where_to_set_it_in_german_too(server, elevated):
+    from libre_panel import i18n
+
+    write(server, **{"device.brightness": 40})
+    i18n.set_language("de")
+    status, data = write(server, **{"video.ffmpeg": "/tmp/ffmpeg"})
+    assert status == 403
+    assert "video.ffmpeg" in data["error"] and "config.toml" in data["error"]
+    assert "Administratorrechten" in data["error"]
