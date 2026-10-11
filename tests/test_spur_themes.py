@@ -542,6 +542,12 @@ def test_studio_counts_the_track_down_to_its_end_as_spur_ii_does():
     assert "media.remaining" in demo_snapshot(fixed_time=1_700_000_000).readings  # the demo too
 
 
+def test_studio_moves_a_new_track_in_from_the_right_as_spur_ii_does():
+    theme = load_theme(find_theme("spur-studio"))
+    card = next(w for w in theme.widgets if w["id"] == "card")
+    assert card["slide"] == 0.55 and card["change"] == 0.6  # (a slide of 0.55 s, a change 0.6)
+
+
 def test_studio_has_the_time_large_the_date_in_capitals_and_the_volume_below_the_network():
     theme, _ = studio()
     by = {w["id"]: w for w in theme.widgets}

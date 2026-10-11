@@ -489,6 +489,11 @@
   colour at the newest value, with the graph's glow around it, drawn in
   quarter pixels so that it glides with the value, in video mode too. SPUR
   Horizon's curves end in a dot as SPUR II's do
+- A card slot takes `slide` (seconds, 0: none): a new track on the playback
+  card that stays on show moves in from the right while the old one moves out
+  to the left, a gap between them that closes, as SPUR II's Studio moves on
+  to a new track; the parts are made once and each frame moves and cuts them.
+  SPUR Studio slides in 0.55 s
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

@@ -349,6 +349,9 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "moving": ("bool", True),
         "hold": ("number", 2.0),
         "change": ("number", 0.6),
+        # a slot's playback card: a new track moves in from the right as the old one moves out
+        # to the left, in this many seconds (0: the new track is there at once)
+        "slide": ("number", 0),
         # the playback card: the time at the right of the progress, the track's length (3:47)
         # or what is left of it (-2:24)
         "time": ("enum:total|remaining", "total"),

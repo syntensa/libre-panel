@@ -151,7 +151,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `calendar` | `w`, `h`, `font`, `font_size`, `color`, `color2`, `muted`, `first_day` | the month as a grid of days, today marked in `color2`; weekday names in `muted` and the language; `first_day` `monday` or `sunday` |
 | `list` | `w`, `h`, `items`, `style`, `columns`, `max_items`, `sort`, `format`, `detail`, `detail_format`, `min`, `max`, `scale`, `levels`, `font`, `font_size`, `label_font`, `uppercase`, `color`, `muted`, `color2`, `background`, `empty`, `color_rules` | readings found by name or pattern, as many as fit, see [Lists](#lists) |
 | `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur`, `ridge` | cards, frames, separators; `backdrop_blur` gives frosted glass, `ridge` a ridge (see [Look and finish](#look-and-finish)) |
-| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `moving`, `hold`, `change`, `time` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
+| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `moving`, `hold`, `change`, `slide`, `time` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
 
 `scale` is `linear`, `sqrt` or `log`: the latter two keep small values visible
 on huge ranges such as network rates.
@@ -498,6 +498,14 @@ showed last: its track is gone from the readings, its words are not. The time is
 frame's planned time, so a change takes as long at 50 frames a second as at 5; on a
 panel that gets one picture a second it is a cut. A change that is under way is
 finished before the next begins.
+
+**A new track** on the playback card that stays on show does not roll: with `slide` (seconds;
+0, none, by default, SPUR Studio sets 0.55) the content of the card moves out to the left and
+the new track's moves in from the right, a gap between them (48 px on a panel 480 px tall,
+scaled with it) that closes as it arrives, as SPUR II's Studio does it: one movement for a new
+track, none while a track plays. What moves out is what the card showed last; the frame stays
+and changes its colour with the cover as above. A pause, a cover that comes late and a change
+of cards are no new track. It takes the frame's planned time, and is a cut where a change is.
 
 The slot's frame is a thin flat line in the colour of the card on show: the colour
 that carries the cover, the weather's (the sun's by day, the clouds' by night, rain's,

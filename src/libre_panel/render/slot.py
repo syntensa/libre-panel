@@ -14,6 +14,11 @@ time of the frame, so a change takes as long on a panel driven at 50 frames a se
 that is driven at 5, and a test can set the clock. The frame of the slot is a thin flat line in
 the colour of the card on show (the colour a cover carries, the weather's, the network's); it
 changes its colour over half a second where the card, or the track, changes.
+
+A new track on the playback card that stays on show does not roll: with ``slide`` the content of
+the card moves out to the left and the new track's moves in from the right, a gap between them
+that closes as it arrives (SPUR II's Studio: one movement for a change of track, nothing while
+a track plays). The old track is what the card showed last, cut to the card's inner box.
 """
 
 from __future__ import annotations
@@ -37,6 +42,7 @@ MIXED = 0.72  # the frame's colour: this much of the cover's or the weather's ov
 PLAYBACK = ("playback", "music")
 WEATHER = ("forecast", "weather")
 SUPER = 3  # the frame's mask is drawn at this many times its size
+GAP = 48  # px between the old track and the new one in a slide, on a bar 480 px tall
 
 
 def _rgb(colour: str) -> tuple[int, int, int]:
@@ -87,6 +93,23 @@ def window(piece: Piece | None, top: float, bottom: float) -> Piece | None:
     return replace(piece, layer=part, y=y0 + first, light=glow)
 
 
+def slid(piece: Piece | None, dx: int, left: int, right: int) -> Piece | None:
+    """``piece`` moved ``dx`` px to the right and cut to the panel columns from ``left`` to
+    ``right``. None: nothing of it shows."""
+    if piece is None:
+        return None
+    glow = slid(piece.light, dx, left, right) if piece.light is not None else None
+    layer, x0 = piece.layer, piece.x + dx
+    a, b = max(left, x0), min(right, x0 + layer.width)
+    if b <= a:
+        if glow is None:
+            return None
+        return Piece(Image.new("RGBA", (1, 1), (0, 0, 0, 0)), glow.x, glow.y, piece.box, light=glow)
+    if (a, b) != (x0, x0 + layer.width):
+        layer = layer.crop((a - x0, 0, b - x0, layer.height))
+    return replace(piece, layer=layer, x=a, light=glow)
+
+
 # -- the slot ----------------------------------------------------------------------------------
 
 
@@ -101,6 +124,7 @@ class Slot:
         self.kinds = [kind for kind, _ in items]
         self.rules = [rule for _, rule in items]
         self.change = max(0.0, float(module["change"]))  # seconds
+        self.slide = max(0.0, float(module["slide"]))  # seconds a new track takes to move in
         self.hold = max(0.0, float(module["hold"])) * 60  # seconds a paused track stays on show
         self.box = box
         self.colors = M.colors_of(renderer.theme.palette)
@@ -115,6 +139,9 @@ class Slot:
         self.paused_for: Any = None
         self.rows: tuple[float, float] | None = None  # in a change: how far each has rolled
         self.line = 0.0  # in a change: the light's strength
+        self.track: tuple[Any, Any] | None = None  # the track the playback card on show shows
+        self.sliding: tuple[float, dict[str, Piece]] | None = None  # since, what the old one showed
+        self.shift: tuple[int, int] | None = None  # in a slide: the old track's and new one's x
         self._colour: tuple[int, int, int] | None = None  # the frame's colour on show now
         self._from: tuple[int, int, int] | None = None
         self._to: tuple[int, int, int] | None = None
@@ -177,6 +204,7 @@ class Slot:
         renderer = self.renderer
         if self.pinned is not None:  # (the warm-up draws each card once, without a change)
             self.shown, self.leaving, self.rows, self.line = self.pinned, None, None, 0.0
+            self.track = self.sliding = self.shift = None
             return
         if self.leaving is not None and now - self.since >= self.change:
             self.leaving, self.frozen, self.rows = None, {}, None
@@ -204,7 +232,38 @@ class Slot:
                 self.line = GLOW * light.ease_out(p / ROLL_UP)
             else:
                 self.line = GLOW * (1.0 - light.ease_out((p - ROLL_UP) / (1.0 - ROLL_UP)))
+        self._slide(snapshot, now)
         self._accent(snapshot, now)
+
+    def _slide(self, snapshot: Any, now: float) -> None:
+        """Where a slide has got to: it begins when the playback card on show has a new track
+        (not in a change of cards: that one shows the new track anyway), and takes ``slide``
+        seconds of the frame's planned time, so as long at 50 frames a second as at 5."""
+        track = None
+        if self.leaving is None and self.kinds[self.shown] in PLAYBACK:
+            title = snapshot.value("media.title")
+            if title:
+                track = (title, snapshot.value("media.artist"))
+        if track is None:
+            self.sliding = None
+        elif (
+            self.track is not None and track != self.track and self.last
+            and self.slide > 0 and self.renderer.animate
+        ):  # fmt: skip
+            self.sliding, self.last = (now, self.last), {}  # (the new track fills a new set)
+        self.track, self.shift = track, None
+        if self.sliding is None:
+            return
+        began = self.sliding[0]
+        if now - began >= self.slide:
+            self.sliding = None
+            return
+        self.renderer.moving = True
+        inner = self._inner()
+        unit = min(self.renderer.theme.width, self.renderer.theme.height) / 480
+        reach = inner[2] + round(GAP * unit)  # the old track moves out, the gap closes
+        away = round(reach * light.ease_out((now - began) / self.slide))
+        self.shift = (-away, reach - away)
 
     def others(self) -> list[int]:
         """The cards that are not on show."""
@@ -215,6 +274,7 @@ class Slot:
         self.pinned = None
         self.shown, self.started, self.leaving = 0, False, None
         self.last, self.frozen, self.rows, self.line = {}, {}, None, 0.0
+        self.track = self.sliding = self.shift = None
         self._to = self._from = self._colour = None
 
     def _inner(self) -> list[float]:
@@ -235,11 +295,17 @@ class Slot:
         return None
 
     def live(self, part: str, piece: Piece | None) -> Piece | None:
-        """A part of the card on show, as drawn: kept for when the card rolls up, and cut to
-        the rows the new card has rolled down to during a change."""
+        """A part of the card on show, as drawn: kept for when the card rolls up or the track
+        changes, and cut to the rows the new card has rolled down to during a change, or moved
+        in from the right (and cut to the card) during a slide."""
         if piece is not None:
             self.last[part] = piece
-        if self.rows is None or piece is None:
+        if piece is None:
+            return None
+        if self.shift is not None:
+            x, _, w, _ = self._inner()
+            return slid(piece, self.shift[1], round(x), round(x + w))
+        if self.rows is None:
             return piece
         top = self._inner()[1]
         return window(piece, top, top + self.rows[1])
@@ -355,6 +421,12 @@ class Slot:
         if at < 0:
             return
         extra: list[tuple[str, Piece]] = []
+        if self.shift is not None and self.sliding is not None:  # the old track, moving out
+            x, _, w, _ = self._inner()
+            for part, piece in self.sliding[1].items():
+                moved = slid(piece, self.shift[0], round(x), round(x + w))
+                if moved is not None:
+                    extra.append((f"{part}\0old", moved))
         if self.width and self._colour is not None:
             extra.append((f"{prefix}\0frame", self._frame(self._colour)))
         line = self._ignition()
