@@ -222,6 +222,28 @@ def module_theme(*modules):
     }
 
 
+def test_the_preview_can_show_a_test_notice(server):
+    """A notice is drawn on the picture in the theme's toast style, for Look to show."""
+    from io import BytesIO
+
+    from PIL import Image, ImageChops
+
+    def picture(**more):
+        status, data = request(server, "POST", "/api/render", {"theme": theme, **more})
+        assert status == 200
+        return Image.open(BytesIO(base64.b64decode(data["png"]))).convert("RGB")
+
+    theme = theme_dict()
+    plain = picture(base="libre-default")
+    card = picture(base="libre-default", notice="volume")
+    assert ImageChops.difference(plain, card).getbbox() is not None  # a card in the corner
+    theme["toast"] = {"style": "band"}
+    band = picture(base="libre-default", notice="volume")
+    assert ImageChops.difference(card, band).getbbox() is not None  # the style is the theme's
+    status, data = request(server, "POST", "/api/render", {"theme": theme, "notice": "nope"})
+    assert status == 400 and "notice" in data["error"]
+
+
 def test_render_reports_the_grid_and_module_cells(server):
     status, data = request(server, "POST", "/api/render", {"theme": theme_dict()})
     assert status == 200 and data["grid_active"] is False and data["module_boxes"] == {}

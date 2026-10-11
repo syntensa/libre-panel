@@ -182,6 +182,40 @@ def _finish_types(types: list[str]) -> dict[str, list[str]]:
     return found
 
 
+NOTICE_AGE_S = 1.2  # how far into its life a preview shows a notice: drawn in full
+
+
+def _with_notice(renderer: Renderer, frame: Any, kind: str) -> Any:
+    """``frame`` with the test message of ``kind`` (the Control page's: volume, music, ...)
+    drawn on it in the theme's toast style, a moment after it began; None for an unknown
+    kind. The previews of the editor have no messages of their own."""
+    from libre_panel.pages.control import probes
+    from libre_panel.plugins.host import Toast
+    from libre_panel.render.overlays import ToastLayer
+
+    made = probes().get(kind)
+    if made is None:
+        return None
+    _name, options = made
+    toast = Toast(
+        options["text"],
+        options.get("icon"),
+        options.get("level", "info"),
+        options.get("seconds"),
+        options.get("kind", ""),
+        options.get("rank", 0),
+        dict(options.get("payload", {})),
+        "editor",
+    )
+    layer = ToastLayer(renderer)
+    try:
+        layer.add([toast])
+        layer.advance(0.0)
+        return layer.draw(frame, NOTICE_AGE_S)
+    finally:
+        layer.close()
+
+
 def _look_ranges() -> dict[str, dict[str, list[float]]]:
     """``LOOK_RANGES`` by block, for sliders that stop where the theme would refuse."""
     found: dict[str, dict[str, list[float]]] = {}
@@ -898,6 +932,12 @@ class EditorHandler(BaseHTTPRequestHandler):
         renderer = Renderer(theme, preview=True)
         try:
             frame, boxes = renderer.render(snapshot)
+            notice = payload.get("notice")
+            if notice:  # a test message on it, as the theme's toast style shows it
+                shown = _with_notice(renderer, frame, notice) if isinstance(notice, str) else None
+                if shown is None:
+                    return self._error("notice must be the kind of a test message")
+                frame = shown
         finally:
             renderer.close()  # plugin screens end with the preview
         buffer = io.BytesIO()
