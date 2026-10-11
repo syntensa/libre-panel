@@ -391,9 +391,93 @@ def build_download(b: _Build, src: M.Source) -> None:
           empty=t("No download running"), glow=round(0.3 * b.glow, 2))  # fmt: skip
 
 
-def build_cards(b: _Build, src: M.Source) -> None:
+# -- the network, as the Studio's NET section has it -----------------------------------------------
+
+
+def build_net(b: _Build, src: M.Source) -> None:
+    """UP and DOWN with the speed beside them, and the history of both: the upload above a
+    line, the download hanging below it. Where the module is small, it is the network module."""
+    ref = _Ref(b, 596, 130, 540, floor=0.45, aspect=1.7)
+    if not ref.ok:
+        M.build_network(b, src)
+        return
     b.card()
+    color = b.tint("net")
+    left, right = ref.x(13), ref.right(16)
+    title = b.module["title"] or t("Net")
+    size = ref.s(26)
+    b.label("title", title, left, ref.cap(30, 26), size, color=color, width=ref.s(300))
+    width = M._width_per_size(b.style["text_font"], title.upper()) * size + max(
+        1, round(size * 0.14)
+    ) * len(title)
+    thin = max(1, round(1.5 * ref.g))
+    b.add("rect", "rule", x=round(left), y=round(ref.y(37)), w=round(width + ref.s(6)), h=thin,
+          color=M.mix(color, b.c("surface"), 0.55))  # fmt: skip
+    for i, (key, name) in enumerate((("net.up", t("Up")), ("net.down", t("Down")))):
+        baseline = (81, 125)[i]
+        first = len(b.out)
+        b.label(name.lower(), name, left, ref.cap(baseline, 22), ref.s(22), width=ref.s(150))
+        b.value(
+            f"{name.lower()}-value",
+            key,
+            "{value:rate}",
+            ref.x(240),
+            ref.cap(baseline, 34),
+            ref.s(34),
+            align="right",
+            width=ref.s(150),
+        )
+        b.value(f"{name.lower()}-unit", key, "{value:rate_unit}", ref.x(246), ref.cap(baseline, 19),
+                ref.s(19), color=b.c("text3"), width=ref.s(80), font="text_font", tabular=False,
+                fallback="")  # fmt: skip
+        for widget in b.out[first:]:
+            widget["hide_if_missing"] = True
+    gx, gw = ref.x(392), right - ref.x(392)
+    if gw >= ref.s(40):
+        mid, half = ref.y(88), ref.s(38)
+        for name, key, down in (
+            ("up-history", "net.up", False),
+            ("down-history", "net.down", True),
+        ):
+            b.add("graph", name, x=round(gx), y=round(mid if down else mid - half), w=round(gw),
+                  h=round(half), sensor=key, min=0, max=None, scale="sqrt",
+                  history=max(30, min(300, round(gw) // 2)), color=color, fill=True,
+                  fill_fade=True, smooth=True, line_width=max(1, round(2 * ref.g)),
+                  direction="down" if down else "up", inset=False,
+                  glow=round(0.35 * b.glow, 2), glow_radius=max(2, round(ref.g * 6)))  # fmt: skip
+        b.add("rect", "axis", x=round(gx), y=round(mid), w=round(gw), h=max(1, round(ref.g)),
+              color=b.c("line"))  # fmt: skip
+
+
+# -- a slot: one card of several ---------------------------------------------------------------
+
+
+def _child(b: _Build, name: str, box: list[int]) -> list[dict[str, Any]]:
+    """The parts of the card ``name`` in ``box`` (a module without a card of its own)."""
+    child = {**b.module, "module": name, "card": "off", "title": "", "items": "", "text": ""}
+    if name != "net":
+        return M.build_module(child, box, b.colors, b.style)
+    inner = _Build(child, box, b.colors, b.style)
+    build_net(inner, M._sources()["net"])
+    return inner.out
+
+
+def build_cards(b: _Build, src: M.Source) -> None:
+    """A slot: the module's ``items`` are the cards it holds, one a line (``playback``,
+    ``forecast``, ``download``, ``instrument``, ``net`` ...); the first that has something to
+    show is on show, and a change rolls the old card up into a line of light and the new one
+    down out of it (render.slot). Its frame is a thin line in the colour of the card on show.
+    Every card is built for the whole slot: it is the slot's size that makes a card compact."""
+    b.card(outline=False)
+    inset = max(1, round(min(b.w, b.h) / 140)) + 1
+    box = [b.x + inset, b.y + inset, b.w - 2 * inset, b.h - 2 * inset]
+    for i, (name, _rule) in enumerate(M.slot_items(b.module)):
+        for widget in _child(b, name, box):
+            widget["id"] = f"c{i}-{widget['id']}"
+            widget["_card"] = i
+            b.out.append(widget)
 
 
 def build_netcard(b: _Build, src: M.Source) -> None:
-    M.build_network(b, src)
+    """The network card: a download while one runs (the Studio's inset), else the network."""
+    build_cards(b, src)

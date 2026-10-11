@@ -334,13 +334,15 @@ class _Build:
         self.out.append(widget)
         return widget
 
-    def card(self) -> None:
+    def card(self, outline: bool = True) -> None:
+        """The card's surface and, unless ``outline`` is off (a slot draws its own frame, in
+        the colour of the card it shows), its thin outline."""
         if not self.card_on:
             return
         radius = round(self.style["radius"] * self.u / 200)
         kind = self.style["card"]
         fill = {"glass": self.c("surface") + "E6", "flat": self.c("surface")}.get(kind)
-        outline = self.c("line") if kind in ("glass", "outline") else None
+        outline = self.c("line") if outline and kind in ("glass", "outline") else None
         self.add(
             "rect", "card", x=self.x, y=self.y, w=self.w, h=self.h, color=fill,
             radius=radius, outline=outline, outline_width=max(1, round(self.u / 160)),
@@ -1521,6 +1523,7 @@ def default_items(kind: str) -> str:
     return {
         "temps": "cpu.temp = CPU\ngpu.temp = GPU\ntemp.*",
         "drives": "disk.*.load",
+        "cards": DEFAULT_CARDS,
         "world": "America/New_York = New York\nEurope/London = London\nAsia/Tokyo = Tokyo\n"
         "Australia/Sydney = Sydney",
         "values": f"cpu.load = CPU\ngpu.load = GPU\nmem.load = {t('RAM')}\n"
@@ -1799,21 +1802,23 @@ MODULE_FALLBACKS = ("auto", "none", "cpu", "gpu", "mem", "disk")
 # -- card slots ----------------------------------------------------------------
 
 DEFAULT_CARDS = "playback\nforecast"
+CARD_NAMES = tuple(k for k in MODULE_KINDS if k not in SLOT_KINDS) + ("net",)  # "net": the
+# network as the Studio's NET section has it (UP and DOWN with the speed beside them)
 
 
-def slot_cards(module: dict[str, Any]) -> list[str]:
-    """The cards a slot module holds, in the order they are asked: its ``items``, one kind of
-    module per line (a line that names none is left out), or a download card and the network
-    for "netcard". The first that has something to show is shown; where none has, the
-    first, in its empty look."""
+def slot_items(module: dict[str, Any]) -> list[tuple[str, str]]:
+    """The cards a slot module holds, in the order they are asked, each with its rule: the
+    conditions (as a ``needs`` has them) after ``if`` on its line of ``items``, else ``""``
+    for the card's own (see render.slot). A line that names no card is left out. ``netcard``
+    holds a download card and the network."""
     if module["module"] == "netcard":
-        return ["download", "network"]
-    names = []
+        return [("download", ""), ("net", "")]
+    found = []
     for line in (module["items"] or DEFAULT_CARDS).splitlines():
-        name = line.partition("#")[0].strip()
-        if name in MODULE_KINDS and name not in SLOT_KINDS:
-            names.append(name)
-    return names or DEFAULT_CARDS.splitlines()
+        name, _, rule = line.partition("#")[0].strip().partition(" if ")
+        if name.strip() in CARD_NAMES:
+            found.append((name.strip(), rule.strip()))
+    return found or [(name, "") for name in DEFAULT_CARDS.splitlines()]
 
 
 # -- expanding a theme -------------------------------------------------------

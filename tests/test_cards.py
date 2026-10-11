@@ -57,6 +57,16 @@ def test_a_need_compares_a_reading_with_a_number(need, expected):
     assert need_holds(need, snap) is expected
 
 
+def test_a_state_that_is_taken_back_has_no_value():
+    running = reading_snapshot(downloads='{"phase":"downloading"}')
+    taken_back = reading_snapshot(downloads="null")
+    assert need_holds("downloads", running) and not need_holds("!downloads", running)
+    assert not need_holds("downloads", taken_back) and need_holds("!downloads", taken_back)
+    assert not need_holds("downloads", reading_snapshot()) and need_holds(
+        "!downloads", reading_snapshot()
+    )
+
+
 def test_a_need_reads_the_sensor_of_its_condition():
     assert need_key("media.playing=1") == "media.playing"
     assert need_key("!cpu.temp >= 80") == "cpu.temp"

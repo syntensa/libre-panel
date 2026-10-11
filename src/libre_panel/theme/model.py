@@ -326,7 +326,8 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         # on a big module
         "forecast": ("enum:auto|days|hours|both|off", "auto"),
         "step": ("int", 3),  # hourly forecast: hours between two columns
-        # temps, drives, dashboard: the readings to show, one per line ("cpu.temp = CPU")
+        # temps, drives, dashboard: the readings to show, one per line ("cpu.temp = CPU");
+        # card slots: the cards, one per line ("playback", "forecast if weather.temperature")
         "items": ("text", ""),
         "sort": ("enum:cpu|memory", "cpu"),  # processes: by processor time or memory
         "timezone": ("string", ""),  # analog clock: e.g. "Asia/Tokyo"

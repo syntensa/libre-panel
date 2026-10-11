@@ -41,6 +41,7 @@ from libre_panel.render.motion import MAX_POINTS, RATE, History, Motion, Spring,
 from libre_panel.render.motion import number as motion_number
 from libre_panel.sensors.base import Snapshot, want
 from libre_panel.theme.model import Theme, ThemeError, resolve_asset
+from libre_panel.theme.modules import SLOT_KINDS, slot_items
 from libre_panel.theme.modules import expand as expand_modules
 
 log = logging.getLogger(__name__)
@@ -309,14 +310,15 @@ def need_key(need: str) -> str:
 
 def need_holds(need: str, snapshot: Snapshot) -> bool:
     """Whether one condition of ``needs`` holds: a reading that has a value (``"gpu.load"``),
-    none (``"!gpu.load"``), or compares so (``"media.playing=1"``, ``=``, ``!=``, ``>``, ``>=``,
-    ``<``, ``<=`` with a number; a reading without a number never does; a ``!`` in front says
-    the opposite)."""
+    none (``"!gpu.load"``; a state that is ``null`` has none), or compares so
+    (``"media.playing=1"``: ``=``, ``!=``, ``>``, ``>=``, ``<``, ``<=`` with a number; a reading
+    without a number never does; a ``!`` in front says the opposite)."""
     need = need.strip()
     body = need.lstrip("!").strip()
     found = _COMPARE.match(body)
-    if found is None:
-        holds = snapshot.value(body) is not None
+    if found is None:  # (a state a service has taken back is the text "null": none)
+        value = snapshot.value(body)
+        holds = value is not None and value != "null"
     else:
         value = snapshot.value(found["key"].strip())
         number = _number(float(value) if isinstance(value, bool) else value)  # (on is 1)
@@ -392,6 +394,7 @@ class Renderer:
         self._drawers = {wid: partial(f.draw, self) for wid, f in self._finishes.items()
                          if finishes.draws(f)}  # fmt: skip
         self._modules = {w["id"]: w for w in theme.widgets if w["type"] == "module"}
+        self._slots = self._make_slots(theme)  # modules that show one card of several
         self._keys = {w["id"]: json.dumps(w, sort_keys=True) for w in self.widgets}
         if not preview:  # costly sensors work only while a panel shows them
             want(self, _reads(self.widgets))
@@ -423,6 +426,17 @@ class Renderer:
         self._fans: OrderedDict[tuple[Any, ...], Piece] = OrderedDict()  # fan pieces, by look
         self._downloads: dict[str, tuple[Any, Any]] = {}  # download widget id -> what it shows
         self.screen = self._make_screen()
+
+    def _make_slots(self, theme: Theme) -> dict[str, Any]:
+        """The slot of every module that shows one card of several (render/slot.py)."""
+        slots: dict[str, Any] = {}
+        for module in self._modules.values():
+            if module["module"] in SLOT_KINDS and module["id"] in self.module_boxes:
+                from libre_panel.render.slot import Slot
+
+                items = slot_items(module)
+                slots[module["id"]] = Slot(self, module, items, self.module_boxes[module["id"]])
+        return slots
 
     # -- resources ---------------------------------------------------------
 
@@ -999,10 +1013,21 @@ class Renderer:
         pieces: list[tuple[str, Piece]] = []
         self._drawing = "\0screen"
         screen = self._screen_image(snapshot, now) if self.screen is not None else None
+        for slot in self._slots.values():  # which card each slot shows, and how far a change is
+            slot.begin(snapshot, now)
         for widget in self.widgets:
-            if not widget.get("visible", True) or self._missing(widget, snapshot):
+            if not widget.get("visible", True):
                 continue
             module = self._modules.get(widget.get("_module", ""))
+            slot = how = None
+            if "_card" in widget and module is not None:  # a part of a card in a slot
+                slot = self._slots.get(module["id"])
+                how = slot.shows(widget["_card"]) if slot is not None else None
+                if slot is not None and how is None:
+                    continue  # the card is not on show
+            # (what a card that rolls up shows is what it showed: its conditions held then)
+            if how != "frozen" and self._missing(widget, snapshot):
+                continue
             if module is not None and (not module["visible"] or self._missing(module, snapshot)):
                 continue
             draw = (
@@ -1012,7 +1037,12 @@ class Renderer:
             )
             self._drawing = widget["id"]
             try:
-                piece = draw(widget, snapshot, now)
+                if how == "frozen":  # a card rolling up: what it showed before
+                    piece = slot.leave(widget["id"])
+                else:
+                    piece = draw(widget, snapshot, now)
+                    if how == "live":
+                        piece = slot.live(widget["id"], piece)
             except Exception as exc:  # one broken widget must not blank the panel
                 self._warn(f"widget {widget['id']!r} failed: {exc}")
                 continue
@@ -1033,6 +1063,8 @@ class Renderer:
                 piece.layer.width,
                 piece.layer.height,
             ]
+        for slot in self._slots.values():  # frame and line of light, over the cards
+            slot.overlay(pieces)
         dust = self._dust_on()
         if screen is not None:
             alone = not pieces and self.look is None and not dust
