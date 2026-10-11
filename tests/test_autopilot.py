@@ -506,7 +506,7 @@ def test_what_it_is_doing_can_be_looked_at(desk):
 
 
 def test_the_autopilot_changes_the_theme_in_the_main_loop(monkeypatch, isolated_home):
-    from test_toast_scenarios import Panel, Script, write_theme
+    from test_toast_scenarios import NoWarmup, Panel, Script, write_theme
 
     from libre_panel import app
     from libre_panel.config import SensorsConfig
@@ -559,6 +559,7 @@ def test_the_autopilot_changes_the_theme_in_the_main_loop(monkeypatch, isolated_
             machine.microphone = False
 
     script = Script(1500, {20: [call_begins], **{n: [watch] for n in range(21, 2000)}})
+    monkeypatch.setattr(app, "_Warmup", NoWarmup)  # frames counted: switch at once
     monkeypatch.setattr(app, "_Pacer", lambda: script)
     try:
         app.run(config, host=host)

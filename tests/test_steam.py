@@ -56,7 +56,8 @@ def test_libraries_in_the_old_format_and_without_a_file(tmp_path):
     other = make_library(tmp_path / "second")
     root = make_library(tmp_path / "Steam")
     assert steam.libraries(root) == [root]  # no libraryfolders.vdf
-    entries = f'"TimeNextStatsReport" "1700000000"\n"1" "{other}"\n"2" "relative"\n'
+    escaped = str(other).replace("\\", "\\\\")  # as Steam writes a Windows path
+    entries = f'"TimeNextStatsReport" "1700000000"\n"1" "{escaped}"\n"2" "relative"\n'
     old = '"LibraryFolders"\n{\n' + entries + "}"
     (root / "steamapps" / "libraryfolders.vdf").write_text(old, encoding="utf-8")
     assert steam.libraries(root) == [

@@ -159,6 +159,7 @@ snapshot, about every `refresh_ms` of the theme, with the snapshot:
 def start(self):
     self.host.on("sample", self.on_sample)
 
+
 def on_sample(self, snapshot):
     temperature = snapshot.value("cpu.temp")
     if temperature is not None and temperature > 90:
@@ -193,8 +194,8 @@ widget types, transitions, toast styles and other services read it back:
 self.host.publish_state("myplugin.round", {"name": "Space Game", "minutes": 42})
 
 # in a screen or widget type: render(snapshot, now) / draw(widget, ctx, snapshot, now)
-round_ = snapshot.state("myplugin.round")                 # a new dict; None if there is none
-age = now - snapshot.state_stamp("myplugin.round")        # seconds since it was published
+round_ = snapshot.state("myplugin.round")  # a new dict; None if there is none
+age = now - snapshot.state_stamp("myplugin.round")  # seconds since it was published
 # in a toast style or transition: self.context.state("myplugin.round", default)
 ```
 
