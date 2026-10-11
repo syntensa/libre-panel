@@ -153,6 +153,15 @@
   opened for reading, nothing is changed or sent; devices come from the
   readings, limits from `limits`. It answers an editor page or a script with
   the analysis as data and a plain-text report in English and German
+- `downloads`, a built-in service that notes what is downloading: Steam's
+  games and updates (read from its `content_log.txt` and `appmanifest` files,
+  with the network's download as the speed) and the part files of browsers
+  (`.crdownload`, `.part`, `.partial`) in the Downloads folder (Windows: the
+  shell's folder; Linux: `xdg-user-dir DOWNLOAD`). It publishes the download that
+  matters most as the state `downloads`: progress, speed, the last three minutes
+  of speed and the time left, for a screen that draws a download card. Nothing
+  below `min_mb` (50) counts, the browser's history is never read, and nothing is
+  written
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

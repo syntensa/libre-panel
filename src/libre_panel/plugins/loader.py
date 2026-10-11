@@ -56,6 +56,7 @@ BUILT_IN_PARTS: dict[str, dict[str, str]] = {
         "autopilot": "libre_panel.services.autopilot:Autopilot",
         "cooling": "libre_panel.services.cooling:Cooling",
         "devices": "libre_panel.services.devices:Devices",
+        "downloads": "libre_panel.services.downloads:Downloads",
         "game": "libre_panel.services.game:Game",
         "memory": "libre_panel.services.memory:Memory",
         "notices": "libre_panel.services.notices:Notices",

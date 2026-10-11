@@ -518,6 +518,52 @@ warnings like those of the notices service (kind `warning`).
   read off the disk; USB devices are read from the system's own list and never
   opened; nothing is written, and nothing is sent anywhere.
 
+### Downloads
+
+Notes what is downloading: a game or an update that Steam loads, and a file
+that a browser saves in your Downloads folder. It publishes the download that
+matters most, with its progress, speed and the time left, for a screen that
+draws a download card ([Plugins](PLUGINS.md#the-downloads-state)); the service
+shows nothing by itself. Nothing is written and nothing is sent.
+
+```toml
+[services]
+enabled = ["downloads"]
+
+[services.downloads]
+min_mb = 50          # smaller downloads are not shown
+steam = true         # Steam's games and updates
+browser = true       # the part files of browsers in the Downloads folder
+# steam_path = ""    # Steam's folder, if Libre Panel does not find it
+# folder = ""        # the Downloads folder, if it is not the system's
+```
+
+- **Steam** is read from its own files, only read: `logs/content_log.txt` (what
+  it does with an app: preparing, downloading, installing, and how big it is)
+  and the app's `appmanifest_<id>.acf` in the libraries (its name and how much
+  is loaded). Steam gives a speed in its log only once a minute, so the speed
+  is the network's download (`net.down`); where the manifest stands still
+  although data flows, the amount loaded is worked out from the speed and the
+  state says so (`estimated`). Steam is found as the [`game`](#game-mode)
+  service finds it, and `steam_path` works as there.
+- **Browsers**: the part files `.crdownload` (Chrome, Edge, Brave and the other
+  Chromium browsers), `.part` (Firefox) and `.partial` in the Downloads folder:
+  on Windows the folder the shell names (it may have been moved), on Linux what
+  `xdg-user-dir DOWNLOAD` says, otherwise `Downloads` in your home folder. How a
+  file grows gives the amount and the speed. How big the whole will be is
+  written only in the browser's history, and **the browser's history is never
+  read**, as it holds everything you looked at: a browser download has no time
+  left. Libre Panel lists the folder and asks for the size of the part files;
+  no file in it is opened.
+- **What counts.** Nothing below `min_mb` megabytes; a download of unknown size
+  counts once it has run for 5 s at more than 1 MB/s. When it is finished it
+  stays for a few seconds as "done", then the panel goes back to what it showed.
+- **Data.** The name of the game or of the file is in the state, so that a card
+  can show it; the state lives in memory and on the panel only. Nothing is
+  written to a file or to the log, and nothing leaves the PC.
+- The options are read when the service starts: change `config.toml` and it
+  restarts by itself.
+
 ### Memory and round report
 
 Keeps what happens at the desk over weeks and months, in a database on this

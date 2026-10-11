@@ -234,6 +234,7 @@ do. Their names cannot be used by a plugin.
 | `devices` | messages for drives, USB devices and controllers that come and go, a full drive and a hot SSD (Windows) |
 | `memory` | keeps minutes, games and the cooling state in a database on this PC, and shows a round report after a game |
 | `cooling` | checks the fan curves of FanControl against what the PC did and says what to change; answers an editor page or a script, reads only |
+| `downloads` | notes what is downloading (Steam's games and updates, a browser's part files) with progress, speed and time left, as a state for a download card |
 
 Their options are in the [configuration guide](CONFIGURATION.md#built-in-services).
 They talk to the panel only through the host described here, so they are also
@@ -430,6 +431,42 @@ can be turned around) and gives the temperature the curve must have seen; the
 recorded sensor that lies on top of it, or follows it with a fixed offset, is
 what the curve reads. A course that moved less than 5 K proves nothing, and the
 answer says so (`too quiet`) instead of guessing.
+
+### The downloads state
+
+While something downloads, the `downloads` service publishes the download that
+matters most as the state `downloads`, once a second (a screen reads it with
+`snapshot.state("downloads")`; it is `None` when nothing downloads, and a
+download that is finished shows for 6 s with the phase `done`, if no other is
+going):
+
+```json
+{
+  "id": "steam:777", "source": "steam", "name": "Space Game", "phase": "downloading",
+  "bytes": 1041943000, "total": 2000000000,
+  "rate": 41943040, "remaining_s": 22.8, "elapsed_s": 80.0,
+  "estimated": false,
+  "history": [0, 20971520, 31457280, 36700160, 39321600],
+  "more": 1
+}
+```
+
+| Field | |
+|---|---|
+| `id` | `steam:<app number>` or `browser:<number>` (counted from the start of the service); it stays the same while the download goes on, also when a browser renames its part file |
+| `source`, `name` | `"steam"` or `"browser"`; the game's name, or the file's name |
+| `phase` | `downloading`, `preparing` (Steam makes room), `paused`, `installing` (Steam checks and puts together what it loaded) or `done` (for 6 s) |
+| `bytes`, `total` | loaded so far, and the whole; `total` is `null` for a browser download, which does not tell |
+| `rate` | bytes per second, smoothed over about two seconds: the network's download for Steam, the growth of the file for a browser; 0 when it is not downloading |
+| `remaining_s` | seconds left; only for Steam, while it downloads with a known size at more than 0.2 MB/s, else `null` |
+| `elapsed_s` | seconds since it began |
+| `estimated` | `true` when `bytes` is worked out from the speed because Steam's manifest has not moved for 10 s |
+| `history` | `rate` of the last (at most 180) seconds, the oldest first, for a graph |
+| `more` | how many other downloads run beside this one |
+
+The one that matters most is the one still going that is fastest. Nothing below
+`min_mb` is in it; the browser's history is never read; see the
+[configuration guide](CONFIGURATION.md#downloads).
 
 ## Screens
 

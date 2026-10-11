@@ -35,6 +35,7 @@
     "Analog clock": "Analoguhr",
     "Another module is in the way": "Ein anderes Modul ist im Weg",
     "Any sensor": "Beliebiger Sensor",
+    "App {appid}": "App {appid}",
     "Autostart is disabled.": "Autostart ist ausgeschaltet.",
     "Autostart is enabled ({where}).": "Autostart ist eingeschaltet ({where}).",
     "Autostart is not supported on this system.": "Autostart wird auf diesem System nicht unterstützt.",
