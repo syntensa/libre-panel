@@ -24,24 +24,17 @@ def app_url():
     srv.editor_state.close()
 
 
-def expected_404(message):
+def expected_404(message, allow=()):
     """The app asks for the hardware's names; a server without them (an older background
-    app, as one test plays) answers 404, the app hides them, and Chromium logs an error."""
+    app, as one test plays) answers 404, the app hides them, and Chromium logs an error. So
+    is a request that a test makes fail on purpose (``allow``: the ends of their addresses)."""
     return message.text.startswith("Failed to load resource") and message.location.get(
         "url", ""
-    ).endswith("/api/hardware")
-
-
-def no_picture_yet(message):
-    """The live picture is 404 before the panel's first frame and while it is paused, which
-    Live and Start show as such; Chromium logs that as an error too."""
-    return message.text.startswith("Failed to load resource") and "/control/live" in (
-        message.location.get("url", "")
-    )
+    ).endswith(("/api/hardware", *allow))
 
 
 @contextlib.contextmanager
-def browser_page(url, view="design", strict_csp=False, size=(1440, 900), routes=None):
+def browser_page(url, view="design", strict_csp=False, size=(1440, 900), routes=None, allow=()):
     with playwright.sync_playwright() as p:
         try:
             browser = p.chromium.launch()
@@ -58,9 +51,7 @@ def browser_page(url, view="design", strict_csp=False, size=(1440, 900), routes=
         page.on(
             "console",
             lambda m: (
-                errors.append(m.text)
-                if m.type == "error" and not (expected_404(m) or no_picture_yet(m))
-                else None
+                errors.append(m.text) if m.type == "error" and not expected_404(m, allow) else None
             ),
         )
         for pattern, handler in (routes or {}).items():  # stand-ins for the server's answers
@@ -360,6 +351,11 @@ def test_without_hardware_names_nothing_shows(app_url):
 # shows), never for "a toast exists": an earlier one may still be up.
 
 
+# The picture on the panel is 404 before its first frame and while the panel is paused, which
+# Start and Live show as such; Chromium logs that as an error, which these tests allow.
+PICTURE = ("&format=jpeg",)
+
+
 @pytest.fixture
 def background(isolated_home):
     """The background app with a panel that writes a PNG file, and the address of its app."""
@@ -444,7 +440,7 @@ def test_start_lists_the_themes_and_switches_the_panel(app_url, isolated_home):
     from libre_panel.config import load_config
 
     choose_theme(isolated_home)
-    with browser_page(app_url, "home") as page:
+    with browser_page(app_url, "home", allow=PICTURE) as page:
         page.wait_for_selector(".start.launcher .quick-theme")
         rows = page.locator(".quick-theme")
         ids = rows.evaluate_all("rows => rows.map((row) => row.dataset.theme)")
@@ -468,7 +464,7 @@ def test_start_lists_the_themes_and_switches_the_panel(app_url, isolated_home):
 
 def test_start_has_a_gallery_of_every_theme(app_url, isolated_home):
     choose_theme(isolated_home)
-    with browser_page(app_url, "home") as page:
+    with browser_page(app_url, "home", allow=PICTURE) as page:
         page.locator(".start-side-head a").click()  # "All"
         page.wait_for_selector(".start.gallery .theme-card")
         shown = shown_themes(page)
@@ -491,7 +487,7 @@ def test_start_begins_empty_or_with_a_file(app_url, isolated_home, tmp_path):
     from test_editor_server import theme_dict
 
     choose_theme(isolated_home)
-    with browser_page(app_url, "home/themes") as page:
+    with browser_page(app_url, "home/themes", allow=PICTURE) as page:
         page.wait_for_selector(".start-actions")
         page.get_by_role("button", name="Start empty").click()
         expect(page.locator(".tab[aria-current='page']")).to_have_text("Design")
@@ -519,7 +515,7 @@ def test_a_first_start_asks_how_it_should_look(app_url, isolated_home):
     from libre_panel.config import load_config
 
     assert not (isolated_home / "config.toml").exists()
-    with browser_page(app_url, "home") as page:
+    with browser_page(app_url, "home", allow=PICTURE) as page:
         page.wait_for_selector(".start.first .theme-card")
         assert page.locator(".start-head h1").inner_text() == "How should it look?"
         assert page.locator(".panel-strip").inner_text().startswith("No panel found yet")
@@ -536,7 +532,7 @@ def test_a_first_start_asks_how_it_should_look(app_url, isolated_home):
 
 
 def test_a_first_start_offers_the_themes_for_the_panel_it_found(app_url, isolated_home):
-    with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}) as page:
+    with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
         page.wait_for_selector(".start.first .theme-card")
         strip = page.locator(".panel-strip")
         expect(strip).to_contain_text("Your panel is here: Turing 9.2″")
@@ -565,7 +561,7 @@ def test_the_launcher_shows_and_controls_the_running_panel(background):
     from libre_panel.config import load_config
 
     app, url = background
-    with browser_page(url, "home") as page:
+    with browser_page(url, "home", allow=PICTURE) as page:
         page.wait_for_selector(".panel-card .state-dot.showing")
         expect(page.locator(".panel-card h2")).to_have_text("Showing “Libre Default”")
         page.wait_for_selector(".panel-picture img")  # the picture on the panel
@@ -584,7 +580,9 @@ def test_the_launcher_shows_and_controls_the_running_panel(background):
 def test_the_launcher_says_what_the_panel_could_not_read(app_url, isolated_home):
     hint = "CPU temperature and power need administrator rights."
     choose_theme(isolated_home)
-    with browser_page(app_url, "home", routes={"**/api/app": a_panel_app(hint=hint)}) as page:
+    with browser_page(
+        app_url, "home", routes={"**/api/app": a_panel_app(hint=hint)}, allow=PICTURE
+    ) as page:
         page.wait_for_selector(".hint-card")
         expect(page.locator(".hint-card")).to_contain_text(hint)
         page.get_by_role("button", name="Show details").click()
@@ -711,7 +709,7 @@ def test_live_shows_the_panel_and_runs_its_services(background, isolated_home):
         "2026-10-11 09:14:31,000 WARNING libre_panel.x: a message to look at\n",
         encoding="utf-8",
     )
-    with browser_page(url, "live") as page:
+    with browser_page(url, "live", allow=PICTURE) as page:
         page.wait_for_selector(".live-tile")
         # the numbers come once the panel loop has run a second
         page.wait_for_function(
@@ -753,7 +751,7 @@ def test_live_without_the_panel_says_so_and_keeps_the_switches(app_url, isolated
 
     from libre_panel.config import load_config
 
-    with browser_page(app_url, "live") as page:
+    with browser_page(app_url, "live", allow=PICTURE) as page:
         page.wait_for_selector(".live-picture-note")
         assert "does not run the panel" in page.locator(".live-picture-note").inner_text()
         assert page.locator(".live-tile b").all_inner_texts() == ["–"] * 5
@@ -770,7 +768,7 @@ def test_the_new_views_speak_german(app_url, isolated_home):
 
     choose_theme(isolated_home)
     i18n.set_language("de")
-    with browser_page(app_url, "home") as page:
+    with browser_page(app_url, "home", allow=PICTURE) as page:
         page.wait_for_selector(".start-tile")
         assert page.locator(".start-tile strong").all_inner_texts() == [
             "Gestalten",
