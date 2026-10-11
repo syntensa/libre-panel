@@ -31,7 +31,7 @@ from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont
 from libre_panel import clock, i18n, timezones
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
 from libre_panel.icons import draw_icon, weather_icon_name
-from libre_panel.render import fan, lists
+from libre_panel.render import facets, fan, lists
 from libre_panel.render.countdown import countdown_text
 from libre_panel.render.dust import Dust
 from libre_panel.render.formatting import FormatError, auto_format, safe_format
@@ -354,6 +354,7 @@ class Renderer:
         self._plugin_types: dict[str, Any] = {}
         self._screen_last: tuple[Any, Piece] | None = None
         self._dust: Dust | None = None  # the theme's look.dust, once it is drawn (render/dust.py)
+        self._facet_tints: tuple[Any, Any] | None = None  # cool and warm tint of a bevel
         self._rotors: dict[str, fan.Rotor] = {}  # fan widget id -> how it turns (render/fan.py)
         self._fans: OrderedDict[tuple[Any, ...], Piece] = OrderedDict()  # fan pieces, by look
         self.screen = self._make_screen()
@@ -987,7 +988,8 @@ class Renderer:
         align = widget.get("align", "left")
         spacing = widget.get("letter_spacing", 0)
         tabular = widget.get("tabular", False)
-        if "\n" in text or not (spacing or (tabular and any(c in _DIGITS for c in text))):
+        facet = widget.get("finish") == "facet" and "\n" not in text and facets.usable(font)
+        if "\n" in text or not (spacing or facet or (tabular and any(c in _DIGITS for c in text))):
             anchor = _ANCHORS.get(align, "la")
             measure = ImageDraw.Draw(Image.new("L", (1, 1)))
             x0, y0, x1, y1 = measure.textbbox((x, y), text, font=font, anchor=anchor)
@@ -1011,11 +1013,22 @@ class Renderer:
         pen = float(margin)
         for ch, advance in zip(text, advances, strict=True):
             at = pen + (cell - font.getlength(ch)) / 2 if tabular and ch in _DIGITS else pen
-            glyph, gx = self._glyph(font, ch, fill, at, margin, h)
-            self._paste(layer, glyph, gx, 0)
+            if facet:  # the glyph with its bevel lit (render/facets.py keeps it)
+                placed = facets.glyph(font, ch, fill, at % 1.0, self._tints())
+                if placed is not None:
+                    self._paste(layer, placed[0], math.floor(at) + placed[1], placed[2])
+            else:
+                glyph, gx = self._glyph(font, ch, fill, at, margin, h)
+                self._paste(layer, glyph, gx, 0)
             pen += advance
         left = math.floor(start) - margin
         return Piece(layer, left, y, box=[left + margin, y, math.ceil(total), h])
+
+    def _tints(self) -> tuple[Any, Any]:
+        """The cool and the warm tint a bevel takes on, from the theme's palette."""
+        if self._facet_tints is None:
+            self._facet_tints = facets.tints_for(self.theme.palette)
+        return self._facet_tints
 
     GLYPHS = 4096  # glyph images kept: a gliding number changes a digit or two at a time
 

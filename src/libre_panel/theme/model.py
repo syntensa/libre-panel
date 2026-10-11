@@ -67,6 +67,12 @@ COMMON_FIELDS = _COMMON
 EFFECT_FIELDS = ("opacity", "glow", "glow_radius", "shadow", "shadow_offset", "shadow_blur")
 
 
+# How a widget's shapes are finished: as drawn, or with facets (render/facets.py): a flat
+# top in their own colour and a sharp bevel along the edges, lit from the top left.
+FINISHES = ("flat", "facet")
+_FINISH: tuple[str, Any] = ("enum:" + "|".join(FINISHES), "flat")
+
+
 def _text_style(tabular: bool) -> dict[str, tuple[str, Any]]:
     return {
         "font": ("font", ""),  # empty = the theme's font
@@ -77,6 +83,7 @@ def _text_style(tabular: bool) -> dict[str, tuple[str, Any]]:
         "tabular": ("bool", tabular),  # equal-width digits: numbers do not jitter
         "max_width": ("int", 0),  # 0 = any width; wider text is made to fit
         "fit": ("enum:shrink|ellipsis", "shrink"),  # how: a smaller font, or cut with …
+        "finish": _FINISH,  # facet: bevelled letters, from 20 px (smaller ones stay flat)
     }
 
 
@@ -117,6 +124,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "segment_gap": ("int", 2),
         "smooth": ("bool", True),
         "color_rules": ("rules", []),
+        "finish": _FINISH,  # facet: a raised bar with straight, bevelled ends in a milled track
     },
     "gauge": {
         "sensor": ("sensor", "cpu.load"),
@@ -136,6 +144,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "tick_color": ("color?", None),
         "smooth": ("bool", True),
         "color_rules": ("rules", []),
+        "finish": _FINISH,  # facet: a raised ring with straight, bevelled ends in a milled track
     },
     "graph": {
         "sensor": ("sensor", "cpu.load"),
@@ -156,6 +165,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "grid": ("int", 0),
         "grid_color": ("color?", "#ffffff1f"),
         "background": ("color?", None),
+        "finish": _FINISH,  # facet: the curve is a bevelled ridge (a slimmer one on wide graphs)
     },
     "clock": {
         "format": ("string", "%H:%M"),
