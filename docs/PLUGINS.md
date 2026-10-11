@@ -622,7 +622,7 @@ None, so a page says what is missing instead of failing.
 | `shown_frame()` | the frame on the panel now, with transitions and messages, as a PIL image in the theme's orientation (not turned for an upside-down panel); None before the first frame and while the panel is paused. Read it only |
 | `notify(text, **options)` | a message on the panel as a service sends it (`ServiceHost.notify`'s arguments), e.g. a test or the answer to an action; returns the `Delivery` (see *Toasts*) |
 | `log_tail(lines=40)` | the last lines of `logs/libre-panel.log`, the log the tray app writes (nothing for `libre-panel start`, which logs to its terminal) |
-| `config_path` | config.toml; change one setting with `libre_panel.config.set_config_value("modes.game.theme", ...)` |
+| `config_path` | config.toml; change one setting with `libre_panel.config.set_config_value("modes.game.theme", ...)` (a boolean, number, string or list), or a list of tables such as the autopilot's rules with `set_config_tables("services.autopilot.rules", [...])`. Both keep the rest of the file, comments included, check the result before writing it and refuse a layout they cannot edit |
 | `data_dir(name)` | a service's data folder |
 
 ## Modes

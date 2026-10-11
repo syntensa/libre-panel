@@ -140,6 +140,10 @@
   the new Control page) and for plugins in `context.status()`;
   `context.sources()` lists the sensor sources and what they say about
   themselves. Measuring costs a few additions per frame and holds no lock
+- Plugins: `set_config_value` writes lists too (`"services.enabled"`) and
+  replaces a list that runs over several lines, and the new `set_config_tables`
+  writes an array of tables such as `[[services.autopilot.rules]]`, keeping the
+  rest of `config.toml` and refusing what it cannot edit safely
 
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept

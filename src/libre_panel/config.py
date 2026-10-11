@@ -7,6 +7,7 @@ Optional features such as weather are off until the user turns them on.
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -385,13 +386,34 @@ def write_default_config(path: Path | None = None, overwrite: bool = False) -> P
     return path
 
 
+_BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _toml_string(text: str) -> str:
+    # a JSON string is a valid TOML basic string (DEL is the one character it leaves bare)
+    return json.dumps(text, ensure_ascii=False).replace("\x7f", "\\u007f")
+
+
+def _toml_key(key: Any) -> str:
+    if not isinstance(key, str):
+        raise TypeError(f"keys in config.toml are text, not {type(key).__name__}")
+    return key if _BARE_KEY.match(key) else _toml_string(key)
+
+
 def _toml_literal(value: Any) -> str:
+    """``value`` as TOML: a boolean, number or string, a list of such values, or an inline
+    table (``{ music = true, apps = ["a.exe"] }``)."""
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, int | float):
         return repr(value)
     if isinstance(value, str):
-        return json.dumps(value)  # a JSON string is a valid TOML basic string
+        return _toml_string(value)
+    if isinstance(value, list | tuple):
+        return "[" + ", ".join(_toml_literal(item) for item in value) + "]"
+    if isinstance(value, dict):
+        pairs = (f"{_toml_key(key)} = {_toml_literal(item)}" for key, item in value.items())
+        return "{ " + ", ".join(pairs) + " }" if value else "{}"
     raise TypeError(f"cannot write {type(value).__name__} to config.toml")
 
 
@@ -401,54 +423,108 @@ _TABLE = re.compile(
     r"^[ \t]*\[[ \t]*([A-Za-z0-9_-]+(?:[ \t]*\.[ \t]*[A-Za-z0-9_-]+)*)[ \t]*\][ \t]*(?:#.*)?$",
     re.MULTILINE,
 )
+# [table] or [[array.of.tables]]: the brackets come back with the name
+_ANY_HEADER = re.compile(
+    r"^[ \t]*(\[\[?)[ \t]*([A-Za-z0-9_-]+(?:[ \t]*\.[ \t]*[A-Za-z0-9_-]+)*)[ \t]*\]\]?"
+    r"[ \t]*(?:#.*)?$",
+    re.MULTILINE,
+)
 
 
-def _trailing_comment(line: str) -> str:
-    """The ``  # ...`` after a ``key = value`` line's value, or ""."""
-    quote = None
-    i = line.index("=") + 1
-    while i < len(line):
-        char = line[i]
-        if quote:
-            if char == "\\" and quote == '"':
-                i += 1  # an escaped character, maybe a quote
-            elif char == quote:
-                quote = None
-        elif char in "\"'":
-            quote = char
-        elif char == "#":
-            return line[len(line[:i].rstrip()) :]
+def _string_end(text: str, i: int) -> int:
+    """Just past the string that opens at ``i``: on one line, or over several when it
+    opens with three quotes."""
+    quote = text[i]
+    if text.startswith(quote * 3, i):
+        j = i + 3
+        while j < len(text) and not text.startswith(quote * 3, j):
+            j += 2 if quote == '"' and text[j] == "\\" else 1
+        return min(j + 3, len(text))
+    j = i + 1
+    while j < len(text) and text[j] != quote and text[j] != "\n":
+        j += 2 if quote == '"' and text[j] == "\\" else 1
+    return j + 1 if j < len(text) and text[j] == quote else j
+
+
+def _value_end(text: str, i: int) -> int:
+    """Where the TOML value that begins at ``i`` ends: just past its last character, over
+    as many lines as an array or an inline table takes. What follows on the line (spaces
+    and a comment) is not part of it."""
+    while i < len(text) and text[i] in " \t":
         i += 1
-    return ""
+    depth = 0
+    while i < len(text):
+        char = text[i]
+        if char in "\"'":
+            i = _string_end(text, i)
+            if depth == 0:
+                return i
+            continue
+        if char in "[{":
+            depth += 1
+        elif char in "]}":
+            depth -= 1
+            if depth <= 0:
+                return i + 1
+        elif char == "#" and depth:  # a comment inside an array runs to the end of its line
+            i = text.find("\n", i)
+            if i < 0:
+                return len(text)
+            continue
+        elif depth == 0 and char in " \t\n#":
+            return i
+        i += 1
+    return i
+
+
+def _table_body(text: str, table: str | None) -> tuple[int, int] | None:
+    """Where the keys of ``table`` are (``None``: the top level, before the first
+    header): the start of their first line and of the header that follows. None when
+    there is no such table."""
+    if table is None:
+        first = _HEADER.search(text)
+        return 0, first.start() if first else len(text)
+    header = next(
+        (m for m in _TABLE.finditer(text) if re.sub(r"[ \t]", "", m.group(1)) == table), None
+    )
+    if header is None:
+        return None
+    start = text.find("\n", header.end()) + 1 or len(text)
+    following = _HEADER.search(text, start)
+    return start, following.start() if following else len(text)
+
+
+def _key_span(text: str, body: tuple[int, int], key: str) -> tuple[int, int, int] | None:
+    """Where ``key = value`` is in a table body: the start of its line, the end of its
+    indentation, and the end of the value (after as many lines as it takes)."""
+    found = re.compile(rf"^([ \t]*){re.escape(key)}[ \t]*=", re.MULTILINE).search(text, *body)
+    if found is None:
+        return None
+    return found.start(), found.end(1), _value_end(text, found.end())
 
 
 def _with_key(text: str, table: str | None, key: str, literal: str) -> str:
     line = f"{key} = {literal}"
-    if table is None:  # top-level keys come before the first [table] header
-        first = _HEADER.search(text)
-        start, end = 0, first.start() if first else len(text)
-    else:
-        header = next(
-            (m for m in _TABLE.finditer(text) if re.sub(r"[ \t]", "", m.group(1)) == table), None
-        )
-        if header is None:
-            return text.rstrip("\n") + f"\n\n[{table}]\n{line}\n"
-        start = text.find("\n", header.end()) + 1 or len(text)
-        following = _HEADER.search(text, start)
-        end = following.start() if following else len(text)
-    body = text[start:end]
-    pattern = re.compile(rf"^([ \t]*){re.escape(key)}[ \t]*=.*$", re.MULTILINE)
-    body, count = pattern.subn(
-        lambda m: m.group(1) + line + _trailing_comment(m.group(0)), body, count=1
-    )
-    if not count:
-        body = line + "\n" + body
-    return text[:start] + body + text[end:]
+    body = _table_body(text, table)
+    if body is None:
+        return text.rstrip("\n") + f"\n\n[{table}]\n{line}\n"
+    found = _key_span(text, body, key)
+    if found is None:
+        return text[: body[0]] + line + "\n" + text[body[0] :]
+    _, indent_end, value_end = found
+    return text[:indent_end] + line + text[value_end:]  # what follows the value stays
+
+
+def _write(path: Path, text: str) -> None:
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def set_config_value(name: str, value: Any, path: Path | None = None) -> Path:
-    """Change one setting (``"theme"``, ``"device.brightness"``,
-    ``"modes.game.theme"``, ...) in config.toml.
+    """Change one setting (``"theme"``, ``"device.brightness"``, ``"modes.game.theme"``,
+    ``"services.enabled"``, ...) in config.toml. The value is a boolean, a number, a
+    string, or a list of them.
 
     The rest of the file, comments included, stays as it is. The new file is
     checked before it is written (atomically), so a mistake never leaves a
@@ -466,12 +542,109 @@ def set_config_value(name: str, value: Any, path: Path | None = None) -> Path:
     written: Any = data
     for part in table.split(".") if table else ():
         written = written.get(part, {}) if isinstance(written, dict) else {}
-    if not isinstance(written, dict) or written.get(key) != value:
+    wanted = list(value) if isinstance(value, tuple) else value
+    if not isinstance(written, dict) or written.get(key) != wanted:
         raise ConfigError(f"{path}: could not set {name}; please edit it by hand")
     parse_config(data, path)
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+    _write(path, text)
+    return path
+
+
+def _comments_above(text: str, pos: int) -> int:
+    """Where the comment lines directly above the line at ``pos`` begin (``pos`` when
+    there are none): they belong to the header on that line."""
+    while pos > 0:
+        previous = text.rfind("\n", 0, pos - 1) + 1
+        if not text[previous:pos].lstrip().startswith("#"):
+            break
+        pos = previous
+    return pos
+
+
+def _without_tables(text: str, name: str) -> tuple[str, int | None]:
+    """``text`` without the ``[[name]]`` blocks (and the tables inside them), and without
+    a ``name = [...]`` in the parent table; and where the first block was (None when
+    there were none). A block takes the comments directly above its header along."""
+    headers = [m.start() for m in _HEADER.finditer(text)]
+    starts = [_comments_above(text, header) for header in headers] + [len(text)]
+    named = {
+        m.start(): (m.group(1), re.sub(r"[ \t]", "", m.group(2)))
+        for m in _ANY_HEADER.finditer(text)
+    }
+    kept, cut, at = [], 0, None
+    for header, begin, stop in zip(headers, starts, starts[1:], strict=False):
+        brackets, found = named.get(header, ("", ""))
+        if (found == name and brackets == "[[") or found.startswith(name + "."):
+            kept.append(text[cut:begin])
+            at = sum(map(len, kept)) if at is None else at
+            cut = stop
+    kept.append(text[cut:])
+    text = "".join(kept)
+    head, _, last = name.rpartition(".")
+    body = _table_body(text, head or None)
+    found = _key_span(text, body, last) if body is not None else None
+    if found is not None:  # written as a list in the parent table: that goes too
+        first, _, value_end = found
+        text = text[:first] + text[text.find("\n", value_end) + 1 or len(text) :]
+    return text, at
+
+
+def _pruned(value: Any) -> Any:
+    """``value`` without the empty tables in it: a table that only the headers of the
+    array made is no difference."""
+    if not isinstance(value, dict):
+        return value
+    kept = {key: _pruned(item) for key, item in value.items()}
+    return {key: item for key, item in kept.items() if item != {}}
+
+
+def set_config_tables(name: str, tables: list[dict[str, Any]], path: Path | None = None) -> Path:
+    """Replace the array of tables ``name`` (``"services.autopilot.rules"``) in config.toml
+    with ``tables``, written as ``[[name]]`` blocks. Everything else stays as it is; the
+    comments inside the old blocks go with them. Like :func:`set_config_value`, the new
+    file is checked before it is written, and a layout this cannot handle is refused."""
+    path = path or config_dir() / CONFIG_FILENAME
+    if not path.exists():
+        write_default_config(path)
+    original = path.read_text(encoding="utf-8")
+    try:
+        before = tomllib.loads(original)
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"{path}: {exc}") from exc
+    text, at = _without_tables(original, name)
+    head, _, last = name.rpartition(".")
+    blocks = "\n".join(
+        f"[[{name}]]\n"
+        + "".join(f"{_toml_key(key)} = {_toml_literal(value)}\n" for key, value in table.items())
+        for table in tables
+    )
+    if blocks:
+        if at is None:  # new: after the parent table's keys, else at the end
+            body = _table_body(text, head) if head else None
+            at = body[1] if body is not None else len(text)
+        ahead, behind = text[:at], text[at:]
+        if not ahead.strip() or ahead.endswith("\n\n"):
+            gap = ""
+        else:
+            gap = "\n" if ahead.endswith("\n") else "\n\n"
+        tail = "\n" if behind.strip() else ""
+        text = ahead + gap + blocks + tail + behind
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"{path}: could not set {name} ({exc}); please edit it by hand") from exc
+    expected = copy.deepcopy(before)
+    node: Any = expected
+    for part in head.split(".") if head else ():
+        node = node.setdefault(part, {}) if isinstance(node, dict) else {}
+    if isinstance(node, dict):
+        node.pop(last, None)
+        if tables:
+            node[last] = [dict(table) for table in tables]
+    if _pruned(data) != _pruned(expected):
+        raise ConfigError(f"{path}: could not set {name}; please edit it by hand")
+    parse_config(data, path)
+    _write(path, text)
     return path
 
 
