@@ -289,9 +289,12 @@ def _catmull_rom(points: list[tuple[float, float]], samples: int = 6) -> list[tu
     return out
 
 
-# "media.playing=1", "sun.up!=0", "cpu.temp>80": a ``needs`` that compares a reading
+# "media.playing=1", "sun.up!=0", "cpu.temp>80", "game.limiter=gpu": a ``needs`` that compares a
+# reading with a number, or (``=``, ``!=``) with a word
+_NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
 _COMPARE = re.compile(
-    r"^(?P<key>[^=<>!]+?)\s*(?P<op>==|=|!=|>=|<=|>|<)\s*(?P<value>-?\d+(?:\.\d+)?)$"
+    r"^(?P<key>[^=<>!]+?)\s*(?P<op>==|=|!=|>=|<=|>|<)\s*"
+    r"(?P<value>-?\d+(?:\.\d+)?|[A-Za-z_][\w .-]*?)$"
 )
 _OPERATORS = {
     "=": lambda a, b: a == b, "==": lambda a, b: a == b, "!=": lambda a, b: a != b,
@@ -312,8 +315,8 @@ def need_holds(need: str, snapshot: Snapshot) -> bool:
     """Whether one condition of ``needs`` holds: a reading that has a value (``"gpu.load"``),
     none (``"!gpu.load"``; a state that is ``null`` has none), a picture that a source has
     (``"@media.app_icon"``), or compares so (``"media.playing=1"``: ``=``, ``!=``, ``>``, ``>=``,
-    ``<``, ``<=`` with a number; a reading without a number never does; a ``!`` in front says
-    the opposite)."""
+    ``<``, ``<=`` with a number; a reading without a number never does; ``"game.limiter=gpu"``:
+    ``=`` and ``!=`` with a word, a text in any case; a ``!`` in front says the opposite)."""
     need = need.strip()
     body = need.lstrip("!").strip()
     found = _COMPARE.match(body)
@@ -324,8 +327,14 @@ def need_holds(need: str, snapshot: Snapshot) -> bool:
         holds = value is not None and value != "null"
     else:
         value = snapshot.value(found["key"].strip())
-        number = _number(float(value) if isinstance(value, bool) else value)  # (on is 1)
-        holds = number is not None and _OPERATORS[found["op"]](number, float(found["value"]))
+        if _NUMBER.fullmatch(found["value"]):
+            number = _number(float(value) if isinstance(value, bool) else value)  # (on is 1)
+            holds = number is not None and _OPERATORS[found["op"]](number, float(found["value"]))
+        elif isinstance(value, str) and found["op"] in ("=", "==", "!="):  # a word
+            same = value.strip().casefold() == found["value"].strip().casefold()
+            holds = same if found["op"] != "!=" else not same
+        else:  # a number is no word, and words have no order
+            holds = False
     return holds != need.startswith("!")
 
 
@@ -1379,6 +1388,8 @@ class Renderer:
             text = i18n.format_date(self._time(widget, snapshot), widget["format"])[:100]
         except ValueError:
             text = "--:--"
+        if widget.get("uppercase"):
+            text = text.upper()
         return self._text_widget(widget, text, widget["color"])
 
     def _time(self, widget: dict[str, Any], snapshot: Snapshot) -> datetime:

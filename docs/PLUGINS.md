@@ -320,11 +320,18 @@ the panel):
 | `report.title`, `report.game`, `report.when`, `report.versus` | texts: "Round report", the game, "21:03 – 21:48", "Compared with the last 7 rounds" |
 | `report.length`, `report.outside` | s, °C |
 | `report.fps`, `report.low`, `report.frametime` | the means: fps, fps, ms |
-| `report.fps_delta`, `report.low_delta` | this round minus the mean of the earlier ones |
+| `report.fps_delta`, `report.low_delta`, `report.frametime_delta` | this round minus the mean of the earlier ones |
+| `report.count` | how many earlier rounds the comparison is made of (0: the first round) |
 | `report.limit` | text: who held the rate down, by share, "GPU 94 %  CPU 6 %" |
+| `report.limit.gpu`, `report.limit.cpu`, `report.limit.cap` | the same shares as numbers in percent, for a bar in their colours (no value for one that held the rate down for under half a percent of that time, as in the text) |
 | `report.cpu_temp`, `report.gpu_temp`, `report.gpu_hotspot`, `report.cpu_power`, `report.gpu_power`, `report.vram_used` | the highest values: °C, W, GB |
+| `report.cpu_temp_mean`, ..., `report.cpu_temp_delta`, ... | for each of those: the mean of the earlier rounds, and this round minus it |
 | `report.level.0` ... | the share of the round in each range of frame rates in percent, the slowest range first; the label is the range ("< 60", "60–90", "165+") |
+| `report.level.0.mean` ... | the mean share of the earlier rounds in each range (no value for the first round, or when the ranges were other ones) |
 | `report.head.levels`, `report.head.peaks` | headings for a chart and a list |
+
+Where there is nothing to be against (the first round of a game) the mean and
+delta readings have no value: a theme shows "--" or hides them with `needs`.
 
 The service also has `show_last_report()` (builds and shows the latest round
 that was long enough again; for a console page) and `status()` (is it

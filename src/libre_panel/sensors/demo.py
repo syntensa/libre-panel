@@ -8,6 +8,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Any
 
+import numpy as np
 from PIL import Image
 
 from libre_panel.sensors.base import Reading, SensorProvider, Snapshot
@@ -263,10 +264,42 @@ def _cover() -> Image.Image:
     return _COVER[0]
 
 
-def demo_snapshot(fixed_time: float | None = None, samples: int = 600) -> Snapshot:
+HISTORY_SAMPLES = 1900  # a graph of SPUR II's panorama (1713 points) is full in a preview
+
+
+def demo_report(t: float, earlier: int = 7) -> dict[str, Reading]:
+    """A round report on show (made up, after the numbers of the plugin guide), so that the theme
+    the memory service shows after a game is complete in a preview. ``earlier`` is how many
+    rounds of the game it is set against; with 0 it is the first round, with nothing to compare."""
+    from libre_panel.services import round_report
+
+    mean = {
+        "fps_mean": 142.1, "fps_p01": 101.2, "fps_low_mean": 99.0, "frametime_mean": 6.9,
+        "cpu_temp_max": 72.4, "gpu_temp_max": 57.1, "gpu_hotspot_max": 78.0,
+        "cpu_power_max": 94.0, "gpu_power_max": 318.0, "vram_used_max": 14.5,
+    }  # fmt: skip
+    session = {
+        "game": "Starfall", "started": t - 2760, "ended": t - 60, "duration_s": 2700,
+        "outside_temp": 12.6, "fps_mean": 148.3, "fps_low_mean": 101.0, "frametime_mean": 6.7,
+        "limit_cpu_s": 210, "limit_gpu_s": 2290, "limit_cap_s": 110,
+        "levels": {"edges": [60, 90, 120, 144, 165], "seconds": [26, 52, 235, 1150, 1040, 107]},
+        "cpu_temp_max": 74.1, "gpu_temp_max": 56.0, "gpu_hotspot_max": 80.0,
+        "cpu_power_max": 96.0, "gpu_power_max": 327.0, "vram_used_max": 14.8,
+    }  # fmt: skip
+    comparison = {
+        "count": earlier,
+        "mean": mean if earlier else {},
+        "levels": [0.02, 0.03, 0.12, 0.40, 0.36, 0.07] if earlier else None,
+    }
+    found = round_report.readings({"session": session, "comparison": comparison})
+    return {key: Reading(key, value, unit, label) for key, (value, unit, label) in found.items()}
+
+
+def demo_snapshot(fixed_time: float | None = None, samples: int = HISTORY_SAMPLES) -> Snapshot:
     """A complete snapshot with filled graph history, for previews and the editor."""
     provider = DemoProvider({"fixed_time": fixed_time})
-    readings = provider.read()
+    when = fixed_time if fixed_time is not None else time.time()
+    readings = {**provider.read(), **demo_report(when)}
     history = {key: demo_history(provider, key, samples) for key in _WAVES}
     now = datetime.fromtimestamp(fixed_time) if fixed_time is not None else datetime.now()
     return Snapshot(readings=readings, history=history, now=now, images=provider.images())
@@ -278,17 +311,14 @@ def demo_history(provider: DemoProvider, key: str, samples: int, step: float = 1
         return []
     label, unit, base, amp, period = _WAVES[key]
     t0 = provider.fixed_time if provider.fixed_time is not None else time.time()
-    values = []
-    for i in range(samples):
-        t = t0 - (samples - 1 - i) * step
-        # Incommensurate slow waves plus a little flutter read like real load.
-        v = (
-            base
-            + amp * 0.6 * math.sin(2 * math.pi * t / (period * 3.7))
-            + amp * 0.35 * math.sin(2 * math.pi * t / (period * 1.3) + 1.1)
-            + amp * 0.08 * math.sin(t * 0.9) * math.sin(t / 3.1)
-        )
-        if unit == "%":
-            v = min(100.0, max(0.0, v))
-        values.append(v)
-    return values
+    t = t0 - (samples - 1 - np.arange(samples)) * step
+    # Incommensurate slow waves plus a little flutter read like real load.
+    v = (
+        base
+        + amp * 0.6 * np.sin(2 * math.pi * t / (period * 3.7))
+        + amp * 0.35 * np.sin(2 * math.pi * t / (period * 1.3) + 1.1)
+        + amp * 0.08 * np.sin(t * 0.9) * np.sin(t / 3.1)
+    )
+    if unit == "%":
+        v = np.clip(v, 0.0, 100.0)
+    return v.tolist()

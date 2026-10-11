@@ -7,7 +7,8 @@ refused and absurd widths are rejected. Extra format specs:
 (3:07, a song's length), ``{value:gb}`` (a size in GB from the reading's own
 unit: 13.5) and ``{value:rate}`` with ``{value:rate_unit}`` (a data rate as a
 number and its unit apart, as SPUR II sets them: 519 and KB/s, from 1 MB/s
-1.2 and MB/s).
+1.2 and MB/s) and ``{value:upper}`` (a text in capitals: ``{label:upper}`` makes
+of a reading's name a heading, in the language of the panel).
 """
 
 from __future__ import annotations
@@ -105,6 +106,8 @@ class _SafeFormatter(string.Formatter):
             return clock_duration(value)
         if format_spec in ("rate", "rate_unit"):
             return rate_parts(value)[format_spec == "rate_unit"]
+        if format_spec == "upper":
+            return str(value).upper()
         if format_spec == "gb":
             size = _SIZES.get(_UNIT.get().removesuffix("/s"), 1024**3)
             return f"{float(value) * size / 1024**3:.1f}"

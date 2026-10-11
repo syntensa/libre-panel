@@ -118,6 +118,11 @@ taken back (`null`) has no value, so `"needs": "downloads"` is true only while
 something downloads. `@` in front of a name asks for a picture a source has:
 `"needs": "!@media.app_icon"` is true while the player has no icon.
 
+`=` and `!=` also compare with a word: `"needs": "game.limiter=gpu"` holds while
+the reading is that text (in any case), so a word in the colour of whoever holds the
+frame rate down shows only while it does. A game's name can stand where its logo is
+missing: `"needs": "!@game.logo"`.
+
 Text-like widgets share `font` (empty = the theme font), `font_size`, `color`,
 `align` (`left`, `center`, `right`; `x` is the left edge, centre or right edge
 accordingly; `y` is the top of the line), `letter_spacing` (pixels, also
@@ -133,7 +138,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `bar` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `color`, `color2`, `background`, `radius`, `direction`, `segments`, `segment_gap`, `smooth`, `color_rules`, `glow_area` | progress bar; `color2` makes a gradient along the track, `segments` an LED-style bar; `glow_area` see [Look and finish](#look-and-finish) |
 | `gauge` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `start_angle`, `end_angle`, `thickness`, `color`, `color2`, `background`, `cap`, `ticks`, `tick_color`, `smooth`, `color_rules` | ring; angles clockwise from 3 o'clock, default 135→405; `cap` round or flat |
 | `graph` | `sensor`, `w`, `h`, `min`, `max`, `scale`, `history`, `seconds`, `color`, `fill`, `fill_fade`, `fill_alpha`, `direction`, `inset`, `smooth`, `per_frame`, `line_width`, `grid`, `grid_color`, `background` | history; `min`/`max` `null` = automatic, `smooth` draws a curve, `fill_alpha` 0 to 1 sets how opaque the fill is (0: the default, a flat fill 0.25, a fade 0.45 at its top), `direction` `down` hangs the curve from the top edge and fills it from there (upload above a line, download below it), `inset` off lets the range span the box (a line at an edge is cut in half there) as SPUR II's charts, `seconds` and `per_frame` see above |
-| `clock` | `format`, `timezone` | date/time with [strftime codes](https://strftime.org), e.g. `%H:%M:%S`, `%A %d %B`; `timezone` e.g. `Asia/Tokyo` (empty: this computer's) |
+| `clock` | `format`, `timezone`, `uppercase` | date/time with [strftime codes](https://strftime.org), e.g. `%H:%M:%S`, `%A %d %B`; `timezone` e.g. `Asia/Tokyo` (empty: this computer's); `uppercase` sets the weekday and month in capitals, in the language of the panel (MONTAG · 28. SEPTEMBER) |
 | `analog` | `w`, `h`, `timezone`, `color`, `color2`, `face`, `marks`, `seconds` | a clock face with hands; `color2` the second hand |
 | `countdown` | `target`, `part`, `done` | the time left until `target` (`2026-12-24`, `2026-12-24 18:00`, or `12-24` for every year); `part`: `number` (76, 5:12, 12:33), `unit` (days, hours, minutes), `clock` (05:12:33 left in the day), `text` ("76 days"), `days`, `date`; `done` is shown once it is there ("Today", "Now") |
 | `moon` | `size`, `sensor`, `color`, `color2`, `mirror` | the moon as it is lit (`moon.phase`); `mirror` as seen south of the equator |
@@ -265,6 +270,33 @@ than a running one. It turns where the panel is driven faster than once a
 second (video mode, or `fps` above 1); in the editor's preview and on a
 panel that gets one picture a second it stands, its ring and its blur showing
 the speed. In the editor, *Fan with speed* adds a fan with its name and RPM.
+
+### The SPUR II screens
+
+The screens of SPUR II are built-in themes for the 8.8" and 9.2" bars (1920 × 480)
+that show the look above in full; each is plain JSON like any other theme, and
+none names a piece of hardware (the names of the processor, the graphics card and
+the memory come from `cpu.name`, `gpu.name` and `mem.name`). Their frames are flat
+bands in the colour of what they frame.
+
+| Theme | Shows |
+|---|---|
+| `spur-classic` | two load charts, RAM and network in staggered boxes, CPU and GPU sections; for the desk |
+| `spur-horizon` | the CPU's load growing up from a midline and the GPU's down from it, 70 seconds side by side (a point a pixel, 25 a second, a mark every 10 s), tiles below for values, network and music; for the desk |
+| `spur-cockpit` | the CPU's and GPU's load as two equal charts with the RAM as a ring beside them, and CPU, GPU, memory and network in four columns of equal width (SPUR II's building blocks on its 40 px grid); for the desk |
+| `spur-header` | for a game: the classic frame with the frame rate and the 1% low in the header beside the game's logo (its name where there is none), load charts, who holds the frame rate down and a chart of the longest frame of each moment; needs the `game` service and PresentMon |
+| `spur-focus` | for a game: the frame rate large (150 px) with its course over 35 s beside it, the CPU's and GPU's load as small charts, then FRAMES, CPU, GPU and system with bars; the game's logo or name above the number; needs the `game` service and PresentMon |
+| `spur-session` | for a game: the frame rate with its last ten minutes, a chart of the longest frame of each moment, and the CPU's and GPU's temperatures and power with their course over the same ten minutes (SPUR II adds up a whole session: time played, average frame rate, share of time per frame rate, highest values; Libre Panel has no readings for those, so this screen shows the last ten minutes, the longest a graph can show); needs the `game` service and PresentMon |
+| `spur-studio` | SPUR II's Studio screen, for the desk, made of the [cards](#cards) on one grid: a large clock with the seconds and the date, the network (a download while one runs) and the volume on the left, the playback card in the middle (the weather card when nothing plays, with the line of light between them), and rings for the CPU, GPU and RAM; it needs `media` for the playback card, the weather for the forecast, and shows the volume with the `audio` source |
+| `round-report` | what the `memory` service shows after a game (`report_theme`): the round's average frame rate with its distance from the average of the earlier rounds, the 1% low and the frame time, who held the rate down as a bar in the colours of the GPU and CPU (and the frame limit's), the share of the round at each frame rate with a line under each bar for the earlier rounds, and the highest temperatures and power against their average; it reads the `report.*` readings ([Plugins](PLUGINS.md#the-round-report)), so its title, heading hints and note follow the language of the panel, and a first round says so and shows no comparison; needs the `memory` service and PresentMon |
+
+The fans in the header need their sensors (`fan.lpc.fan_1` ... , `gpu.fan`) and show
+only the ones that report; the volume needs the `audio` source, what plays the
+`media` source, the screens for a game the `game` service and PresentMon
+(see [Configuration](CONFIGURATION.md#game-mode)). Where a screen for a game
+shows its logo (`@game.logo`, from the `game` service) and the game has none, its
+name stands there: `game.name`, or the program PresentMon counts (`game.app`)
+where the service has no name.
 
 ### Weather symbols
 
@@ -398,7 +430,7 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 
 ### Cards
 
-The cards of SPUR II's Studio screen are modules. A card is laid out in the numbers
+The cards of SPUR II's Studio screen are modules (the theme `spur-studio` is made of them). A card is laid out in the numbers
 of the card it comes from (376 px tall on the 1920 × 480 bar) and scaled with its
 module, so it looks as that card does at its size. Where the module is too small or
 too narrow for that, the older module of its kind takes over: the weather card is
@@ -684,6 +716,7 @@ class Plate(WidgetType):
 | `{value:clock}` | `3:07` (a song's length) |
 | `{value:gb}` | `13.5` (a size in GB, whatever unit the reading comes in) |
 | `{value:rate}` and `{value:rate_unit}` | `519` and `KB/s`, from 1 MB/s `1.2` and `MB/s` (a data rate: the number and its unit apart, so each can have its own font) |
+| `{value:upper}` | `ROUND REPORT` (a text in capitals; `{label:upper}` does so for a reading's name) |
 | `{label}: {value:.0f}` | `CPU load: 38` |
 
 For safety, attribute or index access (`{value.x}`, `{value[0]}`), other field
