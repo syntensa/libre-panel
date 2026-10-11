@@ -51,6 +51,14 @@ _WAVES: dict[str, tuple[str, str, float, float, float]] = {
     "fan.board.case_1": ("Case fan 1", "RPM", 820, 120, 47),
     "fan.board.case_2": ("Case fan 2", "RPM", 760, 90, 53),
     "fan.board.pump": ("Pump", "RPM", 2100, 150, 59),
+    # as LibreHardwareMonitor names them, around SPUR II's sample values
+    "gpu.mem.used": ("GPU memory used", "MB", 13824, 400, 37),
+    "temp.memory.temperature": ("Memory", "°C", 46, 2, 67),
+    "fan.lpc.fan_1": ("Fan #1", "RPM", 820, 40, 47),
+    "fan.lpc.fan_2": ("Fan #2", "RPM", 1140, 60, 41),
+    "fan.lpc.fan_3": ("Fan #3", "RPM", 900, 50, 53),
+    "fan.lpc.fan_4": ("Fan #4", "RPM", 760, 40, 59),
+    "audio.volume": ("Volume", "%", 30, 0, 1),
 }
 # Eight cores, each busy in its own rhythm.
 for _n, (_base, _amp, _period) in enumerate(

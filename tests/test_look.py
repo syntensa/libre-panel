@@ -676,17 +676,21 @@ def test_plugin_widgets_give_the_light_their_edges(plugin_folder):
 # -- sizes ----------------------------------------------------------------------------
 
 
-def test_the_lit_demo_is_a_demo_on_the_bar():
-    theme = load_theme(builtin_themes_dir() / "lit-demo")
-    assert (theme.width, theme.height) == (1920, 480)
-    assert theme.description.startswith("DEMO")
+def test_spur_classic_is_spur_iis_classic_screen_on_the_bar():
+    theme = load_theme(builtin_themes_dir() / "spur-classic")
+    assert (theme.width, theme.height) == (1920, 480) and theme.warnings == []
     assert set(theme.look) == {"grid", "light"}
     renderer = Renderer(theme)
-    frame, _ = renderer.render(demo_snapshot(fixed_time=1_700_000_000), 0.0)
+    found = demo_snapshot(fixed_time=1_700_000_000)
+    frame, _ = renderer.render(found, 0.0)
     assert renderer.warnings == [] and frame.size == (1920, 480)
     assert {type(f).__name__ for f in renderer._finishes.values()} >= {
-        "LitBar", "LitGauge", "LitGraph", "LitIcon"
+        "LitBar", "LitGraph", "LitText", "Ridge"
     }  # fmt: skip
+    owners = {renderer.edge_owners[id(edge)] for edge in renderer.light_edges}
+    assert owners == {"cpu-frame-top", "gpu-frame-top", "mem-box-left", "net-box-left"}
+    shown = {w["sensor"] for w in theme.widgets if w["type"] in ("metric", "bar", "graph")}
+    assert {key for key in shown if found.value(key) is None} == set()  # the demo has them all
 
 
 @pytest.mark.parametrize("size", [(480, 320), (320, 480), (1920, 480)])

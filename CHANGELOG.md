@@ -135,8 +135,12 @@
   `[weather]`, glints on ridges, and a sweep of light runs across at the
   start, on the hour, on a new track and after a tube or entrance transition. The light layers are prepared before
   the first frame and kept in the cache folder. The editor sets both (*Grid
-  background* and *Panel light* with the theme, *Finish* for a widget); the
-  *Lit demo* theme (1920 × 480) shows them
+  background* and *Panel light* with the theme, *Finish* for a widget)
+- The theme *SPUR Classic* (`spur-classic`, 1920 × 480): SPUR II's classic
+  screen as it is now, rebuilt from its geometry with the look and the
+  finishes: two load charts in ridged frames, the CPU and GPU sections,
+  RAM and network in staggered boxes, values as light in their grooves
+  with SPUR II's glow, glowing headings, the fans and the clock above
 - Ridges: a `rect` with a `ridge` name is drawn as SPUR II draws its frames,
   a ridge with two facets under the guide light, the lit one glowing a
   little; rects with the same name are one ridge, joined at mitres. Rects

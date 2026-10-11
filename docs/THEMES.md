@@ -265,7 +265,7 @@ module's parts where the module is in the list.
 
 The look of SPUR II in two parts: the theme's `look` block for the whole
 panel, and a widget's `finish` for its shape. A theme with neither costs
-nothing extra. The built-in *Lit demo* (1920 × 480) shows both.
+nothing extra. The built-in *SPUR Classic* (1920 × 480) shows both.
 
 ```json
 "look": {
