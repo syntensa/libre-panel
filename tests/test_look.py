@@ -350,7 +350,7 @@ def test_grid_colours_come_from_the_background_without_a_palette():
 
 
 FRAME = {"type": "rect", "id": "frame", "x": 40, "y": 40, "w": 400, "h": 240, "color": None,
-         "outline": "#3A4A5C", "outline_width": 4}  # fmt: skip
+         "outline": "#3A4A5C", "outline_width": 4, "ridge": "frame"}  # fmt: skip
 
 
 def test_ridges_are_mitred_and_flat_in_their_middle():
@@ -362,15 +362,53 @@ def test_ridges_are_mitred_and_flat_in_their_middle():
     assert not normals[5:].any()
 
 
-def test_frames_become_ridges_whose_gloss_lies_on_them():
-    theme = theme_of([FRAME, {**FRAME, "id": "thin", "outline_width": 1}], look={"light": {}})
+def test_rects_with_a_ridge_name_are_ridges_whose_gloss_lies_on_them():
+    flat = {**FRAME, "id": "flat", "x": 60, "y": 60, "w": 360, "h": 200, "ridge": ""}
+    theme = theme_of([FRAME, flat], look={"light": {}})
     renderer = Renderer(theme)
     frame, _ = renderer.render(snap(), 0.0)
     assert [renderer.edge_owners[id(edge)] for edge in renderer.light_edges] == ["frame"]
     ids = [wid for wid, _ in renderer._last[0]]
     assert ids[ids.index("frame") + 1].startswith("\0light")  # right on its frame
-    plain, _ = Renderer(theme_of([FRAME])).render(snap(), 0.0)
-    assert changed_region(frame, plain) is not None
+    dark, _ = Renderer(theme_of([FRAME, flat])).render(snap(), 0.0)  # a ridge without the light
+    plain, _ = Renderer(theme_of([{**FRAME, "ridge": ""}, flat])).render(snap(), 0.0)
+    assert changed_region(dark, plain) is not None and changed_region(frame, dark) is not None
+    inner = (62, 62, 418, 258)  # the rect without a name stays flat, light or not
+    assert changed_region(frame.crop(inner), plain.crop(inner)) is None
+
+
+def test_rects_are_flat_unless_a_theme_asks_for_a_ridge():
+    rects = [{**FRAME, "ridge": ""}, {**FRAME, "id": "band", "y": 300, "h": 8, "ridge": "",
+                                      "color": "#3A4A5C", "outline": None}]  # fmt: skip
+    lit_theme = theme_of(rects, look={"light": {}})
+    renderer = Renderer(lit_theme)
+    frame, _ = renderer.render(snap(), 0.0)
+    assert renderer.light_edges == [] and renderer._finishes == {}
+    plain, _ = Renderer(theme_of(rects)).render(snap(), 0.0)
+    assert changed_region(frame, plain) is None
+
+
+def test_bands_of_one_ridge_meet_at_a_mitre():
+    band = {"type": "rect", "color": "#13E5D7B9", "ridge": "cpu-frame"}
+    top = {**band, "id": "top", "x": 40, "y": 40, "w": 200, "h": 5}
+    left = {**band, "id": "left", "x": 40, "y": 40, "w": 5, "h": 120}
+    renderer = Renderer(theme_of([top, left], look={"light": {}}))
+    frame, boxes = renderer.render(snap(), 0.0)
+    [edge] = renderer.light_edges  # one ridge: the first band draws it, glossed once
+    assert renderer.edge_owners[id(edge)] == "top"
+    assert boxes["left"] == [40, 40, 5, 120] and boxes["top"] == [40, 40, 200, 5]
+    pieces = dict(renderer._last[0])
+    assert pieces["left"].layer.size == (1, 1)  # it only keeps its place for the editor
+    apart = Renderer(theme_of([top, {**left, "ridge": "other"}], look={"light": {}}))
+    apart.render(snap(), 0.0)  # two names: two ridges
+    assert sorted(apart.edge_owners[id(edge)] for edge in apart.light_edges) == ["left", "top"]
+
+    one, _ = Renderer(theme_of([top, left])).render(snap(), 0.0)  # (without the sun's gloss)
+    two, _ = Renderer(theme_of([top, {**left, "ridge": "other"}])).render(snap(), 0.0)
+    one, two = np.asarray(one, np.int16), np.asarray(two, np.int16)
+    assert one[41, 120].sum() > one[43, 120].sum()  # the facet towards the light, and away
+    assert (one[38:48, 100:200] == two[38:48, 100:200]).all()  # along a band: the same
+    assert (one[40:45, 40:45] != two[40:45, 40:45]).any()  # where they meet: one ridge
 
 
 def test_the_sun_comes_from_where_it_stands():
@@ -502,7 +540,7 @@ def test_the_lit_demo_is_a_demo_on_the_bar():
     frame, _ = renderer.render(demo_snapshot(fixed_time=1_700_000_000), 0.0)
     assert renderer.warnings == [] and frame.size == (1920, 480)
     assert {type(f).__name__ for f in renderer._finishes.values()} >= {
-        "LitBar", "LitGauge", "LitGraph", "LitIcon", "Ridge"
+        "LitBar", "LitGauge", "LitGraph", "LitIcon"
     }  # fmt: skip
 
 

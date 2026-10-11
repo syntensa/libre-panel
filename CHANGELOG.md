@@ -129,12 +129,15 @@
   size (bars, rings, graphs and icons; modules hand it to their parts).
   `look.grid` lays SPUR II's grid over the backdrop; `look.light` is one
   light for the panel: the sun, where it stands for the place in
-  `[weather]`, glints on frames (outlines of rects become ridges), and a
-  sweep of light runs across at the start, on the hour, on a new track and
-  after a tube or entrance transition. The light layers are prepared before
+  `[weather]`, glints on ridges, and a sweep of light runs across at the
+  start, on the hour, on a new track and after a tube or entrance transition. The light layers are prepared before
   the first frame and kept in the cache folder. The editor sets both (*Grid
   background* and *Panel light* with the theme, *Finish* for a widget); the
   *Lit demo* theme (1920 × 480) shows them
+- Ridges: a `rect` with a `ridge` name is drawn as SPUR II draws its frames,
+  a ridge with two facets under the guide light, the lit one glowing a
+  little; rects with the same name are one ridge, joined at mitres. Rects
+  without a name stay flat
 - For plugins: light edges the panel light glints on
   (`libre_panel.render.look.LightEdge`), from a widget type's `edges()` or a
   screen's `context.light_edge()`; finishes of their own with

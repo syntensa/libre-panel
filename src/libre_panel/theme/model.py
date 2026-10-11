@@ -91,6 +91,9 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "outline": ("color?", None),
         "outline_width": ("int", 1),
         "backdrop_blur": ("int", 0),
+        # A ridge with two lit facets, as SPUR II's frames (render.look); rects
+        # with the same name are one ridge, so bands that meet join at mitres
+        "ridge": ("string", ""),
     },
     "text": {"text": ("text", "Label"), **_text_style(False)},
     "metric": {
@@ -313,12 +316,11 @@ LOOK_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "alpha": ("number", 1.0),
     },
     # One light for the panel: the sun at the place in config.toml (else noon)
-    # glints on light edges (outlines of rects with ``frames``), and sweeps of
-    # light run across at moments
+    # glints on light edges (rects with a ``ridge``, plugins' edges), and
+    # sweeps of light run across at moments
     "light": {
         "strength": ("number", 1.0),
         "sun": ("bool", True),
-        "frames": ("bool", True),
         "color": ("color?", None),  # the sweeps' tint; empty: the accent
         "sweep_seconds": ("number", 1.6),
         "on_start": ("bool", True),

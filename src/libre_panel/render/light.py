@@ -180,25 +180,6 @@ def bloom(layer: Image.Image, radius: float, strength: float, scale: int = 4) ->
     return scaled(soft.resize((w, h), Image.Resampling.BILINEAR), strength)
 
 
-def light_layer(rgb: Any) -> Image.Image:
-    """Light given as RGB values (an array, 0 to 255) as an RGBA layer to add with
-    :func:`plus`: its colour the light's, its alpha its strongest channel."""
-    import numpy as np
-
-    rgb = np.clip(np.asarray(rgb, np.float32), 0, 255)
-    alpha = np.maximum(np.maximum(rgb[..., 0], rgb[..., 1]), rgb[..., 2])
-    plain = rgb * (255 / np.maximum(alpha, 1e-3))[..., None]
-    out = np.concatenate([plain, alpha[..., None]], -1) + 0.5
-    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), "RGBA")
-
-
-def plus(layer: Image.Image, light: Image.Image) -> Image.Image:
-    """``light`` (see :func:`light_layer`) added to the RGBA ``layer`` of the same
-    size: over something it adds up as light does, over nothing it shows
-    as a glow of its own."""
-    return ImageChops.add(layer.convert("RGBa"), light.convert("RGBa")).convert("RGBA")
-
-
 def sun_position(t: float, latitude: float, longitude: float) -> tuple[float, float]:
     """Where the sun stands at Unix time ``t`` seen from a place: (azimuth from
     north, clockwise; elevation) in degrees. The Astronomical Almanac's

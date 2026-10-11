@@ -130,7 +130,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `icon` | `icon`, `sensor`, `size`, `color`, `stroke` | line icons: cpu, gpu, ram, disk, network, download, upload, temperature, fan, power, clock, sun, moon, cloud, partly, rain, snow, storm, fog, humidity, wind, battery, plug, list, grid, signal — and `weather`, which follows the live weather, or the code in `sensor` (e.g. `weather.day.1.code`), by day or night |
 | `calendar` | `w`, `h`, `font`, `font_size`, `color`, `color2`, `muted`, `first_day` | the month as a grid of days, today marked in `color2`; weekday names in `muted` and the language; `first_day` `monday` or `sunday` |
 | `list` | `w`, `h`, `items`, `style`, `columns`, `max_items`, `sort`, `format`, `detail`, `detail_format`, `min`, `max`, `scale`, `levels`, `font`, `font_size`, `label_font`, `uppercase`, `color`, `muted`, `color2`, `background`, `empty`, `color_rules` | readings found by name or pattern, as many as fit, see [Lists](#lists) |
-| `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur` | cards, frames, separators; `backdrop_blur` gives frosted glass |
+| `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur`, `ridge` | cards, frames, separators; `backdrop_blur` gives frosted glass, `ridge` a ridge (see [Look and finish](#look-and-finish)) |
 | `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort` | a building block on the grid, see [Modules](#modules) |
 
 `scale` is `linear`, `sqrt` or `log`: the latter two keep small values visible
@@ -286,9 +286,8 @@ palette's `grid` and `grid_major`, else to a breath away from the background
 colour (the strong lines twice as far); `alpha` (0–1) dims both.
 
 **`light`** is one light for the whole panel. It falls only on *light
-edges*: points with a direction that widgets give it. The outlines of `rect`s
-2 px or wider become ridges with two facets (with `frames`, on by default)
-and catch it; plugins can give their own (see below).
+edges*: points with a direction that widgets give it. Ridges (below) catch
+it; plugins can give their own (see below).
 
 - The sun stands where it stands for the place in `config.toml` (`[weather]`
   latitude and longitude; without a place, or with `"sun": false`, at noon):
@@ -304,6 +303,15 @@ and catch it; plugins can give their own (see below).
   tints it (default: the palette's accent). A new theme does not count as a
   start, and the editor's previews show no sweeps.
 - `strength` (0–2, default 1) scales both.
+
+**Ridges.** A `rect` with a `ridge` name is drawn as a ridge, as SPUR II's
+frames: every point of it tilts towards its nearest edge, so it has two
+facets, one towards the guide light (top left), which lightens and glows a
+little, one away from it in shade. Rects with the same name are one ridge,
+so bands that meet join at a mitre (a frame of five bands is one frame). An
+outlined rect gives its outline, a filled one its fill. A ridge is a light
+edge for `look.light`. Without a name a rect stays flat, with or without a
+look.
 
 **`finish`** is `flat` (the default: the widget as it always looked), `lit`
 or `facet`. A widget keeps its place and size in any finish.
@@ -341,7 +349,7 @@ The panel light glints on `LightEdge`s (`libre_panel.render.look`):
 x to the right, y down, z towards the viewer; `(0, 0, 1)` faces the viewer
 and shines least) and `coverage` (h, w; 0–1 or 0–255) whose top left lies at
 (`x`, `y`) on the panel. `LightEdge.ridge(mask, x, y)` makes every line of a
-mask a ridge, as frames are.
+mask a ridge, as a `ridge` rect is.
 
 - A plugin widget type returns its edges from `edges(widget, ctx, snapshot,
   now)`; a screen calls `context.light_edge(edge)` in `render`.
