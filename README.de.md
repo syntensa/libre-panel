@@ -232,8 +232,8 @@ libre-panel quit                    # die Hintergrund-App beenden
 ## Datenschutz
 
 **Nichts verlässt deinen PC außer dem Wetter, das du einschaltest.** Kein Konto, keine
-Telemetrie, keine Update-Abfrage; die App wird nur für deinen eigenen PC ausgeliefert
-(127.0.0.1).
+Telemetrie, keine Update-Abfrage. Die App wird nur für deinen eigenen PC ausgeliefert
+(127.0.0.1), und nur an Anfragen mit einem geheimen Token, der bei jedem Start neu ist.
 
 - **Das Wetter** ist aus, bis du einen Ort setzt. Dann gehen nur seine Koordinaten an
   [Open-Meteo](https://open-meteo.com), alle 15 Minuten. Einen Ort, den du per Name suchst,

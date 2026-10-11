@@ -167,7 +167,7 @@ and the model becomes *supported* for everyone. Video mode is for the TURZX USB 
 others have no video decoder. Details, Linux permissions and the panels of other brands:
 [docs/HARDWARE.md](docs/HARDWARE.md).
 
-## Install and first start
+## <a name="install"></a>Install and first start
 
 From the [latest release](https://github.com/syntensa/libre-panel/releases/latest), no
 Python needed:
@@ -224,7 +224,8 @@ libre-panel quit                    # quit the background app
 ## Privacy
 
 **Nothing leaves your PC except the weather you turn on.** No account, no telemetry, no
-update check; the app is served to your own PC only (127.0.0.1).
+update check. The app is served to your own PC only (127.0.0.1), and only to requests that
+carry a secret token, new at every start.
 
 - **The weather** is off until you set a place. Then only its coordinates go to
   [Open-Meteo](https://open-meteo.com), every 15 minutes. A place you look up by name goes
