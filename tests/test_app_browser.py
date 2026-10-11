@@ -1206,7 +1206,7 @@ def test_the_palette_gives_the_focus_back(page):
     page.locator(".palette input").fill("keyboard shortcuts")
     page.keyboard.press("Enter")
     expect(page.locator(".dialog")).to_be_visible()
-    assert js(page, "document.activeElement.closest('.dialog') !== null")
+    page.wait_for_function("document.activeElement.closest('.dialog') !== null")
 
 
 def test_save_as_and_to_the_panel(page, isolated_home):
@@ -2968,8 +2968,8 @@ def test_settings_say_when_config_toml_has_a_mistake(app_url, isolated_home):
         assert page.locator(".settings-card").count() == 0  # nothing to change meanwhile
         (isolated_home / "config.toml").write_text("fps = 10\n", encoding="utf-8")
         page.get_by_role("button", name="Try again").click()
+        expect(page.locator(".note.error")).to_have_count(0)  # (the panel is found before)
         page.wait_for_selector(".panel-found")
-        assert page.locator(".note.error").count() == 0
 
 
 def test_settings_say_when_the_app_does_not_answer_and_not_that_config_toml_is_wrong(app_url):
@@ -2983,8 +2983,8 @@ def test_settings_say_when_the_app_does_not_answer_and_not_that_config_toml_is_w
         assert "config.toml" not in note  # (the browser's own "Failed to fetch" is not shown)
         page.unroute("**/api/settings")
         page.get_by_role("button", name="Try again").click()
+        expect(page.locator(".note.error")).to_have_count(0)  # (the panel is found before)
         page.wait_for_selector(".panel-found")
-        assert page.locator(".note.error").count() == 0
 
 
 def test_the_app_says_when_the_server_stops_answering_and_when_it_is_back(app_url):
