@@ -666,6 +666,8 @@ Libre Panel grew out of, for the 1920 × 480 bars, rebuilt as plain themes)
   graphs span 36 seconds in video mode, moving 25 pixels a second. The graphs of Slate, Libre
   Default and Column have a window in seconds for video mode too; on the serial panels these themes
   run on, nothing changes
+- The 9.2" (`turing-9.2-usb`) is listed as supported: stills and the video
+  mode at 50 fps have run on it for hours on end
 
 ## 0.4.2 — 2026-10-10
 
