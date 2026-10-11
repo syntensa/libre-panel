@@ -57,6 +57,11 @@ url = "http://127.0.0.1:8085/data.json"   # the web server (mode "webserver", an
 # ping = "1.1.1.1:443"         # what net.ping connects to (host:port), only while a
                                # theme shows the ping
 
+[hardware]
+# cpu_name = ""                # the names themes show (cpu.name, gpu.name, mem.name):
+# gpu_name = ""                # found by Libre Panel itself; text here replaces what is
+# memory_name = ""             # found, as you write it (empty: as found)
+
 [weather]
 enabled = false                # off unless you turn it on
 provider = "open-meteo"
@@ -249,6 +254,60 @@ path = "C:/Tools/PresentMon-2.3.0-x64.exe"
 Show these readings with the Dashboard module (`ha.sensor.living_room_temperature
 = Living room`, one per line), a list, or any widget with a `sensor`.
 `libre-panel sensors` lists what is there.
+
+## Hardware names
+
+`cpu.name`, `gpu.name` and `mem.name` are the names a theme can show for the
+processor, the graphics card and the memory (the headings of SPUR Classic do).
+Libre Panel finds them itself, once, when it starts: with no administrator
+rights, no other program and nothing to install. The source is `hardware`, it is
+always on and needs no place in `[sensors] providers`. It shortens the names for a
+panel: "AMD Ryzen 5 7600 6-Core Processor" is "Ryzen 5 7600", "12th Gen
+Intel(R) Core(TM) i7-12700K" is "Core i7-12700K", "NVIDIA GeForce RTX 4070" is
+"GeForce RTX 4070". The maker, the marks (R) and (TM), "CPU", the clock, the
+number of cores, the generation and "with Radeon Graphics" go.
+
+| | Windows | Linux |
+|---|---|---|
+| `cpu.name` | the registry, where the processor gives its own name | `model name` in `/proc/cpuinfo`; on ARM the board or the chip it names ("Raspberry Pi 4 Model B") |
+| `gpu.name` | the display adapters in the registry, the software and remote ones left out; the one with the most memory of its own: the card, not the chip in the processor | the cards in `/sys/class/drm`, named by the NVIDIA driver, by AMD's `amdgpu.ids` or by the system's `pci.ids`; a card of its own before the chip in the processor |
+| `mem.name` | the memory modules in the firmware's SMBIOS table: "Kingston DDR5-5600 32 GB" | the same where `/sys/firmware/dmi/entries` may be read (usually only by root); else the size |
+
+Where the modules cannot be read, `mem.name` is the size, "32 GB" (rounded up to a
+size sold, so 15.4 GB that the system leaves visible is "16 GB"). A name that
+cannot be found is no reading: the other sources' names (LibreHardwareMonitor
+has `cpu.name` and `gpu.name`, tidied the same way) fill in, else a theme shows
+its fallback. With several graphics cards, `gpu` under
+`[sensors.librehardwaremonitor]` picks the card by its name here too.
+
+**Your own names.** Text under `[hardware]` is the name, as you write it:
+
+```toml
+[hardware]
+cpu_name = "Ryzen 5 7600"
+memory_name = "Kingston Fury Beast DDR5-5600 2 x 16 GB"
+gpu_name = ""                  # empty: the one found
+```
+
+A name is one line of at most 100 characters. It wins over every other source.
+A changed `config.toml` is picked up while Libre Panel runs. The editor reads
+and writes the names through `GET /api/hardware`, which answers
+`{"cpu": {"detected": "Ryzen 5 7600", "custom": ""}, "gpu": {...},
+"memory": {...}}`, and `POST /api/hardware` with any of `{"cpu": "text", "gpu":
+"", "memory": "text"}` (an empty text gives the found name back). `POST`
+answers like `GET`, refuses anything else with 400 and, like every write, needs the
+header `X-Libre-Panel: 1`. `GET /api/hardware?refresh=1` asks the computer again
+(a card was changed while Libre Panel ran); Libre Panel asks once per start otherwise.
+
+**Where it can be wrong.** Windows can keep the entry of a graphics card that was
+taken out (Device Manager shows it under *Show hidden devices*); if that card had
+more memory, it may be the one named. Some firmware tells no speed or no maker for
+its memory, and then the name has none. Set the name yourself in these cases.
+
+**The names are yours.** They stay on your computer: Libre Panel does not write
+them to the log, and the report of `libre-panel doctor` has none. `libre-panel
+sensors` lists every reading, these three too; leave them out when you paste its
+output into an issue.
 
 ## Services and modes
 
