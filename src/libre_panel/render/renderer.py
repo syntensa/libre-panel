@@ -16,6 +16,7 @@ import json
 import logging
 import math
 import queue
+import re
 import threading
 import time
 from collections import OrderedDict
@@ -31,7 +32,7 @@ from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont
 from libre_panel import clock, i18n, timezones
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
 from libre_panel.icons import draw_icon, weather_icon_name
-from libre_panel.render import fan, lists
+from libre_panel.render import cover, fan, lists
 from libre_panel.render import finish as finishes
 from libre_panel.render.countdown import countdown_text
 from libre_panel.render.dust import Dust
@@ -39,7 +40,8 @@ from libre_panel.render.formatting import FormatError, auto_format, safe_format
 from libre_panel.render.motion import MAX_POINTS, RATE, History, Motion, Spring, grid
 from libre_panel.render.motion import number as motion_number
 from libre_panel.sensors.base import Snapshot, want
-from libre_panel.theme.model import Theme, ThemeError, resolve_asset
+from libre_panel.theme.model import COVER_COLOR, Theme, ThemeError, resolve_asset
+from libre_panel.theme.modules import SLOT_KINDS, slot_items
 from libre_panel.theme.modules import expand as expand_modules
 
 log = logging.getLogger(__name__)
@@ -287,6 +289,46 @@ def _catmull_rom(points: list[tuple[float, float]], samples: int = 6) -> list[tu
     return out
 
 
+# "media.playing=1", "sun.up!=0", "cpu.temp>80": a ``needs`` that compares a reading
+_COMPARE = re.compile(
+    r"^(?P<key>[^=<>!]+?)\s*(?P<op>==|=|!=|>=|<=|>|<)\s*(?P<value>-?\d+(?:\.\d+)?)$"
+)
+_OPERATORS = {
+    "=": lambda a, b: a == b, "==": lambda a, b: a == b, "!=": lambda a, b: a != b,
+    ">": lambda a, b: a > b, ">=": lambda a, b: a >= b,
+    "<": lambda a, b: a < b, "<=": lambda a, b: a <= b,
+}  # fmt: skip
+
+
+def need_key(need: str) -> str:
+    """The sensor a condition of ``needs`` reads: ``"!gpu.load"`` and ``"media.playing=1"``
+    read ``gpu.load`` and ``media.playing``; ``"@media.cover"`` (a picture) ``media.cover``."""
+    need = need.strip().lstrip("!").strip()
+    found = _COMPARE.match(need)
+    return (found["key"].strip() if found else need).lstrip("@")
+
+
+def need_holds(need: str, snapshot: Snapshot) -> bool:
+    """Whether one condition of ``needs`` holds: a reading that has a value (``"gpu.load"``),
+    none (``"!gpu.load"``; a state that is ``null`` has none), a picture that a source has
+    (``"@media.app_icon"``), or compares so (``"media.playing=1"``: ``=``, ``!=``, ``>``, ``>=``,
+    ``<``, ``<=`` with a number; a reading without a number never does; a ``!`` in front says
+    the opposite)."""
+    need = need.strip()
+    body = need.lstrip("!").strip()
+    found = _COMPARE.match(body)
+    if body.startswith("@"):
+        holds = snapshot.images.get(body[1:]) is not None
+    elif found is None:  # (a state a service has taken back is the text "null": none)
+        value = snapshot.value(body)
+        holds = value is not None and value != "null"
+    else:
+        value = snapshot.value(found["key"].strip())
+        number = _number(float(value) if isinstance(value, bool) else value)  # (on is 1)
+        holds = number is not None and _OPERATORS[found["op"]](number, float(found["value"]))
+    return holds != need.startswith("!")
+
+
 def _reads(widgets: list[dict[str, Any]]) -> set[str]:
     """The sensor keys (and patterns) the widgets read."""
     keys: set[str] = set()
@@ -294,7 +336,7 @@ def _reads(widgets: list[dict[str, Any]]) -> set[str]:
         if widget.get("sensor"):
             keys.add(widget["sensor"])
         for need in (widget.get("needs") or "").split(","):
-            need = need.strip().lstrip("!").strip()
+            need = need_key(need)
             if need:
                 keys.add(need)
         if widget["type"] == "weather":
@@ -364,6 +406,8 @@ class Renderer:
         self._drawers = {wid: partial(f.draw, self) for wid, f in self._finishes.items()
                          if finishes.draws(f)}  # fmt: skip
         self._modules = {w["id"]: w for w in theme.widgets if w["type"] == "module"}
+        self._slots = self._make_slots(theme)  # modules that show one card of several
+        self._slots_warm = False  # whether their cards have been drawn once
         self._keys = {w["id"]: json.dumps(w, sort_keys=True) for w in self.widgets}
         if not preview:  # costly sensors work only while a panel shows them
             want(self, _reads(self.widgets))
@@ -393,7 +437,19 @@ class Renderer:
         self._dust: Dust | None = None  # the theme's look.dust, once it is drawn (render/dust.py)
         self._rotors: dict[str, fan.Rotor] = {}  # fan widget id -> how it turns (render/fan.py)
         self._fans: OrderedDict[tuple[Any, ...], Piece] = OrderedDict()  # fan pieces, by look
+        self._downloads: dict[str, tuple[Any, Any]] = {}  # download widget id -> what it shows
         self.screen = self._make_screen()
+
+    def _make_slots(self, theme: Theme) -> dict[str, Any]:
+        """The slot of every module that shows one card of several (render/slot.py)."""
+        slots: dict[str, Any] = {}
+        for module in self._modules.values():
+            if module["module"] in SLOT_KINDS and module["id"] in self.module_boxes:
+                from libre_panel.render.slot import Slot
+
+                items = slot_items(module)
+                slots[module["id"]] = Slot(self, module, items, self.module_boxes[module["id"]])
+        return slots
 
     # -- resources ---------------------------------------------------------
 
@@ -405,7 +461,14 @@ class Renderer:
     def color(self, value: str | None, alpha_scale: float = 1.0) -> RGBA | None:
         if value is None:
             return None
-        if value.startswith("@"):
+        if value == COVER_COLOR:  # the colour the cover on show carries, else the accent
+            carried = (
+                cover.dominant(self.snapshot.images.get("media.cover")) if self.snapshot else None
+            )
+            if carried is not None:
+                return (*carried, int(255 * alpha_scale))
+            value = self.theme.palette.get("accent", "#22d3ee")
+        elif value.startswith("@"):
             value = self.theme.palette.get(value[1:], "#ff00ff")
         rgb = ImageColor.getrgb(value)
         alpha = rgb[3] if len(rgb) == 4 else 255
@@ -955,12 +1018,24 @@ class Renderer:
         finally:
             self.screen, self._breathe = screen, None
 
+    def _warm_slots(self, snapshot: Snapshot, now: float) -> None:
+        """Draw every card of every slot once, whichever is on show, so that the first change
+        finds its pieces made (a card's texts, icons and symbols take a few frames' time)."""
+        for slot in self._slots.values():
+            for card in range(len(slot.kinds)):
+                slot.pinned = card
+                self.render(snapshot, now)
+            slot.settle()
+
     # -- rendering ---------------------------------------------------------
 
     def render(
         self, snapshot: Snapshot, now: float | None = None
     ) -> tuple[Image.Image, dict[str, Box]]:
         now = clock() if now is None else now
+        if self._slots and self.animate and not self.preview and not self._slots_warm:
+            self._slots_warm = True  # (once, with the first frame, or with the warm-up's)
+            self._warm_slots(snapshot, now)
         theme = self.theme
         self.moving = False
         self.snapshot = snapshot
@@ -970,10 +1045,21 @@ class Renderer:
         pieces: list[tuple[str, Piece]] = []
         self._drawing = "\0screen"
         screen = self._screen_image(snapshot, now) if self.screen is not None else None
+        for slot in self._slots.values():  # which card each slot shows, and how far a change is
+            slot.begin(snapshot, now)
         for widget in self.widgets:
-            if not widget.get("visible", True) or self._missing(widget, snapshot):
+            if not widget.get("visible", True):
                 continue
             module = self._modules.get(widget.get("_module", ""))
+            slot = how = None
+            if "_card" in widget and module is not None:  # a part of a card in a slot
+                slot = self._slots.get(module["id"])
+                how = slot.shows(widget["_card"]) if slot is not None else None
+                if slot is not None and how is None:
+                    continue  # the card is not on show
+            # (what a card that rolls up shows is what it showed: its conditions held then)
+            if how != "frozen" and self._missing(widget, snapshot):
+                continue
             if module is not None and (not module["visible"] or self._missing(module, snapshot)):
                 continue
             draw = (
@@ -983,7 +1069,12 @@ class Renderer:
             )
             self._drawing = widget["id"]
             try:
-                piece = draw(widget, snapshot, now)
+                if how == "frozen":  # a card rolling up: what it showed before
+                    piece = slot.leave(widget["id"])
+                else:
+                    piece = draw(widget, snapshot, now)
+                    if how == "live":
+                        piece = slot.live(widget["id"], piece)
             except Exception as exc:  # one broken widget must not blank the panel
                 self._warn(f"widget {widget['id']!r} failed: {exc}")
                 continue
@@ -1004,6 +1095,8 @@ class Renderer:
                 piece.layer.width,
                 piece.layer.height,
             ]
+        for slot in self._slots.values():  # frame and line of light, over the cards
+            slot.overlay(pieces)
         dust = self._dust_on()
         if screen is not None:
             alone = not pieces and self.look is None and not dust
@@ -1047,10 +1140,7 @@ class Renderer:
     def _missing(widget: dict[str, Any], snapshot: Snapshot) -> bool:
         for need in (widget.get("needs") or "").split(","):  # all of them must hold
             need = need.strip()
-            if not need:
-                continue
-            has = snapshot.value(need.lstrip("!").strip()) is not None
-            if has == need.startswith("!"):
+            if need and not need_holds(need, snapshot):
                 return True
         if widget["type"] == "module":
             return False
@@ -1422,6 +1512,26 @@ class Renderer:
         else:
             self._fans.move_to_end(key)
         return piece
+
+    # -- weather symbols ---------------------------------------------------
+
+    def _draw_symbol(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        """A weather symbol drawn flat; the ``lit`` finish draws it from Blender's bodies.
+        Both are layers that move with the planned time of the frame (render/symbols.py)."""
+        from libre_panel.render import symbols
+
+        return symbols.draw(self, widget, snapshot, now)
+
+    # -- downloads ---------------------------------------------------------
+
+    def _draw_downloads(
+        self, widget: dict[str, Any], snapshot: Snapshot, now: float
+    ) -> Piece | None:
+        """A download card (render/download.py), its progress a flat bar; the ``lit``
+        finish makes it light in its groove."""
+        from libre_panel.render import download
+
+        return download.draw(self, widget, snapshot, now)
 
     # -- pictures ----------------------------------------------------------
 

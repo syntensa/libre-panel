@@ -53,6 +53,38 @@
   `entrance` for a game or another mode (the screen closes to a line, the
   game's logo or name lights up while "Game mode" or "Game ended" types
   in, then the new screen opens)
+- Weather symbols that move: the widget type `symbol` follows a weather code
+  (`weather.code`, `weather.hour.3.code` ...) by day or night, and the sun's
+  rays turn, rain, drizzle and snow fall, clouds drift and breathe, stars
+  twinkle, fog sways and a bolt flashes now and then, as on SPUR II's weather
+  card. Flat, or with `"finish": "lit"` from lit bodies; `moving` and `offset`
+  keep a row of them out of step. It moves where the panel is driven faster
+  than once a second, and stands in the editor's preview
+- The cards of SPUR II's Studio screen, as modules that adapt to any panel:
+  `playback` (the cover, the state, title and artist, the app with its icon,
+  the progress), `forecast` (a moving symbol, the day's range, the details, the
+  rain and the sun, the next hours), `instrument` (a ring of light with its
+  number inside and the readings of the part beside or below it, or a fan
+  with its speed), `download`
+  (what loads, its progress, the rate and the time left, the speed of the last
+  minutes: the new widget type `downloads`, which reads the state of the
+  `downloads` service) and `netcard` (the network, with a download in its place
+  while one runs). Cards are lit by themselves (a module's `finish` is `auto`
+  now: its kind's own), their frames are flat thin lines, and where a module is
+  too small for its card the older module of its kind takes over
+- `cards`, a slot that shows one card of several: the first that has something
+  to show (a track that plays or was paused a short while, the weather, a
+  download that runs), or by a rule of its own on a line (`forecast if
+  weather.temperature`). A change is SPUR II's: a line of light ignites at the
+  top edge, the card on show rolls up into it and the new one rolls down out of
+  it, on the frame's own time, so it takes as long at 50 frames a second as at
+  5. The frame of the slot is a thin line in the colour of the card on show: the
+  cover's, the weather's, the network's
+- A `needs` can compare a reading with a number (`media.playing=1`,
+  `cpu.temp>80`) or ask for a picture a source has (`@media.app_icon`), a state
+  that a service has taken back counts as no value, the colour `@cover` is the
+  colour the cover on show carries (bars, rings and icons follow the track), and
+  `play`, `pause`, `up` and `down` are icons
 - Plugins: a toast style says how long a toast stays (`lifetime`) and how
   long one without its own time holds (`hold_s`), and keeps what it knows
   across theme switches; a transition can hide toasts while it plays

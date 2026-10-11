@@ -595,8 +595,9 @@ warnings like those of the notices service (kind `warning`).
 Notes what is downloading: a game or an update that Steam loads, and a file
 that a browser saves in your Downloads folder. It publishes the download that
 matters most, with its progress, speed and the time left, for a screen that
-draws a download card ([Plugins](PLUGINS.md#the-downloads-state)); the service
-shows nothing by itself. Nothing is written and nothing is sent.
+draws a download card ([Plugins](PLUGINS.md#the-downloads-state)); a theme's
+`downloads` widget and its `download` and `netcard` modules are such cards
+([Themes](THEMES.md#downloads)). The service shows nothing by itself. Nothing is written and nothing is sent.
 
 ```toml
 [services]

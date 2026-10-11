@@ -239,6 +239,31 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "color": ("color", "#ffffff"),
         "stroke": ("number", 2.0),
     },
+    # A weather symbol that moves: the sun's rays turn, rain and snow fall, clouds drift.
+    # It follows a weather code ("weather.code", "weather.hour.3.code" ...), by day or night.
+    "symbol": {
+        "sensor": ("sensor", "weather.code"),
+        "size": ("int", 64),
+        "color": ("color", "#ffffff"),  # clouds and the moon (sun, rain, snow: the palette's)
+        "moving": ("bool", True),  # off: it stands (it moves where the panel is driven fast)
+        "offset": ("number", 0.0),  # seconds its motion is shifted: a row is not in step
+    },
+    # A download as the Studio's inset shows it (render/download.py): what loads, its progress,
+    # the speed and the time left, and the speed over the last minutes. It reads the state the
+    # ``downloads`` service publishes; ``empty`` stands where nothing downloads.
+    "downloads": {
+        "state": ("string", "downloads"),
+        "w": ("int", 596),
+        "h": ("int", 130),
+        "font": ("font", ""),  # the heading and the numbers
+        "label_font": ("font", ""),  # the names
+        "color": ("color", "#f1f5f9"),  # the numbers
+        "muted": ("color", "#8a97a8"),  # the names; a paused download
+        "color2": ("color", "#22d3ee"),  # progress and speed
+        "done": ("color", "#4ade80"),  # a finished download
+        "background": ("color?", "#1f2937"),  # the progress's groove
+        "empty": ("string", ""),  # shown where nothing downloads
+    },
     # The month as a grid of days, today marked.
     "calendar": {
         "w": ("int", 280),
@@ -300,13 +325,20 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         # weather: a forecast when there is room; "auto" = days, and hours too
         # on a big module
         "forecast": ("enum:auto|days|hours|both|off", "auto"),
-        "step": ("int", 3),  # hourly forecast: hours between two columns
-        # temps, drives, dashboard: the readings to show, one per line ("cpu.temp = CPU")
+        "step": ("int", 0),  # hourly forecast: hours between two columns (0: 3, the card 1)
+        # temps, drives, dashboard: the readings to show, one per line ("cpu.temp = CPU");
+        # card slots: the cards, one per line ("playback", "forecast if weather.temperature")
         "items": ("text", ""),
         "sort": ("enum:cpu|memory", "cpu"),  # processes: by processor time or memory
         "timezone": ("string", ""),  # analog clock: e.g. "Asia/Tokyo"
         "target": ("string", ""),  # countdown: "2026-12-24", "2026-12-24 18:00", "12-24"
         "seconds": ("int", 10),  # picture: seconds per picture in a slideshow
+        # the cards (theme.cards): the weather card's symbols move (the symbol's own
+        # field); a slot keeps a paused track on show this long (minutes), and a change of
+        # card takes so long (seconds)
+        "moving": ("bool", True),
+        "hold": ("number", 2.0),
+        "change": ("number", 0.6),
     },
 }
 
@@ -315,10 +347,14 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
 # "acrylic". A finish a type does not have draws it flat, with a warning.
 FINISHES = ("flat", "lit", "facet", "acrylic")
 FINISH_FIELD = ("enum:" + "|".join(FINISHES), FINISHES[0])
+# a module's finish unless the theme names one: its kind's own (flat, or lit for a card)
+AUTO = "auto"
 for _type in (
-    "text", "metric", "clock", "weather", "countdown", "bar", "gauge", "graph", "icon", "module"
+    "text", "metric", "clock", "weather", "countdown", "bar", "gauge", "graph", "icon", "symbol",
+    "downloads", "module",
 ):  # fmt: skip
     WIDGET_SPECS[_type]["finish"] = FINISH_FIELD
+WIDGET_SPECS["module"]["finish"] = ("enum:" + "|".join((AUTO, *FINISHES)), AUTO)
 
 # The few fields the editor's inspector shows first for each widget type, in
 # this order; the others are one click further ("Details"). Position and size
@@ -487,6 +523,9 @@ def resolve_asset(root: Path, rel: str) -> Path:
     return target
 
 
+COVER_COLOR = "@cover"  # a colour that is the colour of the cover on show, not a palette entry
+
+
 def _check_color(
     value: Any, where: str, optional: bool, palette: dict[str, str] | None = None
 ) -> Any:
@@ -494,6 +533,8 @@ def _check_color(
         return None
     if not isinstance(value, str):
         raise ThemeError(f"{where}: expected a color string like '#22d3ee'")
+    if value == COVER_COLOR:  # live: what the cover on show carries (render.cover)
+        return value
     if value.startswith("@"):
         if palette is None:
             raise ThemeError(f"{where}: palette references are not allowed here, use a colour")
@@ -865,14 +906,14 @@ def _parse_look(raw: Any, palette: dict[str, str], warnings: list[str]) -> dict[
 
 def _finish_warnings(widgets: list[dict[str, Any]], warnings: list[str]) -> None:
     """One warning per widget type (or icon) whose finish is not there: drawn flat."""
-    if all(widget.get("finish", FINISHES[0]) == FINISHES[0] for widget in widgets):
+    if all(widget.get("finish", FINISHES[0]) in (FINISHES[0], AUTO) for widget in widgets):
         return
     from libre_panel.render.finish import supports  # the finishes are code: loaded when named
 
     told = set()
     for widget in widgets:
         name = widget.get("finish", FINISHES[0])
-        if name == FINISHES[0] or supports(widget):
+        if name in (FINISHES[0], AUTO) or supports(widget):
             continue
         what = f"the icon {widget['icon']!r}" if widget["type"] == "icon" else widget["type"]
         if (name, what) not in told:

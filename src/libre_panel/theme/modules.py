@@ -170,6 +170,8 @@ def _sources() -> dict[str, Source]:
             (("net.down", rate, t("Down")), ("net.up", rate, t("Up"))),
             low=0, high=None, scale="sqrt",
         ),
+        # (for the fan instrument: the module's ``sensor`` names another fan)
+        "fan": Source(t("Fan"), "gpu.fan", "{value:.0f} RPM", "fan", "gpu", low=0, high=None),
     }  # fmt: skip
 
 
@@ -335,13 +337,15 @@ class _Build:
         self.out.append(widget)
         return widget
 
-    def card(self) -> None:
+    def card(self, outline: bool = True) -> None:
+        """The card's surface and, unless ``outline`` is off (a slot draws its own frame, in
+        the colour of the card it shows), its thin outline."""
         if not self.card_on:
             return
         radius = round(self.style["radius"] * self.u / 200)
         kind = self.style["card"]
         fill = {"glass": self.c("surface") + "E6", "flat": self.c("surface")}.get(kind)
-        outline = self.c("line") if kind in ("glass", "outline") else None
+        outline = self.c("line") if outline and kind in ("glass", "outline") else None
         self.add(
             "rect", "card", x=self.x, y=self.y, w=self.w, h=self.h, color=fill,
             radius=radius, outline=outline, outline_width=max(1, round(self.u / 160)),
@@ -895,7 +899,7 @@ def _weather_now(b: _Build, x: float, y: float, w: float, h: float, details: boo
 def _forecast(b: _Build, x: float, y: float, w: float, h: float, mode: str,
               rows: bool = False, prefix: str = "f") -> None:  # fmt: skip
     """Days (today first) or hours (every ``step`` hours) as columns, or as rows."""
-    step = max(1, min(6, b.module["step"]))
+    step = max(1, min(6, b.module["step"] or 3))
     limit = 7 if mode == "days" else 24 // step
     if rows:
         count = int(_clamp(h // (b.ts * 2.6), 1, limit))
@@ -1525,6 +1529,7 @@ def default_items(kind: str) -> str:
     return {
         "temps": "cpu.temp = CPU\ngpu.temp = GPU\ntemp.*",
         "drives": "disk.*.load",
+        "cards": DEFAULT_CARDS,
         "world": "America/New_York = New York\nEurope/London = London\nAsia/Tokyo = Tokyo\n"
         "Australia/Sydney = Sydney",
         "values": f"cpu.load = CPU\ngpu.load = GPU\nmem.load = {t('RAM')}\n"
@@ -1738,9 +1743,12 @@ class Kind:
     build: Callable[[_Build, Source], None]
     sources: tuple[str, ...] = ()  # which "source" values it takes (empty: none)
     span: tuple[int, int] = (1, 1)  # the size it starts with
+    finish: str = "flat"  # what a module's finish "auto" is: a card is lit by itself
 
 
 def kinds() -> dict[str, Kind]:
+    from libre_panel.theme import cards  # the cards build on this module
+
     readings = ("cpu", "gpu", "mem", "disk", "net", "sensor")
     return {
         "clock": Kind(t("Time"), build_clock, span=(2, 1)),
@@ -1768,6 +1776,19 @@ def kinds() -> dict[str, Kind]:
         "music": Kind(t("Music"), build_music, span=(2, 1)),
         "agenda": Kind(t("Agenda"), build_agenda, span=(2, 2)),
         "game": Kind(t("Game FPS"), build_game, span=(2, 1)),
+        # the cards after SPUR II's Studio screen: lit by themselves (theme.cards)
+        "playback": Kind(t("Playback card"), cards.build_playback, span=(3, 2), finish="lit"),
+        "forecast": Kind(t("Weather card"), cards.build_forecast, span=(3, 2), finish="lit"),
+        "download": Kind(t("Download card"), cards.build_download, span=(2, 1), finish="lit"),
+        "instrument": Kind(
+            t("Ring instrument"),
+            cards.build_instrument,
+            ("cpu", "gpu", "mem", "disk", "fan"),
+            span=(1, 2),
+            finish="lit",
+        ),
+        "cards": Kind(t("Card slot"), cards.build_cards, span=(3, 2), finish="lit"),
+        "netcard": Kind(t("Network card"), cards.build_netcard, span=(2, 1), finish="lit"),
     }
 
 
@@ -1775,9 +1796,35 @@ MODULE_KINDS = (
     "clock", "date", "weather", "ring", "stat", "graph", "bars", "network", "system", "text",
     "temps", "cores", "drives", "processes", "netinfo", "battery", "values",
     "sun", "analog", "world", "countdown", "image", "music", "agenda", "game",
+    "playback", "forecast", "download", "instrument", "cards", "netcard",
 )  # fmt: skip
-MODULE_SOURCES = ("cpu", "gpu", "mem", "disk", "net", "sensor")
+# Kinds that hold several cards and show one (render.slot); "netcard" is two: a download
+# while one runs, else the network
+SLOT_KINDS = ("cards", "netcard")
+MODULE_SOURCES = ("cpu", "gpu", "mem", "disk", "net", "sensor", "fan")
 MODULE_FALLBACKS = ("auto", "none", "cpu", "gpu", "mem", "disk")
+
+
+# -- card slots ----------------------------------------------------------------
+
+DEFAULT_CARDS = "playback\nforecast"
+CARD_NAMES = tuple(k for k in MODULE_KINDS if k not in SLOT_KINDS) + ("net",)  # "net": the
+# network as the Studio's NET section has it (UP and DOWN with the speed beside them)
+
+
+def slot_items(module: dict[str, Any]) -> list[tuple[str, str]]:
+    """The cards a slot module holds, in the order they are asked, each with its rule: the
+    conditions (as a ``needs`` has them) after ``if`` on its line of ``items``, else ``""``
+    for the card's own (see render.slot). A line that names no card is left out. ``netcard``
+    holds a download card and the network."""
+    if module["module"] == "netcard":
+        return [("download", ""), ("net", "")]
+    found = []
+    for line in (module["items"] or DEFAULT_CARDS).splitlines():
+        name, _, rule = line.partition("#")[0].strip().partition(" if ")
+        if name.strip() in CARD_NAMES:
+            found.append((name.strip(), rule.strip()))
+    return found or [(name, "") for name in DEFAULT_CARDS.splitlines()]
 
 
 # -- expanding a theme -------------------------------------------------------
@@ -1801,6 +1848,8 @@ def build_module(
 ) -> list[dict[str, Any]]:
     """The plain widgets of one module in ``box`` (raw, not yet checked)."""
     kind = kinds()[module["module"]]
+    if module.get("finish") == "auto":  # the module's own look: a card is lit
+        module = {**module, "finish": kind.finish}
     sources = _sources()
     source = module["source"] if kind.sources else "cpu"
     if source not in kind.sources and kind.sources:
@@ -1810,7 +1859,8 @@ def build_module(
     fallback = _fallback(module) if kind.sources and source in sources else None
     if fallback is None:
         if kind.sources:  # without its readings the module stays empty
-            b.needs = b.module["sensor"] if source == "sensor" else src.load
+            own = source == "sensor" or (source == "fan" and b.module["sensor"])
+            b.needs = b.module["sensor"] if own else src.load
         kind.build(b, src)
     else:  # e.g. no GPU readings: the disk instead
         b.needs = src.load
@@ -1865,12 +1915,15 @@ def expand(theme: Any) -> tuple[list[dict[str, Any]], dict[str, list[int]]]:
         boxes[widget["id"]] = box
         for i, raw in enumerate(build_module(placed, box, colors, style)):
             raw["id"] = f"{widget['id']}/{raw['id']}"
+            card = raw.pop("_card", None)  # a slot's part: the card it belongs to
             try:
                 part, _warnings = normalize_widget(raw, i)
             except ThemeError as exc:  # a bug in a module must not break the theme
                 theme.warnings.append(f"module {widget['id']!r}: {exc}")
                 continue
             part["_module"] = widget["id"]
+            if card is not None:
+                part["_card"] = card
             widgets.append(part)
     return widgets, boxes
 
@@ -2014,9 +2067,9 @@ def detach(theme: Any, module_id: str) -> list[dict[str, Any]]:
     widgets, _boxes = expand(theme)
     parts = []
     for widget in widgets:
-        if widget.get("_module") != module_id:
-            continue
-        part = {k: v for k, v in widget.items() if k != "_module"}
+        if widget.get("_module") != module_id or widget.get("_card", 0) != 0:
+            continue  # (the other cards of a slot are not there: it is its first card)
+        part = {k: v for k, v in widget.items() if k not in ("_module", "_card")}
         part["id"] = part["id"].replace("/", "-")
         parts.append(part)
     return parts
