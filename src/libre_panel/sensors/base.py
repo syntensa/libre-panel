@@ -104,8 +104,9 @@ class SensorProvider:
     name = "base"
     # True when ``read`` is cheap and its values must follow at once (a volume):
     # it is then read on every frame too, not only every ``refresh_ms``. Graphs
-    # still keep one value per ``refresh_ms``.
-    every_frame = False
+    # still keep one value per ``refresh_ms``. "video": on every frame only in
+    # video mode; without it each changed value would be one more picture sent.
+    every_frame: bool | str = False
 
     def __init__(self, options: dict[str, Any] | None = None) -> None:
         self.options = options or {}
@@ -220,12 +221,14 @@ class SensorHub:
                 images.setdefault(key, image)
         return Snapshot(readings=readings, history=history, images=images)
 
-    def fresh(self) -> dict[str, Reading]:
+    def fresh(self, video: bool = True) -> dict[str, Reading]:
         """Between snapshots: the latest values of ``every_frame`` providers, for
-        the keys they supplied (or that nobody supplied); no history."""
+        the keys they supplied (or that nobody supplied); no history. Without
+        ``video`` those that follow on every frame only in video mode are left out."""
         readings: dict[str, Reading] = {}
         for provider in self.providers:
-            if not getattr(provider, "every_frame", False):
+            every = getattr(provider, "every_frame", False)
+            if not every or (every == "video" and not video):
                 continue
             for key, reading in self._read(provider).items():
                 if self._owners.get(key, provider) is provider and key not in readings:

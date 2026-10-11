@@ -145,6 +145,12 @@ class Screen:
     def render(self, snapshot: Any, now: float) -> Image.Image:
         raise NotImplementedError
 
+    def prepare(self) -> None:
+        """Optional: load what the first frames need (pre-rendered layers,
+        caches). Runs once in a thread of its own before the screen's first
+        frame on the panel, at start and while the panel still shows the
+        theme before; ``render`` must also work without it (previews)."""
+
     def close(self) -> None:
         pass
 

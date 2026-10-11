@@ -108,6 +108,29 @@ def write_theme(home, name, color, **toast):
     (folder / "theme.json").write_text(json.dumps(data), encoding="utf-8")
 
 
+class NoWarmup:
+    """Switches at once, as before themes warmed up in the background: these
+    scenarios count frames, and a warm-up takes the time it takes."""
+
+    LIMIT_S = 0.0
+    busy = False
+
+    def ready(self, key, now):
+        return True
+
+    def start(self, key, build, now):
+        pass
+
+    def take(self, key):
+        return None
+
+    def discard(self):
+        pass
+
+    def close(self):
+        pass
+
+
 @pytest.fixture
 def scenario(monkeypatch, isolated_home):
     """Runs ``app.run`` for ``length`` frames with ``events`` ({frame: [action]}),
@@ -130,6 +153,7 @@ def scenario(monkeypatch, isolated_home):
     monkeypatch.setitem(overlays.BUILT_IN_STYLES, "test.band", Recording)
     monkeypatch.setattr(Renderer, "render", rendered)
     monkeypatch.setattr(app, "create_display", Panel)
+    monkeypatch.setattr(app, "_Warmup", NoWarmup)
     made = []
     make = app.transition
 

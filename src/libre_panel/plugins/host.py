@@ -258,7 +258,7 @@ class PluginHost:
     MAX_TOASTS = 20
 
     def __init__(self, clock: Callable[[], float] | None = None) -> None:
-        self.clock = clock or getattr(libre_panel, "clock", time.perf_counter)
+        self.clock = clock or libre_panel.clock
         self._lock = threading.Lock()
         # value and the service that owns it: a stopped service leaves nothing behind
         self._published: dict[str, tuple[Reading, str | None]] = {}

@@ -85,6 +85,25 @@
   downloads are built, each checked against a fixed SHA-256; they are not in the
   repository
 
+- What moves on the panel goes on from theme to theme: a value gliding when
+  the theme switches glides on in the next one instead of starting over
+  (the main loop keeps it; the editor's previews have their own)
+- Numbers glide too: a value with *smooth* on counts to a new reading with
+  the bars and rings of its sensor instead of jumping once per reading
+  (`"smooth": true` on a `metric`)
+- Threshold colours fade in a fifth of a second instead of jumping, and a
+  bar and its number change colour together
+- Graphs in video mode move on every frame: they draw the gliding value 25
+  times a second and move in half-pixel steps, and their newest point is the
+  value the numbers show (they trailed a reading behind and moved a few
+  pixels a second). `seconds` sets the time a graph spans in video mode,
+  whatever the frame rate; a theme that comes on shows its graphs full
+- For plugins: `libre_panel.clock()`, the clock of `now` (`time.perf_counter`)
+- A theme coming on is built and drawn once in the background while the
+  panel goes on showing the one before, so a switch no longer freezes a
+  video for a third of a second. Screens from plugins can load what their
+  first frames need meanwhile: `Screen.prepare()`
+
 **Fixes**
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
   showing the last numbers for ever. After 5 seconds (`stale_seconds` under
@@ -95,6 +114,12 @@
   played
 - A message on show was gone for good when a screen came that shows its
   kind itself; now it goes on unseen and comes back with the next screen
+
+- A seconds clock ticks on the frame that is due: `snapshot.now` is the time
+  a frame is planned for, not the moment its drawing begins
+- Video mode: a graph whose sensor goes missing or reads nothing moves on
+  with a gap, instead of standing still (or, with `per_frame`, running on as
+  a flat line)
 
 **Changes**
 - Windows: the GPU, temperatures, power and fans showed nothing unless
@@ -118,6 +143,24 @@
   what Libre Panel cannot read (the CPU's readings without administrator
   rights). Drive temperatures (`temp.nvme.*`) come only from the web server for
   now: set `mode = "webserver"` to keep them, or to read only it
+
+- SPUR II and Studio read the sensors twice a second and their numbers
+  glide; SPUR II's graphs span 36 seconds in video mode, moving 25 pixels a
+  second. The graphs of Slate, Libre Default and Column have a window in
+  seconds for video mode too; on the serial panels these themes run on
+  nothing changes
+- While it drives a panel, Libre Panel keeps its frames on time as SPUR II
+  did when the PC is busy: Windows' timer at 1 ms, fewer and shorter pauses
+  for garbage collection, and the threads that feed a video panel above
+  normal priority (Windows)
+- Drawing is faster: cards about five times (only their round corners are
+  drawn three times larger), so a theme's first frame takes half as long;
+  numbers that change a digit at a time about six times (each digit is drawn
+  once and kept); bars and rings are drawn again only when they move by a
+  visible amount, and pieces go onto the frame in place
+- The main loop draws one frame at a time through `MainLoop.step(now)`, with
+  the sensor hub, display, host and clock given: tests and plugins' test
+  benches drive the real loop frame by frame instead of copying it
 
 ## 0.4.2 — 2026-10-10
 

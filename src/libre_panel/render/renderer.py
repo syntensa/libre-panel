@@ -18,21 +18,24 @@ import math
 import queue
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 from concurrent.futures import Future
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Any
 
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont, ImageOps
 
-from libre_panel import i18n, timezones
+from libre_panel import clock, i18n, timezones
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
 from libre_panel.icons import draw_icon, weather_icon_name
 from libre_panel.render import lists
 from libre_panel.render.countdown import countdown_text
 from libre_panel.render.formatting import FormatError, auto_format, safe_format
+from libre_panel.render.motion import MAX_POINTS, RATE, History, Motion, Spring, grid
+from libre_panel.render.motion import number as motion_number
 from libre_panel.sensors.base import Snapshot, want
 from libre_panel.theme.model import Theme, ThemeError, resolve_asset
 from libre_panel.theme.modules import expand as expand_modules
@@ -92,58 +95,6 @@ class _Builder:
         self._jobs.put(None)
 
 
-class _Glide:
-    """A value gliding from reading to reading, as a function of time.
-
-    The same critically damped spring as :meth:`Renderer._eased`, kept piece by
-    piece (one per reading), so the value is known at any moment: in the past
-    and, until the next reading, in the future.
-    """
-
-    def __init__(self) -> None:
-        self.pieces: list[tuple[float, float, float, float, float]] = []
-        # (from, target, error, speed, omega); omega 0 = the value jumps
-        self.sample_no = -1
-
-    def _piece(self, t: float) -> tuple[float, float, float, float, float] | None:
-        found = None
-        for piece in self.pieces:  # a handful of pieces: no bisect needed
-            if piece[0] > t:
-                break
-            found = piece
-        return found
-
-    def state(self, t: float) -> tuple[float, float] | None:
-        """(value, speed) at ``t``; None before the first reading."""
-        piece = self._piece(t)
-        if piece is None:
-            return None
-        start, target, error, speed, omega = piece
-        if omega <= 0:
-            return target, 0.0
-        dt = t - start
-        decay = math.exp(-omega * dt)
-        curve = speed + omega * error
-        return target + (error + curve * dt) * decay, (speed - omega * curve * dt) * decay
-
-    def at(self, t: float) -> float | None:
-        state = self.state(t)
-        return None if state is None else state[0]
-
-    def follow(self, t: float, target: float, glide: float) -> None:
-        """A new reading at ``t``: glide towards ``target`` for about ``glide`` s."""
-        now = self.state(t)
-        if now is None or glide <= 0:
-            self.pieces.append((t, target, 0.0, 0.0, 0.0))
-        else:
-            self.pieces.append((t, target, now[0] - target, now[1], 4.74 / glide))
-
-    def forget_before(self, t: float) -> None:
-        """Drop pieces that end before ``t`` (the oldest one still in view stays)."""
-        while len(self.pieces) > 1 and self.pieces[1][0] <= t:
-            self.pieces.pop(0)
-
-
 def changed_region(
     previous: Image.Image | None, current: Image.Image
 ) -> tuple[int, int, int, int] | None:
@@ -187,17 +138,30 @@ def _rule_color(widget: dict[str, Any], value: float | None) -> str | None:
     return color
 
 
+def _steps(frac: float, length: float) -> float:
+    """``frac`` of ``length`` pixels in steps of the supersampled grid: a finer
+    change draws the same pixels, so a gliding bar is drawn again only when
+    it moves visibly."""
+    steps = max(1, round(length * SUPERSAMPLE))
+    return round(frac * steps) / steps
+
+
+def _smoothstep(u: float) -> float:
+    return u * u * (3 - 2 * u)
+
+
 def _lerp(a: RGBA, b: RGBA, t: float) -> RGBA:
     t = min(1.0, max(0.0, t))
     return tuple(round(a[i] + (b[i] - a[i]) * t) for i in range(4))  # type: ignore[return-value]
 
 
-def _blur(img: Image.Image, radius: float) -> Image.Image:
-    """Colour-true Gaussian blur of an RGBA image (premultiplied alpha)."""
+def _blur(img: Image.Image, radius: float, exact: bool = False) -> Image.Image:
+    """Colour-true Gaussian blur of an RGBA image (premultiplied alpha). ``exact``
+    blurs at full size: the same pixels wherever a part is cut from (graph strips)."""
     if radius <= 0:
         return img
     pre = img.convert("RGBa")
-    if max(img.size) > 320 and radius >= 4:  # blur at half size: 4x cheaper, same look
+    if max(img.size) > 320 and radius >= 4 and not exact:  # half size: 4x cheaper, same look
         small = pre.resize((max(1, img.width // 2), max(1, img.height // 2)), Image.BILINEAR)
         pre = small.filter(ImageFilter.GaussianBlur(radius / 2)).resize(img.size, Image.BILINEAR)
     else:
@@ -220,6 +184,41 @@ def _gradient(size: tuple[int, int], a: RGBA, b: RGBA, horizontal: bool) -> Imag
     strip = Image.new("RGBA", (steps, 1) if horizontal else (1, steps))
     strip.putdata([_lerp(a, b, i / max(1, steps - 1)) for i in range(steps)])
     return strip.resize(size, Image.NEAREST)
+
+
+@lru_cache(maxsize=64)
+def _gradient_down(size: tuple[int, int], a: RGBA, b: RGBA, horizontal: bool) -> Image.Image:
+    """The colours a gradient three times the size has once reduced (cached:
+    callers must not modify it)."""
+    steps = size[0] if horizontal else size[1]
+    last = max(1, steps * SUPERSAMPLE - 1)
+    colours = []
+    for i in range(steps):
+        parts = [_lerp(a, b, (SUPERSAMPLE * i + k) / last) for k in range(SUPERSAMPLE)]
+        colours.append(tuple(round(sum(p[c] for p in parts) / SUPERSAMPLE) for c in range(4)))
+    strip = Image.new("RGBA", (steps, 1) if horizontal else (1, steps))
+    strip.putdata(colours)
+    return strip.resize(size, Image.NEAREST)
+
+
+@lru_cache(maxsize=64)
+def _card_corners(r: int, outline: int) -> tuple[Image.Image, Image.Image | None, int]:
+    """How much of each pixel a card with corners of radius ``r`` (and an
+    outline ``outline`` px wide) covers near its corners: a small card drawn
+    three times larger and reduced, ``2 * c + 2`` px square, whose ``c`` px
+    corners are those of any larger card (Pillow draws the corners in boxes at
+    the card's corners, the rest as rectangles)."""
+    s, c = SUPERSAMPLE, r + 2
+    m = 2 * c + 2
+    box = [0, 0, m * s - 1, m * s - 1]
+    shape = Image.new("L", (m * s, m * s), 0)
+    ImageDraw.Draw(shape).rounded_rectangle(box, radius=r * s, fill=255)
+    ring = None
+    if outline:
+        ring = Image.new("L", (m * s, m * s), 0)
+        ImageDraw.Draw(ring).rounded_rectangle(box, radius=r * s, outline=255, width=outline * s)
+        ring = ring.reduce(s)
+    return shape.reduce(s), ring, c
 
 
 def _fitted(image: Image.Image, w: int, h: int, fit: str) -> Image.Image:
@@ -291,10 +290,19 @@ def _reads(widgets: list[dict[str, Any]]) -> set[str]:
 
 
 class Renderer:
-    def __init__(self, theme: Theme, animate: bool = False, preview: bool = False) -> None:
+    def __init__(
+        self,
+        theme: Theme,
+        animate: bool = False,
+        preview: bool = False,
+        motion: Motion | None = None,
+    ) -> None:
         self.theme = theme
         self.animate = animate
         self.preview = preview  # an editor preview or a picture, not the panel
+        # Gliding values, fading colours and graph histories: the main loop's,
+        # kept from theme to theme, or this renderer's own (a preview).
+        self.motion = motion if motion is not None else Motion()
         self.shown: Image.Image | None = None  # the frame the panel shows (set by the loop)
         self.toast: tuple[Any, float] | None = None  # the toast on show, its age (the loop)
         self.snapshot: Snapshot | None = None  # the readings it drew last (context.image)
@@ -305,16 +313,15 @@ class Renderer:
         self._images: dict[tuple[str, int, int, str], Image.Image | None] = {}
         self._slide_lists: dict[str, tuple[float, list[str]]] = {}  # widget id -> pictures
         self._gauge_parts: dict[tuple[Any, ...], Image.Image] = {}  # static rings, colour fields
-        self._anim: dict[str, tuple[float, float, float]] = {}  # value, speed, time
         # Video mode (the main loop sets these): every frame goes out, so graphs
         # scroll between readings and values glide until the next one.
         self.continuous = False
         self.sample: tuple[float, float] = (0.0, 1.0)  # (when, seconds to the next)
-        self._sample_no = 0
-        self._strips: dict[str, Any] = {}  # graph id -> ready strip, strip being built
-        self._frame_strips: dict[str, Any] = {}  # the same for graphs that move per frame
-        self._glides: dict[str, _Glide] = {}  # graph id -> the value its curve follows
+        self._strips: dict[str, _Strips] = {}  # graph id -> its strips (video mode)
         self._cache: dict[str, tuple[Any, Piece]] = {}
+        self._texts: OrderedDict[tuple[str, str, str], Piece] = OrderedDict()
+        self._glyphs: OrderedDict[tuple[Any, ...], Image.Image] = OrderedDict()
+        self._glyph_lock = threading.Lock()
         # Modules become plain widgets laid out for their cells; the editor
         # gets one box per module.
         self.widgets, self.module_boxes = expand_modules(theme)
@@ -323,6 +330,8 @@ class Renderer:
         if not preview:  # costly sensors work only while a panel shows them
             want(self, _reads(self.widgets))
         self._background = self._load_background()
+        # Frames start from an opaque colour: pieces go on with a paste in place
+        self._opaque = (self.color(theme.background_color) or (0, 0, 0, 0))[3] == 255
         # Incremental compositing: the last frame and the pieces it was made of.
         # Only regions whose pieces changed are composed again, so a mostly
         # static screen costs little at 50 fps. The result is pixel-identical.
@@ -340,6 +349,7 @@ class Renderer:
         # Plugins (docs/PLUGINS.md): a screen draws the frame under the widgets,
         # plugin widget types draw themselves.
         self.fps = 0  # the panel's frame rate, for screens (set by the main loop)
+        self._breathe: Callable[[], None] | None = None  # between widgets (warming up)
         self._plugin_types: dict[str, Any] = {}
         self._screen_last: tuple[Any, Piece] | None = None
         self.screen = self._make_screen()
@@ -408,51 +418,43 @@ class Renderer:
     def new_sample(self, at: float, interval: float) -> None:
         """The main loop took fresh readings at ``at``; the next follow after ``interval`` s."""
         self.sample = (at, max(0.001, interval))
-        self._sample_no += 1
 
     def progress(self, now: float, delay: float = 0.0) -> float:
         """How far ``now`` is from the last reading to the next, 0 to 1."""
         at, interval = self.sample
         return min(1.0, max(0.0, (now - at - delay) / interval))
 
-    def _eased(self, widget: dict[str, Any], target: float | None, now: float) -> float | None:
-        """Glide towards new values instead of jumping (theme animation.smoothing_ms).
-
-        A critically damped spring: it starts gently and a new reading changes
-        its course without a kink. In video mode the glide lasts until the next
-        reading, so values never stand still between readings.
-        """
-        wid = widget["id"]
-        if (
-            target is None
-            or not self.animate
-            or not widget.get("smooth", False)
-            or self.theme.smoothing_ms <= 0
-        ):
-            if target is not None:
-                self._anim[wid] = (target, 0.0, now)
-            return target
-        previous = self._anim.get(wid)
-        if previous is None:
-            self._anim[wid] = (target, 0.0, now)
-            return target
-        value, speed, then = previous
+    def _glide_s(self) -> float:
+        """How long a value takes to a new reading (theme animation.smoothing_ms;
+        0: it jumps). In video mode the glide lasts until the next reading, so
+        values never stand still between readings."""
+        if not self.animate or self.theme.smoothing_ms <= 0:
+            return 0.0
         glide = self.theme.smoothing_ms / 1000
-        if self.continuous:
-            glide = max(glide, self.sample[1])
-        omega = 4.74 / glide  # 95 % of a step after ``glide`` seconds
-        dt = max(0.0, now - then)
-        decay = math.exp(-omega * dt)
-        error = value - target
-        curve = speed + omega * error
-        value = target + (error + curve * dt) * decay
-        speed = (speed - omega * curve * dt) * decay
+        return max(glide, self.sample[1]) if self.continuous else glide
+
+    def _lead(self) -> float:
+        """The time between two planned frames (0: not known)."""
+        return 1 / self.fps if self.fps > 0 else 0.0
+
+    def _eased(self, widget: dict[str, Any], target: float | None, now: float) -> float | None:
+        """Glide towards new values instead of jumping (widgets with ``smooth``).
+
+        A critically damped spring per sensor (:class:`~libre_panel.render.motion.Motion`):
+        it starts gently, a new reading changes its course without a kink, and
+        all widgets of a sensor glide together, also into the next theme.
+        """
+        glide = self._glide_s()
+        if glide <= 0 or not widget.get("smooth", False):
+            return target
+        state = self.motion.glide(widget["sensor"], target, now, glide, self._lead())
+        if state is None or target is None:
+            return target
+        value, speed = state
         span = abs(widget.get("max", 100) - widget.get("min", 0)) or 1.0
         if abs(target - value) < span * 0.002 and abs(speed) * glide < span * 0.002:
-            value, speed = target, 0.0
-        else:
-            self.moving = True
-        self._anim[wid] = (value, speed, now)
+            return target
+        self.moving = True
         return value
 
     # -- effects and compositing ------------------------------------------
@@ -466,9 +468,11 @@ class Renderer:
         out.alpha_composite(layer, (pad, pad))
         return Piece(out, piece.x - pad, piece.y - pad, box, piece.backdrop, piece.backdrop_radius)
 
-    def _halo(self, widget: dict[str, Any], layer: Image.Image) -> tuple[Image.Image | None, int]:
+    def _halo(
+        self, widget: dict[str, Any], layer: Image.Image, exact: bool = False
+    ) -> tuple[Image.Image | None, int]:
         """Shadow and glow of ``layer`` (without the layer), ``pad`` pixels larger
-        on every side; None without effects."""
+        on every side; None without effects. ``exact``: see :func:`_blur`."""
         glow = widget.get("glow", 0.0)
         shadow = widget.get("shadow")
         if not glow and not shadow:
@@ -487,30 +491,43 @@ class Renderer:
             offset = widget.get("shadow_offset", 3)
             base = Image.new("RGBA", size, (0, 0, 0, 0))
             base.paste(silhouette, (pad + offset, pad + offset))
-            out.alpha_composite(_blur(base, widget.get("shadow_blur", 6)))
+            out.alpha_composite(_blur(base, widget.get("shadow_blur", 6), exact))
         if glow:
             base = Image.new("RGBA", size, (0, 0, 0, 0))
             base.paste(layer, (pad, pad))
-            halo = _blur(base, widget.get("glow_radius", 10))
+            halo = _blur(base, widget.get("glow_radius", 10), exact)
             boost = 1.0 + glow * 2.5  # light spills: brighter than the shape's own alpha
             halo.putalpha(halo.getchannel("A").point(lambda a: min(255, int(a * boost * glow))))
             out.alpha_composite(halo)
         return out, pad
 
     @staticmethod
-    def _paste(canvas: Image.Image, layer: Image.Image, x: int, y: int) -> None:
-        """alpha_composite that tolerates layers hanging off the canvas."""
+    def _paste(
+        canvas: Image.Image, layer: Image.Image, x: int, y: int, opaque: bool = False
+    ) -> None:
+        """alpha_composite that tolerates layers hanging off the canvas. Onto an
+        ``opaque`` canvas, a paste through the layer's alpha gives the same
+        colours in place (the canvas's own alpha is not used afterwards)."""
         x0, y0 = max(x, 0), max(y, 0)
         x1, y1 = min(x + layer.width, canvas.width), min(y + layer.height, canvas.height)
         if x1 <= x0 or y1 <= y0:
             return
-        crop = layer.crop((x0 - x, y0 - y, x1 - x, y1 - y))
-        canvas.alpha_composite(crop, (x0, y0))
+        if (x0, y0, x1, y1) != (x, y, x + layer.width, y + layer.height):
+            layer = layer.crop((x0 - x, y0 - y, x1 - x, y1 - y))
+        if opaque:
+            canvas.paste(layer, (x0, y0), layer)
+        else:
+            canvas.alpha_composite(layer, (x0, y0))
 
     def _composite(
-        self, canvas: Image.Image, piece: Piece, origin: tuple[int, int] = (0, 0)
+        self,
+        canvas: Image.Image,
+        piece: Piece,
+        origin: tuple[int, int] = (0, 0),
+        opaque: bool = False,
     ) -> None:
-        """Draw ``piece`` onto ``canvas``, whose top left corner is ``origin`` on the panel."""
+        """Draw ``piece`` onto ``canvas``, whose top left corner is ``origin`` on
+        the panel (``opaque``: see :meth:`_paste`)."""
         ox, oy = origin
         if piece.backdrop is not None and piece.box is not None:
             bx, by, bw, bh = piece.box
@@ -529,7 +546,7 @@ class Renderer:
                     (region[0] - bx, region[1] - by, region[2] - bx, region[3] - by)
                 )
                 canvas.paste(blurred, region[:2], mask)
-        self._paste(canvas, piece.layer, piece.x - ox, piece.y - oy)
+        self._paste(canvas, piece.layer, piece.x - ox, piece.y - oy, opaque)
 
     @staticmethod
     def _extent(piece: Piece) -> tuple[int, int, int, int]:
@@ -642,7 +659,7 @@ class Renderer:
             if i == below and not (reused and done == below):
                 self._keep_underlay(region, [p for _, p in inside[:below]], part)
             try:
-                self._composite(part, piece, (x0, y0))
+                self._composite(part, piece, (x0, y0), self._opaque)
             except Exception as exc:  # one broken widget must not blank the panel
                 self._warn(f"widget {wid!r} failed: {exc}")
         return part
@@ -802,15 +819,38 @@ class Renderer:
 
         return self._cached(widget, ("plugin", kind.key(widget, snapshot, now)), build)
 
+    def warm(
+        self, snapshot: Snapshot | None, now: float, pause: Callable[[], Any] | None = None
+    ) -> None:
+        """Build what the first frames need, away from the render thread: the
+        screen's ``prepare()``, and one frame of the widgets (cards, texts,
+        icons, graph strips). The screen does not draw here: its frames
+        belong to the render thread. ``pause`` runs between widgets (to wait
+        while the render thread draws)."""
+        screen = self.screen
+        if screen is not None:
+            try:
+                screen.prepare()
+            except Exception as exc:  # a broken plugin must not keep the theme away
+                self._warn(f"screen {self.theme.screen['name']!r} failed to prepare: {exc}")
+        if snapshot is None:
+            return
+        self.screen, self._breathe = None, pause
+        try:
+            self.render(snapshot, now)
+        finally:
+            self.screen, self._breathe = screen, None
+
     # -- rendering ---------------------------------------------------------
 
     def render(
         self, snapshot: Snapshot, now: float | None = None
     ) -> tuple[Image.Image, dict[str, Box]]:
-        now = time.monotonic() if now is None else now
+        now = clock() if now is None else now
         theme = self.theme
         self.moving = False
         self.snapshot = snapshot
+        self.motion.begin(snapshot.readings, now, self._glide_s(), self._lead())
         boxes: dict[str, Box] = {}
         pieces: list[tuple[str, Piece]] = []
         screen = self._screen_image(snapshot, now) if self.screen is not None else None
@@ -826,6 +866,9 @@ class Renderer:
             except Exception as exc:  # one broken widget must not blank the panel
                 self._warn(f"widget {widget['id']!r} failed: {exc}")
                 continue
+            finally:
+                if self._breathe is not None:
+                    self._breathe()
             if piece is None:
                 continue
             pieces.append((widget["id"], piece))
@@ -936,22 +979,37 @@ class Renderer:
         margin = max(2, widget.get("font_size", 24) // 6)  # room for overhanging glyphs
         w, h = math.ceil(total) + 2 * margin, ascent + descent
         layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(layer)
         pen = float(margin)
         for ch, advance in zip(text, advances, strict=True):
-            if tabular and ch in _DIGITS:
-                draw.text(
-                    (pen + (cell - font.getlength(ch)) / 2, 0),
-                    ch,
-                    font=font,
-                    fill=fill,
-                    anchor="la",
-                )
-            else:
-                draw.text((pen, 0), ch, font=font, fill=fill, anchor="la")
+            at = pen + (cell - font.getlength(ch)) / 2 if tabular and ch in _DIGITS else pen
+            glyph, gx = self._glyph(font, ch, fill, at, margin, h)
+            self._paste(layer, glyph, gx, 0)
             pen += advance
         left = math.floor(start) - margin
         return Piece(layer, left, y, box=[left + margin, y, math.ceil(total), h])
+
+    GLYPHS = 4096  # glyph images kept: a gliding number changes a digit or two at a time
+
+    def _glyph(
+        self, font: Any, ch: str, fill: RGBA, at: float, pad: int, h: int
+    ) -> tuple[Image.Image, int]:
+        """``ch`` drawn at ``at`` (its fraction of a pixel counts) on an image
+        ``pad`` px wider on each side, and where its left edge goes: kept, so
+        the next text with that character in that place costs no rendering."""
+        whole = math.floor(at)
+        key = (id(font), ch, fill, round(at - whole, 4), pad, h)
+        with self._glyph_lock:  # the helper thread draws texts too
+            image = self._glyphs.get(key)
+            if image is not None:
+                self._glyphs.move_to_end(key)
+                return image, whole - pad
+        image = Image.new("RGBA", (math.ceil(font.getlength(ch)) + 2 * pad + 1, h), (0, 0, 0, 0))
+        ImageDraw.Draw(image).text((at - whole + pad, 0), ch, font=font, fill=fill, anchor="la")
+        with self._glyph_lock:
+            self._glyphs[key] = image
+            while len(self._glyphs) > self.GLYPHS:
+                self._glyphs.popitem(last=False)
+        return image, whole - pad
 
     def _format(self, widget: dict[str, Any], reading: Any) -> tuple[str, float | None]:
         if reading is None or reading.value is None:
@@ -965,15 +1023,101 @@ class Renderer:
             text = value if isinstance(value, str) else widget.get("fallback", "--")
         return text, _number(value)
 
+    TEXTS = 256  # text pieces kept: gliding numbers come back to the same texts
+
     def _text_widget(self, widget: dict[str, Any], text: str, color: str) -> Piece | None:
-        return self._cached(widget, (text, color), lambda: self._text_piece(widget, text, color))
+        """The text as a piece, kept by (text, colour): a number gliding back
+        and forth, or a seconds clock, draws each text once."""
+        wid = widget["id"]
+        piece = self._texts.get((wid, text, color))
+        if piece is not None:
+            self._texts.move_to_end((wid, text, color))
+            self._cache[wid] = ((text, color), piece)
+            return piece
+        piece = self._cached(widget, (text, color), lambda: self._text_piece(widget, text, color))
+        hit = self._cache.get(wid)
+        if hit is not None and (wid, *hit[0]) not in self._texts:  # built now, or earlier
+            self._texts[(wid, *hit[0])] = hit[1]
+            while len(self._texts) > self.TEXTS:
+                self._texts.popitem(last=False)
+        return piece
 
     def _draw_text(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         return self._text_widget(widget, widget["text"], widget["color"])
 
     def _draw_metric(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
-        text, value = self._format(widget, snapshot.readings.get(widget["sensor"]))
-        return self._text_widget(widget, text, _rule_color(widget, value) or widget["color"])
+        reading = snapshot.readings.get(widget["sensor"])
+        text, value = self._format(widget, reading)
+        glide = self._glide_s()
+        if widget.get("smooth") and glide > 0:  # the gliding value, with bars and rings
+            state = self.motion.glide(widget["sensor"], value, now, glide, self._lead())
+            # 25 new texts a second at most, at the graphs' points: as fluid, half the work
+            at = self.motion.value(
+                widget["sensor"], max(grid(now) / RATE, self.motion.start(widget["sensor"]))
+            )
+            if state is not None and value is not None and at is not None:
+                gliding, shown = self._format(widget, replace(reading, value=at))
+                if gliding != text:  # settled once it reads the same
+                    text, value = gliding, shown
+                    self.moving = True
+        return self._text_widget(widget, text, self._rule_text(widget, value, now))
+
+    # -- thresholds --------------------------------------------------------
+
+    def _rule_step(self, widget: dict[str, Any], value: float | None, now: float) -> float:
+        """Which colour a value shows: 0 the widget's own, i the i-th lowest
+        threshold's. Crossing a threshold fades the colour in a fraction of a
+        second (Motion.fade), the same for every widget of the sensor with the
+        same rules: a bar and its number change together."""
+        rules = sorted(widget.get("color_rules", []), key=lambda r: r["above"])
+        if not rules:
+            return 0.0
+        step = 0 if value is None else sum(1 for rule in rules if value > rule["above"])
+        if not self.animate:
+            return float(step)
+        key = (widget.get("sensor"), tuple((rule["above"], rule["color"]) for rule in rules))
+        shown = self.motion.fade(key, step, now)
+        if shown != step:
+            self.moving = True
+        return shown
+
+    def _rule_mix(self, step: float) -> tuple[int, float]:
+        """The colour step below ``step`` and how far on to the next (eighths)."""
+        low = math.floor(step)
+        return low, round(_smoothstep(step - low) * 8) / 8
+
+    def _rule_text(self, widget: dict[str, Any], value: float | None, now: float) -> str:
+        """The text colour for ``value``: its own, a threshold's, or on the way."""
+        step = self._rule_step(widget, value, now)
+        rules = sorted(widget.get("color_rules", []), key=lambda r: r["above"])
+        colors = [widget["color"], *(rule["color"] for rule in rules)]
+        low, u = self._rule_mix(step)
+        if u <= 0 or low + 1 >= len(colors):
+            return colors[min(low, len(colors) - 1)]
+        mixed = _lerp(self.color(colors[low]), self.color(colors[low + 1]), u)
+        return "#{:02x}{:02x}{:02x}{:02x}".format(*mixed)
+
+    def _rule_paint(
+        self, widget: dict[str, Any], value: float | None, now: float
+    ) -> tuple[RGBA, RGBA | None]:
+        """A bar's or ring's colours for ``value``: its own (``color``, and
+        ``color2`` for a gradient along it), a threshold's (plain), or on the way."""
+        rules = sorted(widget.get("color_rules", []), key=lambda r: r["above"])
+        step = self._rule_step(widget, value, now)
+        low, u = self._rule_mix(step)
+        paints = [self._paint(widget, None), *(self._paint(widget, r["color"]) for r in rules)]
+        if u <= 0 or low + 1 >= len(paints):
+            return paints[min(low, len(paints) - 1)]
+        (a0, b0), (a1, b1) = paints[low], paints[low + 1]
+        if b0 is None and b1 is None:
+            return _lerp(a0, a1, u), None
+        return _lerp(a0, a1, u), _lerp(b0 or a0, b1 or a1, u)
+
+    def _paint(self, widget: dict[str, Any], rule: str | None) -> tuple[RGBA, RGBA | None]:
+        """A bar's colours: a threshold's colour plain, else ``color`` (to ``color2``)."""
+        if rule:
+            return self.color(rule), None
+        return self.color(widget["color"]), self.color(widget["color2"])
 
     def _draw_weather(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         text, _ = self._format(widget, snapshot.readings.get(f"weather.{widget['field']}"))
@@ -1317,7 +1461,7 @@ class Renderer:
             "color": "#{:02x}{:02x}{:02x}{:02x}".format(*deep), "color2": widget["color2"],
             "background": widget["background"],
         }  # fmt: skip
-        piece = self._bar_piece(bar, frac, rule, x, y, w, h)
+        piece = self._bar_piece(bar, frac, self._paint(bar, rule), x, y, w, h)
         self._paste(layer, piece.layer, x, y)
 
     def _list_piece(self, widget: dict[str, Any], rows: list[tuple]) -> Piece:
@@ -1484,8 +1628,8 @@ class Renderer:
         return layer, ImageDraw.Draw(layer)
 
     @staticmethod
-    def _down(layer: Image.Image, w: int, h: int) -> Image.Image:
-        """Reduce a supersampled layer to its size on the panel.
+    def _down(layer: Image.Image, w: int, h: int, s: int = SUPERSAMPLE) -> Image.Image:
+        """Reduce a layer drawn ``s`` times larger to its size on the panel.
 
         An exact 3x reduction averages each 3x3 block (with premultiplied
         alpha, so edges do not darken): classic supersampling, four times
@@ -1493,7 +1637,6 @@ class Renderer:
         quarter of a level, only on antialiased edges).
         """
         w, h = max(1, w), max(1, h)
-        s = SUPERSAMPLE
         if layer.size == (w * s, h * s):
             if layer.mode == "RGBA":
                 return layer.convert("RGBa").reduce(s).convert("RGBA")
@@ -1522,6 +1665,9 @@ class Renderer:
         s = SUPERSAMPLE
 
         def build() -> Piece:
+            card = self._card(widget, x, y, w, h)
+            if card is not None:
+                return card
             layer, draw = self._canvas(w, h)
             radius = min(widget["radius"], w // 2, h // 2) * s
             box = [0, 0, w * s - 1, h * s - 1]
@@ -1552,26 +1698,91 @@ class Renderer:
 
         return self._cached(widget, None, build)
 
+    def _card(self, widget: dict[str, Any], x: int, y: int, w: int, h: int) -> Piece | None:
+        """A rect drawn at its size with only its round corners supersampled:
+        the pixels of drawing it three times larger, at a fraction of the
+        cost (a 1920x480 backdrop took 100 ms). None where the corners meet (a
+        pill, a circle) or the outline fills it: those are drawn whole."""
+        r = min(widget["radius"], w // 2, h // 2)
+        ring = widget["outline_width"] if widget["outline"] else 0
+        if min(w, h) < 2 * (r + 2) + 2 or 2 * ring >= min(w, h):
+            return None
+        shape, corners, c = _card_corners(r, ring)
+        small, _ = shape.size
+        full = Image.new("L", (w, h), 255)
+        edge = Image.new("L", (w, h), 0) if ring else None
+        if edge is not None:
+            draw = ImageDraw.Draw(edge)
+            for band in ([0, 0, w - 1, ring - 1], [0, h - ring, w - 1, h - 1],
+                         [0, 0, ring - 1, h - 1], [w - ring, 0, w - 1, h - 1]):  # fmt: skip
+                draw.rectangle(band, fill=255)
+        for (sx, sy), (bx, by) in zip(
+            ((0, 0), (small - c, 0), (0, small - c), (small - c, small - c)),
+            ((0, 0), (w - c, 0), (0, h - c), (w - c, h - c)),
+            strict=True,
+        ):
+            full.paste(shape.crop((sx, sy, sx + c, sy + c)), (bx, by))
+            if edge is not None:
+                edge.paste(corners.crop((sx, sy, sx + c, sy + c)), (bx, by))
+        layer = None
+        if widget["color"]:
+            a, b = self.color(widget["color"]), self.color(widget["color2"])
+            if b is None:
+                layer = Image.new("RGBA", (w, h), a)
+            else:
+                layer = _gradient_down((w, h), a, b, widget["gradient"] == "horizontal").copy()
+            inside = full if edge is None else ImageChops.subtract(full, edge)
+            alpha = layer.getchannel("A")
+            layer.putalpha(
+                inside if alpha.getextrema() == (255, 255) else ImageChops.multiply(alpha, inside)
+            )
+        if edge is not None:
+            color = self.color(widget["outline"])
+            line = Image.new("RGBA", (w, h), color)
+            line.putalpha(
+                edge
+                if color[3] == 255
+                else ImageChops.multiply(edge, Image.new("L", (w, h), color[3]))
+            )
+            layer = (
+                line
+                if layer is None
+                else ImageChops.add(layer.convert("RGBa"), line.convert("RGBa")).convert("RGBA")
+            )
+        if layer is None:
+            layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        backdrop = full if widget["backdrop_blur"] else None
+        return Piece(layer, x, y, [x, y, w, h], backdrop, widget["backdrop_blur"])
+
     def _draw_bar(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
         target = _number(snapshot.value(widget["sensor"]))
         value = self._eased(widget, target, now)
         frac = _fraction(value, widget["min"], widget["max"], widget.get("scale", "linear"))
-        rule = _rule_color(widget, target)
-        key = (round(frac, 4), rule)
-        return self._cached(widget, key, lambda: self._bar_piece(widget, frac, rule, x, y, w, h))
+        frac = _steps(frac, w if widget["direction"] in ("right", "left") else h)
+        paint = self._rule_paint(widget, value, now)
+        key = (frac, paint)
+        return self._cached(widget, key, lambda: self._bar_piece(widget, frac, paint, x, y, w, h))
 
     def _bar_piece(
-        self, widget: dict[str, Any], frac: float, rule: str | None, x: int, y: int, w: int, h: int
+        self,
+        widget: dict[str, Any],
+        frac: float,
+        paint: tuple[RGBA, RGBA | None],
+        x: int,
+        y: int,
+        w: int,
+        h: int,
     ) -> Piece:
+        """``paint``: the colour where the bar starts, and where a full bar
+        ends (None: one colour)."""
         s = SUPERSAMPLE
         layer, draw = self._canvas(w, h)
         W, H = w * s, h * s
         radius = min(widget["radius"], w // 2, h // 2) * s
         direction = widget["direction"]
         horizontal = direction in ("right", "left")
-        a = self.color(rule or widget["color"])  # colour where the bar starts
-        b = None if rule else self.color(widget["color2"])  # colour where a full bar ends
+        a, b = paint
         track = self.color(widget["background"])
 
         def span(p0: float, p1: float) -> list[float]:
@@ -1628,12 +1839,14 @@ class Renderer:
         target = _number(snapshot.value(widget["sensor"]))
         value = self._eased(widget, target, now)
         frac = _fraction(value, widget["min"], widget["max"], widget.get("scale", "linear"))
-        rule = _rule_color(widget, target)
-        return self._cached(
-            widget, (round(frac, 4), rule), lambda: self._gauge_piece(widget, frac, rule)
-        )
+        sweep = abs(widget["end_angle"] - widget["start_angle"])
+        frac = _steps(frac, math.radians(sweep) * max(widget["w"], widget["h"]) / 2)
+        paint = self._rule_paint(widget, value, now)
+        return self._cached(widget, (frac, paint), lambda: self._gauge_piece(widget, frac, paint))
 
-    def _gauge_piece(self, widget: dict[str, Any], frac: float, rule: str | None) -> Piece:
+    def _gauge_piece(
+        self, widget: dict[str, Any], frac: float, paint: tuple[RGBA, RGBA | None]
+    ) -> Piece:
         """Ring gauge: a cached static part (track, ticks) plus the value arc.
 
         The arc is one antialiased mask filled from a cached conic gradient, so
@@ -1642,8 +1855,7 @@ class Renderer:
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
         layer = self._gauge_static(widget).copy()
         if frac > 0:
-            a = self.color(rule or widget["color"])
-            b = None if rule else self.color(widget["color2"])
+            a, b = paint
             mask = self._gauge_mask(widget, frac)
             if b is None:
                 arc = Image.new("RGBA", (w, h), a)
@@ -1756,11 +1968,9 @@ class Renderer:
         return field
 
     def _draw_graph(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
-        slots = max(2, widget["history"])
-        if self.continuous and widget.get("per_frame") and self.fps > 0:
-            return self._frame_graph(widget, snapshot, now)
         if self.continuous:
-            return self._scrolling_graph(widget, snapshot, now, slots)
+            return self._timeline(widget, snapshot, now)
+        slots = max(2, widget["history"])
         values = snapshot.history.get(widget["sensor"], [])[-slots:]
         key = (len(values), tuple(values[-3:]), values[0] if values else None)
         return self._cached(widget, key, lambda: self._graph_piece(widget, values, slots))
@@ -1770,223 +1980,390 @@ class Renderer:
         layer = self._graph_layer(widget, values, slots, w, slots - len(values))
         return Piece(self._down(layer, w, h), x, y, [x, y, w, h])
 
-    # Video mode: a strip may take this long to draw before the graph needs it
-    # (it is drawn in the helper thread while the previous one keeps scrolling).
-    STRIP_DELAY_S = 0.1
+    # -- graphs in video mode ------------------------------------------------
+    #
+    # Every frame reaches the panel, so a graph draws the gliding value of its
+    # sensor 25 times a second (the motion's history), and its newest point is
+    # the value the numbers show now. Drawing that every frame costs too much:
+    # the curve goes onto a strip in the helper thread, and each frame shows a
+    # window into it, in half-pixel steps. Until the next reading the glide is
+    # known, so a strip reaches that far ahead; a reading that comes before
+    # the next strip is drawn over the end of the window until it is in.
 
-    def _scrolling_graph(
-        self, widget: dict[str, Any], snapshot: Snapshot, now: float, slots: int
-    ) -> Piece | None:
-        """The curve moves on every frame instead of jumping once per reading.
+    STRIP_SCALE = 2  # drawn twice as large: half-pixel steps, as SPUR II's curves
+    STRIP_AHEAD_S = 0.5  # a strip reaches this far past the next reading
+    STRIP_EVERY_S = 0.25  # a graph asks for a new strip at most this often
 
-        Once per reading the curve is drawn onto a strip two sample widths wider
-        than the graph; every frame shows a window into it that travels one
-        sample width until the next reading. The newest segment enters at the
-        right edge, so the curve runs one reading (smooth curves: two) plus
-        ``STRIP_DELAY_S`` behind the numbers.
-        """
-        wid = widget["id"]
-        ready, building = self._strips.get(wid, ([], None))
-        if building is not None and building[1].done():
-            try:
-                ready = [*ready, building[1].result()][-2:]
-            except Exception as exc:  # one broken widget must not blank the panel
-                self._warn(f"widget {wid!r} failed: {exc}")
-            building = None
-        if (not ready or ready[-1][0] != self._sample_no) and building is None:
-            lag = 2 if widget["smooth"] else 1
-            values = snapshot.history.get(widget["sensor"], [])[-(slots + lag + 1) :]
-            number, at = self._sample_no, self.sample[0]
+    def _graph_seconds(self, widget: dict[str, Any]) -> float:
+        """The time a graph shows in video mode: ``seconds``, a pixel per point
+        for ``per_frame`` (older themes), else ``history`` readings' worth."""
+        seconds = float(widget.get("seconds") or 0)
+        if seconds <= 0 and widget.get("per_frame"):
+            seconds = (widget["w"] - 1) / RATE
+        if seconds <= 0:
+            seconds = (max(2, widget["history"]) - 1) * self.sample[1]
+        return min(max(seconds, 2 / RATE), (MAX_POINTS - 4 * RATE) / RATE)
 
-            # bound now: the helper thread runs it after this call reuses the names
-            def job(number=number, at=at, values=values, lag=lag) -> tuple[Any, ...]:
-                return (number, at, *self._graph_strip(widget, values, slots, lag))
+    def _reach(self, widget: dict[str, Any]) -> int:
+        """How far the curve's glow and shadow reach, in pixels."""
+        glow = 3 * widget.get("glow_radius", 10) if widget.get("glow") else 0
+        shadow = 0
+        if widget.get("shadow"):
+            shadow = 3 * widget.get("shadow_blur", 6) + abs(widget.get("shadow_offset", 3))
+        return max(glow, shadow) + widget["line_width"] + 2
 
-            if ready and self.background_builds:
+    def _timeline(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        wid, key, w, h = widget["id"], widget["sensor"], widget["w"], widget["h"]
+        s = self.STRIP_SCALE
+        glide = self._glide_s()
+        self.motion.glide(key, motion_number(snapshot.value(key)), now, glide, self._lead())
+        span = self._graph_seconds(widget) * RATE  # points across the window
+        per_point = (w * s - 1) / span  # their distance, in pixels at ``s``
+        every = max(1, int(s / per_point))  # long windows: about a point per pixel
+        margin = math.ceil(s * (self._pad(widget) + self._reach(widget) + 1) / per_point)
+        history = self.motion.history(
+            key, math.ceil(span) + margin + 2 * every, now,
+            snapshot.history.get(key, []), self.sample[0], self.sample[1], glide,
+        )  # fmt: skip
+        self.moving = True
+        strips = self._strips.get(wid)
+        if strips is None or strips.per_point != per_point:  # new, or another window
+            strips = self._strips[wid] = _Strips(per_point)
+        strips.collect()
+        # The window's left edge at ``s``, point k sitting at k * per_point on
+        # every strip: the newest point at the right edge, now.
+        left = round(now * RATE * per_point - (w * s - 1))
+        strip = strips.ready
+        if strip is None or not strip.covers(left, w, s):  # the first, or after a long pause
+            strip = strips.ready = self._strip_job(widget, history, now, per_point, every, margin)()
+        valid = self._valid_until(strip, key)
+        due = valid < strip.until or now >= strip.until - self.STRIP_EVERY_S
+        if due and strips.building is None and now - strips.asked >= self.STRIP_EVERY_S:
+            strips.asked = now
+            job = self._strip_job(widget, history, now, per_point, every, margin)
+            if self.background_builds:
                 if self._builder is None:
                     self._builder = _Builder()
-                building = (number, self._builder.submit(job))
+                strips.building = self._builder.submit(job)
             else:
-                ready = [*ready, job()][-2:]
-        self._strips[wid] = (ready, building)
-        if not ready:
-            return None
-        # the newest strip that is due; before that, the one that is still travelling
-        strip = next((s for s in reversed(ready) if now >= s[1] + self.STRIP_DELAY_S), ready[0])
-        number, _at, halo, line, pad, step = strip
-        travelled = (now - strip[1] - self.STRIP_DELAY_S) / self.sample[1]
-        off = round((1 + min(1.0, max(0.0, travelled))) * step)
-        self.moving = True
-        content = ("scroll", number, off)
+                strip = strips.ready = job()
+                valid = strip.until
+        offset, phase = divmod(left - strip.origin, s)
+        pad = strip.pad
+        # A reading the strip did not know: draw the end again once it shows,
+        # at the newest point or in the glow just past it (a big change).
+        beyond = now + s * (pad + self._reach(widget)) / (per_point * RATE)
+        patch = valid < now and (
+            self._apart(widget, strip, now) >= 0.4 or self._apart(widget, strip, beyond) >= 4
+        )
+        content = ("timeline", id(strip), offset, phase)
         hit = self._cache.get(wid)
-        if hit is not None and hit[0] == content:
+        if not patch and hit is not None and hit[0] == content:
             return hit[1]
-        x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
-        window = line.crop((off, 0, off + w, h))
-        if halo is None:
-            piece = Piece(window, x, y, [x, y, w, h])
-        else:
-            layer = halo.crop((off, 0, off + w + 2 * pad, h + 2 * pad))
-            layer.alpha_composite(window, (pad, pad))
-            piece = Piece(layer, x - pad, y - pad, [x, y, w, h])
-        self._cache[wid] = (content, piece)
+        layer = strip.phases[phase].crop((offset, 0, offset + w + 2 * pad, h + 2 * pad))
+        if strip.halo is not None:  # beside the window only the glow: the curve ends at its edges
+            for x0 in (0, w + pad):
+                side = strip.halo.crop((offset + x0, 0, offset + x0 + pad, h + 2 * pad))
+                layer.paste(side, (x0, 0))
+        if patch:
+            self._patch(widget, layer, strip, history, valid, left)
+        x, y = widget["x"], widget["y"]
+        piece = Piece(layer, x - pad, y - pad, [x, y, w, h])
+        self._cache[wid] = (None if patch else content, piece)
         return piece
 
-    def _graph_strip(
-        self, widget: dict[str, Any], values: list[float], slots: int, lag: int
-    ) -> tuple[Image.Image | None, Image.Image, int, float]:
-        """The curve on a strip for :meth:`_scrolling_graph`, with its effects:
-        (halo or None, line, halo padding, sample width in pixels)."""
-        w, h = widget["w"], widget["h"]
-        step = (w * SUPERSAMPLE - 1) / (slots - 1) / SUPERSAMPLE
-        width = w + math.ceil(2 * step) + 1
-        # value i at strip x = graph width + (i - (last - lag) + 1) sample widths
-        layer = self._graph_layer(widget, values, slots, width, slots + lag + 1 - len(values))
-        line = _scale_alpha(self._down(layer, width, h), widget.get("opacity", 1.0))
-        halo, pad = self._halo(widget, line)
-        return halo, line, pad, step
+    def _pad(self, widget: dict[str, Any]) -> int:
+        """The room :meth:`_halo` leaves around a layer for its effects."""
+        pad = 0
+        if widget.get("glow"):
+            pad = max(pad, widget.get("glow_radius", 10) * 2)
+        if widget.get("shadow"):
+            pad = max(pad, widget.get("shadow_blur", 6) * 2 + abs(widget.get("shadow_offset", 3)))
+        return pad
 
-    # A graph that moves per frame keeps this many readings of the future on its
-    # strip; the next reading's strip replaces it after one (and STRIP_DELAY_S).
-    FRAME_HORIZON = 3
+    def _apart(self, widget: dict[str, Any], strip: _Strip, t: float) -> float:
+        """How many pixels the strip's curve is off the sensor's at ``t``. A
+        glide starts gently: a new reading shows only after a frame or two,
+        often after the next strip is in."""
+        live = self.motion.value(widget["sensor"], t)
+        drawn = Spring()
+        drawn.pieces = list(strip.pieces)
+        old = drawn.at(t)
+        if live is None or old is None:
+            return 0.0 if live is None and old is None else math.inf
+        scale = widget.get("scale", "linear")
+        apart = _fraction(live, *strip.bounds, scale) - _fraction(old, *strip.bounds, scale)
+        return abs(apart) * (widget["h"] - 2 * widget["line_width"])
 
-    def _frame_graph(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
-        """One point per frame, a pixel apart, as SPUR II draws its graphs (theme
-        ``per_frame``): the curve is the gliding value, so it moves visibly on
-        every frame even when readings come once a second, and shows the last
-        ``w`` frames.
+    def _valid_until(self, strip: _Strip, key: str) -> float:
+        """Until when the strip's curve is the sensor's: the end of what it
+        drew ahead, or when the value took a course the strip did not know."""
+        spring = self.motion.springs.get(key)
+        if spring is None:
+            return strip.taken
+        if spring.made == strip.made:
+            return strip.until
+        later = [piece for piece in spring.pieces if piece[0] >= strip.made]
+        if not later or later[0][0] != strip.made:  # gone already: right until it was taken
+            return strip.taken
+        return later[0][1]
 
-        Drawing it every frame costs too much. The glide is a spring with a
-        closed form, so once a reading is in, the curve is known until the next
-        one: once per reading the past and the predicted rest go onto a strip
-        (in the helper thread), and every frame shows the window that ends
-        ``STRIP_DELAY_S`` ago, when that strip is ready.
-        """
-        wid, w, fps = widget["id"], widget["w"], self.fps
-        glide = self._glides.setdefault(wid, _Glide())
-        if glide.sample_no != self._sample_no:  # each reading once, also while a strip builds
-            glide.sample_no = self._sample_no
-            values = snapshot.history.get(widget["sensor"], [])
-            if values:
-                smoothing = self.theme.smoothing_ms / 1000 if self.animate else 0.0
-                seconds = max(smoothing, self.sample[1]) if smoothing > 0 else 0.0
-                glide.follow(self.sample[0], values[-1], seconds)
-        ready, building = self._frame_strips.get(wid, ([], None))
-        if building is not None and building[1].done():
-            try:
-                ready = [*ready, building[1].result()][-2:]
-            except Exception as exc:  # one broken widget must not blank the panel
-                self._warn(f"widget {wid!r} failed: {exc}")
-            building = None
-        if (not ready or ready[-1][0] != self._sample_no) and building is None:
-            at, interval = self.sample
-            begin = at - self.STRIP_DELAY_S - (w + 1) / fps  # the oldest point in view
-            ahead = self.FRAME_HORIZON * interval + self.STRIP_DELAY_S
-            count = w + 1 + math.ceil(ahead * fps)
-            glide.forget_before(begin)
-            points = [glide.at(begin + j / fps) for j in range(count)]
-            skip = next((j for j, v in enumerate(points) if v is not None), count)
-            known = [v for v in points[skip:] if v is not None]
-            number = self._sample_no
+    def _values(
+        self, history: History, key: str, first: int, last: int, every: int
+    ) -> tuple[list[float | None], int]:
+        """The values of the points ``first`` .. ``last`` that are drawn (every
+        ``every``-th): recorded ones from the history, later ones ahead of time
+        from the spring. Returns them and the first point's number."""
+        first -= first % every
+        values = history.since(first)[: max(0, history.last - first + 1)][::every]
+        spring = self.motion.springs.get(key)
+        future = Spring()
+        future.pieces = list(spring.pieces) if spring is not None else []
+        start = first + len(values) * every
+        values += [future.at(k / RATE) for k in range(start, last + 1, every)]
+        return values, first
 
-            # bound now: the helper thread runs it after this call reuses the names
-            def job(
-                number=number, at=at, begin=begin, fps=fps, known=known, skip=skip, count=count
-            ) -> tuple[Any, ...]:
-                return (number, at, begin, fps, *self._frame_strip(widget, known, skip, count))
+    def _strip_job(
+        self, widget: dict[str, Any], history: History, now: float, per_point: float,
+        every: int, margin: int,
+    ) -> Callable[[], _Strip]:  # fmt: skip
+        """A strip of the curve to draw (in the helper thread): its values are
+        taken now, on the render thread; the drawing happens when it runs."""
+        key = widget["sensor"]
+        last = grid(now)
+        ahead = math.ceil((self.sample[1] + self.STRIP_AHEAD_S) * RATE)
+        span = (widget["w"] * self.STRIP_SCALE - 1) / per_point
+        values, first = self._values(
+            history, key, last - math.ceil(span) - margin - every, last + ahead + margin, every
+        )
+        spring = self.motion.springs.get(key)
+        made = spring.made if spring is not None else 0
+        pieces = tuple(spring.pieces) if spring is not None else ()
+        until = (last + ahead) / RATE
 
-            if ready and self.background_builds:
-                if self._builder is None:
-                    self._builder = _Builder()
-                building = (number, self._builder.submit(job))
-            else:
-                ready = [*ready, job()][-2:]
-        self._frame_strips[wid] = (ready, building)
-        if not ready:
-            return None
-        strip = next((s for s in reversed(ready) if now >= s[1] + self.STRIP_DELAY_S), ready[0])
-        number, _at, begin, rate, halo, line, pad, step = strip
-        right = (now - self.STRIP_DELAY_S - begin) * rate  # the newest point in view
-        off = min(max(0, round((right - (w - 1)) * step)), line.width - w)
-        self.moving = True
-        content = ("frame", number, off)
-        hit = self._cache.get(wid)
-        if hit is not None and hit[0] == content:
-            return hit[1]
-        x, y, h = widget["x"], widget["y"], widget["h"]
-        window = line.crop((off, 0, off + w, h))
-        if halo is None:
-            piece = Piece(window, x, y, [x, y, w, h])
-        else:
-            layer = halo.crop((off, 0, off + w + 2 * pad, h + 2 * pad))
-            layer.alpha_composite(window, (pad, pad))
-            piece = Piece(layer, x - pad, y - pad, [x, y, w, h])
-        self._cache[wid] = (content, piece)
-        return piece
+        def job() -> _Strip:
+            return self._draw_strip(
+                widget, values, first, per_point, every, _Strip(made, now, until, pieces)
+            )
 
-    def _frame_strip(
-        self, widget: dict[str, Any], values: list[float], first: int, count: int
-    ) -> tuple[Image.Image | None, Image.Image, int, float]:
-        """The strip for :meth:`_frame_graph`: ``count`` points a pixel apart, the
-        known ones from point ``first`` on. No spline: points that close are a
-        curve already."""
-        w, h = widget["w"], widget["h"]
-        step = (w * SUPERSAMPLE - 1) / (w - 1) / SUPERSAMPLE
-        width = max(w, math.ceil(count * step) + 1)
-        flat = {**widget, "smooth": False}
-        layer = self._graph_layer(flat, values, w, width, first)
-        line = _scale_alpha(self._down(layer, width, h), widget.get("opacity", 1.0))
-        halo, pad = self._halo(widget, line)
-        return halo, line, pad, step
+        return job
+
+    def _draw_strip(
+        self, widget: dict[str, Any], values: list[float | None], first: int, per_point: float,
+        every: int, strip: _Strip,
+    ) -> _Strip:  # fmt: skip
+        """Draw the curve through ``values`` (point ``first`` on, every
+        ``every``-th) onto ``strip``: an image per half-pixel step, glow and all."""
+        s, h = self.STRIP_SCALE, widget["h"]
+        widget = self._dense(widget, every * per_point)
+        numbers = [v for v in values if v is not None]
+        bounds = self._graph_bounds(widget, numbers) if numbers else (0.0, 1.0)
+        top = self._fade_top(widget, numbers, bounds, s)
+        origin = math.floor(first * per_point) - 1  # the strip's left edge, at ``s``
+        last = first + (len(values) - 1) * every
+        width = math.ceil((last * per_point - origin + 1) / s) + 1
+        layer = self._graph_layer(
+            widget, values, 0, width + 1, first // every, scale=s, step=every * per_point,
+            origin=origin, bounds=bounds, top=top,
+        )  # fmt: skip
+        opacity = widget.get("opacity", 1.0)
+        lines = [
+            _scale_alpha(self._down(layer.crop((p, 0, p + s * width, s * h)), width, h, s), opacity)
+            for p in range(s)
+        ]
+        halo, pad = self._halo(widget, lines[0], exact=True)
+        phases = []
+        for line in lines:
+            if halo is None:
+                phases.append(line)
+                continue
+            out = halo.copy()
+            out.alpha_composite(line, (pad, pad))
+            phases.append(out)
+        strip.per_point, strip.every, strip.origin, strip.width = per_point, every, origin, width
+        strip.bounds, strip.top, strip.pad, strip.phases = bounds, top, pad, phases
+        strip.halo = halo
+        return strip
+
+    def _patch(
+        self, widget: dict[str, Any], layer: Image.Image, strip: _Strip, history: History,
+        valid: float, left: int,
+    ) -> None:  # fmt: skip
+        """Draw the end of the window ``layer`` again from where the strip no
+        longer holds (a reading it did not know), as the next strip will."""
+        s, w, h, pad = self.STRIP_SCALE, widget["w"], widget["h"], strip.pad
+        widget = self._dense(widget, strip.every * strip.per_point)
+        reach = self._reach(widget)
+        # Window columns from ``start`` on change (and the glow that reaches
+        # them); from ``begin`` on, the patch draws what that glow sees.
+        changed = (valid * RATE * strip.per_point - left) / s
+        start = max(-pad, math.floor(changed) - reach)
+        begin, end = start - reach, w + pad + reach
+        x0 = left + s * begin  # the patch's left edge, at ``s``
+        first = math.floor(x0 / strip.per_point) - strip.every
+        last = math.ceil((x0 + s * (end - begin)) / strip.per_point) + strip.every
+        values, first = self._values(history, widget["sensor"], first, last, strip.every)
+        step = strip.every * strip.per_point
+        points = [((first // strip.every + i) * step - x0, v) for i, v in enumerate(values)]
+        part = self._curve(widget, points, end - begin, s, strip.bounds, strip.top)
+        line = _scale_alpha(self._down(part, end - begin, h, s), widget.get("opacity", 1.0))
+        halo, _ = self._halo(widget, line, exact=True)
+        if halo is not None:  # the curve inside the window, its glow also beside it
+            inside = line.crop((max(0, -begin), 0, w - begin, h))
+            halo.alpha_composite(inside, (pad + max(0, -begin), pad))
+            line = halo
+        cut = start - begin + pad  # the patch's column of window column ``start``
+        layer.paste(line.crop((cut, 0, cut + w + pad - start, line.height)), (start + pad, 0))
+
+    def _dense(self, widget: dict[str, Any], step: float) -> dict[str, Any]:
+        """Points this close (``step`` pixels at the strip's scale) are a curve
+        already: no spline through them, and no round joints (a slice drawn in
+        Python for every point, holding up the render thread)."""
+        if step < 3 * self.STRIP_SCALE:
+            return {**widget, "smooth": False, "\0joints": False}
+        return widget
+
+    def _graph_bounds(self, widget: dict[str, Any], numbers: list[float]) -> tuple[float, float]:
+        lo = widget["min"] if widget["min"] is not None else min(numbers)
+        hi = widget["max"] if widget["max"] is not None else max(numbers)
+        return (lo, lo + 1) if hi == lo else (lo, hi)
+
+    def _fade_top(
+        self, widget: dict[str, Any], numbers: list[float], bounds: tuple[float, float], s: int
+    ) -> int:
+        """Where a strip's fill starts to fade: its highest point."""
+        if not numbers:
+            return 0
+        H, pad = widget["h"] * s, widget["line_width"] * s
+        scale = widget.get("scale", "linear")
+        highest = max(_fraction(v, *bounds, scale) for v in numbers)
+        return int(pad + (H - 1 - 2 * pad) * (1 - highest))
 
     def _graph_layer(
-        self, widget: dict[str, Any], values: list[float], slots: int, width: int, first: int
-    ) -> Image.Image:
-        """The graph, supersampled, on a canvas ``width`` px wide: value ``i`` sits
-        at sample position ``first + i`` of the widget's ``slots``."""
-        s = SUPERSAMPLE
-        W, H = width * s, widget["h"] * s
-        step = (widget["w"] * s - 1) / (slots - 1)
-        layer, draw = self._canvas(width, widget["h"])
+        self, widget: dict[str, Any], values: list[float | None], slots: int, width: int,
+        first: int, *, scale: int = SUPERSAMPLE, step: float | None = None, origin: int = 0,
+        bounds: tuple[float, float] | None = None, top: int | None = None,
+    ) -> Image.Image:  # fmt: skip
+        """The graph at ``scale``, on a canvas ``width`` px wide: value ``i`` sits
+        at sample position ``first + i`` of the widget's ``slots`` (or ``step``
+        pixels apart at ``scale``, the canvas starting at ``origin``); None
+        leaves a gap."""
+        if step is None:
+            step = (widget["w"] * scale - 1) / (slots - 1)
+        points = [((first + i) * step - origin, v) for i, v in enumerate(values)]
+        return self._curve(widget, points, width, scale, bounds, top)
+
+    def _curve(
+        self, widget: dict[str, Any], points: list[tuple[float, float | None]], width: int,
+        scale: int, bounds: tuple[float, float] | None = None, top: int | None = None,
+    ) -> Image.Image:  # fmt: skip
+        """Background, grid and the curve through ``points`` (x in pixels at
+        ``scale``; a value None breaks the curve) on a canvas ``width`` px wide.
+        ``bounds`` is the value range (default: the widget's, else the
+        points'), ``top`` where the fill's fade starts (default: its peak)."""
+        s = scale
+        W, H = max(1, width * s), max(1, widget["h"] * s)
+        layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(layer)
         if widget["background"]:
             draw.rectangle([0, 0, W - 1, H - 1], fill=self.color(widget["background"]))
         if widget["grid"] > 0 and widget["grid_color"]:
-            grid = self.color(widget["grid_color"])
+            grid_color = self.color(widget["grid_color"])
             for i in range(1, widget["grid"] + 1):
                 gy = round(H * i / (widget["grid"] + 1))
-                draw.line([(0, gy), (W - 1, gy)], fill=grid, width=max(1, s // 2))
-        if len(values) >= 2:
-            lo = widget["min"] if widget["min"] is not None else min(values)
-            hi = widget["max"] if widget["max"] is not None else max(values)
-            if hi == lo:
-                hi = lo + 1
-            pad = widget["line_width"] * s
-            points = [
-                (
-                    (first + i) * step,
-                    pad
-                    + (H - 1 - 2 * pad) * (1 - _fraction(v, lo, hi, widget.get("scale", "linear"))),
-                )
-                for i, v in enumerate(values)
+                draw.line([(0, gy), (W - 1, gy)], fill=grid_color, width=max(1, s // 2))
+        numbers = [v for _, v in points if v is not None]
+        if len(numbers) < 2:
+            return layer
+        lo, hi = bounds or self._graph_bounds(widget, numbers)
+        pad = widget["line_width"] * s
+        scale_kind = widget.get("scale", "linear")
+        runs: list[list[tuple[float, float]]] = [[]]
+        for px, v in points:
+            if v is None:
+                if runs[-1]:
+                    runs.append([])
+                continue
+            runs[-1].append((px, pad + (H - 1 - 2 * pad) * (1 - _fraction(v, lo, hi, scale_kind))))
+        runs = [run for run in runs if len(run) >= 2]
+        if widget["smooth"]:
+            runs = [
+                [(px, min(H - 1 - pad, max(pad, py))) for px, py in _catmull_rom(run)]
+                for run in runs
             ]
-            if widget["smooth"]:
-                points = [(px, min(H - 1 - pad, max(pad, py))) for px, py in _catmull_rom(points)]
-            color = self.color(widget["color"])
-            if widget["fill"]:
-                area = Image.new("L", layer.size, 0)
-                polygon = [*points, (points[-1][0], H - 1), (points[0][0], H - 1)]
+        color = self.color(widget["color"])
+        if widget["fill"] and runs:
+            area = Image.new("L", layer.size, 0)
+            for run in runs:
+                polygon = [*run, (run[-1][0], H - 1), (run[0][0], H - 1)]
                 ImageDraw.Draw(area).polygon(polygon, fill=255)
-                if widget["fill_fade"]:
-                    top = int(min(py for _, py in points))
-                    fade = Image.new("L", (1, H), 0)
-                    fade.putdata(
-                        [int(115 * max(0.0, 1 - (row - top) / max(1, H - top))) for row in range(H)]
-                    )
-                    alpha = ImageChops.multiply(area, fade.resize(layer.size))
-                else:
-                    alpha = area.point(lambda v: v * 64 // 255)
-                tint = Image.new("RGBA", layer.size, (*color[:3], 255))
-                tint.putalpha(ImageChops.multiply(alpha, Image.new("L", layer.size, color[3])))
-                layer.alpha_composite(tint)
-            draw.line(points, fill=color, width=widget["line_width"] * s, joint="curve")
+            if widget["fill_fade"]:
+                if top is None:
+                    top = int(min(py for run in runs for _, py in run))
+                fade = Image.new("L", (1, H), 0)
+                fade.putdata(
+                    [
+                        int(115 * min(1.0, max(0.0, 1 - (row - top) / max(1, H - top))))
+                        for row in range(H)
+                    ]
+                )
+                alpha = ImageChops.multiply(area, fade.resize(layer.size))
+            else:
+                alpha = area.point(lambda v: v * 64 // 255)
+            tint = Image.new("RGBA", layer.size, (*color[:3], 255))
+            if color[3] < 255:
+                alpha = ImageChops.multiply(alpha, Image.new("L", layer.size, color[3]))
+            tint.putalpha(alpha)
+            layer.alpha_composite(tint)
+        joint = "curve" if widget.get("\0joints", True) else None
+        for run in runs:
+            draw.line(run, fill=color, width=widget["line_width"] * s, joint=joint)
         return layer
+
+
+class _Strip:
+    """A graph's curve drawn ahead (see :meth:`Renderer._timeline`): one image
+    per half-pixel step, glow and all, ``pad`` pixels larger on every side."""
+
+    def __init__(self, made: int, taken: float, until: float, pieces: tuple) -> None:
+        self.made = made  # the sensor's spring pieces it knew (Spring.made) ...
+        self.pieces = pieces  # ... and those pieces: what it drew ahead with
+        self.taken = taken  # when its values were taken
+        self.until = until  # the curve is right until here, if no reading comes in between
+        self.per_point = 0.0  # pixels between two history points, at the strip's scale
+        self.every = 1  # every how many history points it draws
+        self.origin = 0  # its left edge: point k sits at k * per_point - origin
+        self.width = 0  # in pixels, without the pad
+        self.bounds = (0.0, 1.0)  # the value range it was drawn with
+        self.top = 0  # where its fill's fade starts
+        self.pad = 0
+        self.phases: list[Image.Image] = []
+        self.halo: Image.Image | None = None  # the glow alone, for beside the window
+
+    def covers(self, left: int, w: int, s: int) -> bool:
+        """Whether a window of ``w`` pixels from ``left`` (at scale ``s``) lies on it."""
+        offset = left - self.origin
+        return offset >= 0 and offset // s + w <= self.width
+
+
+class _Strips:
+    """A graph's strip on show and the one being drawn."""
+
+    def __init__(self, per_point: float) -> None:
+        self.per_point = per_point
+        self.ready: _Strip | None = None
+        self.building: Future | None = None
+        self.asked = -math.inf
+
+    def collect(self) -> None:
+        """Take the strip the helper thread has finished, if it is newer."""
+        if self.building is None or not self.building.done():
+            return
+        try:
+            strip = self.building.result()
+        except Exception as exc:  # the strip on show stays
+            log.warning("graph strip failed: %s", exc)
+        else:
+            if self.ready is None or strip.taken >= self.ready.taken:
+                self.ready = strip
+        self.building = None

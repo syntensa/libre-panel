@@ -248,3 +248,99 @@ def test_auto_driver_falls_back_to_png(tmp_path):
     display.show(Image.new("RGB", (32, 16)))
     display.close()
     assert out.exists()
+
+
+class StepClock:
+    """The main loop's clock, set by the test."""
+
+    def __init__(self, now):
+        self.now = now
+
+    def __call__(self):
+        return self.now
+
+
+class MemoryStream(Display):
+    """A streaming display in memory: every frame is kept."""
+
+    streaming = True
+    stream_fps = 50
+
+    def __init__(self, config=None):
+        super().__init__(config or DeviceConfig())
+        self.frames = []
+
+    def show(self, frame, region=None):
+        self.frames.append((frame, region))
+
+
+def test_the_main_loop_goes_one_frame_at_a_time_on_its_own_clock():
+    """MainLoop.step draws one frame on the clock it is given: readings come by
+    that clock, each frame reaches the streaming display, a requested theme
+    shows once it is warmed up."""
+    import time
+
+    from libre_panel.plugins import PluginHost
+    from libre_panel.sensors.base import SensorHub
+    from libre_panel.sensors.demo import DemoProvider
+
+    clock = StepClock(1000.0)
+    hub = SensorHub([DemoProvider({"fixed_time": 1_700_000_000})])
+    taken = []
+    real_snapshot = hub.snapshot
+    hub.snapshot = lambda: taken.append(clock.now) or real_snapshot()
+    display, host = MemoryStream(), PluginHost()
+    config = Config(theme="slate", sensors=SensorsConfig(providers=["demo"]))
+    loop = app_module.MainLoop(config, host=host, hub=hub, display=display, clock=clock)
+    try:
+        for n in range(100):  # two seconds at 50 fps
+            clock.now = 1000.0 + n / 50
+            out = loop.step(clock.now)
+            assert out is not None and out.size == (800, 480)
+        assert loop.streaming and loop.fps == 50
+        assert len(display.frames) == 100 and all(region is None for _, region in display.frames)
+        assert taken == [1000.0, 1001.0]  # slate reads its sensors once a second
+        host.request_theme("libre-default", by="test", transition="cut")
+        for _ in range(150):  # it is warmed up first (at most 2 s) while slate goes on
+            clock.now += 1 / 50
+            out = loop.step(clock.now)
+            if loop.status.theme == "libre-default":
+                break
+            assert out.size == (800, 480)
+            time.sleep(0.002)
+        assert loop.status.theme == "libre-default" and out.size == (480, 320)
+    finally:
+        loop.close()
+        host.close()
+
+
+def test_one_clock_for_the_loop_the_renderer_and_plugins():
+    """``now`` everywhere is on libre_panel.clock() (time.perf_counter), and
+    snapshot.now is the wall time of the frame as planned: a seconds clock
+    ticks on the frame that is due, not on the one that happens to be drawn."""
+    import time
+    from datetime import datetime, timedelta
+
+    import libre_panel
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.sensors.base import SensorHub, Snapshot
+    from libre_panel.sensors.demo import DemoProvider
+
+    before = time.perf_counter()
+    assert before <= libre_panel.clock() <= time.perf_counter()
+    assert app_module._Pacer().clock is libre_panel.clock
+    renderer = Renderer(load_theme(find_theme("pico")))
+    renderer.render(Snapshot())
+    assert before <= renderer.motion.now <= time.perf_counter()
+
+    clock = StepClock(1000.5)  # drawn half a second after it was due
+    hub = SensorHub([DemoProvider({"fixed_time": 1_700_000_000})])
+    config = Config(theme="pico", sensors=SensorsConfig(providers=["demo"]))
+    loop = app_module.MainLoop(config, hub=hub, display=MemoryStream(), clock=clock)
+    try:
+        assert loop.clock is clock
+        loop.step(1000.0)
+        due = datetime.now() - timedelta(seconds=0.5)
+        assert abs((loop.snapshot.now - due).total_seconds()) < 0.2
+    finally:
+        loop.close()

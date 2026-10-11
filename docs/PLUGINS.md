@@ -280,7 +280,10 @@ class Studio(Screen):
   services) are there, and `snapshot.state(key)` gives a dict or list a
   service published (see *States*); `now` is the frame's time in seconds for animations
   (steady; in video mode the time the frame is planned for, so a frame that
-  starts a little late does not make an animation stutter).
+  starts a little late does not make an animation stutter). It is a time on
+  `libre_panel.clock()` (`time.perf_counter`): compare with that clock, not
+  with `time.monotonic`. `snapshot.now` is the same moment as a wall-clock
+  `datetime`, so a seconds clock ticks on the frame that is due.
 - `context` has `size`, `orientation`, `palette`, `model`,
   `hidden_edges()` (pixels the bezel hides, as data: nothing is cropped),
   `font(ref, size)`, `color(value)`, `fps`, `language`, `t(text)`,
@@ -302,9 +305,15 @@ class Studio(Screen):
 - `context.continuous` is true in video mode, where every frame reaches the
   panel; `context.progress(now)` says how far `now` is from the last reading
   to the next (0 to 1). Move a curve by that part of a sample width and it
-  scrolls between readings, as the built-in graphs do.
+  scrolls between readings.
 - `__init__` also runs for every preview in the editor, which then calls
   `close()`: keep expensive loading in a module-level cache.
+- `prepare()` (optional) runs once in a thread of its own before the
+  screen's first frame on the panel: at start, and when its theme is about
+  to come on, while the panel still shows the theme before (the switch
+  waits for it, up to two seconds). Load what the first frames need there
+  (pre-rendered layers, caches), so the first frame does not stall a video.
+  `render` must work without it too: previews do not call it.
 - The theme editor offers installed screens under *Theme → Look*, with their
   options.
 

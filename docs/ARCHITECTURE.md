@@ -16,14 +16,14 @@
 |---|---|
 | `config` | `config.toml`: panel, sensors, weather, plugins. No defaults that point at a person or place. |
 | `theme` | Theme format, validation, safe asset paths, saving; `adapt` rescales a theme to another panel. |
-| `render` | Pillow renderer; the same code serves the panel and the editor preview. Safe format strings. |
+| `render` | Pillow renderer; the same code serves the panel and the editor preview. Safe format strings. `motion` keeps what moves (gliding values, fading colours, graph histories) from frame to frame and theme to theme. |
 | `sensors` | `SensorProvider` plugins merged by `SensorHub` (priority, history for graphs). |
 | `weather` | Open-Meteo provider, background polling, off by default. |
 | `devices` | Panel catalog (`models`), `Display` drivers, USB/serial discovery. |
 | `plugins` | Plugin API: finding plugins (entry points, plugin folders), services and the host they talk to the panel through, modes. See [Plugins](PLUGINS.md). |
 | `services` | Libre Panel's own services, built in and off until `config.toml` lists them: `notices` (messages for the volume, tracks, limits), `game` (game mode) and `autopilot` (theme rules). They use only the plugin API; Steam, the programs that run and the Windows window in front are read in `steam` and `machine`. |
 | `editor` | Local HTTP server (127.0.0.1 only) + vanilla JS editor, no build step. |
-| `app` | Main loop: sample → render → diff → send; reloads config/theme on change; reports its state (`RunStatus`). |
+| `app` | Main loop (`MainLoop.step`, one frame at a time): sample → render → diff → send; reloads config/theme on change; reports its state (`RunStatus`). |
 | `service` | Background app: the main loop in a thread (pause/resume, restarts after a broken config is fixed), the editor server, and the controls shared by tray and editor. |
 | `tray` | Tray icon and menu (pystray); runs without an icon where there is no tray. |
 | `autostart` | Login start per system: Windows `Run` key (or, asked for, a Task Scheduler task with the highest rights), XDG autostart entry, macOS LaunchAgent. |
@@ -71,4 +71,5 @@ bring sensor sources too (`[entry-points."libre_panel.sensors"]` in its
 `plugin.toml`). A source whose `read` is cheap and whose values must follow
 at once (a volume) sets `every_frame = True`: it is then also read on every
 frame between the `refresh_ms` snapshots (graphs keep one value per
-snapshot).
+snapshot). `every_frame = "video"` does so only in video mode, where every
+frame reaches the panel anyway (the `load` source).

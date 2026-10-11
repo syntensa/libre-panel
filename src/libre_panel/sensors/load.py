@@ -282,7 +282,9 @@ class LoadProvider(SensorProvider):
     """``cpu.load`` and ``gpu.load``, measured ten times a second while a theme shows them."""
 
     name = "load"
-    every_frame = True
+    # In video mode the bars follow the load on every frame; on the PNG path each
+    # change would be one more picture to send, so it keeps to the readings there.
+    every_frame = "video"
 
     def __init__(self, options: dict[str, Any] | None = None) -> None:
         super().__init__(options)

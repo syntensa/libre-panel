@@ -613,7 +613,7 @@ def test_a_source_before_it_keeps_its_keys(monkeypatch):
 def test_the_provider_is_built_in():
     provider = base.create_provider("load", {})
     assert isinstance(provider, load.LoadProvider) and provider.name == "load"
-    assert provider.every_frame is True
+    assert provider.every_frame == "video"  # on the PNG path it keeps to the readings
     provider.close()
     assert base.available_providers()["load"] == "built in"
 
@@ -632,3 +632,23 @@ def test_the_real_counters_of_windows():
         value = gpu.read()
         assert value is None or 0.0 <= value <= 100.0
         gpu.close()
+
+
+def test_between_readings_the_load_follows_only_in_video_mode():
+    """On the PNG path every changed bar is one more picture to send: there the
+    load keeps to the readings; a volume follows on every frame either way."""
+    from libre_panel.sensors.base import Reading, SensorHub, SensorProvider
+
+    class Source(SensorProvider):
+        def __init__(self, key, every):
+            super().__init__()
+            self.key, self.every_frame, self.value = key, every, 0.0
+
+        def read(self):
+            self.value += 1
+            return {self.key: Reading(self.key, self.value)}
+
+    hub = SensorHub([Source("cpu.load", "video"), Source("audio.volume", True)])
+    hub.snapshot()
+    assert set(hub.fresh(video=True)) == {"cpu.load", "audio.volume"}
+    assert set(hub.fresh(video=False)) == {"audio.volume"}

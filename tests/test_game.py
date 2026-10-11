@@ -486,7 +486,7 @@ def test_a_game_starts_and_ends_in_the_main_loop(steam, monkeypatch, isolated_ho
     """A game runs: the loop's own samples carry the logo to the service, which
     switches the mode; the entrance plays, the game's theme shows. The game ends:
     the entrance for the end plays and the theme is the user's again."""
-    from test_toast_scenarios import Panel, Script, write_theme
+    from test_toast_scenarios import NoWarmup, Panel, Script, write_theme
 
     from libre_panel import app
     from libre_panel.config import ModeConfig, SensorsConfig
@@ -516,6 +516,7 @@ def test_a_game_starts_and_ends_in_the_main_loop(steam, monkeypatch, isolated_ho
     monkeypatch.setattr(Renderer, "render", rendered)
     monkeypatch.setattr(app, "transition", transition)
     monkeypatch.setattr(app, "create_display", Recording)
+    monkeypatch.setattr(app, "_Warmup", NoWarmup)  # frames counted: switch at once
     host = PluginHost()
     manager = ServiceManager(host)
     options = {"steam_path": str(steam), "poll_s": 3600, "linger_s": 0.0}
