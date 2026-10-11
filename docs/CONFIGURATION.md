@@ -205,11 +205,12 @@ units = { "home/+/temperature" = "°C" }
 
 **Game frame rate** (`game.*`, Windows): Intel's
 [PresentMon](https://github.com/GameTechDev/PresentMon/releases) counts the
-frames of the game you play. Download its console version (MIT license) and
-name it; Libre Panel starts it only while a theme shows the frame rate and
-stops it a minute after. PresentMon needs administrator rights or your
-account in the "Performance Log Users" group (Computer Management → Local
-Users and Groups → Groups; sign out and in again).
+frames of the game you play. It listens to what Windows reports about the
+frames it shows: nothing is put into the game, nothing hooks it, there is no
+overlay. Download its console version (MIT license) and name it. PresentMon
+needs administrator rights or your account in the "Performance Log Users"
+group (Computer Management → Local Users and Groups → Groups; sign out and in
+again).
 
 ```toml
 [sensors]
@@ -218,6 +219,31 @@ providers = ["load", "librehardwaremonitor", "psutil", "presentmon"]
 [sensors.presentmon]
 path = "C:/Tools/PresentMon-2.3.0-x64.exe"
 ```
+
+| Reading | |
+|---|---|
+| `game.fps` | frames per second over the last second |
+| `game.frametime` | the mean frame time over the last second, in ms |
+| `game.low` | the 1 % lows: the frame rate of the slowest hundredth of the last 30 s |
+| `game.frametime_peak` | the longest frame time since the last reading, in ms. A stutter of 60 ms between two readings shows in the next one even though the readings are a second apart. It is there all the time a game runs (0 when no frame came), so a graph of it never stops |
+| `game.limiter` | `cpu`, `gpu` or `cap`: who holds the frame rate down. It is judged from how long each side waits for the other, not from the load: the CPU if the GPU waits longer for it than it waits for the GPU, the GPU in the other case, and `cap` when neither waits much and both work much less than a frame takes (a frame rate limit, or vertical sync). Needs PresentMon 2 |
+| `game.app` | the program |
+
+- **When it runs.** PresentMon runs while a theme on the panel shows `game.*`
+  readings, or the `game` service is on (see [Game mode](#game-mode)), and
+  ends a minute after neither is. The recording session has to exist
+  *before* the game starts: the anti-cheat of some games refuses a new
+  session while the game runs, but leaves one that is already running alone.
+  That is why the service keeps it running, and why a theme that shows
+  `game.*` only once the game runs may miss those games.
+- **Which program counts.** With the `game` service, the program it found;
+  otherwise the program with the most frames. The desktop compositor and known
+  overlays never count.
+- **If it cannot start.** Without administrator rights or the group it ends at
+  once, and the log says so once; Libre Panel tries again with growing pauses
+  (up to a minute). While a game with an anti-cheat runs, it tries every 15
+  seconds, and the frame rates are there again when the game is over. PresentMon
+  is stopped with Libre Panel, also if Libre Panel is killed.
 
 Show these readings with the Dashboard module (`ha.sensor.living_room_temperature
 = Living room`, one per line), a list, or any widget with a `sensor`.
@@ -357,8 +383,10 @@ theme = "slate"        # optional: another theme
 - `force = true` keeps the mode on, which is how to try the game screens;
   `automatic = false` with `force = false` does nothing. A game that runs
   while `force` is on is named.
-- The frame rate of the game (`game.fps`) comes from the `presentmon` source,
-  which is a separate setting.
+- The frame rate of the game (`game.fps` and the other `game.*` readings) comes
+  from the `presentmon` source, which is a separate setting
+  ([above](#more-sensor-sources)). While this service is on it keeps PresentMon
+  running, ready before the game starts, and tells it which program is the game.
 
 ### Autopilot
 

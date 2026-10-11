@@ -71,8 +71,19 @@
   the icon of the running program; Linux: the PNG of the player's desktop
   entry; macOS: the app's `.icns`. Found once per program and nothing is sent
   anywhere
+- `game.frametime_peak`, the longest frame time since the last reading (so a
+  stutter between two readings shows, and a graph of it never stops while a
+  game runs), and `game.limiter`, `cpu`, `gpu` or `cap`: who holds the frame
+  rate down, judged from how long the CPU and the GPU wait for each other
+  (PresentMon 2)
 
 **Fixes**
+- PresentMon began when a theme first showed the frame rate, which is too late
+  for a game with an anti-cheat: it refuses a new recording session while the
+  game runs. It now runs for as long as the `game` service is on or a theme
+  shows `game.*`, ends with Libre Panel however that ends (a Windows job), and
+  when it cannot run (no administrator rights) it waits longer and longer
+  instead of trying again at every reading
 - LibreHardwareMonitor: when its web server stopped answering, the panel kept
   showing the last numbers for ever. After 5 seconds (`stale_seconds` under
   `[sensors.librehardwaremonitor]`; 0 keeps them) the readings go and the
@@ -84,6 +95,8 @@
   kind itself; now it goes on unseen and comes back with the next screen
 
 **Changes**
+- With the `game` service on, the `game.*` readings count the frames of the
+  game it found instead of the program with the most frames
 - Windows: what is playing follows Windows' own reports of a new track, a
   pause or another player instead of asking once a second, so a new track
   shows at once. The cover is read when the track changes, not at every look;
