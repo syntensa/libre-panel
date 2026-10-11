@@ -633,7 +633,12 @@ def test_starting_with_the_system_on_a_desktop(make, isolated_home):
     assert data["enabled"] is False and not entry.exists()
 
 
-def test_the_highest_rights_are_set_up_only_when_asked_and_only_by_an_administrator(make):
+def test_the_highest_rights_are_set_up_only_when_asked_and_only_by_an_administrator(
+    make, monkeypatch, tmp_path
+):
+    # (a home of its own: on Linux the Windows path below is relative, so it resolves under
+    # the working folder, which on CI lies in the home folder and would read as risky)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     registry, tasks = FakeRegistry(), FakeTasks()
     windows = Autostart("win32", registry=registry, tasks=tasks, admin=lambda: False)
     app = App(autostart=windows, autostart_command=[r"C:\Tools\libre-panel.exe", "tray"])
