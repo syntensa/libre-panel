@@ -253,6 +253,13 @@ def _blur(img: Image.Image, radius: float, exact: bool = False) -> Image.Image:
     return pre.convert("RGBA")
 
 
+def _between(one: Image.Image, other: Image.Image, part: int, parts: int) -> Image.Image:
+    """``part`` / ``parts`` of the way from ``one`` to ``other``, blended with their colours
+    weighed by their opacity: no dark seam where one is clear and the other is not."""
+    mixed = Image.blend(one.convert("RGBa"), other.convert("RGBa"), part / parts)
+    return mixed.convert("RGBA")
+
+
 def _scale_alpha(img: Image.Image, factor: float) -> Image.Image:
     if factor >= 0.999:
         return img
@@ -2528,6 +2535,7 @@ class Renderer:
     STRIP_SCALE = 2  # drawn twice as large: half-pixel steps, as SPUR II's curves
     STRIP_AHEAD_S = 0.5  # a strip reaches this far past the next reading
     STRIP_EVERY_S = 0.25  # a graph asks for a new strip at most this often
+    STRIP_PARTS = 8  # a slow graph's steps are cut into at most this many
 
     def _graph_seconds(self, widget: dict[str, Any]) -> float:
         """The time a graph shows in video mode: ``seconds``, a pixel per point
@@ -2567,15 +2575,18 @@ class Renderer:
         strips.collect()
         # The window's left edge at ``s``, point k sitting at k * per_point on
         # every strip: the newest point at the right edge, now.
-        left = round(now * RATE * per_point - (w * s - 1))
+        exact = now * RATE * per_point - (w * s - 1)
+        left = math.floor(exact)
+        parts = self._parts(per_point)
         strip = strips.ready
-        if strip is None or not strip.covers(left, w, s):  # the first, or after a long pause
-            strip = strips.ready = self._strip_job(widget, history, now, per_point, every, margin)()
+        if strip is None or not (strip.covers(left, w, s) and strip.covers(left + 1, w, s)):
+            job = self._strip_job(widget, history, now, per_point, every, margin, parts)
+            strip = strips.ready = job()
         valid = self._valid_until(strip, key)
         due = valid < strip.until or now >= strip.until - self.STRIP_EVERY_S
         if due and strips.building is None and now - strips.asked >= self.STRIP_EVERY_S:
             strips.asked = now
-            job = self._strip_job(widget, history, now, per_point, every, margin)
+            job = self._strip_job(widget, history, now, per_point, every, margin, parts)
             if self.background_builds:
                 if self._builder is None:
                     self._builder = _Builder()
@@ -2583,6 +2594,7 @@ class Renderer:
             else:
                 strip = strips.ready = job()
                 valid = strip.until
+        left, part = divmod(round(exact * strip.parts), strip.parts)  # a step, and a part of one
         offset, phase = divmod(left - strip.origin, s)
         pad = strip.pad
         # A reading the strip did not know: draw the end again once it shows,
@@ -2591,21 +2603,44 @@ class Renderer:
         patch = valid < now and (
             self._apart(widget, strip, now) >= 0.4 or self._apart(widget, strip, beyond) >= 4
         )
-        content = ("timeline", id(strip), offset, phase)
+        content = ("timeline", id(strip), offset, phase, part)
         hit = self._cache.get(wid)
         if not patch and hit is not None and hit[0] == content:
             return hit[1]
-        layer = strip.phases[phase].crop((offset, 0, offset + w + 2 * pad, h + 2 * pad))
-        if strip.halo is not None:  # beside the window only the glow: the curve ends at its edges
-            for x0 in (0, w + pad):
-                side = strip.halo.crop((offset + x0, 0, offset + x0 + pad, h + 2 * pad))
-                layer.paste(side, (x0, 0))
-        if patch:
-            self._patch(widget, layer, strip, history, valid, left)
+
+        def window(k: int, column: int, at: int) -> Image.Image:
+            """Image ``k`` of the strip from ``column`` on: the window that begins at ``at``."""
+            layer = strip.phases[k].crop((column, 0, column + w + 2 * pad, h + 2 * pad))
+            if strip.halo is not None:  # beside the window only the glow: the curve ends there
+                for x0 in (0, w + pad):
+                    side = strip.halo.crop((column + x0, 0, column + x0 + pad, h + 2 * pad))
+                    layer.paste(side, (x0, 0))
+            if patch:
+                self._patch(widget, layer, strip, history, valid, at)
+            return layer
+
+        if not patch or not part:
+            layer = window(phase * strip.parts + part, offset, left)
+        else:  # the end drawn again: on both steps, and blended as the strip's parts are
+            ahead = (phase + 1) % s
+            following = window(ahead * strip.parts, offset + (ahead == 0), left + 1)
+            layer = _between(
+                window(phase * strip.parts, offset, left), following, part, strip.parts
+            )
         x, y = widget["x"], widget["y"]
         piece = Piece(layer, x - pad, y - pad, [x, y, w, h])
         self._cache[wid] = (None if patch else content, piece)
         return piece
+
+    def _parts(self, per_point: float) -> int:
+        """Into how many parts a graph's steps are cut: so many that it moves on in every
+        frame, by about the same. A graph a minute across moves a third of a step a frame;
+        moved in whole steps, it stood still for two or three frames each time. One that
+        moves a step a frame (SPUR II's, 25 points a second) is not cut."""
+        speed = RATE * per_point / self.fps if self.fps > 0 else 0.0  # steps a frame
+        if speed <= 0 or speed >= 0.75:
+            return 1
+        return min(self.STRIP_PARTS, math.ceil(1.5 / speed))
 
     def _pad(self, widget: dict[str, Any]) -> int:
         """The room :meth:`_halo` leaves around a layer for its effects."""
@@ -2660,7 +2695,7 @@ class Renderer:
 
     def _strip_job(
         self, widget: dict[str, Any], history: History, now: float, per_point: float,
-        every: int, margin: int,
+        every: int, margin: int, parts: int = 1,
     ) -> Callable[[], _Strip]:  # fmt: skip
         """A strip of the curve to draw (in the helper thread): its values are
         taken now, on the render thread; the drawing happens when it runs."""
@@ -2677,9 +2712,9 @@ class Renderer:
         until = (last + ahead) / RATE
 
         def job() -> _Strip:
-            return self._draw_strip(
-                widget, values, first, per_point, every, _Strip(made, now, until, pieces)
-            )
+            strip = _Strip(made, now, until, pieces)
+            strip.parts = parts
+            return self._draw_strip(widget, values, first, per_point, every, strip)
 
         return job
 
@@ -2688,7 +2723,8 @@ class Renderer:
         every: int, strip: _Strip,
     ) -> _Strip:  # fmt: skip
         """Draw the curve through ``values`` (point ``first`` on, every
-        ``every``-th) onto ``strip``: an image per half-pixel step, glow and all."""
+        ``every``-th) onto ``strip``: an image per half-pixel step, glow and all,
+        and per part of a step (``strip.parts``) one between it and the next."""
         s, h = self.STRIP_SCALE, widget["h"]
         widget = self._dense(widget, every * per_point)
         numbers = [v for v in values if v is not None]
@@ -2715,6 +2751,16 @@ class Renderer:
             out = halo.copy()
             out.alpha_composite(line, (pad, pad))
             phases.append(out)
+        if strip.parts > 1:  # after the last step comes the first, a pixel on
+            weighed = [phase.convert("RGBa") for phase in phases]
+            width0, height0 = weighed[0].size
+            following = [*weighed[1:], weighed[0].crop((1, 0, width0 + 1, height0))]
+            cut = []
+            for one, mixed, after in zip(phases, weighed, following, strict=True):
+                cut.append(one)
+                for q in range(1, strip.parts):
+                    cut.append(Image.blend(mixed, after, q / strip.parts).convert("RGBA"))
+            phases = cut
         strip.per_point, strip.every, strip.origin, strip.width = per_point, every, origin, width
         strip.bounds, strip.top, strip.pad, strip.phases = bounds, top, pad, phases
         strip.halo = halo
@@ -2890,7 +2936,9 @@ class _Strip:
         self.bounds = (0.0, 1.0)  # the value range it was drawn with
         self.top = 0  # where its fill's fade starts
         self.pad = 0
+        # per half-pixel step, and per part of one (``parts`` images each, the first the step)
         self.phases: list[Image.Image] = []
+        self.parts = 1
         self.halo: Image.Image | None = None  # the glow alone, for beside the window
 
     def covers(self, left: int, w: int, s: int) -> bool:

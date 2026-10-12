@@ -279,6 +279,27 @@ def test_graphs_scroll_between_readings_in_video_mode():
     assert abs(first - (199 - 2 * STEP)) <= 1.5, first
 
 
+def test_a_slow_graph_moves_on_evenly_from_frame_to_frame():
+    """Lumen's graphs, a minute across, move a sixth of a pixel a frame: about that on
+    every frame, not half a pixel on every third or fourth (the curve stood in between)."""
+    import numpy
+
+    renderer = Renderer(theme(spike_graph(w=470, seconds=60), size=(470, 60)))
+    renderer.continuous, renderer.fps = True, 50
+    renderer.new_sample(100.0, 1.0)
+    snap = reading(10.0, SPIKE)
+    where = []
+    for k in range(40):
+        frame = numpy.asarray(renderer.render(snap, 100.0 + k / 50)[0].convert("L"), float)
+        top = frame[:30]  # only the spike reaches up here
+        where.append((top.sum(axis=0) * numpy.arange(470)).sum() / top.sum())
+    steps = numpy.diff(where)
+    speed = 469 / 60 / 50  # pixels a frame
+    assert numpy.all(steps < 0)  # it moves left on every frame
+    assert numpy.allclose(steps, -speed, atol=speed * 0.4), steps
+    assert numpy.mean(steps) == pytest.approx(-speed, rel=0.05)
+
+
 def test_scrolling_graphs_draw_their_curve_once_per_reading(monkeypatch):
     renderer = Renderer(theme(spike_graph(smooth=True, glow=0.6), size=(200, 60)))
     renderer.continuous = True
