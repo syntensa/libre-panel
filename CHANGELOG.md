@@ -3,6 +3,10 @@
 ## Unreleased
 
 **Changes**
+- The round report after a game is in Libre Panel's look now: three cards (the round, its
+  share at each frame rate, its highest values against the earlier rounds) in the colours
+  and lettering of Lumen and Encore, without SPUR II's header of fans and clock. SPUR II's
+  report stays as `spur-round-report` with the other SPUR II screens
 - The logo, redrawn: its bars stand clear of the ring (the tallest cut into it), and the dark
   end of the ring is rounded like the lit one. It is one mark everywhere now, drawn from the
   same code: the app's icon and the tray, the app's header and the website (which showed

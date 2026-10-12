@@ -79,7 +79,7 @@ def test_every_number_of_a_built_in_theme_counts_to_a_new_reading():
     from libre_panel.theme.model import builtin_themes_dir
 
     for path in sorted(builtin_themes_dir().glob("*/theme.json")):
-        if path.parent.name == "round-report":  # a round's figures, fixed once it is over
+        if path.parent.name in ("round-report", "spur-round-report"):  # a round's figures, fixed
             continue
         for widget in json.loads(path.read_text(encoding="utf-8"))["widgets"]:
             if widget["type"] == "metric" and counts(widget["format"]):

@@ -29,7 +29,7 @@ keeps what applies to everyone and leaves out what only made sense there.
 | Game mode: the game found from a list or Steam's library, its logo, the entrance, six seconds after the game ended | the `game` service, `services/game.py` (with `steam.py` and `machine.py`) |
 | Autopilot switching between screens | the `autopilot` service, `services/autopilot.py` |
 | Messages for drives, USB devices and controllers that come and go, a full drive and a hot SSD | the `devices` service (Windows), `services/devices.py` and `devices_windows.py` |
-| The memory of weeks and months (minutes, games, the cooling state) and the report after a game | the `memory` service, `services/memory.py`, `memory_store.py` and `round_report.py`, with the theme `round-report` |
+| The memory of weeks and months (minutes, games, the cooling state) and the report after a game | the `memory` service, `services/memory.py`, `memory_store.py` and `round_report.py`, with the theme `spur-round-report` (Libre Panel's own is `round-report`) |
 | Fan curves checked against what the PC did; the curves and fan names of FanControl; recording the cooling state | the `cooling` service, `services/cooling.py` and `fancontrol.py`, fed by the memory: FanControl's file is only read, device names come from the readings |
 | Downloads of Steam and the browsers | the `downloads` service, `services/downloads.py` |
 | Classic layout, arctic base, teal signature `#13E5D7`, equal perceived brightness of the channel colors | built-in theme `spur-ii` |

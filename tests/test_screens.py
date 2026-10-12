@@ -1,8 +1,8 @@
 """Libre Panel's screens for one thing each, on the 8.8" and 9.2" bars: Encore (what plays, the
-volume and the time), Nimbus (the weather, the moon and a small clock) and Almanac (the time and
-the month, in digits or on a face), and what they are made of: the volume, moon and outlook
-modules, levels that rise, a cover blurred behind everything, Libre Panel's own words in the
-panel's language, and a second hand that glides to the second."""
+volume and the time), Nimbus (the weather, the moon and a small clock), Almanac (the time and
+the month, in digits or on a face) and the round report after a game, and what they are made
+of: the volume, moon and outlook modules, levels that rise, a cover blurred behind everything,
+Libre Panel's own words in the panel's language, and a second hand that glides to the second."""
 
 import gc
 import json
@@ -21,7 +21,7 @@ from libre_panel.sensors.base import Reading, Snapshot
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import builtin_themes_dir, find_theme, load_theme, parse_theme
 
-SCREENS = ["encore", "nimbus", "almanac", "almanac-analog"]
+SCREENS = ["encore", "nimbus", "almanac", "almanac-analog", "round-report"]
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -351,3 +351,87 @@ def test_a_screens_parts_stay_in_json_as_written():
         assert text == json.dumps(data, indent=2, ensure_ascii=False) + "\n"
         for brand in ("Ryzen", "Radeon", "GeForce", "Intel", "Crucial", "Kingston"):
             assert brand not in text
+
+
+# -- The round report --------------------------------------------------------------------------
+
+
+def report_ids(readings, images=None):
+    """The widgets of the round report that are drawn for these readings (and pictures)."""
+    from test_spur_themes import shown_ids
+
+    return shown_ids(load_theme(find_theme("round-report")), readings, images or {})
+
+
+def test_the_round_report_reads_only_what_the_memory_service_publishes():
+    from test_spur_themes import keys_read
+
+    from libre_panel.sensors.demo import demo_report
+
+    theme = load_theme(find_theme("round-report"))
+    read = keys_read(theme)
+    assert read <= set(demo_report(1_700_000_000)), read - set(demo_report(1_700_000_000))
+    round_itself = ("title", "game", "when", "length", "outside", "fps", "low", "frametime")
+    assert {f"report.{name}" for name in round_itself} <= read
+    assert {f"report.level.{n}" for n in range(6)} <= read
+    assert {f"report.{peak}" for peak in ("cpu_temp", "gpu_temp", "gpu_hotspot", "cpu_power",
+                                         "gpu_power", "vram_used")} <= read  # fmt: skip
+    # its headings are the service's words, in the panel's language: none of the theme's own
+    # but "Round" (translated) and signs
+    texts = {w["text"] for w in theme.widgets if w["type"] == "text"}
+    assert texts <= {"Round", "Ø FPS", "Δ", "·", "%", "ms", "°C", "W", "GB"}
+    rounds = [w for w in theme.widgets if w["type"] == "text" and w["text"] == "Round"]
+    assert rounds and all(w["translate"] for w in rounds)
+
+
+def test_the_round_report_sets_the_round_against_the_earlier_ones_when_there_were_some():
+    from libre_panel.sensors.demo import demo_report
+
+    def ids(earlier):
+        readings = {k: r.value for k, r in demo_report(1_700_000_000, earlier).items()}
+        return report_ids(readings)
+
+    compared = {w["id"] for w in load_theme(find_theme("round-report")).widgets
+                if w["id"].endswith(("-mean", "-delta", "-delta-label"))
+                or w["id"] in ("mean-head", "delta-head")}  # fmt: skip
+    assert len(compared) == 18  # the six peaks' mean and difference, the frame rate's, heads
+    seven = ids(7)
+    assert compared <= seven and "first-round" not in seven
+    first = ids(0)  # the first round of a game: the round alone, and it says so
+    assert not first & compared and "first-round" in first
+    assert {"fps", "low-value", "frame-value", "round-head"} <= first
+    assert {f"level-{n}-bar" for n in range(6)} <= first
+
+
+def test_the_round_report_ticks_the_earlier_rounds_on_each_bar_of_the_spread():
+    by = {w["id"]: w for w in load_theme(find_theme("round-report")).widgets}
+    for n in range(6):
+        bar = by[f"level-{n}-bar"]
+        assert (bar["sensor"], bar["mark"], bar["max"]) == (
+            f"report.level.{n}", f"report.level.{n}.mean", 100)  # fmt: skip
+    assert by["level-0-bar"]["color"] == "@crit" and by["level-5-bar"]["color"] == "@accent"
+
+
+def test_the_round_report_shows_the_games_logo_beside_its_name_and_leaves_it_room():
+    by = {w["id"]: w for w in load_theme(find_theme("round-report")).widgets}
+    logo, card = by["game-logo"], by["round-card"]
+    assert (logo["src"], logo["fit"], logo["align"]) == ("@game.logo", "contain", "right")
+    assert logo["x"] + logo["w"] < card["x"] + card["w"]
+    assert by["game-with-logo"]["x"] + by["game-with-logo"]["max_width"] < logo["x"]
+    alone = {"report.game": "Starfall"}
+    ids = report_ids(alone)  # a game without a logo has the whole width for its name
+    assert "game" in ids and not ids & {"game-logo", "game-with-logo"}
+    ids = report_ids(alone, {"game.logo": Image.new("RGBA", (4, 4))})
+    assert {"game-logo", "game-with-logo"} <= ids and "game" not in ids
+
+
+def test_the_round_report_shows_who_held_the_rate_down_in_one_bar():
+    by = {w["id"]: w for w in load_theme(find_theme("round-report")).widgets}
+    # the GPU's share from the left, the CPU's from the right, the frame cap's between them
+    assert (by["limit-gpu-bar"]["direction"], by["limit-cpu-bar"]["direction"]) == ("right", "left")
+    assert by["limit-cap-bar"]["type"] == "rect"
+    mixed = {"report.limit": "GPU 56 %", "report.limit.gpu": 56.0, "report.limit.cpu": 11.0,
+             "report.limit.cap": 33.0}  # fmt: skip
+    assert {"limit-gpu", "limit-cpu", "limit-cap", "limit-label"} <= report_ids(mixed)
+    nothing = report_ids({})
+    assert not nothing & {"limit-label", "limit-groove", "limit-gpu-bar", "limit-cap-bar"}

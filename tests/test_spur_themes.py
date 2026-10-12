@@ -20,7 +20,7 @@ from libre_panel.theme.model import (
 )
 
 SPUR = ["spur-horizon", "spur-header", "spur-focus", "spur-session", "spur-cockpit",
-        "round-report", "spur-studio"]  # fmt: skip
+        "spur-round-report", "spur-studio"]  # fmt: skip
 # the game service publishes this one, and a demo value would hide it: the program's name
 # (game.app) stands in on the screens, so the demo leaves it out
 LEFT_OUT = {"game.name"}
@@ -428,7 +428,7 @@ def report_ids(theme, earlier):
 
 
 def test_the_round_report_reads_what_the_memory_service_publishes():
-    theme = load_theme(find_theme("round-report"))
+    theme = load_theme(find_theme("spur-round-report"))
     # the service's own readings (round_report.readings), at a time Windows can turn into a
     # local one (not before 1970)
     published = set(demo_report(1_700_000_000))
@@ -450,7 +450,7 @@ def test_the_round_report_reads_what_the_memory_service_publishes():
 
 
 def test_the_round_report_sets_the_round_against_the_earlier_ones_when_there_were_some():
-    theme = load_theme(find_theme("round-report"))
+    theme = load_theme(find_theme("spur-round-report"))
     heads = {"mean-head", "delta-head"}
     compared = {  # what only has a meaning next to earlier rounds
         w["id"]
@@ -468,7 +468,7 @@ def test_the_round_report_sets_the_round_against_the_earlier_ones_when_there_wer
 
 
 def test_the_round_report_marks_the_earlier_rounds_with_a_tick_on_each_bar():
-    theme = load_theme(find_theme("round-report"))
+    theme = load_theme(find_theme("spur-round-report"))
     by = {w["id"]: w for w in theme.widgets}
     for n in range(6):  # SPUR II's: a white tick across the bar, not a line under it
         bar = by[f"level-{n}-bar"]
@@ -490,7 +490,7 @@ def test_the_round_report_marks_the_earlier_rounds_with_a_tick_on_each_bar():
 def test_the_round_report_shows_the_games_logo_at_the_top_right_and_leaves_its_name_room():
     from PIL import Image
 
-    theme = load_theme(find_theme("round-report"))
+    theme = load_theme(find_theme("spur-round-report"))
     by = {w["id"]: w for w in theme.widgets}
     logo = by["game-logo"]
     assert (logo["src"], logo["fit"], logo["align"]) == ("@game.logo", "contain", "right")
@@ -508,7 +508,7 @@ def test_the_round_report_shows_the_games_logo_at_the_top_right_and_leaves_its_n
 
 
 def test_the_round_report_names_who_held_the_rate_down_as_the_service_counts_it():
-    theme = load_theme(find_theme("round-report"))
+    theme = load_theme(find_theme("spur-round-report"))
     words = {"limit-gpu", "limit-cpu", "limit-cap"}
     bars = {"limit-gpu-bar", "limit-cpu-bar", "limit-cap-bar"}
     mixed = {"report.limit": "GPU 56 %", "report.limit.gpu": 56.0, "report.limit.cpu": 11.0,
@@ -528,7 +528,7 @@ def test_the_round_report_names_who_held_the_rate_down_as_the_service_counts_it(
 
 
 def test_the_round_report_keeps_the_frames_of_the_screens_it_sits_with():
-    theme = load_theme(find_theme("round-report"))
+    theme = load_theme(find_theme("spur-round-report"))
     by = {w["id"]: w for w in theme.widgets}
     # three boxes of flat bands: the round and the spread in the colour of the frames, the
     # comparison neutral (it holds the CPU's and the GPU's colours)

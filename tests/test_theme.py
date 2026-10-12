@@ -28,7 +28,8 @@ def minimal(**display):
     "name",
     [
         "lumen", "libre-default", "spur-ii", "spur-classic", "spur-horizon", "spur-header",
-        "spur-focus", "spur-session", "spur-cockpit", "round-report", "spur-studio", "studio",
+        "spur-focus", "spur-session", "spur-cockpit", "round-report", "spur-round-report",
+        "spur-studio", "studio",
         "orbit", "slate", "column", "pico", "encore", "nimbus", "almanac", "almanac-analog",
     ],
 )  # fmt: skip
@@ -186,5 +187,6 @@ def test_a_collection_groups_themes_and_the_spur_screens_are_one():
         if (folder / "theme.json").is_file() and load_theme(folder).collection == "SPUR II"
     }
     assert tagged == {f"spur-{n}" for n in (
-        "ii", "classic", "horizon", "header", "focus", "session", "cockpit", "studio"
+        "ii", "classic", "horizon", "header", "focus", "session", "cockpit", "studio",
+        "round-report",
     )}  # fmt: skip
