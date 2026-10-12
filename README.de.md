@@ -89,7 +89,8 @@ Netzwerk-Karte einen laufenden Download an ihrer Stelle.
 Dreh an der Lautstärke, und ein Band rollt von einer leuchtenden Kante herab und ändert sich
 mit, solange du drehst. Ein neuer Titel mit Cover, ein Sensor über einer Grenze, die du
 festlegst, ein Stick oder Controller angesteckt (Windows): kurze Hinweise in den Farben des
-Themes, als Band oder Karte. Wie jeder Dienst sind sie aus, bis du sie einschaltest.
+Themes, als Band oder Karte; ein Bildschirm, der Lautstärke oder Titel selbst zeigt, bekommt
+keinen darüber. Wie jeder Dienst sind sie aus, bis du sie einschaltest.
 
 ### Spielmodus
 

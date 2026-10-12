@@ -113,6 +113,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "fallback": ("string", "--"),
         **_text_style(True),
         "smooth": ("bool", False),  # the number glides with bars and rings of its sensor
+        "glide_ms": ("int", 0),  # with smooth: its own glide (ms), not the theme's smoothing_ms
         "color_rules": ("rules", []),
         "glow_area": ("box?", None),
     },
@@ -134,6 +135,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         # this share of the bar's thickness, the last all of it (0: all of it; flat finish)
         "rising": ("number", 0),
         "smooth": ("bool", True),
+        "glide_ms": ("int", 0),  # with smooth: its own glide (ms), not the theme's smoothing_ms
         "color_rules": ("rules", []),
         "glow_area": ("box?", None),  # [x, y, w, h]: a lit bar's glow stays inside
         # a second reading as a thin line across the bar, at its value on the bar's own scale
@@ -161,6 +163,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "ticks": ("int", 0),
         "tick_color": ("color?", None),
         "smooth": ("bool", True),
+        "glide_ms": ("int", 0),  # with smooth: its own glide (ms), not the theme's smoothing_ms
         "color_rules": ("rules", []),
     },
     "graph": {

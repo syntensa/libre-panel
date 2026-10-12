@@ -162,8 +162,9 @@ def test_a_slow_turn_adds_up_to_a_step_whatever_the_rate_of_the_readings(desk):
 
 def test_volume_changes_between_samples_are_not_looked_at_when_the_volume_is_off(desk):
     d = desk(volume=False, music=True)
-    assert "fresh" not in d.host._listeners or not d.host._listeners["fresh"]
     assert d.fresh(volume(30)) == [] and d.fresh(volume(60)) == []
+    quiet = desk(volume=False, music=False)
+    assert "fresh" not in quiet.host._listeners or not quiet.host._listeners["fresh"]
 
 
 def test_a_stopped_service_does_not_tell_a_volume_that_moved(desk):
@@ -255,6 +256,17 @@ def test_a_new_track_is_told_with_its_cover_and_the_players_icon(desk):
     assert (toast.text, toast.icon, toast.level) == ("Song B – Artist", "music", "info")
     assert toast.payload["label"] == "Now playing" and toast.payload["progress"] == 0.02
     assert toast.payload["image"] is cover and toast.payload["badge"] is icon
+
+
+def test_a_new_track_is_told_in_the_frame_it_comes_not_with_the_next_sample(desk):
+    """The media source knows a new track within 50 ms; the message waited for the next
+    sample, up to a second. It is told on the frame that brings it now, and once."""
+    d = desk(music=True)
+    d.sample(playing("Song A"))
+    [toast] = d.fresh(playing("Song B"))
+    assert toast.text == "Song B – Artist"
+    assert d.fresh(playing("Song B")) == [] and d.sample(playing("Song B")) == []
+    assert d.fresh(playing("Song B", on=0)) == []  # a pause between samples says nothing
 
 
 def test_a_track_without_an_artist_or_pictures(desk):

@@ -503,9 +503,6 @@ class AudioProvider(SensorProvider):
                 self._warned = True
                 log.warning("audio: the volume cannot be read: %s", exc)
             return None
-        if self._warned:
-            self._warned = False
-            log.info("audio: the volume can be read now")
         return source
 
     @staticmethod
@@ -533,6 +530,13 @@ class AudioProvider(SensorProvider):
                         self._stop.wait(RETRY_SECONDS)
                         continue
                     device_at = now + DEVICE_CHECK_SECONDS
+                    # how it comes in, at the start (SPUR II's log proved the callback so)
+                    way = "events" if source.events else "polling"
+                    if self._warned:  # after a warning that it could not be read
+                        self._warned = False
+                        log.info("audio: the volume can be read now, by %s", way)
+                    else:
+                        log.info("audio: the volume is read by %s", way)
                 state = self._sample(source)
                 if state is not None:
                     self._publish(*state)

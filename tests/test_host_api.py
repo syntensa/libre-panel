@@ -349,13 +349,14 @@ def test_messages_wait_for_a_panel_that_is_away_without_piling_up(isolated_home)
     try:
         for track in range(200):
             cover = Image.new("RGB", (64, 64))
-            music.notify(f"Track {track}", kind="music", key=f"t{track}", payload={"image": cover})
+            # (a kind the screen does not show itself: its music would be left out, see shown_by)
+            music.notify(f"Track {track}", kind="device", key=f"t{track}", payload={"image": cover})
             clock.now += 0.05
             loop.step(clock.now)
         assert panel.shown == 0
         waiting = len(loop.toasts.inbox) + len(loop.toasts.queue) + len(host.take_toasts())
         assert waiting <= PluginHost.MAX_TOASTS
-        music.notify("Track 200", kind="music")
+        music.notify("Track 200", kind="device")
         panel.away = False
         clock.now += 60  # the next try to open it
         loop.step(clock.now)

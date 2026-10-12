@@ -619,6 +619,9 @@ def test_the_default_device_is_looked_at_again_and_the_volume_follows(monkeypatc
         provider.close()
     changed = [r for r in caplog.records if "device changed" in r.getMessage()]
     assert len(changed) == 1 and "events" in changed[0].getMessage()
+    # and at the start already: the way the volume comes in is in the log (as SPUR II's was)
+    started = [r for r in caplog.records if "is read by" in r.getMessage()]
+    assert len(started) == 1 and started[0].getMessage().endswith("by events")
     del theme
 
 

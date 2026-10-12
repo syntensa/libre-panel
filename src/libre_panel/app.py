@@ -896,6 +896,13 @@ class MainLoop:
             elif hub.every_frame:  # cheap sources follow on every frame (a new dict:
                 latest = hub.fresh(video=display.streaming)  # helpers may read the old one)
                 before, snapshot.readings = snapshot.readings, {**snapshot.readings, **latest}
+                # their pictures too (a new cover with its title), and the services' own
+                pictures = hub.fresh_images(video=display.streaming)
+                if host is not None:
+                    pictures.update(host.images())
+                if any(snapshot.images.get(k) is not v for k, v in pictures.items()):
+                    merged = {**snapshot.images, **pictures}
+                    snapshot.images = {k: v for k, v in merged.items() if v is not None}
                 if host is not None:  # a service hears of a change at once, not at the sample
                     host.fresh(snapshot, before, latest)
             was_connected = link.connected

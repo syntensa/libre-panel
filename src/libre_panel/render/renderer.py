@@ -51,6 +51,9 @@ log = logging.getLogger(__name__)
 # Sensor texts shown in the user's language on the panel.
 TRANSLATED_READINGS = {"weather.description", "battery.state", "moon.name", "media.state"}
 
+VOLUME, MUTED = "audio.volume", "audio.muted"
+VOLUME_GLIDE_MS = 320  # the volume's bars and rings: 95 % of a step after about a third of a second
+
 # Shapes are drawn at this scale and downsampled for smooth edges.
 SUPERSAMPLE = 3
 _ANCHORS = {"left": "la", "center": "ma", "right": "ra"}
@@ -707,14 +710,40 @@ class Renderer:
         at, interval = self.sample
         return min(1.0, max(0.0, (now - at - delay) / interval))
 
-    def _glide_s(self) -> float:
-        """How long a value takes to a new reading (theme animation.smoothing_ms; 0: it
-        jumps): 95 % of the way after it, in video mode as on still frames. A reading is
-        there in about half a second and then holds, as the SPUR II mod's values did; a glide
-        stretched to the next reading (about a second) followed half as fast."""
-        if not self.animate or self.theme.smoothing_ms <= 0:
+    def _glide_s(self, widget: dict[str, Any] | None = None) -> float:
+        """How long a value takes to a new reading (theme animation.smoothing_ms, or the
+        widget's own ``glide_ms``; 0: it jumps): 95 % of the way after it, in video mode as
+        on still frames. A reading is there in about half a second and then holds, as the
+        SPUR II mod's values did; a glide stretched to the next reading (about a second)
+        followed half as fast. The volume goes its own way on every screen (SPUR II's): its
+        number follows each step of the wheel at once, its bars and rings glide behind it in
+        a third of a second (:data:`VOLUME_GLIDE_MS`)."""
+        if not self.animate:
             return 0.0
-        return self.theme.smoothing_ms / 1000
+        own = self._own_glide_ms(widget) if widget is not None else 0
+        if own is not None and own > 0:
+            return own / 1000
+        if own == 0 and widget is not None and widget.get("sensor") == VOLUME:
+            return 0.0  # the volume's number: at once
+        return max(0, self.theme.smoothing_ms) / 1000
+
+    @staticmethod
+    def _own_glide_ms(widget: dict[str, Any]) -> int | None:
+        """A widget's own glide (ms): its ``glide_ms``, else the volume's (0 for its
+        number: at once), else None (the theme's)."""
+        own = widget.get("glide_ms", 0)
+        if own > 0:
+            return int(own)
+        if widget.get("sensor") == VOLUME:
+            return 0 if widget["type"] == "metric" else VOLUME_GLIDE_MS
+        return None
+
+    @classmethod
+    def _spring(cls, widget: dict[str, Any]) -> str:
+        """Whose glide a widget follows: its sensor's, with the bars, rings and numbers of
+        it; one with a glide of its own (``glide_ms``, the volume's) follows one of its own."""
+        own = cls._own_glide_ms(widget)
+        return f"{widget['sensor']}\0{own}" if own else widget["sensor"]
 
     def _lead(self) -> float:
         """The time between two planned frames (0: not known)."""
@@ -727,10 +756,10 @@ class Renderer:
         it starts gently, a new reading changes its course without a kink, and
         all widgets of a sensor glide together, also into the next theme.
         """
-        glide = self._glide_s()
+        glide = self._glide_s(widget)
         if glide <= 0 or not widget.get("smooth", False):
             return target
-        state = self.motion.glide(widget["sensor"], target, now, glide, self._lead())
+        state = self.motion.glide(self._spring(widget), target, now, glide, self._lead())
         if state is None or target is None:
             return target
         value, speed = state
@@ -1533,14 +1562,18 @@ class Renderer:
 
     def _draw_metric(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         reading = snapshot.readings.get(widget["sensor"])
+        own = MUTED in (widget.get("needs") or "")  # (a screen that shows muting itself)
+        if widget["sensor"] == VOLUME and not own and snapshot.value(MUTED) == 1:
+            # muted: said at once, on every screen, where the number was (SPUR II's MUTE)
+            colour = self.theme.palette.get("crit") or widget["color"]
+            return self._text_widget(widget, i18n.t("Mute").upper(), colour)
         text, value = self._format(widget, reading)
-        glide = self._glide_s()
+        glide = self._glide_s(widget)
         if widget.get("smooth") and glide > 0:  # the gliding value, with bars and rings
-            state = self.motion.glide(widget["sensor"], value, now, glide, self._lead())
+            spring = self._spring(widget)
+            state = self.motion.glide(spring, value, now, glide, self._lead())
             # 25 new texts a second at most, at the graphs' points: as fluid, half the work
-            at = self.motion.value(
-                widget["sensor"], max(grid(now) / RATE, self.motion.start(widget["sensor"]))
-            )
+            at = self.motion.value(spring, max(grid(now) / RATE, self.motion.start(spring)))
             if state is not None and value is not None and at is not None:
                 gliding, shown = self._format(widget, replace(reading, value=at))
                 if gliding != text:  # settled once it reads the same

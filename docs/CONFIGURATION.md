@@ -584,8 +584,9 @@ enabled = ["notices"]
 
 Short messages on the panel for what happens around it. The theme decides how
 they look (the card, or the band after SPUR II: `"toast": {"style": "band"}`)
-and which kinds it shows (`"toast": {"off": ["music"]}`); a screen that shows
-something itself leaves its kind out.
+and which kinds it shows (`"toast": {"off": ["music"]}`). A screen that shows
+the volume or what plays itself (one that reads `audio.volume` or `media.title`)
+leaves that band out by itself: it would only cover them.
 
 | Kind | When | The message |
 |---|---|---|

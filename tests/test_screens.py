@@ -435,3 +435,57 @@ def test_the_round_report_shows_who_held_the_rate_down_in_one_bar():
     assert {"limit-gpu", "limit-cpu", "limit-cap", "limit-label"} <= report_ids(mixed)
     nothing = report_ids({})
     assert not nothing & {"limit-label", "limit-groove", "limit-gpu-bar", "limit-cap-bar"}
+
+
+# -- the volume, on every screen ---------------------------------------------------------------
+
+
+def test_the_volume_number_is_at_once_its_bars_glide_and_muted_says_so_on_every_screen(german):
+    """SPUR II's volume, for every screen alike: the number follows each step of the wheel at
+    once, a bar or ring of it glides behind in a third of a second (a spring of its own), and
+    a number of it says MUTE (in the panel's language) at once while muted."""
+    data = {"format": "libre-panel-theme/1", "name": "volume",
+            "display": {"width": 300, "height": 60}, "animation": {"smoothing_ms": 0},
+            "palette": {"crit": "#FF0000"},
+            "widgets": [
+                {"type": "bar", "id": "bar", "x": 0, "y": 0, "w": 300, "h": 10,
+                 "sensor": "audio.volume"},
+                {"type": "metric", "id": "number", "x": 0, "y": 20, "sensor": "audio.volume",
+                 "format": "{value:.0f}", "smooth": True},
+            ]}  # fmt: skip
+    renderer = Renderer(parse_theme(data))
+    renderer.animate = True  # (as the panel's loop has it)
+    bar, number = renderer.theme.widgets
+    assert renderer._glide_s(bar) == 0.32 and renderer._glide_s(number) == 0.0
+    assert renderer._glide_s() == 0.0  # the theme's own: none, for the rest
+    assert renderer._spring(bar) != "audio.volume"  # its own, not the sensor's others'
+
+    def at(level, t, muted=0):
+        readings = {"audio.volume": Reading("audio.volume", float(level), "%", "Volume"),
+                    "audio.muted": Reading("audio.muted", muted, "", "Muted")}  # fmt: skip
+        renderer.render(Snapshot(readings=readings), t)
+        return {wid: piece for wid, piece in renderer._last[0]}
+
+    at(20, 0.0)
+    at(80, 0.02)  # a step of the wheel
+    assert 20 < renderer._eased(bar, 80.0, 0.1) < 80  # the bar on its way
+    assert abs(renderer._eased(bar, 80.0, 0.6) - 80) < 1  # there after about a third of a second
+    muted = Snapshot(readings={"audio.volume": Reading("audio.volume", 0.0, "%", "Volume"),
+                               "audio.muted": Reading("audio.muted", 1, "", "Muted")})  # fmt: skip
+    said = renderer._draw_metric(number, muted, 0.8)
+    own = renderer._draw_metric({**number, "needs": "audio.muted!=1"}, muted, 0.8)
+    assert said.layer.width > 3 * own.layer.width  # "STUMM", not "0"; a screen with its own
+    red = numpy.asarray(said.layer.convert("RGBA"))  # muting shows that itself (Encore) keeps it
+    assert (red[..., 0] > 200).any() and not (red[..., 1] > 200).any()  # in the warning colour
+
+
+def test_a_screen_that_shows_the_volume_or_what_plays_gets_no_band_of_it():
+    """SPUR II's Studio left out the bands of what it shows itself; every screen does now."""
+    from libre_panel.render.overlays import shown_by
+
+    def kinds(name):
+        return shown_by(Renderer(load_theme(find_theme(name)), preview=True))
+
+    assert kinds("spur-studio") == {"volume", "music"} and kinds("encore") == {"volume", "music"}
+    assert kinds("lumen") == {"music"}  # (its card shows what plays)
+    assert kinds("studio") == {"music"} and kinds("almanac") == frozenset()

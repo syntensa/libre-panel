@@ -26,7 +26,7 @@ import time
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -41,6 +41,7 @@ POLL_SECONDS = 1.0  # playerctl cannot tell what changes: it is asked this often
 SAFETY_SECONDS = 5.0  # Windows tells what changes; this only catches a notice that went missing
 SETTLE_SECONDS = 1.0  # after a notice, once more: players fill in the cover and the position later
 MIN_GAP_SECONDS = 0.05  # two looks are at least this far apart, whatever the notices
+SEEK_SECONDS = 1.0  # a position further than this from the expected one is a seek
 IDLE_SECONDS = 60.0  # nobody looked for this long: the thread ends, and starts on demand
 IDLE_CHECK_SECONDS = 1.0  # while nobody looks: how often to see whether somebody does
 COVER_RETRY_SECONDS = 10.0  # a cover that could not be read is asked for again after this long
@@ -123,13 +124,16 @@ class _WindowsBackend:
     """The current session of the system media transport controls, by its events.
 
     Windows tells when the session, the track or the playback changes, and the provider
-    looks then, instead of every second. A timeline event (the position) is no reason to
-    look: players send those every few seconds, and the position moves on by itself
-    between two looks. ``interval`` is the safety poll for a notice that went missing.
+    looks then, instead of every second. A timeline event (the position: a seek, or one of
+    those players send every few seconds) brings a look at the timeline alone, a few
+    milliseconds, and changes the track only where the position is not where it was expected
+    (:data:`SEEK_SECONDS`). ``interval`` is the safety poll for a notice that went missing.
     """
 
     MANAGER_EVENTS = ("current_session_changed",)
-    SESSION_EVENTS = ("media_properties_changed", "playback_info_changed")
+    SESSION_EVENTS = ("media_properties_changed", "playback_info_changed",
+                      "timeline_properties_changed")  # fmt: skip
+    TIMELINE = "timeline_properties_changed"
 
     def __init__(self) -> None:
         self._w = _winrt()  # fails without the packages
@@ -145,6 +149,11 @@ class _WindowsBackend:
         self._session_events: list[tuple[Any, str, Any, Any]] = []
         self._new_session = False  # the current session changed: listen to it again
         self._new_properties = False  # the track's properties changed since the cover was read
+        self._news: set[str] = set()  # the events since the last look
+        self._last: Track | None = None  # what the last full look found
+        self.timeline_only = False  # the last look read the timeline alone (no settle look)
+        self._noticed_at: float | None = None  # when the first event since the last look came
+        self.trigger: tuple[tuple[str, ...], float | None] = ((), None)  # of the last look
         self._cover_key: tuple[str, str] | None = None
         self._cover: bytes | None = None
         self._cover_asked = -math.inf  # when a cover was last read (monotonic clock)
@@ -175,6 +184,31 @@ class _WindowsBackend:
     async def _look(self, want_cover: bool) -> Track | None:
         # Taken before looking: news that comes while we look stays for the next look.
         news, self._new_properties = self._new_properties, False
+        kinds, self._news = self._news, set()
+        self.trigger, self._noticed_at = (tuple(sorted(kinds)), self._noticed_at), None
+        self.timeline_only = kinds == {self.TIMELINE} and self._last is not None
+        if self.timeline_only and self._manager is not None and not self._new_session:
+            return self._moved(self._last)  # type: ignore[arg-type]
+        self.timeline_only = False
+        self._last = track = await self._full_look(want_cover, news)
+        return track
+
+    def _moved(self, track: Track) -> Track:
+        """The timeline alone: the track as it was, unless the position is not where it was
+        expected (a seek): then with the position the player says."""
+        session = self._manager.get_current_session()
+        if session is None:
+            return track
+        position, duration, at = self._timeline(session, track.state)
+        if position is None or track.position is None:
+            return track
+        expected = track.position + (max(0.0, at - track.at) if track.state == "playing" else 0)
+        if abs(position - expected) <= SEEK_SECONDS:
+            return track  # the same object: nothing downstream changes
+        self._last = moved = replace(track, position=position, duration=duration, at=at)
+        return moved
+
+    async def _full_look(self, want_cover: bool, news: bool) -> Track | None:
         if self._manager is None:
             self._manager = await self._w.Manager.request_async()
             self._manager_listens = self._subscribe(
@@ -278,6 +312,9 @@ class _WindowsBackend:
 
     def _noticed(self, name: str) -> None:
         """News from Windows, in a thread of Windows: note what it is, wake the reader."""
+        self._news.add(name)
+        if self._noticed_at is None:
+            self._noticed_at = time.monotonic()
         if name == "media_properties_changed":
             self._new_properties = True
         elif name == "current_session_changed":
@@ -445,7 +482,8 @@ class MediaProvider(SensorProvider):
                     idle_since = None
                     failed = await self._look(backend)
                     await asyncio.sleep(MIN_GAP_SECONDS)
-                    pause = SETTLE_SECONDS if news else getattr(backend, "interval", POLL_SECONDS)
+                    settle = news and not getattr(backend, "timeline_only", False)
+                    pause = SETTLE_SECONDS if settle else getattr(backend, "interval", POLL_SECONDS)
                     if failed:  # the backend starts anew and has no events yet: look soon
                         pause = min(pause, POLL_SECONDS)
                 else:
@@ -482,8 +520,26 @@ class MediaProvider(SensorProvider):
             self._cover = (cover, load_cover(cover))
         icon = self._icon_of(track)
         with self._lock:
-            self._track, self._icon = track, icon
+            before, self._track, self._icon = self._track, track, icon
+        if log.isEnabledFor(logging.DEBUG) and track is not before:
+            self._tell_change(backend, before, track)
         return failed
+
+    @staticmethod
+    def _tell_change(backend: Any, before: Track | None, track: Track | None) -> None:
+        """One line a change (with --verbose), as SPUR II logged them: what it is, what
+        brought it (the event, or the safety look) and how long after the event it was seen."""
+        names, at = getattr(backend, "trigger", ((), None))
+        if before is None or track is None:
+            what = "a player" if track is not None else "nothing plays"
+        elif (track.title, track.artist) != (before.title, before.artist):
+            what = "a new track"
+        elif track.state != before.state:
+            what = track.state
+        else:
+            what = "a seek" if track.position != before.position else "the track's details"
+        after = f", {(time.monotonic() - at) * 1000:.0f} ms after it" if at is not None else ""
+        log.debug("media: %s, by %s%s", what, " + ".join(names) or "the safety look", after)
 
     def _icon_of(self, track: Track | None) -> Image.Image | None:
         """The icon of the player, if somebody reads it; found once per player."""

@@ -216,6 +216,7 @@ class SensorHub:
         self.names = names
         self._history: dict[str, deque[float]] = {}
         self._owners: dict[str, SensorProvider] = {}  # which provider a key came from
+        self._fresh_images: set[str] = set()  # the pictures fresh_images last handed back
 
     def _named(self, readings: dict[str, Reading]) -> dict[str, Reading]:
         if self.names is None:
@@ -300,6 +301,26 @@ class SensorHub:
                 if self._owners.get(key, provider) is provider and key not in readings:
                     readings[key] = reading
         return self._named(readings)
+
+    def fresh_images(self, video: bool = True) -> dict[str, Any]:
+        """Between snapshots: the pictures of ``every_frame`` providers (a new cover with its
+        new title, not a second later), and None for one such a provider had and has no more.
+        Cheap: a provider hands back the pictures it holds."""
+        images: dict[str, Any] = {}
+        for provider in self.providers:
+            every = getattr(provider, "every_frame", False)
+            if not every or (every == "video" and not video) or not hasattr(provider, "images"):
+                continue
+            try:
+                found = provider.images() or {}
+            except Exception:  # a broken sensor must not stop the display
+                log.exception("sensor provider %s failed", provider.name)
+                continue
+            for key, image in found.items():
+                images.setdefault(key, image)
+        gone = self._fresh_images - set(images)
+        self._fresh_images = set(images)
+        return {**images, **dict.fromkeys(gone)}
 
     def close(self) -> None:
         for provider in self.providers:

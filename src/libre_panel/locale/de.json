@@ -1622,7 +1622,8 @@
     "After a game": "Nach einem Spiel",
     "While a service switches to it": "Wenn ein Dienst dorthin schaltet",
     "Show the page {page}": "Seite {page} zeigen",
-    "Minutes without input": "Minuten ohne Eingabe"
+    "Minutes without input": "Minuten ohne Eingabe",
+    "Mute": "Stumm"
   },
   "fields": {
     "align": "Ausrichtung",
@@ -1758,7 +1759,8 @@
     "translate": "In der Sprache des Panels",
     "rising": "Ansteigend",
     "blur": "Unschärfe",
-    "hand": "Sekundenzeiger"
+    "hand": "Sekundenzeiger",
+    "glide_ms": "eigene Gleitzeit (ms)"
   },
   "widgets": {
     "analog": "Analoguhr",

@@ -85,8 +85,9 @@ download in its place while one runs.
 
 Turn the volume and a band rolls down from a glowing edge, changing in place while you turn.
 A new track with its cover, a sensor past a limit you set, a stick or a game controller
-plugged in (Windows): short notices in the theme's colours, as a band or a card. Like every
-service, they are off until you switch them on.
+plugged in (Windows): short notices in the theme's colours, as a band or a card; a screen
+that shows the volume or the track itself gets none over it. Like every service, they are off
+until you switch them on.
 
 ### Game mode
 

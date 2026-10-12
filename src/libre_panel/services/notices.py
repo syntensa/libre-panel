@@ -8,9 +8,10 @@ shows. The service only decides *when* something is worth a message.
 
 It looks at every new sample (``host.on("sample")``) and asks for the readings
 it needs (``host.want``), so the volume and what is playing are read although
-no theme on the panel shows them. The volume is also looked at whenever it
-moves between two samples (``host.on("fresh")``), so its message comes within
-a frame or two of the key, not with the next reading.
+no theme on the panel shows them. The volume and what is playing are also
+looked at whenever they change between two samples (``host.on("fresh")``), so
+their message comes within a frame or two of the key, not with the next reading
+(up to a second later).
 """
 
 from __future__ import annotations
@@ -148,7 +149,7 @@ class Notices(Service):
             keys += ["media.*"]
         self.host.want(*keys)
         self.host.on("sample", self.on_sample)
-        if self.options["volume"]:
+        if self.options["volume"] or self.options["music"]:
             self.host.on("fresh", self.on_fresh)
         if self.options["restarted"]:
             self.host.on("panel-restarted", self.on_restarted)
@@ -165,15 +166,19 @@ class Notices(Service):
         if self.options["volume"]:
             self._check_volume(snapshot, now)
         if self.options["music"]:
-            self._check_music(snapshot, now)
+            self._check_music(snapshot, now, "the sample")
         for limit in self.limits:
             self._check_limit(limit, snapshot, now)
 
     def on_fresh(self, snapshot: Snapshot, keys: frozenset[str]) -> None:
-        """The volume moved between two samples: tell it now, not with the next reading."""
-        if self._stopped or VOLUME_KEYS.isdisjoint(keys):
+        """The volume moved, or the track or its state changed, between two samples: tell it
+        now, not with the next reading. (A track already told is not told again.)"""
+        if self._stopped:
             return
-        self._check_volume(snapshot, self.clock())
+        if self.options["volume"] and not VOLUME_KEYS.isdisjoint(keys):
+            self._check_volume(snapshot, self.clock())
+        if self.options["music"] and any(key.startswith("media.") for key in keys):
+            self._check_music(snapshot, self.clock(), "a frame")
 
     def _check_volume(self, snapshot: Snapshot, now: float) -> None:
         volume = number(snapshot.value("audio.volume"))
@@ -195,7 +200,7 @@ class Notices(Service):
         text, share = (t("Muted"), 0.0) if muted else (f"{volume:.0f}", volume / 100)
         self._tell(VOLUME, text, {"label": t("Volume"), "progress": share})
 
-    def _check_music(self, snapshot: Snapshot, now: float) -> None:
+    def _check_music(self, snapshot: Snapshot, now: float, via: str = "the sample") -> None:
         title = snapshot.value("media.title")
         if not is_playing(snapshot) or not isinstance(title, str):
             return  # paused: the track stays what it was, so resuming says nothing
@@ -213,6 +218,7 @@ class Notices(Service):
         first, self._track, self._late = self._track is None, track, None
         if first:
             return  # what plays when the service starts is no news
+        self.host.log.debug("notices: the new track is told on %s", via)
         if cover is None:
             self._late = (track, now + COVER_WAIT_S)
         self._tell_track(snapshot, track, cover)

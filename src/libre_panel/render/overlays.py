@@ -27,6 +27,22 @@ SS = 3  # supersampling for smooth corners
 SWITCH_POLICIES = ("wait", "follow", "restart")
 
 
+# The kinds of message a screen shows itself when it reads these: the volume where its number or
+# bar is, what plays where its title is. Their band would only cover them (SPUR II's Studio).
+SHOWN_BY = {"volume": ("audio.volume",), "music": ("media.title",)}
+
+
+def shown_by(renderer: Any) -> frozenset[str]:
+    """The kinds of message the theme on show shows itself, on every screen alike."""
+    widgets = getattr(renderer, "widgets", None)
+    if not widgets:
+        return frozenset()
+    from libre_panel.render.renderer import _reads
+
+    read = _reads(widgets)
+    return frozenset(kind for kind, keys in SHOWN_BY.items() if any(key in read for key in keys))
+
+
 class ToastLayer:
     """Shows toasts in the theme's toast style (the built-in card unless the
     theme names another).
@@ -40,7 +56,8 @@ class ToastLayer:
       toasts are decided one by one as they come: the same or a higher rank
       takes over at once, a lower one is dropped.
     - Kinds the theme switches off (``toast.off``) or the screen shows anyway
-      (``Screen.suppresses``) are left out when they come. One on show when
+      (``Screen.suppresses``, or a theme that shows the volume or what plays: see
+      :data:`SHOWN_BY`) are left out when they come. One on show when
       such a screen comes goes on unseen (it still holds back lower ranks)
       and shows again after it.
     - While a transition plays (``hold``) no new toast starts; the one on show
@@ -75,7 +92,8 @@ class ToastLayer:
         settings, size = theme.toast, (theme.width, theme.height)
         screen = getattr(renderer, "screen", None)
         self.off = frozenset(settings["off"])  # the theme switches these kinds off
-        self.left_out = frozenset(getattr(screen, "suppresses", ()) or ())  # the screen shows them
+        # the screen shows them itself: a plugin's says so, a theme's are seen in what it reads
+        self.left_out = frozenset(getattr(screen, "suppresses", ()) or ()) | shown_by(renderer)
         self.suppressed = set(self.off | self.left_out)
         same = (settings["style"], settings["options"], size) == (
             self.settings.get("style"),

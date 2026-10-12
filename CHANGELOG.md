@@ -24,7 +24,22 @@
   and on the page cards of *Design → Pages* (a mode's page could only take the theme open in
   Design, with the + over the canvas, and was hard to find)
 
+- Themes: a smooth bar, ring or number may glide at its own pace (`glide_ms`) instead of the
+  theme's `smoothing_ms` (the volume's do so by themselves)
+
 **Fixes**
+- What plays reaches the panel without delay: the "now playing" notice comes in the frame the
+  track changes (it waited for the next reading, up to a second), the new cover comes with its
+  title (it followed up to a second later), and a seek in the player shows at once (after up
+  to 5 s before; only the timeline is read for it)
+- The volume, on every screen as on SPUR II's Studio: its number follows each step of the
+  wheel at once (it lagged a third of a second behind), its bars, rings and levels glide behind
+  it in a third of a second instead of stepping, and a number of it says MUTE (STUMM) at once
+  while muted, in the warning colour. A screen that shows the volume or what plays itself gets
+  no band of it rolling over it
+- The log says at the start whether the volume comes in by events or by polling, and with
+  `--verbose` one line for each change of what plays: what it was, the event that brought it
+  and how many milliseconds after it the source had it
 - Windows: starting Libre Panel a second time froze its open window ("not responding"). The
   window was set "on top" for a moment from another thread, which on Windows locked it up; it
   is now brought to the front the way Windows allows, by the start the user just clicked. A

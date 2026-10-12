@@ -95,16 +95,36 @@ def test_nothing_plays_without_a_session_or_a_title(winrt, backend):
 # -- what it listens to ------------------------------------------------------------------------
 
 
-def test_it_listens_to_the_session_the_track_and_the_playback_but_not_the_position(winrt, backend):
+def test_it_listens_to_the_session_the_track_the_playback_and_the_position(winrt, backend):
     session = winrt.manager.current = FakeSession()
     poll(backend)
     assert winrt.manager.listening("current_session_changed") == 1
     assert session.listening("media_properties_changed") == 1
     assert session.listening("playback_info_changed") == 1
-    assert all("timeline" not in name for _verb, name in session.history)  # no reason to look
+    assert session.listening("timeline_properties_changed") == 1  # (a seek)
     poll(backend)
-    assert len(session.history) == 2  # and it does not listen again at every look
+    assert len(session.history) == 3  # and it does not listen again at every look
     assert backend.interval == media.SAFETY_SECONDS > media.POLL_SECONDS
+
+
+def test_a_timeline_event_reads_the_timeline_alone_and_follows_a_seek(winrt, backend):
+    """Players send a timeline event every few seconds; a seek sends one too. Only the
+    timeline is read then, and the track changes only where the position jumped."""
+    session = winrt.manager.current = FakeSession(position=60.0)
+    first = poll(backend)
+    reads = session.reads
+    session.fire("timeline_properties_changed")  # the position where it was expected
+    assert poll(backend) is first and backend.timeline_only
+    assert session.reads == reads  # the track's properties were not asked for
+    session.position, session.updated = 150.0, datetime.now(UTC)  # dragged ahead
+    session.fire("timeline_properties_changed")
+    moved = poll(backend)
+    assert moved is not first and moved.title == first.title and moved.position == 150.0
+    assert session.reads == reads
+    session.fire("timeline_properties_changed")
+    session.fire("playback_info_changed")  # with other news: a whole look
+    poll(backend)
+    assert session.reads == reads + 1 and not backend.timeline_only
 
 
 def test_the_events_wake_the_reader_from_any_thread(winrt, backend):
@@ -469,3 +489,83 @@ def test_each_system_has_its_backend(winrt, monkeypatch):
     monkeypatch.setattr(media.sys, "platform", "linux")
     monkeypatch.setattr(media.shutil, "which", lambda name: "/usr/bin/playerctl")
     assert isinstance(media._backend(), media._PlayerctlBackend)
+
+
+# -- a new cover with its title, in the frame that brings it ---------------------------------------
+
+
+class Player(base.SensorProvider):
+    """A source that follows on every frame, as the media source does, with its cover."""
+
+    name = "player"
+    every_frame = True
+
+    def __init__(self):
+        super().__init__({})
+        self.title, self.cover = "Song A", Image.new("RGB", (4, 4), "red")
+
+    def read(self):
+        return {"media.title": base.Reading("media.title", self.title)}
+
+    def images(self):
+        return {"media.cover": self.cover} if self.cover is not None else {}
+
+
+def test_the_hub_hands_on_the_pictures_of_the_sources_that_follow_every_frame():
+    player = Player()
+    hub = SensorHub([player])
+    assert hub.fresh_images() == {"media.cover": player.cover}
+    player.cover = None  # a track without one: gone, not the old one
+    assert hub.fresh_images() == {"media.cover": None}
+    assert hub.fresh_images() == {}
+
+
+def test_the_panel_shows_the_new_cover_in_the_frame_of_the_new_title(isolated_home):
+    """The cover came with the next sample, up to a second after its title."""
+    from test_default_theme_loop import Reporting, demo_config
+
+    from libre_panel import app as app_module
+
+    player = Player()
+    clock = SimpleClock(1000.0)
+    loop = app_module.MainLoop(demo_config(theme="encore"), hub=SensorHub([player]),
+                               display=Reporting(), clock=clock)  # fmt: skip
+    try:
+        loop.step(clock.now)  # a sample
+        assert loop.snapshot.images["media.cover"] is player.cover
+        player.title, player.cover = "Song B", Image.new("RGB", (4, 4), "blue")
+        clock.now += 0.02
+        loop.step(clock.now)  # a frame between two samples
+        snapshot = loop.snapshot
+        assert snapshot.readings["media.title"].value == "Song B"
+        assert snapshot.images["media.cover"] is player.cover
+    finally:
+        loop.close()
+
+
+class SimpleClock:
+    def __init__(self, now):
+        self.now = now
+
+    def __call__(self):
+        return self.now
+
+
+def test_each_change_is_one_line_in_the_log_with_what_brought_it(winrt, provider, caplog):
+    """As SPUR II logged them (with --verbose): the change, its event, and how long after it
+    the source had it; the chain to the panel is proved so without a camera."""
+    import logging
+
+    caplog.set_level(logging.DEBUG, logger="libre_panel.sensors.media")
+    theme = show("media.title")
+    session = winrt.manager.current = FakeSession()
+    provider.read()
+    assert wait_for(lambda: provider.read().get("media.state"))
+    session.status = 5  # PAUSED
+    session.fire("playback_info_changed")
+    assert wait_for(lambda: provider.read()["media.state"].value == "Paused")
+    assert wait_for(lambda: any("by playback_info_changed" in r.getMessage()
+                                for r in caplog.records))  # fmt: skip
+    line = next(r.getMessage() for r in caplog.records if "playback_info" in r.getMessage())
+    assert line.startswith("media: paused, by playback_info_changed") and "ms after it" in line
+    assert theme is not None
