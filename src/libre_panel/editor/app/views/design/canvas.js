@@ -453,7 +453,10 @@ export function Canvas() {
   const handles = [];
   // (the handle being dragged stays: a pointer captured by an element that is gone sends nothing)
   if (one && !one.locked && interaction?.kind !== "cells" && !libDrag) {
-    const box = boxes[one.id] || boxOf(one);
+    // a module's handles stand on its cells, which change at once: the drawn box comes a
+    // render later, and a handle grabbed right after a resize would sit at the old edge
+    const onCells = isModule(one) && grid && [one.col, one.row, one.cols, one.rows].every(Number.isFinite);
+    const box = onCells ? cellBox(grid, one.col, one.row, one.cols, one.rows) : boxes[one.id] || boxOf(one);
     if (box && isModule(one) && grid) {
       for (const edge of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) {
         const x = box[0] + (edge.includes("w") ? 0 : edge.includes("e") ? box[2] : box[2] / 2);
