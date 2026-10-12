@@ -238,7 +238,7 @@ def test_every_panel_recipe_runs_headless_and_makes_a_clip(panel, clip, short):
     assert list(panel.CLIPS) == [
         "video-mode", "card-ignition", "small-panel", "volume-band", "theme-tube",
         "game-entrance", "close-up-rings", "close-up-curves", "encore", "nimbus", "almanac",
-        "screens-in-turn", "where-it-started",
+        "music-page", "round-report", "screens-in-turn", "where-it-started",
     ]  # fmt: skip
     widths = {}
     for name, recipe in panel.CLIPS.items():
@@ -603,8 +603,8 @@ def test_the_list_says_what_there_is_and_what_each_shows(cli, capsys):
     for name in ("video-mode", "volume-band", "theme-tube", "game-entrance", "card-ignition",
                  "small-panel", "close-up-rings", "close-up-curves", "where-it-started",
                  "app-look", "app-drag-module", "app-ring-style", "app-command-palette",
-                 "app-hardware-names", "encore", "nimbus", "almanac", "screens-in-turn",
-                 "start-screen"):  # fmt: skip
+                 "app-hardware-names", "encore", "nimbus", "almanac", "music-page",
+                 "round-report", "screens-in-turn", "start-screen"):  # fmt: skip
         assert name in shown
     assert "shows: lumen, studio" in shown  # (the tube goes from one theme to another)
     assert "shows: libre-default" in shown and "shows: layout-rings" in shown

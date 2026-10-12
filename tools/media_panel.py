@@ -51,7 +51,7 @@ from libre_panel.plugins import PluginHost, loader
 from libre_panel.plugins.host import ServiceHost, apply_options
 from libre_panel.render.renderer import Renderer
 from libre_panel.sensors.base import Reading, SensorHub, SensorProvider, Snapshot
-from libre_panel.sensors.demo import DemoProvider, demo_history
+from libre_panel.sensors.demo import DemoProvider, demo_history, demo_report
 from libre_panel.sequence import Step
 from libre_panel.services.notices import Notices
 from libre_panel.theme.adapt import adapt_theme
@@ -390,11 +390,16 @@ class Stage:
         modes: dict[str, str] | None = None,
         transition: str = "fade",
         turns: list[tuple[str, float]] | None = None,
+        pages: dict[str, str] | None = None,
+        leave_s: float | None = None,
     ) -> None:
         """The theme the clip begins with, the themes of the modes (``{"game": theme}``), the
-        transition config.toml names for a switch, and screens in turn (theme, seconds)."""
+        transition config.toml names for a switch, screens in turn (theme, seconds), and the
+        pages the panel switches to by itself, switched on (``{"media": theme}``; music's
+        page stays ``leave_s`` after a track stops)."""
         self.start, self.modes, self.transition = theme, dict(modes or {}), transition
         self.turns = list(turns or [])
+        self.pages, self.leave_s = dict(pages or {}), leave_s
 
     def at(self, seconds: float, action: Callable[[Stage], None]) -> None:
         """Do ``action(stage)`` just before the frame at ``seconds`` is drawn."""
@@ -432,13 +437,18 @@ class Stage:
             fps=self.settings.fps,
             transition=self.transition,
             sensors=SensorsConfig(providers=["demo"]),
-            modes={name: ModeConfig(theme=theme) for name, theme in self.modes.items()},
+            modes={
+                **{name: ModeConfig(theme=theme) for name, theme in self.modes.items()},
+                **{name: ModeConfig(theme=theme, on=True) for name, theme in self.pages.items()},
+            },
             sequence=SequenceConfig(True, [Step(theme, s) for theme, s in self.turns]),
         )
         hub = SensorHub([self.speakers, ClipDemo(self.clock, self._tweaks, self.period)])
         loop = MainLoop(
             config, host=self.host, hub=hub, display=Eye(self.settings.fps), clock=self.clock
         )
+        if self.leave_s is not None:
+            loop.pages.leave_s = self.leave_s
         every = (config.refresh_ms or loop.theme.refresh_ms) / 1000
         for k in range(
             min(PREFILL_MAX, round(PREFILL_S / every)), 0, -1
@@ -796,6 +806,30 @@ def record_start(
     return Recorded(frames, min(frames.count - 1, round(clip.poster * fps)))
 
 
+# Music's page: nothing plays, then a track starts and the panel opens Encore by itself (a line
+# of light), the volume is turned up and down there, and when the track stops it goes back.
+def music_page(stage: Stage, themes: tuple[str, ...]) -> None:
+    home, music = (stage.theme(theme) for theme in themes)
+    stage.show(home, transition="tube", pages={"media": music}, leave_s=0.6)
+    stage.tweak(silence("media.", -1000.0, 1.0))  # nothing plays: the theme of every day
+    stage.tweak(silence("media.", 7.0, 1000.0))  # the track stops
+    start = stage.speakers.percent
+    steps = [(3.2 + 0.1 * k, start + 4 * (k + 1)) for k in range(8)]
+    steps += [(4.8 + 0.1 * k, start + 32 - 4 * (k + 1)) for k in range(5)]
+    for at, percent in steps:
+        stage.at(at, lambda s, percent=percent: s.turn_volume(percent))
+
+
+# After a game: the memory service puts its round report on the panel (a line of light).
+def round_report(stage: Stage, themes: tuple[str, ...]) -> None:
+    home, report = (stage.theme(theme) for theme in themes)
+    stage.show(home, transition="tube")
+    finished = demo_report(images.WHEN)  # the round that just ended, as the service tells it
+    stage.tweak(lambda readings, seconds: readings.update(finished))
+    stage.at(1.0, lambda s: s.host.request_theme(report, by="memory", transition="tube",
+                                                 priority=10))  # fmt: skip
+
+
 # One screen to the next, as an autopilot or a plugin switches them: a line ignites at
 # mid-height and opens, the new screen already live between its edges; back again after.
 def theme_tube(stage: Stage, themes: tuple[str, ...]) -> None:
@@ -892,6 +926,14 @@ CLIPS: dict[str, PanelClip] = {
     "almanac": PanelClip(
         "Almanac to Almanac Analog and back: rolling digits, then a second hand that glides",
         ("almanac", "almanac-analog"), 6.6, theme_tube, poster=2.6, clock_runs=True,
+    ),
+    "music-page": PanelClip(
+        "music's page: a track starts and Encore opens by itself; the volume; back when it stops",
+        ("lumen", "encore"), 9.0, music_page, poster=4.2, clock_runs=True,
+    ),
+    "round-report": PanelClip(
+        "after a game: the round report opens, in Libre Panel's look",
+        ("lumen", "round-report"), 6.0, round_report, poster=4.5, loop="cut",
     ),
     "screens-in-turn": PanelClip(
         "screens in turn: Almanac, Nimbus and Encore one after another, each for its time",

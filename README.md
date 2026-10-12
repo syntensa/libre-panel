@@ -98,6 +98,8 @@ line, the game's name lights up and the game screen opens: the frame rate, its 1
 who holds it back, counted by Intel's PresentMon. After a round, an optional report compares
 it with your last ten.
 
+<img src="docs/media/round-report.gif" width="100%" alt="After a game the round report opens from a line of light: the average frame rate against the last rounds, the 1% low and frame time, how much the GPU, the CPU or the frame cap held it back, the share of the round at each frame rate, and the highest temperatures, power and video memory against the average">
+
 ### Screens for music, weather and time
 
 <img src="docs/media/encore.gif" width="100%" alt="Encore: the cover large with its colours behind the whole screen, the track, artist and album, the time with rolling digits, and the volume as levels that rise and fall as it is turned">
@@ -117,6 +119,8 @@ on a face whose second hand glides, ticks or sweeps.
 
 They come by themselves too: switch on the **Music** page in *Design → Pages* and Encore takes
 over while a track plays, the **Idle** page and Almanac shows when you step away from the PC.
+
+<img src="docs/media/music-page.gif" width="100%" alt="The music page: nothing plays on Lumen; a track starts and Encore opens by itself from a line of light, the volume levels rise and fall as it is turned, and when the track stops the panel goes back to Lumen">
 
 ### Screens in turn
 

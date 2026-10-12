@@ -124,6 +124,7 @@ class PageSwitch:
 
     def __init__(self, clock: Callable[[], float], idle: Callable[[], float | None] = idle_seconds):
         self.clock, self.idle = clock, idle
+        self.leave_s = MEDIA_LEAVE_S  # how long music's page stays after a track stops
         self.played_at: float | None = None
         self.idle_s: float | None = None
         self.asked_at: float | None = None
@@ -142,7 +143,7 @@ class PageSwitch:
             playing = readings.get("media.playing")
             if playing is not None and getattr(playing, "value", playing) == 1:
                 self.played_at = now
-            if self.played_at is not None and now - self.played_at < MEDIA_LEAVE_S:
+            if self.played_at is not None and now - self.played_at < self.leave_s:
                 return MEDIA
         if idle:
             if self.asked_at is None or now - self.asked_at >= IDLE_EVERY_S:

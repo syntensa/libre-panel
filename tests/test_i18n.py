@@ -21,6 +21,12 @@ def test_every_text_has_a_german_translation():
     assert missing == [], "add these to locale/de.json:\n" + "\n".join(missing)
 
 
+def test_no_translation_is_empty():
+    tables = [table for table in CATALOG.values() if isinstance(table, dict)]
+    empty = sorted(text for table in tables for text, german in table.items() if german == "")
+    assert empty == [], "translate these in locale/de.json:\n" + "\n".join(empty)
+
+
 def test_the_catalog_has_no_stale_texts():
     unused = sorted(set(CATALOG["messages"]) - all_messages())
     assert unused == [], "no longer used, remove from locale/de.json:\n" + "\n".join(unused)

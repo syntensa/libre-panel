@@ -101,6 +101,8 @@ schließt sich zu einer Linie, der Name des Spiels leuchtet auf, und der Spielbi
 öffnet sich: die FPS, die 1-%-Lows und wer sie bremst, gezählt von Intels PresentMon. Nach
 einer Runde vergleicht ein optionaler Bericht sie mit deinen letzten zehn.
 
+<img src="docs/media/round-report.gif" width="100%" alt="Nach einem Spiel öffnet sich der Rundenbericht aus einer Lichtlinie: die durchschnittlichen FPS gegen die letzten Runden, 1-%-Low und Frametime, wie sehr GPU, CPU oder FPS-Limit gebremst haben, der Anteil der Runde je FPS-Bereich und die Höchstwerte von Temperatur, Leistung und Grafikspeicher gegen den Schnitt">
+
 ### Bildschirme für Musik, Wetter und Uhrzeit
 
 <img src="docs/media/encore.gif" width="100%" alt="Encore: das Cover groß mit seinen Farben hinter dem ganzen Bildschirm, Titel, Künstler und Album, die Uhrzeit mit rollenden Ziffern und die Lautstärke als Pegel, die beim Drehen steigen und fallen">
@@ -122,6 +124,8 @@ durchläuft.
 Sie kommen auch von selbst: Schalte unter *Gestalten → Seiten* die Seite **Musik** ein, und
 Encore übernimmt, solange ein Titel läuft; mit der Seite **Leerlauf** erscheint Almanac, wenn
 du vom PC weggehst.
+
+<img src="docs/media/music-page.gif" width="100%" alt="Die Musikseite: auf Lumen läuft nichts; ein Titel startet, und Encore öffnet sich von selbst aus einer Lichtlinie, die Lautstärkepegel steigen und fallen beim Drehen, und wenn der Titel endet, geht das Panel zurück zu Lumen">
 
 ### Abfolge
 

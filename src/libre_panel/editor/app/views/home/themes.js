@@ -29,7 +29,9 @@ export function startThemes({ themes, models, pages, model, defaultId = null }) 
   // on a first start the theme config.toml names is the default, not a choice
   const first = pages?.chosen === false;
   const normal = first ? null : (pages?.pages?.find((page) => page.id === "normal")?.theme ?? null);
-  const special = new Set((pages?.pages || []).filter((page) => page.id !== "normal" && page.theme).map((page) => page.theme));
+  // a page of its own that is off (music's, the clock's) keeps nothing: its screen is one like any other
+  const kept = (page) => page.id !== "normal" && page.theme && (page.on || !page.own);
+  const special = new Set((pages?.pages || []).filter(kept).map((page) => page.theme));
   const items = themes.map((theme) => {
     const made = models.find((item) => item.id === theme.model);
     const size = theme.size ? `${theme.size[0]} × ${theme.size[1]}` : null;
