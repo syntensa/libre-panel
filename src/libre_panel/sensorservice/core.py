@@ -138,16 +138,15 @@ class Reader:
         self._nodes = build_nodes(computer)
         _forget_history(self._nodes)
         for node in self._nodes:
-            if node.entries:
-                self._update(node)
+            self._update(node, fresh=False)  # build_nodes has just updated it
         self._full = self._clock()
         count = sum(len(node.entries) for node in self._nodes)
         log.info("LibreHardwareMonitor is open: %d parts, %d sensors", len(self._nodes), count)
         self._publish()
 
-    def _update(self, node: Any) -> None:
+    def _update(self, node: Any, fresh: bool = True) -> None:
         try:
-            node.update()
+            node.update() if fresh else node.read()
         except Exception as exc:  # noqa: BLE001 - LibreHardwareMonitor raises .NET exceptions
             if node.hardware_id not in self._failed:
                 self._failed.add(node.hardware_id)
@@ -173,7 +172,9 @@ class Reader:
                     self._snapshot = dataclasses.replace(self._snapshot, stamp=now)
                 return False
         full = everything or self._full is None or now - self._full >= self.refresh_seconds
-        nodes = [n for n in self._nodes if n.entries and (full or n.hardware_id in recent)]
+        # a full round reads all hardware, also a part without sensors yet: LibreHardwareMonitor
+        # lists some only once they have a value (a fan that starts), and the update finds them
+        nodes = [n for n in self._nodes if full or (n.entries and n.hardware_id in recent)]
         for position, node in enumerate(nodes):
             if position:
                 self._stop.wait(PAUSE_SECONDS)

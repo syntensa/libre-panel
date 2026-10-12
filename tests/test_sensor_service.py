@@ -10,7 +10,13 @@ import struct
 import threading
 
 import pytest
-from fake_lhm import FakeHardware, FakeSensor, ring0_off, small_computer
+from fake_lhm import (
+    FakeHardware,
+    FakeSensor,
+    lists_only_after_an_update,
+    ring0_off,
+    small_computer,
+)
 from fake_sensors import wait_for
 
 from libre_panel import __version__
@@ -242,6 +248,20 @@ def test_it_reads_everything_once_when_it_opens():
     assert snap.stamp == clock.now
     names = {sensor.label for sensor in snap.sensors}
     assert {"Core (Tctl/Tdie)", "GPU Core", "Fan #1", "DIMM #1"} <= names
+
+
+def test_a_chip_that_lists_its_fans_only_after_an_update_has_them_from_the_start():
+    """The service read the chip's sensors before its first update: only its fan controls."""
+    computer = small_computer()
+    chip = lists_only_after_an_update(computer)
+    reader, _, clock = begun(computer)
+    assert {"Fan #1", "System", "Fan Control #1"} <= {s.label for s in reader.snapshot().sensors}
+    assert chip.updates == 1  # once when it opened, as every part
+    chip.Sensors.append(FakeSensor("/lpc/nct0000/0/fan/3", "Fan #4", "Fan", 700.0))  # it turns
+    clock.now += reader.refresh_seconds
+    reader.ask([], everything=True)
+    assert reader.refresh()
+    assert "Fan #4" in {s.label for s in reader.snapshot().sensors}
 
 
 def test_nothing_is_read_while_nobody_asks():

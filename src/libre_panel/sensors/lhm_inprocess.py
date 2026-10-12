@@ -64,6 +64,9 @@ LIBRARIES = (
 OPTIONAL = {"DiskInfoToolkit", "HidSharp"}
 BUNDLED_FOLDER = "lhm"  # in the Windows downloads, next to the program's own files
 PAUSE_SECONDS = 0.002  # between two hardware nodes of a round: the renderer gets its turn
+# every so often a round reads all hardware, also what no theme reads now: sensors that
+# LibreHardwareMonitor lists only once they have a value (a fan that starts) are found so
+SURVEY_SECONDS = 30.0
 READY_SECONDS = 20.0  # how long `sensors` and `doctor` wait for the first readings
 PAWNIO_KEY = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\PawnIO"
 
@@ -270,16 +273,46 @@ class _Node:
     entries: list[_Entry]
     keys: set[str] = field(default_factory=set)  # the friendly keys its sensors make
     failed: bool = False  # its Update() raised, and the log said so
+    seen: int = -1  # how many sensors the hardware listed when they were last looked at
 
     @property
     def prefix(self) -> str:
         """Every raw key of this node starts with it."""
         return f"lhm:{self.hardware_id}/"
 
-    def update(self) -> None:
+    def update(self) -> list[_Entry]:
+        """Read the hardware; the sensors it lists now that it did not before come along and
+        are returned. LibreHardwareMonitor lists some only once they have read a value: a
+        Super I/O chip its fans, temperatures and voltages after its first update, a fan
+        only once it turns (a graphics card's in its zero-RPM mode, a pump that starts late)."""
         self.handle.Update()
+        return self.read()
+
+    def read(self) -> list[_Entry]:
+        """The values as the last update left them, with the sensors listed since."""
+        new = self._grow()
+        _forget_entries(new)
         for entry in self.entries:
             entry.value = _number(entry.handle.Value)
+        return new
+
+    def _grow(self) -> list[_Entry]:
+        sensors = self.handle.Sensors
+        try:
+            count = len(sensors)
+        except TypeError:  # not a sized list: look at it every time
+            count = -2
+        if count == self.seen:
+            return []
+        self.seen = count
+        known = {entry.sensor_id for entry in self.entries}
+        new = [
+            entry
+            for entry in (_entry(sensor, self.hardware_type) for sensor in sensors)
+            if entry.sensor_id not in known
+        ]
+        self.entries.extend(new)
+        return new
 
 
 def _number(value: Any) -> float | None:
@@ -299,36 +332,37 @@ def _walk(hardware: Iterable[Any]) -> Iterator[Any]:
         yield from _walk(item.SubHardware)
 
 
+def _entry(sensor: Any, hardware_type: str) -> _Entry:
+    sensor_type = str(sensor.SensorType)
+    return _Entry(
+        sensor,
+        str(sensor.Identifier),
+        str(sensor.Name),
+        sensor_type,
+        _UNITS.get(sensor_type.lower(), ""),
+        needs_ring0(hardware_type, sensor_type),
+    )
+
+
 def build_nodes(computer: Any) -> list[_Node]:
     """Every piece of hardware of an open ``Computer``, sub-hardware (the chips of a
-    mainboard) included, with its sensors. Asked once: it is slow, and pythonnet makes a
-    new wrapper for every access."""
+    mainboard) included, with its sensors. Each is updated once first: LibreHardwareMonitor
+    lists some sensors only after an update has read them (a Super I/O chip lists only its
+    fan controls before, not its fans, temperatures and voltages). Asked once: it is slow,
+    and pythonnet makes a new wrapper for every access; later ones come with
+    :meth:`_Node.update`."""
     nodes: list[_Node] = []
     for hardware in _walk(computer.Hardware):
         hardware_type = str(hardware.HardwareType)
-        entries = []
-        for sensor in hardware.Sensors:
-            sensor_type = str(sensor.SensorType)
-            entries.append(
-                _Entry(
-                    sensor,
-                    str(sensor.Identifier),
-                    str(sensor.Name),
-                    sensor_type,
-                    _UNITS.get(sensor_type.lower(), ""),
-                    needs_ring0(hardware_type, sensor_type),
-                )
-            )
-        nodes.append(
-            _Node(
-                len(nodes),
-                hardware,
-                str(hardware.Identifier),
-                str(hardware.Name),
-                hardware_type,
-                entries,
-            )
+        try:
+            hardware.Update()
+        except Exception as exc:  # noqa: BLE001 - .NET exceptions; its update says so again
+            log.debug("LibreHardwareMonitor: a first update failed (%s): %s", hardware_type, exc)
+        node = _Node(
+            len(nodes), hardware, str(hardware.Identifier), str(hardware.Name), hardware_type, []
         )
+        node._grow()
+        nodes.append(node)
     return nodes
 
 
@@ -362,17 +396,23 @@ def live_sensors(nodes: Iterable[_Node], ring0: bool | None) -> Iterator[LhmSens
 def _forget_history(nodes: Iterable[_Node]) -> None:
     """LibreHardwareMonitor keeps a day of values for every sensor (tens of megabytes for a
     few hundred sensors read once a second). Libre Panel keeps its own history."""
+    _forget_entries([entry for node in nodes for entry in node.entries])
+
+
+def _forget_entries(entries: list[_Entry]) -> None:
+    """The same for these sensors (also those a node lists later)."""
+    if not entries:
+        return
     try:
         from System import TimeSpan
     except ImportError:
         return
-    for node in nodes:
-        for entry in node.entries:
-            try:
-                entry.handle.ValuesTimeWindow = TimeSpan.Zero
-            except Exception:  # noqa: BLE001 - not worth more than a line
-                log.debug("could not switch a sensor's history off", exc_info=True)
-                return
+    for entry in entries:
+        try:
+            entry.handle.ValuesTimeWindow = TimeSpan.Zero
+        except Exception:  # noqa: BLE001 - not worth more than a line
+            log.debug("could not switch a sensor's history off", exc_info=True)
+            return
 
 
 # -- the source --------------------------------------------------------------------------
@@ -408,6 +448,7 @@ class InProcessSource:
         self._nodes: list[_Node] = []
         self._node_of: dict[str, _Node] = {}  # sensor id -> node
         self._needed: tuple[Any, list[_Node]] | None = None  # for what was read, who was needed
+        self._surveyed: float | None = None  # when a round last read all hardware
         self._learned = 0  # how many keys the nodes know: it grows when one is learned
         self._broken = False  # the last round failed, and the log said so
         self._latest: dict[str, Reading] = {}
@@ -509,8 +550,8 @@ class InProcessSource:
         )
         _forget_history(self._nodes)
         for node in self._nodes:
-            if node.entries:
-                self._update(node)
+            self._update(node, fresh=False)  # build_nodes has just updated it
+        self._surveyed = self._clock()
         with self._lock:
             self._elevated, self._pawnio = is_admin(), pawnio_version()
         self._publish()
@@ -529,9 +570,11 @@ class InProcessSource:
                         self._learned += 1
         return readings
 
-    def _update(self, node: _Node) -> None:
+    def _update(self, node: _Node, fresh: bool = True) -> None:
+        """Update ``node`` and read it (``fresh`` False: only read what build_nodes' update
+        left, as the first round after opening does)."""
         try:
-            node.update()
+            new = node.update() if fresh else node.read()
         except Exception as exc:  # noqa: BLE001 - LibreHardwareMonitor raises .NET exceptions
             if not node.failed:
                 node.failed = True
@@ -541,6 +584,8 @@ class InProcessSource:
                 )
             return
         node.failed = False
+        for entry in new:  # sensors it lists now: their keys are learned when published
+            self._node_of[entry.sensor_id] = node
 
     def needed(self) -> list[_Node]:
         """The nodes with a sensor that a theme on show reads: by raw key, or by the
@@ -558,8 +603,14 @@ class InProcessSource:
         return self._needed[1]
 
     def refresh(self) -> None:
-        """One round: update what is read, then make the readings."""
-        nodes = self.needed()
+        """One round: update what is read, then make the readings. Now and then a round reads
+        all hardware (SURVEY_SECONDS), so that sensors that appear later are found."""
+        now = self._clock()
+        if self._surveyed is None or now - self._surveyed >= SURVEY_SECONDS:
+            self._surveyed = now
+            nodes = list(self._nodes)
+        else:
+            nodes = self.needed()
         for position, node in enumerate(nodes):
             if position:
                 self._stop.wait(PAUSE_SECONDS)  # the renderer gets the GIL between two

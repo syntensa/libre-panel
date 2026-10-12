@@ -176,3 +176,20 @@ def ring0_off(computer):
             elif item.HardwareType == "Memory" and sensor.SensorType == "Temperature":
                 sensor.Value = 0.0
     return computer
+
+
+def lists_only_after_an_update(computer):
+    """The Super I/O chip as LibreHardwareMonitor builds it: before its first update it lists
+    its fan controls only; its fans and temperatures come with the update that reads them."""
+    chip = next(item for item in computer.everything() if item.HardwareType == "SuperIO")
+    later, chip.Sensors = (
+        chip.Sensors,
+        [FakeSensor("/lpc/nct0000/0/control/0", "Fan Control #1", "Control", 40.0)],
+    )
+
+    def reveal(hardware):
+        known = {sensor.Identifier for sensor in hardware.Sensors}
+        hardware.Sensors.extend(s for s in later if s.Identifier not in known)
+
+    chip.on_update = reveal
+    return chip

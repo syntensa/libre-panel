@@ -18,6 +18,7 @@ from fake_lhm import (
     FakeHardware,
     FakeSensor,
     computer_from_tree,
+    lists_only_after_an_update,
     ring0_off,
     small_computer,
     with_raw_throughput,
@@ -243,7 +244,7 @@ def test_only_the_nodes_a_theme_reads_are_updated():
     source = opened(computer)
     first = updates(computer)
     assert first == {
-        "/motherboard": 0,  # no sensor of its own; it cannot be updated
+        "/motherboard": 1,  # updated once to see what it lists: no sensor of its own
         "/lpc/nct0000/0": 1,
         "/amdcpu/0": 1,
         "/ram": 1,
@@ -744,3 +745,35 @@ def test_the_pawnio_driver_is_found_where_libre_hardware_monitor_looks(monkeypat
 def test_without_winreg_there_is_no_pawnio(monkeypatch):
     monkeypatch.setitem(sys.modules, "winreg", None)  # an import raises ImportError
     assert REAL_PAWNIO_VERSION() is None
+
+
+def test_a_chip_that_lists_its_fans_only_after_an_update_has_them():
+    """LibreHardwareMonitor lists a Super I/O chip's fans, temperatures and voltages only once
+    an update has read them: read before, the mainboard's fans were missing for good."""
+    computer = small_computer()
+    lists_only_after_an_update(computer)
+    source = opened(computer)
+    readings = source.read()
+    assert readings["fan.lpc.fan_1"].value == 900.0
+    assert "lhm:/lpc/nct0000/0/control/0" in readings  # and what it listed before
+
+
+def test_a_fan_that_starts_later_is_found_by_the_next_survey(monkeypatch):
+    """A fan that stands at first is not listed (a graphics card in its zero-RPM mode, a pump
+    that starts late): a round now and then reads all hardware, also what no theme reads. Its
+    history is switched off as the others' are."""
+    system = types.ModuleType("System")
+    system.TimeSpan = types.SimpleNamespace(Zero="zero")
+    monkeypatch.setitem(sys.modules, "System", system)
+    now = [100.0]
+    computer = small_computer()
+    chip = next(item for item in computer.everything() if item.HardwareType == "SuperIO")
+    source = opened(computer, clock=lambda: now[0])
+    assert "fan.lpc.fan_4" not in source.read()
+    chip.Sensors.append(FakeSensor("/lpc/nct0000/0/fan/3", "Fan #4", "Fan", 700.0))  # it turns
+    source.refresh()  # no theme reads the chip
+    assert "fan.lpc.fan_4" not in source.read()
+    now[0] += inside.SURVEY_SECONDS
+    source.refresh()
+    assert source.read()["fan.lpc.fan_4"].value == 700.0
+    assert chip.Sensors[-1].ValuesTimeWindow == "zero"
