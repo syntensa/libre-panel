@@ -213,7 +213,8 @@ function SensorList({ value, onPick, close }) {
               aria-selected=${String(sensor.key === value)} class="sensor-row" onClick=${() => pick(sensor.key)}>
               <span class="sensor-name">${sensor.name}</span>
               <span class="sensor-key mono">${sensor.key}</span>
-              <span class="sensor-value mono">${reading ? formatValue(reading.value, reading.unit) : ""}</span>
+              <span class=${`sensor-value mono${reading?.sample && live.live ? " sample" : ""}`}
+                title=${reading?.sample && live.live ? t("No value on this computer: a sample") : null}>${reading ? formatValue(reading.value, reading.unit) : ""}</span>
             </button>`;
           })}
         </div>`,

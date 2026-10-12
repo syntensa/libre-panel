@@ -1372,6 +1372,10 @@
   min-width: 56px;
   text-align: right;
 }
+.sensor-value.sample {
+  opacity: 0.45;
+  font-style: italic;
+}
 
 .sensor-foot {
   padding: 8px 8px 2px;

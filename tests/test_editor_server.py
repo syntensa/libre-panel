@@ -431,6 +431,21 @@ def test_readings_with_history(server):
     assert status == 200 and "gpu.temp" in data["readings"]  # without keys: every reading
 
 
+def test_a_reading_this_computer_does_not_give_is_marked_a_sample(monkeypatch, server):
+    """The pickers fill what this computer does not give with sample values (a fan it does not
+    have): they are marked, so that the app does not pretend the panel shows them."""
+    from libre_panel.editor.server import EditorState
+    from libre_panel.sensors.base import Reading, Snapshot
+
+    live = Snapshot(readings={"cpu.load": Reading("cpu.load", 12.0, "%", "CPU")})
+    monkeypatch.setattr(EditorState, "live_snapshot", lambda self: live)
+    status, data = request(server, "GET", "/api/readings?keys=cpu.load,fan.lpc.fan_1")
+    assert status == 200 and data["live"] is True
+    assert data["readings"]["cpu.load"]["sample"] is False
+    assert data["readings"]["cpu.load"]["value"] == 12.0
+    assert data["readings"]["fan.lpc.fan_1"]["sample"] is True
+
+
 def test_pages_of_the_panel(server, isolated_home):
     """The normal theme, each mode's (game mode's always) and the round report's."""
     from libre_panel.config import load_config

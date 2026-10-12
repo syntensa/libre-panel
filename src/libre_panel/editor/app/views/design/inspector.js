@@ -200,6 +200,10 @@ function SensorLine({ sensor }) {
   if (!sensor) return null;
   const reading = live.values[sensor];
   const name = sensorName(sensor, sensors.find((item) => item.key === sensor)?.label);
+  if (reading?.sample && live.live) {
+    // the panel shows nothing for it on this computer: a sample would pretend it does
+    return html`<span>${name} · <span class="muted">${t("no value on this computer")}</span></span>`;
+  }
   return html`<span>${name}${reading ? html` · <span class="mono strong">${formatValue(reading.value, reading.unit)}</span>` : null}</span>`;
 }
 

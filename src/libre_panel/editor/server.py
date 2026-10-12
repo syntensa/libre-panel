@@ -656,12 +656,14 @@ class EditorHandler(BaseHTTPRequestHandler):
     def _readings(self, query: dict[str, list[str]]) -> dict[str, Any]:
         """Sensor values for the editor's pickers (``?keys=a,b``; all without it) and
         the recent history of some (``?history=a``): live where there are live ones,
-        sample values otherwise."""
+        sample values otherwise, each marked ``sample``."""
         snapshot = demo_snapshot()
         live = False
+        measured: set[str] = set()  # the keys this computer gives; the rest are samples
         try:
             current = self.state.live_snapshot()
             live = bool(current.readings)
+            measured = set(current.readings)
             snapshot.readings.update(current.readings)
             snapshot.history.update({k: v for k, v in current.history.items() if len(v) > 1})
         except Exception as exc:  # live sensors are optional for the editor
@@ -679,6 +681,9 @@ class EditorHandler(BaseHTTPRequestHandler):
                     "value": plain(reading.value),
                     "unit": reading.unit,
                     "label": reading.label,
+                    # a sample value: this computer gives none for the key (a fan it does not
+                    # have), so the panel shows nothing there
+                    "sample": key not in measured,
                 }
         history = {}
         for key in ",".join(query.get("history", [])).split(","):
