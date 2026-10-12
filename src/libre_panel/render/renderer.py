@@ -639,13 +639,13 @@ class Renderer:
         return min(1.0, max(0.0, (now - at - delay) / interval))
 
     def _glide_s(self) -> float:
-        """How long a value takes to a new reading (theme animation.smoothing_ms;
-        0: it jumps). In video mode the glide lasts until the next reading, so
-        values never stand still between readings."""
+        """How long a value takes to a new reading (theme animation.smoothing_ms; 0: it
+        jumps): 95 % of the way after it, in video mode as on still frames. A reading is
+        there in about half a second and then holds, as the SPUR II mod's values did; a glide
+        stretched to the next reading (about a second) followed half as fast."""
         if not self.animate or self.theme.smoothing_ms <= 0:
             return 0.0
-        glide = self.theme.smoothing_ms / 1000
-        return max(glide, self.sample[1]) if self.continuous else glide
+        return self.theme.smoothing_ms / 1000
 
     def _lead(self) -> float:
         """The time between two planned frames (0: not known)."""

@@ -70,10 +70,10 @@ to write or review themes by hand.
   set one by one: a text with Arabic letters ignores `letter_spacing` and `tabular` and is
   not lettered in facets.
 - `refresh_ms` is how often sensors are read; `animation.smoothing_ms` is how
-  long bars, rings and numbers with `smooth` glide to a new value (0 = jump).
-  In video mode values glide until the next reading, so they never stand
-  still between readings, and graphs draw the gliding value 25 times a
-  second: the curve moves on every frame (in half-pixel steps) and its
+  long bars, rings and numbers with `smooth` glide to a new value (95 % of the
+  way; 0 = jump), in video mode as on still frames: a reading is there in about
+  half a second and then holds. In video mode graphs draw the gliding value
+  25 times a second: the curve moves on every frame (in half-pixel steps) and its
   newest point is the value the numbers show now. A graph's `seconds` is the
   time it spans in video mode, the same at any frame rate (`0`: as long as
   `history` readings take); a 900 px graph moves 25 px a second at `36`.

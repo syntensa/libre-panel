@@ -896,8 +896,9 @@ English text; a test makes sure every text has one. To add a language, copy
 TURZX USB panels (VID 1CBE) have a hardware video decoder. In video mode
 Libre Panel sends every frame as H.264 video at up to 50 fps instead of one
 PNG image per frame, which the panel accepts only about 9 times a second.
-Moving things run smoothly: values glide until the next reading and graphs
-scroll on every frame instead of jumping once per reading.
+Moving things run smoothly: values glide to each new reading in about half a
+second (the theme's `animation.smoothing_ms`) and graphs scroll on every frame
+instead of jumping once per reading.
 
 ```toml
 [video]

@@ -369,9 +369,12 @@ def test_in_video_mode_the_dot_glides_with_the_value_at_the_end_of_the_curve():
     start = dot_of(renderer)
     assert start[0] == pytest.approx(10 + 200 - 0.5 / scale, abs=0.15)
     assert start[1] == pytest.approx(20 + (4 + 0.8 * 111 + 0.5) / scale, abs=0.15)  # at 20 %
+    renderer.fps = 50  # frames 20 ms apart, as in video mode: the last one just before
+    renderer.render(course(20.0, 20.0, 20.0), 100.98)
     renderer.new_sample(101.0, 1.0)
     seen = []
-    for at in (101.0, 101.5, 102.0, 103.0):
+    # within the theme's glide (smoothing_ms, 400 ms here), not until the next reading
+    for at in (101.0, 101.1, 101.25, 103.0):
         renderer.render(course(20.0, 20.0, 80.0), at)
         seen.append(dot_of(renderer))
     rows = [dot[1] for dot in seen]
