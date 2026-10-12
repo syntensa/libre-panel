@@ -382,7 +382,8 @@ def _open_for_a_moment(webview: Any, seconds: float) -> bool:
     timer = threading.Timer(seconds, give_up)
     timer.daemon = True
     timer.start()
-    with tempfile.TemporaryDirectory() as storage:  # not the app's own window data
+    # not the app's own window data; WebView2's processes may hold its files a moment longer
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as storage:
         webview.start(**{**_start_options(), "storage_path": storage})
     timer.cancel()
     return done["loaded"]

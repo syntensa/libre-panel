@@ -525,3 +525,29 @@ def test_serve_opens_the_window_and_stops_with_it(monkeypatch):
     url, view, backend, token = shown[0]
     assert url.startswith("http://127.0.0.1:") and view == "design" and backend is fake
     assert url.endswith("/") and len(token) >= 40  # the token comes apart from the address
+
+
+def test_the_check_opens_a_window_as_the_app_does(monkeypatch):
+    """window --check --open: a real window, minimized, with the options the app's window
+    starts with (its icon among them), closed once its page has loaded."""
+    monkeypatch.setattr(window.sys, "platform", "win32")
+
+    class Fake(FakeWebview):
+        def create_window(self, title, url=None, **options):
+            created = FakeWindow(title, url, **options)
+            created.events.loaded = FakeEvent()
+            self.windows.append(created)
+            return created
+
+        def start(self, **options):
+            self.started = options
+            if self.session:
+                self.windows[0].events.loaded.set()
+
+    loads = Fake(session=True)
+    assert window._open_for_a_moment(loads, seconds=5) is True
+    win = loads.windows[0]
+    assert win.options["minimized"] is True and ("destroy",) in win.calls
+    assert loads.started["icon"] is None  # no PNG for WinForms
+    assert loads.started["storage_path"] != window._start_options()["storage_path"]
+    assert window._open_for_a_moment(Fake(), seconds=0.01) is False  # it never loaded
