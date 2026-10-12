@@ -1775,6 +1775,16 @@ def test_pages_of_the_panel(app_url, isolated_home):
         tabs.nth(1).click()
         page.wait_for_function("window.libre.store.get().doc.id === 'slate'")
         assert js(page, "window.libre.store.get().page") == "game"
+        # a mode's page takes its theme from a list on its card (it could only be put there
+        # from the theme, with the + over the canvas: not found)
+        page.locator(".rail-item", has_text="Pages").click()
+        game = page.locator(".page-card", has_text="In game")
+        choice = game.locator(".page-card-theme select")
+        playwright.expect(choice).to_have_value("slate")
+        choice.select_option("nimbus")
+        waits_for(page, lambda: game_theme() == "nimbus")
+        choice.select_option("")  # the normal theme
+        waits_for(page, lambda: not game_theme())
 
 
 def test_the_panel_chip_changes_the_panel(page):
@@ -3217,6 +3227,25 @@ def test_settings_services(app_url, isolated_home):
         assert auto.locator("[data-option='rules']").inner_text().count("Edit") == 1
         auto.locator("[data-option='rules'] button").click()
         page.wait_for_function("location.hash === '#/plugin/autopilot'")
+
+
+def game_theme():
+    """The theme game mode shows, as config.toml names it ("" for the normal one)."""
+    mode = settings_config().modes.get("game")
+    return mode.theme if mode else ""
+
+
+def test_the_game_screen_is_chosen_beside_game_mode(app_url, isolated_home):
+    """Which theme game mode shows was only on the pages of Design, where it was not found:
+    it is chosen on game mode's card too."""
+    with browser_page(app_url, "settings/services", allow=PICTURE) as page:
+        game = page.locator("[data-service='game']")
+        choice = game.locator(".game-screen select")
+        playwright.expect(choice).to_have_value("")  # the normal theme, until one is chosen
+        choice.select_option("almanac")
+        waits_for(page, lambda: game_theme() == "almanac")
+        choice.select_option("")
+        waits_for(page, lambda: not game_theme())
 
 
 def test_settings_services_of_the_running_app(isolated_home):

@@ -1611,7 +1611,11 @@
     "Write the standby clip to the panel?": "Den Standby-Clip aufs Panel schreiben?",
     "Writing…": "Schreibe…",
     "the factory's": "das des Werks",
-    "Made for": "Gemacht für"
+    "Made for": "Gemacht für",
+    "Screen while you play": "Bildschirm im Spiel",
+    "The normal theme": "Das normale Theme",
+    "The theme the panel shows in game mode. Design has it too, on the panel's pages.": "Das Theme, das das Panel im Spielmodus zeigt. Auch unter Gestalten, bei den Seiten des Panels.",
+    "Theme of the page {page}": "Theme der Seite {page}"
   },
   "fields": {
     "align": "Ausrichtung",

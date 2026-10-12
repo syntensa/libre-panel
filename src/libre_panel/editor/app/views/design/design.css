@@ -470,6 +470,14 @@
   font-size: 13px;
 }
 
+.page-card-theme {
+  padding: 0 10px 8px;
+}
+
+.page-card-theme .select {
+  width: 100%;
+}
+
 .page-card-tools {
   display: flex;
   align-items: center;

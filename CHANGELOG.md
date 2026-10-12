@@ -8,6 +8,10 @@
   same code: the app's icon and the tray, the app's header and the website (which showed
   another sign), the panel's start screen, the README and the repository's social preview
 
+- Game mode's screen is chosen from a list: on game mode's card in *Settings → Services*,
+  and on the page cards of *Design → Pages* (a mode's page could only take the theme open in
+  Design, with the + over the canvas, and was hard to find)
+
 **Fixes**
 - Windows: starting Libre Panel a second time froze its open window ("not responding"). The
   window was set "on top" for a moment from another thread, which on Windows locked it up; it

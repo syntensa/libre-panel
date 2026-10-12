@@ -4,6 +4,7 @@
 // switched on here; the running app follows at once, and a service whose options change
 // starts again by itself.
 
+import { refreshPages } from "../../core/actions.js";
 import { t } from "../../core/i18n.js";
 import {
   enableService,
@@ -15,10 +16,11 @@ import {
   useConfig,
 } from "../../core/settings.js";
 import { useStore } from "../../core/state.js";
-import { html, useState } from "../../lib/preact.js";
+import { html, useEffect, useState } from "../../lib/preact.js";
 import { navigate } from "../../shell/views.js";
 import { NumberField, Select, Toggle } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
+import { PageThemeSelect } from "../design/pages.js";
 import { CommitField, Note, SettingRow, Status, usePolling } from "./parts.js";
 
 export const loadServicesSection = () => Promise.all([loadSettings(), loadServiceStates()]);
@@ -264,6 +266,21 @@ function ServiceStatus({ row, enabled, loaded, background }) {
   return null;
 }
 
+/** The theme game mode shows ([modes.game] in config.toml): chosen here, beside the service,
+ * as well as on the pages of Design. */
+function GameScreen() {
+  const pages = useStore((s) => s.pages);
+  useEffect(() => {
+    refreshPages();
+  }, []);
+  const game = pages?.pages?.find((page) => page.id === "game");
+  if (!game) return null;
+  return html`<${SettingRow} class="game-screen" title=${t("Screen while you play")}
+      hint=${t("The theme the panel shows in game mode. Design has it too, on the panel's pages.")}>
+    <${PageThemeSelect} page="game" theme=${game.theme} label=${t("Screen while you play")} />
+  <//>`;
+}
+
 function ServiceCard({ service, config, row, loaded, background }) {
   const [open, setOpen] = useState(false);
   const words = SERVICES[service.name];
@@ -286,6 +303,7 @@ function ServiceCard({ service, config, row, loaded, background }) {
         <${Toggle} label=${title} checked=${enabled} disabled=${Boolean(service.error) && !enabled} onChange=${(on) => enableService(service.name, on)} />
       </div>
     </div>
+    ${service.name === "game" ? html`<${GameScreen} />` : null}
     ${service.options.length
       ? html`<button type="button" class="settings-disclosure small" aria-expanded=${String(open)} aria-controls=${`${id}-options`} onClick=${() => setOpen(!open)}>
             <span>${t("Settings")} · ${service.options.length}</span>

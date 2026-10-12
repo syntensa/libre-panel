@@ -4,14 +4,14 @@
 // tabs over the canvas open a page's theme; "+" puts the open theme on a page.
 // The pages panel also lists the pages that plugins bring to the editor.
 
-import { openTheme, refreshPages, save, themeName } from "../../core/actions.js";
+import { openTheme, refreshPages, refreshThemes, save, themeName } from "../../core/actions.js";
 import { endpoints } from "../../core/api.js";
 import { t } from "../../core/i18n.js";
 import { store, useStore } from "../../core/state.js";
-import { html, useRef, useState } from "../../lib/preact.js";
+import { html, useEffect, useRef, useState } from "../../lib/preact.js";
 import { pageName, shownPages } from "../../shell/panel-popover.js";
 import { navigate } from "../../shell/views.js";
-import { NumberField } from "../../ui/controls.js";
+import { NumberField, Select } from "../../ui/controls.js";
 import { promptDialog } from "../../ui/dialog.js";
 import { Icon } from "../../ui/icons.js";
 import { Menu, Popover } from "../../ui/layer.js";
@@ -100,6 +100,29 @@ export function PageTabs() {
   </div>`;
 }
 
+/** Which theme a mode's page shows, from the installed ones; "" is the normal theme. Here and
+ * on game mode's card in Settings → Services. */
+export function PageThemeSelect({ page, theme, label }) {
+  const themes = useStore((s) => s.themes);
+  useEffect(() => {
+    if (!store.get().themes.length) refreshThemes();
+  }, []);
+  const choose = async (id) => {
+    try {
+      store.set({ pages: await endpoints.setPage(page, { theme: id }) });
+    } catch (error) {
+      toastError(error);
+    }
+  };
+  const known = [...themes].sort((a, b) => a.name.localeCompare(b.name));
+  if (theme && !known.some((item) => item.id === theme)) known.unshift({ id: theme, name: theme });
+  const options = [
+    { value: "", label: t("The normal theme") },
+    ...known.map((item) => ({ value: item.id, label: item.name })),
+  ];
+  return html`<${Select} label=${label} value=${theme || ""} options=${options} onChange=${choose} />`;
+}
+
 function PageCard({ item, current, open }) {
   const setFps = async (fps) => {
     try {
@@ -132,6 +155,11 @@ function PageCard({ item, current, open }) {
         <span class="muted">${note}</span>
       </span>
     </button>
+    ${item.mode
+      ? html`<div class="page-card-theme">
+          <${PageThemeSelect} page=${item.id} theme=${item.theme} label=${t("Theme of the page {page}", { page: pageName(item.id) })} />
+        </div>`
+      : null}
     ${item.mode
       ? html`<div class="page-card-tools">
           <label class="inline-field"><span class="muted">${t("Frames per second")}</span>
