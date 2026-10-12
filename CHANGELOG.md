@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.5.3 — 2026-10-12
+
+Fans by their own names.
+
+**New**
+- Fan names: a mainboard wires its fan headers its own way, so a theme cannot know which fan is
+  the intake. Each fan now goes by its name: one of your own (*Settings → Sensors → Fan names*,
+  which shows each fan's speed now so that you can tell them apart; `[[hardware.fans]]` in
+  `config.toml`), else the name FanControl gives it, else the sensor's own ("Fan #1"). Lumen and
+  the SPUR II themes show it; the SPUR II themes no longer write "Intake", "CPU" and "Exhaust"
+  beside the first four headers of every board. `GET /api/hardware` lists the fans,
+  `POST /api/hardware` takes `{"fans": {"fan.lpc.fan_1": "Intake"}}`
+
 ## 0.5.2 — 2026-10-12
 
 The mainboard's fans on Windows, and values that follow as fast as in the SPUR II mod.
