@@ -1988,7 +1988,7 @@ def test_a_building_block_and_a_renamed_palette_colour(page):
     name.fill("signal")
     name.press("Enter")
     now = "JSON.stringify(window.libre.doc.theme()).split('@signal\"').length - 1"
-    assert js(page, now) == refs  # every use follows the new name
+    page.wait_for_function(f"({now}) === {refs}", timeout=5000)  # every use follows the name
     assert js(page, "'accent' in window.libre.doc.theme().palette") is False
     assert js(page, "JSON.stringify(window.libre.doc.theme()).includes('@accent\"')") is False
 
