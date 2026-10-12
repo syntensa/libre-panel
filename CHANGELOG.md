@@ -7,6 +7,9 @@
   rate large with its 1% low, frame time and course, the CPU and the GPU as instruments, every
   core's load and the temperatures. It is the first screen game mode's page offers; until now
   only SPUR II's were ready-made
+- Screens for bars on end (480 × 1920): **Lumen Vertical**, **Encore Vertical**, **Nimbus
+  Vertical**, **Almanac Vertical**, **Almanac Analog Vertical** and **Arena Vertical**, laid out
+  anew for a bar that stands upright, clear of the strip the 9.2" bar's frame hides
 
 **Fixes**
 - Design → Pages and game mode's card in Settings: the list of screens for a page was one list
