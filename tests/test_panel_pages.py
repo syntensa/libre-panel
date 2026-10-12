@@ -121,7 +121,7 @@ def test_logind_says_how_long_the_session_has_been_idle(monkeypatch):
     import time
 
     monkeypatch.setenv("XDG_SESSION_ID", "3")
-    now = time.clock_gettime(time.CLOCK_MONOTONIC)
+    now = time.monotonic()
     since = int((now - 90) * 1e6)
 
     def run(command, **_):

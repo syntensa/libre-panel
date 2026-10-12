@@ -103,7 +103,8 @@ def _logind_idle(run: Callable[..., Any] = subprocess.run) -> float | None:
         since = int(values.get("IdleSinceHintMonotonic", "0")) / 1e6
     except ValueError:
         return None
-    return max(0.0, time.clock_gettime(time.CLOCK_MONOTONIC) - since) if since else 0.0
+    # logind counts on CLOCK_MONOTONIC, the clock time.monotonic reads on Linux
+    return max(0.0, time.monotonic() - since) if since else 0.0
 
 
 def idle_seconds() -> float | None:
