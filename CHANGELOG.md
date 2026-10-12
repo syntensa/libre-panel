@@ -16,6 +16,9 @@ The mainboard's fans on Windows, and values that follow as fast as in the SPUR I
   a change twice as fast. A theme's `animation.smoothing_ms` sets it, as it does on still frames
 - The app: a sensor this PC does not have no longer shows a made-up value in the sensor picker and
   the inspector. Sample values are greyed, marked, and `/api/readings` says `sample` for each
+- The app: a module's resize handles stand at its new edges at once after a resize (they followed
+  a preview later, so a quick second drag could start at the old edge), and keys typed right after
+  Ctrl+K go into the palette, which gives the focus back where it was
 
 ## 0.5.1 — 2026-10-12
 
