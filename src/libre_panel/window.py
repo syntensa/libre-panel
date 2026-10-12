@@ -49,6 +49,8 @@ RUNNING_FILENAME = "window.json"  # the open window: pid, port, token
 STATE_FILENAME = "window-state.json"  # its size, kept for the next time
 WINDOWED_EXE = "LibrePanel.exe"  # the Windows build without a console window
 ANSWER_S = 2.0  # how long a start waits for the open window to answer
+WINDOW_LOG = "window.log"  # next to the tray's log: what the window process says, and why it ended
+SETTLE_S = 15.0  # a window that ends with an error this soon did not open: the browser instead
 
 
 def view_url(url: str, view: str | None) -> str:
@@ -103,6 +105,52 @@ def _detached() -> dict[str, Any]:
     else:
         options["start_new_session"] = True
     return options
+
+
+def window_log() -> Path:
+    """Where the window process writes what it says (it has no terminal): logs/window.log."""
+    from libre_panel.config import log_file
+
+    return log_file().with_name(WINDOW_LOG)
+
+
+def _error_output() -> Any:
+    """The file the window's error output goes to, so that a failure of .NET or of pywebview
+    is not lost; DEVNULL when it cannot be written. It is started anew past a megabyte."""
+    path = window_log()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.is_file() and path.stat().st_size > 1_000_000:
+            path.replace(path.with_name(WINDOW_LOG + ".1"))
+        output = open(path, "ab")  # noqa: SIM115 - handed to the process, closed after Popen
+        output.write(f"--- {time.strftime('%Y-%m-%d %H:%M:%S')} the window starts\n".encode())
+        output.flush()
+        return output
+    except OSError:
+        return subprocess.DEVNULL
+
+
+def _watch(process: Any, target: str, token: str | None, settle: float = SETTLE_S) -> None:
+    """Open the app in the browser if the window's process ends with an error before it has
+    been open for ``settle`` seconds: nobody is left without the app (a window that cannot
+    start on this PC, as one with a broken WebView2)."""
+
+    def watch() -> None:
+        try:
+            code = process.wait(settle)
+        except subprocess.TimeoutExpired:
+            return  # it is open
+        if code == 0:
+            return  # it ended as it should: another window came to the front, or it was closed
+        log.warning(
+            "Libre Panel's window ended at once (exit code %s; %s says why): "
+            "the app opens in the browser instead",
+            code,
+            window_log(),
+        )
+        webbrowser.open(access.with_token(target, token))
+
+    threading.Thread(target=watch, name="window-watch", daemon=True).start()
 
 
 # -- the open window, from outside ------------------------------------------------------
@@ -178,15 +226,23 @@ def open_window(
         if focus_window(base, view, token):
             return "focused"
         if installed():
+            # the token goes in the environment: a command line is for everybody to read
+            env = {**os.environ, access.ENV: token} if token else None
+            errors = _error_output()
             try:
-                # the token goes in the environment: a command line is for everybody to read
-                env = {**os.environ, access.ENV: token} if token else None
-                subprocess.Popen(  # noqa: S603
-                    window_command(target, config_path), env=env, **_detached()
+                process = subprocess.Popen(  # noqa: S603
+                    window_command(target, config_path),
+                    env=env,
+                    **{**_detached(), "stderr": errors},
                 )
-                return "window"
             except OSError as exc:
                 log.warning("could not open Libre Panel's window: %s", exc)
+            else:
+                _watch(process, target, token)
+                return "window"
+            finally:
+                if errors is not subprocess.DEVNULL:
+                    errors.close()  # the process has a handle of its own
     webbrowser.open(access.with_token(target, token))
     return "browser"
 
@@ -257,9 +313,12 @@ def load_backend() -> Any:
     return webview
 
 
-def check() -> tuple[bool, list[str]]:
-    """Whether the window can open here, without opening one: for the release build's test.
-    A missing WebView2 runtime on the machine is said, but not a failure of the build."""
+def check(open_one: bool = False, seconds: float = 60.0) -> tuple[bool, list[str]]:
+    """Whether the window can open here: for the release build's test. Without ``open_one``
+    nothing is opened, and a missing WebView2 runtime on the machine is said, but not a
+    failure of the build. With it a real window opens, minimized, as the app's own does (the
+    same options to webview.start), until its page has loaded or ``seconds`` have passed:
+    only that proves a window shows (0.5.0's died at once, at an icon .NET could not use)."""
     lines = []
     try:
         import webview
@@ -290,7 +349,43 @@ def check() -> tuple[bool, list[str]]:
         lines.append(
             "the WebView2 runtime is not installed here: the app would open in the browser"
         )
+        return not open_one, lines
+    if open_one:
+        loaded = _open_for_a_moment(webview, seconds)
+        lines.append("window: opened and loaded" if loaded else "window: did not load")
+        return loaded, lines
     return True, lines
+
+
+def _open_for_a_moment(webview: Any, seconds: float) -> bool:
+    """Open a minimized window with a page of its own, as _show does, and close it once the
+    page has loaded; False when it has not after ``seconds``."""
+    import tempfile
+
+    done = {"loaded": False}
+    window = webview.create_window(
+        TITLE,
+        html="<!doctype html><title>Libre Panel</title><p>check</p>",
+        minimized=True,
+        background_color=BACKGROUND,
+    )
+
+    def loaded() -> None:
+        done["loaded"] = True
+        window.destroy()
+
+    def give_up() -> None:
+        if not done["loaded"]:
+            window.destroy()
+
+    window.events.loaded += loaded
+    timer = threading.Timer(seconds, give_up)
+    timer.daemon = True
+    timer.start()
+    with tempfile.TemporaryDirectory() as storage:  # not the app's own window data
+        webview.start(**{**_start_options(), "storage_path": storage})
+    timer.cancel()
+    return done["loaded"]
 
 
 class Bridge:
@@ -371,10 +466,28 @@ class _Requests(threading.Thread):
         return True
 
 
-def _icon() -> str | None:
-    """The window's icon file (GTK; on Windows the program's own icon is used)."""
+def _icon(platform: str | None = None) -> str | None:
+    """The window's icon file for GTK. On Windows none: pywebview's WinForms makes a
+    System.Drawing.Icon of the file it is given, which a PNG is not (the window died at
+    once), and without one it takes the icon of the program itself."""
+    if (platform or sys.platform) == "win32":
+        return None
     path = Path(__file__).resolve().parent / "editor" / "static" / "icon.png"
     return str(path) if path.is_file() else None
+
+
+def _start_options() -> dict[str, Any]:
+    """What webview.start gets, the same for the window and for its check (check(open_one))."""
+    return {
+        "private_mode": False,  # the app's own settings (the open panel, recent commands) stay
+        "storage_path": str(config_dir() / "window-data"),
+        "icon": _icon(),
+        "localization": {
+            "global.quitConfirmation": t("Close the window? Changes that are not saved are lost."),
+            "global.ok": t("Close"),
+            "global.cancel": t("Cancel"),
+        },
+    }
 
 
 def _register(listener: socket.socket, token: str, url: str) -> bool:
@@ -486,16 +599,6 @@ def _show(webview: Any, url: str, listener: socket.socket, secret: str) -> int:
     _Requests(listener, secret, window, shown).start()
     webview.settings["ALLOW_DOWNLOADS"] = True  # "Export" saves a theme file
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
-    storage = config_dir() / "window-data"
-    webview.start(
-        private_mode=False,  # the app's own settings (the open panel, recent commands) stay
-        storage_path=str(storage),
-        icon=_icon(),
-        localization={
-            "global.quitConfirmation": t("Close the window? Changes that are not saved are lost."),
-            "global.ok": t("Close"),
-            "global.cancel": t("Cancel"),
-        },
-    )
+    webview.start(**_start_options())
     save_state(state)
     return 0

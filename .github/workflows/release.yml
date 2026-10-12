@@ -130,6 +130,14 @@ jobs:
         timeout-minutes: 5
         shell: bash
         run: '"$CLI" window --check'
+      - name: Smoke test (the app's window opens)
+        # A real window, minimized, with the options the app's own window starts with, until
+        # its page has loaded: --check alone only proves that the backend loads (0.5.0's window
+        # passed it and then died at once on every PC, at an icon .NET could not use).
+        if: runner.os == 'Windows'
+        timeout-minutes: 5
+        shell: bash
+        run: '"$CLI" window --check --open'
       - name: Smoke test (serial and USB libraries in the bundle)
         shell: bash
         run: |

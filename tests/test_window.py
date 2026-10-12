@@ -70,6 +70,23 @@ class FakeWindow:
         self.calls.append(("on_top", value))
 
 
+class OpenProcess:
+    """A window's process that stays open: the watch on it times out."""
+
+    def wait(self, timeout=None):
+        raise window.subprocess.TimeoutExpired("window", timeout)
+
+
+def started_into(started):
+    """A Popen stand-in that notes (command, options) and gives a process that stays open."""
+
+    def popen(command, **options):
+        started.append((command, options))
+        return OpenProcess()
+
+    return popen
+
+
 class FakeWebview:
     """What run_window uses of pywebview; start() plays a short session."""
 
@@ -130,13 +147,60 @@ def test_without_pywebview_the_browser_opens(monkeypatch):
 def test_a_window_process_starts_when_none_is_open(monkeypatch):
     started = []
     monkeypatch.setattr(window, "installed", lambda: True)
-    monkeypatch.setattr(
-        window.subprocess, "Popen", lambda command, **kw: started.append((command, kw))
-    )
+    monkeypatch.setattr(window.subprocess, "Popen", started_into(started))
     assert window.open_window(URL, "design") == "window"
     command, options = started[0]
     assert command[-2:] == ["window", URL + "#/design"]
     assert options["stdin"] == window.subprocess.DEVNULL  # it lives on its own
+
+
+def test_the_window_says_what_goes_wrong_in_a_log_of_its_own(monkeypatch):
+    """Its error output goes to logs/window.log: a crash of .NET in it is not lost."""
+    started = []
+    monkeypatch.setattr(window, "installed", lambda: True)
+    monkeypatch.setattr(window.subprocess, "Popen", started_into(started))
+    assert window.open_window(URL, "design") == "window"
+    errors = started[0][1]["stderr"]
+    assert errors.name == str(window.window_log()) and errors.closed  # the process has its own
+    assert "the window starts" in window.window_log().read_text(encoding="utf-8")
+
+
+class EndedProcess:
+    def __init__(self, code):
+        self.code = code
+
+    def wait(self, timeout=None):
+        return self.code
+
+
+def join_watches():
+    for thread in [t for t in threading.enumerate() if t.name == "window-watch"]:
+        thread.join(5)
+
+
+@pytest.mark.parametrize("code, browser", [(0xE0434352, True), (1, True), (0, False)])
+def test_a_window_that_ends_at_once_with_an_error_leaves_the_browser(monkeypatch, code, browser):
+    """0.5.0's window died at once on Windows and nothing said so: now the app opens in the
+    browser instead (with the token), and the log says where to look. One that ends well (it
+    brought another to the front, or was closed) does not."""
+    opened = []
+    monkeypatch.setattr(window.webbrowser, "open", opened.append)
+    window._watch(EndedProcess(code), URL + "#/design", TOKEN)
+    join_watches()
+    assert opened == ([access.with_token(URL + "#/design", TOKEN)] if browser else [])
+
+
+def test_a_window_that_stays_open_is_left_alone(monkeypatch):
+    monkeypatch.setattr(window.webbrowser, "open", lambda url: pytest.fail("the browser"))
+    window._watch(OpenProcess(), URL, TOKEN, settle=0.01)
+    join_watches()
+
+
+def test_on_windows_the_window_gets_no_png_for_its_icon():
+    """pywebview's WinForms makes a System.Drawing.Icon of the file, which a PNG is not: the
+    window died at once. Without one it takes the program's own icon."""
+    assert window._icon("win32") is None
+    assert window._icon("linux").endswith("icon.png")
 
 
 def answering_window(fake):
@@ -286,11 +350,18 @@ def test_check_without_pywebview(monkeypatch):
 def test_cli_window_command(monkeypatch, capsys):
     from libre_panel import cli
 
+    asked = []
     monkeypatch.setattr(
-        window, "check", lambda: (True, ["backend: winforms, renderer edgechromium"])
+        window,
+        "check",
+        lambda open_one: (
+            asked.append(open_one) or (True, ["backend: winforms, renderer edgechromium"])
+        ),
     )
     assert cli.main(["window", "--check"]) == 0
     assert "edgechromium" in capsys.readouterr().out
+    assert cli.main(["window", "--check", "--open"]) == 0  # a real window, for a moment
+    assert asked == [False, True]
     shown = []
     monkeypatch.setattr(window, "run_window", lambda url, view: shown.append((url, view)) or 0)
     assert cli.main(["window", URL, "--view", "live"]) == 0
@@ -323,7 +394,7 @@ def test_the_window_process_is_told_the_token_apart_from_its_command_line(monkey
     """Other users read a command line (Linux); the environment of a process is its user's."""
     started = []
     monkeypatch.setattr(window, "installed", lambda: True)
-    monkeypatch.setattr(window.subprocess, "Popen", lambda cmd, **kw: started.append((cmd, kw)))
+    monkeypatch.setattr(window.subprocess, "Popen", started_into(started))
     assert window.open_window(URL, "design", token=TOKEN) == "window"
     command, options = started[0]
     assert command[-2:] == ["window", URL + "#/design"]

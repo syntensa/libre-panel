@@ -266,6 +266,8 @@ def _cmd_autostart(args: argparse.Namespace) -> int:
             print(t("Autostart is enabled ({where}).", where=autostart.location()))
         else:
             print(t("Autostart is disabled."))
+        if args.action != "enable" and (hint := autostart.task_hint()):
+            print(hint, file=sys.stderr)  # a leftover task of the same name
     except AutostartError as exc:
         print(exc, file=sys.stderr)
         return 1
@@ -331,7 +333,7 @@ def _cmd_window(args: argparse.Namespace) -> int:
     from libre_panel import window
 
     if args.check:
-        worked, lines = window.check()
+        worked, lines = window.check(open_one=args.open)
         print("\n".join(lines))
         return 0 if worked else 1
     if not args.url:
@@ -685,6 +687,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("url", nargs="?", help="the app's address, http://127.0.0.1:<port>/")
     p.add_argument("--view", default=None, help="home, design, look, live or settings")
     p.add_argument("--check", action="store_true", help="only check that a window could open here")
+    p.add_argument(
+        "--open",
+        action="store_true",
+        help="with --check: open a real window for a moment, minimized, as the app does",
+    )
     p.set_defaults(func=_cmd_window)
 
     p = sub.add_parser("themes", help="list installed themes")
