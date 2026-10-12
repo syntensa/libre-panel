@@ -2054,6 +2054,28 @@ def test_a_round_panel_and_the_strip_its_frame_hides(page):
     assert page.locator(".hidden-strip").count() == 0  # a round panel hides nothing
 
 
+def test_a_portrait_panel_sits_in_its_frame(page):
+    """On end, a bar is narrower than the line under it: the frame holds the panel in the
+    middle, as on its side, instead of growing to that line with the panel on its left."""
+    import json
+
+    from test_editor_server import theme_dict
+
+    theme = theme_dict()
+    theme["display"] = {"model": "turing-9.2-usb", "orientation": "portrait"}
+    theme["display"].update(width=480, height=1920)
+    js(page, f"window.libre.doc.openDoc({{ theme: {json.dumps(theme)}, dirty: true }})")
+    page.wait_for_function("window.libre.store.get().render.size.join() === '480,1920'")
+    page.wait_for_selector(".hidden-strip")
+    frame = page.locator(".panel-frame").bounding_box()
+    canvas = page.locator(".panel-canvas").bounding_box()
+    assert frame["width"] - canvas["width"] == pytest.approx(22, abs=2)  # its padding, each side
+    middle = canvas["x"] + canvas["width"] / 2
+    assert middle == pytest.approx(frame["x"] + frame["width"] / 2, abs=1)
+    foot = page.locator(".canvas-foot").bounding_box()
+    assert foot["width"] > frame["width"]  # (the line under it is wider)
+
+
 def test_a_theme_that_is_opened_shows_no_picture_of_the_one_before(page):
     """While the new theme is drawn (a slow computer, a big theme) the canvas waits with a
     spinner at the new theme's size, with no boxes: it showed the old picture, whose boxes

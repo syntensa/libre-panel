@@ -83,6 +83,9 @@ and a redrawn logo in Libre Panel's look; and what plays and the volume without 
   is now brought to the front the way Windows allows, by the start the user just clicked. A
   second start while the window is still opening no longer opens a second one, and a click
   while Libre Panel itself is still starting waits for it instead of doing nothing
+- Design: a panel on end (portrait, a 9.2" bar at 480 × 1920) sat at the left of a frame as
+  wide as the line under it, so the frame and its grid looked out of place. The frame now holds
+  the panel in the middle, as it does on its side
 
 ## 0.5.5 — 2026-10-12
 

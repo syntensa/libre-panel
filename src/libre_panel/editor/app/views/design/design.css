@@ -570,6 +570,7 @@
 }
 
 .panel-frame {
+  align-self: center; /* a bar on end is narrower than the line under it */
   border-radius: 16px;
   padding: 10px;
   background: var(--surface);
