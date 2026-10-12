@@ -59,6 +59,11 @@ _DIGITS = "0123456789"
 Box = list[int]  # [x, y, w, h]
 RGBA = tuple[int, int, int, int]
 
+# A clock's changing digits (``digits``): how long they take after the second, by default,
+# and how far a rolling one moves, of the band its digits live in (as SPUR II's clocks)
+DIGITS_S = 0.42
+DIGITS_TRAVEL = 0.92
+
 
 @dataclass
 class Piece:
@@ -75,6 +80,18 @@ class Piece:
     # what it can change on the canvas, worked out once (Renderer._extent): a frame
     # asks that of every piece for every region it composes
     span: tuple[int, int, int, int] | None = field(default=None, init=False, compare=False)
+
+
+@dataclass
+class _Letters:
+    """A text laid out letter by letter (:meth:`Renderer._letters`)."""
+
+    size: tuple[int, int]  # the layer's
+    left: int  # where the layer goes
+    y: int
+    box: Box
+    glyphs: list[tuple[Image.Image, int, int] | None]  # each letter on the layer (None: a blank)
+    font: Any
 
 
 class _Builder:
@@ -251,6 +268,34 @@ def _blur(img: Image.Image, radius: float, exact: bool = False) -> Image.Image:
     else:
         pre = pre.filter(ImageFilter.GaussianBlur(radius))
     return pre.convert("RGBA")
+
+
+@lru_cache(maxsize=64)
+def _ramp(w: int, h: int, edge: int) -> Image.Image:
+    """Opacity over ``h`` rows: full, but soft over ``edge`` rows at the top and the bottom."""
+    column = Image.new("L", (1, h))
+    column.putdata(
+        [round(255 * max(0.0, min(1.0, y / edge, (h - 1 - y) / edge))) for y in range(h)]
+    )
+    return column.resize((w, h))
+
+
+def _moved(image: Image.Image, dy: float) -> tuple[Image.Image, int]:
+    """``image`` moved down by ``dy`` pixels, a fraction too: the image and the whole row it
+    goes to (a fraction blends two rows, as a letter in motion is)."""
+    row = math.floor(dy)
+    part = dy - row
+    if part < 1 / 64:
+        return image, row
+    if part > 63 / 64:
+        return image, row + 1
+    moved = image.transform(
+        (image.width, image.height + 1),
+        Image.Transform.AFFINE,
+        (1, 0, 0, 0, 1, -part),
+        resample=Image.Resampling.BILINEAR,
+    )
+    return moved, row
 
 
 def _between(one: Image.Image, other: Image.Image, part: int, parts: int) -> Image.Image:
@@ -1222,14 +1267,16 @@ class Renderer:
                 continue
             pieces.append((widget["id"], piece))
             if slot is None:  # what lies over a bar or a graph: its mark, its end dot
+                over = []
                 if widget["type"] == "bar" and widget.get("mark"):
-                    over = self._draw_mark(widget, snapshot), "mark"
+                    over.append((self._draw_mark(widget, snapshot), "mark"))
+                if widget["type"] == "bar" and widget.get("end_dot"):
+                    over.append((self._draw_bar_dot(widget, snapshot, now), "dot"))
                 elif widget["type"] == "graph" and widget.get("end_dot"):
-                    over = self._draw_end_dot(widget, snapshot, now), "dot"
-                else:
-                    over = None, ""
-                if over[0] is not None:
-                    pieces.append((f"{widget['id']}\0{over[1]}", over[0]))
+                    over.append((self._draw_end_dot(widget, snapshot, now), "dot"))
+                for top, name in over:
+                    if top is not None:
+                        pieces.append((f"{widget['id']}\0{name}", top))
             if module is not None:
                 boxes[module["id"]] = self.module_boxes[module["id"]]
                 continue
@@ -1344,7 +1391,30 @@ class Renderer:
         text, size = self._fit(widget, text)
         if size != widget.get("font_size", 24):
             widget = {**widget, "font_size": size}
+        letters = self._letters(widget, text, color)
+        if letters is not None:
+            layer = Image.new("RGBA", letters.size, (0, 0, 0, 0))
+            for placed in letters.glyphs:
+                if placed is not None:
+                    self._paste(layer, *placed)
+            return Piece(layer, letters.left, letters.y, box=letters.box)
         font = self.font(widget.get("font", ""), size)
+        x, y = widget["x"], widget["y"]
+        anchor = _ANCHORS.get(widget.get("align", "left"), "la")
+        measure = ImageDraw.Draw(Image.new("L", (1, 1)))
+        x0, y0, x1, y1 = measure.textbbox((x, y), text, font=font, anchor=anchor)
+        x0, y0 = int(math.floor(x0)), int(math.floor(y0))
+        w, h = max(1, math.ceil(x1) - x0 + 1), max(1, math.ceil(y1) - y0 + 1)
+        layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        fill = self.color(color)
+        ImageDraw.Draw(layer).text((x - x0, y - y0), text, font=font, anchor=anchor, fill=fill)
+        return Piece(layer, x0, y0)
+
+    def _letters(self, widget: dict[str, Any], text: str, color: str) -> _Letters | None:
+        """``text`` laid out by hand, letter by letter: for letter spacing, equal-width
+        digits, a finish's own letters and a clock's rolling digits; None where it is drawn
+        whole. ``widget`` has the font size the text fits in (:meth:`_fit`)."""
+        font = self.font(widget.get("font", ""), widget.get("font_size", 24))
         fill = self.color(color)
         x, y = widget["x"], widget["y"]
         align = widget.get("align", "left")
@@ -1352,20 +1422,11 @@ class Renderer:
         tabular = widget.get("tabular", False)
         finish = self._finishes.get(widget.get("id", ""))  # a finish may letter its own way
         lettered = finish is not None and finish.lettering(self, widget, font, text)
-        if cursive(text):  # letters that join cannot be set one by one: the whole text, as it is
-            spacing, tabular, lettered = 0, False, False
-        if "\n" in text or not (
-            spacing or lettered or (tabular and any(c in _DIGITS for c in text))
-        ):
-            anchor = _ANCHORS.get(align, "la")
-            measure = ImageDraw.Draw(Image.new("L", (1, 1)))
-            x0, y0, x1, y1 = measure.textbbox((x, y), text, font=font, anchor=anchor)
-            x0, y0 = int(math.floor(x0)), int(math.floor(y0))
-            w, h = max(1, math.ceil(x1) - x0 + 1), max(1, math.ceil(y1) - y0 + 1)
-            layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-            ImageDraw.Draw(layer).text((x - x0, y - y0), text, font=font, anchor=anchor, fill=fill)
-            return Piece(layer, x0, y0)
-        # Hand layout: letter spacing and/or equal-width digits.
+        rolls = widget.get("digits", "jump") != "jump"  # the clock's: they move one by one
+        if cursive(text) or "\n" in text:  # letters that join: the whole text, as it is
+            return None
+        if not (spacing or lettered or rolls or (tabular and any(c in _DIGITS for c in text))):
+            return None
         cell = self._digit_cell(font)
         advances = []
         for ch in text:
@@ -1376,20 +1437,21 @@ class Renderer:
         start = {"left": x, "center": x - total / 2, "right": x - total}.get(align, x)
         margin = max(2, widget.get("font_size", 24) // 6)  # room for overhanging glyphs
         w, h = math.ceil(total) + 2 * margin, ascent + descent
-        layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        glyphs: list[tuple[Image.Image, int, int] | None] = []
         pen = float(margin)
         for ch, advance in zip(text, advances, strict=True):
             at = pen + (cell - font.getlength(ch)) / 2 if tabular and ch in _DIGITS else pen
             if lettered:  # the finish's letter: (image, left, top), or None for a blank
                 placed = finish.glyph(self, widget, font, ch, fill, at % 1.0)
-                if placed is not None:
-                    self._paste(layer, placed[0], math.floor(at) + placed[1], placed[2])
+                glyphs.append(
+                    None if placed is None else (placed[0], math.floor(at) + placed[1], placed[2])
+                )
             else:
                 glyph, gx = self._glyph(font, ch, fill, at, margin, h)
-                self._paste(layer, glyph, gx, 0)
+                glyphs.append((glyph, gx, 0))
             pen += advance
         left = math.floor(start) - margin
-        return Piece(layer, left, y, box=[left + margin, y, math.ceil(total), h])
+        return _Letters((w, h), left, y, [left + margin, y, math.ceil(total), h], glyphs, font)
 
     GLYPHS = 4096  # glyph images kept: a gliding number changes a digit or two at a time
 
@@ -1527,11 +1589,95 @@ class Renderer:
         return self._text_widget(widget, text, widget["color"])
 
     def _draw_clock(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
-        return self._text_widget(widget, self._clock_text(widget, snapshot), widget["color"])
+        """The time as a text. With ``digits`` "roll" what changes on the second rolls (the
+        old letter up and out, the new one in from below, soft at the edges) or with "fade"
+        fades, for ``digits_seconds`` after it, as SPUR II's clocks do; at any other time it
+        is the text as it stands, the same pixels as a clock that jumps."""
+        when = self._time(widget, snapshot)  # the planned frame's, to the microsecond
+        text, color = self._clock_format(widget, when), widget["color"]
+        resting = self._text_widget(widget, text, color)
+        kind, seconds = widget.get("digits", "jump"), widget.get("digits_seconds", DIGITS_S)
+        if kind == "jump" or not self.animate or not 0 < seconds <= 1:
+            return resting
+        p = when.microsecond / 1e6 / seconds
+        if p >= 1:
+            return resting
+        before = self._clock_format(widget, when - timedelta(seconds=1))
+        # the new text's letters are made first (in the helper thread on a video panel): a
+        # change starts a frame late rather than holding the frame up
+        if (
+            before == text
+            or len(before) != len(text)
+            or (widget["id"], text, color) not in (self._texts)
+        ):
+            return resting
+        piece = self._changing(widget, before, text, color, 1 - (1 - p) ** 3, kind)
+        if piece is None:
+            return resting
+        self.moving = True
+        return self._effects(widget, piece)  # (never kept: it is another one every frame)
+
+    def _changing(
+        self, widget: dict[str, Any], old: str, new: str, color: str, e: float, kind: str
+    ) -> Piece | None:
+        """The clock ``e`` of the way from ``old`` to ``new``, letter by letter: the letters
+        that stay where they stand, those that change rolling or fading. None where the two
+        are not laid out alike (another size, another width)."""
+        old, size = self._fit(widget, old)
+        new, size_new = self._fit(widget, new)
+        if size != size_new:
+            return None
+        if size != widget.get("font_size", 24):
+            widget = {**widget, "font_size": size}
+        before, after = self._letters(widget, old, color), self._letters(widget, new, color)
+        if before is None or after is None or len(old) != len(new):
+            return None
+        if (before.size, before.left) != (after.size, after.left):
+            return None
+        w, h = after.size
+        # the band a digit lives in, with room above and below where the letters fade:
+        # outside the resting digit, so it does not end its roll dimmed and then light up
+        _, top, _, bottom = after.font.getbbox(_DIGITS, anchor="la")
+        top, bottom = math.floor(top), math.ceil(bottom)
+        edge = max(6, (bottom - top) // 5)
+        band_top, band_h = top - edge, bottom - top + 2 * edge
+        up, down = max(0, -band_top), max(0, band_top + band_h - h)
+        layer = Image.new("RGBA", (w, h + up + down), (0, 0, 0, 0))
+        travel = DIGITS_TRAVEL * band_h
+        for was, comes, one, other in zip(old, new, before.glyphs, after.glyphs, strict=True):
+            if was == comes:
+                if other is not None:
+                    self._paste(layer, other[0], other[1], other[2] + up)
+                continue
+            shown = [g for g in (one, other) if g is not None]
+            if not shown:
+                continue
+            x0 = min(g[1] for g in shown)
+            x1 = max(g[1] + g[0].width for g in shown)
+            if kind == "fade":  # each where it stands, the old one out as the new one comes in
+                pair = []
+                for glyph in (one, other):
+                    band = Image.new("RGBa", (x1 - x0, h), (0, 0, 0, 0))
+                    if glyph is not None:
+                        band.paste(glyph[0].convert("RGBa"), (glyph[1] - x0, glyph[2]))
+                    pair.append(band)
+                self._paste(layer, Image.blend(*pair, e).convert("RGBA"), x0, up)
+                continue
+            band = Image.new("RGBA", (x1 - x0, band_h), (0, 0, 0, 0))
+            for glyph, dy in ((one, -e * travel), (other, (1 - e) * travel)):
+                if glyph is not None:
+                    image, row = _moved(glyph[0], glyph[2] - band_top + dy)
+                    self._paste(band, image, glyph[1] - x0, row)
+            band.putalpha(ImageChops.multiply(band.getchannel("A"), _ramp(x1 - x0, band_h, edge)))
+            self._paste(layer, band, x0, band_top + up)
+        return Piece(layer, after.left, after.y - up, box=after.box)
 
     def _clock_text(self, widget: dict[str, Any], snapshot: Snapshot) -> str:
+        return self._clock_format(widget, self._time(widget, snapshot))
+
+    def _clock_format(self, widget: dict[str, Any], when: datetime) -> str:
         try:
-            text = i18n.format_date(self._time(widget, snapshot), widget["format"])[:100]
+            text = i18n.format_date(when, widget["format"])[:100]
         except ValueError:
             text = "--:--"
         return text.upper() if widget.get("uppercase") else text
@@ -2461,7 +2607,6 @@ class Renderer:
         widget's glow around it, where the line ends: at the right edge, at the newest value.
         Drawn in quarter pixels, as SPUR II draws it, so it glides with the value. None where
         the line has no end (too few points, no value)."""
-        radius = float(widget["end_dot"])
         x, y, w = widget["x"], widget["y"], widget["w"]
         key = widget["sensor"]
         if self.continuous:  # the curve is drawn from the gliding value: so is its end
@@ -2483,10 +2628,31 @@ class Renderer:
             row = first + last - row
         # the curve's end in pixels (the last point is a quarter of a pixel inside the edge)
         cx, cy = x + w - 0.5 / scale, y + (row + 0.5) / scale
+        return self._dot(widget, cx, cy, self.color(widget["color"]))
+
+    def _draw_bar_dot(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        """A bar's end dot: a dot of ``end_dot`` px radius in the bar's colour where it
+        ends, its head (Studio's seconds run). None for an empty bar."""
+        value = self._eased(widget, _number(snapshot.value(widget["sensor"])), now)
+        frac = _fraction(value, widget["min"], widget["max"], widget.get("scale", "linear"))
+        x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
+        direction = widget["direction"]
+        length = w if direction in ("right", "left") else h
+        if value is None or frac * length < 0.5:
+            return None
+        reach = frac * length - 0.5  # the middle of its last pixel, as SPUR II's run
+        cx = {"right": x + reach, "left": x + w - reach}.get(direction, x + w / 2)
+        cy = {"down": y + reach, "up": y + h - reach}.get(direction, y + h / 2)
+        start, end = self._rule_paint(widget, value, now)
+        return self._dot(widget, cx, cy, start if end is None else _lerp(start, end, frac))
+
+    def _dot(self, widget: dict[str, Any], cx: float, cy: float, color: Any) -> Piece:
+        """A dot of the widget's ``end_dot`` radius around (``cx``, ``cy``), placed in
+        quarter pixels, with the widget's glow."""
+        radius = float(widget["end_dot"])
         left, top = cx - radius - 1.0, cy - radius - 1.0
         ix, iy = math.floor(left), math.floor(top)
         px, py = int((left - ix) * 4) % 4, int((top - iy) * 4) % 4
-        color = self.color(widget["color"])
         glow, glow_radius = widget.get("glow", 0.0), widget.get("glow_radius", 10)
         look = (radius, color, px, py, glow, glow_radius)
         if look not in self._dots:

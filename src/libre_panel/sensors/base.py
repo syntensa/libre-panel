@@ -60,6 +60,11 @@ def wanted_keys() -> frozenset[str]:
     return frozenset().union(*list(_WANTED.values()))
 
 
+# The seconds of the minute with their fraction (0 to 60), at the time of the frame, not
+# of a reading: a bar on it (0 to 60) runs once a minute, smoothly (Studio's seconds run)
+TIME_SECOND = "time.second"
+
+
 @dataclass(frozen=True)
 class Reading:
     """One sensor value. ``key`` uses dotted names such as ``cpu.load``."""
@@ -84,7 +89,11 @@ class Snapshot:
 
     def value(self, key: str) -> Any:
         reading = self.readings.get(key)
-        return reading.value if reading else None
+        if reading is not None:
+            return reading.value
+        if key == TIME_SECOND:  # the clock's own, at the time of the frame
+            return self.now.second + self.now.microsecond / 1e6
+        return None
 
     def state(self, key: str, default: Any = None) -> Any:
         """The dict or list a service published with ``publish_state``, parsed anew

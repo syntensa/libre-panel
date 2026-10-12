@@ -1631,6 +1631,7 @@
       "x": 1902,
       "y": 1,
       "format": "%H:%M:%S",
+      "digits": "roll",
       "font": "builtin:LiberationSans-Bold",
       "font_size": 60,
       "color": "@text",

@@ -134,6 +134,8 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "mark": ("sensor", ""),
         "mark_color": ("color", "#ffffff"),
         "mark_width": ("int", 2),
+        # a dot of this radius (px) at the bar's end, its head, in its colour (0: none)
+        "end_dot": ("number", 0),
     },
     "gauge": {
         "sensor": ("sensor", "cpu.load"),
@@ -184,6 +186,10 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "format": ("string", "%H:%M"),
         "timezone": ("string", ""),  # e.g. "Asia/Tokyo"; empty = this computer's
         "uppercase": ("bool", False),  # the weekday and month in capitals, as SPUR II's date
+        # what changes on the second: jumps, rolls (the old letter up and out, the new one in
+        # from below) or fades, as SPUR II's clocks do, for ``digits_seconds`` (at most 1)
+        "digits": ("enum:jump|roll|fade", "jump"),
+        "digits_seconds": ("number", 0.42),
         **_text_style(True),
     },
     # A clock face with hands.

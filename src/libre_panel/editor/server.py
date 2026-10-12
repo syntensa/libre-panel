@@ -45,7 +45,7 @@ from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_font_path, b
 from libre_panel.i18n import t
 from libre_panel.icons import ICON_NAMES
 from libre_panel.render.renderer import Renderer
-from libre_panel.sensors.base import SensorHub, Snapshot
+from libre_panel.sensors.base import TIME_SECOND, SensorHub, Snapshot
 from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.sensors.hardware import detected_names
 from libre_panel.theme.adapt import adapt_theme
@@ -692,6 +692,11 @@ class EditorHandler(BaseHTTPRequestHandler):
                     # have), so the panel shows nothing there
                     "sample": key not in measured,
                 }
+        if not wanted or TIME_SECOND in wanted:  # the clock's own (a seconds run): always live
+            second = snapshot.value(TIME_SECOND)
+            readings[TIME_SECOND] = {
+                "value": second, "unit": "s", "label": "Seconds of the minute", "sample": False
+            }  # fmt: skip
         history = {}
         for key in ",".join(query.get("history", [])).split(","):
             values = snapshot.history.get(key) if key else None

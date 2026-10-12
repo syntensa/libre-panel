@@ -504,6 +504,7 @@
       "x": 17,
       "y": 66,
       "format": "%H:%M",
+      "digits": "roll",
       "font": "builtin:LiberationSans-Bold",
       "font_size": 176,
       "color": "@text"
@@ -514,6 +515,7 @@
       "x": 486,
       "y": 175,
       "format": "%S",
+      "digits": "roll",
       "font": "builtin:LiberationSans-Bold",
       "font_size": 56,
       "color": "@accent"
@@ -526,6 +528,22 @@
       "w": 568,
       "h": 4,
       "color": "@track"
+    },
+    {
+      "type": "bar",
+      "id": "seconds-run",
+      "x": 23,
+      "y": 250,
+      "w": 568,
+      "h": 4,
+      "sensor": "time.second",
+      "min": 0,
+      "max": 60,
+      "color": "@accent",
+      "background": null,
+      "radius": 0,
+      "smooth": false,
+      "end_dot": 5.5
     },
     {
       "type": "clock",

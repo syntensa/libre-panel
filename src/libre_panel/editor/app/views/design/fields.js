@@ -27,6 +27,9 @@ export function hintFor(widget, key, kind) {
   if (key === "smooth" && widget?.type === "metric") return t("the number glides between readings, together with the bars and rings of its sensor");
   if (key === "seconds" && widget?.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = as long as the history readings take");
   if (key === "per_frame") return t("video mode: a point a pixel apart, as SPUR II draws its curves (seconds = width / 25)");
+  if (key === "digits") return t("what changes on the second: it jumps, rolls (the old digit up and out, the new one in from below) or fades, as SPUR II's clocks do");
+  if (key === "digits_seconds") return t("how long a change takes after the second, at most 1 (SPUR II's: 0.42)");
+  if (key === "end_dot" && widget?.type === "bar") return t("a dot of this radius at the bar's end, its head; 0 = none (time.second runs through the minute)");
   if (key === "fill_alpha") return t("how opaque the fill is, 0 to 1; 0 = as before (a flat fill 0.25, a fade 0.45 at its top)");
   if (key === "finish") {
     return [
