@@ -26,7 +26,6 @@ from libre_panel import timezones
 from libre_panel.devices.models import find_model
 from libre_panel.fonts import builtin_font_path
 from libre_panel.i18n import t
-from libre_panel.render.formatting import counts
 
 # -- looks -------------------------------------------------------------------
 
@@ -387,6 +386,8 @@ class _Build:
     def value(self, name: str, sensor: str, fmt: str, x: float, cap_top: float, size: float,
               color: str | None = None, align: str = "left", width: float = 0,
               font: str = "display_font", tabular: bool = True, **kw: Any) -> None:  # fmt: skip
+        from libre_panel.render.formatting import counts  # (render imports the theme model)
+
         fields = self._text_fields(size, cap_top, font)
         kw.setdefault("smooth", counts(fmt))  # a number counts to a new reading, as the rings
         self.add(
