@@ -8,8 +8,14 @@ is brought to the front and shows the asked view; otherwise a new window process
 already uses). Without pywebview, or without a backend that can show the app (no GTK with
 WebKit, no WebView2 runtime, no desktop), the browser opens instead.
 
+A window process holds a lock (``window.lock``) from its first moment to its last: one that
+starts while another is open, or still opening (.NET and WebView2 take seconds), never shows
+a window of its own; it waits for the other to answer and brings that one to the front.
+
 The open window answers on a local port, with a token from a file only this user can
-read, so another start finds it: ``focus <token> <url>`` and ``close <token>``.
+read, so another start finds it: ``focus <token> <url>`` and ``close <token>``. It answers
+at once and then acts on its window, in a thread of its own: a page that is still loading
+does not keep the other start waiting (which then opened a second window).
 
 The app's server wants a token of its own (editor/access.py): the window brings it to the
 page in the address, after a ``#``. It is not given to a program on its command line, which
@@ -23,6 +29,7 @@ import importlib.util
 import json
 import logging
 import os
+import queue
 import secrets
 import socket
 import subprocess
@@ -37,6 +44,7 @@ from urllib.parse import urlsplit
 from libre_panel.config import config_dir
 from libre_panel.editor import access
 from libre_panel.i18n import t
+from libre_panel.instance import AlreadyRunning, InstanceLock
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +54,8 @@ MIN_SIZE = (1100, 700)
 DEFAULT_SIZE = (1440, 900)
 BACKGROUND = "#0A0E13"  # the app's background: no white flash while it loads
 RUNNING_FILENAME = "window.json"  # the open window: pid, port, token
+LOCK_FILENAME = "window.lock"  # held by the window's process, opening or open
+OPENING_S = 30.0  # how long a second start waits for a window that is still opening
 STATE_FILENAME = "window-state.json"  # its size, kept for the next time
 WINDOWED_EXE = "LibrePanel.exe"  # the Windows build without a console window
 ANSWER_S = 2.0  # how long a start waits for the open window to answer
@@ -193,11 +203,44 @@ def _address(url: str, view: str | None, token: str | None = None) -> str:
     return access.with_token(view_url(base, view), token or inside or access.read_token(base))
 
 
+def _allow_foreground(pid: Any) -> None:
+    """Windows lets only the program the user just started bring a window to the front: this
+    start passes that on to the window's process (else its window only flashes in the
+    taskbar)."""
+    if sys.platform != "win32" or not isinstance(pid, int):
+        return
+    try:
+        import ctypes
+
+        ctypes.windll.user32.AllowSetForegroundWindow(pid)  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        pass
+
+
 def focus_window(url: str, view: str | None = None, token: str | None = None) -> bool:
     """Bring the open window to the front, showing ``view`` of ``url``; False when none is open.
     ``token`` is the access token of ``url``'s server, if the caller knows it."""
     info = running()
-    return bool(info) and _ask(info, ["focus", _address(url, view, token)])
+    if not info:
+        return False
+    _allow_foreground(info.get("pid"))
+    return _ask(info, ["focus", _address(url, view, token)])
+
+
+def _window_lock() -> InstanceLock:
+    return InstanceLock(config_dir() / LOCK_FILENAME)
+
+
+def _wait_for_window(url: str, view: str | None, token: str | None) -> bool:
+    """Another window process holds the lock: its window is open or opening. Bring it to the
+    front as soon as it answers; False when it has not after :data:`OPENING_S`."""
+    deadline = time.monotonic() + OPENING_S
+    while True:
+        if focus_window(url, view, token):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.25)
 
 
 def close_window(url: str | None = None) -> bool:
@@ -412,7 +455,9 @@ class Bridge:
 
 
 class _Requests(threading.Thread):
-    """Answers the other starts: ``focus <token> <url>`` and ``close <token>``."""
+    """Answers the other starts: ``focus <token> <url>`` and ``close <token>``. A request is
+    answered as soon as it is understood; what it asks of the window is done after, one at a
+    time, in a thread of its own (:meth:`act`)."""
 
     def __init__(self, listener: socket.socket, token: str, window: Any, shown: dict) -> None:
         super().__init__(name="window-requests", daemon=True)
@@ -420,6 +465,22 @@ class _Requests(threading.Thread):
         self.token = token
         self.window = window
         self.shown = shown  # {"url": ..., "minimized": bool}
+        self.todo: queue.Queue[list[str]] = queue.Queue()
+        threading.Thread(target=self._work, name="window-acts", daemon=True).start()
+
+    def _work(self) -> None:
+        while True:
+            words = self.todo.get()
+            try:
+                self.act(words)
+            except Exception:  # a window call that failed: this request, not the next
+                log.debug("a request to the window failed", exc_info=True)
+            finally:
+                self.todo.task_done()
+
+    def settle(self) -> None:
+        """Wait until every request so far is done (for the tests)."""
+        self.todo.join()
 
     def run(self) -> None:
         while True:
@@ -443,11 +504,19 @@ class _Requests(threading.Thread):
         given = words[1].encode("utf-8") if len(words) >= 2 else b""
         if not given or not secrets.compare_digest(given, self.token.encode("utf-8")):
             return False
+        if words[0] == "close" or (words[0] == "focus" and len(words) == 3 and local_url(words[2])):
+            self.todo.put(words)
+            return True
+        return False
+
+    def act(self, words: list[str]) -> None:
+        """What a request asks of the window. Only calls that pywebview hands to the window's
+        own thread: a property set from here (``on_top``) is set on this thread on Windows, and
+        holds the Python lock while the window, activated by it, waits for that lock in its
+        handler: the window froze ("not responding") when Libre Panel was started again."""
         if words[0] == "close":
             self.window.destroy()
-            return True
-        if words[0] != "focus" or len(words) != 3 or not local_url(words[2]):
-            return False
+            return
         url = words[2]
         page, _token = access.split_token(url)  # the page is shown without the token in its name
         current = self.shown["url"]
@@ -460,11 +529,7 @@ class _Requests(threading.Thread):
         self.shown["url"] = page
         if self.shown.get("minimized"):
             self.window.restore()
-        self.window.show()
-        self.window.on_top = True  # to the front; the system may only flash it in the taskbar
-        time.sleep(0.15)
-        self.window.on_top = False
-        return True
+        self.window.show()  # shown and activated: to the front (the start allowed it)
 
 
 def _icon(platform: str | None = None) -> str | None:
@@ -491,25 +556,21 @@ def _start_options() -> dict[str, Any]:
     }
 
 
-def _register(listener: socket.socket, token: str, url: str) -> bool:
-    """Write the file that lets other starts find this window; False when another one is
-    open (and was asked to come to the front instead)."""
+def _register(listener: socket.socket, token: str, url: str) -> None:
+    """Write the file that lets other starts find this window (only this user may read it).
+    The window lock is this process's, so one there is left behind by a window that is gone."""
     path = _running_file()
-    path.parent.mkdir(parents=True, exist_ok=True)
     info = {"pid": os.getpid(), "port": listener.getsockname()[1], "token": token, "url": url}
-    for _attempt in range(2):
-        other = running()
-        if other and other.get("pid") != os.getpid() and _ask(other, ["focus", url]):
-            return False
-        try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError:
-            path.unlink(missing_ok=True)  # left behind by a window that is gone
-            continue
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp.unlink(missing_ok=True)
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as file:
             json.dump(info, file)
-        return True
-    return True  # could not write it: this window works, it is just not found by others
+        os.replace(tmp, path)
+    except OSError as exc:  # this window works; it is just not found by others
+        log.warning("the window could not write %s: %s", path, exc)
 
 
 def _unregister() -> None:
@@ -535,23 +596,33 @@ def run_window(
         return 2
     inherited = access.inherited_token()  # (taken out of the environment in any case)
     token = token or inside or inherited or access.read_token(base)
-    if focus_window(target, token=token):
-        return 0
-    webview = webview or load_backend()
-    if webview is None:
-        webbrowser.open(access.with_token(target, token))
-        return 0
-    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    listener.bind(("127.0.0.1", 0))
-    listener.listen(4)
-    secret = secrets.token_hex(16)  # what the other starts of the window must say
+    lock = _window_lock()
     try:
-        if not _register(listener, secret, target):  # names the page, not the access token
+        lock.acquire()
+    except AlreadyRunning:  # another window is open, or opening: that one, never a second
+        if not _wait_for_window(base, view, token):
+            log.warning("the open window does not answer: the app opens in the browser")
+            webbrowser.open(access.with_token(target, token))
+        return 0
+    try:
+        if focus_window(base, view, token):  # (a window of a Libre Panel before the lock)
             return 0
-        return _show(webview, access.with_token(target, token), listener, secret)
+        webview = webview or load_backend()
+        if webview is None:
+            webbrowser.open(access.with_token(target, token))
+            return 0
+        listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(4)
+        secret = secrets.token_hex(16)  # what the other starts of the window must say
+        try:
+            _register(listener, secret, target)  # names the page, not the access token
+            return _show(webview, access.with_token(target, token), listener, secret)
+        finally:
+            listener.close()
+            _unregister()
     finally:
-        listener.close()
-        _unregister()
+        lock.release()
 
 
 def _show(webview: Any, url: str, listener: socket.socket, secret: str) -> int:

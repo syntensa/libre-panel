@@ -60,7 +60,7 @@ def _background(args: argparse.Namespace, use_icon: bool, open_editor: bool) -> 
     """Drive the panel and serve the editor until Quit; one instance at a time."""
     from libre_panel.editor import access
     from libre_panel.instance import AlreadyRunning, InstanceLock
-    from libre_panel.service import BackgroundApp, running_instance
+    from libre_panel.service import BackgroundApp
     from libre_panel.tray import run_app
     from libre_panel.window import open_window
 
@@ -68,7 +68,8 @@ def _background(args: argparse.Namespace, use_icon: bool, open_editor: bool) -> 
     try:
         lock.acquire()
     except AlreadyRunning:
-        url = (running_instance() or {}).get("editor")
+        # a second click while the first start is still on its way: its app is there in a moment
+        url = _editor_of_running_app(STARTING_S if open_editor else 0.0)
         if not url:
             raise
         address = access.with_token(url, access.read_token(url))  # the way into the app
@@ -84,6 +85,24 @@ def _background(args: argparse.Namespace, use_icon: bool, open_editor: bool) -> 
     finally:
         lock.release()
         _exit_if_threads_hang()
+
+
+STARTING_S = 30.0  # how long a second start waits for the first to serve its app
+
+
+def _editor_of_running_app(seconds: float) -> str | None:
+    """The address of the running app (its editor), waiting up to ``seconds`` for one that is
+    starting: it writes the address down once its server runs."""
+    import time
+
+    from libre_panel.service import running_instance
+
+    deadline = time.monotonic() + seconds
+    while True:
+        url = (running_instance() or {}).get("editor")
+        if url or time.monotonic() >= deadline:
+            return url
+        time.sleep(0.25)
 
 
 def _exit_later(seconds: float = 15.0, cleanup: Callable[[], None] | None = None) -> None:

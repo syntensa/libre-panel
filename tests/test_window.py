@@ -203,13 +203,23 @@ def test_on_windows_the_window_gets_no_png_for_its_icon():
     assert window._icon("linux").endswith("icon.png")
 
 
-def answering_window(fake):
-    """A window that listens as an open one does, and the file that names it."""
+def answering_window(fake, monkeypatch):
+    """A window that listens as an open one does, and the file that names it. It answers a
+    request first and acts on it after: here each request waits until it has."""
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
     listener.listen(4)
     shown = {"url": URL + "#/home", "minimized": True}
-    window._Requests(listener, "secret", fake, shown).start()
+    requests = window._Requests(listener, "secret", fake, shown)
+    requests.start()
+    ask = window._ask
+
+    def ask_and_wait(info, words):
+        answer = ask(info, words)
+        requests.settle()
+        return answer
+
+    monkeypatch.setattr(window, "_ask", ask_and_wait)
     path = window._running_file()
     path.parent.mkdir(parents=True, exist_ok=True)
     info = {"pid": os.getpid(), "port": listener.getsockname()[1], "token": "secret", "url": URL}
@@ -219,13 +229,13 @@ def answering_window(fake):
 
 def test_an_open_window_comes_to_the_front_on_the_view(monkeypatch):
     fake = FakeWindow("Libre Panel", URL)
-    listener, shown = answering_window(fake)
-    monkeypatch.setattr(window.time, "sleep", lambda s: None)
+    listener, shown = answering_window(fake, monkeypatch)
     try:
         assert window.open_window(URL, "design") == "focused"
         assert ("js", 'location.hash = "#/design"') in fake.calls  # no reload: nothing is lost
-        assert ("restore",) in fake.calls and ("show",) in fake.calls  # it was minimized
-        assert fake.calls[-2:] == [("on_top", True), ("on_top", False)]
+        assert fake.calls[-2:] == [("restore",), ("show",)]  # it was minimized
+        # not "on top" for a moment: on Windows that froze the window (see _Requests.act)
+        assert not [call for call in fake.calls if call[0] == "on_top"]
         # another server (the editor started anew): the page loads from there
         other = "http://127.0.0.1:9999/"
         assert window.focus_window(other, "look")
@@ -243,13 +253,13 @@ def test_a_garbled_request_leaves_the_window_answering(monkeypatch):
     token that is not ASCII, a window call that fails) is refused, and the next request is
     answered: else a second start opened a second window, and quitting could not close it."""
     fake = FakeWindow("Libre Panel", URL)
-    listener, _shown = answering_window(fake)
-    monkeypatch.setattr(window.time, "sleep", lambda s: None)
+    listener, _shown = answering_window(fake, monkeypatch)
     info = window.running()
     try:
         assert not window._ask({**info, "token": "géheim"}, ["close"])
+        assert not window._ask(info, ["focus", "https://example.org/"])
         monkeypatch.setattr(fake, "show", lambda: 1 / 0)  # the window says no
-        assert not window._ask(info, ["focus", URL + "#/look"])
+        assert window._ask(info, ["focus", URL + "#/look"])  # (answered before it was asked)
         assert window.close_window(URL)
         assert ("destroy",) in fake.calls
     finally:
@@ -258,7 +268,7 @@ def test_a_garbled_request_leaves_the_window_answering(monkeypatch):
 
 def test_closing_only_a_window_of_this_server(monkeypatch):
     fake = FakeWindow("Libre Panel", URL)
-    listener, _shown = answering_window(fake)
+    listener, _shown = answering_window(fake, monkeypatch)
     try:
         assert not window.close_window("http://127.0.0.1:9999/")
         assert ("destroy",) not in fake.calls
@@ -276,6 +286,93 @@ def test_a_gone_window_is_not_asked(monkeypatch):
     path.write_text(json.dumps({"pid": 4242, "port": 9, "token": "x"}))
     monkeypatch.setattr(psutil, "pid_exists", lambda pid: False)
     assert window.running() is None and not window.focus_window(URL)
+
+
+def test_a_second_start_while_the_window_opens_brings_that_one_to_the_front(monkeypatch):
+    """A window process holds the lock from its first moment, while .NET and WebView2 still
+    load. A second start in that time opened a second window (the first did not answer yet);
+    now it waits for the first and brings it to the front."""
+    opening = window._window_lock().acquire()  # the first window's process, still loading
+    fake = FakeWindow("Libre Panel", URL)
+    later = threading.Timer(0.3, lambda: answering_window(fake, monkeypatch))
+    later.start()
+    second = FakeWebview()
+    try:
+        assert window.run_window(URL, "design", webview=second, token=TOKEN) == 0
+        later.join()
+        assert second.windows == [] and second.started is None  # no second window
+        assert ("js", f'location.hash = "#/design&token={TOKEN}"') in fake.calls
+        assert fake.calls[-1] == ("show",)
+    finally:
+        opening.release()
+
+
+def test_a_window_that_never_answers_leaves_the_browser(monkeypatch):
+    opened = []
+    monkeypatch.setattr(window.webbrowser, "open", opened.append)
+    monkeypatch.setattr(window, "OPENING_S", 0.3)
+    stuck = window._window_lock().acquire()
+    try:
+        assert window.run_window(URL, "live", webview=FakeWebview(), token=TOKEN) == 0
+    finally:
+        stuck.release()
+    assert opened == [access.with_token(URL + "#/live", TOKEN)]
+
+
+def test_the_window_holds_its_lock_while_it_is_open():
+    from libre_panel.instance import AlreadyRunning
+
+    seen = {}
+
+    def session(win):
+        with pytest.raises(AlreadyRunning):
+            window._window_lock().acquire()
+        seen["locked"] = True
+
+    assert window.run_window(URL, "home", webview=FakeWebview(session)) == 0
+    assert seen == {"locked": True}
+    window._window_lock().acquire().release()  # free again once it is closed
+
+
+def test_on_windows_the_start_lets_the_window_come_to_the_front(monkeypatch):
+    import ctypes
+
+    allowed = []
+    user32 = SimpleNamespace(AllowSetForegroundWindow=allowed.append)
+    monkeypatch.setattr(ctypes, "windll", SimpleNamespace(user32=user32), raising=False)
+    monkeypatch.setattr(sys, "platform", "win32")
+    fake = FakeWindow("Libre Panel", URL)
+    listener, _shown = answering_window(fake, monkeypatch)
+    try:
+        assert window.focus_window(URL, "look")
+        assert allowed == [os.getpid()]  # the window's process (this one, here)
+    finally:
+        listener.close()
+
+
+def test_a_second_click_while_the_app_starts_waits_for_it(monkeypatch, isolated_home):
+    """The first start holds the lock before its server runs; a second click in that moment
+    ended without a word. Now it waits for the app's address and shows its window."""
+    from libre_panel import cli
+    from libre_panel.instance import InstanceLock
+    from libre_panel.service import instance_file
+
+    shown = []
+    monkeypatch.setattr(window, "open_window", lambda url, view, **kw: shown.append((url, view)))
+
+    def started():
+        instance_file().parent.mkdir(parents=True, exist_ok=True)
+        instance_file().write_text(json.dumps({"pid": os.getpid(), "editor": URL}))
+
+    first = InstanceLock().acquire()
+    later = threading.Timer(0.3, started)
+    later.start()
+    try:
+        assert cli.main(["tray", "--no-icon"]) == 0
+    finally:
+        later.join()
+        first.release()
+    assert shown == [(URL, "home")]
 
 
 def test_the_window(monkeypatch):
@@ -430,8 +527,7 @@ def test_the_browser_gets_the_address_with_the_token(monkeypatch):
 
 def test_an_open_window_is_given_the_token_for_its_page(monkeypatch):
     fake = FakeWindow("Libre Panel", URL)
-    listener, shown = answering_window(fake)
-    monkeypatch.setattr(window.time, "sleep", lambda s: None)
+    listener, shown = answering_window(fake, monkeypatch)
     try:
         assert window.open_window(URL, "design", token=TOKEN) == "focused"
         # the page moves to the route and takes the token, which it takes out of its address

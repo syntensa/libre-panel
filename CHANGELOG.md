@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+**Fixes**
+- Windows: starting Libre Panel a second time froze its open window ("not responding"). The
+  window was set "on top" for a moment from another thread, which on Windows locked it up; it
+  is now brought to the front the way Windows allows, by the start the user just clicked. A
+  second start while the window is still opening no longer opens a second one, and a click
+  while Libre Panel itself is still starting waits for it instead of doing nothing
+
 ## 0.5.6 — 2026-10-12
 
 Three new screens for the bars: one for music, one for the weather and one clock with the
