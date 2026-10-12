@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import threading
+import time
 import tomllib
 import unicodedata
 from dataclasses import dataclass, field
@@ -715,10 +716,21 @@ def _with_key(text: str, table: str | None, key: str, literal: str) -> str:
     return text[:indent_end] + line + text[value_end:]  # what follows the value stays
 
 
+REPLACE_TRIES = 40  # Windows: a file another reader holds open cannot be replaced, a moment
+REPLACE_WAIT_S = 0.025  # later it can (the panel reads config.toml when it changed)
+
+
 def _write(path: Path, text: str) -> None:
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+    for attempt in range(REPLACE_TRIES):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:  # (Windows: "access denied" while it is open for reading)
+            if attempt == REPLACE_TRIES - 1:
+                raise
+            time.sleep(REPLACE_WAIT_S)
 
 
 def _comments_above(text: str, pos: int) -> int:

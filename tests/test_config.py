@@ -234,6 +234,32 @@ def test_set_config_value_adds_missing_keys_and_tables(isolated_home):
     assert load_config().device.brightness == 40
 
 
+def test_a_setting_is_written_though_config_toml_is_open_for_a_moment(isolated_home, monkeypatch):
+    """Windows cannot replace a file another reader holds open ("access denied"): the panel
+    reads config.toml when it changed, and a setting changed just then was refused. The
+    write tries again a moment later."""
+    import libre_panel.config as config_module
+    from libre_panel.config import load_config, set_config_value, write_default_config
+
+    path = write_default_config()
+    real, refused = config_module.os.replace, []
+
+    def busy(source, target):
+        if len(refused) < 3:  # open for reading the first three times
+            refused.append(target)
+            raise PermissionError(13, "Access is denied", str(target))
+        return real(source, target)
+
+    monkeypatch.setattr(config_module.os, "replace", busy)
+    monkeypatch.setattr(config_module, "REPLACE_WAIT_S", 0)
+    set_config_value("services.enabled", ["notices"], path)
+    assert len(refused) == 3 and load_config(path).services.enabled == ["notices"]
+    refused.clear()
+    monkeypatch.setattr(config_module, "REPLACE_TRIES", 2)  # held longer than it waits: refused
+    with pytest.raises(PermissionError):
+        set_config_value("services.enabled", [], path)
+
+
 def test_set_config_value_never_writes_a_broken_config(isolated_home):
     from libre_panel.config import set_brightness, set_config_value
 

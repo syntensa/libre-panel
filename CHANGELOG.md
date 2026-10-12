@@ -28,6 +28,9 @@ are easier to place.
   with a fixed text. Several parts selected together that read one sensor now have one picker
   for all of them, and the block shows the fan's own name. The ring instrument's fan shows
   its sensor in the inspector, and its title is the fan's name too
+- Windows: a setting changed just as the panel read `config.toml` (a service switched on or off
+  right after another change) could be refused with "access denied": Windows cannot replace a
+  file another reader holds open. The write now tries again a moment later
 
 ## 0.5.4 — 2026-10-12
 
