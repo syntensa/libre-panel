@@ -143,6 +143,37 @@ theme = "slate"                # any built-in theme, or a folder in the user the
   `config.toml` yet) with the panel's default first, marked *Default*. Choosing a theme
   there, in the tray's *Theme* menu or in Design writes `theme`.
 
+## Pages of the panel
+
+Besides the normal theme (or the screens in turn) the panel has pages it switches to when
+something happens, each with a theme of its own. In the app: *Design → Pages*, a card a page
+with a switch, its theme (the screens made for it first) and its frame rate.
+
+| Page | When | Its screen | Switched on with |
+|---|---|---|---|
+| In game | while a game runs | the normal theme, or one you choose | the [game service](#game-mode) and its `automatic` |
+| Music | while a track plays (and for 8 s of a pause, the gap between two tracks) | Encore | `[modes.media] on = true` |
+| Idle | when nobody has pressed a key or moved the mouse for `minutes` (5) | Almanac | `[modes.idle] on = true` |
+| Round report | after a game | `round-report` | the [memory service](#memory-and-round-report) and its `report` |
+
+A game goes first, then the round report after it, then music, then the idle clock; the
+normal theme (or the screens in turn) when none of them is due. Music and the idle clock are
+off until they are switched on. On Windows the time without input is the system's own; on
+Linux it is the time since the desktop called the session idle (logind's idle hint, which
+GNOME, KDE and others set after their own delay), and without one the idle page never shows.
+
+```toml
+[modes.media]
+on = true
+theme = "encore"          # the default
+
+[modes.idle]
+on = true
+minutes = 5
+theme = "almanac-analog"  # Almanac is the default
+fps = 25                  # a page may have a frame rate of its own, as a mode
+```
+
 ## Screens in turn
 
 Instead of one theme the panel can show several in turn: each for its seconds, minutes or
@@ -907,9 +938,9 @@ fps_levels = [60, 90, 120, 144, 165]   # the frame-rate ranges of the report's c
   ends, the report is built from the file: this round against the mean of the
   last `report_compare` rounds of the same program that were long enough too
   (compared by the game's name where the program is not known). It shows the
-  theme for `report_seconds`, ahead of an autopilot's choice and in normal mode
-  only; a new game ends it at once, and a round that ends because Libre Panel
-  quits has none. `round-report` is Libre Panel's report for 8.8" and 9.2" bars,
+  theme for `report_seconds`, ahead of an autopilot's choice and of the music
+  and idle pages; a new game ends it at once, and a round that ends because Libre
+  Panel quits has none. `round-report` is Libre Panel's report for 8.8" and 9.2" bars,
   in three cards, with the game's logo (the one the [`game` service](#game-mode)
   keeps, `@game.logo`) beside its name; `spur-round-report` is SPUR II's report
   screen. Copy one in the editor to change it, choose another on the round

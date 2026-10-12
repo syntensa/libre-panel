@@ -32,6 +32,7 @@ from pathlib import Path
 from typing import Any
 
 from libre_panel.i18n import t
+from libre_panel.modes import GAME
 from libre_panel.plugins import Service
 from libre_panel.sensors.base import Snapshot
 from libre_panel.services import fancontrol, round_report
@@ -782,7 +783,7 @@ class Memory(Service):
         """A round report has been built (on the store's thread): show it, unless a game has
         begun since, which the report would only be in the way of."""
         with self._lock:
-            if self._stopped or self.host.mode is not None or games != self._games:
+            if self._stopped or self.host.mode == GAME or games != self._games:
                 return
             self.show(report)
 
@@ -802,8 +803,9 @@ class Memory(Service):
                 self.host.publish(key, value, unit, label)
             self._keys = set(readings)
             if not again and s.report_theme:
+                # in every mode but a game's (which ends it): ahead of the music's page too
                 self.host.show_theme(
-                    s.report_theme, transition=s.report_transition or None, priority=10, mode=None
+                    s.report_theme, transition=s.report_transition or None, priority=10
                 )
         session = report["session"]
         self.host.log.info(
@@ -841,8 +843,9 @@ class Memory(Service):
                 self._keys = set()
 
     def on_mode(self, mode: str | None = None, **_: Any) -> None:
-        """A game began: the report goes at once, and none that was being built is shown."""
-        if mode is None:
+        """A game began: the report goes at once, and none that was being built is shown. (The
+        pages Libre Panel switches to itself, music and idle, are no game.)"""
+        if mode != GAME:
             return
         with self._lock:
             self._games += 1

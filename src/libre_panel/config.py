@@ -311,10 +311,14 @@ class ServicesConfig:
 
 @dataclass
 class ModeConfig:
-    """A mode a service can switch to, e.g. [modes.game] with fewer frames."""
+    """A mode a service can switch to, e.g. [modes.game] with fewer frames; or one of the
+    pages Libre Panel switches to itself (libre_panel.pages: "media", "idle"), with ``on``
+    and, for "idle", its ``minutes``."""
 
     fps: int | None = None
     theme: str | None = None
+    on: bool = False
+    minutes: float | None = None
 
 
 @dataclass
@@ -505,6 +509,15 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
                 raise ConfigError(f"modes.{name}.fps: must be between 1 and 60")
         if "theme" in table:
             mode.theme = _expect(table["theme"], str, f"modes.{name}.theme")
+        if "on" in table:
+            mode.on = _expect(table["on"], bool, f"modes.{name}.on")
+        if "minutes" in table:
+            minutes = table["minutes"]
+            if isinstance(minutes, bool) or not isinstance(minutes, int | float):
+                raise ConfigError(f"modes.{name}.minutes: expected a number of minutes")
+            if not 0.5 <= minutes <= 1440:
+                raise ConfigError(f"modes.{name}.minutes: must be between 0.5 and 1440")
+            mode.minutes = float(minutes)
         cfg.modes[name] = mode
 
     sequence = _expect(data.get("sequence", {}), dict, "sequence")

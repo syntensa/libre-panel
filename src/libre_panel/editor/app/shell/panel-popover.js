@@ -28,7 +28,9 @@ export const stateText = (state) =>
   })[state] || state;
 
 /** The name of a mode for people: "game" → "In game". */
-export const modeName = (mode) => (mode === "game" ? t("In game") : mode ? mode.charAt(0).toUpperCase() + mode.slice(1) : t("Normal"));
+const MODE_NAMES = { game: () => t("In game"), media: () => t("Music"), idle: () => t("Idle") };
+export const modeName = (mode) =>
+  MODE_NAMES[mode] ? MODE_NAMES[mode]() : mode ? mode.charAt(0).toUpperCase() + mode.slice(1) : t("Normal");
 
 /** The name of a page of the panel: "normal", "report" (the round report) or a mode. */
 export const pageName = (id) => (id === "report" ? t("Round report") : modeName(id === "normal" ? null : id));
@@ -38,7 +40,11 @@ export const pageName = (id) => (id === "report" ? t("Round report") : modeName(
  * with its own theme, and the round report while the memory service makes one.
  */
 export function shownPages(data = store.get().pages) {
-  return (data?.pages || []).filter((page) => page.id === "normal" || (page.service ? page.on && page.theme : page.theme));
+  // a mode's page with a theme of its own has its tab (to change that theme), switched on or
+  // not; music's and the idle clock's (which always have one) and the round report's when on
+  return (data?.pages || []).filter(
+    (page) => page.id === "normal" || (page.theme && (page.on || (page.mode && !page.own))),
+  );
 }
 
 function PanelChoice({ theme, models }) {

@@ -455,8 +455,28 @@ def test_pages_of_the_panel(server, isolated_home):
     assert status == 200 and data["shown"] is None and data["mode"] is None
     pages = {page["id"]: page for page in data["pages"]}
     assert pages["normal"]["theme"] == "libre-default"
-    assert pages["game"] == {"id": "game", "mode": "game", "theme": None, "fps": None}
+    assert pages["game"] == {
+        "id": "game", "mode": "game", "theme": None, "fps": None,
+        "on": False, "service": "game",  # (the game service is off)
+        "suggested": ["spur-session", "spur-focus", "spur-header"],
+    }  # fmt: skip
     assert pages["report"]["theme"] == "round-report" and pages["report"]["on"] is False
+    # the pages Libre Panel switches to itself: off until switched on, each with its screen
+    assert (pages["media"]["on"], pages["media"]["theme"], pages["media"]["own"]) == (
+        False, "encore", True)  # fmt: skip
+    assert (pages["idle"]["theme"], pages["idle"]["minutes"]) == ("almanac", 5.0)
+    assert pages["idle"]["suggested"] == ["almanac", "almanac-analog"]
+    status, data = request(server, "POST", "/api/pages", {"page": "idle", "on": True, "minutes": 2})
+    pages = {page["id"]: page for page in data["pages"]}
+    assert status == 200 and pages["idle"]["on"] is True and pages["idle"]["minutes"] == 2
+    status, data = request(server, "POST", "/api/pages", {"page": "game", "on": True})
+    pages = {page["id"]: page for page in data["pages"]}
+    assert status == 200 and pages["game"]["on"] is True  # the game service runs for it
+    assert load_config().services.enabled == ["game"]
+    status, data = request(server, "POST", "/api/pages", {"page": "game", "on": False})
+    config = load_config()
+    assert config.services.options["game"]["automatic"] is False  # (it may still count)
+    assert config.modes["idle"].on is True and config.modes["idle"].minutes == 2
 
     game = {"page": "game", "theme": "slate", "fps": 30}
     status, data = request(server, "POST", "/api/pages", game)
@@ -465,7 +485,8 @@ def test_pages_of_the_panel(server, isolated_home):
     status, data = request(server, "POST", "/api/pages", {"page": "report", "theme": "orbit"})
     assert status == 200 and data["pages"][-1]["theme"] == "orbit"
     status, data = request(server, "POST", "/api/pages", {"page": "vr", "theme": "pico"})
-    assert status == 200 and [p["id"] for p in data["pages"]] == ["normal", "game", "vr", "report"]
+    assert status == 200 and [p["id"] for p in data["pages"]] == [
+        "normal", "game", "media", "idle", "vr", "report"]  # fmt: skip
     status, data = request(server, "POST", "/api/pages", {"page": "game", "theme": ""})
     assert status == 200 and data["pages"][1]["theme"] is None  # the normal one again
     config = load_config()
@@ -478,6 +499,10 @@ def test_pages_of_the_panel(server, isolated_home):
         {"page": "game", "fps": True},
         {"page": "normal", "theme": "slate", "fps": 20},
         {"page": "report", "theme": ""},
+        {"page": "normal", "on": False},  # the normal page is always there
+        {"page": "media", "on": "yes"},
+        {"page": "media", "minutes": 3},  # (the idle page's)
+        {"page": "idle", "minutes": 0},
     ):
         assert request(server, "POST", "/api/pages", wrong)[0] == 400, wrong
 

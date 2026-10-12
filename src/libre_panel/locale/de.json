@@ -1364,11 +1364,9 @@
     "{edges} hidden by the frame": "{edges} vom Rahmen verdeckt",
     "Fine-tuning": "Feinheiten",
     "Open Libre Panel": "Libre Panel öffnen",
-    "the memory service is off": "der Gedächtnis-Dienst ist aus",
     "shows the normal theme": "zeigt das normale Theme",
     "Show the normal theme here": "Hier das normale Theme zeigen",
     "Close the window? Changes that are not saved are lost.": "Fenster schließen? Was nicht gespeichert ist, geht verloren.",
-    "after a game": "nach einem Spiel",
     "Time and date": "Zeit",
     "colours and module style": "Farben und Modulstil",
     "colours palette": "Farben Farbpalette",
@@ -1616,7 +1614,15 @@
     "The normal theme": "Das normale Theme",
     "The theme the panel shows in game mode. Design has it too, on the panel's pages.": "Das Theme, das das Panel im Spielmodus zeigt. Auch unter Gestalten, bei den Seiten des Panels.",
     "Theme of the page {page}": "Theme der Seite {page}",
-    "Round": "Runde"
+    "Round": "Runde",
+    "Idle": "Leerlauf",
+    "While a game runs": "Während ein Spiel läuft",
+    "While music plays": "Während Musik läuft",
+    "When nobody has touched the PC for a while": "Wenn niemand den PC eine Weile berührt hat",
+    "After a game": "Nach einem Spiel",
+    "While a service switches to it": "Wenn ein Dienst dorthin schaltet",
+    "Show the page {page}": "Seite {page} zeigen",
+    "Minutes without input": "Minuten ohne Eingabe"
   },
   "fields": {
     "align": "Ausrichtung",

@@ -12,6 +12,14 @@
   same code: the app's icon and the tray, the app's header and the website (which showed
   another sign), the panel's start screen, the README and the repository's social preview
 
+- Pages the panel switches to by itself: **Music** shows Encore while a track plays, and
+  **Idle** shows Almanac (or Almanac Analog) when nobody has touched the PC for some minutes
+  (5 by default). *Design → Pages* has a switch on every page but the normal one (game mode's
+  page is the game service switching by itself, the round report's the memory service's
+  report), and each page's theme is chosen from a list with the screens made for it first; the
+  round report's screens are offered for its page alone. A game goes first, then its report,
+  then music, then the idle clock; both new pages are off until switched on
+  (`[modes.media]`, `[modes.idle]`)
 - Game mode's screen is chosen from a list: on game mode's card in *Settings → Services*,
   and on the page cards of *Design → Pages* (a mode's page could only take the theme open in
   Design, with the + over the canvas, and was hard to find)

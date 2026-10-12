@@ -15,7 +15,7 @@ from typing import Any
 from PIL import Image, ImageOps
 
 from libre_panel import clock as loop_clock
-from libre_panel import i18n, timing
+from libre_panel import i18n, modes, timing
 from libre_panel.config import Config, ConfigError, load_config
 from libre_panel.devices.base import Counters, DeviceError, Display, FrameError, create_display
 from libre_panel.devices.models import PanelModel, find_model
@@ -295,9 +295,9 @@ def _theme_name(
     if host is not None:
         if host.theme:
             return host.theme
-        mode = config.modes.get(host.mode or "")
-        if mode is not None and mode.theme:
-            return mode.theme
+        page = modes.page_theme(config, host.mode)  # (music's page has Encore of its own)
+        if page:
+            return page
     if rotation is not None and config.sequence.active:
         place = rotation.where(config.sequence.steps)
         if place is not None:
@@ -518,6 +518,7 @@ class MainLoop:
         named = config.theme if config.theme_given else self.default
         # the screens in turn, on the loop's clock
         self.rotation = Rotation(clock)
+        self.pages = modes.PageSwitch(clock)  # music's page, the idle clock's
         shown = _theme_name(config, host, self.default, self.rotation) if not once else named
         self.refused: str | None = None  # a requested theme that failed to load
         status.missing_theme = ""
@@ -774,6 +775,16 @@ class MainLoop:
         self.turn = config.device.rotate if _on_panel(display) else 0
         display.show(turned(frame, self.turn), None)
 
+    def _follow_pages(self, config: Config, host: Any, snapshot: Snapshot | None) -> None:
+        """Switch to the page that is due (music while it plays, the clock when the PC is
+        idle), or back; never over a mode a service set (a game)."""
+        owner = host.mode_owner
+        if owner is not None and owner != modes.OWNER:
+            return
+        due = self.pages.due(config, snapshot.readings if snapshot is not None else {})
+        if due != (host.mode if owner == modes.OWNER else None):
+            host.set_mode(due, by=modes.OWNER)
+
     def step(self, now: float | None = None) -> Image.Image | None:
         """One frame: follow a switch, take readings when due, draw and send.
 
@@ -803,6 +814,8 @@ class MainLoop:
         try:  # the frame's state is kept whatever happens
             # While a transition plays, a switch waits for its end, unless the
             # transition says otherwise (Transition.on_switch: follow or restart).
+            if host is not None:
+                self._follow_pages(config, host, snapshot)
             wanted = _theme_name(config, host, default, self.rotation)
             status.sequence = _sequence_state(config, self.rotation)
             mode = host.mode if host is not None else None

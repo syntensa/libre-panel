@@ -462,6 +462,12 @@ class PluginHost:
         mode = self._mode
         return mode[0] if mode else None
 
+    @property
+    def mode_owner(self) -> str | None:
+        """Who set the mode on now: a service's name, or "pages" (libre_panel.modes)."""
+        mode = self._mode
+        return mode[1] if mode else None
+
     def take_toasts(self) -> list[Toast]:
         with self._lock:
             toasts = list(self._toasts)

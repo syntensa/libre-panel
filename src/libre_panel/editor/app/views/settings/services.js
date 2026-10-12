@@ -277,7 +277,7 @@ function GameScreen() {
   if (!game) return null;
   return html`<${SettingRow} class="game-screen" title=${t("Screen while you play")}
       hint=${t("The theme the panel shows in game mode. Design has it too, on the panel's pages.")}>
-    <${PageThemeSelect} page="game" theme=${game.theme} label=${t("Screen while you play")} />
+    <${PageThemeSelect} page="game" theme=${game.theme} suggested=${game.suggested || []} label=${t("Screen while you play")} />
   <//>`;
 }
 

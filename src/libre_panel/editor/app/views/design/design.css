@@ -470,6 +470,21 @@
   font-size: 13px;
 }
 
+.page-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 10px 0;
+  font-size: 13px;
+}
+
+.page-card.off .page-card-main,
+.page-card.off .page-card-theme,
+.page-card.off .page-card-tools {
+  opacity: 0.55;
+}
+
 .page-card-theme {
   padding: 0 10px 8px;
 }

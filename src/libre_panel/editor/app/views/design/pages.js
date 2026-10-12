@@ -11,7 +11,7 @@ import { store, useStore } from "../../core/state.js";
 import { html, useEffect, useRef, useState } from "../../lib/preact.js";
 import { pageName, shownPages } from "../../shell/panel-popover.js";
 import { navigate } from "../../shell/views.js";
-import { NumberField, Select } from "../../ui/controls.js";
+import { NumberField, Select, Toggle } from "../../ui/controls.js";
 import { promptDialog } from "../../ui/dialog.js";
 import { Icon } from "../../ui/icons.js";
 import { Menu, Popover } from "../../ui/layer.js";
@@ -100,9 +100,14 @@ export function PageTabs() {
   </div>`;
 }
 
-/** Which theme a mode's page shows, from the installed ones; "" is the normal theme. Here and
- * on game mode's card in Settings → Services. */
-export function PageThemeSelect({ page, theme, label }) {
+// The round report's screens are for the report alone; the others for any page.
+const REPORTS = ["round-report", "spur-round-report"];
+
+/** Which theme a page shows, from the installed ones: the screens made for it first
+ * (``suggested``), then the others. A mode's page may show the normal theme ("");
+ * music's and the idle clock's always show one of their own. Here and on game mode's card
+ * in Settings → Services. */
+export function PageThemeSelect({ page, theme, label, suggested = [], normal = true }) {
   const themes = useStore((s) => s.themes);
   useEffect(() => {
     if (!store.get().themes.length) refreshThemes();
@@ -114,23 +119,39 @@ export function PageThemeSelect({ page, theme, label }) {
       toastError(error);
     }
   };
-  const known = [...themes].sort((a, b) => a.name.localeCompare(b.name));
-  if (theme && !known.some((item) => item.id === theme)) known.unshift({ id: theme, name: theme });
+  const report = page === "report";
+  const named = new Map(themes.map((item) => [item.id, item.name]));
+  const first = suggested.filter((id) => named.has(id));
+  const rest = themes
+    .filter((item) => !first.includes(item.id) && (report || !REPORTS.includes(item.id)))
+    .sort((a, b) => a.name.localeCompare(b.name));
   const options = [
-    { value: "", label: t("The normal theme") },
-    ...known.map((item) => ({ value: item.id, label: item.name })),
+    ...(normal ? [{ value: "", label: t("The normal theme") }] : []),
+    ...first.map((id) => ({ value: id, label: named.get(id) })),
+    ...rest.map((item) => ({ value: item.id, label: item.name })),
   ];
+  if (theme && !named.has(theme)) options.push({ value: theme, label: theme });
   return html`<${Select} label=${label} value=${theme || ""} options=${options} onChange=${choose} />`;
 }
 
+/** Why a page is on show: music while it plays, the clock when the PC is idle, ... */
+function pageWhen(item) {
+  if (item.id === "game") return t("While a game runs");
+  if (item.id === "media") return t("While music plays");
+  if (item.id === "idle") return t("When nobody has touched the PC for a while");
+  if (item.id === "report") return t("After a game");
+  return t("While a service switches to it");
+}
+
 function PageCard({ item, current, open }) {
-  const setFps = async (fps) => {
+  const change = async (what) => {
     try {
-      store.set({ pages: await endpoints.setPage(item.id, { fps }) });
+      store.set({ pages: await endpoints.setPage(item.id, what) });
     } catch (error) {
       toastError(error);
     }
   };
+  const setFps = (fps) => change({ fps });
   const remove = async () => {
     try {
       store.set({ pages: await endpoints.setPage(item.id, { theme: "" }) });
@@ -139,25 +160,37 @@ function PageCard({ item, current, open }) {
       toastError(error);
     }
   };
-  const note = item.service
-    ? item.on
-      ? t("after a game")
-      : t("the memory service is off")
-    : item.mode && !item.theme
-      ? t("shows the normal theme")
-      : themeName(item.theme);
-  return html`<div class=${`page-card${current ? " current" : ""}${item.theme ? "" : " empty"}`}>
+  const note = item.id === "normal" ? themeName(item.theme) : pageWhen(item);
+  const switchable = item.id !== "normal";
+  return html`<div class=${`page-card${current ? " current" : ""}${item.theme ? "" : " empty"}${switchable && !item.on ? " off" : ""}`}
+      data-page=${item.id}>
+    ${switchable
+      ? html`<div class="page-card-head">
+          <strong>${pageName(item.id)}</strong>
+          <${Toggle} label=${t("Show the page {page}", { page: pageName(item.id) })} checked=${item.on}
+            onChange=${(on) => change({ on })} />
+        </div>`
+      : null}
     <button type="button" class="page-card-main" disabled=${!item.theme} onClick=${() => item.theme && open(item)}
       title=${item.theme ? t("Open its theme") : null}>
       ${item.theme ? html`<img alt="" src=${endpoints.previewUrl(item.theme, 240)} loading="lazy" />` : html`<span class="page-card-blank"></span>`}
       <span class="page-card-text">
-        <strong>${pageName(item.id)}</strong>
+        ${switchable ? null : html`<strong>${pageName(item.id)}</strong>`}
         <span class="muted">${note}</span>
       </span>
     </button>
-    ${item.mode
+    ${switchable
       ? html`<div class="page-card-theme">
-          <${PageThemeSelect} page=${item.id} theme=${item.theme} label=${t("Theme of the page {page}", { page: pageName(item.id) })} />
+          <${PageThemeSelect} page=${item.id} theme=${item.theme} suggested=${item.suggested || []}
+            normal=${Boolean(item.mode) && !item.own}
+            label=${t("Theme of the page {page}", { page: pageName(item.id) })} />
+        </div>`
+      : null}
+    ${item.id === "idle"
+      ? html`<div class="page-card-tools">
+          <label class="inline-field"><span class="muted">${t("Minutes without input")}</span>
+            <${NumberField} label=${t("Minutes without input")} value=${item.minutes} min=${0.5} max=${1440} step=${0.5}
+              onChange=${(minutes) => minutes && change({ minutes })} /></label>
         </div>`
       : null}
     ${item.mode
@@ -165,7 +198,7 @@ function PageCard({ item, current, open }) {
           <label class="inline-field"><span class="muted">${t("Frames per second")}</span>
             <${NumberField} label=${t("Frames per second")} value=${item.fps} min=${1} max=${60} allowEmpty placeholder=${t("auto")}
               onChange=${(fps) => fps && setFps(fps)} /></label>
-          ${item.theme
+          ${item.theme && !item.own
             ? html`<button type="button" class="icon-btn" aria-label=${t("Show the normal theme here")} title=${t("Show the normal theme here")}
                 onClick=${remove}><${Icon} name="close" size=${14} /></button>`
             : null}

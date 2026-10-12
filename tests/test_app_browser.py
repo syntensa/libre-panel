@@ -1785,6 +1785,20 @@ def test_pages_of_the_panel(app_url, isolated_home):
         waits_for(page, lambda: game_theme() == "nimbus")
         choice.select_option("")  # the normal theme
         waits_for(page, lambda: not game_theme())
+        # music's page and the idle clock's: off until switched on, their own screens first
+        music = page.locator(".page-card[data-page='media']")
+        playwright.expect(music.locator(".page-card-theme select")).to_have_value("encore")
+        options = music.locator(".page-card-theme option").all_inner_texts()
+        assert options[0] == "Encore" and "Round report" not in options
+        music.get_by_role("switch").click()
+        waits_for(page, lambda: getattr(settings_config().modes.get("media"), "on", False))
+        idle = page.locator(".page-card[data-page='idle']")
+        first = idle.locator(".page-card-theme option").all_inner_texts()[:2]
+        assert first == ["Almanac", "Almanac Analog"]
+        minutes = idle.get_by_role("textbox", name="Minutes without input")
+        minutes.fill("10")
+        minutes.press("Enter")
+        waits_for(page, lambda: getattr(settings_config().modes.get("idle"), "minutes", 0) == 10)
 
 
 def test_the_panel_chip_changes_the_panel(page):

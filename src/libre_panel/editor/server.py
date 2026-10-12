@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import ParseResult, parse_qs, unquote, urlparse
 
-from libre_panel import __version__, i18n, sequence
+from libre_panel import __version__, i18n, modes, sequence
 from libre_panel.config import (
     FAN_LOOKS,
     FAN_PAINTS,
@@ -780,11 +780,24 @@ class EditorHandler(BaseHTTPRequestHandler):
         default = panel.get("default_theme") or default_theme(panel_model(config.device))
         pages = [{"id": "normal", "theme": config.theme if config.theme_given else default,
                   "sequence": config.sequence.active}]  # fmt: skip
-        names = [GAME_MODE, *sorted(name for name in config.modes if name != GAME_MODE)]
+        own = (GAME_MODE, modes.MEDIA, modes.IDLE)
+        names = [*own, *sorted(name for name in config.modes if name not in own)]
+        game = config.services.options.get(GAME_MODE, {})
         for name in names:
             mode = config.modes.get(name)
             theme, fps = (mode.theme or None, mode.fps) if mode else (None, None)
-            pages.append({"id": name, "mode": name, "theme": theme, "fps": fps})
+            page = {"id": name, "mode": name, "theme": theme, "fps": fps, "on": True,
+                    "suggested": list(modes.SUGGESTED.get(name, ()))}  # fmt: skip
+            if name == GAME_MODE:  # game mode's page is the game service switching by itself
+                page["on"] = (GAME_MODE in config.services.enabled
+                              and game.get("automatic", True) is not False)  # fmt: skip
+                page["service"] = GAME_MODE
+            elif name in (modes.MEDIA, modes.IDLE):  # the pages Libre Panel switches to itself
+                page.update(on=modes.page_on(config, name), theme=modes.page_theme(config, name),
+                            own=True)  # fmt: skip
+                if name == modes.IDLE:
+                    page["minutes"] = modes.idle_minutes(config)
+            pages.append(page)
         memory = config.services.options.get(Memory.name, {})
         report = memory.get("report_theme", Memory.options["report_theme"][1])
         pages.append(
@@ -793,6 +806,7 @@ class EditorHandler(BaseHTTPRequestHandler):
                 "service": Memory.name,
                 "theme": report if isinstance(report, str) and report else None,
                 "on": Memory.name in config.services.enabled and memory.get("report", True) is True,
+                "suggested": list(modes.SUGGESTED[modes.REPORT]),
             }
         )
         chosen = theme_chosen(config.path)  # false on a first start: Start offers the themes
@@ -944,12 +958,23 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error('expected {"page": "normal", "report" or a mode, ...}')
         theme = payload.get("theme")
         fps = payload.get("fps")
+        on = payload.get("on")
+        minutes = payload.get("minutes")
         if theme is not None and not isinstance(theme, str):
             return self._error("theme must be a theme name")
         if fps is not None and (isinstance(fps, bool) or not isinstance(fps, int)):
             return self._error("fps must be a whole number")
-        if page in ("normal", "report") and (fps is not None or not theme):
+        if on is not None and (not isinstance(on, bool) or page == "normal"):
+            return self._error("on is true or false, for every page but the normal one")
+        if minutes is not None and (
+            page != modes.IDLE or isinstance(minutes, bool)
+            or not isinstance(minutes, int | float) or not 0.5 <= minutes <= 1440
+        ):  # fmt: skip
+            return self._error("minutes (0.5 to 1440) are the idle page's")
+        if page in ("normal", "report") and (fps is not None or (theme is not None and not theme)):
             return self._error(f"the page {page} needs a theme and has no frame rate of its own")
+        if page in ("normal", "report") and theme is None and on is None:
+            return self._error(f"the page {page} needs a theme")
         keys = {"normal": "theme", "report": f"services.{Memory.name}.report_theme"}
         key = keys.get(page, f"modes.{page}.theme")
         changes: list[tuple[str, str, Any]] = []
@@ -957,7 +982,11 @@ class EditorHandler(BaseHTTPRequestHandler):
             changes.append(("value", key, theme))
         if fps is not None:
             changes.append(("value", f"modes.{page}.fps", fps))
+        if minutes is not None:
+            changes.append(("value", "modes.idle.minutes", minutes))
         try:
+            if on is not None:
+                changes.extend(self._page_switch(page, on))
             if theme:
                 find_theme(theme)
             if page == "normal" and load_config(self.state.config_path).sequence.active:
@@ -970,6 +999,23 @@ class EditorHandler(BaseHTTPRequestHandler):
         except (ConfigError, OSError) as exc:
             return self._error(str(exc), HTTPStatus.CONFLICT)
         self._panel_pages()
+
+    def _page_switch(self, page: str, on: bool) -> list[tuple[str, str, Any]]:
+        """What switching a page on or off writes: game mode's page is the game service
+        switching by itself (switched on, the service runs), the round report's is the memory
+        service's report (likewise), and any other is its mode's ``on``."""
+        from libre_panel.services.game import MODE as GAME_MODE
+        from libre_panel.services.memory import Memory
+
+        services = {GAME_MODE: (GAME_MODE, "automatic"), "report": (Memory.name, "report")}
+        if page not in services:
+            return [("value", f"modes.{page}.on", on)]
+        service, option = services[page]
+        changes: list[tuple[str, str, Any]] = [("value", f"services.{service}.{option}", on)]
+        enabled = load_config(self.state.config_path).services.enabled
+        if on and service not in enabled:
+            changes.append(("value", "services.enabled", [*enabled, service]))
+        return changes
 
     def _sequence(self) -> None:
         """The screens in turn: their steps (a theme and its seconds each), whether they
