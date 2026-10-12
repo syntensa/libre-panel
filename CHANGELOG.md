@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 — 2026-10-12
 
 Libre Panel's biggest release: the panel moves, and an app of its own designs it.
 
