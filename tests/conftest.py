@@ -131,6 +131,9 @@ class NoTasks:
     def exists(self, name):
         return False
 
+    def query(self, name):
+        return None
+
     def create(self, name, xml):
         raise AssertionError("a test created a real scheduled task")
 

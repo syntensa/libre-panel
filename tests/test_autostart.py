@@ -153,6 +153,10 @@ class FakeTasks:
     def exists(self, name):
         return name in self.tasks
 
+    def query(self, name):
+        xml = self.tasks.get(name)
+        return None if xml is None else autostart_module.parse_task(xml)
+
     def create(self, name, xml):
         self.tasks[name] = xml
 
@@ -177,13 +181,14 @@ def test_windows_elevated_start_is_a_task_with_the_highest_rights():
     registry, tasks = FakeRegistry(), FakeTasks()
     environ = {"USERNAME": "gamer", "USERDOMAIN": "PC"}
     command = [r"C:\Program Files\Libre Panel\LibrePanel.exe", "tray", "--background"]
-    user = Autostart("win32", environ=environ, registry=registry, tasks=tasks, admin=lambda: False)
+    options = {"environ": environ, "registry": registry, "tasks": tasks, "program": command[0]}
+    user = Autostart("win32", admin=lambda: False, **options)
     with pytest.raises(AutostartError, match="administrator"):
         user.enable(command, elevated=True)
     assert not tasks.tasks
 
     user.enable(command)  # the plain start first
-    admin = Autostart("win32", environ=environ, registry=registry, tasks=tasks, admin=lambda: True)
+    admin = Autostart("win32", admin=lambda: True, **options)
     assert "highest rights" in admin.enable(command, elevated=True)
     assert APP_NAME not in registry.values  # one start at login, not two
     assert admin.is_enabled() and admin.elevated()
@@ -204,6 +209,58 @@ def test_windows_elevated_start_is_a_task_with_the_highest_rights():
     assert admin.disable() and not admin.is_enabled()
     with pytest.raises(AutostartError, match="Windows only"):
         Autostart("linux", home=Path("/tmp/x")).enable(command, elevated=True)
+
+
+def task_of(program, enabled=None):
+    """A task as schtasks /Query /XML prints it (UTF-16 declared, Settings/Enabled when off)."""
+    from libre_panel.autostart import task_xml
+
+    xml = task_xml([program, "tray", "--background"], "PC\\gamer")
+    if enabled is not None:
+        xml = xml.replace(
+            "<Settings>", f"<Settings>\n    <Enabled>{str(enabled).lower()}</Enabled>"
+        )
+    return xml
+
+
+def test_a_task_is_read_from_what_task_scheduler_prints():
+    from libre_panel.autostart import TaskInfo, parse_task
+
+    program = r"C:\Program Files\Libre Panel\LibrePanel.exe"
+    assert parse_task(task_of(program)) == TaskInfo(enabled=True, command=program)
+    assert parse_task("\ufeff" + task_of(program, enabled=False)).enabled is False
+    assert parse_task("not xml") == TaskInfo(enabled=True, command="")
+
+
+@pytest.mark.parametrize(
+    "task, state",
+    [
+        (None, "none"),
+        (r"c:\program files\libre panel\librepanel.exe", "ours"),  # Windows ignores the case
+        ("off", "off"),
+        (r"D:\mod\.venv\Scripts\pythonw.exe", "other"),  # a mod's checkout
+    ],
+)
+def test_only_an_enabled_task_that_starts_this_program_is_the_elevated_start(task, state):
+    """A leftover task of the same name (switched off, or one that starts another program)
+    neither shows the switch on nor keeps the normal start at login away."""
+    program = r"C:\Program Files\Libre Panel\LibrePanel.exe"
+    registry, tasks = FakeRegistry(), FakeTasks()
+    if task == "off":
+        tasks.tasks[APP_NAME] = task_of(program, enabled=False)
+    elif task:
+        tasks.tasks[APP_NAME] = task_of(task)
+    auto = Autostart("win32", registry=registry, tasks=tasks, program=program, admin=lambda: False)
+    assert auto.task_state() == state
+    assert auto.elevated() is (state == "ours") and auto.is_enabled() is (state == "ours")
+    assert ("schtasks /Delete" in auto.task_hint()) is (state in ("off", "other"))
+    if state == "ours":
+        with pytest.raises(AutostartError, match="disable"):
+            auto.enable([program, "tray", "--background"])
+        return
+    auto.enable([program, "tray", "--background"])  # the normal start is written
+    assert registry.get(APP_NAME) is not None and auto.is_enabled()
+    assert auto.disable() and (APP_NAME in tasks.tasks) == (task is not None)  # left alone
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="needs the Task Scheduler")

@@ -26,6 +26,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 from xml.sax.saxutils import escape
@@ -107,8 +108,43 @@ def _not_supported() -> AutostartError:
     return AutostartError(t("Autostart is not supported on this system."))
 
 
+@dataclass(frozen=True)
+class TaskInfo:
+    """What Task Scheduler says of a task: whether it is on, and the program it starts."""
+
+    enabled: bool
+    command: str
+
+
+def parse_task(xml: str) -> TaskInfo:
+    """A task's state from its XML (``schtasks /Query /XML``): ``Settings/Enabled`` (true
+    when not given) and the program of its first ``Exec``. Unreadable XML: on, no program."""
+    import xml.etree.ElementTree as ET
+
+    text = re.sub(r"^\ufeff?\s*<\?xml[^>]*\?>", "", xml.strip())
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        return TaskInfo(enabled=True, command="")
+    ns = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
+    enabled = root.findtext("t:Settings/t:Enabled", default="true", namespaces=ns)
+    command = root.findtext("t:Actions/t:Exec/t:Command", default="", namespaces=ns)
+    return TaskInfo(enabled=enabled.strip().lower() != "false", command=command.strip())
+
+
+def same_program(one: str, other: str) -> bool:
+    """Whether two Windows program paths name the same file (case, quotes, slashes)."""
+    import ntpath
+
+    def norm(path: str) -> str:
+        return ntpath.normcase(ntpath.normpath(os.path.expandvars(path.strip().strip('"'))))
+
+    return bool(one.strip()) and norm(one) == norm(other)
+
+
 class Tasks(Protocol):
     def exists(self, name: str) -> bool: ...
+    def query(self, name: str) -> TaskInfo | None: ...
     def create(self, name: str, xml: str) -> None: ...
     def delete(self, name: str) -> None: ...
 
@@ -130,6 +166,14 @@ class WindowsTasks:
             return self._run("/Query", "/TN", name).returncode == 0
         except OSError:  # no schtasks (not Windows)
             return False
+
+    def query(self, name: str) -> TaskInfo | None:
+        """The task's state and program, or None when there is no such task."""
+        try:
+            result = self._run("/Query", "/TN", name, "/XML")
+        except OSError:  # no schtasks (not Windows)
+            return None
+        return parse_task(result.stdout) if result.returncode == 0 else None
 
     def create(self, name: str, xml: str) -> None:
         with tempfile.TemporaryDirectory() as folder:
@@ -236,6 +280,7 @@ class Autostart:
         registry: Registry | None = None,
         tasks: Tasks | None = None,
         admin: Callable[[], bool] = is_admin,
+        program: str | None = None,
     ) -> None:
         self.platform = platform
         self.home = home or Path.home()
@@ -243,7 +288,8 @@ class Autostart:
         self._registry = registry
         self._tasks = tasks
         self._admin = admin
-        self._elevated: tuple[float, bool] | None = None
+        self._program = program  # what Libre Panel's own task starts (launch_command's)
+        self._elevated: tuple[float, str] | None = None
 
     @property
     def kind(self) -> str:
@@ -266,16 +312,42 @@ class Autostart:
             self._tasks = WindowsTasks()
         return self._tasks
 
-    def elevated(self, fresh: bool = False) -> bool:
-        """Whether Libre Panel starts through the elevated task (Windows). Asked
-        often (tray, editor): schtasks runs at most every few seconds, unless
-        ``fresh``."""
+    def task_state(self, fresh: bool = False) -> str:
+        """The task named like Libre Panel's elevated start (Windows): "none"; "ours", on and
+        starting this program; "off", ours but switched off in Task Scheduler; or "other", one
+        that starts another program (a copy elsewhere, a mod). Asked often (tray, editor):
+        schtasks runs at most every few seconds, unless ``fresh``."""
         if self.kind != "windows":
-            return False
+            return "none"
         now = time.monotonic()
         if fresh or self._elevated is None or now - self._elevated[0] > 5.0:
-            self._elevated = (now, self.tasks.exists(WINDOWS_TASK))
+            info = self.tasks.query(WINDOWS_TASK)
+            if info is None:
+                state = "none"
+            elif not same_program(info.command, self._program or launch_command()[0]):
+                state = "other"
+            else:
+                state = "ours" if info.enabled else "off"
+            self._elevated = (now, state)
         return self._elevated[1]
+
+    def elevated(self, fresh: bool = False) -> bool:
+        """Whether Libre Panel starts through its elevated task (Windows): one that is on and
+        starts this program. A task of the same name that is off or starts another program
+        does not count: it neither shows the switch on nor keeps the normal start away."""
+        return self.task_state(fresh) == "ours"
+
+    def task_hint(self) -> str:
+        """What to do about a task named like Libre Panel's that is off or not its own."""
+        state = self.task_state()
+        if state not in ("off", "other"):
+            return ""
+        return t(
+            'A task "{name}" in Task Scheduler is switched off or starts another program; '
+            "Libre Panel uses its normal start at login instead. To remove the task, run as "
+            'administrator: schtasks /Delete /TN "{name}" /F',
+            name=WINDOWS_TASK,
+        )
 
     def can_elevate(self) -> bool:
         """Whether this process may set up the start with the highest rights: it runs as

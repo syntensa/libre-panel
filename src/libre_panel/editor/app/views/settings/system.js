@@ -10,7 +10,7 @@ import { html } from "../../lib/preact.js";
 import { Segmented, Toggle } from "../../ui/controls.js";
 import { confirmDialog, openDialog } from "../../ui/dialog.js";
 import { toastError } from "../../ui/toast.js";
-import { Card, SettingRow, Status, copyText } from "./parts.js";
+import { Card, Note, SettingRow, Status, copyText } from "./parts.js";
 
 /** What to do when the app is not run as administrator: open a terminal that is. */
 function Elevate({ command, close }) {
@@ -72,6 +72,7 @@ function StartCard() {
         onChange=${(on) => saveSystem({ autostart: on })}
       />
     <//>
+    ${info.task_hint ? html`<div class="settings-row"><${Note} tone="warn">${info.task_hint}<//></div>` : null}
     ${windows
       ? html`<${SettingRow}
           title=${t("With administrator rights")}

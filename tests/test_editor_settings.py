@@ -640,8 +640,11 @@ def test_the_highest_rights_are_set_up_only_when_asked_and_only_by_an_administra
     # the working folder, which on CI lies in the home folder and would read as risky)
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     registry, tasks = FakeRegistry(), FakeTasks()
-    windows = Autostart("win32", registry=registry, tasks=tasks, admin=lambda: False)
-    app = App(autostart=windows, autostart_command=[r"C:\Tools\libre-panel.exe", "tray"])
+    program = r"C:\Tools\libre-panel.exe"
+    windows = Autostart(
+        "win32", registry=registry, tasks=tasks, admin=lambda: False, program=program
+    )
+    app = App(autostart=windows, autostart_command=[program, "tray"])
     port = make(app)
     _, data = request(port, "GET", "/api/system")
     assert data["kind"] == "windows" and data["enabled"] is False
@@ -667,7 +670,9 @@ def test_the_highest_rights_are_set_up_only_when_asked_and_only_by_an_administra
 
 def test_the_highest_rights_cannot_be_taken_away_without_an_administrator(make):
     registry, tasks = FakeRegistry(), FakeTasks(allowed=False)
-    windows = Autostart("win32", registry=registry, tasks=tasks, admin=lambda: True)
+    windows = Autostart(
+        "win32", registry=registry, tasks=tasks, admin=lambda: True, program="x.exe"
+    )
     windows.enable(["x.exe", "tray"], elevated=True)
     port = make(App(autostart=windows, autostart_command=["x.exe", "tray"]))
     status, data = request(port, "POST", "/api/system", {"elevated": False})

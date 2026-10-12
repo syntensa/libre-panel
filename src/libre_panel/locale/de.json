@@ -13,6 +13,7 @@
     "A small Windows service reads the sensors that need administrator rights, so that Libre Panel itself runs without them. It only reads: it changes no hardware setting.": "Ein kleiner Windows-Dienst liest die Sensoren, die Administratorrechte brauchen, damit Libre Panel selbst ohne sie läuft. Er liest nur: Er ändert keine Einstellung der Hardware.",
     "A solid-state drive is hot from": "Eine SSD gilt als heiß ab",
     "Access token missing or wrong. Open Libre Panel from its window or its tray icon, or with the address that libre-panel editor prints.": "Der Zugangsschlüssel fehlt oder ist falsch. Öffne Libre Panel über sein Fenster oder das Symbol im Infobereich, oder mit der Adresse, die libre-panel editor ausgibt.",
+    "A task \"{name}\" in Task Scheduler is switched off or starts another program; Libre Panel uses its normal start at login instead. To remove the task, run as administrator: schtasks /Delete /TN \"{name}\" /F": "In der Aufgabenplanung gibt es eine Aufgabe „{name}“, die ausgeschaltet ist oder ein anderes Programm startet; Libre Panel nutzt stattdessen seinen normalen Start bei der Anmeldung. Um die Aufgabe zu entfernen, als Administrator ausführen: schtasks /Delete /TN \"{name}\" /F",
     "A theme stays at least": "Ein Theme bleibt mindestens",
     "Add and press Enter": "Eintippen und Enter drücken",
     "Address of the web server": "Adresse des Webservers",

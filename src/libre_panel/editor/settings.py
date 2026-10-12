@@ -585,6 +585,8 @@ class Settings:
             "kind": kind,  # windows, xdg or unsupported
             "enabled": enabled,
             "elevated": autostart.elevated() if kind == "windows" else False,
+            # a task of that name that is off or starts another program (a leftover)
+            "task_hint": autostart.task_hint() if kind == "windows" else "",
             "can_elevate": autostart.can_elevate(),
             "location": autostart.location() if kind != "unsupported" else "",
             "command": cli_command("autostart enable --elevated"),
