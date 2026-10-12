@@ -10,6 +10,7 @@ import { html, useRef, useState } from "../../lib/preact.js";
 import { panelName, stateText } from "../../shell/panel-popover.js";
 import { Segmented, Select, Slider, Toggle } from "../../ui/controls.js";
 import { Popover } from "../../ui/layer.js";
+import { MountedChoice } from "../home/panel.js";
 import { Card, CommitField, Disclosure, SettingRow, Status, usePolling } from "./parts.js";
 import { StartScreenCard } from "./startscreen.js";
 
@@ -200,6 +201,12 @@ function DisplayCard() {
         format=${(value) => `${value} %`}
         onCommit=${choose}
       />
+    <//>
+    <${SettingRow}
+      title=${t("How the panel is mounted")}
+      hint=${t("Libre Panel's screens show in their version for it: Lumen Vertical for Lumen on a bar that stands on end.")}
+    >
+      <${MountedChoice} />
     <//>
     <${SettingRow}
       title=${t("Upside down")}

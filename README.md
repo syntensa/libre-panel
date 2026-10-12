@@ -140,6 +140,14 @@ PC starts, before any app talks to them. Libre Panel draws both in its own look,
 size of your panel, and puts them on it with one click on **Settings → Panel → Start screen**,
 after a question; the factory logo stays on the panel and comes back with another click.
 
+### Bars on end
+
+<img src="docs/images/vertical.png" width="100%" alt="Libre Panel's screens for a bar that stands on end, side by side: Lumen with the track, the time, the load, the fans and the rings; Encore with the cover large and the volume as levels; Nimbus with the weather, the next days and the moon; Almanac with the hours over the minutes; Almanac Analog with a clock face; Arena with the frame rate, CPU, GPU, cores and temperatures">
+
+Mounted your bar upright? Say so on the first start, on *Start* or in *Settings → Panel*:
+every screen then shows in its version for a bar on end, laid out anew, not turned on its
+side. Lumen, Encore, Nimbus, Almanac and Arena each have one.
+
 ### Every panel size
 
 <img src="docs/media/small-panel.gif" width="100%" alt="Libre Default on a 3.5-inch panel: the time, lit rings for CPU and memory that fill, the CPU temperature, disk and network, a CPU history that scrolls, and a small card in the corner that changes from the playing track to the weather">

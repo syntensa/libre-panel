@@ -250,6 +250,29 @@ def gallery(shots: dict[str, Image.Image]) -> Image.Image:
     return img.convert("RGB")
 
 
+VERTICAL = ("lumen", "encore", "nimbus", "almanac", "almanac-analog", "arena")
+
+
+def vertical() -> Image.Image:
+    """The screens of the bars in their versions for a bar on end, side by side."""
+    border = 14
+    shots = [device(render(f"{name}-vertical"), border) for name in VERTICAL]
+    pad = shadow_margin(border)
+    gap, margin = 36 - 2 * pad, 64 - pad
+    w = sum(shot.width for shot in shots) + gap * (len(shots) - 1) + 2 * margin
+    h = shots[0].height + 2 * margin + 54
+    img = background(w, h, glow=(0.5, 1.0))
+    draw = ImageDraw.Draw(img)
+    x = margin
+    for name, shot in zip(VERTICAL, shots, strict=True):
+        img.paste(shot, (x, margin), shot)
+        title = load_theme(find_theme(f"{name}-vertical")).name.removesuffix(" Vertical")
+        text_center(draw, x + shot.width / 2, margin + shot.height - pad + 22, title,
+                    font("Barlow-SemiBold", 30), (226, 232, 240))  # fmt: skip
+        x += shot.width + gap
+    return img
+
+
 def social(bar2x: Image.Image) -> Image.Image:
     """1280x640 for the repository's social preview: Lumen under the name and the promise."""
     w, h = 1280, 640
@@ -734,6 +757,7 @@ def main() -> None:
             (render("studio", 2, gpu), "No GPU sensor", "· the disk takes its ring"),
         ]
     ).save(out / "studio-adapts.png", optimize=True)
+    vertical().save(out / "vertical.png", optimize=True)
     module_sizes().save(out / "module-sizes.png", optimize=True)
     weather_sizes().save(out / "weather-sizes.png", optimize=True)
     looks().save(out / "looks.png", optimize=True)

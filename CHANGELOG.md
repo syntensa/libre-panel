@@ -7,9 +7,15 @@
   rate large with its 1% low, frame time and course, the CPU and the GPU as instruments, every
   core's load and the temperatures. It is the first screen game mode's page offers; until now
   only SPUR II's were ready-made
-- Screens for bars on end (480 × 1920): **Lumen Vertical**, **Encore Vertical**, **Nimbus
-  Vertical**, **Almanac Vertical**, **Almanac Analog Vertical** and **Arena Vertical**, laid out
-  anew for a bar that stands upright, clear of the strip the 9.2" bar's frame hides
+- **Bars on end.** Say how the panel is mounted, upright or on its side: on a first start,
+  on *Start* or in *Settings → Panel* (`device.orientation`). Upright, every screen shows in
+  its version for a bar on end, for the normal theme, the pages and the screens in turn alike;
+  the lists show each screen once, with the picture of the version the panel shows, and
+  *Design* opens that version. Lumen, Encore, Nimbus, Almanac, Almanac Analog and Arena have
+  one each (480 × 1920), laid out anew, clear of the strip the 9.2" bar's frame hides; a theme
+  of your own gets one as `<id>-vertical`
+- Start: the panel's own default (Lumen on a bar) stays in the quick list, right after the
+  theme on the panel
 
 **Fixes**
 - Design → Pages and game mode's card in Settings: the list of screens for a page was one list

@@ -28,7 +28,7 @@ invalid is refused with the reason, and nothing is written.
 
 | Section | What it changes in `config.toml` |
 |---|---|
-| Panel | `[device]` (`model`, `brightness`, `rotate`; under *Advanced* `driver`, `output`, `port`) and `[video]` (`mode`, `fps`, `local_clip`; under *Advanced* `ffmpeg`) |
+| Panel | `[device]` (`model`, `brightness`, `orientation`, `rotate`; under *Advanced* `driver`, `output`, `port`) and `[video]` (`mode`, `fps`, `local_clip`; under *Advanced* `ffmpeg`) |
 | Sensors | `[sensors] providers` (which sources, and their order), `[sensors.librehardwaremonitor]` (`mode`, `url`), `refresh_ms`, and the hardware's names |
 | Services | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
@@ -64,6 +64,7 @@ brightness = 60                # 0-100
 rotate = 0                     # 180: upside down, for a panel mounted the other way
                                # round (also in the tray menu and the app); Design's
                                # preview and the PNG file stay upright
+orientation = ""               # "portrait": a bar that stands on end, see A panel on end
 output = "libre-panel-frame.png"   # frames go here when no panel is used;
                                    # a relative path is inside the settings folder
 port = ""                      # serial panels: found by their USB ids; only if that
@@ -142,6 +143,17 @@ theme = "slate"                # any built-in theme, or a folder in the user the
 - **In the app**, *Start* asks "How should it look?" on a first start (no `theme` in
   `config.toml` yet) with the panel's default first, marked *Default*. Choosing a theme
   there, in the tray's *Theme* menu or in Design writes `theme`.
+
+## A panel on end
+
+`orientation = "portrait"` in `[device]` says the panel stands upright (a bar mounted on
+its end), `"landscape"` that it lies on its side; empty, each theme shows as it is made. Each
+theme is then shown in its version for the way the panel is mounted where it has one: a theme
+named `lumen-vertical` is Lumen's version for a panel on end, so `theme = "lumen"` shows
+Lumen Vertical on an upright bar, for the normal theme, the pages and the screens in turn
+alike. The app asks on a first start and has the choice on *Start* and in *Settings →
+Panel*; its lists show each theme once, by the name it is chosen by. `rotate = 180` turns
+either way upside down.
 
 ## Pages of the panel
 

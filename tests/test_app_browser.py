@@ -2,6 +2,7 @@
 Chromium are missing. CI runs it with the other browser tests (the desktop job)."""
 
 import contextlib
+import re
 import threading
 
 import pytest
@@ -1800,6 +1801,36 @@ def test_pages_of_the_panel(app_url, isolated_home):
         minutes.fill("10")
         minutes.press("Enter")
         waits_for(page, lambda: getattr(settings_config().modes.get("idle"), "minutes", 0) == 10)
+
+
+def test_a_first_start_asks_how_the_panel_is_mounted(app_url, isolated_home):
+    """Upright, each screen shows in its version for a bar on end: once in the list, by its
+    name, with that version's picture and size; Design opens that version, and Start and
+    Settings → Panel switch it back."""
+    routes = {"**/api/app": a_panel_app()}
+    with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
+        page.wait_for_selector(".start.first .theme-card")
+        choice = page.locator(".start-mounted").get_by_role("radio", name="Vertical")
+        choice.click()
+        waits_for(page, lambda: settings_config().device.orientation == "portrait")
+        expect(page.locator(".theme-grid.upright")).to_have_count(1)
+        cards = shown_themes(page)
+        assert "lumen" in cards and not [c for c in cards if c.endswith("-vertical")]
+        lumen = page.locator(".theme-card[data-theme='lumen']")
+        expect(lumen.locator("img")).to_have_attribute("src", re.compile(r"lumen-vertical"))
+        expect(lumen.locator(".theme-card-note")).to_contain_text("480 × 1920")
+        assert cards[-1] == "studio"  # no version for a bar on end: last
+        lumen.locator(".theme-card-main").click()
+        page.wait_for_function("window.libre.store.get().doc?.id === 'lumen-vertical'")
+        page.locator(".tab", has_text="Start").click()
+        page.wait_for_selector(".panel-card")
+        page.locator(".panel-card").get_by_role("radio", name="Horizontal").click()
+        waits_for(page, lambda: settings_config().device.orientation == "landscape")
+        page.goto(f"{app_url}#/settings/panel")
+        row = page.locator(".settings-row", has_text="How the panel is mounted")
+        expect(row.get_by_role("radio", name="Horizontal")).to_have_attribute(
+            "aria-checked", "true"
+        )
 
 
 def test_a_page_lists_the_screens_in_groups(app_url, isolated_home):

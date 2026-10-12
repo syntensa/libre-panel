@@ -148,6 +148,14 @@ passend zur Größe deines Panels, und spielt es mit einem Klick unter **Einstel
 Startbildschirm** auf, nach einer Rückfrage; das Werkslogo bleibt auf dem Panel und kommt mit
 einem weiteren Klick zurück.
 
+### Leisten hochkant
+
+<img src="docs/images/vertical.png" width="100%" alt="Die Screens von Libre Panel für eine Leiste, die hochkant steht, nebeneinander: Lumen mit dem Titel, der Uhrzeit, der Last, den Lüftern und den Ringen; Encore mit großem Cover und der Lautstärke als Pegel; Nimbus mit dem Wetter, den nächsten Tagen und dem Mond; Almanac mit den Stunden über den Minuten; Almanac Analog mit Zifferblatt; Arena mit FPS, CPU, GPU, Kernen und Temperaturen">
+
+Deine Leiste steht hochkant? Sag es beim ersten Start, auf *Start* oder unter *Einstellungen →
+Panel*: Jeder Screen erscheint dann in seiner Fassung dafür, neu angeordnet statt gedreht.
+Lumen, Encore, Nimbus, Almanac und Arena haben je eine.
+
 ### Jede Panelgröße
 
 <img src="docs/media/small-panel.gif" width="100%" alt="Libre Default auf einem 3,5-Zoll-Panel: die Uhrzeit, leuchtende Ringe für CPU und Arbeitsspeicher, die sich füllen, CPU-Temperatur, Laufwerk und Netzwerk, ein scrollender CPU-Verlauf und eine kleine Karte in der Ecke, die vom laufenden Titel zum Wetter wechselt">

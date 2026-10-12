@@ -8,6 +8,7 @@ import { blankTheme, importTheme, openTheme, showOnPanel, startTheme, themeName 
 import { registerCommands, registerProvider } from "../../core/commands.js";
 import { control, usePolled } from "../../core/console.js";
 import { t } from "../../core/i18n.js";
+import { useMounted } from "../../core/orientation.js";
 import { loadUnlock, runUnlock } from "../../core/settings.js";
 import { firstStart, store, useStore } from "../../core/state.js";
 import { html, useEffect, useState } from "../../lib/preact.js";
@@ -17,7 +18,7 @@ import { Segmented } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { toast } from "../../ui/toast.js";
 import { ClipQuestion } from "./clip.js";
-import { PanelCard, PanelStrip, panelModelNow, usePanelModel } from "./panel.js";
+import { MountedChoice, PanelCard, PanelStrip, panelModelNow, usePanelModel } from "./panel.js";
 import { Gallery, ThemeRow, collectionsOf, fitsPanel, startThemes } from "./themes.js";
 import { SequenceCard, SequencePage } from "./sequence.js";
 import { SetupCard } from "./setup.js";
@@ -81,6 +82,7 @@ function StartActions({ children }) {
 }
 
 function useStartThemes() {
+  useMounted(); // the order and the pictures follow how the panel is mounted
   const { themes, models, pages } = useStore((s) => ({ themes: s.themes, models: s.specs?.models || [], pages: s.pages }));
   const { model } = usePanelModel();
   // what the panel shows until a theme is chosen: the default of the panel the themes are shown
@@ -117,6 +119,12 @@ function FirstStart({ focus }) {
       <h1>${t("How should it look?")}</h1>
       <span class="muted">${t("Everything can be changed freely afterwards.")}</span>
     </div>
+    ${model?.shape === "round"
+      ? null
+      : html`<div class="start-mounted">
+          <span>${t("How is your panel mounted?")}</span>
+          <${MountedChoice} big />
+        </div>`}
     <${Gallery} big=${shown.length <= 4} items=${shown} label=${themeLabel} onChoose=${(item) => choose(item, { open: true })} />
     <${StartActions}>
       ${more > 0
@@ -226,7 +234,9 @@ function Launcher({ focus }) {
   // report); the rest is under "All", and a collection has a line of its own under them
   const own = items.filter((item) => !item.collection && !item.special);
   const wanted = items.filter((item) => item.shown || (own.includes(item) && (item.fits || !model)));
-  const quick = (wanted.length ? wanted : own.length ? own : items).slice(0, 5);
+  // the panel's own default (Lumen on a bar) right after the one on the panel
+  const first = (item) => (item.shown ? 0 : item.id === model?.default_theme ? 1 : 2);
+  const quick = (wanted.length ? [...wanted].sort((a, b) => first(a) - first(b)) : own.length ? own : items).slice(0, 5);
   const sets = collectionsOf(items.filter((item) => item.fits || !model));
   return html`<div class="start launcher">
     <div class="start-main">

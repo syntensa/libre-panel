@@ -12,6 +12,7 @@ import { html, useEffect, useRef, useState } from "../../lib/preact.js";
 import { pageName, shownPages } from "../../shell/panel-popover.js";
 import { navigate } from "../../shell/views.js";
 import { NumberField, Select, Toggle } from "../../ui/controls.js";
+import { useMounted, versionFor } from "../../core/orientation.js";
 import { panelModelNow } from "../home/panel.js";
 import { fitsPanel } from "../home/themes.js";
 import { promptDialog } from "../../ui/dialog.js";
@@ -172,6 +173,7 @@ function pageWhen(item) {
 }
 
 function PageCard({ item, current, open }) {
+  useMounted(); // its picture as the panel shows it
   const change = async (what) => {
     try {
       store.set({ pages: await endpoints.setPage(item.id, what) });
@@ -201,7 +203,7 @@ function PageCard({ item, current, open }) {
       : null}
     <button type="button" class="page-card-main" disabled=${!item.theme} onClick=${() => item.theme && open(item)}
       title=${item.theme ? t("Open its theme") : null}>
-      ${item.theme ? html`<img alt="" src=${endpoints.previewUrl(item.theme, 240)} loading="lazy" />` : html`<span class="page-card-blank"></span>`}
+      ${item.theme ? html`<img alt="" src=${endpoints.previewUrl(versionFor(item.theme), 240)} loading="lazy" />` : html`<span class="page-card-blank"></span>`}
       <span class="page-card-text">
         ${switchable ? null : html`<strong>${pageName(item.id)}</strong>`}
         <span class="muted">${note}</span>

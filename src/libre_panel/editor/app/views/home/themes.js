@@ -7,6 +7,7 @@
 import { endpoints } from "../../core/api.js";
 import { t } from "../../core/i18n.js";
 import { html, useEffect, useRef, useState } from "../../lib/preact.js";
+import { mounted, themeEntry, useMounted, versionFor } from "../../core/orientation.js";
 import { panelName } from "../../shell/panel-popover.js";
 import { Icon } from "../../ui/icons.js";
 
@@ -32,15 +33,19 @@ export function startThemes({ themes, models, pages, model, defaultId = null }) 
   // a page of its own that is off (music's, the clock's) keeps nothing: its screen is one like any other
   const kept = (page) => page.id !== "normal" && page.theme && (page.on || !page.own);
   const special = new Set((pages?.pages || []).filter(kept).map((page) => page.theme));
+  const upright = mounted() === "portrait";
   const items = themes.map((theme) => {
     const made = models.find((item) => item.id === theme.model);
-    const size = theme.size ? `${theme.size[0]} × ${theme.size[1]}` : null;
+    // the size the panel shows it at: its version for a bar on end, where it has one
+    const [w, h] = (themeEntry(versionFor(theme.id)) || theme).size || [];
+    const size = w ? `${w} × ${h}` : null;
     const where = [made ? panelName(made) : null, size].filter(Boolean).join(" · ");
     const shown = theme.id === normal;
     return {
       ...theme,
       shown,
       fits: fitsPanel(theme, model),
+      sideways: upright && Boolean(w) && w > h, // on a panel on end, a theme that has no version for it
       collection: typeof theme.collection === "string" ? theme.collection : "",
       special: special.has(theme.id) && !shown,
       isDefault: first && theme.id === defaultId,
@@ -48,7 +53,8 @@ export function startThemes({ themes, models, pages, model, defaultId = null }) 
       own: !theme.builtin && theme.source !== "plugin",
     };
   });
-  const order = (item) => (item.shown || item.isDefault ? 0 : (item.collection ? 20 : 0) + (item.fits ? 0 : 10) + (item.special ? 3 : item.own ? 1 : 2));
+  const order = (item) =>
+    item.shown || item.isDefault ? 0 : (item.collection ? 20 : 0) + (item.fits ? 0 : 10) + (item.sideways ? 5 : 0) + (item.special ? 3 : item.own ? 1 : 2);
   return items.sort((a, b) => order(a) - order(b) || (a.name || a.id).localeCompare(b.name || b.id));
 }
 
@@ -61,8 +67,10 @@ export function collectionsOf(items) {
 
 /** A theme's picture, drawn by the server (it keeps the picture until the theme changes). */
 function Picture({ item, width }) {
-  const [w, h] = item.size || [480, 320];
-  return html`<img src=${endpoints.previewUrl(item.id, width)} alt="" loading="lazy" decoding="async" width=${w} height=${h} />`;
+  useMounted(); // as the panel would show it: its version for a panel on end
+  const shown = themeEntry(versionFor(item.id)) || item;
+  const [w, h] = shown.size || [480, 320];
+  return html`<img src=${endpoints.previewUrl(shown.id, width)} alt="" loading="lazy" decoding="async" width=${w} height=${h} />`;
 }
 
 /**
@@ -107,7 +115,8 @@ export function ThemeRow({ item, onChoose }) {
 }
 
 function Grid({ items, big, onChoose, onEdit, label, name }) {
-  return html`<div class=${`theme-grid${big ? " big" : ""}`} role="list" aria-label=${name || t("Themes")}>
+  const upright = useMounted() === "portrait"; // tall pictures: narrow cards
+  return html`<div class=${`theme-grid${big ? " big" : ""}${upright ? " upright" : ""}`} role="list" aria-label=${name || t("Themes")}>
     ${items.map(
       (item) => html`<div role="listitem" key=${item.id} class="theme-grid-item">
         <${ThemeCard} item=${item} big=${big} label=${label(item)} onChoose=${onChoose} onEdit=${onEdit} />

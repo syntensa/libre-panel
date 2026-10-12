@@ -21,6 +21,7 @@ export const store = createStore({
   route: { view: "home", rest: "" },
   specs: null, // /api/specs
   themes: [], // /api/themes
+  versions: [], // their versions for a panel on end ("lumen-vertical"): shown, not listed
   sensors: [], // /api/sensors: [{key, unit, label}]
   rev: 0, // counts changes of the theme being edited
   doc: null, // {theme, id, builtin, assets}; id null: not saved yet

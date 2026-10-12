@@ -638,6 +638,16 @@
   height: auto;
 }
 
+/* a panel on end: tall pictures in narrow cards */
+.theme-grid.upright,
+.theme-grid.upright.big {
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+
+.theme-grid.upright .theme-card-picture img {
+  max-height: 440px;
+}
+
 .theme-card-text {
   display: flex;
   flex-wrap: wrap; /* in a narrow card the note goes below the name */
@@ -919,4 +929,19 @@
   .sequence-error {
     grid-column: 2;
   }
+}
+
+/* how the panel is mounted: on a first start a question with large choices */
+.start-mounted {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: -6px 0 18px;
+  color: var(--text-2);
+}
+
+.mounted-choice.big button {
+  padding: 8px 18px;
+  font-size: 14px;
 }

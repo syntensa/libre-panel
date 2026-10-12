@@ -323,6 +323,13 @@ light. Each is plain JSON; none names a piece of hardware.
 | `round-report` | 8.8" / 9.2" bar | what the `memory` service shows after a game (`report_theme`), in three cards: the round (the game's name, with its logo where the `game` service kept one, when and how long it was, the average frame rate large against the average of the earlier rounds, the 1% low, the frame time and who held the rate down as one bar, the GPU's share from the left and the CPU's from the right, the frame cap's between them), the share of the round at each frame rate with a tick where the earlier rounds' average stands, and the highest temperatures, power and video memory against their average. It reads the `report.*` readings ([Plugins](PLUGINS.md#the-round-report)), so its headings follow the language of the panel; a first round says so and shows no comparison. SPUR II's report is `spur-round-report` |
 | `libre-default` | 3.5" | two lit rings, the CPU's temperature, the disk and the network, a history that scrolls past at SPUR II's pace, and a small slot in the corner: what plays, the weather or the day |
 
+Each screen of the bars has a version for a bar on end (480×1920): `lumen-vertical`,
+`encore-vertical`, `nimbus-vertical`, `almanac-vertical`, `almanac-analog-vertical` and
+`arena-vertical`, laid out anew, clear of the strip the 9.2" bar's frame hides on the left. A
+theme of your own gets one the same way: a theme named `<id>-vertical` is shown in place of
+`<id>` where `device.orientation = "portrait"` ([a panel on
+end](CONFIGURATION.md#a-panel-on-end)), and the lists show the two as one.
+
 A `config.toml` without a `theme` shows `lumen` on the 1920×480 bars and `libre-default` on
 every other panel ([the theme on the panel](CONFIGURATION.md#the-theme-on-the-panel)).
 

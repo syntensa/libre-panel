@@ -75,6 +75,7 @@ def test_the_settings_are_the_config_with_its_defaults_filled_in(server):
         "driver": "auto",
         "brightness": 60,
         "rotate": 0,
+        "orientation": "",
         "output": "libre-panel-frame.png",
         "port": "",
     }
@@ -948,6 +949,7 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
 
     names = {
         "device.model", "device.driver", "device.brightness", "device.rotate", "device.port",
+        "device.orientation",
         "video.mode", "video.fps", "video.local_clip", "video.clip_asked", "refresh_ms",
         "sensors.providers",
         "sensors.librehardwaremonitor.mode", "sensors.librehardwaremonitor.url",

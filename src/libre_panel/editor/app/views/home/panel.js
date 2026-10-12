@@ -7,12 +7,14 @@ import { appAction } from "../../core/app.js";
 import { endpoints } from "../../core/api.js";
 import { useLivePicture } from "../../core/console.js";
 import { formatNumber, t } from "../../core/i18n.js";
+import { themeEntry, useMounted, versionFor } from "../../core/orientation.js";
+import { saveSettings } from "../../core/settings.js";
 import { setPref, store, useStore } from "../../core/state.js";
 import { runtime } from "../../core/stats.js";
 import { html, useRef, useState } from "../../lib/preact.js";
 import { modeName, panelName, stateText } from "../../shell/panel-popover.js";
 import { navigate } from "../../shell/views.js";
-import { Slider, Toggle } from "../../ui/controls.js";
+import { Segmented, Slider, Toggle } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { Popover } from "../../ui/layer.js";
 
@@ -174,20 +176,37 @@ function Picture({ app, theme, size }) {
           : t("There is no picture yet.");
   }
   // without the app a theme's own picture (the server draws it), else what the panel shows
-  const src = running ? live.src : theme ? endpoints.previewUrl(theme, 960) : null;
+  const src = running ? live.src : theme ? endpoints.previewUrl(versionFor(theme), 960) : null;
   return html`<div class="panel-picture" style=${{ aspectRatio: ratio }}>
     ${src ? html`<img src=${src} alt=${running ? t("What the panel shows now") : t("The theme on the panel")} />` : null}
     ${note ? html`<p class="panel-picture-note">${note}</p>` : null}
   </div>`;
 }
 
-/** The panel at a glance: its state, what it shows, and pause, brightness, upside down. */
+/** How the panel is mounted: on its side or on end (config.toml's device.orientation). The
+ * screens show in their version for it, Lumen Vertical for Lumen on a bar on end. */
+export function MountedChoice({ big = false }) {
+  const way = useMounted() || "landscape";
+  return html`<${Segmented}
+    class=${big ? "mounted-choice big" : "mounted-choice"}
+    label=${t("How the panel is mounted")}
+    value=${way}
+    onChange=${(value) => value !== way && saveSettings({ "device.orientation": value })}
+    options=${[
+      { value: "landscape", icon: "landscape", label: t("Horizontal") },
+      { value: "portrait", icon: "portrait", label: t("Vertical") },
+    ]}
+  />`;
+}
+
+/** The panel at a glance: its state, what it shows, and pause, brightness, how it is mounted
+ * and upside down. */
 export function PanelCard() {
-  const { app, themes } = useStore((s) => ({ app: s.app, themes: s.themes }));
+  const { app } = useStore((s) => ({ app: s.app, themes: s.themes, versions: s.versions }));
   const { connected } = usePanelModel();
   const running = app.available && !app.quit;
   const shown = shownTheme(app);
-  const size = themes.find((item) => item.id === shown)?.size;
+  const size = themeEntry(versionFor(shown))?.size;
   const summary = app.available ? panelSummary(app, connected, shown) : null;
   const paused = app.panel?.state === "paused";
   return html`<section class="panel-card" aria-label=${t("Panel")}>
@@ -203,9 +222,9 @@ export function PanelCard() {
       </button>
     </div>
     <${Picture} app=${app} theme=${shown} size=${size} />
-    ${running
-      ? html`<div class="panel-card-controls">
-          <button type="button" class="btn" onClick=${() => appAction(paused ? "resume" : "pause")}>
+    <div class="panel-card-controls">
+      ${running
+        ? html`<button type="button" class="btn" onClick=${() => appAction(paused ? "resume" : "pause")}>
             <${Icon} name=${paused ? "play" : "pause"} size=${14} /> ${paused ? t("Resume panel") : t("Pause panel")}
           </button>
           <label class="panel-card-brightness">
@@ -214,13 +233,16 @@ export function PanelCard() {
             <${Slider} label=${t("Brightness")} value=${app.brightness ?? 0} step=${5} format=${(v) => `${v} %`}
               onCommit=${(value) => appAction("brightness", value)} />
           </label>
-          <span class="grow"></span>
-          <label class="panel-card-flip">
+          <span class="grow"></span>`
+        : html`<span class="grow"></span>`}
+      <${MountedChoice} />
+      ${running
+        ? html`<label class="panel-card-flip">
             <span>${t("Upside down")}</span>
             <${Toggle} label=${t("Upside down")} checked=${app.upside_down} disabled=${app.upside_down === null}
               onChange=${(on) => appAction("upside_down", on)} />
-          </label>
-        </div>`
-      : null}
+          </label>`
+        : null}
+    </div>
   </section>`;
 }

@@ -1625,7 +1625,12 @@
     "Minutes without input": "Minuten ohne Eingabe",
     "Mute": "Stumm",
     "For other panels": "Für andere Panels",
-    "Made for this page": "Für diese Seite gemacht"
+    "Made for this page": "Für diese Seite gemacht",
+    "How the panel is mounted": "Wie das Panel eingebaut ist",
+    "Horizontal": "Quer",
+    "Vertical": "Hochkant",
+    "How is your panel mounted?": "Wie ist dein Panel eingebaut?",
+    "Libre Panel's screens show in their version for it: Lumen Vertical for Lumen on a bar that stands on end.": "Die Screens von Libre Panel erscheinen in ihrer Fassung dafür: Lumen Vertical statt Lumen auf einer Leiste, die hochkant steht."
   },
   "fields": {
     "align": "Ausrichtung",

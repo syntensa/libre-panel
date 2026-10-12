@@ -1118,6 +1118,26 @@ def find_theme(name: str) -> Path:
     raise ThemeError(f"theme {name!r} not found")
 
 
+VERTICAL = "-vertical"  # "lumen-vertical" is Lumen laid out for a panel that stands on end
+
+
+def theme_for(name: str, orientation: str) -> str:
+    """The version of the theme ``name`` for a panel mounted ``orientation`` ("landscape",
+    "portrait"; "" leaves it to the theme): "lumen-vertical" for "lumen" on a panel that
+    stands on end and the other way round, where that version is installed; else ``name``."""
+    if orientation == "portrait" and not name.endswith(VERTICAL):
+        other = name + VERTICAL
+    elif orientation == "landscape" and name.endswith(VERTICAL):
+        other = name[: -len(VERTICAL)]
+    else:
+        return name
+    try:
+        find_theme(other)
+    except ThemeError:
+        return name
+    return other
+
+
 def list_themes() -> list[dict[str, Any]]:
     found: dict[str, dict[str, Any]] = {}
     for base in reversed(_search_dirs()):

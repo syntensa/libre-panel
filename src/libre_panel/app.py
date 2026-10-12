@@ -32,7 +32,14 @@ from libre_panel.sensors.base import SensorHub, SensorProvider, Snapshot, create
 from libre_panel.sensors.fan_names import FanNames
 from libre_panel.sequence import Rotation
 from libre_panel.theme.defaults import default_theme, panel_model
-from libre_panel.theme.model import THEME_FILENAME, Theme, ThemeError, find_theme, load_theme
+from libre_panel.theme.model import (
+    THEME_FILENAME,
+    Theme,
+    ThemeError,
+    find_theme,
+    load_theme,
+    theme_for,
+)
 
 log = logging.getLogger(__name__)
 
@@ -291,7 +298,12 @@ def _theme_name(
 ) -> str:
     """A theme a service shows, else the active mode's theme, else the step of the screens in
     turn that is due (``rotation`` follows them), else config.toml's; where that names none,
-    the panel's own ``default``."""
+    the panel's own ``default``. Each in its version for the way the panel is mounted
+    (``device.orientation``: Lumen Vertical for Lumen on a panel on end)."""
+    return theme_for(_named(config, host, default, rotation), config.device.orientation)
+
+
+def _named(config: Config, host: Any, default: str | None, rotation: Rotation | None) -> str:
     if host is not None:
         if host.theme:
             return host.theme
@@ -515,7 +527,9 @@ class MainLoop:
         self.worked_out: tuple[Any, str] | None = None  # the default for a changed model or driver
         panel = panel_model(config.device, self.reported)
         self.default = status.default_theme = default_theme(panel)
-        named = config.theme if config.theme_given else self.default
+        named = theme_for(
+            config.theme if config.theme_given else self.default, config.device.orientation
+        )
         # the screens in turn, on the loop's clock
         self.rotation = Rotation(clock)
         self.pages = modes.PageSwitch(clock)  # music's page, the idle clock's

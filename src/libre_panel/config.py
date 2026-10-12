@@ -70,6 +70,10 @@ driver = "auto"
 brightness = 60
 # 180 shows the picture upside down, for a panel mounted the other way round.
 rotate = 0
+# How the panel is mounted: "landscape", or "portrait" for a bar that stands on end. Each
+# theme is then shown in its version for it where it has one (Lumen as Lumen Vertical).
+# Empty: as each theme is made.
+orientation = ""
 # Where frames go when no panel is used (relative = in this settings folder).
 output = "libre-panel-frame.png"
 # Serial panels (3.5", 5", 2.1" ...) are found by their USB ids. Only if that
@@ -260,6 +264,9 @@ class DeviceConfig:
     driver: str = "auto"
     brightness: int = 60
     rotate: int = 0  # 180: upside down, for a panel mounted the other way round
+    # how the panel is mounted: "landscape" or "portrait" (on end) shows each theme in its
+    # version for it ("lumen-vertical" for "lumen"); "": as the theme is made
+    orientation: str = ""
     output: str = "libre-panel-frame.png"
     port: str = ""  # serial panels: the port; empty = found by its USB ids
     video: VideoConfig = field(default_factory=VideoConfig)
@@ -456,6 +463,10 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     cfg.device.rotate = _expect(dev.get("rotate", cfg.device.rotate), int, "device.rotate")
     if cfg.device.rotate not in (0, 180):
         raise ConfigError("device.rotate: must be 0, or 180 for upside down")
+    orientation = _expect(dev.get("orientation", cfg.device.orientation), str, "device.orientation")
+    if orientation not in ("", "landscape", "portrait"):
+        raise ConfigError('device.orientation: "landscape", "portrait" or ""')
+    cfg.device.orientation = orientation
     cfg.device.output = _expect(dev.get("output", cfg.device.output), str, "device.output")
     cfg.device.port = _expect(dev.get("port", cfg.device.port), str, "device.port").strip()
     cfg.device.video = _parse_video(_expect(data.get("video", {}), dict, "video"))

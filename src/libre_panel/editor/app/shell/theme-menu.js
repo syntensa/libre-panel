@@ -5,6 +5,7 @@ import { blankTheme, confirmDiscard, exportTheme, importTheme, openTheme, save, 
 import { endpoints } from "../core/api.js";
 import { clone, setSelection } from "../core/doc.js";
 import { t } from "../core/i18n.js";
+import { versionFor } from "../core/orientation.js";
 import { store, useStore } from "../core/state.js";
 import { html, useEffect, useMemo, useRef, useState } from "../lib/preact.js";
 import { openDialog } from "../ui/dialog.js";
@@ -37,13 +38,13 @@ function ThemeList({ onClose }) {
           type="button"
           role="menuitem"
           key=${theme.id}
-          class=${`theme-row${theme.id === current ? " current" : ""}`}
+          class=${`theme-row${versionFor(theme.id) === current ? " current" : ""}`}
           onClick=${() => {
             onClose();
-            if (theme.id !== current) openTheme(theme.id);
+            if (versionFor(theme.id) !== current) openTheme(theme.id);
           }}
         >
-          <img src=${endpoints.previewUrl(theme.id, 240)} alt="" loading="lazy" />
+          <img src=${endpoints.previewUrl(versionFor(theme.id), 240)} alt="" loading="lazy" />
           <span class="theme-row-text">
             <span class="theme-row-name">${theme.name || theme.id}</span>
             <span class="theme-row-note">${theme.id === active ? t("shown on the panel") : sourceText(theme)} · <span class="mono">${theme.id}</span></span>

@@ -6,6 +6,7 @@ import { toast, toastError } from "../ui/toast.js";
 import { endpoints } from "./api.js";
 import { clone, commit, docSerial, markClean, openDoc, setSelection, touch, updateDoc } from "./doc.js";
 import { t } from "./i18n.js";
+import { isVersion, versionFor } from "./orientation.js";
 import { store } from "./state.js";
 
 export const THEME_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -20,7 +21,10 @@ export const slug = (text) =>
 
 export async function refreshThemes() {
   try {
-    store.set({ themes: await endpoints.themes() });
+    // a theme's version for a panel on end ("lumen-vertical") is not listed: it is chosen as
+    // its theme, and shown in its place where the panel stands on end
+    const all = await endpoints.themes();
+    store.set({ themes: all.filter((item) => !isVersion(item, all)), versions: all.filter((item) => isVersion(item, all)) });
   } catch (error) {
     toastError(error);
   }
@@ -38,7 +42,8 @@ export async function refreshPages() {
 export const normalTheme = () => store.get().pages?.pages?.[0]?.theme ?? null;
 
 /** A theme's name from the theme list (its id where it has none). */
-export const themeName = (id) => store.get().themes.find((theme) => theme.id === id)?.name || id;
+export const themeName = (id) =>
+  [...store.get().themes, ...(store.get().versions || [])].find((theme) => theme.id === id)?.name || id;
 
 /** The images and fonts in the open theme's folder. */
 export async function refreshAssets() {
@@ -70,8 +75,9 @@ export async function confirmDiscard() {
 export async function openTheme(id, { page, ask = true } = {}) {
   if (ask && !(await confirmDiscard())) return false;
   try {
-    const data = await endpoints.theme(id);
-    openDoc({ theme: data.theme, id, builtin: data.builtin });
+    const shown = versionFor(id); // the version the panel shows (Lumen Vertical on a bar on end)
+    const data = await endpoints.theme(shown);
+    openDoc({ theme: data.theme, id: shown, builtin: data.builtin });
     store.set({ page: page === undefined ? pageOf(id) : page });
     refreshAssets();
     if (data.warnings?.length) toast(t("Warning: {text}", { text: data.warnings.join(" · ") }), { kind: "warn" });
