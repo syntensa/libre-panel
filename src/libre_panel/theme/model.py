@@ -100,6 +100,10 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
     },
     "text": {
         "text": ("text", "Label"),
+        # Libre Panel's own words in the panel's language ("Nothing playing" is "Es läuft
+        # nichts" in German); a text it does not know stays as it is
+        "translate": ("bool", False),
+        "uppercase": ("bool", False),  # in capitals, as a clock's date can be
         **_text_style(False),
         "glow_area": ("box?", None),  # [x, y, w, h]: a lit text's glow stays inside
     },
@@ -126,6 +130,9 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "scale": ("enum:linear|sqrt|log", "linear"),
         "segments": ("int", 0),
         "segment_gap": ("int", 2),
+        # segments that rise as levels on a mixer, as the volume's message shows it: the first
+        # this share of the bar's thickness, the last all of it (0: all of it; flat finish)
+        "rising": ("number", 0),
         "smooth": ("bool", True),
         "color_rules": ("rules", []),
         "glow_area": ("box?", None),  # [x, y, w, h]: a lit bar's glow stays inside
@@ -203,6 +210,10 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "face": ("color?", "#1f2937"),
         "marks": ("color?", "#8a97a8"),
         "seconds": ("bool", True),
+        # the second hand: jumps on the second (tick), moves to it in ``digits_seconds`` as a
+        # clock's rolling digits do (glide), or goes round without stopping (sweep)
+        "hand": ("enum:tick|glide|sweep", "tick"),
+        "digits_seconds": ("number", 0.42),
     },
     # The days, hours or minutes until a date: "2026-12-24", "2026-12-24 18:00",
     # or "12-24" for every year.
@@ -243,6 +254,9 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "fit": ("enum:stretch|contain|cover", "stretch"),  # into w x h
         "align": ("enum:left|center|right", "center"),  # contain: where it stands in w x h
         "radius": ("int", 0),
+        # blurred by this radius (px): a backdrop of its colours, as an album cover behind
+        # what plays; it fills its box on any panel (0: sharp)
+        "blur": ("int", 0),
         # more pictures for a slideshow, one per line ("photos/*.jpg" takes a folder)
         "slides": ("text", ""),
         "seconds": ("int", 10),  # per picture
@@ -398,7 +412,7 @@ PRIMARY_FIELDS: dict[str, tuple[str, ...]] = {
     "gauge": ("sensor", "finish", "color", "smooth", "color_rules"),
     "graph": ("sensor", "finish", "color", "fill", "seconds"),
     "clock": ("format", "timezone", "color", "font_size"),
-    "analog": ("timezone", "color", "color2", "seconds"),
+    "analog": ("timezone", "hand", "color", "color2", "seconds"),
     "countdown": ("target", "part", "color", "font_size"),
     "moon": ("color", "color2", "mirror"),
     "image": ("src", "fit", "slides", "seconds"),
@@ -714,9 +728,11 @@ def normalize_widget(
         raise ThemeError(f"{where}.opacity: must be between 0 and 1")
     if not 0 <= widget["glow"] <= 1:
         raise ThemeError(f"{where}.glow: must be between 0 and 1")
-    for key in ("glow_radius", "shadow_blur", "backdrop_blur"):
+    for key in ("glow_radius", "shadow_blur", "backdrop_blur", "blur"):
         if key in widget and not 0 <= widget[key] <= BLUR_MAX:
             raise ThemeError(f"{where}.{key}: must be between 0 and {BLUR_MAX}")
+    if wtype == "bar" and not 0 <= widget["rising"] <= 1:
+        raise ThemeError(f"{where}.rising: must be between 0 and 1")
     if wtype == "fan" and widget["max_rpm"] <= 0:
         raise ThemeError(f"{where}.max_rpm: must be above 0")
     if not widget["id"]:

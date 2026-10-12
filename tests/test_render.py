@@ -35,7 +35,8 @@ def test_builtin_themes_render(name):
     # every visible widget, but those whose needs say "not now" (Studio's calendar sheet)
     shown = {w["id"] for w in theme.widgets if w["visible"] and not Renderer._missing(w, snapshot)}
     assert set(boxes) == shown
-    assert len(shown) >= 0.8 * len(theme.widgets)
+    # (Encore keeps a few parts for when nothing plays and for a pause: a quarter at most)
+    assert len(shown) >= 0.75 * len(theme.widgets)
 
 
 def test_rendering_is_deterministic_with_fixed_time():

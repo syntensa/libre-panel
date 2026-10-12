@@ -368,7 +368,7 @@ function ModuleInspector({ widget }) {
       <${DetailsHead} title=${kindName(widget.module)} onBack=${() => setPage("main")} />
       <div class="inspector-body">
         <${Section} title=${t("Shows")}>
-          ${widget.module !== "text" && widget.module !== "clock" && widget.module !== "date"
+          ${!["text", "clock", "date", "moon", "outlook"].includes(widget.module)
             ? html`<${Field} label=${t("Title")}><${TextField} label=${t("Title")} value=${widget.title} placeholder=${t("automatic")} onChange=${change("title")} /><//>`
             : null}
           ${info.sources.length

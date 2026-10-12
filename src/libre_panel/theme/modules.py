@@ -975,6 +975,112 @@ def _forecast(b: _Build, x: float, y: float, w: float, h: float, mode: str,
             widget["needs"] = f"{key}.code"
 
 
+def build_outlook(b: _Build, _src: Source) -> None:
+    """The next days, today first, at most a week: each with its name, a symbol that moves,
+    the high and the low, and the chance of rain. Side by side in a long module, one under
+    the other in a tall or big one. While there is no weather a hint says where it is set."""
+    b.card()
+    icon = min(b.iw, b.ih) * 0.24
+    b.needs = "!weather.day.0.code"
+    b.icon("idle-icon", "partly", b.ix + (b.iw - icon) / 2, b.iy + b.ih / 2 - icon * 0.9, icon,
+           b.c("text3"))  # fmt: skip
+    hint = t("The days ahead show here once the weather is on: Settings, Weather and place")
+    first, colon, where = hint.partition(": ")  # where it is set on a line of its own
+    for n, line in enumerate((first + colon.strip(), where) if colon else (hint,)):
+        b.add("text", f"idle-{n}", x=round(b.ix + b.iw / 2), text=line, color=b.c("text3"),
+              align="center", max_width=round(b.iw * 0.92), fit="shrink", tabular=False,
+              **b._text_fields(b.ts, b.iy + b.ih / 2 + icon * 0.35 + n * b.ts * 1.6,
+                               "text_font"))  # fmt: skip
+    b.needs = ""
+    clouds = b.module.get("color") or b.c("text2")
+    rain = b.c("gpu")
+    rows = b.aspect <= 0.72 or (b.large and b.ih >= b.ts * 16 and b.aspect < 2.2)
+    if rows:
+        count = int(_clamp(b.ih // (b.ts * 2.4), 1, 7))
+    else:
+        count = int(_clamp(b.iw // max(b.ts * 4.6, b.ih * 0.36), 1, 7))
+    for i in range(count):
+        key = f"weather.day.{i}"
+        first = len(b.out)
+        if rows:
+            _outlook_row(b, i, key, count, clouds, rain)
+        else:
+            _outlook_column(b, i, key, count, clouds, rain)
+        for widget in b.out[first:]:  # a day only while it is known
+            own = widget.get("needs", "")
+            widget["needs"] = f"{key}.code,{own}" if own else f"{key}.code"
+
+
+def _outlook_row(b: _Build, i: int, key: str, count: int, clouds: str, rain: str) -> None:
+    """A day as a row: its name, its symbol, the chance of rain, the low and the high."""
+    row = b.ih / count
+    mid = b.iy + row * (i + 0.5)
+    size = min(row * 0.42, b.ts * 1.5, b.iw * 0.08)
+    name = min(b.ts * 1.15, row * 0.4)
+    if i:
+        b.add("rect", f"d{i}-rule", x=round(b.ix), y=round(b.iy + row * i), w=round(b.iw), h=1,
+              color=faded(b.c("line"), 0.7))  # fmt: skip
+    b.value(f"d{i}-name", f"{key}.name", "{value}", b.ix, mid - CAP * name / 2, name,
+            color=b.c("text2"), width=b.iw * 0.26, font="text_font", tabular=False,
+            fallback="")  # fmt: skip
+    edge = min(row * 1.15, b.iw * 0.16)
+    b.add("symbol", f"d{i}-symbol", x=round(b.ix + b.iw * 0.3 - edge / 2), y=round(mid - edge / 2),
+          size=max(8, round(edge)), sensor=f"{key}.code", color=clouds,
+          moving=b.module["moving"], offset=round(i * 1.7, 2))  # fmt: skip
+    small = min(b.ts, row * 0.36)
+    b.value(f"d{i}-rain", f"{key}.rain", "{value:.0f}%", b.ix + b.iw * 0.42,
+            mid - CAP * small / 2, small, color=rain, width=b.iw * 0.1, font="text_font",
+            hide_if_missing=True)  # fmt: skip
+    thick = max(2, round(b.ts * 0.3))
+    b.add(
+        "bar", f"d{i}-rain-bar", x=round(b.ix + b.iw * 0.53), y=round(mid - thick / 2),
+        w=max(4, round(b.iw * 0.14)), h=thick, sensor=f"{key}.rain", min=0, max=100, color=rain,
+        color2=None, background=b.c("track"), radius=thick // 2, hide_if_missing=True,
+    )  # fmt: skip
+    b.value(f"d{i}-low", f"{key}.low", "{value:.0f}°", b.ix + b.iw * 0.8, mid - CAP * size / 2,
+            size * 0.9, color=b.c("text3"), align="right", width=b.iw * 0.18)  # fmt: skip
+    b.value(f"d{i}-high", f"{key}.high", "{value:.0f}°", b.ix + b.iw, mid - CAP * size / 2,
+            size, align="right", width=b.iw * 0.18)  # fmt: skip
+
+
+def _outlook_column(b: _Build, i: int, key: str, count: int, clouds: str, rain: str) -> None:
+    """A day as a column: its name, its symbol, the high, the low, the chance of rain."""
+    col = b.iw / count
+    cx = b.ix + col * (i + 0.5)
+    name = min(b.ts * 1.1, col * 0.2)
+    b.value(f"d{i}-name", f"{key}.name", "{value}", cx, b.iy, name, color=b.c("text2"),
+            align="center", width=col * 0.92, font="text_font", tabular=False,
+            fallback="")  # fmt: skip
+    edge = min(col * 0.7, b.ih * 0.34)
+    top = b.iy + CAP * name + b.ih * 0.06
+    b.add("symbol", f"d{i}-symbol", x=round(cx - edge / 2), y=round(top), size=max(8, round(edge)),
+          sensor=f"{key}.code", color=clouds, moving=b.module["moving"],
+          offset=round(i * 1.7, 2))  # fmt: skip
+    size = min(col * 0.26, b.ih * 0.13)
+    top += edge + b.ih * 0.05
+    b.value(f"d{i}-high", f"{key}.high", "{value:.0f}°", cx, top, size, align="center",
+            width=col * 0.9)  # fmt: skip
+    top += CAP * size + b.ih * 0.05
+    low = size * 0.72
+    b.value(f"d{i}-low", f"{key}.low", "{value:.0f}°", cx, top, low, color=b.c("text3"),
+            align="center", width=col * 0.9)  # fmt: skip
+    top += CAP * low + b.ih * 0.07
+    small = min(b.ts * 0.95, col * 0.17)
+    if top + CAP * small + b.ih * 0.05 > b.iy + b.ih:  # no room for the chance of rain
+        return
+    b.value(f"d{i}-rain", f"{key}.rain", "{value:.0f}%", cx, top, small, color=rain,
+            align="center", width=col * 0.9, font="text_font", hide_if_missing=True)  # fmt: skip
+    thick = max(2, round(b.ts * 0.3))
+    track = top + CAP * small + b.ih * 0.04
+    if track + thick <= b.iy + b.ih:
+        b.add(
+            "bar", f"d{i}-rain-bar", x=round(cx - col * 0.3), y=round(track),
+            w=max(4, round(col * 0.6)), h=thick, sensor=f"{key}.rain", min=0, max=100,
+            color=rain, color2=None, background=b.c("track"), radius=thick // 2,
+            hide_if_missing=True,
+        )  # fmt: skip
+
+
 _WEATHER_DETAILS = (
     ("apparent_temperature", "temperature", "{value:.0f}°"),
     ("humidity", "humidity", "{value:.0f}%"),
@@ -1095,12 +1201,22 @@ def _sun(b: _Build, x: float, y: float, w: float, h: float, details: bool = Fals
                 color=b.c("text2"))  # fmt: skip
 
 
-def _moon(b: _Build, x: float, y: float, w: float, h: float, details: bool = False) -> None:
+def build_moon(b: _Build, _src: Source) -> None:
+    """The moon as it is lit tonight, large: its phase, how much of it is lit, and the days
+    until the next full moon and new moon. It needs no place."""
+    b.card()
+    _moon(b, b.ix, b.iy, b.iw, b.ih, details=True, more=True)
+
+
+def _moon(b: _Build, x: float, y: float, w: float, h: float, details: bool = False,
+          more: bool = False) -> None:  # fmt: skip
     beside = w / max(1, h) >= 1.2 and w >= b.ts * 14
     lines = [("name", "moon.name", "{value}", 1.25, "text"),
              ("lit", "moon.illumination", t("{value:.0f}% lit"), 1.0, "text2")]  # fmt: skip
     if details:
         lines.append(("full", "moon.full_in", t("Full moon in {value:.0f} days"), 0.95, "text3"))
+    if more:
+        lines.append(("new", "moon.new_in", t("New moon in {value:.0f} days"), 0.95, "text3"))
     block = sum(CAP * b.ts * scale for *_rest, scale, _c in lines) + b.ts * 0.9 * (len(lines) - 1)
     if beside:
         disc = min(h * 0.82, w * 0.38)
@@ -1131,7 +1247,7 @@ def _face(b: _Build, name: str, x: float, y: float, d: float, zone: str = "") ->
         "analog", name, x=round(x), y=round(y), w=round(d), h=round(d), timezone=zone,
         color=b.c("text"), color2=b.c("accent") if not b.module.get("color") else b.tint("accent"),
         face=mix(b.c("surface"), b.c("track"), 0.7) if b.card_on else b.c("surface"),
-        marks=b.c("text3"), seconds=d >= 90,
+        marks=b.c("text3"), seconds=d >= 90, hand="glide",
         glow=round(0.15 * b.glow, 2), glow_radius=max(2, round(d * 0.03)),
     )  # fmt: skip
 
@@ -1366,6 +1482,77 @@ def build_music(b: _Build, _src: Source) -> None:
     b.label("idle", t("Nothing playing"), b.ix + b.iw / 2, b.iy + b.ih / 2 + icon * 0.45, b.ts,
             align="center", width=b.iw)  # fmt: skip
     b.needs = ""
+
+
+def build_volume(b: _Build, _src: Source) -> None:
+    """The volume: a speaker, the level in percent, and levels that rise as on a mixer (as
+    the volume's message shows them); muted, a crossed speaker and the word. Upright in a
+    tall module."""
+    b.card()
+    color = b.tint("accent")
+    tall = b.aspect <= 0.72
+    if tall:
+        size = min(b.iw * 0.34, b.ih * 0.12)
+        icon = size * 0.9
+        cx = b.ix + b.iw / 2
+        b.icon("icon", "volume", cx - icon / 2, b.iy, icon, b.c("text2"))
+        b.out[-1]["needs"] = "audio.muted!=1"
+        b.icon("muted-icon", "mute", cx - icon / 2, b.iy, icon, b.c("crit"))
+        b.out[-1]["needs"] = "audio.muted=1"
+        top = b.iy + icon + b.ts * 0.9
+        b.value("value", "audio.volume", "{value:.0f}%", cx, top, size, align="center",
+                width=b.iw, needs="audio.muted!=1")  # fmt: skip
+        b.label("muted", t("Muted"), cx, top + CAP * (size - b.ts) / 2, b.ts, color=b.c("crit"),
+                align="center", width=b.iw)  # fmt: skip
+        b.out[-1]["needs"] = "audio.muted=1"
+        top += CAP * size + b.ts * 1.2
+        _levels(b, b.ix + b.iw * 0.2, top, b.iw * 0.6, b.iy + b.ih - top, color, upright=True)
+        return
+    size = min(b.ih * 0.26, b.iw * 0.09)
+    label = max(8, min(size * 0.42, b.ts * 1.4))
+    icon = size * 0.86
+    cap = b.iy
+    b.icon("icon", "volume", b.ix, cap + CAP * size / 2 - icon / 2, icon, b.c("text2"))
+    b.out[-1]["needs"] = "audio.muted!=1"
+    b.icon("muted-icon", "mute", b.ix, cap + CAP * size / 2 - icon / 2, icon, b.c("crit"))
+    b.out[-1]["needs"] = "audio.muted=1"
+    title = b.module["title"] or t("Volume")
+    unit = label * 1.15
+    unit_w = _width_per_size(b.style["text_font"], "%") * unit
+    room = b.iw - icon * 1.4 - _width_per_size(b.style["display_font"], "100") * size - unit_w
+    b.label("title", title, b.ix + icon * 1.4, cap + CAP * (size - label) / 2, label,
+            width=max(8, room - b.ts))  # fmt: skip
+    right = b.ix + b.iw
+    b.value("value", "audio.volume", "{value:.0f}", right - unit_w - size * 0.08, cap, size,
+            align="right", needs="audio.muted!=1")  # fmt: skip
+    b.add("text", "unit", x=round(right), text="%", color=b.c("text3"), align="right",
+          tabular=False, needs="audio.muted!=1",
+          **b._text_fields(unit, cap + CAP * (size - unit), "text_font"))  # fmt: skip
+    b.label("muted", t("Muted"), right, cap + CAP * (size - label) / 2, label, color=b.c("crit"),
+            align="right", width=max(8, room))  # fmt: skip
+    b.out[-1]["needs"] = "audio.muted=1"
+    top = cap + CAP * size + max(b.ts * 0.9, b.ih * 0.12)
+    _levels(b, b.ix, top, b.iw, b.iy + b.ih - top, color)
+
+
+def _levels(b: _Build, x: float, y: float, w: float, h: float, color: str,
+            upright: bool = False) -> None:  # fmt: skip
+    """The volume as levels: segments rising from a fifth to all of the bar's thickness
+    (upright: plain segments up a column)."""
+    if w < 8 or h < 4:
+        return
+    length = h if upright else w
+    across = w if upright else h
+    count = int(_clamp(length / max(5.0, across * 0.3 if not upright else across * 0.16), 8, 40))
+    gap = max(1, round(length / count * 0.3))
+    b.add(
+        "bar", "levels", x=round(x), y=round(y), w=max(4, round(w)), h=max(4, round(h)),
+        sensor="audio.volume", min=0, max=100, color=b.deep(color), color2=color,
+        background=b.c("track"), radius=max(1, round(min(length / count, across) * 0.12)),
+        direction="up" if upright else "right", segments=count, segment_gap=gap,
+        rising=0 if upright else 0.2, glow=round(0.5 * b.glow, 2),
+        glow_radius=max(2, round(across * 0.12)), finish="flat", needs="audio.volume",
+    )  # fmt: skip
 
 
 def _cover(b: _Build, x: float, y: float, d: float) -> None:
@@ -1803,6 +1990,9 @@ def kinds() -> dict[str, Kind]:
         "countdown": Kind(t("Countdown"), build_countdown, span=(2, 1)),
         "image": Kind(t("Picture"), build_image, span=(2, 2)),
         "music": Kind(t("Music"), build_music, span=(2, 1)),
+        "volume": Kind(t("Volume"), build_volume, span=(2, 1)),
+        "moon": Kind(t("Moon"), build_moon),
+        "outlook": Kind(t("Next days"), build_outlook, span=(3, 1), finish="lit"),
         "agenda": Kind(t("Agenda"), build_agenda, span=(2, 2)),
         "game": Kind(t("Game FPS"), build_game, span=(2, 1)),
         # the cards after SPUR II's Studio screen: lit by themselves (theme.cards)
@@ -1825,7 +2015,8 @@ MODULE_KINDS = (
     "clock", "date", "weather", "ring", "stat", "graph", "bars", "network", "system", "text",
     "temps", "cores", "drives", "processes", "netinfo", "battery", "values",
     "sun", "analog", "world", "countdown", "image", "music", "agenda", "game",
-    "playback", "forecast", "download", "instrument", "cards", "netcard",
+    "playback", "forecast", "download", "instrument", "cards", "netcard", "volume", "moon",
+    "outlook",
 )  # fmt: skip
 # Kinds that hold several cards and show one (render.slot); "netcard" is two: a download
 # while one runs, else the network

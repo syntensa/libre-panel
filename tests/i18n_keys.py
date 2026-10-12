@@ -75,8 +75,18 @@ def dynamic_messages() -> set[str]:
     )
 
 
+def theme_messages() -> set[str]:
+    """The words of the built-in themes that are shown in the panel's language ("translate")."""
+    found = set()
+    for path in (SRC / "themes").glob("*/theme.json"):
+        for widget in json.loads(path.read_text(encoding="utf-8")).get("widgets", []):
+            if widget.get("type") == "text" and widget.get("translate"):
+                found.add(widget["text"])
+    return found
+
+
 def all_messages() -> set[str]:
-    return python_messages() | js_messages() | dynamic_messages()
+    return python_messages() | js_messages() | dynamic_messages() | theme_messages()
 
 
 def tables() -> dict[str, set[str]]:

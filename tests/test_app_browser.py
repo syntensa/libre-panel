@@ -717,8 +717,9 @@ def test_a_collection_does_not_lead_a_first_start_or_the_quick_list(app_url, iso
     with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
         page.wait_for_selector(".start.first .theme-card")
         assert page.locator(".theme-collection").count() == 0  # nothing of a collection is offered
-        # made for the 9.2" panel: Libre Panel's own, its default first
-        assert shown_themes(page) == ["lumen", "studio"]
+        # made for the 9.2" panel: Libre Panel's own, its default first, the others A to Z
+        assert shown_themes(page) == ["lumen", "almanac", "almanac-analog", "encore", "nimbus",
+                                      "studio"]  # fmt: skip
         page.get_by_role("button", name="See all").click()
         expect(page.locator(".theme-collection")).to_have_count(2)  # closed, at the end
         assert page.locator(".theme-card[data-theme='spur-ii']").count() == 0
@@ -728,7 +729,7 @@ def test_a_collection_does_not_lead_a_first_start_or_the_quick_list(app_url, iso
     with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
         page.wait_for_selector(".quick-theme")
         ids = page.locator(".quick-theme").evaluate_all("rows => rows.map((r) => r.dataset.theme)")
-        assert "studio" in ids and not [i for i in ids if a_set(i)]
+        assert "lumen" in ids and not [i for i in ids if a_set(i)]
         link = page.locator(".quick-collection")  # one line for the collection made for this panel
         expect(link).to_have_count(1)
         expect(link).to_contain_text("SPUR II · Legacy")

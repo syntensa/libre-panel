@@ -1,0 +1,185 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "Almanac",
+  "author": "Libre Panel contributors",
+  "license": "CC0-1.0",
+  "description": "Libre Panel's clock for 8.8\" and 9.2\" bars: the time large with rolling digits and its seconds, the date, a line that runs through the minute, and the month beside it with today marked. Almanac Analog has a clock face instead.",
+  "display": {
+    "model": "turing-9.2-usb",
+    "orientation": "landscape",
+    "width": 1920,
+    "height": 480
+  },
+  "palette": {
+    "bg": "#0A0E13",
+    "bg2": "#06090D",
+    "surface": "#0D1219",
+    "line": "#1F2A36",
+    "track": "#18212C",
+    "text": "#E8EEF4",
+    "text2": "#C9D3DE",
+    "text3": "#93A1B2",
+    "dim": "#5F6E80",
+    "accent": "#2EE6D6",
+    "cpu": "#2EE6D6",
+    "gpu": "#7F9CFF",
+    "mem": "#C792FF",
+    "disk": "#5FB6FF",
+    "net": "#34D399",
+    "warn": "#F5C46B",
+    "crit": "#F87171"
+  },
+  "font": "builtin:Barlow-Medium",
+  "background": {
+    "color": "@bg",
+    "image": "assets/backdrop.png"
+  },
+  "refresh_ms": 1000,
+  "animation": {
+    "smoothing_ms": 600
+  },
+  "grid": {
+    "columns": 48,
+    "rows": 48,
+    "gap": 1,
+    "margin": 16
+  },
+  "style": {
+    "card": "glass",
+    "radius": 14,
+    "glow": 0.6,
+    "backdrop": "flat",
+    "display_font": "builtin:Barlow-SemiBold",
+    "text_font": "builtin:Barlow-Medium"
+  },
+  "widgets": [
+    {
+      "type": "clock",
+      "id": "clock",
+      "x": 190,
+      "y": 41,
+      "format": "%H:%M",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 236,
+      "color": "@text",
+      "digits": "roll",
+      "finish": "acrylic"
+    },
+    {
+      "type": "clock",
+      "id": "seconds",
+      "x": 832,
+      "y": 90,
+      "format": "%S",
+      "font": "builtin:Barlow-SemiBold",
+      "font_size": 72,
+      "color": "@accent",
+      "digits": "roll",
+      "glow": 0.6,
+      "glow_radius": 12
+    },
+    {
+      "type": "clock",
+      "id": "date",
+      "x": 552,
+      "y": 313,
+      "format": "%A · %d %B",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 28,
+      "color": "@text2",
+      "uppercase": true,
+      "letter_spacing": 4,
+      "tabular": false,
+      "align": "center"
+    },
+    {
+      "type": "rect",
+      "id": "seconds-groove",
+      "x": 190,
+      "y": 373,
+      "w": 724,
+      "h": 2,
+      "color": "@track"
+    },
+    {
+      "type": "bar",
+      "id": "seconds-run",
+      "x": 190,
+      "y": 373,
+      "w": 724,
+      "h": 2,
+      "sensor": "time.second",
+      "min": 0,
+      "max": 60,
+      "color": "@accent",
+      "background": null,
+      "radius": 0,
+      "smooth": false,
+      "end_dot": 4.5
+    },
+    {
+      "type": "rect",
+      "id": "month-card",
+      "x": 1120,
+      "y": 24,
+      "w": 776,
+      "h": 432,
+      "color": "#0D1219E6",
+      "radius": 18,
+      "outline": "@line"
+    },
+    {
+      "type": "clock",
+      "id": "month",
+      "x": 1156,
+      "y": 57,
+      "format": "%B %Y",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 24,
+      "color": "@accent",
+      "uppercase": true,
+      "letter_spacing": 4,
+      "tabular": false
+    },
+    {
+      "type": "clock",
+      "id": "week",
+      "x": 1860,
+      "y": 57,
+      "format": "%V",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 24,
+      "color": "@text2",
+      "letter_spacing": 2,
+      "align": "right"
+    },
+    {
+      "type": "text",
+      "id": "week-label",
+      "x": 1817,
+      "y": 57,
+      "text": "Week",
+      "font": "builtin:Barlow-Medium",
+      "font_size": 24,
+      "color": "@dim",
+      "tabular": false,
+      "translate": true,
+      "uppercase": true,
+      "letter_spacing": 4,
+      "align": "right"
+    },
+    {
+      "type": "calendar",
+      "id": "days",
+      "x": 1148,
+      "y": 110,
+      "w": 720,
+      "h": 322,
+      "font": "builtin:Barlow-Medium",
+      "font_size": 27,
+      "color": "@text2",
+      "color2": "@accent",
+      "muted": "@dim"
+    }
+  ]
+}

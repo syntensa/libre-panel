@@ -132,6 +132,9 @@ the panel at a glance and the themes made for it, **Live** how it runs.
 |---|---|---|
 | **Lumen** | 8.8" and 9.2" bars (1920×480); the default there | Libre Panel's own: what plays, else the weather, else the day; the time with the load scrolling past as light and the fans turning; lit rings for CPU, GPU and RAM named after your hardware, over the network |
 | **Studio** | 8.8" and 9.2" bars | calm: a large clock, the card slot and lit rings for CPU, RAM and GPU |
+| **Encore** | 8.8" and 9.2" bars | for music: the cover large and its colours behind the whole screen, the time with rolling digits, the volume as levels that rise |
+| **Nimbus** | 8.8" and 9.2" bars | for the weather: now and the next hours, the next days, the moon as it is lit tonight, a small clock |
+| **Almanac** | 8.8" and 9.2" bars | a clock with the month: the time large, or on a face whose second hand glides (**Almanac Analog**), beside the month with today and the week |
 | **Libre Default** | 3.5" (480×320); the default on every other panel | two lit rings, temperature, disk and network, a history that scrolls; what plays, the weather or the day in the corner |
 | **Slate** | 5" (800×480) | four cards: CPU, GPU, memory and network |
 | **Orbit** | round 2.1" and 2.8" | three rings around a large clock |
@@ -145,9 +148,9 @@ are plain JSON with their pictures and fonts, and cannot run code
 screens of SPUR II as a legacy collection, see [Where it started](#where-it-started).
 
 <details>
-<summary><b>All 25 modules</b>: the building blocks of your own themes</summary>
+<summary><b>All 28 modules</b>: the building blocks of your own themes</summary>
 <br>
-<p align="center"><img src="docs/images/module-catalog.png" width="100%" alt="Every module at two cells: ring, big number, history, bars, temperatures, CPU cores, drives, processes, network, network details, battery, game FPS; time, calendar, analog clock, world clock, countdown, sun and moon, weather; music, agenda, dashboard, picture, system and title"></p>
+<p align="center"><img src="docs/images/module-catalog.png" width="100%" alt="Every module at two cells: ring, big number, history, bars, temperatures, CPU cores, drives, processes, network, network details, battery, game FPS; time, calendar, analog clock, world clock, countdown, sun and moon, moon, weather, next days; music, volume, agenda, dashboard, picture, system and title"></p>
 
 Hardware down to every core, drive and fan; clocks for any time zone, a countdown, sunrise,
 sunset and the moon (computed, no internet); what is playing, your calendars (any `.ics`),

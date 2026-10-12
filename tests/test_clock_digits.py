@@ -142,7 +142,8 @@ def test_studio_runs_through_the_minute_under_its_clock_on_the_frames_time():
 @pytest.mark.parametrize(
     "name",
     ["spur-classic", "spur-cockpit", "spur-focus", "spur-header", "spur-horizon",
-     "spur-session", "spur-studio", "spur-ii", "round-report", "studio", "lumen"],
+     "spur-session", "spur-studio", "spur-ii", "round-report", "studio", "lumen", "encore",
+     "nimbus", "almanac", "almanac-analog"],
 )  # fmt: skip
 def test_the_spur_screens_and_lumen_roll_their_clocks(name):
     data = json.loads((builtin_themes_dir() / name / "theme.json").read_text("utf-8"))

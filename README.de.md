@@ -138,6 +138,9 @@ dafür gemacht sind, **Live**, wie es läuft.
 |---|---|---|
 | **Lumen** | 8,8"- und 9,2"-Leisten (1920×480); dort der Standard | das eigene Theme von Libre Panel: was läuft, sonst das Wetter, sonst der Tag; die Uhrzeit mit der Last als vorbeiziehendes Licht und den drehenden Lüftern; leuchtende Ringe für CPU, GPU und RAM, benannt nach deiner Hardware, über dem Netzwerk |
 | **Studio** | 8,8"- und 9,2"-Leisten | ruhig: eine große Uhr, das Kartenfach und leuchtende Ringe für CPU, RAM und GPU |
+| **Encore** | 8,8"- und 9,2"-Leisten | für Musik: das Cover groß und seine Farben hinter dem ganzen Bildschirm, die Uhrzeit mit rollenden Ziffern, die Lautstärke als steigende Pegel |
+| **Nimbus** | 8,8"- und 9,2"-Leisten | fürs Wetter: jetzt und die nächsten Stunden, die nächsten Tage, der Mond, wie er heute Nacht leuchtet, eine kleine Uhr |
+| **Almanac** | 8,8"- und 9,2"-Leisten | eine Uhr mit dem Monat: die Uhrzeit groß oder auf einem Zifferblatt mit gleitendem Sekundenzeiger (**Almanac Analog**), daneben der Monat mit heute und der Kalenderwoche |
 | **Libre Default** | 3,5" (480×320); der Standard auf allen anderen Panels | zwei leuchtende Ringe, Temperatur, Laufwerk und Netzwerk, ein scrollender Verlauf; in der Ecke, was läuft, das Wetter oder der Tag |
 | **Slate** | 5" (800×480) | vier Karten: CPU, GPU, Arbeitsspeicher und Netzwerk |
 | **Orbit** | rund, 2,1" und 2,8" | drei Ringe um eine große Uhr |
@@ -151,9 +154,9 @@ ausführen ([Theme-Format](docs/THEMES.md)). Eins gebaut, das dir gefällt? Teil
 acht Bildschirme von SPUR II als Legacy-Sammlung, siehe [Wo alles begann](#wo-alles-begann).
 
 <details>
-<summary><b>Alle 25 Module</b>: die Bausteine eigener Themes</summary>
+<summary><b>Alle 28 Module</b>: die Bausteine eigener Themes</summary>
 <br>
-<p align="center"><img src="docs/images/module-catalog.png" width="100%" alt="Jedes Modul auf zwei Zellen: Ring, große Zahl, Verlauf, Balken, Temperaturen, CPU-Kerne, Laufwerke, Prozesse, Netzwerk, Netzwerkdetails, Akku, Spiel-FPS; Uhrzeit, Kalender, Analoguhr, Weltuhr, Countdown, Sonne und Mond, Wetter; Musik, Termine, Dashboard, Bild, System und Titel"></p>
+<p align="center"><img src="docs/images/module-catalog.png" width="100%" alt="Jedes Modul auf zwei Zellen: Ring, große Zahl, Verlauf, Balken, Temperaturen, CPU-Kerne, Laufwerke, Prozesse, Netzwerk, Netzwerkdetails, Akku, Spiel-FPS; Uhrzeit, Kalender, Analoguhr, Weltuhr, Countdown, Sonne und Mond, Mond, Wetter, die nächsten Tage; Musik, Lautstärke, Termine, Dashboard, Bild, System und Titel"></p>
 
 Hardware bis zu jedem Kern, jedem Laufwerk und jedem Lüfter; Uhren für jede Zeitzone, ein
 Countdown, Sonnenauf- und -untergang und der Mond (berechnet, ohne Internet); was gerade

@@ -58,6 +58,8 @@ ICON_NAMES = (
     "pause",
     "up",
     "down",
+    "volume",
+    "mute",
     "weather",
 )
 
@@ -341,6 +343,22 @@ def _pause(pen: _Pen) -> None:
         pen.draw.rounded_rectangle(box, radius=pen.s * 1.1, fill=pen.color)
 
 
+def _speaker(pen: _Pen) -> None:
+    pen.polygon([(3, 9), (7, 9), (12, 4.5), (12, 19.5), (7, 15), (3, 15)])
+
+
+def _volume(pen: _Pen) -> None:
+    _speaker(pen)
+    pen.arc(12.5, 12, 4, -42, 42)
+    pen.arc(12.5, 12, 8, -48, 48)
+
+
+def _mute(pen: _Pen) -> None:
+    _speaker(pen)
+    pen.line((15.5, 9), (21, 15))
+    pen.line((21, 9), (15.5, 15))
+
+
 def _up(pen: _Pen) -> None:
     pen.line((12, 20), (12, 4.5))
     pen.line((6, 10.5), (12, 4.5), (18, 10.5))
@@ -508,6 +526,8 @@ _ICONS: dict[str, Callable[[_Pen], None]] = {
     "pause": _pause,
     "up": _up,
     "down": _down,
+    "volume": _volume,
+    "mute": _mute,
 }
 
 

@@ -34,7 +34,8 @@ BG_TOP, BG_BOTTOM = (13, 20, 29), (6, 9, 13)
 TX_1, TX_3, ACCENT = (238, 246, 255), (140, 160, 184), (19, 229, 215)
 
 # Each theme as the panel shows it: Libre Panel's own first, the bars before the small panels.
-THEMES = ("lumen", "studio", "libre-default", "slate", "orbit", "column", "pico", "spur-ii")
+THEMES = ("lumen", "studio", "encore", "nimbus", "almanac", "almanac-analog", "libre-default",
+          "slate", "orbit", "column", "pico", "spur-ii")  # fmt: skip
 # The pictures made of them, and the screenshots of the app (those need Playwright).
 COMPOSED = ("hero.png", "gallery.png", "social-preview.png", "studio-adapts.png",
             "module-sizes.png", "weather-sizes.png", "looks.png", "module-layouts.png",
@@ -65,6 +66,7 @@ def snapshot():
     moon = {
         "moon.phase": (0.36, "", "Moon phase"), "moon.illumination": (79.0, "%", "Moon lit"),
         "moon.name": ("Waxing gibbous", "", "Moon"), "moon.full_in": (4.1, "d", "Full moon in"),
+        "moon.new_in": (18.9, "d", "New moon in"),
     }  # fmt: skip
     for key, (value, unit, label) in moon.items():
         snap.readings[key] = Reading(key, value, unit, label)
@@ -486,10 +488,10 @@ CATALOG = [  # (section, [(kind, options, cols, rows)])
     ("Time and the sky", [
         ("clock", {}, 2, 1), ("date", {}, 2, 1), ("analog", {}, 2, 1),
         ("world", {}, 2, 1), ("countdown", {"target": "12-24", "title": "Christmas"}, 2, 1),
-        ("sun", {}, 2, 1), ("weather", {}, 2, 1),
+        ("sun", {}, 2, 1), ("moon", {}, 2, 1), ("weather", {}, 2, 1), ("outlook", {}, 2, 1),
     ]),
     ("Your things", [
-        ("music", {}, 2, 1), ("agenda", {}, 2, 1), ("values", {}, 2, 1),
+        ("music", {}, 2, 1), ("volume", {}, 2, 1), ("agenda", {}, 2, 1), ("values", {}, 2, 1),
         ("image", {}, 2, 1), ("system", {}, 2, 1), ("text", {"text": "Libre Panel"}, 2, 1),
     ]),
 ]  # fmt: skip

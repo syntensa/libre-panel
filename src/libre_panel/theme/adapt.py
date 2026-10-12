@@ -27,6 +27,7 @@ _UNIFORM = (
     "letter_spacing",
     "segment_gap",
     "backdrop_blur",
+    "blur",
     "mark_width",
     "end_dot",
 )
@@ -53,7 +54,7 @@ def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any
                 "mark_width": 1,
             }
             out[key] = max(minimum.get(key, 0), round(out[key] * s))
-            if key in ("glow_radius", "shadow_blur", "backdrop_blur"):
+            if key in ("glow_radius", "shadow_blur", "backdrop_blur", "blur"):
                 out[key] = min(out[key], BLUR_MAX)  # (a theme holds no more than that)
     if widget["type"] in ("icon", "symbol", "moon"):  # square: keep it square and centred
         size = max(8, round(widget["size"] * s))
@@ -62,7 +63,9 @@ def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any
         out["size"], out["x"], out["y"] = size, round(cx - size / 2), round(cy - size / 2)
         return out
     has_box = "w" in out and "h" in out
-    if has_box and widget["type"] in _KEEP_ASPECT and out["w"] > 0 and out["h"] > 0:
+    # a blurred picture is a backdrop of its colours: it fills its box on any panel
+    keep = widget["type"] in _KEEP_ASPECT and not (widget["type"] == "image" and widget.get("blur"))
+    if has_box and keep and out["w"] > 0 and out["h"] > 0:
         cx = (widget["x"] + widget["w"] / 2) * sx
         cy = (widget["y"] + widget["h"] / 2) * sy
         out["w"], out["h"] = max(1, round(widget["w"] * s)), max(1, round(widget["h"] * s))

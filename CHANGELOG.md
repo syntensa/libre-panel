@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.5.6 — 2026-10-12
+
+Three new screens for the bars: one for music, one for the weather and one clock with the
+month, in digits or on a face.
+
+**New**
+- Encore: what plays with its cover large and the cover's colours blurred behind the whole
+  screen, the state in the panel's language, the time with rolling digits, its seconds and a
+  line through the minute, and the volume as levels that rise as on a mixer (a crossed
+  speaker while muted)
+- Nimbus: the weather now and the next hours, the next days with their moving symbols, rain,
+  low and high, the moon as it is lit tonight with the days until the next full and new moon,
+  and a small clock. Without a place, a calendar sheet with the month and a line that says
+  where the weather is set
+- Almanac: the time large beside the month with today marked and the week; Almanac Analog has
+  a clock face whose second hand glides to each second instead
+- Modules: *Volume* (a speaker, the level and levels that rise; upright in a tall module),
+  *Moon* (large, with its phase and the days until the next full and new moon) and *Next
+  days* (side by side when long, one under the other when tall or big)
+- Themes: a clock face's second hand may glide to the second (`"hand": "glide"`, as a clock's
+  rolling digits) or go round (`"sweep"`), for a millisecond or two a frame; the clock faces of
+  the analog and world clock modules glide. Bars may rise as levels (`rising`), pictures be
+  blurred into a backdrop of their colours (`blur`), and a text may be one of Libre Panel's own
+  words in the panel's language (`translate`) and in capitals (`uppercase`); icons `volume` and
+  `mute`
+
 ## 0.5.5 — 2026-10-12
 
 Fans in the look of your own fans, graphs as fluid as SPUR II's everywhere, and modules that

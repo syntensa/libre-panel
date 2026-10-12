@@ -379,6 +379,20 @@ def _fitted(image: Image.Image, w: int, h: int, fit: str, align: str = "center")
     return image.resize((w, h), Image.Resampling.LANCZOS)
 
 
+def _blurred(image: Image.Image, radius: float, w: int = 0, h: int = 0, fit: str = "stretch",
+             align: str = "center") -> Image.Image:  # fmt: skip
+    """``image`` at w x h (as :func:`_fitted`; 0: its own size) blurred by ``radius`` px: fitted
+    and blurred at a fraction of the size, then drawn up (a backdrop of a cover's colours across
+    a 1920 x 480 panel costs a few milliseconds, once per cover); transparent edges stay clean."""
+    if w <= 0 or h <= 0:
+        w, h = image.size
+    scale = max(1, min(8, int(radius // 4)))
+    small = _fitted(image.convert("RGBA"), max(1, round(w / scale)), max(1, round(h / scale)),
+                    fit, align).convert("RGBa")  # fmt: skip
+    small = small.filter(ImageFilter.GaussianBlur(radius / scale))
+    return small.resize((w, h), Image.Resampling.BILINEAR).convert("RGBA")
+
+
 def _rounded(image: Image.Image, radius: int) -> Image.Image:
     """``image`` with round corners (drawn larger, then reduced: smooth edges)."""
     w, h = image.size
@@ -514,6 +528,7 @@ class Renderer:
         self.snapshot: Snapshot | None = None  # the readings it drew last (context.image)
         self.warnings: list[str] = []
         self.moving = False  # True while an animation has not settled yet
+        self._analog_parts: dict[Any, Image.Image] = {}  # faces and second hands (_analog_part)
         self._fonts: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
         self._digit_width: dict[int, float] = {}
         self._images: OrderedDict[tuple[str, int, int, str, str], Image.Image | None] = (
@@ -1511,7 +1526,10 @@ class Renderer:
         return piece
 
     def _draw_text(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
-        return self._text_widget(widget, widget["text"], widget["color"])
+        text = i18n.t(widget["text"]) if widget.get("translate") else widget["text"]
+        if widget.get("uppercase"):
+            text = text.upper()
+        return self._text_widget(widget, text, widget["color"])
 
     def _draw_metric(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         reading = snapshot.readings.get(widget["sensor"])
@@ -1700,11 +1718,86 @@ class Renderer:
         return self._text_widget(widget, text, widget["color"])
 
     def _draw_analog(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        """A clock face. Its second hand jumps on the second (``hand`` "tick"), or moves to it
+        in ``digits_seconds`` as rolling digits do ("glide"), or goes round ("sweep"): then the
+        face with the other hands is kept, and the second hand, drawn once, is turned onto it
+        for each frame."""
         moment = self._time(widget, snapshot)
         hands = (moment.hour % 12, moment.minute, moment.second if widget["seconds"] else -1)
-        return self._cached(widget, hands, lambda: self._analog_piece(widget, *hands))
+        kind = widget.get("hand", "tick")
+        if kind == "tick" or hands[2] < 0 or not self.animate:
+            return self._cached(widget, hands, lambda: self._analog_piece(widget, *hands))
+        part = moment.microsecond / 1e6
+        seconds = widget.get("digits_seconds", DIGITS_S)
+        if kind == "sweep":
+            at = moment.second + part
+        elif 0 < seconds <= 1 and part < seconds:
+            at = moment.second - 1 + 1 - (1 - part / seconds) ** 3  # as the digits roll
+        else:
+            at = float(moment.second)
+        # the face with the hour and minute hands: the minute hand moves on every 5 seconds
+        shown = (hands[0], hands[1], moment.second // 5 * 5)
+        content = ("hand", shown, at)
+        hit = self._cache.get(widget["id"])
+        if hit is not None and hit[0] == content:
+            return hit[1]
+        layer = self._analog_part(widget, shown).copy()
+        hand, at_x, at_y = self._second_hand(widget, at)
+        layer.alpha_composite(hand, (at_x, at_y))
+        x, y = widget["x"], widget["y"]
+        piece = self._effects(widget, Piece(layer, x, y, [x, y, layer.width, layer.height]))
+        if kind == "sweep" or at != moment.second:
+            self.moving = True
+        else:  # at rest for the rest of the second (made here: a hand must not step back)
+            self._cache[widget["id"]] = (content, piece)
+        return piece
 
-    def _analog_piece(self, widget: dict[str, Any], hour: int, minute: int, second: int) -> Piece:
+    def _analog_part(self, widget: dict[str, Any], hands: tuple[int, int, int]) -> Image.Image:
+        """The face with its hour and minute hands at ``hands`` and no second hand, kept while
+        the widget stays the same."""
+        key = (widget["id"], json.dumps(widget, sort_keys=True, default=str), hands)
+        found = self._analog_parts.get(key)
+        if found is None:
+            found = self._analog_piece(widget, *hands, part="face").layer
+            self._analog_parts[key] = found
+            while len(self._analog_parts) > 8:
+                self._analog_parts.pop(next(iter(self._analog_parts)))
+        return found
+
+    def _second_hand(self, widget: dict[str, Any], at: float) -> tuple[Image.Image, int, int]:
+        """The second hand at ``at`` seconds (a fraction too) with the dot in the middle, drawn
+        in its own small box (where it is on the face): a few milliseconds a frame."""
+        w, h = max(8, widget["w"]), max(8, widget["h"])
+        r, cx, cy = min(w, h) / 2, w / 2, h / 2
+        a = math.radians(at * 6 - 90)
+        tip = (cx + r * 0.84 * math.cos(a), cy + r * 0.84 * math.sin(a))
+        tail = (cx - r * 0.18 * math.cos(a), cy - r * 0.18 * math.sin(a))
+        width, dot = r * 0.022, r * 0.065
+        pad = max(width / 2, dot) + 2
+        x0 = max(0, math.floor(min(tip[0], tail[0], cx) - pad))
+        y0 = max(0, math.floor(min(tip[1], tail[1], cy) - pad))
+        x1 = min(w, math.ceil(max(tip[0], tail[0], cx) + pad))
+        y1 = min(h, math.ceil(max(tip[1], tail[1], cy) + pad))
+        s = SUPERSAMPLE
+        layer = Image.new("RGBA", ((x1 - x0) * s, (y1 - y0) * s), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(layer)
+        accent = self.color(widget["color2"])
+
+        def at_s(px: float, py: float) -> tuple[float, float]:
+            return (px - x0) * s, (py - y0) * s
+
+        draw.line([at_s(*tail), at_s(*tip)], fill=accent, width=max(1, round(width * s)))
+        for px, py in (at_s(*tail), at_s(*tip)):
+            half = width * s / 2
+            draw.ellipse([px - half, py - half, px + half, py + half], fill=accent)
+        mx, my = at_s(cx, cy)
+        draw.ellipse([mx - dot * s, my - dot * s, mx + dot * s, my + dot * s], fill=accent)
+        return self._down(layer, x1 - x0, y1 - y0), x0, y0
+
+    def _analog_piece(self, widget: dict[str, Any], hour: int, minute: int, second: int,
+                      part: str = "all") -> Piece:  # fmt: skip
+        """The clock face with its hands; ``part`` "face" without the second hand and the
+        dot in the middle, "hand" those alone (the second hand at ``second``)."""
         x, y, w, h = widget["x"], widget["y"], max(8, widget["w"]), max(8, widget["h"])
         s = SUPERSAMPLE
         layer, draw = self._canvas(w, h)
@@ -1722,9 +1815,9 @@ class Renderer:
                 draw.ellipse([px - width / 2, py - width / 2, px + width / 2, py + width / 2],
                              fill=color)  # fmt: skip
 
-        if widget["face"]:
+        if widget["face"] and part != "hand":
             draw.ellipse([cx - r, cy - r, cx + r - 1, cy + r - 1], fill=self.color(widget["face"]))
-        if widget["marks"]:
+        if widget["marks"] and part != "hand":
             marks = self.color(widget["marks"])
             fine = min(w, h) >= 110
             for tick in range(60):
@@ -1736,8 +1829,11 @@ class Renderer:
                 hand(tick * 6, r * 0.93, width, marks, -inner)
         color = self.color(widget["color"])
         accent = self.color(widget["color2"])
-        hand((hour + minute / 60) * 30, r * 0.5, r * 0.085, color, r * 0.08)
-        hand((minute + max(0, second) / 60) * 6, r * 0.76, r * 0.055, color, r * 0.08)
+        if part != "hand":
+            hand((hour + minute / 60) * 30, r * 0.5, r * 0.085, color, r * 0.08)
+            hand((minute + max(0, second) / 60) * 6, r * 0.76, r * 0.055, color, r * 0.08)
+        if part == "face":
+            return Piece(self._down(layer, w, h), x, y, [x, y, w, h])
         if second >= 0:
             hand(second * 6, r * 0.84, r * 0.022, accent, r * 0.18)
         dot = r * 0.065
@@ -1854,6 +1950,8 @@ class Renderer:
             if image is None:
                 empty = Image.new("RGBA", (max(w, 1), max(h, 1)), (0, 0, 0, 0))
                 return Piece(empty, x, y)
+            if widget.get("blur", 0) > 0:
+                image = _blurred(image, widget["blur"])
             if widget["radius"] > 0:
                 image = _rounded(image, widget["radius"])
             return Piece(image, x, y)
@@ -1867,8 +1965,11 @@ class Renderer:
 
         def build() -> Piece:
             picture = image.convert("RGBA")
-            if w > 0 and h > 0:
-                picture = _fitted(picture, w, h, widget["fit"], widget.get("align", "center"))
+            blur, align = widget.get("blur", 0), widget.get("align", "center")
+            if blur > 0:
+                picture = _blurred(picture, blur, w, h, widget["fit"], align)
+            elif w > 0 and h > 0:
+                picture = _fitted(picture, w, h, widget["fit"], align)
             if widget["radius"] > 0:
                 picture = _rounded(picture, widget["radius"])
             return Piece(picture, x, y)
@@ -2417,8 +2518,15 @@ class Renderer:
             gap = widget["segment_gap"] * s / (W if horizontal else H)
             cell = (1 - gap * (n - 1)) / n
             colors = self._gradient_colors(a, b, n)
+            rising = widget.get("rising", 0)
             for i in range(n):
                 box = span(i * (cell + gap), i * (cell + gap) + cell)
+                if rising > 0:  # levels on a mixer: standing on the bottom (the left) edge
+                    share = rising + (1 - rising) * i / max(1, n - 1)
+                    if horizontal:
+                        box[1] = box[3] - max(s, share * H)
+                    else:
+                        box[2] = box[0] + max(s, share * W)
                 seg_r = min(radius, (box[2] - box[0]) / 2, (box[3] - box[1]) / 2)
                 amount = min(1.0, max(0.0, frac * n - i))  # the last lit segment may be partial
                 if track and amount < 1:
