@@ -1605,11 +1605,8 @@ class Renderer:
         before = self._clock_format(widget, when - timedelta(seconds=1))
         # the new text's letters are made first (in the helper thread on a video panel): a
         # change starts a frame late rather than holding the frame up
-        if (
-            before == text
-            or len(before) != len(text)
-            or (widget["id"], text, color) not in (self._texts)
-        ):
+        made = (widget["id"], text, color) in self._texts
+        if before == text or len(before) != len(text) or not made:
             return resting
         piece = self._changing(widget, before, text, color, 1 - (1 - p) ** 3, kind)
         if piece is None:
