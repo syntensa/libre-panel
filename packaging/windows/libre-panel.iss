@@ -1,4 +1,4 @@
-; Windows installer for Libre Panel (Inno Setup 6).
+﻿; Windows installer for Libre Panel (Inno Setup 6).
 ;
 ;   iscc /DAppVersion=0.1.0 /DNumericVersion=0.1.0.0 /DSourceDir=..\..\dist\libre-panel
 ;        /DOutputDir=..\..\dist packaging\windows\libre-panel.iss
@@ -54,6 +54,11 @@ CloseApplications=yes
 [Languages]
 Name: "en"; MessagesFile: "compiler:Default.isl"
 Name: "de"; MessagesFile: "compiler:Languages\German.isl"
+
+[Messages]
+; the choice the README and the website name, in the same words
+en.PrivilegesRequiredOverrideCurrentUser=Install for &me only
+de.PrivilegesRequiredOverrideCurrentUser=Nur für &mich installieren
 
 [CustomMessages]
 en.Autostart=Start Libre Panel when I log in

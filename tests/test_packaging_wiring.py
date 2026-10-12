@@ -85,3 +85,11 @@ def test_the_names_the_app_looks_for_are_the_ones_the_table_installs(monkeypatch
             assert len(files) == 3  # and nothing else that the app does not know of
         else:
             assert files == {"ffmpeg"}
+
+
+def test_the_setup_script_is_read_as_utf8():
+    """Inno Setup reads a script as UTF-8 when it starts with the byte order mark; without it
+    the German texts of the setup ("Für alle Sensoren …") would come out garbled."""
+    script = ROOT.joinpath("packaging", "windows", "libre-panel.iss").read_bytes()
+    assert script.startswith(b"\xef\xbb\xbf")
+    assert "de.PrivilegesRequiredOverrideCurrentUser=Nur für &mich installieren" in script.decode()
