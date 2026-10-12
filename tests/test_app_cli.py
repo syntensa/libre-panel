@@ -204,6 +204,20 @@ def test_set_active_theme_keeps_comments(isolated_home):
     ]  # one, under the note that explains it
 
 
+def size_of(path):
+    """The size of the picture the running panel keeps writing. On Windows the file cannot be
+    opened for the moment it is replaced (PermissionError): then it is asked again."""
+    import time
+
+    for _ in range(100):
+        try:
+            with Image.open(path) as picture:
+                return picture.size
+        except PermissionError:
+            time.sleep(0.02)
+    raise AssertionError(f"{path} stayed locked")
+
+
 def test_running_panel_picks_up_theme_changes(tmp_path, isolated_home):
     import threading
     import time
@@ -225,17 +239,12 @@ def test_running_panel_picks_up_theme_changes(tmp_path, isolated_home):
         deadline = time.time() + 10
         while not out.exists() and time.time() < deadline:
             time.sleep(0.05)
-        with Image.open(out) as first:
-            assert first.size == (480, 320)
+        assert size_of(out) == (480, 320)
         time.sleep(0.05)  # make sure the next write gets a new mtime
         set_active_theme("spur-ii")
-        while time.time() < deadline:
-            with Image.open(out) as frame:
-                if frame.size == (1920, 480):
-                    break
+        while time.time() < deadline and size_of(out) != (1920, 480):
             time.sleep(0.05)
-        with Image.open(out) as frame:
-            assert frame.size == (1920, 480)
+        assert size_of(out) == (1920, 480)
     finally:
         stop.set()
         thread.join(5)
