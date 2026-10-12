@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+**Changes**
+- The logo, redrawn: its bars stand clear of the ring (the tallest cut into it), and the dark
+  end of the ring is rounded like the lit one. It is one mark everywhere now, drawn from the
+  same code: the app's icon and the tray, the app's header and the website (which showed
+  another sign), the panel's start screen, the README and the repository's social preview
+
 **Fixes**
 - Windows: starting Libre Panel a second time froze its open window ("not responding"). The
   window was set "on top" for a moment from another thread, which on Windows locked it up; it

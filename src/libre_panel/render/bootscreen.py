@@ -25,6 +25,7 @@ from functools import lru_cache
 import numpy as np
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
+from libre_panel import branding
 from libre_panel.devices.models import PanelModel
 from libre_panel.fonts import builtin_font_path
 
@@ -37,7 +38,6 @@ BG2 = (6, 9, 13)
 DOTS = (22, 30, 40)
 TEXT = (232, 238, 244)
 ACCENT = (46, 230, 214)
-TRACK = (42, 52, 64)
 SS = 3  # supersampling of the shapes
 
 
@@ -142,48 +142,8 @@ def _backdrop(w: int, h: int, quiet: int) -> Image.Image:
 
 
 def _mark(d: float, arc_light: float = 1.0) -> Image.Image:
-    """The app's mark at ``d`` px: a gauge's arc (lit from bottom left over the top to the
-    right, its last part dark) round three bars, the last one lit; with its glow."""
-    size = max(8, math.ceil(d * 1.5))
-    s = SS
-    shape = Image.new("RGBA", (size * s, size * s), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(shape)
-    r = d / 2
-    cx = cy = size / 2
-    t = d * 0.1
-    box = [(cx - r) * s, (cy - r) * s, (cx + r) * s, (cy + r) * s]  # (a wide arc is drawn inward)
-    width = max(1, round(t * s))
-    accent = tuple(round(c * (0.55 + 0.45 * arc_light)) for c in ACCENT)
-
-    def cap(angle: float, colour: tuple[int, ...]) -> None:
-        a = math.radians(angle)
-        px, py = cx + (r - t / 2) * math.cos(a), cy + (r - t / 2) * math.sin(a)
-        draw.ellipse([(px - t / 2) * s, (py - t / 2) * s, (px + t / 2) * s, (py + t / 2) * s],
-                     fill=(*colour, 255))  # fmt: skip
-
-    # the dark end of the gauge first, then the lit arc over its beginning
-    draw.arc(box, 330, 412, fill=(*TRACK, 255), width=width)
-    cap(412, TRACK)
-    draw.arc(box, 135, 350, fill=(*accent, 255), width=width)
-    cap(135, accent)
-    cap(350, accent)
-    base = cy + r * 0.36
-    bar_w = r * 0.21
-    for x, tall, colour in ((-0.47, 0.34, TEXT), (-0.14, 0.54, TEXT), (0.19, 0.78, accent)):
-        x0 = cx + x * r
-        draw.rounded_rectangle([x0 * s, (base - tall * r) * s, (x0 + bar_w) * s, base * s],
-                               radius=bar_w * 0.32 * s, fill=(*colour, 255))  # fmt: skip
-    shape = shape.convert("RGBa").reduce(s).convert("RGBA")
-    # its glow: the lit parts, blurred, as light around them
-    lit = Image.new("RGB", shape.size, (0, 0, 0))
-    lit.paste(shape.convert("RGB"), (0, 0), shape.getchannel("A"))
-    glow = lit.filter(ImageFilter.GaussianBlur(max(1.0, d * 0.06)))
-    glow = glow.point(lambda v: round(v * (0.5 + 0.35 * arc_light)))
-    out = Image.new("RGBA", shape.size, (0, 0, 0, 0))
-    out.paste(glow.convert("RGBA"), (0, 0))
-    out.putalpha(glow.convert("L"))
-    out.alpha_composite(shape)
-    return out
+    """The app's mark at ``d`` px (branding.py), with its glow; ``arc_light`` dims its light."""
+    return branding.mark(d, arc_light)
 
 
 def _wave(i: int, count: int, phase: float) -> float:

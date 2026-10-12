@@ -21,6 +21,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+from libre_panel.branding import logo
 from libre_panel.fonts import builtin_font_path
 from libre_panel.render.renderer import Renderer
 from libre_panel.sensors.base import Reading
@@ -256,8 +257,9 @@ def social(bar2x: Image.Image) -> Image.Image:
     draw = ImageDraw.Draw(img)
     title, tag = font("Barlow-Bold", 96), font("Barlow-Medium", 38)
     small = font("Barlow-Regular", 28)
-    draw.text((72, 44), "Libre Panel", font=title, fill=TX_1)
-    draw.rounded_rectangle([76, 158, 76 + 120, 158 + 7], 3, fill=ACCENT)
+    img.alpha_composite(logo(112), (68, 40))  # the app's icon, then its name
+    draw.text((204, 44), "Libre Panel", font=title, fill=TX_1)
+    draw.rounded_rectangle([208, 158, 208 + 120, 158 + 7], 3, fill=ACCENT)
     draw.text((72, 188), "Free software for USB system-monitor displays", font=tag, fill=TX_1)
     draw.text(
         (72, 240),

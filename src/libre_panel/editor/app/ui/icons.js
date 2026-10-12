@@ -5,7 +5,8 @@ import { html } from "../lib/preact.js";
 const DOT = (x, y) => `<circle cx="${x}" cy="${y}" r="1.3" fill="currentColor" stroke="none"/>`;
 
 export const ICONS = {
-  logo: '<rect x="2.5" y="7" width="19" height="10" rx="2.5"/><path d="M6 13.5l2.5-3 2 2 3-4 4 5"/>',
+  // the app's mark, as branding.mark_svg() draws it (tests/test_branding.py keeps them alike)
+  logo: '<path d="M21.66 10.88A10 10 0 0 1 19.07 20.54" fill="none" stroke="#2a3440" stroke-width="2.6" stroke-linecap="round"/><path d="M4.93 20.54A10 10 0 1 1 21.66 10.88" fill="none" stroke="#2ee6d6" stroke-width="2.6" stroke-linecap="round"/><rect x="6.9" y="13.26" width="2.4" height="4.2" rx="0.8" fill="#e8eef4" stroke="none"/><rect x="10.8" y="10.86" width="2.4" height="6.6" rx="0.8" fill="#e8eef4" stroke="none"/><rect x="14.7" y="8.46" width="2.4" height="9" rx="0.8" fill="#2ee6d6" stroke="none"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
   undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H11"/>',
   redo: '<path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 000 11H13"/>',
