@@ -26,6 +26,7 @@ export function hintFor(widget, key, kind) {
   if (key === "needs") return t("show only while this sensor has a value (e.g. weather.temperature); with ! in front, only while it has none");
   if (key === "smooth" && widget?.type === "metric") return t("the number glides between readings, together with the bars and rings of its sensor");
   if (key === "seconds" && widget?.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = as long as the history readings take");
+  if (key === "sensor" && widget?.type === "module" && widget.source === "fan") return t("which fan; empty: the graphics card's (gpu.fan)");
   if (key === "per_frame") return t("video mode: a point a pixel apart, as SPUR II draws its curves (seconds = width / 25)");
   if (key === "digits") return t("what changes on the second: it jumps, rolls (the old digit up and out, the new one in from below) or fades, as SPUR II's clocks do");
   if (key === "digits_seconds") return t("how long a change takes after the second, at most 1 (SPUR II's: 0.42)");

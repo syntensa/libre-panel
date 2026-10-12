@@ -1993,6 +1993,26 @@ def test_a_building_block_and_a_renamed_palette_colour(page):
     assert js(page, "JSON.stringify(window.libre.doc.theme()).includes('@accent\"')") is False
 
 
+def test_the_fan_block_takes_another_fan_for_all_its_parts_at_once(page):
+    """The block's fan, its name and its speed read one sensor: chosen once for the three
+    (it read the graphics card's fan, and its name was the text "GPU FAN")."""
+    page.locator('.tile[data-item="preset:fan"]').click()
+    chosen = js(page, "window.libre.store.get().selection")  # with the unit's text
+    reading = [wid for wid in chosen if widget(page, wid).get("sensor")]
+    assert len(reading) == 3
+    inspector = page.locator(".inspector")
+    assert "3" in inspector.locator(".field", has=page.locator(".sensor-button")).inner_text()
+    inspector.locator(".sensor-button").click()
+    picker = page.locator(".sensor-picker")
+    picker.locator("input").fill("fan.lpc.fan_2")
+    picker.locator(".sensor-row[data-key='fan.lpc.fan_2']").click()
+    parts = [widget(page, wid) for wid in reading]
+    assert {part["sensor"] for part in parts} == {"fan.lpc.fan_2"}
+    assert [p["format"] for p in parts if p["type"] == "metric"][0] == "{label:upper}"
+    page.keyboard.press("Control+z")  # one step back for all three
+    assert {widget(page, wid)["sensor"] for wid in reading} == {"gpu.fan"}
+
+
 def test_a_round_panel_and_the_strip_its_frame_hides(page):
     page.locator(".panel-chip").click()
     page.locator(".model-row", has_text="Turing 9.2").click()

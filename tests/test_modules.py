@@ -86,6 +86,18 @@ def test_every_number_of_a_built_in_theme_counts_to_a_new_reading():
                 assert widget.get("smooth"), (path.parent.name, widget["id"])
 
 
+def test_the_fan_instrument_shows_the_fan_it_is_given_by_the_name_it_goes_by():
+    parts, _ = expand(theme({"module": "instrument", "source": "fan", "sensor": "fan.lpc.fan_2",
+                             "col": 0, "row": 0, "cols": 1, "rows": 2}))  # fmt: skip
+    title = next(w for w in parts if w["id"].endswith("/title"))
+    assert (title["type"], title["sensor"], title["format"]) == ("metric", "fan.lpc.fan_2",
+                                                                   "{label:upper}")  # fmt: skip
+    assert {w["sensor"] for w in parts if w.get("sensor")} == {"fan.lpc.fan_2"}
+    named, _ = expand(theme({"module": "instrument", "source": "fan", "title": "Radiator",
+                             "col": 0, "row": 0, "cols": 1, "rows": 2}))  # fmt: skip
+    assert next(w for w in named if w["id"].endswith("/title"))["text"] == "RADIATOR"
+
+
 def test_grid_for_a_bar_keeps_clear_of_the_hidden_strip():
     grid = make_grid(1920, 480, None, "turing-9.2-usb")
     assert (grid.columns, grid.rows) == (8, 2)

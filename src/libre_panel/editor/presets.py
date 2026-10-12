@@ -248,7 +248,20 @@ PRESETS: list[dict[str, Any]] = [
                 "color": "$accent",
                 "max_rpm": 3000,
             },
-            _text("label", 60, 20, "GPU FAN", 14, "$muted", letter_spacing=2),
+            # the fan's own name (FanControl's, the user's, the sensor's): it follows the sensor
+            _metric(
+                "label",
+                60,
+                20,
+                "gpu.fan",
+                "{label:upper}",
+                14,
+                "$muted",
+                letter_spacing=2,
+                tabular=False,
+                max_width=96,
+                fit="shrink",
+            ),
             _metric(
                 "value",
                 112,

@@ -267,6 +267,22 @@ def _fan_name(sensor: str) -> str:
     return name.replace("_", " ")
 
 
+def _fan_title(
+    b: _Build, title: str, sensor: str, x: float, top: float, size: float, color: str,
+    width: float, align: str = "left",
+) -> None:  # fmt: skip
+    """The fan's name over its speed: the module's ``title``, else the name the fan goes by
+    (the user's own, FanControl's, the sensor's: sensors/fan_names.py), in capitals."""
+    if title:
+        b.label("title", title, x, top, size, color=color, align=align, width=width)
+        return
+    b.value(
+        "title", sensor, "{label:upper}", x, top, size, color=color, align=align, width=width,
+        font="text_font", tabular=False, letter_spacing=max(1, round(size * 0.14)),
+        fit="shrink", fallback=_fan_name(sensor).upper(),
+    )  # fmt: skip
+
+
 def _build_fan(b: _Build, src: M.Source) -> None:
     """A fan with its speed, as the top row of the Studio screen shows them: the rotor in
     its ring (the ``fan`` widget: it turns with the speed) and, beside it or under it, the
@@ -274,7 +290,7 @@ def _build_fan(b: _Build, src: M.Source) -> None:
     sensor = b.module["sensor"] or src.load
     color = b.module["color"] or b.c("gpu" if sensor.startswith("gpu") else "cpu")
     b.card()
-    title = b.module["title"] or _fan_name(sensor)
+    title = b.module["title"]
     fonts = b.style["text_font"], b.style["display_font"]
     wide = b.aspect >= 1.5
     value = min(b.ih * (0.36 if wide else 0.2), b.iw * 0.2)
@@ -295,7 +311,7 @@ def _build_fan(b: _Build, src: M.Source) -> None:
         block = CAP * name + gap * 1.6 + CAP * value
         top = b.iy + (b.ih - block) / 2
         fan_xy = (x0, b.iy + (b.ih - d) / 2)
-        b.label("title", title, left, top, max(7, name), color=color, width=room)
+        _fan_title(b, title, sensor, left, top, max(7, name), color, room)
         number_at, cap = left + digits * value, top + CAP * name + gap * 1.6
         align_right = True
     else:
@@ -309,8 +325,7 @@ def _build_fan(b: _Build, src: M.Source) -> None:
         cx = b.ix + b.iw / 2
         fan_xy = (cx - d / 2, top)
         title_top = top + d + 0.14 * d
-        b.label("title", title, cx, title_top, max(7, name), color=color, align="center",
-                width=b.iw)  # fmt: skip
+        _fan_title(b, title, sensor, cx, title_top, max(7, name), color, b.iw, align="center")
         cap = title_top + CAP * name + gap * 1.6
         pair = digits * value + gap + unit_w
         number_at = cx - pair / 2 + digits * value

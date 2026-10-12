@@ -358,7 +358,7 @@ function ModuleInspector({ widget }) {
   const kinds = moduleKinds();
   const change = (key) => widgetChange(widget, key);
   const sources = sourceLabels();
-  const sensor = widget.source === "sensor" ? widget.sensor : null;
+  const sensor = widget.source === "sensor" || (widget.source === "fan" && widget.sensor) ? widget.sensor : null;
   const sourceName = info.sources.length ? (widget.source === "sensor" ? null : sources[widget.source]) : null;
 
   if (page === "details") {
@@ -426,9 +426,11 @@ function ModuleInspector({ widget }) {
           ? html`<${Chips} label=${t("Shows")} value=${widget.source} onChange=${change("source")}
               options=${info.sources.map((source) => ({ value: source, label: sources[source] ?? source }))} />`
           : null}
+        ${(widget.source === "sensor" || widget.source === "fan") && info.sources.length
+          ? html`<${FieldRow} widget=${widget} name="sensor" kind="sensor" value=${widget.sensor} onChange=${change("sensor")} />`
+          : null}
         ${widget.source === "sensor" && info.sources.length
-          ? html`<${FieldRow} widget=${widget} name="sensor" kind="sensor" value=${widget.sensor} onChange=${change("sensor")} />
-              <${FieldRow} widget=${widget} name="format" kind="format" value=${widget.format} onChange=${change("format")} />`
+          ? html`<${FieldRow} widget=${widget} name="format" kind="format" value=${widget.format} onChange=${change("format")} />`
           : null}
         <${NameFields} widget=${widget} />
         ${widget.module === "weather"
@@ -513,6 +515,30 @@ function ModuleInspector({ widget }) {
 
 // -- several widgets --------------------------------------------------------------------------
 
+/** The reading several parts share (a building block: a fan, its name and its speed), changed
+ * for all of them at once, and so are their conditions on it. */
+function SharedSensor({ chosen }) {
+  const reading = chosen.filter((widget) => typeof widget.sensor === "string" && widget.sensor);
+  const sensors = [...new Set(reading.map((widget) => widget.sensor))];
+  if (reading.length < 2 || sensors.length !== 1) return null;
+  const [old] = sensors;
+  const ids = new Set(reading.map((widget) => widget.id));
+  const change = (value) => {
+    if (!value || value === old) return;
+    edit("multi:sensor", (current) => {
+      for (const widget of current.widgets) {
+        if (!ids.has(widget.id)) continue;
+        widget.sensor = value;
+        if (widget.needs === old) widget.needs = value;
+      }
+    });
+  };
+  return html`<${Section} title=${t("Shows")}>
+    <${FieldRow} widget=${reading[0]} name="sensor" kind="sensor" value=${old} onChange=${change}
+      label=${t("Sensor of all {count} parts", { count: reading.length })} />
+  <//>`;
+}
+
 function MultiInspector({ chosen }) {
   const count = chosen.length;
   const ids = chosen.map((widget) => widget.id);
@@ -530,6 +556,7 @@ function MultiInspector({ chosen }) {
   return html`
     <${Header} icon="select-all" title=${t("{count} widgets", { count })} subtitle=${t("selected together")} />
     <div class="inspector-body">
+      <${SharedSensor} chosen=${chosen} />
       <${Section} title=${t("Align")}>
         <div class="align-grid">
           ${tools.map(([icon, mode, text]) => html`<${IconButton} key=${mode} icon=${icon} size=${18} label=${text}

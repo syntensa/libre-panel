@@ -1538,7 +1538,9 @@
     "Share of the round · tick: average": "Anteil der Runde · Strich: Schnitt",
     "what changes on the second: it jumps, rolls (the old digit up and out, the new one in from below) or fades, as SPUR II's clocks do": "was sich zur vollen Sekunde ändert: springt, rollt (die alte Ziffer nach oben hinaus, die neue von unten herein) oder blendet über, wie bei den Uhren von SPUR II",
     "how long a change takes after the second, at most 1 (SPUR II's: 0.42)": "wie lange ein Wechsel nach der vollen Sekunde dauert, höchstens 1 (bei SPUR II: 0,42)",
-    "a dot of this radius at the bar's end, its head; 0 = none (time.second runs through the minute)": "ein Punkt dieses Radius am Ende des Balkens, sein Kopf; 0 = keiner (time.second läuft durch die Minute)"
+    "a dot of this radius at the bar's end, its head; 0 = none (time.second runs through the minute)": "ein Punkt dieses Radius am Ende des Balkens, sein Kopf; 0 = keiner (time.second läuft durch die Minute)",
+    "Sensor of all {count} parts": "Sensor aller {count} Teile",
+    "which fan; empty: the graphics card's (gpu.fan)": "welcher Lüfter; leer: der der Grafikkarte (gpu.fan)"
   },
   "fields": {
     "align": "Ausrichtung",
