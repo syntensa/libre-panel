@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.2 — 2026-10-12
+
+The mainboard's fans on Windows, and values that follow as fast as in the SPUR II mod.
+
+**Fixes**
+- Windows: the mainboard's fans, and the temperatures and voltages of its Super I/O chip, did not
+  appear (only the GPU's fan did). LibreHardwareMonitor lists them only once an update has read
+  them, and Libre Panel took the list before the first update and never again. Each part is now
+  updated first, and sensors that appear later (a fan that starts turning, a graphics card's fan
+  after its zero-RPM mode) are found within a minute, through the sensor service and inside
+  Libre Panel alike
+- Video mode: values reach a new reading in about half a second and then hold, as in the SPUR II
+  mod, instead of gliding until the next reading (about a second): numbers, bars and rings follow
+  a change twice as fast. A theme's `animation.smoothing_ms` sets it, as it does on still frames
+- The app: a sensor this PC does not have no longer shows a made-up value in the sensor picker and
+  the inspector. Sample values are greyed, marked, and `/api/readings` says `sample` for each
+
 ## 0.5.1 — 2026-10-12
 
 Fixes from the first installs of 0.5.0 on Windows, above all the app's window.
