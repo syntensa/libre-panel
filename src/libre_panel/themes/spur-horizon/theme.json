@@ -1181,16 +1181,20 @@
       "needs": "fan.lpc.fan_1"
     },
     {
-      "type": "text",
+      "type": "metric",
       "id": "fan-1-name",
       "x": 342,
       "y": 35,
-      "text": "Intake",
+      "sensor": "fan.lpc.fan_1",
+      "format": "{label}",
       "font": "builtin:LiberationSans-Regular",
       "font_size": 23,
       "color": "@text3",
       "letter_spacing": 0,
       "align": "left",
+      "tabular": false,
+      "max_width": 65,
+      "fit": "shrink",
       "needs": "fan.lpc.fan_1"
     },
     {
@@ -1234,16 +1238,20 @@
       "needs": "fan.lpc.fan_2"
     },
     {
-      "type": "text",
+      "type": "metric",
       "id": "fan-2-name",
       "x": 609,
       "y": 35,
-      "text": "CPU",
+      "sensor": "fan.lpc.fan_2",
+      "format": "{label}",
       "font": "builtin:LiberationSans-Regular",
       "font_size": 23,
       "color": "@text3",
       "letter_spacing": 0,
       "align": "left",
+      "tabular": false,
+      "max_width": 51,
+      "fit": "shrink",
       "needs": "fan.lpc.fan_2"
     },
     {
@@ -1287,16 +1295,20 @@
       "needs": "fan.lpc.fan_4"
     },
     {
-      "type": "text",
+      "type": "metric",
       "id": "fan-3-name",
       "x": 879,
       "y": 35,
-      "text": "Exhaust",
+      "sensor": "fan.lpc.fan_4",
+      "format": "{label}",
       "font": "builtin:LiberationSans-Regular",
       "font_size": 23,
       "color": "@text3",
       "letter_spacing": 0,
       "align": "left",
+      "tabular": false,
+      "max_width": 86,
+      "fit": "shrink",
       "needs": "fan.lpc.fan_4"
     },
     {
@@ -1340,16 +1352,20 @@
       "needs": "fan.lpc.fan_3"
     },
     {
-      "type": "text",
+      "type": "metric",
       "id": "fan-4-name",
       "x": 1184,
       "y": 35,
-      "text": "Intake",
+      "sensor": "fan.lpc.fan_3",
+      "format": "{label}",
       "font": "builtin:LiberationSans-Regular",
       "font_size": 23,
       "color": "@text3",
       "letter_spacing": 0,
       "align": "left",
+      "tabular": false,
+      "max_width": 65,
+      "fit": "shrink",
       "needs": "fan.lpc.fan_3"
     },
     {

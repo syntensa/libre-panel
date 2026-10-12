@@ -322,7 +322,9 @@ A few things they do that a theme of your own can do too:
   Linux names the fans of the mainboard's Super I/O chip the same way),
   each with `"needs"` on its own reading, so a fan that is not there leaves
   no gap behind; their names come from the readings (`"format":
-  "{label:upper}"`). Where a PC names its fans otherwise (the board's
+  "{label:upper}"`): the user's own, else FanControl's, else the sensor's
+  ([hardware names](CONFIGURATION.md#hardware-names)), as the SPUR II
+  themes do too. Where a PC names its fans otherwise (the board's
   controller, a cooler on USB), a [list](#lists) of `fan.*` with `"needs":
   "!gpu.fan, !fan.lpc.fan_1"` shows them instead.
 - **A backdrop of their own.** Lumen's background is a picture in its folder
