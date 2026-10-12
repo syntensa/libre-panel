@@ -603,7 +603,10 @@ def test_a_fan_instrument_is_a_fan_with_its_name_and_its_speed():
     assert fan["type"] == "fan" and fan["sensor"] == "gpu.fan" and fan["w"] == fan["h"]
     assert fan["frame"] == "ring" and fan["max_rpm"] == 3000
     assert parts["value"]["sensor"] == "gpu.fan" and parts["unit"]["text"] == "RPM"
-    assert parts["title"]["text"] == "GPU"
+    # the name the fan goes by (the user's, FanControl's, the sensor's): its reading's
+    title = parts["title"]
+    assert (title["sensor"], title["format"], title["fallback"]) == ("gpu.fan", "{label:upper}",
+                                                                     "GPU")  # fmt: skip
     assert parts["title"]["x"] > fan["x"] + fan["w"]  # wide: the name and the speed beside it
     tall = widgets_of("instrument", 1, 2, source="fan")
     assert tall["title"]["y"] > tall["fan"]["y"] + tall["fan"]["h"]  # tall: under it
@@ -613,7 +616,10 @@ def test_a_fan_instrument_is_a_fan_with_its_name_and_its_speed():
 def test_a_fan_instrument_can_name_its_fan_and_its_colour():
     parts = widgets_of("instrument", 1, 1, source="fan", sensor="fan.board.case_1")
     assert parts["fan"]["sensor"] == parts["value"]["sensor"] == "fan.board.case_1"
-    assert parts["title"]["text"] == "CASE 1"
+    assert parts["title"]["sensor"] == "fan.board.case_1"
+    assert parts["title"]["fallback"] == "CASE 1"  # without a reading of its own
+    named = widgets_of("instrument", 1, 1, source="fan", title="Radiator")
+    assert named["title"]["text"] == "RADIATOR"
     colors = M_colors()
     assert parts["fan"]["color"].upper() == colors["cpu"].upper()  # (a graphics card's is `gpu`)
     own = widgets_of("instrument", 1, 1, source="fan", color="#ff8800")
