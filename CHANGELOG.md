@@ -6,6 +6,15 @@ Three new screens for the bars: one for music, one for the weather and one clock
 month, in digits or on a face; screens in turn; and the panel's own boot logo and standby
 clip in Libre Panel's look.
 
+<p>
+  <img src="https://raw.githubusercontent.com/syntensa/libre-panel/v0.5.6/docs/media/encore.gif" width="49%" alt="Encore: the cover large with its colours behind the screen, the time with rolling digits and the volume as levels that rise">
+  <img src="https://raw.githubusercontent.com/syntensa/libre-panel/v0.5.6/docs/media/nimbus.gif" width="49%" alt="Nimbus: the weather now, the next hours and days, the moon and a small clock">
+  <img src="https://raw.githubusercontent.com/syntensa/libre-panel/v0.5.6/docs/media/almanac.gif" width="49%" alt="Almanac beside the month, then Almanac Analog with a second hand that glides">
+  <img src="https://raw.githubusercontent.com/syntensa/libre-panel/v0.5.6/docs/media/screens-in-turn.gif" width="49%" alt="Screens in turn: Almanac, Nimbus and Encore one after another">
+</p>
+
+![The 9.2" panel's own boot logo and standby clip in Libre Panel's look](https://raw.githubusercontent.com/syntensa/libre-panel/v0.5.6/docs/media/start-screen.gif)
+
 **New**
 - Screens in turn: themes one after another, each for its seconds, minutes or hours, then
   from the top again (*Start → Screens in turn*, `[sequence]` in config.toml). A game's theme
@@ -16,7 +25,7 @@ clip in Libre Panel's look.
 - Encore: what plays with its cover large and the cover's colours blurred behind the whole
   screen, the state in the panel's language, the time with rolling digits, its seconds and a
   line through the minute, and the volume as levels that rise as on a mixer (a crossed
-  speaker while muted)
+  speaker while muted; no volume notice covers it)
 - Nimbus: the weather now and the next hours, the next days with their moving symbols, rain,
   low and high, the moon as it is lit tonight with the days until the next full and new moon,
   and a small clock. Without a place, a calendar sheet with the month and a line that says

@@ -33,12 +33,12 @@ import media_app  # noqa: E402
 import media_encode as encode  # noqa: E402
 import media_panel  # noqa: E402
 
-Clip = media_panel.PanelClip | media_app.AppClip
+Clip = media_panel.PanelClip | media_panel.StartClip | media_app.AppClip
 
 
 def clips() -> dict[str, Clip]:
     """Every recipe, by name."""
-    return {**media_panel.CLIPS, **media_app.CLIPS}
+    return {**media_panel.CLIPS, **media_panel.START_CLIPS, **media_app.CLIPS}
 
 
 def parse_themes(given: list[str], known: dict[str, Clip]) -> dict[str, tuple[str, ...]]:
@@ -76,6 +76,8 @@ def record(
     folder: Path,
     themes: tuple[str, ...] | None,
 ) -> encode.Recorded:
+    if isinstance(clip, media_panel.StartClip):
+        return media_panel.record_start(name, clip, settings, folder, themes)
     module = media_panel if isinstance(clip, media_panel.PanelClip) else media_app
     return module.record(name, clip, settings, folder, themes)
 

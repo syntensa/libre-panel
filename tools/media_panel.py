@@ -6,12 +6,15 @@ scripted events (a notice, a theme switch, a game that starts, a card that chang
 here waits for the wall clock, so a clip is the same on every run, whatever the machine:
 
 - the loop's clock is a number the recipe sets, and the demo's values follow it;
-- the time of day on the panel stands still (as in the pictures of tools/readme_images.py);
+- the time of day on the panel stands still (as in the pictures of tools/readme_images.py),
+  or, in a clip of a clock, runs with the loop's clock from that same moment;
 - the next theme is not warmed up in a thread, the pieces of a frame are not built in a helper
   thread: when those finish depends on the machine. The pictures are the same either way.
 
 Each recipe is a :class:`PanelClip`: how long it runs, and a function that sets the stage
-(themes, events, changes to the demo's values). Add one by adding it to ``CLIPS``.
+(themes, events, changes to the demo's values). Add one by adding it to ``CLIPS``. The
+panel's own start screen (``START_CLIPS``) is not the main loop: its pictures are shown as the
+panel shows them.
 """
 
 from __future__ import annotations
@@ -35,13 +38,21 @@ from PIL import Image, ImageChops
 
 from libre_panel import app, i18n
 from libre_panel.app import MainLoop
-from libre_panel.config import Config, DeviceConfig, ModeConfig, SensorsConfig, user_themes_dir
+from libre_panel.config import (
+    Config,
+    DeviceConfig,
+    ModeConfig,
+    SensorsConfig,
+    SequenceConfig,
+    user_themes_dir,
+)
 from libre_panel.devices.base import Display
 from libre_panel.plugins import PluginHost, loader
 from libre_panel.plugins.host import ServiceHost, apply_options
 from libre_panel.render.renderer import Renderer
 from libre_panel.sensors.base import Reading, SensorHub, SensorProvider, Snapshot
 from libre_panel.sensors.demo import DemoProvider, demo_history
+from libre_panel.sequence import Step
 from libre_panel.services.notices import Notices
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import THEME_FORMAT, find_theme, parse_theme, save_theme
@@ -227,6 +238,17 @@ class _FrozenTime:
         return images.WHEN
 
 
+class _RunningTime(_FrozenTime):
+    """``time`` for a clip whose clock runs: the time of day goes on with the clip's own clock
+    (from the same moment, so a clip is still the same on every run)."""
+
+    def __init__(self, clock: Clock) -> None:
+        self.clock = clock
+
+    def time(self) -> float:
+        return images.WHEN + self.clock.seconds
+
+
 class _NoWarmup:
     """A switch of theme happens in the frame it is asked for: the next theme is not built
     in a thread beforehand (when it is done depends on the machine, and so would the frame
@@ -363,11 +385,16 @@ class Stage:
         return name
 
     def show(
-        self, theme: str, modes: dict[str, str] | None = None, transition: str = "fade"
+        self,
+        theme: str,
+        modes: dict[str, str] | None = None,
+        transition: str = "fade",
+        turns: list[tuple[str, float]] | None = None,
     ) -> None:
-        """The theme the clip begins with, the themes of the modes (``{"game": theme}``) and
-        the transition config.toml names for a switch."""
+        """The theme the clip begins with, the themes of the modes (``{"game": theme}``), the
+        transition config.toml names for a switch, and screens in turn (theme, seconds)."""
         self.start, self.modes, self.transition = theme, dict(modes or {}), transition
+        self.turns = list(turns or [])
 
     def at(self, seconds: float, action: Callable[[Stage], None]) -> None:
         """Do ``action(stage)`` just before the frame at ``seconds`` is drawn."""
@@ -406,6 +433,7 @@ class Stage:
             transition=self.transition,
             sensors=SensorsConfig(providers=["demo"]),
             modes={name: ModeConfig(theme=theme) for name, theme in self.modes.items()},
+            sequence=SequenceConfig(True, [Step(theme, s) for theme, s in self.turns]),
         )
         hub = SensorHub([self.speakers, ClipDemo(self.clock, self._tweaks, self.period)])
         loop = MainLoop(
@@ -623,6 +651,9 @@ class PanelClip:
     # would show the same stretch again and again. Else the end gives way to the start.
     periodic: bool = False
     warmup: float = WARMUP_S
+    # Whether the time of day runs with the clip (the seconds roll, a second hand glides); else
+    # it stands still at the moment of the README's pictures.
+    clock_runs: bool = False
 
     @property
     def kind(self) -> str:
@@ -640,12 +671,14 @@ def record(
     themes = themes or clip.themes
     if len(themes) != len(clip.themes):
         raise ValueError(f"{name} shows {len(clip.themes)} theme(s), not {len(themes)}")
-    with workshop():
+    with workshop(), contextlib.ExitStack() as stack:
         box = clip.crop
         if isinstance(box, Focus):
             box = box.box(theme_data(themes[0])[0])
         whole = box is None and clip.crop is not None  # a close-up of what the theme lacks
         stage = Stage(settings, 1 if whole else clip.zoom, clip.seconds if clip.periodic else None)
+        if clip.clock_runs:
+            stack.enter_context(mock.patch.object(app, "time", _RunningTime(stage.clock)))
         clip.setup(stage, themes)
         fps = settings.fps
         overlap = round(FADE_S * fps) if clip.loop == "fade" else 0
@@ -694,6 +727,73 @@ def volume_band(stage: Stage, themes: tuple[str, ...]) -> None:
     down = [(2.4 + 0.1 * k, start + 24 - 2 * (k + 1)) for k in range(12)]
     for at, percent in up + down:
         stage.at(at, lambda s, percent=percent: s.turn_volume(percent))
+
+
+# Encore: what plays, the cover's colours behind it, the time rolling on, and the volume turned
+# up and then down: its levels rise and fall (the screen shows the volume itself, so no notice).
+def encore_screen(stage: Stage, themes: tuple[str, ...]) -> None:
+    stage.show(stage.theme(themes[0]))
+    start = stage.speakers.percent
+    up = [(1.0 + 0.12 * k, start + 4 * (k + 1)) for k in range(10)]
+    down = [(3.6 + 0.12 * k, start + 40 - 4 * (k + 1)) for k in range(10)]
+    for at, percent in up + down:
+        stage.at(at, lambda s, percent=percent: s.turn_volume(percent))
+
+
+# A screen as it runs: its symbols move, its clock rolls, its second hand glides.
+def screen(stage: Stage, themes: tuple[str, ...]) -> None:
+    stage.show(stage.theme(themes[0]))
+
+
+# Screens in turn: each shows for its time, then the next comes with the tube, by itself.
+def screens_in_turn(stage: Stage, themes: tuple[str, ...]) -> None:
+    names = [stage.theme(theme) for theme in themes]
+    stage.show(names[0], transition="tube", turns=[(name, 2.6) for name in names])
+
+
+@dataclass(frozen=True)
+class StartClip:
+    """The panel's own screens (render/bootscreen.py): the boot logo of a panel (by its model's
+    id), then its standby clip, round and round, in the device frame."""
+
+    about: str
+    themes: tuple[str, ...]  # the panel's model
+    seconds: float
+    logo_s: float = 1.6
+    poster: float = 3.0
+
+    @property
+    def kind(self) -> str:
+        return "panel"
+
+
+def record_start(
+    name: str,
+    clip: StartClip,
+    settings: Settings,
+    folder: Path,
+    themes: tuple[str, ...] | None = None,
+) -> Recorded:
+    """The boot logo for ``logo_s``, then the standby clip at its own rate, as the panel shows
+    them."""
+    from libre_panel.devices.models import get_model
+    from libre_panel.render import bootscreen
+
+    model = get_model((themes or clip.themes)[0])
+    logo = bootscreen.boot_logo(model)
+    loop = bootscreen.standby_frames(model)
+    size = (round(logo.width * settings.scale), round(logo.height * settings.scale))
+    present = Presenter(size, None, settings.bare)
+    fps = settings.fps
+    sink = FrameSink(folder, fps)
+    shown = present(logo.resize(size, Image.Resampling.LANCZOS))
+    sink.add(shown, round(clip.logo_s * fps))
+    count = round((clip.seconds - clip.logo_s) * fps)
+    for n in range(count):
+        picture = loop[int(n / fps * bootscreen.CLIP_FPS) % len(loop)]
+        sink.add(present(picture.resize(size, Image.Resampling.LANCZOS)))
+    frames = sink.frames()
+    return Recorded(frames, min(frames.count - 1, round(clip.poster * fps)))
 
 
 # One screen to the next, as an autopilot or a plugin switches them: a line ignites at
@@ -781,9 +881,34 @@ CLIPS: dict[str, PanelClip] = {
         ("lumen",), 6.0, close_up, poster=3.0, zoom=2, framed=False,
         crop=Focus(("graph", "fan"), 20, 44, 20, 22),
     ),
+    "encore": PanelClip(
+        "Encore: what plays, the cover's colours behind it, the time rolling, the volume rising",
+        ("encore",), 7.0, encore_screen, poster=2.4, periodic=True, clock_runs=True,
+    ),
+    "nimbus": PanelClip(
+        "Nimbus: the weather's symbols moving, the next days, the moon, a small clock rolling",
+        ("nimbus",), 6.0, screen, poster=2.0, periodic=True, clock_runs=True,
+    ),
+    "almanac": PanelClip(
+        "Almanac to Almanac Analog and back: rolling digits, then a second hand that glides",
+        ("almanac", "almanac-analog"), 6.6, theme_tube, poster=2.6, clock_runs=True,
+    ),
+    "screens-in-turn": PanelClip(
+        "screens in turn: Almanac, Nimbus and Encore one after another, each for its time",
+        ("almanac", "nimbus", "encore"), 7.8, screens_in_turn, poster=1.2, loop="cut",
+        clock_runs=True,
+    ),
     # SPUR II's classic screen, where Libre Panel started: the only clip of its own look
     "where-it-started": PanelClip(
         "SPUR II's classic screen in video mode, where it started: curves, fans, dust",
         ("spur-classic",), 8.0, video_mode, poster=4.0,
+    ),
+}  # fmt: skip
+
+# The panel's own screens: its boot logo, then its standby clip, as the panel shows them.
+START_CLIPS: dict[str, StartClip] = {
+    "start-screen": StartClip(
+        "the panel's own screens: the boot logo, then the standby clip's light running out",
+        ("turing-9.2-usb",), 6.0, poster=2.0,
     ),
 }  # fmt: skip

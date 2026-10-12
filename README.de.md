@@ -100,6 +100,43 @@ schließt sich zu einer Linie, der Name des Spiels leuchtet auf, und der Spielbi
 öffnet sich: die FPS, die 1-%-Lows und wer sie bremst, gezählt von Intels PresentMon. Nach
 einer Runde vergleicht ein optionaler Bericht sie mit deinen letzten zehn.
 
+### Bildschirme für Musik, Wetter und Uhrzeit
+
+<img src="docs/media/encore.gif" width="100%" alt="Encore: das Cover groß mit seinen Farben hinter dem ganzen Bildschirm, Titel, Künstler und Album, die Uhrzeit mit rollenden Ziffern und die Lautstärke als Pegel, die beim Drehen steigen und fallen">
+
+**Encore** ist für Musik: das Cover groß und seine Farben hinter dem ganzen Bildschirm, die
+Uhrzeit mit rollenden Ziffern und die Lautstärke als Pegel, die steigen, während du drehst.
+
+<img src="docs/media/nimbus.gif" width="100%" alt="Nimbus: das Wetter jetzt mit bewegtem Symbol, die nächsten Stunden, die nächsten sieben Tage mit Regen, der Mond, wie er heute Nacht leuchtet, und eine kleine Uhr">
+
+**Nimbus** ist fürs Wetter: jetzt und die nächsten Stunden, die nächsten Tage mit ihrem Regen,
+der Mond, wie er heute Nacht leuchtet, und eine kleine Uhr.
+
+<img src="docs/media/almanac.gif" width="100%" alt="Almanac: die Uhrzeit groß mit rollenden Ziffern neben dem Monat; die Röhre öffnet Almanac Analog, ein Zifferblatt mit gleitendem Sekundenzeiger, und wieder zurück">
+
+**Almanac** ist eine Uhr mit dem Monat, dem heutigen Tag und der Kalenderwoche; **Almanac
+Analog** zeigt die Zeit auf einem Zifferblatt, dessen Sekundenzeiger gleitet, tickt oder
+durchläuft.
+
+### Abfolge
+
+<img src="docs/media/screens-in-turn.gif" width="100%" alt="Abfolge: Almanac, dann Nimbus, dann Encore, jeder für seine Zeit, einer nach dem anderen aus einer Lichtlinie geöffnet, und wieder von vorn">
+
+Fünf Minuten Almanac, fünf Minuten Nimbus, zehn Minuten Studio, und wieder von vorn: Unter
+**Start** wählst du die Bildschirme, gibst jedem seine Sekunden, Minuten oder Stunden, und das
+Panel zeigt sie nacheinander. Ein Spiel, ein Hinweis oder ein Theme, das ein Dienst anfordert,
+geht weiterhin vor.
+
+### Der eigene Startbildschirm des Panels
+
+<img src="docs/media/start-screen.gif" width="100%" alt="Die eigenen Bildschirme des 9,2-Zoll-Panels im Look von Libre Panel: das Startlogo mit Zeichen und Namen von Libre Panel, dann der Standby-Clip, ein Licht, das von der Mitte aus über die Leiste läuft">
+
+TURZX-USB-Panels zeigen beim Einschalten ein eigenes Logo und spielen beim Start des PCs einen
+Clip, bevor irgendeine App mit ihnen spricht. Libre Panel zeichnet beides in seinem Look,
+passend zur Größe deines Panels, und spielt es mit einem Klick unter **Einstellungen → Panel →
+Startbildschirm** auf, nach einer Rückfrage; das Werkslogo bleibt auf dem Panel und kommt mit
+einem weiteren Klick zurück.
+
 ### Jede Panelgröße
 
 <img src="docs/media/small-panel.gif" width="100%" alt="Libre Default auf einem 3,5-Zoll-Panel: die Uhrzeit, leuchtende Ringe für CPU und Arbeitsspeicher, die sich füllen, CPU-Temperatur, Laufwerk und Netzwerk, ein scrollender CPU-Verlauf und eine kleine Karte in der Ecke, die vom laufenden Titel zum Wetter wechselt">
@@ -113,7 +150,7 @@ außer den 8,8"- und 9,2"-Leisten.
 <img src="docs/media/app-drag-module.gif" width="100%" alt="Gestalten: ein Wetter-Modul wird aus der Bibliothek auf ein 3,5-Zoll-Panel gezogen, breiter gemacht und zeigt beim Wachsen mehr">
 
 **Gestalten**: Bausteine aufs Panel ziehen. Ein Modul passt sich dem Platz an, den du ihm
-gibst, und zeigt umso mehr, je größer es ist; 25 davon, von jedem Kern bis zum nächsten
+gibst, und zeigt umso mehr, je größer es ist; 28 davon, von jedem Kern bis zum nächsten
 Termin.
 
 <img src="docs/media/app-look.gif" width="100%" alt="Look: ein Klick auf die Farbwelt Neon färbt ganz Lumen um, und ein Testhinweis zeigt, wie Hinweise aussehen werden">
@@ -362,12 +399,14 @@ den Libre Panel nicht installiert. Mehr:
 Den Videomodus gibt es für die TURZX-USB-Panels, die einen Videodecoder haben. Die Windows-
 und Linux-Downloads bringen das [ffmpeg](https://ffmpeg.org) mit, das er braucht; du gibst nur
 unter *Einstellungen → Panel* den Namen des Standby-Clips des Panels an, so wie ihn die
-Hersteller-App zeigt. Auf dem 9,2" schaltet er sich dann von selbst ein; auf den anderen
-TURZX-USB-Panels stellst du ihn zum Ausprobieren auf *an*. Mit einer Python-Installation
-installierst du ffmpeg selbst (Windows: `winget install ffmpeg`; Linux: das Paket deiner
-Distribution) oder nennst es an derselben Stelle. Auf dem Panel wird nichts gespeichert. Die
-seriellen Panels bekommen Standbilder, von denen nur die geänderten Teile gesendet werden
-([Einzelheiten](docs/CONFIGURATION.md#video)).
+Hersteller-App zeigt, oder spielst unter *Einstellungen → Panel → Startbildschirm* den
+Standby-Clip von Libre Panel auf, der ihn gleich mit einträgt. Auf dem 9,2" schaltet er sich
+dann von selbst ein; auf den anderen TURZX-USB-Panels stellst du ihn zum Ausprobieren auf
+*an*. Mit einer Python-Installation installierst du ffmpeg selbst (Windows: `winget install
+ffmpeg`; Linux: das Paket deiner Distribution) oder nennst es an derselben Stelle. Der
+Videomodus speichert nichts auf dem Panel; nur der Startbildschirm schreibt darauf, auf einen
+Klick. Die seriellen Panels bekommen Standbilder, von denen nur die geänderten Teile gesendet
+werden ([Einzelheiten](docs/CONFIGURATION.md#video)).
 </details>
 
 <details>

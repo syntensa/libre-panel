@@ -237,7 +237,8 @@ LONG = ("card-ignition", "volume-band", "theme-tube", "game-entrance")  # what t
 def test_every_panel_recipe_runs_headless_and_makes_a_clip(panel, clip, short):
     assert list(panel.CLIPS) == [
         "video-mode", "card-ignition", "small-panel", "volume-band", "theme-tube",
-        "game-entrance", "close-up-rings", "close-up-curves", "where-it-started",
+        "game-entrance", "close-up-rings", "close-up-curves", "encore", "nimbus", "almanac",
+        "screens-in-turn", "where-it-started",
     ]  # fmt: skip
     widths = {}
     for name, recipe in panel.CLIPS.items():
@@ -319,6 +320,44 @@ def test_the_card_slot_changes_and_changes_back(clip):
 
     assert np.abs(card(5) - card(35)).mean() > 8  # the weather instead of what plays
     assert np.abs(card(5) - card(cards.frames.count - 1)).mean() < 1.5  # playing again at the end
+
+
+def test_the_time_of_day_runs_in_a_clip_of_a_clock_and_stands_still_in_the_others(panel, short):
+    clock = panel.Clock()
+    clock.now = panel.START + 2.5
+    assert panel._RunningTime(clock).time() == panel.images.WHEN + 2.5
+    assert panel._FrozenTime().time() == panel.images.WHEN
+    assert panel.CLIPS["almanac"].clock_runs and not panel.CLIPS["video-mode"].clock_runs
+    # Almanac Analog's second hand glides: a face a second apart is not the same
+    analog = short("nimbus", themes=("almanac-analog",), scale=0.3)
+    assert differ(analog, 0, 10) > 0.1
+
+
+def test_the_screens_in_turn_come_one_after_another_and_round_again(panel, clip):
+    turn = panel.CLIPS["screens-in-turn"]
+    assert turn.loop == "cut" and turn.seconds == pytest.approx(3 * 2.6)  # the clip is one round
+    recorded = clip("screens-in-turn")
+    assert differ(recorded, 10, 40) > 8 and differ(recorded, 40, 70) > 8  # three screens
+    assert differ(recorded, 10, 70) > 8
+
+
+def test_the_start_clip_is_the_boot_logo_then_the_standby_clip_round_and_round(
+    panel, encode, tmp_path
+):
+    from libre_panel.render import bootscreen
+
+    start = panel.START_CLIPS["start-screen"]
+    assert start.kind == "panel" and start.about
+    fps = bootscreen.CLIP_FPS  # (the clip's own rate: a round is its frames)
+    settings = encode.Settings(fps=fps, scale=0.1)
+    recorded = panel.record_start("start-screen", start, settings, tmp_path)
+    frames = recorded.frames
+    assert frames.count == round(start.seconds * fps) and 0 <= recorded.poster < frames.count
+    logo = round(start.logo_s * fps)
+    assert differ(recorded, 0, logo - 1) == 0  # the logo stands
+    assert differ(recorded, logo - 1, logo) > 0  # the clip begins
+    after = logo + bootscreen.CLIP_FRAMES  # and comes round
+    assert differ(recorded, logo, after) == 0 < differ(recorded, logo, logo + 20)
 
 
 def test_a_clip_is_the_same_on_every_run(short):
@@ -564,7 +603,8 @@ def test_the_list_says_what_there_is_and_what_each_shows(cli, capsys):
     for name in ("video-mode", "volume-band", "theme-tube", "game-entrance", "card-ignition",
                  "small-panel", "close-up-rings", "close-up-curves", "where-it-started",
                  "app-look", "app-drag-module", "app-ring-style", "app-command-palette",
-                 "app-hardware-names"):  # fmt: skip
+                 "app-hardware-names", "encore", "nimbus", "almanac", "screens-in-turn",
+                 "start-screen"):  # fmt: skip
         assert name in shown
     assert "shows: lumen, studio" in shown  # (the tube goes from one theme to another)
     assert "shows: libre-default" in shown and "shows: layout-rings" in shown

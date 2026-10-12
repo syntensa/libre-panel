@@ -97,6 +97,40 @@ line, the game's name lights up and the game screen opens: the frame rate, its 1
 who holds it back, counted by Intel's PresentMon. After a round, an optional report compares
 it with your last ten.
 
+### Screens for music, weather and time
+
+<img src="docs/media/encore.gif" width="100%" alt="Encore: the cover large with its colours behind the whole screen, the track, artist and album, the time with rolling digits, and the volume as levels that rise and fall as it is turned">
+
+**Encore** is for music: the cover large and its colours behind the whole screen, the time
+with rolling digits, and the volume as levels that rise while you turn it.
+
+<img src="docs/media/nimbus.gif" width="100%" alt="Nimbus: the weather now with a moving symbol, the next hours, the next seven days with rain, the moon as it is lit tonight and a small clock">
+
+**Nimbus** is for the weather: now and the next hours, the next days with their rain, the
+moon as it is lit tonight and a small clock.
+
+<img src="docs/media/almanac.gif" width="100%" alt="Almanac: the time large with rolling digits beside the month; the tube opens Almanac Analog, a face whose second hand glides, and goes back">
+
+**Almanac** is a clock with the month, today and the week; **Almanac Analog** puts the time
+on a face whose second hand glides, ticks or sweeps.
+
+### Screens in turn
+
+<img src="docs/media/screens-in-turn.gif" width="100%" alt="Screens in turn: Almanac, then Nimbus, then Encore, each for its time, one opening from a line of light after the other, and from the top again">
+
+Five minutes Almanac, five minutes Nimbus, ten minutes Studio, and round again: on **Start**,
+pick the screens, give each its seconds, minutes or hours, and the panel shows them one after
+another. A game, a notice or a theme a service asks for still comes first.
+
+### The panel's own start screen
+
+<img src="docs/media/start-screen.gif" width="100%" alt="The 9.2-inch panel's own screens in Libre Panel's look: the boot logo with the Libre Panel mark and name, then the standby clip, a light that runs out from the middle along the bar">
+
+TURZX USB panels show a logo of their own when they are switched on and play a clip when the
+PC starts, before any app talks to them. Libre Panel draws both in its own look, made for the
+size of your panel, and puts them on it with one click on **Settings → Panel → Start screen**,
+after a question; the factory logo stays on the panel and comes back with another click.
+
 ### Every panel size
 
 <img src="docs/media/small-panel.gif" width="100%" alt="Libre Default on a 3.5-inch panel: the time, lit rings for CPU and memory that fill, the CPU temperature, disk and network, a CPU history that scrolls, and a small card in the corner that changes from the playing track to the weather">
@@ -109,7 +143,7 @@ out for it. Libre Default, here on a 3.5" panel, is the default on every panel b
 <img src="docs/media/app-drag-module.gif" width="100%" alt="Design: a weather module is dragged from the library onto a 3.5-inch panel and made wider, and shows more as it grows">
 
 **Design**: drag building blocks onto the panel. A module fits itself to the room you give
-it and shows more the larger it is; 25 of them, from every core to your next appointment.
+it and shows more the larger it is; 28 of them, from every core to your next appointment.
 
 <img src="docs/media/app-look.gif" width="100%" alt="Look: a click on the colour world Neon recolours the whole of Lumen, and a test notice shows how notices will look">
 
@@ -344,11 +378,13 @@ from outside the kernel, which Libre Panel does not install. More:
 
 Video mode is for the TURZX USB panels, which have a video decoder. The Windows and Linux
 downloads carry the [ffmpeg](https://ffmpeg.org) it needs, so you only name the panel's
-standby clip, as the vendor app shows it, in *Settings → Panel*. On the 9.2" it then turns
-itself on; on the other TURZX USB panels set it to *on* to try it. With a pip install, install
-ffmpeg yourself (Windows: `winget install ffmpeg`; Linux: your distribution's package) or
-name it in the same place. Nothing is saved on the panel. The serial panels get still frames,
-with only the changed parts sent ([details](docs/CONFIGURATION.md#video)).
+standby clip, as the vendor app shows it, in *Settings → Panel*, or put Libre Panel's own
+standby clip on the panel under *Settings → Panel → Start screen*, which names it for you. On
+the 9.2" it then turns itself on; on the other TURZX USB panels set it to *on* to try it. With
+a pip install, install ffmpeg yourself (Windows: `winget install ffmpeg`; Linux: your
+distribution's package) or name it in the same place. Video mode saves nothing on the panel;
+only the Start screen writes to it, on a click. The serial panels get still frames, with only
+the changed parts sent ([details](docs/CONFIGURATION.md#video)).
 </details>
 
 <details>

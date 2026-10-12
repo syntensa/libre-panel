@@ -44,6 +44,11 @@
     "gap": 1,
     "margin": 16
   },
+  "toast": {
+    "off": [
+      "volume"
+    ]
+  },
   "style": {
     "card": "glass",
     "radius": 14,
