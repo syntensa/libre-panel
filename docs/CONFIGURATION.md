@@ -92,6 +92,9 @@ url = "http://127.0.0.1:8085/data.json"   # the web server (mode "webserver", an
 # cpu_name = ""                # the names themes show (cpu.name, gpu.name, mem.name):
 # gpu_name = ""                # found by Libre Panel itself; text here replaces what is
 # memory_name = ""             # found, as you write it (empty: as found)
+# [[hardware.fans]]            # a fan's own name, by the key of its speed (Settings ->
+# sensor = "fan.lpc.fan_1"     # Sensors sets them); without one: FanControl's name for
+# name = "Intake"              # it, else the sensor's ("Fan #1")
 
 [weather]
 enabled = false                # off unless you turn it on
@@ -396,6 +399,24 @@ answers like `GET`, refuses anything else with 400 and, like every request, need
 access token in the header `X-Libre-Panel` ([Running in the
 background](BACKGROUND.md#who-can-talk-to-the-app)). `GET /api/hardware?refresh=1` asks the computer again
 (a card was changed while Libre Panel ran); Libre Panel asks once per start otherwise.
+
+**The fans' names.** A mainboard wires its fan headers its own way, so a theme does
+not name them itself: it shows each fan's name (`{label}`), and the name comes from
+here. A name of your own (*Settings → Sensors → Fan names*, which shows each fan's
+speed now, so one can tell them apart) is kept by the key of the fan's speed:
+
+```toml
+[[hardware.fans]]
+sensor = "fan.lpc.fan_1"
+name = "Intake"
+```
+
+Without one a fan goes by the name FanControl gives it (Windows; Libre Panel reads its
+`userConfig.json`, where the cooling analysis finds it, or at `fancontrol` under
+`[services.cooling]`), else by the sensor's own ("Fan #1"). `GET /api/hardware` lists
+the fans as `"fans": [{"key", "detected", "custom", "value"}]` (`value`: the speed now,
+or `null`), and `POST /api/hardware` takes `{"fans": {"fan.lpc.fan_1": "Intake"}}` (an
+empty text gives the detected name back).
 
 **Where it can be wrong.** Windows can keep the entry of a graphics card that was
 taken out (Device Manager shows it under *Show hidden devices*); if that card had

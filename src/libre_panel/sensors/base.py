@@ -201,10 +201,21 @@ class SensorHub:
     lists the key in its ``overrides``.
     """
 
-    def __init__(self, providers: list[SensorProvider]) -> None:
+    def __init__(self, providers: list[SensorProvider], names: Any = None) -> None:
         self.providers = providers
+        # puts the names readings go by into them (the fans': sensors.fan_names.FanNames)
+        self.names = names
         self._history: dict[str, deque[float]] = {}
         self._owners: dict[str, SensorProvider] = {}  # which provider a key came from
+
+    def _named(self, readings: dict[str, Reading]) -> dict[str, Reading]:
+        if self.names is None:
+            return readings
+        try:
+            return self.names.apply(readings)
+        except Exception:  # a name is not worth a reading
+            log.exception("the names of the readings could not be given")
+            return readings
 
     @property
     def every_frame(self) -> bool:
@@ -228,6 +239,7 @@ class SensorHub:
                     readings[key] = reading
                     owners[key] = provider
         self._owners = owners
+        readings = self._named(readings)
         for key, reading in readings.items():
             if isinstance(reading.value, (int, float)) and not isinstance(reading.value, bool):
                 self._history.setdefault(key, deque(maxlen=HISTORY_LENGTH)).append(
@@ -247,7 +259,12 @@ class SensorHub:
 
     def follow_config(self, config: Any) -> None:
         """Tell the sources about the config.toml that was loaded (see
-        :meth:`SensorProvider.follow_config`)."""
+        :meth:`SensorProvider.follow_config`), and the names."""
+        if self.names is not None:
+            try:
+                self.names.follow_config(config)
+            except Exception:  # a name is not worth a reading
+                log.exception("the names of the readings could not follow the config")
         for provider in self.providers:
             follow = getattr(provider, "follow_config", None)
             if follow is None:  # a source written without the base class
@@ -273,7 +290,7 @@ class SensorHub:
             for key, reading in self._read(provider).items():
                 if self._owners.get(key, provider) is provider and key not in readings:
                     readings[key] = reading
-        return readings
+        return self._named(readings)
 
     def close(self) -> None:
         for provider in self.providers:

@@ -129,6 +129,13 @@ PICTURES = (
 _ASSET_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 # The names /api/hardware talks about, and the setting in config.toml ([hardware]) of each.
 _HARDWARE_SETTINGS = {"cpu": "cpu_name", "gpu": "gpu_name", "memory": "memory_name"}
+
+
+def _natural(key: str) -> list[Any]:
+    """A key in the order people count (fan_2 before fan_10)."""
+    return [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", key)]
+
+
 _CONTENT_TYPES = {
     ".html": "text/html; charset=utf-8",
     ".js": "text/javascript; charset=utf-8",
@@ -986,26 +993,87 @@ class EditorHandler(BaseHTTPRequestHandler):
         found = detected_names(card if isinstance(card, str) else "", refresh)
         own = config.hardware
         custom = {"cpu": own.cpu_name, "gpu": own.gpu_name, "memory": own.memory_name}
-        self._json({part: {"detected": found[part], "custom": custom[part]} for part in custom})
+        answer: dict[str, Any] = {
+            part: {"detected": found[part], "custom": custom[part]} for part in custom
+        }
+        answer["fans"] = self._fans(config)
+        self._json(answer)
+
+    def _fans(self, config: Any) -> list[dict[str, Any]]:
+        """The fans this computer reads, each ``{key, detected, custom, value}``: the name it
+        goes by without one of the user's own (FanControl's, else the sensor's), the user's,
+        and its speed now (which tells one from the other). A fan named but not read now
+        stays in the list, so that its name can be taken back."""
+        from libre_panel.sensors.fan_names import FanNames, is_fan
+
+        try:
+            readings = self.state.live_snapshot().readings
+        except Exception as exc:  # live sensors are optional here
+            log.debug("live sensors unavailable: %s", exc)
+            readings = {}
+        names = FanNames()
+        names.follow_config(config)
+        own = config.hardware.fans
+        fans = {}
+        for key, reading in readings.items():
+            if is_fan(key, reading):
+                value = reading.value if isinstance(reading.value, int | float) else None
+                fans[key] = {
+                    "key": key,
+                    "detected": names.detected(reading, readings),
+                    "custom": own.get(key, ""),
+                    "value": round(value) if value is not None and math.isfinite(value) else None,
+                }
+        for key, name in own.items():
+            fans.setdefault(key, {"key": key, "detected": "", "custom": name, "value": None})
+        return [fans[key] for key in sorted(fans, key=_natural)]
 
     def _set_hardware(self) -> None:
-        """Set the user's own text for any of ``cpu``, ``gpu`` and ``memory`` ("" gives the
-        detected name back); answers like the GET."""
+        """Set the user's own text for any of ``cpu``, ``gpu`` and ``memory``, and for fans
+        (``{"fans": {"fan.lpc.fan_1": "Intake"}}``); "" gives the detected name back.
+        Answers like the GET."""
         payload = self._read_json()
+        fans = payload.get("fans") if isinstance(payload, dict) else None
+        parts = (
+            {k: v for k, v in payload.items() if k != "fans"} if isinstance(payload, dict) else None
+        )
         if payload is None:
             return
         if (
             not isinstance(payload, dict)
             or not payload
-            or not set(payload) <= set(_HARDWARE_SETTINGS)
-            or not all(isinstance(text, str) for text in payload.values())
+            or not set(parts) <= set(_HARDWARE_SETTINGS)
+            or not all(isinstance(text, str) for text in parts.values())
+            or (
+                "fans" in payload
+                and (
+                    not isinstance(fans, dict)
+                    or not all(isinstance(k, str) and k.strip() for k in fans)
+                    or not all(isinstance(text, str) for text in fans.values())
+                )
+            )
         ):
-            return self._error('expected text for "cpu", "gpu" or "memory": {"cpu": "My CPU"}')
+            return self._error(
+                'expected text for "cpu", "gpu" or "memory", or "fans" by sensor: '
+                '{"cpu": "My CPU", "fans": {"fan.lpc.fan_1": "Intake"}}'
+            )
         try:
-            changes = []
-            for part, text in payload.items():
+            changes: list[tuple[str, str, Any]] = []
+            for part, text in parts.items():
                 name = f"hardware.{_HARDWARE_SETTINGS[part]}"
                 changes.append(("value", name, hardware_name(text, name)))
+            if fans is not None:
+                named = dict(load_config(self.state.config_path).hardware.fans)
+                for key, text in fans.items():
+                    text = hardware_name(text, f"hardware.fans ({key})")
+                    if text:
+                        named[key.strip()] = text
+                    else:
+                        named.pop(key.strip(), None)
+                tables = [
+                    {"sensor": key, "name": named[key]} for key in sorted(named, key=_natural)
+                ]
+                changes.append(("tables", "hardware.fans", tables))
             edit_config(*changes, path=self.state.config_path)  # all of them in one write
         except (ConfigError, OSError) as exc:
             return self._error(str(exc))

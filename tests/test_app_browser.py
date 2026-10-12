@@ -3530,6 +3530,42 @@ def test_hardware_names_in_settings_and_where_they_show(app_url):
         assert page.locator(".inspector .hardware-name").count() == 0
 
 
+def test_the_fans_are_named_in_settings(app_url):
+    """Each fan by the name it goes by, its key and its speed now; a name of one's own, and
+    back to the detected one."""
+    import json
+
+    names = HardwareNames()
+    names.names["fans"] = [
+        {"key": "fan.lpc.fan_1", "detected": "Fan #1", "custom": "", "value": 820},
+        {"key": "fan.lpc.fan_2", "detected": "Rear", "custom": "", "value": None},
+    ]
+
+    def answer(route, request):
+        if request.method == "POST":
+            change = json.loads(request.post_data or "{}")
+            names.posted.append(change)
+            for key, text in change.get("fans", {}).items():
+                next(f for f in names.names["fans"] if f["key"] == key)["custom"] = text
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(names.names))
+
+    with browser_page(app_url, "settings/sensors", routes={"**/api/hardware": answer}) as page:
+        first = page.locator('[id="fan-name-fan.lpc.fan_1"]')
+        assert first.get_attribute("placeholder") == "Fan #1"
+        row = page.locator(".settings-row", has=first)
+        expect(row).to_contain_text("fan.lpc.fan_1 · 820 RPM now")
+        expect(page.locator(".settings-row", has_text="Rear")).to_contain_text("not read now")
+        first.fill("Intake")
+        first.press("Enter")
+        page.wait_for_function("window.libre.store.get().hardware.fans[0].custom === 'Intake'")
+        row.locator(".link-btn").click()  # Automatic
+        page.wait_for_function("window.libre.store.get().hardware.fans[0].custom === ''")
+        assert names.posted == [
+            {"fans": {"fan.lpc.fan_1": "Intake"}},
+            {"fans": {"fan.lpc.fan_1": ""}},
+        ]
+
+
 def test_without_hardware_names_nothing_shows(app_url):
     """A server without /api/hardware (an older background app): no fields; the rest of
     the section is there."""

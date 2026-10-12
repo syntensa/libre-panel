@@ -1,8 +1,9 @@
-// The hardware's names on the panel (cpu.name, gpu.name, mem.name): the sensors
-// detect them, and a text of the user's own takes their place (config.toml
-// [hardware], for every theme; the running panel follows). store.get().hardware is
-// null until asked, false where the server has no /api/hardware, else
-// {cpu, gpu, memory}, each {detected, custom}.
+// The hardware's names on the panel (cpu.name, gpu.name, mem.name), and the fans' (each
+// fan's {label}): the sensors detect them (a fan's from FanControl, else the sensor's),
+// and a text of the user's own takes their place (config.toml [hardware], for every theme;
+// the running panel follows). store.get().hardware is null until asked, false where the
+// server has no /api/hardware, else {cpu, gpu, memory, fans}: the parts each {detected,
+// custom}, fans a list of {key, detected, custom, value} (value: its speed now, or null).
 
 import { endpoints } from "./api.js";
 import { t } from "./i18n.js";
@@ -39,6 +40,18 @@ export function loadHardware(again = false) {
     },
   );
   return asking;
+}
+
+/** Use `text` as the name of the fan whose speed `key` reads ("" goes back to the detected one). */
+export async function setFanName(key, text) {
+  const value = String(text ?? "").trim();
+  const fan = (store.get().hardware?.fans || []).find((item) => item.key === key);
+  if (!fan || value === (fan.custom || "")) return true;
+  const data = await endpoints.setHardware({ fans: { [key]: value } });
+  if (usable(data)) store.set({ hardware: data });
+  else await loadHardware(true);
+  requestRender(0); // the preview shows the name too
+  return true;
 }
 
 /** Use `text` as a part's name ("" goes back to the detected one). */

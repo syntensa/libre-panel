@@ -123,6 +123,12 @@ url = "http://127.0.0.1:8085/data.json"
 # cpu_name = ""
 # gpu_name = ""
 # memory_name = ""
+# Names of your own for the fans, by the sensor that measures each (the app sets them in
+# Settings -> Sensors); without one a fan goes by the name FanControl gives it, else by
+# the sensor's own ("Fan #1").
+# [[hardware.fans]]
+# sensor = "fan.lpc.fan_1"
+# name = "Intake"
 
 [weather]
 # Weather is off by default. Turn it on and set your own location.
@@ -252,6 +258,8 @@ class HardwareConfig:
     cpu_name: str = ""
     gpu_name: str = ""
     memory_name: str = ""
+    # the fans' own names, by the key of the sensor that measures each ([[hardware.fans]])
+    fans: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -331,6 +339,22 @@ def hardware_name(value: Any, name: str) -> str:
     return text
 
 
+def _fan_names(value: Any) -> dict[str, str]:
+    """``[[hardware.fans]]``: each ``sensor`` (a key such as ``fan.lpc.fan_1``) with its
+    ``name``; one without a name is left out."""
+    names: dict[str, str] = {}
+    for n, table in enumerate(_expect(value, list, "hardware.fans")):
+        where = f"hardware.fans[{n}]"
+        table = _expect(table, dict, where)
+        sensor = _expect(table.get("sensor", ""), str, f"{where}.sensor").strip()
+        if not sensor:
+            raise ConfigError(f"{where}.sensor: the key of the fan's sensor, e.g. fan.lpc.fan_1")
+        name = hardware_name(table.get("name", ""), f"{where}.name")
+        if name:
+            names[sensor] = name
+    return names
+
+
 def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     cfg = Config(path=path)
     if "theme" in data:
@@ -387,6 +411,7 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         cpu_name=hardware_name(hw.get("cpu_name", ""), "hardware.cpu_name"),
         gpu_name=hardware_name(hw.get("gpu_name", ""), "hardware.gpu_name"),
         memory_name=hardware_name(hw.get("memory_name", ""), "hardware.memory_name"),
+        fans=_fan_names(hw.get("fans", [])),
     )
 
     w = _expect(data.get("weather", {}), dict, "weather")

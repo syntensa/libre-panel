@@ -28,6 +28,7 @@ from libre_panel.render.motion import Motion
 from libre_panel.render.overlays import ToastLayer, switch_policy, transition
 from libre_panel.render.renderer import Renderer, changed_region
 from libre_panel.sensors.base import SensorHub, SensorProvider, Snapshot, create_provider
+from libre_panel.sensors.fan_names import FanNames
 from libre_panel.theme.defaults import default_theme, panel_model
 from libre_panel.theme.model import THEME_FILENAME, Theme, ThemeError, find_theme, load_theme
 
@@ -63,7 +64,7 @@ def build_hub(config: Config, demo: bool = False) -> SensorHub:
             providers.append(MediaProvider(config.sensors.options.get("media", {})))
         if not given & {"hardware", "demo"}:  # a demo has names of its own, made up
             providers.append(HardwareProvider())  # the names of this PC, and [hardware]
-    hub = SensorHub(providers)
+    hub = SensorHub(providers, names=FanNames())  # the fans by the names they go by
     hub.follow_config(config)  # [hardware] and the like, which no source's own table holds
     return hub
 

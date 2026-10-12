@@ -9,6 +9,7 @@ import pytest
 from editor_token import token_of
 from fake_hardware import PC, TIDY
 
+from libre_panel.config import load_config
 from libre_panel.editor import access
 from libre_panel.editor.server import make_server
 from libre_panel.sensors import hardware
@@ -596,34 +597,90 @@ def hardware_state(custom=("", "", "")):
     return {part: {"detected": TIDY[part], "custom": text} for part, text in parts}
 
 
+def parts(data):
+    """The three parts of an answer of /api/hardware (its fans aside)."""
+    return {part: data[part] for part in ("cpu", "gpu", "memory")}
+
+
 def written(isolated_home):
     return tomllib.loads((isolated_home / "config.toml").read_text(encoding="utf-8"))
 
 
 def test_the_hardware_names_are_what_is_found_and_what_the_user_wrote(editor, pc, isolated_home):
     status, data = names(editor)
-    assert status == 200 and data == hardware_state()
+    assert status == 200 and parts(data) == hardware_state()
     assert data["cpu"]["detected"] == "Ryzen 5 7600"  # tidied, as the panel shows it
     assert not (isolated_home / "config.toml").exists()  # asking writes nothing
 
 
 def test_the_users_text_is_written_to_config_toml_and_comes_back(editor, pc, isolated_home):
     status, data = names(editor, {"cpu": "My CPU"})
-    assert status == 200 and data == hardware_state(("My CPU", "", ""))
+    assert status == 200 and parts(data) == hardware_state(("My CPU", "", ""))
     assert names(editor) == (200, data)
     assert written(isolated_home)["hardware"] == {"cpu_name": "My CPU"}
     assert "# Libre Panel configuration" in (isolated_home / "config.toml").read_text("utf-8")
     status, data = names(editor, {"gpu": "My card", "memory": "2x16 GB"})
-    assert status == 200 and data == hardware_state(("My CPU", "My card", "2x16 GB"))
+    assert status == 200 and parts(data) == hardware_state(("My CPU", "My card", "2x16 GB"))
     assert written(isolated_home)["hardware"] == {
         "cpu_name": "My CPU", "gpu_name": "My card", "memory_name": "2x16 GB",
     }  # fmt: skip
 
 
+def test_the_fans_are_named_in_the_app_and_written_to_config_toml(
+    monkeypatch, editor, pc, isolated_home
+):
+    """Each fan this computer reads, with its speed now (which tells one from the other), the
+    name it goes by without one of the user's own, and the user's, kept in config.toml."""
+    from libre_panel.editor.server import EditorState
+    from libre_panel.sensors.base import Reading, Snapshot
+    from libre_panel.sensors.fan_names import FanNames
+
+    raw = "lhm:/lpc/chip0000/0/fan/0"
+    live = Snapshot(
+        readings={
+            raw: Reading(raw, 820.0, "RPM", "Fan #1"),
+            "fan.lpc.fan_1": Reading("fan.lpc.fan_1", 820.0, "RPM", "Fan #1", origin=raw),
+            "fan.lpc.fan_10": Reading("fan.lpc.fan_10", 0.0, "RPM", "Fan #10"),
+            "fan.lpc.fan_2": Reading("fan.lpc.fan_2", 1140.4, "RPM", "Fan #2"),
+        }
+    )
+
+    def named(self):  # the live readings go by their names, as the hub gives them
+        names = FanNames()
+        names.follow_config(load_config())
+        return Snapshot(readings=names.apply(dict(live.readings)))
+
+    monkeypatch.setattr(EditorState, "live_snapshot", named)
+    status, data = names(editor)
+    assert status == 200 and [fan["key"] for fan in data["fans"]] == [
+        "fan.lpc.fan_1", "fan.lpc.fan_2", "fan.lpc.fan_10",
+    ]  # fmt: skip
+    assert data["fans"][0] == {
+        "key": "fan.lpc.fan_1",
+        "detected": "Fan #1",
+        "custom": "",
+        "value": 820,
+    }
+    status, data = names(editor, {"fans": {"fan.lpc.fan_1": "  Intake ", "fan.lpc.fan_2": "CPU"}})
+    assert status == 200 and data["fans"][0]["custom"] == "Intake"
+    assert data["fans"][0]["detected"] == "Fan #1"  # what it goes back to
+    assert written(isolated_home)["hardware"]["fans"] == [
+        {"sensor": "fan.lpc.fan_1", "name": "Intake"}, {"sensor": "fan.lpc.fan_2", "name": "CPU"},
+    ]  # fmt: skip
+    assert parts(data) == hardware_state()  # the other names stay
+    status, data = names(editor, {"fans": {"fan.lpc.fan_2": ""}})
+    assert status == 200 and [f["custom"] for f in data["fans"]] == ["Intake", "", ""]
+    assert written(isolated_home)["hardware"]["fans"] == [
+        {"sensor": "fan.lpc.fan_1", "name": "Intake"}
+    ]
+    for wrong in ({"fans": []}, {"fans": {"": "x"}}, {"fans": {"fan.lpc.fan_1": 1}}):
+        assert names(editor, wrong)[0] == 400, wrong
+
+
 def test_an_empty_text_gives_the_found_name_back_and_the_others_stay(editor, pc, isolated_home):
     names(editor, {"cpu": "My CPU", "gpu": "My card"})
     status, data = names(editor, {"cpu": ""})
-    assert status == 200 and data == hardware_state(("", "My card", ""))
+    assert status == 200 and parts(data) == hardware_state(("", "My card", ""))
     assert written(isolated_home)["hardware"]["cpu_name"] == ""
 
 
