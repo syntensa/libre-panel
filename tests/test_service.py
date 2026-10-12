@@ -55,13 +55,34 @@ def test_panel_service_pause_resume_stop(isolated_home):
     assert not service.running
 
 
-def test_panel_service_waits_for_a_fixed_config(isolated_home):
+def test_a_theme_that_is_gone_shows_the_panels_own_and_says_so(isolated_home):
+    """A theme config.toml names that is not installed any more (a plugin's that is gone)
+    does not stop the panel: it shows its own theme, and the tray and Start say why."""
     write_config(isolated_home, theme="does-not-exist")
     service = PanelService()
     service.start()
     try:
+        assert wait_for(lambda: service.state()["state"] == "showing")
+        state = service.state()
+        assert state["theme"] == "libre-default" and state["missing_theme"] == "does-not-exist"
+        assert "does-not-exist" in state["notice"] and "libre-default" in state["notice"]
+        time.sleep(0.05)
+        write_config(isolated_home, theme="slate")  # chosen in the tray or on Start
+        assert wait_for(lambda: service.state()["theme"] == "slate")
+        assert service.state()["missing_theme"] == "" and service.state()["notice"] == ""
+    finally:
+        service.stop()
+
+
+def test_panel_service_waits_for_a_fixed_config(isolated_home):
+    write_config(isolated_home)
+    with open(isolated_home / "config.toml", "a", encoding="utf-8") as config:
+        config.write("fps = = 5\n")  # not TOML
+    service = PanelService()
+    service.start()
+    try:
         assert wait_for(lambda: service.state()["state"] == "error")
-        assert "does-not-exist" in service.state()["detail"]
+        assert "config.toml" in service.state()["detail"]
         assert service.running  # still alive, waiting for a fix
         time.sleep(0.05)
         write_config(isolated_home, theme="slate")  # e.g. fixed in the editor

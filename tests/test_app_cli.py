@@ -250,6 +250,47 @@ def test_running_panel_picks_up_theme_changes(tmp_path, isolated_home):
         thread.join(5)
 
 
+def test_a_theme_that_is_gone_leaves_the_panel_lit_with_its_own(tmp_path, isolated_home):
+    """config.toml names a theme that is not installed (one of a plugin that is gone): the
+    panel shows its own theme instead of going dark, the status says which one is missing,
+    and choosing another theme ends it."""
+    import threading
+    import time
+
+    from libre_panel.app import RunStatus
+    from libre_panel.config import load_config, set_active_theme, write_default_config
+
+    path = write_default_config()
+    out = tmp_path / "frame.png"
+    text = re.sub(r"(?m)^providers = .*$", 'providers = ["demo"]', path.read_text())
+    text = text.replace('output = "libre-panel-frame.png"', f'output = "{out.as_posix()}"')
+    path.write_text(re.sub(r"(?m)^#? ?theme = .*$", 'theme = "gone-theme"', text, count=1))
+    config = load_config(path)
+    assert config.theme == "gone-theme" and config.theme_given
+    config.refresh_ms = 100
+    status, stop = RunStatus(), threading.Event()
+    thread = threading.Thread(
+        target=run, args=(config,), kwargs={"stop": stop, "status": status}, daemon=True
+    )
+    thread.start()
+    try:
+        deadline = time.time() + 10
+        while not out.exists() and time.time() < deadline:
+            time.sleep(0.05)
+        assert size_of(out) == (480, 320)  # the panel's own theme
+        assert status.missing_theme == "gone-theme"
+        assert status.theme == status.default_theme == "libre-default"
+        time.sleep(0.05)  # make sure the next write gets a new mtime
+        set_active_theme("spur-ii")
+        while time.time() < deadline and size_of(out) != (1920, 480):
+            time.sleep(0.05)
+        assert size_of(out) == (1920, 480)
+        assert status.missing_theme == "" and status.theme == "spur-ii"
+    finally:
+        stop.set()
+        thread.join(5)
+
+
 def test_auto_driver_falls_back_to_png(tmp_path):
     from libre_panel.devices.base import create_display
 

@@ -174,6 +174,9 @@ class RunStatus:
     # What a config.toml without a theme shows on this panel (Lumen on a bar, Libre Default
     # elsewhere), as the loop worked it out; empty until it has.
     default_theme: str = ""
+    # A theme config.toml names that cannot be shown (removed, or from a plugin that is not
+    # installed): the panel shows default_theme instead until another is chosen.
+    missing_theme: str = ""
     detail: str = ""  # why the panel is not available
     frames: int = 0
     mode: str | None = None  # set by a service, e.g. "game"
@@ -491,21 +494,26 @@ class MainLoop:
         self.default = status.default_theme = default_theme(panel)
         named = config.theme if config.theme_given else self.default
         shown = _theme_name(config, host, self.default) if not once else named
+        self.refused: str | None = None  # a requested theme that failed to load
+        status.missing_theme = ""
         try:
             theme = load_theme(find_theme(shown))
         except ThemeError:
             if shown == named:
-                raise
-            log.warning("theme %r not found; showing %r", shown, named)
-            shown = named
-            theme = load_configured_theme(config, self.default)
+                theme, shown = self._instead_of(named, status)
+            else:
+                log.warning("theme %r not found; showing %r", shown, named)
+                shown = named
+                try:
+                    theme = load_configured_theme(config, self.default)
+                except ThemeError:
+                    theme, shown = self._instead_of(named, status)
         if not config.theme_given:
             log.info(
                 "no theme in config.toml: %r, the default for %s",
                 self.default,
                 panel.label if panel else "a panel that is not known yet",
             )
-        self.refused: str | None = None  # a requested theme that failed to load
         status.theme = shown
         for warning in theme.warnings:
             log.warning("theme %s: %s", shown, warning)
@@ -655,6 +663,29 @@ class MainLoop:
 
         return build
 
+    def _instead_of(self, named: str, status: RunStatus) -> tuple[Theme, str]:
+        """The panel's own theme, shown while the one config.toml names cannot be (a theme
+        that was removed, or came from a plugin that is not installed): the panel stays lit,
+        and the app and the tray say which theme is missing. config.toml is left as it is, so
+        the theme shows again once it is back; choosing another one ends it."""
+        try:
+            find_theme(named)
+        except ThemeError as exc:
+            why = str(exc)
+        else:
+            why = f"theme {named!r} cannot be loaded"
+        if named == self.default:
+            raise ThemeError(why)
+        theme = load_theme(find_theme(self.default))
+        log.warning(
+            "%s: showing %r, the panel's own, until it is back or another is chosen",
+            why,
+            self.default,
+        )
+        status.missing_theme = named
+        self.refused = named  # tried again when config.toml changes, not on every frame
+        return theme, self.default
+
     def _default_for(self, fresh: Config) -> str:
         """The default theme for a config just read: the one now, unless it names another
         panel or driver, which are worked out again (once for a change: a switch asks at
@@ -800,6 +831,7 @@ class MainLoop:
                             switches = host.switches  # this was the switch
                             host.emit("theme-changed", theme=wanted)
                     shown, refused, status.theme = wanted, None, wanted
+                    status.missing_theme = ""
                     log.info("showing theme %r", shown)
                     if changed and on_config is not None:
                         on_config(config)

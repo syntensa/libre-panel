@@ -63,7 +63,9 @@ export function panelSummary(app, model, shown) {
   if (!parts.length && panel.target) parts.push(panel.target);
   if (panel.mode) parts.push(modeName(panel.mode));
   if (app.quit) parts.splice(0, parts.length, t("Libre Panel has quit."));
-  return { state, title: titles[state] || stateText(state), line: parts.join(" · "), detail: panel.detail || "" };
+  // the theme config.toml names is missing: the panel shows its own until another is chosen
+  const detail = panel.detail || panel.notice || "";
+  return { state, title: titles[state] || stateText(state), line: parts.join(" · "), detail };
 }
 
 // -- the strip of a first start and of the gallery -------------------------------------------

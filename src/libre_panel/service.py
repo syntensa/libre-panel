@@ -33,6 +33,7 @@ from libre_panel.devices import turzx
 from libre_panel.devices.base import DeviceError
 from libre_panel.devices.models import MODELS, PanelModel
 from libre_panel.editor import access
+from libre_panel.i18n import t
 from libre_panel.theme.defaults import normal_theme
 from libre_panel.theme.model import THEME_FILENAME, ThemeError, find_theme
 
@@ -144,6 +145,18 @@ class PanelService:
                 log.exception("panel loop crashed; starting again in %.0f s", self.restart_delay)
                 stop.wait(self.restart_delay)
 
+    def _notice(self) -> str:
+        """What the tray and Start say while the theme config.toml names cannot be shown."""
+        missing = self.status.missing_theme
+        if not missing:
+            return ""
+        return t(
+            "The theme “{name}” is no longer installed, so the panel shows “{shown}”. "
+            "Choose a theme in the tray menu or on Start.",
+            name=missing,
+            shown=self.status.theme or self.status.default_theme,
+        )
+
     def _hint(self) -> str:
         snapshot = self.host.latest if self.host is not None else None
         readings = snapshot.readings if snapshot is not None else {}
@@ -164,6 +177,9 @@ class PanelService:
             "detail": self.error or (status.detail if state == "waiting" else ""),
             # what to do when temperatures and power show "--" (Windows), in the user's language
             "hint": self._hint() if state in ("showing", "waiting") else "",
+            # a theme config.toml names that cannot be shown: the panel shows its own instead
+            "missing_theme": status.missing_theme,
+            "notice": self._notice() if state in ("showing", "waiting") else "",
             "target": status.target,
             "theme": status.theme,
             # what a config.toml without a theme shows on this panel (see theme.defaults)

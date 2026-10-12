@@ -49,12 +49,13 @@ def headline(state: dict[str, Any]) -> str:
 
 def tooltip(state: dict[str, Any]) -> str:
     text = headline(state)
+    line = state.get("notice") or state.get("hint")  # a missing theme, else missing readings
     if state.get("detail"):
         text += "\n" + state["detail"]
-    elif state.get("hint"):  # what to do about missing readings: it gives the headline room
-        text += "\n" + state["hint"]
+    elif line:  # what to do about it: it gives the headline room
+        text += "\n" + line
         if len(text) > TOOLTIP_CHARS:
-            text = "Libre Panel\n" + state["hint"]
+            text = "Libre Panel\n" + line
     return text if len(text) <= TOOLTIP_CHARS else text[: TOOLTIP_CHARS - 1] + "…"
 
 
@@ -99,6 +100,12 @@ class Tray:
         app = self.app
         return menu(
             item(lambda _: headline(app.panel.state()), None, enabled=False),
+            item(  # the theme config.toml names is missing: the panel shows its own instead
+                lambda _: app.panel.state().get("notice", ""),
+                None,
+                enabled=False,
+                visible=lambda _: bool(app.panel.state().get("notice")),
+            ),
             item(  # temperatures missing: what to do about it, as long as it is the case
                 lambda _: app.panel.state().get("hint", ""),
                 None,
@@ -243,6 +250,7 @@ class Tray:
             state["target"],
             state["detail"],
             state.get("hint"),
+            state.get("notice"),
             state.get("mode"),
             self.app.active_theme(),
             snapshot["brightness"],
