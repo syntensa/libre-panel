@@ -90,7 +90,10 @@ first; quitting Libre Panel closes it.
   session) the app opens in the browser as it always did. `libre-panel editor
   --browser` asks for the browser, `libre-panel editor --no-browser` only
   serves the app. `libre-panel window --check` says whether a window can open
-  here, and why not.
+  here, and why not; with `--open` it opens one for a moment, minimized, as the
+  app does. A window that ends with an error right after its start leaves the
+  app in the browser instead, and `logs/window.log` (next to the tray's log)
+  says why.
 
 ## How the panel is doing
 
