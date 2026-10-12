@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.5.5 — 2026-10-12
+
+Fans in the look of your own fans, graphs as fluid as SPUR II's everywhere, and modules that
+are easier to place.
+
+**New**
+- Fans: the rotor a fan widget turns may now look like Noctua's first NF-A12x25 (nine broad
+  blades swept forward), the first 140 mm NF-A14 (seven blades) or Libre Panel's own fan (six
+  round-tipped blades with a lit ridge round a hub with a ring of light), besides the nine
+  blades of Noctua's G2 it always had. Each in the theme's colour or its own (Noctua's brown
+  rotor in a beige frame with brown pads). *Settings → Sensors → How the fans turn* chooses
+  the look and the colours for all fans and for each, with a picture of every look; a theme
+  may set `look` and `paint` on a fan of its own
+- Design: the *module grid* (View and snapping) moves and grows modules by whole cells
+  (coarse, as the pictures of the modules show them), half ones (medium, the default) or each
+  line of the theme's grid (fine, as before); Alt while dragging goes line by line
+
+**Fixes**
+- Graphs: every graph now moves 25 pixels a second, as SPUR II's (a step of half a pixel in
+  every frame at 50 fps), in every theme and as a module, unless it sets its own `seconds`.
+  Lumen's moved 8 px a second, Studio's network graphs 2, and they stood between their steps
+  or blurred between them; Lumen's now show the last 19 seconds instead of a minute
+- Design: a module from the library on a theme with a fine grid (Lumen's) was one sliver of
+  it, hard to see or click. It now comes in whole cells, chosen, with its settings at once
+- Design: the "Fan with speed" block read the graphics card's fan in three parts and named it
+  with a fixed text. Several parts selected together that read one sensor now have one picker
+  for all of them, and the block shows the fan's own name. The ring instrument's fan shows
+  its sensor in the inspector, and its title is the fan's name too
+
 ## 0.5.4 — 2026-10-12
 
 The motion of the SPUR II mod: numbers that count, values in the next frame, graphs without
