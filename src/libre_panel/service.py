@@ -186,6 +186,8 @@ class PanelService:
             "default_theme": status.default_theme,
             "frames": status.frames,
             "mode": status.mode,
+            # where the screens in turn stand: the step, its theme and the seconds left of it
+            "sequence": status.sequence if state == "showing" else None,
             # numbers of the last seconds (see libre_panel.meter); none while it does not run
             "stats": status.stats if state in ("showing", "waiting") else {},
         }

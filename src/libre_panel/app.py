@@ -30,6 +30,7 @@ from libre_panel.render.overlays import ToastLayer, switch_policy, transition
 from libre_panel.render.renderer import Renderer, changed_region
 from libre_panel.sensors.base import SensorHub, SensorProvider, Snapshot, create_provider
 from libre_panel.sensors.fan_names import FanNames
+from libre_panel.sequence import Rotation
 from libre_panel.theme.defaults import default_theme, panel_model
 from libre_panel.theme.model import THEME_FILENAME, Theme, ThemeError, find_theme, load_theme
 
@@ -179,6 +180,9 @@ class RunStatus:
     # A theme config.toml names that cannot be shown (removed, or from a plugin that is not
     # installed): the panel shows default_theme instead until another is chosen.
     missing_theme: str = ""
+    # Where the screens in turn stand (None while there are none, or they are off): the step's
+    # index and theme, and the seconds left of it
+    sequence: dict[str, Any] | None = None
     detail: str = ""  # why the panel is not available
     frames: int = 0
     mode: str | None = None  # set by a service, e.g. "game"
@@ -282,16 +286,33 @@ class _Link:
         self.retry_at = now + delay
 
 
-def _theme_name(config: Config, host: Any, default: str | None = None) -> str:
-    """A theme a service shows, else the active mode's theme, else config.toml's; where that
-    names none, the panel's own ``default``."""
+def _theme_name(
+    config: Config, host: Any, default: str | None = None, rotation: Rotation | None = None
+) -> str:
+    """A theme a service shows, else the active mode's theme, else the step of the screens in
+    turn that is due (``rotation`` follows them), else config.toml's; where that names none,
+    the panel's own ``default``."""
     if host is not None:
         if host.theme:
             return host.theme
         mode = config.modes.get(host.mode or "")
         if mode is not None and mode.theme:
             return mode.theme
+    if rotation is not None and config.sequence.active:
+        place = rotation.where(config.sequence.steps)
+        if place is not None:
+            return place.theme
     return config.theme if config.theme_given or default is None else default
+
+
+def _sequence_state(config: Config, rotation: Rotation) -> dict[str, Any] | None:
+    """Where the screens in turn stand, for the app (RunStatus.sequence)."""
+    if not config.sequence.active:
+        return None
+    place = rotation.where(config.sequence.steps)
+    if place is None:
+        return None
+    return {"index": place.index, "theme": place.theme, "left_s": round(place.left_s, 1)}
 
 
 def _fps(config: Config, host: Any, display: Any = None) -> int:
@@ -495,7 +516,9 @@ class MainLoop:
         panel = panel_model(config.device, self.reported)
         self.default = status.default_theme = default_theme(panel)
         named = config.theme if config.theme_given else self.default
-        shown = _theme_name(config, host, self.default) if not once else named
+        # the screens in turn, on the loop's clock
+        self.rotation = Rotation(clock)
+        shown = _theme_name(config, host, self.default, self.rotation) if not once else named
         self.refused: str | None = None  # a requested theme that failed to load
         status.missing_theme = ""
         try:
@@ -615,12 +638,13 @@ class MainLoop:
         warmed up in a thread of its own first (:class:`_Warmup`) while this
         one goes on; nothing to switch to, or a theme that fails, goes ahead."""
         pending = watcher.pending()
-        wanted = _theme_name(config, host, self.default)
+        wanted = _theme_name(config, host, self.default, self.rotation)
         if not pending and wanted in (shown, refused):
             return True
         try:
             fresh = load_config(config.path) if pending and config.path else config
-            theme = load_theme(find_theme(_theme_name(fresh, host, self._default_for(fresh))))
+            default = self._default_for(fresh)
+            theme = load_theme(find_theme(_theme_name(fresh, host, default, self.rotation)))
         except (ConfigError, ThemeError):
             return True  # the switch says why
         if fresh.language != config.language:
@@ -779,7 +803,8 @@ class MainLoop:
         try:  # the frame's state is kept whatever happens
             # While a transition plays, a switch waits for its end, unless the
             # transition says otherwise (Transition.on_switch: follow or restart).
-            wanted = _theme_name(config, host, default)
+            wanted = _theme_name(config, host, default, self.rotation)
+            status.sequence = _sequence_state(config, self.rotation)
             mode = host.mode if host is not None else None
             playing = blend
             policy = switch_policy(blend[0], wanted, mode, began_in) if blend else None
@@ -792,7 +817,7 @@ class MainLoop:
                     if changed and config.path:
                         fresh = load_config(config.path)
                     fresh_default = self._default_for(fresh)
-                    wanted = _theme_name(fresh, host, fresh_default)
+                    wanted = _theme_name(fresh, host, fresh_default, self.rotation)
                     new_theme = load_theme(find_theme(wanted))
                 except (ConfigError, ThemeError) as exc:
                     log.warning("keeping theme %r: %s", shown, exc)  # e.g. half-written file

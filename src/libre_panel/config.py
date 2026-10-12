@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from libre_panel.sequence import Step, StepError, parse_steps
+
 CONFIG_FILENAME = "config.toml"
 # The theme of every panel but the bars, and what ``Config.theme`` is where nothing better is
 # known (libre_panel.theme.defaults has the panel's own default).
@@ -34,6 +36,18 @@ _DEFAULT_CONFIG_TEMPLATE = """\
 # 8.8" and 9.2"), Libre Default on every other panel. To pick another, take out the # and
 # put its name there (or choose one in the app, on Start).
 # theme = "slate"
+
+# Screens in turn: themes one after another, each for its seconds, minutes or hours, and
+# from the top again after the last (or set them up in the app: Start, Screens in turn).
+# While it is on it stands in for the theme above; a game's theme and the autopilot go first.
+# [sequence]
+# on = true
+# [[sequence.steps]]
+# theme = "almanac"
+# minutes = 5
+# [[sequence.steps]]
+# theme = "studio"
+# minutes = 10
 
 # "auto" (the system language), "en" or "de": editor, tray and the date and
 # weather texts on the panel.
@@ -305,6 +319,18 @@ class ModeConfig:
 
 
 @dataclass
+class SequenceConfig:
+    """Screens in turn (libre_panel.sequence): the steps, and whether they show."""
+
+    on: bool = True
+    steps: list[Step] = field(default_factory=list)
+
+    @property
+    def active(self) -> bool:
+        return self.on and bool(self.steps)
+
+
+@dataclass
 class Config:
     # The theme config.toml names; without one the panel's own default shows, and this is
     # only the fallback (see ``theme_given``).
@@ -319,6 +345,7 @@ class Config:
     weather: WeatherConfig = field(default_factory=WeatherConfig)
     services: ServicesConfig = field(default_factory=ServicesConfig)
     modes: dict[str, ModeConfig] = field(default_factory=dict)
+    sequence: SequenceConfig = field(default_factory=SequenceConfig)
     path: Path | None = None
     # config.toml's modification time when it was read: a change made while
     # the program starts up is noticed too.
@@ -480,6 +507,13 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         if "theme" in table:
             mode.theme = _expect(table["theme"], str, f"modes.{name}.theme")
         cfg.modes[name] = mode
+
+    sequence = _expect(data.get("sequence", {}), dict, "sequence")
+    cfg.sequence.on = _expect(sequence.get("on", True), bool, "sequence.on")
+    try:
+        cfg.sequence.steps = parse_steps(sequence.get("steps", []))
+    except StepError as exc:
+        raise ConfigError(str(exc)) from exc
 
     if cfg.weather.enabled and (cfg.weather.latitude is None or cfg.weather.longitude is None):
         raise ConfigError(
@@ -892,8 +926,16 @@ def set_config_tables(name: str, tables: list[dict[str, Any]], path: Path | None
 
 
 def set_active_theme(name: str, path: Path | None = None) -> Path:
-    """Point config.toml at another theme, keeping the rest of the file (and comments)."""
-    return set_config_value("theme", name, path)
+    """Point config.toml at another theme, keeping the rest of the file (and comments). One
+    theme chosen stops the screens in turn ([sequence]); their steps are kept."""
+    path = path or config_dir() / CONFIG_FILENAME
+    changes: list[tuple[str, str, Any]] = [("value", "theme", name)]
+    try:
+        if load_config(path).sequence.active:
+            changes.append(("value", "sequence.on", False))
+    except ConfigError:
+        pass  # (the write below says what is wrong with the file)
+    return edit_config(*changes, path=path)
 
 
 def set_brightness(percent: int, path: Path | None = None) -> Path:

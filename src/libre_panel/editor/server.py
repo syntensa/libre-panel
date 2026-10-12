@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import ParseResult, parse_qs, unquote, urlparse
 
-from libre_panel import __version__, i18n
+from libre_panel import __version__, i18n, sequence
 from libre_panel.config import (
     FAN_LOOKS,
     FAN_PAINTS,
@@ -766,7 +766,8 @@ class EditorHandler(BaseHTTPRequestHandler):
         panel = self._panel_state()
         # the panel's own default: the running app's word, else worked out from the config
         default = panel.get("default_theme") or default_theme(panel_model(config.device))
-        pages = [{"id": "normal", "theme": config.theme if config.theme_given else default}]
+        pages = [{"id": "normal", "theme": config.theme if config.theme_given else default,
+                  "sequence": config.sequence.active}]  # fmt: skip
         names = [GAME_MODE, *sorted(name for name in config.modes if name != GAME_MODE)]
         for name in names:
             mode = config.modes.get(name)
@@ -939,18 +940,72 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error(f"the page {page} needs a theme and has no frame rate of its own")
         keys = {"normal": "theme", "report": f"services.{Memory.name}.report_theme"}
         key = keys.get(page, f"modes.{page}.theme")
+        changes: list[tuple[str, str, Any]] = []
+        if theme is not None:
+            changes.append(("value", key, theme))
+        if fps is not None:
+            changes.append(("value", f"modes.{page}.fps", fps))
         try:
             if theme:
                 find_theme(theme)
-            if theme is not None:
-                set_config_value(key, theme, self.state.config_path)
-            if fps is not None:
-                set_config_value(f"modes.{page}.fps", fps, self.state.config_path)
+            if page == "normal" and load_config(self.state.config_path).sequence.active:
+                # one theme chosen: the screens in turn stop (they are kept, to go on later)
+                changes.append(("value", "sequence.on", False))
+            if changes:
+                edit_config(*changes, path=self.state.config_path)
         except ThemeError as exc:
             return self._error(str(exc))
         except (ConfigError, OSError) as exc:
             return self._error(str(exc), HTTPStatus.CONFLICT)
         self._panel_pages()
+
+    def _sequence(self) -> None:
+        """The screens in turn: their steps (a theme and its seconds each), whether they
+        show, and where the running panel stands in them (``now``: the step's index and
+        theme and the seconds left of it; None while it shows no sequence)."""
+        try:
+            config = load_config(self.state.config_path)
+        except ConfigError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        steps = [{"theme": step.theme, "seconds": step.seconds} for step in config.sequence.steps]
+        now = self._panel_state().get("sequence") if config.sequence.active else None
+        self._json(
+            {
+                "on": config.sequence.on,
+                "steps": steps,
+                "now": now,
+                "shortest_s": sequence.SHORTEST_S,
+                "longest_s": sequence.LONGEST_S,
+            }
+        )
+
+    def _set_sequence(self) -> None:
+        """``{"on": true, "steps": [{"theme": "almanac", "seconds": 300}, ...]}``: the screens
+        in turn, written to config.toml ([sequence]); without steps they are off."""
+        payload = self._read_json()
+        if payload is None:
+            return
+        if not isinstance(payload, dict) or not isinstance(payload.get("on"), bool):
+            return self._error('expected {"on": true or false, "steps": [...]}')
+        raw = payload.get("steps", [])
+        if not isinstance(raw, list) or not all(isinstance(step, dict) for step in raw):
+            return self._error('steps: expected a list of {"theme": ..., "seconds": ...}')
+        try:
+            steps = sequence.parse_steps(
+                [{"theme": step.get("theme"), "seconds": step.get("seconds")} for step in raw]
+            )
+            for step in steps:
+                find_theme(step.theme)
+            edit_config(
+                ("value", "sequence.on", payload["on"] and bool(steps)),
+                ("tables", "sequence.steps", [step.to_table() for step in steps]),
+                path=self.state.config_path,
+            )
+        except (sequence.StepError, ThemeError) as exc:
+            return self._error(str(exc))
+        except (ConfigError, OSError) as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        self._sequence()
 
     def _settings(self, method: str, body: bool = False) -> None:
         """A route of the Settings (editor/settings.py): its answer, or why it is refused."""
@@ -1390,6 +1445,7 @@ ROUTES: tuple[Route, ...] = (
     ),
     Route("GET", "/api/readings", lambda h, m, u: h._json(h._readings(parse_qs(u.query)))),
     Route("GET", "/api/pages", lambda h, m, u: h._panel_pages()),
+    Route("GET", "/api/sequence", lambda h, m, u: h._sequence()),
     *(
         Route("GET", path, lambda h, m, u, name=name: h._settings(name))
         for path, name in _SETTINGS_GET.items()
@@ -1416,6 +1472,7 @@ ROUTES: tuple[Route, ...] = (
     Route("POST", "/api/app", lambda h, m, u: h._app_action()),
     Route("POST", "/api/language", lambda h, m, u: h._set_language()),
     Route("POST", "/api/pages", lambda h, m, u: h._set_panel_page()),
+    Route("POST", "/api/sequence", lambda h, m, u: h._set_sequence()),
     *(
         Route("POST", path, lambda h, m, u, name=name: h._settings(name, body=True))
         for path, name in _SETTINGS_POST.items()

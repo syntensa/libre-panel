@@ -19,6 +19,7 @@ import { toast } from "../../ui/toast.js";
 import { ClipQuestion } from "./clip.js";
 import { PanelCard, PanelStrip, panelModelNow, usePanelModel } from "./panel.js";
 import { Gallery, ThemeRow, collectionsOf, fitsPanel, startThemes } from "./themes.js";
+import { SequenceCard, SequencePage } from "./sequence.js";
 import { SetupCard } from "./setup.js";
 
 // -- what a click does ---------------------------------------------------------------------------
@@ -261,6 +262,7 @@ function Launcher({ focus }) {
         <button type="button" class="btn" onClick=${startEmpty}><${Icon} name="plus" size=${15} /> ${t("Start empty")}</button>
         <button type="button" class="btn" onClick=${openFile}><${Icon} name="upload" size=${15} /> ${t("Open a theme file")}</button>
       </div>
+      <${SequenceCard} />
       <${Routing} />
       <span class="grow"></span>
       <${UnlockCard} />
@@ -283,6 +285,7 @@ function HomeView({ rest }) {
   const first = useStore((s) => firstStart(s));
   const [page, asked] = rest.split("/"); // #/home/themes, or #/home/themes/<a collection>
   if (page === "themes") return html`<${ThemesPage} asked=${asked ? decoded(asked) : ""} />`;
+  if (page === "sequence") return html`<${SequencePage} />`;
   const focus = page === "clip"; // #/home/clip: the tray points to the question about the clip
   return first ? html`<${FirstStart} focus=${focus} />` : html`<${Launcher} focus=${focus} />`;
 }
@@ -294,6 +297,7 @@ registerView({ id: "home", title: () => t("Start"), order: 10, icon: "home", com
 registerCommands([
   { id: "home.empty", title: () => t("Start with an empty theme"), group: () => t("Theme"), icon: "plus", rank: 24, run: startEmpty },
   { id: "home.themes", title: () => t("All themes"), hint: () => t("the gallery on Start"), group: () => t("Go to"), icon: "home", rank: 6, run: () => navigate("home", "themes") },
+  { id: "home.sequence", title: () => t("Screens in turn"), hint: () => t("themes one after another"), group: () => t("Go to"), icon: "refresh", rank: 7, run: () => navigate("home", "sequence") },
 ]);
 
 registerProvider(() =>

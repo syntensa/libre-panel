@@ -51,6 +51,12 @@ fps = 10                       # 1-60; values glide between readings
 transition = "fade"            # between themes: "cut", "fade", "slide", "tube", "entrance",
                                # or a plugin's
 
+# [sequence]                   # screens in turn (see "Screens in turn"), instead of one theme
+# on = true
+# [[sequence.steps]]
+# theme = "almanac"
+# minutes = 5                  # seconds, minutes and hours, together: at least 5 seconds
+
 [device]
 model = "auto"                 # or an id from `libre-panel models`
 driver = "auto"                # panel if connected, else PNG; "turzx" or "virtual" to force
@@ -136,6 +142,41 @@ theme = "slate"                # any built-in theme, or a folder in the user the
 - **In the app**, *Start* asks "How should it look?" on a first start (no `theme` in
   `config.toml` yet) with the panel's default first, marked *Default*. Choosing a theme
   there, in the tray's *Theme* menu or in Design writes `theme`.
+
+## Screens in turn
+
+Instead of one theme the panel can show several in turn: each for its seconds, minutes or
+hours, then the next, and from the top again after the last. In the app: *Start → Screens in
+turn* (a row a screen: the theme, how long, up, down, remove), and the switch on its card
+turns them on and off.
+
+```toml
+[sequence]
+on = true
+[[sequence.steps]]
+theme = "almanac"
+minutes = 5
+[[sequence.steps]]
+theme = "nimbus"
+minutes = 5
+[[sequence.steps]]
+theme = "studio"
+minutes = 10
+```
+
+- **How long:** `seconds`, `minutes` and `hours`, added up (`minutes = 1` and `seconds =
+  30` is a minute and a half), at least 5 seconds a step and at most a week. The app writes
+  each in the largest unit that takes it whole.
+- **What goes first:** a game's theme ([game mode](#game-mode)), an [autopilot](#autopilot)
+  rule that holds and any service that shows a theme of its own; the screens in turn go on
+  underneath and the panel comes back to the step that is due.
+- **When it begins:** with the first step when the panel starts and whenever the steps
+  change; anything else changed in `config.toml` leaves it where it is. Each change of screen
+  plays the `transition` of `config.toml`, and the next theme is made ready while the one
+  before still shows.
+- **One theme chosen** on *Start*, in the tray or in Design stops the screens in turn
+  (`on = false`); their steps are kept, and the switch on the card starts them again.
+- **`theme`** stays what shows when they are off.
 
 ## Sensor sources and their order
 

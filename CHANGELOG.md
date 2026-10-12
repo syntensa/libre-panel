@@ -3,9 +3,13 @@
 ## 0.5.6 — 2026-10-12
 
 Three new screens for the bars: one for music, one for the weather and one clock with the
-month, in digits or on a face.
+month, in digits or on a face; screens in turn; and the panel's own boot logo and standby
+clip in Libre Panel's look.
 
 **New**
+- Screens in turn: themes one after another, each for its seconds, minutes or hours, then
+  from the top again (*Start → Screens in turn*, `[sequence]` in config.toml). A game's theme
+  and the autopilot go first; choosing one theme stops them and keeps their steps
 - Encore: what plays with its cover large and the cover's colours blurred behind the whole
   screen, the state in the panel's language, the time with rolling digits, its seconds and a
   line through the minute, and the volume as levels that rise as on a mixer (a crossed
