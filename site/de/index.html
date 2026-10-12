@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Libre Panel: freie Software für USB-Systemmonitor-Panels</title>
-<meta name="description" content="Libre Panel steuert die kleinen USB-Systemmonitor-Panels von TURZX, Turing Smart Screen, WeAct, Kipye und anderen: Videomodus mit bis zu 50 fps, Karten, Hinweise, Spielmodus und eine App zum Gestalten. Frei und quelloffen, für Windows und Linux, ohne Konto, ohne Cloud.">
+<meta name="description" content="Libre Panel steuert die kleinen USB-Systemmonitor-Panels von TURZX, Turing Smart Screen, WeAct, Kipye und anderen: Videomodus mit bis zu 50 fps, Karten, Hinweise, Spielmodus und eine App zum Gestalten. Funktioniert sofort, out of the box: Sensoren, Lüfter, GPU und ffmpeg sind dabei. Frei und quelloffen, für Windows und Linux, ohne Konto, ohne Cloud.">
 <link rel="canonical" href="https://syntensa.github.io/libre-panel/de/">
 <link rel="alternate" hreflang="en" href="https://syntensa.github.io/libre-panel/">
 <link rel="alternate" hreflang="de" href="https://syntensa.github.io/libre-panel/de/">
@@ -12,7 +12,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Libre Panel">
 <meta property="og:title" content="Libre Panel: die Werte deines PCs als bewegtes Licht">
-<meta property="og:description" content="Freie Open-Source-Software für USB-Systemmonitor-Panels: Videomodus mit bis zu 50 fps, Karten, Hinweise, Spielmodus und eine App zum Gestalten. Windows und Linux, ohne Konto, ohne Cloud.">
+<meta property="og:description" content="Freie Open-Source-Software für USB-Systemmonitor-Panels: Videomodus mit bis zu 50 fps, Karten, Hinweise, Spielmodus und eine App zum Gestalten. Funktioniert sofort, out of the box. Windows und Linux, ohne Konto, ohne Cloud.">
 <meta property="og:url" content="https://syntensa.github.io/libre-panel/de/">
 <meta property="og:image" content="https://syntensa.github.io/libre-panel/images/social-preview.png">
 <meta property="og:image:width" content="1280">
@@ -74,7 +74,9 @@
       <p class="lead">Libre Panel steuert die kleinen USB-Systemmonitor-Panels, die als TURZX, Turing
         Smart Screen, WeAct, Kipye und unter vielen anderen Namen verkauft werden: Prozessor,
         Grafikkarte, Lüfter, Netzwerk, was gerade läuft und das Wetter, mit bis zu 50 Bildern pro
-        Sekunde. Frei und quelloffen, für Windows und Linux, ohne Konto und ohne Cloud.</p>
+        Sekunde. Es funktioniert out of the box: Die Downloads bringen mit, was die Funktionen
+        ausführen, und das Setup richtet den Rest nach einer einzigen Frage ein. Frei und quelloffen,
+        für Windows und Linux, ohne Konto und ohne Cloud.</p>
       <div class="actions">
         <a class="btn btn-primary btn-lg" data-asset="setup" href="https://github.com/syntensa/libre-panel/releases/latest">
           <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg><span>Download für Windows<small>Setup · Windows 10 und 11, 64 Bit</small></span></a>
@@ -95,6 +97,7 @@
         </figure>
         <p class="caption">Lumen, das eigene Theme von Libre Panel, im Videomodus auf einem 9,2"-Panel, mit Demo-Werten.</p>
         <ul class="facts" aria-label="Auf einen Blick">
+          <li><span class="dot" style="background: var(--accent)"></span>Läuft sofort, out of the box</li>
           <li><span class="dot" style="background: var(--cpu)"></span>Bis zu 50 fps auf TURZX-USB-Panels</li>
           <li><span class="dot" style="background: var(--gpu)"></span>0,96" bis 12,3", rund und hochkant</li>
           <li><span class="dot" style="background: var(--ram)"></span>Windows und Linux</li>
@@ -418,10 +421,52 @@
   <section id="inside" aria-labelledby="inside-title">
     <div class="wrap">
       <div class="head">
-        <p class="kicker">Unter der Haube</p>
-        <h2 id="inside-title">Sensoren drin, Extras optional</h2>
-        <p>Libre Panel liest, was dein PC ohnehin weiß. Die Extras sind Dienste, und jeder ist aus, bis
-          du ihn in den Einstellungen einschaltest.</p>
+        <p class="kicker">Sofort startklar</p>
+        <h2 id="inside-title">Alles Nötige ist dabei</h2>
+        <p>Sensoren, Lüfter, Grafikkarte, Bildraten in Spielen (Windows) und der Videomodus mit 50 fps
+          brauchen kein weiteres Programm. Die Downloads bringen mit, was die Funktionen ausführen, in
+          einem Ordner <code>tools</code>: ffmpeg für den Videomodus, unter Windows außerdem PresentMon
+          und den Installer des PawnIO-Treibers. Den Rest richtet ein einziger Schritt ein.</p>
+      </div>
+      <table class="table">
+        <thead><tr><th scope="col">Was</th><th scope="col">Windows-Setup</th><th scope="col">Portables Zip</th><th scope="col">Linux-AppImage</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Sensoren von Prozessor, Mainboard, Arbeitsspeicher und Laufwerken</th>
+            <td data-label="Windows-Setup">Der Sensordienst und der PawnIO-Treiber, zwei angehakte Kästchen</td>
+            <td data-label="Portables Zip"><em>Alle Sensoren freischalten</em> auf Start und unter Einstellungen → Sensoren richtet dasselbe ein</td>
+            <td data-label="Linux">Prozessor und NVMe-Laufwerke werden ohne Rechte gelesen; <em>Sensoren und Panel-Zugriff einrichten</em> lädt die Kerneltreiber für den Lüfterchip des Boards und für SATA-Laufwerke</td></tr>
+          <tr><th scope="row">Leistung des Prozessors</th>
+            <td data-label="Windows-Setup">Liest der Sensordienst</td>
+            <td data-label="Portables Zip">Ebenso</td>
+            <td data-label="Linux">Ein Schalter in dieser Karte, aus, bis du ihn einschaltest</td></tr>
+          <tr><th scope="row">Grafikkarte</th>
+            <td data-label="Windows-Setup">Eingebaut (LibreHardwareMonitor)</td>
+            <td data-label="Portables Zip">Eingebaut</td>
+            <td data-label="Linux">AMD, Intel und NVIDIA, ohne Rechte gelesen</td></tr>
+          <tr><th scope="row">Bildraten in Spielen</th>
+            <td data-label="Windows-Setup">PresentMon steckt im Download; das dritte Kästchen nimmt dich in die Gruppe <em>Leistungsprotokollbenutzer</em> auf</td>
+            <td data-label="Portables Zip">PresentMon steckt im Download; <em>Alle Sensoren freischalten</em> nimmt dich auf</td>
+            <td data-label="Linux">Nur unter Windows</td></tr>
+          <tr><th scope="row">Videomodus mit 50 fps</th>
+            <td data-label="Windows-Setup">ffmpeg steckt im Download</td>
+            <td data-label="Portables Zip">ffmpeg steckt im Download</td>
+            <td data-label="Linux">ffmpeg steckt im Download</td></tr>
+          <tr><th scope="row">USB-Zugriff aufs Panel</th>
+            <td data-label="Windows-Setup">Nichts zu tun</td>
+            <td data-label="Portables Zip">Nichts zu tun</td>
+            <td data-label="Linux">Dieselbe Karte schreibt die udev-Regel</td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>
+        <p><strong>Einmal gefragt, dann läuft es.</strong> Windows fragt einmal nach Administratorrechten,
+          beim Setup oder bei <em>Alle Sensoren freischalten</em>; unter Linux fragt dein System einmal
+          nach dem Passwort. Libre Panel selbst läuft ohne Administratorrechte. Der Sensordienst liest
+          nur: Er regelt keinen Lüfter, ändert keine Einstellung der Hardware, und Netzwerk-Anmeldungen
+          werden abgewiesen.
+          <a href="https://github.com/syntensa/libre-panel/blob/main/docs/BACKGROUND.md#the-sensor-service">Wie das sicher bleibt</a>
+          · <a href="https://github.com/syntensa/libre-panel/blob/main/NOTICE.md">Lizenzen und Quellen der Programme</a>
+          (jeweils englisch)</p>
       </div>
       <div class="two">
         <div class="card">
@@ -430,8 +475,12 @@
           <ul class="rows">
             <li><b>LibreHardwareMonitor, eingebaut</b><span class="chip chip-quiet">Windows</span>
               <span class="desc">GPU, Temperaturen, Leistung und Lüfter, gelesen in Libre Panel selbst,
-                ohne weiteres Programm. Temperatur und Leistung der CPU brauchen Administratorrechte und
-                den Treiber PawnIO.</span></li>
+                ohne weiteres Programm. Der Sensordienst ergänzt Temperatur, Leistung und Takt der CPU,
+                die Mainboard-Lüfter sowie Arbeitsspeicher und Laufwerke.</span></li>
+            <li><b>Die Sensoren des Kernels</b><span class="chip chip-quiet">Linux</span>
+              <span class="desc">Prozessor, Grafikkarte (AMD, Intel, NVIDIA) und NVMe-Laufwerke, gelesen
+                aus dem Kernel und dem NVIDIA-Treiber: kein zusätzliches Programm, kein lm-sensors. Die
+                Mainboard-Lüfter brauchen einen Klick.</span></li>
             <li><b>Last zehnmal pro Sekunde</b>
               <span class="desc">CPU- und GPU-Last, wie sie gerade ist, die GPU so, wie der Task-Manager
                 sie zeigt, und die Lautstärke mit jedem Bild.</span></li>
@@ -541,17 +590,21 @@
       <div class="os">
         <div class="card">
           <h3>Windows 10 und 11</h3>
-          <p>Ein Setup für deinen Benutzer, ohne Administratorrechte: ein Startmenü-Eintrag, auf Wunsch
-            Start bei der Anmeldung, und ein Deinstallationsprogramm, das nur deine Einstellungen und
-            Themes behält. Ein portables Zip gibt es auch.</p>
+          <p>Ein Setup für alle Benutzer: ein Startmenü-Eintrag, auf Wunsch Start bei der Anmeldung und
+            drei angehakte Kästchen, die sagen, was jedes ist: der Sensordienst, der PawnIO-Treiber und
+            das, was Bildraten in Spielen brauchen. Windows fragt einmal nach Administratorrechten;
+            Libre Panel selbst läuft ohne sie. <em>Nur für mich installieren</em> geht weiterhin. Das
+            Deinstallationsprogramm behält deine Einstellungen und Themes. Ein portables Zip gibt es
+            auch: Sein <em>Alle Sensoren freischalten</em> richtet dasselbe ein.</p>
           <a class="btn btn-primary" data-asset="setup" href="https://github.com/syntensa/libre-panel/releases/latest"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Setup herunterladen</a>
           <small>Noch nicht signiert: SmartScreen fragt einmal nach (<em>Weitere Informationen → Trotzdem
             ausführen</em>).</small>
         </div>
         <div class="card">
           <h3>Linux</h3>
-          <p>Ein AppImage für x86-64: ausführbar machen und starten, ohne Installation. USB-Zugriff
-            einmal erlauben mit <code>libre-panel udev-rules</code>. Ein Tarball gibt es auch.</p>
+          <p>Ein AppImage für x86-64: ausführbar machen und starten, ohne Installation. Start bietet an,
+            deinem Benutzer die Nutzung des Panels zu erlauben und den Treiber für den Lüfterchip des
+            Mainboards zu laden, mit einem Klick und einem Passwort. Ein Tarball gibt es auch.</p>
           <a class="btn btn-primary" data-asset="appimage" href="https://github.com/syntensa/libre-panel/releases/latest"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>AppImage herunterladen</a>
           <small>Das AppImage öffnet die App vorerst im Browser.
             <a href="https://github.com/syntensa/libre-panel/blob/main/docs/HARDWARE.md#setup-per-operating-system">Einrichtung je System</a> (englisch)</small>
@@ -560,7 +613,7 @@
       <ol class="steps">
         <li><b>Hersteller-App beenden</b>Sie hält das Panel für sich fest.</li>
         <li><b>Libre Panel starten</b>Mit angestecktem Panel. Ein TURZX-USB-Panel wird von selbst
-          gefunden.</li>
+          gefunden; unter Linux bietet Start die Berechtigung fürs Panel mit einem Klick an.</li>
         <li><b>Einen Look wählen</b>Start fragt „Wie soll es aussehen?“ mit den Themes für dein
           Panel.</li>
         <li><b>Einschalten, was du willst</b>Wetter, Videomodus und Dienste in den Einstellungen; das
@@ -594,13 +647,20 @@ libre-panel doctor             <span class="c"># das Panel prüfen, Bericht schr
           <summary>Warum zeigen CPU-Temperatur und -Leistung unter Windows <code>--</code>?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
           <div class="answer"><p>Die Windows-Downloads lesen Grafikkarte, Leistung und Lüfter mit der
             eingebauten Bibliothek von LibreHardwareMonitor. Temperatur, Leistung und Takt des
-            Prozessors, die RAM-Temperatur und die Mainboard-Lüfter brauchen zusätzlich
-            Administratorrechte und den Treiber <a href="https://pawnio.eu">PawnIO</a>; das Tray sagt, was
-            davon fehlt.</p>
-            <p>Damit Libre Panel bei jeder Anmeldung mit diesen Rechten startet, führ
-            <code>libre-panel autostart enable --elevated</code> in einem Terminal als Administrator aus,
-            aber nur, wo allein Administratoren die Dateien von Libre Panel ändern können, etwa beim
-            portablen Zip unter Programme
+            Prozessors, die Temperaturen von Arbeitsspeicher und Laufwerken und die Mainboard-Lüfter
+            brauchen zusätzlich Administratorrechte und den Treiber PawnIO, den der Download mitbringt.
+            Der Sensordienst von Libre Panel hat beides, und das Setup richtet die beiden ein (die
+            angehakten Kästchen <em>Sensordienst</em> und <em>PawnIO-Treiber</em>): Nach dem Setup ist
+            nichts mehr zu tun.</p>
+            <p><code>--</code> siehst du nur, wo dieser Teil nicht eingerichtet wurde, also nach <em>Nur für
+            mich installieren</em> oder beim portablen Zip. Dann richtet <em>Alle Sensoren
+            freischalten</em> auf Start oder unter Einstellungen → Sensoren ihn mit einer Frage von
+            Windows ein, und Libre Panel selbst läuft weiter ohne Administratorrechte
+            (<a href="https://github.com/syntensa/libre-panel/blob/main/docs/BACKGROUND.md#the-sensor-service">wie das sicher bleibt</a>).
+            Bei einer Python-Installation gibt es keinen Dienst: Installiere
+            <a href="https://pawnio.eu">PawnIO</a> und führ <code>libre-panel autostart enable
+            --elevated</code> in einem Terminal als Administrator aus, aber nur, wo allein
+            Administratoren die Dateien von Libre Panel ändern können
             (<a href="https://github.com/syntensa/libre-panel/blob/main/docs/BACKGROUND.md#windows-starting-with-the-highest-rights">warum</a>).
             Ein LibreHardwareMonitor, den du selbst mit Webserver laufen lässt, geht auch.</p></div>
         </details>
@@ -619,9 +679,11 @@ libre-panel doctor             <span class="c"># das Panel prüfen, Bericht schr
           <summary>Brauche ich LibreHardwareMonitor, FanControl oder PresentMon?<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></summary>
           <div class="answer"><p>Es braucht kein weiteres Programm: LibreHardwareMonitor und Intels
             <a href="https://github.com/GameTechDev/PresentMon">PresentMon</a> stecken in den
-            Windows-Downloads. Für die FPS eines Spiels schaltest du Bildrate im Spiel unter
-            Einstellungen → Sensoren ein; PresentMon braucht Administratorrechte oder dein Konto in der
-            Windows-Gruppe „Performance Log Users“, was das Setup erledigen kann
+            Windows-Downloads. Die Quelle Bildrate im Spiel ist unter Windows von Anfang an an und zählt
+            die Bilder eines Spiels, solange ein Theme sie zeigt. PresentMon braucht Administratorrechte
+            oder dein Konto in der Windows-Gruppe „Leistungsprotokollbenutzer“ („Performance Log
+            Users“); das dritte Kästchen des Setups (oder Alle Sensoren freischalten) nimmt dich auf, ab
+            der nächsten Anmeldung
             (<a href="https://github.com/syntensa/libre-panel/blob/main/docs/CONFIGURATION.md#more-sensor-sources">wie</a>).
             Die Kühlungsanalyse liest die Lüfterkurven von FanControl, falls du FanControl nutzt.</p></div>
         </details>
@@ -668,9 +730,13 @@ libre-panel doctor             <span class="c"># das Panel prüfen, Bericht schr
     <div>
       <p>Libre Panel ist freie Software unter der GPL-3.0. Es steht auf den Schultern von
         <a href="https://github.com/mathoudebine/turing-smart-screen-python">turing-smart-screen-python</a>,
-        dessen Reverse Engineering diese Panels dokumentiert; die Windows-Downloads bringen
+        dessen Reverse Engineering diese Panels dokumentiert. Die Downloads bringen
+        <a href="https://ffmpeg.org">ffmpeg</a> (GPL-3.0-or-later) mit, die für Windows außerdem
         <a href="https://github.com/LibreHardwareMonitor/LibreHardwareMonitor">LibreHardwareMonitor</a>
-        mit (MPL-2.0). Schriften: Barlow und JetBrains Mono (SIL OFL). Wetterdaten von
+        (MPL-2.0), <a href="https://github.com/GameTechDev/PresentMon">PresentMon</a> (MIT) und den
+        Installer des Treibers <a href="https://pawnio.eu">PawnIO</a>; Quellen und Lizenzen stehen in
+        <a href="https://github.com/syntensa/libre-panel/blob/main/NOTICE.md">NOTICE.md</a>.
+        Schriften: Barlow und JetBrains Mono (SIL OFL). Wetterdaten von
         <a href="https://open-meteo.com">Open-Meteo.com</a>.</p>
       <p>„TURZX“, „Turing Smart Screen“ und andere Produktnamen sind Marken ihrer Inhaber. Libre Panel
         ist ein unabhängiges Projekt und mit ihnen nicht verbunden.</p>

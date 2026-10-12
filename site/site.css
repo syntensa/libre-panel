@@ -245,6 +245,7 @@ section + section { border-top: 1px solid var(--line); }
 .callout { display: flex; gap: 16px; align-items: flex-start; margin-top: 22px; padding: 18px 20px; border-radius: var(--radius); background: var(--accent-softer); border: 1px solid rgba(46, 230, 214, 0.26); }
 .callout .icon { width: 22px; height: 22px; margin-top: 2px; color: var(--accent); }
 .callout strong { color: var(--text); }
+.callout + .two { margin-top: 26px; }
 
 /* -- privacy ------------------------------------------------------------------------------- */
 
