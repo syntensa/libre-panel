@@ -1540,7 +1540,16 @@
     "how long a change takes after the second, at most 1 (SPUR II's: 0.42)": "wie lange ein Wechsel nach der vollen Sekunde dauert, höchstens 1 (bei SPUR II: 0,42)",
     "a dot of this radius at the bar's end, its head; 0 = none (time.second runs through the minute)": "ein Punkt dieses Radius am Ende des Balkens, sein Kopf; 0 = keiner (time.second läuft durch die Minute)",
     "Sensor of all {count} parts": "Sensor aller {count} Teile",
-    "which fan; empty: the graphics card's (gpu.fan)": "welcher Lüfter; leer: der der Grafikkarte (gpu.fan)"
+    "which fan; empty: the graphics card's (gpu.fan)": "welcher Lüfter; leer: der der Grafikkarte (gpu.fan)",
+    "as all fans": "wie alle Lüfter",
+    "How the fans turn": "Wie die Lüfter drehen",
+    "The look of the fans' rotors on the panel, where a theme leaves it to you: for all fans, or for one of its own. A theme may give a fan a look of its own.": "Das Aussehen der Lüfterräder auf dem Panel, wo ein Theme es dir überlässt: für alle Lüfter oder für einen ein eigenes. Ein Theme kann einem Lüfter ein eigenes Aussehen geben.",
+    "Look of all fans": "Aussehen aller Lüfter",
+    "Colours": "Farben",
+    "the theme's colour, or the look's own (Noctua's brown and beige)": "die Farbe des Themes oder die eigenen des Aussehens (Noctuas Braun und Beige)",
+    "the theme's": "des Themes",
+    "the look's own": "eigene des Aussehens",
+    "Look of {fan}": "Aussehen von {fan}"
   },
   "fields": {
     "align": "Ausrichtung",
@@ -1670,7 +1679,9 @@
     "mark_color": "Farbe der Marke",
     "mark_width": "Breite der Marke",
     "slide": "Schwenkzeit",
-    "time": "Zeit rechts"
+    "time": "Zeit rechts",
+    "look": "Aussehen",
+    "paint": "Farben"
   },
   "widgets": {
     "analog": "Analoguhr",
@@ -1787,7 +1798,13 @@
     "wind_speed": "Windgeschwindigkeit",
     "world": "Weltzeit",
     "remaining": "Restzeit",
-    "total": "Gesamtlänge"
+    "total": "Gesamtlänge",
+    "noctua-g2": "Noctua NF-A12x25 / NF-A14x25 G2",
+    "noctua-a12x25": "Noctua NF-A12x25 (G1)",
+    "noctua-a14": "Noctua NF-A14 (G1, 140 mm)",
+    "libre": "Libre Panel",
+    "theme": "des Themes",
+    "own": "eigene des Aussehens"
   },
   "icons": {
     "battery": "Akku",

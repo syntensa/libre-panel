@@ -54,6 +54,18 @@ export async function setFanName(key, text) {
   return true;
 }
 
+/**
+ * How the fans turn: `{fan_look, fan_paint}` for all of them, `{fan_looks: {key: look}}` and
+ * `{fan_paints: {key: paint}}` for one ("" goes back to the one of all fans).
+ */
+export async function setFanLook(change) {
+  const data = await endpoints.setHardware(change);
+  if (usable(data)) store.set({ hardware: data });
+  else await loadHardware(true);
+  requestRender(0); // the preview's fans turn in the look too
+  return true;
+}
+
 /** Use `text` as a part's name ("" goes back to the detected one). */
 export async function setHardwareName(part, text) {
   const value = String(text ?? "").trim();

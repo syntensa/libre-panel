@@ -29,6 +29,8 @@ from urllib.parse import ParseResult, parse_qs, unquote, urlparse
 
 from libre_panel import __version__, i18n
 from libre_panel.config import (
+    FAN_LOOKS,
+    FAN_PAINTS,
     ConfigError,
     edit_config,
     hardware_name,
@@ -44,6 +46,7 @@ from libre_panel.editor.presets import presets_for_editor
 from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_font_path, builtin_fonts
 from libre_panel.i18n import t
 from libre_panel.icons import ICON_NAMES
+from libre_panel.render import fan, fan_looks
 from libre_panel.render.renderer import Renderer
 from libre_panel.sensors.base import TIME_SECOND, SensorHub, Snapshot
 from libre_panel.sensors.demo import demo_snapshot
@@ -342,6 +345,22 @@ class EditorState:
                 self._hub = build_hub(load_config(self.config_path))
                 self._hub.snapshot()  # rates need a previous sample
             return self._hub.snapshot()
+
+    def fan_choices(self) -> fan.Choices:
+        """What the user chose for the fans in config.toml (their look and colours): the
+        canvas shows them as the panel does. Read again when the file changed."""
+        try:
+            stamp = self.config_path.stat().st_mtime_ns if self.config_path else None
+        except OSError:
+            stamp = None
+        kept = getattr(self, "_fan_choices", None)
+        if kept is None or kept[0] != stamp:
+            try:
+                choices = fan.Choices.of(load_config(self.config_path))
+            except (ConfigError, OSError):
+                choices = kept[1] if kept is not None else fan.Choices()
+            kept = self._fan_choices = (stamp, choices)
+        return kept[1]
 
     def follow_config(self) -> None:
         """config.toml was written: the sources of this editor's own hub (a plain editor;
@@ -660,6 +679,21 @@ class EditorHandler(BaseHTTPRequestHandler):
                 cache[key] = png
         self._send(200, png, "image/png")
 
+    def _fan_look(self, query: dict[str, list[str]]) -> None:
+        """``GET /api/fan-look?look=libre&paint=own``: a fan of that look as a picture
+        (PNG), in its square frame and the app's accent: the tiles of Settings show them."""
+        look = (query.get("look") or [fan_looks.DEFAULT])[0]
+        paint = (query.get("paint") or ["theme"])[0]
+        if look not in fan_looks.LOOKS or paint not in FAN_PAINTS:
+            return self._error("unknown look or colours", HTTPStatus.NOT_FOUND)
+        rotor = fan.Rotor("preview", fan_looks.look(look).blades)
+        rotor.settle(1800.0, 3000.0)  # a fan that runs: lit ...
+        rotor.speed = 0.0  # ... drawn standing, its blades sharp
+        image = fan.fan_image((34, 211, 238), 112, 112, rotor, "square", look, paint)
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        self._send(200, buffer.getvalue(), "image/png")
+
     def _readings(self, query: dict[str, list[str]]) -> dict[str, Any]:
         """Sensor values for the editor's pickers (``?keys=a,b``; all without it) and
         the recent history of some (``?history=a``): live where there are live ones,
@@ -792,6 +826,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             "toast_anchors": list(TOAST_ANCHORS),
             "common": {k: list(v) for k, v in COMMON_FIELDS.items()},
             "effect_fields": list(EFFECT_FIELDS),
+            # names for values a name of its own would not say (the language's catalog first)
+            "enum_labels": {**fan_looks.labels(), "theme": "the theme's", "own": "the look's own"},
             # what the inspector shows first for each widget type
             "primary": {kind: list(keys) for kind, keys in PRIMARY_FIELDS.items()},
             # which widget types each finish draws (flat draws all)
@@ -1002,6 +1038,12 @@ class EditorHandler(BaseHTTPRequestHandler):
             part: {"detected": found[part], "custom": custom[part]} for part in custom
         }
         answer["fans"] = self._fans(config)
+        # how the fans turn, for all of them ("": Noctua's G2 in the theme's colours)
+        answer["fan_look"] = {
+            "look": own.fan_look,
+            "paint": own.fan_paint,
+            "looks": [{"id": key, "label": label} for key, label in fan_looks.labels().items()],
+        }
         self._json(answer)
 
     def _fans(self, config: Any) -> list[dict[str, Any]]:
@@ -1029,56 +1071,91 @@ class EditorHandler(BaseHTTPRequestHandler):
                     "custom": own.get(key, ""),
                     "value": round(value) if value is not None and math.isfinite(value) else None,
                 }
-        for key, name in own.items():
-            fans.setdefault(key, {"key": key, "detected": "", "custom": name, "value": None})
+        hw = config.hardware
+        for key in [*own, *hw.fan_looks, *hw.fan_paints]:
+            fans.setdefault(
+                key, {"key": key, "detected": "", "custom": own.get(key, ""), "value": None}
+            )
+        for key, fan_ in fans.items():  # its own look and colours ("": as all fans)
+            fan_["look"], fan_["paint"] = hw.fan_looks.get(key, ""), hw.fan_paints.get(key, "")
         return [fans[key] for key in sorted(fans, key=_natural)]
 
     def _set_hardware(self) -> None:
         """Set the user's own text for any of ``cpu``, ``gpu`` and ``memory``, and for fans
-        (``{"fans": {"fan.lpc.fan_1": "Intake"}}``); "" gives the detected name back.
-        Answers like the GET."""
+        (``{"fans": {"fan.lpc.fan_1": "Intake"}}``); "" gives the detected name back. The
+        fans' look and colours: ``fan_look`` and ``fan_paint`` for all of them, and
+        ``fan_looks`` / ``fan_paints`` by sensor ("" for "as all of them"). Answers like the
+        GET."""
         payload = self._read_json()
-        fans = payload.get("fans") if isinstance(payload, dict) else None
-        parts = (
-            {k: v for k, v in payload.items() if k != "fans"} if isinstance(payload, dict) else None
-        )
         if payload is None:
             return
+        tables = ("fans", "fan_looks", "fan_paints")
+        choices = {"fan_look": FAN_LOOKS, "fan_paint": FAN_PAINTS}
+        by_fan = {"fan_looks": FAN_LOOKS, "fan_paints": FAN_PAINTS}
+
+        def fan_table(value: Any) -> bool:
+            return isinstance(value, dict) and all(
+                isinstance(k, str) and k.strip() and isinstance(v, str) for k, v in value.items()
+            )
+
+        parts = (
+            {k: v for k, v in payload.items() if k not in (*tables, *choices)}
+            if isinstance(payload, dict)
+            else None
+        )
         if (
             not isinstance(payload, dict)
             or not payload
             or not set(parts) <= set(_HARDWARE_SETTINGS)
             or not all(isinstance(text, str) for text in parts.values())
-            or (
-                "fans" in payload
-                and (
-                    not isinstance(fans, dict)
-                    or not all(isinstance(k, str) and k.strip() for k in fans)
-                    or not all(isinstance(text, str) for text in fans.values())
-                )
+            or not all(fan_table(payload[k]) for k in tables if k in payload)
+            or not all(
+                payload[k] in ("", *allowed) for k, allowed in choices.items() if k in payload
+            )
+            or not all(
+                v in ("", *allowed)
+                for k, allowed in by_fan.items()
+                for v in payload.get(k, {}).values()
             )
         ):
             return self._error(
-                'expected text for "cpu", "gpu" or "memory", or "fans" by sensor: '
-                '{"cpu": "My CPU", "fans": {"fan.lpc.fan_1": "Intake"}}'
+                'expected text for "cpu", "gpu" or "memory", "fans" by sensor, or the fans\' '
+                '"fan_look" and "fan_paint" (also "fan_looks" and "fan_paints" by sensor): '
+                '{"cpu": "My CPU", "fans": {"fan.lpc.fan_1": "Intake"}, "fan_look": "libre"}'
             )
         try:
             changes: list[tuple[str, str, Any]] = []
             for part, text in parts.items():
                 name = f"hardware.{_HARDWARE_SETTINGS[part]}"
                 changes.append(("value", name, hardware_name(text, name)))
-            if fans is not None:
-                named = dict(load_config(self.state.config_path).hardware.fans)
-                for key, text in fans.items():
-                    text = hardware_name(text, f"hardware.fans ({key})")
-                    if text:
-                        named[key.strip()] = text
-                    else:
-                        named.pop(key.strip(), None)
-                tables = [
-                    {"sensor": key, "name": named[key]} for key in sorted(named, key=_natural)
+            for key in choices:
+                if key in payload:
+                    changes.append(("value", f"hardware.{key}", payload[key]))
+            if any(key in payload for key in tables):
+                hw = load_config(self.state.config_path).hardware
+                kept = {
+                    "name": dict(hw.fans),
+                    "look": dict(hw.fan_looks),
+                    "paint": dict(hw.fan_paints),
+                }
+                given = (("fans", "name"), ("fan_looks", "look"), ("fan_paints", "paint"))
+                for table, field in given:
+                    for key, text in payload.get(table, {}).items():
+                        if field == "name":
+                            text = hardware_name(text, f"hardware.fans ({key})")
+                        if text:
+                            kept[field][key.strip()] = text
+                        else:
+                            kept[field].pop(key.strip(), None)
+                sensors = sorted(set().union(*kept.values()), key=_natural)
+                rows = [
+                    {
+                        "sensor": key,
+                        **{f: kept[f][key] for f in ("name", "look", "paint") if key in kept[f]},
+                    }
+                    for key in sensors
                 ]
-                changes.append(("tables", "hardware.fans", tables))
+                changes.append(("tables", "hardware.fans", rows))
             edit_config(*changes, path=self.state.config_path)  # all of them in one write
         except (ConfigError, OSError) as exc:
             return self._error(str(exc))
@@ -1130,6 +1207,7 @@ class EditorHandler(BaseHTTPRequestHandler):
             except Exception as exc:
                 log.warning("live sensors unavailable: %s", exc)
         renderer = Renderer(theme, preview=True)
+        renderer.fan_choices = self.state.fan_choices()
         try:
             frame, boxes = renderer.render(snapshot)
             notice = payload.get("notice")
@@ -1321,6 +1399,7 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/i18n", lambda h, m, u: h._json(h._i18n())),
     Route("GET", "/api/app", lambda h, m, u: h._app_state()),
     Route("GET", "/api/hardware", lambda h, m, u: h._hardware(_refresh_asked(u.query))),
+    Route("GET", "/api/fan-look", lambda h, m, u: h._fan_look(parse_qs(u.query)), picture=True),
     Route("GET", "/api/plugins/pages", lambda h, m, u: h._json(h._pages())),
     Route(
         "GET",

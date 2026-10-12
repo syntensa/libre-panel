@@ -123,12 +123,20 @@ url = "http://127.0.0.1:8085/data.json"
 # cpu_name = ""
 # gpu_name = ""
 # memory_name = ""
+# How the fans turn on the panel, where a theme leaves it to you: the look of their rotor,
+# "noctua-g2" (Noctua's NF-A12x25 / NF-A14x25 G2, the default), "noctua-a12x25" (the first
+# NF-A12x25), "noctua-a14" (the first 140 mm, NF-A14) or "libre" (Libre Panel's own), and
+# their colours, "theme" (the theme's) or "own" (the look's: Noctua's brown and beige).
+# fan_look = "noctua-g2"
+# fan_paint = "theme"
 # Names of your own for the fans, by the sensor that measures each (the app sets them in
 # Settings -> Sensors); without one a fan goes by the name FanControl gives it, else by
-# the sensor's own ("Fan #1").
+# the sensor's own ("Fan #1"). A fan may have a look and colours of its own too.
 # [[hardware.fans]]
 # sensor = "fan.lpc.fan_1"
 # name = "Intake"
+# look = "noctua-a12x25"
+# paint = "own"
 
 [weather]
 # Weather is off by default. Turn it on and set your own location.
@@ -260,6 +268,12 @@ class HardwareConfig:
     memory_name: str = ""
     # the fans' own names, by the key of the sensor that measures each ([[hardware.fans]])
     fans: dict[str, str] = field(default_factory=dict)
+    # how the fans turn on the panel (render/fan_looks.py): a look and colours for all ("":
+    # the default), and for some fans by their sensor ([[hardware.fans]] look, paint)
+    fan_look: str = ""
+    fan_paint: str = ""
+    fan_looks: dict[str, str] = field(default_factory=dict)
+    fan_paints: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -339,10 +353,25 @@ def hardware_name(value: Any, name: str) -> str:
     return text
 
 
-def _fan_names(value: Any) -> dict[str, str]:
+# The looks of a fan's rotor (render/fan_looks.py has them) and the colours it may take
+FAN_LOOKS = ("noctua-g2", "noctua-a12x25", "noctua-a14", "libre")
+FAN_PAINTS = ("theme", "own")
+
+
+def _choice(value: Any, choices: tuple[str, ...], name: str) -> str:
+    """One of ``choices``, or "" (as the theme or the default says)."""
+    text = _expect(value, str, name).strip()
+    if text and text not in choices:
+        raise ConfigError(f"{name}: one of {', '.join(choices)} (or empty)")
+    return text
+
+
+def _fans(value: Any) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
     """``[[hardware.fans]]``: each ``sensor`` (a key such as ``fan.lpc.fan_1``) with its
-    ``name``; one without a name is left out."""
+    ``name``, ``look`` and ``paint``, each by itself (one that is empty is left out)."""
     names: dict[str, str] = {}
+    looks: dict[str, str] = {}
+    paints: dict[str, str] = {}
     for n, table in enumerate(_expect(value, list, "hardware.fans")):
         where = f"hardware.fans[{n}]"
         table = _expect(table, dict, where)
@@ -350,9 +379,12 @@ def _fan_names(value: Any) -> dict[str, str]:
         if not sensor:
             raise ConfigError(f"{where}.sensor: the key of the fan's sensor, e.g. fan.lpc.fan_1")
         name = hardware_name(table.get("name", ""), f"{where}.name")
-        if name:
-            names[sensor] = name
-    return names
+        look = _choice(table.get("look", ""), FAN_LOOKS, f"{where}.look")
+        paint = _choice(table.get("paint", ""), FAN_PAINTS, f"{where}.paint")
+        for kept, given in ((names, name), (looks, look), (paints, paint)):
+            if given:
+                kept[sensor] = given
+    return names, looks, paints
 
 
 def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
@@ -407,11 +439,16 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     cfg.sensors.options = {k: v for k, v in sensors.items() if isinstance(v, dict)}
 
     hw = _expect(data.get("hardware", {}), dict, "hardware")
+    names, looks, paints = _fans(hw.get("fans", []))
     cfg.hardware = HardwareConfig(
         cpu_name=hardware_name(hw.get("cpu_name", ""), "hardware.cpu_name"),
         gpu_name=hardware_name(hw.get("gpu_name", ""), "hardware.gpu_name"),
         memory_name=hardware_name(hw.get("memory_name", ""), "hardware.memory_name"),
-        fans=_fan_names(hw.get("fans", [])),
+        fans=names,
+        fan_look=_choice(hw.get("fan_look", ""), FAN_LOOKS, "hardware.fan_look"),
+        fan_paint=_choice(hw.get("fan_paint", ""), FAN_PAINTS, "hardware.fan_paint"),
+        fan_looks=looks,
+        fan_paints=paints,
     )
 
     w = _expect(data.get("weather", {}), dict, "weather")

@@ -287,7 +287,8 @@ def test_warming_up_loads_every_position_off_the_render_thread():
     paused = []
     renderer.warm(snapshot(rpm=1200.0), 1.0, pause=lambda: paused.append(1))
     k = fan.rotor_size(52)
-    assert k in fan._layers and fan._layers[k].shape[:2] == (POSITIONS, 4)
+    assert ("noctua-g2", k) in fan._layers
+    assert fan._layers["noctua-g2", k].shape[:2] == (POSITIONS, 5)
     assert fan.rotor_image((34, 211, 238), k, 47) is fan.rotor_image((34, 211, 238), k, 47)
     assert paused
 
@@ -298,10 +299,12 @@ def test_a_theme_with_fans_has_their_rotors_ready_before_the_first_frame():
     renderer = Renderer(theme(widget(w=58, h=58, color="#123456")), animate=True)
     assert renderer.prepares  # a fan alone is something to prepare
     k = fan.rotor_size(58)
-    fan._layers.pop(k, None)
+    fan._layers.pop(("noctua-g2", k), None)
     renderer.warm(None, 0.0)
-    assert k in fan._layers
-    assert all(("rotor", (0x12, 0x34, 0x56), k, p) in fan._images for p in range(POSITIONS))
+    assert ("noctua-g2", k) in fan._layers
+    main, second = fan.colours("noctua-g2", "theme", (0x12, 0x34, 0x56))
+    kept = (("rotor", "noctua-g2", main, second, k, p) for p in range(POSITIONS))
+    assert all(key in fan._images for key in kept)
 
 
 def test_the_rotors_layers_are_kept_for_the_sizes_in_use_not_for_every_size_asked(monkeypatch):
@@ -313,9 +316,11 @@ def test_the_rotors_layers_are_kept_for_the_sizes_in_use_not_for_every_size_aske
     for k in (8, 10, 12, 14, 16, 18, 20):
         fan.rotor_layers(k)
         kept = sum(layers.nbytes for layers in fan._layers.values())
-        assert k in fan._layers and (kept <= 700_000 or len(fan._layers) == 1), (k, kept)
+        assert ("noctua-g2", k) in fan._layers, k
+        assert kept <= 700_000 or len(fan._layers) == 1, (k, kept)
     assert 1 < len(fan._layers) < 7
-    assert 8 not in fan._layers and fan.rotor_layers(8).shape == (POSITIONS, 4, 8, 8)  # made again
+    assert ("noctua-g2", 8) not in fan._layers
+    assert fan.rotor_layers(8).shape == (POSITIONS, 5, 8, 8)  # made again
 
 
 def test_a_fan_stays_round_when_the_theme_is_adapted():

@@ -49,6 +49,7 @@ export const endpoints = {
   assetUrl: (id, path) =>
     withToken(`/api/themes/${enc(id)}/assets/${path.split("/").map(enc).join("/")}`),
   previewUrl: (id, width = 480) => withToken(`/api/themes/${enc(id)}/preview?w=${width}`),
+  fanLookUrl: (look, paint) => withToken(`/api/fan-look?look=${enc(look)}&paint=${enc(paint)}`),
   uploadAsset: (id, name, bytes) =>
     api("POST", `/api/themes/${enc(id)}/assets?name=${enc(name)}`, bytes, { raw: true }),
   sensors: () => get("/api/sensors"),

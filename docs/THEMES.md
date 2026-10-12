@@ -164,7 +164,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `analog` | `w`, `h`, `timezone`, `color`, `color2`, `face`, `marks`, `seconds` | a clock face with hands; `color2` the second hand |
 | `countdown` | `target`, `part`, `done` | the time left until `target` (`2026-12-24`, `2026-12-24 18:00`, or `12-24` for every year); `part`: `number` (76, 5:12, 12:33), `unit` (days, hours, minutes), `clock` (05:12:33 left in the day), `text` ("76 days"), `days`, `date`; `done` is shown once it is there ("Today", "Now") |
 | `moon` | `size`, `sensor`, `color`, `color2`, `mirror` | the moon as it is lit (`moon.phase`); `mirror` as seen south of the equator |
-| `fan` | `sensor`, `w`, `h`, `color`, `max_rpm`, `frame` | a fan that turns with its speed (default `gpu.fan`), see [Fans](#fans) |
+| `fan` | `sensor`, `w`, `h`, `color`, `max_rpm`, `frame`, `look`, `paint` | a fan that turns with its speed (default `gpu.fan`), see [Fans](#fans) |
 | `image` | `src`, `w`, `h`, `fit`, `align`, `radius`, `slides`, `seconds` | a picture from the theme folder, or one a sensor source has (`@media.cover`: the album cover); `w`/`h` 0 = original size; `fit` `stretch`, `contain` or `cover`; `align` `left`, `center` (the default) or `right` says where a `contain`ed picture stands in its box when it does not fill it, as a logo that is wider or narrower than its slot; `slides`: more pictures, one per line (`photos/*.jpg` takes a folder), each shown `seconds` |
 | `weather` | `field`, `format`, `fallback` | `temperature`, `apparent_temperature`, `humidity`, `wind_speed`, `description`, `code` |
 | `icon` | `icon`, `sensor`, `size`, `color`, `stroke` | line icons: cpu, gpu, ram, disk, network, download, upload, temperature, fan, power, clock, sun, moon, cloud, partly, rain, snow, storm, fog, humidity, wind, battery, plug, list, grid, signal, play, pause, up, down — and `weather`, which follows the live weather, or the code in `sensor` (e.g. `weather.day.1.code`), by day or night |
@@ -277,7 +277,7 @@ where a flat track is drawn instead.
 
 ### Fans
 
-A `fan` draws a rotor of nine lit blades in its `color` that turns with a fan's
+A `fan` draws a rotor of lit blades in its `color` that turns with a fan's
 speed (`sensor`, in RPM; `gpu.fan` by default). It is not the real speed (1200
 RPM would be 20 turns a second, a flicker at 50 frames a second) but a calm one
 between a fifth of a turn and a turn a second that rises with the RPM, follows
@@ -292,6 +292,18 @@ than a running one. It turns where the panel is driven faster than once a
 second (video mode, or `fps` above 1); in the editor's preview and on a
 panel that gets one picture a second it stands, its ring and its blur showing
 the speed. In the editor, *Fan with speed* adds a fan with its name and RPM.
+
+`look` is the rotor's: `noctua-g2` (the nine blades of Noctua's NF-A12x25 / NF-A14x25 G2,
+SPUR II's rotor), `noctua-a12x25` (the first NF-A12x25: nine broad blades swept forward,
+with grooves near their tips), `noctua-a14` (the first 140 mm, NF-A14: seven blades with
+wider gaps) or `libre` (Libre Panel's own: six round-tipped blades with a lit ridge round a
+hub with a ring of light). `paint` is `theme` (the widget's `color`, a lighter one on the
+hub) or `own` (the look's own colours: Noctua's brown rotor in a beige frame with brown
+pads, Libre Panel's white blades round a cyan hub). Both default to `auto`: what the user
+chose for that fan, or for all fans (*Settings → Sensors → How the fans turn*, see
+[Configuration](CONFIGURATION.md#hardware-names)), else `noctua-g2` in the theme's colour.
+The ring that shows the load is always in `color`. The looks are drawings of their own;
+Noctua and the model names are their owner's trademarks.
 
 ### Libre Panel's screens
 

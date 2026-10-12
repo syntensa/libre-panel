@@ -24,6 +24,7 @@ from libre_panel.devices.virtual import VirtualDisplay
 from libre_panel.meter import Meter
 from libre_panel.plugins.host import LEFT_OUT, NO_PANEL, OFF_IN_THEME, Delivery, Toast
 from libre_panel.plugins.render import RenderContext
+from libre_panel.render import fan
 from libre_panel.render.motion import Motion
 from libre_panel.render.overlays import ToastLayer, switch_policy, transition
 from libre_panel.render.renderer import Renderer, changed_region
@@ -597,6 +598,7 @@ class MainLoop:
             renderer.motion = self.motion  # from now on the panel's
             self.motion.adopt(motion)  # graph histories it began
         renderer.place = _place(config)
+        renderer.fan_choices = fan.Choices.of(config)
         return renderer
 
     @staticmethod
@@ -658,6 +660,7 @@ class MainLoop:
         def build() -> tuple[Renderer, Motion]:
             renderer = Renderer(theme, animate=animate, motion=motion)
             renderer.continuous, renderer.fps, renderer.sample = continuous, fps, sample
+            renderer.fan_choices = fan.Choices.of(config)  # their rotors, warmed as shown
             # widget by widget between the panel's frames, not while one is drawn
             renderer.warm(snapshot, now, pause=lambda: self.idle.wait(0.1))
             return renderer, motion

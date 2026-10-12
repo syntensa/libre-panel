@@ -1,10 +1,12 @@
 """A fan that turns with its speed: a lit rotor in a ring that shows the load.
 
-The rotor is SPUR II's, made once in Blender without colour: nine blades, lit
-from the top left, in 48 positions over one blade's pitch (after that it looks
-the same again, so the turn loops without a jump). Three grey layers per
-position (shape, core, gloss) are coloured here, and the coloured result is
-kept by colour, size and position. The ring around it shows how fast the fan
+The rotor has a look (render/fan_looks.py): SPUR II's, made once in Blender without colour
+(nine blades, as Noctua's second generation), or one drawn from its shape (the first
+NF-A12x25 and NF-A14, Libre Panel's own). Each is lit from the top left, in 48 positions
+over one blade's pitch (after that it looks the same again, so the turn loops without a
+jump). Grey layers per position (shape, core, gloss, and where the second colour goes) are
+coloured here, in the theme's colour or the look's own, and the coloured result is kept by
+colour, size and position. The ring around it shows how fast the fan
 runs: a faint groove all round and a glowing arc, from twelve o'clock
 clockwise, as long as its share of ``max_rpm``.
 
@@ -20,15 +22,18 @@ import math
 import threading
 from collections import OrderedDict
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
+from libre_panel.render import fan_looks
+
 ASSETS = Path(__file__).resolve().parent.parent / "assets" / "light3d" / "fan"
 
-BLADES = 9
+BLADES = 9  # the Blender rotor's; each look has its own (fan_looks.Look.blades)
 POSITIONS = 48  # rotor images over one blade's pitch
 FAN_SIZE = 48  # the sizes below are for a fan this big, and scale with it
 LAYER_SIZE = 38  # the rotor's diameter
@@ -60,13 +65,41 @@ LIGHT = {"running": 1.0, "stopped": 0.5, "missing": 0.25}  # how bright it shows
 _lock = threading.Lock()  # the coloured images and the kept layers, held for a moment
 _load = threading.Lock()  # reading the layers, held for as long as that takes
 _images: OrderedDict[tuple[Any, ...], Image.Image] = OrderedDict()
-# size -> (positions, 4, k, k): shape, core, gloss, alpha; the sizes in use, the oldest first
-_layers: OrderedDict[int, np.ndarray] = OrderedDict()
-_frames: OrderedDict[int, np.ndarray] = OrderedDict()
+# (look, size) -> (positions, 5, k, k): shape, core, gloss, alpha, part; the oldest first
+_layers: OrderedDict[tuple[str, int], np.ndarray] = OrderedDict()
+_frames: OrderedDict[tuple[str, int], np.ndarray] = OrderedDict()
 IMAGES = 768  # coloured images kept
 # The layers of a size are a few megabytes (17 for a fan of 150 px), and a fan that is resized in
 # the editor asks for one size after the other: the sizes kept are as many as this holds.
 LAYER_BYTES = 48 << 20
+
+
+@dataclass
+class Choices:
+    """What the user chose for the fans (``[hardware]`` in config.toml): a look and colours
+    for all, and for some fans by their sensor. A widget's own look and colours come first;
+    "auto" takes these."""
+
+    look: str = ""
+    paint: str = ""
+    looks: dict[str, str] = field(default_factory=dict)
+    paints: dict[str, str] = field(default_factory=dict)
+
+    @classmethod
+    def of(cls, config: Any) -> Choices:
+        hw = config.hardware
+        return cls(hw.fan_look, hw.fan_paint, dict(hw.fan_looks), dict(hw.fan_paints))
+
+    def for_widget(self, widget: dict[str, Any]) -> tuple[str, str]:
+        """``(look, paint)`` of a fan widget."""
+        sensor = widget.get("sensor", "")
+        look = widget.get("look", "auto")
+        if look == "auto" or look not in fan_looks.LOOKS:
+            look = self.looks.get(sensor) or self.look or fan_looks.DEFAULT
+        paint = widget.get("paint", "auto")
+        if paint not in ("theme", "own"):
+            paint = self.paints.get(sensor) or self.paint or "theme"
+        return look, paint
 
 
 def turns(rpm: float | None, max_rpm: float) -> float:
@@ -87,9 +120,10 @@ class Rotor:
     rotor to a far position.
     """
 
-    def __init__(self, key: str) -> None:
+    def __init__(self, key: str, blades: int = BLADES) -> None:
         # every fan in its own position, or they all turn in step
         self.angle = (sum(map(ord, key)) % 97) / 97.0  # in blade pitches, 0 to 1
+        self.blades = blades  # the look's: a pitch is a turn over this many
         self.speed = 0.0  # turns a second, shown
         self.ring = 0.0  # share of the ring that glows
         self.light = 1.0
@@ -119,7 +153,7 @@ class Rotor:
             self.speed = max(0.0, self.speed - FRICTION * dt)
             if self.speed < 0.02:
                 self.speed = 0.0
-        self.angle = (self.angle + min(MAX_STEP, self.speed * BLADES * dt)) % 1.0
+        self.angle = (self.angle + min(MAX_STEP, self.speed * self.blades * dt)) % 1.0
 
     def settle(self, rpm: float | None, max_rpm: float) -> None:
         """No animation (a preview, a picture): show the speed's look, standing."""
@@ -155,11 +189,13 @@ def _plane(name: str) -> np.ndarray:
 
 
 def _reduced(planes: list[np.ndarray], size: int) -> np.ndarray:
-    """``(4, size, size)``: shape, core and gloss times alpha, then alpha, each averaged
-    down from the layers' own size (a box filter: edges do not darken)."""
+    """``(5, size, size)``: shape, core and gloss times alpha, then alpha, each averaged
+    down from the layers' own size (a box filter: edges do not darken), and the part where a
+    second colour goes (none: the Blender layers are of one colour)."""
     (shape, alpha), (core, _), (gloss, _) = planes
     core = np.clip((core - CORE_FLOOR) / (1 - CORE_FLOOR), 0, 1)
-    stack = np.stack([shape * alpha, core * alpha, gloss * alpha, alpha]).astype(np.float32)
+    part = np.zeros_like(alpha)
+    stack = np.stack([shape * alpha, core * alpha, gloss * alpha, alpha, part]).astype(np.float32)
     if stack.shape[-1] == size:
         return stack
     return np.stack(
@@ -170,8 +206,8 @@ def _reduced(planes: list[np.ndarray], size: int) -> np.ndarray:
     )
 
 
-def _kept_layers(cache: OrderedDict[int, np.ndarray], size: int) -> np.ndarray | None:
-    """The layers of ``size`` if they are kept (they are then the newest)."""
+def _kept_layers(cache: OrderedDict[Any, np.ndarray], size: Any) -> np.ndarray | None:
+    """The layers of ``size`` (a look and a size) if they are kept (they are then the newest)."""
     with _lock:
         layers = cache.get(size)
         if layers is not None:
@@ -179,7 +215,7 @@ def _kept_layers(cache: OrderedDict[int, np.ndarray], size: int) -> np.ndarray |
         return layers
 
 
-def _keep_layers(cache: OrderedDict[int, np.ndarray], size: int, layers: np.ndarray) -> None:
+def _keep_layers(cache: OrderedDict[Any, np.ndarray], size: Any, layers: np.ndarray) -> None:
     """Keep ``layers`` as the newest; the oldest go while more than ``LAYER_BYTES`` are kept."""
     with _lock:
         cache[size] = layers
@@ -188,34 +224,61 @@ def _keep_layers(cache: OrderedDict[int, np.ndarray], size: int, layers: np.ndar
             cache.popitem(last=False)
 
 
-def rotor_layers(size: int) -> np.ndarray:
-    """All positions of the rotor at ``size`` px: ``(POSITIONS, 4, size, size)``. The
-    first call per size reads 144 small pictures (about 150 ms): do it off the
-    render thread (``Renderer.warm``) or at the very start."""
-    layers = _kept_layers(_layers, size)
+def rotor_layers(size: int, look: str = fan_looks.DEFAULT) -> np.ndarray:
+    """All positions of the rotor at ``size`` px: ``(POSITIONS, 5, size, size)``. The
+    first call per size reads 144 small pictures (about 150 ms) or draws the look (as
+    long): do it off the render thread (``Renderer.warm``) or at the very start."""
+    found = fan_looks.look(look)
+    key = (found.name, size)
+    layers = _kept_layers(_layers, key)
     if layers is not None:
         return layers
     with _load:
-        layers = _kept_layers(_layers, size)
+        layers = _kept_layers(_layers, key)
         if layers is None:
-            kinds = ("shape", "core", "gloss")
-            layers = np.stack(
-                [
-                    _reduced([_plane(f"rotor_{kind}_{p:02d}.png") for kind in kinds], size)
-                    for p in range(POSITIONS)
-                ]
-            )
-            _keep_layers(_layers, size, layers)
+            if found.drawn:
+                angles = fan_looks.angles(found, POSITIONS)
+                layers = np.stack([fan_looks.rotor(found, size, angle) for angle in angles])
+            else:
+                kinds = ("shape", "core", "gloss")
+                layers = np.stack(
+                    [
+                        _reduced([_plane(f"rotor_{kind}_{p:02d}.png") for kind in kinds], size)
+                        for p in range(POSITIONS)
+                    ]
+                )
+            _keep_layers(_layers, key, layers)
     return layers
 
 
-def _coloured(layers: np.ndarray, color: tuple[int, int, int]) -> np.ndarray:
-    """RGBA (uint8, ``(..., size, size, 4)``) of the grey layers ``(..., 4, size, size)``
-    in ``color``."""
+Colours = tuple[tuple[int, int, int], tuple[int, int, int]]  # the main one, the second
+
+
+def colours(look: str, paint: str, color: tuple[int, int, int], frame: bool = False) -> Colours:
+    """The colours a fan's rotor (or its square ``frame``) is painted in: the look's own
+    (``paint`` "own": Noctua's brown and beige), else the theme's ``color`` with a lighter
+    one of it for the hub, the sticker or the frame's pads."""
+    found = fan_looks.look(look)
+    if paint == "own":
+        if frame:
+            return found.frame_color, found.pad_color
+        return found.blade_color, found.hub_color
+    lighter = tuple(round(v + (255 - v) * 0.45) for v in color)
+    return color, lighter  # type: ignore[return-value]
+
+
+def _coloured(
+    layers: np.ndarray, color: tuple[int, int, int], second: tuple[int, int, int] | None = None
+) -> np.ndarray:
+    """RGBA (uint8, ``(..., size, size, 4)``) of the grey layers ``(..., 5, size, size)``
+    in ``color``, and ``second`` where their part says so."""
     c = np.asarray(color, np.float32) / 255
     alpha = np.clip(layers[..., 3, :, :], 0, 1)
     safe = np.maximum(layers[..., 3, :, :], 1e-6)
     shade, core, gloss = (np.clip(layers[..., i, :, :] / safe, 0, 1)[..., None] for i in range(3))
+    if second is not None and second != color and layers.shape[-3] > 4:
+        part = np.clip(layers[..., 4, :, :] / safe, 0, 1)[..., None]
+        c = c * (1 - part) + (np.asarray(second, np.float32) / 255) * part
     rgb = c * (AMBIENT + DIFFUSE * shade) * ((1 - CORE) + CORE * core)
     rgb = rgb / np.maximum(1.0, rgb.max(-1, keepdims=True))  # keep the hue: pastels do not wash out
     rgb = np.clip(rgb + GLOSS * gloss, 0, 1)
@@ -237,28 +300,36 @@ def _kept(key: tuple[Any, ...], make: Callable[[], Image.Image]) -> Image.Image:
     return image
 
 
-def rotor_image(color: tuple[int, int, int], size: int, phase: int) -> Image.Image:
+def rotor_image(
+    color: tuple[int, int, int], size: int, phase: int, look: str = fan_looks.DEFAULT,
+    second: tuple[int, int, int] | None = None,
+) -> Image.Image:  # fmt: skip
     """The rotor at ``phase`` (0 to ``POSITIONS`` - 1), ``size`` px square, RGBA."""
-    key = ("rotor", color, size, phase % POSITIONS)
+    key = ("rotor", look, color, second, size, phase % POSITIONS)
     return _kept(
         key,
-        lambda: Image.fromarray(_coloured(rotor_layers(size)[phase % POSITIONS], color), "RGBA"),
+        lambda: Image.fromarray(
+            _coloured(rotor_layers(size, look)[phase % POSITIONS], color, second), "RGBA"
+        ),
     )
 
 
-def disc_image(color: tuple[int, int, int], size: int) -> Image.Image:
+def disc_image(
+    color: tuple[int, int, int], size: int, look: str = fan_looks.DEFAULT,
+    second: tuple[int, int, int] | None = None,
+) -> Image.Image:  # fmt: skip
     """The rotor blurred into a disc: the mean over all positions (each coloured first:
     averaging the layers gives a flatter shading than the turning rotor shows)."""
 
     def make() -> Image.Image:
-        rgba = _coloured(rotor_layers(size), color).astype(np.float32)
+        rgba = _coloured(rotor_layers(size, look), color, second).astype(np.float32)
         alpha = rgba[..., 3:] / 255
         mean_alpha = alpha.mean(0)
         rgb = (rgba[..., :3] * alpha).mean(0) / np.maximum(mean_alpha, 1e-6)
         out = np.concatenate([rgb, mean_alpha * 255], -1)
         return Image.fromarray(out.round().clip(0, 255).astype(np.uint8), "RGBA")
 
-    return _kept(("disc", color, size), make)
+    return _kept(("disc", look, color, second, size), make)
 
 
 # -- the ring ------------------------------------------------------------------------
@@ -317,30 +388,42 @@ def ring_image(color: tuple[int, int, int], size: int, steps: int, canvas: int) 
     return _kept(("ring", color, size, steps, canvas), make)
 
 
-def frame_layers(size: int) -> np.ndarray:
-    """The square frame's layers at ``size`` px: ``(4, size, size)``, like a rotor's."""
-    layers = _kept_layers(_frames, size)
+def frame_layers(size: int, look: str = fan_looks.DEFAULT, paint: str = "theme") -> np.ndarray:
+    """The square frame's layers at ``size`` px: ``(5, size, size)``, like a rotor's: the
+    Blender frame, or the look's own (Noctua's with its pads; always in its own colours)."""
+    found = fan_looks.look(look)
+    drawn = found.drawn or paint == "own"
+    key = (found.name if drawn else "", size)
+    layers = _kept_layers(_frames, key)
     if layers is None:
         with _load:
-            planes = [_plane(f"frame_{kind}.png") for kind in ("shape", "core", "gloss")]
-            layers = _reduced(planes, size)
-            _keep_layers(_frames, size, layers)
+            if drawn:
+                layers = fan_looks.frame(found, size)
+            else:
+                planes = [_plane(f"frame_{kind}.png") for kind in ("shape", "core", "gloss")]
+                layers = _reduced(planes, size)
+            _keep_layers(_frames, key, layers)
     return layers
 
 
-def frame_image(color: tuple[int, int, int], size: int, steps: int) -> Image.Image:
+def frame_image(
+    color: tuple[int, int, int], size: int, steps: int, look: str = fan_looks.DEFAULT,
+    paint: str = "theme",
+) -> Image.Image:  # fmt: skip
     """The lit square frame of a fan, brighter the faster it runs (``steps`` of ``SHADES``)."""
 
     def make() -> Image.Image:
         bright = (
             0.58 + 0.42 * steps / SHADES
         )  # the idle frame is dark, a fast one as bright as the blades
-        layers = frame_layers(size).copy()
+        layers = frame_layers(size, look, paint).copy()
         layers[2] *= bright  # gloss follows the brightness
-        scaled = tuple(round(v * bright) for v in color)
-        return Image.fromarray(_coloured(layers, scaled), "RGBA")
+        main, second = colours(look, paint, color, frame=True)
+        scaled = tuple(round(v * bright) for v in main)
+        lit = tuple(round(v * bright) for v in second)
+        return Image.fromarray(_coloured(layers, scaled, lit), "RGBA")  # type: ignore[arg-type]
 
-    return _kept(("frame", color, size, steps), make)
+    return _kept(("frame", look, paint, color, size, steps), make)
 
 
 # -- the fan -------------------------------------------------------------------------
@@ -351,13 +434,17 @@ def rotor_size(size: int) -> int:
     return max(6, round(size * LAYER_SIZE / FAN_SIZE))
 
 
-def preload(color: tuple[int, int, int], w: int, h: int) -> None:
-    """Everything a fan of this colour and size will ask for but its ring: the layers,
-    all rotor positions and the blur disc. For a thread that is not drawing a frame."""
+def preload(
+    color: tuple[int, int, int], w: int, h: int, look: str = fan_looks.DEFAULT,
+    paint: str = "theme",
+) -> None:  # fmt: skip
+    """Everything a fan of this colour, size and look will ask for but its ring: the
+    layers, all rotor positions and the blur disc. For a thread that is not drawing a frame."""
     k = rotor_size(geometry(w, h)[0])
+    main, second = colours(look, paint, color)
     for phase in range(POSITIONS):
-        rotor_image(color, k, phase)
-    disc_image(color, k)
+        rotor_image(main, k, phase, look, second)
+    disc_image(main, k, look, second)
 
 
 def geometry(w: int, h: int) -> tuple[int, int, int]:
@@ -369,11 +456,14 @@ def geometry(w: int, h: int) -> tuple[int, int, int]:
 
 
 def fan_image(
-    color: tuple[int, int, int], w: int, h: int, rotor: Rotor, frame: str = "ring"
-) -> Image.Image:
+    color: tuple[int, int, int], w: int, h: int, rotor: Rotor, frame: str = "ring",
+    look: str = fan_looks.DEFAULT, paint: str = "theme",
+) -> Image.Image:  # fmt: skip
     """The fan as RGBA, ``geometry(w, h)[2]`` px square: its frame (``ring``,
-    ``square`` or ``none``) and the rotor at its position, blurred by its speed, dimmed
-    by its light. Kept by what is on it, so a fan that has been round once costs a lookup."""
+    ``square`` or ``none``) and the rotor of its ``look`` at its position, in the theme's
+    ``color`` or the look's own (``paint``), blurred by its speed, dimmed by its light. The
+    ring shows the load in the theme's colour. Kept by what is on it, so a fan that has been
+    round once costs a lookup."""
     size, _, canvas = geometry(w, h)
     key = (
         "fan",
@@ -384,6 +474,8 @@ def fan_image(
         rotor.dim,
         round(rotor.ring * RING_STEPS),
         frame,
+        look,
+        paint,
     )
 
     def make() -> Image.Image:
@@ -393,10 +485,13 @@ def fan_image(
             image.alpha_composite(ring_image(color, size, round(rotor.ring * RING_STEPS), canvas))
         elif frame == "square":
             at = (canvas - size) // 2
-            image.alpha_composite(frame_image(color, size, round(rotor.ring * SHADES)), (at, at))
-        blades = rotor_image(color, k, rotor.phase)
+            steps = round(rotor.ring * SHADES)
+            image.alpha_composite(frame_image(color, size, steps, look, paint), (at, at))
+        main, second = colours(look, paint, color)
+        blades = rotor_image(main, k, rotor.phase, look, second)
         if rotor.blur:
-            blades = Image.blend(blades, disc_image(color, k), BLUR * rotor.blur / SHADES)
+            disc = disc_image(main, k, look, second)
+            blades = Image.blend(blades, disc, BLUR * rotor.blur / SHADES)
         if rotor.dim:
             blades = blades.copy()
             alpha = blades.getchannel("A")

@@ -418,6 +418,28 @@ the fans as `"fans": [{"key", "detected", "custom", "value"}]` (`value`: the spe
 or `null`), and `POST /api/hardware` takes `{"fans": {"fan.lpc.fan_1": "Intake"}}` (an
 empty text gives the detected name back).
 
+**How the fans turn.** Where a theme leaves a fan's look to you (`"look": "auto"`, as the
+built-in themes do), the rotor is the one you choose in *Settings → Sensors → How the fans
+turn*, for all fans or for one: `noctua-g2` (Noctua's NF-A12x25 / NF-A14x25 G2, the
+default), `noctua-a12x25` (the first NF-A12x25), `noctua-a14` (the first 140 mm, NF-A14) or
+`libre` (Libre Panel's own), in the theme's colours or the look's own (`own`: Noctua's
+brown and beige):
+
+```toml
+[hardware]
+fan_look = "noctua-a12x25"
+fan_paint = "own"
+
+[[hardware.fans]]
+sensor = "fan.lpc.fan_2"
+look = "noctua-a14"   # this one is a 140 mm fan
+```
+
+`GET /api/hardware` says them as `"fan_look": {"look", "paint", "looks"}` and each fan's
+`look` and `paint` ("": as all fans); `POST /api/hardware` takes `fan_look`, `fan_paint`,
+`fan_looks` and `fan_paints` (the last two by sensor), and `GET /api/fan-look?look=libre&paint=own`
+is a picture of a look.
+
 **Where it can be wrong.** Windows can keep the entry of a graphics card that was
 taken out (Device Manager shows it under *Show hidden devices*); if that card had
 more memory, it may be the one named. Some firmware tells no speed or no maker for

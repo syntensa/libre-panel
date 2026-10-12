@@ -3586,6 +3586,54 @@ def test_the_fans_are_named_in_settings(app_url):
         ]
 
 
+def test_the_fans_look_is_chosen_in_settings_for_all_and_for_one(app_url):
+    """A tile with a picture for each look, for all fans; colours, the theme's or the look's;
+    and a fan's own look ("as all fans" goes back)."""
+    import json
+
+    names = HardwareNames()
+    looks = [{"id": "noctua-g2", "label": "Noctua NF-A12x25 / NF-A14x25 G2"},
+             {"id": "noctua-a12x25", "label": "Noctua NF-A12x25 (G1)"},
+             {"id": "noctua-a14", "label": "Noctua NF-A14 (G1, 140 mm)"},
+             {"id": "libre", "label": "Libre Panel"}]  # fmt: skip
+    names.names["fan_look"] = {"look": "", "paint": "", "looks": looks}
+    names.names["fans"] = [{"key": "fan.lpc.fan_1", "detected": "Fan #1", "custom": "",
+                            "value": 820, "look": "", "paint": ""}]  # fmt: skip
+
+    def answer(route, request):
+        if request.method == "POST":
+            change = json.loads(request.post_data or "{}")
+            names.posted.append(change)
+            for key in ("fan_look", "fan_paint"):
+                if key in change:
+                    names.names["fan_look"][key.removeprefix("fan_")] = change[key]
+            for key, look in change.get("fan_looks", {}).items():
+                next(f for f in names.names["fans"] if f["key"] == key)["look"] = look
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(names.names))
+
+    with browser_page(app_url, "settings/sensors", routes={"**/api/hardware": answer}) as page:
+        tiles = page.locator(".fan-look-tile")
+        expect(tiles).to_have_count(4)
+        assert tiles.first.get_attribute("aria-checked") == "true"  # the default
+        page.wait_for_function(
+            "[...document.querySelectorAll('.fan-look-tile img')].every((i) => i.naturalWidth > 0)"
+        )  # each with its picture
+        page.locator('.fan-look-tile[data-look="noctua-a12x25"]').click()
+        page.wait_for_function(
+            "window.libre.store.get().hardware.fan_look.look === 'noctua-a12x25'"
+        )
+        page.locator(".settings-row", has_text="Colours").get_by_role("radio").nth(1).click()
+        page.wait_for_function("window.libre.store.get().hardware.fan_look.paint === 'own'")
+        assert "paint=own" in page.locator(".fan-look-tile img").first.get_attribute("src")
+        page.locator('[data-fan="fan.lpc.fan_1"] select').select_option("noctua-a14")
+        page.wait_for_function("window.libre.store.get().hardware.fans[0].look === 'noctua-a14'")
+        assert names.posted == [
+            {"fan_look": "noctua-a12x25"},
+            {"fan_paint": "own"},
+            {"fan_looks": {"fan.lpc.fan_1": "noctua-a14"}},
+        ]
+
+
 def test_without_hardware_names_nothing_shows(app_url):
     """A server without /api/hardware (an older background app): no fields; the rest of
     the section is there."""

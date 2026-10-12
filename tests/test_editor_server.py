@@ -660,6 +660,8 @@ def test_the_fans_are_named_in_the_app_and_written_to_config_toml(
         "detected": "Fan #1",
         "custom": "",
         "value": 820,
+        "look": "",  # as all fans
+        "paint": "",
     }
     status, data = names(editor, {"fans": {"fan.lpc.fan_1": "  Intake ", "fan.lpc.fan_2": "CPU"}})
     assert status == 200 and data["fans"][0]["custom"] == "Intake"
@@ -675,6 +677,50 @@ def test_the_fans_are_named_in_the_app_and_written_to_config_toml(
     ]
     for wrong in ({"fans": []}, {"fans": {"": "x"}}, {"fans": {"fan.lpc.fan_1": 1}}):
         assert names(editor, wrong)[0] == 400, wrong
+
+
+def test_the_fans_look_is_chosen_for_all_and_for_one_and_written_to_config_toml(
+    editor, pc, isolated_home
+):
+    status, data = names(editor)
+    assert status == 200 and data["fan_look"]["look"] == "" and data["fan_look"]["paint"] == ""
+    assert [look["id"] for look in data["fan_look"]["looks"]] == [
+        "noctua-g2", "noctua-a12x25", "noctua-a14", "libre",
+    ]  # fmt: skip
+    status, data = names(editor, {"fan_look": "noctua-a12x25", "fan_paint": "own"})
+    assert status == 200 and data["fan_look"]["look"] == "noctua-a12x25"
+    assert written(isolated_home)["hardware"]["fan_look"] == "noctua-a12x25"
+    assert written(isolated_home)["hardware"]["fan_paint"] == "own"
+    status, data = names(editor, {"fan_looks": {"fan.lpc.fan_2": "noctua-a14"}})
+    assert status == 200
+    assert written(isolated_home)["hardware"]["fans"] == [
+        {"sensor": "fan.lpc.fan_2", "look": "noctua-a14"}  # a look of its own, without a name
+    ]
+    names(editor, {"fans": {"fan.lpc.fan_2": "Rear"}})
+    assert written(isolated_home)["hardware"]["fans"] == [
+        {"sensor": "fan.lpc.fan_2", "name": "Rear", "look": "noctua-a14"}
+    ]
+    names(editor, {"fan_looks": {"fan.lpc.fan_2": ""}})  # as all fans again
+    assert written(isolated_home)["hardware"]["fans"] == [
+        {"sensor": "fan.lpc.fan_2", "name": "Rear"}
+    ]
+    for wrong in ({"fan_look": "noctua-a15"}, {"fan_paint": "brown"},
+                  {"fan_looks": {"fan.lpc.fan_2": "rgb"}}, {"fan_looks": []}):  # fmt: skip
+        assert names(editor, wrong)[0] == 400, wrong
+
+
+def test_each_fan_look_has_a_picture_for_its_tile(editor, pc):
+    import io
+
+    from PIL import Image
+
+    for look in ("noctua-g2", "noctua-a12x25", "noctua-a14", "libre"):
+        for paint in ("theme", "own"):
+            status, body = request(editor.port, "GET", f"/api/fan-look?look={look}&paint={paint}")
+            assert status == 200, (look, paint)
+            image = Image.open(io.BytesIO(body))
+            assert image.size[0] == image.size[1] >= 112 and image.getbbox() is not None
+    assert request(editor.port, "GET", "/api/fan-look?look=rgb")[0] == 404
 
 
 def test_an_empty_text_gives_the_found_name_back_and_the_others_stay(editor, pc, isolated_home):

@@ -46,7 +46,7 @@ const WIDGET_NAMES = {
 export const fieldLabel = (key) => catalog.fields?.[key] ?? key.replace(/_/g, " ");
 export const widgetLabel = (type) =>
   store.get().specs?.widget_labels?.[type] ?? catalog.widgets?.[type] ?? WIDGET_NAMES[type] ?? type;
-export const enumLabel = (value) => catalog.enums?.[value] ?? value;
+export const enumLabel = (value) => catalog.enums?.[value] ?? store.get().specs?.enum_labels?.[value] ?? value;
 export const iconLabel = (name) => catalog.icons?.[name] ?? name;
 
 /** A number in the language's way: 1,5 in German. `fixed`: always `digits` decimals. */

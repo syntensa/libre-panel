@@ -34,7 +34,7 @@ from libre_panel import clock, i18n, timezones
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
 from libre_panel.fonts.fallback import cursive, truetype
 from libre_panel.icons import draw_icon, weather_icon_name
-from libre_panel.render import cover, fan, lists
+from libre_panel.render import cover, fan, fan_looks, lists
 from libre_panel.render import finish as finishes
 from libre_panel.render.countdown import countdown_text
 from libre_panel.render.dust import Dust
@@ -580,6 +580,8 @@ class Renderer:
         self._dust_submit: Callable[..., Any] | None = None  # its way to the helper thread
         self._dots: dict[tuple[Any, ...], tuple[Image.Image, int]] = {}  # end dots, by look
         self._rotors: dict[str, fan.Rotor] = {}  # fan widget id -> how it turns (render/fan.py)
+        # what the user chose for the fans: their look and colours (config.toml [hardware])
+        self.fan_choices = fan.Choices()
         self._fans: OrderedDict[tuple[Any, ...], Piece] = OrderedDict()  # fan pieces, by look
         self._downloads: dict[str, tuple[Any, Any]] = {}  # download widget id -> what it shows
         self.screen = self._make_screen()
@@ -1156,7 +1158,8 @@ class Renderer:
             if widget["type"] == "fan":
                 color = self.color(widget["color"])
                 if color is not None:
-                    fan.preload(color[:3], widget["w"], widget["h"])
+                    look, paint = self.fan_choices.for_widget(widget)
+                    fan.preload(color[:3], widget["w"], widget["h"], look, paint)
 
     def _prepare_look(self) -> None:
         """Load the light layers and build what the finishes and the look draw
@@ -1787,19 +1790,24 @@ class Renderer:
         turn is worked out from the planned time of the frame (render/fan.py)."""
         wid, x, y, w, h = widget["id"], widget["x"], widget["y"], widget["w"], widget["h"]
         rpm = _number(snapshot.value(widget["sensor"]))
+        look, paint = self.fan_choices.for_widget(widget)
         rotor = self._rotors.get(wid)
         if rotor is None:
             rotor = self._rotors[wid] = fan.Rotor(wid)
+        rotor.blades = fan_looks.look(look).blades
         if self.animate:
             rotor.advance(rpm, widget["max_rpm"], now)
             self.moving = self.moving or rotor.turning
         else:  # a preview or a picture: how it looks at this speed, standing
             rotor.settle(rpm, widget["max_rpm"])
         color = self.color(widget["color"])[:3]
-        key = (self._keys[wid], rotor.phase, rotor.blur, rotor.dim, round(rotor.ring * 120))
+        key = (
+            self._keys[wid], look, paint, rotor.phase, rotor.blur, rotor.dim,
+            round(rotor.ring * 120),
+        )  # fmt: skip
         piece = self._fans.get(key)
         if piece is None:
-            image = fan.fan_image(color, w, h, rotor, widget["frame"])
+            image = fan.fan_image(color, w, h, rotor, widget["frame"], look, paint)
             at = (x + (w - image.width) // 2, y + (h - image.height) // 2)
             piece = self._effects(widget, Piece(image, at[0], at[1], [x, y, w, h]))
             self._fans[key] = piece

@@ -199,5 +199,7 @@ licence:
 The WebView2 runtime that draws the window is not in the downloads: Windows 11 has it,
 and Windows 10 gets it with Microsoft Edge.
 
-Product names such as TURZX, Turing Smart Screen, Lian Li and WeAct are
-trademarks of their respective owners; Libre Panel is not affiliated with them.
+Product names such as TURZX, Turing Smart Screen, Lian Li, WeAct and Noctua (and its
+fans' model names) are trademarks of their respective owners; Libre Panel is not affiliated
+with them. The fan looks named after Noctua's fans are drawings of Libre Panel's own, made
+from the blades' shape, without any of Noctua's pictures or logos.

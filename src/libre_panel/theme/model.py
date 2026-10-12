@@ -20,7 +20,7 @@ from typing import Any
 
 from PIL import ImageColor
 
-from libre_panel.config import user_themes_dir
+from libre_panel.config import FAN_LOOKS, FAN_PAINTS, user_themes_dir
 from libre_panel.devices.models import find_model, orientation_of
 from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_font_path, builtin_fonts
 from libre_panel.icons import ICON_NAMES
@@ -230,6 +230,11 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "color": ("color", "#22d3ee"),
         "max_rpm": ("number", 3000),  # the speed that fills the ring and turns the rotor fastest
         "frame": ("enum:ring|square|none", "ring"),  # the load ring, the lit square frame, or none
+        # the rotor's look (render/fan_looks.py) and its colours, the theme's or the look's own
+        # (Noctua's brown and beige); "auto": what the user chose for the fan (Settings ->
+        # Sensors, [hardware] in config.toml), else Noctua's G2 in the theme's colour
+        "look": ("enum:auto|" + "|".join(FAN_LOOKS), "auto"),
+        "paint": ("enum:auto|" + "|".join(FAN_PAINTS), "auto"),
     },
     "image": {
         "src": ("asset", ""),
