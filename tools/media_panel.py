@@ -574,26 +574,10 @@ def modules_theme(
     return data
 
 
-def layout_game() -> dict[str, Any]:
-    """A screen for a game: the frame rate large with its course, the CPU and the GPU, the
-    cores and the temperatures."""
-    return modules_theme(
-        "arctic",
-        [
-            module("game", 0, 0, 4, 2),
-            module("instrument", 4, 0, 1, 2, source="cpu"),
-            module("instrument", 5, 0, 1, 2, source="gpu"),
-            module("cores", 6, 0, 2), module("temps", 6, 1, 2),
-        ],
-    )  # fmt: skip
-
-
 # Themes a recipe may name besides the built-in ones: screens that Libre Panel's themes do not
-# have (a game's), made of modules in Libre Panel's own look. ``--theme clip=THEME`` puts any
-# theme in a clip's place.
-LAYOUTS: dict[str, Callable[[], dict[str, Any]]] = {
-    "layout-game": layout_game,
-}
+# have, made of modules in Libre Panel's own look (tools/media_app.py adds its own).
+# ``--theme clip=THEME`` puts any theme in a clip's place.
+LAYOUTS: dict[str, Callable[[], dict[str, Any]]] = {}
 
 
 # -- recipes ------------------------------------------------------------------------------------
@@ -903,7 +887,7 @@ CLIPS: dict[str, PanelClip] = {
     ),
     "game-entrance": PanelClip(
         "a game starts and ends with the entrance: the screen closes to a line, a band opens",
-        ("lumen", "layout-game"), 7.8, game_entrance, poster=4.2,
+        ("lumen", "arena"), 7.8, game_entrance, poster=4.2,
     ),
     "close-up-rings": PanelClip(
         "a close-up of the rings: lit arcs that fill, numbers that glide, at twice the size",

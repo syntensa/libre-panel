@@ -1623,7 +1623,9 @@
     "While a service switches to it": "Wenn ein Dienst dorthin schaltet",
     "Show the page {page}": "Seite {page} zeigen",
     "Minutes without input": "Minuten ohne Eingabe",
-    "Mute": "Stumm"
+    "Mute": "Stumm",
+    "For other panels": "Für andere Panels",
+    "Made for this page": "Für diese Seite gemacht"
   },
   "fields": {
     "align": "Ausrichtung",

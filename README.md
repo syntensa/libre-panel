@@ -95,8 +95,9 @@ until you switch them on.
 
 Start a game, from a list of your own or your Steam library, and the screen closes to a
 line, the game's name lights up and the game screen opens: the frame rate, its 1% low and
-who holds it back, counted by Intel's PresentMon. After a round, an optional report compares
-it with your last ten.
+who holds it back, counted by Intel's PresentMon. Its screen is yours to pick in
+*Design → Pages*: **Arena**, Libre Panel's own, or one of SPUR II's. After a round, an
+optional report compares it with your last ten.
 
 <img src="docs/media/round-report.gif" width="100%" alt="After a game the round report opens from a line of light: the average frame rate against the last rounds, the 1% low and frame time, how much the GPU, the CPU or the frame cap held it back, the share of the round at each frame rate, and the highest temperatures, power and video memory against the average">
 
@@ -177,6 +178,7 @@ the panel at a glance and the themes made for it, **Live** how it runs.
 | **Encore** | 8.8" and 9.2" bars | for music: the cover large and its colours behind the whole screen, the time with rolling digits, the volume as levels that rise |
 | **Nimbus** | 8.8" and 9.2" bars | for the weather: now and the next hours, the next days, the moon as it is lit tonight, a small clock |
 | **Almanac** | 8.8" and 9.2" bars | a clock with the month: the time large, or on a face whose second hand glides (**Almanac Analog**), beside the month with today and the week |
+| **Arena** | 8.8" and 9.2" bars | for game mode: the game's frame rate large with its 1% low, frame time and course, CPU and GPU as instruments, every core and the temperatures |
 | **Libre Default** | 3.5" (480×320); the default on every other panel | two lit rings, temperature, disk and network, a history that scrolls; what plays, the weather or the day in the corner |
 | **Slate** | 5" (800×480) | four cards: CPU, GPU, memory and network |
 | **Orbit** | round 2.1" and 2.8" | three rings around a large clock |

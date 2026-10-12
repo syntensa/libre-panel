@@ -12,6 +12,8 @@ import { html, useEffect, useRef, useState } from "../../lib/preact.js";
 import { pageName, shownPages } from "../../shell/panel-popover.js";
 import { navigate } from "../../shell/views.js";
 import { NumberField, Select, Toggle } from "../../ui/controls.js";
+import { panelModelNow } from "../home/panel.js";
+import { fitsPanel } from "../home/themes.js";
 import { promptDialog } from "../../ui/dialog.js";
 import { Icon } from "../../ui/icons.js";
 import { Menu, Popover } from "../../ui/layer.js";
@@ -103,10 +105,31 @@ export function PageTabs() {
 // The round report's screens are for the report alone; the others for any page.
 const REPORTS = ["round-report", "spur-round-report"];
 
+/** The panel the pages are for: the one connected, else the one the normal theme is made for. */
+function pagesModel(themes) {
+  const { specs, pages } = store.get();
+  const models = specs?.models || [];
+  const { connected } = panelModelNow();
+  if (connected) return connected;
+  const normal = pages?.pages?.find((page) => page.id === "normal")?.theme;
+  const made = themes.find((item) => item.id === normal)?.model;
+  return models.find((model) => model.id === made) || null;
+}
+
+/** Where a theme stands in a page's list, after the screens made for the page: Libre Panel's
+ * own, yours, each collection, a plugin's, and last those made for another panel. */
+function themeGroup(item, model) {
+  if (model && !fitsPanel(item, model)) return [4, t("For other panels")];
+  if (item.collection) return [2, item.collection];
+  if (item.source === "plugin") return [3, t("From plugins")];
+  return item.builtin ? [0, "Libre Panel"] : [1, t("Your themes")];
+}
+
 /** Which theme a page shows, from the installed ones: the screens made for it first
- * (``suggested``), then the others. A mode's page may show the normal theme ("");
- * music's and the idle clock's always show one of their own. Here and on game mode's card
- * in Settings → Services. */
+ * (``suggested``), then the others in groups, each A to Z. Two themes of one name (a copy
+ * of yours, a plugin's) are told apart by their ids. A mode's page may show the normal theme
+ * (""); music's and the idle clock's always show one of their own. Here and on game mode's
+ * card in Settings → Services. */
 export function PageThemeSelect({ page, theme, label, suggested = [], normal = true }) {
   const themes = useStore((s) => s.themes);
   useEffect(() => {
@@ -120,17 +143,22 @@ export function PageThemeSelect({ page, theme, label, suggested = [], normal = t
     }
   };
   const report = page === "report";
-  const named = new Map(themes.map((item) => [item.id, item.name]));
-  const first = suggested.filter((id) => named.has(id));
-  const rest = themes
-    .filter((item) => !first.includes(item.id) && (report || !REPORTS.includes(item.id)))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const offered = themes.filter((item) => report || !REPORTS.includes(item.id));
+  const names = new Map();
+  for (const item of offered) names.set(item.name, (names.get(item.name) || 0) + 1);
+  const shownName = (item) => (names.get(item.name) > 1 ? `${item.name} (${item.id})` : item.name);
+  const first = suggested.map((id) => offered.find((item) => item.id === id)).filter(Boolean);
+  const model = pagesModel(themes);
+  const rest = offered
+    .filter((item) => !first.includes(item))
+    .map((item) => ({ item, group: themeGroup(item, model) }))
+    .sort((a, b) => a.group[0] - b.group[0] || a.group[1].localeCompare(b.group[1]) || a.item.name.localeCompare(b.item.name));
   const options = [
     ...(normal ? [{ value: "", label: t("The normal theme") }] : []),
-    ...first.map((id) => ({ value: id, label: named.get(id) })),
-    ...rest.map((item) => ({ value: item.id, label: item.name })),
+    ...first.map((item) => ({ value: item.id, label: shownName(item), group: t("Made for this page") })),
+    ...rest.map(({ item, group }) => ({ value: item.id, label: shownName(item), group: group[1] })),
   ];
-  if (theme && !named.has(theme)) options.push({ value: theme, label: theme });
+  if (theme && !offered.some((item) => item.id === theme)) options.push({ value: theme, label: theme });
   return html`<${Select} label=${label} value=${theme || ""} options=${options} onChange=${choose} />`;
 }
 

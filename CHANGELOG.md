@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+**New**
+- **Arena**, Libre Panel's own screen for game mode on 8.8" and 9.2" bars: the game's frame
+  rate large with its 1% low, frame time and course, the CPU and the GPU as instruments, every
+  core's load and the temperatures. It is the first screen game mode's page offers; until now
+  only SPUR II's were ready-made
+
+**Fixes**
+- Design → Pages and game mode's card in Settings: the list of screens for a page was one list
+  from A to Z, Libre Panel's own mixed with SPUR II's and with screens for other panels (a
+  0.96" one for a bar), and two themes of one name (a copy of yours, a plugin's) looked the
+  same. The screens made for the page come first, then Libre Panel's, yours, each collection,
+  a plugin's and those for other panels, each in its group; two of one name show their ids
+
 ## 0.5.6 — 2026-10-12
 
 Three new screens for the bars: one for music, one for the weather and one clock with the

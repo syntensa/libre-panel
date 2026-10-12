@@ -719,8 +719,8 @@ def test_a_collection_does_not_lead_a_first_start_or_the_quick_list(app_url, iso
         page.wait_for_selector(".start.first .theme-card")
         assert page.locator(".theme-collection").count() == 0  # nothing of a collection is offered
         # made for the 9.2" panel: Libre Panel's own, its default first, the others A to Z
-        assert shown_themes(page) == ["lumen", "almanac", "almanac-analog", "encore", "nimbus",
-                                      "studio"]  # fmt: skip
+        assert shown_themes(page) == ["lumen", "almanac", "almanac-analog", "arena", "encore",
+                                      "nimbus", "studio"]  # fmt: skip
         page.get_by_role("button", name="See all").click()
         expect(page.locator(".theme-collection")).to_have_count(2)  # closed, at the end
         assert page.locator(".theme-card[data-theme='spur-ii']").count() == 0
@@ -1800,6 +1800,37 @@ def test_pages_of_the_panel(app_url, isolated_home):
         minutes.fill("10")
         minutes.press("Enter")
         waits_for(page, lambda: getattr(settings_config().modes.get("idle"), "minutes", 0) == 10)
+
+
+def test_a_page_lists_the_screens_in_groups(app_url, isolated_home):
+    """The screens made for the page first, then Libre Panel's own, yours, each collection and
+    those made for another panel; two themes of one name are told apart, and none is twice."""
+    import json
+
+    from libre_panel.config import set_config_value
+    from libre_panel.theme.model import find_theme, save_theme
+
+    set_config_value("theme", "lumen")  # a 9.2" bar
+    lumen = json.loads((find_theme("lumen") / "theme.json").read_text(encoding="utf-8"))
+    save_theme("my-lumen", lumen)  # a copy of yours with the same name
+    with browser_page(app_url) as page:
+        page.locator(".rail-item", has_text="Pages").click()
+        game = page.locator(".page-card[data-page='game'] .page-card-theme select")
+        playwright.expect(game.locator("option[value='arena']")).to_have_count(1)
+        groups = game.evaluate(
+            "s => [...s.querySelectorAll('optgroup')].map((g) => [g.label,"
+            " [...g.querySelectorAll('option')].map((o) => o.textContent)])"
+        )
+        names = [name for name, _ in groups]
+        assert names == ["Made for this page", "Libre Panel", "Your themes", "SPUR II",
+                         "For other panels"]  # fmt: skip
+        listed = dict(groups)
+        assert listed["Made for this page"][0] == "Arena"  # Libre Panel's game screen first
+        assert "Lumen (lumen)" in listed["Libre Panel"]
+        assert listed["Your themes"] == ["Lumen (my-lumen)"]
+        assert "Pico" in listed["For other panels"] and "Pico" not in listed["Libre Panel"]
+        values = game.locator("option").evaluate_all("o => o.map((x) => x.value)")
+        assert len(values) == len(set(values))  # nothing twice
 
 
 def test_the_panel_chip_changes_the_panel(page):
