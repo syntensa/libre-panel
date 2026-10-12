@@ -42,12 +42,11 @@ _DEFAULT_CONFIG_TEMPLATE = """\
 # While it is on it stands in for the theme above; a game's theme and the autopilot go first.
 # [sequence]
 # on = true
-# [[sequence.steps]]
-# theme = "almanac"
-# minutes = 5
-# [[sequence.steps]]
-# theme = "studio"
-# minutes = 10
+# steps = [
+#   { theme = "almanac", minutes = 5 },
+#   { theme = "nimbus", minutes = 5 },
+#   { theme = "studio", minutes = 10 },
+# ]
 
 # "auto" (the system language), "en" or "de": editor, tray and the date and
 # weather texts on the panel.

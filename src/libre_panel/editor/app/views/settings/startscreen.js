@@ -7,6 +7,7 @@
 import { appAction } from "../../core/app.js";
 import { endpoints } from "../../core/api.js";
 import { t } from "../../core/i18n.js";
+import { useConfig } from "../../core/settings.js";
 import { html, useEffect, useState } from "../../lib/preact.js";
 import { Select } from "../../ui/controls.js";
 import { confirmDialog } from "../../ui/dialog.js";
@@ -28,6 +29,7 @@ function Tile({ title, text, picture, children }) {
 }
 
 export function StartScreenCard() {
+  const config = useConfig(); // (none while config.toml cannot be read: nothing here is written then)
   const [info, setInfo] = useState(null);
   const [model, setModel] = useState(null);
   const [busy, setBusy] = useState("");
@@ -42,7 +44,7 @@ export function StartScreenCard() {
       })
       .catch(() => setInfo({ models: [] }));
   }, []);
-  if (!info?.models?.length || !model) return null;
+  if (!config || !info?.models?.length || !model) return null;
   const chosen = info.models.find((item) => item.id === model);
 
   const run = async (action, question) => {
