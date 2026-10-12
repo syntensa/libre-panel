@@ -1,6 +1,12 @@
 import pytest
 
-from libre_panel.render.formatting import FormatError, human_bytes, human_duration, safe_format
+from libre_panel.render.formatting import (
+    FormatError,
+    counts,
+    human_bytes,
+    human_duration,
+    safe_format,
+)
 
 
 def test_basic_format():
@@ -13,6 +19,14 @@ def test_extra_specs():
     assert safe_format("{value:duration}", 3 * 86400 + 5 * 3600) == "3d 5h"
     assert human_bytes(512) == "512 B"
     assert human_duration(59) == "0m"
+
+
+def test_a_number_counts_to_a_new_reading_a_text_or_a_songs_time_does_not():
+    for fmt in ("{value:.0f}°", "{value:bytes}/s", "{value:gb} GB", "{value:rate_unit}",
+                "{value:>5.1f}", "{value:d} RPM", "{value:.0%}", "{value:rate}"):  # fmt: skip
+        assert counts(fmt), fmt
+    for fmt in ("{value}", "{label}", "{value:clock}", "{value:duration}", "{value:upper}"):
+        assert not counts(fmt), fmt
 
 
 def test_rates_and_sizes_as_spur_ii_sets_them():

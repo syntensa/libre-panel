@@ -31,6 +31,16 @@ class FormatError(ValueError):
     pass
 
 
+# A number's spec: Python's (.0f, d, %, ...) or one of ours that shows an amount
+_COUNTING = re.compile(r"\{value:(bytes|rate|rate_unit|gb|[^{}A-Za-z]*[bcdeEfFgGnoxX%])\}")
+
+
+def counts(fmt: str) -> bool:
+    """Whether ``fmt`` shows its value as a number, which may count to a new reading
+    (``{value:.0f}°``, ``{value:bytes}/s``), not a text, a name or a song's time."""
+    return bool(_COUNTING.search(fmt))
+
+
 def human_bytes(value: float) -> str:
     value = float(value)
     for unit in ("B", "KB", "MB", "GB", "TB"):

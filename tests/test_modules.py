@@ -11,6 +11,7 @@ from libre_panel.theme.modules import (
     MIN_CELL,
     MODULE_KINDS,
     ROLES,
+    expand,
     look_theme_parts,
     make_grid,
     module_info,
@@ -61,6 +62,28 @@ def shown(renderer, snap):
     """Ids of the parts that are drawn."""
     renderer.render(snap)
     return [pid for pid, _ in renderer._last[0]]
+
+
+def test_a_modules_numbers_count_to_a_new_reading_as_its_rings_move():
+    """The numbers glide as the SPUR II mod's did, not jump once a second; a name does not."""
+    parts, _ = expand(theme({"kind": "cpu", "col": 0, "row": 0, "cols": 2, "rows": 2}))
+    metrics = {w["format"]: w.get("smooth") for w in parts if w["type"] == "metric"}
+    assert metrics["{value:.0f}°C"] and metrics["{value:.0f}%"]
+    assert metrics["{value}"] is False  # the processor's name
+
+
+def test_every_number_of_a_built_in_theme_counts_to_a_new_reading():
+    import json
+
+    from libre_panel.render.formatting import counts
+    from libre_panel.theme.model import builtin_themes_dir
+
+    for path in sorted(builtin_themes_dir().glob("*/theme.json")):
+        if path.parent.name == "round-report":  # a round's figures, fixed once it is over
+            continue
+        for widget in json.loads(path.read_text(encoding="utf-8"))["widgets"]:
+            if widget["type"] == "metric" and counts(widget["format"]):
+                assert widget.get("smooth"), (path.parent.name, widget["id"])
 
 
 def test_grid_for_a_bar_keeps_clear_of_the_hidden_strip():

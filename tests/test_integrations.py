@@ -100,6 +100,25 @@ def test_music_is_only_asked_while_shown(monkeypatch):
     provider.close()
 
 
+def test_news_of_the_player_shows_in_the_next_frame(monkeypatch):
+    """A new song or a pause shows at once, not at the next snapshot a second later; the
+    position moves on at each frame's time."""
+    monkeypatch.setattr(base, "_WANTED", {})
+    owner = type("Theme", (), {})()
+    want(owner, {"media.title"})
+    provider = media.MediaProvider()
+    monkeypatch.setattr(provider, "_start", lambda: None)  # no player: the track is set here
+    provider._track = Track("playing", "Song", position=10.0, duration=200.0, at=0.0)
+    hub = SensorHub([provider])
+    assert hub.snapshot().readings["media.title"].value == "Song"
+    provider._track = Track("paused", "Next", position=0.0, duration=180.0, at=0.0)
+    fresh = hub.fresh(video=False)
+    assert fresh["media.title"].value == "Next" and fresh["media.state"].value == "Paused"
+    song = Track("playing", "Song", position=10.0, duration=200.0, at=5.0)
+    assert song.readings(5.5)["media.position"].value == 10.5  # at the frame's time
+    assert song.readings(5.52)["media.position"].value == pytest.approx(10.52)
+
+
 def test_pictures_of_sources_reach_image_widgets():
     class Covers(SensorProvider):
         name = "covers"

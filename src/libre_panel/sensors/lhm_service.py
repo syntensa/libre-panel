@@ -120,7 +120,7 @@ def status_of(readings: Readings | None, why: str = "") -> LhmStatus:
 
 
 class ServiceSource:
-    """The sensor service, asked by a thread of its own once a second."""
+    """The sensor service, asked by a thread of its own (twice in each of its rounds)."""
 
     def __init__(
         self,

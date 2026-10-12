@@ -296,6 +296,7 @@ def test_where_the_service_is_installed_it_is_all_that_is_read(installed):
         (service,) = installed.services
         assert service.started and service.options["gpu"] == "radeon"
         assert service.options["stale_seconds"] == 9
+        assert service.options["poll_seconds"] == 1800  # twice in each of the service's rounds
         assert installed.inside == [] and provider._thread is None and not installed.web
         service.readings = {"cpu.temp": Reading("cpu.temp", 60.0, "°C")}
         assert provider.read() == service.readings
@@ -303,6 +304,19 @@ def test_where_the_service_is_installed_it_is_all_that_is_read(installed):
     finally:
         provider.close()
     assert service.closed
+
+
+def test_a_new_reading_shows_in_the_next_frame_not_at_the_next_snapshot(installed):
+    provider = provider_with()
+    try:
+        (service,) = installed.services
+        service.readings = {"cpu.temp": Reading("cpu.temp", 60.0, "°C")}
+        hub = SensorHub([provider])
+        assert hub.snapshot().readings["cpu.temp"].value == 60.0
+        service.readings = {"cpu.temp": Reading("cpu.temp", 61.0, "°C")}
+        assert hub.fresh(video=False)["cpu.temp"].value == 61.0  # still pictures too
+    finally:
+        provider.close()
 
 
 def test_a_service_that_is_switched_off_counts_as_not_installed(installed, monkeypatch):

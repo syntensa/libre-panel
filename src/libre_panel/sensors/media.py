@@ -385,6 +385,9 @@ class MediaProvider(SensorProvider):
     while a theme or a service reads them."""
 
     name = "media"
+    # news shows in the next frame (a new song, play or pause), and the position moves
+    # on at each frame's time: reading is a copy of the track the thread keeps
+    every_frame = True
 
     def __init__(self, options: dict[str, Any] | None = None, *, icons: Any = None) -> None:
         super().__init__(options)

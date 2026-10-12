@@ -522,6 +522,11 @@ def _mode(value: Any) -> str:
 
 class LibreHardwareMonitorProvider(SensorProvider):
     name = "librehardwaremonitor"
+    # A new reading shows in the next frame, not at the next snapshot: three clocks of a
+    # second each (the service, its client, the snapshot) made it late and uneven. Reading
+    # costs a copy of the latest, whichever way they come (the web server is asked by a
+    # thread of its own).
+    every_frame = True
 
     def __init__(self, options: dict[str, Any] | None = None) -> None:
         super().__init__(options)
@@ -565,7 +570,8 @@ class LibreHardwareMonitorProvider(SensorProvider):
         from libre_panel.sensors import lhm_service
 
         source = lhm_service.ServiceSource(
-            poll_seconds=self.poll_seconds,
+            # twice a round of the service: no reading is skipped, none is late by more
+            poll_seconds=self.poll_seconds / 2,
             stale_seconds=self.stale_seconds,
             gpu=self.gpu,
             on_ready=self._service_ready,
