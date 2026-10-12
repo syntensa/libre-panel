@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.5.1 — 2026-10-12
+
+Fixes from the first installs of 0.5.0 on Windows, above all the app's window.
+
+**Fixes**
+- Windows: the app's window did not open. It died at once, before it showed, on every PC: it was
+  given a PNG as its icon, which .NET cannot use as one. It now takes the program's own icon. A
+  window that still cannot start (a broken WebView2) opens the app in the browser instead of
+  nothing, and `logs/window.log` says why. The release build opens a real window on Windows
+  before it is published (`libre-panel window --check --open`)
+- A theme that `config.toml` names but that is not installed any more (removed, or one of a plugin
+  that is gone) no longer leaves the panel dark until the file is changed: the panel shows its
+  own theme (Lumen on the 8.8" and 9.2", Libre Default elsewhere), and the tray menu, its tooltip
+  and *Start* name the missing theme and say how to choose another. `config.toml` stays as it is
+- Windows autostart: a task named "Libre Panel" in Task Scheduler that is switched off, or that
+  starts another program (a leftover of an older copy or of a mod), showed *Start with Windows* as
+  on and kept the normal start from being written. Only Libre Panel's own task, switched on,
+  counts now; another one is left alone, and *Settings → System* and `libre-panel autostart
+  status` say how to remove it
+
 ## 0.5.0 — 2026-10-12
 
 Libre Panel's biggest release: the panel moves, and an app of its own designs it.
