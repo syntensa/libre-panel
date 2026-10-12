@@ -11,6 +11,7 @@ import { panelName, stateText } from "../../shell/panel-popover.js";
 import { Segmented, Select, Slider, Toggle } from "../../ui/controls.js";
 import { Popover } from "../../ui/layer.js";
 import { Card, CommitField, Disclosure, SettingRow, Status, usePolling } from "./parts.js";
+import { StartScreenCard } from "./startscreen.js";
 
 /** Write settings, and ask about the panel again: what they change shows there. */
 async function change(changes) {
@@ -261,5 +262,6 @@ export const panelGroups = [
   { id: "found", order: 10, component: PanelFound, load: loadPanelSection },
   { id: "video", order: 20, component: VideoCard },
   { id: "display", order: 30, component: DisplayCard },
+  { id: "start-screen", order: 35, component: StartScreenCard },
   { id: "advanced", order: 40, component: AdvancedCard },
 ];

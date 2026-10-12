@@ -64,6 +64,11 @@ export const endpoints = {
   pages: () => get("/api/pages"),
   setPage: (page, change) => post("/api/pages", { page, ...change }),
   sequence: () => get("/api/sequence"),
+  startScreen: () => get("/api/start-screen"),
+  startScreenAction: (action, model) => post("/api/start-screen", { action, model }),
+  startScreenPicture: (model, what, width = 960) =>
+    withToken(`/api/start-screen/picture?model=${enc(model)}&what=${enc(what)}&w=${width}`),
+  startScreenFile: (model, what) => withToken(`/api/start-screen/file?model=${enc(model)}&what=${enc(what)}`),
   setSequence: (on, steps) => post("/api/sequence", { on, steps }),
   app: () => get("/api/app"),
   appAction: (action, value) => post("/api/app", { action, value }),

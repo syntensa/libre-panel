@@ -842,3 +842,76 @@ a.btn:hover {
   width: 64px;
   height: 64px;
 }
+
+/* -- the panel's start screen (startscreen.js) ---------------------------------------------- */
+
+.boot-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 20px 20px;
+}
+
+.boot-panel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.boot-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.boot-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+
+.boot-picture {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 150px;
+  border-radius: 8px;
+  background: #000;
+  overflow: hidden;
+}
+
+.boot-picture img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.boot-tile-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.boot-actions,
+.boot-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.boot-actions .btn,
+.boot-foot .btn {
+  height: 34px;
+  padding: 0 12px;
+}
+
+.boot-foot {
+  font-size: 13px;
+}

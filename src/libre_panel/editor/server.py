@@ -39,6 +39,7 @@ from libre_panel.config import (
     theme_chosen,
     user_themes_dir,
 )
+from libre_panel.devices.base import DeviceError
 from libre_panel.devices.models import MODELS, PROTOCOLS
 from libre_panel.editor import access
 from libre_panel.editor import settings as app_settings
@@ -331,6 +332,15 @@ class EditorState:
         self.previews: dict[tuple, bytes] = {}  # pictures of saved themes
         self.previews_lock = threading.Lock()
         self.restart = app_settings.Restart()  # settings the panel loop takes in when it restarts
+        self.start_screen_jobs: Any = None  # the panel's own screens (a test puts a fake panel)
+
+    def start_screen(self) -> Any:
+        """What writes the panel's boot logo and standby clip (devices/panel_files.py)."""
+        if self.start_screen_jobs is None:
+            from libre_panel.devices.panel_files import StartScreen
+
+            self.start_screen_jobs = StartScreen()
+        return self.start_screen_jobs
 
     def live_snapshot(self):
         """The readings for previews. In the background app they are the panel's
@@ -428,9 +438,11 @@ class EditorHandler(BaseHTTPRequestHandler):
 
     # -- helpers -----------------------------------------------------------
 
-    def _send(self, status: int, body: bytes, content_type: str) -> None:
+    def _send(self, status: int, body: bytes, content_type: str, filename: str = "") -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
+        if filename:  # a file to keep
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -1007,6 +1019,133 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error(str(exc), HTTPStatus.CONFLICT)
         self._sequence()
 
+    # -- the panel's own screens (devices/panel_files.py) -------------------------------------
+
+    def _start_screen(self) -> None:
+        """The TURZX USB panels whose boot logo and standby clip Libre Panel can make, and the
+        one at hand: the one config.toml names, else the one on the USB bus."""
+        from libre_panel.devices import panel_files
+
+        try:
+            configured = load_config(self.state.config_path).device.model
+        except ConfigError:
+            configured = "auto"
+        usb = [model.id for model in panel_files.models()]
+        model = configured if configured in usb else None
+        if model is None:
+            try:
+                from libre_panel.devices.turzx_usb import present_model
+
+                found = present_model()
+                model = found.id if found is not None and found.id in usb else None
+            except Exception:  # (no pyusb, no access: nothing found)
+                model = None
+        self._json(
+            {
+                "models": [
+                    {
+                        "id": m.id,
+                        "label": m.label,
+                        "size": list(m.size("landscape")),
+                        "measured": m.video,
+                    }  # (the 9.2": where SPUR II measured it all)
+                    for m in panel_files.models()
+                ],  # fmt: skip
+                "model": model,
+                "runs_panel": self.controls is not None,
+                "names": {"logo": panel_files.BOOT_LOGO, "clip": panel_files.STANDBY_CLIP},
+            }
+        )
+
+    def _start_screen_model(self, query: dict[str, list[str]]) -> Any:
+        from libre_panel.devices import panel_files
+
+        try:
+            return panel_files.model_of((query.get("model") or [""])[0])
+        except DeviceError:
+            return None
+
+    def _start_screen_picture(self, query: dict[str, list[str]]) -> None:
+        """``?model=turing-9.2-usb&what=logo|clip&w=960``: the boot logo (PNG) or the standby
+        clip (an animated PNG) as the app shows them."""
+        from libre_panel.devices import panel_files
+
+        model = self._start_screen_model(query)
+        what = (query.get("what") or ["logo"])[0]
+        if model is None or what not in ("logo", "clip"):
+            return self._error("unknown panel or picture", HTTPStatus.NOT_FOUND)
+        try:
+            width = max(120, min(1920, int((query.get("w") or ["960"])[0])))
+        except ValueError:
+            width = 960
+        self._send(200, panel_files.cached_preview(model.id, what, width), "image/png")
+
+    def _start_screen_file(self, query: dict[str, list[str]]) -> None:
+        """``?model=...&what=logo|clip``: the boot logo's JPEG or the standby clip (H.264) as
+        the panel takes them, to keep."""
+        from libre_panel.devices import panel_files
+
+        model = self._start_screen_model(query)
+        what = (query.get("what") or ["logo"])[0]
+        if model is None or what not in ("logo", "clip"):
+            return self._error("unknown panel or file", HTTPStatus.NOT_FOUND)
+        try:
+            data = panel_files.cached_file(model.id, what)
+        except DeviceError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        name = f"{model.id}-{'boot.jpg' if what == 'logo' else 'standby.h264'}"
+        kind = "image/jpeg" if what == "logo" else "application/octet-stream"
+        self._send(200, data, kind, filename=name)
+
+    def _start_screen_action(self) -> None:
+        """``{"action": "state" | "logo" | "remove-logo" | "clip", "model": ...}``: what is on
+        the panel, or its boot logo or standby clip written or taken away. Only on the
+        person's own click: the panel's themes are paused first (and stay paused, so the
+        panel shows what was written; the app resumes them)."""
+        from libre_panel.devices import panel_files
+
+        payload = self._read_json()
+        if payload is None:
+            return
+        action = payload.get("action") if isinstance(payload, dict) else None
+        if action not in ("state", "logo", "remove-logo", "clip"):
+            return self._error('expected {"action": "state", "logo", "remove-logo" or "clip"}')
+        model = None
+        if payload.get("model"):
+            try:
+                model = panel_files.model_of(str(payload["model"]))
+            except DeviceError as exc:
+                return self._error(str(exc))
+        try:
+            config = load_config(self.state.config_path)
+        except ConfigError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        paused = False
+        if self.controls is not None:
+            self.controls.act("pause")  # the panel is free for this, and stays so
+            paused = True
+        screen = self.state.start_screen()
+        try:
+            if action == "state":
+                result = screen.state(model)
+            elif action == "logo":
+                result = screen.write_logo(model)
+            elif action == "remove-logo":
+                result = screen.remove_logo(model)
+            else:
+                result = screen.write_clip(config.device.brightness, model)
+                if not config.video.local_clip:  # the video mode names the clip it plays
+                    edit_config(("value", "video.local_clip", panel_files.STANDBY_CLIP),
+                                ("value", "video.clip_asked", True),
+                                path=self.state.config_path)  # fmt: skip
+        except DeviceError as exc:
+            log.warning("start screen: %s failed: %s", action, exc)
+            return self._json({"error": str(exc), "paused": paused}, HTTPStatus.CONFLICT)
+        except (ConfigError, OSError) as exc:
+            return self._json({"error": str(exc), "paused": paused}, HTTPStatus.CONFLICT)
+        log.info("start screen: %s done: %s", action, result)
+        self._json({**result, "paused": paused})
+
     def _settings(self, method: str, body: bool = False) -> None:
         """A route of the Settings (editor/settings.py): its answer, or why it is refused."""
         args = []
@@ -1456,6 +1595,19 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/app", lambda h, m, u: h._app_state()),
     Route("GET", "/api/hardware", lambda h, m, u: h._hardware(_refresh_asked(u.query))),
     Route("GET", "/api/fan-look", lambda h, m, u: h._fan_look(parse_qs(u.query)), picture=True),
+    Route("GET", "/api/start-screen", lambda h, m, u: h._start_screen()),
+    Route(
+        "GET",
+        "/api/start-screen/picture",
+        lambda h, m, u: h._start_screen_picture(parse_qs(u.query)),
+        picture=True,
+    ),
+    Route(
+        "GET",
+        "/api/start-screen/file",
+        lambda h, m, u: h._start_screen_file(parse_qs(u.query)),
+        picture=True,  # a link that downloads it carries the token in its address
+    ),
     Route("GET", "/api/plugins/pages", lambda h, m, u: h._json(h._pages())),
     Route(
         "GET",
@@ -1473,6 +1625,7 @@ ROUTES: tuple[Route, ...] = (
     Route("POST", "/api/language", lambda h, m, u: h._set_language()),
     Route("POST", "/api/pages", lambda h, m, u: h._set_panel_page()),
     Route("POST", "/api/sequence", lambda h, m, u: h._set_sequence()),
+    Route("POST", "/api/start-screen", lambda h, m, u: h._start_screen_action()),
     *(
         Route("POST", path, lambda h, m, u, name=name: h._settings(name, body=True))
         for path, name in _SETTINGS_POST.items()

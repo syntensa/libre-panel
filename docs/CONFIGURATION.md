@@ -178,6 +178,33 @@ minutes = 10
   (`on = false`); their steps are kept, and the switch on the card starts them again.
 - **`theme`** stays what shows when they are off.
 
+## The panel's start screen
+
+A TURZX USB panel has two screens of its own, shown without any program on the PC: a
+**boot logo** when it is switched on, and a **standby clip** it plays when the PC starts,
+until Libre Panel shows its themes. *Settings → Panel → Start screen* has both in Libre
+Panel's look, made for each USB panel's size (the 2.8" round, 4.6", 5.2", 8", 8.8", 9.2" and
+12.3"): the mark, the name and the line of light, and in the clip a light that runs out from
+the middle. The card shows them as they will look.
+
+- **Put on the panel** writes one, after a question: the panel's themes pause, the panel
+  shows what was written (the logo at once, the clip playing), and *Show the themes again*
+  brings them back. The boot logo appears at the next power-on; the panel starts with the
+  clip from then on.
+- **Factory logo again** takes Libre Panel's boot logo away; the factory logo was never
+  touched and shows again.
+- **The standby clip replaces** the one the panel has (`usr/data/standby.h264`, the vendor
+  app's name); that one cannot be read back first. Where `video.local_clip` is empty, the
+  video mode is then told this name.
+- **What is on the panel** lists its folder and the sizes of both files.
+- **JPEG** and **H.264** download the files as the panel takes them.
+
+It works only on a click, never while themes run, and writes only below `usr/data/`, at most
+1 MiB a file, checking each file's size afterwards ([protocol](protocol/turzx-usb.md#the-panels-own-screens)).
+It was measured on the 9.2"; the other USB panels share its firmware but have not been tried.
+A panel kept on power while the PC is off shows neither again after a restart of the PC: it
+keeps its last picture.
+
 ## Sensor sources and their order
 
 `[sensors] providers` lists the sources in order of priority: when two of them

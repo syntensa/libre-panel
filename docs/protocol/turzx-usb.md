@@ -71,13 +71,14 @@ send a sync and check the echo (up to three attempts). **verified**
 | 122 | queue depth | reply `[8]` = blocks waiting **verified** |
 | 123 | stop stream | **verified** |
 
-Commands that change what the panel keeps, and are **never sent by Libre
-Panel**: 13 (set rotation and save the settings), 125 (save settings: start
-mode, brightness), all storage and file commands (38–42, 98–100), firmware.
-11 restarts the panel (back after about 5 s; the only fix for a hung video
-decoder besides replugging); Libre Panel sends it for that and nothing else
-(see *A hung decoder*). 12 **halts** the panel until it loses power: never
-send it.
+Commands that change what the panel keeps are **never sent while the panel
+shows themes**. A few are sent for the panel's own screens, and only when the
+person asks for it in *Settings → Panel → Start screen* (see *The panel's own
+screens* below): 40, 42, 98, 99, 113 and 125. Never sent at all: 13 (set
+rotation and save the settings), 38, 39, 41, 100, firmware. 11 restarts the
+panel (back after about 5 s; the only fix for a hung video decoder besides
+replugging); Libre Panel sends it for that and nothing else (see *A hung
+decoder*). 12 **halts** the panel until it loses power: never send it.
 
 ## Frames
 
@@ -193,3 +194,43 @@ three restarts in a row; the count starts again after 5 minutes without a
 hang. When restarts do not help, or the panel does not come back, Libre
 Panel asks to replug it. Plugins hear `panel-restarted` after
 `panel-connected` when the panel came back from such a restart.
+
+## The panel's own screens
+
+The panel has two screens of its own that need no program on the PC: a JPEG at
+power-on (`usr/data/boot.jpg`, else the factory logo `/media/logo.jpg` on another
+partition, never written) and an H.264 clip it plays in a loop when the PC's USB
+comes up, until a program streams (the name kept in its settings, `cfg+6`; the
+vendor app's `usr/data/standby.h264`). SPUR II read this from the 8.8"'s firmware
+and measured it on the 9.2". Libre Panel draws both in its own look for the
+panel's size (`render/bootscreen.py`) and writes them on a click
+(`devices/panel_files.py`), with the panel's themes paused first.
+
+File commands share one layout: `[8:12]` the name's length (big endian),
+`[12:16]` the file's length (40 only), `[16:]` the name, relative to the
+application's folder (`usr/data/...`; `/usr/data` fails).
+
+| Cmd | | |
+|---|---|---|
+| 40 | write a file | the file follows the packet in the same transfer, at most 1 MiB; written as named, so only names below `usr/data/` are sent |
+| 42 | delete a file | taking `usr/data/boot.jpg` away brings the factory logo back |
+| 98 | a file's size | little endian at `[8:12]`; checked after every write |
+| 99 | list a folder | 20 pieces of 512 bytes from a 0x2800-byte buffer; it reads the name only at the first, so all 20 are fetched every time; it creates a missing folder |
+| 113 | show a JPEG of the panel's | the boot logo, at once |
+| 110 | play a clip | clears the framebuffer and keeps the name in the settings **in memory**; never with an empty name |
+| 125 | save the settings | `[8:14]` brightness (0–102), start mode (2: the clip `cfg+6` names), 0, rotation, 0, offline (0: dim and stop 10 s after the PC is gone); saved with the clip's name |
+
+- **The boot logo** is drawn in the framebuffer's orientation (480×1920 on the
+  9.2", turned as the frames are), JPEG quality 88. The JPEG path draws into a
+  smaller area that leaves about 64 of 1920 px at both short ends as they were and
+  does not clear the framebuffer, so nothing is near the ends; they fade to black.
+- **The standby clip** is H.264 baseline with one slice a picture
+  (`sliced-threads=0`), no B pictures, and a sequence (SPS, PPS and a keyframe)
+  every 11 pictures (`keyint=11:repeat-headers=1`): the decoder takes at most 11
+  pictures per sequence. 44 pictures at the 30 fps of a cold start loop in about
+  1.5 s. A sequence start costs the panel about 30 ms and it refills its queue
+  about once a second, so the clip moves only in brightness at fixed places.
+- **Writing it:** 40 `usr/data/standby.h264`, 98 to check, 15 = 30, 110 with the
+  name (it plays at once), 125 `[brightness, 2, 0, 0, 0, 0]`. The clip that was
+  there cannot be read back first: the protocol has no file read.
+

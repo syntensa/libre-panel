@@ -10,6 +10,9 @@ clip in Libre Panel's look.
 - Screens in turn: themes one after another, each for its seconds, minutes or hours, then
   from the top again (*Start → Screens in turn*, `[sequence]` in config.toml). A game's theme
   and the autopilot go first; choosing one theme stops them and keeps their steps
+- Start screen (*Settings → Panel*): the TURZX USB panels' own boot logo and standby clip in
+  Libre Panel's look, made for each panel's size, shown as they will look and put on the
+  panel on a click (after a question; the factory logo can always come back), or downloaded
 - Encore: what plays with its cover large and the cover's colours blurred behind the whole
   screen, the state in the panel's language, the time with rolling digits, its seconds and a
   line through the minute, and the volume as levels that rise as on a mixer (a crossed

@@ -14,8 +14,11 @@ A1 1A. A payload (PNG, H.264) follows the packet in the same bulk transfer.
 The panel answers on the bulk IN endpoint: byte 0 echoes the command id,
 0xC8 means "accepted" (not "displayed").
 
-Only harmless commands are used here. Restart (11), 125 and all storage/file
-commands are deliberately absent; firmware is never touched.
+The live path uses only harmless commands. Restart (11) is sent by the video
+mode's hang detection alone; the panel's own files and settings (its boot logo
+and standby clip: 40, 42, 98, 99, 113, 125) are written by
+devices/panel_files.py, only when the person asks for it. Firmware is never
+touched, and 12 (halt) and 13 are never sent.
 """
 
 from __future__ import annotations
@@ -303,6 +306,21 @@ class UsbTransport:
             raise DeviceError(f"command {cmd}: unexpected reply {reply[:16].hex(' ')}")
         if ACK not in (reply[1:2] + reply[8:9]):
             raise DeviceError(f"command {cmd} not accepted: {reply[:16].hex(' ')}")
+        return reply
+
+    def ask(self, cmd: int, args: bytes = b"", timeout_ms: int = 2000) -> bytes:
+        """A command whose reply carries data rather than the accepted mark (a file's size,
+        a piece of a folder's listing): the reply as it comes, for the caller to read."""
+        import usb.core
+
+        with self._lock:
+            try:
+                self.ep_out.write(build_packet(cmd, args), timeout_ms)
+                reply = self._reply(cmd, timeout_ms)
+            except usb.core.USBError as exc:
+                raise DeviceError(f"USB error on command {cmd}: {exc}") from exc
+        if reply[:1] != bytes([cmd]):
+            raise DeviceError(f"command {cmd}: unexpected reply {reply[:16].hex(' ')}")
         return reply
 
     def query(self, cmd: int, timeout_ms: int = 400) -> bytes | None:

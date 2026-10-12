@@ -129,6 +129,8 @@ def test_the_files_that_need_no_token_are_the_apps_own_and_a_few_pictures():
         "/api/themes/{theme}/preview",
         "/api/plugins/{page}/{rest*}",
         "/api/fan-look",  # a fan's look on its tile in Settings
+        "/api/start-screen/picture",  # the panel's boot logo and standby clip in Settings
+        "/api/start-screen/file",  # ... and the link that downloads them
     }
     assert all(route.method == "GET" and not route.public for route in ROUTES if route.picture)
     # and nothing is answered but through the routes
