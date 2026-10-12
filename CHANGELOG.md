@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.5.4 — 2026-10-12
+
+The motion of the SPUR II mod: numbers that count, values in the next frame, graphs without
+steps, and a clock whose digits roll.
+
+**New**
+- Clocks: a clock's `digits` may `roll` on the second (the old digit moves up and out, the new
+  one comes in from below, soft at the edges; all that change roll together) or `fade`, for
+  `digits_seconds` (0.42) after it, as the SPUR II mod's clocks do. The rest of the second the
+  clock is its plain text, the same pixels as before. Finished lettering (facet, acrylic) rolls
+  as it is lettered. The SPUR II themes, Studio and Lumen roll their clocks; others jump as before
+- SPUR Studio: the seconds run under the clock fills its groove once a minute, without steps,
+  with a soft head. `time.second` is the seconds of the minute at each frame's time, and a bar's
+  `end_dot` gives a bar such a head
+
+**Fixes**
+- The processor's, graphics card's, memory's and network's numbers and the fans'
+  speeds jumped once a second while the rings glided. Every number that shows an amount now
+  counts to a new reading with its bars and rings, in the modules and in the built-in themes
+  (`smooth`)
+- LibreHardwareMonitor's readings came up to three seconds late and now and then one was
+  skipped: the sensor service, its client and the panel's snapshot each kept their own second.
+  A new reading now shows in the next frame, and the service is asked twice in each of its rounds
+- Music: a new song, play and pause showed up to a second late; they now show in the next frame,
+  and the position moves on at each frame's time
+- Video mode: a slow graph (a minute across, as Lumen's) stood still for two or three frames and
+  then stepped half a pixel. Its steps are now cut into parts, drawn ahead in the helper thread,
+  so it moves on in every frame. Graphs that move a step a frame (SPUR II's) stay as they were
+
 ## 0.5.3 — 2026-10-12
 
 Fans by their own names.
