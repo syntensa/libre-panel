@@ -2,7 +2,7 @@
 // page's #layers element, so no overflow or stacking order of a view cuts them.
 
 import { bindKey } from "../core/shortcuts.js";
-import { html, render, useEffect, useLayoutEffect, useRef } from "../lib/preact.js";
+import { html, render, useLayoutEffect, useRef } from "../lib/preact.js";
 import { Icon } from "./icons.js";
 import { keyLabel } from "../core/shortcuts.js";
 
@@ -70,7 +70,9 @@ export function Popover({ anchor, open, onClose, placement = "bottom-start", lab
       removeEventListener("scroll", place, true);
     };
   });
-  useEffect(() => {
+  // at once, not after the next paint: an Escape that comes as soon as the popover shows must
+  // close it, not reach what is behind it (the design view would let go of the selection)
+  useLayoutEffect(() => {
     if (!open) return undefined;
     const before = document.activeElement;
     const outside = (event) => {
