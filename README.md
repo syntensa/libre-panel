@@ -115,6 +115,9 @@ moon as it is lit tonight and a small clock.
 **Almanac** is a clock with the month, today and the week; **Almanac Analog** puts the time
 on a face whose second hand glides, ticks or sweeps.
 
+They come by themselves too: switch on the **Music** page in *Design → Pages* and Encore takes
+over while a track plays, the **Idle** page and Almanac shows when you step away from the PC.
+
 ### Screens in turn
 
 <img src="docs/media/screens-in-turn.gif" width="100%" alt="Screens in turn: Almanac, then Nimbus, then Encore, each for its time, one opening from a line of light after the other, and from the top again">
