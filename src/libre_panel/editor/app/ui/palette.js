@@ -86,7 +86,9 @@ function PaletteBox({ initial }) {
   useLayoutEffect(() => {
     list.current?.querySelector(".palette-item.active")?.scrollIntoView({ block: "nearest" });
   }, [active, query]);
-  useEffect(() => {
+  // at once, not after the next paint: keys typed right after Ctrl+K go into the input, and
+  // the focus the palette gives back is the one before it, not its own input
+  useLayoutEffect(() => {
     const before = document.activeElement;
     input.current?.focus();
     const unbind = bindKey("escape", () => closePalette(), { inInputs: true });

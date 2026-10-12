@@ -6,7 +6,7 @@
 import { createStore, useSelector } from "../core/store.js";
 import { t } from "../core/i18n.js";
 import { bindKey } from "../core/shortcuts.js";
-import { html, useEffect, useRef, useState } from "../lib/preact.js";
+import { html, useLayoutEffect, useRef, useState } from "../lib/preact.js";
 
 const dialogs = createStore({ stack: [] });
 let next = 1;
@@ -80,7 +80,9 @@ const FOCUSABLE = 'input:not([disabled]), select:not([disabled]), textarea:not([
 
 function DialogBox({ dialog, top }) {
   const box = useRef(null);
-  useEffect(() => {
+  // at once, not after the next paint, as the popover and the palette: the focus it gives
+  // back is the one before it, and an Escape right after it shows closes it
+  useLayoutEffect(() => {
     const before = document.activeElement;
     const frame = requestAnimationFrame(() => {
       const target = box.current?.querySelector("[autofocus]") || box.current?.querySelector(FOCUSABLE);
@@ -91,7 +93,7 @@ function DialogBox({ dialog, top }) {
       if (before instanceof HTMLElement && document.contains(before)) before.focus({ preventScroll: true });
     };
   }, []);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!top) return undefined;
     return bindKey("escape", () => dialog.close(null), { inInputs: true });
   }, [top]);
