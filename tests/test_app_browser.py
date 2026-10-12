@@ -3339,7 +3339,9 @@ def test_settings_the_highest_rights_only_when_asked_and_by_an_administrator(iso
     from libre_panel.autostart import Autostart
 
     registry, tasks = FakeRegistry(), FakeTasks()
-    autostart = Autostart("win32", registry=registry, tasks=tasks, admin=lambda: False)
+    autostart = Autostart(  # (the program settings_app gives its autostart command)
+        "win32", registry=registry, tasks=tasks, admin=lambda: False, program="/opt/libre-panel"
+    )
     app = settings_app(isolated_home, autostart)
     url = app.start()
     try:
