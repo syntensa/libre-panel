@@ -61,9 +61,9 @@
     {
       "type": "image",
       "id": "ambient",
-      "x": 0,
+      "x": 18,
       "y": 0,
-      "w": 480,
+      "w": 462,
       "h": 1920,
       "src": "@media.cover",
       "fit": "cover",
@@ -74,9 +74,9 @@
     {
       "type": "rect",
       "id": "veil",
-      "x": 0,
+      "x": 18,
       "y": 0,
-      "w": 480,
+      "w": 462,
       "h": 1920,
       "color": "#0A0E1338",
       "color2": "#0A0E13F2",

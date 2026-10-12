@@ -38,7 +38,7 @@ TX_1, TX_3, ACCENT = (238, 246, 255), (140, 160, 184), (19, 229, 215)
 THEMES = ("lumen", "studio", "encore", "nimbus", "almanac", "almanac-analog", "libre-default",
           "slate", "orbit", "column", "pico", "spur-ii")  # fmt: skip
 # The pictures made of them, and the screenshots of the app (those need Playwright).
-COMPOSED = ("hero.png", "gallery.png", "social-preview.png", "studio-adapts.png",
+COMPOSED = ("hero.png", "gallery.png", "social-preview.png", "studio-adapts.png", "vertical.png",
             "module-sizes.png", "weather-sizes.png", "looks.png", "module-layouts.png",
             "module-catalog.png", "module-layouts-more.png")  # fmt: skip
 APP_SHOTS = ("editor-new.png", "editor.png", "editor-drag.png", "palette.png", "start.png",
