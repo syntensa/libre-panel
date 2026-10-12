@@ -36,6 +36,7 @@
   <a href="#a-30-second-tour">Tour</a> ·
   <a href="#themes">Themes</a> ·
   <a href="#supported-panels">Panels</a> ·
+  <a href="#out-of-the-box">Out of the box</a> ·
   <a href="#install-and-first-start">Install</a> ·
   <a href="#privacy">Privacy</a> ·
   <a href="#faq">FAQ</a> ·
@@ -45,6 +46,12 @@
 Plug in the panel, start Libre Panel, and it shows your processor, graphics card, memory,
 fans, network, what is playing and the weather outside, in a theme you pick or build
 yourself. It runs quietly in the tray and takes the vendor app's place.
+
+**Everything works out of the box.** Sensors, fans, graphics card, game frame rates (Windows)
+and the 50 fps video mode need no other program. The downloads carry what the features run;
+the Windows installer sets up the rest, and the portable zip and Linux do it with one click in
+the app. It asks once, for administrator rights on Windows and for your password on Linux
+([what is set up](#out-of-the-box)).
 
 ## A 30-second tour
 
@@ -167,6 +174,43 @@ and the model becomes *supported* for everyone. Video mode is for the TURZX USB 
 others have no video decoder. Details, Linux permissions and the panels of other brands:
 [docs/HARDWARE.md](docs/HARDWARE.md).
 
+## Out of the box
+
+Nothing else to download or install. The downloads carry the programs the features run, in a
+`tools` folder next to the program: ffmpeg for the video mode (Windows and Linux), and on
+Windows PresentMon for game frame rates and the installer of the PawnIO driver. One setup step
+does the rest: the installer on Windows, a card in the app for the portable zip and for Linux.
+Libre Panel itself runs without administrator rights.
+
+| | Windows setup | Portable zip | Linux (AppImage) |
+|---|---|---|---|
+| **Processor, mainboard, memory and drive sensors** | the sensor service and the PawnIO driver, two checked boxes | *Unlock all sensors* on Start and in *Settings → Sensors* sets up the same | the processor and NVMe drives are read without rights; *Set up sensors and panel access* loads the kernel's drivers for the board's fan chip and for SATA drives |
+| **Processor power** | read by the sensor service | the same | a switch in that card, off until you turn it on |
+| **Graphics card** | built in (LibreHardwareMonitor) | built in | AMD, Intel and NVIDIA, read without rights |
+| **Game frame rates** | PresentMon is in the download; the third box adds you to *Performance Log Users* | PresentMon is in the download; *Unlock all sensors* adds you | Windows only |
+| **50 fps video mode** | ffmpeg is in the download | ffmpeg is in the download | ffmpeg is in the download |
+| **The panel's USB access** | nothing to do | nothing to do | the same card writes the udev rule |
+
+- **One question.** Windows asks for administrator rights once, for the setup or for *Unlock
+  all sensors*; on Linux your system asks for your password once. *Install for me only* is
+  still possible: the setup then installs without those rights and leaves the system parts to
+  *Unlock all sensors*. The readings arrive within a few seconds; game frame rates count from
+  your next sign-in, when Windows applies the group.
+- **Read only.** The sensor service only reads: it sets no fan and changes no setting of the
+  hardware. People signed in at the PC can read its values; network logons and other computers
+  are refused ([how it is built](docs/BACKGROUND.md#the-sensor-service)). *Remove* in
+  *Settings → Sensors*, the uninstaller and, on Linux, *Remove again* take it all out. Every
+  release build installs the Windows setup on a Windows test machine, checks that the service
+  runs and that Libre Panel reads through it, and uninstalls it again; the AppImage's setup is
+  run as a dry run in the bare environment `pkexec` makes.
+- **Video mode** turns itself on on the 9.2" once the panel's standby clip is named; *Start*
+  asks for the name once ([what it needs](#faq)).
+- **The programs** are the files their projects publish, unchanged, each checked against a
+  SHA-256 when the download is built. ffmpeg is GPL-3.0, PresentMon MIT, PawnIO's driver
+  GPL-2.0-or-later with an exception
+  ([which programs](docs/CONFIGURATION.md#programs-that-come-with-the-downloads); their
+  licences and sources are in [NOTICE.md](NOTICE.md)).
+
 ## <a name="install"></a>Install and first start
 
 From the [latest release](https://github.com/syntensa/libre-panel/releases/latest), no
@@ -180,12 +224,6 @@ Python needed:
 - **Linux (x86-64):** `Libre_Panel-…-x86_64.AppImage`: make it executable and start it, no
   installation. A tarball is there too.
 
-The downloads carry what the features run, in a `tools` folder next to the program: ffmpeg
-for the video mode, and on Windows PresentMon for game frame rates and the installer of the
-PawnIO driver for the CPU's sensors. Nothing else has to be installed; ffmpeg is GPL-3.0, the
-others are MIT and GPL-2.0 ([which programs](docs/CONFIGURATION.md#programs-that-come-with-the-downloads),
-and [NOTICE.md](NOTICE.md) for their sources).
-
 1. **Close the vendor app.** It keeps the panel to itself.
 2. **Start Libre Panel** with the panel plugged in. The Windows downloads are not code-signed
    yet: SmartScreen asks once (*More info → Run anyway*). On Linux, *Start* offers to give your
@@ -196,13 +234,9 @@ and [NOTICE.md](NOTICE.md) for their sources).
    services (all off until you switch them on). The tray icon has the theme, brightness,
    pause and *Start with system*.
 
-On Windows, the processor's temperature and power, the mainboard's fans and the
-temperatures of memory and drives come through Libre Panel's sensor service, which reads
-them with the rights they need ([FAQ](#faq)); the app itself runs without those rights. On
-Linux the sensors need no rights, except the mainboard's fans and the processor's power:
-*Start* offers both with one click ([FAQ](#faq)).
 The app opens in a window of its own (WebView2 on Windows, WebKitGTK on Linux); the AppImage
-opens it in the browser for now ([details](docs/BACKGROUND.md#the-apps-window)).
+opens it in the browser for now ([details](docs/BACKGROUND.md#the-apps-window)). What the
+downloads carry and what each system sets up: [Out of the box](#out-of-the-box).
 
 With Python instead:
 
@@ -272,13 +306,17 @@ as a virtual COM port (`COM3`, `/dev/ttyACM0`). *Start* in the app names the pan
 The Windows downloads carry LibreHardwareMonitor's library and read the graphics card and
 its fans with no other program. The processor's temperature, power and clock, the RAM's and
 the drives' temperatures and the mainboard's fans need **administrator rights** and the
-**PawnIO** driver ([pawnio.eu](https://pawnio.eu)). Libre Panel's **sensor service** has
-both: the setup installs it (the checked box *Sensor service*), the portable zip offers
-*Unlock all sensors* on Start (one question of Windows), and Libre Panel itself goes on
-without administrator rights ([how it is kept safe](docs/BACKGROUND.md#the-sensor-service)).
-*Settings → Sensors* says whether it runs. Without it, `libre-panel autostart enable
---elevated` (as administrator) or a LibreHardwareMonitor that you run yourself with its web
-server work as before ([details](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans)).
+**PawnIO** driver, and the downloads carry its installer. Libre Panel's **sensor service**
+has both, and the setup installs the two (the checked boxes *Sensor service* and *PawnIO
+driver*), so after the setup nothing is left to do. You see "--" only where that part was
+not set up: after *Install for me only*, or with the portable zip. *Unlock all sensors* on
+Start, or in *Settings → Sensors*, sets it up with one question of Windows, and Libre Panel
+itself goes on without administrator rights
+([how it is kept safe](docs/BACKGROUND.md#the-sensor-service)). *Settings → Sensors* says
+whether the service runs. With a pip install there is no service: install PawnIO from
+[pawnio.eu](https://pawnio.eu) and use `libre-panel autostart enable --elevated` (as
+administrator), or a LibreHardwareMonitor that you run yourself with its web server
+([details](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans)).
 </details>
 
 <details>
@@ -291,7 +329,9 @@ fans** (the kernel has it, but nobody loads it), and, only if you want it, the *
 power** (the kernel has kept those counters from everyone but root since 2020). *Start* shows a
 card when one of them is missing, *Settings → Sensors* always has it: one click, your system
 asks for the password once, and the card says exactly what is changed. In a terminal:
-`libre-panel system-setup --linux` (add `--rapl` for the power, `--remove` to undo it all). More:
+`libre-panel system-setup --linux` (add `--rapl` for the power, `--remove` to undo it all).
+A board whose fan chip the kernel has no driver for (some MSI and Gigabyte boards) needs one
+from outside the kernel, which Libre Panel does not install. More:
 [Linux sensors and panel access](docs/CONFIGURATION.md#linux-sensors-and-panel-access).
 </details>
 
@@ -314,9 +354,10 @@ with only the changed parts sent ([details](docs/CONFIGURATION.md#video)).
 
 No other program is needed: LibreHardwareMonitor and Intel's
 [PresentMon](https://github.com/GameTechDev/PresentMon) (Windows, MIT licence) are in the
-Windows downloads. For the game's frame rate switch *Game frame rate* on in *Settings →
-Sensors*; PresentMon needs administrator rights or your account in the Windows group
-"Performance Log Users", which the setup can arrange
+Windows downloads. The *Game frame rate* source is on by default on Windows and counts a
+game's frames while a theme shows them. PresentMon needs administrator rights or your
+account in the Windows group "Performance Log Users", which the setup's third box (or
+*Unlock all sensors*) arranges; it applies from your next sign-in
 ([how](docs/CONFIGURATION.md#more-sensor-sources)). The cooling analysis reads FanControl's
 fan curves, if you use FanControl.
 </details>
