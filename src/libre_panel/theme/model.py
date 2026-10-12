@@ -164,7 +164,8 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "max": ("number?", 100),
         "scale": ("enum:linear|sqrt|log", "linear"),
         "history": ("int", 60),
-        # video mode: the seconds the curve spans (0: ``history`` readings' worth)
+        # video mode: the seconds the curve spans (0: a pixel per point, 25 a second, as
+        # SPUR II's: as fluid as a graph moves; ``history`` is for still pictures)
         "seconds": ("number", 0),
         "color": ("color", "#22d3ee"),
         "fill": ("bool", True),

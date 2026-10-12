@@ -301,9 +301,9 @@ light. Each is plain JSON; none names a piece of hardware.
 
 | Theme | Panel | Shows |
 |---|---|---|
-| `lumen` | 8.8" / 9.2" bar | the signature screen: on the left a slot of cards (what plays, else the weather with its moving symbols and the next hours, else a calendar sheet); in the middle the time with its seconds, the load of the CPU and GPU over the last minute as light that scrolls (`seconds` 60), and the fans; on the right lit [instruments](#cards) for the CPU, GPU and RAM with their readings and the names of the hardware (`cpu.name`, `gpu.name`, `mem.name`), over the network card, which shows a download while one runs |
+| `lumen` | 8.8" / 9.2" bar | the signature screen: on the left a slot of cards (what plays, else the weather with its moving symbols and the next hours, else a calendar sheet); in the middle the time with its seconds, the load of the CPU and GPU as light that scrolls past at SPUR II's pace, and the fans; on the right lit [instruments](#cards) for the CPU, GPU and RAM with their readings and the names of the hardware (`cpu.name`, `gpu.name`, `mem.name`), over the network card, which shows a download while one runs |
 | `studio` | 8.8" / 9.2" bar | a large clock with the date and the network, a slot of cards (what plays, the weather, the day) and lit rings for the CPU, RAM and GPU (the disk on a PC without GPU readings) with the hardware's names |
-| `libre-default` | 3.5" | two lit rings, the CPU's temperature, the disk and the network, a history that scrolls through the last 30 seconds, and a small slot in the corner: what plays, the weather or the day |
+| `libre-default` | 3.5" | two lit rings, the CPU's temperature, the disk and the network, a history that scrolls past at SPUR II's pace, and a small slot in the corner: what plays, the weather or the day |
 
 A `config.toml` without a `theme` shows `lumen` on the 1920×480 bars and `libre-default` on
 every other panel ([the theme on the panel](CONFIGURATION.md#the-theme-on-the-panel)).

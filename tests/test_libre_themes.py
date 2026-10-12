@@ -190,11 +190,12 @@ def test_lumen_shows_lit_instruments_with_the_names_of_the_hardware():
     assert len({(r[1], r[2], r[3]) for r in rings}) <= 2  # one row of equal instruments
 
 
-def test_lumen_draws_the_load_of_the_last_minute_as_light_that_moves():
+def test_lumen_draws_the_load_as_light_that_moves_at_spur_iis_pace():
     _, by = lumen()
     for src in ("cpu", "gpu"):
         graph = by[f"{src}-graph"]
-        assert graph["finish"] == "lit" and graph["smooth"] and graph["seconds"] == 60
+        # a pixel per point, as every graph that sets no time of its own: as fluid as SPUR II's
+        assert graph["finish"] == "lit" and graph["smooth"] and graph["seconds"] == 0
         assert graph["sensor"] == f"{src}.load"
     cpu, gpu = by["cpu-graph"], by["gpu-graph"]
     assert (cpu["x"], cpu["y"], cpu["w"], cpu["h"]) == (gpu["x"], gpu["y"], gpu["w"], gpu["h"])
@@ -250,7 +251,7 @@ def test_libre_default_keeps_its_layout_with_the_corner_showing_what_plays():
     for part in ("cpu-ring", "ram-ring", "side-card", "history-card", "history"):
         assert part in by
     assert by["cpu-ring"]["finish"] == by["ram-ring"]["finish"] == "lit"
-    assert by["history"]["finish"] == "lit" and by["history"]["seconds"] == 30
+    assert by["history"]["finish"] == "lit" and by["history"]["seconds"] == 0  # SPUR II's pace
     assert by["corner"]["rows"] == 1  # one row of cells: the modules' compact looks
     box = Renderer(theme, preview=True).module_boxes["corner"]
     ram, side = by["ram-ring"], by["side-card"]

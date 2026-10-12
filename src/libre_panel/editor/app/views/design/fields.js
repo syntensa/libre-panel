@@ -25,9 +25,9 @@ export function hintFor(widget, key, kind) {
   if (key === "hide_if_missing") return t("hide when the sensor has no value (e.g. weather off)");
   if (key === "needs") return t("show only while this sensor has a value (e.g. weather.temperature); with ! in front, only while it has none");
   if (key === "smooth" && widget?.type === "metric") return t("the number glides between readings, together with the bars and rings of its sensor");
-  if (key === "seconds" && widget?.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = as long as the history readings take");
+  if (key === "seconds" && widget?.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = a pixel per point, 25 a second, as SPUR II's graphs (the most fluid)");
   if (key === "sensor" && widget?.type === "module" && widget.source === "fan") return t("which fan; empty: the graphics card's (gpu.fan)");
-  if (key === "per_frame") return t("video mode: a point a pixel apart, as SPUR II draws its curves (seconds = width / 25)");
+  if (key === "per_frame") return t("older themes: a point a pixel apart, as every graph whose seconds are 0 now");
   if (key === "digits") return t("what changes on the second: it jumps, rolls (the old digit up and out, the new one in from below) or fades, as SPUR II's clocks do");
   if (key === "digits_seconds") return t("how long a change takes after the second, at most 1 (SPUR II's: 0.42)");
   if (key === "end_dot" && widget?.type === "bar") return t("a dot of this radius at the bar's end, its head; 0 = none (time.second runs through the minute)");

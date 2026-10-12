@@ -397,7 +397,6 @@
       "h": 48,
       "sensor": "cpu.load",
       "history": 120,
-      "seconds": 30,
       "min": 0,
       "max": 100,
       "color": "@accent",

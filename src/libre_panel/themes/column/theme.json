@@ -425,7 +425,6 @@
       "h": 42,
       "sensor": "net.down",
       "history": 60,
-      "seconds": 12,
       "min": 0,
       "max": null,
       "color": "@net",

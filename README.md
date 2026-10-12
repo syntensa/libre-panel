@@ -20,7 +20,7 @@
 
 <picture>
   <source media="(prefers-reduced-motion: reduce)" srcset="docs/images/hero.png">
-  <img src="docs/media/video-mode.gif" width="100%" alt="Lumen, Libre Panel's own theme, in video mode on a 9.2-inch panel: what is playing with its cover, the time with the load of the last minute scrolling as light, four fans turning, and lit rings for CPU, GPU and RAM that fill as the load rises">
+  <img src="docs/media/video-mode.gif" width="100%" alt="Lumen, Libre Panel's own theme, in video mode on a 9.2-inch panel: what is playing with its cover, the time with the load scrolling past as light, four fans turning, and lit rings for CPU, GPU and RAM that fill as the load rises">
 </picture>
 
 <p align="center">
@@ -130,7 +130,7 @@ the panel at a glance and the themes made for it, **Live** how it runs.
 
 | Theme | Made for | |
 |---|---|---|
-| **Lumen** | 8.8" and 9.2" bars (1920×480); the default there | Libre Panel's own: what plays, else the weather, else the day; the time with the load of the last minute as scrolling light and the fans turning; lit rings for CPU, GPU and RAM named after your hardware, over the network |
+| **Lumen** | 8.8" and 9.2" bars (1920×480); the default there | Libre Panel's own: what plays, else the weather, else the day; the time with the load scrolling past as light and the fans turning; lit rings for CPU, GPU and RAM named after your hardware, over the network |
 | **Studio** | 8.8" and 9.2" bars | calm: a large clock, the card slot and lit rings for CPU, RAM and GPU |
 | **Libre Default** | 3.5" (480×320); the default on every other panel | two lit rings, temperature, disk and network, a history that scrolls; what plays, the weather or the day in the corner |
 | **Slate** | 5" (800×480) | four cards: CPU, GPU, memory and network |

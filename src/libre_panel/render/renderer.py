@@ -2701,13 +2701,13 @@ class Renderer:
     STRIP_PARTS = 8  # a slow graph's steps are cut into at most this many
 
     def _graph_seconds(self, widget: dict[str, Any]) -> float:
-        """The time a graph shows in video mode: ``seconds``, a pixel per point
-        for ``per_frame`` (older themes), else ``history`` readings' worth."""
+        """The time a graph shows in video mode: its ``seconds``, else a pixel per point
+        (25 a second): as SPUR II's graphs, half a pixel in every frame at 50 fps, in every
+        theme and module alike. (A slower one stood still between its steps, or blurred
+        between them.)"""
         seconds = float(widget.get("seconds") or 0)
-        if seconds <= 0 and widget.get("per_frame"):
-            seconds = (widget["w"] - 1) / RATE
         if seconds <= 0:
-            seconds = (max(2, widget["history"]) - 1) * self.sample[1]
+            seconds = (widget["w"] - 1) / RATE
         return min(max(seconds, 2 / RATE), (MAX_POINTS - 4 * RATE) / RATE)
 
     def _reach(self, widget: dict[str, Any]) -> int:

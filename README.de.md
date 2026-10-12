@@ -20,7 +20,7 @@
 
 <picture>
   <source media="(prefers-reduced-motion: reduce)" srcset="docs/images/hero.png">
-  <img src="docs/media/video-mode.gif" width="100%" alt="Lumen, das eigene Theme von Libre Panel, im Videomodus auf einem 9,2-Zoll-Panel: was gerade läuft, mit Cover, die Uhrzeit mit der Last der letzten Minute als scrollendes Licht, vier drehende Lüfter und leuchtende Ringe für CPU, GPU und RAM, die sich mit der Last füllen">
+  <img src="docs/media/video-mode.gif" width="100%" alt="Lumen, das eigene Theme von Libre Panel, im Videomodus auf einem 9,2-Zoll-Panel: was gerade läuft, mit Cover, die Uhrzeit mit der Last als vorbeiziehendes Licht, vier drehende Lüfter und leuchtende Ringe für CPU, GPU und RAM, die sich mit der Last füllen">
 </picture>
 
 <p align="center">
@@ -136,7 +136,7 @@ dafür gemacht sind, **Live**, wie es läuft.
 
 | Theme | Gemacht für | |
 |---|---|---|
-| **Lumen** | 8,8"- und 9,2"-Leisten (1920×480); dort der Standard | das eigene Theme von Libre Panel: was läuft, sonst das Wetter, sonst der Tag; die Uhrzeit mit der Last der letzten Minute als scrollendes Licht und den drehenden Lüftern; leuchtende Ringe für CPU, GPU und RAM, benannt nach deiner Hardware, über dem Netzwerk |
+| **Lumen** | 8,8"- und 9,2"-Leisten (1920×480); dort der Standard | das eigene Theme von Libre Panel: was läuft, sonst das Wetter, sonst der Tag; die Uhrzeit mit der Last als vorbeiziehendes Licht und den drehenden Lüftern; leuchtende Ringe für CPU, GPU und RAM, benannt nach deiner Hardware, über dem Netzwerk |
 | **Studio** | 8,8"- und 9,2"-Leisten | ruhig: eine große Uhr, das Kartenfach und leuchtende Ringe für CPU, RAM und GPU |
 | **Libre Default** | 3,5" (480×320); der Standard auf allen anderen Panels | zwei leuchtende Ringe, Temperatur, Laufwerk und Netzwerk, ein scrollender Verlauf; in der Ecke, was läuft, das Wetter oder der Tag |
 | **Slate** | 5" (800×480) | vier Karten: CPU, GPU, Arbeitsspeicher und Netzwerk |

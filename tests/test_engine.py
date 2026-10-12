@@ -228,8 +228,11 @@ def test_a_downward_graph_hangs_from_its_top_and_is_filled_from_there():
 
 
 def spike_graph(**kw):
+    """A graph of 11 readings that spans their 10 seconds in video mode too (without its own
+    ``seconds`` a graph moves a pixel per point, 25 a second, as SPUR II's)."""
+    span = {} if kw.get("per_frame") else {"seconds": 10}  # (per_frame: a pixel per point)
     return {"type": "graph", "id": "g", "x": 0, "y": 0, "w": 200, "h": 60, "sensor": "v",
-            "history": 11, "min": 0, "max": 100, "fill": False, "color": "#ffffff",
+            "history": 11, **span, "min": 0, "max": 100, "fill": False, "color": "#ffffff",
             "line_width": 1, "smooth": False, **kw}  # fmt: skip
 
 
