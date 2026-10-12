@@ -21,8 +21,17 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
 - **The app**, in a window of its own: Start, Design with drag-and-drop building blocks, Look,
   Live, Settings for all of `config.toml`, Ctrl+K for everything; every theme moves to every
   panel size. The old browser editor is gone.
-- **LibreHardwareMonitor built in** (Windows): the GPU, temperatures, power and fans need no
-  other program. The hardware's names are found by Libre Panel and can be typed over.
+- **Out of the box.** The downloads carry what the features run, in a `tools` folder: ffmpeg
+  (Windows and Linux), PresentMon and PawnIO's installer (Windows). The Windows setup installs
+  the sensor service, the PawnIO driver and the frame-rate rights in three checked boxes, after
+  one question for administrator rights; in the portable zip *Unlock all sensors* does the same;
+  on Linux one click and one password (*Set up sensors and panel access*) lets your user use the
+  panel and loads the driver of the mainboard's fans. Libre Panel itself runs without
+  administrator rights.
+- **Hardware read by Libre Panel itself.** Windows: LibreHardwareMonitor is built in, read inside
+  Libre Panel or through the sensor service. Linux: the new `linux` source reads the kernel's
+  chips, AMD and Intel graphics from sysfs and NVIDIA through NVML, with no root. The hardware's
+  names are found by Libre Panel and can be typed over.
 - **Optional services**, all off until you switch them on: notices, game mode, autopilot,
   devices, memory and round report, cooling analysis (read from FanControl), downloads.
 - **Windows and Linux.** macOS is no longer supported.
@@ -357,16 +366,18 @@ Libre Panel's biggest release: the panel moves, and an app of its own designs it
   cannot use its library (damaged, or deleted by a virus scanner) reports that as the source's
   `error` and does not ask a web server that is not there. More: [Windows
   sensors](docs/CONFIGURATION.md#windows-sensors-gpu-power-fans)
-- The CPU's temperature, power and clock, the RAM temperature and the mainboard's fans need Libre
-  Panel to run as administrator (`libre-panel autostart enable --elevated`) and
-  LibreHardwareMonitor's driver PawnIO ([pawnio.eu](https://pawnio.eu)). Without them those readings
-  show "--", never 0, and a LibreHardwareMonitor web server that does have them fills in.
-  `libre-panel sensors` and `libre-panel doctor` say which of the two is missing, and so does one
-  plain sentence in the user's language when a Windows PC gives no temperatures (no administrator
-  rights, no PawnIO driver, the reader did not start, its web server not running): a line under the
-  status line of the tray menu and in the tooltip of the icon, `hint` in the panel's state
-  (`/api/app`, `GET control/panel`) and on the LibreHardwareMonitor row of `GET control/sources`. It
-  keeps quiet while LibreHardwareMonitor starts and about what nobody can change.
+- The CPU's temperature, power and clock, the RAM temperature and the mainboard's fans need
+  administrator rights and LibreHardwareMonitor's driver PawnIO ([pawnio.eu](https://pawnio.eu)).
+  The sensor service (below) has both, so that Libre Panel itself needs neither; read inside
+  Libre Panel they need it to run as administrator (`libre-panel autostart enable --elevated`).
+  Without them those readings show "--", never 0, and a LibreHardwareMonitor web server that does
+  have them fills in. `libre-panel sensors` and `libre-panel doctor` say which of the two is
+  missing, and so does one plain sentence in the user's language when a Windows PC gives no
+  temperatures (no administrator rights, no PawnIO driver, the reader did not start, its web
+  server not running): a line under the status line of the tray menu and in the tooltip of the
+  icon, `hint` in the panel's state (`/api/app`, `GET control/panel`) and on the
+  LibreHardwareMonitor row of `GET control/sources`. It keeps quiet while LibreHardwareMonitor
+  starts and about what nobody can change.
   `libre-panel sensors --check-lhm` tests that the library loads
 - The sensor service (Windows): `LibrePanelSensors`, a small Windows service that runs
   LibreHardwareMonitor as LocalSystem on every kind of hardware it knows (the CPU's temperature,
