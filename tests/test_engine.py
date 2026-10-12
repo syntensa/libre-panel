@@ -361,12 +361,17 @@ def test_a_graphs_newest_point_is_the_value_bars_and_numbers_show():
             frame = renderer.render(reading(value, [value]), now)[0]
             if now - 0.08 < 100.0:
                 continue  # nothing read yet two pixels in from the edge
-            # two pixels in from the newest point (the right edge), 0.08 s ago: a
-            # reading late, the curve would be up to 39 px off there (a 2 px line
-            # on a steep stretch spans a few rows: a pixel or two either way)
-            shown = renderer.motion.value("v", now - 0.08)
-            expected = (4 + 111 * (1 - shown / 100)) / 2  # 2x drawn: 2 px lines, 111 px tall
-            assert abs(head_y(frame, 197) - expected) <= 3, (now, head_y(frame, 197), expected)
+            # two pixels in from the newest point (the right edge), about 0.08 s ago: a
+            # reading late, the curve would be up to 39 px off there. Where the spring was
+            # in the frames around then (its points lie on a 25 Hz grid, and the start of
+            # a 0.4 s glide is steep), a pixel or two either way (a 2 px line on a steep
+            # stretch spans a few rows)
+            values = [
+                renderer.motion.value("v", now - ago) for ago in (0.04, 0.06, 0.08, 0.1, 0.12)
+            ]
+            rows = [(4 + 111 * (1 - v / 100)) / 2 for v in values if v is not None]  # 2x drawn
+            head = head_y(frame, 197)
+            assert min(rows) - 3 <= head <= max(rows) + 3, (now, head, rows)
             filled = sum(1 for x in range(0, 200, 2) if frame.getpixel((x, 80))[0] > 200) * 2
             assert abs(filled - 2 * renderer.motion.value("v", now)) <= 4  # the bar's value
 
@@ -463,7 +468,10 @@ def test_graphs_keep_moving_when_their_strips_come_from_the_helper_thread(monkey
     assert renderer.warnings == []
 
 
-def test_values_glide_until_the_next_reading_in_video_mode():
+def test_values_glide_as_long_as_the_theme_says_in_video_mode_too():
+    """A reading is there after the theme's smoothing_ms and then holds, in video mode as on
+    still frames, also when readings come seldom: stretched to the next reading, values
+    followed half as fast as the SPUR II mod's."""
     t = theme(bar(smooth=True), animation={"smoothing_ms": 400})
 
     def glide(continuous):
@@ -473,15 +481,15 @@ def test_values_glide_until_the_next_reading_in_video_mode():
         renderer.render(Snapshot(readings={"v": Reading("v", 0.0)}), 0.0)
         values = []
         for i in range(1, 21):
-            renderer.render(Snapshot(readings={"v": Reading("v", 100.0)}), i / 10)
-            values.append(renderer.motion.value("v", i / 10))
+            renderer.render(Snapshot(readings={"v": Reading("v", 100.0)}), i / 20)
+            values.append(renderer.motion.value("v", i / 20))
         return values
 
-    quick, slow = glide(False), glide(True)
-    assert quick[5] > 99 and slow[5] < 90  # 0.6 s in: there, still on its way
-    assert slow[-1] > 90  # nearly there when the next reading comes
-    speeds = [b - a for a, b in zip(slow, slow[1:], strict=False)]
-    assert speeds[0] < speeds[2]  # a spring starts gently: no kink when a reading comes
+    still, video = glide(False), glide(True)
+    assert video == still
+    assert 50 < video[3] < 95 and video[7] > 94  # 0.2 s in: on its way; 0.4 s: there
+    steps = [b - a for a, b in zip([0.0, *video], video, strict=False)]
+    assert steps[0] < steps[1]  # a spring starts gently: no kink when a reading comes
 
 
 def text(t, **kw):
