@@ -22,7 +22,7 @@ import {
 import { t } from "../../core/i18n.js";
 import { store } from "../../core/state.js";
 import { toast, toastError } from "../../ui/toast.js";
-import { blockers, cellBox, freeSpot, placed, unionBox } from "./geometry.js";
+import { blockers, cellBox, cellSteps, freeSpot, placed, unionBox } from "./geometry.js";
 
 export const specs = () => store.get().specs;
 export const moduleKinds = () => specs()?.modules?.kinds || {};
@@ -122,12 +122,24 @@ function newModule(kind, area) {
   return widget;
 }
 
-/** The free cells where a module of a kind fits best (at a cell, or anywhere). */
+/** How many cells a module moves and grows by, in the grid mode chosen (View and snapping). */
+export function moduleSteps(cells = grid()) {
+  return cellSteps(cells, store.get().render.size, store.get().prefs.cells || "medium");
+}
+
+/**
+ * The free cells where a module of a kind fits best (at a cell, or anywhere): as large as its
+ * kind is meant to be in whole cells as an automatic grid has them (on a theme with a fine
+ * grid, many of its cells: a ring is not one sliver of it), in steps of the grid mode.
+ */
 export function spotFor(kind, prefer = null, exceptId = null) {
   const cells = grid();
   if (!cells) return null;
   const span = moduleKinds()[kind]?.span || [1, 1];
-  return freeSpot(widgets(), cells, span[0], span[1], prefer, exceptId);
+  const whole = cellSteps(cells, store.get().render.size, "coarse");
+  const cols = Math.min(cells.columns, span[0] * whole[0]);
+  const rows = Math.min(cells.rows, span[1] * whole[1]);
+  return freeSpot(widgets(), cells, cols, rows, prefer, exceptId, moduleSteps(cells));
 }
 
 export function addModule(kind, area = spotFor(kind)) {
@@ -312,10 +324,13 @@ export function renameWidget(widget, value) {
   return true;
 }
 
-/** Move widgets by (dx, dy) pixels; modules by cells. */
+/** Move widgets by (dx, dy) pixels; modules by cells, in steps of the grid mode. */
 export function nudge(dx, dy) {
   const module = single();
-  if (isModule(module)) return moveModuleBy(module, Math.sign(dx), Math.sign(dy));
+  if (isModule(module)) {
+    const [sx, sy] = moduleSteps();
+    return moveModuleBy(module, Math.sign(dx) * sx, Math.sign(dy) * sy);
+  }
   const movers = selectedWidgets().filter((widget) => !widget.locked && !isModule(widget));
   if (!movers.length) return;
   commit("nudge");

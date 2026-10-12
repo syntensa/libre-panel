@@ -1549,7 +1549,12 @@
     "the theme's colour, or the look's own (Noctua's brown and beige)": "die Farbe des Themes oder die eigenen des Aussehens (Noctuas Braun und Beige)",
     "the theme's": "des Themes",
     "the look's own": "eigene des Aussehens",
-    "Look of {fan}": "Aussehen von {fan}"
+    "Look of {fan}": "Aussehen von {fan}",
+    "Module grid": "Raster der Module",
+    "how modules move and grow: by whole cells, as the pictures of the modules show them, by half ones, or by each line of the theme's grid; Alt while dragging: by each line": "wie Module sich verschieben und wachsen: um ganze Zellen, wie die Bilder der Module sie zeigen, um halbe oder um jede Linie des Rasters des Themes; Alt beim Ziehen: um jede Linie",
+    "coarse": "grob",
+    "medium": "mittel",
+    "fine": "fein"
   },
   "fields": {
     "align": "Ausrichtung",

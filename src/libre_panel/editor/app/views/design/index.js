@@ -69,6 +69,14 @@ function ViewOptions() {
           <${Segmented} label=${t("Snap")} value=${prefs.snap} onChange=${(value) => setPref("snap", value)}
             options=${[0, 1, 4, 8, 16].map((value) => ({ value, label: value ? `${value}` : t("off") }))} />
         <//>
+        <${Row} label=${t("Module grid")} hint=${t("how modules move and grow: by whole cells, as the pictures of the modules show them, by half ones, or by each line of the theme's grid; Alt while dragging: by each line")}>
+          <${Segmented} label=${t("Module grid")} value=${prefs.cells || "medium"} onChange=${(value) => setPref("cells", value)}
+            options=${[
+              { value: "coarse", label: t("coarse") },
+              { value: "medium", label: t("medium") },
+              { value: "fine", label: t("fine") },
+            ]} />
+        <//>
         <${Row} label=${t("Guides")} hint=${t("lines to the edges and centres of the others; Alt while dragging: free")}>
           <${Toggle} label=${t("Guides")} checked=${prefs.guides} onChange=${(on) => setPref("guides", on)} />
         <//>

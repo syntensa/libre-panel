@@ -51,19 +51,26 @@ export function blockers(widgets, grid, area, ...except) {
   return widgets.filter((w) => w.type === "module" && !except.includes(w.id) && intersects(placed(grid, w), area));
 }
 
-/** The largest free area up to cols × rows: at (or around) a preferred cell, or anywhere. */
-export function freeSpot(widgets, grid, cols, rows, prefer = null, exceptId = null) {
+/**
+ * The largest free area up to cols × rows: at (or around) a preferred cell, or anywhere. With
+ * `step` ([columns, rows]) it is a whole number of steps, starting on one (the grid's mode).
+ */
+export function freeSpot(widgets, grid, cols, rows, prefer = null, exceptId = null, step = [1, 1]) {
+  const [sx, sy] = step;
   const sizes = [];
-  for (let c = Math.min(cols, grid.columns); c >= 1; c--) {
-    for (let r = Math.min(rows, grid.rows); r >= 1; r--) sizes.push([c, r]);
+  const top = (n, s, most) => Math.max(s, Math.min(most - (most % s), n - (n % s)));
+  for (let c = top(cols, sx, grid.columns); c >= 1; c -= c > sx ? sx : 1) {
+    for (let r = top(rows, sy, grid.rows); r >= 1; r -= r > sy ? sy : 1) sizes.push([c, r]);
   }
   sizes.sort((a, b) => b[0] * b[1] - a[0] * a[1]);
+  const on = (v, s) => v - (v % s);
   for (const [c, r] of sizes) {
     const candidates = [];
     if (prefer) {
-      for (let dr = 0; dr < r; dr++) for (let dc = 0; dc < c; dc++) candidates.push([prefer[0] - dc, prefer[1] - dr]);
+      const [pc, pr] = [on(prefer[0], sx), on(prefer[1], sy)];
+      for (let dr = 0; dr < r; dr += sy) for (let dc = 0; dc < c; dc += sx) candidates.push([pc - dc, pr - dr]);
     } else {
-      for (let row = 0; row + r <= grid.rows; row++) for (let col = 0; col + c <= grid.columns; col++) candidates.push([col, row]);
+      for (let row = 0; row + r <= grid.rows; row += sy) for (let col = 0; col + c <= grid.columns; col += sx) candidates.push([col, row]);
     }
     for (const [col, row] of candidates) {
       if (col < 0 || row < 0 || col + c > grid.columns || row + r > grid.rows) continue;
@@ -71,6 +78,29 @@ export function freeSpot(widgets, grid, cols, rows, prefer = null, exceptId = nu
     }
   }
   return null;
+}
+
+/**
+ * How many of the grid's cells a module moves and grows by: `fine` one; `coarse` a whole
+ * cell as an automatic grid has them (about half the panel's short side: 8 × 2 on a bar, as
+ * the pictures of the modules show them), `medium` half of one. A theme with a fine grid
+ * (Lumen's 48 × 48) is laid out in those; one with coarse cells moves by its own.
+ */
+export function cellSteps(grid, size, mode = "medium") {
+  if (!grid || mode === "fine") return [1, 1];
+  const short = Math.min(size[0], size[1]);
+  const target = Math.max(64, Math.min(240, short / 2)); // as theme.modules.make_grid
+  const width = grid.columns * grid.cell_w + (grid.columns - 1) * grid.gap;
+  const height = grid.rows * grid.cell_h + (grid.rows - 1) * grid.gap;
+  const parts = mode === "coarse" ? 1 : 2;
+  const across = Math.max(1, Math.round(width / target)) * parts;
+  const down = Math.max(1, Math.round(height / target)) * parts;
+  return [Math.max(1, Math.round(grid.columns / across)), Math.max(1, Math.round(grid.rows / down))];
+}
+
+/** `value` on the nearest whole step, between `low` and `high`. */
+export function onStep(value, step, low, high) {
+  return Math.max(low, Math.min(high, Math.round(value / step) * step));
 }
 
 // -- snapping ------------------------------------------------------------------

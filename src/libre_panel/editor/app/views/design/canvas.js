@@ -27,9 +27,9 @@ import {
   blockers,
   cellAt,
   cellBox,
-  freeSpot,
   hiddenEdges,
   intersects,
+  onStep,
   placed,
   resizeBox,
   snapLines,
@@ -37,7 +37,7 @@ import {
   snapTo,
   unionBox,
 } from "./geometry.js";
-import { addModule, addPicture, addWidget, boxOf, insertPreset, kindName, moduleKinds, setModuleArea, specOf } from "./ops.js";
+import { addModule, addPicture, addWidget, boxOf, insertPreset, kindName, moduleKinds, moduleSteps, setModuleArea, specOf, spotFor } from "./ops.js";
 import { FloatingToolbar, widgetMenu } from "./toolbar.js";
 import { PageTabs } from "./pages.js";
 
@@ -85,10 +85,10 @@ export function startLibraryDrag(event, item, picture = null) {
     if (item.kind !== "module") return { point, ok: true };
     const grid = store.get().render.grid;
     if (!grid) return null;
-    const span = moduleKinds()[item.module]?.span || [1, 1];
     const cell = cellAt(grid, point[0], point[1]);
-    const spot = freeSpot(widgets(), grid, span[0], span[1], cell);
-    return spot ? { area: spot, ok: true } : { area: [cell[0], cell[1], 1, 1], ok: false };
+    const spot = spotFor(item.module, cell);
+    const [sx, sy] = moduleSteps(grid);
+    return spot ? { area: spot, ok: true } : { area: [cell[0], cell[1], sx, sy], ok: false };
   };
   const move = (e) => {
     if (!moved) {
@@ -316,10 +316,12 @@ export function Canvas() {
     if (widget.locked || !grid) return;
     const start = placed(grid, widget);
     const grab = cellAt(grid, ...pointToPanel(event));
+    const [sx, sy] = moduleSteps(grid);
     begin(event, { kind: "cells", id: widget.id, start, offset: [grab[0] - start[0], grab[1] - start[1]], zone: null }, (e, state) => {
       const [c, r] = cellAt(grid, ...pointToPanel(e));
-      const col = Math.max(0, Math.min(grid.columns - start[2], c - state.offset[0]));
-      const row = Math.max(0, Math.min(grid.rows - start[3], r - state.offset[1]));
+      // in steps of the grid mode (Alt: cell by cell)
+      const col = onStep(c - state.offset[0], e.altKey ? 1 : sx, 0, grid.columns - start[2]);
+      const row = onStep(r - state.offset[1], e.altKey ? 1 : sy, 0, grid.rows - start[3]);
       let zone = null;
       if (col !== start[0] || row !== start[1]) {
         const area = [col, row, start[2], start[3]];
@@ -352,16 +354,19 @@ export function Canvas() {
     event.stopPropagation();
     if (widget.locked || !grid) return;
     const start = placed(grid, widget);
+    const steps = moduleSteps(grid);
     let committed = false;
     begin(event, { kind: "cell-resize", id: widget.id }, (e) => {
       const [c, r] = cellAt(grid, ...pointToPanel(e));
+      const [sx, sy] = e.altKey ? [1, 1] : steps; // in steps of the grid mode (Alt: cell by cell)
       let [col, row, cols, rows] = start;
       let right = col + cols - 1;
       let bottom = row + rows - 1;
-      if (edge.includes("e")) right = Math.max(col, c);
-      if (edge.includes("w")) col = Math.min(c, right);
-      if (edge.includes("s")) bottom = Math.max(row, r);
-      if (edge.includes("n")) row = Math.min(r, bottom);
+      // an edge goes to the nearest step from the other edge: the size is whole steps
+      if (edge.includes("e")) right = col + onStep(c - col + 1, sx, Math.min(sx, grid.columns - col), grid.columns - col) - 1;
+      if (edge.includes("w")) col = right + 1 - onStep(right + 1 - c, sx, Math.min(sx, right + 1), right + 1);
+      if (edge.includes("s")) bottom = row + onStep(r - row + 1, sy, Math.min(sy, grid.rows - row), grid.rows - row) - 1;
+      if (edge.includes("n")) row = bottom + 1 - onStep(bottom + 1 - r, sy, Math.min(sy, bottom + 1), bottom + 1);
       const area = [col, row, right - col + 1, bottom - row + 1];
       const now = placed(grid, widget);
       if (area.every((v, i) => v === now[i]) || blockers(widgets(), grid, area, widget.id).length) return;

@@ -2406,6 +2406,8 @@ def test_every_handle_of_a_module_resizes_it_one_cell_further_out(page):
         })""",
     )
     page.wait_for_function("window.libre.store.get().render.grid?.columns === 9")
+    fine = "window.libre.store.set({prefs: {...window.libre.store.get().prefs, cells: 'fine'}})"
+    js(page, fine)  # cell by cell: each handle one cell further out
     js(page, "window.libre.doc.setSelection(['box'])")
     cells = "(w => [w.col, w.row, w.cols, w.rows])(window.libre.doc.widgetById('box'))"
     frames = "new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))"
@@ -2441,6 +2443,35 @@ def test_every_handle_of_a_module_resizes_it_one_cell_further_out(page):
         drag(page, start, end, steps=6)
         page.wait_for_function(f"({cells}).join() === {expected!r}.join()", timeout=5000)
         js(page, frames)  # the handles stand where the module's edges are now
+
+
+def test_a_module_on_a_fine_grid_comes_in_whole_cells_chosen_and_moves_by_the_grid_mode(page):
+    """Lumen's grid has 48 × 48 lines: a module from the library was one of its cells, a
+    sliver hard to see or click. It comes as large as its kind is meant to be (whole cells as
+    an automatic grid has them, as the pictures of the modules show them), chosen, with its
+    settings at once; it moves by whole cells, half ones, or each line, as the mode says."""
+    js(
+        page,
+        """window.libre.doc.edit('grid', (theme) => {
+          theme.widgets = [];
+          theme.grid = { columns: 48, rows: 48, gap: 1, margin: 8 };
+        })""",
+    )
+    page.wait_for_function("window.libre.store.get().render.grid?.columns === 48")
+    page.locator('.tile[data-item="module:ring"]').click()
+    added = js(page, "window.libre.doc.single()")
+    assert added["module"] == "ring" and added["cols"] >= 8 and added["rows"] >= 8
+    expect(page.locator(".inspector .inspector-title")).to_have_text("Ring")
+    page.wait_for_function(f"window.libre.store.get().render.boxes[{added['id']!r}]?.[2] > 60")
+    col = "window.libre.doc.single().col"
+    set_mode = "window.libre.store.set({prefs: {...window.libre.store.get().prefs, cells: %r}})"
+    moved = {}
+    for mode in ("fine", "medium", "coarse"):
+        js(page, set_mode % mode)
+        before = js(page, col)
+        page.keyboard.press("ArrowRight")
+        moved[mode] = js(page, col) - before
+    assert moved["fine"] == 1 and moved["medium"] > 1 and moved["coarse"] >= 2 * moved["medium"] - 1
 
 
 def test_a_modules_source_and_detaching_it(page):

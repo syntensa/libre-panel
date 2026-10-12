@@ -54,6 +54,7 @@ export const store = createStore({
   serviceStates: null, // Settings: the services and their states
   prefs: {
     snap: 4, // px: 1, 4, 8 or 16; 0 = off
+    cells: "medium", // modules move and grow by whole cells ("coarse"), half ones, or each ("fine")
     guides: true,
     live: false, // previews with this computer's sensors
     panel: "library", // the open side panel of the design view (null: closed)
