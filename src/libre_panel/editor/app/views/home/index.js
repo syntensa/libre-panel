@@ -150,6 +150,7 @@ function ThemesPage({ asked }) {
       <div>
         <a class="back-link" href="#/home"><${Icon} name="chevron-left" size=${14} /> ${t("Start")}</a>
         <h1>${t("Themes")}</h1>
+        <p class="muted">${t("A click on a theme puts it on the panel; Edit opens it in Design.")}</p>
       </div>
       ${model && fitting.length < items.length
         ? html`<${Segmented} label=${t("Which themes")} value=${scope} onChange=${setScope}
@@ -245,7 +246,7 @@ function Launcher({ focus }) {
         <a href="#/home/themes">${t("All")}</a>
       </div>
       <div class="quick-themes">
-        ${quick.map((item) => html`<${ThemeRow} key=${item.id} item=${item} onChoose=${(chosen) => choose(chosen)} />`)}
+        ${quick.map((item) => html`<${ThemeRow} key=${item.id} item=${item} label=${themeLabel(item)} onChoose=${(chosen) => choose(chosen)} />`)}
         ${sets.map(
           ({ name, count }) => html`<a key=${name} class="quick-collection" href=${`#/home/themes/${encodeURIComponent(name)}`}
             title=${t("The screens of the project Libre Panel grew out of")}>

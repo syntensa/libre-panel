@@ -1503,7 +1503,6 @@
     "rules that choose the theme": "Regeln, die das Theme wählen",
     "running for {time}": "läuft seit {time}",
     "shown like a real one": "wird wie ein echter gezeigt",
-    "shows now": "zeigt jetzt",
     "temperatures, power and fans": "Temperaturen, Leistung und Lüfter",
     "the gallery on Start": "die Galerie auf Start",
     "video mode is possible": "Videomodus ist möglich",
@@ -1644,7 +1643,9 @@
     "Set the place": "Ort festlegen",
     "First steps": "Erste Schritte",
     "{done} of {all} done": "{done} von {all} erledigt",
-    "The panel's own boot logo and the clip it plays while the PC starts, in Libre Panel's look.": "Das eigene Startlogo des Panels und der Clip, den es beim Hochfahren des PCs spielt, im Look von Libre Panel."
+    "The panel's own boot logo and the clip it plays while the PC starts, in Libre Panel's look.": "Das eigene Startlogo des Panels und der Clip, den es beim Hochfahren des PCs spielt, im Look von Libre Panel.",
+    "Show on the panel": "Auf dem Panel zeigen",
+    "A click on a theme puts it on the panel; Edit opens it in Design.": "Ein Klick auf ein Theme bringt es aufs Panel; „Bearbeiten“ öffnet es in Gestalten."
   },
   "fields": {
     "align": "Ausrichtung",

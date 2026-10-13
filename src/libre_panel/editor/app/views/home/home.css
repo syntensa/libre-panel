@@ -282,6 +282,14 @@
   white-space: nowrap;
 }
 
+.quick-theme-note.on {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .start-side-actions {
   display: flex;
   flex-wrap: wrap;
@@ -502,6 +510,10 @@
 
 .start.gallery .start-head h1 {
   font-size: 30px;
+}
+
+.start.gallery .start-head p {
+  margin: 6px 0 0;
 }
 
 .back-link {
@@ -795,20 +807,74 @@
   color: var(--accent);
 }
 
+/* "Edit" in the card's corner, beside the name and what it is made for (in two lines there):
+   always there, with its name */
 .theme-card-edit {
   position: absolute;
-  top: 20px;
-  right: 20px;
-  opacity: 0;
-  background: rgba(10, 14, 19, 0.85);
-  border: 1px solid var(--line-4);
-  transition: opacity 0.12s;
+  right: 14px;
+  bottom: 19px;
+  height: 30px;
+  padding: 0 11px;
+  gap: 6px;
+  font-size: 12.5px;
 }
 
-.theme-card:hover .theme-card-edit,
-.theme-card:focus-within .theme-card-edit,
-.theme-card-edit:focus-visible {
+.theme-card.editable .theme-card-text {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  padding-right: 124px;
+}
+
+.theme-card.editable .theme-card-note {
+  text-align: left;
+}
+
+/* narrow cards (a panel on end): "Edit" under the name */
+.theme-grid.upright .theme-card.editable {
+  flex-direction: column;
+}
+
+.theme-grid.upright .theme-card.editable .theme-card-text {
+  padding-right: 0;
+}
+
+.theme-grid.upright .theme-card-edit {
+  position: static;
+  align-self: flex-start;
+  margin: -4px 14px 14px;
+}
+
+/* what a click on the picture does, said over it while the pointer is there */
+.theme-card-picture {
+  position: relative;
+}
+
+.theme-card-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(4, 33, 30, 0.92);
+  border: 1px solid rgba(46, 230, 214, 0.45);
+  color: var(--accent-hi);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  transition: opacity 0.12s, transform 0.12s;
+  pointer-events: none;
+}
+
+.theme-card-main:hover .theme-card-hint,
+.theme-card-main:focus-visible .theme-card-hint {
   opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .start-actions {
