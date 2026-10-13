@@ -15,11 +15,13 @@ import {
   single,
   theme,
   touch,
+  undo,
   uniqueId,
   widgetById,
   widgets,
 } from "../../core/doc.js";
-import { t } from "../../core/i18n.js";
+import { t, widgetLabel } from "../../core/i18n.js";
+import { keyLabel } from "../../core/shortcuts.js";
 import { store } from "../../core/state.js";
 import { toast, toastError } from "../../ui/toast.js";
 import { blockers, cellBox, cellSteps, freeSpot, placed, unionBox } from "./geometry.js";
@@ -48,6 +50,12 @@ export const sourceLabels = () => ({
   sensor: t("Any sensor"),
   fan: t("Fan"),
 });
+
+/** Why a module was not added: what to do about it, not only what is wrong. */
+const NO_ROOM = () => t("No room left for it on the panel: make a module smaller or remove one, then add it again.");
+
+/** A widget's name for people: a module's kind, else its type. */
+export const nameOf = (widget) => (isModule(widget) ? kindName(widget.module) : widgetLabel(widget.type));
 
 /** The fields of a widget type: the common ones and its own ({key: [kind, default]}). */
 export const specOf = (type) => ({ ...(specs()?.common || {}), ...(specs()?.widgets?.[type] || {}) });
@@ -144,7 +152,7 @@ export function spotFor(kind, prefer = null, exceptId = null) {
 
 export function addModule(kind, area = spotFor(kind)) {
   if (!area) {
-    toast(t("No free cells left: make a module smaller or remove one"), { kind: "warn" });
+    toast(NO_ROOM(), { kind: "warn" });
     return null;
   }
   const widget = newModule(kind, area);
@@ -208,7 +216,7 @@ export function duplicateSelection() {
       if (isModule(copy)) {
         const spot = grid() && freeSpot(current.widgets, grid(), copy.cols, copy.rows);
         if (!spot) {
-          toast(t("No free cells left: make a module smaller or remove one"), { kind: "warn" });
+          toast(NO_ROOM(), { kind: "warn" });
           continue;
         }
         [copy.col, copy.row, copy.cols, copy.rows] = spot;
@@ -220,13 +228,33 @@ export function duplicateSelection() {
   setSelection(ids);
 }
 
-export function deleteSelection() {
+/**
+ * Remove what is selected. The message says what went and takes it back, as long as nothing
+ * else was changed since (else Ctrl+Z goes back step by step); `quiet` for a cut, which has
+ * said "copied" already.
+ */
+export function deleteSelection({ quiet = false } = {}) {
   const ids = new Set(selection());
   if (!ids.size) return;
+  const gone = selectedWidgets();
   edit(null, (current) => {
     current.widgets = current.widgets.filter((widget) => !ids.has(widget.id));
   });
   setSelection([]);
+  if (quiet) return;
+  const after = { rev: store.get().rev, serial: docSerial() };
+  const text = gone.length === 1 ? t("Removed “{name}”", { name: nameOf(gone[0]) }) : t("Removed {count} widgets", { count: gone.length });
+  toast(text, {
+    timeout: 8000,
+    action: {
+      label: t("Undo"),
+      run: () => {
+        if (docSerial() !== after.serial) return;
+        if (store.get().rev === after.rev) undo();
+        else toast(t("Other changes came after it: {keys} takes them back one by one.", { keys: keyLabel("mod+z") }));
+      },
+    },
+  });
 }
 
 export function copySelection() {

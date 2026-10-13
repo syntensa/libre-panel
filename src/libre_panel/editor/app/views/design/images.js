@@ -31,7 +31,7 @@ export function Images() {
           ${pictures.map((path) => {
             const src = endpoints.assetUrl(id, path);
             const item = { kind: "picture", path };
-            return html`<button type="button" key=${path} class="tile" title=${t("Drag onto the panel, or click to add")}
+            return html`<button type="button" key=${path} class="tile" title=${t("Click to add it, or drag it onto the panel")}
               onPointerDown=${(event) => startLibraryDrag(event, { ...item, label: path }, src)}
               onClick=${(event) => event.detail === 0 && dropItem(item, null)}>
               <span class="tile-picture checker"><img src=${src} alt="" draggable="false" loading="lazy" /></span>

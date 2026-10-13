@@ -201,6 +201,7 @@
 }
 
 .tile {
+  position: relative;
   display: flex;
   flex-direction: column;
   border-radius: 12px;
@@ -223,6 +224,38 @@
 .tile:active {
   cursor: grabbing;
   transform: scale(0.985);
+}
+
+/* a click adds it: the "+" in the corner says so where the pointer or the focus is */
+.tile-add {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--accent-ink);
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.12s, transform 0.12s;
+  pointer-events: none;
+}
+
+.tile.small .tile-add {
+  width: 18px;
+  height: 18px;
+  top: 4px;
+  right: 4px;
+}
+
+.tile:hover .tile-add,
+.tile:focus-visible .tile-add {
+  opacity: 1;
+  transform: none;
 }
 
 .tile-picture {

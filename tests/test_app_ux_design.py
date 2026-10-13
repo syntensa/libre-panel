@@ -11,6 +11,7 @@ from test_app_browser import (  # noqa: F401
     browser_page,
     choose_theme,
     js,
+    no_setup_card,
     settings_config,
     waits_for,
     widget,
@@ -51,3 +52,36 @@ def test_a_card_slot_names_its_cards(app_url, isolated_home):  # noqa: F811
         # a module that shows a source still has its chip
         js(page, "window.libre.doc.setSelection(['cpu-ring'])")
         expect(page.locator(".floating-toolbar .tool-sensor")).to_have_text("CPU")
+
+
+def test_a_block_is_added_with_a_click_and_taken_back_from_the_message(app_url):  # noqa: F811
+    """The library said "Drag onto the panel" while a click adds a block too; its "+" and its
+    hint say so. What is removed can be taken back from the message, but not past a change
+    that came after it."""
+    with browser_page(app_url) as page:
+        library = page.locator(".library")
+        expect(library.locator(".library-hint")).to_contain_text("Click a block to add it")
+        tile = page.locator('.tile[data-item="module:clock"]')
+        tile.hover()
+        expect(tile.locator(".tile-add")).to_have_css("opacity", "1")
+        count = js(page, "window.libre.doc.widgets().length")
+        tile.click()
+        assert js(page, "window.libre.doc.widgets().length") == count + 1
+        added = js(page, "window.libre.doc.single().id")
+        page.keyboard.press("Delete")
+        message = page.locator(".toast", has_text="Removed “Time”")
+        message.get_by_role("button", name="Undo").click()
+        assert widget(page, added) is not None
+        assert js(page, "window.libre.store.get().canRedo") is True  # it was the step back
+        # removed, then something else changed: the message's Undo leaves that change alone
+        js(page, f"window.libre.doc.setSelection([{added!r}])")
+        page.keyboard.press("Delete")
+        js(page, "window.libre.doc.edit('n', (theme) => { theme.name = 'Changed'; })")
+        page.locator(".toast", has_text="Removed “Time”").get_by_role("button", name="Undo").click()
+        assert js(page, "window.libre.doc.theme().name") == "Changed"
+        expect(page.locator(".toast", has_text="takes them back one by one")).to_have_count(1)
+        # a cut says it copied, and nothing about a removal
+        js(page, "window.libre.doc.setSelection(['clock'])")
+        page.keyboard.press("Control+x")
+        expect(page.locator(".toast", has_text="Copied 1 widget")).to_have_count(1)
+        expect(page.locator(".toast", has_text="Removed “Clock”")).to_have_count(0)

@@ -141,7 +141,7 @@ bindKey(["delete", "backspace"], () => (chosen() ? deleteSelection() : false), {
 bindKey("escape", () => (chosen() ? setSelection([]) : false), { when: here });
 bindKey("mod+a", () => selectAll(), { when: here });
 bindKey("mod+c", () => (chosen() ? copySelection() : false), { when: here });
-bindKey("mod+x", () => (chosen() ? (copySelection(), deleteSelection()) : false), { when: here });
+bindKey("mod+x", () => (chosen() ? (copySelection(), deleteSelection({ quiet: true })) : false), { when: here });
 bindKey("mod+v", () => (canPaste() ? paste() : false), { when: here });
 bindKey("mod+d", () => (chosen() ? duplicateSelection() : false), { when: here });
 for (const [key, dx, dy] of [
