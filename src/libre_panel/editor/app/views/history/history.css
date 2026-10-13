@@ -1,0 +1,317 @@
+/* History (index.js): the course of the readings over a day, a week or a month, what that came
+   to, and the games. One column that scrolls; the charts take its width. */
+
+.history {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
+  padding: 24px 28px 32px;
+  overflow-y: auto;
+}
+
+.history-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.history-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.history-head p {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.history-note {
+  margin: 0;
+  font-size: 13px;
+}
+
+/* nothing kept: why, and the switch that keeps it */
+.history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 620px;
+  padding: 24px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  color: var(--accent);
+}
+
+.history-empty h3 {
+  margin: 4px 0 0;
+  color: var(--text);
+  font-size: 16px;
+}
+
+.history-empty p {
+  margin: 0 0 6px;
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+/* what it came to */
+.history-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.history-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+}
+
+.history-tile-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.history-tile strong {
+  font-size: 22px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.history-tile .muted {
+  font-size: 13px;
+}
+
+.history-tiles-note {
+  grid-column: 1 / -1;
+  margin: -4px 0 0;
+  font-size: 12px;
+}
+
+/* a chart */
+.history-chart {
+  padding: 14px 16px 10px;
+  border-radius: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-2);
+}
+
+.history-chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.history-chart-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.history-legend {
+  display: flex;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.history-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.history-swatch.game {
+  background: var(--surface-3);
+  border: 1px solid var(--line-5);
+}
+
+.history-plot {
+  position: relative;
+}
+
+.history-plot svg {
+  display: block;
+  touch-action: none;
+}
+
+.history-game {
+  fill: var(--surface-3);
+  opacity: 0.55;
+}
+
+.history-grid line {
+  stroke: var(--line-3);
+  stroke-width: 1;
+}
+
+.history-grid text,
+.history-time {
+  fill: var(--faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.history-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.history-end {
+  fill: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.history-cross line {
+  stroke: var(--line-5);
+  stroke-width: 1;
+}
+
+.history-cross circle {
+  stroke: var(--panel-2);
+  stroke-width: 2;
+}
+
+.history-tip {
+  position: absolute;
+  top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 180px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line-4);
+  box-shadow: var(--shadow-float);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.history-tip span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* the games and the last rounds */
+.history-lists {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.history-games,
+.history-rounds {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.history-table th,
+.history-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line-2);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.history-table thead th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.history-table th:first-child {
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 220px;
+}
+
+.history-table tbody th {
+  font-weight: 600;
+}
+
+.history-round-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.history-round-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.history-round-when {
+  grid-column: 1 / -1;
+  font-size: 12px;
+}
+
+.history-round-list strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px) {
+  .history-lists {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .history {
+    padding: 16px;
+  }
+
+  .history-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

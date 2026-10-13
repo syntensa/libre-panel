@@ -17,6 +17,7 @@ import { registerAppCommands } from "./shell/commands.js";
 import "./shell/plugin-view.js";
 import "./views/design/index.js";
 import "./views/home/index.js";
+import "./views/history/index.js";
 import "./views/live/index.js";
 import "./views/look/index.js";
 import "./views/settings/index.js";

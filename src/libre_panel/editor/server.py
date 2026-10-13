@@ -18,6 +18,7 @@ import re
 import socket
 import sys
 import threading
+import time
 import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -41,7 +42,7 @@ from libre_panel.config import (
 )
 from libre_panel.devices.base import DeviceError
 from libre_panel.devices.models import MODELS, PROTOCOLS
-from libre_panel.editor import access
+from libre_panel.editor import access, history
 from libre_panel.editor import settings as app_settings
 from libre_panel.editor.news import News
 from libre_panel.editor.presets import presets_for_editor
@@ -1023,6 +1024,20 @@ class EditorHandler(BaseHTTPRequestHandler):
         except ConfigError:
             return None  # config.toml cannot be read: nothing is asked
 
+    def _history(self, query: dict[str, list[str]]) -> None:
+        """What the memory kept in ``?span=day`` (week, month), for History (history.py), and
+        whether the memory service is switched on."""
+        span = (query.get("span") or ["day"])[0]
+        try:
+            config = load_config(self.state.config_path)
+        except ConfigError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        try:
+            found = history.history(history.database(config), span, time.time())
+        except ValueError as exc:
+            return self._error(str(exc))
+        self._json({**found, "memory": "memory" in config.services.enabled})
+
     def _update(self, query: dict[str, list[str]]) -> None:
         """Whether a newer version is out (updates.py); ``?now=1`` asks GitHub at once."""
         self._json(self.state.updates.state(self._check_updates(), now="now" in query))
@@ -1688,6 +1703,7 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/sequence", lambda h, m, u: h._sequence()),
     Route("GET", "/api/news", lambda h, m, u: h._json(h.state.news.state())),
     Route("GET", "/api/update", lambda h, m, u: h._update(parse_qs(u.query))),
+    Route("GET", "/api/history", lambda h, m, u: h._history(parse_qs(u.query))),
     *(
         Route("GET", path, lambda h, m, u, name=name: h._settings(name))
         for path, name in _SETTINGS_GET.items()
