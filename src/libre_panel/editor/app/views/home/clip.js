@@ -6,6 +6,9 @@
 // one of the two is pressed. The server says when to ask (/api/clip: a panel the video
 // mode is proven on, ffmpeg found, no name yet, not asked before); the tray's line "Smooth
 // motion: confirm the clip name…" opens Start at #/home/clip, where this card has the focus.
+// A first start asks how the panel should look first: the card comes after that choice, on the
+// launcher right under the panel's card, as the next step (unless the tray's line brought the
+// person to it).
 
 import { t } from "../../core/i18n.js";
 import { answerClipQuestion, loadClipQuestion } from "../../core/settings.js";
@@ -14,8 +17,9 @@ import { html, useEffect, useRef, useState } from "../../lib/preact.js";
 import { Icon } from "../../ui/icons.js";
 import { toast } from "../../ui/toast.js";
 
-/** The question, asked again when this is shown and when the panel the app drives changes. */
-function useClipQuestion() {
+/** The question, asked again when this is shown and when the panel the app drives changes. A
+ * first start asks it too, for the tray's line, but shows it only to who came for it. */
+export function useClipQuestion() {
   const target = useStore((s) => s.app.panel?.target);
   useEffect(() => {
     loadClipQuestion();

@@ -112,25 +112,25 @@ export function SequenceCard() {
   };
   return html`<section class=${`sequence-card${sequence.on && steps.length ? " on" : ""}`} aria-label=${t("Screens in turn")}>
     <div class="sequence-card-head">
-      <${Icon} name="refresh" size=${16} />
-      <strong>${t("Screens in turn")}</strong>
-      <span class="grow"></span>
+      <span class="more-row-icon" aria-hidden="true"><${Icon} name="refresh" size=${16} /></span>
+      <span class="more-row-text">
+        <strong>${t("Screens in turn")}</strong>
+        ${steps.length && sequence.on
+          ? html`<${Now} sequence=${sequence} />`
+          : html`<span class="muted">${steps.length ? t("Off: the panel shows one theme") : t("Themes one after another, each for as long as you like")}</span>`}
+      </span>
       ${steps.length ? html`<${Toggle} checked=${sequence.on} label=${t("Screens in turn")} onChange=${toggle} />` : null}
+      <a class="btn" href="#/home/sequence">${steps.length ? t("Edit") : t("Set up")}</a>
     </div>
     ${steps.length
       ? html`<ol class="sequence-chips">
           ${steps.map(
-            (step, i) => html`<li key=${i} class=${sequence.now?.index === i ? "current" : ""}>
+            (step, i) => html`<li key=${i} class=${sequence.on && sequence.now?.index === i ? "current" : ""}>
               <span>${themeName(step.theme)}</span><span class="muted">${duration(step.seconds)}</span>
             </li>`,
           )}
         </ol>`
-      : html`<p class="muted">${t("Themes one after another, each for as long as you like, then from the top.")}</p>`}
-    <div class="sequence-card-foot">
-      <${Now} sequence=${sequence} />
-      <span class="grow"></span>
-      <a class="btn" href="#/home/sequence">${steps.length ? t("Edit") : t("Set up")}</a>
-    </div>
+      : null}
   </section>`;
 }
 

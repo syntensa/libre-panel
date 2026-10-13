@@ -1,8 +1,9 @@
-// Start (#/home, #/home/themes): the launcher. The panel at a glance with its picture and
-// controls, the themes to switch between, and the way into the other views. On a first start
+// Start (#/home, #/home/themes): the launcher. What the panel shows now and when, with its
+// controls; the themes to switch between; and, for a while, the first steps. On a first start
 // (no theme in config.toml yet) it asks "How should it look?" with the themes made for the
-// panel. Where the video mode only lacks the name of the panel's standby clip, a card at the top
-// asks for it once (clip.js). Built on the shell: see ../../README.md.
+// panel; the choice goes on the panel and Start goes on to the launcher: the panel's picture,
+// then the question about smooth motion (clip.js) and the first steps. Built on the shell: see
+// ../../README.md.
 
 import { blankTheme, importTheme, openTheme, showOnPanel, startTheme } from "../../core/actions.js";
 import { registerCommands, registerProvider } from "../../core/commands.js";
@@ -16,17 +17,14 @@ import { navigate, registerView } from "../../shell/views.js";
 import { Segmented } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { toast } from "../../ui/toast.js";
-import { ClipQuestion } from "./clip.js";
+import { ClipQuestion, useClipQuestion } from "./clip.js";
 import { FirstSteps, PagesCard, StartScreenTile } from "./overview.js";
-import { MountedChoice, PanelCard, PanelStrip, panelModelNow, usePanelModel } from "./panel.js";
+import { MountedChoice, PanelCard, PanelStrip, asksMounting, panelModelNow, usePanelModel } from "./panel.js";
 import { Gallery, ThemeRow, collectionsOf, fitsPanel, startThemes } from "./themes.js";
 import { SequenceCard, SequencePage } from "./sequence.js";
 import { SetupCard } from "./setup.js";
 
 // -- what a click does ---------------------------------------------------------------------------
-
-// A first start stays on show while a theme is chosen and taken on to Design (`choosing`),
-// instead of giving way to the launcher the moment config.toml names a theme.
 
 /** Open a theme for editing in Design (asks about unsaved changes first). */
 async function edit(item) {
@@ -36,25 +34,20 @@ async function edit(item) {
 
 /**
  * A theme chosen: it goes on the panel at once. A theme for another panel size says so, since
- * the picture is then scaled to the panel; `open` takes it on to Design (a first start).
+ * the picture is then scaled to the panel. On a first start Start then goes on to the launcher
+ * by itself (config.toml names a theme now): the panel's picture, the next steps.
  */
-async function choose(item, { open = false } = {}) {
-  if (open) store.set({ choosing: true });
-  try {
-    if (!(await showOnPanel(item.id))) return;
-    const { model } = panelModelNow();
-    if (model && !fitsPanel(item, model) && item.size) {
-      toast(
-        t("“{name}” is made for {size}; the picture is scaled to this panel. Adapt the theme in Design for a sharp result.", {
-          name: item.name || item.id,
-          size: `${item.size[0]} × ${item.size[1]}`,
-        }),
-        { kind: "warn" },
-      );
-    }
-    if (open) await edit(item);
-  } finally {
-    store.set({ choosing: false });
+async function choose(item) {
+  if (!(await showOnPanel(item.id))) return;
+  const { model } = panelModelNow();
+  if (model && !fitsPanel(item, model) && item.size) {
+    toast(
+      t("“{name}” is made for {size}; the picture is scaled to this panel. Adapt the theme in Design for a sharp result.", {
+        name: item.name || item.id,
+        size: `${item.size[0]} × ${item.size[1]}`,
+      }),
+      { kind: "warn" },
+    );
   }
 }
 
@@ -106,26 +99,48 @@ function suggestions(items, model) {
   return standard && !picks.includes(standard) ? [standard, ...picks] : picks;
 }
 
+/** A step of a first start: its number (where there is more than one), what it asks, and how. */
+function Step({ number, title, text, class: className = "", children }) {
+  return html`<div class=${`start-step ${className}`}>
+    ${number ? html`<span class="start-step-number" aria-hidden="true">${number}</span>` : null}
+    <span class="start-step-text">
+      <strong>${title}</strong>
+      ${text ? html`<span class="muted">${text}</span>` : null}
+    </span>
+    ${children}
+  </div>`;
+}
+
+/**
+ * The first start, one thing after the other: the panel (found, or which one it is), how it is
+ * mounted, and its theme. Smooth motion and the rest come after the choice, on the launcher;
+ * the question about the clip is here only for whom the tray's line brought (`focus`), and the
+ * setup of Linux only where the panel may not be used without it.
+ */
 function FirstStart({ focus }) {
   const { model, items } = useStartThemes();
   const [everything, setEverything] = useState(false);
   const picks = suggestions(items, model);
   const more = items.length - picks.length;
   const shown = everything ? items : picks;
+  const mounting = asksMounting(model); // a bar (or a panel not known yet), not a 3.5″
+  useClipQuestion(); // known already, for the tray's line and for the launcher that follows
   return html`<div class="start first">
     <${PanelStrip} />
-    <${ClipQuestion} focus=${focus} />
+    ${focus ? html`<${ClipQuestion} focus />` : null}
+    <${SetupCard} blocking />
     <div class="start-head">
       <h1>${t("How should it look?")}</h1>
-      <span class="muted">${t("Everything can be changed freely afterwards.")}</span>
+      <p class="muted">${t("Everything can be changed freely afterwards.")}</p>
     </div>
-    ${model?.shape === "round"
-      ? null
-      : html`<div class="start-mounted">
-          <span>${t("How is your panel mounted?")}</span>
+    ${mounting
+      ? html`<${Step} number="1" class="start-mounted" title=${t("How is your panel mounted?")}
+          text=${t("Upright, every screen shows in its version for a bar on end.")}>
           <${MountedChoice} big />
-        </div>`}
-    <${Gallery} big=${shown.length <= 4} items=${shown} label=${themeLabel} onChoose=${(item) => choose(item, { open: true })} />
+        <//>`
+      : null}
+    <${Step} number=${mounting ? "2" : ""} title=${t("Choose a theme")} text=${t("A click puts it on the panel; the pictures show it as the panel will.")} />
+    <${Gallery} big=${shown.length <= 4} items=${shown} label=${themeLabel} onChoose=${choose} />
     <${StartActions}>
       ${more > 0
         ? html`<span class="muted">${t("More themes: {n}", { n: more })}</span>
@@ -160,19 +175,12 @@ function ThemesPage({ asked }) {
             ]} />`
         : null}
     </div>
-    <${Gallery} items=${filtered} asked=${asked} label=${themeLabel} onChoose=${(item) => choose(item)} onEdit=${edit} />
+    <${Gallery} items=${filtered} asked=${asked} label=${themeLabel} onChoose=${choose} onEdit=${edit} />
     <${StartActions} />
   </div>`;
 }
 
 // -- the launcher -------------------------------------------------------------------------------------
-
-const TILES = () => [
-  { view: "design", icon: "blocks", title: t("Design"), text: t("Blocks, layout, pages") },
-  { view: "look", icon: "palette", title: t("Look"), text: t("Colours, finishes, light") },
-  { view: "live", icon: "pulse", title: t("Live"), text: t("Values, services, test notices") },
-  { view: "settings", icon: "sliders", title: t("Settings"), text: t("Panel, sensors, services, start") },
-];
 
 /** Whether this Windows download can set up the sensor service, and it is not there yet. */
 const unlockable = (info) => Boolean(info?.platform === "win32" && info.available && !info.service);
@@ -190,12 +198,14 @@ function UnlockCard() {
   if (!unlockable(info)) return null;
   const busy = Boolean(info.job?.running);
   return html`<aside class="hint-card unlock-card" role="status">
-    <strong>${t("Unlock all sensors")}</strong>
-    <p>
-      ${t(
-        "CPU, GPU and mainboard temperatures, power, fan speeds, memory and drives need a small Windows service with the rights to read them. Libre Panel itself keeps running without administrator rights.",
-      )}
-    </p>
+    <div class="hint-card-text">
+      <strong>${t("Unlock all sensors")}</strong>
+      <p>
+        ${t(
+          "CPU, GPU and mainboard temperatures, power, fan speeds, memory and drives need a small Windows service with the rights to read them. Libre Panel itself keeps running without administrator rights.",
+        )}
+      </p>
+    </div>
     <button type="button" class="btn" disabled=${busy} onClick=${() => runUnlock("unlock")}>
       ${busy ? t("Waiting for Windows…") : t("Unlock all sensors")}
     </button>
@@ -207,66 +217,80 @@ function Hint() {
   const hint = useStore((s) => (s.app.available && !unlockable(s.unlockInfo) ? s.app.panel?.hint : ""));
   if (!hint) return null;
   return html`<aside class="hint-card" role="status">
-    <strong>${t("Readings are missing")}</strong>
-    <p>${hint}</p>
+    <div class="hint-card-text">
+      <strong>${t("Readings are missing")}</strong>
+      <p>${hint}</p>
+    </div>
     <button type="button" class="btn" onClick=${() => navigate("live")}>${t("Show details")}</button>
   </aside>`;
 }
 
-function Launcher({ focus }) {
+/**
+ * What keeps the panel from all it can do, each with the way to fix it: the sensors Windows keeps
+ * to administrators, the rights Linux gives, readings that are missing. The launcher's first
+ * place, above the panel: "is everything all right?" is answered before anything else.
+ */
+function StartNotices() {
+  return html`<${UnlockCard} /><${SetupCard} /><${Hint} />`;
+}
+
+/** The themes beside the panel: what is on it and what is made for it, a click away. */
+function QuickThemes() {
   const { model, items } = useStartThemes();
   // the quick switch: what is on the panel and what is made for it, of Libre Panel's own and
   // yours (not a collection's, nor a theme kept for a page of its own, such as the round
-  // report); the rest is under "All", and a collection has a line of its own under them
+  // report); the rest is under "All themes", and a collection has a line of its own under them
   const own = items.filter((item) => !item.collection && !item.special);
   const wanted = items.filter((item) => item.shown || (own.includes(item) && (item.fits || !model)));
   // the panel's own default (Lumen on a bar) right after the one on the panel
   const first = (item) => (item.shown ? 0 : item.id === model?.default_theme ? 1 : 2);
   const quick = (wanted.length ? [...wanted].sort((a, b) => first(a) - first(b)) : own.length ? own : items).slice(0, 5);
   const sets = collectionsOf(items.filter((item) => item.fits || !model));
+  return html`<section class="start-themes" aria-labelledby="start-themes-title">
+    <div class="start-side-head">
+      <h2 id="start-themes-title">${t("Themes")}</h2>
+      <a href="#/home/themes">${t("All themes")} <${Icon} name="chevron-right" size=${14} /></a>
+    </div>
+    <p class="start-side-hint muted">${t("A click puts one on the panel.")}</p>
+    <div class="quick-themes">
+      ${quick.map((item) => html`<${ThemeRow} key=${item.id} item=${item} label=${themeLabel(item)} onChoose=${choose} />`)}
+      ${sets.map(
+        ({ name, count }) => html`<a key=${name} class="quick-collection" href=${`#/home/themes/${encodeURIComponent(name)}`}>
+          <span class="quick-collection-text">
+            <strong>${t("{collection} · Legacy", { collection: name })}</strong>
+            <span class="muted">${t("The screens of the project Libre Panel grew out of")}</span>
+          </span>
+          <span class="theme-collection-count">${count}</span>
+          <${Icon} name="chevron-right" size=${16} />
+        </a>`,
+      )}
+    </div>
+  </section>`;
+}
+
+/**
+ * The launcher, in the order of the questions someone has who comes back: is everything all
+ * right (what is missing, with its fix), what is on the panel now (its card), what to do next
+ * (smooth motion, the first steps) and what it shows when. The themes and the
+ * rest for the panel are beside it.
+ */
+function Launcher({ focus }) {
   return html`<div class="start launcher">
     <div class="start-main">
+      <${StartNotices} />
+      <${PanelCard} />
       <${ClipQuestion} focus=${focus} />
       <${FirstSteps} />
-      <${PanelCard} />
       <${PagesCard} />
-      <nav class="start-tiles" aria-label=${t("Area")}>
-        ${TILES().map(
-          (tile) => html`<a key=${tile.view} class="start-tile" href=${`#/${tile.view}`}>
-            <${Icon} name=${tile.icon} size=${22} />
-            <strong>${tile.title}</strong>
-            <span class="muted">${tile.text}</span>
-          </a>`,
-        )}
-      </nav>
     </div>
-    <aside class="start-side" aria-label=${t("Themes")}>
-      <div class="start-side-head">
-        <h2>${t("Themes")}</h2>
-        <a href="#/home/themes">${t("All")}</a>
-      </div>
-      <div class="quick-themes">
-        ${quick.map((item) => html`<${ThemeRow} key=${item.id} item=${item} label=${themeLabel(item)} onChoose=${(chosen) => choose(chosen)} />`)}
-        ${sets.map(
-          ({ name, count }) => html`<a key=${name} class="quick-collection" href=${`#/home/themes/${encodeURIComponent(name)}`}
-            title=${t("The screens of the project Libre Panel grew out of")}>
-            <strong>${t("{collection} · Legacy", { collection: name })}</strong>
-            <span class="theme-collection-count">${count}</span>
-            <${Icon} name="chevron-right" size=${16} />
-          </a>`,
-        )}
-      </div>
-      <div class="start-side-actions">
-        <button type="button" class="btn" onClick=${startEmpty}><${Icon} name="plus" size=${15} /> ${t("Start empty")}</button>
-        <button type="button" class="btn" onClick=${openFile}><${Icon} name="upload" size=${15} /> ${t("Open a theme file")}</button>
-      </div>
-      <${SequenceCard} />
-      <${StartScreenTile} />
-      <span class="grow"></span>
-      <${UnlockCard} />
-      <${SetupCard} />
-      <${Hint} />
-    </aside>
+    <div class="start-side">
+      <${QuickThemes} />
+      <section class="start-more" aria-labelledby="start-more-title">
+        <h2 id="start-more-title">${t("More for your panel")}</h2>
+        <${SequenceCard} />
+        <${StartScreenTile} />
+      </section>
+    </div>
   </div>`;
 }
 

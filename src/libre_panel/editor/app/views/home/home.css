@@ -29,23 +29,25 @@
 
 .start.launcher {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr) 360px;
   grid-template-rows: auto;
-  align-content: stretch;
+  align-content: start;
+  align-items: start;
+  gap: 28px;
 }
 
 .start-main {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
   min-width: 0;
 }
 
 .panel-card {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 22px;
+  gap: 16px;
+  padding: 20px 22px;
   border-radius: 18px;
   background: var(--panel-2);
   border: 1px solid var(--line);
@@ -102,12 +104,14 @@
   background: var(--danger);
 }
 
+/* the picture at the panel's own proportions, never taller than a third of the window: the
+   panel's card and the next step under it stay together on one screen */
 .panel-picture {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  max-height: min(52vh, 460px);
+  max-height: min(36vh, 300px);
   border-radius: 10px;
   background: var(--picture);
   border: 1px solid var(--line-2);
@@ -117,9 +121,20 @@
 .panel-picture img {
   display: block;
   max-width: 100%;
-  max-height: min(52vh, 460px);
+  max-height: min(36vh, 300px);
   width: auto;
   height: auto;
+}
+
+/* a panel on end: a tall picture in a box of its own height */
+.panel-picture.upright {
+  height: min(44vh, 380px);
+  max-height: none;
+  aspect-ratio: auto !important;
+}
+
+.panel-picture.upright img {
+  max-height: 100%;
 }
 
 .panel-picture-note {
@@ -129,10 +144,24 @@
   text-align: center;
 }
 
+/* no picture of the panel (yet): the theme's own, dimmed, with the note over it */
+.panel-picture.still img {
+  opacity: 0.28;
+}
+
+.panel-picture.still .panel-picture-note {
+  position: absolute;
+  max-width: calc(100% - 32px);
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: rgba(10, 14, 19, 0.82);
+  color: var(--text-2);
+}
+
 .panel-card-controls {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 10px 18px;
   flex-wrap: wrap;
 }
 
@@ -150,49 +179,19 @@
   flex: none;
 }
 
-.start-tiles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 16px;
-}
-
-.start-tile {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 18px;
-  border-radius: 14px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-  color: var(--text);
-  transition: border-color 0.12s, background 0.12s;
-}
-
-.start-tile:hover {
-  color: var(--text);
-  border-color: var(--line-5);
-  background: var(--surface);
-}
-
-.start-tile .icon {
-  color: var(--accent);
-}
-
-.start-tile strong {
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.start-tile .muted {
-  font-size: 13px;
-}
-
 .start-side {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 28px;
   min-width: 0;
   min-height: 0;
+}
+
+.start-themes,
+.start-more {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .start-side-head {
@@ -201,14 +200,22 @@
   justify-content: space-between;
 }
 
-.start-side-head h2 {
+.start-side h2 {
   font-size: 16px;
   font-weight: 600;
 }
 
 .start-side-head a {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
   font-size: 13px;
   font-weight: 600;
+}
+
+.start-side-hint {
+  margin: -6px 0 2px;
+  font-size: 13px;
 }
 
 .quick-themes {
@@ -290,25 +297,14 @@
   font-weight: 600;
 }
 
-.start-side-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.start-side-actions .btn {
-  flex: 1 1 auto;
-  height: 38px;
-  padding: 0 12px;
-}
-
-/* what the panel shows when: the normal theme and each page with its switch */
-.pages-card,
-.first-steps {
+/* the first steps (a first start) and what the panel shows when (the normal theme and each
+   page with its switch): short lists */
+.first-steps,
+.pages-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 18px 22px;
+  gap: 6px;
+  padding: 16px 22px 8px;
   border-radius: 18px;
   background: var(--panel-2);
   border: 1px solid var(--line);
@@ -328,7 +324,8 @@
 .pages-card h2,
 .first-steps h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .pages-card-rows,
@@ -345,7 +342,8 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 10px 0;
+  min-height: 48px;
+  padding: 6px 0;
   border-top: 1px solid var(--line);
 }
 
@@ -359,7 +357,7 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
   font-size: 13px;
 }
@@ -413,15 +411,29 @@
   flex: none;
 }
 
+/* what keeps the panel from all it can do: what is missing, and the button that fixes it */
 .hint-card {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 14px;
-  border-radius: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 20px;
+  padding: 14px 18px;
+  border-radius: 14px;
   background: var(--warn-soft);
   border: 1px solid rgba(245, 196, 107, 0.25);
+}
+
+.hint-card-text {
+  display: flex;
+  flex: 1 1 360px;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hint-card.setup-card {
+  flex-direction: column;
+  align-items: stretch;
 }
 
 .hint-card strong {
@@ -436,8 +448,9 @@
 }
 
 .hint-card .btn {
-  height: 32px;
-  padding: 0 12px;
+  flex-shrink: 0;
+  height: 34px;
+  padding: 0 14px;
   border-color: rgba(245, 196, 107, 0.4);
   background: transparent;
   color: var(--warn);
@@ -505,15 +518,11 @@
   display: flex;
   flex-direction: column;
   padding: 40px clamp(28px, 5vw, 72px) 48px;
-  gap: 30px;
+  gap: 26px;
 }
 
 .start.gallery .start-head h1 {
   font-size: 30px;
-}
-
-.start.gallery .start-head p {
-  margin: 6px 0 0;
 }
 
 .back-link {
@@ -670,11 +679,21 @@
   color: var(--text-2);
 }
 
-.quick-collection strong {
+.quick-collection-text {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: 1px;
   min-width: 0;
+}
+
+.quick-collection strong {
   font-size: 14px;
   font-weight: 600;
+}
+
+.quick-collection .muted {
+  font-size: 12px;
 }
 
 .theme-card {
@@ -924,48 +943,78 @@
 
 /* -- screens in turn (sequence.js) --------------------------------------------------------------- */
 
-.sequence-card {
+/* the launcher's "More for your panel": a row each, what it is and the way to it */
+.sequence-card,
+.more-row {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 14px;
+  padding: 12px 14px;
   border-radius: 12px;
   background: var(--panel-2);
   border: 1.5px solid var(--line);
+}
+
+.more-row {
+  flex-direction: row;
+  align-items: center;
 }
 
 .sequence-card.on {
   border-color: var(--accent);
 }
 
-.sequence-card p {
-  margin: 0;
-  font-size: 13px;
-}
-
 .sequence-card-head,
-.sequence-card-foot,
 .sequence-foot {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+}
+
+.more-row-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--accent);
+}
+
+.more-row-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.more-row-text strong {
+  font-size: 14px;
+}
+
+.sequence-card .btn,
+.more-row .btn {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 12px;
 }
 
 .start-screen-thumb {
-  width: 100%;
-  height: 64px;
+  flex-shrink: 0;
+  width: 76px;
+  height: 32px;
   object-fit: contain;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #000;
 }
 
 .start-screen-thumb.upright {
-  height: 120px;
-}
-
-.sequence-card-foot .btn {
-  height: 32px;
-  padding: 0 12px;
+  width: 32px;
+  height: 64px;
 }
 
 .sequence-chips {
@@ -994,7 +1043,8 @@
 .sequence-now {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 2px 6px;
   font-size: 13px;
   font-weight: 600;
 }
@@ -1111,17 +1161,70 @@
   }
 }
 
-/* how the panel is mounted: on a first start a question with large choices */
-.start-mounted {
+/* a first start, one step after the other: its number, what it asks, and how */
+.start-step {
   display: flex;
   align-items: center;
-  gap: 16px;
   flex-wrap: wrap;
-  margin: -6px 0 18px;
-  color: var(--text-2);
+  gap: 12px 16px;
+}
+
+.start-step-number {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(46, 230, 214, 0.5);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.start-step-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.start-step-text strong {
+  font-size: 17px;
+}
+
+.start-step-text .muted {
+  font-size: 13.5px;
+}
+
+/* how the panel is mounted: large choices next to the question */
+.start-mounted .mounted-choice {
+  margin-left: 8px;
+}
+
+.start.first .start-head {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.start.first .start-head p {
+  margin: 0;
+  font-size: 15px;
+}
+
+.start.gallery .start-head p {
+  margin: 6px 0 0;
 }
 
 .mounted-choice.big button {
   padding: 8px 18px;
   font-size: 14px;
+}
+
+/* a narrow browser: the themes under the panel */
+@media (max-width: 1000px) {
+  .start.launcher {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

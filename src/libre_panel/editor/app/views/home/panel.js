@@ -7,7 +7,7 @@ import { appAction } from "../../core/app.js";
 import { endpoints } from "../../core/api.js";
 import { useLivePicture } from "../../core/console.js";
 import { formatNumber, t } from "../../core/i18n.js";
-import { themeEntry, useMounted, versionFor } from "../../core/orientation.js";
+import { VERTICAL, themeEntry, useMounted, versionFor } from "../../core/orientation.js";
 import { saveSettings } from "../../core/settings.js";
 import { setPref, store, useStore } from "../../core/state.js";
 import { runtime } from "../../core/stats.js";
@@ -57,10 +57,10 @@ export function panelSummary(app, model, shown) {
     error: t("Needs attention"),
     stopped: t("Stopped"),
   };
+  // in plain words: how smooth, for how long (the data rate and the rest are on Live)
   const parts = [];
-  if (stats.streaming) parts.push(t("Video mode"));
+  if (stats.streaming) parts.push(t("Smooth motion"));
   if (typeof stats.fps === "number") parts.push(t("{n} frames per second", { n: formatNumber(stats.fps, 0) }));
-  if (typeof stats.kbps === "number") parts.push(t("{n} KB/s", { n: formatNumber(stats.kbps, 0) }));
   if (typeof stats.uptime_s === "number") parts.push(t("running for {time}", { time: runtime(stats.uptime_s) }));
   if (!parts.length && panel.target) parts.push(panel.target);
   if (panel.mode) parts.push(modeName(panel.mode));
@@ -126,8 +126,8 @@ export function PanelStrip({ compact = false }) {
   else if (model) title = t("Themes for {panel}", { panel: panelName(model) });
   if (model) {
     const parts = [`${model.landscape[0]} × ${model.landscape[1]}`, connection(model, models)].filter(Boolean);
-    if (connected && !picked && stats.streaming) parts.push(t("video mode with {n} frames per second is on", { n: stats.target_fps }));
-    else if (model.video) parts.push(t("video mode is possible"));
+    if (connected && !picked && stats.streaming) parts.push(t("smooth motion with {n} frames per second is on", { n: stats.target_fps }));
+    else if (model.video) parts.push(t("smooth motion is possible"));
     line = parts.join(" · ");
   }
   const round = model?.shape === "round";
@@ -173,14 +173,34 @@ function Picture({ app, theme, size }) {
         ? t("The panel is paused: there is no picture.")
         : state === "error"
           ? t("The panel needs attention: there is no picture.")
-          : t("There is no picture yet.");
+          : state === "waiting"
+            ? t("No panel yet: this is the theme it will show.")
+            : t("There is no picture yet.");
   }
-  // without the app a theme's own picture (the server draws it), else what the panel shows
-  const src = running ? live.src : theme ? endpoints.previewUrl(versionFor(theme), 960) : null;
-  return html`<div class="panel-picture" style=${{ aspectRatio: ratio }}>
-    ${src ? html`<img src=${src} alt=${running ? t("What the panel shows now") : t("The theme on the panel")} />` : null}
+  // what the panel shows; until there is a picture of it (and without the app) the theme's own,
+  // which the server draws, dimmed under the note that says why
+  const own = theme ? endpoints.previewUrl(versionFor(theme), 960) : null;
+  const src = (running && live.src) || own;
+  const upright = size && size[1] > size[0];
+  return html`<div class=${`panel-picture${upright ? " upright" : ""}${note ? " still" : ""}`} style=${{ aspectRatio: ratio }}>
+    ${src ? html`<img src=${src} alt=${running && live.src ? t("What the panel shows now") : t("The theme on the panel")} />` : null}
     ${note ? html`<p class="panel-picture-note">${note}</p>` : null}
   </div>`;
+}
+
+const sameSize = (a, b) => Boolean(a && b) && a[0] === b[0] && a[1] === b[1];
+
+/**
+ * Whether how the panel is mounted changes anything for it: a theme made for it has a version
+ * for a panel on end (Lumen Vertical for a bar). A panel not known yet may be a bar; a round
+ * one, a 3.5″ or a 12.3″ has no such version and is not asked.
+ */
+export function asksMounting(model) {
+  const { themes, versions } = store.get();
+  return (versions || []).some((version) => {
+    const base = themes.find((item) => version.id === `${item.id}${VERTICAL}`);
+    return Boolean(base) && (!model || base.model === model.id || sameSize(base.size, model.landscape));
+  });
 }
 
 /** How the panel is mounted: on its side or on end (config.toml's device.orientation). The
@@ -199,14 +219,24 @@ export function MountedChoice({ big = false }) {
   />`;
 }
 
-/** The panel at a glance: its state, what it shows, and pause, brightness, how it is mounted
- * and upside down. */
+/** The size of the picture on the panel: the connected panel's, the way it is mounted (a theme
+ * made for another size is scaled to it), else the theme's own. */
+function pictureSize(model, theme, way) {
+  if (model) return way === "portrait" ? model.portrait || [...model.landscape].reverse() : model.landscape;
+  return themeEntry(versionFor(theme))?.size;
+}
+
+/**
+ * The panel at a glance, at the top of Start: its state, what it shows with the way to edit
+ * that, its picture, and pause, brightness and upside down. How the panel is mounted is a
+ * choice made once: the first start, the first steps and Settings → Panel ask it.
+ */
 export function PanelCard() {
   const { app } = useStore((s) => ({ app: s.app, themes: s.themes, versions: s.versions }));
+  const way = useMounted();
   const { connected } = usePanelModel();
   const running = app.available && !app.quit;
   const shown = shownTheme(app);
-  const size = themeEntry(versionFor(shown))?.size;
   const summary = app.available ? panelSummary(app, connected, shown) : null;
   const paused = app.panel?.state === "paused";
   return html`<section class="panel-card" aria-label=${t("Panel")}>
@@ -214,17 +244,21 @@ export function PanelCard() {
       <span class=${`state-dot ${summary ? summary.state : "none"}`} aria-hidden="true"></span>
       <div class="panel-card-title">
         <h2>${summary ? summary.title : themeName(shown)}</h2>
-        <p class="muted">${summary ? summary.line : t("This editor does not run the panel. Start Libre Panel with “libre-panel tray” to see what it shows and to control it from here.")}</p>
+        <p class="muted">
+          ${summary
+            ? summary.line
+            : t("This window is not connected to the running panel. Open Libre Panel from your apps (or its icon in the tray) to see the panel live and control it here.")}
+        </p>
         ${summary?.detail ? html`<p class="panel-card-detail">${summary.detail}</p>` : null}
       </div>
       <button type="button" class="btn btn-primary" onClick=${editShown}>
-        <${Icon} name="pencil" size=${16} strokeWidth=${2.2} /> ${t("Design")}
+        <${Icon} name="pencil" size=${16} strokeWidth=${2.2} /> ${t("Edit theme")}
       </button>
     </div>
-    <${Picture} app=${app} theme=${shown} size=${size} />
-    <div class="panel-card-controls">
-      ${running
-        ? html`<button type="button" class="btn" onClick=${() => appAction(paused ? "resume" : "pause")}>
+    <${Picture} app=${app} theme=${shown} size=${pictureSize(running ? connected : null, shown, way)} />
+    ${running
+      ? html`<div class="panel-card-controls">
+          <button type="button" class="btn" onClick=${() => appAction(paused ? "resume" : "pause")}>
             <${Icon} name=${paused ? "play" : "pause"} size=${14} /> ${paused ? t("Resume panel") : t("Pause panel")}
           </button>
           <label class="panel-card-brightness">
@@ -233,16 +267,13 @@ export function PanelCard() {
             <${Slider} label=${t("Brightness")} value=${app.brightness ?? 0} step=${5} format=${(v) => `${v} %`}
               onCommit=${(value) => appAction("brightness", value)} />
           </label>
-          <span class="grow"></span>`
-        : html`<span class="grow"></span>`}
-      <${MountedChoice} />
-      ${running
-        ? html`<label class="panel-card-flip">
+          <span class="grow"></span>
+          <label class="panel-card-flip">
             <span>${t("Upside down")}</span>
             <${Toggle} label=${t("Upside down")} checked=${app.upside_down} disabled=${app.upside_down === null}
               onChange=${(on) => appAction("upside_down", on)} />
-          </label>`
-        : null}
-    </div>
+          </label>
+        </div>`
+      : null}
   </section>`;
 }
