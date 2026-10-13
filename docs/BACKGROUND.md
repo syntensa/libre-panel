@@ -40,12 +40,13 @@ Installed with pip, add the `tray` extra: `pipx install "libre-panel[usb,serial,
 | hint line | only on Windows, only while temperatures and power show "--": the one thing to do about it, e.g. "CPU temperature and power need administrator rights: run Libre Panel as administrator." The tooltip of the icon says it too |
 | **Open Libre Panel** | the app's window on *Start*; also a click on the icon |
 | **Smooth motion: confirm the clip name…** | only until it is answered: on a panel the video mode is proven on (the 9.2"), with ffmpeg found and no `local_clip` yet, *Start* asks for the name of the panel's standby clip, and this line opens it there |
-| **Theme editor** | the window on *Design* |
-| **Theme** | switch the theme on the panel |
+| **Theme** | switch the theme on the panel: the themes made for it by name, the others under *More themes*, a collection (SPUR II) in its own |
 | **Brightness** | Off, 10–100 %; written to `config.toml` |
 | **Pause panel** | stops sending frames and releases the USB device, e.g. for the vendor app |
-| **Start with system** | the same as `libre-panel autostart enable/disable` |
+| **Design** | the window on *Design* |
 | **Settings** | the window on *Settings*: every setting of `config.toml` ([Configuration](CONFIGURATION.md#every-setting-is-in-the-app)) |
+| **Upside down** | for a panel mounted the other way round |
+| **Start with system** | the same as `libre-panel autostart enable/disable` |
 | **Open settings folder** / **Open log** | `config.toml`, user themes, `logs/libre-panel.log` (in the file manager) |
 | **Quit Libre Panel** | |
 

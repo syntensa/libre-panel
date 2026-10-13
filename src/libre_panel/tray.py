@@ -9,6 +9,7 @@ running without an icon.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -22,10 +23,11 @@ from typing import Any
 
 from libre_panel import i18n
 from libre_panel.branding import logo
-from libre_panel.config import config_dir, set_active_theme
+from libre_panel.config import ConfigError, config_dir, load_config, set_active_theme
+from libre_panel.devices.models import MODELS, PanelModel, find_model
 from libre_panel.i18n import t
 from libre_panel.service import BackgroundApp
-from libre_panel.theme.model import list_themes
+from libre_panel.theme.model import THEME_FILENAME, VERTICAL, list_themes
 
 log = logging.getLogger(__name__)
 
@@ -43,8 +45,14 @@ def headline(state: dict[str, Any]) -> str:
         "stopped": t("stopped"),
     }.get(state["state"], state["state"])
     if state.get("mode") and state["state"] == "showing":
-        text += f" ({state['mode']})"  # set by a service, e.g. "game"
+        text += f" ({mode_name(state['mode'])})"  # set by a service, e.g. "game"
     return "Libre Panel: " + text
+
+
+def mode_name(mode: str) -> str:
+    """A mode's name as the app's pages call it: "game" is "In game"."""
+    names = {"game": t("In game"), "media": t("Music"), "idle": t("Idle")}
+    return names.get(mode, mode)
 
 
 def tooltip(state: dict[str, Any]) -> str:
@@ -67,6 +75,60 @@ def load_pystray() -> Any:
         log.warning("no tray icon (%s); Libre Panel keeps running without one", exc)
         return None
     return pystray
+
+
+def _theme_facts(path: str) -> dict[str, Any]:
+    """A theme's name, panel, size and collection, from its theme.json (without loading it)."""
+    try:
+        data = json.loads((Path(path) / THEME_FILENAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        data = {}
+    data = data if isinstance(data, dict) else {}
+    display = data.get("display") if isinstance(data.get("display"), dict) else {}
+    size = [display.get("width"), display.get("height")]
+    return {
+        "name": data["name"] if isinstance(data.get("name"), str) and data["name"].strip() else "",
+        "model": display.get("model"),
+        "size": sorted(size) if all(isinstance(n, int) for n in size) else None,
+        "collection": data["collection"] if isinstance(data.get("collection"), str) else "",
+    }
+
+
+def theme_choices(
+    model: PanelModel | None, report: str | None = None
+) -> tuple[list[tuple[str, str]], list[tuple[str, str]], dict[str, list[tuple[str, str]]]]:
+    """The themes the tray offers for the panel, as (id, name), by name, in three parts, as Start
+    shows them: those made for ``model`` (all where it is not known); the others ("More
+    themes": other panels, and ``report``, the round report's); and each collection's (the
+    screens Libre Panel grew out of), apart. A theme's version for a panel on end
+    ("lumen-vertical") is not listed: it is chosen as its theme."""
+    themes = list_themes()
+    ids = {theme["id"] for theme in themes}
+    first: list[tuple[str, str]] = []
+    more: list[tuple[str, str]] = []
+    collections: dict[str, list[tuple[str, str]]] = {}
+    for theme in themes:
+        if theme["id"].endswith(VERTICAL) and theme["id"][: -len(VERTICAL)] in ids:
+            continue
+        facts = _theme_facts(theme["path"])
+        entry = (theme["id"], facts["name"] or theme["id"])
+        fits = (
+            model is None
+            or facts["model"] == model.id
+            or facts["size"] == sorted(model.size("landscape"))
+        )
+        if facts["collection"]:
+            collections.setdefault(facts["collection"], []).append(entry)
+        elif fits and theme["id"] != report:
+            first.append(entry)
+        else:
+            more.append(entry)
+
+    def by_name(entries: list[tuple[str, str]]) -> list[tuple[str, str]]:
+        return sorted(entries, key=lambda entry: entry[1].casefold())
+
+    sets = {name: by_name(entries) for name, entries in sorted(collections.items())}
+    return by_name(first), by_name(more), sets
 
 
 def open_path(path: Path) -> None:
@@ -96,6 +158,8 @@ class Tray:
     # -- menu ------------------------------------------------------------------
 
     def build_menu(self) -> Any:
+        """What most people come for first (the app, the theme, the brightness, a pause), then
+        the app's views and the switches set once, the folders, and Quit."""
         menu, item = self.pystray.Menu, self.pystray.MenuItem
         app = self.app
         return menu(
@@ -118,36 +182,73 @@ class Tray:
                 self.open_clip_question,
                 visible=lambda _: self.asks_for_clip(),
             ),
-            item(t("Theme editor"), self.open_editor),
+            menu.SEPARATOR,
             item(t("Theme"), menu(self._theme_items)),
             item(t("Brightness"), menu(self._brightness_items)),
+            item(t("Pause panel"), self.toggle_pause, checked=lambda _: app.panel.paused),
+            menu.SEPARATOR,
+            item(t("Design"), self.open_editor),  # the app's tab of that name
+            item(t("Settings"), self.open_settings_view),
             item(
                 t("Upside down"), self.toggle_upside_down, checked=lambda _: bool(app.upside_down())
             ),
-            item(t("Pause panel"), self.toggle_pause, checked=lambda _: app.panel.paused),
-            menu.SEPARATOR,
             item(
                 t("Start with system"),
                 self.toggle_autostart,
                 checked=lambda _: bool(app.snapshot()["autostart"]),
             ),
-            item(t("Settings"), self.open_settings_view),
+            menu.SEPARATOR,
             item(t("Open settings folder"), self.open_settings),
             item(t("Open log"), self.open_log, visible=self.log_path is not None),
             menu.SEPARATOR,
             item(t("Quit Libre Panel"), self.quit),
         )
 
+    def _panel_model(self) -> tuple[PanelModel | None, str | None]:
+        """The panel the themes are offered for (config.toml's model, else the one the running
+        panel says it is; nothing on the USB bus is looked at) and the round report's theme."""
+        try:
+            config = load_config(self.app.config_path)
+        except ConfigError:
+            return None, None
+        target = self.app.panel.state().get("target") or ""
+        model = find_model(config.device.model) or next(
+            (m for m in MODELS if target.startswith(m.label)), None
+        )
+        report = config.services.options.get("memory", {}).get("report_theme", "round-report")
+        return model, report if isinstance(report, str) else None
+
     def _theme_items(self):
-        item = self.pystray.MenuItem
-        for theme in list_themes():
-            name = theme["id"]
-            yield item(
+        """The themes by name: those made for the panel, then the rest and each collection in
+        a submenu of its own. The one on the panel's normal page is checked."""
+        item, menu = self.pystray.MenuItem, self.pystray.Menu
+        first, more, collections = theme_choices(*self._panel_model())
+
+        def choice(theme_id: str, name: str) -> Any:
+            return item(
                 name,
-                self._later(set_active_theme, name, self.app.config_path),
-                checked=lambda _, name=name: self.app.active_theme() == name,
+                self._later(set_active_theme, theme_id, self.app.config_path),
+                checked=lambda _, theme_id=theme_id: self._chosen() == theme_id,
                 radio=True,
             )
+
+        yield from (choice(*entry) for entry in first)
+        if more or collections:
+            yield menu.SEPARATOR
+        if more:
+            yield item(t("More themes"), menu(*(choice(*entry) for entry in more)))
+        for name, entries in collections.items():
+            yield item(name, menu(*(choice(*entry) for entry in entries)))
+
+    def _chosen(self) -> str | None:
+        """The theme of the panel's normal page, by the id it is chosen by (Lumen, not its
+        version for a panel on end)."""
+        active = self.app.active_theme()
+        if active and active.endswith(VERTICAL):
+            base = active[: -len(VERTICAL)]
+            if any(theme["id"] == base for theme in list_themes()):
+                return base
+        return active
 
     def _brightness_items(self):
         item = self.pystray.MenuItem

@@ -740,7 +740,6 @@
     "Text": "Text",
     "The start with the highest rights can only be removed by an administrator ({reason}): open a terminal with 'Run as administrator' and run: libre-panel autostart disable": "Den Start mit den höchsten Rechten kann nur ein Administrator entfernen ({reason}): ein Terminal mit „Als Administrator ausführen“ öffnen und ausführen: libre-panel autostart disable",
     "Theme": "Theme",
-    "Theme editor": "Theme-Editor",
     "Theme font": "Theme-Schrift",
     "This theme": "Dieses Theme",
     "Thunderstorm": "Gewitter",
@@ -862,7 +861,7 @@
     "memory": "Arbeitsspeicher",
     "minutes": "Minuten",
     "mode is normal or game, and theme a name": "mode ist normal oder game, theme ein Name",
-    "needs attention": "braucht Aufmerksamkeit",
+    "needs attention": "etwas stimmt nicht",
     "no": "nein",
     "no panel is connected": "kein Panel ist verbunden",
     "no picture yet": "noch kein Bild",
@@ -913,7 +912,7 @@
     "serial write failed: {error}": "Schreiben über den seriellen Port fehlgeschlagen: {error}",
     "show only while this sensor has a value (e.g. weather.temperature); with ! in front, only while it has none": "nur zeigen, solange dieser Sensor einen Wert hat (z. B. weather.temperature); mit ! davor nur, solange er keinen hat",
     "show {source}": "{source} zeigen",
-    "showing on {target}": "Anzeige auf {target}",
+    "showing on {target}": "läuft auf {target}",
     "shown when the module is large enough: wider or taller shows more": "erscheint, wenn das Modul groß genug ist: breiter oder höher zeigt mehr",
     "shows": "zeigt",
     "slowest of the last frames {n} ms": "langsamstes der letzten Bilder {n} ms",
@@ -1774,7 +1773,8 @@
     "“{file}” is not a theme file: choose one exported from Libre Panel, or the theme.json in a theme's folder.": "„{file}“ ist keine Theme-Datei: Wähle eine, die aus Libre Panel exportiert wurde, oder die theme.json im Ordner eines Themes.",
     "“{id}” cannot be the name of a folder: use a–z, 0–9, - _ and . (no spaces).": "„{id}“ geht nicht als Ordnername: Nimm a–z, 0–9, - _ und . (keine Leerzeichen).",
     "“{name}” is now shown on the panel": "„{name}“ ist jetzt auf dem Panel",
-    "a–z, 0–9, - _ and ., no spaces": "a–z, 0–9, - _ und ., keine Leerzeichen"
+    "a–z, 0–9, - _ and ., no spaces": "a–z, 0–9, - _ und ., keine Leerzeichen",
+    "More themes": "Weitere Themes"
   },
   "fields": {
     "align": "Ausrichtung",

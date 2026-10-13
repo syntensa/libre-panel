@@ -248,7 +248,7 @@ def test_tray_menu_in_german(isolated_home):
     i18n.set_language("de")
     tray = Tray(BackgroundApp(port=0), pystray)
     texts = [item.text for item in tray.build_menu() if item is not pystray.Menu.SEPARATOR]
-    assert "Libre Panel öffnen" in texts and "Theme-Editor" in texts and "Einstellungen" in texts
+    assert "Libre Panel öffnen" in texts and "Gestalten" in texts and "Einstellungen" in texts
     assert "Libre Panel beenden" in texts
     assert texts[0] == "Libre Panel: angehalten"
 
