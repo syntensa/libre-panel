@@ -312,3 +312,16 @@
   height: 36px;
   width: 36px;
 }
+
+/* how Look is used, in a line at its top */
+.look-intro {
+  margin: 0 0 -8px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* a block's switch: the pointer on it tries on what it would do */
+.look-switch {
+  display: inline-flex;
+}

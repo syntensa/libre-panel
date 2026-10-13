@@ -224,3 +224,44 @@ def test_the_background_colour_says_it_lies_under_the_picture(app_url, isolated_
         expect(background.locator(".background-under")).to_have_count(0)
         page.keyboard.press("Control+z")
         assert js(page, "window.libre.doc.theme().background.image") == "assets/backdrop.png"
+
+
+def test_look_says_what_each_part_does_and_tries_a_choice_on(app_url, isolated_home):  # noqa: F811
+    """Look's parts had no word of what they do, or one about "SPUR II's screens" and "a panel
+    that is sent pictures". Each says it in a line, and a choice the pointer rests on is tried
+    on the picture before a click keeps it: a colour world, a notice style with a notice."""
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url, "look") as page:
+        page.wait_for_selector(".look-picture img")
+        side = page.locator(".look-side")
+        expect(side.locator(".look-intro")).to_contain_text("try it on")
+        text = side.inner_text()
+        assert "SPUR II" not in text and "sent pictures" not in text
+        for name in ("Finish and glow", "Panel light", "Grid background", "Depth dust", "Notices"):
+            part = side.locator(".section").filter(
+                has=page.locator(".section-title", has_text=name)
+            )
+            expect(part.locator(".look-about").first).not_to_be_empty()
+        picture = page.locator(".look-picture img")
+        plain = picture.get_attribute("src")
+        accent = js(page, "window.libre.doc.theme().palette.accent")
+        side.locator(".look-tile", has_text="Neon").hover()
+        expect(picture).not_to_have_attribute("src", plain)
+        assert js(page, "window.libre.doc.theme().palette.accent") == accent  # only tried on
+        side.locator(".look-intro").hover()
+        expect(picture).to_have_attribute("src", plain)
+        # a notice style is tried on with a notice on show
+        asked = []
+        page.on(
+            "request",
+            lambda r: asked.append(r.post_data_json) if r.url.endswith("/api/render") else None,
+        )
+        side.locator(".look-notice", has_text="Band").hover()
+        expect(picture).not_to_have_attribute("src", plain)
+        tried = [body for body in asked if body.get("notice")]
+        assert tried and tried[-1]["theme"]["toast"]["style"] == "band"
+        assert not js(page, "window.libre.doc.theme().toast?.style")
+        side.locator(".look-notice", has_text="Band").click()
+        assert js(page, "window.libre.doc.theme().toast.style") == "band"
+        shown = "document.querySelector('.look-picture img').src"
+        page.wait_for_function(f"{shown} === window.libre.store.get().render.png")

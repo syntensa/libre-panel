@@ -486,14 +486,20 @@ export function activeLook(current = theme()) {
   return null;
 }
 
-/** A look's colours and module style for the theme; its own palette names stay. */
+/** Put a look's colours and module style on a theme (changed in place); its own palette names
+ * stay. Look tries one on a copy before it is chosen. */
+export function wearLook(current, key) {
+  const look = looks()[key];
+  if (!look) return;
+  current.palette = { ...(current.palette || {}), ...clone(look.palette) };
+  current.style = clone(look.style);
+  current.background = { ...(current.background || {}), color: "@bg" };
+}
+
+/** A look's colours and module style for the theme, as one step back. */
 export function applyLook(key) {
   const look = looks()[key];
   if (!look || !store.get().doc) return;
-  edit(null, (current) => {
-    current.palette = { ...(current.palette || {}), ...clone(look.palette) };
-    current.style = clone(look.style);
-    current.background = { ...(current.background || {}), color: "@bg" };
-  });
+  edit(null, (current) => wearLook(current, key));
   toast(t("Look: {name}", { name: look.name }));
 }
