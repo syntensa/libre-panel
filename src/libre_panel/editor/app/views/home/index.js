@@ -1,9 +1,9 @@
 // Start (#/home, #/home/themes): the launcher. What the panel shows now and when, with its
-// controls; the themes to switch between; and, for a while, the first steps. On a first start
-// (no theme in config.toml yet) it asks "How should it look?" with the themes made for the
-// panel; the choice goes on the panel and Start goes on to the launcher: the panel's picture,
-// then the question about smooth motion (clip.js) and the first steps. Built on the shell: see
-// ../../README.md.
+// controls; the themes to switch between; and, for a while, the first steps (a first start of
+// this version) or what is new (an update). On a first start (no theme in config.toml yet) it
+// asks "How should it look?" with the themes made for the panel; the choice goes on the panel
+// and Start goes on to the launcher: the panel's picture, then the question about smooth motion
+// (clip.js) and the first steps. Built on the shell: see ../../README.md.
 
 import { blankTheme, importTheme, openTheme, showOnPanel, startTheme } from "../../core/actions.js";
 import { registerCommands, registerProvider } from "../../core/commands.js";
@@ -18,6 +18,7 @@ import { Segmented } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { toast } from "../../ui/toast.js";
 import { ClipQuestion, useClipQuestion } from "./clip.js";
+import { WhatsNew, showsFirstSteps, showsNews, useNews } from "./news.js";
 import { FirstSteps, PagesCard, StartScreenTile } from "./overview.js";
 import { MountedChoice, PanelCard, PanelStrip, asksMounting, panelModelNow, usePanelModel } from "./panel.js";
 import { Gallery, ThemeRow, collectionsOf, fitsPanel, startThemes } from "./themes.js";
@@ -234,6 +235,16 @@ function StartNotices() {
   return html`<${UnlockCard} /><${SetupCard} /><${Hint} />`;
 }
 
+/** For a while: what is new (who updated, until it is closed), else the first steps (who began
+ * with this version, until they are done or hidden). */
+function Welcome() {
+  const news = useNews();
+  const version = useStore((s) => s.specs?.version);
+  if (news === null || news === undefined) return null; // asked: neither until it is known
+  if (showsNews(news, version)) return html`<${WhatsNew} />`;
+  return showsFirstSteps(news, version) ? html`<${FirstSteps} />` : null;
+}
+
 /** The themes beside the panel: what is on it and what is made for it, a click away. */
 function QuickThemes() {
   const { model, items } = useStartThemes();
@@ -271,7 +282,7 @@ function QuickThemes() {
 /**
  * The launcher, in the order of the questions someone has who comes back: is everything all
  * right (what is missing, with its fix), what is on the panel now (its card), what to do next
- * (smooth motion, the first steps) and what it shows when. The themes and the
+ * (smooth motion, the first steps or what is new) and what it shows when. The themes and the
  * rest for the panel are beside it.
  */
 function Launcher({ focus }) {
@@ -280,7 +291,7 @@ function Launcher({ focus }) {
       <${StartNotices} />
       <${PanelCard} />
       <${ClipQuestion} focus=${focus} />
-      <${FirstSteps} />
+      <${Welcome} />
       <${PagesCard} />
     </div>
     <div class="start-side">

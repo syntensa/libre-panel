@@ -1,6 +1,6 @@
-"""Start in a real browser: the order of the launcher, the mounting question where it
-matters, the actions of the gallery and the screens in turn; skipped without Playwright or
-Chromium."""
+"""Start in a real browser: the order of the launcher, what is new for who updated, the first
+steps for who began with this version, the mounting question where it matters, the actions of
+the gallery and the screens in turn; skipped without Playwright or Chromium."""
 
 import json
 import re
@@ -26,6 +26,18 @@ from test_app_browser import (  # noqa: E402, F401
     waits_for,
     windows_download,
 )
+
+from libre_panel import __version__  # noqa: E402
+
+
+def updated(home, seen=""):
+    """What news.json says where Libre Panel ran in a version from before this release."""
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "news.json").write_text(json.dumps({"first": "older", "seen": seen}), "utf-8")
+
+
+def news_file(home):
+    return json.loads((home / "news.json").read_text(encoding="utf-8"))
 
 
 def main_column(page):
@@ -72,6 +84,64 @@ def test_the_launcher_answers_what_is_on_the_panel_before_what_to_do_next(
     with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
         page.wait_for_selector(".unlock-card")
         assert main_column(page)[:2] == ["hint-card", "panel-card"]
+
+
+def test_who_updated_is_told_what_is_new_once_and_each_thing_is_done_right_there(
+    app_url,  # noqa: F811
+    isolated_home,
+):
+    choose_theme(isolated_home, "lumen")
+    updated(isolated_home)
+    with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
+        card = page.locator(".news-card")
+        expect(card.locator("h2")).to_have_text("What's new in 0.6")
+        expect(page.locator(".first-steps")).to_have_count(0)  # who updated knows the rest
+        rows = card.locator(".first-step")
+        assert rows.evaluate_all("r => r.map((e) => e.dataset.step)") == [
+            "upright",
+            "arena",
+            "overview",
+        ]
+        # bars on end: the choice right there
+        card.locator("[data-step='upright']").get_by_role("radio", name="Vertical").click()
+        waits_for(page, lambda: settings_config().device.orientation == "portrait")
+        expect(card.locator("[data-step='upright']")).to_have_class(re.compile(r"\bdone\b"))
+        # Arena: game mode on, with Arena
+        card.get_by_role("button", name="Use Arena in games").click()
+        waits_for(page, lambda: "game" in settings_config().services.enabled)
+        assert game_theme() == "arena"
+        expect(card.locator("[data-step='arena']")).to_have_class(re.compile(r"\bdone\b"))
+        game = page.locator(".pages-card [data-page='game']")
+        expect(game.get_by_role("switch")).to_have_attribute("aria-checked", "true")
+        # the overview, shown and marked
+        card.get_by_role("button", name="Show me").click()
+        expect(page.locator(".pages-card")).to_have_class(re.compile(r"\bpointed\b"))
+        expect(page.locator(".pages-card")).to_be_in_viewport()
+        # closed: kept by the server, for the window and any browser alike
+        card.get_by_role("button", name="Got it").click()
+        expect(card).to_have_count(0)
+        waits_for(page, lambda: news_file(isolated_home)["seen"] == "0.6")
+        page.reload()
+        page.wait_for_selector(".pages-card")
+        page.wait_for_function("window.libre.store.get().news?.seen === '0.6'")
+        expect(page.locator(".news-card")).to_have_count(0)
+        expect(page.locator(".first-steps")).to_have_count(0)
+
+
+def test_who_began_with_this_version_gets_the_first_steps_and_no_news(
+    app_url,  # noqa: F811
+    isolated_home,
+):
+    """A first start: the choice goes on the panel and Start goes on to the launcher, where the
+    panel's card leads and the first steps follow."""
+    with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
+        page.wait_for_selector(".start.first .theme-card")
+        page.locator(".theme-card[data-theme='lumen'] .theme-card-main").click()
+        page.wait_for_selector(".start.launcher .first-steps")
+        expect(page.locator(".panel-card h2")).to_contain_text("Turing 9.2")
+        expect(page.locator(".news-card")).to_have_count(0)
+        assert main_column(page)[0] == "panel-card"
+        assert news_file(isolated_home) == {"first": __version__, "seen": ""}
 
 
 def test_the_mounting_question_is_asked_only_where_it_changes_something(

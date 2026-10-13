@@ -1,7 +1,7 @@
 // Start's overview of what the panel shows when (its pages, switched on and off right here), the
 // first steps after a first start (each says what it does and does it, until all are done or the
 // person hides them), and the way to the panel's own start screen. Design → Pages has the pages
-// in full.
+// in full. The rows of the first steps are the news' too (news.js).
 
 import { refreshPages, themeName } from "../../core/actions.js";
 import { endpoints } from "../../core/api.js";
@@ -116,7 +116,8 @@ export function PagesCard() {
   </section>`;
 }
 
-/** Rows of things to do, each with its mark (ticked when done), what it is and what does it. */
+/** Rows of things to do, each with its mark (ticked when done), what it is and what does it:
+ * the first steps and the news. */
 export function StepList({ steps }) {
   return html`<ol class="first-steps-list">
     ${steps.map(

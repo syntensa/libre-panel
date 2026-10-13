@@ -297,9 +297,10 @@
   font-weight: 600;
 }
 
-/* the first steps (a first start) and what the panel shows when (the normal theme and each
-   page with its switch): short lists */
+/* the first steps (a first start of this version), the news (an update) and what the panel
+   shows when (the normal theme and each page with its switch): short lists */
 .first-steps,
+.news-card,
 .pages-card {
   display: flex;
   flex-direction: column;
@@ -308,6 +309,34 @@
   border-radius: 18px;
   background: var(--panel-2);
   border: 1px solid var(--line);
+}
+
+.news-card {
+  background: linear-gradient(180deg, var(--accent-softer), transparent 70%), var(--panel-2);
+  border-color: rgba(46, 230, 214, 0.22);
+}
+
+.news-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
+/* "Show me" of the news: the overview is marked for a moment */
+.pages-card.pointed {
+  animation: pointed 1.6s ease-out;
+}
+
+@keyframes pointed {
+  0%,
+  35% {
+    border-color: var(--accent);
+    background: var(--accent-softer);
+  }
+  100% {
+    border-color: var(--line);
+    background: var(--panel-2);
+  }
 }
 
 .pages-card-head,
@@ -322,7 +351,8 @@
 }
 
 .pages-card h2,
-.first-steps h2 {
+.first-steps h2,
+.news-card h2 {
   margin: 0;
   font-size: 16px;
   font-weight: 700;

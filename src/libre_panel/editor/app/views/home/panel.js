@@ -229,7 +229,7 @@ function pictureSize(model, theme, way) {
 /**
  * The panel at a glance, at the top of Start: its state, what it shows with the way to edit
  * that, its picture, and pause, brightness and upside down. How the panel is mounted is a
- * choice made once: the first start, the first steps and Settings → Panel ask it.
+ * choice made once: the first start, the first steps (or the news) and Settings → Panel ask it.
  */
 export function PanelCard() {
   const { app } = useStore((s) => ({ app: s.app, themes: s.themes, versions: s.versions }));
