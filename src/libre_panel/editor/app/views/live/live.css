@@ -266,8 +266,13 @@
   line-height: 1.45;
 }
 
+.live-video > .dot {
+  align-self: flex-start;
+  margin-top: 6px; /* beside the first line of a text that wraps */
+}
+
 .live-video-text {
-  flex: 1 1 auto;
+  flex: 1 1 0; /* the text wraps in its place; it does not drop below the dot */
   min-width: 0;
 }
 
