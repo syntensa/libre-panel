@@ -26,7 +26,9 @@ export function dismiss(id) {
   toasts.set((state) => ({ list: state.list.filter((item) => item.id !== id) }));
 }
 
-export const toastError = (error) => toast(error?.message || String(error), { kind: "error" });
+/** An error as a message: its text, never an empty box (a failure without words says so). */
+export const toastError = (error) =>
+  toast(error?.message || (error && typeof error !== "object" ? String(error) : t("Something went wrong.")), { kind: "error" });
 
 export function Toasts() {
   const list = useSelector(toasts, (state) => state.list);

@@ -1,7 +1,8 @@
 """The app's shell for 0.6.0: Ctrl+K finds every feature by the words a person uses (German and
 English), what it suggests and what it says when it finds nothing, the help, the header the views
-share and the way back from Settings, and the panel chip. Skipped where Playwright or Chromium
-are missing, as test_app_browser.py is."""
+share and the way back from Settings, the panel chip, and the messages and dialogs: plain words
+for a failure, and unsaved work saved first. Skipped where Playwright or Chromium are missing, as
+test_app_browser.py is."""
 
 import pytest
 
@@ -294,3 +295,84 @@ def test_the_chip_shows_the_running_panel_first(app_url, isolated_home):  # noqa
         titles = page.locator(".popover .pop-title").all_inner_texts()
         assert [title.lower() for title in titles] == ["on the panel now", "this theme is made for"]
         expect(page.locator(".popover .pop-hint")).to_contain_text("Settings → Panel")
+
+
+# -- messages and dialogs --------------------------------------------------------------------------
+
+
+def test_a_failure_says_what_happened_in_plain_words(app_url, isolated_home):  # noqa: F811
+    """The server's reason without the name of the exception and the system's error numbers: a
+    file that may not be changed or another program holds, a full disk, a bug in Libre Panel."""
+    import json
+
+    def refused(route, request):
+        if request.method != "POST":
+            return route.continue_()
+        reason = "[Errno 13] Permission denied: 'C:\\\\Panel\\\\themes\\\\mine\\\\theme.json'"
+        body = json.dumps({"error": reason})
+        route.fulfill(status=409, content_type="application/json", body=body)
+
+    routes = {**a_bar(isolated_home), "**/api/themes/mine": refused}
+    with browser_page(app_url, "design", routes=routes, allow=("/api/themes/mine",)) as page:
+        cases = [
+            ("[WinError 32] The process cannot access the file: 'theme.json'", 409),
+            ("OSError: [Errno 28] No space left on device", 500),
+            ("KeyError: 'palette'", 500),
+            ("the theme has no widgets", 400),
+            ("", 400),
+        ]
+        said = page.evaluate(
+            """async (cases) => {
+              const { readable } = await import('/app/core/api.js');
+              return cases.map(([text, status]) => readable(text, status));
+            }""",
+            cases,
+        )
+        assert said == [
+            "Libre Panel may not change theme.json: it is read-only, "
+            "or another program has it open.",
+            "The disk is full: nothing could be saved.",
+            "Something went wrong in Libre Panel: 'palette'",
+            "the theme has no widgets",  # a sentence of the server's own stays as it is
+            "Something went wrong.",
+        ]
+        js(page, "window.libre.doc.edit('t', (theme) => { theme.name = 'Mine'; })")
+        page.keyboard.press("Control+s")  # Lumen is built in: saved under a name of one's own
+        page.locator(".dialog input").fill("mine")
+        page.locator(".dialog button[type='submit']").click()
+        expect(page.locator(".toast.error")).to_have_text(
+            "Libre Panel may not change C:\\Panel\\themes\\mine\\theme.json: it is read-only, "
+            "or another program has it open."
+        )
+        assert js(page, "window.libre.store.get().dirty") is True  # nothing is lost
+
+
+def test_unsaved_changes_can_be_saved_before_another_theme_opens(app_url, isolated_home):  # noqa: F811
+    """Opening another theme with unsaved changes offers to save them first (it was Discard or
+    Cancel, and the work had to be saved by hand and the other theme opened again)."""
+    from libre_panel.theme.model import load_theme
+
+    routes = a_bar(isolated_home)
+    with browser_page(app_url, "design", routes=routes, allow=PICTURE) as page:
+        js(page, "window.libre.doc.edit('t', (theme) => { theme.name = 'My Lumen'; })")
+        palette(page, "open theme encore")
+        page.keyboard.press("Enter")
+        dialog = page.locator(".dialog")
+        expect(dialog).to_contain_text("The changes to “My Lumen” since it was last saved are lost")
+        save = dialog.get_by_role("button", name="Save first")
+        expect(save).to_be_focused()  # Enter keeps the work
+        save.click()
+        dialog.locator("input").fill("my-lumen")  # Lumen is built in: it asks for a name
+        dialog.locator("button[type='submit']").click()
+        page.wait_for_function("window.libre.store.get().doc.id === 'encore'")
+        assert load_theme(isolated_home / "themes" / "my-lumen").name == "My Lumen"
+        assert js(page, "window.libre.store.get().dirty") is False
+        # Cancel in the name's dialog: nothing is saved, and the theme stays open
+        js(page, "window.libre.doc.edit('t', (theme) => { theme.name = 'My Encore'; })")
+        palette(page, "open theme arena")
+        page.keyboard.press("Enter")
+        dialog.get_by_role("button", name="Save first").click()
+        dialog.get_by_role("button", name="Cancel").click()
+        expect(dialog).to_have_count(0)
+        assert js(page, "window.libre.store.get().doc.id") == "encore"
+        assert js(page, "window.libre.doc.theme().name") == "My Encore"

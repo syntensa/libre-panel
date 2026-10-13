@@ -1,7 +1,8 @@
 // What every view can do with the theme being edited: open, save, save as,
 // import, export, show it on the panel, fit it to another panel.
 
-import { confirmDialog, promptDialog } from "../ui/dialog.js";
+import { html } from "../lib/preact.js";
+import { confirmDialog, openDialog, promptDialog } from "../ui/dialog.js";
 import { toast, toastError } from "../ui/toast.js";
 import { endpoints } from "./api.js";
 import { clone, commit, docSerial, markClean, openDoc, setSelection, touch, updateDoc } from "./doc.js";
@@ -60,15 +61,27 @@ export function pageOf(id) {
   return (id && pages.find((page) => page.theme === id)?.id) || null;
 }
 
-/** Nothing unsaved, or the user agrees to lose it. */
+/**
+ * Nothing unsaved, or the user saves it first (Save, which asks for a name where the theme is
+ * built in) or agrees to lose it. False: the user would rather stay where they are.
+ */
 export async function confirmDiscard() {
   if (!store.get().dirty) return true;
-  return confirmDialog({
-    title: t("Discard unsaved changes?"),
-    message: t("The changes to this theme since it was last saved are lost."),
-    confirm: t("Discard"),
-    danger: true,
-  });
+  const name = store.get().doc?.theme?.name || t("this theme");
+  const choice = await openDialog(
+    (close) => html`
+      <h2 class="dialog-title">${t("Discard unsaved changes?")}</h2>
+      <p class="dialog-text">${t("The changes to “{name}” since it was last saved are lost, unless you save them first.", { name })}</p>
+      <div class="dialog-actions">
+        <button type="button" class="btn" onClick=${() => close(null)}>${t("Cancel")}</button>
+        <button type="button" class="btn btn-danger" onClick=${() => close("discard")}>${t("Discard")}</button>
+        <button type="button" class="btn btn-primary" autofocus onClick=${() => close("save")}>${t("Save first")}</button>
+      </div>
+    `,
+    { label: t("Discard unsaved changes?") },
+  );
+  if (choice === "save") return save();
+  return choice === "discard";
 }
 
 /** Open a saved theme for editing (after asking about unsaved changes). */
@@ -151,16 +164,21 @@ export async function saveAs() {
       ? t("“{name}” is built in and cannot be changed: your changes are saved as a theme of your own.", { name: themeName(doc.id) })
       : null,
     label: t("Name of the theme's folder"),
-    hint: t("Letters, digits, - _ and ."),
+    hint: t("a–z, 0–9, - _ and ., no spaces"),
     value: doc.builtin || !doc.id ? suggestion : doc.id,
     confirm: t("Save"),
     validate: (value) =>
-      THEME_NAME.test(value) && !value.includes("..") ? null : t('"{id}" is not a valid theme name', { id: value }),
+      THEME_NAME.test(value) && !value.includes("..") ? null : t("“{id}” cannot be the name of a folder: use a–z, 0–9, - _ and . (no spaces).", { id: value }),
   });
   if (!id) return false;
   const mine = themes.some((theme) => theme.id === id && !theme.builtin);
   if (mine && id !== doc.id) {
-    const sure = await confirmDialog({ title: t('Overwrite your theme "{id}"?', { id }), confirm: t("Overwrite"), danger: true });
+    const sure = await confirmDialog({
+      title: t("Overwrite your theme “{id}”?", { id }),
+      message: t("The theme you saved under this name before is replaced by this one."),
+      confirm: t("Overwrite"),
+      danger: true,
+    });
     if (!sure) return false;
   }
   try {
@@ -187,7 +205,7 @@ export async function applyToPanel() {
   try {
     store.set({ pages: await endpoints.setPage(page || "normal", { theme: saved.id }) });
     if (!page) store.set({ page: "normal" });
-    toast(t('"{id}" is now shown on the panel', { id: saved.id }), { kind: "success" });
+    toast(t("“{name}” is now shown on the panel", { name: saved.theme.name || saved.id }), { kind: "success" });
     return true;
   } catch (error) {
     toastError(error);
@@ -210,7 +228,7 @@ export async function showOnPanel(id) {
   const { doc, dirty } = store.get();
   if (!dirty && doc?.id !== id) await openTheme(id, { ask: false, page: "normal" });
   else if (doc?.id === id && !store.get().page) store.set({ page: "normal" });
-  toast(t('"{id}" is now shown on the panel', { id: themeName(id) }), { kind: "success" });
+  toast(t("“{name}” is now shown on the panel", { name: themeName(id) }), { kind: "success" });
   return true;
 }
 
@@ -243,8 +261,16 @@ export function exportTheme() {
 export async function importTheme(file) {
   const chosen = file || (await pickFile(".json,application/json"));
   if (!chosen || !(await confirmDiscard())) return false;
+  let theme;
   try {
-    const theme = JSON.parse(await chosen.text());
+    theme = JSON.parse(await chosen.text());
+  } catch {
+    toast(t("“{file}” is not a theme file: choose one exported from Libre Panel, or the theme.json in a theme's folder.", { file: chosen.name }), {
+      kind: "error",
+    });
+    return false;
+  }
+  try {
     await endpoints.render(theme); // checks it before anything is replaced
     openDoc({ theme, dirty: true });
     store.set({ page: null });
@@ -253,7 +279,7 @@ export async function importTheme(file) {
     });
     return true;
   } catch (error) {
-    toast(t("Import failed: {error}", { error: error.message }), { kind: "error" });
+    toast(t("“{file}” cannot be opened as a theme: {error}", { file: chosen.name, error: error.message }), { kind: "error" });
     return false;
   }
 }
