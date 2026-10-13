@@ -99,6 +99,8 @@ on an overview and speak plainly; and Ctrl+K finds everything by the words you w
   name for screen readers
 
 **Fixes**
+- Linux, with a tray of X11: *Quit* now and then took 15 s and ended the app the hard way,
+  as the tray's loop missed the call to stop; Quit no longer waits for it
 - On a bar on end, Design opened Lumen lying on its side at start while the panel showed
   Lumen Vertical
 - *Settings*: a link to *Advanced* opens it, instead of landing on a closed card

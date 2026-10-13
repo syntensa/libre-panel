@@ -143,6 +143,7 @@ def open_path(path: Path) -> None:
 
 class Tray:
     POLL_S = 1.0
+    STOP_S = 2.0  # how long Quit waits for an X11 tray's loop to end
 
     def __init__(self, app: BackgroundApp, pystray: Any, log_path: Path | None = None) -> None:
         self.app = app
@@ -387,7 +388,24 @@ class Tray:
             "libre-panel", logo(64, state["state"]), tooltip(state), self.build_menu()
         )
         self.app.on_quit(self.stop_icon)
-        self.icon.run(setup=self._setup)
+        if not type(self.icon).__module__.endswith("._xorg"):
+            self.icon.run(setup=self._setup)
+            return
+        # pystray's loop for an X11 tray now and then misses the wake-up its stop() sends and
+        # waits for an X event that never comes (one quit in a few): there the loop runs
+        # beside, and Quit goes on without it once it has had a moment to end.
+        loop = threading.Thread(target=self._run_icon, name="tray", daemon=True)
+        loop.start()
+        while not self.app.quit_requested.wait(0.5):  # (a timeout keeps Ctrl+C working)
+            if not loop.is_alive():  # the icon went (its tray did): the panel goes on
+                return
+        loop.join(self.STOP_S)
+
+    def _run_icon(self) -> None:
+        try:
+            self.icon.run(setup=self._setup)
+        except Exception:  # the icon is a convenience; the panel must keep running
+            log.exception("tray icon failed; Libre Panel keeps running without one")
 
 
 def _quit_on_signals(app: BackgroundApp) -> None:

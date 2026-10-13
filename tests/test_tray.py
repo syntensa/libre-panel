@@ -481,3 +481,44 @@ def test_quit_always_ends_the_process():
     started = time.monotonic()
     result = subprocess.run([sys.executable, "-c", code], timeout=30)
     assert result.returncode == 0 and time.monotonic() - started < 20
+
+
+def test_quit_goes_on_where_an_x11_tray_s_loop_does_not_end(isolated_home):
+    """pystray's loop for an X11 tray now and then misses the wake-up its stop() sends and
+    waits for an X event that never comes: Quit must not wait for it (the release's smoke test
+    saw the app end only through its last-resort exit, one quit in a few)."""
+    import types
+
+    write_config(isolated_home)
+    app = BackgroundApp(
+        port=0,
+        autostart=Autostart("win32", registry=FakeRegistry()),
+        autostart_command=["LibrePanel.exe", "tray", "--background"],
+    )
+    app.start()
+    never = threading.Event()
+
+    class Icon:  # pystray's X11 icon, as far as the tray can tell, whose loop never ends
+        def __init__(self, *args):
+            self.stopped = False
+
+        def run(self, setup=None):
+            never.wait()
+
+        def stop(self):
+            self.stopped = True
+
+    Icon.__module__ = "pystray._xorg"
+    backend = types.SimpleNamespace(Icon=Icon, Menu=pystray.Menu, MenuItem=pystray.MenuItem)
+    tray = Tray(app, backend)
+    running = threading.Thread(target=tray.run)
+    running.start()
+    try:
+        time.sleep(0.3)
+        app.quit()
+        running.join(Tray.STOP_S + 3)
+        assert not running.is_alive()
+        assert tray.icon.stopped
+    finally:
+        never.set()
+        app.shutdown()
