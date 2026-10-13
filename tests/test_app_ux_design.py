@@ -323,3 +323,35 @@ def test_the_tips_name_what_is_not_in_sight_and_the_view_says_what_it_does(app_u
         expect(view.locator(".row.stacked .row-label")).to_have_count(2)
         expect(view.get_by_role("radiogroup", name="Steps of the modules")).to_be_visible()
         expect(view).to_contain_text("Alt while dragging: free")
+
+
+def test_on_a_bar_on_end_design_edits_the_upright_version_and_says_so(app_url, isolated_home):  # noqa: F811
+    """On a bar on end Design opened Lumen lying on its side (the settings came after the theme),
+    and "On the panel" said the panel showed it. It opens Lumen Vertical, says which version it
+    is and what it goes with, follows when the panel is turned, and a copy is named to go with
+    a copy of Lumen."""
+    from libre_panel.config import set_config_value
+
+    choose_theme(isolated_home, "lumen")
+    set_config_value("device.model", "turing-9.2-usb")
+    set_config_value("device.orientation", "portrait")
+    with browser_page(app_url) as page:
+        page.wait_for_function("window.libre.store.get().doc?.id === 'lumen-vertical'")
+        version = page.locator(".inspector .inspector-version")
+        expect(version).to_contain_text("The version of Lumen for a panel mounted vertically")
+        expect(page.locator(".btn-apply")).to_have_text("On the panel")
+        # the panel turned in Settings: Design follows it, and back
+        mounted = page.locator(".settings-row", has_text="How the panel is mounted")
+        for way, theme in (("Horizontal", "lumen"), ("Vertical", "lumen-vertical")):
+            page.goto(f"{app_url}#/settings/panel")
+            mounted.get_by_role("radio", name=way).click()
+            page.goto(f"{app_url}#/design")
+            page.wait_for_function(f"window.libre.store.get().doc?.id === {theme!r}")
+        expect(version).to_have_count(1)
+        # saved as one's own: named to go with a copy of Lumen ("lumen-mine")
+        js(page, "window.libre.doc.edit('n', (theme) => { theme.description = 'mine'; })")
+        page.locator(".btn-apply").click()
+        dialog = page.locator(".dialog")
+        expect(dialog.locator("input")).to_have_value("lumen-mine-vertical")
+        dialog.locator("button[type='submit']").click()
+        waits_for(page, lambda: settings_config().theme == "lumen-mine-vertical")

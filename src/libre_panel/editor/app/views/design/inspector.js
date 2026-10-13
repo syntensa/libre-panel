@@ -2,7 +2,7 @@
 // (specs "primary", theme/model.py PRIMARY_FIELDS) in sections; the rest are on
 // the "Details" page. With nothing selected it is the theme's settings.
 
-import { PALETTE_NAME } from "../../core/actions.js";
+import { PALETTE_NAME, themeName } from "../../core/actions.js";
 import { edit, isModule, selectedWidgets, setSelection, theme as currentTheme, widgetById } from "../../core/doc.js";
 import { enumLabel, fieldLabel, t, widgetLabel } from "../../core/i18n.js";
 import { store, useStore } from "../../core/state.js";
@@ -35,6 +35,7 @@ import {
 import { QUICK_SENSORS, SensorButton, Sparkline, formatValue, sensorName, shortSensorName, useReadings } from "./sensors.js";
 import { uploadAsset } from "../../core/actions.js";
 import { hardwareParts, partOfSensor } from "../../core/hardware.js";
+import { VERTICAL } from "../../core/orientation.js";
 import { panelName, currentModel } from "../../shell/panel-popover.js";
 import { HardwareNameField } from "../settings/hardware.js";
 import { navigate } from "../../shell/views.js";
@@ -880,6 +881,10 @@ function Background({ theme }) {
 function ThemeInspector({ theme }) {
   const [page, setPage] = usePage();
   const builtin = useStore((s) => s.doc?.builtin); // why saving it asks for a name
+  // a theme's version for a panel mounted vertically (Lumen Vertical): the one it goes with
+  const versionOf = useStore((s) =>
+    (s.versions || []).some((item) => item.id === s.doc?.id) ? s.doc.id.slice(0, -VERTICAL.length) : null,
+  );
   const specs = store.get().specs;
   const hasModules = Boolean(theme.grid || theme.widgets.some(isModule));
   if (page === "details") return html`<${ThemeDetails} theme=${theme} onBack=${() => setPage("main")} />`;
@@ -890,6 +895,12 @@ function ThemeInspector({ theme }) {
     <div class="inspector-body">
       <p class="inspector-note">
         ${t("The whole theme. Click something on the panel to change just that.")}
+        ${versionOf
+          ? html`<span class="inspector-version">
+              <${Icon} name="portrait" size=${14} />
+              <span>${t("The version of {name} for a panel mounted vertically. Mounted horizontally, the panel shows {name}, a design of its own: what you change here stays in this version.", { name: themeName(versionOf) })}</span>
+            </span>`
+          : null}
         ${builtin ? html`<span class="inspector-builtin">${t("Built in: your changes are saved as a theme of your own.")}</span>` : null}
       </p>
       <${Section} title=${t("Name")}>

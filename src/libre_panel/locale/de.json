@@ -1686,7 +1686,8 @@
     "Add what it should show from the blocks.": "Füg aus den Bausteinen hinzu, was es zeigen soll.",
     "Show the blocks": "Bausteine zeigen",
     "Nothing on the panel yet. What you add from the blocks is listed here, the one in front on top.": "Noch nichts auf dem Panel. Was du aus den Bausteinen hinzufügst, steht hier, das vorderste oben.",
-    "Steps of the modules": "Schritte der Bausteine"
+    "Steps of the modules": "Schritte der Bausteine",
+    "The version of {name} for a panel mounted vertically. Mounted horizontally, the panel shows {name}, a design of its own: what you change here stays in this version.": "Die Fassung von {name} für ein hochkant eingebautes Panel. Quer eingebaut zeigt das Panel {name}, ein eigenes Design: Was du hier änderst, bleibt in dieser Fassung."
   },
   "fields": {
     "align": "Ausrichtung",

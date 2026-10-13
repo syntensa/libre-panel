@@ -7,7 +7,7 @@ import { toast, toastError } from "../ui/toast.js";
 import { endpoints } from "./api.js";
 import { clone, commit, docSerial, markClean, openDoc, setSelection, touch, updateDoc } from "./doc.js";
 import { t } from "./i18n.js";
-import { isVersion, versionFor } from "./orientation.js";
+import { VERTICAL, isVersion, versionFor } from "./orientation.js";
 import { store } from "./state.js";
 
 export const THEME_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -158,10 +158,16 @@ export async function saveAs() {
   // a copy of a built-in theme that kept its name was a second "Lumen" in every list: it is
   // "Lumen (mine)", and its folder is named after that, free of the others'
   const copy = doc.builtin && doc.theme.name === themeName(doc.id) ? t("{name} (mine)", { name: doc.theme.name }) : null;
-  const taken = new Set([...themes, ...(store.get().versions || [])].map((theme) => theme.id));
-  const first = slug(copy || doc.theme.name) + (doc.builtin && !copy ? "-custom" : "") || "my-theme";
-  let suggestion = first;
-  for (let n = 2; doc.builtin && taken.has(suggestion); n++) suggestion = `${first}-${n}`;
+  const all = [...themes, ...(store.get().versions || [])];
+  const taken = new Set(all.map((theme) => theme.id));
+  // a copy of a version for a panel on end keeps its ending after the copy's name:
+  // "lumen-mine-vertical" goes with "lumen-mine", a copy of Lumen, as "lumen-vertical" with "lumen"
+  const end = doc.builtin && doc.id && isVersion({ id: doc.id }, all) ? VERTICAL : "";
+  const first = end
+    ? slug(copy ? t("{name} (mine)", { name: themeName(doc.id.slice(0, -end.length)) }) : doc.theme.name)
+    : slug(copy || doc.theme.name) + (doc.builtin && !copy ? "-custom" : "") || "my-theme";
+  let suggestion = first + end;
+  for (let n = 2; doc.builtin && taken.has(suggestion); n++) suggestion = `${first}-${n}${end}`;
   const id = await promptDialog({
     title: t("Save as…"),
     // why a person who only wanted it on the panel is asked for a name

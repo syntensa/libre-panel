@@ -2,9 +2,11 @@
 // pictures on the left; the inspector on the right; a toolbar over the
 // selection. Everything here is a command too (Ctrl+K).
 
+import { openTheme } from "../../core/actions.js";
 import { registerCommands, registerProvider } from "../../core/commands.js";
 import { edit, isModule, selectedWidgets, selection, setSelection, single, widgets } from "../../core/doc.js";
 import { t, widgetLabel } from "../../core/i18n.js";
+import { VERTICAL, themeEntry, versionFor } from "../../core/orientation.js";
 import { bindKey } from "../../core/shortcuts.js";
 import { setPref, store, useStore } from "../../core/state.js";
 import { html, useRef, useState } from "../../lib/preact.js";
@@ -135,6 +137,23 @@ registerView({
   icon: "pencil",
   component: DesignView,
   header: { lead: ThemeTitle, center: WideSearch, actions: DesignActions },
+});
+
+// -- the panel turned ------------------------------------------------------------------------------
+
+// Turned on end or back (Start, Settings), the panel shows another version of its theme (Lumen
+// Vertical for Lumen): the open theme follows, so what is edited is what the panel shows, unless
+// it holds work not saved yet.
+let mountedAs;
+store.subscribe((state) => {
+  const way = state.settings?.config?.device?.orientation;
+  if (way === undefined || way === mountedAs) return;
+  const before = mountedAs;
+  mountedAs = way;
+  const { doc, dirty, page } = state;
+  if (before === undefined || !way || !doc?.id || dirty) return;
+  const theme = doc.id.endsWith(VERTICAL) ? doc.id.slice(0, -VERTICAL.length) : doc.id;
+  if (themeEntry(theme) && versionFor(theme) !== doc.id) openTheme(theme, { page, ask: false });
 });
 
 // -- keys ---------------------------------------------------------------------------------------

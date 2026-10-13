@@ -1245,6 +1245,20 @@
   color: var(--warn);
 }
 
+/* the version for a panel on end: which one this is, and what it goes with */
+.inspector-version {
+  display: flex;
+  gap: 7px;
+  margin-top: 6px;
+  color: var(--text-2);
+}
+
+.inspector-version svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--accent);
+}
+
 /* where something is set elsewhere (Look), and the way there */
 .inspector-aside {
   display: flex;

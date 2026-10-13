@@ -8,6 +8,7 @@ import * as commands from "./core/commands.js";
 import * as doc from "./core/doc.js";
 import { loadLanguage, t } from "./core/i18n.js";
 import "./core/preview.js";
+import { loadSettings } from "./core/settings.js";
 import { loadSetup } from "./core/setup.js";
 import { store } from "./core/state.js";
 import { html, render } from "./lib/preact.js";
@@ -26,7 +27,9 @@ async function start() {
   try {
     await loadLanguage();
     store.set({ specs: await endpoints.specs() });
-    await Promise.all([refreshThemes(), refreshPages()]);
+    // and config.toml's settings: on a bar on end the first theme opens in its version for it
+    // (Lumen Vertical), as the panel shows it, not lying on its side
+    await Promise.all([refreshThemes(), refreshPages(), loadSettings()]);
     endpoints.sensors().then((sensors) => store.set({ sensors }), () => {});
     endpoints.pluginPages().then((plugins) => store.set({ plugins }), () => {});
     loadSetup(); // what the setup of Linux would bring (Start's card, Settings, Ctrl+K)
