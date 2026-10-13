@@ -1840,7 +1840,8 @@
   gap: 8px;
 }
 
-.design-steps-list li {
+.design-steps-list li,
+.tip-list li {
   display: flex;
   align-items: flex-start;
   gap: 9px;
@@ -1865,6 +1866,39 @@
   align-self: flex-start;
   height: 30px;
   padding: 0 14px;
+}
+
+/* -- the tips on the rail -------------------------------------------------------------------- */
+
+.tip-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tip-icon {
+  flex-shrink: 0;
+  width: 22px;
+  display: flex;
+  justify-content: center;
+  padding-top: 1px;
+  color: var(--accent);
+}
+
+.tip-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding-top: 4px;
+}
+
+/* the view's choices: each a name, a line of what it does, then the control */
+.view-options .row.stacked .row-label small {
+  margin-top: 1px;
 }
 
 /* -- a theme with nothing on it ------------------------------------------------------------ */

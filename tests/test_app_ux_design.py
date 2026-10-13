@@ -298,3 +298,28 @@ def test_a_first_visit_has_three_steps_and_an_empty_theme_says_how_to_fill_it(ap
         empty.get_by_role("button", name="Show the blocks").click()
         page.locator('.tile[data-item="module:clock"]').click()
         expect(empty).to_have_count(0)
+
+
+def test_the_tips_name_what_is_not_in_sight_and_the_view_says_what_it_does(app_url):  # noqa: F811
+    """Selecting several, the menu of a right click, locking, moving freely and the keys were
+    nowhere to be read in Design; the rail's Tips name them and lead to every key and to the
+    three steps again. The view's choices each say what they do, above their buttons (the module
+    grid's hint stood beside them as a column of single words)."""
+    with browser_page(app_url) as page:
+        page.locator(".design-steps").get_by_role("button", name="Got it").click()
+        page.locator(".rail-tips").click()
+        tips = page.locator(".popover .tip-list li")
+        expect(tips).to_have_count(6)
+        expect(tips.first).to_contain_text("Shift+click")
+        expect(tips.last).to_contain_text("Ctrl+K finds every block")
+        page.get_by_role("button", name="The three steps again").click()
+        expect(page.locator(".design-steps")).to_have_count(1)
+        page.locator(".rail-tips").click()
+        page.get_by_role("button", name="All keyboard shortcuts").click()
+        expect(page.locator(".dialog .dialog-title")).to_have_text("Keyboard shortcuts")
+        page.keyboard.press("Escape")
+        page.locator(".rail-gear").click()
+        view = page.locator(".popover")
+        expect(view.locator(".row.stacked .row-label")).to_have_count(2)
+        expect(view.get_by_role("radiogroup", name="Steps of the modules")).to_be_visible()
+        expect(view).to_contain_text("Alt while dragging: free")

@@ -20,6 +20,7 @@ import { Popover } from "../../ui/layer.js";
 import { paletteOpen } from "../../ui/palette.js";
 import { Canvas, dropItem, setZoom, zoomStep } from "./canvas.js";
 import { FINISH_NAMES, finishesFor } from "./fields.js";
+import { Tips } from "./guide.js";
 import { Images } from "./images.js";
 import { Inspector, MODULE_ICONS, TYPE_ICONS } from "./inspector.js";
 import { Layers } from "./layers.js";
@@ -54,6 +55,8 @@ const PANELS = () => [
   { id: "images", icon: "images", label: t("Pictures"), title: t("Pictures") },
 ];
 
+/** How things move and snap on the canvas. Each choice has its name above it and a line of what
+ * it does (the module grid's hint was a column of words beside its buttons). */
 function ViewOptions() {
   const prefs = useStore((s) => s.prefs);
   const [open, setOpen] = useState(false);
@@ -63,27 +66,28 @@ function ViewOptions() {
       <${Icon} name="sliders" size=${20} />
       <span>${t("View")}</span>
     </button>
-    <${Popover} anchor=${anchor} open=${open} onClose=${() => setOpen(false)} placement="right-end" label=${t("View and snapping")} width=${300}>
-      <div class="pop-section">
+    <${Popover} anchor=${anchor} open=${open} onClose=${() => setOpen(false)} placement="right-end" label=${t("View and snapping")} width=${320}>
+      <div class="pop-section view-options">
         <div class="pop-title">${t("View and snapping")}</div>
-        <${Row} label=${t("Snap")} hint=${t("in pixels; 1: whole pixels")}>
+        <${Row} class="stacked" label=${t("Snap")} hint=${t("What you move or size goes in steps of this many pixels.")}>
           <${Segmented} label=${t("Snap")} value=${prefs.snap} onChange=${(value) => setPref("snap", value)}
             options=${[0, 1, 4, 8, 16].map((value) => ({ value, label: value ? `${value}` : t("off") }))} />
         <//>
-        <${Row} label=${t("Module grid")} hint=${t("how modules move and grow: by whole cells, as the pictures of the modules show them, by half ones, or by each line of the theme's grid; Alt while dragging: by each line")}>
-          <${Segmented} label=${t("Module grid")} value=${prefs.cells || "medium"} onChange=${(value) => setPref("cells", value)}
+        <${Row} class="stacked" label=${t("Steps of the modules")} hint=${t("How modules move and grow: coarse by whole cells, fine by each line of the grid.")}>
+          <${Segmented} label=${t("Steps of the modules")} value=${prefs.cells || "medium"} onChange=${(value) => setPref("cells", value)}
             options=${[
               { value: "coarse", label: t("coarse") },
               { value: "medium", label: t("medium") },
               { value: "fine", label: t("fine") },
             ]} />
         <//>
-        <${Row} label=${t("Guides")} hint=${t("lines to the edges and centres of the others; Alt while dragging: free")}>
+        <${Row} label=${t("Guides")} hint=${t("Lines to the edges and centres of the others while you drag.")}>
           <${Toggle} label=${t("Guides")} checked=${prefs.guides} onChange=${(on) => setPref("guides", on)} />
         <//>
         <${Row} label=${t("Live values")} hint=${t("the preview with this computer's sensors")}>
           <${Toggle} label=${t("Live values")} checked=${prefs.live} onChange=${(on) => setPref("live", on)} />
         <//>
+        <small class="field-hint">${t("Alt while dragging: free, without snapping or guides.")}</small>
       </div>
     <//>`;
 }
@@ -99,6 +103,7 @@ function Rail() {
       </button>`,
     )}
     <div class="rail-flex"></div>
+    <${Tips} />
     <${ViewOptions} />
   </nav>`;
 }
