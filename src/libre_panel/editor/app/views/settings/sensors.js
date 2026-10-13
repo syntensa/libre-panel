@@ -23,7 +23,7 @@ import { Card, CommitField, Note, RestartNote, SettingRow, Status, usePolling } 
 export const loadSensorsSection = () => Promise.all([loadSettings(), loadSourceStates()]);
 
 // What the people who use Libre Panel are told about each source (the others: their name).
-const SOURCES = {
+export const SOURCES = {
   load: {
     title: () => t("Fast load"),
     hint: () => t("The load of the processor and the graphics card, ten times a second, so bars and graphs follow it as it happens."),
@@ -88,7 +88,7 @@ function sourceRows(config, catalog) {
 }
 
 /** A source switched on goes before psutil, the one that fills in the rest. */
-function withSource(listed, name) {
+export function withSource(listed, name) {
   const at = listed.indexOf("psutil");
   return at < 0 || name === "psutil" ? [...listed, name] : [...listed.slice(0, at), name, ...listed.slice(at)];
 }

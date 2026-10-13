@@ -25,7 +25,7 @@ import { CommitField, Note, SettingRow, Status, usePolling } from "./parts.js";
 
 export const loadServicesSection = () => Promise.all([loadSettings(), loadServiceStates()]);
 
-const SERVICES = {
+export const SERVICES = {
   notices: {
     title: () => t("Messages"),
     hint: () => t("Short messages on the panel: the volume, a new track, a sensor past a limit, a restart of the panel."),

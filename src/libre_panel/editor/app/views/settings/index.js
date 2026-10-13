@@ -1,7 +1,7 @@
-// Settings (#/settings, #/settings/<section>): the panel, sensors, services,
-// weather and place, start and system, about. The sections are on the left; a part
-// of the app adds its group to one (sections.js). Built on the shell: see
-// ../../README.md.
+// Settings (#/settings, #/settings/<section>): the overview (what needs attention, each part
+// at a glance), the panel, sensors, game mode and more, weather and place, start and system,
+// about. The sections are on the left; a part of the app adds its group to one (sections.js).
+// Built on the shell: see ../../README.md.
 
 import { registerProvider } from "../../core/commands.js";
 import { t } from "../../core/i18n.js";
@@ -14,6 +14,7 @@ import { navigate, registerView } from "../../shell/views.js";
 import { Icon } from "../../ui/icons.js";
 import { aboutGroups } from "./about.js";
 import { HardwareNames } from "./hardware.js";
+import { AtAGlance, HealthCard, useHealth } from "./health.js";
 import { panelGroups } from "./panel.js";
 import { Note } from "./parts.js";
 import { registerSettingsGroup, registerSettingsSection, settingsGroups, settingsSections } from "./sections.js";
@@ -23,6 +24,12 @@ import { SetupCard, setupShows } from "./setup.js";
 import { systemGroups } from "./system.js";
 import { weatherGroups } from "./weather.js";
 
+registerSettingsSection({
+  id: "overview",
+  order: 5,
+  title: () => t("Overview"),
+  text: () => t("What needs attention, and how each part is set now."),
+});
 registerSettingsSection({
   id: "panel",
   order: 10,
@@ -60,8 +67,13 @@ registerSettingsSection({
   text: () => t("The version, the licence and where to find help."),
 });
 
-// each section's groups: the panel, the sources, the services, the weather, the system, about
+// each section's groups: the overview, the panel, the sources, the services, the weather, the
+// system, about
 for (const [section, groups] of Object.entries({
+  overview: [
+    { id: "health", order: 10, component: HealthCard },
+    { id: "glance", order: 20, component: AtAGlance },
+  ],
   panel: panelGroups,
   sensors: sensorGroups,
   services: serviceGroups,
@@ -117,6 +129,13 @@ function showCard(id, tries = 30) {
   else if (tries) setTimeout(() => showCard(id, tries - 1), 100);
 }
 
+/** How many things need attention, beside the overview's name while another section is open. */
+function HealthCount() {
+  const count = useHealth().items.filter((item) => item.tone !== "info").length;
+  if (!count) return null;
+  return html`<span class="settings-nav-count" title=${t("What needs attention")}>${count}</span>`;
+}
+
 function SettingsView({ rest }) {
   useStore((s) => [s.lang, s.hardware, s.unlockInfo]); // the texts follow the language; groups come and go
   const { problem, down } = useStore((s) => ({ problem: s.settingsError, down: s.settingsDown }));
@@ -133,7 +152,9 @@ function SettingsView({ rest }) {
     <nav class="settings-nav" aria-label=${t("Settings")}>
       ${sections.map(
         (section) => html`<button type="button" key=${section.id} aria-current=${section.id === current.id ? "page" : null}
-          onClick=${() => navigate("settings", section.id)}>${section.title()}</button>`,
+          onClick=${() => navigate("settings", section.id)}>
+          ${section.title()}${section.id === "overview" && current.id !== "overview" ? html`<${HealthCount} />` : null}
+        </button>`,
       )}
     </nav>
     <main class="settings-main" aria-labelledby="settings-title">

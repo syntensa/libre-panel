@@ -525,6 +525,45 @@ def test_the_running_app_tells_how_its_panel_is_doing(make, monkeypatch):
     assert data["running"] == {"state": "waiting", "detail": "no panel"}
 
 
+def test_the_panel_says_whether_its_theme_shows_the_weather(make, isolated_home, monkeypatch):
+    """The overview says so while the weather is off: the theme on the panel (else the normal
+    one) with its modules taken apart as the panel draws them."""
+    from libre_panel.editor import settings
+
+    panel_on_the_bus(monkeypatch)
+    isolated_home.mkdir(parents=True, exist_ok=True)
+    (isolated_home / "config.toml").write_text('theme = "almanac"\n', encoding="utf-8")
+    port = make()
+    assert request(port, "GET", "/api/panel")[1]["weather_theme"] is None
+    (isolated_home / "config.toml").write_text('theme = "nimbus"\n', encoding="utf-8")
+    assert request(port, "GET", "/api/panel")[1]["weather_theme"] == "nimbus"
+    # the running app shows another one now (a page of its own): that one is asked too
+    (isolated_home / "config.toml").write_text('theme = "almanac"\n', encoding="utf-8")
+    panel = SimpleNamespace(state=lambda: {"state": "showing", "detail": "", "theme": "lumen"})
+    port = make(App(panel=panel))
+    assert request(port, "GET", "/api/panel")[1]["weather_theme"] == "lumen"
+    assert "weather.temperature" in settings.theme_reads("libre-default")
+    assert settings.theme_reads("no-such-theme") == frozenset()
+
+
+def test_windows_says_whether_presentmon_is_there(server, monkeypatch):
+    """Games' frame rates come from PresentMon, which the Windows downloads carry; the path
+    config.toml names is the one asked for."""
+    from libre_panel.sensors import presentmon
+
+    monkeypatch.setattr("libre_panel.linux_setup.supported", lambda: False)
+    monkeypatch.setattr(
+        "libre_panel.sensorservice.setup.unlock_state",
+        lambda platform=None: {"platform": "win32", "available": False, "service": None},
+    )
+    asked = []
+    monkeypatch.setattr(presentmon, "find_presentmon", lambda path="": asked.append(path))
+    assert request(server, "GET", "/api/unlock")[1]["presentmon"] is False
+    monkeypatch.setattr(presentmon, "find_presentmon", lambda path="": "C:/x/PresentMon.exe")
+    assert request(server, "GET", "/api/unlock")[1]["presentmon"] is True
+    assert asked == [""]  # none named here
+
+
 # -- the question about the standby clip -----------------------------------------------------
 
 

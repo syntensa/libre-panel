@@ -40,6 +40,27 @@
   font-weight: 600;
 }
 
+/* how many things need attention, beside "Overview" */
+.settings-nav button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-nav-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--warn);
+  color: #1f1500;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+}
+
 .settings-main {
   flex: 1;
   min-width: 0;
@@ -919,4 +940,205 @@ a.btn:hover {
 
 .boot-foot {
   font-size: 13px;
+}
+
+/* -- Overview: what needs attention (health.js), here and in short on Start -------------------- */
+
+.health-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 20px;
+}
+
+.health-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.health-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.health-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.health.good .health-badge {
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--ok);
+}
+
+.health-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.health-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--line);
+}
+
+.health-mark {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 2px;
+  color: var(--warn);
+}
+
+.health-item.error .health-mark {
+  color: var(--danger);
+}
+
+.health-item.info .health-mark {
+  color: var(--muted);
+}
+
+.health-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.health-text strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.health-text span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+  max-width: 600px;
+  overflow-wrap: anywhere;
+}
+
+.health-action {
+  flex-shrink: 0;
+}
+
+.health-action:empty {
+  display: none;
+}
+
+.health-go {
+  gap: 4px;
+}
+
+.health-go .icon {
+  margin-right: -4px;
+}
+
+/* the short form, for Start: a card of its own */
+.health.compact {
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  border: 1px solid rgba(245, 196, 107, 0.3);
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.health.compact .health-head {
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+
+.health.compact .health-head h2 {
+  font-size: 14px;
+}
+
+.health.compact .health-item {
+  padding: 10px 16px;
+  gap: 10px;
+}
+
+.health.compact .health-text strong {
+  font-size: 13px;
+}
+
+.health-short {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.health.compact .health-action .btn {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+/* each part at a glance: a row that leads to its section */
+.glance-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 13px 20px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.glance-row:last-child {
+  border-bottom: none;
+}
+
+.glance-row:hover,
+.glance-row:focus-visible {
+  background: var(--surface-2);
+}
+
+.glance-row > .icon {
+  flex-shrink: 0;
+  color: var(--dim);
+}
+
+.glance-title {
+  width: 210px;
+  flex-shrink: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.glance-value {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.glance-value.ok {
+  color: var(--text-2);
+}
+
+.glance-value.warn {
+  color: var(--warn);
 }

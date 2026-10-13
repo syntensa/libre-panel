@@ -8,6 +8,7 @@ follows, and nothing here has to be done by hand in that file.
 
 from __future__ import annotations
 
+import functools
 import logging
 import math
 import os
@@ -245,6 +246,28 @@ def folders() -> dict[str, str]:
         "themes": str(user_themes_dir()),
         "logs": str(log_file().parent),
     }
+
+
+@functools.lru_cache(maxsize=32)
+def _reads(folder: Path, changed: float) -> frozenset[str]:
+    from libre_panel.render.renderer import _reads as widget_reads
+    from libre_panel.theme.model import load_theme
+    from libre_panel.theme.modules import expand
+
+    return frozenset(widget_reads(expand(load_theme(folder))[0]))
+
+
+def theme_reads(theme_id: str) -> frozenset[str]:
+    """The sensor keys (and patterns) the theme ``theme_id`` reads, its modules taken apart as
+    the panel draws them; none for a theme that cannot be read. Kept until its file changes."""
+    from libre_panel.theme.model import THEME_FILENAME, ThemeError, find_theme
+
+    try:
+        folder = find_theme(theme_id)
+        return _reads(folder, (folder / THEME_FILENAME).stat().st_mtime)
+    except (ThemeError, OSError, ValueError, KeyError, TypeError):
+        log.debug("what %s reads is not known", theme_id, exc_info=True)
+        return frozenset()
 
 
 def notice_text() -> str:
@@ -503,10 +526,12 @@ class Settings:
         else:
             gaps = video_gaps(video, model, proven=False)
         running = None
+        shown = None
         panel = getattr(self.controls, "panel", None)
         if panel is not None:
             state = panel.state()
             running = {"state": state["state"], "detail": state["detail"]}
+            shown = state.get("theme") or None
         return {
             "configured": config.device.model,
             "found": found["info"] if found else None,
@@ -519,7 +544,19 @@ class Settings:
                 "usb": usb,
                 "gaps": gaps,
             },
+            "weather_theme": self._weather_theme(config, shown),
         }
+
+    @staticmethod
+    def _weather_theme(config: Config, shown: str | None) -> str | None:
+        """The theme on the panel (else the normal one) when it shows the weather, which the
+        app then asks for while the weather is off: its id, else None."""
+        from libre_panel.theme.defaults import normal_theme
+
+        for theme_id in dict.fromkeys(filter(None, (shown, normal_theme(config)))):
+            if any(key.startswith("weather.") for key in theme_reads(theme_id)):
+                return theme_id
+        return None
 
     def clip_question(self) -> dict[str, Any]:
         """Whether Start is to ask for the name of the panel's standby clip, and the name the
@@ -642,10 +679,25 @@ class Settings:
             return linux_rights.status(linux_setup.gather())
         from libre_panel.sensorservice import setup
 
+        state = setup.unlock_state()
+        if state.get("platform") == "win32":
+            state["presentmon"] = self._presentmon()
         return {
-            **setup.unlock_state(),
+            **state,
             "command": cli_command("system-setup --service --pawnio --perf-log-users"),
         }
+
+    def _presentmon(self) -> bool | None:
+        """Whether the program that reads the frame rates of games is there (the Windows
+        downloads carry it); None while config.toml cannot be read."""
+        from libre_panel.sensors.presentmon import find_presentmon
+
+        try:
+            options = self._config().sensors.options.get("presentmon", {})
+        except SettingsError:
+            return None
+        path = options.get("path")
+        return find_presentmon(path if isinstance(path, str) else "") is not None
 
     def set_unlock(self, payload: Any) -> dict[str, Any]:
         """``{"action": "unlock"}`` (or ``"remove"``): ``libre-panel system-setup`` with the

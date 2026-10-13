@@ -3497,7 +3497,8 @@ def test_settings_start_and_language(app_url, isolated_home):
         radio(page, "Language", "Deutsch").click()
         waits_for(page, lambda: settings_config().language == "de")
         playwright.expect(page.locator("#settings-title")).to_have_text("Start und System")
-        assert page.locator(".settings-nav button").first.inner_text() == "Panel"
+        nav = page.locator(".settings-nav button")
+        assert nav.first.inner_text().startswith("Übersicht") and nav.nth(1).inner_text() == "Panel"
         playwright.expect(radio(page, "Sprache", "Deutsch")).to_have_attribute(
             "aria-checked", "true"
         )
