@@ -209,11 +209,12 @@ function PageCard({ item, current, open }) {
         ? html`<${Toggle} label=${t("Show the page {page}", { page: name })} checked=${item.on} onChange=${(on) => change({ on })} />`
         : html`<span class="page-card-always">${t("always")}</span>`}
     </div>
-    <button type="button" class="page-card-main" disabled=${!item.theme} onClick=${() => item.theme && open(item)}
-      title=${item.theme ? t("Edit its theme") : null}>
-      ${item.theme ? html`<img alt="" src=${endpoints.previewUrl(versionFor(item.theme), 240)} loading="lazy" />` : html`<span class="page-card-blank"></span>`}
-      ${current ? html`<span class="page-card-badge">${t("Being edited")}</span>` : null}
-    </button>
+    ${item.theme
+      ? html`<button type="button" class="page-card-main" onClick=${() => open(item)} title=${t("Edit its theme")}>
+          <img alt="" src=${endpoints.previewUrl(versionFor(item.theme), 240)} loading="lazy" />
+          ${current ? html`<span class="page-card-badge">${t("Being edited")}</span>` : null}
+        </button>`
+      : null /* the normal theme shows then, as the choice under it says: no empty picture */}
     <div class="page-card-theme">
       <${PageThemeSelect} page=${item.id} theme=${item.theme} suggested=${item.suggested || []}
         normal=${Boolean(item.mode) && !item.own}
