@@ -100,6 +100,19 @@ def test_only_the_frames_of_the_game_that_was_found_count():
     assert counter.readings(end)["game.app"].value == "Browser"
 
 
+def test_where_the_game_found_draws_nothing_the_program_with_the_most_frames_counts():
+    """The program the game service found may be a launcher that another program of the game
+    draws for: after half a minute without a frame of it, the busiest program counts."""
+    counter = FrameCounter()
+    counter.set_target("launcher.exe")
+    end = play(counter, "Game-Win64.exe", 100, 8.0, start=100.0)
+    out = counter.readings(end)
+    assert out["game.app"].value == "Game-Win64" and 120 < out["game.fps"].value < 130
+    counter.add("Launcher.exe", 16.0, end)  # the found one draws again: it counts
+    counter.add("Launcher.exe", 16.0, end + 0.1)
+    assert counter.readings(end + 0.2)["game.app"].value == "Launcher"
+
+
 def test_the_peak_is_the_one_of_the_program_that_counts():
     counter = FrameCounter()
     counter.set_target("game.exe")

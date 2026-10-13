@@ -1717,7 +1717,16 @@ def build_game(b: _Build, _src: Source) -> None:
     icon = min(b.iw, b.ih) * 0.3
     b.icon("idle-icon", "gamepad", b.ix + (b.iw - icon) / 2, b.iy + b.ih / 2 - icon * 0.8, icon,
            b.c("text3"))  # fmt: skip
-    b.label("idle", t("No game running"), b.ix + b.iw / 2, b.iy + b.ih / 2 + icon * 0.45, b.ts,
+    line = b.iy + b.ih / 2 + icon * 0.45
+    b.needs = "!game.fps,!game.name"
+    b.label("idle", t("No game running"), b.ix + b.iw / 2, line, b.ts, align="center",
+            width=b.iw)  # fmt: skip
+    # game mode found a game whose frame rate has not come (yet): its name, not "no game"
+    b.needs = "!game.fps,game.name"
+    b.value("idle-game", "game.name", "{value}", b.ix + b.iw / 2, line, b.ts * 1.05,
+            color=b.c("text2"), align="center", width=b.iw, font="text_font", tabular=False,
+            fallback="", fit="ellipsis")  # fmt: skip
+    b.label("idle-wait", t("No frame rate yet"), b.ix + b.iw / 2, line + b.ts * 1.9, b.ts * 0.85,
             align="center", width=b.iw)  # fmt: skip
     b.needs = ""
 

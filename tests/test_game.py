@@ -91,6 +91,23 @@ def test_a_steam_game_counts_once_its_window_has_been_in_front(steam):
     assert look(4).name == "Space Game"
 
 
+def test_of_a_steam_game_the_program_in_front_counts_not_its_launcher(steam):
+    """A launcher or an anti-cheat's starter that stays in the background is the game's
+    program first; once another program of the game is in front, that one draws, and it is
+    the program whose frames count (the game screen said "No game running" while a game ran)."""
+    machine = FakeMachine()
+    look = detector(steam, machine).look
+    machine.start("launcher.exe", 5, game_path(steam, "SpaceGame", "launcher.exe"))
+    machine.front = 5
+    assert look(0).pid == 5
+    machine.start("space-win64.exe", 9, game_path(steam, "SpaceGame", "space-win64.exe"))
+    machine.front = 9
+    found = look(2)
+    assert (found.pid, found.key) == (9, "steam:10")
+    machine.front = 1  # alt-tab: it stays the program that draws
+    assert look(4).pid == 9
+
+
 def test_where_the_window_in_front_is_not_known_the_program_running_is_enough(steam):
     machine = FakeMachine(has_foreground=False)
     machine.start("game.exe", 7, game_path(steam, "SpaceGame"))

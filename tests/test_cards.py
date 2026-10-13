@@ -703,3 +703,18 @@ def test_a_need_can_ask_for_a_picture():
     from libre_panel.render.renderer import _reads
 
     assert "media.app_icon" in _reads([{"type": "text", "id": "t", "needs": "@media.app_icon"}])
+
+
+# the game card
+
+
+def test_the_game_card_says_no_game_only_where_none_was_found():
+    """Game mode found a game whose frame rate has not come (yet: PresentMon's rights, an
+    anti-cheat, a launcher): the card names the game and waits, instead of "No game running"."""
+    nothing, _, _ = drawn("game", snapshot_with(drop=("game.",)))
+    assert {"idle", "idle-icon"} <= nothing and not {"idle-game", "idle-wait", "fps"} & nothing
+    waiting, _, _ = drawn("game", snapshot_with(drop=("game.",), game__name="Space Game"))
+    assert {"idle-icon", "idle-game", "idle-wait"} <= waiting
+    assert not {"idle", "fps"} & waiting
+    playing, _, _ = drawn("game", snapshot_with(game__name="Space Game"))
+    assert "fps" in playing and not {"idle", "idle-icon", "idle-game", "idle-wait"} & playing

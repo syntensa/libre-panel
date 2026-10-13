@@ -122,7 +122,10 @@ class Detector:
             return None
         front = self.machine.foreground_pid() if self.machine.has_foreground else None
         current = self.game.pid if self.game else 0
-        for program in sorted(running, key=lambda p: p.pid != current):  # keep the game it is
+        # the game's program in front first (a launcher or an anti-cheat's starter that stays
+        # in the background is not the one that draws), then the one it is: keep the game
+        order = sorted(running, key=lambda p: (p.pid != front, p.pid != current))
+        for program in order:
             game = self.library.match(program.path)
             if game is None:
                 continue

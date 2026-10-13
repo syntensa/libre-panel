@@ -27,8 +27,9 @@ program). The peak is there all the time a game runs, 0 when no frame came, so
 a graph of it never stops.
 
 The game is the program that the ``game`` service found (``set_target``);
-without it, the program with the most frames. The desktop compositor and known
-overlays do not count.
+without it, or where that program drew nothing for the last half minute (a launcher
+another program of the game draws for), the program with the most frames. The desktop
+compositor and known overlays do not count.
 """
 
 from __future__ import annotations
@@ -126,8 +127,9 @@ Frame = tuple[float, float, Waits | None]  # when it came, how long it took, its
 class FrameCounter:
     """Frames per program as they come; the rate of the one that counts.
 
-    The one that counts is ``target`` (the game the service found), else the program
-    with the most frames in the last second.
+    The one that counts is ``target`` (the game the service found), else (or where the
+    target drew nothing in the last half minute) the program with the most frames in the
+    last second.
     """
 
     def __init__(self) -> None:
@@ -166,7 +168,7 @@ class FrameCounter:
             best = self._last[0]  # a game that stalls for a moment is still a game
         # With a game found (or just seen) the peak is always there, 0 without a frame. The
         # game found counts however few frames it has: a hitch of a second is one frame.
-        if self.target is not None:
+        if self.target is not None and (best is None or best.lower() == self.target):
             peak = max((p for app, p in peaks.items() if app.lower() == self.target), default=0.0)
         else:
             peak = peaks.get(best or "", 0.0)
@@ -187,7 +189,12 @@ class FrameCounter:
                 continue
             counts[app] = sum(1 for at, _ms, _waits in reversed(frames) if now - at <= WINDOW)
         if self.target is not None:
-            counts = {app: n for app, n in counts.items() if app.lower() == self.target}
+            # The program the game service found counts. Where it drew nothing for the last
+            # half minute (a launcher, an anti-cheat's starter that another program of the game
+            # draws for), the program with the most frames does, as without a game found.
+            mine = {app: n for app, n in counts.items() if app.lower() == self.target}
+            if mine:
+                counts = mine
         best, best_count = None, 0
         for app, count in counts.items():
             if count > best_count:

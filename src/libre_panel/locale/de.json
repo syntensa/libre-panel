@@ -1934,7 +1934,8 @@
     "a–z, 0–9, - _ and ., no spaces": "a–z, 0–9, - _ und ., keine Leerzeichen",
     "More themes": "Weitere Themes",
     "Not saved: save now ({keys})": "Nicht gespeichert: jetzt speichern ({keys})",
-    "Choosing another one fits the theme to it; the panel itself stays as it is. Which panel is connected: Settings → Panel.": "Wählst du ein anderes, wird das Theme daran angepasst; das Panel selbst bleibt, wie es ist. Welches Panel angeschlossen ist: Einstellungen → Panel."
+    "Choosing another one fits the theme to it; the panel itself stays as it is. Which panel is connected: Settings → Panel.": "Wählst du ein anderes, wird das Theme daran angepasst; das Panel selbst bleibt, wie es ist. Welches Panel angeschlossen ist: Einstellungen → Panel.",
+    "No frame rate yet": "Noch keine Bildrate"
   },
   "fields": {
     "align": "Ausrichtung",
