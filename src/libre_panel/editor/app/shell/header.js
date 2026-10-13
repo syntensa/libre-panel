@@ -59,7 +59,8 @@ function SettingsButton({ active }) {
   const back = active ? settingsReturn() : null;
   const title = back && back.id !== "settings" ? t("Back to {view}", { view: titleOf(back) }) : t("Settings");
   return html`<button type="button" class=${`btn settings-btn${active ? " active" : ""}`}
-    aria-pressed=${String(active)} title=${active ? `${title} (Esc)` : title} onClick=${() => (active ? leaveSettings() : navigate("settings"))}>
+    aria-pressed=${String(active)} aria-label=${title} title=${active ? `${title} (Esc)` : title}
+    onClick=${() => (active ? leaveSettings() : navigate("settings"))}>
     <${Icon} name="gear" size=${17} />
     <span class="settings-btn-text">${t("Settings")}</span>
   </button>`;

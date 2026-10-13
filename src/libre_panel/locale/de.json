@@ -1267,7 +1267,6 @@
     "Remove the selection": "Auswahl entfernen",
     "Remove {count}": "{count} entfernen",
     "Sample values": "Beispielwerte",
-    "Save (Ctrl+S)": "Speichern (Strg+S)",
     "Scale": "Skala",
     "Scale and shape": "Skala und Form",
     "Search for a command": "Befehl suchen",
@@ -1774,7 +1773,8 @@
     "“{id}” cannot be the name of a folder: use a–z, 0–9, - _ and . (no spaces).": "„{id}“ geht nicht als Ordnername: Nimm a–z, 0–9, - _ und . (keine Leerzeichen).",
     "“{name}” is now shown on the panel": "„{name}“ ist jetzt auf dem Panel",
     "a–z, 0–9, - _ and ., no spaces": "a–z, 0–9, - _ und ., keine Leerzeichen",
-    "More themes": "Weitere Themes"
+    "More themes": "Weitere Themes",
+    "Not saved: save now ({keys})": "Nicht gespeichert: jetzt speichern ({keys})"
   },
   "fields": {
     "align": "Ausrichtung",

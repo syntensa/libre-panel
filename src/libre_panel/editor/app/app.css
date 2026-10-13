@@ -59,6 +59,7 @@
   --text-2: #c9d3de;
   --muted: #93a1b2;
   --dim: #5f6e80;
+  --faint: #748396; /* small print that must still be read: 4.5:1 on the surfaces */
   --accent: #2ee6d6;
   --accent-hi: #7ff3ea;
   --accent-ink: #04211e;
@@ -725,7 +726,7 @@ textarea.input {
 }
 
 .input::placeholder {
-  color: var(--dim);
+  color: var(--faint);
 }
 
 .input:hover {
@@ -756,7 +757,7 @@ textarea.input {
 .number-field .unit {
   position: absolute;
   right: 10px;
-  color: var(--dim);
+  color: var(--faint);
   font-size: 12px;
   pointer-events: none;
 }
@@ -1329,7 +1330,7 @@ textarea.input {
 }
 
 .palette-search input::placeholder {
-  color: var(--dim);
+  color: var(--faint);
 }
 
 .palette-body {
@@ -1665,7 +1666,7 @@ textarea.input {
 .model-vendor {
   padding: 8px 8px 4px;
   font-size: 11px;
-  color: var(--dim);
+  color: var(--faint);
   text-transform: uppercase;
   letter-spacing: 1px;
 }
@@ -1727,7 +1728,7 @@ textarea.input {
 
 .model-proto {
   font-size: 11px;
-  color: var(--dim);
+  color: var(--faint);
   text-align: right;
 }
 

@@ -376,3 +376,65 @@ def test_unsaved_changes_can_be_saved_before_another_theme_opens(app_url, isolat
         expect(dialog).to_have_count(0)
         assert js(page, "window.libre.store.get().doc.id") == "encore"
         assert js(page, "window.libre.doc.theme().name") == "My Encore"
+
+
+# -- the keyboard and screen readers ---------------------------------------------------------------
+
+NAMELESS = """(root) => [...document.querySelectorAll(`${root} :is(button, a[href], input, select,
+    [role=switch], [role=option], [role=menuitem])`)]
+  .filter((el) => el.offsetParent !== null)
+  .filter((el) => !(el.getAttribute('aria-label') || (el.labels?.[0]?.textContent) || el.innerText
+    || '').trim())
+  .map((el) => el.outerHTML.slice(0, 120))"""
+
+FOCUSED = """() => {
+  const el = document.activeElement;
+  const style = getComputedStyle(el);
+  return { text: (el.getAttribute('aria-label') || el.innerText || '').trim(),
+           ring: style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2 };
+}"""
+
+
+def test_the_shared_parts_have_names_rings_and_escape(app_url, isolated_home):  # noqa: F811
+    """Every button of the header, the chip's popover, the theme menu, the palette and the help
+    has a name a screen reader says (the Settings button was an icon with only a tooltip where
+    the header is narrow); Tab goes through the header in the order it is seen, each with a
+    ring; Escape closes what floats and gives the focus back to what opened it."""
+    routes = a_bar(isolated_home)
+    with browser_page(app_url, "design", routes=routes, allow=PICTURE) as page:
+        assert page.evaluate(NAMELESS, ".topbar") == []
+        expect(page.locator(".settings-btn")).to_have_attribute("aria-label", "Settings")
+        page.reload()
+        page.wait_for_selector(".panel-canvas .preview")
+        seen = []
+        for _ in range(10):
+            page.keyboard.press("Tab")
+            focused = page.evaluate(FOCUSED)
+            assert focused["ring"], focused
+            seen.append(focused["text"].split("\n")[0])
+        assert seen[:7] == ["Libre Panel: start", "Lumen", "Start", "Design", "Look", "Live",
+                            "Search or command …"]  # fmt: skip
+        assert seen[-1] == "Settings"
+        for opener, floating, root in (
+            (".panel-chip", ".popover", ".popover"),
+            (".theme-name", ".popover", ".popover"),
+            (".search-trigger", ".palette", ".palette"),
+        ):
+            page.locator(opener).focus()
+            page.keyboard.press("Enter")
+            expect(page.locator(floating)).to_be_visible()
+            assert page.evaluate(NAMELESS, root) == [], opener
+            page.keyboard.press("Escape")
+            expect(page.locator(floating)).to_have_count(0)
+            expect(page.locator(opener)).to_be_focused()
+        page.locator(".settings-btn").focus()
+        page.keyboard.press("?")
+        expect(page.locator(".dialog")).to_be_visible()
+        assert page.evaluate(NAMELESS, ".dialog") == []
+        page.keyboard.press("Escape")
+        expect(page.locator(".dialog")).to_have_count(0)
+        expect(page.locator(".settings-btn")).to_be_focused()
+        js(page, "window.libre.doc.edit('t', (theme) => { theme.name = 'Changed'; })")
+        expect(page.locator(".unsaved")).to_have_attribute(
+            "aria-label", "Not saved: save now (Ctrl S)"
+        )
