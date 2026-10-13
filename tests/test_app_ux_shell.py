@@ -282,6 +282,7 @@ def test_the_settings_button_leads_back_to_where_you_were(app_url, isolated_home
         page.wait_for_selector(".look-side")
         button.click()
         page.wait_for_function("location.hash.startsWith('#/settings')")
+        page.wait_for_selector(".settings-nav")  # Settings is shown, not only its address
         page.keyboard.press("Escape")
         page.wait_for_function("location.hash === '#/look'")
 

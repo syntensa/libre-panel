@@ -1631,7 +1631,7 @@ def test_the_palette_gives_the_focus_back(page):
     expect(layers).to_be_focused()
     # a command that opens a dialog leaves the focus to the dialog
     page.keyboard.press("Control+k")
-    page.locator(".palette input").fill("keyboard shortcuts")
+    page.locator(".palette input").fill("help and keyboard shortcuts")  # (not the whole PC's)
     page.keyboard.press("Enter")
     expect(page.locator(".dialog")).to_be_visible()
     page.wait_for_function("document.activeElement.closest('.dialog') !== null")
