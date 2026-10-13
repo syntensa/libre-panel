@@ -93,3 +93,21 @@ def test_the_setup_script_is_read_as_utf8():
     script = ROOT.joinpath("packaging", "windows", "libre-panel.iss").read_bytes()
     assert script.startswith(b"\xef\xbb\xbf")
     assert "de.PrivilegesRequiredOverrideCurrentUser=Nur für &mich installieren" in script.decode()
+
+
+def test_ci_runs_every_test_that_needs_a_browser_where_there_is_one():
+    """Only CI's desktop job has Playwright and Chromium: elsewhere a test that needs them skips.
+    A file of such tests left out of its list would never run anywhere."""
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    job = ci.split("\n  desktop:", 1)[1]
+    listed = set(re.findall(r"tests/[\w*]+\.py", job))
+    tests = ROOT / "tests"
+    uses = re.compile(r"^(?:from|import) playwright|importorskip\(\s*\"playwright", re.M)
+    needing = {
+        path.name
+        for path in tests.glob("test_*.py")
+        if uses.search(path.read_text(encoding="utf-8")) and not path.name.startswith("test_zz")
+    }
+    assert "test_app_browser.py" in needing
+    for name in sorted(needing):
+        assert any(Path(name).match(Path(pattern).name) for pattern in listed), name

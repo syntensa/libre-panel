@@ -56,7 +56,8 @@ jobs:
           libre-panel preview spur-ii -o spur-ii.png
 
   desktop:
-    # The editor in a real browser and the tray icon on a real X11 tray.
+    # The app in a real browser (every test that needs one: the others skip them) and the tray
+    # icon on a real X11 tray.
     timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
@@ -68,4 +69,7 @@ jobs:
       - run: pip install -e ".[dev,tray]" playwright
       - run: python -m playwright install --with-deps chromium
       - name: The app in a browser, tray icon on X11
-        run: pytest -q -rs tests/test_app_browser.py tests/test_tray.py
+        run: >-
+          pytest -q -rs tests/test_app_browser.py tests/test_app_ux_*.py
+          tests/test_sequence_browser.py tests/test_panel_files_browser.py
+          tests/test_readme_media.py tests/test_tray.py
