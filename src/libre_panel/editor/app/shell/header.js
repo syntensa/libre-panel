@@ -1,7 +1,7 @@
 // The header every view shares: the brand, the view's own parts (lead,
 // center, actions), the tabs, the command field and the way to the settings, by name.
 
-import { applyToPanel } from "../core/actions.js";
+import { applyToPanel, panelState } from "../core/actions.js";
 import { redo, undo } from "../core/doc.js";
 import { t } from "../core/i18n.js";
 import { firstStart, useStore } from "../core/state.js";
@@ -35,13 +35,21 @@ export function UndoRedo() {
   `;
 }
 
-/** "Aufs Panel": save the theme and show it on the panel. */
+/** "Aufs Panel": save the theme and show it on the panel. Once the panel shows the open theme
+ * as it is here (saved, and the theme of the page it is open for), the button says so instead
+ * of asking again: what is edited and what is on the panel are told apart at a glance. */
 export function ApplyButton() {
-  const hasDoc = useStore((s) => Boolean(s.doc));
-  return html`<button type="button" class="btn btn-primary btn-apply" disabled=${!hasDoc} title=${t("Save and show this theme on the panel")}
+  const state = useStore((s) => (s.doc ? panelState(s) : null));
+  const shown = state === "shown";
+  const title = {
+    shown: t("The panel shows this theme as you see it here"),
+    changed: t("Save the changes and show them on the panel"),
+    other: t("Save and show this theme on the panel"),
+  }[state];
+  return html`<button type="button" class=${`btn btn-apply${shown ? " shown" : " btn-primary"}`} disabled=${!state} title=${title}
     onClick=${applyToPanel}>
-    <${Icon} name="to-panel" size=${16} strokeWidth=${2.2} />
-    ${t("To the panel")}
+    <${Icon} name=${shown ? "check" : "to-panel"} size=${16} strokeWidth=${2.2} />
+    ${shown ? t("On the panel") : t("To the panel")}
   </button>`;
 }
 

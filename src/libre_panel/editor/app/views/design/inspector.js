@@ -2,7 +2,7 @@
 // (specs "primary", theme/model.py PRIMARY_FIELDS) in sections; the rest are on
 // the "Details" page. With nothing selected it is the theme's settings.
 
-import { PALETTE_NAME } from "../../core/actions.js";
+import { PALETTE_NAME, themeName } from "../../core/actions.js";
 import { edit, isModule, selectedWidgets, setSelection, theme as currentTheme, widgetById } from "../../core/doc.js";
 import { enumLabel, fieldLabel, t, widgetLabel } from "../../core/i18n.js";
 import { store, useStore } from "../../core/state.js";
@@ -35,8 +35,10 @@ import {
 import { QUICK_SENSORS, SensorButton, Sparkline, formatValue, sensorName, shortSensorName, useReadings } from "./sensors.js";
 import { uploadAsset } from "../../core/actions.js";
 import { hardwareParts, partOfSensor } from "../../core/hardware.js";
+import { VERTICAL } from "../../core/orientation.js";
 import { panelName, currentModel } from "../../shell/panel-popover.js";
 import { HardwareNameField } from "../settings/hardware.js";
+import { navigate } from "../../shell/views.js";
 
 const cap = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : text);
 const label = (key) => cap(fieldLabel(key));
@@ -352,6 +354,59 @@ function WidgetInspector({ widget }) {
 
 // -- a module ---------------------------------------------------------------------------------
 
+// The kinds that hold cards themselves; the cards a slot can hold are every other kind, and
+// the network as the Studio's card has it ("net"), the cards after SPUR II's first.
+const SLOTS = ["cards", "netcard"];
+const CARDS = ["playback", "forecast", "download", "instrument", "net"];
+
+/** A card's name in words (a line of a slot's items: "forecast", "date if weather.temp"). */
+const cardOf = (line) => line.split("#")[0].split(" if ")[0].trim();
+const cardName = (card) => (card === "net" ? t("Network") : kindName(card));
+
+/** What a card slot holds (its items, one card a line; the first with something to show is on
+ * show): named in words, each moved up or taken out, one more from a list. A line's condition
+ * ("forecast if weather.temp") stays with its card. It was a box of words a sensor's hint
+ * explained ("a sensor (cpu.temp), a pattern"), which a slot does not take. */
+function SlotCards({ widget, onChange }) {
+  const lines = (widget.items || moduleKinds()[widget.module]?.items || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const set = (next) => onChange(next.join("\n")); // each its own step back (Ctrl+Z)
+  const others = Object.keys(moduleKinds()).filter((kind) => !SLOTS.includes(kind) && !CARDS.includes(kind));
+  const options = [
+    { value: "", label: t("Add a card…") },
+    ...CARDS.map((card) => ({ value: card, label: cardName(card), group: t("Cards") })),
+    ...others.map((kind) => ({ value: kind, label: kindName(kind), group: t("Modules") })),
+  ];
+  return html`<${Field} label=${t("Cards")} hint=${t("The first one with something to show is on show: what plays while music plays, else the next.")}>
+    <ol class="slot-cards">
+      ${lines.map(
+        (line, index) => html`<li key=${`${index}:${line}`} class="slot-card">
+          <span class="slot-card-name" title=${line}>${cardName(cardOf(line))}</span>
+          <${IconButton} icon="arrow-up" size=${14} label=${t("Move up")} disabled=${index === 0}
+            onClick=${() => set([...lines.slice(0, index - 1), line, lines[index - 1], ...lines.slice(index + 1)])} />
+          <${IconButton} icon="close" size=${14} label=${t("Take out")} disabled=${lines.length < 2}
+            onClick=${() => set(lines.filter((_, i) => i !== index))} />
+        </li>`,
+      )}
+    </ol>
+    <${Select} key=${lines.length} label=${t("Add a card…")} value="" options=${options}
+      onChange=${(card) => card && set([...lines, card])} />
+  <//>`;
+}
+
+/** The second line of a module's head: what it shows, or the cards a slot holds. */
+function moduleSubtitle(widget, sensor, sourceName) {
+  if (sensor) return html`<${SensorLine} sensor=${sensor} />`;
+  if (sourceName) return sourceName;
+  if (widget.module === "cards") {
+    const lines = (widget.items || moduleKinds().cards?.items || "").split("\n").map(cardOf).filter(Boolean);
+    return lines.map(cardName).join(" · ");
+  }
+  return null;
+}
+
 function ModuleInspector({ widget }) {
   const [page, setPage] = usePage();
   const info = moduleKinds()[widget.module] || { sources: [] };
@@ -401,7 +456,9 @@ function ModuleInspector({ widget }) {
     `;
   }
 
-  const items = info.items
+  const items = widget.module === "cards"
+    ? html`<${SlotCards} widget=${widget} onChange=${(value) => edit(null, () => (widget.items = value))} />`
+    : info.items
     ? html`<${Field}
         label=${widget.module === "world" ? t("Places") : t("Readings")}
         hint=${widget.module === "world"
@@ -415,7 +472,7 @@ function ModuleInspector({ widget }) {
     <${Header}
       icon=${iconOf(widget)}
       title=${kindName(widget.module)}
-      subtitle=${sensor ? html`<${SensorLine} sensor=${sensor} />` : sourceName || html`<span class="mono">${widget.id}</span>`}
+      subtitle=${moduleSubtitle(widget, sensor, sourceName)}
       sensor=${sensor}
     />
     <div class="inspector-body">
@@ -582,32 +639,6 @@ function themeChange(key, apply) {
   return (value) => edit(`theme:${key}`, (theme) => apply(theme, value));
 }
 
-function LookBlocks({ theme }) {
-  const blocks = store.get().specs?.look || {};
-  const titles = { grid: t("Grid background"), light: t("Panel light") };
-  return Object.entries(blocks).map(([block, spec]) => {
-    const settings = theme.look?.[block];
-    const toggle = (on) =>
-      edit(`look:${block}`, (current) => {
-        const look = { ...(current.look || {}) };
-        if (on) look[block] = Object.fromEntries(Object.entries(spec).map(([key, [, fallback]]) => [key, JSON.parse(JSON.stringify(fallback))]));
-        else delete look[block];
-        if (Object.keys(look).length) current.look = look;
-        else delete current.look;
-      });
-    return html`<${Section} key=${block} title=${titles[block] || label(block)}
-      action=${html`<${Toggle} label=${titles[block] || label(block)} checked=${Boolean(settings)} onChange=${toggle} />`}>
-      ${settings
-        ? Object.entries(spec).map(([key, [kind, fallback]]) => html`<${FieldRow} key=${key} name=${key} kind=${kind}
-            value=${settings[key] ?? fallback}
-            onChange=${(value) => edit(`look:${block}:${key}`, (current) => {
-              current.look[block] = { ...current.look[block], [key]: value };
-            })} />`)
-        : null}
-    <//>`;
-  });
-}
-
 export function PaletteEditor({ theme }) {
   const palette = theme.palette || {};
   const replace = (from, to) => {
@@ -658,10 +689,11 @@ export function PaletteEditor({ theme }) {
   </div>`;
 }
 
-/** The looks: one click puts a look's colours and module style on the theme. */
+/** The looks: one click puts a look's colours and module style on the theme. Look has them too,
+ * with the rest of the theme's look; the link goes there. */
 function LookTiles({ theme }) {
   const active = activeLook(theme);
-  return html`<div class="look-grid" role="radiogroup" aria-label=${t("Look")}>
+  return html`<div class="look-grid" role="radiogroup" aria-label=${t("Colour world")}>
       ${Object.entries(looks()).map(
         ([key, item]) => html`<button type="button" role="radio" key=${key} aria-checked=${String(active === key)} class="look-tile"
           title=${t("Use the {name} look", { name: item.name })} onClick=${() => applyLook(key)}>
@@ -672,7 +704,15 @@ function LookTiles({ theme }) {
         </button>`,
       )}
     </div>
-    <small class="field-hint">${t("A look sets the palette's colours and the modules' style.")}</small>`;
+    <small class="field-hint">${t("The colours of the whole theme in one click.")}</small>
+    <${ToLook} text=${t("Finish, glow, panel light and notices: in Look")} />`;
+}
+
+/** The way to Look, where the theme's look is set in full. */
+function ToLook({ text }) {
+  return html`<button type="button" class="link-btn inspector-link" onClick=${() => navigate("look")}>
+    ${text} <${Icon} name="chevron-right" size=${13} />
+  </button>`;
 }
 
 function PluginOptions({ options, values, onChange }) {
@@ -680,8 +720,12 @@ function PluginOptions({ options, values, onChange }) {
     value=${values?.[key] ?? fallback} onChange=${(value) => onChange(key, value)} />`);
 }
 
+/** What a theme has that is changed now and then: its modules' grid and style, its colours by
+ * name, its notices, its timing, a plugin's screen and what is said about it. The look itself
+ * (colour world, finish, light, grid background, dust) is Look's, a click away. */
 function ThemeDetails({ theme, onBack }) {
   const specs = store.get().specs;
+  const grid = useStore((s) => s.render.grid);
   const screens = specs.screens || {};
   const toasts = specs.toasts || {};
   const toast = theme.toast || {};
@@ -690,6 +734,8 @@ function ThemeDetails({ theme, onBack }) {
   const set = (key, apply) => themeChange(key, apply);
   const setStyle = (key) => (value) => edit(`style:${key}`, (current) => (current.style = { ...style, ...(current.style || {}), [key]: value }));
   const setToast = (key) => (value) => edit(`toast:${key}`, (current) => (current.toast = { ...(current.toast || {}), [key]: value }));
+  const setGrid = (key) => (value) =>
+    edit(`grid:${key}`, (current) => (current.grid = { ...(current.grid || { columns: 0, rows: 0, gap: 0, margin: 0 }), [key]: Math.max(0, Math.round(value || 0)) }));
   const screenOptions = [{ value: "", label: t("none") }, ...Object.entries(screens).map(([name, info]) => ({ value: name, label: info.label }))];
   if (theme.screen?.name && !screens[theme.screen.name]) screenOptions.push({ value: theme.screen.name, label: t("{name} (not installed)", { name: theme.screen.name }) });
   const toastOptions = [{ value: "", label: t("card (built in)") }, ...Object.entries(toasts).map(([name, info]) => ({ value: name, label: info.label }))];
@@ -697,17 +743,78 @@ function ThemeDetails({ theme, onBack }) {
   return html`
     <${DetailsHead} title=${t("Theme")} onBack=${onBack} />
     <div class="inspector-body">
-      <${Section} title=${t("About")}>
-        <${Field} label=${cap(t("author"))}><${TextField} label=${t("author")} value=${theme.author} onChange=${set("author", (th, v) => (th.author = v))} /><//>
-        <${Field} label=${cap(t("license"))} hint=${t("e.g. CC0-1.0, CC-BY-4.0")}>
-          <${TextField} label=${t("license")} value=${theme.license} onChange=${set("license", (th, v) => (th.license = v))} />
+      <div class="inspector-aside">
+        <span>${t("The colour world, the finish, the panel light, the grid background and the depth dust are set in Look.")}</span>
+        <${ToLook} text=${t("Open Look")} />
+      </div>
+      ${hasModules
+        ? html`<${Section} title=${t("Grid of the modules")}>
+            <div class="quad">
+              ${[
+                ["columns", t("columns")],
+                ["rows", t("rows")],
+                ["gap", t("gap")],
+                ["margin", t("margin")],
+              ].map(([key, text]) => html`<${Field} key=${key} label=${cap(text)}>
+                <${NumberField} label=${text} value=${theme.grid?.[key] ?? 0} min=${0} max=${key === "columns" || key === "rows" ? 48 : 200}
+                  onChange=${setGrid(key)} />
+              <//>`)}
+            </div>
+            <small class="field-hint">${t("The cells the modules are placed on; 0 = as the panel's size suggests. Now {cols} × {rows} cells.", { cols: grid?.columns ?? "?", rows: grid?.rows ?? "?" })}</small>
+          <//>
+          <${Section} title=${t("Module style")}>
+            <${Field} label=${cap(t("cards"))}>
+              <${Segmented} label=${t("cards")} value=${style.card} onChange=${setStyle("card")}
+                options=${[["glass", t("glass")], ["flat", t("flat")], ["outline", t("outline")], ["none", t("none")]].map(([value, text]) => ({ value, label: text }))} />
+            <//>
+            <div class="quad">
+              <${Field} label=${cap(t("corners"))}><${NumberField} label=${t("corners")} value=${style.radius} min=${0} max=${100} unit="px" onChange=${setStyle("radius")} /><//>
+              <${Field} label=${label("glow")}><${NumberField} label=${label("glow")} value=${style.glow} min=${0} max=${1} step=${0.05} digits=${2} onChange=${setStyle("glow")} /><//>
+            </div>
+            <${Field} label=${cap(t("backdrop"))}>
+              <${Segmented} label=${t("backdrop")} value=${style.backdrop} onChange=${setStyle("backdrop")}
+                options=${[{ value: "gradient", label: t("gradient") }, { value: "flat", label: t("plain colour") }]} />
+            <//>
+            <${Field} label=${cap(t("numbers font"))}><${FontControl} value=${style.display_font} onChange=${setStyle("display_font")} /><//>
+            <${Field} label=${cap(t("labels font"))}><${FontControl} value=${style.text_font} onChange=${setStyle("text_font")} /><//>
+          <//>`
+        : null}
+      <${Section} title=${t("Colours of this theme")}><${PaletteEditor} theme=${theme} /><//>
+      <${Section} title=${t("Notices")}>
+        <${Field} label=${cap(t("position"))} hint=${t("where notices appear on the panel")}>
+          <${Select} label=${t("position")} value=${toast.anchor || "top-right"} onChange=${setToast("anchor")}
+            options=${(specs.toast_anchors || ["top-right"]).map((value) => ({ value, label: enumLabel(value) }))} />
         <//>
-        <${Field} label=${cap(t("description"))}>
-          <${TextField} multiline rows=${3} label=${t("description")} value=${theme.description} onChange=${set("description", (th, v) => (th.description = v))} />
+        <${Field} label=${cap(t("seconds shown"))}>
+          <${NumberField} label=${t("seconds shown")} value=${toast.seconds ?? 4} min=${0.5} max=${60} step=${0.5} digits=${1} onChange=${setToast("seconds")} />
         <//>
+        <${Row} class="row-box" label=${cap(t("one after another"))} hint=${t("off: a new notice of the same or a higher rank takes over at once, a lower one is dropped")}>
+          <${Toggle} label=${t("one after another")} checked=${toast.queue ?? true} onChange=${setToast("queue")} />
+        <//>
+        <${Field} label=${cap(t("hidden kinds"))} hint=${t("kinds of notices this theme does not show, e.g. music")}>
+          <${TextField} label=${t("hidden kinds")} value=${(toast.off || []).join(", ")}
+            onChange=${(text) => setToast("off")(text.split(",").map((kind) => kind.trim()).filter(Boolean))} />
+        <//>
+        <${Field} label=${cap(t("style"))} hint=${t("how notices look; plugins can bring more")}>
+          <${Select} label=${t("style")} value=${toast.style || ""} options=${toastOptions}
+            onChange=${(name) => edit("toast:style", (th) => {
+              th.toast = { ...(th.toast || {}) };
+              if (name) {
+                th.toast.style = name;
+                th.toast.options = Object.fromEntries(Object.entries(toasts[name]?.options || {}).map(([k, [, d]]) => [k, d]));
+              } else {
+                delete th.toast.style;
+                delete th.toast.options;
+              }
+            })} />
+        <//>
+        ${toast.style
+          ? html`<${PluginOptions} options=${toasts[toast.style]?.options} values=${toast.options}
+              onChange=${(key, value) => edit(`toast:${key}`, (th) => (th.toast.options = { ...th.toast.options, [key]: value }))} />`
+          : null}
       <//>
       <${Section} title=${t("Timing")}>
-        <${Field} label=${cap(t("sensor refresh (ms)"))}>
+        <${Field} label=${cap(t("sensor refresh (ms)"))} hint=${t("how often the values are read; 1000 = once a second")}>
           <${NumberField} label=${t("sensor refresh (ms)")} value=${theme.refresh_ms ?? 1000} min=${100} step=${100}
             onChange=${set("refresh", (th, v) => (th.refresh_ms = Math.max(100, v || 1000)))} />
         <//>
@@ -731,109 +838,83 @@ function ThemeDetails({ theme, onBack }) {
               : null}
           <//>`
         : null}
-      ${hasModules
-        ? html`<${Section} title=${t("Module style")}>
-            <${Field} label=${cap(t("cards"))}>
-              <${Segmented} label=${t("cards")} value=${style.card} onChange=${setStyle("card")}
-                options=${[["glass", t("glass")], ["flat", t("flat")], ["outline", t("outline")], ["none", t("none")]].map(([value, text]) => ({ value, label: text }))} />
-            <//>
-            <div class="quad">
-              <${Field} label=${cap(t("corners"))}><${NumberField} label=${t("corners")} value=${style.radius} min=${0} max=${100} unit="px" onChange=${setStyle("radius")} /><//>
-              <${Field} label=${label("glow")}><${NumberField} label=${label("glow")} value=${style.glow} min=${0} max=${1} step=${0.05} digits=${2} onChange=${setStyle("glow")} /><//>
-            </div>
-            <${Field} label=${cap(t("backdrop"))}>
-              <${Segmented} label=${t("backdrop")} value=${style.backdrop} onChange=${setStyle("backdrop")}
-                options=${[{ value: "gradient", label: t("gradient") }, { value: "flat", label: t("plain colour") }]} />
-            <//>
-            <${Field} label=${cap(t("numbers font"))}><${FontControl} value=${style.display_font} onChange=${setStyle("display_font")} /><//>
-            <${Field} label=${cap(t("labels font"))}><${FontControl} value=${style.text_font} onChange=${setStyle("text_font")} /><//>
-          <//>`
-        : null}
-      <${LookBlocks} theme=${theme} />
-      <${Section} title=${t("Palette")}><${PaletteEditor} theme=${theme} /><//>
-      <${Section} title=${t("Messages")}>
-        <${Field} label=${cap(t("position"))} hint=${t("where messages from services appear")}>
-          <${Select} label=${t("position")} value=${toast.anchor || "top-right"} onChange=${setToast("anchor")}
-            options=${(specs.toast_anchors || ["top-right"]).map((value) => ({ value, label: enumLabel(value) }))} />
+      <${Section} title=${t("About")}>
+        <${Field} label=${cap(t("author"))}><${TextField} label=${t("author")} value=${theme.author} onChange=${set("author", (th, v) => (th.author = v))} /><//>
+        <${Field} label=${cap(t("license"))} hint=${t("e.g. CC0-1.0, CC-BY-4.0")}>
+          <${TextField} label=${t("license")} value=${theme.license} onChange=${set("license", (th, v) => (th.license = v))} />
         <//>
-        <${Field} label=${cap(t("seconds shown"))}>
-          <${NumberField} label=${t("seconds shown")} value=${toast.seconds ?? 4} min=${0.5} max=${60} step=${0.5} digits=${1} onChange=${setToast("seconds")} />
+        <${Field} label=${cap(t("description"))}>
+          <${TextField} multiline rows=${3} label=${t("description")} value=${theme.description} onChange=${set("description", (th, v) => (th.description = v))} />
         <//>
-        <${Row} class="row-box" label=${cap(t("one after another"))} hint=${t("off: a new message of the same or a higher rank takes over at once, a lower one is dropped")}>
-          <${Toggle} label=${t("one after another")} checked=${toast.queue ?? true} onChange=${setToast("queue")} />
-        <//>
-        <${Field} label=${cap(t("hidden kinds"))} hint=${t("kinds of messages this theme does not show, e.g. music")}>
-          <${TextField} label=${t("hidden kinds")} value=${(toast.off || []).join(", ")}
-            onChange=${(text) => setToast("off")(text.split(",").map((kind) => kind.trim()).filter(Boolean))} />
-        <//>
-        <${Field} label=${cap(t("style"))} hint=${t("how messages look; plugins can bring more")}>
-          <${Select} label=${t("style")} value=${toast.style || ""} options=${toastOptions}
-            onChange=${(name) => edit("toast:style", (th) => {
-              th.toast = { ...(th.toast || {}) };
-              if (name) {
-                th.toast.style = name;
-                th.toast.options = Object.fromEntries(Object.entries(toasts[name]?.options || {}).map(([k, [, d]]) => [k, d]));
-              } else {
-                delete th.toast.style;
-                delete th.toast.options;
-              }
-            })} />
-        <//>
-        ${toast.style
-          ? html`<${PluginOptions} options=${toasts[toast.style]?.options} values=${toast.options}
-              onChange=${(key, value) => edit(`toast:${key}`, (th) => (th.toast.options = { ...th.toast.options, [key]: value }))} />`
-          : null}
       <//>
     </div>
   `;
 }
 
+/** The theme's background: a picture over a colour. The picture fills the whole panel, so a
+ * colour changed under it showed nothing (Lumen, Encore, Almanac, Nimbus): with a picture, the
+ * picture comes first, the colour says it lies under it, and the picture goes in one click. */
+function Background({ theme }) {
+  const background = theme.background || {};
+  const image = background.image;
+  const setColor = themeChange("bg", (th, v) => (th.background = { ...(th.background || {}), color: v }));
+  const setImage = themeChange("bgimg", (th, v) => (th.background = { ...(th.background || {}), image: v || null }));
+  const picture = html`<${Field} key="picture" label=${t("Picture")}>
+    <${AssetControl} value=${image} onChange=${setImage} />
+  <//>`;
+  const colour = html`<${Field} key="colour" label=${image ? t("Colour under the picture") : t("Colour")}>
+    <${ColorSwatches} label=${t("Background")} value=${background.color} onChange=${setColor} />
+  <//>`;
+  if (!image) return html`<${Section} title=${t("Background")}>${colour}${picture}<//>`;
+  return html`<${Section} title=${t("Background")}>
+    ${picture}
+    ${colour}
+    <div class="inspector-aside background-under">
+      <span>${t("You see it only where the picture is see-through.")}</span>
+      <button type="button" class="link-btn" onClick=${() => setImage(null)}>${t("Remove the picture")}</button>
+    </div>
+  <//>`;
+}
+
+/** Nothing selected: the whole theme. What is changed most (its name, colour world, background
+ * and font) is here; the rest under Fine-tuning. */
 function ThemeInspector({ theme }) {
   const [page, setPage] = usePage();
+  const builtin = useStore((s) => s.doc?.builtin); // why saving it asks for a name
+  // a theme's version for a panel mounted vertically (Lumen Vertical): the one it goes with
+  const versionOf = useStore((s) =>
+    (s.versions || []).some((item) => item.id === s.doc?.id) ? s.doc.id.slice(0, -VERTICAL.length) : null,
+  );
   const specs = store.get().specs;
-  const grid = useStore((s) => s.render.grid);
   const hasModules = Boolean(theme.grid || theme.widgets.some(isModule));
-  const background = theme.background || {};
   if (page === "details") return html`<${ThemeDetails} theme=${theme} onBack=${() => setPage("main")} />`;
   const size = `${theme.display?.width ?? "?"} × ${theme.display?.height ?? "?"}`;
-  const setGrid = (key) => (value) =>
-    edit(`grid:${key}`, (current) => (current.grid = { ...(current.grid || { columns: 0, rows: 0, gap: 0, margin: 0 }), [key]: Math.max(0, Math.round(value || 0)) }));
+  const more = [hasModules ? t("Grid") : null, t("Colours"), t("Notices"), t("About")].filter(Boolean);
   return html`
     <${Header} icon="frame" title=${theme.name || t("Untitled")} subtitle=${`${size} · ${panelName(currentModel())}`} />
     <div class="inspector-body">
+      <p class="inspector-note">
+        ${t("The whole theme. Click something on the panel to change just that.")}
+        ${versionOf
+          ? html`<span class="inspector-version">
+              <${Icon} name="portrait" size=${14} />
+              <span>${t("The version of {name} for a panel mounted vertically. Mounted horizontally, the panel shows {name}, a design of its own: what you change here stays in this version.", { name: themeName(versionOf) })}</span>
+            </span>`
+          : null}
+        ${builtin ? html`<span class="inspector-builtin">${t("Built in: your changes are saved as a theme of your own.")}</span>` : null}
+      </p>
       <${Section} title=${t("Name")}>
         <${TextField} label=${t("Name")} value=${theme.name} onChange=${themeChange("name", (th, v) => (th.name = v))} />
       <//>
-      <${Section} title=${t("Background")}>
-        <${ColorSwatches} label=${t("Background")} value=${background.color} onChange=${themeChange("bg", (th, v) => (th.background = { ...(th.background || {}), color: v }))} />
-        <${Field} label=${cap(t("background image"))}>
-          <${AssetControl} value=${background.image} onChange=${themeChange("bgimg", (th, v) => (th.background = { ...(th.background || {}), image: v || null }))} />
-        <//>
-      <//>
-      ${Object.keys(looks()).length ? html`<${Section} title=${t("Look")}><${LookTiles} theme=${theme} /><//>` : null}
+      ${Object.keys(looks()).length ? html`<${Section} title=${t("Colour world")}><${LookTiles} theme=${theme} /><//>` : null}
+      <${Background} theme=${theme} />
       <${Section} title=${t("Font")}>
         <${FontControl} value=${theme.font === specs.default_font ? "" : theme.font} empty=${t("Default (Barlow Medium)")}
           onChange=${themeChange("font", (th, v) => (th.font = v || specs.default_font))} />
         <small class="field-hint">${t("used by every text widget without its own font")}</small>
       <//>
-      ${hasModules
-        ? html`<${Section} title=${t("Grid")}>
-            <div class="quad">
-              ${[
-                ["columns", t("columns")],
-                ["rows", t("rows")],
-                ["gap", t("gap")],
-                ["margin", t("margin")],
-              ].map(([key, text]) => html`<${Field} key=${key} label=${cap(text)}>
-                <${NumberField} label=${text} value=${theme.grid?.[key] ?? 0} min=${0} max=${key === "columns" || key === "rows" ? 48 : 200}
-                  onChange=${setGrid(key)} />
-              <//>`)}
-            </div>
-            <small class="field-hint">${t("0 = automatic; now {cols} × {rows} cells", { cols: grid?.columns ?? "?", rows: grid?.rows ?? "?" })}</small>
-          <//>`
-        : null}
     </div>
-    <${Footer} summary=${`${t("Fine-tuning")}: ${[t("About"), t("Palette"), t("Messages")].join(", ")}`} onDetails=${() => setPage("details")} />
+    <${Footer} summary=${`${t("Fine-tuning")}: ${more.join(", ")}`} onDetails=${() => setPage("details")} />
   `;
 }
 

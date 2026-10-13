@@ -2,9 +2,11 @@
 // pictures on the left; the inspector on the right; a toolbar over the
 // selection. Everything here is a command too (Ctrl+K).
 
+import { openTheme } from "../../core/actions.js";
 import { registerCommands, registerProvider } from "../../core/commands.js";
 import { edit, isModule, selectedWidgets, selection, setSelection, single, widgets } from "../../core/doc.js";
 import { t, widgetLabel } from "../../core/i18n.js";
+import { VERTICAL, themeEntry, versionFor } from "../../core/orientation.js";
 import { bindKey } from "../../core/shortcuts.js";
 import { setPref, store, useStore } from "../../core/state.js";
 import { html, useRef, useState } from "../../lib/preact.js";
@@ -20,6 +22,7 @@ import { Popover } from "../../ui/layer.js";
 import { paletteOpen } from "../../ui/palette.js";
 import { Canvas, dropItem, setZoom, zoomStep } from "./canvas.js";
 import { FINISH_NAMES, finishesFor } from "./fields.js";
+import { Tips } from "./guide.js";
 import { Images } from "./images.js";
 import { Inspector, MODULE_ICONS, TYPE_ICONS } from "./inspector.js";
 import { Layers } from "./layers.js";
@@ -54,6 +57,8 @@ const PANELS = () => [
   { id: "images", icon: "images", label: t("Pictures"), title: t("Pictures") },
 ];
 
+/** How things move and snap on the canvas. Each choice has its name above it and a line of what
+ * it does (the module grid's hint was a column of words beside its buttons). */
 function ViewOptions() {
   const prefs = useStore((s) => s.prefs);
   const [open, setOpen] = useState(false);
@@ -63,27 +68,28 @@ function ViewOptions() {
       <${Icon} name="sliders" size=${20} />
       <span>${t("View")}</span>
     </button>
-    <${Popover} anchor=${anchor} open=${open} onClose=${() => setOpen(false)} placement="right-end" label=${t("View and snapping")} width=${300}>
-      <div class="pop-section">
+    <${Popover} anchor=${anchor} open=${open} onClose=${() => setOpen(false)} placement="right-end" label=${t("View and snapping")} width=${320}>
+      <div class="pop-section view-options">
         <div class="pop-title">${t("View and snapping")}</div>
-        <${Row} label=${t("Snap")} hint=${t("in pixels; 1: whole pixels")}>
+        <${Row} class="stacked" label=${t("Snap")} hint=${t("What you move or size goes in steps of this many pixels.")}>
           <${Segmented} label=${t("Snap")} value=${prefs.snap} onChange=${(value) => setPref("snap", value)}
             options=${[0, 1, 4, 8, 16].map((value) => ({ value, label: value ? `${value}` : t("off") }))} />
         <//>
-        <${Row} label=${t("Module grid")} hint=${t("how modules move and grow: by whole cells, as the pictures of the modules show them, by half ones, or by each line of the theme's grid; Alt while dragging: by each line")}>
-          <${Segmented} label=${t("Module grid")} value=${prefs.cells || "medium"} onChange=${(value) => setPref("cells", value)}
+        <${Row} class="stacked" label=${t("Steps of the modules")} hint=${t("How modules move and grow: coarse by whole cells, fine by each line of the grid.")}>
+          <${Segmented} label=${t("Steps of the modules")} value=${prefs.cells || "medium"} onChange=${(value) => setPref("cells", value)}
             options=${[
               { value: "coarse", label: t("coarse") },
               { value: "medium", label: t("medium") },
               { value: "fine", label: t("fine") },
             ]} />
         <//>
-        <${Row} label=${t("Guides")} hint=${t("lines to the edges and centres of the others; Alt while dragging: free")}>
+        <${Row} label=${t("Guides")} hint=${t("Lines to the edges and centres of the others while you drag.")}>
           <${Toggle} label=${t("Guides")} checked=${prefs.guides} onChange=${(on) => setPref("guides", on)} />
         <//>
         <${Row} label=${t("Live values")} hint=${t("the preview with this computer's sensors")}>
           <${Toggle} label=${t("Live values")} checked=${prefs.live} onChange=${(on) => setPref("live", on)} />
         <//>
+        <small class="field-hint">${t("Alt while dragging: free, without snapping or guides.")}</small>
       </div>
     <//>`;
 }
@@ -99,6 +105,7 @@ function Rail() {
       </button>`,
     )}
     <div class="rail-flex"></div>
+    <${Tips} />
     <${ViewOptions} />
   </nav>`;
 }
@@ -132,6 +139,23 @@ registerView({
   header: { lead: ThemeTitle, center: WideSearch, actions: DesignActions },
 });
 
+// -- the panel turned ------------------------------------------------------------------------------
+
+// Turned on end or back (Start, Settings), the panel shows another version of its theme (Lumen
+// Vertical for Lumen): the open theme follows, so what is edited is what the panel shows, unless
+// it holds work not saved yet.
+let mountedAs;
+store.subscribe((state) => {
+  const way = state.settings?.config?.device?.orientation;
+  if (way === undefined || way === mountedAs) return;
+  const before = mountedAs;
+  mountedAs = way;
+  const { doc, dirty, page } = state;
+  if (before === undefined || !way || !doc?.id || dirty) return;
+  const theme = doc.id.endsWith(VERTICAL) ? doc.id.slice(0, -VERTICAL.length) : doc.id;
+  if (themeEntry(theme) && versionFor(theme) !== doc.id) openTheme(theme, { page, ask: false });
+});
+
 // -- keys ---------------------------------------------------------------------------------------
 
 const here = () => store.get().route.view === "design" && Boolean(store.get().doc) && !dialogOpen() && !paletteOpen();
@@ -141,7 +165,7 @@ bindKey(["delete", "backspace"], () => (chosen() ? deleteSelection() : false), {
 bindKey("escape", () => (chosen() ? setSelection([]) : false), { when: here });
 bindKey("mod+a", () => selectAll(), { when: here });
 bindKey("mod+c", () => (chosen() ? copySelection() : false), { when: here });
-bindKey("mod+x", () => (chosen() ? (copySelection(), deleteSelection()) : false), { when: here });
+bindKey("mod+x", () => (chosen() ? (copySelection(), deleteSelection({ quiet: true })) : false), { when: here });
 bindKey("mod+v", () => (canPaste() ? paste() : false), { when: here });
 bindKey("mod+d", () => (chosen() ? duplicateSelection() : false), { when: here });
 for (const [key, dx, dy] of [

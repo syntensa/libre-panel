@@ -1,6 +1,7 @@
 // Look's side panel: the colours of the theme, how its shapes are drawn (finish and glow), the
-// panel light, the depth (grid and dust) and the notices. Every change is one undo step through
-// core/doc.js, and the preview follows.
+// panel light, the depth (grid and dust) and the notices, each said in a line. Every change is
+// one undo step through core/doc.js, and the preview follows; a choice the pointer rests on is
+// tried on first (stage.js, peekAt).
 
 import { clone, edit, isModule, setSelection, theme as currentTheme, widgets } from "../../core/doc.js";
 import { fieldLabel, formatNumber, t } from "../../core/i18n.js";
@@ -14,7 +15,8 @@ import { COLOR, ColorSwatches } from "../design/color.js";
 import { FINISH_NAMES, FinishPicture, finishesFor } from "../design/fields.js";
 import { PaletteEditor } from "../design/inspector.js";
 import { inspectorState } from "../design/inspector-state.js";
-import { activeLook, applyLook, looks, specOf } from "../design/ops.js";
+import { activeLook, applyLook, looks, specOf, wearLook } from "../design/ops.js";
+import { peeks } from "./stage.js";
 
 const cap = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : text);
 const label = (key) => cap(fieldLabel(key));
@@ -48,7 +50,8 @@ function Colours() {
       ? html`<div class="look-grid" role="radiogroup" aria-label=${t("Colour world")}>
           ${all.map(
             ([key, item]) => html`<button type="button" role="radio" key=${key} aria-checked=${String(active === key)} class="look-tile"
-              title=${t("Use the {name} look", { name: names[key] || item.name })} onClick=${() => applyLook(key)}>
+              title=${t("Use the {name} look", { name: names[key] || item.name })} onClick=${() => applyLook(key)}
+              ...${active === key ? {} : peeks((theme) => wearLook(theme, key))}>
               <span class="look-dots">
                 ${["accent", "mem", "net", "surface"].map((role) => html`<i key=${role} style=${{ background: item.palette[role] || item.palette.accent }}></i>`)}
               </span>
@@ -56,7 +59,7 @@ function Colours() {
             </button>`,
           )}
         </div>
-        <small class="field-hint">${t("A look sets the palette's colours and the modules' style.")}</small>`
+        <small class="field-hint">${t("The colours of the whole theme in one click.")}</small>`
       : null}
     <details class="look-more">
       <summary>${t("Colours of this theme")}</summary>
@@ -121,6 +124,11 @@ function Finish() {
     edit(`finish:${scope}`, () => {
       for (const widget of members) if (supports(widget, finish)) widget.finish = finish;
     });
+  // the same on a copy of the theme, to try it on
+  const ids = new Set(members.map((widget) => widget.id));
+  const wear = (finish) => (copy) => {
+    for (const widget of copy.widgets) if (ids.has(widget.id) && supports(widget, finish)) widget.finish = finish;
+  };
   const setGlow = (value) =>
     edit(`glow:${scope}`, (theme) => {
       for (const widget of members) if (!isModule(widget)) widget.glow = value;
@@ -132,6 +140,7 @@ function Finish() {
     <//>`;
   }
   return html`<${Section} title=${t("Finish and glow")}>
+    <p class="look-about">${t("How rings, bars and numbers are drawn, and how much they glow.")}</p>
     ${groups.length > 1
       ? html`<${Segmented} class="look-scope" label=${t("Elements")} value=${scope} onChange=${setChosen}
           options=${[{ value: "all", label: t("All") }, ...groups.map((item) => ({ value: item.id, label: item.title }))]} />`
@@ -139,7 +148,7 @@ function Finish() {
     <div class=${`finish-tiles${offered.length > 4 ? " five" : offered.length > 3 ? " four" : ""}`} role="radiogroup" aria-label=${t("Style")}>
       ${offered.map(
         (finish) => html`<button type="button" role="radio" key=${finish} aria-checked=${String(current(finish))} class="finish-tile"
-          onClick=${() => set(finish)}>
+          onClick=${() => set(finish)} ...${current(finish) ? {} : peeks(wear(finish))}>
           ${finish === "auto"
             ? html`<${AutoPicture} />`
             : html`<${FinishPicture} finish=${finish} shape=${finish === "acrylic" ? "text" : shape} />`}
@@ -160,14 +169,7 @@ function Finish() {
 // -- the blocks of the look (theme "look"): each is on or off --------------------------------------
 
 export function toggleBlock(block, on) {
-  const spec = specs().look[block];
-  edit(`look:${block}`, (theme) => {
-    const look = { ...(theme.look || {}) };
-    if (on) look[block] = Object.fromEntries(Object.entries(spec).map(([key, [, fallback]]) => [key, clone(fallback)]));
-    else delete look[block];
-    if (Object.keys(look).length) theme.look = look;
-    else delete theme.look;
-  });
+  edit(`look:${block}`, (theme) => setBlockOn(theme, block, on));
 }
 
 const setBlock = (block, key) => (value) =>
@@ -175,11 +177,23 @@ const setBlock = (block, key) => (value) =>
     theme.look[block] = { ...theme.look[block], [key]: value };
   });
 
-/** A titled block with its switch; `render(settings)` draws what is in it while it is on. */
+/** A block of the look switched on (with its defaults) or off, on a theme. */
+function setBlockOn(theme, block, on) {
+  const look = { ...(theme.look || {}) };
+  if (on) look[block] = Object.fromEntries(Object.entries(specs().look[block]).map(([key, [, fallback]]) => [key, clone(fallback)]));
+  else delete look[block];
+  if (Object.keys(look).length) theme.look = look;
+  else delete theme.look;
+}
+
+/** A titled block with its switch, which tries on what it would do while the pointer rests on
+ * it; `render(settings)` draws what is in it while it is on. */
 function BlockSection({ block, title, about, render }) {
   const settings = currentTheme()?.look?.[block];
   return html`<${Section} class="look-block" title=${title}
-    action=${html`<${Toggle} label=${title} checked=${Boolean(settings)} onChange=${(on) => toggleBlock(block, on)} />`}>
+    action=${html`<span class="look-switch" ...${peeks((theme) => setBlockOn(theme, block, !settings))}>
+      <${Toggle} label=${title} checked=${Boolean(settings)} onChange=${(on) => toggleBlock(block, on)} />
+    </span>`}>
     ${about ? html`<p class="look-about">${about}</p>` : null}
     ${settings ? render(settings) : null}
   <//>`;
@@ -226,7 +240,7 @@ function SunPath() {
 
 function Light() {
   return html`<${BlockSection} block="light" title=${t("Panel light")}
-    about=${t("one light for the whole panel: it glints on frames and sweeps across at start, on the hour, on a new track and after a tube or entrance")}
+    about=${t("One light over the whole panel: it glints on edges and sweeps across now and then.")}
     render=${(settings) => html`
       <div class="look-sun">
         <${SunPath} />
@@ -251,7 +265,7 @@ function Light() {
 
 function Grid() {
   return html`<${BlockSection} block="grid" title=${t("Grid background")}
-    about=${t("thin lines behind the widgets, as on SPUR II's screens")}
+    about=${t("Fine lines behind everything, as on graph paper.")}
     render=${(settings) => html`
       <${BlockSlider} block="grid" settings=${settings} name="alpha" step=${0.05} format=${percent} text=${t("Visibility")} />
       <details class="look-more">
@@ -323,7 +337,7 @@ function DustAreas({ dust }) {
 
 function Dust() {
   return html`<${BlockSection} block="dust" title=${t("Depth dust")}
-    about=${t("fine grains fall from the elements into the depth behind the panel; drawn in video mode and here, not on a panel that is sent pictures")}
+    about=${t("Fine grains drift from the elements into the depth. The panel shows them with smooth motion only; the preview here always does.")}
     render=${(settings) => html`
       <${BlockSlider} block="dust" settings=${settings} name="strength" step=${0.1} format=${decimal} />
       <details class="look-more">
@@ -351,22 +365,26 @@ function Notices() {
     ...Object.entries(styles).map(([name, info]) => ({ value: name, label: info.label, hint: name === "band" ? t("a glowing edge, the band rolls down from it") : "" })),
   ];
   if (current && !styles[current]) options.push({ value: current, label: t("{name} (not installed)", { name: current }), hint: "" });
-  const choose = (name) =>
-    edit("toast:style", (th) => {
-      th.toast = { ...(th.toast || {}) };
-      if (name) {
-        th.toast.style = name;
-        th.toast.options = Object.fromEntries(Object.entries(styles[name]?.options || {}).map(([key, [, fallback]]) => [key, clone(fallback)]));
-      } else {
-        delete th.toast.style;
-        delete th.toast.options;
-      }
-    });
+  const wear = (name) => (th) => {
+    th.toast = { ...(th.toast || {}) };
+    if (name) {
+      th.toast.style = name;
+      th.toast.options = Object.fromEntries(Object.entries(styles[name]?.options || {}).map(([key, [, fallback]]) => [key, clone(fallback)]));
+    } else {
+      delete th.toast.style;
+      delete th.toast.options;
+    }
+  };
+  const choose = (name) => edit("toast:style", wear(name));
+  // a style is tried on with a notice on show: one no theme shows by itself (the volume and
+  // what plays are left out where the theme has them) and this one does not switch off
+  const sample = ["game", "panel", "device"].find((kind) => !(theme.toast?.off || []).includes(kind)) || "game";
   return html`<${Section} title=${t("Notices")}>
+    <p class="look-about">${t("How short notices look on the panel, such as the volume, a new track or a warning.")}</p>
     <div class="look-notices" role="radiogroup" aria-label=${t("How notices look")}>
       ${options.map(
         (option) => html`<button type="button" role="radio" key=${option.value} aria-checked=${String(current === option.value)} class="look-notice"
-          onClick=${() => choose(option.value)}>
+          onClick=${() => choose(option.value)} ...${peeks(wear(option.value), sample)}>
           <strong>${option.label}</strong>
           ${option.hint ? html`<span>${option.hint}</span>` : null}
         </button>`,
@@ -395,6 +413,7 @@ export function LookPanel() {
   useStore((s) => [s.rev, s.lang, s.render.size[0], s.render.size[1]]); // the sections read the theme as it is now
   if (!currentTheme()) return null;
   return html`<aside class="look-side" aria-label=${t("Look")}>
+    <p class="look-intro">${t("Rest the pointer on a choice to try it on the picture; a click keeps it.")}</p>
     <${Colours} />
     <${Finish} />
     <${Light} />

@@ -1,12 +1,13 @@
 // What every view can do with the theme being edited: open, save, save as,
 // import, export, show it on the panel, fit it to another panel.
 
-import { confirmDialog, promptDialog } from "../ui/dialog.js";
+import { html } from "../lib/preact.js";
+import { confirmDialog, openDialog, promptDialog } from "../ui/dialog.js";
 import { toast, toastError } from "../ui/toast.js";
 import { endpoints } from "./api.js";
 import { clone, commit, docSerial, markClean, openDoc, setSelection, touch, updateDoc } from "./doc.js";
 import { t } from "./i18n.js";
-import { isVersion, versionFor } from "./orientation.js";
+import { VERTICAL, isVersion, versionFor } from "./orientation.js";
 import { store } from "./state.js";
 
 export const THEME_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
@@ -60,15 +61,26 @@ export function pageOf(id) {
   return (id && pages.find((page) => page.theme === id)?.id) || null;
 }
 
-/** Nothing unsaved, or the user agrees to lose it. */
+/** Nothing unsaved, or the user saves it first or agrees to lose it. Keeping the work is one
+ * click (Save, the default) instead of Cancel, save and the same way again. */
 export async function confirmDiscard() {
-  if (!store.get().dirty) return true;
-  return confirmDialog({
-    title: t("Discard unsaved changes?"),
-    message: t("The changes to this theme since it was last saved are lost."),
-    confirm: t("Discard"),
-    danger: true,
-  });
+  const { dirty, doc } = store.get();
+  if (!dirty) return true;
+  const title = t("Discard unsaved changes?");
+  const choice = await openDialog(
+    (close) => html`
+      <h2 class="dialog-title">${title}</h2>
+      <p class="dialog-text">${t("Your changes to “{name}” are not saved yet: save them, or they are lost.", { name: doc.theme.name || themeName(doc.id) })}</p>
+      <div class="dialog-actions">
+        <button type="button" class="btn" onClick=${() => close(null)}>${t("Cancel")}</button>
+        <span class="grow"></span>
+        <button type="button" class="btn btn-danger" onClick=${() => close("discard")}>${t("Discard")}</button>
+        <button type="button" class="btn btn-primary" autofocus onClick=${() => close("save")}>${t("Save")}</button>
+      </div>
+    `,
+    { label: title },
+  );
+  return choice === "save" ? save() : choice === "discard";
 }
 
 /** Open a saved theme for editing (after asking about unsaved changes). */
@@ -131,7 +143,7 @@ export async function save() {
   try {
     await endpoints.saveTheme(doc.id, doc.theme, doc.id);
     markClean();
-    toast(t("Saved {id}", { id: doc.id }), { kind: "success" });
+    toast(t("Saved {id}", { id: doc.theme.name || doc.id }), { kind: "success" });
     refreshThemes();
     return true;
   } catch (error) {
@@ -143,7 +155,19 @@ export async function save() {
 export async function saveAs() {
   const { doc, themes } = store.get();
   if (!doc) return false;
-  const suggestion = slug(doc.theme.name) + (doc.builtin ? "-custom" : "") || "my-theme";
+  // a copy of a built-in theme that kept its name was a second "Lumen" in every list: it is
+  // "Lumen (mine)", and its folder is named after that, free of the others'
+  const copy = doc.builtin && doc.theme.name === themeName(doc.id) ? t("{name} (mine)", { name: doc.theme.name }) : null;
+  const all = [...themes, ...(store.get().versions || [])];
+  const taken = new Set(all.map((theme) => theme.id));
+  // a copy of a version for a panel on end keeps its ending after the copy's name:
+  // "lumen-mine-vertical" goes with "lumen-mine", a copy of Lumen, as "lumen-vertical" with "lumen"
+  const end = doc.builtin && doc.id && isVersion({ id: doc.id }, all) ? VERTICAL : "";
+  const first = end
+    ? slug(copy ? t("{name} (mine)", { name: themeName(doc.id.slice(0, -end.length)) }) : doc.theme.name)
+    : slug(copy || doc.theme.name) || "my-theme"; // (a folder that is taken gets a number: below)
+  let suggestion = first + end;
+  for (let n = 2; doc.builtin && taken.has(suggestion); n++) suggestion = `${first}-${n}${end}`;
   const id = await promptDialog({
     title: t("Save as…"),
     // why a person who only wanted it on the panel is asked for a name
@@ -164,17 +188,34 @@ export async function saveAs() {
     if (!sure) return false;
   }
   try {
+    if (copy) {
+      commit("theme:name");
+      doc.theme.name = copy;
+      touch();
+    }
     await endpoints.saveTheme(id, doc.theme, doc.id);
     updateDoc({ id, builtin: false });
     markClean();
     await refreshThemes();
     refreshAssets();
-    toast(t("Saved {id}", { id }), { kind: "success" });
+    toast(t("Saved {id}", { id: doc.theme.name || id }), { kind: "success" });
     return true;
   } catch (error) {
     toastError(error);
     return false;
   }
+}
+
+/**
+ * Where the open theme stands with the panel ("To the panel" says it): "shown" when it is saved
+ * and the theme of the page it is open for (its version for a panel on end counts), and that
+ * page is on; "changed" when it is that page's theme with changes not saved; else "other".
+ */
+export function panelState({ doc, dirty, page, pages } = store.get()) {
+  const target = (pages?.pages || []).find((item) => item.id === (page || "normal"));
+  const there = Boolean(doc?.id && target?.theme && (target.theme === doc.id || versionFor(target.theme) === doc.id));
+  if (!there || (target.id !== "normal" && !target.on)) return "other";
+  return dirty ? "changed" : "shown";
 }
 
 /** Save the theme and show it: on the page it was opened for (a mode, the round report), else
@@ -187,7 +228,7 @@ export async function applyToPanel() {
   try {
     store.set({ pages: await endpoints.setPage(page || "normal", { theme: saved.id }) });
     if (!page) store.set({ page: "normal" });
-    toast(t('"{id}" is now shown on the panel', { id: saved.id }), { kind: "success" });
+    toast(t('"{id}" is now shown on the panel', { id: saved.theme.name || saved.id }), { kind: "success" });
     return true;
   } catch (error) {
     toastError(error);

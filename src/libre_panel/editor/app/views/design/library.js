@@ -1,6 +1,7 @@
 // The library: modules (they lay themselves out for the cells they get),
 // building blocks (groups of widgets) and single widgets, with pictures in the
-// theme's own look. Drag one onto the panel, or click it.
+// theme's own look. A click adds one where there is room (its "+" says so), a drag puts it
+// where it is let go.
 
 import { endpoints } from "../../core/api.js";
 import { t, widgetLabel } from "../../core/i18n.js";
@@ -9,6 +10,7 @@ import { html, useEffect, useMemo, useState } from "../../lib/preact.js";
 import { Chips } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { dropItem, startLibraryDrag } from "./canvas.js";
+import { FirstSteps, useFirstSteps } from "./guide.js";
 import { TYPE_ICONS } from "./inspector.js";
 import { moduleKinds } from "./ops.js";
 
@@ -68,7 +70,7 @@ function Tile({ item, picture, icon, name, small = false }) {
     type="button"
     class=${`tile${small ? " small" : ""}`}
     data-item=${item.key}
-    title=${t("Drag onto the panel, or click to add")}
+    title=${t("Click to add it, or drag it onto the panel")}
     onPointerDown=${(event) => startLibraryDrag(event, { ...item, label: name }, src)}
     onClick=${(event) => event.detail === 0 && dropItem(item, null)}
     onKeyDown=${(event) => {
@@ -81,6 +83,7 @@ function Tile({ item, picture, icon, name, small = false }) {
     <span class="tile-picture">
       ${src ? html`<img src=${src} alt="" draggable="false" />` : html`<${Icon} name=${icon} size=${small ? 22 : 26} />`}
     </span>
+    <span class="tile-add" aria-hidden="true"><${Icon} name="plus" size=${small ? 12 : 14} strokeWidth=${2.6} /></span>
     <span class="tile-name">${name}</span>
   </button>`;
 }
@@ -110,7 +113,9 @@ export function Library() {
     ["game", t("Game")],
   ];
   const nothing = !shownModules.length && !presets.length && !types.length;
+  const firstVisit = useFirstSteps(); // its steps say what the hint at the foot says
   return html`<div class="library">
+    ${firstVisit ? html`<${FirstSteps} />` : null}
     <label class="search-field">
       <${Icon} name="search" size=${15} />
       <input type="text" value=${query} placeholder=${t("Find a building block")} aria-label=${t("Find a building block")}
@@ -141,7 +146,7 @@ export function Library() {
         : null}
       ${nothing ? html`<p class="side-hint">${t("Nothing of that name.")}</p>` : null}
     </div>
-    <p class="library-hint">${t("Drag onto the panel. A module fits itself to the room you give it.")}</p>
+    ${firstVisit ? null : html`<p class="library-hint">${t("Click a block to add it, or drag it to where it should go. A module fits itself to the room it gets.")}</p>`}
   </div>`;
 }
 
