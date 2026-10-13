@@ -1259,3 +1259,20 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* a newer version (update.js): the card of the clip's question, with pip's command where there
+   is no download */
+.update-card .update-card-now {
+  font-size: 13px;
+}
+
+.update-card-command code {
+  display: block;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}

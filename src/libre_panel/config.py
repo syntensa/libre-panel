@@ -55,6 +55,10 @@ language = "auto"
 # Optional: override how often sensors are read (milliseconds); the theme sets it.
 # refresh_ms = 1000
 
+# Whether Libre Panel looks once a day for a newer version (a request to GitHub; Start then
+# says so). Not set, Start asks once.
+# check_updates = true
+
 # Frames per second: values glide smoothly between sensor readings.
 # 1 turns animation off (least CPU and USB traffic).
 fps = 10
@@ -349,6 +353,7 @@ class Config:
     refresh_ms: int | None = None
     fps: int = 10
     transition: str = "fade"  # between themes: cut, fade, slide, tube, entrance, or a plugin's
+    check_updates: bool | None = None  # a look for a newer version once a day; None: not asked
     device: DeviceConfig = field(default_factory=DeviceConfig)
     sensors: SensorsConfig = field(default_factory=SensorsConfig)
     hardware: HardwareConfig = field(default_factory=HardwareConfig)
@@ -444,6 +449,8 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         cfg.refresh_ms = _expect(data["refresh_ms"], int, "refresh_ms")
         if cfg.refresh_ms < 100:
             raise ConfigError("refresh_ms: must be at least 100")
+    if "check_updates" in data:
+        cfg.check_updates = _expect(data["check_updates"], bool, "check_updates")
 
     dev = _expect(data.get("device", {}), dict, "device")
     cfg.device.model = _expect(dev.get("model", cfg.device.model), str, "device.model")

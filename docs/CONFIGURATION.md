@@ -32,7 +32,7 @@ invalid is refused with the reason, and nothing is written.
 | Sensors | `[sensors] providers` (which sources, and their order; those not in use under *More sources*), the hardware's names, and under *Advanced* `refresh_ms` and `[sensors.librehardwaremonitor]` (`mode`, `url`) |
 | Game mode and more | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
-| Start and system | `language`, and starting with the system (`libre-panel autostart`) |
+| Start and system | `language`, `check_updates`, and starting with the system (`libre-panel autostart`) |
 | About | nothing: the version, the licence, the notices, how to report a panel, and the folders (with *Open folder*) |
 
 The running Libre Panel follows a change at once, services included (one whose options
@@ -47,6 +47,7 @@ a restart, and its *Restart the panel* button does that without quitting Libre P
                                # default shows (see "The theme on the panel")
 language = "auto"              # "auto" (system language), "en" or "de"
 # refresh_ms = 1000            # override the theme's refresh interval
+# check_updates = true        # look once a day for a newer version (not set: Start asks)
 fps = 10                       # 1-60; values glide between readings
 transition = "fade"            # between themes: "cut", "fade", "slide", "tube", "entrance",
                                # or a plugin's
@@ -119,6 +120,18 @@ fps = 50                       # frames per second in video mode
 local_clip = ""                # required for "auto" and "on", see below
 clip_asked = false             # true once the app has asked for local_clip (on Start)
 ```
+
+## New versions
+
+With `check_updates = true` Libre Panel asks GitHub once a day for its latest release
+(`api.github.com/repos/syntensa/libre-panel/releases/latest`), and Start shows a newer one with
+what is new and the download that fits how it was installed: the setup, the portable .zip, the
+AppImage or the Linux .tar.gz (installed with pip: the command that brings it). The request
+carries what any does (the computer's address and "libre-panel/<version>"); nothing of you or
+the panel. The answer is kept in `updates.json` beside config.toml, with the version whose card
+was closed (*Later*): that card does not come again, the next version's does. Without the
+setting Start asks once; `false` never looks. *Settings → Start and system → New versions*
+switches it and looks at once (*Look now*).
 
 ## The theme on the panel
 

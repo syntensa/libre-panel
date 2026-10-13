@@ -45,6 +45,7 @@ from libre_panel.editor import access
 from libre_panel.editor import settings as app_settings
 from libre_panel.editor.news import News
 from libre_panel.editor.presets import presets_for_editor
+from libre_panel.editor.updates import Updates
 from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_font_path, builtin_fonts
 from libre_panel.i18n import t
 from libre_panel.icons import ICON_NAMES
@@ -337,6 +338,7 @@ class EditorState:
         self.restart = app_settings.Restart()  # settings the panel loop takes in when it restarts
         self.start_screen_jobs: Any = None  # the panel's own screens (a test puts a fake panel)
         self.news = News(config_path)  # whom Start tells what is new (news.py)
+        self.updates = Updates(config_path)  # whether a newer version is out (updates.py)
 
     def start_screen(self) -> Any:
         """What writes the panel's boot logo and standby clip (devices/panel_files.py)."""
@@ -1015,6 +1017,28 @@ class EditorHandler(BaseHTTPRequestHandler):
         except ValueError as exc:
             self._error(str(exc))
 
+    def _check_updates(self) -> bool | None:
+        try:
+            return load_config(self.state.config_path).check_updates
+        except ConfigError:
+            return None  # config.toml cannot be read: nothing is asked
+
+    def _update(self, query: dict[str, list[str]]) -> None:
+        """Whether a newer version is out (updates.py); ``?now=1`` asks GitHub at once."""
+        self._json(self.state.updates.state(self._check_updates(), now="now" in query))
+
+    def _update_later(self) -> None:
+        """``{"later": "0.7.0"}``: the card of that version was closed (updates.py)."""
+        payload = self._read_json()
+        if payload is None:
+            return
+        later = payload.get("later") if isinstance(payload, dict) else None
+        version = later if isinstance(later, str) else ""
+        try:
+            self._json(self.state.updates.later(version, self._check_updates()))
+        except ValueError as exc:
+            self._error(str(exc))
+
     def _page_switch(self, page: str, on: bool) -> list[tuple[str, str, Any]]:
         """What switching a page on or off writes: game mode's page is the game service
         switching by itself (switched on, the service runs), the round report's is the memory
@@ -1663,6 +1687,7 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/pages", lambda h, m, u: h._panel_pages()),
     Route("GET", "/api/sequence", lambda h, m, u: h._sequence()),
     Route("GET", "/api/news", lambda h, m, u: h._json(h.state.news.state())),
+    Route("GET", "/api/update", lambda h, m, u: h._update(parse_qs(u.query))),
     *(
         Route("GET", path, lambda h, m, u, name=name: h._settings(name))
         for path, name in _SETTINGS_GET.items()
@@ -1704,6 +1729,7 @@ ROUTES: tuple[Route, ...] = (
     Route("POST", "/api/pages", lambda h, m, u: h._set_panel_page()),
     Route("POST", "/api/sequence", lambda h, m, u: h._set_sequence()),
     Route("POST", "/api/news", lambda h, m, u: h._see_news()),
+    Route("POST", "/api/update", lambda h, m, u: h._update_later()),
     Route("POST", "/api/start-screen", lambda h, m, u: h._start_screen_action()),
     *(
         Route("POST", path, lambda h, m, u, name=name: h._settings(name, body=True))

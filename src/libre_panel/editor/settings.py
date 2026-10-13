@@ -386,6 +386,7 @@ class Settings:
                     "options": _plain(config.services.options),
                 },
                 "language": config.language,
+                "check_updates": config.check_updates,
             },
             "catalog": self._catalog(),
             "restart": self.restart.pending(self.controls),
@@ -932,6 +933,7 @@ RULES: dict[str, Any] = {
     "video.clip_asked": lambda n, v, c: _flag(n, v),
     "video.ffmpeg": lambda n, v, c: _text(n, v, 260),
     "refresh_ms": lambda n, v, c: _whole(n, v, 100, 3_600_000),
+    "check_updates": lambda n, v, c: _flag(n, v),
     "sensors.providers": _rule_providers,
     "sensors.librehardwaremonitor.mode": lambda n, v, c: _choice(
         n, v, ("auto", "service", "inprocess", "webserver")

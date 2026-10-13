@@ -1,16 +1,62 @@
 // Settings → Start and system: starting with the system, starting with the highest rights
-// (Windows; only when asked for, and only an administrator can set it up), the language, and,
-// where the app is shown in the browser, what a window of its own needs.
+// (Windows; only when asked for, and only an administrator can set it up), the language, the
+// daily look for a new version, and, where the app is shown in the browser, what a window of
+// its own needs.
 
 import { inNativeWindow } from "../../core/app.js";
 import { languageSetting, languages, setLanguage, t } from "../../core/i18n.js";
 import { loadSystem, saveSystem } from "../../core/settings.js";
 import { useStore } from "../../core/state.js";
-import { html } from "../../lib/preact.js";
+import { html, useState } from "../../lib/preact.js";
 import { Segmented, Toggle } from "../../ui/controls.js";
 import { confirmDialog, openDialog } from "../../ui/dialog.js";
+import { Icon } from "../../ui/icons.js";
 import { toastError } from "../../ui/toast.js";
+import { loadUpdate, setCheckUpdates, useUpdate } from "../home/update.js";
 import { Card, Note, SettingRow, Status, copyText } from "./parts.js";
+
+/** When GitHub was asked last, as the clock reads it ("" before the first time). */
+const askedAt = (seconds) => (seconds ? new Date(seconds * 1000).toLocaleString() : "");
+
+/** Whether Libre Panel looks for a new version once a day, what it found, and "Look now". */
+function UpdatesRow() {
+  const update = useUpdate();
+  const [looking, setLooking] = useState(false);
+  if (!update) return null;
+  const look = async () => {
+    setLooking(true);
+    try {
+      await loadUpdate({ now: true });
+    } finally {
+      setLooking(false);
+    }
+  };
+  const status = !update.check
+    ? null
+    : update.error
+      ? html`<${Status} tone="off">${t("GitHub did not answer: {error}", { error: update.error })}<//>`
+      : update.newer
+        ? html`<${Status} tone="warn">${t("Libre Panel {version} is out.", { version: update.latest.version })}<//>`
+        : update.asked
+          ? html`<${Status} tone="ok">${t("Up to date ({version}), looked {time}.", { version: update.current, time: askedAt(update.asked) })}<//>`
+          : null;
+  return html`<${SettingRow}
+    title=${t("New versions")}
+    hint=${t("Once a day Libre Panel asks GitHub whether a new version is out, and Start says so. Nothing of you or your panel is sent.")}
+    status=${status}
+    data-updates
+  >
+    ${update.check && update.newer
+      ? html`<a class="btn" href=${update.latest.download || update.latest.page} target="_blank" rel="noopener noreferrer">
+          ${t("Get {version}", { version: update.latest.version })} <${Icon} name="external" size=${14} />
+        </a>`
+      : null}
+    ${update.check
+      ? html`<button type="button" class="btn" disabled=${looking} onClick=${look}>${t("Look now")}</button>`
+      : null}
+    <${Toggle} label=${t("Look for new versions")} checked=${Boolean(update.check)} onChange=${(on) => setCheckUpdates(on).catch(toastError)} />
+  <//>`;
+}
 
 /** What to do when the app is not run as administrator: open a terminal that is. */
 function Elevate({ command, close }) {
@@ -102,6 +148,7 @@ function StartCard() {
         ]}
       />
     <//>
+    <${UpdatesRow} />
     ${inNativeWindow()
       ? null
       : html`<${SettingRow}

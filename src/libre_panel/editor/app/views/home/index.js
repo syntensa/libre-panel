@@ -25,6 +25,7 @@ import { MountedChoice, PanelCard, PanelStrip, asksMounting, panelModelNow, useP
 import { Gallery, ThemeRow, collectionsOf, fitsPanel, startThemes } from "./themes.js";
 import { SequenceCard, SequencePage } from "./sequence.js";
 import { SetupCard } from "./setup.js";
+import { UpdateCard } from "./update.js";
 
 // -- what a click does ---------------------------------------------------------------------------
 
@@ -297,6 +298,7 @@ function Launcher({ focus }) {
       <${StartNotices} />
       <${PanelCard} />
       <${ClipQuestion} focus=${focus} />
+      <${UpdateCard} />
       <${Welcome} />
       <${PagesCard} />
     </div>

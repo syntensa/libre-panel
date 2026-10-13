@@ -268,3 +268,103 @@ def test_start_switches_the_volume_on_for_every_screen_and_leads_to_its_look(
         tile.get_by_role("button", name="Style").click()
         page.wait_for_url(re.compile(r"#/look$"))
         expect(page.locator("[data-look-volume]")).to_be_in_viewport()
+
+
+def update_route(latest=None, kind="setup"):
+    """/api/update as the server answers it, GitHub's part made up: whether to look comes from
+    config.toml as the server reads it; a POST of "later" is kept for the next answer."""
+    later = {"version": ""}
+
+    def handler(route, request):
+        if request.method == "POST":
+            later["version"] = json.loads(request.post_data)["later"]
+        check = settings_config().check_updates
+        body = {
+            "check": check,
+            "current": __version__,
+            "kind": kind,
+            "latest": latest if check else None,
+            "newer": bool(check and latest),
+            "asked": 1_790_000_000 if check else None,
+            "error": "",
+            "later": later["version"],
+        }
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(body))
+
+    return handler
+
+
+NEW = {
+    "version": "9.1.0",
+    "page": "https://github.com/syntensa/libre-panel/releases/tag/v9.1.0",
+    "download": "https://github.com/syntensa/libre-panel/releases/download/v9.1.0/setup.exe",
+    "notes": "Something new on every screen.",
+    "published": "2026-11-01T10:00:00Z",
+}
+
+
+def test_start_asks_once_whether_to_look_for_new_versions(app_url, isolated_home):  # noqa: F811
+    choose_theme(isolated_home, "lumen")
+    routes = {"**/api/update*": update_route()}
+    with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
+        card = page.locator("[data-update='ask']")
+        expect(card).to_contain_text("Hear of new versions?")
+        expect(card).to_contain_text("nothing of you or your panel is sent")
+        card.get_by_role("button", name="Yes, look").click()
+        waits_for(page, lambda: settings_config().check_updates is True)
+        expect(card).to_have_count(0)  # asked once: nothing newer, no card
+        page.reload()
+        page.wait_for_selector(".view > *")
+        expect(page.locator("[data-update]")).to_have_count(0)
+
+
+def test_no_thanks_is_kept_and_settings_switch_it_on_later(app_url, isolated_home):  # noqa: F811
+    choose_theme(isolated_home, "lumen")
+    routes = {"**/api/update*": update_route()}
+    with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
+        page.get_by_role("button", name="No, thanks").click()
+        waits_for(page, lambda: settings_config().check_updates is False)
+        expect(page.locator("[data-update]")).to_have_count(0)
+        page.goto(f"{app_url}#/settings/system")
+        row = page.locator("[data-updates]")
+        switch = row.get_by_role("switch", name="Look for new versions")
+        expect(switch).to_have_attribute("aria-checked", "false")
+        switch.click()
+        waits_for(page, lambda: settings_config().check_updates is True)
+        expect(row).to_contain_text(f"Up to date ({__version__})")
+        expect(row.get_by_role("button", name="Look now")).to_be_visible()
+
+
+def test_a_newer_version_shows_with_its_download_until_later(app_url, isolated_home):  # noqa: F811
+    from libre_panel.config import set_config_value
+
+    choose_theme(isolated_home, "lumen")
+    set_config_value("check_updates", True)
+    routes = {"**/api/update*": update_route(NEW)}
+    with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
+        card = page.locator("[data-update='new']")
+        expect(card).to_contain_text("Libre Panel 9.1.0 is out")
+        expect(card).to_contain_text("Something new on every screen.")
+        expect(card).to_contain_text(f"You have {__version__}.")
+        expect(card.get_by_role("link", name="Download")).to_have_attribute("href", NEW["download"])
+        expect(card.get_by_role("link", name="What is new")).to_have_attribute("href", NEW["page"])
+        with page.expect_request(lambda r: r.url.endswith("/api/update") and r.method == "POST"):
+            card.get_by_role("button", name="Later").click()
+        expect(card).to_have_count(0)
+        page.goto(f"{app_url}#/settings/system")
+        row = page.locator("[data-updates]")
+        expect(row).to_contain_text("Libre Panel 9.1.0 is out.")
+        expect(row.get_by_role("link", name="Get 9.1.0")).to_have_attribute("href", NEW["download"])
+
+
+def test_installed_with_pip_the_card_gives_the_command(app_url, isolated_home):  # noqa: F811
+    from libre_panel.config import set_config_value
+
+    choose_theme(isolated_home, "lumen")
+    set_config_value("check_updates", True)
+    routes = {"**/api/update*": update_route({**NEW, "download": ""}, kind="python")}
+    with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
+        card = page.locator("[data-update='new']")
+        expect(card.locator("code")).to_contain_text("libre-panel@v9.1.0")
+        expect(card.get_by_role("link", name="Download")).to_have_count(0)
+        expect(card.get_by_role("link", name="What is new")).to_be_visible()
