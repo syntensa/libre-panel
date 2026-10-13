@@ -2,6 +2,7 @@
 
 import json
 import logging
+import threading
 from pathlib import Path
 
 import pytest
@@ -34,8 +35,12 @@ def provider_with(**options):
     return lhm.LibreHardwareMonitorProvider({"poll_seconds": 3600, **options})
 
 
-def records(caplog, level):
-    return [r.getMessage() for r in caplog.records if r.levelno == level]
+def records(caplog, level, provider):
+    """What the test's provider logged, from the test's thread or its own: a provider of
+    another test may still be asking the real address, which on Windows takes until its
+    timeout."""
+    mine = {threading.get_ident(), getattr(provider._thread, "ident", None)}
+    return [r.getMessage() for r in caplog.records if r.levelno == level and r.thread in mine]
 
 
 def test_a_silent_web_server_hides_the_readings_after_a_while(web_server, caplog):
@@ -48,12 +53,12 @@ def test_a_silent_web_server_hides_the_readings_after_a_while(web_server, caplog
 
         provider._poll_once(answered + 3)  # a short silence: the last numbers stay
         assert provider.read()["cpu.load"].value == 0.4
-        assert not records(caplog, logging.WARNING)
+        assert not records(caplog, logging.WARNING, provider)
 
         provider._poll_once(answered + 6)  # long enough: "--" on the panel
         assert provider.read() == {}
         provider._poll_once(answered + 9)
-        warning = records(caplog, logging.WARNING)
+        warning = records(caplog, logging.WARNING, provider)
         assert len(warning) == 1
         assert "has not answered" in warning[0] and "hidden" in warning[0]
 
@@ -61,9 +66,9 @@ def test_a_silent_web_server_hides_the_readings_after_a_while(web_server, caplog
         provider._poll_once(answered + 10)
         assert provider.read()["cpu.load"].value == 0.4
         provider._poll_once(answered + 11)
-        back = records(caplog, logging.INFO)
+        back = records(caplog, logging.INFO, provider)
         assert len(back) == 1 and "answers again" in back[0]
-        assert len(records(caplog, logging.WARNING)) == 1  # nothing more to complain about
+        assert len(records(caplog, logging.WARNING, provider)) == 1  # nothing more to say
     finally:
         provider.close()
 
@@ -79,7 +84,8 @@ def test_a_slow_answer_in_time_is_not_a_silence(web_server, caplog):
         web_server["answer"] = TREE
         provider._poll_once(answered + 5.5)  # it answered after all
         assert provider.read()["cpu.load"].value == 0.4
-        assert not records(caplog, logging.WARNING) and not records(caplog, logging.INFO)
+        assert not records(caplog, logging.WARNING, provider)
+        assert not records(caplog, logging.INFO, provider)
     finally:
         provider.close()
 
@@ -110,7 +116,7 @@ def test_zero_keeps_the_last_readings_as_before(web_server, caplog):
         provider._poll_once(answered + 3600)
         provider._poll_once(answered + 7200)
         assert provider.read()["cpu.load"].value == 0.4
-        warning = records(caplog, logging.WARNING)
+        warning = records(caplog, logging.WARNING, provider)
         assert len(warning) == 1 and "not reachable" in warning[0]  # said once, at the first
     finally:
         provider.close()
@@ -126,15 +132,15 @@ def test_a_web_server_that_never_answered_costs_one_quiet_line(web_server, caplo
         assert provider.read() == {}
         for _ in range(10):
             provider._poll_once()
-        assert not records(caplog, logging.WARNING)
-        said = records(caplog, logging.INFO)
+        assert not records(caplog, logging.WARNING, provider)
+        said = records(caplog, logging.INFO, provider)
         assert len(said) == 1 and "does not answer" in said[0] and "connection refused" in said[0]
         assert "administrator" in said[0] and "Options -> Remote Web Server -> Run" in said[0]
 
         web_server["answer"] = TREE  # LibreHardwareMonitor was started in the meantime
         provider._poll_once()
         assert provider.read()["cpu.load"].value == 0.4
-        back = records(caplog, logging.INFO)
+        back = records(caplog, logging.INFO, provider)
         assert len(back) == 2 and "answers again" in back[1]
     finally:
         provider.close()
