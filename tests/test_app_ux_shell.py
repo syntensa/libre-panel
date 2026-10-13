@@ -438,3 +438,38 @@ def test_the_shared_parts_have_names_rings_and_escape(app_url, isolated_home):  
         expect(page.locator(".unsaved")).to_have_attribute(
             "aria-label", "Not saved: save now (Ctrl S)"
         )
+
+
+def test_a_low_window_keeps_the_popover_below_and_the_help_from_its_top(app_url, isolated_home):  # noqa: F811
+    """At 1280 × 800 the panel chip's popover, taller than the room below the chip, covered the
+    chip and the header; it stays below and scrolls. The help, taller than the window there,
+    opened scrolled to its end (its Close button has the focus): it shows its top."""
+    from libre_panel import i18n
+
+    routes = a_bar(isolated_home)
+    i18n.set_language("de")
+    with browser_page(app_url, "design", routes=routes, allow=PICTURE, size=(1280, 800)) as page:
+        chip = page.locator(".panel-chip")
+        chip.click()
+        popover = page.locator(".popover")
+        expect(popover).to_be_visible()
+        below = chip.bounding_box()["y"] + chip.bounding_box()["height"]
+        box = popover.bounding_box()
+        assert box["y"] >= below and box["y"] + box["height"] <= 800
+        assert js(page, "document.querySelector('.popover').scrollHeight") > box["height"]
+        page.keyboard.press("Escape")
+        page.keyboard.press("?")
+        dialog = page.locator(".dialog")
+        expect(dialog.get_by_role("button", name="Schließen")).to_be_focused()
+        assert js(page, "document.querySelector('.dialog').scrollTop") == 0
+        expect(dialog.locator(".dialog-title")).to_be_in_viewport()
+        page.keyboard.press("Escape")
+        palette(page, "")  # the views' hints are read whole, not cut after a few words
+        cut = """[...document.querySelectorAll('.palette-hint')]
+            .filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent)"""
+        assert js(page, cut) == []
+        ends = """[...document.querySelectorAll('.palette-item')]
+            .filter((item) => item.querySelector('.kbd'))
+            .map((item) => item.getBoundingClientRect().right
+              - item.querySelector('.kbd').getBoundingClientRect().right)"""
+        assert all(gap < 20 for gap in js(page, ends))  # the keys end the row, hint or none

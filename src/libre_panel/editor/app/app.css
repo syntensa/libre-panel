@@ -1382,9 +1382,11 @@ textarea.input {
   color: var(--accent);
 }
 
+/* the title first: it keeps its width (up to most of the row), the hint gets the rest */
 .palette-title {
-  flex: 1;
+  flex: 1 0 auto;
   min-width: 0;
+  max-width: 70%;
   font-size: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1400,17 +1402,24 @@ textarea.input {
 }
 
 .palette-hint {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 220px;
 }
 
 .palette-item .kbd {
   color: var(--text-2);
   border-color: var(--line-5);
+}
+
+/* (a command without a hint: its keys at the end of the row all the same) */
+.palette-title + .kbd {
+  margin-left: auto;
 }
 
 .palette-empty {

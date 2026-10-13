@@ -28,21 +28,32 @@ export function Layer({ children }) {
 
 const FOCUSABLE = 'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
 
-/** Place `panel` next to the anchor's rectangle, flipped and kept inside the window. */
+/**
+ * Place `panel` next to the anchor's rectangle, flipped and kept inside the window. One that
+ * fits neither below nor above (a tall popover in a low window) stays below its anchor and
+ * scrolls, rather than covering it.
+ */
 export function placeNear(panel, rect, placement = "bottom-start", offset = 8) {
   const width = panel.offsetWidth;
-  const height = panel.offsetHeight;
+  // its whole height, also where it scrolls now
+  const height = Math.min(panel.scrollHeight + (panel.offsetHeight - panel.clientHeight), innerHeight - 16);
   const [side, align = "start"] = placement.split("-");
   let x = align === "end" ? rect.right - width : align === "center" ? rect.left + rect.width / 2 - width / 2 : rect.left;
   let y = side === "top" ? rect.top - height - offset : rect.bottom + offset;
+  let room = "";
   if (side === "right") {
     x = rect.right + offset;
     y = rect.top;
   }
-  if (side === "bottom" && y + height > innerHeight - 8) y = rect.top - height - offset;
+  const below = innerHeight - 8 - (rect.bottom + offset);
+  if (side === "bottom" && height > below) {
+    if (rect.top - offset - height >= 8 || below < 240) y = rect.top - height - offset;
+    else room = `${Math.floor(below)}px`;
+  }
   if (side === "top" && y < 8) y = rect.bottom + offset;
+  if (panel.style.maxHeight !== room) panel.style.maxHeight = room;
   x = Math.max(8, Math.min(innerWidth - width - 8, x));
-  y = Math.max(8, Math.min(innerHeight - height - 8, y));
+  y = Math.max(8, Math.min(innerHeight - (room ? parseFloat(room) : height) - 8, y));
   panel.style.left = `${Math.round(x)}px`;
   panel.style.top = `${Math.round(y)}px`;
 }
