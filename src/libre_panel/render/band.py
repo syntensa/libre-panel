@@ -104,7 +104,7 @@ class BandStyle(ToastStyle):
 
     name = "band"
     api = 1
-    label = {"en": "Band", "de": "Band"}
+    label = {"en": "Band", "de": "Band", "fr": "Bande", "es": "Banda", "pl": "Pasmo", "pt": "Faixa"}
     options = {"roll_in": ("number", 0.45), "roll_out": ("number", 0.32)}
     CHANGE_S = 0.26  # another message rolls down inside the open band
     GLIDE_S = 0.09  # the bar is two thirds of the way after 90 ms, there after 270 ms

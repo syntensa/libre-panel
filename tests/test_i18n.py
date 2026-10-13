@@ -107,7 +107,9 @@ def test_german_dates():
     [
         ({"LANG": "de_DE.UTF-8"}, "de"),
         ({"LANG": "de_AT.UTF-8"}, "de"),
-        ({"LANG": "fr_FR.UTF-8"}, "en"),
+        ({"LANG": "fr_FR.UTF-8"}, "fr"),
+        ({"LANG": "pt_BR.UTF-8"}, "pt"),
+        ({"LANG": "ja_JP.UTF-8"}, "en"),
         ({"LC_ALL": "C", "LANG": "de_DE.UTF-8"}, "de"),
         ({}, "en"),
     ],
@@ -127,8 +129,9 @@ def test_language_setting(isolated_home):
 
     assert load_config().language == "auto"
     assert parse_config({"language": "de"}).language == "de"
+    assert parse_config({"language": "pl"}).language == "pl"
     with pytest.raises(ConfigError):
-        parse_config({"language": "fr"})
+        parse_config({"language": "ja"})
 
 
 def test_panel_texts_in_german():
@@ -224,7 +227,7 @@ def test_editor_switches_language(isolated_home):
         status, specs = request(port, "GET", "/api/specs")
         assert "CPU-Karte" in [p["name"] for p in specs["presets"]]
 
-        status, _ = request(port, "POST", "/api/language", {"language": "fr"})
+        status, _ = request(port, "POST", "/api/language", {"language": "ja"})
         assert status == 400
         request(port, "POST", "/api/language", {"language": "en"})
         assert i18n.language() == "en"

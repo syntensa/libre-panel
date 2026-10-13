@@ -70,7 +70,7 @@ export async function loadLanguage() {
 }
 
 /**
- * Switch the language ("auto", "en", "de"); config.toml keeps it, the tray and the panel follow.
+ * Switch the language ("auto" or one the server lists); config.toml keeps it, the tray and the panel follow.
  * The server translates some of what it sends (the building blocks' names, the panels' notes,
  * the titles of plugins' pages), so that is asked for again before the app changes over; and
  * the panel's preview has dates and weather in the language, so it is drawn again.

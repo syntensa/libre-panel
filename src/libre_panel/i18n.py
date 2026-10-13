@@ -1,4 +1,4 @@
-"""Languages: English (the source text) and German.
+"""Languages: English (the source text), German, French, Spanish, Polish and Portuguese (Brazil).
 
 Texts are looked up by their English wording in ``locale/<lang>.json``; the
 same catalog serves the tray, the editor (through ``/api/i18n``) and the
@@ -7,7 +7,7 @@ a translation stays English, so a missing entry never breaks anything; the
 tests make sure there are none.
 
 The language is ``language`` in config.toml: ``"auto"`` (the system
-language), ``"en"`` or ``"de"``.
+language) or one of ``LANGUAGES``.
 """
 
 from __future__ import annotations
@@ -21,7 +21,17 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-LANGUAGES = {"en": "English", "de": "Deutsch"}
+LANGUAGES = {
+    "en": "English",
+    "de": "Deutsch",
+    "fr": "Français",
+    "es": "Español",
+    "pl": "Polski",
+    "pt": "Português (Brasil)",
+}
+# what follows a day's number before a month's name: "27. September", "27 de septiembre"
+DAY_BEFORE_MONTH = {"de": ".", "es": " de", "pt": " de"}
+DECIMAL_COMMA = {"de", "fr", "es", "pl", "pt"}  # 1,5 rather than 1.5
 LOCALE_DIR = Path(__file__).resolve().parent / "locale"
 
 _current = "en"
@@ -68,7 +78,7 @@ def resolve(setting: str | None) -> str:
 
 
 def set_language(setting: str | None) -> str:
-    """Switch the language of this process (``"auto"``, ``"en"``, ``"de"``)."""
+    """Switch the language of this process (``"auto"`` or one of ``LANGUAGES``)."""
     global _current
     _current = resolve(setting)
     return _current
@@ -96,8 +106,9 @@ _DATE_TOKENS = re.compile(r"%%|%[aAbB]|%d(?= %[bB])")
 def format_date(moment: datetime, fmt: str) -> str:
     """``strftime`` with weekday and month names in the current language.
 
-    In German a day number followed by a month name gets its period
-    ("27. September").
+    A day number followed by a month name is joined as the language does it: German gives it a
+    period ("27. September"), Spanish and Portuguese a "de" ("27 de septiembre"), and Polish
+    names the month in the genitive there ("27 września", ``months_after_day``).
     """
     names = catalog(_current)
     if not names:
@@ -108,8 +119,11 @@ def format_date(moment: datetime, fmt: str) -> str:
         if token == "%%":
             return token
         if token == "%d":
-            return f"{moment.day:02d}."
+            return f"{moment.day:02d}{DAY_BEFORE_MONTH.get(_current, '')}"
         table = {"%a": "days_short", "%A": "days", "%b": "months_short", "%B": "months"}[token]
+        if token == "%B" and "months_after_day" in names:
+            if match.string[: match.start()].rstrip().endswith("%d"):  # "27 września"
+                table = "months_after_day"
         index = moment.weekday() if token in ("%a", "%A") else moment.month - 1
         return names[table][index].replace("%", "%%")
 

@@ -186,7 +186,14 @@ class BarLook(VolumeLook):
     covers least of the screen."""
 
     name = "bar"
-    label = {"en": "Bar", "de": "Leiste"}
+    label = {
+        "en": "Bar",
+        "de": "Leiste",
+        "fr": "Barre",
+        "es": "Barra",
+        "pl": "Pasek",
+        "pt": "Barra",
+    }
 
     def place(self, frame: tuple[int, int], size: tuple[int, int], slide: float) -> tuple[int, int]:
         fw, fh = frame
@@ -218,7 +225,14 @@ class LevelsLook(VolumeLook):
     the loudest in the warning colour."""
 
     name = "levels"
-    label = {"en": "Levels", "de": "Pegel"}
+    label = {
+        "en": "Levels",
+        "de": "Pegel",
+        "fr": "Niveaux",
+        "es": "Niveles",
+        "pl": "Poziomy",
+        "pt": "Níveis",
+    }
     BARS = 16
 
     def picture(self, toast: Any, level: float, size: tuple[int, int]) -> Image.Image:
@@ -257,7 +271,14 @@ class RingLook(VolumeLook):
     """A ring that fills with the volume, the number in its middle."""
 
     name = "ring"
-    label = {"en": "Ring", "de": "Ring"}
+    label = {
+        "en": "Ring",
+        "de": "Ring",
+        "fr": "Anneau",
+        "es": "Anillo",
+        "pl": "Pierścień",
+        "pt": "Anel",
+    }
 
     def picture(self, toast: Any, level: float, size: tuple[int, int]) -> Image.Image:
         u, c = self.unit(size) * SS, self.colors(toast)
@@ -287,7 +308,14 @@ class BigLook(VolumeLook):
     own volume shows: seen from across the room."""
 
     name = "big"
-    label = {"en": "Large", "de": "Groß"}
+    label = {
+        "en": "Large",
+        "de": "Groß",
+        "fr": "Grand",
+        "es": "Grande",
+        "pl": "Duży",
+        "pt": "Grande",
+    }
 
     def place(self, frame: tuple[int, int], size: tuple[int, int], slide: float) -> tuple[int, int]:
         fw, fh = frame

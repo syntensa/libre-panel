@@ -48,8 +48,8 @@ _DEFAULT_CONFIG_TEMPLATE = """\
 #   { theme = "studio", minutes = 10 },
 # ]
 
-# "auto" (the system language), "en" or "de": editor, tray and the date and
-# weather texts on the panel.
+# "auto" (the system language), "en", "de", "fr", "es", "pl" or "pt" (Brazil): the app, the
+# tray and the date and weather texts on the panel.
 language = "auto"
 
 # Optional: override how often sensors are read (milliseconds); the theme sets it.
@@ -471,8 +471,10 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         cfg.theme_given = True
     if "language" in data:
         cfg.language = _expect(data["language"], str, "language")
-        if cfg.language not in ("auto", "en", "de"):
-            raise ConfigError('language: must be "auto", "en" or "de"')
+        from libre_panel.i18n import LANGUAGES
+
+        if cfg.language not in ("auto", *LANGUAGES):
+            raise ConfigError(f"language: must be auto or one of {', '.join(LANGUAGES)}")
     if "fps" in data:
         cfg.fps = _expect(data["fps"], int, "fps")
         if not 1 <= cfg.fps <= 60:

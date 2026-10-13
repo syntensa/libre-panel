@@ -154,7 +154,14 @@ def lhm_rows(status: dict[str, Any]) -> list[list[str]]:
 
 
 class Control(ConsolePage):
-    title = {"en": "Control", "de": "Steuerung"}
+    title = {
+        "en": "Control",
+        "de": "Steuerung",
+        "fr": "Contrôle",
+        "es": "Control",
+        "pl": "Sterowanie",
+        "pt": "Controle",
+    }
     routes = {
         ("GET", "status"): "status",
         ("GET", "panel"): "panel",

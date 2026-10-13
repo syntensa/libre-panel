@@ -308,7 +308,14 @@ class CardStyle(ToastStyle):
 
     name = "card"
     api = 1
-    label = {"en": "Card", "de": "Karte"}
+    label = {
+        "en": "Card",
+        "de": "Karte",
+        "fr": "Carte",
+        "es": "Tarjeta",
+        "pl": "Karta",
+        "pt": "Cartão",
+    }
     FADE_IN_S = 0.18
     leave_s = 0.25
     anchor = "top-right"

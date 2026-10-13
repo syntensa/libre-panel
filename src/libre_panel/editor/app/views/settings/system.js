@@ -8,7 +8,7 @@ import { languageSetting, languages, setLanguage, t } from "../../core/i18n.js";
 import { loadSystem, saveSystem } from "../../core/settings.js";
 import { useStore } from "../../core/state.js";
 import { html, useState } from "../../lib/preact.js";
-import { Segmented, Toggle } from "../../ui/controls.js";
+import { Select, Toggle } from "../../ui/controls.js";
 import { confirmDialog, openDialog } from "../../ui/dialog.js";
 import { Icon } from "../../ui/icons.js";
 import { toastError } from "../../ui/toast.js";
@@ -136,7 +136,7 @@ function StartCard() {
         <//>`
       : null}
     <${SettingRow} title=${t("Language")} hint=${t("The app, the tray menu and the texts on the panel.")}>
-      <${Segmented}
+      <${Select}
         label=${t("Language")}
         value=${languageSetting()}
         onChange=${(value) => setLanguage(value).catch(toastError)}

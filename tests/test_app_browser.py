@@ -3510,14 +3510,16 @@ def test_settings_start_and_language(app_url, isolated_home):
     """The language switches the whole app, the tray and the panel (config.toml keeps it)."""
     with browser_page(app_url, "settings/system") as page:
         assert page.locator("#settings-title").inner_text() == "Start and system"
-        radio(page, "Language", "Deutsch").click()
+        language = page.get_by_role("combobox", name="Language")
+        expect_options = ["System", "Deutsch", "English", "Español", "Français", "Polski",
+                          "Português (Brasil)"]  # fmt: skip
+        assert language.locator("option").all_inner_texts() == expect_options
+        language.select_option("de")
         waits_for(page, lambda: settings_config().language == "de")
         playwright.expect(page.locator("#settings-title")).to_have_text("Start und System")
         nav = page.locator(".settings-nav button")
         assert nav.first.inner_text().startswith("Übersicht") and nav.nth(1).inner_text() == "Panel"
-        playwright.expect(radio(page, "Sprache", "Deutsch")).to_have_attribute(
-            "aria-checked", "true"
-        )
+        playwright.expect(page.get_by_role("combobox", name="Sprache")).to_have_value("de")
         page.locator(".settings-nav button", has_text="Spielmodus und mehr").click()
         page.wait_for_selector("[data-service='game']")
         assert "Spielmodus" in page.locator("[data-service='game']").inner_text()
@@ -3527,9 +3529,9 @@ def test_settings_start_and_language(app_url, isolated_home):
         assert "Flüssige Bewegung" in text and "Bilder pro Sekunde" in text
         assert "Auf dem Kopf" in text
         page.goto(f"{app_url}#/settings/system")
-        radio(page, "Sprache", "System").click()
+        page.get_by_role("combobox", name="Sprache").select_option("auto")
         waits_for(page, lambda: settings_config().language == "auto")
-        radio(page, "Language", "English").click()
+        page.get_by_role("combobox", name="Language").select_option("en")
         waits_for(page, lambda: settings_config().language == "en")
 
 

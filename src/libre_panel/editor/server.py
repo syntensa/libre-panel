@@ -947,7 +947,7 @@ class EditorHandler(BaseHTTPRequestHandler):
             return
         setting = payload.get("language") if isinstance(payload, dict) else None
         if setting not in ("auto", *i18n.LANGUAGES):
-            return self._error("language must be auto, en or de")
+            return self._error(f"language must be auto or one of {', '.join(i18n.LANGUAGES)}")
         try:
             set_config_value("language", setting, self.state.config_path)
         except ConfigError as exc:

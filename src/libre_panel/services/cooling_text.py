@@ -21,7 +21,7 @@ LABEL = 14  # width of a line's label in the text report
 def num(value: float, digits: int = 0, sign: bool = False) -> str:
     """A number as the language writes it: 26.7 or 26,7."""
     text = f"{value:+.{digits}f}" if sign else f"{value:.{digits}f}"
-    return text.replace(".", ",") if i18n.language() == "de" else text
+    return text.replace(".", ",") if i18n.language() in i18n.DECIMAL_COMMA else text
 
 
 def _short(value: float) -> str:

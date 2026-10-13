@@ -86,7 +86,14 @@ def settings_problem(options: Any) -> str:
 
 
 class Autopilot(ConsolePage):
-    title = {"en": "Autopilot", "de": "Autopilot"}
+    title = {
+        "en": "Autopilot",
+        "de": "Autopilot",
+        "fr": "Pilote automatique",
+        "es": "Piloto automático",
+        "pl": "Autopilot",
+        "pt": "Piloto automático",
+    }
     routes = {
         ("GET", "settings"): "read",
         ("GET", "status"): "status",
