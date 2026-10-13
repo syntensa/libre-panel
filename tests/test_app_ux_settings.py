@@ -534,3 +534,35 @@ def test_live_names_things_as_settings_does(app_url, isolated_home):  # noqa: F8
         expect(page.locator("[data-service=memory] .live-row-name")).to_have_text(
             "Round report and history"
         )
+
+
+def test_a_late_read_of_the_settings_does_not_undo_a_click(app_url, isolated_home):  # noqa: F811
+    """Settings → Panel reads config.toml as it opens. On a busy machine that answer came after a
+    quick click's write and put the old value back: the choice jumped back, and a click on it
+    then wrote nothing (it looked chosen already)."""
+    from libre_panel.config import set_config_value
+
+    choose_theme(isolated_home, "lumen")
+    set_config_value("device.orientation", "portrait")
+    with browser_page(app_url, "home") as page:
+        # from now on every read of the settings answers 1.5 s late; writes as ever
+        page.evaluate(
+            """() => {
+              const fetch = window.fetch;
+              window.fetch = async (url, options) => {
+                const answer = await fetch(url, options);
+                if (String(url).includes("/api/settings") && options?.method === "GET")
+                  await new Promise((done) => setTimeout(done, 1500));
+                return answer;
+              };
+            }"""
+        )
+        page.goto(f"{app_url}#/settings/panel")
+        mounted = page.locator(".settings-row", has_text="How the panel is mounted")
+        mounted.get_by_role("radio", name="Horizontal").click()
+        waits_for(page, lambda: settings_config().device.orientation == "landscape")
+        page.wait_for_timeout(2500)  # the read from opening the section has answered by now
+        horizontal = mounted.get_by_role("radio", name="Horizontal")
+        expect(horizontal).to_have_attribute("aria-checked", "true")
+        mounted.get_by_role("radio", name="Vertical").click()
+        waits_for(page, lambda: settings_config().device.orientation == "portrait")

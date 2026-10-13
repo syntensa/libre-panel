@@ -31,18 +31,26 @@ const api = {
   restart: (service) => post("/api/plugins/control/services/restart", { service }),
 };
 
+let writing = Promise.resolve();
+let writes = 0; // writes sent
+let unanswered = 0; // writes sent and not answered yet
+
 /** Read config.toml (again); resolves to the settings, or null when it cannot be read. */
 export async function loadSettings() {
+  const since = writes;
+  const quiet = !unanswered; // no write on its way: the file is read as it stays
+  // a write sent meanwhile answers with the file as it left it: an older read is not kept (a
+  // section that reads on opening would else undo a quick click, and the next click be "none")
+  const kept = () => quiet && writes === since;
   try {
-    store.set({ settings: await api.settings(), settingsError: null, settingsDown: false });
+    const settings = await api.settings();
+    if (kept()) store.set({ settings, settingsError: null, settingsDown: false });
   } catch (error) {
     // no answer at all (status 0) is not a mistake in config.toml
-    store.set({ settingsError: error.message, settingsDown: error.status === 0 });
+    if (kept()) store.set({ settingsError: error.message, settingsDown: error.status === 0 });
   }
   return store.get().settings;
 }
-
-let writing = Promise.resolve();
 
 /**
  * Write settings by their names in config.toml, all in one go: `{"device.brightness": 70,
@@ -55,11 +63,16 @@ export function saveSettings(changes) {
   const write = async () => {
     const wanted = typeof changes === "function" ? changes(store.get().settings?.config) : changes;
     if (!wanted) return true;
+    writes += 1;
+    unanswered += 1;
     try {
-      store.set({ settings: await api.write(wanted), settingsError: null });
+      const settings = await api.write(wanted);
+      unanswered -= 1;
+      store.set({ settings, settingsError: null });
       pollApp(); // the panel's chip shows brightness, upside down and the rest
       return true;
     } catch (error) {
+      unanswered -= 1;
       toastError(error);
       await loadSettings(); // what the file really says
       return false;

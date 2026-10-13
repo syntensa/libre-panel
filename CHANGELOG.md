@@ -23,6 +23,9 @@ mode shows the frame rate of games that start through a launcher.
   found draws nothing for half a minute, the one with the most frames does
 - The game screen says "No game running" only where no game was found: while the frame rate
   of a game has not come (yet), it names the game and says so
+- *Settings*: a choice clicked right as a section opened (how the panel is mounted, say) could
+  jump back to the old one on a busy PC, and a click on it then did nothing. The section's
+  reading of the settings no longer undoes a change made meanwhile
 
 ## 0.6.0 — 2026-10-13
 
