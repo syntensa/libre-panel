@@ -12,10 +12,12 @@ import functools
 import logging
 import math
 import os
+import platform
 import sys
 import threading
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from libre_panel import __version__, i18n
 from libre_panel.config import (
@@ -34,6 +36,7 @@ from libre_panel.i18n import t
 log = logging.getLogger(__name__)
 
 PROJECT_URL = "https://github.com/syntensa/libre-panel"
+REPORT_FORM = f"{PROJECT_URL}/issues/new?template=panel_support.yml"
 LICENSE = {"id": "GPL-3.0-or-later", "url": "https://www.gnu.org/licenses/gpl-3.0.html"}
 MAX_NOTICE = 200_000
 # The built-in services in the order the app lists them; plugins' come after them.
@@ -237,6 +240,35 @@ def cli_command(arguments: str) -> str:
         if appimage and sys.platform.startswith("linux"):
             return f'"{appimage}" {arguments}'
     return f"libre-panel {arguments}"
+
+
+def connected_devices() -> list[str]:
+    """What is plugged in that could be a panel, a line each, as ``libre-panel devices`` lists
+    it but without serial numbers: the USB serial ports with their ids and the plain USB panels,
+    and the models each could be. Only the system's lists are read; no port is opened."""
+    from libre_panel.devices.base import DeviceError, list_serial_ports, list_usb_devices
+    from libre_panel.devices.models import models_for_usb
+
+    def models(vid: str | None, pid: str | None) -> str:
+        found = models_for_usb(int(vid, 16), int(pid, 16)) if vid and pid else []
+        return f"  -> {' / '.join(model.id for model in found)}" if found else ""
+
+    lines = []
+    try:
+        for port in list_serial_ports():
+            vid, pid = port["vid"], port["pid"]
+            if vid:  # a port without USB ids (a mainboard's, Bluetooth) is no panel
+                about = f"{port['description']}{models(vid, pid)}"
+                lines.append(f"{port['device']}  {vid}:{pid}  {about}")
+    except (DeviceError, OSError) as exc:
+        lines.append(f"serial: {exc}")
+    try:
+        for device in list_usb_devices():
+            vid, pid = device["vid"], device["pid"]
+            lines.append(f"usb  {vid}:{pid}{models(vid, pid)}")
+    except (DeviceError, OSError) as exc:
+        lines.append(f"usb: {exc}")
+    return lines or ["Nothing plugged in looks like a panel."]
 
 
 def folders() -> dict[str, str]:
@@ -795,11 +827,35 @@ class Settings:
             "links": {
                 "project": PROJECT_URL,
                 "issues": f"{PROJECT_URL}/issues",
-                "hardware_report": f"{PROJECT_URL}/issues/new?template=panel_support.yml",
+                "hardware_report": REPORT_FORM,
             },
             "doctor": cli_command("doctor"),
             "devices": cli_command("devices"),
             "folders": folders(),
+        }
+
+    def report(self) -> dict[str, Any]:
+        """What a report of a panel says of this computer, for the form on GitHub: Libre Panel's
+        version, the system, the panel found and what is plugged in that could be one, by its USB
+        ids (what ``libre-panel devices`` prints, without serial numbers, names or folders). The
+        bus is only looked at, as for :meth:`panel`: nothing is sent to a panel. ``form`` is the
+        form's address with the product and this text filled in."""
+        config = self._config()
+        found = self._find_panel(config)
+        product = found["model"].label if found else ""
+        lines = [
+            f"Libre Panel {__version__}, {platform.system()} {platform.release()} "
+            f"({platform.machine()})",
+            f"Panel found: {product or 'none'}",
+            *connected_devices(),
+        ]
+        text = "\n".join(lines)
+        fields = {"product": product, "devices": text} if product else {"devices": text}
+        return {
+            "text": text,
+            "product": product,
+            "form": f"{REPORT_FORM}&{urlencode(fields)}",
+            "platform": sys.platform,  # how a terminal is opened, for the doctor
         }
 
     def open_folder(self, payload: Any) -> dict[str, Any]:

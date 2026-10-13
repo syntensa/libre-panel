@@ -14,7 +14,7 @@ export async function copyText(text) {
     await navigator.clipboard.writeText(text);
     toast(t("Copied."), { kind: "success" });
   } catch {
-    toast(t("Select the command and copy it."), { kind: "warn" });
+    toast(t("Copying is not allowed here: select the text and copy it."), { kind: "warn" });
   }
 }
 

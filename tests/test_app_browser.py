@@ -3604,12 +3604,13 @@ def test_settings_about(app_url, isolated_home, monkeypatch):
         links = page.locator("#main a.btn")
         hrefs = [links.nth(i).get_attribute("href") for i in range(links.count())]
         assert "https://github.com/syntensa/libre-panel" in hrefs
-        assert any(href.endswith("template=panel_support.yml") for href in hrefs)
-        commands = page.locator(".command")
+        assert any("template=panel_support.yml" in href for href in hrefs)  # (filled in)
+        # what is connected the app lists itself; the doctor runs in a terminal
+        commands = page.locator(".command-row .command")
         assert [commands.nth(i).inner_text().split()[-1] for i in range(commands.count())] == [
-            "doctor",
-            "devices",
+            "doctor"
         ]
+        playwright.expect(page.locator(".report-list")).to_contain_text("Panel found:")
         assert str(isolated_home) in page.locator("[data-folder='config']").inner_text()
         page.locator("[data-folder='themes'] button").click()
         page.locator("[data-folder='logs'] button").click()

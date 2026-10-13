@@ -295,3 +295,45 @@ def test_the_overview_speaks_german(app_url, isolated_home):  # noqa: F811
             "Nimbus kann das Wetter zeigen"
         )
         expect(page.locator("#glance-title")).to_have_text("Auf einen Blick")
+
+
+# -- report a panel: three steps, what is connected listed by the app ---------------------------
+
+
+def test_report_a_panel_is_three_steps_with_what_is_connected_listed(app_url, monkeypatch):  # noqa: F811
+    """The app lists what is connected itself (no command to run for it), says how to run the
+    doctor step by step, and the form opens with the list filled in."""
+    from test_editor_settings import panel_on_the_bus, plugged_in
+
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    plugged_in(monkeypatch, usb=[{"vid": "1cbe", "pid": "0092"}])
+    with browser_page(app_url, "settings/about") as page:
+        card = page.locator("#about-report")
+        steps = card.locator(".report-step").evaluate_all("rows => rows.map((r) => r.dataset.step)")
+        assert steps == ["list", "doctor", "send"]
+        listed = card.locator(".report-list")
+        expect(listed).to_contain_text("usb  1cbe:0092  -> turing-9.2-usb")
+        expect(listed).to_contain_text('Panel found: Turing 9.2"')
+        assert "No serial numbers" in card.locator("[data-step='list']").inner_text()
+        # the doctor sends the panel test pictures: it runs outside the app, the way is told
+        doctor = card.locator("[data-step='doctor']")
+        expect(doctor.locator(".command")).to_have_text("libre-panel doctor")
+        expect(doctor.locator(".report-how li")).to_have_count(4)
+        expect(doctor).to_contain_text("Open a terminal")  # (this is no Windows)
+        form = card.get_by_role("link", name="Open the report form").get_attribute("href")
+        assert "template=panel_support.yml" in form and "product=Turing+9.2%22" in form
+        assert "devices=Libre+Panel" in form
+        # plugged in meanwhile: looked at again on a click
+        plugged_in(monkeypatch, usb=[{"vid": "1cbe", "pid": "0088"}])
+        card.get_by_role("button", name="Look again").click()
+        expect(listed).to_contain_text("usb  1cbe:0088  -> turing-8.8-usb")
+
+
+def test_report_a_panel_tells_windows_how_to_open_a_terminal(app_url):  # noqa: F811
+    told = {"text": "Libre Panel 0.6.0", "product": "", "form": "https://example.invalid/form",
+            "platform": "win32"}  # fmt: skip
+    with browser_page(app_url, "settings/about", routes={"**/api/report": answer(told)}) as page:
+        doctor = page.locator("[data-step='doctor']")
+        expect(doctor).to_contain_text("Press Windows+R, type cmd")
+        link = page.get_by_role("link", name="Open the report form")
+        expect(link).to_have_attribute("href", "https://example.invalid/form")
