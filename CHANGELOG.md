@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — 2026-10-13
+
+Bars on end: say once how the panel is mounted, and every screen shows in its version for a bar
+that stands upright, laid out anew, down to the panel's own boot logo. Arena, Libre Panel's own
+screen for game mode. And an app that is much easier to find your way in: Start leads with the
+panel and says what needs attention, with the click that mends it; a first start goes step by
+step; Design shows its first steps and Look tries a choice on before you keep it; Settings open
+on an overview and speak plainly; and Ctrl+K finds everything by the words you would use.
+
+![Libre Panel's screens for a bar on end: Lumen, Studio, Encore, Nimbus, Almanac, Almanac Analog, Arena and the round report](https://raw.githubusercontent.com/syntensa/libre-panel/v0.6.0/docs/images/vertical.png)
+
+<img src="https://raw.githubusercontent.com/syntensa/libre-panel/v0.6.0/docs/media/game-entrance.gif" width="100%" alt="A game starts: the screen closes to a line, the game's name lights up, and Arena opens with the frame rate, its 1% low, the frame time, CPU and GPU">
 
 **New**
 - **Arena**, Libre Panel's own screen for game mode on 8.8" and 9.2" bars: the game's frame
