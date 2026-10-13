@@ -23,6 +23,7 @@ import {
   duplicateSelection,
   copySelection,
   kindName,
+  lookName,
   looks,
   moduleKinds,
   renameWidget,
@@ -696,11 +697,11 @@ function LookTiles({ theme }) {
   return html`<div class="look-grid" role="radiogroup" aria-label=${t("Colour world")}>
       ${Object.entries(looks()).map(
         ([key, item]) => html`<button type="button" role="radio" key=${key} aria-checked=${String(active === key)} class="look-tile"
-          title=${t("Use the {name} look", { name: item.name })} onClick=${() => applyLook(key)}>
+          title=${t("Use the {name} look", { name: lookName(key) })} onClick=${() => applyLook(key)}>
           <span class="look-dots">
             ${["accent", "mem", "net", "surface"].map((role) => html`<i key=${role} style=${{ background: item.palette[role] || item.palette.accent }}></i>`)}
           </span>
-          <span>${item.name}</span>
+          <span>${lookName(key)}</span>
         </button>`,
       )}
     </div>

@@ -215,7 +215,7 @@ export function registerAppCommands() {
   // F1 also while typing, and from the palette, which it closes
   bindKey("f1", () => {
     if (paletteOpen()) closePalette();
-    setTimeout(openHelp, 0);
+    setTimeout(() => openHelp(), 0);
   }, { inInputs: true, when: () => !dialogOpen() });
 
   listShortcuts(() => t("Everywhere"), [

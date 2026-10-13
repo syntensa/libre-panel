@@ -316,7 +316,8 @@ def test_the_tips_name_what_is_not_in_sight_and_the_view_says_what_it_does(app_u
         expect(page.locator(".design-steps")).to_have_count(1)
         page.locator(".rail-tips").click()
         page.get_by_role("button", name="All keyboard shortcuts").click()
-        expect(page.locator(".dialog .dialog-title")).to_have_text("Keyboard shortcuts")
+        expect(page.locator(".dialog .dialog-title")).to_have_text("Help")
+        expect(page.locator(".dialog #help-keys")).to_be_in_viewport()  # at its keys
         page.keyboard.press("Escape")
         page.locator(".rail-gear").click()
         view = page.locator(".popover")

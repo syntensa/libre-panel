@@ -476,6 +476,19 @@ export async function detachModule(widget) {
 
 export const looks = () => specs()?.modules?.looks || {};
 
+// the looks' names in the language (the specs carry them in English)
+const LOOK_NAMES = () => ({
+  arctic: t("Arctic"),
+  neon: t("Neon"),
+  graphite: t("Graphite"),
+  paper: t("Paper"),
+  sunset: t("Sunset"),
+  mono: t("Mono"),
+});
+
+/** A look's name in the language: in Look, in the theme's settings, in Ctrl+K and its message. */
+export const lookName = (key) => LOOK_NAMES()[key] || looks()[key]?.name || key;
+
 /** The look the theme wears now: its background, accent and cards are the look's. */
 export function activeLook(current = theme()) {
   const palette = current?.palette || {};
@@ -501,5 +514,5 @@ export function applyLook(key) {
   const look = looks()[key];
   if (!look || !store.get().doc) return;
   edit(null, (current) => wearLook(current, key));
-  toast(t("Look: {name}", { name: look.name }));
+  toast(t("Look: {name}", { name: lookName(key) }));
 }

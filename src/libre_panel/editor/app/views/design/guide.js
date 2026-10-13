@@ -3,11 +3,11 @@
 // Design can do that is not in sight (several at once, the menu of a right click, locking,
 // moving freely, the keys).
 
-import { runCommand } from "../../core/commands.js";
 import { t } from "../../core/i18n.js";
 import { keyLabel } from "../../core/shortcuts.js";
 import { setPref, useStore } from "../../core/state.js";
 import { html, useRef, useState } from "../../lib/preact.js";
+import { openHelp } from "../../shell/help.js";
 import { Icon } from "../../ui/icons.js";
 import { Popover } from "../../ui/layer.js";
 
@@ -59,7 +59,7 @@ function TipList({ close }) {
       )}
     </ul>
     <div class="tip-actions">
-      <button type="button" class="btn" onClick=${() => (close(), runCommand("help.shortcuts"))}>
+      <button type="button" class="btn" onClick=${() => (close(), openHelp({ keys: true }))}>
         <${Icon} name="keyboard" size=${15} /> ${t("All keyboard shortcuts")}
       </button>
       <button type="button" class="link-btn" onClick=${() => {

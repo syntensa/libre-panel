@@ -18,22 +18,79 @@
 - Start: the panel's own default (Lumen on a bar) stays in the quick list, right after the
   theme on the panel
 
-**Easier to find**
-- Start says what the panel shows when: the normal theme, game mode, music, idle and the
-  round report, each with the screen it shows and its switch right there; *Change the pages*
-  opens them in *Design*
-- First steps on Start: how the panel is mounted, game mode, the music page, the notices and
-  the weather's place, each said in one line and done with one click, ticked off when done;
-  the card goes when all are done, or with *Hide*
-- The panel's own boot logo and standby clip have a card on Start that leads to them; before,
-  they were at the end of *Settings → Panel*
-- The settings are a button with their name, and the search, which also runs commands
-  (Ctrl+K), is a field that says so on every page
-- The question about smooth motion says what it gives and asks plainly: *Turn on* or *Not
-  now*; the clip's other name is behind a link for those who changed it
-- Design: the button for the view and snapping has its name under it, as the others
+**Easier to find, easier to use**
+
+*Start*
+- Start leads with the panel: what it shows now, with its picture and controls; above it, in
+  short, what keeps it from all it can do, each with the click that mends it; under it the
+  next step (smooth motion, the first steps) and *What the panel shows when*: the normal
+  theme, game mode, music, idle and the round report, each with its screen and its switch.
+  The tiles that repeated the tabs are gone; *Screens in turn* and the *Start screen* (the
+  panel's own boot logo and standby clip) are under *More for your panel*
+- A first start goes step by step: how the panel is mounted (only on a bar, where it changes
+  something), then the theme, which goes on the panel; Start goes on from there instead of
+  opening *Design*. *First steps* (game mode, the music page, the notices, the weather's
+  place) are one click each and ticked off when done
+- *What's new* on Start, once, for who updated: bars on end, Arena for game mode and the new
+  overview, each to be done right there
+- The gallery says what a click does: *Edit* is a button on every card, *Show on the panel*
+  shows over the picture, and the quick list marks the theme *On the panel*. Game mode
+  switched on from Start gets its game screen (Arena on a bar)
+- The question about smooth motion says what it gives and asks plainly: *Turn on* or *Not now*
+- *Screens in turn* lists the themes made for the panel first, starts a new screen with the
+  theme on the panel, and says when one screen changes nothing and when changes are not saved
+
+*Design and Look*
+- Design's first visit shows three steps: click or drag a block, click something to change it,
+  *To the panel* keeps it. *Tips* on the rail name what is not in sight (selecting several and
+  aligning them, the right-click menu, locking, Alt, the arrow keys) and lead to every key
+- Blocks are added with a click as well as by dragging, and a removal can be taken back from
+  its message. An empty theme says how to fill it
+- *To the panel* reads *On the panel ✓* when the panel shows the theme as edited; opening
+  another theme over unsaved work offers *Save first*
+- The theme's settings keep to the theme (name, colour world, background, font), the rest is
+  under *Fine-tuning*. With a background picture the colour is *Colour under the picture*,
+  and *Remove the picture* is beside it
+- Look says in a line what each part does, and tries a choice on before a click keeps it: rest
+  the pointer on a colour world, a finish, the light, the grid, the dust or a notice style
+- Design's pages read as Start's *What the panel shows when*; over the canvas it is *+ Page*.
+  *View and snapping* says what each choice does
+- On a bar on end Design opens the upright version, says which version is open, and follows
+  when the panel is turned; a copy of Lumen Vertical goes with a copy of Lumen
+
+*Settings and Live*
+- *Settings* open on an *Overview*: what needs attention, in plain words and the worst first,
+  each with the click that mends it (use the panel that is plugged in, resume, turn on smooth
+  motion, unlock all sensors, read games' frame rates, turn on the weather, restart a service),
+  then each part at a glance
+- Every section says in a line what it holds and speaks plainly: *Smooth motion*, *Game mode
+  and more* (game mode and its round report first), *Where the readings come from*; the
+  technical rest (where the pictures go, a serial panel's port, the video program, the reading
+  interval) is under *Advanced*. *Weather and place* starts with the place
+- Smooth motion asks for the standby clip's name where it is set: *Use this name* takes the
+  one the panel's own app gives it, and nothing is written before the click
+- *Report a panel* in three steps: the app lists what is connected itself (by USB ids, never
+  serial numbers), says how to run the check, and opens the form with the list filled in
+- *Live* says in a sentence how the panel runs ("Runs smoothly at 50 fps", or slower than
+  planned and what helps), with the numbers under it. Nowhere does the app ask for a command
+
+*Everywhere*
+- *Ctrl+K* finds every feature by the words people use, in English and German ("hochkant",
+  "Bootlogo", "kopfüber", "Fehler melden", "flüssig"); an empty search suggests what most
+  people come for. *Help* (? or F1) has the questions and answers, the issue form and every
+  view's keys
+- One header in every view: the search field after the tabs, each tab says what it is for,
+  *Settings* is a button with its name, and it or Escape leads back to where you were
+- The tray menu shows the themes by name, those made for the panel first, with the most used
+  at the top
+- Errors say what happened in plain words (a file another program holds, a full disk), never
+  an exception's name. German calls each thing by one name, and every header button has a
+  name for screen readers
 
 **Fixes**
+- On a bar on end, Design opened Lumen lying on its side at start while the panel showed
+  Lumen Vertical
+- *Settings*: a link to *Advanced* opens it, instead of landing on a closed card
 - Start screen: writing the boot logo or the standby clip stopped with "command 99: unexpected
   reply 00 00 …". Before writing, the panel's folder is listed for the log, and the 9.2" sends
   that listing without the command's number in front; it is now read as it comes, and a panel

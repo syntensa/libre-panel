@@ -37,6 +37,7 @@ import {
   detachModule,
   duplicateSelection,
   kindName,
+  lookName,
   looks,
   moduleKinds,
   moveLayer,
@@ -253,7 +254,7 @@ registerProvider(() => {
     .filter(([key]) => key !== active)
     .map(([key, look]) => ({
       id: `look.${key}`,
-      title: () => t("Look: {name}", { name: look.name }),
+      title: () => t("Look: {name}", { name: lookName(key) }),
       hint: () => t("colours and module style"),
       keywords: () => t("colours palette"),
       group: () => t("Theme"),

@@ -44,10 +44,12 @@ const LINKS = (links) => [
   },
 ];
 
-function Help({ close }) {
+function Help({ close, keys }) {
   const about = useStore((s) => s.aboutInfo);
   useEffect(() => {
     if (!store.get().aboutInfo) loadAbout();
+    // asked for the keys ("All keyboard shortcuts"): they in view, not the top
+    if (keys) document.getElementById("help-keys")?.scrollIntoView({ block: "start" });
   }, []);
   return html`<h2 class="dialog-title">${t("Help")}</h2>
     <p class="dialog-text">
@@ -64,7 +66,7 @@ function Help({ close }) {
           )}
         </div>`
       : null}
-    <h3 class="section-title">${t("Keyboard shortcuts")}</h3>
+    <h3 class="section-title" id="help-keys">${t("Keyboard shortcuts")}</h3>
     <div class="shortcut-groups">
       ${SHORTCUTS.map(
         (group) => html`<section key=${group.group()}>
@@ -80,8 +82,8 @@ function Help({ close }) {
     <div class="dialog-actions"><button type="button" class="btn btn-primary" autofocus onClick=${() => close()}>${t("Close")}</button></div>`;
 }
 
-/** Show the help (once: a second ? while it is open does nothing). */
-export function openHelp() {
+/** Show the help (once: a second ? while it is open does nothing); `keys`: at its keys. */
+export function openHelp({ keys = false } = {}) {
   if (dialogOpen()) return null;
-  return openDialog((close) => html`<${Help} close=${close} />`, { label: t("Help"), wide: true });
+  return openDialog((close) => html`<${Help} close=${close} keys=${keys} />`, { label: t("Help"), wide: true });
 }

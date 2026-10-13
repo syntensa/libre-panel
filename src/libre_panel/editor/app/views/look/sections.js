@@ -15,7 +15,7 @@ import { COLOR, ColorSwatches } from "../design/color.js";
 import { FINISH_NAMES, FinishPicture, finishesFor } from "../design/fields.js";
 import { PaletteEditor } from "../design/inspector.js";
 import { inspectorState } from "../design/inspector-state.js";
-import { activeLook, applyLook, looks, specOf, wearLook } from "../design/ops.js";
+import { activeLook, applyLook, lookName, looks, specOf, wearLook } from "../design/ops.js";
 import { peeks } from "./stage.js";
 
 const cap = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : text);
@@ -30,32 +30,21 @@ const decimal = (value) => formatNumber(value, 1, { fixed: true });
 
 // -- the colours ---------------------------------------------------------------------------------
 
-// The names of the looks in the language (the specs carry them in English)
-const LOOK_NAMES = () => ({
-  arctic: t("Arctic"),
-  neon: t("Neon"),
-  graphite: t("Graphite"),
-  paper: t("Paper"),
-  sunset: t("Sunset"),
-  mono: t("Mono"),
-});
-
 function Colours() {
   const theme = currentTheme();
   const active = activeLook(theme);
-  const names = LOOK_NAMES();
   const all = Object.entries(looks());
   return html`<${Section} title=${t("Colour world")}>
     ${all.length
       ? html`<div class="look-grid" role="radiogroup" aria-label=${t("Colour world")}>
           ${all.map(
             ([key, item]) => html`<button type="button" role="radio" key=${key} aria-checked=${String(active === key)} class="look-tile"
-              title=${t("Use the {name} look", { name: names[key] || item.name })} onClick=${() => applyLook(key)}
+              title=${t("Use the {name} look", { name: lookName(key) })} onClick=${() => applyLook(key)}
               ...${active === key ? {} : peeks((theme) => wearLook(theme, key))}>
               <span class="look-dots">
                 ${["accent", "mem", "net", "surface"].map((role) => html`<i key=${role} style=${{ background: item.palette[role] || item.palette.accent }}></i>`)}
               </span>
-              <span>${names[key] || item.name}</span>
+              <span>${lookName(key)}</span>
             </button>`,
           )}
         </div>

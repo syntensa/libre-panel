@@ -284,7 +284,7 @@ export function registerFeatureCommands() {
       keys: "?",
       rank: 9,
       suggest: 20,
-      run: openHelp,
+      run: () => openHelp(),
     },
     {
       id: "help.report-panel",
