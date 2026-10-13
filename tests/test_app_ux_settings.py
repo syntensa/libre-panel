@@ -461,3 +461,72 @@ def test_the_sections_speak_german(app_url, monkeypatch):  # noqa: F811
         page.goto(f"{app_url}#/settings/sensors")
         expect(page.locator("#sensor-sources h2")).to_have_text("Woher die Werte kommen")
         expect(page.locator(".sources-more")).to_contain_text("Weitere Quellen")
+
+
+# -- Live: how it runs, in a calm sentence ---------------------------------------------------------
+
+
+RUN_STATE = """async ([background, status]) => {
+  const { runState } = await import("/app/views/live/index.js");
+  const { tone, title, text } = runState(background, status);
+  return [tone, title, text];
+}"""
+
+
+def test_live_says_how_the_panel_runs_in_a_calm_sentence(app_url):  # noqa: F811
+    """The numbers are the detail; the sentence above them says what they mean: smooth, slower
+    than planned (and what helps), picture by picture, waiting (and why), paused, a fault."""
+
+    def running(**numbers):
+        return app_answer(**numbers)["panel"]
+
+    with browser_page(app_url, "live", allow=PICTURE) as page:
+
+        def of(background, status):
+            return page.evaluate(RUN_STATE, [background, status])
+
+        alone = of(False, None)
+        assert alone[:2] == ["warn", "Libre Panel is not running in the background"]
+        assert "Start menu" in alone[2] and "libre-panel" not in alone[2]  # no command
+        assert of(True, running())[:2] == ["ok", "Runs smoothly at 50 fps"]
+        slow = of(True, running(fps=30.2))
+        assert slow[:2] == ["warn", "Runs slower than planned: 30 of 50 fps"]
+        assert "Fewer frames per second" in slow[2]
+        single = of(True, running(streaming=False, target_fps=5, fps=3.6))
+        assert single == [
+            "ok",
+            "Runs, picture by picture",
+            "A new picture whenever something changes, up to 5 a second.",
+        ]
+        hiccups = of(True, running(usb_errors=1, panel_restarts=1))
+        assert hiccups[2] == "2 hiccups since it started; it recovered by itself each time."
+        waiting = of(True, {"state": "waiting", "detail": "no panel", "stats": {}})
+        assert waiting[:2] == ["warn", "Waiting for the panel"]
+        assert waiting[2].startswith("Libre Panel says: no panel")
+        assert of(True, {"state": "paused", "stats": {}})[:2] == ["off", "Paused"]
+        broken = of(True, {"state": "error", "detail": "no USB library", "stats": {}})
+        assert broken == ["error", "The panel needs attention", "no USB library"]
+
+
+def test_live_names_things_as_settings_does(app_url, isolated_home):  # noqa: F811
+    """A running panel in smooth motion: the calm line on top, the numbers under "In numbers";
+    the services and the sensors by the names Settings gives them."""
+    import json
+
+    choose_theme(isolated_home)
+    panel = {"background": True, "panel": app_answer()["panel"]}
+
+    def handler(route, request):
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(panel))
+
+    routes = {"**/api/plugins/control/panel": handler}
+    with browser_page(app_url, "live", routes=routes, allow=PICTURE) as page:
+        status = page.locator(".live-status")
+        expect(status).to_have_text("Runs smoothly at 50 fps")
+        expect(status).to_have_attribute("data-tone", "ok")
+        expect(page.locator(".live-numbers .live-tile")).to_have_count(5)
+        expect(page.locator(".live-side .section-title").first).to_have_text("Smooth motion")
+        expect(page.locator("[data-service=notices] .live-row-name")).to_have_text("Notices")
+        expect(page.locator("[data-service=memory] .live-row-name")).to_have_text(
+            "Memory and round report"
+        )

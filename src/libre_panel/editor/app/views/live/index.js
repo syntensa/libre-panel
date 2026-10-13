@@ -1,8 +1,9 @@
-// Live (#/live): what the panel shows now and how it runs. The picture on the panel, its numbers
-// (frame rate against the target, data rate, drawing time, queue, faults), the sensor sources and
-// the services with their switches, test notices and the end of the log. It uses the console
-// API (docs/ARCHITECTURE.md) and polls it while it is shown. Built on the shell: see
-// ../../README.md.
+// Live (#/live): what the panel shows now and how it runs. A calm line says it in words ("Runs
+// smoothly at 50 fps", or what keeps it from running); under it the picture on the panel, the
+// numbers as detail (frame rate against the target, data rate, drawing time, queue, faults) and
+// the end of the log; at the side smooth motion, the sensors, game mode and the other services
+// with their switches (named as Settings names them), and test notices. It uses the console API
+// (docs/ARCHITECTURE.md) and polls it while it is shown. Built on the shell: see ../../README.md.
 
 import { appAction } from "../../core/app.js";
 import { registerProvider } from "../../core/commands.js";
@@ -13,44 +14,55 @@ import { store, useStore } from "../../core/state.js";
 import { statTiles } from "../../core/stats.js";
 import { videoState } from "../../core/video.js";
 import { html, useEffect, useRef, useState } from "../../lib/preact.js";
-import { modeName, panelName, stateText } from "../../shell/panel-popover.js";
+import { modeName, panelName } from "../../shell/panel-popover.js";
 import { registerView } from "../../shell/views.js";
 import { Slider, Toggle } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { toast, toastError } from "../../ui/toast.js";
 import { connectedModel } from "../home/panel.js";
+import { SOURCES } from "../settings/sensors.js";
+import { SERVICES } from "../settings/services.js";
 
 // -- names ------------------------------------------------------------------------------------------
 
-// What the sensor sources and services are called for people, and what they are for; any other
-// (a plugin's) keeps the name it has. Written as texts the catalog finds, not looked up.
-const SOURCE_NAMES = () => ({
-  librehardwaremonitor: ["LibreHardwareMonitor", t("temperatures, power and fans")],
-  linux: [t("Linux sensors"), t("temperatures, fans and power from the kernel")],
-  load: [t("Load"), t("CPU and GPU load, ten times a second")],
-  audio: [t("Volume"), t("what the default output plays at")],
-  psutil: [t("System"), t("processor, memory, disk and network")],
-  media: [t("Media"), t("what is playing")],
-  sky: [t("Sun and moon"), t("where they stand")],
-  "open-meteo": [t("Weather"), "Open-Meteo"],
-  calendar: [t("Calendar"), t("your appointments")],
-  homeassistant: ["Home Assistant", ""],
-  mqtt: ["MQTT", ""],
-  presentmon: ["PresentMon", t("frame rates of games")],
-  demo: [t("Demo values"), t("made-up readings")],
-  services: [t("Services"), t("what the services publish")],
-  hardware: [t("Hardware names"), t("the names of the processor, the graphics card and the memory")],
+// What the sensor sources and services are for, in a few words (a row's hover); their names are
+// the ones Settings gives them (SOURCES, SERVICES), and any other (a plugin's) keeps its own.
+const SOURCE_ABOUT = () => ({
+  librehardwaremonitor: t("temperatures, power and fans"),
+  linux: t("temperatures, fans and power from the kernel"),
+  load: t("CPU and GPU load, ten times a second"),
+  audio: t("what the default output plays at"),
+  psutil: t("processor, memory, disk and network"),
+  media: t("what is playing"),
+  sky: t("where they stand"),
+  "open-meteo": "Open-Meteo",
+  calendar: t("your appointments"),
+  presentmon: t("frame rates of games"),
+  demo: t("made-up readings"),
+  services: t("what game mode and the other services publish"),
+  hardware: t("the names of the processor, the graphics card and the memory"),
 });
 
-const SERVICE_NAMES = () => ({
-  notices: [t("Notices"), t("volume, tracks, warnings")],
-  game: [t("Game mode"), t("Steam and a list of games")],
-  autopilot: [t("Autopilot"), t("rules that choose the theme")],
-  devices: [t("Devices"), t("USB, drives, controllers")],
-  memory: [t("Round report"), t("records a game and reports after it")],
-  cooling: [t("Cooling"), t("checks FanControl's curves")],
-  downloads: [t("Downloads"), t("Steam and the browsers")],
+// the sources Settings does not list (they start by themselves, or come with a service)
+const SOURCE_NAMES = () => ({
+  "open-meteo": t("Weather"),
+  services: t("Game mode and more"),
+  hardware: t("Hardware names"),
 });
+
+const sourceName = (name) => SOURCES[name]?.title() ?? SOURCE_NAMES()[name] ?? name;
+
+const SERVICE_ABOUT = () => ({
+  notices: t("volume, tracks, warnings"),
+  game: t("Steam and a list of games"),
+  autopilot: t("rules that choose the theme"),
+  devices: t("USB, drives, controllers"),
+  memory: t("records a game and reports after it"),
+  cooling: t("checks FanControl's curves"),
+  downloads: t("Steam and the browsers"),
+});
+
+const serviceName = (name) => SERVICES[name]?.title() ?? name;
 
 const SERVICE_STATES = () => ({
   stopped: t("stopped"),
@@ -59,13 +71,63 @@ const SERVICE_STATES = () => ({
   "not-installed": t("not installed"),
 });
 
+// -- how it runs, in words --------------------------------------------------------------------------
+
+/**
+ * How the panel runs, in one calm sentence and a line under it: `{tone, title, text}`, tone "ok",
+ * "warn", "error" or "off". The numbers further down are the detail; this says what they mean.
+ */
+export function runState(background, status) {
+  if (!background) {
+    return {
+      tone: "warn",
+      title: t("Libre Panel is not running in the background"),
+      text: t("This window edits the settings and the themes, but the panel gets nothing from it. Start Libre Panel from the Start menu or your list of apps: it then runs in the background, drives the panel and uses what you set here."),
+    };
+  }
+  const state = status?.state;
+  const detail = status?.detail || "";
+  if (state === "waiting") {
+    const why = detail ? `${t("Libre Panel says: {reason}", { reason: detail })} ` : "";
+    return { tone: "warn", title: t("Waiting for the panel"), text: why + t("Plug the panel in with its USB cable: Libre Panel looks for it every few seconds.") };
+  }
+  if (state === "paused") return { tone: "off", title: t("Paused"), text: t("The panel keeps its last picture until you resume it.") };
+  if (state === "error") return { tone: "error", title: t("The panel needs attention"), text: detail || t("Libre Panel stopped drawing for the panel.") };
+  if (state === "stopped") return { tone: "off", title: t("Stopped"), text: "" };
+  const s = status?.stats || {};
+  if (state !== "showing") return { tone: "off", title: t("Starting …"), text: "" };
+  if (typeof s.fps !== "number") return { tone: "ok", title: t("Runs"), text: "" }; // (numbers come after a second)
+  const faults = (s.usb_errors ?? 0) + (s.panel_restarts ?? 0) + (s.ffmpeg_restarts ?? 0);
+  const hiccups = faults === 1 ? t("One hiccup since it started; it recovered by itself.") : faults ? t("{n} hiccups since it started; it recovered by itself each time.", { n: faults }) : "";
+  const fps = Math.round(s.fps);
+  if (s.streaming && s.target_fps) {
+    if (s.fps < 0.9 * s.target_fps) {
+      const why = t("The PC or the panel cannot keep up. Fewer frames per second in Settings → Panel ask less of both.");
+      return { tone: "warn", title: t("Runs slower than planned: {fps} of {target} fps", { fps, target: s.target_fps }), text: [why, hiccups].filter(Boolean).join(" ") };
+    }
+    return { tone: "ok", title: t("Runs smoothly at {fps} fps", { fps }), text: hiccups };
+  }
+  const single = s.target_fps ? t("A new picture whenever something changes, up to {n} a second.", { n: s.target_fps }) : "";
+  return { tone: "ok", title: t("Runs, picture by picture"), text: [single, hiccups].filter(Boolean).join(" ") };
+}
+
+function RunState({ background, status }) {
+  const state = runState(background, status);
+  return html`<div class=${`live-status ${state.tone}`} role="status" data-tone=${state.tone}>
+    <span class=${`dot ${state.tone === "off" ? "idle" : state.tone}`} aria-hidden="true"></span>
+    <div class="live-status-text">
+      <strong>${state.title}</strong>
+      ${state.text ? html`<span>${state.text}</span>` : null}
+    </div>
+  </div>`;
+}
+
 // -- the picture and the numbers ------------------------------------------------------------------
 
 function Picture({ state, background }) {
   const live = useLivePicture({ width: 960, every: 200, on: background && state === "showing" });
   let note = null;
-  if (!background) note = t("There is no picture: this editor does not run the panel.");
-  else if (live.src === null) {
+  if (live.src === null) {
     note =
       state === "paused"
         ? t("The panel is paused: there is no picture.")
@@ -74,7 +136,7 @@ function Picture({ state, background }) {
           : t("There is no picture yet.");
   }
   return html`<div class="live-picture">
-    ${live.src && background ? html`<img src=${live.src} alt=${t("The picture on the panel")} />` : null}
+    ${live.src ? html`<img src=${live.src} alt=${t("The picture on the panel")} />` : null}
     ${note ? html`<p class="live-picture-note">${note}</p>` : null}
   </div>`;
 }
@@ -115,7 +177,7 @@ function LogBox() {
   }, [log.data]);
   let note = null;
   if (log.data && !log.data.exists) {
-    note = t("There is no log file yet. The tray app writes it to {path}; “libre-panel start” logs to its terminal.", { path: log.data.path });
+    note = t("No log yet: Libre Panel writes one while it runs in the background, to {path}.", { path: log.data.path });
   }
   return html`<div class="live-log" role="log" aria-label=${t("The last lines of the log")} tabindex="0" ref=${box}
     onScroll=${(event) => {
@@ -142,7 +204,7 @@ function VideoMode({ background, stats }) {
   const streaming = Boolean(stats?.streaming);
   const state = videoState(video, video.mode, streaming && stats.target_fps ? stats.target_fps : video.fps, streaming);
   return html`<section>
-    <h3 class="section-title">${t("Video mode")}</h3>
+    <h3 class="section-title">${t("Smooth motion")}</h3>
     <p class="live-video" data-video-state=${state.tone}>
       <span class=${`dot ${state.tone === "off" ? "idle" : state.tone}`} aria-hidden="true"></span>
       <span class="live-video-text">${state.text}</span>
@@ -154,7 +216,8 @@ function VideoMode({ background, stats }) {
 // -- sources, services, notices -----------------------------------------------------------------------
 
 function Source({ source }) {
-  const [name, about] = SOURCE_NAMES()[source.name] || [source.name, ""];
+  const name = sourceName(source.name);
+  const about = SOURCE_ABOUT()[source.name] || "";
   const status = source.status || {};
   const dot = source.problem ? "warn" : source.readings > 0 ? "ok" : "idle";
   let note = source.readings === 1 ? t("1 reading") : t("{n} readings", { n: source.readings });
@@ -178,16 +241,15 @@ function Source({ source }) {
 }
 
 function Sources({ data, background }) {
-  if (!background) {
-    return html`<p class="live-note">${t("This editor does not run the panel, so there are no sources to show. Start Libre Panel with “libre-panel tray”.")}</p>`;
-  }
+  if (!background) return html`<p class="live-note">${t("They show here while Libre Panel runs in the background.")}</p>`;
   const sources = data?.sources || [];
   if (!sources.length) return html`<p class="live-note">${t("No sensor source is running.")}</p>`;
   return html`<ul class="live-list">${sources.map((source) => html`<${Source} key=${source.name} source=${source} />`)}</ul>`;
 }
 
 function Service({ service, busy, onToggle, onRestart }) {
-  const [name, about] = SERVICE_NAMES()[service.name] || [service.name, ""];
+  const name = serviceName(service.name);
+  const about = SERVICE_ABOUT()[service.name] || "";
   const word = SERVICE_STATES()[service.state];
   const speaks = word && (service.enabled || service.state === "pending");
   const trouble = service.state === "failed" || service.state === "not-installed";
@@ -225,7 +287,7 @@ function Services({ data, onChanged }) {
     onChanged();
   };
   const restarted = (item) => (answer) =>
-    t("{name}: {state}", { name: SERVICE_NAMES()[item.name]?.[0] || item.name, state: SERVICE_STATES()[answer.state] || t("running") });
+    t("{name}: {state}", { name: serviceName(item.name), state: SERVICE_STATES()[answer.state] || t("running") });
   if (!services.length) return null;
   return html`<ul class="live-list">
       ${services.map(
@@ -291,32 +353,32 @@ function LiveView() {
   const status = panel.data?.panel || (background ? app.panel : null);
   const state = status?.state;
   const model = connectedModel({ available: background, panel: status }, models);
-  const line = [
-    model ? panelName(model) : status?.target,
-    status?.stats?.streaming ? t("Video mode") : null,
-    status?.mode ? modeName(status.mode) : null,
-    state && state !== "showing" ? stateText(state) : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const line = [model ? panelName(model) : status?.target, status?.mode ? modeName(status.mode) : null].filter(Boolean).join(" · ");
   return html`<div class="live">
     <div class="live-main">
       <div class="live-head">
         <h2>${t("On the panel now")}</h2>
-        ${background ? html`<span class="live-state"><span class=${`dot ${state || "none"}`} aria-hidden="true"></span>${line}</span>` : null}
+        ${background && line ? html`<span class="live-state">${line}</span>` : null}
       </div>
-      <${Picture} state=${state} background=${background} />
-      <${Tiles} stats=${background ? status?.stats : null} />
+      <${RunState} background=${background} status=${status} />
+      ${background
+        ? html`<${Picture} state=${state} background=${background} />
+            <section class="live-numbers" aria-label=${t("In numbers")}>
+              <h3 class="section-title">${t("In numbers")}</h3>
+              <${Tiles} stats=${status?.stats} />
+            </section>`
+        : null}
+      <h3 class="section-title live-log-title">${t("Log")}</h3>
       <${LogBox} />
     </div>
     <aside class="live-side" aria-label=${t("Sources and services")}>
       <${VideoMode} background=${background} stats=${status?.stats} />
       <section>
-        <h3 class="section-title">${t("Sources")}</h3>
+        <h3 class="section-title">${t("Sensors")}</h3>
         <${Sources} data=${sources.data} background=${background} />
       </section>
       <section>
-        <h3 class="section-title">${t("Services")}</h3>
+        <h3 class="section-title">${t("Game mode and more")}</h3>
         <${Services} data=${services.data} onChanged=${services.reload} />
       </section>
       <section>

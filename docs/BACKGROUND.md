@@ -57,8 +57,10 @@ fixed).
 The same controls are in the app: the panel button at the top right of
 *Design* shows the state and has pause, brightness, upside down, start with
 system and quit. *Start* shows the picture on the panel with pause, brightness
-and upside down, and *Live* has its numbers, the sensor sources, the services
-and test messages (the *Control* page, below, in the app's look).
+and upside down, and *Live* says in a sentence how it runs ("Runs smoothly at 50
+fps", slower than planned and what helps, waiting for the panel and why), with its numbers
+under it, the sensor sources, the services and test messages (the *Control* page, below, in
+the app's look).
 
 ## The app's window
 

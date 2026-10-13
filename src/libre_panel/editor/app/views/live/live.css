@@ -1,5 +1,5 @@
-/* Live: the picture on the panel, its numbers and the log on the left; sources, services and
-   test notices on the right (Live.dc.html) */
+/* Live: how the panel runs in words, the picture on the panel, its numbers and the log on the
+   left; smooth motion, the sensors, the services and test notices on the right (Live.dc.html) */
 
 .live {
   display: grid;
@@ -40,6 +40,58 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* how it runs, in a calm sentence; the numbers below are the detail */
+.live-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  flex-shrink: 0;
+}
+
+.live-status > .dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 6px;
+}
+
+.live-status.warn {
+  background: var(--warn-soft);
+  border-color: transparent;
+}
+
+.live-status-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.live-status-text strong {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.live-status-text span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.live-numbers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.live-main > .section-title {
+  margin-bottom: -12px; /* the log belongs to its heading */
 }
 
 .dot {

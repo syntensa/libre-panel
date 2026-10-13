@@ -1095,7 +1095,7 @@ def test_live_says_whether_the_video_mode_is_on_or_what_it_lacks(
         with browser_page(
             app_url, "live", routes=running(streaming) if app else None, allow=PICTURE
         ) as page:
-            page.wait_for_selector(".live-tile")
+            page.wait_for_selector(".live-status")
             if not app:
                 page.wait_for_timeout(500)
                 return None, page.locator(".live-video").count()
@@ -1126,9 +1126,9 @@ def test_live_without_the_panel_says_so_and_keeps_the_switches(app_url, isolated
     from libre_panel.config import load_config
 
     with browser_page(app_url, "live", allow=PICTURE) as page:
-        page.wait_for_selector(".live-picture-note")
-        assert "does not run the panel" in page.locator(".live-picture-note").inner_text()
-        assert page.locator(".live-tile b").all_inner_texts() == ["–"] * 5
+        page.wait_for_selector(".live-status")
+        assert "not running in the background" in page.locator(".live-status").inner_text()
+        assert page.locator(".live-tile").count() == 0  # no numbers without the panel
         page.wait_for_selector(".live-chip")
         expect(page.locator(".live-chip").first).to_be_disabled()
         assert page.locator(".live-pause").count() == 0  # nothing to pause
@@ -1212,8 +1212,8 @@ def test_the_new_views_speak_german(app_url, isolated_home):
         page.goto(f"{app_url}#/live")
         page.wait_for_selector(".live-side")
         assert page.locator(".live-side .section-title").all_text_contents() == [
-            "Quellen",
-            "Dienste",
+            "Sensoren",
+            "Spielmodus und mehr",
             "Hinweis testen",
         ]
         assert page.locator(".live-head h2").inner_text() == "Auf dem Panel, jetzt"
