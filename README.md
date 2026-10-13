@@ -81,10 +81,11 @@ download in its place while one runs.
 
 ### Notices
 
-<img src="docs/media/volume-band.gif" width="100%" alt="The volume key on the Studio theme: a band rolls down from a glowing edge, its number counts up and down and its bar glides">
+<img src="docs/media/volume-looks.gif" width="100%" alt="The volume over Lumen in its four looks, one after the other: a bar along the bottom edge, levels that rise, a ring that fills with the number in it, and a large number in the middle">
 
-Turn the volume and a band rolls down from a glowing edge, changing in place while you turn.
-A new track with its cover, a sensor past a limit you set, a stick or a game controller
+Turn the volume and it shows over every screen, in the look you pick: a *Bar* along the edge,
+*Levels* that rise, a *Ring* that fills or a *Large* number, switched on with one click on
+*Start*. A new track with its cover, a sensor past a limit you set, a stick or a game controller
 plugged in (Windows): short notices in the theme's colours, as a band or a card; a screen
 that shows the volume or the track itself gets none over it. Like every service, they are off
 until you switch them on.

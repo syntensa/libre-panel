@@ -171,7 +171,7 @@ website and the release notes all show the release's own look.
 
 | Where | What it shows |
 |---|---|
-| README.md, README.de.md | `docs/media/*.gif`: `video-mode` on top (with `docs/images/hero.png` for those who ask for less motion), `close-up-rings`, `close-up-curves`, `card-ignition`, `volume-band`, `game-entrance`, `small-panel`, `app-drag-module`, `app-look`, `app-command-palette`, and `where-it-started.png` linking its GIF; `docs/images/gallery.png` and `module-catalog.png` |
+| README.md, README.de.md | `docs/media/*.gif`: `video-mode` on top (with `docs/images/hero.png` for those who ask for less motion), `close-up-rings`, `close-up-curves`, `card-ignition`, `volume-looks`, `game-entrance`, `small-panel`, `app-drag-module`, `app-look`, `app-command-palette`, and `where-it-started.png` linking its GIF; `docs/images/gallery.png` and `module-catalog.png` |
 | site/, site/de/ | every clip of `docs/media` as WebM and MP4 with its poster (`*.png`), the GIF only where a browser has no script or no video; from `docs/images` the themes (`lumen`, `studio`, `libre-default`, `slate`, `orbit`, `column`, `pico`), `looks`, `studio-adapts`, `editor-new` and, for links shared elsewhere, `social-preview` |
 | CHANGELOG.md (the release notes) | `docs/media/video-mode.gif`, `card-ignition.gif`, `game-entrance.gif`, `app-drag-module.gif` and `app-look.gif` on the tag (raw.githubusercontent.com, so the tag must hold them), in the highlights at the top of the version's section |
 | The repository's social preview | `docs/images/social-preview.png`, uploaded by hand in *Settings → General → Social preview* |
