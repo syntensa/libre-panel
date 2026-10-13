@@ -850,6 +850,31 @@ function ThemeDetails({ theme, onBack }) {
   `;
 }
 
+/** The theme's background: a picture over a colour. The picture fills the whole panel, so a
+ * colour changed under it showed nothing (Lumen, Encore, Almanac, Nimbus): with a picture, the
+ * picture comes first, the colour says it lies under it, and the picture goes in one click. */
+function Background({ theme }) {
+  const background = theme.background || {};
+  const image = background.image;
+  const setColor = themeChange("bg", (th, v) => (th.background = { ...(th.background || {}), color: v }));
+  const setImage = themeChange("bgimg", (th, v) => (th.background = { ...(th.background || {}), image: v || null }));
+  const picture = html`<${Field} key="picture" label=${t("Picture")}>
+    <${AssetControl} value=${image} onChange=${setImage} />
+  <//>`;
+  const colour = html`<${Field} key="colour" label=${image ? t("Colour under the picture") : t("Colour")}>
+    <${ColorSwatches} label=${t("Background")} value=${background.color} onChange=${setColor} />
+  <//>`;
+  if (!image) return html`<${Section} title=${t("Background")}>${colour}${picture}<//>`;
+  return html`<${Section} title=${t("Background")}>
+    ${picture}
+    ${colour}
+    <div class="inspector-aside background-under">
+      <span>${t("You see it only where the picture is see-through.")}</span>
+      <button type="button" class="link-btn" onClick=${() => setImage(null)}>${t("Remove the picture")}</button>
+    </div>
+  <//>`;
+}
+
 /** Nothing selected: the whole theme. What is changed most (its name, colour world, background
  * and font) is here; the rest under Fine-tuning. */
 function ThemeInspector({ theme }) {
@@ -857,7 +882,6 @@ function ThemeInspector({ theme }) {
   const builtin = useStore((s) => s.doc?.builtin); // why saving it asks for a name
   const specs = store.get().specs;
   const hasModules = Boolean(theme.grid || theme.widgets.some(isModule));
-  const background = theme.background || {};
   if (page === "details") return html`<${ThemeDetails} theme=${theme} onBack=${() => setPage("main")} />`;
   const size = `${theme.display?.width ?? "?"} × ${theme.display?.height ?? "?"}`;
   const more = [hasModules ? t("Grid") : null, t("Colours"), t("Notices"), t("About")].filter(Boolean);
@@ -872,12 +896,7 @@ function ThemeInspector({ theme }) {
         <${TextField} label=${t("Name")} value=${theme.name} onChange=${themeChange("name", (th, v) => (th.name = v))} />
       <//>
       ${Object.keys(looks()).length ? html`<${Section} title=${t("Colour world")}><${LookTiles} theme=${theme} /><//>` : null}
-      <${Section} title=${t("Background")}>
-        <${ColorSwatches} label=${t("Background")} value=${background.color} onChange=${themeChange("bg", (th, v) => (th.background = { ...(th.background || {}), color: v }))} />
-        <${Field} label=${cap(t("background image"))}>
-          <${AssetControl} value=${background.image} onChange=${themeChange("bgimg", (th, v) => (th.background = { ...(th.background || {}), image: v || null }))} />
-        <//>
-      <//>
+      <${Background} theme=${theme} />
       <${Section} title=${t("Font")}>
         <${FontControl} value=${theme.font === specs.default_font ? "" : theme.font} empty=${t("Default (Barlow Medium)")}
           onChange=${themeChange("font", (th, v) => (th.font = v || specs.default_font))} />

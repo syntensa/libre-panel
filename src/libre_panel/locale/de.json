@@ -807,7 +807,6 @@
     "automatic (the disk for a missing GPU)": "automatisch (Laufwerk statt fehlender GPU)",
     "averaged over (s)": "gemittelt über (s)",
     "backdrop": "Hintergrund",
-    "background image": "Hintergrundbild",
     "cannot open {port}: {error}": "{port} lässt sich nicht öffnen: {error}",
     "cannot start ffmpeg: {error}": "ffmpeg lässt sich nicht starten: {error}",
     "cannot write {path}: {error}": "{path} kann nicht geschrieben werden: {error}",
@@ -1663,7 +1662,10 @@
     "Edit its theme": "Ihr Theme bearbeiten",
     "Page": "Seite",
     "Show this theme on another page": "Dieses Theme auf einer weiteren Seite zeigen",
-    "The mode a plugin switches the panel to, as the plugin names it: a-z, 0-9, - and _": "Der Modus, auf den ein Plugin das Panel schaltet, so wie das Plugin ihn nennt: a-z, 0-9, - und _"
+    "The mode a plugin switches the panel to, as the plugin names it: a-z, 0-9, - and _": "Der Modus, auf den ein Plugin das Panel schaltet, so wie das Plugin ihn nennt: a-z, 0-9, - und _",
+    "Colour under the picture": "Farbe unter dem Bild",
+    "You see it only where the picture is see-through.": "Du siehst sie nur dort, wo das Bild durchsichtig ist.",
+    "Remove the picture": "Bild entfernen"
   },
   "fields": {
     "align": "Ausrichtung",

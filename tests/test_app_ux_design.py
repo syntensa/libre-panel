@@ -201,3 +201,26 @@ def test_designs_pages_say_what_the_panel_shows_when_as_start_does(app_url, isol
         items = page.locator(".popover .menu-item").all_inner_texts()
         assert items[0] == "As the normal theme"
         assert "Music · While music plays" in items and items[-1] == "A plugin's page…"
+
+
+def test_the_background_colour_says_it_lies_under_the_picture(app_url, isolated_home):  # noqa: F811
+    """In Lumen the background picture covers the whole panel, so a colour picked for the
+    background changed nothing that could be seen. With a picture the colour says it lies
+    under it, and the picture is removed in one click (and back with Ctrl+Z)."""
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url) as page:
+        inspector = page.locator(".inspector")
+        background = inspector.locator(".section").filter(
+            has=page.locator(".section-title", has_text="Background")
+        )
+        labels = background.locator(".field-label")
+        expect(labels).to_have_text(["Picture", "Colour under the picture"])
+        expect(background.locator(".background-under")).to_contain_text("see-through")
+        background.locator(".swatch").nth(1).click()
+        assert js(page, "window.libre.doc.theme().background.color") != "@bg"
+        background.get_by_role("button", name="Remove the picture").click()
+        assert js(page, "window.libre.doc.theme().background.image") is None
+        expect(labels).to_have_text(["Colour", "Picture"])  # the colour is the background now
+        expect(background.locator(".background-under")).to_have_count(0)
+        page.keyboard.press("Control+z")
+        assert js(page, "window.libre.doc.theme().background.image") == "assets/backdrop.png"

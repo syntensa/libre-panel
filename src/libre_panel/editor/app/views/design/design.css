@@ -1259,13 +1259,18 @@
   line-height: 1.45;
 }
 
+/* the chevron follows the last word: a text that wraps keeps it beside the end, not apart */
 .inspector-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
+  display: block;
   align-self: flex-start;
   margin-top: 6px;
   text-align: left;
+}
+
+.inspector-link svg {
+  display: inline;
+  margin-left: 2px;
+  vertical-align: -2px;
 }
 
 .inspector-aside .inspector-link {
