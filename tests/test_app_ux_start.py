@@ -1,5 +1,5 @@
-"""Start in a real browser: the actions of the gallery; skipped without Playwright or
-Chromium."""
+"""Start in a real browser: the actions of the gallery and the screens in turn; skipped
+without Playwright or Chromium."""
 
 import pytest
 
@@ -11,6 +11,7 @@ from test_app_browser import (  # noqa: E402, F401
     app_url,
     browser_page,
     choose_theme,
+    settings_config,
     shown_themes,
 )
 
@@ -43,3 +44,24 @@ def test_every_card_of_the_gallery_names_both_its_actions(app_url, isolated_home
                     or text["y"] >= edit["y"] + edit["height"]
                 )
                 assert apart, (card.get_attribute("data-theme"), part)
+
+
+def test_screens_in_turn_say_what_is_missing_and_what_is_not_saved(
+    app_url,  # noqa: F811
+    isolated_home,
+):
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url, "home/sequence", allow=PICTURE) as page:
+        page.wait_for_selector(".sequence-add")
+        foot = page.locator(".sequence-foot")
+        expect(foot.locator(".sequence-unsaved")).to_have_count(0)
+        page.get_by_role("button", name="Add a screen").click()
+        expect(page.locator(".sequence-step select")).to_have_value("lumen")  # the one on the panel
+        expect(foot).to_contain_text("Add another screen: with one, nothing changes.")
+        expect(foot.locator(".sequence-unsaved")).to_have_text("Not saved yet")
+        page.get_by_role("button", name="Add a screen").click()
+        expect(foot).not_to_contain_text("Add another screen")
+        page.get_by_role("button", name="Save and start").click()
+        expect(page.get_by_role("button", name="Stop")).to_be_visible()
+        expect(foot.locator(".sequence-unsaved")).to_have_count(0)
+    assert settings_config().sequence.on

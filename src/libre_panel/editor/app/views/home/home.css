@@ -1009,6 +1009,11 @@
   gap: 16px;
 }
 
+/* lines a hand and an eye can follow, however wide the window */
+.sequence-page > * {
+  max-width: 1040px;
+}
+
 .sequence-lead {
   margin: 0;
   max-width: 760px;
@@ -1076,7 +1081,20 @@
 }
 
 .sequence-foot {
+  flex-wrap: wrap;
   padding-top: 4px;
+}
+
+.sequence-hint {
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+/* changes that leaving the page would lose */
+.sequence-unsaved {
+  color: var(--warn);
+  font-size: 13px;
+  font-weight: 600;
 }
 
 @media (max-width: 900px) {

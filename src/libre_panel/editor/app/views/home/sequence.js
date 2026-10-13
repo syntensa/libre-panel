@@ -1,18 +1,21 @@
 // Screens in turn (#/home/sequence): themes the panel shows one after another, each for its
 // seconds, minutes or hours, and from the top again after the last ([sequence] in config.toml,
 // libre_panel/sequence.py). The launcher has a card with the steps and a switch; this page
-// sets them up: a row a screen, its time in the unit that suits it, up, down, away.
+// sets them up: a row a screen, its time in the unit that suits it, up, down, away. The themes
+// made for the panel come first, in the list and when a screen is added.
 
 import { endpoints } from "../../core/api.js";
-import { themeName } from "../../core/actions.js";
+import { normalTheme, themeName } from "../../core/actions.js";
 import { t } from "../../core/i18n.js";
 import { versionFor } from "../../core/orientation.js";
+import { useConfig } from "../../core/settings.js";
 import { store, useStore } from "../../core/state.js";
 import { html, useEffect, useState } from "../../lib/preact.js";
 import { IconButton, NumberField, Segmented, Select, Toggle } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { toast, toastError } from "../../ui/toast.js";
-import { PanelStrip } from "./panel.js";
+import { knownModel } from "./overview.js";
+import { fitsPanel } from "./themes.js";
 
 export const UNITS = [
   { value: "s", size: 1 },
@@ -156,25 +159,54 @@ function StepRow({ row, index, count, current, options, onChange, onMove, onRemo
   </li>`;
 }
 
+/**
+ * The themes for a screen: those made for the panel first (Libre Panel's own and yours, then
+ * each collection's under its name), then those made for other sizes, which are scaled.
+ */
+function themeOptions(themes, model) {
+  const fits = (item) => fitsPanel(item, model);
+  const rank = (item) => (fits(item) ? 0 : 2) + (item.collection ? 1 : 0);
+  return [...themes]
+    .sort((a, b) => rank(a) - rank(b))
+    .map((item) => ({
+      value: item.id,
+      label: item.name || item.id,
+      group: !fits(item) ? t("For other panels") : item.collection || (model ? t("Made for this panel") : ""),
+    }));
+}
+
+/** The theme a new screen starts with: the one on the panel while it is not in the list yet,
+ * else the next made for the panel (not a collection's), else any not in the list. */
+function nextTheme(themes, used, model) {
+  const free = themes.filter((item) => !used.has(item.id));
+  const normal = normalTheme();
+  return (
+    free.find((item) => item.id === normal) ||
+    free.find((item) => !item.collection && fitsPanel(item, model)) ||
+    free.find((item) => !item.collection) ||
+    free[0] ||
+    themes[0]
+  );
+}
+
 export function SequencePage() {
   const themes = useStore((s) => s.themes);
+  const config = useConfig();
+  useStore((s) => [s.specs, s.app.panel?.target, s.prefs.startModel]); // the panel's model
+  const model = knownModel(config);
   const [sequence, setSequence] = useSequence(2000);
   const [rows, setRows] = useState(null); // null: as the server has them
-  if (!sequence) return html`<div class="start sequence-page"><${PanelStrip} compact /></div>`;
+  if (!sequence) return html`<div class="start sequence-page"></div>`;
   const saved = sequence.steps.map(editable);
   const shown = rows ?? saved;
   const shortest = sequence.shortest_s || 5;
   const dirty = rows !== null && JSON.stringify(rows.map((row) => [row.theme, secondsOf(row)])) !== JSON.stringify(saved.map((row) => [row.theme, secondsOf(row)]));
   const valid = shown.every((row) => secondsOf(row) >= shortest);
   const total = shown.reduce((sum, row) => sum + (secondsOf(row) || 0), 0);
-  // Libre Panel's own and yours first, then each collection under its name
-  const options = [...themes]
-    .sort((a, b) => Boolean(a.collection) - Boolean(b.collection))
-    .map((item) => ({ value: item.id, label: item.name || item.id, group: item.collection || "" }));
+  const options = themeOptions(themes, model);
   const edit = (next) => setRows(next);
   const add = () => {
-    const used = new Set(shown.map((row) => row.theme));
-    const next = themes.find((item) => !item.collection && !used.has(item.id)) || themes[0];
+    const next = nextTheme(themes, new Set(shown.map((row) => row.theme)), model);
     if (next) edit([...shown, { theme: next.id, amount: 5, unit: "min" }]);
   };
   const apply = async (on) => {
@@ -189,7 +221,6 @@ export function SequencePage() {
   };
   const running = sequence.on && sequence.steps.length > 0;
   return html`<div class="start sequence-page">
-    <${PanelStrip} compact />
     <div class="start-head">
       <div>
         <a class="back-link" href="#/home"><${Icon} name="chevron-left" size=${14} /> ${t("Start")}</a>
@@ -198,7 +229,7 @@ export function SequencePage() {
       <${Now} sequence=${sequence} />
     </div>
     <p class="muted sequence-lead">
-      ${t("Each screen shows for as long as you set, then the next; after the last it begins again. A game's theme and the autopilot go first.")}
+      ${t("Each screen shows for as long as you set, then the next; after the last one it starts again. While a game runs or music plays, those pages come first.")}
     </p>
     ${shown.length
       ? html`<ol class="sequence-steps">
@@ -214,15 +245,19 @@ export function SequencePage() {
               onRemove=${() => edit(shown.filter((_, j) => j !== i))} />`,
           )}
         </ol>`
-      : html`<p class="sequence-empty muted">${t("No screens yet: add the first.")}</p>`}
+      : html`<p class="sequence-empty muted">${t("No screens yet. Add two or more; the first is the theme on the panel, and each can be changed.")}</p>`}
     <button type="button" class="btn btn-wide btn-dashed-wide sequence-add" onClick=${add}><${Icon} name="plus" size=${18} /> ${t("Add a screen")}</button>
     <div class="sequence-foot">
       ${shown.length ? html`<span class="muted">${t("Once round: {time}", { time: duration(total) })}</span>` : null}
+      ${shown.length === 1 ? html`<span class="sequence-hint">${t("Add another screen: with one, nothing changes.")}</span>` : null}
       <span class="grow"></span>
+      ${dirty ? html`<span class="sequence-unsaved">${t("Not saved yet")}</span>` : null}
       ${running ? html`<button type="button" class="btn" onClick=${() => apply(false)}>${t("Stop")}</button>` : null}
-      <button type="button" class="btn btn-primary" disabled=${!valid || !shown.length || (!dirty && running)} onClick=${() => apply(true)}>
-        ${running ? t("Save") : t("Save and start")}
-      </button>
+      ${shown.length || running
+        ? html`<button type="button" class="btn btn-primary" disabled=${!valid || !shown.length || (!dirty && running)} onClick=${() => apply(true)}>
+            ${running ? t("Save") : t("Save and start")}
+          </button>`
+        : null}
     </div>
   </div>`;
 }

@@ -1553,12 +1553,10 @@
     "Week": "KW",
     "Add a screen": "Bildschirm hinzufügen",
     "At least {n} seconds": "Mindestens {n} Sekunden",
-    "Each screen shows for as long as you set, then the next; after the last it begins again. A game's theme and the autopilot go first.": "Jeder Bildschirm ist so lange zu sehen, wie du einstellst, dann kommt der nächste; nach dem letzten geht es von vorn los. Das Theme eines Spiels und der Autopilot gehen vor.",
     "Earlier": "Früher",
     "Edit": "Bearbeiten",
     "How long screen {n} shows": "Wie lange Bildschirm {n} zu sehen ist",
     "Later": "Später",
-    "No screens yet: add the first.": "Noch keine Bildschirme: Füge den ersten hinzu.",
     "Once round: {time}": "Eine Runde: {time}",
     "Save and start": "Speichern und starten",
     "Screens in turn": "Abfolge",
@@ -1645,7 +1643,12 @@
     "{done} of {all} done": "{done} von {all} erledigt",
     "The panel's own boot logo and the clip it plays while the PC starts, in Libre Panel's look.": "Das eigene Startlogo des Panels und der Clip, den es beim Hochfahren des PCs spielt, im Look von Libre Panel.",
     "Show on the panel": "Auf dem Panel zeigen",
-    "A click on a theme puts it on the panel; Edit opens it in Design.": "Ein Klick auf ein Theme bringt es aufs Panel; „Bearbeiten“ öffnet es in Gestalten."
+    "A click on a theme puts it on the panel; Edit opens it in Design.": "Ein Klick auf ein Theme bringt es aufs Panel; „Bearbeiten“ öffnet es in Gestalten.",
+    "Made for this panel": "Für dieses Panel gemacht",
+    "Each screen shows for as long as you set, then the next; after the last one it starts again. While a game runs or music plays, those pages come first.": "Jeder Bildschirm ist so lange zu sehen, wie du einstellst, dann kommt der nächste; nach dem letzten geht es von vorn los. Läuft ein Spiel oder Musik, gehen diese Seiten vor.",
+    "No screens yet. Add two or more; the first is the theme on the panel, and each can be changed.": "Noch keine Bildschirme. Füge zwei oder mehr hinzu; der erste ist das Theme auf dem Panel, und jeder lässt sich ändern.",
+    "Add another screen: with one, nothing changes.": "Füge noch einen Bildschirm hinzu: Mit einem allein wechselt nichts.",
+    "Not saved yet": "Noch nicht gespeichert"
   },
   "fields": {
     "align": "Ausrichtung",

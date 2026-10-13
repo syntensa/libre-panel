@@ -15,12 +15,18 @@ import { navigate } from "../../shell/views.js";
 import { Toggle } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { toastError } from "../../ui/toast.js";
-import { MountedChoice } from "./panel.js";
+import { MountedChoice, panelModelNow } from "./panel.js";
 
 /** Design with its Pages open. */
 export function openPages() {
   setPref("panel", "pages");
   navigate("design");
+}
+
+/** The panel's model as far as it is known: the one Start shows themes for, else config.toml's. */
+export function knownModel(config) {
+  const models = store.get().specs?.models || [];
+  return panelModelNow().model || models.find((model) => model.id === config?.device?.model) || null;
 }
 
 async function switchPage(id, on) {
