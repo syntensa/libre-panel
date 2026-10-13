@@ -84,10 +84,11 @@ Netzwerk-Karte einen laufenden Download an ihrer Stelle.
 
 ### Hinweise
 
-<img src="docs/media/volume-band.gif" width="100%" alt="Die Lautstärketaste im Theme Studio: ein Band rollt von einer leuchtenden Kante herab, seine Zahl zählt hoch und runter, sein Balken gleitet">
+<img src="docs/media/volume-looks.gif" width="100%" alt="Die Lautstärke über Lumen in ihren vier Looks nacheinander: eine Leiste am unteren Rand, Pegel, die steigen, ein Ring, der sich füllt, mit der Zahl darin, und eine große Zahl in der Mitte">
 
-Dreh an der Lautstärke, und ein Band rollt von einer leuchtenden Kante herab und ändert sich
-mit, solange du drehst. Ein neuer Titel mit Cover, ein Sensor über einer Grenze, die du
+Dreh an der Lautstärke, und sie erscheint über jedem Screen, im Look deiner Wahl: als *Leiste*
+am Rand, als *Pegel*, die steigen, als *Ring*, der sich füllt, oder *Groß*, eingeschaltet mit
+einem Klick auf *Start*. Ein neuer Titel mit Cover, ein Sensor über einer Grenze, die du
 festlegst, ein Stick oder Controller angesteckt (Windows): kurze Hinweise in den Farben des
 Themes, als Band oder Karte; ein Bildschirm, der Lautstärke oder Titel selbst zeigt, bekommt
 keinen darüber. Wie jeder Dienst sind sie aus, bis du sie einschaltest.

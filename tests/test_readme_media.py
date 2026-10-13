@@ -234,12 +234,13 @@ def differ(recorded, a, b):
     return float(np.abs(pixels(recorded, a) - pixels(recorded, b)).mean())
 
 
-LONG = ("card-ignition", "volume-band", "theme-tube", "game-entrance")  # what the tests below use
+# what the tests below use
+LONG = ("card-ignition", "volume-band", "volume-looks", "theme-tube", "game-entrance")
 
 
 def test_every_panel_recipe_runs_headless_and_makes_a_clip(panel, clip, short):
     assert list(panel.CLIPS) == [
-        "video-mode", "card-ignition", "small-panel", "volume-band", "theme-tube",
+        "video-mode", "card-ignition", "small-panel", "volume-band", "volume-looks", "theme-tube",
         "game-entrance", "close-up-rings", "close-up-curves", "encore", "nimbus", "almanac",
         "music-page", "round-report", "screens-in-turn", "where-it-started",
     ]  # fmt: skip
@@ -297,6 +298,23 @@ def test_the_volume_band_rolls_down_and_the_clip_ends_as_it_began(clip):
     assert differ(volume, 0, 20) > 8  # the band is on show at two seconds
     assert differ(volume, 0, 30) > 8
     assert differ(volume, 0, volume.frames.count - 1) < 1  # and gone, the rings as they were
+
+
+def test_the_volume_shows_in_each_of_its_looks_and_is_gone_between_them(panel, clip):
+    looks = clip("volume-looks")
+    every = len(panel.VOLUME_LOOKS)
+    shown = [panel.LOOK_EVERY_S * n + 1.1 for n in range(every)]  # each look at its height
+    gaps = [panel.LOOK_EVERY_S * (n + 1) + 0.4 for n in range(every - 1)]  # and gone between
+    rate = looks.frames.count / panel.CLIPS["volume-looks"].seconds
+    frame = lambda at: min(round(at * rate), looks.frames.count - 1)  # noqa: E731
+    pictures = [pixels(looks, frame(at)) for at in shown]
+    for i in range(every):
+        for j in range(i + 1, every):  # four looks, four different pictures
+            assert float(np.abs(pictures[i] - pictures[j]).mean()) > 1, (i, j)
+    for at in shown:
+        assert differ(looks, 0, frame(at)) > 1
+    for at in gaps:
+        assert differ(looks, 0, frame(at)) < differ(looks, 0, frame(at - 1.6)), at
 
 
 def test_the_tube_goes_to_the_other_screen_and_back(clip):
@@ -603,7 +621,8 @@ def run(cli, encode, tmp_path, **options):
 def test_the_list_says_what_there_is_and_what_each_shows(cli, capsys):
     assert cli.main(["--list"]) == 0
     shown = capsys.readouterr().out
-    for name in ("video-mode", "volume-band", "theme-tube", "game-entrance", "card-ignition",
+    for name in ("video-mode", "volume-band", "volume-looks", "theme-tube", "game-entrance",
+                 "card-ignition",
                  "small-panel", "close-up-rings", "close-up-curves", "where-it-started",
                  "app-look", "app-drag-module", "app-ring-style", "app-command-palette",
                  "app-hardware-names", "encore", "nimbus", "almanac", "music-page",

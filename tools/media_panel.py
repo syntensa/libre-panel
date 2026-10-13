@@ -723,6 +723,24 @@ def volume_band(stage: Stage, themes: tuple[str, ...]) -> None:
         stage.at(at, lambda s, percent=percent: s.turn_volume(percent))
 
 
+# The volume over a screen in each of its looks (Look → Notices → Volume): Bar, Levels, Ring and
+# Large one after the other, each turned up and down a little and gone before the next comes.
+VOLUME_LOOKS = ("bar", "levels", "ring", "big")
+LOOK_EVERY_S = 2.5  # one look's turn: up, down, its hold of 1.2 s and its fade
+
+
+def volume_looks(stage: Stage, themes: tuple[str, ...]) -> None:
+    stage.show(stage.theme(themes[0], toast={"seconds": 1.2}))
+    start = stage.speakers.percent
+    for n, look in enumerate(VOLUME_LOOKS):
+        begin = 0.5 + LOOK_EVERY_S * n
+        stage.at(begin - 0.1, lambda s, look=look: setattr(s.notices, "look", look))
+        up = [(begin + 0.07 * k, start + 3 * (k + 1)) for k in range(6)]
+        down = [(begin + 0.6 + 0.07 * k, start + 18 - 3 * (k + 1)) for k in range(4)]
+        for at, percent in up + down:
+            stage.at(at, lambda s, percent=percent: s.turn_volume(percent))
+
+
 # Encore: what plays, the cover's colours behind it, the time rolling on, and the volume turned
 # up and then down: its levels rise and fall (the screen shows the volume itself, so no notice).
 def encore_screen(stage: Stage, themes: tuple[str, ...]) -> None:
@@ -880,6 +898,10 @@ CLIPS: dict[str, PanelClip] = {
     "volume-band": PanelClip(
         "the volume key: a notice in the band style, its number counting and its bar gliding",
         ("studio",), 6.8, volume_band, poster=2.2,
+    ),
+    "volume-looks": PanelClip(
+        "the volume over the screen in its four looks: Bar, Levels, Ring and Large",
+        ("lumen",), 10.6, volume_looks, poster=5.6,
     ),
     "theme-tube": PanelClip(
         "one screen to the next with the tube, and back again",
