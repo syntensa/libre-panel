@@ -100,7 +100,8 @@ def field_label(key: str) -> str:
 
 # -- dates on the panel --------------------------------------------------------
 
-_DATE_TOKENS = re.compile(r"%%|%[aAbB]|%d(?= %[bB])")
+_DATE_CODE = re.compile(r"%[-#_0^]?[A-Za-z%]")
+_NAMES = {"%a": "days_short", "%A": "days", "%b": "months_short", "%B": "months"}
 
 
 def format_date(moment: datetime, fmt: str) -> str:
@@ -109,22 +110,24 @@ def format_date(moment: datetime, fmt: str) -> str:
     A day number followed by a month name is joined as the language does it: German gives it a
     period ("27. September"), Spanish and Portuguese a "de" ("27 de septiembre"), and Polish
     names the month in the genitive there ("27 września", ``months_after_day``).
+
+    Only the codes go through ``strftime``, one at a time, never the names or the text around
+    them: on Windows, Python before 3.12 passes its format through the ANSI code page, where a
+    "ś" is lost (and an "ä" only happens to survive).
     """
     names = catalog(_current)
-    if not names:
-        return moment.strftime(fmt)
 
-    def replace(match: re.Match[str]) -> str:
+    def code(match: re.Match[str]) -> str:
         token = match.group(0)
-        if token == "%%":
-            return token
-        if token == "%d":
+        if names and token == "%d" and re.match(r" %[bB]", fmt[match.end() :]):
             return f"{moment.day:02d}{DAY_BEFORE_MONTH.get(_current, '')}"
-        table = {"%a": "days_short", "%A": "days", "%b": "months_short", "%B": "months"}[token]
-        if token == "%B" and "months_after_day" in names:
-            if match.string[: match.start()].rstrip().endswith("%d"):  # "27 września"
-                table = "months_after_day"
-        index = moment.weekday() if token in ("%a", "%A") else moment.month - 1
-        return names[table][index].replace("%", "%%")
+        if names and token in _NAMES:
+            table = _NAMES[token]
+            if token == "%B" and "months_after_day" in names:
+                if fmt[: match.start()].rstrip().endswith("%d"):  # "27 września"
+                    table = "months_after_day"
+            index = moment.weekday() if token in ("%a", "%A") else moment.month - 1
+            return names[table][index]
+        return moment.strftime(token)
 
-    return moment.strftime(_DATE_TOKENS.sub(replace, fmt))
+    return _DATE_CODE.sub(code, fmt)

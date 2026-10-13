@@ -104,6 +104,27 @@ def test_dates(language, expected):
     assert format_date(datetime(2026, 9, 27), "%B") == catalog(language)["months"][8]
 
 
+class Strict(datetime):
+    """A moment whose strftime takes only ASCII, as Windows' Python before 3.12 does: its
+    format goes through the ANSI code page, where "września" comes out wrong."""
+
+    def strftime(self, fmt):
+        assert fmt.isascii(), fmt
+        return super().strftime(fmt)
+
+
+@pytest.mark.parametrize("language", ["en", "de", *LANGUAGES])
+def test_no_name_goes_through_strftime(language):
+    i18n.set_language(language)
+    moment = Strict(2026, 9, 27, 21, 5)
+    text = format_date(moment, "%A, %d %B %Y · %H:%M · %a %b · 100%% · Ühr")
+    names = catalog(language) if language != "en" else {}
+    assert text.endswith("· 100% · Ühr") and "21:05" in text and "2026" in text
+    if names:
+        assert names["days"][6] in text and names["days_short"][6] in text
+    assert format_date(moment, "%d %B") == format_date(datetime(2026, 9, 27), "%d %B")
+
+
 @pytest.mark.parametrize("language", LANGUAGES)
 def test_texts_switch_with_the_language(language):
     i18n.set_language(language)

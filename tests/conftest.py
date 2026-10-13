@@ -20,7 +20,10 @@ def pytest_runtest_logreport(report):
         text = text.replace(char, code)
     title = f"{report.nodeid} ({report.when})".replace(",", ";").replace("::", " ")
     # on a line of its own: pytest's progress dots have no line break
-    sys.__stdout__.write(f"\n::error file={path},line={(line or 0) + 1},title={title}::{text}\n")
+    out = f"\n::error file={path},line={(line or 0) + 1},title={title}::{text}\n"
+    # what the console cannot write (a "ś" on Windows' cp1252) as "?", not a crash of the run
+    encoding = sys.__stdout__.encoding or "utf-8"
+    sys.__stdout__.write(out.encode(encoding, "replace").decode(encoding))
     sys.__stdout__.flush()
 
 
