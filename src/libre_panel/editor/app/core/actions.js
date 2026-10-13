@@ -165,7 +165,7 @@ export async function saveAs() {
   const end = doc.builtin && doc.id && isVersion({ id: doc.id }, all) ? VERTICAL : "";
   const first = end
     ? slug(copy ? t("{name} (mine)", { name: themeName(doc.id.slice(0, -end.length)) }) : doc.theme.name)
-    : slug(copy || doc.theme.name) + (doc.builtin && !copy ? "-custom" : "") || "my-theme";
+    : slug(copy || doc.theme.name) || "my-theme"; // (a folder that is taken gets a number: below)
   let suggestion = first + end;
   for (let n = 2; doc.builtin && taken.has(suggestion); n++) suggestion = `${first}-${n}${end}`;
   const id = await promptDialog({
