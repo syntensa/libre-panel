@@ -3,7 +3,7 @@
   "name": "Arena Vertical",
   "author": "Libre Panel contributors",
   "license": "CC0-1.0",
-  "description": "Arena for 8.8\" and 9.2\" bars on end: the game's frame rate large with its 1% low, frame time and course, the CPU and the GPU as instruments, every core's load and the temperatures.",
+  "description": "Arena for 8.8\" and 9.2\" bars on end: the game's frame rate large with its 1% low, frame time and course, the CPU and the GPU as instruments, every core's load, the temperatures and, small in a corner, the time.",
   "display": {
     "model": "turing-9.2-usb",
     "orientation": "portrait",

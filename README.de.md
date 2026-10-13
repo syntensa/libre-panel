@@ -199,7 +199,7 @@ dafür gemacht sind, **Live**, wie es läuft.
 | **Encore** | 8,8"- und 9,2"-Leisten | für Musik: das Cover groß und seine Farben hinter dem ganzen Bildschirm, die Uhrzeit mit rollenden Ziffern, die Lautstärke als steigende Pegel |
 | **Nimbus** | 8,8"- und 9,2"-Leisten | fürs Wetter: jetzt und die nächsten Stunden, die nächsten Tage, der Mond, wie er heute Nacht leuchtet, eine kleine Uhr |
 | **Almanac** | 8,8"- und 9,2"-Leisten | eine Uhr mit dem Monat: die Uhrzeit groß oder auf einem Zifferblatt mit gleitendem Sekundenzeiger (**Almanac Analog**), daneben der Monat mit heute und der Kalenderwoche |
-| **Arena** | 8,8"- und 9,2"-Leisten | für den Spielmodus: die FPS des Spiels groß mit 1-%-Low, Frametime und Verlauf, CPU und GPU als Instrumente, jeder Kern und die Temperaturen |
+| **Arena** | 8,8"- und 9,2"-Leisten | für den Spielmodus: die FPS des Spiels groß mit 1-%-Low, Frametime und Verlauf, CPU und GPU als Instrumente, jeder Kern, die Temperaturen und, klein in der Ecke, die Uhrzeit |
 | **Libre Default** | 3,5" (480×320); der Standard auf allen anderen Panels | zwei leuchtende Ringe, Temperatur, Laufwerk und Netzwerk, ein scrollender Verlauf; in der Ecke, was läuft, das Wetter oder der Tag |
 | **Slate** | 5" (800×480) | vier Karten: CPU, GPU, Arbeitsspeicher und Netzwerk |
 | **Orbit** | rund, 2,1" und 2,8" | drei Ringe um eine große Uhr |

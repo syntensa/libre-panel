@@ -1670,16 +1670,25 @@ def build_game(b: _Build, _src: Source) -> None:
     b.card()
     color = b.tint("gpu")
     a = b.aspect
+    # the time, small and dim in the corner: a glance between rounds, not a second screen
+    # (where the card has room for it beside the game's name)
+    clock_w = _width_per_size(b.style["text_font"], "00:00") * b.ts * 1.05
+    if b.iw >= b.ts * 14:
+        b.clock("clock", "%H:%M", b.ix + b.iw, b.iy + b.ts * 0.15, b.ts * 1.05,
+                color=b.c("text3"), align="right", width=clock_w, font="text_font")  # fmt: skip
+    else:
+        clock_w = -b.ts  # the name has the whole line
     b.needs = "game.fps"
     title = b.module["title"]
+    title_w = b.iw - b.ts * 2.1 - clock_w - b.ts
     top = b.ts * 2.4
     b.icon("icon", "gamepad", b.ix, b.iy - b.ts * 0.1, b.ts * 1.5, color)
     if title:
         b.label("title", title, b.ix + b.ts * 2.1, b.iy + b.ts * 0.15, b.ts * 1.05, color=color,
-                width=b.iw - b.ts * 2.1)  # fmt: skip
+                width=title_w)  # fmt: skip
     else:
         b.value("title", "game.app", "{value}", b.ix + b.ts * 2.1, b.iy + b.ts * 0.15,
-                b.ts * 1.05, color=color, width=b.iw - b.ts * 2.1, font="text_font",
+                b.ts * 1.05, color=color, width=title_w, font="text_font",
                 tabular=False, fallback="", fit="ellipsis")  # fmt: skip
     x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
     graph = b.large or a >= 3.0 or (a <= 0.72 and h > b.ts * 12)

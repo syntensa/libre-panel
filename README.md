@@ -188,7 +188,7 @@ the panel at a glance and the themes made for it, **Live** how it runs.
 | **Encore** | 8.8" and 9.2" bars | for music: the cover large and its colours behind the whole screen, the time with rolling digits, the volume as levels that rise |
 | **Nimbus** | 8.8" and 9.2" bars | for the weather: now and the next hours, the next days, the moon as it is lit tonight, a small clock |
 | **Almanac** | 8.8" and 9.2" bars | a clock with the month: the time large, or on a face whose second hand glides (**Almanac Analog**), beside the month with today and the week |
-| **Arena** | 8.8" and 9.2" bars | for game mode: the game's frame rate large with its 1% low, frame time and course, CPU and GPU as instruments, every core and the temperatures |
+| **Arena** | 8.8" and 9.2" bars | for game mode: the game's frame rate large with its 1% low, frame time and course, CPU and GPU as instruments, every core, the temperatures and, small in a corner, the time |
 | **Libre Default** | 3.5" (480×320); the default on every other panel | two lit rings, temperature, disk and network, a history that scrolls; what plays, the weather or the day in the corner |
 | **Slate** | 5" (800×480) | four cards: CPU, GPU, memory and network |
 | **Orbit** | round 2.1" and 2.8" | three rings around a large clock |

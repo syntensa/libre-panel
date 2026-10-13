@@ -718,3 +718,17 @@ def test_the_game_card_says_no_game_only_where_none_was_found():
     assert not {"idle", "fps"} & waiting
     playing, _, _ = drawn("game", snapshot_with(game__name="Space Game"))
     assert "fps" in playing and not {"idle", "idle-icon", "idle-game", "idle-wait"} & playing
+
+
+def test_the_game_card_tells_the_time_quietly_where_it_has_room():
+    """The time sits small and dim in the corner of the header, playing or not, and keeps
+    the game's name from running into it; a small card leaves the line to the name."""
+    for snap in (snapshot_with(game__name="Space Game"), snapshot_with(drop=("game.",))):
+        names, _, _ = drawn("game", snap, 4, 2)
+        assert "clock" in names
+    parts = widgets_of("game", 4, 2)
+    clock, title = parts["clock"], parts["title"]
+    assert clock["format"] == "%H:%M" and clock["align"] == "right"
+    assert clock["font_size"] == title["font_size"] and clock["color"] != title["color"]
+    assert title["x"] + title["max_width"] < clock["x"] - clock["max_width"]
+    assert "clock" not in widgets_of("game", 1, 1)
