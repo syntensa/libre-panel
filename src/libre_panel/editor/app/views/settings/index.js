@@ -34,37 +34,37 @@ registerSettingsSection({
   id: "panel",
   order: 10,
   title: () => t("Panel"),
-  text: () => t("The panel: which one, the video mode and its frame rate, brightness and orientation."),
+  text: () => t("Which panel is connected, smooth motion, brightness, how it is mounted and its start screen."),
 });
 registerSettingsSection({
   id: "sensors",
   order: 20,
   title: () => t("Sensors"),
-  text: () => t("Where the readings come from, and the names of the hardware."),
+  text: () => t("Where temperatures, loads and the other readings come from, and the names the panel gives your hardware."),
 });
 registerSettingsSection({
   id: "services",
   order: 30,
-  title: () => t("Services"),
-  text: () => t("Game mode, the round report, the cooling analysis, downloads and the plugins' services."),
+  title: () => t("Game mode and more"),
+  text: () => t("What Libre Panel does by itself: game mode, the round report after a game, notices on the panel and more. Each is off until you switch it on, and a change takes effect at once."),
 });
 registerSettingsSection({
   id: "weather",
   order: 40,
   title: () => t("Weather and place"),
-  text: () => t("The place for the weather and the sun, and the weather itself."),
+  text: () => t("Your place, for the weather and for sunrise and sunset, and the weather itself."),
 });
 registerSettingsSection({
   id: "system",
   order: 50,
   title: () => t("Start and system"),
-  text: () => t("Starting with the system, administrator rights and the language."),
+  text: () => t("Starting with your computer, and the language."),
 });
 registerSettingsSection({
   id: "about",
   order: 60,
   title: () => t("About Libre Panel"),
-  text: () => t("The version, the licence and where to find help."),
+  text: () => t("The version, where to find help, how to report a panel, and the folders Libre Panel uses."),
 });
 
 // each section's groups: the overview, the panel, the sources, the services, the weather, the
@@ -111,14 +111,11 @@ function ConfigProblem({ message, down }) {
   <//>`;
 }
 
-/** A section none of whose groups shows anything yet: what it is going to hold. */
-function Upcoming({ section }) {
+/** A section none of whose groups shows anything yet (what it is going to hold is its lead). */
+function Upcoming() {
   return html`<section class="settings-card settings-upcoming">
     <span class="slot-icon"><${Icon} name="gear" size=${22} /></span>
-    <div>
-      <p>${section.text()}</p>
-      <p class="muted">${t("This part of the settings is being built; until then config.toml and the tray menu have it.")}</p>
-    </div>
+    <p class="muted">${t("This part of the settings is being built; until then config.toml and the tray menu have it.")}</p>
   </section>`;
 }
 
@@ -159,9 +156,10 @@ function SettingsView({ rest }) {
     </nav>
     <main class="settings-main" aria-labelledby="settings-title">
       <h1 id="settings-title">${current.title()}</h1>
+      ${current.id === "overview" ? null : html`<p class="settings-lead">${current.text()}</p>`}
       ${problem && current.id !== "about" ? html`<${ConfigProblem} message=${problem} down=${down} />` : null}
       ${showing.map((group) => html`<${group.component} key=${group.id} />`)}
-      ${showing.length ? null : html`<${Upcoming} section=${current} />`}
+      ${showing.length ? null : html`<${Upcoming} />`}
     </main>
   </div>`;
 }

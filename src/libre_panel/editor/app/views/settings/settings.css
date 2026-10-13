@@ -83,6 +83,14 @@
   font-weight: 700;
 }
 
+/* what the section holds, in a line under its name */
+.settings-main .settings-lead {
+  margin: -14px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
 .settings-card {
   display: flex;
   flex-direction: column;
@@ -227,6 +235,14 @@
   flex-direction: column;
   align-items: stretch;
   flex-shrink: 1;
+}
+
+/* the standby clip's name: the field, and the button that takes the panel's own name */
+.clip-choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
 }
 
 .settings-row-control > .input,

@@ -131,7 +131,7 @@ without one: the theme per mode and the log.
 | **Log** | the last lines of `logs/libre-panel.log`, which the tray app writes (`libre-panel start` logs to its terminal instead) |
 
 The **Autopilot** page (found the same way, or by *Edit* under the autopilot in
-*Settings → Services*) edits the rules of the `autopilot` service, switches it
+*Settings → Game mode and more*) edits the rules of the `autopilot` service, switches it
 on and off, and shows which rule holds and what it sees; see
 [the autopilot](CONFIGURATION.md#autopilot).
 

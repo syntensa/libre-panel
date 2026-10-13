@@ -132,7 +132,7 @@ def test_the_catalog_names_the_sources_the_drivers_and_the_services_with_their_o
     assert catalog["lhm_modes"] == ["auto", "service", "inprocess", "webserver"]
     services = catalog["services"]
     assert [service["name"] for service in services] == [
-        "notices", "game", "autopilot", "devices", "memory", "cooling", "downloads",
+        "game", "memory", "notices", "autopilot", "devices", "cooling", "downloads",
     ]  # fmt: skip
     game = next(service for service in services if service["name"] == "game")
     options = {option["key"]: option for option in game["options"]}
@@ -157,7 +157,7 @@ def test_a_plugins_service_is_listed_with_its_options(server, plugin_folder):
     )
     _, data = request(server, "GET", "/api/settings")
     names = [service["name"] for service in data["catalog"]["services"]]
-    assert names[-1] == "tick" and names[:2] == ["notices", "game"]  # the built-in ones first
+    assert names[-1] == "tick" and names[:2] == ["game", "memory"]  # the built-in ones first
     tick = data["catalog"]["services"][-1]
     assert not tick["builtin"] and tick["source"].startswith("folder ")
     assert [o["key"] for o in tick["options"]] == ["every_s", "loud"]

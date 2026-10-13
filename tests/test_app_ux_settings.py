@@ -337,3 +337,127 @@ def test_report_a_panel_tells_windows_how_to_open_a_terminal(app_url):  # noqa: 
         expect(doctor).to_contain_text("Press Windows+R, type cmd")
         link = page.get_by_role("link", name="Open the report form")
         expect(link).to_have_attribute("href", "https://example.invalid/form")
+
+
+# -- the sections in plain words, what few change under Advanced --------------------------------
+
+
+def test_smooth_motion_asks_for_the_clip_and_takes_the_panels_own_name_on_a_click(
+    app_url,  # noqa: F811
+    isolated_home,
+    monkeypatch,
+):
+    """Settings → Panel calls the video mode smooth motion; while it lacks the standby clip's
+    name the row offers the one the panel's own app gives it (written only on the click), and
+    once it is set the name is under Advanced, which an address opens."""
+    from test_app_browser import radio
+    from test_editor_settings import lacking_ffmpeg, panel_on_the_bus
+
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    lacking_ffmpeg(monkeypatch, found=True)
+    with browser_page(app_url, "settings/panel") as page:
+        expect(page.locator(".settings-lead")).to_contain_text("smooth motion")
+        card = page.locator("#panel-video")
+        expect(card.locator(".settings-row-title").first).to_have_text("Smooth motion")
+        expect(card).to_contain_text("Off for now. Missing: the name of the standby clip.")
+        clip = card.locator(".clip-row")
+        expect(clip).to_contain_text(f"Its own app calls it {CLIP}")
+        assert not (isolated_home / "config.toml").exists()  # nothing written by asking
+        clip.get_by_role("button", name="Use this name").click()
+        waits_for(page, lambda: settings_config().device.video.local_clip == CLIP)
+        assert settings_config().device.video.clip_asked is True  # Start need not ask
+        expect(card).to_contain_text("On, 50 fps")
+        expect(card.locator(".clip-row")).to_have_count(0)
+        # the name is kept under Advanced, in plain words; the address opens it
+        page.goto(f"{app_url}#/settings/panel/panel-advanced")
+        advanced = page.locator("#panel-advanced")
+        expect(advanced.locator(".settings-disclosure")).to_have_attribute("aria-expanded", "true")
+        expect(page.get_by_label("Name of the standby clip")).to_have_value(CLIP)
+        titles = advanced.locator(".settings-row-title").all_inner_texts()
+        assert titles == [
+            "Advanced",
+            "Where the pictures go",
+            "Picture file",
+            "Name of the standby clip",
+            "Port of a serial panel",
+            "Video program (ffmpeg)",
+        ]
+        # off: neither the rate nor the clip is asked for
+        radio(page, "Smooth motion", "Off").click()
+        waits_for(page, lambda: settings_config().device.video.mode == "off")
+        expect(page.get_by_role("radiogroup", name="Frames per second")).to_have_count(0)
+        expect(page.get_by_label("Name of the standby clip")).to_have_count(0)
+
+
+def test_the_sensors_lead_with_what_is_in_use_and_fold_the_rest(app_url, isolated_home):  # noqa: F811
+    """The sources in use are listed; the others wait under More sources, and how often they
+    are read and how LibreHardwareMonitor is reached are under Advanced. What a source says when
+    readings are missing shows on its row."""
+    from libre_panel.config import set_config_value
+
+    set_config_value("sensors.providers", ["load", "librehardwaremonitor", "psutil"])
+    hint = "CPU temperature, power and fans need the sensor service."
+    sources = {
+        "background": True,
+        "sources": [
+            {"name": "librehardwaremonitor", "readings": 3, "problem": True, "hint": hint,
+             "status": {}, "details": [["Mode", "inside Libre Panel"]]},
+        ],
+    }  # fmt: skip
+    routes = {"**/api/plugins/control/sources": answer(sources)}
+    with browser_page(app_url, "settings/sensors", routes=routes) as page:
+        card = page.locator("#sensor-sources")
+        expect(card.locator("h2")).to_have_text("Where the readings come from")
+        expect(card.locator("[data-source='librehardwaremonitor']")).to_contain_text(hint)
+        expect(card.locator(".source-row.unused")).to_have_count(0)
+        card.locator(".sources-more").click()
+        expect(card.locator(".source-row.unused[data-source='demo']")).to_have_count(1)
+        # how often, and LibreHardwareMonitor: folded away until asked for
+        expect(page.get_by_label("Reading interval")).to_have_count(0)
+        page.locator("#sensor-advanced .settings-disclosure").click()
+        expect(page.get_by_label("Reading interval")).to_be_visible()
+        lhm = page.locator("#sensor-lhm")
+        expect(lhm).to_contain_text("inside Libre Panel")
+        expect(lhm.get_by_role("radiogroup", name="How it is read")).to_be_visible()
+
+
+def test_game_mode_and_more_leads_with_game_mode_and_the_place_comes_first(app_url):  # noqa: F811
+    with browser_page(app_url, "settings/services") as page:
+        expect(page.locator("#settings-title")).to_have_text("Game mode and more")
+        expect(page.locator(".settings-lead")).to_contain_text("Each is off until you switch it on")
+        cards = page.locator(".settings-card.service")
+        expect(cards.first).to_have_attribute("data-service", "game")
+        notices = page.locator("[data-service='notices']")
+        expect(notices.locator(".settings-row-title").first).to_have_text("Notices")
+        expect(notices.locator(".settings-disclosure")).to_contain_text("Options · ")
+        expect(page.locator(".note")).to_have_count(0)  # (what the note said is the lead now)
+        # the weather needs a place: the place comes first, then the weather
+        page.goto(f"{app_url}#/settings/weather")
+        page.wait_for_selector("#weather")
+        ids = page.locator(".settings-main .settings-card").evaluate_all(
+            "cards => cards.map((c) => c.id)"
+        )
+        assert ids == ["place", "weather"]
+        # no command to type for a window of its own
+        page.goto(f"{app_url}#/settings/system")
+        page.wait_for_selector("#start")
+        assert "--check" not in page.locator("#main").inner_text()
+
+
+def test_the_sections_speak_german(app_url, monkeypatch):  # noqa: F811
+    from test_editor_settings import lacking_ffmpeg, panel_on_the_bus
+
+    from libre_panel import i18n
+
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    lacking_ffmpeg(monkeypatch, found=True)
+    i18n.set_language("de")
+    with browser_page(app_url, "settings/panel") as page:
+        card = page.locator("#panel-video")
+        expect(card.locator(".settings-row-title").first).to_have_text("Flüssige Bewegung")
+        expect(card.get_by_role("button", name="Diesen Namen nehmen")).to_be_visible()
+        nav = page.locator(".settings-nav button")
+        expect(nav.nth(3)).to_have_text("Spielmodus und mehr")
+        page.goto(f"{app_url}#/settings/sensors")
+        expect(page.locator("#sensor-sources h2")).to_have_text("Woher die Werte kommen")
+        expect(page.locator(".sources-more")).to_contain_text("Weitere Quellen")

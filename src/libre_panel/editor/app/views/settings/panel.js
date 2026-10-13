@@ -1,12 +1,21 @@
-// Settings → Panel: the panel that was found, the video mode and its frame rate,
-// brightness and which way up the panel is mounted; under Advanced the driver, the file
-// the picture goes to when there is no panel, the serial port and ffmpeg.
+// Settings → Panel: the panel that was found, smooth motion (the video mode) and its frame
+// rate, the name of the standby clip while smooth motion lacks it, brightness and which way up
+// the panel is mounted, the start screen; under Advanced where the pictures go, the file they go
+// to without a panel, the standby clip's name once it is set, the serial port and ffmpeg.
 
 import { t } from "../../core/i18n.js";
-import { loadPanelInfo, loadSettings, saveSettings, setting, useCatalog, useConfig } from "../../core/settings.js";
+import {
+  loadClipQuestion,
+  loadPanelInfo,
+  loadSettings,
+  saveSettings,
+  setting,
+  useCatalog,
+  useConfig,
+} from "../../core/settings.js";
 import { useStore } from "../../core/state.js";
 import { videoState } from "../../core/video.js";
-import { html, useRef, useState } from "../../lib/preact.js";
+import { html, useEffect, useRef, useState } from "../../lib/preact.js";
 import { panelName, stateText } from "../../shell/panel-popover.js";
 import { Segmented, Select, Slider, Toggle } from "../../ui/controls.js";
 import { Popover } from "../../ui/layer.js";
@@ -119,12 +128,51 @@ function PanelFound() {
   <//>`;
 }
 
-// -- the video mode ----------------------------------------------------------------------------
+// -- smooth motion (the video mode) --------------------------------------------------------------
 
-/** What the video mode is doing, in a mark and words. */
+/** What smooth motion is doing, in a mark and words. */
 function VideoStatus({ video, mode, fps }) {
   const state = videoState(video, mode, fps);
   return html`<${Status} tone=${state.tone}>${state.text}<//>`;
+}
+
+/** Whether the rate and the standby clip matter: smooth motion is not off, on a panel it is for. */
+const videoApplies = (config, info) => Boolean(info.video.usb) && config.video.mode !== "off";
+
+/** The name of the standby clip, written when it is typed (and so answers Start's question). */
+function ClipField({ value }) {
+  return html`<${CommitField}
+    label=${t("Name of the standby clip")}
+    value=${value}
+    placeholder="usr/data/standby.h264"
+    mono
+    onCommit=${(text) => change({ "video.local_clip": text, "video.clip_asked": true })}
+  />`;
+}
+
+/**
+ * The name of the standby clip while smooth motion lacks it: the panel's own app gives it a name,
+ * which a click takes; another can be typed. Nothing is written before either.
+ */
+function ClipRow({ value }) {
+  const name = useStore((s) => s.clipQuestion?.name);
+  useEffect(() => {
+    if (!name) loadClipQuestion();
+  }, []);
+  const use = () => change({ "video.local_clip": name, "video.clip_asked": true });
+  return html`<${SettingRow}
+    stacked
+    class="clip-row"
+    title=${t("Name of the standby clip")}
+    hint=${name
+      ? t("Smooth motion needs the name of the clip your panel plays by itself when the PC starts. Its own app calls it {name}. Nothing is written until you choose it.", { name })
+      : t("Smooth motion needs the name of the clip your panel plays by itself when the PC starts, as its own app calls it. Nothing is written until you type it.")}
+  >
+    <div class="clip-choice">
+      <${ClipField} value=${value} />
+      ${name ? html`<button type="button" class="btn btn-primary" onClick=${use}>${t("Use this name")}</button>` : null}
+    </div>
+  <//>`;
 }
 
 function VideoCard() {
@@ -134,14 +182,15 @@ function VideoCard() {
   const { mode, fps, local_clip: clip } = config.video;
   const video = info.video;
   const rates = [25, 30, 50, ...(fps && ![25, 30, 50].includes(fps) ? [fps] : [])].sort((a, b) => a - b);
+  const applies = videoApplies(config, info);
   return html`<${Card} id="panel-video">
     <${SettingRow}
-      title=${t("Video mode")}
-      hint=${t("Smooth motion: up to 50 pictures a second instead of single ones.")}
+      title=${t("Smooth motion")}
+      hint=${t("Up to 50 pictures a second, so clocks, graphs and moving parts glide instead of jumping. For TURZX USB panels.")}
       status=${html`<${VideoStatus} video=${video} mode=${mode} fps=${fps} />`}
     >
       <${Segmented}
-        label=${t("Video mode")}
+        label=${t("Smooth motion")}
         value=${mode}
         onChange=${(value) => change({ "video.mode": value })}
         options=${[
@@ -151,30 +200,17 @@ function VideoCard() {
         ]}
       />
     <//>
-    <${SettingRow} title=${t("Frames per second")} hint=${t("How many pictures a second the panel gets in video mode. 25 and 30 ask less of the PC.")}>
-      <${Segmented}
-        label=${t("Frames per second")}
-        value=${fps}
-        onChange=${(value) => change({ "video.fps": value })}
-        options=${rates.map((rate) => ({ value: rate, label: String(rate) }))}
-      />
-    <//>
-    ${mode !== "off" && video.usb
-      ? html`<${SettingRow}
-          title=${t("Name of the standby clip")}
-          hint=${t(
-            "The clip the panel plays by itself while the PC is off, as the vendor app names it. It goes to the panel when the video starts, so it must be a name the panel has. Nothing is written until you type it.",
-          )}
-        >
-          <${CommitField}
-            label=${t("Name of the standby clip")}
-            value=${clip}
-            placeholder="usr/data/standby.h264"
-            mono
-            onCommit=${(text) => change({ "video.local_clip": text, "video.clip_asked": true })}
+    ${applies
+      ? html`<${SettingRow} title=${t("Frames per second")} hint=${t("50 is the smoothest; 25 and 30 ask less of the PC.")}>
+          <${Segmented}
+            label=${t("Frames per second")}
+            value=${fps}
+            onChange=${(value) => change({ "video.fps": value })}
+            options=${rates.map((rate) => ({ value: rate, label: String(rate) }))}
           />
         <//>`
       : null}
+    ${applies && video.gaps.includes("clip") ? html`<${ClipRow} value=${clip} />` : null}
   <//>`;
 }
 
@@ -229,7 +265,7 @@ const driverName = (name) =>
 function AdvancedCard() {
   const config = useConfig();
   const catalog = useCatalog();
-  const [open, setOpen] = useState(false);
+  const info = useStore((s) => s.panelInfo);
   if (!config || !catalog) return null;
   const text = (name, label, placeholder) => html`<${CommitField}
     label=${label}
@@ -238,16 +274,16 @@ function AdvancedCard() {
     mono
     onCommit=${(value) => change({ [name]: value })}
   />`;
+  // the clip's name is asked for above while it is missing; once it is there it is kept here
+  const clip = info && videoApplies(config, info) && !info.video.gaps.includes("clip");
   return html`<${Disclosure}
     id="panel-advanced"
     title=${t("Advanced")}
-    hint=${t("The driver, the file for pictures without a panel, the serial port, ffmpeg")}
-    open=${open}
-    onToggle=${() => setOpen(!open)}
+    hint=${t("For special cases: where the pictures go, the standby clip's name, the port of a serial panel, the video program.")}
   >
-    <${SettingRow} title=${t("Driver")} hint=${t("Automatic uses a connected panel and otherwise writes a picture to the file below.")}>
+    <${SettingRow} title=${t("Where the pictures go")} hint=${t("Automatic: to the panel when one is connected, else to the picture file below.")}>
       <${Select}
-        label=${t("Driver")}
+        label=${t("Where the pictures go")}
         value=${config.device.driver}
         options=${catalog.drivers.map((name) => ({ value: name, label: driverName(name) }))}
         onChange=${(value) => change({ "device.driver": value })}
@@ -256,11 +292,22 @@ function AdvancedCard() {
     <${SettingRow} title=${t("Picture file")} hint=${t("Where the pictures go when no panel is used. A short name is in the settings folder.")}>
       ${text("device.output", t("Picture file"), "libre-panel-frame.png")}
     <//>
-    <${SettingRow} title=${t("Serial port")} hint=${t("Serial panels are found by their USB ids. Only if that picks the wrong port, name it.")}>
-      ${text("device.port", t("Serial port"), "COM5, /dev/ttyACM0")}
+    ${clip
+      ? html`<${SettingRow} title=${t("Name of the standby clip")} hint=${t("The clip your panel plays by itself when the PC starts, as its own app names it. Smooth motion needs it.")}>
+          <${ClipField} value=${config.video.local_clip} />
+        <//>`
+      : null}
+    <${SettingRow}
+      title=${t("Port of a serial panel")}
+      hint=${t("Panels that connect as a serial port (the 3.5″ and the like) are found by themselves. Only if the wrong port is taken, name it.")}
+    >
+      ${text("device.port", t("Port of a serial panel"), "COM5, /dev/ttyACM0")}
     <//>
-    <${SettingRow} title=${t("ffmpeg program")} hint=${t("For the video mode, if Libre Panel does not find ffmpeg by itself.")}>
-      ${text("video.ffmpeg", t("ffmpeg program"), "ffmpeg")}
+    <${SettingRow}
+      title=${t("Video program (ffmpeg)")}
+      hint=${t("Smooth motion turns the pictures into video with ffmpeg, which the downloads bring. Only if Libre Panel does not find it, name it.")}
+    >
+      ${text("video.ffmpeg", t("Video program (ffmpeg)"), "ffmpeg")}
     <//>
   <//>`;
 }

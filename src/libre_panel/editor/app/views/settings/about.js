@@ -144,14 +144,11 @@ function Folders() {
 
 function Notices() {
   const info = useStore((s) => s.aboutInfo);
-  const [open, setOpen] = useState(false);
   if (!info || !info.notice) return null;
   return html`<${Disclosure}
     id="about-notices"
     title=${t("Notices and credits")}
     hint=${t("The software and the work Libre Panel is built on, with their licences.")}
-    open=${open}
-    onToggle=${() => setOpen(!open)}
   >
     <div class="notices"><${Markdown} source=${info.notice} /></div>
   <//>`;

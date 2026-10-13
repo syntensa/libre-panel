@@ -1,5 +1,6 @@
-// Settings → Weather and place: the weather (off until it is turned on), its units and how
-// often it is asked for, and the place, which the sun and the moon use as well. Searching
+// Settings → Weather and place: the place first (the weather needs it, and the sun and the moon
+// use it as well), then the weather (off until it is turned on), its units and how often it is
+// asked for. Searching
 // a place sends the name that was typed to Open-Meteo, and the weather sends the place's
 // coordinates there: nothing else leaves this computer for either, and neither happens
 // unasked. The sources are made when the panel starts, so a change takes effect after a
@@ -23,8 +24,7 @@ function WeatherCard() {
   const { enabled, latitude, longitude, units, update_minutes: minutes } = config.weather;
   const hasPlace = latitude !== null && longitude !== null;
   const intervals = INTERVALS.includes(minutes) ? INTERVALS : [...INTERVALS, minutes].sort((a, b) => a - b);
-  return html`<${RestartNote} prefix="weather." />
-    <${Card} id="weather">
+  return html`<${Card} id="weather">
       <${SettingRow}
         title=${t("Weather")}
         hint=${!hasPlace
@@ -59,7 +59,10 @@ function WeatherCard() {
           options=${intervals.map((value) => ({ value, label: t("{minutes} min", { minutes: value }) }))}
         />
       <//>
-    <//>`;
+    <//>
+    <p class="settings-credit">
+      ${t("Weather data by")} <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a> (CC BY 4.0)
+    </p>`;
 }
 
 // -- the place -----------------------------------------------------------------------------------
@@ -114,7 +117,8 @@ function PlaceCard() {
       });
     }
   };
-  return html`<${Card} id="place" title=${t("Place")} text=${t("The sun and the moon use it too, also while the weather is off.")}>
+  return html`<${RestartNote} prefix="weather." />
+    <${Card} id="place" title=${t("Place")} text=${t("For the weather, and for sunrise, sunset and the moon, also while the weather is off.")}>
     <${SettingRow}
       title=${hasPlace ? place || t("A place set in config.toml") : t("No place yet")}
       hint=${hasPlace ? coordinates(latitude, longitude) : t("Search for a town or a district below.")}
@@ -122,7 +126,7 @@ function PlaceCard() {
       ${hasPlace ? html`<button type="button" class="link-btn" onClick=${remove}>${t("Remove")}</button>` : null}
     <//>
     <${SettingRow}
-      title=${t("Search")}
+      title=${hasPlace ? t("Another place") : t("Search")}
       hint=${t("The name you type goes to the place search of Open-Meteo, and only when you press Search. The place is kept to about a kilometre.")}
       stacked
     >
@@ -160,13 +164,10 @@ function PlaceCard() {
           </ul>`
         : null}
     <//>
-  <//>
-  <p class="settings-credit">
-    ${t("Weather data by")} <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a> (CC BY 4.0)
-  </p>`;
+  <//>`;
 }
 
 export const weatherGroups = [
-  { id: "weather", order: 10, component: WeatherCard, load: loadSettings },
-  { id: "place", order: 20, component: PlaceCard },
+  { id: "place", order: 10, component: PlaceCard, load: loadSettings },
+  { id: "weather", order: 20, component: WeatherCard },
 ];

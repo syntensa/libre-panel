@@ -872,7 +872,8 @@ def test_the_sensor_settings_show_the_service_and_take_it_away_after_asking(app_
 
 def test_the_sensor_settings_name_the_service_as_a_way_to_read(app_url):
     with browser_page(app_url, "settings/sensors") as page:
-        page.wait_for_selector("#sensor-lhm, .settings-main")
+        page.wait_for_selector("#sensor-advanced")
+        page.locator("#sensor-advanced .settings-disclosure").click()  # (it is under Advanced)
         if not page.locator("#sensor-lhm").count():  # (not on Windows, and not in the list)
             return
         labels = page.locator("#sensor-lhm .segmented button").all_inner_texts()
@@ -1106,7 +1107,7 @@ def test_live_says_whether_the_video_mode_is_on_or_what_it_lacks(
     missing = "Off for now. Missing: the name of the standby clip"
     tone, text, link = state(ffmpeg=False)
     assert (tone, link) == ("warn", ["Panel settings"])
-    assert text.startswith(f"{missing}, ffmpeg.")
+    assert text.startswith(f"{missing}, the video program ffmpeg.")
     tone, text, link = state()
     assert tone == "warn" and text.startswith(f"{missing}.")
     with_clip = f'\n[video]\nlocal_clip = "{CLIP}"\n'
@@ -3111,7 +3112,9 @@ def test_settings_panel(app_url, isolated_home, monkeypatch):
         detail = page.locator(".panel-found-detail").inner_text()
         assert "USB · 1920 × 480" in detail and "Connected" in detail
         status = page.locator("#main .settings-row-status").first
-        assert status.inner_text() == "Off for now. Missing: the name of the standby clip, ffmpeg."
+        assert status.inner_text() == (
+            "Off for now. Missing: the name of the standby clip, the video program ffmpeg."
+        )
         # the clip's name is never made up: the placeholder is no value, and nothing is
         # written until the person types it
         clip = page.get_by_label("Name of the standby clip")
@@ -3133,11 +3136,11 @@ def test_settings_panel(app_url, isolated_home, monkeypatch):
         radio(page, "Frames per second", "30").click()
         waits_for(page, lambda: settings_config().device.video.fps == 30)
         playwright.expect(video).to_contain_text("On, 30 fps")
-        radio(page, "Video mode", "Off").click()
+        radio(page, "Smooth motion", "Off").click()
         waits_for(page, lambda: settings_config().device.video.mode == "off")
         playwright.expect(video).to_contain_text("single pictures")
         assert page.get_by_label("Name of the standby clip").count() == 0  # not needed now
-        radio(page, "Video mode", "Automatic").click()
+        radio(page, "Smooth motion", "Automatic").click()
         waits_for(page, lambda: settings_config().device.video.mode == "auto")
 
         slider = page.get_by_role("slider", name="Brightness")
@@ -3164,14 +3167,14 @@ def test_settings_panel(app_url, isolated_home, monkeypatch):
 
         # Advanced: the driver and the files it names
         page.locator(".settings-disclosure", has_text="Advanced").click()
-        page.get_by_label("Driver").select_option("virtual")
+        page.get_by_label("Where the pictures go").select_option("virtual")
         waits_for(page, lambda: settings_config().device.driver == "virtual")
         output = page.get_by_label("Picture file")
         assert output.input_value() == "libre-panel-frame.png"
         output.fill("shown.png")
         output.press("Enter")
         waits_for(page, lambda: settings_config().device.output == "shown.png")
-        port = page.get_by_label("Serial port")
+        port = page.get_by_label("Port of a serial panel")
         port.fill("COM5")
         port.press("Enter")
         waits_for(page, lambda: settings_config().device.port == "COM5")
@@ -3222,6 +3225,8 @@ def test_settings_sensors(app_url, isolated_home):
         assert [rows.nth(i).get_attribute("data-source") for i in range(rows.count())] == (
             default_providers()
         )  # in the order they are asked
+        assert page.locator(".source-row.unused").count() == 0  # folded away
+        page.locator(".sources-more").click()
         assert page.locator(".source-row.unused[data-source='demo']").count() == 1
         assert page.locator(".source-row[data-source='media']").count() == 0  # starts by itself
         assert page.locator(".note.warn").count() == 0
@@ -3255,7 +3260,8 @@ def test_settings_sensors(app_url, isolated_home):
         playwright.expect(
             page.locator(".source-row[data-source='psutil'] [role='switch']")
         ).to_be_enabled()
-        # how often they are read: empty is the theme's choice
+        # how often they are read (under Advanced): empty is the theme's choice
+        page.locator(".settings-disclosure", has_text="Advanced").click()
         interval = page.get_by_label("Reading interval")
         assert interval.input_value() == "" and interval.get_attribute("placeholder") == "Automatic"
         interval.fill("500")
@@ -3273,6 +3279,9 @@ def test_settings_sensors_names_the_linux_source(app_url, isolated_home):
     from libre_panel.config import default_providers
 
     with browser_page(app_url, "settings/sensors") as page:
+        page.wait_for_selector(".source-row")
+        if page.locator(".sources-more").count():  # (the sources not in use are folded away)
+            page.locator(".sources-more").click()
         row = page.locator(".source-row[data-source='linux']")
         playwright.expect(row).to_contain_text("Linux sensors")
         playwright.expect(row).to_contain_text("read from the kernel and from NVIDIA's driver")
@@ -3315,7 +3324,7 @@ def test_settings_services(app_url, isolated_home):
         page.wait_for_selector(".settings-card.service")
         cards = page.locator(".settings-card.service")
         assert [cards.nth(i).get_attribute("data-service") for i in range(cards.count())] == [
-            "notices", "game", "autopilot", "devices", "memory", "cooling", "downloads",
+            "game", "memory", "notices", "autopilot", "devices", "cooling", "downloads",
         ]  # fmt: skip
         assert page.locator("[role='switch'][aria-checked='true']").count() == 0  # off until asked
         game = page.locator("[data-service='game']")
@@ -3386,7 +3395,7 @@ def test_settings_services_of_the_running_app(isolated_home):
         assert wait_for(lambda: app.panel.state()["state"] == "showing")
         with browser_page(url, "settings/services") as page:
             notices = page.locator("[data-service='notices']")
-            notices.get_by_role("switch", name="Messages", exact=True).click()
+            notices.get_by_role("switch", name="Notices", exact=True).click()
             assert wait_for(lambda: app.services.state.get("notices") == "running")
             page.wait_for_function(
                 "document.querySelector(\"[data-service='notices'] .status.ok\") !== null"
@@ -3399,7 +3408,7 @@ def test_settings_services_of_the_running_app(isolated_home):
             notices.locator(".settings-disclosure").click()
             notices.locator("[data-option='music'] [role='switch']").click()
             assert wait_for(lambda: app.services.running["notices"][0].options["music"] is False)
-            notices.get_by_role("switch", name="Messages", exact=True).click()
+            notices.get_by_role("switch", name="Notices", exact=True).click()
             assert wait_for(lambda: "notices" not in app.services.running)
             page.wait_for_function(
                 "document.querySelector(\"[data-service='notices'] .status\") === null"
@@ -3502,13 +3511,14 @@ def test_settings_start_and_language(app_url, isolated_home):
         playwright.expect(radio(page, "Sprache", "Deutsch")).to_have_attribute(
             "aria-checked", "true"
         )
-        page.locator(".settings-nav button", has_text="Dienste").click()
+        page.locator(".settings-nav button", has_text="Spielmodus und mehr").click()
         page.wait_for_selector("[data-service='game']")
         assert "Spielmodus" in page.locator("[data-service='game']").inner_text()
         page.goto(f"{app_url}#/settings/panel")
         page.wait_for_selector(".panel-found")
         text = page.locator("#main").inner_text()
-        assert "Videomodus" in text and "Bilder pro Sekunde" in text and "Auf dem Kopf" in text
+        assert "Flüssige Bewegung" in text and "Bilder pro Sekunde" in text
+        assert "Auf dem Kopf" in text
         page.goto(f"{app_url}#/settings/system")
         radio(page, "Sprache", "System").click()
         waits_for(page, lambda: settings_config().language == "auto")

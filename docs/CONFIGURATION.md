@@ -28,9 +28,9 @@ invalid is refused with the reason, and nothing is written.
 
 | Section | What it changes in `config.toml` |
 |---|---|
-| Panel | `[device]` (`model`, `brightness`, `orientation`, `rotate`; under *Advanced* `driver`, `output`, `port`) and `[video]` (`mode`, `fps`, `local_clip`; under *Advanced* `ffmpeg`) |
-| Sensors | `[sensors] providers` (which sources, and their order), `[sensors.librehardwaremonitor]` (`mode`, `url`), `refresh_ms`, and the hardware's names |
-| Services | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
+| Panel | `[device]` (`model`, `brightness`, `orientation`, `rotate`; under *Advanced* `driver`, `output`, `port`) and `[video]` (`mode`, `fps`, `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
+| Sensors | `[sensors] providers` (which sources, and their order; those not in use under *More sources*), the hardware's names, and under *Advanced* `refresh_ms` and `[sensors.librehardwaremonitor]` (`mode`, `url`) |
+| Game mode and more | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
 | Start and system | `language`, and starting with the system (`libre-panel autostart`) |
 | About | nothing: the version, the licence, the notices, how to report a panel, and the folders (with *Open folder*) |
@@ -773,7 +773,7 @@ when = { time = "22:00-06:30" }        # may cross midnight
   the system once a second (the list of programs every two seconds).
 - Rules are read when the service starts: change `config.toml` and it restarts
   by itself.
-- **In the app.** *Settings → Services*, *Edit* under the autopilot, opens the
+- **In the app.** *Settings → Game mode and more*, *Edit* under the autopilot, opens the
   page that edits these rules and the settings above, switches the service on
   and off, and shows which rule holds and what the
   autopilot sees (music, microphone, the program in front, the loads). Saving
@@ -1065,9 +1065,10 @@ With `mode = "auto"` (the default) the video mode is on by itself where it is
 proven, today the 9.2", as soon as ffmpeg is found and `local_clip` is set.
 `libre-panel doctor` and the log say what is missing. `mode = "on"` tries it on
 every TURZX USB panel; `"off"` keeps single PNG frames. In the app, *Settings →
-Panel* shows the same (on with its frame rate, or what is still missing), sets the
-mode and the frame rate (25, 30 or 50), and has a field for the clip's name. That
-field is empty until you type a name.
+Panel* shows the same as *Smooth motion* (on with its frame rate, or what is still missing),
+sets the mode and the frame rate (25, 30 or 50), and while the clip's name is missing asks
+for it: the field is empty until you type a name, and *Use this name* takes the vendor app's.
+Once it is set, the name is under *Advanced*.
 
 Where the clip's name is all that the video mode lacks (a panel it is proven on, ffmpeg
 found, `mode = "auto"`), *Start* asks for it once, in a card (on a first start too), and
