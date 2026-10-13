@@ -1227,7 +1227,6 @@
     "No sensor of that name": "Kein Sensor mit diesem Namen",
     "No theme of that name": "Kein Theme mit diesem Namen",
     "No value on this computer: a sample": "Kein Wert auf diesem Computer: ein Beispielwert",
-    "No widgets yet: drag one from the building blocks.": "Noch keine Elemente: Zieh einen Baustein aufs Panel.",
     "Normal": "Normal",
     "Not saved": "Nicht gespeichert",
     "Notes": "Hinweise",
@@ -1667,7 +1666,17 @@
     "Fine lines behind everything, as on graph paper.": "Feine Linien hinter allem, wie auf Millimeterpapier.",
     "Fine grains drift from the elements into the depth. The panel shows them with smooth motion only; the preview here always does.": "Feine Körnchen rieseln von den Elementen in die Tiefe. Das Panel zeigt sie nur mit flüssiger Bewegung, die Vorschau hier immer.",
     "How short notices look on the panel, such as the volume, a new track or a warning.": "Wie kurze Hinweise auf dem Panel aussehen, etwa die Lautstärke, ein neuer Titel oder eine Warnung.",
-    "Rest the pointer on a choice to try it on the picture; a click keeps it.": "Zeig mit der Maus auf eine Wahl, um sie im Bild anzuprobieren; ein Klick übernimmt sie."
+    "Rest the pointer on a choice to try it on the picture; a click keeps it.": "Zeig mit der Maus auf eine Wahl, um sie im Bild anzuprobieren; ein Klick übernimmt sie.",
+    "Design in three steps": "Gestalten in drei Schritten",
+    "Click a block below to add it, or drag it to where it should go.": "Klick unten einen Baustein an, um ihn hinzuzufügen, oder zieh ihn dorthin, wo er hin soll.",
+    "Click something on the panel to change it: its settings are on the right.": "Klick etwas auf dem Panel an, um es zu ändern: Seine Einstellungen stehen rechts.",
+    "To the panel saves your theme and shows it on the panel. {keys} takes back any step.": "„Aufs Panel“ speichert dein Theme und zeigt es auf dem Panel. {keys} nimmt jeden Schritt zurück.",
+    "Got it": "Verstanden",
+    "This theme is still empty": "Dieses Theme ist noch leer",
+    "Click a block on the left to add it, or drag it here.": "Klick links einen Baustein an, um ihn hinzuzufügen, oder zieh ihn hierher.",
+    "Add what it should show from the blocks.": "Füg aus den Bausteinen hinzu, was es zeigen soll.",
+    "Show the blocks": "Bausteine zeigen",
+    "Nothing on the panel yet. What you add from the blocks is listed here, the one in front on top.": "Noch nichts auf dem Panel. Was du aus den Bausteinen hinzufügst, steht hier, das vorderste oben."
   },
   "fields": {
     "align": "Ausrichtung",

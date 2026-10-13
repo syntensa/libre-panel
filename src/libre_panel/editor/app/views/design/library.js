@@ -10,6 +10,7 @@ import { html, useEffect, useMemo, useState } from "../../lib/preact.js";
 import { Chips } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { dropItem, startLibraryDrag } from "./canvas.js";
+import { FirstSteps, useFirstSteps } from "./guide.js";
 import { TYPE_ICONS } from "./inspector.js";
 import { moduleKinds } from "./ops.js";
 
@@ -112,7 +113,9 @@ export function Library() {
     ["game", t("Game")],
   ];
   const nothing = !shownModules.length && !presets.length && !types.length;
+  const firstVisit = useFirstSteps(); // its steps say what the hint at the foot says
   return html`<div class="library">
+    ${firstVisit ? html`<${FirstSteps} />` : null}
     <label class="search-field">
       <${Icon} name="search" size=${15} />
       <input type="text" value=${query} placeholder=${t("Find a building block")} aria-label=${t("Find a building block")}
@@ -143,7 +146,7 @@ export function Library() {
         : null}
       ${nothing ? html`<p class="side-hint">${t("Nothing of that name.")}</p>` : null}
     </div>
-    <p class="library-hint">${t("Click a block to add it, or drag it to where it should go. A module fits itself to the room it gets.")}</p>
+    ${firstVisit ? null : html`<p class="library-hint">${t("Click a block to add it, or drag it to where it should go. A module fits itself to the room it gets.")}</p>`}
   </div>`;
 }
 

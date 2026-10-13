@@ -83,7 +83,9 @@ export function Layers() {
             </div>`;
           })}
         </div>`
-      : html`<p class="side-hint">${t("No widgets yet: drag one from the building blocks.")}</p>`}
-    <p class="side-hint">${t("The top one is in front. Drag a row to change the order (or Alt+↑ ↓). Locked layers ignore clicks on the canvas; pick them here.")}</p>
+      : html`<p class="side-hint">${t("Nothing on the panel yet. What you add from the blocks is listed here, the one in front on top.")}</p>`}
+    ${rows.length
+      ? html`<p class="side-hint">${t("The top one is in front. Drag a row to change the order (or Alt+↑ ↓). Locked layers ignore clicks on the canvas; pick them here.")}</p>`
+      : null}
   </div>`;
 }

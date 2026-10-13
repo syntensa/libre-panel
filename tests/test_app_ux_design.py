@@ -62,6 +62,8 @@ def test_a_block_is_added_with_a_click_and_taken_back_from_the_message(app_url):
     that came after it."""
     with browser_page(app_url) as page:
         library = page.locator(".library")
+        expect(library.locator(".design-steps")).to_contain_text("Click a block below to add it")
+        library.get_by_role("button", name="Got it").click()  # (the hint says it after the steps)
         expect(library.locator(".library-hint")).to_contain_text("Click a block to add it")
         tile = page.locator('.tile[data-item="module:clock"]')
         tile.hover()
@@ -265,3 +267,34 @@ def test_look_says_what_each_part_does_and_tries_a_choice_on(app_url, isolated_h
         assert js(page, "window.libre.doc.theme().toast.style") == "band"
         shown = "document.querySelector('.look-picture img').src"
         page.wait_for_function(f"{shown} === window.libre.store.get().render.png")
+
+
+def test_a_first_visit_has_three_steps_and_an_empty_theme_says_how_to_fill_it(app_url):  # noqa: F811
+    """Design opened with no word of where to start: three steps are on top of the blocks until
+    "Got it" (remembered), and a theme with nothing on it says how to fill it, with the way to
+    the blocks where they are not open. The layers of an empty theme say what they will be."""
+    with browser_page(app_url) as page:
+        steps = page.locator(".design-steps")
+        expect(steps.locator("li")).to_have_count(3)
+        expect(steps).to_contain_text("Ctrl+Z takes back any step")
+        expect(page.locator(".library-hint")).to_have_count(0)  # the steps say it
+        steps.get_by_role("button", name="Got it").click()
+        expect(steps).to_have_count(0)
+        expect(page.locator(".library-hint")).to_have_count(1)
+        page.reload()
+        page.wait_for_selector(".panel-canvas .preview")
+        expect(page.locator(".library")).to_be_visible()
+        expect(steps).to_have_count(0)  # remembered
+        # a theme with nothing on it
+        js(page, "window.libre.doc.edit(null, (theme) => { theme.widgets = []; })")
+        empty = page.locator(".canvas-empty")
+        expect(empty).to_contain_text("This theme is still empty")
+        expect(empty).to_contain_text("Click a block on the left")
+        expect(empty.get_by_role("button")).to_have_count(0)  # the blocks are open
+        page.locator(".rail-item", has_text="Layers").click()
+        hints = page.locator(".side .side-hint")
+        expect(hints).to_have_count(1)
+        expect(hints).to_contain_text("Nothing on the panel yet")
+        empty.get_by_role("button", name="Show the blocks").click()
+        page.locator('.tile[data-item="module:clock"]').click()
+        expect(empty).to_have_count(0)

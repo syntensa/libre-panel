@@ -557,6 +557,7 @@ export function Canvas() {
               )}
               ${marquee ? html`<div class="marquee" style=${place(marquee)}></div>` : null}
             </div>
+            ${!list.length && render.png && !libDrag ? html`<${EmptyPage} libraryOpen=${prefs.panel === "library"} />` : null}
           </div>
         </div>
         <div class="canvas-foot">
@@ -592,6 +593,19 @@ export function Canvas() {
         <//>`
       : null}
   </main>`;
+}
+
+/** A theme with nothing on it: what to do, over the empty panel (clicks and drops go through to
+ * the canvas, but for the way to the blocks where they are not open). */
+function EmptyPage({ libraryOpen }) {
+  return html`<div class="canvas-empty" role="status">
+    <strong>${t("This theme is still empty")}</strong>
+    <span>${libraryOpen ? t("Click a block on the left to add it, or drag it here.") : t("Add what it should show from the blocks.")}</span>
+    ${libraryOpen
+      ? null
+      : html`<button type="button" class="btn" onPointerDown=${(event) => event.stopPropagation()}
+          onClick=${() => setPref("panel", "library")}><${Icon} name="blocks" size=${15} /> ${t("Show the blocks")}</button>`}
+  </div>`;
 }
 
 function Warnings({ warnings }) {

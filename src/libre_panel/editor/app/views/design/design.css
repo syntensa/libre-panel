@@ -1811,3 +1811,87 @@
   white-space: nowrap;
   font-size: 13px;
 }
+
+/* -- the first visit's three steps, on top of the blocks ----------------------------------- */
+
+.design-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 12px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(46, 230, 214, 0.3);
+  background: var(--accent-softer);
+}
+
+.design-steps-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.design-steps-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.design-steps-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.design-steps-icon {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.design-steps-done {
+  align-self: flex-start;
+  height: 30px;
+  padding: 0 14px;
+}
+
+/* -- a theme with nothing on it ------------------------------------------------------------ */
+
+.canvas-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  text-align: center;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.4;
+  background: rgba(8, 12, 17, 0.55);
+  pointer-events: none;
+}
+
+.canvas-empty strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.canvas-empty .btn {
+  margin-top: 6px;
+  pointer-events: auto;
+}
