@@ -1140,6 +1140,14 @@ textarea.input {
   font-weight: 600;
 }
 
+.pop-hint {
+  margin: -4px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+  white-space: normal;
+}
+
 .pop-actions {
   display: flex;
   gap: 8px;
@@ -1648,7 +1656,7 @@ textarea.input {
 .model-list {
   display: flex;
   flex-direction: column;
-  max-height: 280px;
+  max-height: min(280px, 28vh);
   overflow: auto;
   margin: 0 -4px;
   padding: 0 4px;

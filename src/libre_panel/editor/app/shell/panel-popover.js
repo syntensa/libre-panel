@@ -1,6 +1,7 @@
-// The panel chip in the header and its popover: which panel the theme is for
-// (model, orientation, custom size) and, when the background app runs, how the
-// panel is doing (state, brightness, upside down, start with system, pause, quit).
+// The panel chip in the header and its popover: when the background app runs, how the panel is
+// doing (state, brightness, upside down, start with system, pause, quit), first; then which panel
+// the theme being edited is made for (model, orientation, custom size), which fits the theme to
+// another panel and does not change the panel.
 
 import { adaptPanel } from "../core/actions.js";
 import { appAction, quitApp } from "../core/app.js";
@@ -70,8 +71,9 @@ function PanelChoice({ theme, models }) {
   }
   return html`
     <div class="pop-section">
-      <div class="pop-title">${t("Panel")}</div>
-      <div class="model-list" role="listbox" aria-label=${t("Panel model")}>
+      <div class="pop-title">${t("This theme is made for")}</div>
+      <p class="pop-hint">${t("Another one fits the theme to it. Which panel is connected is in Settings → Panel.")}</p>
+      <div class="model-list" role="listbox" aria-label=${t("This theme is made for")}>
         ${groups.map(
           (group) => html`<div class="model-group" key=${group.vendor}>
             <div class="model-vendor">${group.vendor}</div>
@@ -232,7 +234,7 @@ export function PanelChip() {
       class=${`panel-chip ${state}`}
       aria-haspopup="dialog"
       aria-expanded=${String(open)}
-      title=${panel?.detail || t("Panel and orientation")}
+      title=${panel?.detail || t("The panel, and what this theme is made for")}
       onClick=${() => setOpen(!open)}
     >
       <span class="dot"></span>
@@ -240,8 +242,8 @@ export function PanelChip() {
       <span class="panel-chip-detail">${detail}</span>
     </button>
     <${Popover} anchor=${anchor} open=${open} onClose=${() => setOpen(false)} placement="bottom-end" label=${t("Panel")} width=${360}>
-      <${PanelChoice} theme=${theme} models=${models} />
       ${app.available ? html`<${Running} app=${app} onClose=${() => setOpen(false)} />` : null}
+      <${PanelChoice} theme=${theme} models=${models} />
     <//>
   `;
 }

@@ -1,6 +1,7 @@
 """The app's shell for 0.6.0: Ctrl+K finds every feature by the words a person uses (German and
-English), what it suggests and what it says when it finds nothing, and the help. Skipped where
-Playwright or Chromium are missing, as test_app_browser.py is."""
+English), what it suggests and what it says when it finds nothing, the help, the header the views
+share and the way back from Settings, and the panel chip. Skipped where Playwright or Chromium
+are missing, as test_app_browser.py is."""
 
 import pytest
 
@@ -233,3 +234,63 @@ def test_help_speaks_german(app_url, isolated_home):  # noqa: F811
         expect(dialog.locator(".dialog-title")).to_have_text("Hilfe")
         expect(dialog).to_contain_text("„hochkant“")
         expect(dialog.locator(".help-link").first).to_contain_text("Fragen und Antworten")
+
+
+# -- the header ------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("language", ["en", "de"])
+def test_the_header_is_the_same_in_every_view(app_url, isolated_home, language):  # noqa: F811
+    """The search field sits right after the tabs in every view (it was at the right in Look,
+    Start and Live and beside the tabs in Design), each tab says what it is for, and the way to
+    the settings is in the same corner."""
+    from libre_panel import i18n
+
+    routes = a_bar(isolated_home)
+    i18n.set_language(language)
+    with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
+        for view in ("home", "design", "look", "live", "settings/panel"):
+            page.goto(f"{app_url}#/{view}")
+            page.wait_for_selector(".view > *")
+            order = js(
+                page,
+                """[...document.querySelectorAll('.topbar > *')].map((el) =>
+                    el.classList.contains('tabs') ? 'tabs'
+                    : el.classList.contains('search-trigger') ? 'search'
+                    : el.classList.contains('settings-btn') ? 'settings' : '')
+                  .filter(Boolean)""",
+            )
+            assert order == ["tabs", "search", "settings"], view
+        titles = page.locator(".tabs .tab").evaluate_all("tabs => tabs.map((t) => t.title)")
+        assert len(titles) == 4 and all(len(title) > 12 for title in titles)
+
+
+def test_the_settings_button_leads_back_to_where_you_were(app_url, isolated_home):  # noqa: F811
+    routes = a_bar(isolated_home)
+    with browser_page(app_url, "look", routes=routes, allow=PICTURE) as page:
+        page.wait_for_selector(".look-side")
+        button = page.locator(".settings-btn")
+        button.click()
+        page.wait_for_function("location.hash.startsWith('#/settings')")
+        page.locator(".settings-nav button", has_text="Sensors").click()  # a section or two later
+        page.wait_for_function("location.hash === '#/settings/sensors'")
+        expect(button).to_have_attribute("aria-pressed", "true")
+        expect(button).to_have_attribute("title", "Back to Look (Esc)")
+        button.click()
+        page.wait_for_function("location.hash === '#/look'")
+        page.wait_for_selector(".look-side")
+        button.click()
+        page.wait_for_function("location.hash.startsWith('#/settings')")
+        page.keyboard.press("Escape")
+        page.wait_for_function("location.hash === '#/look'")
+
+
+def test_the_chip_shows_the_running_panel_first(app_url, isolated_home):  # noqa: F811
+    """What most people open the chip for (how the panel is doing, brightness, pause) comes
+    first; which panel the theme is made for, which fits the theme and not the panel, after it."""
+    routes = a_bar(isolated_home)
+    with browser_page(app_url, "design", routes=routes, allow=PICTURE) as page:
+        page.locator(".panel-chip").click()
+        titles = page.locator(".popover .pop-title").all_inner_texts()
+        assert [title.lower() for title in titles] == ["on the panel now", "this theme is made for"]
+        expect(page.locator(".popover .pop-hint")).to_contain_text("Settings → Panel")
