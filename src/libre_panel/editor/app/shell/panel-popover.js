@@ -72,7 +72,7 @@ function PanelChoice({ theme, models }) {
   return html`
     <div class="pop-section">
       <div class="pop-title">${t("This theme is made for")}</div>
-      <p class="pop-hint">${t("Another one fits the theme to it. Which panel is connected is in Settings → Panel.")}</p>
+      <p class="pop-hint">${t("Choosing another one fits the theme to it; the panel itself stays as it is. Which panel is connected: Settings → Panel.")}</p>
       <div class="model-list" role="listbox" aria-label=${t("This theme is made for")}>
         ${groups.map(
           (group) => html`<div class="model-group" key=${group.vendor}>
