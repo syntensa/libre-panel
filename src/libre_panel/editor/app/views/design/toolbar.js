@@ -145,8 +145,10 @@ function SizeControl({ widget }) {
 function SingleTools({ widget }) {
   const spec = specOf(widget.type);
   const parts = [];
+  // a module shows what it is made to (its source), or is named: its sensor field is a source's
+  // ("No sensor" on a card slot or a clock said it lacked one)
   if (isModule(widget) && moduleKinds()[widget.module]?.sources?.length) parts.push(html`<${SourceChip} key="source" widget=${widget} />`);
-  else if ("sensor" in spec && spec.sensor[0] === "sensor" && widget.type !== "icon")
+  else if (!isModule(widget) && "sensor" in spec && spec.sensor[0] === "sensor" && widget.type !== "icon")
     parts.push(html`<${SensorButton} key="sensor" compact value=${widget.sensor} onPick=${change(widget, "sensor")} />`);
   else parts.push(html`<span key="name" class="tool-name">${isModule(widget) ? kindName(widget.module) : widgetLabel(widget.type)}</span>`);
   if ("finish" in spec) {

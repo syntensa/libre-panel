@@ -1644,7 +1644,12 @@
     "Set the place": "Ort festlegen",
     "First steps": "Erste Schritte",
     "{done} of {all} done": "{done} von {all} erledigt",
-    "The panel's own boot logo and the clip it plays while the PC starts, in Libre Panel's look.": "Das eigene Startlogo des Panels und der Clip, den es beim Hochfahren des PCs spielt, im Look von Libre Panel."
+    "The panel's own boot logo and the clip it plays while the PC starts, in Libre Panel's look.": "Das eigene Startlogo des Panels und der Clip, den es beim Hochfahren des PCs spielt, im Look von Libre Panel.",
+    "Add a card…": "Karte hinzufügen …",
+    "Cards": "Karten",
+    "Take out": "Herausnehmen",
+    "Move up": "Nach oben",
+    "The first one with something to show is on show: what plays while music plays, else the next.": "Die erste, die etwas zu zeigen hat, ist zu sehen: was gerade läuft, solange Musik spielt, sonst die nächste."
   },
   "fields": {
     "align": "Ausrichtung",

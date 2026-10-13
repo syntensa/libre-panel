@@ -352,6 +352,59 @@ function WidgetInspector({ widget }) {
 
 // -- a module ---------------------------------------------------------------------------------
 
+// The kinds that hold cards themselves; the cards a slot can hold are every other kind, and
+// the network as the Studio's card has it ("net"), the cards after SPUR II's first.
+const SLOTS = ["cards", "netcard"];
+const CARDS = ["playback", "forecast", "download", "instrument", "net"];
+
+/** A card's name in words (a line of a slot's items: "forecast", "date if weather.temp"). */
+const cardOf = (line) => line.split("#")[0].split(" if ")[0].trim();
+const cardName = (card) => (card === "net" ? t("Network") : kindName(card));
+
+/** What a card slot holds (its items, one card a line; the first with something to show is on
+ * show): named in words, each moved up or taken out, one more from a list. A line's condition
+ * ("forecast if weather.temp") stays with its card. It was a box of words a sensor's hint
+ * explained ("a sensor (cpu.temp), a pattern"), which a slot does not take. */
+function SlotCards({ widget, onChange }) {
+  const lines = (widget.items || moduleKinds()[widget.module]?.items || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const set = (next) => onChange(next.join("\n")); // each its own step back (Ctrl+Z)
+  const others = Object.keys(moduleKinds()).filter((kind) => !SLOTS.includes(kind) && !CARDS.includes(kind));
+  const options = [
+    { value: "", label: t("Add a card…") },
+    ...CARDS.map((card) => ({ value: card, label: cardName(card), group: t("Cards") })),
+    ...others.map((kind) => ({ value: kind, label: kindName(kind), group: t("Modules") })),
+  ];
+  return html`<${Field} label=${t("Cards")} hint=${t("The first one with something to show is on show: what plays while music plays, else the next.")}>
+    <ol class="slot-cards">
+      ${lines.map(
+        (line, index) => html`<li key=${`${index}:${line}`} class="slot-card">
+          <span class="slot-card-name" title=${line}>${cardName(cardOf(line))}</span>
+          <${IconButton} icon="arrow-up" size=${14} label=${t("Move up")} disabled=${index === 0}
+            onClick=${() => set([...lines.slice(0, index - 1), line, lines[index - 1], ...lines.slice(index + 1)])} />
+          <${IconButton} icon="close" size=${14} label=${t("Take out")} disabled=${lines.length < 2}
+            onClick=${() => set(lines.filter((_, i) => i !== index))} />
+        </li>`,
+      )}
+    </ol>
+    <${Select} key=${lines.length} label=${t("Add a card…")} value="" options=${options}
+      onChange=${(card) => card && set([...lines, card])} />
+  <//>`;
+}
+
+/** The second line of a module's head: what it shows, or the cards a slot holds. */
+function moduleSubtitle(widget, sensor, sourceName) {
+  if (sensor) return html`<${SensorLine} sensor=${sensor} />`;
+  if (sourceName) return sourceName;
+  if (widget.module === "cards") {
+    const lines = (widget.items || moduleKinds().cards?.items || "").split("\n").map(cardOf).filter(Boolean);
+    return lines.map(cardName).join(" · ");
+  }
+  return null;
+}
+
 function ModuleInspector({ widget }) {
   const [page, setPage] = usePage();
   const info = moduleKinds()[widget.module] || { sources: [] };
@@ -401,7 +454,9 @@ function ModuleInspector({ widget }) {
     `;
   }
 
-  const items = info.items
+  const items = widget.module === "cards"
+    ? html`<${SlotCards} widget=${widget} onChange=${(value) => edit(null, () => (widget.items = value))} />`
+    : info.items
     ? html`<${Field}
         label=${widget.module === "world" ? t("Places") : t("Readings")}
         hint=${widget.module === "world"
@@ -415,7 +470,7 @@ function ModuleInspector({ widget }) {
     <${Header}
       icon=${iconOf(widget)}
       title=${kindName(widget.module)}
-      subtitle=${sensor ? html`<${SensorLine} sensor=${sensor} />` : sourceName || html`<span class="mono">${widget.id}</span>`}
+      subtitle=${moduleSubtitle(widget, sensor, sourceName)}
       sensor=${sensor}
     />
     <div class="inspector-body">

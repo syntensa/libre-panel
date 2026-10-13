@@ -1656,3 +1656,43 @@
   border-radius: 6px;
   border: 1px dashed var(--line-5);
 }
+
+/* -- a card slot's cards: one a row, the first on top ---------------------------------------- */
+
+.slot-cards {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  counter-reset: slot;
+}
+
+.slot-card {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 0 4px 0 10px;
+  border-radius: 9px;
+  background: var(--surface);
+  counter-increment: slot;
+}
+
+.slot-card::before {
+  content: counter(slot);
+  width: 18px;
+  color: var(--dim);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.slot-card-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
