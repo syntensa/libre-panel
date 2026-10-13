@@ -1067,15 +1067,26 @@ class EditorHandler(BaseHTTPRequestHandler):
 
     # -- the panel's own screens (devices/panel_files.py) -------------------------------------
 
+    def _mounted(self) -> str:
+        """How the panel is mounted, for its own screens: "portrait" for a bar on end (they
+        are drawn upright), else "landscape"."""
+        try:
+            way = load_config(self.state.config_path).device.orientation
+        except ConfigError:
+            way = ""
+        return "portrait" if way == "portrait" else "landscape"
+
     def _start_screen(self) -> None:
         """The TURZX USB panels whose boot logo and standby clip Libre Panel can make, and the
-        one at hand: the one config.toml names, else the one on the USB bus."""
+        one at hand: the one config.toml names, else the one on the USB bus; drawn upright for
+        a bar on end."""
         from libre_panel.devices import panel_files
 
         try:
             configured = load_config(self.state.config_path).device.model
         except ConfigError:
             configured = "auto"
+        way = self._mounted()
         usb = [model.id for model in panel_files.models()]
         model = configured if configured in usb else None
         if model is None:
@@ -1092,12 +1103,13 @@ class EditorHandler(BaseHTTPRequestHandler):
                     {
                         "id": m.id,
                         "label": m.label,
-                        "size": list(m.size("landscape")),
+                        "size": list(m.size(way)),
                         "measured": m.video,
                     }  # (the 9.2": where SPUR II measured it all)
                     for m in panel_files.models()
                 ],  # fmt: skip
                 "model": model,
+                "orientation": way,
                 "runs_panel": self.controls is not None,
                 "names": {"logo": panel_files.BOOT_LOGO, "clip": panel_files.STANDBY_CLIP},
             }
@@ -1124,7 +1136,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             width = max(120, min(1920, int((query.get("w") or ["960"])[0])))
         except ValueError:
             width = 960
-        self._send(200, panel_files.cached_preview(model.id, what, width), "image/png")
+        picture = panel_files.cached_preview(model.id, what, width, self._mounted())
+        self._send(200, picture, "image/png")
 
     def _start_screen_file(self, query: dict[str, list[str]]) -> None:
         """``?model=...&what=logo|clip``: the boot logo's JPEG or the standby clip (H.264) as
@@ -1136,7 +1149,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         if model is None or what not in ("logo", "clip"):
             return self._error("unknown panel or file", HTTPStatus.NOT_FOUND)
         try:
-            data = panel_files.cached_file(model.id, what)
+            data = panel_files.cached_file(model.id, what, self._mounted())
         except DeviceError as exc:
             return self._error(str(exc), HTTPStatus.CONFLICT)
         name = f"{model.id}-{'boot.jpg' if what == 'logo' else 'standby.h264'}"
@@ -1175,11 +1188,11 @@ class EditorHandler(BaseHTTPRequestHandler):
             if action == "state":
                 result = screen.state(model)
             elif action == "logo":
-                result = screen.write_logo(model)
+                result = screen.write_logo(model, self._mounted())
             elif action == "remove-logo":
                 result = screen.remove_logo(model)
             else:
-                result = screen.write_clip(config.device.brightness, model)
+                result = screen.write_clip(config.device.brightness, model, self._mounted())
                 if not config.video.local_clip:  # the video mode names the clip it plays
                     edit_config(("value", "video.local_clip", panel_files.STANDBY_CLIP),
                                 ("value", "video.clip_asked", True),

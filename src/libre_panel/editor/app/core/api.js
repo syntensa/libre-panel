@@ -66,9 +66,12 @@ export const endpoints = {
   sequence: () => get("/api/sequence"),
   startScreen: () => get("/api/start-screen"),
   startScreenAction: (action, model) => post("/api/start-screen", { action, model }),
-  startScreenPicture: (model, what, width = 960) =>
-    withToken(`/api/start-screen/picture?model=${enc(model)}&what=${enc(what)}&w=${width}`),
-  startScreenFile: (model, what) => withToken(`/api/start-screen/file?model=${enc(model)}&what=${enc(what)}`),
+  // (the way the panel is mounted is config.toml's: in the address too, so that a picture
+  // of the other way is not taken from the cache)
+  startScreenPicture: (model, what, width = 960, way = "") =>
+    withToken(`/api/start-screen/picture?model=${enc(model)}&what=${enc(what)}&w=${width}&o=${enc(way)}`),
+  startScreenFile: (model, what, way = "") =>
+    withToken(`/api/start-screen/file?model=${enc(model)}&what=${enc(what)}&o=${enc(way)}`),
   setSequence: (on, steps) => post("/api/sequence", { on, steps }),
   app: () => get("/api/app"),
   appAction: (action, value) => post("/api/app", { action, value }),

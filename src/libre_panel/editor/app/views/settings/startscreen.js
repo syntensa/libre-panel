@@ -7,6 +7,7 @@
 import { appAction } from "../../core/app.js";
 import { endpoints } from "../../core/api.js";
 import { t } from "../../core/i18n.js";
+import { useMounted } from "../../core/orientation.js";
 import { useConfig } from "../../core/settings.js";
 import { html, useEffect, useState } from "../../lib/preact.js";
 import { Select } from "../../ui/controls.js";
@@ -17,8 +18,8 @@ import { Card, Note } from "./parts.js";
 
 const kilobytes = (bytes) => `${Math.max(1, Math.round(bytes / 1024))} KB`;
 
-function Tile({ title, text, picture, children }) {
-  return html`<div class="boot-tile">
+function Tile({ title, text, picture, upright, children }) {
+  return html`<div class=${`boot-tile${upright ? " upright" : ""}`}>
     <div class="boot-picture"><img src=${picture} alt=${title} decoding="async" /></div>
     <div class="boot-tile-text">
       <strong>${title}</strong>
@@ -30,6 +31,7 @@ function Tile({ title, text, picture, children }) {
 
 export function StartScreenCard() {
   const config = useConfig(); // (none while config.toml cannot be read: nothing here is written then)
+  const way = useMounted() === "portrait" ? "portrait" : "landscape"; // drawn upright on a bar on end
   const [info, setInfo] = useState(null);
   const [model, setModel] = useState(null);
   const [busy, setBusy] = useState("");
@@ -75,7 +77,10 @@ export function StartScreenCard() {
     <div class="boot-panel">
       <span class="muted">${t("Made for")}</span>
       <${Select} label=${t("Panel")} value=${model} onChange=${(id) => { setModel(id); setFound(null); }}
-        options=${info.models.map((item) => ({ value: item.id, label: `${item.label} · ${item.size[0]} × ${item.size[1]}` }))} />
+        options=${info.models.map((item) => {
+          const [w, h] = way === (info.orientation || "landscape") ? item.size : [item.size[1], item.size[0]];
+          return { value: item.id, label: `${item.label} · ${w} × ${h}` };
+        })} />
     </div>
     ${chosen && !chosen.measured
       ? html`<${Note}>${t("Measured on the 9.2\"; this panel has the same firmware, but writing to it has not been tried yet.")}<//>`
@@ -87,7 +92,7 @@ export function StartScreenCard() {
       : null}
     <div class="boot-tiles">
       <${Tile} title=${t("Boot logo")} text=${t("When the panel is switched on. The factory logo stays on the panel and can always come back.")}
-        picture=${endpoints.startScreenPicture(model, "logo")}>
+        picture=${endpoints.startScreenPicture(model, "logo", 960, way)} upright=${way === "portrait"}>
         <button type="button" class="btn btn-primary" disabled=${writing}
           onClick=${() => run("logo", {
             title: t("Write the boot logo to the panel?"),
@@ -100,10 +105,10 @@ export function StartScreenCard() {
           onClick=${() => run("remove-logo", { title: t("Bring back the factory logo?"), message: t("Libre Panel's boot logo is taken off the panel."), confirm: t("Factory logo again") })}>
           ${t("Factory logo again")}
         </button>
-        <a class="btn" href=${endpoints.startScreenFile(model, "logo")} download><${Icon} name="download" size=${15} /> JPEG</a>
+        <a class="btn" href=${endpoints.startScreenFile(model, "logo", way)} download><${Icon} name="download" size=${15} /> JPEG</a>
       <//>
       <${Tile} title=${t("Standby clip")} text=${t("When the PC starts, until Libre Panel shows its themes: a light that runs out from the middle.")}
-        picture=${endpoints.startScreenPicture(model, "clip")}>
+        picture=${endpoints.startScreenPicture(model, "clip", 960, way)} upright=${way === "portrait"}>
         <button type="button" class="btn btn-primary" disabled=${writing}
           onClick=${() => run("clip", {
             title: t("Write the standby clip to the panel?"),
@@ -113,7 +118,7 @@ export function StartScreenCard() {
           })}>
           ${busy === "clip" ? t("Writing…") : t("Put on the panel")}
         </button>
-        <a class="btn" href=${endpoints.startScreenFile(model, "clip")} download><${Icon} name="download" size=${15} /> H.264</a>
+        <a class="btn" href=${endpoints.startScreenFile(model, "clip", way)} download><${Icon} name="download" size=${15} /> H.264</a>
       <//>
     </div>
     <div class="boot-foot">

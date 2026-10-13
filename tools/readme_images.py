@@ -250,7 +250,8 @@ def gallery(shots: dict[str, Image.Image]) -> Image.Image:
     return img.convert("RGB")
 
 
-VERTICAL = ("lumen", "encore", "nimbus", "almanac", "almanac-analog", "arena")
+VERTICAL = ("lumen", "studio", "encore", "nimbus", "almanac", "almanac-analog", "arena",
+            "round-report")  # fmt: skip
 
 
 def vertical() -> Image.Image:
@@ -270,7 +271,8 @@ def vertical() -> Image.Image:
         text_center(draw, x + shot.width / 2, margin + shot.height - pad + 22, title,
                     font("Barlow-SemiBold", 30), (226, 232, 240))  # fmt: skip
         x += shot.width + gap
-    return img
+    # (eight panels in true pixels are 4400 px across: more than a page shows)
+    return img.resize((round(w * 0.6), round(h * 0.6)), Image.Resampling.LANCZOS)
 
 
 def social(bar2x: Image.Image) -> Image.Image:

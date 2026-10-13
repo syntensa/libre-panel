@@ -150,11 +150,12 @@ einem weiteren Klick zurück.
 
 ### Leisten hochkant
 
-<img src="docs/images/vertical.png" width="100%" alt="Die Screens von Libre Panel für eine Leiste, die hochkant steht, nebeneinander: Lumen mit dem Titel, der Uhrzeit, der Last, den Lüftern und den Ringen; Encore mit großem Cover und der Lautstärke als Pegel; Nimbus mit dem Wetter, den nächsten Tagen und dem Mond; Almanac mit den Stunden über den Minuten; Almanac Analog mit Zifferblatt; Arena mit FPS, CPU, GPU, Kernen und Temperaturen">
+<img src="docs/images/vertical.png" width="100%" alt="Die Screens von Libre Panel für eine Leiste, die hochkant steht, nebeneinander: Lumen mit dem Titel, der Uhrzeit, der Last, den Lüftern und den Ringen; Studio mit großer Uhr, der Karte und einer Zeile je Ring; Encore mit großem Cover und der Lautstärke als Pegel; Nimbus mit dem Wetter, den nächsten Tagen und dem Mond; Almanac mit den Stunden über den Minuten; Almanac Analog mit Zifferblatt; Arena mit FPS, CPU, GPU, Kernen und Temperaturen; der Rundenbericht in drei Karten untereinander">
 
 Deine Leiste steht hochkant? Sag es beim ersten Start, auf *Start* oder unter *Einstellungen →
 Panel*: Jeder Screen erscheint dann in seiner Fassung dafür, neu angeordnet statt gedreht.
-Lumen, Encore, Nimbus, Almanac und Arena haben je eine.
+Lumen, Studio, Encore, Nimbus, Almanac, Arena und der Rundenbericht haben je eine, und das
+eigene Bootlogo und der Standby-Clip des Panels werden ebenfalls hochkant gezeichnet.
 
 ### Jede Panelgröße
 

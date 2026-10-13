@@ -324,8 +324,8 @@ light. Each is plain JSON; none names a piece of hardware.
 | `libre-default` | 3.5" | two lit rings, the CPU's temperature, the disk and the network, a history that scrolls past at SPUR II's pace, and a small slot in the corner: what plays, the weather or the day |
 
 Each screen of the bars has a version for a bar on end (480×1920): `lumen-vertical`,
-`encore-vertical`, `nimbus-vertical`, `almanac-vertical`, `almanac-analog-vertical` and
-`arena-vertical`, laid out anew, clear of the strip the 9.2" bar's frame hides on the left. A
+`studio-vertical`, `encore-vertical`, `nimbus-vertical`, `almanac-vertical`,
+`almanac-analog-vertical`, `arena-vertical` and `round-report-vertical`, laid out anew, clear of the strip the 9.2" bar's frame hides on the left. A
 theme of your own gets one the same way: a theme named `<id>-vertical` is shown in place of
 `<id>` where `device.orientation = "portrait"` ([a panel on
 end](CONFIGURATION.md#a-panel-on-end)), and the lists show the two as one.

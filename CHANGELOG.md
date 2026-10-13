@@ -11,9 +11,10 @@
   on *Start* or in *Settings → Panel* (`device.orientation`). Upright, every screen shows in
   its version for a bar on end, for the normal theme, the pages and the screens in turn alike;
   the lists show each screen once, with the picture of the version the panel shows, and
-  *Design* opens that version. Lumen, Encore, Nimbus, Almanac, Almanac Analog and Arena have
-  one each (480 × 1920), laid out anew, clear of the strip the 9.2" bar's frame hides; a theme
-  of your own gets one as `<id>-vertical`
+  *Design* opens that version. Lumen, Studio, Encore, Nimbus, Almanac, Almanac Analog, Arena
+  and the round report have one each (480 × 1920), laid out anew, clear of the strip the 9.2"
+  bar's frame hides; a theme of your own gets one as `<id>-vertical`. The panel's own boot
+  logo and standby clip (*Settings → Panel → Start screen*) are drawn upright too
 - Start: the panel's own default (Lumen on a bar) stays in the quick list, right after the
   theme on the panel
 

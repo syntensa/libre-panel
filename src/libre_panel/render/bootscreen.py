@@ -2,9 +2,10 @@
 on, and the standby clip it plays when the PC's USB comes up, until Libre Panel streams
 (devices/panel_files.py puts them on a TURZX USB panel).
 
-Both are drawn for the panel's size, in landscape (a round panel square): the app's mark (a
-gauge's arc round three bars, as its icon), the name, and the line of light under them, on
-the dark backdrop of Lumen with its dot grid. Nothing that matters is near the short ends:
+Both are drawn for the panel's size, in landscape (a round panel square), or upright for a bar
+that stands on end (``orientation``): the app's mark (a gauge's arc round three bars, as its
+icon), the name, and the line of light under them, on the dark backdrop of Lumen with its dot
+grid. Nothing that matters is near the short ends:
 the panel draws its boot JPEG into a smaller area that leaves about a thirtieth of the long
 side at both ends as it was (measured on the 9.2"), and they fade out to black. The strip the
 bezel hides (``hidden`` in the catalog) is left out of the middle.
@@ -54,9 +55,10 @@ class Layout:
     unit: float  # px per px of the 1920 x 480 design
 
 
-def design_size(model: PanelModel) -> tuple[int, int]:
-    """The picture's size before it is turned for the panel: landscape, a round one square."""
-    return model.size("landscape")
+def design_size(model: PanelModel, orientation: str = "landscape") -> tuple[int, int]:
+    """The picture's size before it is turned for the panel: landscape (a round one square),
+    or upright ("portrait") for a bar on end."""
+    return model.size(orientation)
 
 
 def _font(size: float) -> ImageFont.FreeTypeFont:
@@ -68,14 +70,17 @@ def _name_width(size: float) -> float:
     return _font(size).getlength("Libre Panel")
 
 
-def layout(model: PanelModel) -> Layout:
+def layout(model: PanelModel, orientation: str = "landscape") -> Layout:
     """The parts of the picture for ``model``: side by side on a bar, the name under the mark
-    on a broad panel, and smaller within the circle of a round one."""
-    w, h = design_size(model)
-    left, top, right, bottom = getattr(model, "hidden", (0, 0, 0, 0)) or (0, 0, 0, 0)
-    quiet = round(QUIET * max(w, h))
-    room_x0, room_x1 = left + quiet, w - right - quiet
-    room_y0, room_y1 = top, h - bottom
+    on a broad panel or a bar on end, and smaller within the circle of a round one."""
+    w, h = design_size(model, orientation)
+    edges = model.hidden_edges(orientation) if hasattr(model, "hidden_edges") else {}
+    left, top = edges.get("left", 0), edges.get("top", 0)
+    right, bottom = edges.get("right", 0), edges.get("bottom", 0)
+    quiet = round(QUIET * max(w, h))  # at both ends of the long side
+    across, along = (quiet, 0) if w >= h else (0, quiet)
+    room_x0, room_x1 = left + across, w - right - across
+    room_y0, room_y1 = top + along, h - bottom - along
     room_w, room_h = room_x1 - room_x0, room_y1 - room_y0
     cx, cy = (room_x0 + room_x1) / 2, (room_y0 + room_y1) / 2
     aspect = room_w / max(1, room_h)
@@ -95,9 +100,10 @@ def layout(model: PanelModel) -> Layout:
         half = max(group * 0.62, room_w * 0.28)
         return Layout((w, h), (x, y, d), (x + d + gap, name_top, size),
                       (cx - half, cx + half, line_y), 31, room_h / 480)  # fmt: skip
-    # broad, square or round: the name under the mark
+    # broad, square, round or a bar on end: the name under the mark
     fit = 0.62 if round_panel else 0.86
-    d = min(room_h * 0.4, room_w * 0.3) * (0.78 if round_panel else 1.0)
+    tall = aspect <= 0.5
+    d = room_w * 0.56 if tall else min(room_h * 0.4, room_w * 0.3) * (0.78 if round_panel else 1.0)
     size = d * 0.42
     name_w = _name_width(size)
     if name_w > room_w * fit:
@@ -108,7 +114,7 @@ def layout(model: PanelModel) -> Layout:
     name_top = y + d + d * 0.24
     line_y = name_top + 0.7 * size + d * 0.3
     half = min(max(name_w * 0.62, d * 0.9), room_w * fit / 2)
-    unit = min(room_w / 1920, room_h / 480) * 1.6
+    unit = min(room_w, room_h) / 480 if tall else min(room_w / 1920, room_h / 480) * 1.6
     return Layout((w, h), (cx - d / 2, y, d), (cx - name_w / 2, name_top, size),
                   (cx - half, cx + half, line_y), 21, unit)  # fmt: skip
 
@@ -157,9 +163,9 @@ def _wave(i: int, count: int, phase: float) -> float:
 
 
 @lru_cache(maxsize=4)
-def _base(model: PanelModel) -> Image.Image:
+def _base(model: PanelModel, orientation: str = "landscape") -> Image.Image:
     """What does not move: the backdrop and the name."""
-    lay = layout(model)
+    lay = layout(model, orientation)
     w, h = lay.size
     out = _backdrop(w, h, round(QUIET * max(w, h))).copy().convert("RGBA")
     nx, top, size = lay.name
@@ -172,11 +178,13 @@ def _base(model: PanelModel) -> Image.Image:
     return out
 
 
-def picture(model: PanelModel, phase: float | None = None) -> Image.Image:
-    """The picture for ``model``, RGB, in landscape (a round one square): the boot logo with
-    ``phase`` None, else the standby clip at that point of its loop (0 to 1)."""
-    lay = layout(model)
-    out = _base(model).copy()
+def picture(
+    model: PanelModel, phase: float | None = None, orientation: str = "landscape"
+) -> Image.Image:
+    """The picture for ``model``, RGB, in ``orientation`` (a round one square): the boot logo
+    with ``phase`` None, else the standby clip at that point of its loop (0 to 1)."""
+    lay = layout(model, orientation)
+    out = _base(model, orientation).copy()
     x, y, d = lay.mark
     breathe = 1.0 if phase is None else 0.75 + 0.25 * math.cos(2 * math.pi * phase)
     mark = _mark(d, round(breathe, 3))
@@ -230,11 +238,13 @@ def _line(out: Image.Image, lay: Layout, phase: float | None) -> None:
     out.paste(band.convert("RGBA"), box[:2])
 
 
-def boot_logo(model: PanelModel) -> Image.Image:
-    """The boot logo for ``model``, in landscape (a round one square)."""
-    return picture(model)
+def boot_logo(model: PanelModel, orientation: str = "landscape") -> Image.Image:
+    """The boot logo for ``model``, in ``orientation`` (a round one square)."""
+    return picture(model, None, orientation)
 
 
-def standby_frames(model: PanelModel, count: int = CLIP_FRAMES) -> list[Image.Image]:
-    """The standby clip's pictures for ``model``, one loop, in landscape."""
-    return [picture(model, i / count) for i in range(count)]
+def standby_frames(
+    model: PanelModel, count: int = CLIP_FRAMES, orientation: str = "landscape"
+) -> list[Image.Image]:
+    """The standby clip's pictures for ``model``, one loop, in ``orientation``."""
+    return [picture(model, i / count, orientation) for i in range(count)]

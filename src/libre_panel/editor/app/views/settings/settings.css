@@ -891,6 +891,11 @@ a.btn:hover {
   max-height: 100%;
 }
 
+/* a bar on end: its screens stand upright */
+.boot-tile.upright .boot-picture {
+  height: 380px;
+}
+
 .boot-tile-text {
   display: flex;
   flex-direction: column;

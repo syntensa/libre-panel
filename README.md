@@ -142,11 +142,12 @@ after a question; the factory logo stays on the panel and comes back with anothe
 
 ### Bars on end
 
-<img src="docs/images/vertical.png" width="100%" alt="Libre Panel's screens for a bar that stands on end, side by side: Lumen with the track, the time, the load, the fans and the rings; Encore with the cover large and the volume as levels; Nimbus with the weather, the next days and the moon; Almanac with the hours over the minutes; Almanac Analog with a clock face; Arena with the frame rate, CPU, GPU, cores and temperatures">
+<img src="docs/images/vertical.png" width="100%" alt="Libre Panel's screens for a bar that stands on end, side by side: Lumen with the track, the time, the load, the fans and the rings; Studio with a large clock, the card and a row for each ring; Encore with the cover large and the volume as levels; Nimbus with the weather, the next days and the moon; Almanac with the hours over the minutes; Almanac Analog with a clock face; Arena with the frame rate, CPU, GPU, cores and temperatures; the round report in three cards one under the other">
 
 Mounted your bar upright? Say so on the first start, on *Start* or in *Settings → Panel*:
 every screen then shows in its version for a bar on end, laid out anew, not turned on its
-side. Lumen, Encore, Nimbus, Almanac and Arena each have one.
+side: Lumen, Studio, Encore, Nimbus, Almanac, Arena and the round report each have one, and
+the panel's own boot logo and standby clip are drawn upright too.
 
 ### Every panel size
 

@@ -94,6 +94,22 @@ def test_every_usb_panel_gets_its_boot_logo_and_clip_in_its_size(model):
     assert moved[:, 0].min() >= lay.mark[1] - lay.mark[2]  # ... where the mark and the line are
 
 
+def test_a_bar_on_end_gets_them_upright():
+    logo = bootscreen.boot_logo(NINE, "portrait")
+    assert logo.size == (480, 1920)
+    pixels = numpy.asarray(logo, float)
+    quiet = round(bootscreen.QUIET * 1920)
+    ends = numpy.concatenate([pixels[:quiet], pixels[-quiet:]], axis=0)
+    assert ends.max() < 24  # the short ends, now at the top and the bottom, stay dark
+    lay = bootscreen.layout(NINE, "portrait")
+    assert min(lay.mark[0], lay.name[0], lay.line[0]) >= NINE.hidden_edges("portrait")["left"]
+    jpeg = Image.open(io.BytesIO(F.logo_jpeg(NINE, orientation="portrait")))
+    turned = numpy.asarray(logo.rotate(180).convert("L"), float)  # as a bar on end's frames
+    assert numpy.abs(numpy.asarray(jpeg.convert("L"), float) - turned).mean() < 3
+    frames = bootscreen.standby_frames(NINE, 4, orientation="portrait")
+    assert {frame.size for frame in frames} == {(480, 1920)}
+
+
 def test_the_light_runs_out_from_the_middle():
     count = 31
     middle = [bootscreen._wave(15, count, p / 44) for p in range(44)]
@@ -224,6 +240,16 @@ def test_the_app_shows_the_pictures_for_each_usb_panel(server, isolated_home):  
     status, jpeg = request(server, "GET", "/api/start-screen/file?model=turing-9.2-usb&what=logo")
     assert status == 200 and Image.open(io.BytesIO(jpeg)).size == (480, 1920)
     assert request(server, "GET", "/api/start-screen/picture?model=turing-3.5&what=logo")[0] == 404
+    from libre_panel.config import set_config_value
+
+    set_config_value("device.orientation", "portrait")  # a bar on end: they stand upright
+    status, data = request(server, "GET", "/api/start-screen")
+    assert data["orientation"] == "portrait"
+    assert [m["size"] for m in data["models"] if m["id"] == "turing-9.2-usb"] == [[480, 1920]]
+    status, png = request(
+        server, "GET", "/api/start-screen/picture?model=turing-9.2-usb&what=logo&w=240&o=portrait"
+    )
+    assert status == 200 and Image.open(io.BytesIO(png)).size == (240, 960)
 
 
 def test_the_app_writes_only_when_asked_and_pauses_the_panel_for_it(isolated_home, monkeypatch):

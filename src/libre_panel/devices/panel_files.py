@@ -90,10 +90,13 @@ def file_args(name: bytes, size: int = 0) -> bytes:
 # -- the pictures, as the panel takes them ------------------------------------------------------
 
 
-def logo_jpeg(model: PanelModel, picture: Image.Image | None = None) -> bytes:
-    """The boot logo for ``model`` as the JPEG the panel shows: turned into its framebuffer
-    (480 x 1920 on the 9.2"), quality 88 (less where it would not fit in 1 MiB)."""
-    native = to_native(picture or bootscreen.boot_logo(model)).convert("RGB")
+def logo_jpeg(
+    model: PanelModel, picture: Image.Image | None = None, orientation: str = "landscape"
+) -> bytes:
+    """The boot logo for ``model`` (drawn upright for a bar on end with ``orientation``
+    "portrait") as the JPEG the panel shows: turned into its framebuffer (480 x 1920 on the
+    9.2"), quality 88 (less where it would not fit in 1 MiB)."""
+    native = to_native(picture or bootscreen.boot_logo(model, orientation)).convert("RGB")
     for quality in (JPEG_QUALITY, 80, 70, 60):
         buffer = io.BytesIO()
         native.save(buffer, format="JPEG", quality=quality, optimize=True)
@@ -118,11 +121,17 @@ def clip_command(ffmpeg: str, size: tuple[int, int]) -> list[str]:
     ]  # fmt: skip
 
 
-def clip_h264(model: PanelModel, ffmpeg: str, frames: list[Image.Image] | None = None) -> bytes:
-    """The standby clip for ``model``: its pictures turned into the framebuffer and encoded."""
+def clip_h264(
+    model: PanelModel,
+    ffmpeg: str,
+    frames: list[Image.Image] | None = None,
+    orientation: str = "landscape",
+) -> bytes:
+    """The standby clip for ``model`` (upright with ``orientation`` "portrait"): its pictures
+    turned into the framebuffer and encoded."""
     from libre_panel.devices.h264 import slice_count
 
-    pictures = frames or bootscreen.standby_frames(model)
+    pictures = frames or bootscreen.standby_frames(model, orientation=orientation)
     native = [to_native(frame).convert("RGB") for frame in pictures]
     raw = b"".join(frame.tobytes() for frame in native)
     try:
@@ -267,11 +276,13 @@ class StartScreen:
 
         return self._with_panel(model, job)
 
-    def write_logo(self, model: PanelModel | None = None) -> dict[str, Any]:
+    def write_logo(
+        self, model: PanelModel | None = None, orientation: str = "landscape"
+    ) -> dict[str, Any]:
         """The boot logo written and shown (it shows at the next cold start)."""
 
         def job(files: PanelFiles, found: PanelModel) -> dict[str, Any]:
-            data = logo_jpeg(found)
+            data = logo_jpeg(found, orientation=orientation)
             files.listing()  # what is there before, in the log of the panel's folder
             files.write(BOOT_LOGO, data)
             files.show_jpeg(BOOT_LOGO)
@@ -288,7 +299,9 @@ class StartScreen:
 
         return self._with_panel(model, job)
 
-    def write_clip(self, brightness: int, model: PanelModel | None = None) -> dict[str, Any]:
+    def write_clip(
+        self, brightness: int, model: PanelModel | None = None, orientation: str = "landscape"
+    ) -> dict[str, Any]:
         """The standby clip written, played (as it will be) and saved as what the panel
         starts with."""
         from libre_panel.devices.h264 import find_ffmpeg
@@ -296,7 +309,7 @@ class StartScreen:
         ffmpeg = self.ffmpeg() if self.ffmpeg else find_ffmpeg()
 
         def job(files: PanelFiles, found: PanelModel) -> dict[str, Any]:
-            data = clip_h264(found, ffmpeg)
+            data = clip_h264(found, ffmpeg, orientation=orientation)
             files.listing()
             files.write(STANDBY_CLIP, data)
             files.play(STANDBY_CLIP)
@@ -306,9 +319,9 @@ class StartScreen:
         return self._with_panel(model, job)
 
 
-def preview_png(model: PanelModel, width: int = 960) -> bytes:
-    """The boot logo as a PNG for the app, ``width`` px wide."""
-    picture = bootscreen.boot_logo(model)
+def preview_png(model: PanelModel, width: int = 960, orientation: str = "landscape") -> bytes:
+    """The boot logo as a PNG for the app, ``width`` px wide (upright for a bar on end)."""
+    picture = bootscreen.boot_logo(model, orientation)
     scale = min(1.0, width / picture.width)
     size = (max(1, round(picture.width * scale)), max(1, round(picture.height * scale)))
     buffer = io.BytesIO()
@@ -316,9 +329,9 @@ def preview_png(model: PanelModel, width: int = 960) -> bytes:
     return buffer.getvalue()
 
 
-def preview_clip(model: PanelModel, width: int = 960) -> bytes:
+def preview_clip(model: PanelModel, width: int = 960, orientation: str = "landscape") -> bytes:
     """The standby clip as an animated PNG for the app, ``width`` px wide, at its rate."""
-    frames = bootscreen.standby_frames(model)
+    frames = bootscreen.standby_frames(model, orientation=orientation)
     scale = min(1.0, width / frames[0].width)
     size = (max(1, round(frames[0].width * scale)), max(1, round(frames[0].height * scale)))
     small = [frame.resize(size, Image.Resampling.LANCZOS) for frame in frames]
@@ -337,17 +350,21 @@ def model_of(model_id: str) -> PanelModel:
 
 
 @lru_cache(maxsize=8)
-def cached_preview(model_id: str, what: str, width: int) -> bytes:
+def cached_preview(model_id: str, what: str, width: int, orientation: str = "landscape") -> bytes:
     """The app's picture of the boot logo (PNG) or of the standby clip (an animated PNG)."""
     model = model_of(model_id)
-    return preview_clip(model, width) if what == "clip" else preview_png(model, width)
+    if what == "clip":
+        return preview_clip(model, width, orientation)
+    return preview_png(model, width, orientation)
 
 
 @lru_cache(maxsize=4)
-def cached_file(model_id: str, what: str) -> bytes:
+def cached_file(model_id: str, what: str, orientation: str = "landscape") -> bytes:
     """The boot logo's JPEG or the standby clip as the panel takes them, to keep or to put
     on the panel with another program."""
     from libre_panel.devices.h264 import find_ffmpeg
 
     model = model_of(model_id)
-    return clip_h264(model, find_ffmpeg()) if what == "clip" else logo_jpeg(model)
+    if what == "clip":
+        return clip_h264(model, find_ffmpeg(), orientation=orientation)
+    return logo_jpeg(model, orientation=orientation)
