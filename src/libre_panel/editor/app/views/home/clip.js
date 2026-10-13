@@ -1,7 +1,8 @@
 // The question about the panel's standby clip, on Start: the video mode needs the name of the clip
 // the panel plays by itself (docs/CONFIGURATION.md, Video), which Libre Panel never makes up. So
-// the app asks once, with the name the vendor app uses already in the field: "Use it" writes what
-// is in the field, "Not now" writes only that the question was asked. Nothing is written before
+// the app asks once, in plain words, offering the name the vendor app uses: "Turn on" writes it
+// (or what is typed after "The clip has another name…"), "Not now" writes only that the
+// question was asked. Nothing is written before
 // one of the two is pressed. The server says when to ask (/api/clip: a panel the video
 // mode is proven on, ffmpeg found, no name yet, not asked before); the tray's line "Smooth
 // motion: confirm the clip name…" opens Start at #/home/clip, where this card has the focus.
@@ -28,6 +29,7 @@ export function ClipQuestion({ focus = false }) {
   const running = useStore((s) => s.app.available && !s.app.quit); // the app takes a name in by itself
   const [draft, setDraft] = useState(null); // what is typed; until then the name offered
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false); // the name in a field, for a clip named otherwise
   const use = useRef(null);
   const asked = Boolean(question?.ask);
   useEffect(() => {
@@ -51,8 +53,8 @@ export function ClipQuestion({ focus = false }) {
   return html`<section class="clip-card" aria-labelledby="clip-card-title">
     <span class="clip-card-icon" aria-hidden="true"><${Icon} name="pulse" size=${22} /></span>
     <div class="clip-card-body">
-      <h2 id="clip-card-title">${t("Smooth motion")}</h2>
-      <p>${t("Smooth motion at up to 50 frames a second needs the name of the panel's own standby clip.")} ${t("The vendor app keeps it as {name}.", { name: question.name })}</p>
+      <h2 id="clip-card-title">${t("Turn on smooth motion")}</h2>
+      <p>${t("Your panel can show Libre Panel as video, at up to 50 frames a second: numbers that count, rings that glide. For that Libre Panel needs the name of the clip the panel plays by itself when the PC starts; nothing on the panel is changed.")}</p>
       <form
         class="clip-card-form"
         onSubmit=${(event) => {
@@ -60,16 +62,20 @@ export function ClipQuestion({ focus = false }) {
           if (name && !busy) answer(name);
         }}
       >
-        <input
-          type="text"
-          class="input mono"
-          aria-label=${t("Name of the standby clip")}
-          value=${draft ?? question.name}
-          spellcheck="false"
-          onInput=${(event) => setDraft(event.currentTarget.value)}
-        />
-        <button ref=${use} type="submit" class="btn btn-primary" disabled=${!name || busy}>${t("Use it")}</button>
+        <button ref=${use} type="submit" class="btn btn-primary" disabled=${!name || busy}>${t("Turn on")}</button>
         <button type="button" class="btn" disabled=${busy} onClick=${() => answer(null)}>${t("Not now")}</button>
+        ${editing
+          ? html`<input
+              type="text"
+              class="input mono"
+              aria-label=${t("Name of the standby clip")}
+              value=${draft ?? question.name}
+              spellcheck="false"
+              onInput=${(event) => setDraft(event.currentTarget.value)}
+            />`
+          : html`<button type="button" class="link-btn" onClick=${() => setEditing(true)}>
+              ${t("The clip has another name ({name})…", { name: question.name })}
+            </button>`}
       </form>
     </div>
   </section>`;

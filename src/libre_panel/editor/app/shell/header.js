@@ -1,5 +1,5 @@
 // The header every view shares: the brand, the view's own parts (lead,
-// center, actions), the tabs, the command trigger and the settings gear.
+// center, actions), the tabs, the command field and the way to the settings, by name.
 
 import { applyToPanel } from "../core/actions.js";
 import { redo, undo } from "../core/doc.js";
@@ -51,7 +51,7 @@ export function Header({ view }) {
   const asking = useStore((s) => firstStart(s)) && route.view === "home" && !route.rest.startsWith("themes");
   const parts = view?.header || {};
   const tabs = allViews().filter((item) => item.tab);
-  return html`<header class="topbar">
+  return html`<header class=${`topbar${parts.lead ? " with-lead" : ""}`}>
     <a class="brand" href="#/home" aria-label=${t("Libre Panel: start")}>
       <${Icon} name="logo" size=${22} />
       <span>Libre Panel</span>
@@ -72,14 +72,11 @@ export function Header({ view }) {
     ${parts.center ? html`<${parts.center} />` : null}
     <div class="topbar-flex"></div>
     ${parts.actions ? html`<${parts.actions} />` : null}
-    ${parts.center ? null : html`<${SearchTrigger} />`}
-    <${IconButton}
-      icon="gear"
-      size=${18}
-      class="square gear"
-      label=${t("Settings")}
-      pressed=${route.view === "settings"}
-      onClick=${() => navigate("settings")}
-    />
+    ${parts.center ? null : html`<${SearchTrigger} wide />`}
+    <button type="button" class=${`btn settings-btn${route.view === "settings" ? " active" : ""}`}
+      aria-pressed=${String(route.view === "settings")} title=${t("Settings")} onClick=${() => navigate("settings")}>
+      <${Icon} name="gear" size=${17} />
+      <span class="settings-btn-text">${t("Settings")}</span>
+    </button>
   </header>`;
 }

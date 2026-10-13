@@ -21,7 +21,7 @@ highest rights runs the programs and plugins this folder names with those rights
 
 ## Every setting is in the app
 
-Nothing in this file needs a text editor: *Settings* in the app (the gear at the top
+Nothing in this file needs a text editor: *Settings* in the app (the button at the top
 right, or the tray's *Settings*) changes each of its settings and writes it with the
 rest of the file, comments included, left as it is. A setting that would make the file
 invalid is refused with the reason, and nothing is written.

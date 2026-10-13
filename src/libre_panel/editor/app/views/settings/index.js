@@ -110,13 +110,24 @@ function Upcoming({ section }) {
   </section>`;
 }
 
+/** Scrolls the card with that id into view once it is there (cards load their data first). */
+function showCard(id, tries = 30) {
+  const found = document.getElementById(id);
+  if (found) found.scrollIntoView({ block: "start", behavior: "smooth" });
+  else if (tries) setTimeout(() => showCard(id, tries - 1), 100);
+}
+
 function SettingsView({ rest }) {
   useStore((s) => [s.lang, s.hardware, s.unlockInfo]); // the texts follow the language; groups come and go
   const { problem, down } = useStore((s) => ({ problem: s.settingsError, down: s.settingsDown }));
   const sections = settingsSections();
-  const current = sections.find((section) => section.id === rest) || sections[0];
+  const [wanted, card] = (rest || "").split("/"); // #/settings/panel/start-screen: that card in view
+  const current = sections.find((section) => section.id === wanted) || sections[0];
   const groups = settingsGroups(current.id);
   useEffect(() => groups.forEach((group) => group.load?.()), [current.id]);
+  useEffect(() => {
+    if (card) showCard(card);
+  }, [rest]);
   const showing = groups.filter((group) => !group.shows || group.shows());
   return html`<div class="settings">
     <nav class="settings-nav" aria-label=${t("Settings")}>
@@ -159,8 +170,6 @@ registerProvider(() => [
       ]),
 ]);
 
-const SettingsTitle = () => html`<span class="topbar-title">${t("Settings")}</span>`;
-
 registerView({
   id: "settings",
   title: () => t("Settings"),
@@ -168,5 +177,4 @@ registerView({
   order: 60,
   icon: "gear",
   component: SettingsView,
-  header: { actions: SettingsTitle },
 });

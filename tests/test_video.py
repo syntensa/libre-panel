@@ -986,7 +986,7 @@ def wait_until(predicate, timeout=30.0):
 def test_a_clip_name_written_while_the_panel_runs_starts_the_video_mode_without_a_restart(
     panel, monkeypatch, isolated_home
 ):
-    """What "Use it" on Start does: the name goes into config.toml, and the panel loop, which
+    """What "Turn on" on Start does: the name goes into config.toml, and the panel loop, which
     follows that file, opens the panel again in video mode with exactly that name. Nothing is
     sent to the panel for the clip before."""
     from libre_panel.config import edit_config

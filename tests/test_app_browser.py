@@ -353,7 +353,7 @@ def test_a_first_start_is_asked_without_the_tabs(app_url, isolated_home):
     with browser_page(app_url, "home", allow=PICTURE) as page:
         page.wait_for_selector(".start.first .theme-card")
         expect(page.locator(tabs)).to_have_count(0)
-        assert page.locator(".brand").is_visible() and page.locator(".gear").is_visible()
+        assert page.locator(".brand").is_visible() and page.locator(".settings-btn").is_visible()
         page.goto(f"{app_url}#/home/themes")  # the gallery is not the question
         page.wait_for_selector(".start.gallery .theme-card")
         expect(page.locator(tabs)).to_have_count(1)
@@ -474,22 +474,20 @@ def test_a_first_start_asks_for_the_standby_clip_and_writes_it_when_told_to(
     with browser_page(app_url, "home", allow=PICTURE) as page:
         page.wait_for_selector(".start.first .clip-card")
         card = page.locator(".clip-card")
-        assert card.locator("h2").inner_text() == "Smooth motion"
-        assert card.locator("p").inner_text() == (
-            "Smooth motion at up to 50 frames a second needs the name of the panel's own "
-            "standby clip. The vendor app keeps it as usr/data/standby.h264."
-        )
-        # the name is in the field, as a value to confirm; it sits between the panel and the themes
-        field = page.get_by_label("Name of the standby clip")
-        assert field.input_value() == CLIP
+        assert card.locator("h2").inner_text() == "Turn on smooth motion"
+        assert card.locator("p").inner_text().startswith("Your panel can show Libre Panel as video")
+        # in plain words: the name offered is only named on the way to another one; the card
+        # sits between the panel and the themes
+        assert CLIP in card.get_by_role("button", name="The clip has another name").inner_text()
+        assert page.get_by_label("Name of the standby clip").count() == 0
         assert page.locator(".panel-strip + .clip-card + .start-head").count() == 1
         # asking writes nothing, nor does looking at it for a while
         page.wait_for_timeout(400)
         assert not (isolated_home / "config.toml").exists()
-        page.get_by_role("button", name="Use it").click()
+        page.get_by_role("button", name="Turn on", exact=True).click()
         waits_for(page, lambda: settings_config().device.video.local_clip == CLIP)
         text = config_file_text(isolated_home)
-        assert f'local_clip = "{CLIP}"' in text  # exactly the name that was in the field
+        assert f'local_clip = "{CLIP}"' in text  # exactly the name that was offered
         assert settings_config().device.video.clip_asked is True
         expect(card).to_have_count(0)  # answered
         # (a plain editor does not run the panel: it says when the video mode starts)
@@ -512,17 +510,18 @@ def test_the_launcher_asks_too_and_writes_the_name_that_was_typed(
         assert page.locator(".start-main > :first-child").evaluate(
             "e => e.matches('.clip-card')"
         )  # on top of the panel's card
+        page.get_by_role("button", name="The clip has another name").click()
         field = page.get_by_label("Name of the standby clip")
-        use = page.get_by_role("button", name="Use it")
+        use = page.get_by_role("button", name="Turn on", exact=True)
         assert field.input_value() == CLIP
-        # no name, no "use it": nothing is made up for an empty field either
+        # no name, no "turn on": nothing is made up for an empty field either
         before = config_file_text(isolated_home)
         field.fill("   ")
         expect(use).to_be_disabled()
         field.press("Enter")
         page.wait_for_timeout(300)
         assert config_file_text(isolated_home) == before
-        # a name of the person's own is written as typed (Enter is a click on "Use it")
+        # a name of the person's own is written as typed (Enter is a click on "Turn on")
         field.fill("usr/data/other-clip.h264")
         expect(use).to_be_enabled()
         field.press("Enter")
@@ -598,10 +597,10 @@ def test_the_trays_line_opens_start_at_the_question(app_url, isolated_home, monk
     choose_theme(isolated_home)
     with browser_page(app_url, "home/clip", allow=PICTURE) as page:
         page.wait_for_selector(".start.launcher .clip-card")
-        expect(page.get_by_role("button", name="Use it")).to_be_focused()
+        expect(page.get_by_role("button", name="Turn on", exact=True)).to_be_focused()
     with browser_page(app_url, "home", allow=PICTURE) as page:  # (Start alone does not take it)
         page.wait_for_selector(".start.launcher .clip-card")
-        expect(page.get_by_role("button", name="Use it")).not_to_be_focused()
+        expect(page.get_by_role("button", name="Turn on", exact=True)).not_to_be_focused()
 
 
 def test_the_question_about_the_standby_clip_is_asked_in_german_too(
@@ -615,15 +614,14 @@ def test_the_question_about_the_standby_clip_is_asked_in_german_too(
     with browser_page(app_url, "home", allow=PICTURE) as page:
         page.wait_for_selector(".start.launcher .clip-card")
         card = page.locator(".clip-card")
-        assert card.locator("h2").inner_text() == "Flüssige Bewegung"
-        assert card.locator("p").inner_text() == (
-            "Flüssige Bewegung mit bis zu 50 Bildern pro Sekunde braucht den Namen des "
-            "Standby-Clips, den das Panel selbst hat. Die Hersteller-App kennt ihn als "
-            "usr/data/standby.h264."
+        assert card.locator("h2").inner_text() == "Flüssige Bewegung einschalten"
+        assert card.locator("p").inner_text().startswith(
+            "Dein Panel kann Libre Panel als Video zeigen, mit bis zu 50 Bildern pro Sekunde"
         )
-        assert page.get_by_label("Name des Standby-Clips").input_value() == CLIP
         expect(page.get_by_role("button", name="Jetzt nicht")).to_be_visible()
-        page.get_by_role("button", name="Übernehmen").click()
+        card.get_by_role("button", name="Der Clip heißt anders").click()
+        assert page.get_by_label("Name des Standby-Clips").input_value() == CLIP
+        page.get_by_role("button", name="Einschalten", exact=True).click()
         waits_for(page, lambda: settings_config().device.video.local_clip == CLIP)
         expect(page.locator(".toast")).to_contain_text(
             "Gespeichert. Die flüssige Bewegung beginnt, sobald Libre Panel neu gestartet wird."
@@ -658,7 +656,7 @@ def test_a_running_panel_switches_by_itself_and_the_trays_line_goes(isolated_hom
         assert app.clip_question() is True  # the tray shows its line
         with browser_page(url, "home", allow=PICTURE) as page:
             page.wait_for_selector(".start.launcher .clip-card")
-            page.get_by_role("button", name="Use it").click()
+            page.get_by_role("button", name="Turn on", exact=True).click()
             waits_for(page, lambda: settings_config().device.video.local_clip == CLIP)
             expect(page.locator(".toast")).to_contain_text(
                 "Saved. The panel switches to smooth motion in a moment."
@@ -1372,7 +1370,8 @@ def test_the_header_fits_a_small_window_in_either_language(background, language)
         page.goto(f"{url}#/look")
         page.wait_for_selector(".look-side")
         assert page.locator(".unsaved").get_attribute("aria-label")
-        assert page.locator(".gear").is_visible() and page.locator(".btn-apply").is_visible()
+        assert page.locator(".settings-btn").is_visible()
+        assert page.locator(".btn-apply").is_visible()
 
 
 @pytest.mark.parametrize("language", ["en", "de"])
@@ -1831,6 +1830,36 @@ def test_a_first_start_asks_how_the_panel_is_mounted(app_url, isolated_home):
         expect(row.get_by_role("radio", name="Horizontal")).to_have_attribute(
             "aria-checked", "true"
         )
+
+
+def test_start_shows_the_pages_the_first_steps_and_the_way_to_the_start_screen(
+    app_url, isolated_home
+):
+    """Start says what the panel shows when, each page with its switch; the first steps tick
+    off what is done and can be hidden; and the panel's own start screen is a click away."""
+    from libre_panel.config import set_config_value
+
+    choose_theme(isolated_home, "lumen")
+    set_config_value("device.model", "turing-9.2-usb")
+    routes = {"**/api/app": a_panel_app()}
+    with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
+        card = page.locator(".pages-card")
+        expect(card.locator("[data-page='normal']")).to_contain_text("Lumen")
+        card.locator("[data-page='media']").get_by_role("switch").click()
+        waits_for(page, lambda: getattr(settings_config().modes.get("media"), "on", False))
+        steps = page.locator(".first-steps")
+        expect(steps.locator("[data-step='media']")).to_have_class(re.compile(r"\bdone\b"))
+        steps.locator("[data-step='game']").get_by_role("switch").click()
+        waits_for(page, lambda: "game" in settings_config().services.enabled)
+        game = card.locator("[data-page='game']").get_by_role("switch")
+        expect(game).to_have_attribute("aria-checked", "true")
+        chosen = steps.locator("[data-step='mounted'] [role='radio'][aria-checked='true']")
+        expect(chosen).to_have_count(0)  # nothing is marked until it is chosen
+        steps.get_by_role("button", name="Hide").click()
+        expect(steps).to_have_count(0)
+        page.locator(".start-screen-tile").get_by_role("button", name="Set up").click()
+        page.wait_for_url(re.compile(r"#/settings/panel/start-screen$"))
+        expect(page.locator("#start-screen")).to_be_in_viewport()
 
 
 def test_a_page_lists_the_screens_in_groups(app_url, isolated_home):

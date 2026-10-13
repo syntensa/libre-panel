@@ -52,19 +52,6 @@
   flex: 1;
 }
 
-.rail-gear {
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  border: none;
-  background: transparent;
-  color: var(--muted);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.rail-gear:hover,
 .rail-gear[aria-expanded="true"] {
   color: var(--text);
   background: var(--surface);

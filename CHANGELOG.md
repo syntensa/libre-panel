@@ -18,6 +18,21 @@
 - Start: the panel's own default (Lumen on a bar) stays in the quick list, right after the
   theme on the panel
 
+**Easier to find**
+- Start says what the panel shows when: the normal theme, game mode, music, idle and the
+  round report, each with the screen it shows and its switch right there; *Change the pages*
+  opens them in *Design*
+- First steps on Start: how the panel is mounted, game mode, the music page, the notices and
+  the weather's place, each said in one line and done with one click, ticked off when done;
+  the card goes when all are done, or with *Hide*
+- The panel's own boot logo and standby clip have a card on Start that leads to them; before,
+  they were at the end of *Settings → Panel*
+- The settings are a button with their name, and the search, which also runs commands
+  (Ctrl+K), is a field that says so on every page
+- The question about smooth motion says what it gives and asks plainly: *Turn on* or *Not
+  now*; the clip's other name is behind a link for those who changed it
+- Design: the button for the view and snapping has its name under it, as the others
+
 **Fixes**
 - Start screen: writing the boot logo or the standby clip stopped with "command 99: unexpected
   reply 00 00 …". Before writing, the panel's folder is listed for the log, and the 9.2" sends

@@ -58,9 +58,10 @@ function ViewOptions() {
   const prefs = useStore((s) => s.prefs);
   const [open, setOpen] = useState(false);
   const anchor = useRef(null);
-  return html`<button ref=${anchor} type="button" class="rail-gear" aria-label=${t("View and snapping")} title=${t("View and snapping")}
+  return html`<button ref=${anchor} type="button" class="rail-item rail-gear" title=${t("View and snapping")}
       aria-haspopup="dialog" aria-expanded=${String(open)} onClick=${() => setOpen(!open)}>
       <${Icon} name="sliders" size=${20} />
+      <span>${t("View")}</span>
     </button>
     <${Popover} anchor=${anchor} open=${open} onClose=${() => setOpen(false)} placement="right-end" label=${t("View and snapping")} width=${300}>
       <div class="pop-section">

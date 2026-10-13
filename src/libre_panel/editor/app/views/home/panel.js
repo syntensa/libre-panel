@@ -186,7 +186,7 @@ function Picture({ app, theme, size }) {
 /** How the panel is mounted: on its side or on end (config.toml's device.orientation). The
  * screens show in their version for it, Lumen Vertical for Lumen on a bar on end. */
 export function MountedChoice({ big = false }) {
-  const way = useMounted() || "landscape";
+  const way = useMounted(); // "" until chosen: then neither is marked, and either click says so
   return html`<${Segmented}
     class=${big ? "mounted-choice big" : "mounted-choice"}
     label=${t("How the panel is mounted")}

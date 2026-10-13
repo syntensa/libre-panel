@@ -294,31 +294,115 @@
   padding: 0 12px;
 }
 
-.routing {
+/* what the panel shows when: the normal theme and each page with its switch */
+.pages-card,
+.first-steps {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 6px 0 0;
-  padding: 14px;
-  border-radius: 12px;
+  gap: 12px;
+  padding: 18px 22px;
+  border-radius: 18px;
   background: var(--panel-2);
   border: 1px solid var(--line);
 }
 
-.routing div {
+.pages-card-head,
+.first-steps-head {
   display: flex;
-  justify-content: space-between;
+  align-items: baseline;
   gap: 12px;
 }
 
-.routing dt {
+.pages-card-head {
+  justify-content: space-between;
+}
+
+.pages-card h2,
+.first-steps h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.pages-card-rows,
+.first-steps-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pages-card-row,
+.first-step {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.pages-card-row:first-child,
+.first-step:first-child {
+  border-top: 0;
+}
+
+.pages-card-text,
+.first-step-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.pages-card-text strong,
+.first-step-text strong {
+  font-size: 14px;
+}
+
+.pages-card-theme {
+  color: var(--text-2);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pages-card-row.off .pages-card-theme,
+.pages-card-row.off .pages-card-text strong {
   color: var(--muted);
 }
 
-.routing dd {
-  margin: 0;
-  font-weight: 600;
+.pages-card-always {
+  min-width: 40px;
+  color: var(--muted);
+  font-size: 12px;
   text-align: right;
+}
+
+/* the first steps: a mark, what it is, and what does it */
+.first-step-mark {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--line-4);
+  color: #071512;
+}
+
+.first-step.done .first-step-mark {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.first-step.done .first-step-text strong {
+  color: var(--muted);
+}
+
+.first-step-action {
+  flex: none;
 }
 
 .hint-card {
@@ -799,6 +883,18 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.start-screen-thumb {
+  width: 100%;
+  height: 64px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #000;
+}
+
+.start-screen-thumb.upright {
+  height: 120px;
 }
 
 .sequence-card-foot .btn {

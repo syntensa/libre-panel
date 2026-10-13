@@ -255,10 +255,6 @@ a:hover {
   flex: 1;
 }
 
-.topbar-title {
-  font-weight: 600;
-}
-
 .tabs {
   margin-left: 16px;
   display: flex;
@@ -676,13 +672,29 @@ a:hover {
   opacity: 1;
 }
 
-.icon-btn.gear {
-  width: 36px;
+/* the way to the settings, with its name (an icon alone was taken for a light switch) */
+.btn.settings-btn {
   height: 36px;
+  gap: 8px;
 }
 
-.icon-btn.gear[aria-pressed="true"] {
+.btn.settings-btn.active {
   border-color: rgba(46, 230, 214, 0.4);
+  color: var(--accent);
+}
+
+/* beside a theme's name (Design, Look) the name keeps its room: the button is its icon up to
+   the window's default size, as "Einstellungen" would cut the name at 1280 px */
+@media (max-width: 1440px) {
+  .topbar.with-lead .settings-btn-text {
+    display: none;
+  }
+}
+
+@media (max-width: 1180px) {
+  .settings-btn-text {
+    display: none;
+  }
 }
 
 /* -- form controls ---------------------------------------------------------------------------- */

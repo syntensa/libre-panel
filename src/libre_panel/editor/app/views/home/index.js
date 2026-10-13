@@ -4,9 +4,8 @@
 // panel. Where the video mode only lacks the name of the panel's standby clip, a card at the top
 // asks for it once (clip.js). Built on the shell: see ../../README.md.
 
-import { blankTheme, importTheme, openTheme, showOnPanel, startTheme, themeName } from "../../core/actions.js";
+import { blankTheme, importTheme, openTheme, showOnPanel, startTheme } from "../../core/actions.js";
 import { registerCommands, registerProvider } from "../../core/commands.js";
-import { control, usePolled } from "../../core/console.js";
 import { t } from "../../core/i18n.js";
 import { useMounted } from "../../core/orientation.js";
 import { loadUnlock, runUnlock } from "../../core/settings.js";
@@ -18,6 +17,7 @@ import { Segmented } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { toast } from "../../ui/toast.js";
 import { ClipQuestion } from "./clip.js";
+import { FirstSteps, PagesCard, StartScreenTile } from "./overview.js";
 import { MountedChoice, PanelCard, PanelStrip, panelModelNow, usePanelModel } from "./panel.js";
 import { Gallery, ThemeRow, collectionsOf, fitsPanel, startThemes } from "./themes.js";
 import { SequenceCard, SequencePage } from "./sequence.js";
@@ -173,21 +173,6 @@ const TILES = () => [
   { view: "settings", icon: "sliders", title: t("Settings"), text: t("Panel, sensors, services, start") },
 ];
 
-/** Where the panel's other pages stand: game mode's theme, and whether the autopilot is on. */
-function Routing() {
-  const pages = useStore((s) => s.pages);
-  const services = usePolled(control.services, 5000);
-  const game = pages?.pages?.find((page) => page.id === "game");
-  const autopilot = services.data?.services?.find((service) => service.name === "autopilot");
-  if (!game && !autopilot) return null;
-  return html`<dl class="routing">
-    ${game
-      ? html`<div><dt>${t("In game")}</dt><dd>${game.theme ? themeName(game.theme) : t("shows the normal theme")}</dd></div>`
-      : null}
-    ${autopilot ? html`<div><dt>${t("Autopilot")}</dt><dd>${autopilot.enabled ? t("on") : t("off")}</dd></div>` : null}
-  </dl>`;
-}
-
 /** Whether this Windows download can set up the sensor service, and it is not there yet. */
 const unlockable = (info) => Boolean(info?.platform === "win32" && info.available && !info.service);
 
@@ -241,7 +226,9 @@ function Launcher({ focus }) {
   return html`<div class="start launcher">
     <div class="start-main">
       <${ClipQuestion} focus=${focus} />
+      <${FirstSteps} />
       <${PanelCard} />
+      <${PagesCard} />
       <nav class="start-tiles" aria-label=${t("Area")}>
         ${TILES().map(
           (tile) => html`<a key=${tile.view} class="start-tile" href=${`#/${tile.view}`}>
@@ -273,7 +260,7 @@ function Launcher({ focus }) {
         <button type="button" class="btn" onClick=${openFile}><${Icon} name="upload" size=${15} /> ${t("Open a theme file")}</button>
       </div>
       <${SequenceCard} />
-      <${Routing} />
+      <${StartScreenTile} />
       <span class="grow"></span>
       <${UnlockCard} />
       <${SetupCard} />
