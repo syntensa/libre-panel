@@ -62,6 +62,17 @@ const TRANSITIONS = ["", "cut", "fade", "slide", "tube", "entrance"];
 // The words for the options of the services Libre Panel brings; a plugin's show their key.
 const OPTIONS = {
   "notices.volume": { label: () => t("The volume") },
+  "notices.volume_look": {
+    label: () => t("How the volume looks"),
+    hint: () => t("On every screen; Look shows each on the picture."),
+    choices: () => [
+      { id: "", name: t("As the notices") },
+      { id: "bar", name: t("Bar") },
+      { id: "levels", name: t("Levels") },
+      { id: "ring", name: t("Ring") },
+      { id: "big", name: t("Large") },
+    ],
+  },
   "notices.music": { label: () => t("A new track") },
   "notices.restarted": { label: () => t("The panel was restarted") },
   "notices.warnings": {
@@ -218,7 +229,9 @@ function OptionRow({ service, option, given }) {
   if (option.type === "string") {
     const choices = meta.themes
       ? [{ id: "", name: t("None") }, ...themes]
-      : meta.choices?.map((id) => ({ id, name: id || t("The one of config.toml") }));
+      : (typeof meta.choices === "function" ? meta.choices() : meta.choices)?.map((choice) =>
+          typeof choice === "object" ? choice : { id: choice, name: choice || t("The one of config.toml") },
+        );
     if (choices) {
       const options = choices.map((choice) => ({ value: choice.id, label: choice.name || choice.id }));
       if (!options.some((choice) => choice.value === value)) options.push({ value, label: value });

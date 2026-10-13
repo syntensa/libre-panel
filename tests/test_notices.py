@@ -107,7 +107,7 @@ def test_the_volume_is_told_when_it_changes_by_a_step(desk):
     [toast] = d.sample(volume(34))
     assert (toast.kind, toast.key, toast.rank, toast.level) == ("volume", "volume", 0, "info")
     assert toast.text == "34" and toast.seconds is None  # the theme's hold time
-    assert toast.payload == {"label": "Volume", "progress": pytest.approx(0.34)}
+    assert toast.payload == {"label": "Volume", "progress": pytest.approx(0.34), "muted": False}
     assert toast.service == "notices"
     [toast] = d.sample(volume(35))  # one more
     assert toast.text == "35"
@@ -516,3 +516,19 @@ def test_a_track_with_its_cover_and_icon_is_drawn_in_the_band(desk):
     shown.advance(0.0)
     frame = shown.apply(Image.new("RGB", (480, 320)), 1.0)
     assert (255, 128, 0) in {frame.getpixel((x, y)) for x in range(10, 90) for y in range(200, 300)}
+
+
+def test_the_volume_is_told_in_the_look_chosen_for_every_screen(desk):
+    """``volume_look`` goes with the message, so it shows so on every screen; a look that does
+    not exist is said in the log and the theme's notices draw the volume."""
+    d = desk(volume=True, volume_look="ring")
+    d.sample(volume(30))
+    [toast] = d.sample(volume(40))
+    assert toast.payload["look"] == "ring" and toast.payload["muted"] is False
+    [toast] = d.sample(volume(40, muted=True))
+    assert toast.payload == {"label": "Volume", "progress": 0.0, "muted": True, "look": "ring"}
+    other = desk(volume=True, volume_look="sparkles")
+    assert other.service.look == ""
+    other.sample(volume(30))
+    [toast] = other.sample(volume(40))
+    assert "look" not in toast.payload

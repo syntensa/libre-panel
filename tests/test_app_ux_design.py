@@ -346,6 +346,9 @@ def test_on_a_bar_on_end_design_edits_the_upright_version_and_says_so(app_url, i
         for way, theme in (("Horizontal", "lumen"), ("Vertical", "lumen-vertical")):
             page.goto(f"{app_url}#/settings/panel")
             mounted.get_by_role("radio", name=way).click()
+            # written before Design loads anew (else, on a busy machine, it reads the old way)
+            orientation = "landscape" if way == "Horizontal" else "portrait"
+            waits_for(page, lambda o=orientation: settings_config().device.orientation == o)
             page.goto(f"{app_url}#/design")
             page.wait_for_function(f"window.libre.store.get().doc?.id === {theme!r}")
         expect(version).to_have_count(1)
@@ -356,3 +359,37 @@ def test_on_a_bar_on_end_design_edits_the_upright_version_and_says_so(app_url, i
         expect(dialog.locator("input")).to_have_value("lumen-mine-vertical")
         dialog.locator("button[type='submit']").click()
         waits_for(page, lambda: settings_config().theme == "lumen-mine-vertical")
+
+
+def test_the_volume_is_switched_on_for_every_screen_and_its_look_tried_on_in_look(
+    app_url,  # noqa: F811
+    isolated_home,
+):
+    """Look → Notices → Volume: the switch turns the notices and their volume on (settings, not
+    the theme's), and a look is tried on with a volume notice before a click keeps it."""
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url, "look", allow=PICTURE) as page:
+        volume = page.locator("[data-look-volume]")
+        volume.wait_for()
+        switch = volume.get_by_role("switch", name="Show the volume")
+        expect(switch).to_have_attribute("aria-checked", "false")
+        switch.click()
+        waits_for(page, lambda: "notices" in settings_config().services.enabled)
+        notices = lambda: settings_config().services.options.get("notices", {})  # noqa: E731
+        waits_for(page, lambda: notices().get("volume", True) is True)  # (on is the default)
+        expect(switch).to_have_attribute("aria-checked", "true")
+        names = volume.locator("[role='radio'] strong")
+        expect(names).to_have_text(["As the notices", "Bar", "Levels", "Ring", "Large"])
+        with page.expect_request(
+            lambda r: (
+                r.url.endswith("/api/render")
+                and '"look": "ring"' in (r.post_data or "").replace('":"', '": "')
+            )
+        ):
+            volume.get_by_role("radio", name=re.compile("^Ring")).hover()
+        volume.get_by_role("radio", name=re.compile("^Ring")).click()
+        waits_for(page, lambda: notices().get("volume_look") == "ring")
+        expect(volume.get_by_role("radio", name=re.compile("^Ring"))).to_have_attribute(
+            "aria-checked", "true"
+        )
+        assert not page.locator(".unsaved").count() or not page.locator(".unsaved").is_visible()

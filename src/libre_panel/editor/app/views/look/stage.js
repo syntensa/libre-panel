@@ -26,8 +26,9 @@ let peeking = 0;
 /**
  * Try a choice on before it is made (a colour world, a finish, the panel light, a notice
  * style): `change(theme)` changes a copy, which the server draws, and `notice` shows a test
- * notice on it. null goes back to the theme as it is; so does every change of the theme (a
- * click that made the choice).
+ * notice on it: its kind, or `{kind, look}` for the volume in one of its looks. null goes
+ * back to the theme as it is; so does every change of the theme (a click that made the
+ * choice).
  */
 export function peekAt(change, notice = null) {
   const ticket = ++peeking;
@@ -40,14 +41,18 @@ export function peekAt(change, notice = null) {
     if (ticket !== peeking || !doc) return;
     const theme = clone(doc.theme);
     change(theme);
+    const sample = notice && typeof notice === "object" ? notice : { kind: notice, look: volumeLook() };
     try {
-      const data = await post("/api/render", { theme, base: doc.id, live: prefs.live, notice });
+      const data = await post("/api/render", { theme, base: doc.id, live: prefs.live, notice: sample.kind, look: sample.look });
       if (ticket === peeking) peek.set({ png: `data:image/png;base64,${data.png}` });
     } catch {
       // nothing to try on: the theme as it is stays on show
     }
   }, PEEK_MS);
 }
+
+// the look the volume is shown in on every screen (Look → Notices → Volume), "" for the theme's
+const volumeLook = () => store.get().settings?.config?.services?.options?.notices?.volume_look || "";
 
 /** What a choice does to `onPointerEnter`, `onPointerLeave`, focus and blur: tried on while the
  * pointer rests on it (or the keyboard is on it). */
@@ -70,7 +75,7 @@ function useNotice(rev) {
   const show = async (kind) => {
     const { doc, prefs } = store.get();
     try {
-      const data = await post("/api/render", { theme: doc.theme, base: doc.id, live: prefs.live, notice: kind });
+      const data = await post("/api/render", { theme: doc.theme, base: doc.id, live: prefs.live, notice: kind, look: volumeLook() });
       setPicture(`data:image/png;base64,${data.png}`);
     } catch (error) {
       toastError(error);

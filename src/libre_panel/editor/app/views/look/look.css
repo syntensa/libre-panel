@@ -283,6 +283,34 @@
   background: var(--accent-softer);
 }
 
+/* the volume, for every screen at once: set apart from the theme's own notice style */
+.look-volume {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.look-volume-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.look-volume-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.look-volume-head span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .look-all {
   align-self: flex-start;
   display: inline-flex;

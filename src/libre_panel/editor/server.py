@@ -231,15 +231,16 @@ def _finish_types(types: list[str]) -> dict[str, list[str]]:
 NOTICE_AGE_S = 1.2  # how far into its life a preview shows a notice: drawn in full
 
 
-def _with_notice(renderer: Renderer, frame: Any, kind: str) -> Any:
+def _with_notice(renderer: Renderer, frame: Any, kind: str, look: str = "") -> Any:
     """``frame`` with the test message of ``kind`` (the Control page's: volume, music, ...)
-    drawn on it in the theme's toast style, a moment after it began; None for an unknown
-    kind. The previews of the editor have no messages of their own."""
+    drawn on it in the theme's toast style (the volume in ``look``, where one is named), a
+    moment after it began; None for an unknown kind. The previews of the editor have no
+    messages of their own."""
     from libre_panel.pages.control import probes
     from libre_panel.plugins.host import Toast
     from libre_panel.render.overlays import ToastLayer
 
-    made = probes().get(kind)
+    made = probes(look).get(kind)
     if made is None:
         return None
     _name, options = made
@@ -1479,7 +1480,10 @@ class EditorHandler(BaseHTTPRequestHandler):
             frame, boxes = renderer.render(snapshot)
             notice = payload.get("notice")
             if notice:  # a test message on it, as the theme's toast style shows it
-                shown = _with_notice(renderer, frame, notice) if isinstance(notice, str) else None
+                look = payload.get("look") if isinstance(payload.get("look"), str) else ""
+                shown = (
+                    _with_notice(renderer, frame, notice, look) if isinstance(notice, str) else None
+                )
                 if shown is None:
                     return self._error("notice must be the kind of a test message")
                 frame = shown

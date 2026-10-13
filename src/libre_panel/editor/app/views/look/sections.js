@@ -5,8 +5,10 @@
 
 import { clone, edit, isModule, setSelection, theme as currentTheme, widgets } from "../../core/doc.js";
 import { fieldLabel, formatNumber, t } from "../../core/i18n.js";
+import { loadSettings, useConfig } from "../../core/settings.js";
 import { store, useStore } from "../../core/state.js";
-import { html, useState } from "../../lib/preact.js";
+import { VOLUME_LOOKS, chooseVolumeLook, showVolume, volumeNotice } from "../../core/volume.js";
+import { html, useEffect, useState } from "../../lib/preact.js";
 import { navigate } from "../../shell/views.js";
 import { Field, IconButton, NumberField, Section, Segmented, Select, Slider, TextField, Toggle } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
@@ -379,7 +381,42 @@ function Notices() {
         </button>`,
       )}
     </div>
+    <${Volume} />
   <//>`;
+}
+
+// -- the volume: on every screen, in one look for all of them --------------------------------------
+
+/**
+ * Whether turning the volume shows on the panel, and how: settings of the notices service, so
+ * for every theme at once (not undone with the theme's changes). The music page's screen
+ * shows the volume itself and leaves the message out.
+ */
+function Volume() {
+  const config = useConfig();
+  useEffect(() => {
+    if (!store.get().settings) loadSettings();
+  }, []);
+  const { on, look } = volumeNotice(config);
+  if (on === undefined) return null;
+  return html`<div class="look-volume" data-look-volume>
+    <div class="look-volume-head">
+      <div>
+        <strong>${t("Volume")}</strong>
+        <span>${t("When you turn it, on every screen; the music page's shows it itself.")}</span>
+      </div>
+      <${Toggle} label=${t("Show the volume")} checked=${on} onChange=${showVolume} />
+    </div>
+    <div class="look-notices" role="radiogroup" aria-label=${t("How the volume looks")}>
+      ${VOLUME_LOOKS().map(
+        (option) => html`<button type="button" role="radio" key=${option.value} aria-checked=${String(look === option.value)} class="look-notice"
+          onClick=${() => chooseVolumeLook(option.value)} ...${peeks(() => {}, { kind: "volume", look: option.value })}>
+          <strong>${option.label}</strong>
+          <span>${option.hint}</span>
+        </button>`,
+      )}
+    </div>
+  </div>`;
 }
 
 // -- ridge frames: not offered, but a theme that has them can drop them -----------------------------

@@ -109,6 +109,7 @@ class Notices(Service):
     api = 1
     options = {
         "volume": ("bool", True),
+        "volume_look": ("string", ""),  # "": the theme's toast style; else volume_looks.py's
         "music": ("bool", True),
         "restarted": ("bool", True),
         "warnings": ("list", []),
@@ -133,6 +134,13 @@ class Notices(Service):
             parse_limit(e, f"warnings[{n}]", report) for n, e in enumerate(options["warnings"], 1)
         ]
         self.limits = [limit for limit in entries if limit is not None]
+        from libre_panel.render.volume_looks import VOLUME_LOOKS  # (render is not light)
+
+        look = options["volume_look"]
+        if look and look not in VOLUME_LOOKS:
+            report(f"volume_look: {look!r} is none of {', '.join(sorted(VOLUME_LOOKS))}")
+            look = ""
+        self.look = look  # how the volume shows on every screen ("": as the theme's notices)
         self._volume: tuple[float, bool] | None = None  # at the last message, or the first value
         self._volume_seen = False
         self._hinted = False
@@ -198,7 +206,10 @@ class Notices(Service):
         if before is None:
             return  # the first value is no change
         text, share = (t("Muted"), 0.0) if muted else (f"{volume:.0f}", volume / 100)
-        self._tell(VOLUME, text, {"label": t("Volume"), "progress": share})
+        payload = {"label": t("Volume"), "progress": share, "muted": muted}
+        if self.look:
+            payload["look"] = self.look
+        self._tell(VOLUME, text, payload)
 
     def _check_music(self, snapshot: Snapshot, now: float, via: str = "the sample") -> None:
         title = snapshot.value("media.title")

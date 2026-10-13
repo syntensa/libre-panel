@@ -8,6 +8,7 @@ import { endpoints } from "../../core/api.js";
 import { t } from "../../core/i18n.js";
 import { enableService, loadSettings, useConfig } from "../../core/settings.js";
 import { useMounted } from "../../core/orientation.js";
+import { VOLUME_LOOKS, openVolumeLook, showVolume, useVolumeNotice } from "../../core/volume.js";
 import { setPref, store, useStore } from "../../core/state.js";
 import { html, useEffect, useState } from "../../lib/preact.js";
 import { pageName } from "../../shell/panel-popover.js";
@@ -226,5 +227,22 @@ export function StartScreenTile() {
       <span class="muted">${t("The panel's own boot logo and standby clip")}</span>
     </span>
     <button type="button" class="btn" onClick=${() => navigate("settings", "panel/start-screen")}>${t("Set up")}</button>
+  </section>`;
+}
+
+/** The volume over every screen, from Start: its switch, the look it has, and the way to Look
+ * to choose another (core/volume.js). */
+export function VolumeTile() {
+  const { on, look } = useVolumeNotice();
+  if (on === undefined) return null;
+  const name = VOLUME_LOOKS().find((option) => option.value === look)?.label;
+  return html`<section class=${`more-row volume-tile${on ? " on" : ""}`} aria-label=${t("Show the volume")} data-volume-tile>
+    <span class="more-row-icon" aria-hidden="true"><${Icon} name="volume" size=${16} /></span>
+    <span class="more-row-text">
+      <strong>${t("Show the volume")}</strong>
+      <span class="muted">${on ? t("On every screen: {look}", { look: name }) : t("When you turn it, on every screen")}</span>
+    </span>
+    <${Toggle} checked=${on} label=${t("Show the volume")} onChange=${showVolume} />
+    <button type="button" class="btn" onClick=${openVolumeLook}>${t("Style")}</button>
   </section>`;
 }

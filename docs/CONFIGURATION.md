@@ -610,6 +610,8 @@ leaves that band out by itself: it would only cover them.
 ```toml
 [services.notices]
 volume = true          # the volume; needs "audio" in [sensors] providers (the default has it)
+volume_look = ""       # how the volume shows on every screen: "bar", "levels", "ring", "big",
+                       # or "" for the theme's notice style
 music = true           # a new track
 restarted = true       # "Panel restarted"
 quiet_s = 120          # warnings: the same sensor is not told again within this time
@@ -639,6 +641,11 @@ crit = 85
   them: what is playing (`media.*`), the volume (`audio.*`) and the warned
   sensors. They cost what they cost otherwise (a player is asked once a
   second); switch off `volume` or `music` to save that.
+- `volume_look` draws the volume in the same look on every screen, whatever the theme's
+  notice style (the other notices keep it): `bar`, a slim bar along the bottom edge; `levels`,
+  bars that rise as on a mixer; `ring`, a ring that fills with the number in it; `big`, a
+  large number in the middle. The app sets it in *Look → Notices → Volume* and on *Start*
+  (*Show the volume*), where each is tried on the picture first.
 - Texts follow the language setting. Each notice has its own `key`, so the
   same one again (the volume while it turns) changes in place instead of
   coming again.

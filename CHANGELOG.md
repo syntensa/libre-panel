@@ -2,7 +2,18 @@
 
 ## 0.6.1 — 2026-10-13
 
-Game mode shows the frame rate of games that start through a launcher.
+The volume over every screen, switched on from Start and in one of four new looks; and game
+mode shows the frame rate of games that start through a launcher.
+
+**New**
+- *Show the volume*: turning the volume shows on every screen, switched on with one click on
+  *Start* (*More for your panel*), in *Look → Notices → Volume* or with Ctrl+K. The music
+  page's screen shows the volume itself and leaves it out
+- Four looks for the volume, the same on every screen: *Bar* (a slim bar along the bottom
+  edge), *Levels* (bars that rise as on a mixer), *Ring* (a ring that fills, the number in
+  it) and *Large* (a large number in the middle). Each is tried on the picture before a click
+  keeps it; *As the notices* keeps the theme's notice style (`volume_look` in
+  `[services.notices]`). The bar glides to each new value, and muted shows the crossed speaker
 
 **Fixes**
 - Game mode: with some games the game screen opened and then said "No game running" while the

@@ -20,7 +20,7 @@ import { toast } from "../../ui/toast.js";
 import { HealthCard } from "../settings/health.js";
 import { ClipQuestion, useClipQuestion } from "./clip.js";
 import { WhatsNew, showsFirstSteps, showsNews, useNews } from "./news.js";
-import { FirstSteps, PagesCard, StartScreenTile } from "./overview.js";
+import { FirstSteps, PagesCard, StartScreenTile, VolumeTile } from "./overview.js";
 import { MountedChoice, PanelCard, PanelStrip, asksMounting, panelModelNow, usePanelModel } from "./panel.js";
 import { Gallery, ThemeRow, collectionsOf, fitsPanel, startThemes } from "./themes.js";
 import { SequenceCard, SequencePage } from "./sequence.js";
@@ -305,6 +305,7 @@ function Launcher({ focus }) {
       <section class="start-more" aria-labelledby="start-more-title">
         <h2 id="start-more-title">${t("More for your panel")}</h2>
         <${SequenceCard} />
+        <${VolumeTile} />
         <${StartScreenTile} />
       </section>
     </div>

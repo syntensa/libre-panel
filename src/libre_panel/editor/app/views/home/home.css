@@ -990,7 +990,8 @@
   align-items: center;
 }
 
-.sequence-card.on {
+.sequence-card.on,
+.more-row.volume-tile.on {
   border-color: var(--accent);
 }
 

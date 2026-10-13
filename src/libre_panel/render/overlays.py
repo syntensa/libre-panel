@@ -20,6 +20,7 @@ from libre_panel.plugins.render import RenderContext, ToastStyle, Transition
 from libre_panel.render.band import BandStyle
 from libre_panel.render.light import accent_color, ellipsize, role_value
 from libre_panel.render.transitions import Entrance, Tube
+from libre_panel.render.volume_looks import VOLUME_LOOKS
 
 log = logging.getLogger(__name__)
 
@@ -79,6 +80,7 @@ class ToastLayer:
         self.current: tuple[Any, float, tuple[Any, float] | None] | None = None
         self.ends = 0.0  # when the current toast is gone (ToastStyle.lifetime)
         self.style: Any = None
+        self.looks: dict[str, Any] = {}  # the volume's looks in use (volume_looks.py), by name
         self.settings: dict[str, Any] = {}
         self._size: tuple[int, int] | None = None
         self._failed: str | None = None  # the last failure logged (not 50 times a second)
@@ -90,6 +92,10 @@ class ToastLayer:
         names the same one with the same options at the same size."""
         theme = renderer.theme
         settings, size = theme.toast, (theme.width, theme.height)
+        self._renderer = renderer
+        for look in self.looks.values():  # (they keep the glide of the volume)
+            look.context = RenderContext(renderer, type(look))
+            look.anchor = settings["anchor"]
         screen = getattr(renderer, "screen", None)
         self.off = frozenset(settings["off"])  # the theme switches these kinds off
         # the screen shows them itself: a plugin's says so, a theme's are seen in what it reads
@@ -132,6 +138,19 @@ class ToastLayer:
     @staticmethod
     def key_of(toast: Any) -> str:
         return toast.key or toast.kind
+
+    def style_of(self, toast: Any) -> Any:
+        """The style that draws ``toast``: the volume in the look the notices service chose
+        for every screen (its payload's ``look``), every other message in the theme's."""
+        look = toast.payload.get("look") if toast.kind == "volume" else None
+        if not isinstance(look, str) or look not in VOLUME_LOOKS:
+            return self.style
+        style = self.looks.get(look)
+        if style is None:
+            cls = VOLUME_LOOKS[look]
+            style = self.looks[look] = cls(RenderContext(self._renderer, cls), {})
+            style.anchor = self.settings["anchor"]
+        return style
 
     def add(self, toasts: list[Any]) -> None:
         self.inbox.extend(toasts)
@@ -176,7 +195,7 @@ class ToastLayer:
             return None
         if toast.seconds is None:
             theme_seconds = self.settings["seconds"]
-            seconds = self._ask("hold_s", theme_seconds, toast, theme_seconds)
+            seconds = self._ask("hold_s", theme_seconds, toast, theme_seconds, of=toast)
             toast = replace(toast, seconds=max(0.0, seconds))
         return toast
 
@@ -229,19 +248,20 @@ class ToastLayer:
 
     def _start(self, toast: Any, now: float, previous: tuple[Any, float] | None) -> None:
         self.current = (toast, now, previous)
-        fallback = toast.seconds + getattr(self.style, "leave_s", 0.25)
-        self.ends = now + self._ask("lifetime", fallback, toast, previous)
+        fallback = toast.seconds + getattr(self.style_of(toast), "leave_s", 0.25)
+        self.ends = now + self._ask("lifetime", fallback, toast, previous, of=toast)
 
-    def _ask(self, method: str, fallback: float, *args: Any) -> float:
-        """A number from the style (``lifetime``, ``hold_s``); a style that fails
-        must not stop the toasts."""
+    def _ask(self, method: str, fallback: float, *args: Any, of: Any = None) -> float:
+        """A number from the style of the toast ``of`` (``lifetime``, ``hold_s``); a style
+        that fails must not stop the toasts."""
+        style = self.style_of(of) if of is not None else self.style
         try:
-            return float(getattr(self.style, method)(*args))
+            return float(getattr(style, method)(*args))
         except Exception as exc:
             message = f"{method}: {type(exc).__name__}: {exc}"
             if message != self._failed:
                 self._failed = message
-                log.error("toast style %r failed in %s", getattr(self.style, "name", "?"), message)
+                log.error("toast style %r failed in %s", getattr(style, "name", "?"), message)
             return fallback
 
     def draw(self, frame: Image.Image, now: float, hidden: bool = False) -> Image.Image:
@@ -255,15 +275,16 @@ class ToastLayer:
         if hidden:
             self._start(toast, now, None)
             return frame
+        style = self.style_of(toast)
         try:
-            if not self._previous:
-                return self.style.draw(frame, toast, now - began)
-            return self.style.draw(frame, toast, now - began, previous=previous)
+            if style is self.style and not self._previous:
+                return style.draw(frame, toast, now - began)
+            return style.draw(frame, toast, now - began, previous=previous)
         except Exception as exc:  # a broken style must not blank the panel
             message = f"{type(exc).__name__}: {exc}"
             if message != self._failed:
                 self._failed = message
-                log.exception("toast style %r failed", self.style.name)
+                log.exception("toast style %r failed", getattr(style, "name", "?"))
             return frame
 
     def apply(self, frame: Image.Image, now: float, hold: bool = False) -> Image.Image:
@@ -278,6 +299,7 @@ class ToastLayer:
             except Exception:
                 log.exception("toast style %r failed while closing", self.style.name)
             self.style = None
+        self.looks.clear()
 
 
 class CardStyle(ToastStyle):

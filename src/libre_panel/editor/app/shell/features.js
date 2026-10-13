@@ -14,6 +14,7 @@ import { t } from "../core/i18n.js";
 import { mounted } from "../core/orientation.js";
 import { enableService, loadAbout, openFolder, saveSettings, setting } from "../core/settings.js";
 import { setPref, store } from "../core/state.js";
+import { openVolumeLook, showVolume, volumeNotice } from "../core/volume.js";
 import { toast, toastError } from "../ui/toast.js";
 import { openHelp } from "./help.js";
 import { pageName } from "./panel-popover.js";
@@ -328,6 +329,28 @@ export function registerFeatureCommands() {
         icon: "info",
         rank: 25,
         run: () => enableService("notices", !on),
+      });
+      // the volume over every screen, and the look it has there (Look → Notices → Volume)
+      const volume = volumeNotice(config()).on;
+      list.push({
+        id: "settings.volume-notice",
+        title: () => (volume ? t("Show the volume: off") : t("Show the volume: on")),
+        hint: () => t("when you turn it, on every screen but the music page's"),
+        keywords: () => t("volume overlay show volume bar loudness sound speaker osd"),
+        group: settings,
+        icon: "volume",
+        rank: 24,
+        run: () => showVolume(!volume),
+      });
+      list.push({
+        id: "look.volume",
+        title: () => t("How the volume looks"),
+        hint: () => t("a bar, levels, a ring or a large number"),
+        keywords: () => t("volume look style bar levels ring large overlay"),
+        group: settings,
+        icon: "volume",
+        rank: 40,
+        run: openVolumeLook,
       });
     }
     const info = store.get().unlockInfo;

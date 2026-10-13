@@ -85,10 +85,10 @@ def why_not(reason: str) -> str:
     return t("no panel is connected")
 
 
-def probes() -> dict[str, tuple[str, dict[str, Any]]]:
+def probes(look: str = "") -> dict[str, tuple[str, dict[str, Any]]]:
     """A test message of each kind: the name the page gives it and the arguments of
     ``notify``. They are made as the services make theirs (rank, time, the label and the
-    bar a style draws), so the theme and the screen treat them alike."""
+    bar a style draws, the volume's ``look``), so the theme and the screen treat them alike."""
     test = t("Test message")
 
     def probe(kind: str, name: str, text: str = test, label: str = "", **options: Any):
@@ -97,7 +97,13 @@ def probes() -> dict[str, tuple[str, dict[str, Any]]]:
 
     time = datetime.now().strftime("%H:%M")
     return {
-        "volume": probe("volume", t("Volume"), "42", rank=0, payload={"progress": 0.42}),
+        "volume": probe(
+            "volume",
+            t("Volume"),
+            "42",
+            rank=0,
+            payload={"progress": 0.42, **({"look": look} if look else {})},
+        ),
         "music": probe(
             "music",
             t("Music"),
@@ -299,7 +305,9 @@ class Control(ConsolePage):
 
     def probe(self, request: Request) -> dict[str, Any]:
         kind = request.text("kind")
-        made = probes().get(kind)
+        config, _problem = self._config()
+        look = config.services.options.get("notices", {}).get("volume_look", "") if config else ""
+        made = probes(look if isinstance(look, str) else "").get(kind)
         if made is None:
             raise Refused(t("unknown kind of message: {kind}", kind=kind))
         name, options = made

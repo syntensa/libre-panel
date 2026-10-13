@@ -250,3 +250,21 @@ def test_screens_in_turn_say_what_is_missing_and_what_is_not_saved(
         expect(page.get_by_role("button", name="Stop")).to_be_visible()
         expect(foot.locator(".sequence-unsaved")).to_have_count(0)
     assert settings_config().sequence.on
+
+
+def test_start_switches_the_volume_on_for_every_screen_and_leads_to_its_look(
+    app_url,  # noqa: F811
+    isolated_home,
+):
+    """More for your panel: the volume over every screen, switched on right there, and its
+    style a click away in Look."""
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
+        tile = page.locator("[data-volume-tile]")
+        expect(tile).to_contain_text("When you turn it, on every screen")
+        tile.get_by_role("switch", name="Show the volume").click()
+        waits_for(page, lambda: "notices" in settings_config().services.enabled)
+        expect(tile).to_contain_text("On every screen: As the notices")
+        tile.get_by_role("button", name="Style").click()
+        page.wait_for_url(re.compile(r"#/look$"))
+        expect(page.locator("[data-look-volume]")).to_be_in_viewport()
