@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 — 2026-10-13
+
+Bars on end: say once how the panel is mounted, and every screen shows in its version for a bar
+that stands upright, laid out anew, down to the panel's own boot logo. And Arena, Libre Panel's
+own screen for game mode.
+
+![Libre Panel's screens for a bar on end: Lumen, Studio, Encore, Nimbus, Almanac, Almanac Analog, Arena and the round report](https://raw.githubusercontent.com/syntensa/libre-panel/v0.6.0/docs/images/vertical.png)
+
+<img src="https://raw.githubusercontent.com/syntensa/libre-panel/v0.6.0/docs/media/game-entrance.gif" width="100%" alt="A game starts: the screen closes to a line, the game's name lights up, and Arena opens with the frame rate, its 1% low, the frame time, CPU and GPU">
 
 **New**
 - **Arena**, Libre Panel's own screen for game mode on 8.8" and 9.2" bars: the game's frame
@@ -19,6 +27,10 @@
   theme on the panel
 
 **Fixes**
+- Start screen: writing the boot logo or the standby clip stopped with "command 99: unexpected
+  reply 00 00 …". Before writing, the panel's folder is listed for the log, and the 9.2" sends
+  that listing without the command's number in front; it is now read as it comes, and a panel
+  that does not list its files no longer keeps either from being written
 - Design → Pages and game mode's card in Settings: the list of screens for a page was one list
   from A to Z, Libre Panel's own mixed with SPUR II's and with screens for other panels (a
   0.96" one for a bar), and two themes of one name (a copy of yours, a plugin's) looked the

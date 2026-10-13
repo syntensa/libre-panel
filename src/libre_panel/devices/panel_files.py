@@ -24,6 +24,7 @@ standby clip for good).
 from __future__ import annotations
 
 import io
+import logging
 import struct
 import subprocess
 from collections.abc import Callable
@@ -37,6 +38,7 @@ from libre_panel.devices.base import DeviceError
 from libre_panel.devices.models import MODELS, PanelModel
 from libre_panel.devices.turzx import VENDOR_CLIP
 from libre_panel.devices.turzx_usb import (
+    ACK,
     CMD_FRAME_RATE,
     USB_PIDS,
     UsbTransport,
@@ -45,6 +47,8 @@ from libre_panel.devices.turzx_usb import (
 )
 from libre_panel.i18n import t
 from libre_panel.render import bootscreen
+
+log = logging.getLogger(__name__)
 
 FOLDER = "usr/data"
 BOOT_LOGO = "usr/data/boot.jpg"
@@ -172,10 +176,28 @@ class PanelFiles:
         if folder != FOLDER:
             raise DeviceError(f"only {FOLDER} is listed")
         pieces = []
-        for _ in range(LIST_PIECES):
-            reply = self.transport.ask(CMD_LIST, file_args(name))
-            pieces.append(bytes(reply[8 : 8 + PIECE]))
+        for n in range(LIST_PIECES):
+            # a piece of the listing's buffer: the 9.2" sends it as it is, without the
+            # command's number in front (its first piece began with zeros); where that header
+            # does come, the piece follows it
+            reply = bytes(self.transport.ask(CMD_LIST, file_args(name), echo=False))
+            if n == 0:
+                log.debug("start screen: listing %s begins %s", folder, reply[:32].hex(" "))
+            header = reply[:1] == bytes([CMD_LIST]) and reply[1:2] == bytes([ACK])
+            pieces.append(reply[8 : 8 + PIECE] if header else reply[:PIECE])
         return names_in(b"".join(pieces))
+
+    def noted_listing(self) -> list[str] | None:
+        """The listing before a file is written, for the log; a panel that does not give it
+        does not stop the writing (what was left unread is dropped)."""
+        try:
+            names = self.listing()
+        except DeviceError as exc:
+            log.warning("start screen: the panel's files could not be listed: %s", exc)
+            self.transport.drain()
+            return None
+        log.info("start screen: %s holds %s", FOLDER, ", ".join(names) or "nothing listed")
+        return names
 
     def size(self, name: str) -> int:
         """The size of a file of the panel's (0: none)."""
@@ -269,7 +291,7 @@ class StartScreen:
         def job(files: PanelFiles, found: PanelModel) -> dict[str, Any]:
             return {
                 "model": found.id,
-                "files": files.listing(),
+                "files": files.noted_listing(),  # (None: the panel did not list them)
                 "boot_logo": files.size(BOOT_LOGO),
                 "standby_clip": files.size(STANDBY_CLIP),
             }
@@ -283,7 +305,7 @@ class StartScreen:
 
         def job(files: PanelFiles, found: PanelModel) -> dict[str, Any]:
             data = logo_jpeg(found, orientation=orientation)
-            files.listing()  # what is there before, in the log of the panel's folder
+            files.noted_listing()  # what is there before, in the log of the panel's folder
             files.write(BOOT_LOGO, data)
             files.show_jpeg(BOOT_LOGO)
             return {"model": found.id, "boot_logo": len(data)}
@@ -310,7 +332,7 @@ class StartScreen:
 
         def job(files: PanelFiles, found: PanelModel) -> dict[str, Any]:
             data = clip_h264(found, ffmpeg, orientation=orientation)
-            files.listing()
+            files.noted_listing()
             files.write(STANDBY_CLIP, data)
             files.play(STANDBY_CLIP)
             files.save_start(brightness)

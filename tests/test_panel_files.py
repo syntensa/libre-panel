@@ -22,8 +22,9 @@ NINE = get_model("turing-9.2-usb")
 class FakePanel:
     """A TURZX USB panel's files and settings, and the commands it was sent."""
 
-    def __init__(self, files=None):
+    def __init__(self, files=None, listing="header"):
         self.files = dict(files or {})
+        self.listing = listing  # "header": [99, ack] in front; "bare": the piece alone (the 9.2")
         self.sent = []  # (command, name or args, payload size)
         self.listed = 0
         self.closed = False
@@ -48,7 +49,7 @@ class FakePanel:
             self.sent.append((cmd, bytes(args), len(payload)))
         return bytes([cmd, 0xC8]) + bytes(510)
 
-    def ask(self, cmd, args=b"", timeout_ms=2000):
+    def ask(self, cmd, args=b"", timeout_ms=2000, echo=True):
         name = self.name_of(args)
         if cmd == 98:
             self.sent.append((98, name, 0))
@@ -60,7 +61,15 @@ class FakePanel:
             self.listed * F.PIECE : (self.listed + 1) * F.PIECE
         ]
         self.listed = (self.listed + 1) % F.LIST_PIECES
+        if self.listing == "bare":
+            assert not echo  # (a check for the command's number would refuse it)
+            return piece
+        if self.listing == "none":
+            return bytes(16)  # a panel that does not list (the reply of the error)
         return bytes([99, 0xC8]) + bytes(6) + piece
+
+    def drain(self):
+        self.drained = True
 
     def close(self):
         self.closed = True
@@ -208,6 +217,17 @@ def test_the_standby_clip_is_written_played_and_saved_as_what_the_panel_starts_w
         (110, F.STANDBY_CLIP, 0),  # played, its name (never an empty one) in the settings
         (125, bytes([61, 2, 0, 0, 0, 0]), 0),  # saved: brightness, start with the clip
     ]  # fmt: skip
+
+
+def test_a_listing_without_a_header_is_read_as_the_9_2_sends_it():
+    """The 9.2" sends each piece of the listing as it is, beginning with zeros: no command
+    number in front (\"command 99: unexpected reply 00 00 ...\" stopped every write)."""
+    panel = FakePanel({F.BOOT_LOGO: b"j", F.STANDBY_CLIP: b"c"}, listing="bare")
+    assert F.PanelFiles(panel).listing() == ["boot.jpg", "standby.h264"]
+    silent = FakePanel({}, listing="none")
+    assert F.PanelFiles(silent).listing() == []  # nothing in it: no names, and no error
+    answer = jobs(silent).write_logo()  # the boot logo is written all the same
+    assert answer["boot_logo"] == len(silent.files[F.BOOT_LOGO])
 
 
 def test_the_listing_gives_the_names_the_panel_has():

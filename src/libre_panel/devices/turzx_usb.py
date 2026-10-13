@@ -308,9 +308,10 @@ class UsbTransport:
             raise DeviceError(f"command {cmd} not accepted: {reply[:16].hex(' ')}")
         return reply
 
-    def ask(self, cmd: int, args: bytes = b"", timeout_ms: int = 2000) -> bytes:
+    def ask(self, cmd: int, args: bytes = b"", timeout_ms: int = 2000, echo: bool = True) -> bytes:
         """A command whose reply carries data rather than the accepted mark (a file's size,
-        a piece of a folder's listing): the reply as it comes, for the caller to read."""
+        a piece of a folder's listing): the reply as it comes, for the caller to read. With
+        ``echo`` it must begin with the command's number; without, it is taken as it is."""
         import usb.core
 
         with self._lock:
@@ -319,7 +320,7 @@ class UsbTransport:
                 reply = self._reply(cmd, timeout_ms)
             except usb.core.USBError as exc:
                 raise DeviceError(f"USB error on command {cmd}: {exc}") from exc
-        if reply[:1] != bytes([cmd]):
+        if echo and reply[:1] != bytes([cmd]):
             raise DeviceError(f"command {cmd}: unexpected reply {reply[:16].hex(' ')}")
         return reply
 
