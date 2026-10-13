@@ -1,14 +1,6 @@
 # Changelog
 
-## 0.6.0 — 2026-10-13
-
-Bars on end: say once how the panel is mounted, and every screen shows in its version for a bar
-that stands upright, laid out anew, down to the panel's own boot logo. And Arena, Libre Panel's
-own screen for game mode.
-
-![Libre Panel's screens for a bar on end: Lumen, Studio, Encore, Nimbus, Almanac, Almanac Analog, Arena and the round report](https://raw.githubusercontent.com/syntensa/libre-panel/v0.6.0/docs/images/vertical.png)
-
-<img src="https://raw.githubusercontent.com/syntensa/libre-panel/v0.6.0/docs/media/game-entrance.gif" width="100%" alt="A game starts: the screen closes to a line, the game's name lights up, and Arena opens with the frame rate, its 1% low, the frame time, CPU and GPU">
+## Unreleased
 
 **New**
 - **Arena**, Libre Panel's own screen for game mode on 8.8" and 9.2" bars: the game's frame
