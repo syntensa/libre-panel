@@ -2041,7 +2041,9 @@
     "python-xlib is not installed.": "python-xlib nie jest zainstalowany.",
     "{combo} is the shortcut of another action already": "{combo} jest już skrótem innej akcji",
     "{keys} needs Ctrl, Alt or Win": "{keys} wymaga Ctrl, Alt lub Win",
-    "Shift": "Shift"
+    "Shift": "Shift",
+    "Use the shortcuts": "Używaj skrótów",
+    "Off: no key is taken, and the combinations stay for later.": "Wył.: żaden klawisz nie jest zajęty, a kombinacje zostają na później."
   },
   "fields": {
     "align": "Wyrównanie",

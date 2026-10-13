@@ -64,7 +64,8 @@ language = "auto"
 # allow_notify = false
 
 # Keyboard shortcuts for the whole PC (Windows; Linux with X11), set in Settings → Start and
-# system by pressing the keys. The actions: pause, brightness_up, brightness_down, open.
+# system by pressing the keys. The actions: pause, brightness_up, brightness_down, open;
+# enabled = false switches all of them off and keeps the keys written here.
 # [hotkeys]
 # pause = "Ctrl+Alt+P"
 
@@ -372,6 +373,7 @@ class Config:
     modes: dict[str, ModeConfig] = field(default_factory=dict)
     sequence: SequenceConfig = field(default_factory=SequenceConfig)
     hotkeys: dict[str, str] = field(default_factory=dict)  # action: combination (hotkeys.py)
+    hotkeys_enabled: bool = True  # [hotkeys] enabled: off holds no key, the combinations kept
     path: Path | None = None
     # config.toml's modification time when it was read: a change made while
     # the program starts up is noticed too.
@@ -490,7 +492,10 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     if "allow_notify" in data:
         cfg.allow_notify = _expect(data["allow_notify"], bool, "allow_notify")
     if "hotkeys" in data:
-        cfg.hotkeys = _hotkeys(_expect(data["hotkeys"], dict, "hotkeys"))
+        table = dict(_expect(data["hotkeys"], dict, "hotkeys"))
+        if "enabled" in table:
+            cfg.hotkeys_enabled = _expect(table.pop("enabled"), bool, "hotkeys.enabled")
+        cfg.hotkeys = _hotkeys(table)
 
     dev = _expect(data.get("device", {}), dict, "device")
     cfg.device.model = _expect(dev.get("model", cfg.device.model), str, "device.model")

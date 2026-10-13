@@ -48,6 +48,30 @@ def test_config_toml_takes_them_written_one_way_and_each_once():
     assert parse_config({}).hotkeys == {}
 
 
+def test_switched_off_they_are_all_let_go_and_their_keys_kept(isolated_home, monkeypatch):
+    from libre_panel import service
+
+    config = parse_config({"hotkeys": {"enabled": False, "pause": "Ctrl+Alt+P"}})
+    assert config.hotkeys == {"pause": "Ctrl+Alt+P"} and not config.hotkeys_enabled
+    assert service._held(config) == {}
+    assert parse_config({}).hotkeys_enabled and service._held(parse_config({})) == {}
+    with pytest.raises(ConfigError):
+        parse_config({"hotkeys": {"enabled": "no"}})
+    # the switch in Settings writes [hotkeys] enabled and leaves the keys as they were
+    set_config_value("hotkeys.pause", "Ctrl+Alt+P")
+    set_config_value("hotkeys.enabled", False)
+    held = load_config()
+    assert held.hotkeys == {"pause": "Ctrl+Alt+P"} and not held.hotkeys_enabled
+    applied = []
+    monkeypatch.setattr(Hotkeys, "apply", lambda self, keys: applied.append(dict(keys)))
+    app = service.BackgroundApp(port=0)
+    app._config_loaded(held)
+    set_config_value("hotkeys.enabled", True)
+    app._config_loaded(load_config())
+    assert wait_for(lambda: applied == [{}, {"pause": "Ctrl+Alt+P"}])
+    app.shutdown()
+
+
 class FakeBackend:
     made: list = []
 

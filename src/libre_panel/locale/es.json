@@ -2041,7 +2041,9 @@
     "python-xlib is not installed.": "python-xlib no está instalado.",
     "{combo} is the shortcut of another action already": "{combo} ya es el atajo de otra acción",
     "{keys} needs Ctrl, Alt or Win": "{keys} necesita Ctrl, Alt o Win",
-    "Shift": "Mayús"
+    "Shift": "Mayús",
+    "Use the shortcuts": "Usar los atajos",
+    "Off: no key is taken, and the combinations stay for later.": "Desactivado: no se toma ninguna tecla y las combinaciones se quedan para después."
   },
   "fields": {
     "align": "Alineación",

@@ -625,6 +625,18 @@ def test_a_shortcut_is_set_by_pressing_the_keys_and_taken_away_again(app_url, is
         brighter.click()
         page.keyboard.press("Escape")  # changed one's mind
         expect(brighter).to_have_text("Not set")
+        # all of them off at once: the keys stay, greyed, and come back with the switch
+        switch = card.get_by_role("switch", name="Use the shortcuts")
+        expect(switch).to_have_attribute("aria-checked", "true")
+        switch.click()
+        waits_for(page, lambda: settings_config().hotkeys_enabled is False)
+        expect(card).to_contain_text("Off: no key is taken")
+        expect(pause).to_be_disabled()
+        expect(pause).to_have_text("Ctrl+Alt+P")
+        assert settings_config().hotkeys == {"pause": "Ctrl+Alt+P"}
+        switch.click()
+        waits_for(page, lambda: settings_config().hotkeys_enabled is True)
+        expect(pause).to_be_enabled()
         card.get_by_role("button", name="Take Pause or resume the panel's shortcut away").click()
         waits_for(page, lambda: settings_config().hotkeys == {})
 

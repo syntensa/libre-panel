@@ -264,6 +264,11 @@ class EditorService:
             server.editor_state.close()
 
 
+def _held(config: Any) -> dict[str, str]:
+    """The shortcuts to hold: those of config.toml, none while they are switched off."""
+    return dict(config.hotkeys) if config.hotkeys_enabled else {}
+
+
 def instance_file() -> Path:
     return config_dir() / INSTANCE_FILENAME
 
@@ -330,7 +335,7 @@ class BackgroundApp:
         try:
             config = load_config(self.config_path)
             self.services.apply(config)
-            self.hotkeys.apply(config.hotkeys)
+            self.hotkeys.apply(_held(config))
         except ConfigError as exc:
             log.error("services not started: %s", exc)  # they start once the config is fixed
         self.panel.start()
@@ -358,7 +363,7 @@ class BackgroundApp:
             target=self.services.apply, args=(config,), name="services", daemon=True
         ).start()
         threading.Thread(
-            target=self.hotkeys.apply, args=(config.hotkeys,), name="hotkeys-apply", daemon=True
+            target=self.hotkeys.apply, args=(_held(config),), name="hotkeys-apply", daemon=True
         ).start()
 
     def follow_config(self) -> None:

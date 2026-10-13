@@ -1,13 +1,14 @@
 // Settings → Start and system → Keyboard shortcuts: a key combination for the whole PC for each
 // action of the background app (config.toml's [hotkeys], hotkeys.py), set by pressing the keys.
 // The app says which ones it holds, which another program has taken, and where there can be
-// none (Wayland).
+// none (Wayland). A switch turns them all off at once ([hotkeys] enabled) and keeps the keys.
 
 import { t } from "../../core/i18n.js";
 import { saveSettings, useConfig } from "../../core/settings.js";
 import { useStore } from "../../core/state.js";
 import { html, useLayoutEffect, useState } from "../../lib/preact.js";
 import { Icon } from "../../ui/icons.js";
+import { Toggle } from "../../ui/controls.js";
 import { toastError } from "../../ui/toast.js";
 import { Card, Note, SettingRow } from "./parts.js";
 
@@ -57,7 +58,7 @@ const shown = (combo) =>
     .join("+");
 
 /** The button that shows a shortcut and, clicked, takes the next keys pressed. */
-function Recorder({ action, combo, onSet }) {
+function Recorder({ action, combo, onSet, disabled = false }) {
   const [listening, setListening] = useState(false);
   // (as the button turns, not after the next paint: keys pressed at once are not lost)
   useLayoutEffect(() => {
@@ -88,6 +89,7 @@ function Recorder({ action, combo, onSet }) {
     class=${`btn hotkey-recorder mono${listening ? " listening" : ""}`}
     aria-pressed=${String(listening)}
     data-hotkey=${action}
+    disabled=${disabled}
     onClick=${() => setListening(!listening)}
   >
     ${listening ? t("Press the keys …") : combo ? shown(combo) : t("Not set")}
@@ -99,6 +101,7 @@ export function HotkeysCard() {
   const app = useStore((s) => s.app);
   if (!config) return null;
   const state = app?.available && !app.quit ? app.hotkeys : null; // what the background app holds
+  const on = config.hotkeys_enabled !== false;
   const set = (action, combo) =>
     saveSettings({ [`hotkeys.${action}`]: combo }).catch(toastError);
   const problem = (action) => {
@@ -111,20 +114,27 @@ export function HotkeysCard() {
     title=${t("Keyboard shortcuts")}
     text=${t("Key combinations for the whole PC, whatever window is in front. Click one, then press the keys: Ctrl, Alt or Win with a key. Backspace takes it away.")}
   >
-    ${state && !state.supported ? html`<div class="settings-row"><${Note} tone="warn">${state.why}<//></div>` : null}
-    ${!state
+    <${SettingRow} title=${t("Use the shortcuts")} hint=${on ? null : t("Off: no key is taken, and the combinations stay for later.")} data-hotkeys-switch>
+      <${Toggle}
+        label=${t("Use the shortcuts")}
+        checked=${on}
+        onChange=${(value) => saveSettings({ "hotkeys.enabled": value }).catch(toastError)}
+      />
+    <//>
+    ${on && state && !state.supported ? html`<div class="settings-row"><${Note} tone="warn">${state.why}<//></div>` : null}
+    ${on && !state
       ? html`<div class="settings-row"><${Note}>${t("They work while Libre Panel runs in the background.")}<//></div>`
       : null}
     ${ACTIONS().map((action) => {
       const combo = config.hotkeys?.[action.id] || "";
-      const wrong = problem(action.id);
+      const wrong = on ? problem(action.id) : null;
       return html`<${SettingRow}
         key=${action.id}
         title=${action.name}
         status=${wrong ? html`<span class="status warn"><span class="dot"></span>${wrong}</span>` : null}
       >
-        <${Recorder} action=${action.id} combo=${combo} onSet=${(made) => set(action.id, made)} />
-        ${combo
+        <${Recorder} action=${action.id} combo=${combo} disabled=${!on} onSet=${(made) => set(action.id, made)} />
+        ${combo && on
           ? html`<button type="button" class="icon-btn" aria-label=${t("Take {name}'s shortcut away", { name: action.name })} title=${t("Take {name}'s shortcut away", { name: action.name })}
               onClick=${() => set(action.id, null)}><${Icon} name="close" size=${14} /></button>`
           : null}

@@ -142,11 +142,16 @@ Start and system → Keyboard shortcuts* by pressing the keys, or in config.toml
 
 ```toml
 [hotkeys]
+# enabled = false             # all of them off at once; the keys below stay for later
 pause = "Ctrl+Alt+P"
 brightness_up = "Ctrl+Alt+Up"
 brightness_down = "Ctrl+Alt+Down"
 open = "Ctrl+Alt+L"
 ```
+
+*Use the shortcuts* at the top of the card switches them all off and on (`enabled`): off,
+Libre Panel holds no key, so every combination goes to the program in front again, and the
+ones you set are kept for when you switch them back on.
 
 A combination needs Ctrl, Alt or Win (Shift alone would take a letter from typing), except
 the keys nothing types: F13 to F24, Pause and Scroll Lock. Windows registers them with the
