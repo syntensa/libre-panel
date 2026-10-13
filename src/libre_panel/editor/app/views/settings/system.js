@@ -1,6 +1,6 @@
 // Settings → Start and system: starting with the system, starting with the highest rights
-// (Windows; only when asked for, and only an administrator can set it up), the language
-// and the window the app is shown in.
+// (Windows; only when asked for, and only an administrator can set it up), the language, and,
+// where the app is shown in the browser, what a window of its own needs.
 
 import { inNativeWindow } from "../../core/app.js";
 import { languageSetting, languages, setLanguage, t } from "../../core/i18n.js";
@@ -76,7 +76,7 @@ function StartCard() {
     ${windows
       ? html`<${SettingRow}
           title=${t("With administrator rights")}
-          hint=${t("Needed for the temperature and power of the processor and for the fans on the mainboard only where the sensor service is not set up (Settings → Sensors), and for sensor plugins that read the hardware themselves. Off unless you turn it on.")}
+          hint=${t("Rarely needed: for the temperature and power of the processor and the mainboard's fans only where the sensor service is not set up (Settings → Sensors), or for a sensor plugin that reads the hardware itself. Off unless you turn it on.")}
           status=${!info.elevated && !info.can_elevate
             ? html`<${Status}>${t("Setting it up needs Libre Panel to run as administrator.")}<//>`
             : null}
@@ -102,13 +102,16 @@ function StartCard() {
         ]}
       />
     <//>
-    <${SettingRow}
-      title=${t("Window")}
-      hint=${inNativeWindow()
-        ? t("The app is shown in a window of its own.")
-        : t("The app is shown in the browser. A window of its own needs WebView2 (Windows) or WebKitGTK (Linux).")}
-      status=${inNativeWindow() ? null : html`${t("What is missing:")} <span class="mono">libre-panel window --check</span>`}
-    />
+    ${inNativeWindow()
+      ? null
+      : html`<${SettingRow}
+          title=${t("Window")}
+          hint=${windows
+            ? t("The app is shown in the browser. A window of its own needs Microsoft's WebView2 Runtime, which Windows 11 has: install it from Microsoft, then start Libre Panel again.")
+            : info.kind === "xdg"
+              ? t("The app is shown in the browser. A window of its own needs WebKitGTK: install it from your software centre, then start Libre Panel again.")
+              : t("The app is shown in the browser.")}
+        />`}
   <//>`;
 }
 

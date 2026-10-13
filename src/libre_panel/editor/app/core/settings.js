@@ -1,9 +1,10 @@
 // The settings of the app (Settings view): config.toml as the server reads it
 // (/api/settings), what is written back, and the facts around it: the panel found, the
-// start with the system, the sources and services of the running app. The server is
-// editor/settings.py; every write goes into config.toml with its comments kept, and the
-// running Libre Panel follows. `store.get().settings` is `{config, catalog, restart}`
-// once loaded; `settingsError` says why not (config.toml with a mistake in it).
+// start with the system, the sources and services of the running app, what a report of a
+// panel says of this computer. The server is editor/settings.py; every write goes into
+// config.toml with its comments kept, and the running Libre Panel follows.
+// `store.get().settings` is `{config, catalog, restart}` once loaded; `settingsError` says why
+// not (config.toml with a mistake in it).
 
 import { toast, toastError } from "../ui/toast.js";
 import { get, post } from "./api.js";
@@ -21,6 +22,7 @@ const api = {
   unlock: () => get("/api/unlock"),
   setUnlock: (action, options = {}) => post("/api/unlock", { action, ...options }),
   about: () => get("/api/about"),
+  report: () => get("/api/report"),
   open: (folder) => post("/api/open", { folder }),
   place: (query) => post("/api/location", { query }),
   sources: () => get("/api/plugins/control/sources"),
@@ -146,6 +148,10 @@ export async function loadAbout() {
     toastError(error);
   }
 }
+
+/** What a report of a panel says of this computer (/api/report): `{text, product, form, platform}`,
+ * the form's address with the panel found and the list filled in. Rejects with the reason. */
+export const loadReport = () => api.report();
 
 /** Show a folder of Libre Panel ("config", "themes" or "logs") in the file manager. */
 export async function openFolder(folder) {

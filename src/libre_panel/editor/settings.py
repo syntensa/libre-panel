@@ -8,13 +8,16 @@ follows, and nothing here has to be done by hand in that file.
 
 from __future__ import annotations
 
+import functools
 import logging
 import math
 import os
+import platform
 import sys
 import threading
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from libre_panel import __version__, i18n
 from libre_panel.config import (
@@ -33,10 +36,12 @@ from libre_panel.i18n import t
 log = logging.getLogger(__name__)
 
 PROJECT_URL = "https://github.com/syntensa/libre-panel"
+REPORT_FORM = f"{PROJECT_URL}/issues/new?template=panel_support.yml"
 LICENSE = {"id": "GPL-3.0-or-later", "url": "https://www.gnu.org/licenses/gpl-3.0.html"}
 MAX_NOTICE = 200_000
-# The built-in services in the order the app lists them; plugins' come after them.
-SERVICE_ORDER = ("notices", "game", "autopilot", "devices", "memory", "cooling", "downloads")
+# The built-in services in the order the app lists them (game mode and its round report first,
+# the section is named after it); plugins' come after them.
+SERVICE_ORDER = ("game", "memory", "notices", "autopilot", "devices", "cooling", "downloads")
 # Sources that start by themselves; they are listed only where config.toml names them.
 IMPLICIT_SOURCES = ("media", "sky", "hardware")  # hardware: the names of this PC
 # The sensors and the weather are made once when the panel loop starts.
@@ -238,6 +243,35 @@ def cli_command(arguments: str) -> str:
     return f"libre-panel {arguments}"
 
 
+def connected_devices() -> list[str]:
+    """What is plugged in that could be a panel, a line each, as ``libre-panel devices`` lists
+    it but without serial numbers: the USB serial ports with their ids and the plain USB panels,
+    and the models each could be. Only the system's lists are read; no port is opened."""
+    from libre_panel.devices.base import DeviceError, list_serial_ports, list_usb_devices
+    from libre_panel.devices.models import models_for_usb
+
+    def models(vid: str | None, pid: str | None) -> str:
+        found = models_for_usb(int(vid, 16), int(pid, 16)) if vid and pid else []
+        return f"  -> {' / '.join(model.id for model in found)}" if found else ""
+
+    lines = []
+    try:
+        for port in list_serial_ports():
+            vid, pid = port["vid"], port["pid"]
+            if vid:  # a port without USB ids (a mainboard's, Bluetooth) is no panel
+                about = f"{port['description']}{models(vid, pid)}"
+                lines.append(f"{port['device']}  {vid}:{pid}  {about}")
+    except (DeviceError, OSError) as exc:
+        lines.append(f"serial: {exc}")
+    try:
+        for device in list_usb_devices():
+            vid, pid = device["vid"], device["pid"]
+            lines.append(f"usb  {vid}:{pid}{models(vid, pid)}")
+    except (DeviceError, OSError) as exc:
+        lines.append(f"usb: {exc}")
+    return lines or ["Nothing plugged in looks like a panel."]
+
+
 def folders() -> dict[str, str]:
     """The folders the About page shows and opens: the settings, the user's themes, the log."""
     return {
@@ -245,6 +279,28 @@ def folders() -> dict[str, str]:
         "themes": str(user_themes_dir()),
         "logs": str(log_file().parent),
     }
+
+
+@functools.lru_cache(maxsize=32)
+def _reads(folder: Path, changed: float) -> frozenset[str]:
+    from libre_panel.render.renderer import _reads as widget_reads
+    from libre_panel.theme.model import load_theme
+    from libre_panel.theme.modules import expand
+
+    return frozenset(widget_reads(expand(load_theme(folder))[0]))
+
+
+def theme_reads(theme_id: str) -> frozenset[str]:
+    """The sensor keys (and patterns) the theme ``theme_id`` reads, its modules taken apart as
+    the panel draws them; none for a theme that cannot be read. Kept until its file changes."""
+    from libre_panel.theme.model import THEME_FILENAME, ThemeError, find_theme
+
+    try:
+        folder = find_theme(theme_id)
+        return _reads(folder, (folder / THEME_FILENAME).stat().st_mtime)
+    except (ThemeError, OSError, ValueError, KeyError, TypeError):
+        log.debug("what %s reads is not known", theme_id, exc_info=True)
+        return frozenset()
 
 
 def notice_text() -> str:
@@ -503,10 +559,12 @@ class Settings:
         else:
             gaps = video_gaps(video, model, proven=False)
         running = None
+        shown = None
         panel = getattr(self.controls, "panel", None)
         if panel is not None:
             state = panel.state()
             running = {"state": state["state"], "detail": state["detail"]}
+            shown = state.get("theme") or None
         return {
             "configured": config.device.model,
             "found": found["info"] if found else None,
@@ -519,7 +577,19 @@ class Settings:
                 "usb": usb,
                 "gaps": gaps,
             },
+            "weather_theme": self._weather_theme(config, shown),
         }
+
+    @staticmethod
+    def _weather_theme(config: Config, shown: str | None) -> str | None:
+        """The theme on the panel (else the normal one) when it shows the weather, which the
+        app then asks for while the weather is off: its id, else None."""
+        from libre_panel.theme.defaults import normal_theme
+
+        for theme_id in dict.fromkeys(filter(None, (shown, normal_theme(config)))):
+            if any(key.startswith("weather.") for key in theme_reads(theme_id)):
+                return theme_id
+        return None
 
     def clip_question(self) -> dict[str, Any]:
         """Whether Start is to ask for the name of the panel's standby clip, and the name the
@@ -642,10 +712,25 @@ class Settings:
             return linux_rights.status(linux_setup.gather())
         from libre_panel.sensorservice import setup
 
+        state = setup.unlock_state()
+        if state.get("platform") == "win32":
+            state["presentmon"] = self._presentmon()
         return {
-            **setup.unlock_state(),
+            **state,
             "command": cli_command("system-setup --service --pawnio --perf-log-users"),
         }
+
+    def _presentmon(self) -> bool | None:
+        """Whether the program that reads the frame rates of games is there (the Windows
+        downloads carry it); None while config.toml cannot be read."""
+        from libre_panel.sensors.presentmon import find_presentmon
+
+        try:
+            options = self._config().sensors.options.get("presentmon", {})
+        except SettingsError:
+            return None
+        path = options.get("path")
+        return find_presentmon(path if isinstance(path, str) else "") is not None
 
     def set_unlock(self, payload: Any) -> dict[str, Any]:
         """``{"action": "unlock"}`` (or ``"remove"``): ``libre-panel system-setup`` with the
@@ -743,11 +828,35 @@ class Settings:
             "links": {
                 "project": PROJECT_URL,
                 "issues": f"{PROJECT_URL}/issues",
-                "hardware_report": f"{PROJECT_URL}/issues/new?template=panel_support.yml",
+                "hardware_report": REPORT_FORM,
             },
             "doctor": cli_command("doctor"),
             "devices": cli_command("devices"),
             "folders": folders(),
+        }
+
+    def report(self) -> dict[str, Any]:
+        """What a report of a panel says of this computer, for the form on GitHub: Libre Panel's
+        version, the system, the panel found and what is plugged in that could be one, by its USB
+        ids (what ``libre-panel devices`` prints, without serial numbers, names or folders). The
+        bus is only looked at, as for :meth:`panel`: nothing is sent to a panel. ``form`` is the
+        form's address with the product and this text filled in."""
+        config = self._config()
+        found = self._find_panel(config)
+        product = found["model"].label if found else ""
+        lines = [
+            f"Libre Panel {__version__}, {platform.system()} {platform.release()} "
+            f"({platform.machine()})",
+            f"Panel found: {product or 'none'}",
+            *connected_devices(),
+        ]
+        text = "\n".join(lines)
+        fields = {"product": product, "devices": text} if product else {"devices": text}
+        return {
+            "text": text,
+            "product": product,
+            "form": f"{REPORT_FORM}&{urlencode(fields)}",
+            "platform": sys.platform,  # how a terminal is opened, for the doctor
         }
 
     def open_folder(self, payload: Any) -> dict[str, Any]:

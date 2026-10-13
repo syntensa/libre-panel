@@ -1,8 +1,8 @@
-// Settings → Sensors: which sources the readings come from and in which order they are
-// asked, the sensor service (Windows), how LibreHardwareMonitor is read and what it says,
-// how often the sensors are read. (The hardware's names are in hardware.js.) The sources
-// are made when the panel starts, so a change here takes effect after a restart; the
-// reading interval at once.
+// Settings → Sensors: where the readings come from (the sources, in the order they are asked),
+// the sensor service (Windows), and under Advanced how often the sensors are read and how
+// LibreHardwareMonitor is reached and what it says. (The hardware's names are in hardware.js,
+// Linux' setup in setup.js.) The sources are made when the panel starts, so a change here takes
+// effect after a restart; the reading interval at once.
 
 import { formatNumber, t } from "../../core/i18n.js";
 import {
@@ -15,15 +15,16 @@ import {
   useConfig,
 } from "../../core/settings.js";
 import { useStore } from "../../core/state.js";
-import { html } from "../../lib/preact.js";
+import { html, useState } from "../../lib/preact.js";
 import { IconButton, NumberField, Segmented, Toggle } from "../../ui/controls.js";
 import { confirmDialog } from "../../ui/dialog.js";
-import { Card, CommitField, Note, RestartNote, SettingRow, Status, usePolling } from "./parts.js";
+import { Icon } from "../../ui/icons.js";
+import { Card, CommitField, Disclosure, RestartNote, SettingRow, Status, usePolling } from "./parts.js";
 
 export const loadSensorsSection = () => Promise.all([loadSettings(), loadSourceStates()]);
 
 // What the people who use Libre Panel are told about each source (the others: their name).
-const SOURCES = {
+export const SOURCES = {
   load: {
     title: () => t("Fast load"),
     hint: () => t("The load of the processor and the graphics card, ten times a second, so bars and graphs follow it as it happens."),
@@ -74,7 +75,8 @@ function worksHere(name, platform) {
   return true;
 }
 
-/** The sources in use, in the order they are asked, then those that are not, as rows. */
+/** The sources in use, in the order they are asked, then those that are not (the ones that work
+ * on this system first), as rows. */
 function sourceRows(config, catalog) {
   const listed = config.sensors.providers;
   const known = new Map(catalog.providers.map((source) => [source.name, source]));
@@ -82,13 +84,16 @@ function sourceRows(config, catalog) {
   const rank = (name) => (ORDER.includes(name) ? ORDER.indexOf(name) : ORDER.length);
   const unused = catalog.providers
     .filter((source) => !listed.includes(source.name) && !catalog.implicit_providers.includes(source.name))
-    .sort((a, b) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name))
+    .sort((a, b) => {
+      const works = worksHere(b.name, catalog.platform) - worksHere(a.name, catalog.platform);
+      return works || rank(a.name) - rank(b.name) || a.name.localeCompare(b.name);
+    })
     .map((source) => ({ name: source.name, on: false, known: true, source }));
   return { used, unused };
 }
 
 /** A source switched on goes before psutil, the one that fills in the rest. */
-function withSource(listed, name) {
+export function withSource(listed, name) {
   const at = listed.indexOf("psutil");
   return at < 0 || name === "psutil" ? [...listed, name] : [...listed.slice(0, at), name, ...listed.slice(at)];
 }
@@ -113,6 +118,7 @@ function SourceRow({ row, index, count, used, state, platform, move, toggle }) {
     <div class="settings-row-text">
       <span class="settings-row-title">${title}</span>
       ${hint ? html`<span class="settings-row-hint">${hint}</span>` : null}
+      ${row.on && state?.hint ? html`<span class="settings-row-status"><${Status} tone="warn">${state.hint}<//></span>` : null}
     </div>
     <div class="settings-row-control">
       ${status}
@@ -136,6 +142,7 @@ function Sources() {
   const config = useConfig();
   const catalog = useCatalog();
   const states = useStore((s) => s.sourceStates);
+  const [more, setMore] = useState(false); // the sources not in use, folded away
   usePolling(loadSourceStates, 3000);
   if (!config || !catalog) return null;
   const listed = config.sensors.providers;
@@ -169,15 +176,20 @@ function Sources() {
   return html`<${RestartNote} prefix="sensors." />
     <${Card}
       id="sensor-sources"
-      title=${t("Sources")}
-      text=${t("Libre Panel asks the sources from the top. For each reading the first source that has one wins, so a quicker or better source goes first.")}
+      title=${t("Where the readings come from")}
+      text=${t("Each one brings a kind of reading to the panel; switched off, those stay empty. Where two bring the same reading, the one higher up is used.")}
       action=${usual
         ? null
         : html`<button type="button" class="link-btn" onClick=${() => save(() => catalog.default_providers)}>${t("Back to the usual")}</button>`}
     >
       ${used.map(row)}
-      ${unused.length ? html`<div class="settings-subhead">${t("Not in use")}</div>` : null}
-      ${unused.map((item) => row(item, -1))}
+      ${unused.length
+        ? html`<button type="button" class="settings-disclosure small sources-more" aria-expanded=${String(more)} onClick=${() => setMore(!more)}>
+            <span>${t("More sources")} · ${unused.length}</span>
+            <${Icon} name=${more ? "chevron-up" : "chevron-down"} size=${14} />
+          </button>`
+        : null}
+      ${more ? unused.map((item) => row(item, -1)) : null}
     <//>`;
 }
 
@@ -244,22 +256,20 @@ function SensorService() {
   <//>`;
 }
 
-// -- LibreHardwareMonitor ----------------------------------------------------------------------
+// -- advanced: how often, and LibreHardwareMonitor ----------------------------------------------
 
-function LibreHardwareMonitor() {
-  const config = useConfig();
-  const catalog = useCatalog();
+/** How LibreHardwareMonitor is reached (Windows, or where it is in use) and what it says. */
+function LibreHardwareMonitor({ config }) {
   const states = useStore((s) => s.sourceStates);
-  if (!config || !catalog) return null;
   const used = config.sensors.providers.includes("librehardwaremonitor");
-  if (catalog.platform !== "win32" && !used) return null;
   const lhm = config.sensors.librehardwaremonitor;
   const state = (states?.sources || []).find((source) => source.name === "librehardwaremonitor");
   let report;
   if (!states?.background) report = t("Its state shows while Libre Panel runs in the background.");
-  else if (!used) report = t("Not in use: switch it on under Sources.");
+  else if (!used) report = t("Not in use: switch it on above.");
   else if (!state) report = t("Not running yet.");
-  return html`<${Card} id="sensor-lhm" title="LibreHardwareMonitor" text=${t("Where the temperatures, the power and the fans of Windows come from.")}>
+  return html`<div id="sensor-lhm">
+    <div class="settings-subhead">LibreHardwareMonitor</div>
     <${SettingRow}
       title=${t("How it is read")}
       hint=${t("Automatic reads it through the sensor service where that is set up, else inside Libre Panel, and otherwise asks the web server of a LibreHardwareMonitor that you run yourself.")}
@@ -294,42 +304,51 @@ function LibreHardwareMonitor() {
           </dl>
         </div>`
       : null}
-    ${state?.hint ? html`<div class="settings-row"><${Note} tone="warn">${state.hint}<//></div>` : null}
+  </div>`;
+}
+
+/** How often the sensors are read: the theme's choice, or a fixed interval. */
+function Interval({ ms }) {
+  return html`<${SettingRow}
+    title=${t("Reading interval")}
+    hint=${ms === null ? t("Automatic: each theme says how often it needs the readings.") : t("Every {seconds} s, whatever the theme says.", { seconds: formatNumber(ms / 1000, 2) })}
+  >
+    <${NumberField}
+      label=${t("Reading interval")}
+      value=${ms}
+      min=${100}
+      max=${60000}
+      step=${50}
+      unit="ms"
+      allowEmpty
+      placeholder=${t("Automatic")}
+      onChange=${(value) => saveSettings({ refresh_ms: value })}
+    />
+    <span class="row-action">
+      ${ms !== null ? html`<button type="button" class="link-btn" onClick=${() => saveSettings({ refresh_ms: null })}>${t("Automatic")}</button>` : null}
+    </span>
   <//>`;
 }
 
-// -- how often ---------------------------------------------------------------------------------
-
-function Interval() {
+/** What few people change: how often the sensors are read, and how LibreHardwareMonitor is
+ * reached (Windows). Folded away; what it says when readings are missing shows above. */
+function Advanced() {
   const config = useConfig();
-  if (!config) return null;
-  const ms = config.refresh_ms;
-  return html`<${Card} id="sensor-interval">
-    <${SettingRow}
-      title=${t("Reading interval")}
-      hint=${ms === null ? t("Automatic: each theme says how often it needs the readings.") : t("Every {seconds} s, whatever the theme says.", { seconds: formatNumber(ms / 1000, 2) })}
-    >
-      <${NumberField}
-        label=${t("Reading interval")}
-        value=${ms}
-        min=${100}
-        max=${60000}
-        step=${50}
-        unit="ms"
-        allowEmpty
-        placeholder=${t("Automatic")}
-        onChange=${(value) => saveSettings({ refresh_ms: value })}
-      />
-      <span class="row-action">
-        ${ms !== null ? html`<button type="button" class="link-btn" onClick=${() => saveSettings({ refresh_ms: null })}>${t("Automatic")}</button>` : null}
-      </span>
-    <//>
+  const catalog = useCatalog();
+  if (!config || !catalog) return null;
+  const lhm = catalog.platform === "win32" || config.sensors.providers.includes("librehardwaremonitor");
+  return html`<${Disclosure}
+    id="sensor-advanced"
+    title=${t("Advanced")}
+    hint=${lhm ? t("How often the sensors are read, and how LibreHardwareMonitor is reached.") : t("How often the sensors are read.")}
+  >
+    <${Interval} ms=${config.refresh_ms} />
+    ${lhm ? html`<${LibreHardwareMonitor} config=${config} />` : null}
   <//>`;
 }
 
 export const sensorGroups = [
   { id: "sources", order: 10, component: Sources, load: loadSensorsSection },
   { id: "service", order: 15, component: SensorService, load: loadUnlock }, // Windows only
-  { id: "lhm", order: 20, component: LibreHardwareMonitor },
-  { id: "interval", order: 30, component: Interval },
+  { id: "advanced", order: 90, component: Advanced }, // after the hardware's names
 ];

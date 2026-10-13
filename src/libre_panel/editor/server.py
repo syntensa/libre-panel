@@ -169,6 +169,7 @@ _SETTINGS_GET = {
     "/api/system": "system",
     "/api/unlock": "unlock",
     "/api/about": "about",
+    "/api/report": "report",
 }
 _SETTINGS_POST = {
     "/api/settings": "write",

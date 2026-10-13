@@ -1,8 +1,8 @@
-// Settings → Services: each service Libre Panel brings (and those of plugins), whether it
-// is on, how it is doing, and its options as the service itself declares them
-// (`options` of the service: bool, number, string, list). Every service is off until it is
-// switched on here; the running app follows at once, and a service whose options change
-// starts again by itself.
+// Settings → Game mode and more (#/settings/services): each service Libre Panel brings (and
+// those of plugins), whether it is on, how it is doing, and its options as the service itself
+// declares them (`options` of the service: bool, number, string, list). Every service is off
+// until it is switched on here; the running app follows at once, and a service whose options
+// change starts again by itself (the section's lead says so).
 
 import { refreshPages } from "../../core/actions.js";
 import { t } from "../../core/i18n.js";
@@ -21,14 +21,14 @@ import { navigate } from "../../shell/views.js";
 import { NumberField, Select, Toggle } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { PageThemeSelect } from "../design/pages.js";
-import { CommitField, Note, SettingRow, Status, usePolling } from "./parts.js";
+import { CommitField, SettingRow, Status, usePolling } from "./parts.js";
 
 export const loadServicesSection = () => Promise.all([loadSettings(), loadServiceStates()]);
 
-const SERVICES = {
+export const SERVICES = {
   notices: {
-    title: () => t("Messages"),
-    hint: () => t("Short messages on the panel: the volume, a new track, a sensor past a limit, a restart of the panel."),
+    title: () => t("Notices"),
+    hint: () => t("Short notices on the panel: the volume, a new track, a sensor past a limit, a restart of the panel."),
   },
   game: {
     title: () => t("Game mode"),
@@ -40,11 +40,11 @@ const SERVICES = {
   },
   devices: {
     title: () => t("Devices"),
-    hint: () => t("Messages when a drive, a USB device or a controller comes or goes, and when a drive is nearly full (Windows)."),
+    hint: () => t("Notices when a drive, a USB device or a controller comes or goes, and when a drive is nearly full (Windows)."),
   },
   memory: {
-    title: () => t("Memory and round report"),
-    hint: () => t("Keeps what happens at the desk over weeks, on this computer, and shows a report after a game."),
+    title: () => t("Round report and history"),
+    hint: () => t("Shows a report of the round on the panel after a game, and keeps what happens at the desk over weeks, on this computer."),
   },
   cooling: {
     title: () => t("Cooling analysis"),
@@ -255,7 +255,7 @@ function OptionRow({ service, option, given }) {
 
 function ServiceStatus({ row, enabled, loaded, background }) {
   if (!loaded) return null;
-  if (!background) return enabled ? html`<${Status}>${t("Starts with the background app")}<//>` : null;
+  if (!background) return enabled ? html`<${Status}>${t("Starts when Libre Panel runs in the background")}<//>` : null;
   const state = row?.state;
   if (!enabled && (!state || state === "off")) return null;
   if (state === "running") return html`<${Status} tone="ok">${t("Running")}<//>`;
@@ -306,7 +306,7 @@ function ServiceCard({ service, config, row, loaded, background }) {
     ${service.name === "game" ? html`<${GameScreen} />` : null}
     ${service.options.length
       ? html`<button type="button" class="settings-disclosure small" aria-expanded=${String(open)} aria-controls=${`${id}-options`} onClick=${() => setOpen(!open)}>
-            <span>${t("Settings")} · ${service.options.length}</span>
+            <span>${t("Options")} · ${service.options.length}</span>
             <${Icon} name=${open ? "chevron-up" : "chevron-down"} size=${14} />
           </button>
           ${open
@@ -332,10 +332,7 @@ function Services() {
     .filter((name) => !known.has(name))
     .map((name) => ({ name, source: "", builtin: false, error: "", options: [] }));
   const rows = new Map((states?.services || []).map((row) => [row.name, row]));
-  return html`<${Note} tone="info">
-      ${t("Services are off until you switch them on. Libre Panel's own run in the background app, and one whose settings you change starts again by itself.")}
-    <//>
-    ${[...catalog.services, ...missing].map(
+  return html`${[...catalog.services, ...missing].map(
       (service) => html`<${ServiceCard}
         key=${service.name}
         service=${service}

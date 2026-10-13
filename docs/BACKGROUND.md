@@ -57,8 +57,10 @@ fixed).
 The same controls are in the app: the panel button at the top right of
 *Design* shows the state and has pause, brightness, upside down, start with
 system and quit. *Start* shows the picture on the panel with pause, brightness
-and upside down, and *Live* has its numbers, the sensor sources, the services
-and test messages (the *Control* page, below, in the app's look).
+and upside down, and *Live* says in a sentence how it runs ("Runs smoothly at 50
+fps", slower than planned and what helps, waiting for the panel and why), with its numbers
+under it, the sensor sources, the services and test messages (the *Control* page, below, in
+the app's look).
 
 ## The app's window
 
@@ -131,7 +133,7 @@ without one: the theme per mode and the log.
 | **Log** | the last lines of `logs/libre-panel.log`, which the tray app writes (`libre-panel start` logs to its terminal instead) |
 
 The **Autopilot** page (found the same way, or by *Edit* under the autopilot in
-*Settings → Services*) edits the rules of the `autopilot` service, switches it
+*Settings → Game mode and more*) edits the rules of the `autopilot` service, switches it
 on and off, and shows which rule holds and what it sees; see
 [the autopilot](CONFIGURATION.md#autopilot).
 

@@ -132,7 +132,7 @@ def test_the_catalog_names_the_sources_the_drivers_and_the_services_with_their_o
     assert catalog["lhm_modes"] == ["auto", "service", "inprocess", "webserver"]
     services = catalog["services"]
     assert [service["name"] for service in services] == [
-        "notices", "game", "autopilot", "devices", "memory", "cooling", "downloads",
+        "game", "memory", "notices", "autopilot", "devices", "cooling", "downloads",
     ]  # fmt: skip
     game = next(service for service in services if service["name"] == "game")
     options = {option["key"]: option for option in game["options"]}
@@ -157,7 +157,7 @@ def test_a_plugins_service_is_listed_with_its_options(server, plugin_folder):
     )
     _, data = request(server, "GET", "/api/settings")
     names = [service["name"] for service in data["catalog"]["services"]]
-    assert names[-1] == "tick" and names[:2] == ["notices", "game"]  # the built-in ones first
+    assert names[-1] == "tick" and names[:2] == ["game", "memory"]  # the built-in ones first
     tick = data["catalog"]["services"][-1]
     assert not tick["builtin"] and tick["source"].startswith("folder ")
     assert [o["key"] for o in tick["options"]] == ["every_s", "loud"]
@@ -525,6 +525,45 @@ def test_the_running_app_tells_how_its_panel_is_doing(make, monkeypatch):
     assert data["running"] == {"state": "waiting", "detail": "no panel"}
 
 
+def test_the_panel_says_whether_its_theme_shows_the_weather(make, isolated_home, monkeypatch):
+    """The overview says so while the weather is off: the theme on the panel (else the normal
+    one) with its modules taken apart as the panel draws them."""
+    from libre_panel.editor import settings
+
+    panel_on_the_bus(monkeypatch)
+    isolated_home.mkdir(parents=True, exist_ok=True)
+    (isolated_home / "config.toml").write_text('theme = "almanac"\n', encoding="utf-8")
+    port = make()
+    assert request(port, "GET", "/api/panel")[1]["weather_theme"] is None
+    (isolated_home / "config.toml").write_text('theme = "nimbus"\n', encoding="utf-8")
+    assert request(port, "GET", "/api/panel")[1]["weather_theme"] == "nimbus"
+    # the running app shows another one now (a page of its own): that one is asked too
+    (isolated_home / "config.toml").write_text('theme = "almanac"\n', encoding="utf-8")
+    panel = SimpleNamespace(state=lambda: {"state": "showing", "detail": "", "theme": "lumen"})
+    port = make(App(panel=panel))
+    assert request(port, "GET", "/api/panel")[1]["weather_theme"] == "lumen"
+    assert "weather.temperature" in settings.theme_reads("libre-default")
+    assert settings.theme_reads("no-such-theme") == frozenset()
+
+
+def test_windows_says_whether_presentmon_is_there(server, monkeypatch):
+    """Games' frame rates come from PresentMon, which the Windows downloads carry; the path
+    config.toml names is the one asked for."""
+    from libre_panel.sensors import presentmon
+
+    monkeypatch.setattr("libre_panel.linux_setup.supported", lambda: False)
+    monkeypatch.setattr(
+        "libre_panel.sensorservice.setup.unlock_state",
+        lambda platform=None: {"platform": "win32", "available": False, "service": None},
+    )
+    asked = []
+    monkeypatch.setattr(presentmon, "find_presentmon", lambda path="": asked.append(path))
+    assert request(server, "GET", "/api/unlock")[1]["presentmon"] is False
+    monkeypatch.setattr(presentmon, "find_presentmon", lambda path="": "C:/x/PresentMon.exe")
+    assert request(server, "GET", "/api/unlock")[1]["presentmon"] is True
+    assert asked == [""]  # none named here
+
+
 # -- the question about the standby clip -----------------------------------------------------
 
 
@@ -773,6 +812,64 @@ def test_about_gives_the_version_the_licence_the_links_and_the_folders(server, i
     assert data["notice"].startswith("# Notices and credits")
 
 
+def plugged_in(monkeypatch, ports=(), usb=(), fail=""):
+    """What the system lists as plugged in: serial ports (as list_serial_ports gives them) and
+    USB panels; ``fail`` is the reason the USB library is not there."""
+    from libre_panel.devices import base
+    from libre_panel.devices.base import DeviceError
+
+    def usb_devices():
+        if fail:
+            raise DeviceError(fail)
+        return list(usb)
+
+    monkeypatch.setattr(base, "list_serial_ports", lambda: list(ports))
+    monkeypatch.setattr(base, "list_usb_devices", usb_devices)
+
+
+def test_the_report_lists_what_is_connected_without_serial_numbers(server, monkeypatch):
+    """What a report of a panel says of this computer, for the form: the version, the system,
+    the panel found and what could be one by its USB ids; never a serial number, and a port
+    without USB ids (a mainboard's, Bluetooth) is left out."""
+    from urllib.parse import parse_qs, urlsplit
+
+    from libre_panel import __version__
+
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    ports = [
+        {"device": "COM5", "description": "USB Serial Device (COM5)", "vid": "1a86",
+         "pid": "5722", "serial_number": "SER1AL0000", "manufacturer": "wch.cn"},
+        {"device": "COM1", "description": "Communications Port (COM1)", "vid": None,
+         "pid": None, "serial_number": None, "manufacturer": None},
+    ]  # fmt: skip
+    plugged_in(monkeypatch, ports, [{"vid": "1cbe", "pid": "0092"}])
+    status, data = request(server, "GET", "/api/report")
+    assert status == 200
+    lines = data["text"].splitlines()
+    assert lines[0].startswith(f"Libre Panel {__version__}, ")
+    assert lines[1] == 'Panel found: Turing 9.2"'
+    assert lines[2].startswith("COM5  1a86:5722  USB Serial Device (COM5)  -> turing-3.5 / ")
+    assert lines[3] == "usb  1cbe:0092  -> turing-9.2-usb"
+    assert len(lines) == 4 and "SER1AL0000" not in data["text"] and "COM1" not in data["text"]
+    assert data["product"] == 'Turing 9.2"'
+    form = urlsplit(data["form"])
+    assert data["form"].startswith(
+        "https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml&"
+    )
+    fields = parse_qs(form.query)
+    assert fields["product"] == ['Turing 9.2"'] and fields["devices"] == [data["text"]]
+    # nothing found, and no USB library: said so, and the form has no product to fill in
+    panel_on_the_bus(monkeypatch)
+    plugged_in(monkeypatch, fail="pyusb is not installed")
+    data = request(server, "GET", "/api/report")[1]
+    assert data["text"].splitlines()[1:] == ["Panel found: none", "usb: pyusb is not installed"]
+    assert data["product"] == "" and "product" not in parse_qs(urlsplit(data["form"]).query)
+    plugged_in(monkeypatch)
+    assert request(server, "GET", "/api/report")[1]["text"].splitlines()[2:] == [
+        "Nothing plugged in looks like a panel."
+    ]
+
+
 def test_the_settings_routes_in_the_docs_are_the_ones_the_server_answers():
     """docs/ARCHITECTURE.md lists the routes the Settings use; this keeps the list true."""
     import re
@@ -855,6 +952,7 @@ def test_the_settings_routes_are_for_this_computer_only(server):
         ("GET", "/api/panel"),
         ("GET", "/api/system"),
         ("GET", "/api/about"),
+        ("GET", "/api/report"),
     ):
         assert request(server, method, path, host="evil.example")[0] == 403, path
     for path in ("/api/settings", "/api/system", "/api/location", "/api/open"):

@@ -27,12 +27,12 @@ and plugins' editor pages share is in `editor/static/`, served at `/static/`: `k
 | `core/commands.js` | the command registry the palette searches |
 | `core/app.js` | the background app (`store.get().app`, polled), `appAction()`, `quitApp()`, the window's bridge |
 | `core/hardware.js` | the hardware's names (`/api/hardware`): `loadHardware()`, `setHardwareName(part, text)`; `store.get().hardware` is `false` where the server has none |
-| `core/settings.js` | what Settings reads and writes (`/api/settings`, `/api/panel`, `/api/system`, `/api/unlock`, `/api/about`, the console's sources and services): `loadSettings()`, `saveSettings(changes)`, `useConfig()`, `useCatalog()`, `loadPanelInfo()`, `loadClipQuestion()`, `answerClipQuestion(name)`, `saveSystem(change)`, `searchPlaces(query)`, `enableService()`, `restartPanel()`, and the setup of the system, Windows' sensor service and Linux' rights (`loadUnlock()`, `runUnlock("unlock" or "remove", options)`: Start's card and Settings → Sensors) |
+| `core/settings.js` | what Settings reads and writes (`/api/settings`, `/api/panel`, `/api/system`, `/api/unlock`, `/api/about`, `/api/report`, the console's sources and services): `loadSettings()`, `saveSettings(changes)`, `useConfig()`, `useCatalog()`, `loadPanelInfo()`, `loadReport()` (what a report of a panel says of this computer), `loadClipQuestion()`, `answerClipQuestion(name)`, `saveSystem(change)`, `searchPlaces(query)`, `enableService()`, `restartPanel()`, and the setup of the system, Windows' sensor service and Linux' rights (`loadUnlock()`, `runUnlock("unlock" or "remove", options)`: Start's card and Settings → Sensors) |
 | `core/setup.js` | the one-click setup of Linux (`libre-panel system-setup --linux`) in the app: it is what `/api/unlock` tells where the system is Linux (`linuxSetup(info)`, `useSetup()`; the same route, store key `unlockInfo` and polling as Windows' *Unlock all sensors*), `runSetup({rapl, remove})` asks for the rights, `dismissSetup()` is Start's *Not now*. The card in Settings → Sensors is `views/settings/setup.js`, the one on Start `views/home/setup.js` |
 | `core/video.js` | what the video mode is doing in words, `videoState(video, mode, fps, running)` → `{tone, text}`, for Settings and Live; the server's `video_mode()` has worked out `video` (`/api/panel`) |
 | `ui/` | controls (`Toggle`, `Segmented`, `Chips`, `NumberField`, `TextField`, `Select`, `Slider`, `Field`, `Row`, `Section`, `IconButton`), `Icon`, `Popover`, `Menu`, dialogs (`openDialog`, `confirmDialog`, `promptDialog`), `toast()`, the palette |
 | `shell/` | views and routes, the header and its parts (`ThemeTitle`, `SearchTrigger`, `PanelChip`, `UndoRedo`, `ApplyButton`), app-wide commands, plugin pages (`#/plugin/<id>`) |
-| `views/<id>/` | one folder per view: `home` is Start (`#/home`, also `#/start`: the launcher, or on a first start the question "How should it look?"; `#/home/themes` the gallery; where the video mode lacks only the name of the panel's standby clip, the card in `clip.js` asks for it once, and `#/home/clip`, which the tray's line opens, puts the focus on it), `design` the editor, `look` the theme's look and finish, `live` the running panel, `settings` the settings (the frame with the sections on the left, and one file for each section: `panel.js`, `sensors.js`, `services.js`, `weather.js`, `system.js`, `about.js`; `parts.js` has the cards, rows and notes they are made of) |
+| `views/<id>/` | one folder per view: `home` is Start (`#/home`, also `#/start`: the launcher, or on a first start the question "How should it look?"; `#/home/themes` the gallery; where the video mode lacks only the name of the panel's standby clip, the card in `clip.js` asks for it once, and `#/home/clip`, which the tray's line opens, puts the focus on it), `design` the editor, `look` the theme's look and finish, `live` the running panel, `settings` the settings (the frame with the sections on the left, and one file for each section: `health.js` the overview, `panel.js`, `sensors.js`, `services.js`, `weather.js`, `system.js`, `about.js`; `parts.js` has the cards, rows and notes they are made of, and the `Disclosure` that holds a section's *Advanced* and opens by itself when an address names it, `#/settings/panel/panel-advanced`). `health.js` works out what needs attention from what the app knows (`healthOf(state)`, `useHealth()`), each with the click that mends it or the next step: `HealthCard` shows it at the top of the overview, `<HealthCard compact />` in short for Start (nothing while all is well) |
 | `app.css` | colours and fonts (`:root` tokens) and the shared controls; a view brings its own CSS |
 
 ## A view
@@ -98,8 +98,9 @@ page's theme (`pages.pages[0]`) is that default as long as config.toml names non
 
 ## A group in Settings
 
-Settings has sections (Panel, Sensors, Services, Weather and place, Start and system,
-About); a part of the app adds its group to one without touching the others:
+Settings has sections (Overview, Panel, Sensors, Game mode and more (`services`), Weather
+and place, Start and system, About), each with its lead line under its name; a part of the
+app adds its group to one without touching the others:
 
 ```js
 registerSettingsGroup("sensors", {
