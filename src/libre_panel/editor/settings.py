@@ -388,6 +388,7 @@ class Settings:
                 "language": config.language,
                 "check_updates": config.check_updates,
                 "allow_notify": config.allow_notify,
+                "hotkeys": dict(config.hotkeys),
             },
             "catalog": self._catalog(),
             "restart": self.restart.pending(self.controls),
@@ -920,6 +921,21 @@ def _rule_url(name: str, value: Any, config: Config) -> str:
     return value
 
 
+def _rule_hotkey(name: str, value: Any, config: Config) -> str:
+    """A shortcut, written the one way (``Ctrl+Alt+P``), that no other action has."""
+    from libre_panel.hotkeys import parse
+
+    try:
+        combo = str(parse(_text(name, value, 40, required=True)))
+    except ValueError as exc:
+        raise SettingsError(f"{name}: {exc}") from None
+    action = name.split(".", 1)[1]
+    twin = next((other for other, given in config.hotkeys.items() if given == combo), None)
+    if twin and twin != action:
+        raise SettingsError(t("{combo} is the shortcut of another action already", combo=combo))
+    return combo
+
+
 RULES: dict[str, Any] = {
     "device.model": _rule_model,
     "device.driver": _rule_driver,
@@ -936,6 +952,10 @@ RULES: dict[str, Any] = {
     "refresh_ms": lambda n, v, c: _whole(n, v, 100, 3_600_000),
     "check_updates": lambda n, v, c: _flag(n, v),
     "allow_notify": lambda n, v, c: _flag(n, v),
+    "hotkeys.pause": _rule_hotkey,
+    "hotkeys.brightness_up": _rule_hotkey,
+    "hotkeys.brightness_down": _rule_hotkey,
+    "hotkeys.open": _rule_hotkey,
     "sensors.providers": _rule_providers,
     "sensors.librehardwaremonitor.mode": lambda n, v, c: _choice(
         n, v, ("auto", "service", "inprocess", "webserver")
@@ -949,4 +969,7 @@ RULES: dict[str, Any] = {
     "weather.place": lambda n, v, c: _text(n, v, 120),
 }
 # What can be taken out of config.toml, so that its default holds.
-UNSETTABLE = {"refresh_ms", "weather.latitude", "weather.longitude", "weather.place"}
+UNSETTABLE = {
+    "refresh_ms", "weather.latitude", "weather.longitude", "weather.place",
+    "hotkeys.pause", "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open",
+}  # fmt: skip

@@ -63,6 +63,11 @@ language = "auto"
 # Stream Deck button), with the key in notify.json; see Settings → Services.
 # allow_notify = false
 
+# Keyboard shortcuts for the whole PC (Windows; Linux with X11), set in Settings → Start and
+# system by pressing the keys. The actions: pause, brightness_up, brightness_down, open.
+# [hotkeys]
+# pause = "Ctrl+Alt+P"
+
 # Frames per second: values glide smoothly between sensor readings.
 # 1 turns animation off (least CPU and USB traffic).
 fps = 10
@@ -366,6 +371,7 @@ class Config:
     services: ServicesConfig = field(default_factory=ServicesConfig)
     modes: dict[str, ModeConfig] = field(default_factory=dict)
     sequence: SequenceConfig = field(default_factory=SequenceConfig)
+    hotkeys: dict[str, str] = field(default_factory=dict)  # action: combination (hotkeys.py)
     path: Path | None = None
     # config.toml's modification time when it was read: a change made while
     # the program starts up is noticed too.
@@ -435,6 +441,29 @@ def _fans(value: Any) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
     return names, looks, paints
 
 
+def _hotkeys(table: dict[str, Any]) -> dict[str, str]:
+    """``[hotkeys]``: each action's combination, written the one way (``Ctrl+Alt+P``); two
+    actions cannot share one."""
+    from libre_panel.hotkeys import ACTIONS, parse
+
+    found: dict[str, str] = {}
+    for action, text in table.items():
+        if action not in ACTIONS:
+            raise ConfigError(f"hotkeys.{action}: none of {', '.join(ACTIONS)}")
+        text = _expect(text, str, f"hotkeys.{action}")
+        if not text:
+            continue
+        try:
+            combo = str(parse(text))
+        except ValueError as exc:
+            raise ConfigError(f"hotkeys.{action}: {exc}") from None
+        twin = next((other for other, given in found.items() if given == combo), None)
+        if twin:
+            raise ConfigError(f"hotkeys.{action}: {combo} is the shortcut of {twin} already")
+        found[action] = combo
+    return found
+
+
 def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     cfg = Config(path=path)
     if "theme" in data:
@@ -458,6 +487,8 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         cfg.check_updates = _expect(data["check_updates"], bool, "check_updates")
     if "allow_notify" in data:
         cfg.allow_notify = _expect(data["allow_notify"], bool, "allow_notify")
+    if "hotkeys" in data:
+        cfg.hotkeys = _hotkeys(_expect(data["hotkeys"], dict, "hotkeys"))
 
     dev = _expect(data.get("device", {}), dict, "device")
     cfg.device.model = _expect(dev.get("model", cfg.device.model), str, "device.model")

@@ -32,7 +32,7 @@ invalid is refused with the reason, and nothing is written.
 | Sensors | `[sensors] providers` (which sources, and their order; those not in use under *More sources*), the hardware's names, and under *Advanced* `refresh_ms` and `[sensors.librehardwaremonitor]` (`mode`, `url`) |
 | Game mode and more | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
-| Start and system | `language`, `check_updates`, and starting with the system (`libre-panel autostart`) |
+| Start and system | `language`, `check_updates`, `[hotkeys]`, and starting with the system (`libre-panel autostart`) |
 | About | nothing: the version, the licence, the notices, how to report a panel, and the folders (with *Open folder*) |
 
 The running Libre Panel follows a change at once, services included (one whose options
@@ -133,6 +133,26 @@ the panel. The answer is kept in `updates.json` beside config.toml, with the ver
 was closed (*Later*): that card does not come again, the next version's does. Without the
 setting Start asks once; `false` never looks. *Settings → Start and system → New versions*
 switches it and looks at once (*Look now*).
+
+## Keyboard shortcuts
+
+Key combinations for the whole PC, whatever window is in front: pause or resume the panel,
+turn its brightness up or down a step (10 %), or open Libre Panel. Set them in *Settings →
+Start and system → Keyboard shortcuts* by pressing the keys, or in config.toml:
+
+```toml
+[hotkeys]
+pause = "Ctrl+Alt+P"
+brightness_up = "Ctrl+Alt+Up"
+brightness_down = "Ctrl+Alt+Down"
+open = "Ctrl+Alt+L"
+```
+
+A combination needs Ctrl, Alt or Win (Shift alone would take a letter from typing), except
+the keys nothing types: F13 to F24, Pause and Scroll Lock. Windows registers them with the
+system; on Linux the X server grabs them (X11 only: Wayland lets no program take keys for
+itself). One that another program holds already is said so in Settings, not taken from it.
+They work while Libre Panel runs in the background.
 
 ## Notices from other programs
 

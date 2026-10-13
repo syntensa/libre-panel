@@ -589,3 +589,81 @@ def test_other_programs_get_a_key_and_an_address_once_it_is_switched_on(app_url,
         page.locator(".dialog").get_by_role("button", name="New key").click()
         expect(address).not_to_contain_text(old)
         assert notify.read_key() != old
+
+
+def test_a_shortcut_is_set_by_pressing_the_keys_and_taken_away_again(app_url, isolated_home):  # noqa: F811
+    choose_theme(isolated_home, "lumen")
+    # (the settings refuse two of the shortcuts: a 400 the browser logs)
+    with browser_page(app_url, "settings/system", allow=("/api/settings",)) as page:
+        card = page.locator("#hotkeys")
+        expect(card).to_contain_text("Keyboard shortcuts")
+        expect(card).to_contain_text("They work while Libre Panel runs in the background.")
+        pause = card.locator("[data-hotkey='pause']")
+        expect(pause).to_have_text("Not set")
+        pause.click()
+        expect(pause).to_have_text("Press the keys …")
+        page.keyboard.down("Control")
+        page.keyboard.down("Alt")  # a modifier alone: it waits for the key
+        expect(pause).to_have_attribute("aria-pressed", "true")
+        page.keyboard.press("KeyP")
+        page.keyboard.up("Alt")
+        page.keyboard.up("Control")
+        waits_for(page, lambda: settings_config().hotkeys == {"pause": "Ctrl+Alt+P"})
+        expect(pause).to_have_text("Ctrl+Alt+P")
+        expect(page.locator(".palette")).to_have_count(0)  # Ctrl+K and the rest waited
+        # Shift alone would take a letter from typing: refused, nothing written
+        brighter = card.locator("[data-hotkey='brightness_up']")
+        brighter.click()
+        expect(brighter).to_have_text("Press the keys …")
+        page.keyboard.press("Shift+KeyB")
+        expect(page.locator(".toast").last).to_contain_text("needs Ctrl, Alt or Win")
+        assert settings_config().hotkeys == {"pause": "Ctrl+Alt+P"}
+        # the same keys for a second action: refused
+        card.locator("[data-hotkey='open']").click()
+        page.keyboard.press("Control+Alt+KeyP")
+        expect(page.locator(".toast").last).to_contain_text("another action")
+        brighter.click()
+        page.keyboard.press("Escape")  # changed one's mind
+        expect(brighter).to_have_text("Not set")
+        card.get_by_role("button", name="Take Pause or resume the panel's shortcut away").click()
+        waits_for(page, lambda: settings_config().hotkeys == {})
+
+
+def test_the_running_app_says_which_shortcut_another_program_has(app_url, isolated_home):  # noqa: F811
+    from libre_panel.config import set_config_value
+
+    choose_theme(isolated_home, "lumen")
+    set_config_value("hotkeys.pause", "Ctrl+Alt+P")
+    set_config_value("hotkeys.open", "Ctrl+Alt+L")
+    answer = app_answer()
+    answer["hotkeys"] = {
+        "supported": True,
+        "why": "",
+        "keys": {
+            "pause": {"combo": "Ctrl+Alt+P", "error": ""},
+            "open": {"combo": "Ctrl+Alt+L", "error": "taken"},
+        },
+    }
+    routes = {"**/api/app": answer_route(answer)}
+    with browser_page(app_url, "settings/system", routes=routes) as page:
+        card = page.locator("#hotkeys")
+        expect(card.locator(".settings-row", has_text="Open Libre Panel")).to_contain_text(
+            "Another program has this combination"
+        )
+        expect(card).not_to_contain_text("They work while Libre Panel runs")
+        answer["hotkeys"] = {
+            "supported": False,
+            "why": "Wayland lets no program take keys for itself.",
+            "keys": {},
+        }
+        page.reload()
+        expect(card).to_contain_text("Wayland lets no program take keys for itself.")
+
+
+def answer_route(data):
+    """A route's handler that answers what ``data`` holds when it is asked (it may change)."""
+
+    def handler(route, request):
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(data))
+
+    return handler

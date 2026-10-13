@@ -13,6 +13,7 @@ import { confirmDialog, openDialog } from "../../ui/dialog.js";
 import { Icon } from "../../ui/icons.js";
 import { toastError } from "../../ui/toast.js";
 import { loadUpdate, setCheckUpdates, useUpdate } from "../home/update.js";
+import { HotkeysCard } from "./hotkeys.js";
 import { Card, Note, SettingRow, Status, copyText } from "./parts.js";
 
 /** When GitHub was asked last, as the clock reads it ("" before the first time). */
@@ -162,4 +163,7 @@ function StartCard() {
   <//>`;
 }
 
-export const systemGroups = [{ id: "start", order: 10, component: StartCard, load: loadSystem }];
+export const systemGroups = [
+  { id: "start", order: 10, component: StartCard, load: loadSystem },
+  { id: "hotkeys", order: 20, component: HotkeysCard },
+];

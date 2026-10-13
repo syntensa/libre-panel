@@ -295,6 +295,9 @@ class BackgroundApp:
         self.services = ServiceManager(self.plugin_host)
         self.panel = PanelService(config_path, host=self.plugin_host, on_config=self._config_loaded)
         self.editor = EditorService(config_path, port, controls=self)
+        from libre_panel.hotkeys import Hotkeys
+
+        self.hotkeys = Hotkeys(self.shortcut)  # the keyboard shortcuts for the whole PC
         self.autostart = autostart or Autostart()
         self.autostart_command = autostart_command or launch_command(config_path)
         self.quit_requested = threading.Event()
@@ -325,7 +328,9 @@ class BackgroundApp:
     def start(self) -> str:
         self._check_folders()
         try:
-            self.services.apply(load_config(self.config_path))
+            config = load_config(self.config_path)
+            self.services.apply(config)
+            self.hotkeys.apply(config.hotkeys)
         except ConfigError as exc:
             log.error("services not started: %s", exc)  # they start once the config is fixed
         self.panel.start()
@@ -352,6 +357,9 @@ class BackgroundApp:
         threading.Thread(
             target=self.services.apply, args=(config,), name="services", daemon=True
         ).start()
+        threading.Thread(
+            target=self.hotkeys.apply, args=(config.hotkeys,), name="hotkeys-apply", daemon=True
+        ).start()
 
     def follow_config(self) -> None:
         """Bring the services in line with config.toml now. The panel loop does it when it
@@ -364,6 +372,7 @@ class BackgroundApp:
         self._config_loaded(config)
 
     def shutdown(self) -> None:
+        self.hotkeys.close()
         self.services.stop()
         self.panel.stop()
         self.editor.stop()
@@ -432,7 +441,22 @@ class BackgroundApp:
             "autostart": autostart,
             "autostart_location": self.autostart.location(),
             "can_quit": True,
+            "hotkeys": self.hotkeys.state(),
         }
+
+    def shortcut(self, action: str) -> None:
+        """What a keyboard shortcut does (hotkeys.py): pause or resume the panel, turn its
+        brightness up or down a step, or open the app."""
+        from libre_panel.hotkeys import BRIGHTNESS_STEP
+
+        if action == "pause":
+            self.act("resume" if self.panel.paused else "pause")
+        elif action in ("brightness_up", "brightness_down"):
+            step = BRIGHTNESS_STEP if action == "brightness_up" else -BRIGHTNESS_STEP
+            now = self.brightness()
+            self.set_brightness(max(0, min(100, (now if now is not None else 50) + step)))
+        elif action == "open":
+            self.editor.open("home")
 
     def set_brightness(self, percent: int) -> None:
         if not 0 <= percent <= 100:

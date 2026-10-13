@@ -56,8 +56,8 @@ jobs:
           libre-panel preview spur-ii -o spur-ii.png
 
   desktop:
-    # The app in a real browser (every test that needs one: the others skip them) and the tray
-    # icon on a real X11 tray.
+    # The app in a real browser (every test that needs one: the others skip them), the tray
+    # icon on a real X11 tray, and keyboard shortcuts pressed on an X server.
     timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
@@ -72,4 +72,4 @@ jobs:
         run: >-
           pytest -q -rs tests/test_app_browser.py tests/test_app_ux_*.py
           tests/test_sequence_browser.py tests/test_panel_files_browser.py
-          tests/test_readme_media.py tests/test_tray.py
+          tests/test_readme_media.py tests/test_tray.py tests/test_hotkeys.py

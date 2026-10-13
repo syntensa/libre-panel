@@ -247,6 +247,16 @@ export function registerFeatureCommands() {
       run: toCard("system/start"),
     },
     {
+      id: "settings.hotkeys",
+      title: () => t("Keyboard shortcuts for the whole PC"),
+      hint: () => t("pause, brightness and the app from any window"),
+      keywords: () => t("hotkey shortcut keyboard keys global pause brightness"),
+      group: settings,
+      icon: "keyboard",
+      rank: 81,
+      run: toCard("system/hotkeys"),
+    },
+    {
       id: "settings.updates",
       title: () => t("New versions"),
       hint: () => t("look once a day whether one is out"),

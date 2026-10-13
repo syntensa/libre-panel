@@ -1235,3 +1235,16 @@ a.btn:hover {
 .glance-value.warn {
   color: var(--warn);
 }
+
+/* a keyboard shortcut (hotkeys.js): the keys it is, or, clicked, waiting for them */
+.hotkey-recorder {
+  min-width: 160px;
+  justify-content: center;
+  font-size: 13px;
+}
+
+.hotkey-recorder.listening {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-softer);
+}
