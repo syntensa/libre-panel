@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.1 — 2026-10-13
+
+Game mode shows the frame rate of games that start through a launcher.
+
+**Fixes**
+- Game mode: with some games the game screen opened and then said "No game running" while the
+  game ran. Of a Steam game, a program in the game's folder that stays in the background (a
+  launcher, or the starter of an anti-cheat) was taken as the game, and only its frames
+  counted. The program of the game whose window is in front counts now, and where the program
+  found draws nothing for half a minute, the one with the most frames does
+- The game screen says "No game running" only where no game was found: while the frame rate
+  of a game has not come (yet), it names the game and says so
+
 ## 0.6.0 — 2026-10-13
 
 Bars on end: say once how the panel is mounted, and every screen shows in its version for a bar
