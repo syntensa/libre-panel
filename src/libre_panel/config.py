@@ -59,6 +59,10 @@ language = "auto"
 # says so). Not set, Start asks once.
 # check_updates = true
 
+# Whether other programs may show a notice on the panel (libre-panel notify, a script, a
+# Stream Deck button), with the key in notify.json; see Settings → Services.
+# allow_notify = false
+
 # Frames per second: values glide smoothly between sensor readings.
 # 1 turns animation off (least CPU and USB traffic).
 fps = 10
@@ -354,6 +358,7 @@ class Config:
     fps: int = 10
     transition: str = "fade"  # between themes: cut, fade, slide, tube, entrance, or a plugin's
     check_updates: bool | None = None  # a look for a newer version once a day; None: not asked
+    allow_notify: bool = False  # other programs may show a notice (notify.py)
     device: DeviceConfig = field(default_factory=DeviceConfig)
     sensors: SensorsConfig = field(default_factory=SensorsConfig)
     hardware: HardwareConfig = field(default_factory=HardwareConfig)
@@ -451,6 +456,8 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
             raise ConfigError("refresh_ms: must be at least 100")
     if "check_updates" in data:
         cfg.check_updates = _expect(data["check_updates"], bool, "check_updates")
+    if "allow_notify" in data:
+        cfg.allow_notify = _expect(data["allow_notify"], bool, "allow_notify")
 
     dev = _expect(data.get("device", {}), dict, "device")
     cfg.device.model = _expect(dev.get("model", cfg.device.model), str, "device.model")

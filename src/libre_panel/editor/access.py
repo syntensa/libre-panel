@@ -43,7 +43,8 @@ ENV = "LIBRE_PANEL_TOKEN"  # how a program that starts a window tells it the tok
 PRIVATE_DIR = "private"  # in the settings folder: opened by this user only
 TOKEN_FILE = "editor.json"  # in it: the pid, the port and the token of the running editor
 _TOKEN = re.compile(r"[A-Za-z0-9_-]{16,200}")
-_IN_TEXT = re.compile(r"([?&#]" + NAME + r"=)[A-Za-z0-9_-]+")
+# this run's token, and the key of the notices from other programs (notify.py)
+_IN_TEXT = re.compile(r"([?&#](?:" + NAME + r"|key)=)[A-Za-z0-9_-]+")
 
 
 def new_token() -> str:

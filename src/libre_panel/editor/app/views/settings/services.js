@@ -21,6 +21,7 @@ import { navigate } from "../../shell/views.js";
 import { NumberField, Select, Toggle } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { PageThemeSelect } from "../design/pages.js";
+import { NotifyCard } from "./notify.js";
 import { CommitField, SettingRow, Status, usePolling } from "./parts.js";
 
 export const loadServicesSection = () => Promise.all([loadSettings(), loadServiceStates()]);
@@ -357,4 +358,7 @@ function Services() {
     )}`;
 }
 
-export const serviceGroups = [{ id: "services", order: 10, component: Services, load: loadServicesSection }];
+export const serviceGroups = [
+  { id: "services", order: 10, component: Services, load: loadServicesSection },
+  { id: "notify", order: 20, component: NotifyCard },
+];

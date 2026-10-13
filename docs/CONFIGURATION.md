@@ -48,6 +48,7 @@ a restart, and its *Restart the panel* button does that without quitting Libre P
 language = "auto"              # "auto" (system language), "en" or "de"
 # refresh_ms = 1000            # override the theme's refresh interval
 # check_updates = true        # look once a day for a newer version (not set: Start asks)
+# allow_notify = false        # other programs may show a notice (see below)
 fps = 10                       # 1-60; values glide between readings
 transition = "fade"            # between themes: "cut", "fade", "slide", "tube", "entrance",
                                # or a plugin's
@@ -132,6 +133,32 @@ the panel. The answer is kept in `updates.json` beside config.toml, with the ver
 was closed (*Later*): that card does not come again, the next version's does. Without the
 setting Start asks once; `false` never looks. *Settings → Start and system → New versions*
 switches it and looks at once (*Look now*).
+
+## Notices from other programs
+
+With `allow_notify = true` (*Settings → Services → Notices from other programs*) a script, a
+Stream Deck button or the command line shows a short notice on the panel:
+
+```sh
+libre-panel notify "Render finished" --title Blender --seconds 8
+```
+
+or as an address, for a Stream Deck's *Website* action (as a request in the background) or
+anything that can open one:
+
+```text
+http://127.0.0.1:8765/api/notify?key=<the key>&text=Render%20finished&title=Blender
+```
+
+`text` (up to 160 characters) is needed; `title` (up to 40), `seconds` (1 to 60, 5 when not
+given), `icon` (one of the icons themes use: `music`, `gamepad`, `temperature`, ...) and
+`level` (`info`, `warning`, `error`) may come along, also posted as JSON with the key in the
+`X-Libre-Panel-Notify` header. The key is a secret of its own in `notify.json` beside
+config.toml, readable by you only; it lets a program show a notice and nothing else. *New key*
+in Settings makes another, and the old one stops working. The app answers on this computer
+only (port 8765, or the one `libre-panel` printed where that was taken), while it runs in the
+background. These notices are of the kind `outside`, which a theme can switch off like any
+other (`toast.off`).
 
 ## The theme on the panel
 

@@ -187,6 +187,47 @@ def _instance_running() -> bool:
     return False
 
 
+def _cmd_notify(args: argparse.Namespace) -> int:
+    """Show a notice on the panel of the running app (notify.py), e.g. at the end of a script."""
+    import json
+    import urllib.error
+    import urllib.request
+
+    from libre_panel import notify
+    from libre_panel.service import running_instance
+
+    url = (running_instance() or {}).get("editor") if _instance_running() else None
+    if not url:
+        print(t("Libre Panel is not running."), file=sys.stderr)
+        return 1
+    body = {"text": args.text, "seconds": args.seconds, "level": args.level}
+    if args.title:
+        body["title"] = args.title
+    if args.icon:
+        body["icon"] = args.icon
+    request = urllib.request.Request(
+        url + "api/notify",
+        data=json.dumps(body).encode(),
+        headers={notify.HEADER: notify.read_key(), "Content-Type": "application/json"},
+    )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # local, no proxy
+    try:
+        answer = json.load(opener.open(request, timeout=10))
+    except urllib.error.HTTPError as exc:
+        try:
+            print(json.load(exc).get("error") or exc, file=sys.stderr)
+        except ValueError:
+            print(exc, file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    if not answer.get("shown"):
+        print(t("Not shown: {why}.", why=answer.get("reason") or "?"), file=sys.stderr)
+        return 2
+    return 0
+
+
 def _cmd_quit(args: argparse.Namespace) -> int:
     """Quit the running background app, e.g. before an installer replaces it."""
     import json
@@ -676,6 +717,21 @@ def build_parser() -> argparse.ArgumentParser:
         "run as administrator",
     )
     p.set_defaults(func=_cmd_autostart)
+
+    p = sub.add_parser(
+        "notify",
+        help="show a notice on the panel (switched on in Settings → Services)",
+    )
+    p.add_argument("text", help="what the notice says (at most 160 characters)")
+    p.add_argument("--title", default="", help="a heading above it")
+    p.add_argument("--seconds", type=float, default=5.0, help="how long it shows (1 to 60)")
+    p.add_argument(
+        "--icon", default="", help="an icon of the themes, e.g. temperature, music, gamepad"
+    )
+    p.add_argument(
+        "--level", default="info", choices=("info", "warning", "error"), help="how urgent"
+    )
+    p.set_defaults(func=_cmd_notify)
 
     p = sub.add_parser("quit", help="quit the running background app")
     p.add_argument("--timeout", type=float, default=15, help="seconds to wait")

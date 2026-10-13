@@ -566,3 +566,26 @@ def test_a_late_read_of_the_settings_does_not_undo_a_click(app_url, isolated_hom
         expect(horizontal).to_have_attribute("aria-checked", "true")
         mounted.get_by_role("radio", name="Vertical").click()
         waits_for(page, lambda: settings_config().device.orientation == "portrait")
+
+
+def test_other_programs_get_a_key_and_an_address_once_it_is_switched_on(app_url, isolated_home):  # noqa: F811
+    from libre_panel import notify
+
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url, "settings/services") as page:
+        card = page.locator("#notify")
+        expect(card).to_contain_text("Notices from other programs")
+        expect(card.locator("[data-notify-address]")).to_have_count(0)
+        card.get_by_role("switch", name="Let other programs show notices").click()
+        waits_for(page, lambda: settings_config().allow_notify is True)
+        address = card.locator("[data-notify-address]")
+        expect(address).to_contain_text("/api/notify?key=")
+        expect(address).to_contain_text(f"/api/notify?key={notify.read_key()}&text=")
+        expect(card.locator("[data-notify-command]")).to_contain_text('notify "Render finished"')
+        card.get_by_role("button", name="Try it").click()  # no background app: it says so
+        expect(page.locator(".toast").last).to_contain_text("Not shown")
+        old = notify.read_key()
+        card.get_by_role("button", name="New key").click()
+        page.locator(".dialog").get_by_role("button", name="New key").click()
+        expect(address).not_to_contain_text(old)
+        assert notify.read_key() != old

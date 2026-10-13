@@ -133,6 +133,12 @@ def test_the_files_that_need_no_token_are_the_apps_own_and_a_few_pictures():
         "/api/start-screen/file",  # ... and the link that downloads them
     }
     assert all(route.method == "GET" and not route.public for route in ROUTES if route.picture)
+    # another program's notice, with the notify key instead of the token (test_notify.py)
+    assert {(r.method, r.template) for r in ROUTES if r.notify} == {
+        ("GET", "/api/notify"),
+        ("POST", "/api/notify"),
+    }
+    assert not any(route.notify and (route.public or route.picture) for route in ROUTES)
     # and nothing is answered but through the routes
     assert [name for name in dir(EditorHandler) if name.startswith("do_")] == ["do_GET", "do_POST"]
 
@@ -154,6 +160,11 @@ def test_no_route_answers_without_the_token_but_the_apps_own_files(port):
         path, method = sample(route), route.method
         if route.public:  # the app's own files: "not found" is possible, "no" is not
             assert ask(port, method, path)[0] != 403, (method, path)
+            continue
+        if route.notify:  # the notify key, not the token; switched off it says no to all
+            for given in (None, token):
+                status, body = ask(port, method, path, given)
+                assert status == 403 and "switched off" in body["error"], (method, path)
             continue
         for wrong in (None, "", "wrong", token[:-1], token + "x", token.swapcase(), "tökén"):
             status, body = ask(port, method, path, wrong)

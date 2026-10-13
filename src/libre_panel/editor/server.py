@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import ParseResult, parse_qs, unquote, urlparse
 
-from libre_panel import __version__, i18n, modes, sequence
+from libre_panel import __version__, i18n, modes, notify, sequence
 from libre_panel.config import (
     FAN_LOOKS,
     FAN_PAINTS,
@@ -424,6 +424,9 @@ class Route:
     public: bool = False
     # an <img> asks for it and cannot send the header: the token may be in the query (?token=)
     picture: bool = False
+    # another program's notice: the notify key stands for the token, checked by the route
+    # itself, which does nothing but show it (notify.py)
+    notify: bool = False
     pattern: re.Pattern[str] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -549,7 +552,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             if found:
                 route, match = candidate, found
                 break
-        if (route is None or not route.public) and not self._token_ok(url, route):
+        open_ = route is not None and (route.public or route.notify)
+        if not open_ and not self._token_ok(url, route):
             return self._error(
                 t(
                     "Access token missing or wrong. Open Libre Panel from its window or its "
@@ -1037,6 +1041,60 @@ class EditorHandler(BaseHTTPRequestHandler):
         except ValueError as exc:
             return self._error(str(exc))
         self._json({**found, "memory": "memory" in config.services.enabled})
+
+    def _outside_notice(self, method: str, url: ParseResult) -> None:
+        """A notice from another program (notify.py): only where ``allow_notify`` is on and
+        with the notify key (the header, or ``?key=``); ``text``, ``title``, ``seconds``,
+        ``icon`` and ``level`` in the address or, posted, as JSON."""
+        try:
+            config = load_config(self.state.config_path)
+        except ConfigError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        if not config.allow_notify:
+            return self._error(
+                t("Notices from other programs are switched off (Settings → Services)."),
+                HTTPStatus.FORBIDDEN,
+            )
+        params: dict[str, Any] = {k: v[0] for k, v in parse_qs(url.query).items()}
+        given = self.headers.get(notify.HEADER) or params.get("key", "")
+        params.pop("key", None)
+        if not access.matches(given, notify.read_key()):
+            return self._error(t("The notify key is missing or wrong."), HTTPStatus.FORBIDDEN)
+        if method == "POST" and self.headers.get("Content-Length", "0") != "0":
+            body = self._read_json()
+            if body is None:
+                return None
+            if not isinstance(body, dict):
+                return self._error('expected {"text": "..."}')
+            params.update(body)
+        try:
+            options = notify.notice(params)
+        except notify.NoticeError as exc:
+            return self._error(str(exc))
+        from libre_panel.plugins.pages import PageContext
+
+        delivery = PageContext(self.controls, self.state.config_path).notify(**options)
+        self._json({"shown": delivery.shown, "reason": delivery.reason})
+
+    def _notify_key(self, renew: bool = False) -> None:
+        """For Settings: the notify key (made where there is none; ``renew``: a new one), the
+        address that shows a notice and the command that does."""
+        try:
+            config = load_config(self.state.config_path)
+        except ConfigError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        if not config.allow_notify:
+            return self._json({"on": False})
+        key = notify.new_key() if renew else notify.key(create=True)
+        port = self.server.server_address[1]
+        self._json(
+            {
+                "on": True,
+                "key": key,
+                "address": notify.address(port, key, t("Render finished")),
+                "command": app_settings.cli_command(f'notify "{t("Render finished")}"'),
+            }
+        )
 
     def _update(self, query: dict[str, list[str]]) -> None:
         """Whether a newer version is out (updates.py); ``?now=1`` asks GitHub at once."""
@@ -1704,6 +1762,11 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/news", lambda h, m, u: h._json(h.state.news.state())),
     Route("GET", "/api/update", lambda h, m, u: h._update(parse_qs(u.query))),
     Route("GET", "/api/history", lambda h, m, u: h._history(parse_qs(u.query))),
+    # a notice from another program: with the notify key instead of the token (notify.py)
+    Route("GET", "/api/notify", lambda h, m, u: h._outside_notice("GET", u), notify=True),
+    Route("POST", "/api/notify", lambda h, m, u: h._outside_notice("POST", u), notify=True),
+    Route("GET", "/api/notify-key", lambda h, m, u: h._notify_key()),
+    Route("POST", "/api/notify-key", lambda h, m, u: h._notify_key(renew=True)),
     *(
         Route("GET", path, lambda h, m, u, name=name: h._settings(name))
         for path, name in _SETTINGS_GET.items()

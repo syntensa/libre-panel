@@ -2003,7 +2003,22 @@
     "{fps} fps, 1% low {low}": "{fps} fps, 1 % Tiefs {low}",
     "{name} {low} to {high} {unit}": "{name} {low} bis {high} {unit}",
     "Period": "Zeitraum",
-    "What the panel shows now, and the history of the last days": "Was das Panel jetzt zeigt, und der Verlauf der letzten Tage"
+    "A new key is made.": "Ein neuer Schlüssel ist erstellt.",
+    "A script, a Stream Deck button or the command line shows a short notice on the panel: a render is done, a download has finished. Only from this computer, and only with the key below.": "Ein Skript, eine Stream-Deck-Taste oder die Befehlszeile zeigt einen kurzen Hinweis auf dem Panel: ein Rendern ist fertig, ein Download abgeschlossen. Nur von diesem Computer aus und nur mit dem Schlüssel unten.",
+    "As an address": "Als Adresse",
+    "Buttons and scripts that carry the old key stop working until they get the new address.": "Tasten und Skripte mit dem alten Schlüssel funktionieren nicht mehr, bis sie die neue Adresse bekommen.",
+    "Copy the address": "Adresse kopieren",
+    "From the command line": "Über die Befehlszeile",
+    "Let other programs show notices": "Andere Programme Hinweise zeigen lassen",
+    "Make a new key?": "Neuen Schlüssel erstellen?",
+    "New key": "Neuer Schlüssel",
+    "Notices from other programs": "Hinweise von anderen Programmen",
+    "Notices from other programs are switched off (Settings → Services).": "Hinweise von anderen Programmen sind ausgeschaltet (Einstellungen → Dienste).",
+    "Render finished": "Rendern fertig",
+    "The notify key is missing or wrong.": "Der Hinweis-Schlüssel fehlt oder ist falsch.",
+    "Try it": "Ausprobieren",
+    "What the panel shows now, and the history of the last days": "Was das Panel jetzt zeigt, und der Verlauf der letzten Tage",
+    "For a Stream Deck's Website action (as a request in the background) or a script, while Libre Panel runs. The address may also carry a title, seconds (1 to 60), an icon and a level (info, warning, error).": "Für die Website-Aktion eines Stream Decks (als Anfrage im Hintergrund) oder ein Skript, solange Libre Panel läuft. Die Adresse kann auch einen Titel (title), Sekunden (seconds, 1 bis 60), ein Symbol (icon) und eine Stufe (level: info, warning, error) mitbringen."
   },
   "fields": {
     "align": "Ausrichtung",
