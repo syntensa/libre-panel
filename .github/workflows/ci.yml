@@ -36,9 +36,18 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: pip install -e ".[dev,usb,tray]"
       - name: ffmpeg for the video mode tests
+        # Windows: the FFmpeg build the downloads carry (packaging/fetch_tools.py: pinned, from
+        # its project's releases on GitHub, checked, asked again when a server fails), not
+        # Chocolatey's, whose server failed runs with 504 before a test had run.
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then choco install ffmpeg -y --no-progress; else sudo apt-get update && sudo apt-get install -y ffmpeg; fi
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            python packaging/fetch_tools.py "$RUNNER_TEMP/tools"
+            cygpath -w "$RUNNER_TEMP/tools" >> "$GITHUB_PATH"
+            export PATH="$RUNNER_TEMP/tools:$PATH"
+          else
+            sudo apt-get update && sudo apt-get install -y ffmpeg
+          fi
           ffmpeg -hide_banner -encoders | grep libx264
       - run: pytest -q -rs
       - name: Render the built-in themes
