@@ -1205,13 +1205,13 @@ def test_the_new_views_speak_german(app_url, isolated_home):
         page.goto(f"{app_url}#/home/themes")
         page.wait_for_selector(".theme-collection")
         group = page.locator(".theme-collection").last
-        assert group.locator("strong").inner_text() == "SPUR II · Legacy"
-        german = "Die Bildschirme des Projekts, aus dem Libre Panel entstand"
+        assert group.locator("strong").inner_text() == "SPUR II · Klassiker"
+        german = "Die Screens des Projekts, aus dem Libre Panel entstand"
         assert group.locator(".theme-collection-note").inner_text() == german
         page.goto(f"{app_url}#/look")
         page.wait_for_selector(".look-side")
         titles = page.locator(".look-side .section-title").all_text_contents()
-        assert titles[:3] == ["Farbwelt", "Oberfläche und Schein", "Panel-Licht"]
+        assert titles[:3] == ["Farbwelt", "Oberfläche und Leuchten", "Panel-Licht"]
         page.goto(f"{app_url}#/live")
         page.wait_for_selector(".live-side")
         assert page.locator(".live-side .section-title").all_text_contents() == [
@@ -1219,7 +1219,7 @@ def test_the_new_views_speak_german(app_url, isolated_home):
             "Spielmodus und mehr",
             "Hinweis testen",
         ]
-        assert page.locator(".live-head h2").inner_text() == "Auf dem Panel, jetzt"
+        assert page.locator(".live-head h2").inner_text() == "Jetzt auf dem Panel"
 
 
 def test_start_look_and_live_have_their_commands(app_url, isolated_home):
@@ -1686,7 +1686,7 @@ def test_save_as_says_why_a_built_in_theme_asks_for_a_name(page, isolated_home):
     js(page, "window.libre.doc.edit('t', (theme) => { theme.name = 'Meins'; })")
     page.locator(".btn-apply").click()
     expect(dialog.locator(".dialog-text")).to_have_text(
-        "„Libre Default“ ist eingebaut und lässt sich nicht ändern: "
+        "„Libre Default“ gehört zu Libre Panel und lässt sich nicht ändern: "
         "Deine Änderungen werden als eigenes Theme gespeichert."
     )
 

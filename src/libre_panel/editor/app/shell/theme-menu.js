@@ -6,6 +6,7 @@ import { endpoints } from "../core/api.js";
 import { clone, setSelection } from "../core/doc.js";
 import { t } from "../core/i18n.js";
 import { versionFor } from "../core/orientation.js";
+import { keyLabel } from "../core/shortcuts.js";
 import { store, useStore } from "../core/state.js";
 import { html, useEffect, useMemo, useRef, useState } from "../lib/preact.js";
 import { openDialog } from "../ui/dialog.js";
@@ -100,14 +101,15 @@ export function ThemeTitle() {
         <${Icon} name="chevron-down" size=${14} />
       </button>
       ${dirty
-        ? html`<button type="button" class="unsaved" title=${t("Save (Ctrl+S)")} aria-label=${t("Not saved")} onClick=${save}>
+        ? html`<button type="button" class="unsaved" title=${t("Not saved: save now ({keys})", { keys: keyLabel("mod+s") })}
+            aria-label=${t("Not saved: save now ({keys})", { keys: keyLabel("mod+s") })} onClick=${save}>
             <span class="dot"></span><span class="unsaved-text">${t("Not saved")}</span>
           </button>`
         : null}
     </div>
     <${Popover} anchor=${anchor} open=${open} onClose=${close} label=${t("Themes")} width=${340} class="theme-menu">
       <${ThemeList} onClose=${close} />
-      <div class="menu" role="menu" onKeyDown=${(event) => arrowNavigation(event)}>
+      <div class="menu" role="menu" aria-label=${t("This theme")} onKeyDown=${(event) => arrowNavigation(event)}>
         <div class="menu-sep"></div>
         ${actions.map(
           (item) => html`<button type="button" role="menuitem" class="menu-item" key=${item.label}

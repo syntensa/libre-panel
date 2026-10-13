@@ -84,9 +84,11 @@ function DialogBox({ dialog, top }) {
   // back is the one before it, and an Escape right after it shows closes it
   useLayoutEffect(() => {
     const before = document.activeElement;
+    // (without scrolling: a dialog taller than the window, as the help on a small one, is read
+    // from its top even where the focus is on its last button)
     const frame = requestAnimationFrame(() => {
       const target = box.current?.querySelector("[autofocus]") || box.current?.querySelector(FOCUSABLE);
-      target?.focus();
+      target?.focus({ preventScroll: true });
     });
     return () => {
       cancelAnimationFrame(frame);

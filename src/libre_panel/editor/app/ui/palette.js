@@ -1,7 +1,7 @@
 // The command palette (Ctrl+K): finds any command by a few letters of its name.
 // ↑ ↓ choose, ↵ runs, Tab shows a preview, Esc closes.
 
-import { run, searchCommands, text } from "../core/commands.js";
+import { commandById, run, searchCommands, text } from "../core/commands.js";
 import { t } from "../core/i18n.js";
 import { bindKey, keyLabel } from "../core/shortcuts.js";
 import { createStore, useSelector } from "../core/store.js";
@@ -48,9 +48,12 @@ function grouped(results, query) {
   if (recentFirst) {
     const recent = results.filter((r) => r.recent >= 0).sort((a, b) => a.recent - b.recent);
     if (recent.length) groups.push({ name: t("Recent"), items: recent });
+    // what most people come for, before the long list of everything
+    const suggested = results.filter((r) => r.recent < 0 && r.suggestion !== null).sort((a, b) => a.suggestion - b.suggestion);
+    if (suggested.length) groups.push({ name: t("Suggested"), items: suggested });
   }
   for (const result of results) {
-    if (recentFirst && result.recent >= 0) continue;
+    if (recentFirst && (result.recent >= 0 || result.suggestion !== null)) continue;
     let group = groups.find((g) => g.name === result.group);
     if (!group) groups.push((group = { name: result.group, items: [] }));
     group.items.push(result);
@@ -69,6 +72,28 @@ function Preview({ result }) {
     <span class="muted">${result.group}</span>
     ${command.keys ? html`<kbd class="kbd">${keyLabel(command.keys)}</kbd>` : null}
   </aside>`;
+}
+
+/** Run a command by its id once the palette is gone (help, from its foot or an empty search). */
+function runLater(id) {
+  closePalette();
+  setTimeout(() => {
+    const command = commandById(id);
+    if (command) Promise.resolve(run(command)).catch(toastError);
+  }, 0);
+}
+
+/** Nothing found: what to try instead, a few words that do find something, and the help. */
+function NothingFound({ query, onTry }) {
+  const words = [t("brightness"), t("game"), t("weather"), t("start screen")];
+  return html`<div class="palette-empty" role="status">
+    <p><strong>${t("Nothing found for “{query}”", { query })}</strong></p>
+    <p>${t("Try fewer letters or another word for it. These find something:")}</p>
+    <div class="palette-try">
+      ${words.map((word) => html`<button type="button" class="chip" key=${word} onClick=${() => onTry(word)}>${word}</button>`)}
+      <button type="button" class="link-btn" onClick=${() => runLater("help.shortcuts")}>${t("Help")}</button>
+    </div>
+  </div>`;
 }
 
 function PaletteBox({ initial }) {
@@ -177,7 +202,7 @@ function PaletteBox({ initial }) {
                   })}
                 </div>`,
               )
-            : html`<p class="palette-empty">${t("Nothing found for “{query}”", { query })}</p>`}
+            : html`<${NothingFound} query=${query} onTry=${(word) => (setQuery(word), input.current?.focus())} />`}
         </div>
         ${preview ? html`<${Preview} result=${current} />` : null}
       </div>
@@ -186,7 +211,10 @@ function PaletteBox({ initial }) {
         <span><span class="mono">↵</span> ${t("run")}</span>
         <span><span class="mono">Tab</span> ${t("preview")}</span>
         <span class="grow"></span>
-        <span>${t("Everything in Libre Panel can be reached from here")}</span>
+        <span class="palette-foot-note">${t("Everything in Libre Panel can be reached from here")}</span>
+        <button type="button" class="link-btn palette-help" onClick=${() => runLater("help.shortcuts")}>
+          ${t("Help")} <kbd class="kbd quiet">F1</kbd>
+        </button>
       </footer>
     </div>
   </div>`;

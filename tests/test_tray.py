@@ -68,23 +68,26 @@ def test_menu_layout_and_state(tray):
     assert wait_for(lambda: tray.app.panel.state()["state"] == "showing")
     menu = items(tray.build_menu())
     assert list(menu)[0].startswith("Libre Panel: showing on PNG file")
+    # what most people come for first, then the views and what is set once
     assert [
         "Open Libre Panel",
-        "Theme editor",
         "Theme",
         "Brightness",
-        "Upside down",
         "Pause panel",
-        "Start with system",
+        "Design",
         "Settings",
+        "Upside down",
+        "Start with system",
         "Open settings folder",
         "Open log",
         "Quit Libre Panel",
     ] == list(menu)[1:]
     assert menu["Open Libre Panel"].default  # also a click on the icon
-    themes = items(menu["Theme"].submenu)
-    assert {"libre-default", "spur-ii", "orbit", "slate", "column"} <= set(themes)
-    assert themes["libre-default"].checked and not themes["slate"].checked
+    themes = items(menu["Theme"].submenu)  # by name; the panel is not known: all sizes
+    assert {"Libre Default", "Orbit", "Slate", "Column", "Lumen"} <= set(themes)
+    assert themes["Libre Default"].checked and not themes["Slate"].checked
+    assert "SPUR II" in items(themes["SPUR II"].submenu)  # a collection keeps to itself
+    assert "Lumen Vertical" not in themes  # chosen as Lumen
     brightness = items(menu["Brightness"].submenu)
     assert list(brightness) == ["Off", "10 %", "25 %", "50 %", "75 %", "100 %"]
     assert not any(item.checked for item in brightness.values())  # 60 is not a step
@@ -92,7 +95,7 @@ def test_menu_layout_and_state(tray):
 
 def test_menu_actions(tray):
     menu = items(tray.build_menu())
-    items(menu["Theme"].submenu)["slate"](tray.icon)
+    items(menu["Theme"].submenu)["Slate"](tray.icon)
     assert wait_for(lambda: load_config().theme == "slate")
     items(menu["Brightness"].submenu)["25 %"](tray.icon)
     assert wait_for(lambda: load_config().device.brightness == 25)
@@ -125,7 +128,7 @@ def test_menu_opens_the_app_on_its_views(tray, monkeypatch):
     opened = []
     monkeypatch.setattr(window, "open_window", lambda url, view, **kw: opened.append(view))
     menu = items(tray.build_menu())
-    for name in ("Open Libre Panel", "Theme editor", "Settings"):
+    for name in ("Open Libre Panel", "Design", "Settings"):
         menu[name](tray.icon)
     assert wait_for(lambda: sorted(opened) == ["design", "home", "settings"])
 
@@ -238,7 +241,42 @@ def test_texts():
     assert headline(state) == "Libre Panel: waiting for the panel"
     assert len(tooltip(state)) <= 120
     assert headline({"state": "showing", "target": 'TURZX 9.2"'}).endswith('TURZX 9.2"')
-    assert headline({"state": "showing", "target": "P", "mode": "game"}).endswith("P (game)")
+    assert headline({"state": "showing", "target": "P", "mode": "game"}).endswith("P (In game)")
+
+
+def test_the_theme_menu_offers_the_panel_s_themes_by_name(tray):
+    """On a 9.2" bar the themes made for it come first, by name; those for other panels and the
+    round report's wait in "More themes", the screens Libre Panel grew out of in their own; a
+    theme chosen on a bar on end is checked by its name, not by its version's."""
+    from libre_panel.config import set_config_value
+
+    set_config_value("device.model", "turing-9.2-usb")
+    themes = items(items(tray.build_menu())["Theme"].submenu)
+    first = list(themes)[: list(themes).index("More themes")]
+    assert first == ["Almanac", "Almanac Analog", "Arena", "Encore", "Lumen", "Nimbus", "Studio"]
+    more = items(themes["More themes"].submenu)
+    assert {"Libre Default", "Column", "Slate", "Round report"} <= set(more)
+    assert "Lumen" not in more and "SPUR II" in items(themes["SPUR II"].submenu)
+    assert more["Libre Default"].checked  # config.toml names it: checked where it is
+    themes["Lumen"](tray.icon)
+    assert wait_for(lambda: load_config().theme == "lumen")
+    assert items(items(tray.build_menu())["Theme"].submenu)["Lumen"].checked
+    set_config_value("theme", "lumen-vertical")  # (an older way to choose it on end)
+    assert items(items(tray.build_menu())["Theme"].submenu)["Lumen"].checked
+
+
+def test_the_tray_speaks_german(tray):
+    from libre_panel import i18n
+
+    assert wait_for(lambda: tray.app.panel.state()["state"] == "showing")
+    i18n.set_language("de")
+    menu = items(tray.build_menu())
+    assert list(menu)[0].startswith("Libre Panel: läuft auf ")
+    assert {"Gestalten", "Panel pausieren", "Auf dem Kopf", "Libre Panel beenden"} <= set(menu)
+    assert "Weitere Themes" in items(menu["Theme"].submenu)  # (the round report's)
+    state = {"state": "showing", "target": "P", "mode": "game"}
+    assert headline(state) == "Libre Panel: läuft auf P (Im Spiel)"
+    assert headline({"state": "error", "target": ""}) == "Libre Panel: etwas stimmt nicht"
 
 
 def test_run_app_without_icon(isolated_home):

@@ -36,6 +36,7 @@ function Boundary({ children, at }) {
     <${Icon} name="warning" size=${22} />
     <strong>${t("This view could not be drawn")}</strong>
     <span>${error.message || String(error)}</span>
+    <span class="muted">${t("If it happens again, tell the project: Help (F1) has the way to report it.")}</span>
     <div class="view-message-actions">
       <button type="button" class="btn" onClick=${reset}>${t("Try again")}</button>
       <a class="btn" href="#/home">${t("Start")}</a>

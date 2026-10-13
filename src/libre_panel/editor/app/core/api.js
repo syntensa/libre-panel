@@ -7,7 +7,35 @@ import { t } from "./i18n.js";
 
 export { authHeaders };
 
-/** A request; resolves to the JSON answer, rejects with the server's error text (and
+/**
+ * The server's reason as a person reads it: without the name of the exception that was raised
+ * and the system's error numbers ("PermissionError: [Errno 13] Permission denied: 'C:\\…'"), and
+ * the system's words for the reasons that come up (no permission, a full disk, a missing file)
+ * in the language of the app.
+ */
+export function readable(message, status = 400) {
+  let text = String(message || "").trim();
+  if (!text) return t("Something went wrong.");
+  const internal = status >= 500 && /^[A-Z]\w*(?:Error|Exception): /.test(text);
+  text = text.replace(/^[A-Z]\w*(?:Error|Exception): /, "");
+  const system = /^\[(?:Errno|WinError) (\d+)\] ([^:]+)(?::\s*'?(.*?)'?)?$/.exec(text);
+  if (system) {
+    const [, code, words, quoted = ""] = system;
+    const path = quoted.replace(/\\\\/g, "\\"); // Python quotes a Windows path with \\ for \
+    const where = path || t("the file");
+    // no permission (EPERM, EACCES, Windows' access denied), in use (EBUSY, Windows' sharing
+    // violation), a read-only drive (EROFS)
+    if (["1", "5", "13", "16", "30", "32"].includes(code)) {
+      return t("Libre Panel may not change {path}: it is read-only, or another program has it open.", { path: where });
+    }
+    if (["28", "112"].includes(code)) return t("The disk is full: nothing could be saved.");
+    if (["2", "3"].includes(code)) return t("Not found: {path}", { path: where });
+    text = path ? `${words}: ${path}` : words;
+  }
+  return internal ? t("Something went wrong in Libre Panel: {reason}", { reason: text }) : text;
+}
+
+/** A request; resolves to the JSON answer, rejects with the server's error text (readable, and
  * the HTTP status as `error.status`; 0 when the server did not answer at all). */
 export async function api(method, url, body, { raw = false, signal } = {}) {
   const options = { method, headers: authHeaders(), signal };
@@ -26,7 +54,7 @@ export async function api(method, url, body, { raw = false, signal } = {}) {
   }
   const data = await response.json().catch(() => ({ error: response.statusText }));
   if (!response.ok) {
-    const error = new Error(data.error || response.statusText || String(response.status));
+    const error = new Error(readable(data.error || response.statusText || String(response.status), response.status));
     error.status = response.status;
     throw error;
   }

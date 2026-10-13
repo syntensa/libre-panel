@@ -1,5 +1,6 @@
 // Commands that belong to the whole app: going to a view, the theme's file
-// actions, undo and redo, the panel's controls, the language.
+// actions, undo and redo, the panel's controls, the language, the help. The features that live
+// in the cards of Start and Settings are in features.js.
 
 import {
   adaptPanel,
@@ -15,43 +16,23 @@ import { appAction, quitApp } from "../core/app.js";
 import { registerCommands, registerProvider } from "../core/commands.js";
 import { redo, undo } from "../core/doc.js";
 import { languageSetting, setLanguage, t } from "../core/i18n.js";
-import { bindKey, keyLabel } from "../core/shortcuts.js";
+import { bindKey } from "../core/shortcuts.js";
 import { setPref, store } from "../core/state.js";
-import { html } from "../lib/preact.js";
-import { dialogOpen, openDialog } from "../ui/dialog.js";
+import { dialogOpen } from "../ui/dialog.js";
+import { closePalette, paletteOpen } from "../ui/palette.js";
 import { toastError } from "../ui/toast.js";
+import { registerFeatureCommands } from "./features.js";
+import { listShortcuts, openHelp } from "./help.js";
 import { pageName, panelName, shownPages } from "./panel-popover.js";
 import { newThemeDialog } from "./theme-menu.js";
-import { allViews, navigate, showsTheme } from "./views.js";
+import { allViews, navigate, showsTheme, viewHint, viewKeywords } from "./views.js";
+
+export { listShortcuts };
 
 const hasDoc = () => Boolean(store.get().doc);
 /** Undo and redo change what a view shows, so they act where the theme is shown (not behind Settings). */
 const canEdit = () => hasDoc() && showsTheme();
 const appRuns = () => store.get().app.available && !store.get().app.quit;
-
-/** Shortcuts every view has; a view lists its own in `shortcuts` (shown by "Keyboard shortcuts"). */
-export const SHORTCUTS = [];
-
-export function listShortcuts(group, items) {
-  SHORTCUTS.push({ group, items });
-}
-
-function ShortcutsHelp({ close }) {
-  return html`<h2 class="dialog-title">${t("Keyboard shortcuts")}</h2>
-    <div class="shortcut-groups">
-      ${SHORTCUTS.map(
-        (group) => html`<section key=${group.group()}>
-          <h3 class="section-title">${group.group()}</h3>
-          <dl class="shortcut-list">
-            ${group.items.map(
-              ([keys, label]) => html`<div key=${keys}><dt><kbd class="kbd">${keyLabel(keys)}</kbd></dt><dd>${label()}</dd></div>`,
-            )}
-          </dl>
-        </section>`,
-      )}
-    </div>
-    <div class="dialog-actions"><button type="button" class="btn btn-primary" onClick=${() => close()}>${t("Close")}</button></div>`;
-}
 
 export function registerAppCommands() {
   const go = () => t("Go to");
@@ -66,6 +47,8 @@ export function registerAppCommands() {
       .map((view) => ({
         id: `view.${view.id}`,
         title: typeof view.title === "function" ? view.title : () => view.title,
+        hint: () => viewHint(view),
+        keywords: () => viewKeywords(view),
         group: go,
         icon: view.icon || icons[view.id] || "chevron-right",
         rank: 5,
@@ -79,34 +62,44 @@ export function registerAppCommands() {
     { id: "theme.save-as", title: () => t("Save as…"), group: theme, icon: "file", keys: "mod+shift+s", bind: true, inInputs: true, when: hasDoc, rank: 21, run: saveAs },
     { id: "theme.import", title: () => t("Import a theme file…"), group: theme, icon: "upload", rank: 22, run: () => importTheme() },
     { id: "theme.export", title: () => t("Export as a file"), group: theme, icon: "download", when: hasDoc, rank: 23, run: exportTheme },
-    { id: "theme.apply", title: () => t("To the panel"), hint: () => t("save and show"), group: theme, icon: "to-panel", when: hasDoc, rank: 11, run: applyToPanel },
+    {
+      id: "theme.apply",
+      title: () => t("To the panel"),
+      hint: () => t("save and show"),
+      group: theme,
+      icon: "to-panel",
+      when: hasDoc,
+      rank: 11,
+      suggest: () => (showsTheme() ? 1 : null), // where the theme being changed is shown
+      run: applyToPanel,
+    },
     { id: "edit.undo", title: () => t("Undo"), group: theme, icon: "undo", keys: "mod+z", when: () => canEdit() && store.get().canUndo, rank: 12, run: undo },
     { id: "edit.redo", title: () => t("Redo"), group: theme, icon: "redo", keys: "mod+y", when: () => canEdit() && store.get().canRedo, rank: 13, run: redo },
     {
       id: "app.pause",
       title: () => (store.get().app.panel?.state === "paused" ? t("Resume panel") : t("Pause panel")),
+      hint: () => (store.get().app.panel?.state === "paused" ? "" : t("frees the panel for another program")),
+      keywords: () => t("pause stop freeze hold resume continue"),
       group: panel,
       icon: "pause",
       when: appRuns,
+      rank: 12,
+      suggest: 9,
       run: () => appAction(store.get().app.panel?.state === "paused" ? "resume" : "pause"),
     },
     {
-      id: "app.upside-down",
-      title: () => (store.get().app.upside_down ? t("Upside down: off") : t("Upside down: on")),
-      group: panel,
-      icon: "swap",
-      when: appRuns,
-      run: () => appAction("upside_down", !store.get().app.upside_down),
-    },
-    {
+      // the running app's switch; without one, the card in Settings that has it
       id: "app.autostart",
-      title: () => (store.get().app.autostart ? t("Start with system: off") : t("Start with system: on")),
+      title: () =>
+        appRuns() ? (store.get().app.autostart ? t("Start with system: off") : t("Start with system: on")) : t("Start with system"),
+      hint: () => (appRuns() ? "" : t("Settings → Start and system")),
+      keywords: () => t("autostart startup boot login sign in start automatically with windows"),
       group: panel,
       icon: "power",
-      when: appRuns,
-      run: () => appAction("autostart", !store.get().app.autostart),
+      rank: 34,
+      run: () => (appRuns() ? appAction("autostart", !store.get().app.autostart) : navigate("settings", "system/start")),
     },
-    { id: "app.quit", title: () => t("Quit Libre Panel"), group: panel, icon: "power", when: appRuns, rank: 90, run: quitApp },
+    { id: "app.quit", title: () => t("Quit Libre Panel"), keywords: () => t("quit exit close end"), group: panel, icon: "power", when: appRuns, rank: 90, run: quitApp },
     {
       id: "view.live-values",
       title: () => (store.get().prefs.live ? t("Live values: off") : t("Live values: on")),
@@ -115,15 +108,8 @@ export function registerAppCommands() {
       icon: "pulse",
       run: () => setPref("live", !store.get().prefs.live),
     },
-    {
-      id: "help.shortcuts",
-      title: () => t("Keyboard shortcuts"),
-      group: settings,
-      icon: "keyboard",
-      keys: "?",
-      run: () => openDialog((close) => html`<${ShortcutsHelp} close=${close} />`, { label: t("Keyboard shortcuts") }),
-    },
   ]);
+  registerFeatureCommands();
 
   // a theme by name, the brightness, the panel model, the language
   registerProvider(() =>
@@ -131,7 +117,7 @@ export function registerAppCommands() {
       id: `theme.open.${item.id}`,
       title: () => t("Open theme {name}", { name: item.name || item.id }),
       hint: () => (item.id === normalTheme() ? t("shown on the panel") : item.builtin ? t("built in") : t("yours")),
-      keywords: () => item.id,
+      keywords: () => `${item.id} ${t("edit change design")}`,
       group: theme,
       icon: "file",
       rank: 30,
@@ -145,6 +131,7 @@ export function registerAppCommands() {
       ? [0, 10, 25, 50, 75, 100].map((value) => ({
           id: `app.brightness.${value}`,
           title: () => (value ? t("Brightness {value} %", { value }) : t("Brightness off")),
+          keywords: () => t("dim bright darker lighter backlight light"),
           group: panel,
           icon: "sun",
           rank: 60,
@@ -158,11 +145,13 @@ export function registerAppCommands() {
     const display = doc.theme.display || {};
     const orientation = display.orientation || "landscape";
     const mode = store.get().prefs.adapt || "scale";
+    // these change the theme being edited, not the panel: its size and its layout
     const models = (store.get().specs?.models || []).map((model) => ({
       id: `panel.model.${model.id}`,
-      title: () => t("Panel: {name}", { name: panelName(model) }),
+      title: () => t("Fit this theme to {name}", { name: panelName(model) }),
       hint: () => `${model[orientation][0]} × ${model[orientation][1]}`,
-      group: panel,
+      keywords: () => t("panel size model adapt"),
+      group: theme,
       icon: model.shape === "round" ? "sensor" : "landscape",
       rank: 70,
       when: () => model.id !== display.model,
@@ -172,8 +161,10 @@ export function registerAppCommands() {
     return [
       {
         id: "panel.orientation",
-        title: () => (flip === "portrait" ? t("Orientation: portrait") : t("Orientation: landscape")),
-        group: panel,
+        title: () => (flip === "portrait" ? t("Lay this theme out in portrait") : t("Lay this theme out in landscape")),
+        hint: () => t("changes the theme, not the panel"),
+        keywords: () => t("orientation portrait landscape upright layout format"),
+        group: theme,
         icon: flip,
         rank: 65,
         run: () => adaptPanel({ model: display.model || "custom", orientation: flip, mode, width: display.width, height: display.height }),
@@ -220,16 +211,20 @@ export function registerAppCommands() {
 
   bindKey(["mod+z"], () => undo(), { when: () => !dialogOpen() && canEdit() });
   bindKey(["mod+y", "mod+shift+z"], () => redo(), { when: () => !dialogOpen() && canEdit() });
-  bindKey("?", () => {
-    openDialog((close) => html`<${ShortcutsHelp} close=${close} />`, { label: t("Keyboard shortcuts") });
-  }, { when: () => !dialogOpen() });
+  bindKey("?", () => void openHelp(), { when: () => !dialogOpen() });
+  // F1 also while typing, and from the palette, which it closes
+  bindKey("f1", () => {
+    if (paletteOpen()) closePalette();
+    setTimeout(openHelp, 0);
+  }, { inInputs: true, when: () => !dialogOpen() });
 
   listShortcuts(() => t("Everywhere"), [
-    ["mod+k", () => t("Commands and search")],
+    ["mod+k", () => t("Find anything: features, settings, themes")],
     ["mod+s", () => t("Save")],
     ["mod+shift+s", () => t("Save as…")],
     ["mod+z", () => t("Undo")],
     ["mod+y", () => t("Redo")],
-    ["?", () => t("Keyboard shortcuts")],
-  ]);
+    ["?", () => t("Help and keyboard shortcuts")],
+    ["escape", () => t("Close a dialog or a menu; leave Settings")],
+  ], { first: true });
 }
