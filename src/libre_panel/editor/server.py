@@ -43,6 +43,7 @@ from libre_panel.devices.base import DeviceError
 from libre_panel.devices.models import MODELS, PROTOCOLS
 from libre_panel.editor import access
 from libre_panel.editor import settings as app_settings
+from libre_panel.editor.news import News
 from libre_panel.editor.presets import presets_for_editor
 from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_font_path, builtin_fonts
 from libre_panel.i18n import t
@@ -333,6 +334,7 @@ class EditorState:
         self.previews_lock = threading.Lock()
         self.restart = app_settings.Restart()  # settings the panel loop takes in when it restarts
         self.start_screen_jobs: Any = None  # the panel's own screens (a test puts a fake panel)
+        self.news = News(config_path)  # whom Start tells what is new (news.py)
 
     def start_screen(self) -> Any:
         """What writes the panel's boot logo and standby clip (devices/panel_files.py)."""
@@ -1000,6 +1002,17 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error(str(exc), HTTPStatus.CONFLICT)
         self._panel_pages()
 
+    def _see_news(self) -> None:
+        """``{"seen": "0.6"}``: the card of a release's news was closed (news.py)."""
+        payload = self._read_json()
+        if payload is None:
+            return
+        seen = payload.get("seen") if isinstance(payload, dict) else None
+        try:
+            self._json(self.state.news.see(seen if isinstance(seen, str) else ""))
+        except ValueError as exc:
+            self._error(str(exc))
+
     def _page_switch(self, page: str, on: bool) -> list[tuple[str, str, Any]]:
         """What switching a page on or off writes: game mode's page is the game service
         switching by itself (switched on, the service runs), the round report's is the memory
@@ -1644,6 +1657,7 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/readings", lambda h, m, u: h._json(h._readings(parse_qs(u.query)))),
     Route("GET", "/api/pages", lambda h, m, u: h._panel_pages()),
     Route("GET", "/api/sequence", lambda h, m, u: h._sequence()),
+    Route("GET", "/api/news", lambda h, m, u: h._json(h.state.news.state())),
     *(
         Route("GET", path, lambda h, m, u, name=name: h._settings(name))
         for path, name in _SETTINGS_GET.items()
@@ -1684,6 +1698,7 @@ ROUTES: tuple[Route, ...] = (
     Route("POST", "/api/language", lambda h, m, u: h._set_language()),
     Route("POST", "/api/pages", lambda h, m, u: h._set_panel_page()),
     Route("POST", "/api/sequence", lambda h, m, u: h._set_sequence()),
+    Route("POST", "/api/news", lambda h, m, u: h._see_news()),
     Route("POST", "/api/start-screen", lambda h, m, u: h._start_screen_action()),
     *(
         Route("POST", path, lambda h, m, u, name=name: h._settings(name, body=True))
