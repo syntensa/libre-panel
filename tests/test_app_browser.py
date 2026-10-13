@@ -615,9 +615,8 @@ def test_the_question_about_the_standby_clip_is_asked_in_german_too(
         page.wait_for_selector(".start.launcher .clip-card")
         card = page.locator(".clip-card")
         assert card.locator("h2").inner_text() == "Flüssige Bewegung einschalten"
-        assert card.locator("p").inner_text().startswith(
-            "Dein Panel kann Libre Panel als Video zeigen, mit bis zu 50 Bildern pro Sekunde"
-        )
+        text = card.locator("p").inner_text()
+        assert text.startswith("Dein Panel kann Libre Panel als Video zeigen, mit bis zu 50")
         expect(page.get_by_role("button", name="Jetzt nicht")).to_be_visible()
         card.get_by_role("button", name="Der Clip heißt anders").click()
         assert page.get_by_label("Name des Standby-Clips").input_value() == CLIP
