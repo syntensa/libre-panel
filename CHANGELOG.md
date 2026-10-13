@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.6.2 — 2026-10-13
+
+Libre Panel in six languages; keyboard shortcuts for the whole PC; the history of your PC under
+*Live*; notices from your own scripts and a Stream Deck; and the time on the game screen.
+
+**New**
+- The app, the tray menu and the panel speak French, Spanish, Polish and Portuguese (Brazil)
+  besides English and German: *Settings → Start and system → Language*, or *System* to follow
+  Windows or Linux. Dates are joined as each language does it ("27 de septiembre", "27
+  września")
+- **Keyboard shortcuts for the whole PC**, whatever window is in front: pause or resume the
+  panel, its brightness up or down, open Libre Panel. Set in *Settings → Start and system* by
+  pressing the keys; *Use the shortcuts* switches them all off and keeps them for later
+  (Windows; Linux with X11, as Wayland lets no program take keys)
+- **History** under *Live*: with the memory on, the temperatures, load and power of the last
+  day, week or month, with the peaks, the time in games, the games played most and the last
+  rounds
+- **Notices from other programs**: a script, a Stream Deck button or `libre-panel notify
+  "Render done"` shows a short notice on the panel, with a title, an icon and how long it
+  stays if you like. Off until you allow it in *Settings → Services*; taken only from this PC
+  and only with the key Libre Panel makes
+- **New versions**: *Start* asks once whether Libre Panel may look for a newer version, and if
+  so says when one is out, with the right download for how it was installed. One request a
+  day to GitHub, carrying the version you have and nothing else (`check_updates`)
+- The game screen tells the time, small and dim in the corner of the game's card
+
 ## 0.6.1 — 2026-10-13
 
 The volume over every screen, switched on from Start and in one of four new looks; and game
