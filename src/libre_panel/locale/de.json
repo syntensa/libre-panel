@@ -1292,7 +1292,6 @@
     "Style": "Stil",
     "Style: {name}": "Stil: {name}",
     "The built-in fonts are always there; add your own here.": "Die eingebauten Schriften sind immer da; eigene fügst du hier hinzu.",
-    "The changes to this theme since it was last saved are lost.": "Die Änderungen an diesem Theme seit dem letzten Speichern gehen verloren.",
     "The pages come from config.toml, which could not be read.": "Die Seiten stehen in config.toml, die sich nicht lesen ließ.",
     "The panel stops updating until you start Libre Panel again.": "Das Panel wird nicht mehr aktualisiert, bis du Libre Panel wieder startest.",
     "The top one is in front. Drag a row to change the order (or Alt+↑ ↓). Locked layers ignore clicks on the canvas; pick them here.": "Die oberste liegt vorn. Zieh eine Zeile, um die Reihenfolge zu ändern (oder Alt+↑ ↓). Gesperrte Ebenen reagieren auf dem Panel nicht auf Klicks; wähle sie hier.",
@@ -1658,7 +1657,12 @@
     "off: a new notice of the same or a higher rank takes over at once, a lower one is dropped": "aus: ein neuer Hinweis gleichen oder höheren Rangs übernimmt sofort, ein niedrigerer entfällt",
     "where notices appear on the panel": "wo Hinweise auf dem Panel erscheinen",
     "The cells the modules are placed on; 0 = as the panel's size suggests. Now {cols} × {rows} cells.": "Die Felder, auf denen die Bausteine liegen; 0 = wie es die Größe des Panels nahelegt. Jetzt {cols} × {rows} Felder.",
-    "how often the values are read; 1000 = once a second": "wie oft die Werte gelesen werden; 1000 = einmal pro Sekunde"
+    "how often the values are read; 1000 = once a second": "wie oft die Werte gelesen werden; 1000 = einmal pro Sekunde",
+    "The panel shows this theme as you see it here": "Das Panel zeigt dieses Theme so, wie du es hier siehst",
+    "Save the changes and show them on the panel": "Änderungen speichern und auf dem Panel zeigen",
+    "{name} (mine)": "{name} (meins)",
+    "Your changes to “{name}” are not saved yet: save them, or they are lost.": "Deine Änderungen an „{name}“ sind noch nicht gespeichert: Speichere sie, sonst gehen sie verloren.",
+    "Built in: your changes are saved as a theme of your own.": "Eingebaut: Deine Änderungen werden als eigenes Theme gespeichert."
   },
   "fields": {
     "align": "Ausrichtung",

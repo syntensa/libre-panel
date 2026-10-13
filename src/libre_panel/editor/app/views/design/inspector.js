@@ -854,6 +854,7 @@ function ThemeDetails({ theme, onBack }) {
  * and font) is here; the rest under Fine-tuning. */
 function ThemeInspector({ theme }) {
   const [page, setPage] = usePage();
+  const builtin = useStore((s) => s.doc?.builtin); // why saving it asks for a name
   const specs = store.get().specs;
   const hasModules = Boolean(theme.grid || theme.widgets.some(isModule));
   const background = theme.background || {};
@@ -863,7 +864,10 @@ function ThemeInspector({ theme }) {
   return html`
     <${Header} icon="frame" title=${theme.name || t("Untitled")} subtitle=${`${size} · ${panelName(currentModel())}`} />
     <div class="inspector-body">
-      <p class="inspector-note">${t("The whole theme. Click something on the panel to change just that.")}</p>
+      <p class="inspector-note">
+        ${t("The whole theme. Click something on the panel to change just that.")}
+        ${builtin ? html`<span class="inspector-builtin">${t("Built in: your changes are saved as a theme of your own.")}</span>` : null}
+      </p>
       <${Section} title=${t("Name")}>
         <${TextField} label=${t("Name")} value=${theme.name} onChange=${themeChange("name", (th, v) => (th.name = v))} />
       <//>

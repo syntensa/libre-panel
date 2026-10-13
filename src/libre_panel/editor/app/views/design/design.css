@@ -1203,6 +1203,12 @@
   line-height: 1.45;
 }
 
+.inspector-builtin {
+  display: block;
+  margin-top: 4px;
+  color: var(--warn);
+}
+
 /* where something is set elsewhere (Look), and the way there */
 .inspector-aside {
   display: flex;
