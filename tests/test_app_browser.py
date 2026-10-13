@@ -337,9 +337,9 @@ def test_a_first_start_asks_how_it_should_look(app_url, isolated_home):
         assert mark.get_attribute("title") == "Shown on the panel until you choose another"
         choice = shown_themes(page)[0]
         page.locator(f'.theme-card[data-theme="{choice}"] .theme-card-main').click()
-        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design")  # on to Design
+        page.wait_for_selector(".start.launcher")  # on to Start's launcher: the panel, what next
         assert wait_for(lambda: load_config().theme == choice)
-        assert js(page, "window.libre.store.get().doc.id") == choice
+        page.wait_for_function(f"window.libre.store.get().doc?.id === {choice!r}")
         page.goto(f"{app_url}#/home")
         page.wait_for_selector(".start.launcher")  # a theme is chosen: the launcher
 
@@ -362,9 +362,10 @@ def test_a_first_start_is_asked_without_the_tabs(app_url, isolated_home):
         page.goto(f"{app_url}#/home")
         page.wait_for_selector(".start.first .theme-card")
         expect(page.locator(tabs)).to_have_count(0)
-        choice = shown_themes(page)[0]  # a theme is chosen and taken on to Design, which has them
+        choice = shown_themes(page)[0]  # a theme is chosen: the launcher follows, with the tabs
         page.locator(f'.theme-card[data-theme="{choice}"] .theme-card-main').click()
-        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design")
+        page.wait_for_selector(".start.launcher")
+        expect(page.locator(".tab[aria-current='page']")).to_have_text("Start")
         expect(page.locator(tabs)).to_have_count(1)
         page.goto(f"{app_url}#/home")
         page.wait_for_selector(".start.launcher")
@@ -469,34 +470,44 @@ def config_file_text(home):
 def test_a_first_start_asks_for_the_standby_clip_and_writes_it_when_told_to(
     app_url, isolated_home, monkeypatch
 ):
+    """A first start asks how it should look first; the question about the clip follows the
+    choice, on top of the launcher."""
     clip_ready(monkeypatch)
     assert not (isolated_home / "config.toml").exists()
     with browser_page(app_url, "home", allow=PICTURE) as page:
-        page.wait_for_selector(".start.first .clip-card")
+        page.wait_for_selector(".start.first .theme-card")
+        assert asks_for_the_clip(page) is False  # the look first
+        choice = shown_themes(page)[0]
+        page.locator(f'.theme-card[data-theme="{choice}"] .theme-card-main').click()
+        page.wait_for_selector(".start.launcher .clip-card")
         card = page.locator(".clip-card")
         assert card.locator("h2").inner_text() == "Turn on smooth motion"
         assert card.locator("p").inner_text().startswith("Your panel can show Libre Panel as video")
         # in plain words: the name offered is only named on the way to another one; the card
-        # sits between the panel and the themes
+        # is the next step, right under the panel's card
         assert CLIP in card.get_by_role("button", name="The clip has another name").inner_text()
         assert page.get_by_label("Name of the standby clip").count() == 0
-        assert page.locator(".panel-strip + .clip-card + .start-head").count() == 1
+        assert page.locator(".panel-card + .clip-card").count() == 1
         # asking writes nothing, nor does looking at it for a while
+        chosen = config_file_text(isolated_home)
         page.wait_for_timeout(400)
-        assert not (isolated_home / "config.toml").exists()
+        assert config_file_text(isolated_home) == chosen
+        assert settings_config().device.video.local_clip == ""
+        assert settings_config().device.video.clip_asked is False
         page.get_by_role("button", name="Turn on", exact=True).click()
         waits_for(page, lambda: settings_config().device.video.local_clip == CLIP)
         text = config_file_text(isolated_home)
         assert f'local_clip = "{CLIP}"' in text  # exactly the name that was offered
         assert settings_config().device.video.clip_asked is True
         expect(card).to_have_count(0)  # answered
-        # (a plain editor does not run the panel: it says when the video mode starts)
-        expect(page.locator(".toast")).to_contain_text(
+        # (a plain editor does not run the panel: it says when the video mode starts; the toast
+        # of the choice may still be up)
+        expect(page.locator(".toast", has_text="Smooth motion")).to_contain_text(
             "Saved. Smooth motion starts after Libre Panel is started again."
         )
         page.goto(f"{app_url}#/home")
         page.reload()
-        page.wait_for_selector(".start.first .theme-card")
+        page.wait_for_selector(".start.launcher")
         assert asks_for_the_clip(page) is False  # not again
 
 
@@ -507,9 +518,7 @@ def test_the_launcher_asks_too_and_writes_the_name_that_was_typed(
     choose_theme(isolated_home)
     with browser_page(app_url, "home", allow=PICTURE) as page:
         page.wait_for_selector(".start.launcher .clip-card")
-        assert page.locator(".start-main > :first-child").evaluate(
-            "e => e.matches('.clip-card')"
-        )  # on top of the panel's card
+        assert page.locator(".panel-card + .clip-card").count() == 1  # under the panel's card
         page.get_by_role("button", name="The clip has another name").click()
         field = page.get_by_label("Name of the standby clip")
         use = page.get_by_role("button", name="Turn on", exact=True)
@@ -757,7 +766,7 @@ def test_the_launcher_shows_and_controls_the_running_panel(background):
     with browser_page(url, "home", allow=PICTURE) as page:
         page.wait_for_selector(".panel-card .state-dot.showing")
         expect(page.locator(".panel-card h2")).to_have_text("Showing “Libre Default”")
-        page.wait_for_selector(".panel-picture img")  # the picture on the panel
+        page.wait_for_selector(".panel-picture img[src^='blob:']")  # the picture on the panel
         assert page.locator(".panel-picture img").get_attribute("src").startswith("blob:")
         page.get_by_role("button", name="Pause panel").click()
         assert wait_for(lambda: app.panel.paused)
@@ -1190,14 +1199,9 @@ def test_the_new_views_speak_german(app_url, isolated_home):
     i18n.set_language("de")
     sets = {"**/api/themes": with_collections()}
     with browser_page(app_url, "home", routes=sets, allow=PICTURE) as page:
-        page.wait_for_selector(".start-tile")
-        assert page.locator(".start-tile strong").all_inner_texts() == [
-            "Gestalten",
-            "Look",
-            "Live",
-            "Einstellungen",
-        ]
-        assert page.locator(".panel-card .btn-primary").inner_text() == "Gestalten"
+        page.wait_for_selector(".start-more")
+        assert page.locator(".start-more h2").inner_text() == "Mehr für dein Panel"
+        assert page.locator(".panel-card .btn-primary").inner_text() == "Theme bearbeiten"
         page.goto(f"{app_url}#/home/themes")
         page.wait_for_selector(".theme-collection")
         group = page.locator(".theme-collection").last
@@ -1804,8 +1808,8 @@ def test_pages_of_the_panel(app_url, isolated_home):
 
 def test_a_first_start_asks_how_the_panel_is_mounted(app_url, isolated_home):
     """Upright, each screen shows in its version for a bar on end: once in the list, by its
-    name, with that version's picture and size; Design opens that version, and Start and
-    Settings → Panel switch it back."""
+    name, with that version's picture and size; Design opens that version, and Start's first
+    steps and Settings → Panel switch it back."""
     routes = {"**/api/app": a_panel_app()}
     with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
         page.wait_for_selector(".start.first .theme-card")
@@ -1822,8 +1826,8 @@ def test_a_first_start_asks_how_the_panel_is_mounted(app_url, isolated_home):
         lumen.locator(".theme-card-main").click()
         page.wait_for_function("window.libre.store.get().doc?.id === 'lumen-vertical'")
         page.locator(".tab", has_text="Start").click()
-        page.wait_for_selector(".panel-card")
-        page.locator(".panel-card").get_by_role("radio", name="Horizontal").click()
+        page.wait_for_selector(".first-steps")
+        page.locator(".first-steps").get_by_role("radio", name="Horizontal").click()
         waits_for(page, lambda: settings_config().device.orientation == "landscape")
         page.goto(f"{app_url}#/settings/panel")
         row = page.locator(".settings-row", has_text="How the panel is mounted")

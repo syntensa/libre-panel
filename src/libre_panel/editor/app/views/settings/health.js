@@ -183,7 +183,8 @@ export function healthOf(facts) {
   if (info && !file) {
     const why = info.running && ["waiting", "error"].includes(info.running.state) ? info.running.detail : "";
     const plugIn = t("Plug the panel in with its USB cable: Libre Panel looks for it every few seconds.");
-    if (!info.found) {
+    // a panel the background app shows a theme on is there, whatever the USB bus said here
+    if (!info.found && !(running && panel.state === "showing")) {
       add({
         id: "no-panel",
         tone: "warn",
@@ -193,7 +194,7 @@ export function healthOf(facts) {
           .join(" "),
         action: go(t("Report a panel"), "settings", "about/about-report"),
       });
-    } else if (info.model && info.found.id !== info.model.id) {
+    } else if (info.model && info.found && info.found.id !== info.model.id) {
       add({
         id: "other-panel",
         tone: "warn",
@@ -452,11 +453,12 @@ function Item({ item, compact }) {
  * when nothing does, and the suggestions under it. `compact` (Start): only what needs attention,
  * three at most and the way to the rest, and nothing at all when all is well.
  */
-export function HealthCard({ compact = false }) {
+export function HealthCard({ compact = false, skip = [] }) {
   const { ready, items, good } = useHealth();
   const broken = useStore((s) => Boolean(s.settingsError)); // the note at the top of Settings says it
   if (!ready || (broken && !compact)) return null;
-  const attention = items.filter((item) => item.tone !== "info");
+  // `skip`: what the place has a card of its own for (Start asks for the clip and the sensors)
+  const attention = items.filter((item) => item.tone !== "info" && !skip.includes(item.id));
   if (compact) {
     if (!attention.length) return null;
     const shown = attention.slice(0, 3);

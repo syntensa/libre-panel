@@ -74,16 +74,20 @@ function Picture({ item, width }) {
 }
 
 /**
- * A theme as a card with its picture: a click chooses it (`onChoose`), and `onEdit` (if given)
- * opens it for editing from the corner.
+ * A theme as a card with its picture: a click chooses it (`onChoose`: it goes on the panel), and
+ * `onEdit` (if given) adds a button that says so and opens it for editing.
  */
 export function ThemeCard({ item, big = false, label, onChoose, onEdit }) {
-  return html`<article class=${`theme-card${item.shown ? " current" : ""}${big ? " big" : ""}`} data-theme=${item.id}>
+  const name = item.name || item.id;
+  return html`<article class=${`theme-card${item.shown ? " current" : ""}${big ? " big" : ""}${onEdit ? " editable" : ""}`} data-theme=${item.id}>
     <button type="button" class="theme-card-main" aria-label=${label} aria-current=${item.shown ? "true" : undefined} onClick=${() => onChoose(item)}>
-      <span class="theme-card-picture"><${Picture} item=${item} width=${big ? 960 : 640} /></span>
+      <span class="theme-card-picture">
+        <${Picture} item=${item} width=${big ? 960 : 640} />
+        ${item.shown ? null : html`<span class="theme-card-hint" aria-hidden="true"><${Icon} name="to-panel" size=${15} /> ${t("Show on the panel")}</span>`}
+      </span>
       <span class="theme-card-text">
         <span class="theme-card-title">
-          <span class="theme-card-name">${item.name || item.id}</span>
+          <span class="theme-card-name">${name}</span>
           ${item.shown ? html`<span class="theme-card-badge"><${Icon} name="check" size=${12} strokeWidth=${3} /> ${t("On the panel")}</span>` : null}
           ${item.isDefault
             ? html`<span class="theme-card-tag default" title=${t("Shown on the panel until you choose another")}>${t("Default")}</span>`
@@ -94,22 +98,24 @@ export function ThemeCard({ item, big = false, label, onChoose, onEdit }) {
       </span>
     </button>
     ${onEdit
-      ? html`<button type="button" class="icon-btn theme-card-edit" aria-label=${t("Edit “{name}”", { name: item.name || item.id })}
-          title=${t("Edit “{name}”", { name: item.name || item.id })} onClick=${() => onEdit(item)}>
-          <${Icon} name="pencil" size=${15} />
+      ? html`<button type="button" class="btn theme-card-edit" aria-label=${t("Edit “{name}”", { name })} onClick=${() => onEdit(item)}>
+          <${Icon} name="pencil" size=${14} /> ${t("Edit")}
         </button>`
       : null}
   </article>`;
 }
 
-/** A theme in the launcher's list: a small picture, its name, and what it is. */
-export function ThemeRow({ item, onChoose }) {
+/** A theme in the launcher's list: a small picture, its name, and what it is; a click puts it on
+ * the panel (`label` says so). */
+export function ThemeRow({ item, label, onChoose }) {
   return html`<button type="button" class=${`quick-theme${item.shown ? " current" : ""}`} data-theme=${item.id}
-    aria-current=${item.shown ? "true" : undefined} onClick=${() => onChoose(item)}>
+    aria-label=${label} aria-current=${item.shown ? "true" : undefined} onClick=${() => onChoose(item)}>
     <span class="quick-theme-picture"><${Picture} item=${item} width=${640} /></span>
     <span class="quick-theme-text">
       <span class="quick-theme-name">${item.name || item.id}</span>
-      <span class="quick-theme-note">${item.shown ? t("shows now") : item.note}</span>
+      ${item.shown
+        ? html`<span class="quick-theme-note on"><${Icon} name="check" size=${12} strokeWidth=${3} /> ${t("On the panel")}</span>`
+        : html`<span class="quick-theme-note">${item.note}</span>`}
     </span>
   </button>`;
 }

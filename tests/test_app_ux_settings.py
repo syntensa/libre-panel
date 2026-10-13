@@ -89,7 +89,11 @@ def test_the_overview_tells_each_thing_with_what_mends_it(app_url):  # noqa: F81
         assert of() == {"ready": False, "good": True, "items": []}  # nothing known yet
         assert of(panelInfo=found) == {"ready": True, "good": True, "items": []}
         # no panel, or another one than the settings name: the next step, or the click
-        assert of(panelInfo=PANEL)["items"] == [["no-panel", "warn", "Report a panel"]]
+        waiting = {"available": True, "panel": {"state": "waiting", "stats": {}}}
+        missing = [["no-panel", "warn", "Report a panel"]]
+        assert of(panelInfo=PANEL, app=waiting)["items"] == missing
+        # (a panel the background app shows a theme on is there, whatever the bus said here)
+        assert of(panelInfo=PANEL)["items"] == []
         chosen = {**found, "model": {**TURING, "id": "turing-8.8-usb", "label": 'Turing 8.8"'}}
         assert of(panelInfo=chosen)["items"] == [["other-panel", "warn", "Use the Turing 9.2″"]]
         # the panel paused, or stopped with a fault
@@ -157,7 +161,7 @@ def test_the_overview_tells_each_thing_with_what_mends_it(app_url):  # noqa: F81
                 {"name": "devices", "state": "stopped", "detail": "", "enabled": False},
             ],
         }
-        items = of(panelInfo=PANEL, serviceStates=services)["items"]
+        items = of(panelInfo=PANEL, app=waiting, serviceStates=services)["items"]
         assert items == [
             ["service-notices", "error", "Restart"],
             ["no-panel", "warn", "Report a panel"],
@@ -273,7 +277,7 @@ def test_the_short_form_lists_what_needs_attention_with_its_clicks(
         box.locator("[data-health='sensor-service']").wait_for()
         assert box.locator("h2").inner_text() == "What needs attention"
         ids = box.locator(".health-item").evaluate_all("rows => rows.map((r) => r.dataset.health)")
-        assert ids == ["no-panel", "sensor-service"]  # (Nimbus's weather is no fault)
+        assert ids == ["sensor-service"]  # (the panel shows a theme; Nimbus's weather is no fault)
         expect(box.get_by_role("button", name="Unlock all sensors")).to_be_visible()
         box.get_by_role("button", name="Settings").click()
         page.wait_for_function("location.hash === '#/settings/overview'")
