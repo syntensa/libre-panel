@@ -40,11 +40,11 @@ export const SERVICES = {
   },
   devices: {
     title: () => t("Devices"),
-    hint: () => t("Messages when a drive, a USB device or a controller comes or goes, and when a drive is nearly full (Windows)."),
+    hint: () => t("Notices when a drive, a USB device or a controller comes or goes, and when a drive is nearly full (Windows)."),
   },
   memory: {
-    title: () => t("Memory and round report"),
-    hint: () => t("Keeps what happens at the desk over weeks, on this computer, and shows a report after a game."),
+    title: () => t("Round report and history"),
+    hint: () => t("Shows a report of the round on the panel after a game, and keeps what happens at the desk over weeks, on this computer."),
   },
   cooling: {
     title: () => t("Cooling analysis"),

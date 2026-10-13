@@ -525,7 +525,7 @@ export function AtAGlance() {
     {
       id: "sensors",
       title: t("Sensors"),
-      value: readings === null ? t("{n} sources in use", { n: used }) : t("{n} sources in use, {readings} readings now", { n: used, readings }),
+      value: readings === null ? t("{n} switched on", { n: used }) : t("{readings} readings now", { readings }),
       section: "sensors",
     },
     {

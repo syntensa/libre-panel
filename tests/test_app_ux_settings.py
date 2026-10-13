@@ -528,5 +528,5 @@ def test_live_names_things_as_settings_does(app_url, isolated_home):  # noqa: F8
         expect(page.locator(".live-side .section-title").first).to_have_text("Smooth motion")
         expect(page.locator("[data-service=notices] .live-row-name")).to_have_text("Notices")
         expect(page.locator("[data-service=memory] .live-row-name")).to_have_text(
-            "Memory and round report"
+            "Round report and history"
         )
