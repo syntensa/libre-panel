@@ -61,7 +61,10 @@ class Rig:
     def finish(self, at=None):
         if at is not None:
             self.recorder.close(at)
-        self.store.stop()
+        # all of it written: the app's stop gives up after 3 s (a stuck disk must not hold up
+        # Quit), which a slow runner needs for thousands of samples
+        self.store.stop(timeout=60)
+        assert not self.store._thread.is_alive(), "the store was still writing"
         return sqlite3.connect(self.path)
 
     def play(self, start, seconds, fps=140, game="Space Game", program="spacegame", temp=70.0):
@@ -244,7 +247,7 @@ def test_a_store_that_cannot_open_its_file_says_so_and_tries_again(tmp_path):
     store.put("INSERT INTO meta VALUES ('c', 'd')")
     assert wait_for(lambda: store.written == 1)
     assert store.error is None
-    store.stop()
+    store.stop(timeout=60)  # (all of it written, also on a slow runner)
     db = sqlite3.connect(folder / "m.db")
     assert db.execute("SELECT key FROM meta WHERE key IN ('a', 'c')").fetchall() == [("c",)]
     assert db.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
@@ -265,7 +268,7 @@ def test_a_full_queue_drops_what_does_not_fit_and_says_so(tmp_path):
         store.put("INSERT OR REPLACE INTO meta VALUES (?, 'x')", [str(n)])
     assert store.error and "queue is full" in store.error
     gate.set()
-    store.stop()
+    store.stop(timeout=60)  # (all of it written, also on a slow runner)
     db = sqlite3.connect(tmp_path / "m.db")
     assert db.execute("SELECT COUNT(*) FROM meta WHERE value = 'x'").fetchone()[0] == 3
 

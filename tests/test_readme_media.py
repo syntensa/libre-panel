@@ -90,14 +90,17 @@ def test_a_video_is_yuv420p_in_bt709_with_even_sides(encode, tmp_path):
     for n in range(6):
         sink.add(picture(n, (97, 65)))  # odd sizes: yuv420p needs even ones
     mp4 = encode.write_mp4(sink.frames(), tmp_path / "odd.mp4")
+    # ffprobe beside ffmpeg, else on the path (the ffmpeg Libre Panel ships has none beside it)
+    beside = Path(FFMPEG).with_name(Path(FFMPEG).name.replace("ffmpeg", "ffprobe"))
+    ffprobe = str(beside) if beside.is_file() else shutil.which("ffprobe")
+    if ffprobe is None:
+        pytest.skip("ffprobe is not installed")
     shown = subprocess.run(
-        [FFMPEG.replace("ffmpeg", "ffprobe"), "-v", "error", "-select_streams", "v:0",
+        [ffprobe, "-v", "error", "-select_streams", "v:0",
          "-show_entries", "stream=pix_fmt,width,height,color_space,codec_name", "-of",
          "default=nw=1", str(mp4)],
-        capture_output=True, text=True,
+        capture_output=True, text=True, check=True,
     )  # fmt: skip
-    if shown.returncode:
-        pytest.skip("ffprobe is not installed")
     found = dict(line.split("=") for line in shown.stdout.split())
     assert found == {"codec_name": "h264", "width": "96", "height": "64", "pix_fmt": "yuv420p",
                      "color_space": "bt709"}  # fmt: skip

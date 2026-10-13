@@ -2465,7 +2465,11 @@ def test_a_plain_editor_has_no_panel_controls(page):
 def new_theme_from_a_layout(page, panel="Turing 9.2"):
     """Choose a panel, then make a theme from the first layout of the New theme dialog."""
     page.locator(".panel-chip").click()
-    page.locator(".model-row", has_text=panel).click()
+    row = page.locator(".model-row", has_text=panel)
+    row.click()
+    # the theme is fitted to it by the server: whether that left it unsaved is known once it came
+    # back (the palette runs New theme a moment after Enter, which asks about unsaved changes)
+    expect(row).to_have_attribute("aria-selected", "true")
     page.keyboard.press("Escape")  # the popover
     page.keyboard.press("Control+k")
     page.locator(".palette input").fill("new theme")
