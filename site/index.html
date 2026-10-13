@@ -190,9 +190,10 @@
           <div><span class="label">Notices</span><h3>The volume, the way you like it</h3></div>
           <p>Turn the volume and it shows over every screen, in one of four looks: a bar along the
             edge, levels that rise, a ring that fills or a large number. A new track with its cover, a sensor past a limit you set, a stick or a game
-            controller plugged in: short notices in the colours of the theme.</p>
+            controller plugged in: short notices in the colours of the theme. Your own scripts and a
+            Stream Deck button can show one too, from this PC and with a key.</p>
           <p class="note">The notices and devices services are off until you switch them on; devices is
-            for Windows.</p>
+            for Windows. Notices from other programs wait until you allow them.</p>
         </div>
         <figure class="media">
           <video loop muted playsinline preload="none" width="2000" height="580" data-lazy data-poster="media/volume-looks.png" aria-label="The volume over Lumen in its four looks: a bar along the edge, levels that rise, a ring that fills and a large number">
@@ -209,8 +210,8 @@
           <div><span class="label">Game mode</span><h3>An entrance for every game</h3></div>
           <p>Libre Panel finds the game you start, from a list of your own or your Steam library. The
             screen closes to a line, the game's name lights up, and the game screen opens with the
-            frame rate, its 1% low and who holds it back. After a round, an optional report compares
-            it with your last ten.</p>
+            frame rate, its 1% low and who holds it back, and the time, small in a corner. After a
+            round, an optional report compares it with your last ten.</p>
           <p class="note">The frame rate comes from Intel's PresentMon (Windows), which the download
             carries.</p>
         </div>
@@ -354,12 +355,14 @@
         <p class="kicker">The app</p>
         <h2 id="app-title">Everything in one window</h2>
         <p>Libre Panel's app opens in a window of its own and draws every picture with the panel's own
-          renderer: what you see is what the panel shows.</p>
+          renderer: what you see is what the panel shows. It speaks English, German, French, Spanish,
+          Polish and Portuguese (Brazil), and keyboard shortcuts for the whole PC pause the panel,
+          turn its brightness or open it from any window.</p>
         <ul class="views">
           <li><b>Start</b> the panel and its themes</li>
           <li><b>Design</b> build a theme</li>
           <li><b>Look</b> colours, light, notices</li>
-          <li><b>Live</b> how it runs</li>
+          <li><b>Live</b> how it runs, and its history</li>
           <li><b>Settings</b> all of config.toml</li>
         </ul>
       </div>
@@ -653,13 +656,16 @@
     <div class="wrap">
       <div class="promise">
         <p class="kicker">Privacy</p>
-        <h2 id="privacy-title">Nothing leaves your PC except the weather you turn on.</h2>
-        <p>No account, no telemetry, no update check. The app is served to your own PC only, and
-          only to requests that carry a secret token, new at every start.</p>
+        <h2 id="privacy-title">Nothing leaves your PC that you have not turned on.</h2>
+        <p>No account, no telemetry. The app is served to your own PC only, and only to requests
+          that carry a secret token, new at every start.</p>
         <ul class="points">
           <li><b>The weather</b>Off until you set a place; then only its coordinates go to Open-Meteo,
             every 15 minutes. A place you look up by name is sent when you press Search, and kept to
             about a kilometre.</li>
+          <li><b>New versions</b>Start asks once whether to look. Say yes, and once a day one request
+            asks GitHub for the latest release; it carries the version you have, nothing about you or
+            your panel.</li>
           <li><b>What you connect yourself</b>Calendars, Home Assistant and MQTT talk to the addresses you
             give them. The ping of the network details module connects to 1.1.1.1 while it is on the
             panel, and a cover a player names by a web address is loaded from there.</li>

@@ -91,7 +91,9 @@ am Rand, als *Pegel*, die steigen, als *Ring*, der sich füllt, oder *Groß*, ei
 einem Klick auf *Start*. Ein neuer Titel mit Cover, ein Sensor über einer Grenze, die du
 festlegst, ein Stick oder Controller angesteckt (Windows): kurze Hinweise in den Farben des
 Themes, als Band oder Karte; ein Bildschirm, der Lautstärke oder Titel selbst zeigt, bekommt
-keinen darüber. Wie jeder Dienst sind sie aus, bis du sie einschaltest.
+keinen darüber. Auch deine eigenen Skripte und eine Stream-Deck-Taste können einen zeigen,
+sobald du es erlaubst: `libre-panel notify "Rendern fertig"` oder eine Adresse mit Schlüssel,
+nur von diesem PC aus. Wie jeder Dienst sind sie aus, bis du sie einschaltest.
 
 ### Spielmodus
 
@@ -99,7 +101,8 @@ keinen darüber. Wie jeder Dienst sind sie aus, bis du sie einschaltest.
 
 Starte ein Spiel aus deiner eigenen Liste oder deiner Steam-Bibliothek, und der Bildschirm
 schließt sich zu einer Linie, der Name des Spiels leuchtet auf, und der Spielbildschirm
-öffnet sich: die FPS, die 1-%-Lows und wer sie bremst, gezählt von Intels PresentMon. Seinen
+öffnet sich: die FPS, die 1-%-Lows und wer sie bremst, gezählt von Intels PresentMon, dazu
+klein in der Ecke die Uhrzeit. Seinen
 Bildschirm wählst du unter *Gestalten → Seiten*: **Arena**, den eigenen von Libre Panel, oder
 einen von SPUR II. Nach einer Runde vergleicht ein optionaler Bericht sie mit deinen letzten
 zehn.
@@ -186,7 +189,12 @@ neben dem Bild des Panels.
 paar Buchstaben. **Einstellungen** schreibt die `config.toml` für dich, Kommentare bleiben
 stehen; die Namen von Prozessor, Grafikkarte und Arbeitsspeicher findet Libre Panel selbst,
 und du kannst eigene eintippen. **Start** zeigt das Panel auf einen Blick und die Themes, die
-dafür gemacht sind, **Live**, wie es läuft.
+dafür gemacht sind, und sagt, wenn eine neue Version da ist, sofern du es nachsehen lässt.
+**Live** zeigt, wie es läuft, und mit eingeschaltetem Gedächtnis den **Verlauf**: Temperaturen,
+Last und Leistung über einen Tag, eine Woche oder einen Monat, dazu die gespielten Spiele.
+**Tastenkürzel** für den ganzen PC halten das Panel an, ändern seine Helligkeit oder öffnen die
+App aus jedem Fenster (Windows, Linux mit X11) und lassen sich als Ganzes ausschalten. Die App
+spricht Deutsch, Englisch, Französisch, Spanisch, Polnisch und Portugiesisch (Brasilien).
 
 ## Themes
 
@@ -344,14 +352,20 @@ libre-panel quit                    # die Hintergrund-App beenden
 
 ## Datenschutz
 
-**Nichts verlässt deinen PC außer dem Wetter, das du einschaltest.** Kein Konto, keine
-Telemetrie, keine Update-Abfrage. Die App wird nur für deinen eigenen PC ausgeliefert
-(127.0.0.1), und nur an Anfragen mit einem geheimen Token, der bei jedem Start neu ist.
+**Nichts verlässt deinen PC, was du nicht selbst eingeschaltet hast.** Kein Konto, keine
+Telemetrie. Die App wird nur für deinen eigenen PC ausgeliefert (127.0.0.1), und nur an
+Anfragen mit einem geheimen Token, der bei jedem Start neu ist.
 
 - **Das Wetter** ist aus, bis du einen Ort setzt. Dann gehen nur seine Koordinaten an
   [Open-Meteo](https://open-meteo.com), alle 15 Minuten. Einen Ort, den du per Name suchst,
   bekommt die Ortssuche von Open-Meteo erst, wenn du auf *Suchen* drückst; gespeichert wird
   er auf etwa einen Kilometer genau.
+- **Neue Versionen**: *Start* fragt einmal, ob nachgesehen werden soll. Sagst du ja, fragt
+  Libre Panel einmal am Tag bei GitHub nach der neuesten Version; die Anfrage trägt nur deine
+  Versionsnummer, nichts über dich oder dein Panel. *Einstellungen → Start und System* schaltet
+  es wieder aus.
+- **Hinweise von anderen Programmen** sind aus, bis du sie erlaubst, und kommen dann nur von
+  diesem PC und nur mit dem Schlüssel, den Libre Panel dafür erstellt hat.
 - **Was du selbst anbindest**, spricht mit der Adresse, die du ihm gibst: Kalender (`.ics`),
   Home Assistant, MQTT. Der Ping des Moduls Netzwerkdetails verbindet sich mit 1.1.1.1 (oder
   dem Host, den du einstellst), solange das Modul auf dem Panel ist, und ein Cover, das ein

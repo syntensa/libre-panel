@@ -87,8 +87,10 @@ Turn the volume and it shows over every screen, in the look you pick: a *Bar* al
 *Levels* that rise, a *Ring* that fills or a *Large* number, switched on with one click on
 *Start*. A new track with its cover, a sensor past a limit you set, a stick or a game controller
 plugged in (Windows): short notices in the theme's colours, as a band or a card; a screen
-that shows the volume or the track itself gets none over it. Like every service, they are off
-until you switch them on.
+that shows the volume or the track itself gets none over it. Your own scripts and a Stream
+Deck button can show one too, once you allow it: `libre-panel notify "Render done"`, or an
+address with a key, from this PC only. Like every service, they are off until you switch them
+on.
 
 ### Game mode
 
@@ -96,7 +98,8 @@ until you switch them on.
 
 Start a game, from a list of your own or your Steam library, and the screen closes to a
 line, the game's name lights up and the game screen opens: the frame rate, its 1% low and
-who holds it back, counted by Intel's PresentMon. Its screen is yours to pick in
+who holds it back, counted by Intel's PresentMon, and the time, small in a corner. Its
+screen is yours to pick in
 *Design → Pages*: **Arena**, Libre Panel's own, or one of SPUR II's. After a round, an
 optional report compares it with your last ten.
 
@@ -175,7 +178,12 @@ the picture of the panel.
 **Ctrl+K** finds every command, theme, module, sensor and setting by a few letters.
 **Settings** writes `config.toml` for you, comments kept; the names of your processor,
 graphics card and memory are found by themselves, and you can type your own. **Start** shows
-the panel at a glance and the themes made for it, **Live** how it runs.
+the panel at a glance and the themes made for it, and says when a new version is out if you let
+it look. **Live** shows how it runs, and with the memory on, the **history**: temperatures, load
+and power over a day, a week or a month, and the games you played.
+**Keyboard shortcuts** for the whole PC pause the panel, turn its brightness or open the app
+from any window (Windows, Linux with X11), and switch off as a whole. The app speaks English,
+German, French, Spanish, Polish and Portuguese (Brazil).
 
 ## Themes
 
@@ -326,13 +334,18 @@ libre-panel quit                    # quit the background app
 
 ## Privacy
 
-**Nothing leaves your PC except the weather you turn on.** No account, no telemetry, no
-update check. The app is served to your own PC only (127.0.0.1), and only to requests that
-carry a secret token, new at every start.
+**Nothing leaves your PC that you have not turned on.** No account, no telemetry. The app is
+served to your own PC only (127.0.0.1), and only to requests that carry a secret token, new at
+every start.
 
 - **The weather** is off until you set a place. Then only its coordinates go to
   [Open-Meteo](https://open-meteo.com), every 15 minutes. A place you look up by name goes
   to Open-Meteo's place search when you press *Search*, and is kept to about a kilometre.
+- **New versions**: *Start* asks once whether to look. Say yes, and once a day Libre Panel
+  asks GitHub for its latest release; the request carries the version you have, nothing about
+  you or your panel. *Settings → Start and system* switches it off again.
+- **Notices from other programs** are off until you allow them, and then taken only from this
+  PC and only with the key Libre Panel made for them.
 - **What you connect yourself** talks to the address you give it: calendars (`.ics`),
   Home Assistant, MQTT. The ping of the network details module connects to 1.1.1.1 (or the
   host you set) while that module is on the panel, and a cover that a player names by a web

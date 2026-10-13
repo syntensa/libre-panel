@@ -195,9 +195,10 @@
             Leiste am Rand, als Pegel, die steigen, als Ring, der sich füllt, oder als große Zahl. Ein
             neuer Titel mit Cover, ein Sensor über einer Grenze, die
             du festlegst, ein Stick oder Controller angesteckt: kurze Hinweise in den Farben des
-            Themes.</p>
+            Themes. Auch deine eigenen Skripte und eine Stream-Deck-Taste können einen zeigen, von
+            diesem PC aus und mit Schlüssel.</p>
           <p class="note">Die Dienste Hinweise und Geräte sind aus, bis du sie einschaltest; Geräte gibt es
-            für Windows.</p>
+            für Windows. Hinweise von anderen Programmen warten, bis du sie erlaubst.</p>
         </div>
         <figure class="media">
           <video loop muted playsinline preload="none" width="2000" height="580" data-lazy data-poster="../media/volume-looks.png" aria-label="Die Lautstärke über Lumen in ihren vier Looks: eine Leiste am Rand, Pegel, die steigen, ein Ring, der sich füllt, und eine große Zahl">
@@ -214,8 +215,9 @@
           <div><span class="label">Spielmodus</span><h3>Ein Auftritt für jedes Spiel</h3></div>
           <p>Libre Panel erkennt das Spiel, das du startest, aus einer eigenen Liste oder deiner
             Steam-Bibliothek. Der Bildschirm schließt sich zu einer Linie, der Name des Spiels leuchtet
-            auf, und der Spielbildschirm öffnet sich mit den FPS, den 1-%-Lows und wer sie bremst. Nach
-            einer Runde vergleicht ein optionaler Bericht sie mit deinen letzten zehn.</p>
+            auf, und der Spielbildschirm öffnet sich mit den FPS, den 1-%-Lows und wer sie bremst, dazu
+            klein in der Ecke die Uhrzeit. Nach einer Runde vergleicht ein optionaler Bericht sie mit
+            deinen letzten zehn.</p>
           <p class="note">Die FPS kommen von Intels PresentMon (Windows), das der Download mitbringt.</p>
         </div>
         <figure class="media">
@@ -360,12 +362,14 @@
         <p class="kicker">Die App</p>
         <h2 id="app-title">Alles in einem Fenster</h2>
         <p>Die App von Libre Panel öffnet sich in einem eigenen Fenster und zeichnet jedes Bild mit dem
-          Renderer des Panels: Was du siehst, zeigt auch das Panel.</p>
+          Renderer des Panels: Was du siehst, zeigt auch das Panel. Sie spricht Deutsch, Englisch,
+          Französisch, Spanisch, Polnisch und Portugiesisch (Brasilien), und Tastenkürzel für den
+          ganzen PC halten das Panel an, ändern seine Helligkeit oder öffnen sie aus jedem Fenster.</p>
         <ul class="views">
           <li><b>Start</b> das Panel und seine Themes</li>
           <li><b>Gestalten</b> ein Theme bauen</li>
           <li><b>Look</b> Farben, Licht, Hinweise</li>
-          <li><b>Live</b> wie es läuft</li>
+          <li><b>Live</b> wie es läuft, und sein Verlauf</li>
           <li><b>Einstellungen</b> die ganze config.toml</li>
         </ul>
       </div>
@@ -665,14 +669,16 @@
     <div class="wrap">
       <div class="promise">
         <p class="kicker">Datenschutz</p>
-        <h2 id="privacy-title">Nichts verlässt deinen PC außer dem Wetter, das du einschaltest.</h2>
-        <p>Kein Konto, keine Telemetrie, keine Update-Abfrage. Die App wird nur für deinen eigenen PC
-          ausgeliefert, und nur an Anfragen mit einem geheimen Token, der bei jedem Start neu
-          ist.</p>
+        <h2 id="privacy-title">Nichts verlässt deinen PC, was du nicht selbst eingeschaltet hast.</h2>
+        <p>Kein Konto, keine Telemetrie. Die App wird nur für deinen eigenen PC ausgeliefert, und nur
+          an Anfragen mit einem geheimen Token, der bei jedem Start neu ist.</p>
         <ul class="points">
           <li><b>Das Wetter</b>Aus, bis du einen Ort setzt; dann gehen nur seine Koordinaten an
             Open-Meteo, alle 15 Minuten. Einen Ort, den du per Name suchst, bekommt die Suche erst, wenn
             du auf Suchen drückst; gespeichert wird er auf etwa einen Kilometer genau.</li>
+          <li><b>Neue Versionen</b>Start fragt einmal, ob nachgesehen werden soll. Sagst du ja, geht
+            einmal am Tag eine Anfrage an GitHub nach der neuesten Version; sie trägt nur deine
+            Versionsnummer, nichts über dich oder dein Panel.</li>
           <li><b>Was du selbst anbindest</b>Kalender, Home Assistant und MQTT sprechen mit den Adressen,
             die du ihnen gibst. Der Ping des Moduls Netzwerkdetails verbindet sich mit 1.1.1.1, solange
             es auf dem Panel ist, und ein Cover, das ein Player per Webadresse nennt, wird von dort
