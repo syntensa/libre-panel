@@ -165,3 +165,39 @@ def test_unsaved_work_is_saved_with_one_click_before_another_theme_opens(app_url
         dialog.locator("button[type='submit']").click()  # built in: saved as one's own first
         page.wait_for_function("window.libre.store.get().doc.id === 'nimbus'")
         assert load_theme(isolated_home / "themes" / "lumen-mine").description == "mine now"
+
+
+def test_designs_pages_say_what_the_panel_shows_when_as_start_does(app_url, isolated_home):  # noqa: F811
+    """Design's pages were cards whose picture had to be found to be clicked, "Normal" had no
+    word of when it shows, and "+" over the canvas did not say what it adds. They read as Start's
+    "What the panel shows when": each page, when it is on show, its switch and its theme, and a
+    way to edit it; the tabs' "+ Page" says it shows this theme on another page."""
+    from libre_panel.config import set_config_value
+
+    choose_theme(isolated_home, "lumen")
+    set_config_value("modes.game.theme", "arena")
+    with browser_page(app_url) as page:
+        page.locator(".rail-item", has_text="Pages").click()
+        side = page.locator(".side")
+        expect(side.locator(".side-title").first).to_have_text("What the panel shows when")
+        cards = side.locator(".page-card")
+        assert cards.evaluate_all("cs => cs.map((c) => c.dataset.page)")[:4] == [
+            "normal", "game", "media", "idle"
+        ]  # fmt: skip
+        normal = side.locator(".page-card[data-page='normal']")
+        expect(normal.locator(".page-card-name")).to_contain_text("The rest of the time")
+        expect(normal.locator(".page-card-always")).to_have_text("always")
+        expect(normal.locator(".page-card-badge")).to_have_text("Being edited")
+        game = side.locator(".page-card[data-page='game']")
+        expect(game.locator(".page-card-name")).to_contain_text("While a game runs")
+        game.get_by_role("button", name="Edit", exact=True).click()
+        page.wait_for_function("window.libre.store.get().doc.id === 'arena'")
+        expect(game.locator(".page-card-badge")).to_have_count(1)
+        expect(page.locator(".page-tab[aria-selected='true']")).to_have_text("In game")
+        # the tabs' "+ Page": this theme on another page, said with when that is
+        add = page.locator(".page-add")
+        expect(add).to_have_text("Page")
+        add.click()
+        items = page.locator(".popover .menu-item").all_inner_texts()
+        assert items[0] == "As the normal theme"
+        assert "Music · While music plays" in items and items[-1] == "A plugin's page…"

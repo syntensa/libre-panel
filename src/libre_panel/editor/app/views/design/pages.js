@@ -1,8 +1,9 @@
 // The panel's pages: the theme it shows normally (config.toml's theme), the
 // theme of each mode ([modes.<name>]: game mode switches to "game" while you
 // play) and the round report's (the memory service shows it after a game). The
-// tabs over the canvas open a page's theme; "+" puts the open theme on a page.
-// The pages panel also lists the pages that plugins bring to the editor.
+// tabs over the canvas open a page's theme; "+ Page" puts the open theme on a page.
+// The pages panel says what the panel shows when, as Start does, each page with its
+// switch, its theme and the way to edit it; it also lists the pages plugins bring.
 
 import { openTheme, refreshPages, refreshThemes, save, themeName } from "../../core/actions.js";
 import { endpoints } from "../../core/api.js";
@@ -53,32 +54,35 @@ export async function putOnPage(page) {
 
 async function askForMode() {
   const name = await promptDialog({
-    title: t("Another page"),
+    title: t("A plugin's page"),
     label: t("Name of the mode"),
-    hint: t("A mode a service switches to, as a plugin names it: a-z, 0-9, - and _"),
+    hint: t("The mode a plugin switches the panel to, as the plugin names it: a-z, 0-9, - and _"),
     validate: (value) => (MODE_NAME.test(value) && !["normal", "report"].includes(value) ? null : t("a-z, 0-9, - and _, starting with a letter")),
     confirm: t("Add"),
   });
   if (name) putOnPage(name);
 }
 
+/** Where the open theme can be shown too: normally, or on a page, each said with when it is on
+ * show; a plugin's own mode last, as it is the rare one. */
 function addItems() {
   const data = store.get().pages;
   const shown = new Set(shownPages(data).map((page) => page.id));
   const more = (data?.pages || []).filter((page) => !shown.has(page.id) && page.id !== "normal");
   return [
+    { icon: "to-panel", label: t("As the normal theme"), run: () => putOnPage("normal") },
     ...more.map((page) => ({
-      icon: page.id === "game" ? "game" : page.id === "report" ? "graph" : "pages",
-      label: t("Show this theme: {page}", { page: pageName(page.id) }),
+      icon: page.id === "game" ? "game" : page.id === "report" ? "graph" : page.id === "media" ? "music" : "pages",
+      label: `${pageName(page.id)} · ${pageWhen(page)}`,
       run: () => putOnPage(page.id),
     })),
-    { icon: "plus", label: t("Another mode…"), run: askForMode },
     "-",
-    { icon: "to-panel", label: t("As the normal theme"), run: () => putOnPage("normal") },
+    { icon: "plugin", label: t("A plugin's page…"), run: askForMode },
   ];
 }
 
-/** The tabs over the canvas. */
+/** The tabs over the canvas: the pages with a theme of their own, the one being edited chosen;
+ * each says when it is on show and what it shows. "+ Page" shows the open theme on one more. */
 export function PageTabs() {
   const { data, page } = useStore((s) => ({ data: s.pages, page: s.page, app: s.app.available }));
   const [open, setOpen] = useState(false);
@@ -88,16 +92,16 @@ export function PageTabs() {
   return html`<div class="page-tabs" role="tablist" aria-label=${t("Pages of the panel")} onPointerDown=${(event) => event.stopPropagation()}>
     ${shownPages(data).map(
       (item) => html`<button type="button" role="tab" key=${item.id} class="page-tab" aria-selected=${String(page === item.id)}
-        title=${t("Shows {theme}", { theme: themeName(item.theme) })} onClick=${() => openPage(item)}>
+        title=${`${pageName(item.id)}: ${pageWhen(item)} · ${t("Shows {theme}", { theme: themeName(item.theme) })}`} onClick=${() => openPage(item)}>
         ${pageName(item.id)}
         ${now === item.id ? html`<span class="page-live" title=${t("on the panel now")}></span>` : null}
       </button>`,
     )}
-    <button ref=${anchor} type="button" class="page-add" aria-label=${t("Add a page")} title=${t("Add a page")}
+    <button ref=${anchor} type="button" class="page-add" aria-label=${t("Show this theme on another page")} title=${t("Show this theme on another page")}
       aria-haspopup="menu" aria-expanded=${String(open)} onClick=${() => setOpen(!open)}>
-      <${Icon} name="plus" size=${15} />
+      <${Icon} name="plus" size=${14} /><span>${t("Page")}</span>
     </button>
-    <${Popover} anchor=${anchor} open=${open} onClose=${() => setOpen(false)} label=${t("Add a page")} width=${290}>
+    <${Popover} anchor=${anchor} open=${open} onClose=${() => setOpen(false)} label=${t("Show this theme on another page")} width=${320}>
       <${Menu} items=${addItems()} onClose=${() => setOpen(false)} />
     <//>
   </div>`;
@@ -163,8 +167,10 @@ export function PageThemeSelect({ page, theme, label, suggested = [], normal = t
   return html`<${Select} label=${label} value=${theme || ""} options=${options} onChange=${choose} />`;
 }
 
-/** Why a page is on show: music while it plays, the clock when the PC is idle, ... */
+/** Why a page is on show: music while it plays, the clock when the PC is idle, ... (as Start's
+ * "What the panel shows when" says it) */
 function pageWhen(item) {
+  if (item.id === "normal") return t("The rest of the time");
   if (item.id === "game") return t("While a game runs");
   if (item.id === "media") return t("While music plays");
   if (item.id === "idle") return t("When nobody has touched the PC for a while");
@@ -190,32 +196,32 @@ function PageCard({ item, current, open }) {
       toastError(error);
     }
   };
-  const note = item.id === "normal" ? themeName(item.theme) : pageWhen(item);
   const switchable = item.id !== "normal";
+  const name = pageName(item.id);
   return html`<div class=${`page-card${current ? " current" : ""}${item.theme ? "" : " empty"}${switchable && !item.on ? " off" : ""}`}
       data-page=${item.id}>
-    ${switchable
-      ? html`<div class="page-card-head">
-          <strong>${pageName(item.id)}</strong>
-          <${Toggle} label=${t("Show the page {page}", { page: pageName(item.id) })} checked=${item.on}
-            onChange=${(on) => change({ on })} />
-        </div>`
-      : null}
-    <button type="button" class="page-card-main" disabled=${!item.theme} onClick=${() => item.theme && open(item)}
-      title=${item.theme ? t("Open its theme") : null}>
-      ${item.theme ? html`<img alt="" src=${endpoints.previewUrl(versionFor(item.theme), 240)} loading="lazy" />` : html`<span class="page-card-blank"></span>`}
-      <span class="page-card-text">
-        ${switchable ? null : html`<strong>${pageName(item.id)}</strong>`}
-        <span class="muted">${note}</span>
+    <div class="page-card-head">
+      <span class="page-card-name">
+        <strong>${name}</strong>
+        <span class="muted">${pageWhen(item)}${item.id === "idle" && item.minutes ? ` · ${t("after {n} min", { n: item.minutes })}` : ""}</span>
       </span>
+      ${switchable
+        ? html`<${Toggle} label=${t("Show the page {page}", { page: name })} checked=${item.on} onChange=${(on) => change({ on })} />`
+        : html`<span class="page-card-always">${t("always")}</span>`}
+    </div>
+    <button type="button" class="page-card-main" disabled=${!item.theme} onClick=${() => item.theme && open(item)}
+      title=${item.theme ? t("Edit its theme") : null}>
+      ${item.theme ? html`<img alt="" src=${endpoints.previewUrl(versionFor(item.theme), 240)} loading="lazy" />` : html`<span class="page-card-blank"></span>`}
+      ${current ? html`<span class="page-card-badge">${t("Being edited")}</span>` : null}
     </button>
-    ${switchable
-      ? html`<div class="page-card-theme">
-          <${PageThemeSelect} page=${item.id} theme=${item.theme} suggested=${item.suggested || []}
-            normal=${Boolean(item.mode) && !item.own}
-            label=${t("Theme of the page {page}", { page: pageName(item.id) })} />
-        </div>`
-      : null}
+    <div class="page-card-theme">
+      <${PageThemeSelect} page=${item.id} theme=${item.theme} suggested=${item.suggested || []}
+        normal=${Boolean(item.mode) && !item.own}
+        label=${t("Theme of the page {page}", { page: name })} />
+      ${item.theme && !current
+        ? html`<button type="button" class="link-btn page-card-edit" onClick=${() => open(item)}>${t("Edit")}</button>`
+        : null}
+    </div>
     ${item.id === "idle"
       ? html`<div class="page-card-tools">
           <label class="inline-field"><span class="muted">${t("Minutes without input")}</span>
@@ -237,17 +243,23 @@ function PageCard({ item, current, open }) {
   </div>`;
 }
 
-/** The side panel: every page with its theme, and the plugins' pages. */
+// The pages in the order Start lists them; a plugin's own modes after them.
+const ORDER = ["normal", "game", "media", "idle", "report"];
+const rank = (id) => (ORDER.includes(id) ? ORDER.indexOf(id) : ORDER.length);
+
+/** The side panel: what the panel shows when, every page with its theme, and the plugins'
+ * pages. */
 export function PagesPanel() {
   const { data, page, plugins } = useStore((s) => ({ data: s.pages, page: s.page, plugins: s.plugins }));
+  const pages = [...(data?.pages || [])].sort((a, b) => rank(a.id) - rank(b.id));
   return html`<div class="side-scroll">
-    <h2 class="side-title">${t("Pages of the panel")}</h2>
+    <h2 class="side-title">${t("What the panel shows when")}</h2>
     ${data
-      ? html`<div class="page-cards">
-          ${data.pages.map((item) => html`<${PageCard} key=${item.id} item=${item} current=${page === item.id} open=${openPage} />`)}
+      ? html`<p class="side-hint">${t("Each page is a theme for a moment: while you play, while music plays, when the PC is idle. A page that is off leaves the normal theme on show.")}</p>
+        <div class="page-cards">
+          ${pages.map((item) => html`<${PageCard} key=${item.id} item=${item} current=${page === item.id} open=${openPage} />`)}
         </div>
-        <${AddPage} />
-        <p class="side-hint">${t("A page is shown while a service switches its mode on: game mode shows “In game” while you play.")}</p>`
+        <${AddPage} />`
       : html`<p class="side-hint">${t("The pages come from config.toml, which could not be read.")}</p>
           <button type="button" class="btn" onClick=${refreshPages}>${t("Try again")}</button>`}
     ${plugins.length
@@ -267,8 +279,8 @@ function AddPage() {
   const [open, setOpen] = useState(false);
   const anchor = useRef(null);
   return html`<button ref=${anchor} type="button" class="btn btn-dashed" aria-haspopup="menu" aria-expanded=${String(open)}
-      onClick=${() => setOpen(!open)}><${Icon} name="plus" size=${15} /> ${t("Add a page")}</button>
-    <${Popover} anchor=${anchor} open=${open} onClose=${() => setOpen(false)} label=${t("Add a page")} width=${290}>
+      onClick=${() => setOpen(!open)}><${Icon} name="plus" size=${15} /> ${t("Show this theme on another page")}</button>
+    <${Popover} anchor=${anchor} open=${open} onClose=${() => setOpen(false)} label=${t("Show this theme on another page")} width=${320}>
       <${Menu} items=${addItems()} onClose=${() => setOpen(false)} />
     <//>`;
 }
