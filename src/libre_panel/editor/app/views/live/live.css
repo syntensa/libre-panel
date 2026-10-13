@@ -457,3 +457,32 @@
   width: 120px;
   flex: none;
 }
+
+/* Now or History (index.js), at the top of both */
+.live-switch {
+  display: flex;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+}
+
+.live-switch a {
+  padding: 5px 14px;
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.live-switch a:hover {
+  color: var(--text);
+}
+
+.live-switch a[aria-current="page"] {
+  background: var(--surface-3);
+  color: var(--text);
+}

@@ -1,4 +1,5 @@
-// Live (#/live): what the panel shows now and how it runs. A calm line says it in words ("Runs
+// Live (#/live): what the panel shows now and how it runs; its switch leads to History
+// (#/live/history, ../history), what the memory kept of the last days. A calm line says it in words ("Runs
 // smoothly at 50 fps", or what keeps it from running); under it the picture on the panel, the
 // numbers as detail (frame rate against the target, data rate, drawing time, queue, faults) and
 // the end of the log; at the side smooth motion, the sensors, game mode and the other services
@@ -6,7 +7,7 @@
 // (docs/ARCHITECTURE.md) and polls it while it is shown. Built on the shell: see ../../README.md.
 
 import { appAction } from "../../core/app.js";
-import { registerProvider } from "../../core/commands.js";
+import { registerCommands, registerProvider } from "../../core/commands.js";
 import { control, useLivePicture, usePolled } from "../../core/console.js";
 import { t } from "../../core/i18n.js";
 import { loadPanelInfo } from "../../core/settings.js";
@@ -15,10 +16,11 @@ import { statTiles } from "../../core/stats.js";
 import { videoState } from "../../core/video.js";
 import { html, useEffect, useRef, useState } from "../../lib/preact.js";
 import { modeName, panelName } from "../../shell/panel-popover.js";
-import { registerView } from "../../shell/views.js";
+import { navigate, registerView } from "../../shell/views.js";
 import { Slider, Toggle } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { toast, toastError } from "../../ui/toast.js";
+import { HistoryView } from "../history/index.js";
 import { connectedModel } from "../home/panel.js";
 import { SOURCES } from "../settings/sensors.js";
 import { SERVICES } from "../settings/services.js";
@@ -343,7 +345,21 @@ function LiveActions() {
 
 // -- the view -------------------------------------------------------------------------------------------------
 
-function LiveView() {
+/** Now or History: the two halves of Live. */
+function Switch({ history }) {
+  return html`<nav class="live-switch" aria-label=${t("Live")}>
+    <a href="#/live" aria-current=${history ? undefined : "page"}>${t("Now")}</a>
+    <a href="#/live/history" aria-current=${history ? "page" : undefined}>${t("History")}</a>
+  </nav>`;
+}
+
+function LiveView({ rest = "" }) {
+  const [part, span] = rest.split("/");
+  if (part === "history") return html`<${HistoryView} rest=${span || ""} switcher=${html`<${Switch} history />`} />`;
+  return html`<${LiveNow} />`;
+}
+
+function LiveNow() {
   const app = useStore((s) => s.app);
   const models = useStore((s) => s.specs?.models || []);
   const panel = usePolled(control.panel, 1000);
@@ -356,6 +372,7 @@ function LiveView() {
   const line = [model ? panelName(model) : status?.target, status?.mode ? modeName(status.mode) : null].filter(Boolean).join(" · ");
   return html`<div class="live">
     <div class="live-main">
+      <${Switch} />
       <div class="live-head">
         <h2>${t("On the panel now")}</h2>
         ${background && line ? html`<span class="live-state">${line}</span>` : null}
@@ -397,6 +414,19 @@ registerView({
   component: LiveView,
   header: { actions: LiveActions },
 });
+
+registerCommands([
+  {
+    id: "live.history",
+    title: () => t("History"),
+    hint: () => t("temperatures, load and games over days"),
+    keywords: () => t("history graph chart temperatures past week month games rounds fps statistics"),
+    group: () => t("Go to"),
+    icon: "graph",
+    rank: 8,
+    run: () => navigate("live", "history"),
+  },
+]);
 
 // -- commands (Ctrl+K): a test notice of each kind --------------------------------------------------------
 

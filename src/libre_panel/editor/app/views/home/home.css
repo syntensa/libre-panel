@@ -489,7 +489,8 @@
 
 /* -- the question about the panel's standby clip (clip.js) ------------------------------------ */
 
-.clip-card {
+.clip-card,
+.update-card {
   display: flex;
   align-items: flex-start;
   gap: 16px;
@@ -500,31 +501,36 @@
   flex-shrink: 0;
 }
 
-.clip-card-icon {
+.clip-card-icon,
+.update-card-icon {
   display: flex;
   flex-shrink: 0;
   padding-top: 1px;
   color: var(--accent);
 }
 
-.clip-card-body {
+.clip-card-body,
+.update-card-body {
   flex: 1;
   min-width: 0;
 }
 
-.clip-card-body h2 {
+.clip-card-body h2,
+.update-card-body h2 {
   font-size: 17px;
   font-weight: 700;
 }
 
-.clip-card-body p {
+.clip-card-body p,
+.update-card-body p {
   margin: 4px 0 0;
   color: var(--text-2);
   font-size: 14px;
   line-height: 1.45;
 }
 
-.clip-card-form {
+.clip-card-form,
+.update-card-form {
   display: flex;
   flex-wrap: wrap;
   align-items: center;

@@ -914,7 +914,7 @@ Keeps what happens at the desk over weeks and months, in a database on this
 computer, and shows a round report when a game ends: the round against your
 last rounds of the same program. Nothing is sent anywhere.
 
-The app's *History* shows what it kept: the temperature, the load and the power of
+*Live → History* in the app shows what it kept: the temperature, the load and the power of
 the CPU and the GPU over 24 hours, 7 days or 30 days (the time in games behind
 them, gaps where the PC was off), what that came to, the games played most and the
 last rounds. Where the memory is off, *History* says so and switches it on.

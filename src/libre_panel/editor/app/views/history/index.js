@@ -1,4 +1,5 @@
-// History (#/history, #/history/week, #/history/month): what the memory kept on this computer.
+// History (#/live/history, #/live/history/week, #/live/history/month), the other half of Live:
+// what the memory kept on this computer.
 // The temperatures, the load and the power of the CPU and the GPU over a day, a week or a month
 // (the time in games behind them), what that came to, the games played most and the last
 // rounds. The server reads the memory's database (/api/history, editor/history.py); without
@@ -7,11 +8,10 @@
 
 import { get } from "../../core/api.js";
 import { usePolled } from "../../core/console.js";
-import { registerCommands } from "../../core/commands.js";
 import { t } from "../../core/i18n.js";
 import { enableService } from "../../core/settings.js";
 import { html, useEffect, useLayoutEffect, useRef, useState } from "../../lib/preact.js";
-import { navigate, registerView } from "../../shell/views.js";
+import { navigate } from "../../shell/views.js";
 import { Segmented } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 
@@ -314,7 +314,8 @@ function Off({ onOn }) {
   </div>`;
 }
 
-function HistoryView({ rest }) {
+/** History, under Live's switch (`switcher`); `rest` is the span: "", "week" or "month". */
+export function HistoryView({ rest, switcher }) {
   const span = SPANS().some((item) => item.value === rest) ? rest : "day";
   const found = usePolled(() => get(`/api/history?span=${span}`), 60_000, { deps: [span] });
   const data = found.data?.span === span ? found.data : null;
@@ -323,13 +324,14 @@ function HistoryView({ rest }) {
   }, [span]);
   const kept = data && data.course.t.length > 0;
   return html`<div class="history">
+    ${switcher}
     <div class="history-head">
       <div>
         <h2>${t("History")}</h2>
         <p class="muted">${t("What your PC went through, kept on this computer.")}</p>
       </div>
       <${Segmented} label=${t("Period")} value=${span} options=${SPANS()}
-        onChange=${(value) => navigate("history", value === "day" ? "" : value)} />
+        onChange=${(value) => navigate("live", value === "day" ? "history" : `history/${value}`)} />
     </div>
     ${found.error && !data ? html`<p class="history-note">${found.error}</p>` : null}
     ${data && !data.memory && !kept ? html`<${Off} onOn=${found.reload} />` : null}
@@ -351,18 +353,3 @@ function HistoryView({ rest }) {
       : null}
   </div>`;
 }
-
-registerView({ id: "history", title: () => t("History"), order: 45, icon: "graph", component: HistoryView });
-
-registerCommands([
-  {
-    id: "history.open",
-    title: () => t("History"),
-    hint: () => t("temperatures, load and games over days"),
-    keywords: () => t("history graph chart temperatures past week month games rounds fps statistics"),
-    group: () => t("Go to"),
-    icon: "graph",
-    rank: 8,
-    run: () => navigate("history"),
-  },
-]);

@@ -34,7 +34,7 @@ const HINTS = {
   home: () => t("The panel at a glance, the themes and what it shows when"),
   design: () => t("Arrange the building blocks of a theme, and its pages"),
   look: () => t("The colours, the finish and the light of a theme"),
-  live: () => t("What the panel shows now: its readings, services and test notices"),
+  live: () => t("What the panel shows now, and the history of the last days"),
   settings: () => t("The panel, sensors, services, weather and start"),
 };
 const KEYWORDS = {

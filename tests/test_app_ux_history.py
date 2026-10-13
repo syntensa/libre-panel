@@ -55,7 +55,7 @@ def kept(home, days=3):
 
 def test_without_the_memory_history_says_so_and_switches_it_on(app_url, isolated_home):  # noqa: F811
     choose_theme(isolated_home, "lumen")
-    with browser_page(app_url, "history", allow=PICTURE) as page:
+    with browser_page(app_url, "live/history", allow=PICTURE) as page:
         off = page.locator("[data-history='off']")
         expect(off).to_contain_text("No history is kept yet")
         expect(off).to_contain_text("on this computer only")
@@ -66,13 +66,26 @@ def test_without_the_memory_history_says_so_and_switches_it_on(app_url, isolated
         )
 
 
+def test_live_leads_to_history_and_back(app_url, isolated_home):  # noqa: F811
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url, "live", allow=PICTURE) as page:
+        switch = page.locator(".live-switch")
+        expect(switch.get_by_role("link", name="Now")).to_have_attribute("aria-current", "page")
+        switch.get_by_role("link", name="History").click()
+        page.wait_for_selector(".history")
+        assert page.url.endswith("#/live/history")
+        expect(page.locator(".tabs .tab[aria-current='page']")).to_have_text("Live")
+        page.locator(".live-switch").get_by_role("link", name="Now").click()
+        page.wait_for_selector(".live-main")
+
+
 def test_a_day_and_a_week_of_readings_with_the_games(app_url, isolated_home):  # noqa: F811
     from libre_panel.config import set_config_value
 
     choose_theme(isolated_home, "lumen")
     set_config_value("services.enabled", ["memory"])
     kept(isolated_home)
-    with browser_page(app_url, "history", allow=PICTURE) as page:
+    with browser_page(app_url, "live/history", allow=PICTURE) as page:
         tiles = page.locator(".history-tile")
         expect(tiles.nth(0)).to_contain_text("CPU temperature")
         expect(tiles.nth(0)).to_contain_text("peak 84 °C")
@@ -93,6 +106,6 @@ def test_a_day_and_a_week_of_readings_with_the_games(app_url, isolated_home):  #
         expect(page.locator(".history-round-list li")).to_have_count(1)  # today's
         with page.expect_request(lambda r: "/api/history?span=week" in r.url):
             page.get_by_role("radio", name="7 days").click()
-        assert page.url.endswith("#/history/week")
+        assert page.url.endswith("#/live/history/week")
         expect(page.locator(".history-round-list li")).to_have_count(3)
         expect(tiles.nth(2)).to_contain_text("72 h")

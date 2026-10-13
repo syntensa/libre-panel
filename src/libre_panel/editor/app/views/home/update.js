@@ -61,12 +61,12 @@ function Question() {
       setBusy(false);
     }
   };
-  return html`<section class="update-card clip-card" aria-labelledby="update-card-title" data-update="ask">
-    <span class="clip-card-icon" aria-hidden="true"><${Icon} name="download" size=${22} /></span>
-    <div class="clip-card-body">
+  return html`<section class="update-card" aria-labelledby="update-card-title" data-update="ask">
+    <span class="update-card-icon" aria-hidden="true"><${Icon} name="download" size=${22} /></span>
+    <div class="update-card-body">
       <h2 id="update-card-title">${t("Hear of new versions?")}</h2>
       <p>${t("Libre Panel can look once a day whether a new version is out, and say so here. It asks GitHub, where Libre Panel is published; nothing of you or your panel is sent.")}</p>
-      <div class="clip-card-form">
+      <div class="update-card-form">
         <button type="button" class="btn btn-primary" disabled=${busy} onClick=${() => answer(true)}>${t("Yes, look")}</button>
         <button type="button" class="btn" disabled=${busy} onClick=${() => answer(false)}>${t("No, thanks")}</button>
       </div>
@@ -83,9 +83,9 @@ function NewVersion({ update }) {
       toastError(error);
     }
   };
-  return html`<section class="update-card clip-card" aria-labelledby="update-card-title" data-update="new">
-    <span class="clip-card-icon" aria-hidden="true"><${Icon} name="download" size=${22} /></span>
-    <div class="clip-card-body">
+  return html`<section class="update-card" aria-labelledby="update-card-title" data-update="new">
+    <span class="update-card-icon" aria-hidden="true"><${Icon} name="download" size=${22} /></span>
+    <div class="update-card-body">
       <h2 id="update-card-title">${t("Libre Panel {version} is out", { version: latest.version })}</h2>
       ${latest.notes ? html`<p>${latest.notes}</p>` : null}
       <p class="update-card-now muted">${t("You have {version}.", { version: update.current })}</p>
@@ -93,7 +93,7 @@ function NewVersion({ update }) {
         ? html`<p class="update-card-command">${t("Installed with pip: this command brings the new version.")}
             <code class="mono">${pipCommand(latest.version)}</code></p>`
         : null}
-      <div class="clip-card-form">
+      <div class="update-card-form">
         ${latest.download ? external(latest.download, t("Download"), true) : null}
         ${external(latest.page, t("What is new"), !latest.download)}
         <button type="button" class="btn" onClick=${later}>${t("Later")}</button>
