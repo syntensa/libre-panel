@@ -139,7 +139,7 @@ def test_what_each_shortcut_does_in_the_background_app(isolated_home):
     app.shortcut("open")
     assert opened == ["home"]
     assert app.snapshot()["hotkeys"]["keys"] == {}
-    app.hotkeys.close()
+    app.shutdown()  # "resume" set its panel running: left so, it draws on into the next tests
 
 
 def test_the_settings_take_one_and_refuse_a_shortcut_two_actions_would_share(isolated_home):
