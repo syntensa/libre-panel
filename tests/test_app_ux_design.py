@@ -85,3 +85,29 @@ def test_a_block_is_added_with_a_click_and_taken_back_from_the_message(app_url):
         page.keyboard.press("Control+x")
         expect(page.locator(".toast", has_text="Copied 1 widget")).to_have_count(1)
         expect(page.locator(".toast", has_text="Removed “Clock”")).to_have_count(0)
+
+
+def test_the_themes_settings_keep_to_the_theme_and_lead_to_look(app_url, isolated_home):  # noqa: F811
+    """With nothing selected the inspector showed a 48 × 48 grid of numbers to a newcomer, and
+    its fine-tuning had Look's panel light and grid background a second time. The colour world
+    stays as the quick choice, with the way to Look; the grid and the rest are under
+    Fine-tuning, and "messages" are notices, as everywhere else."""
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url) as page:
+        inspector = page.locator(".inspector")
+        titles = inspector.locator(".section-title")
+        expect(titles).to_have_text(["Name", "Colour world", "Background", "Font"])
+        expect(inspector.locator(".inspector-note")).to_contain_text("The whole theme")
+        inspector.locator(".details-button").click()
+        details = inspector.locator(".section-title").all_text_contents()
+        assert details[:2] == ["Grid of the modules", "Module style"]
+        assert "Notices" in details and "Messages" not in details
+        assert "Panel light" not in details and "Grid background" not in details
+        inspector.get_by_role("button", name="Open Look").click()
+        page.wait_for_selector(".look-side")
+        page.go_back()  # the fine-tuning is where it was left
+        page.locator(".inspector").get_by_role("button", name="Back").click()
+        page.locator(".inspector").get_by_role(
+            "button", name="Finish, glow, panel light and notices: in Look"
+        ).click()
+        page.wait_for_selector(".look-side")

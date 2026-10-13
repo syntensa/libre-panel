@@ -1195,6 +1195,41 @@
   gap: 22px;
 }
 
+/* what the inspector shows when nothing is selected, in a line */
+.inspector-note {
+  margin: -4px 0 -8px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+/* where something is set elsewhere (Look), and the way there */
+.inspector-aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.inspector-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  align-self: flex-start;
+  margin-top: 6px;
+  text-align: left;
+}
+
+.inspector-aside .inspector-link {
+  margin-top: 0;
+}
+
 /* the looks of the theme, three to a row */
 .inspector .look-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
