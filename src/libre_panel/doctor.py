@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -364,6 +365,40 @@ def open_serial_panel(
     return display
 
 
+class Terminal:
+    """How the doctor asks in a terminal: ``ask`` is ``input``. The app asks with buttons
+    instead (doctor_session.py): each question has a key it is known by there."""
+
+    def __init__(self, ask: Callable[[str], str], say: Callable[[str], None]) -> None:
+        self.ask = ask
+        self.say = say
+
+    def confirm(self, key: str, question: str) -> tuple[bool, str]:
+        """Yes or no, and with a no what the person sees instead."""
+        answer = self.ask(f"{question} [y/n] ").strip().lower()
+        if answer.startswith(("y", "j")):
+            return True, ""
+        return False, self.ask("What do you see instead? (Enter to skip) ").strip()
+
+    def choose(self, key: str, question: str, options: list[str]) -> int | None:
+        """The index of one of ``options``; None for none of them."""
+        for number, label in enumerate(options, start=1):
+            self.say(f"  {number}) {label}")
+        answer = self.ask(f"{question} [1-{len(options)}] ").strip()
+        if answer.isdigit() and 1 <= int(answer) <= len(options):
+            return int(answer) - 1
+        return None
+
+    def number(self, key: str, question: str) -> int | None:
+        """A whole number; None where the person cannot tell."""
+        answer = self.ask(question).strip()
+        return int(answer) if answer.isdigit() else None
+
+    def wait(self, key: str, text: str) -> None:
+        """Until the person is ready (watching the panel)."""
+        self.ask(text)
+
+
 class Doctor:
     def __init__(
         self,
@@ -379,14 +414,23 @@ class Doctor:
         port: str = "",
         sensors: Callable[[], tuple[str, str] | None] | None = None,
         video: VideoConfig | None = None,
+        questions: Any = None,
+        speed_seconds: float = 20.0,
     ) -> None:
         self.ask = ask
+        # who answers the questions: the app (``questions``), a terminal (``ask``), or nobody
+        if questions is None and ask is not None:
+            questions = Terminal(ask, say)
+        self.questions = questions
         self.video = video  # the [video] settings: whether this panel would get the video mode
         self.brightness = brightness  # set again after the brightness check
         self.say = say
         self.pause = pause
         self.seconds_per_card = seconds_per_card
         self.frames = frames
+        # the speed test ends after this long, at two frames at least: an older serial panel
+        # (rev. A at 115200 baud) takes up to half a minute for one whole frame
+        self.speed_seconds = speed_seconds
         if open_transport is None:
             from libre_panel.devices.turzx_usb import UsbTransport
 
@@ -410,33 +454,28 @@ class Doctor:
         mark = {"ok": "ok", "fail": "FAIL", "skip": "skip", "info": "info"}[result]
         self.say(f"[{mark:>4}] {name}" + (f" — {detail}" if detail else ""))
 
-    def _question(self, name: str, question: str) -> None:
-        if self.ask is None:
+    def _question(self, key: str, name: str, question: str) -> None:
+        if self.questions is None:
             self.pause(self.seconds_per_card)
             self._step(name, "skip", "not checked (no questions asked)")
             return
-        answer = self.ask(f"{question} [y/n] ").strip().lower()
-        if answer.startswith(("y", "j")):
+        seen, note = self.questions.confirm(key, question)
+        if seen:
             self._step(name, "ok", "confirmed by looking at the panel")
         else:
-            note = self.ask("What do you see instead? (Enter to skip) ").strip()
             self._step(name, "fail", note or "not as expected")
 
     def _choose_size(self, candidates: list) -> object:
         """Which of several panels with the same USB ids this one is."""
         labels = ", ".join(m.label for m in candidates)
         default = next((m for m in candidates if m.shape == "rect"), candidates[0])
-        if self.ask is None:
+        if self.questions is None:
             self._step("panel size", "info", f"{default.label} assumed (its USB ids fit {labels}); "
                        "set device.model if it is another")  # fmt: skip
             return default
         self.say("Its USB ids fit several panels:")
-        for number, model in enumerate(candidates, start=1):
-            self.say(f"  {number}) {model.label}")
-        answer = self.ask(f"Which one is it? [1-{len(candidates)}] ").strip()
-        chosen = default
-        if answer.isdigit() and 1 <= int(answer) <= len(candidates):
-            chosen = candidates[int(answer) - 1]
+        index = self.questions.choose("size", "Which one is it?", [m.label for m in candidates])
+        chosen = default if index is None else candidates[index]
         self._step("panel size", "info", f"{chosen.label}, as chosen (USB ids fit {labels})")
         return chosen
 
@@ -547,18 +586,19 @@ class Doctor:
         w, h = model.size("landscape")
         self._send(ruler_card(w, h, step=step))
         self.say("\nThe panel should now show the RULER card (landscape).")
-        if self.ask is None:
+        if self.questions is None:
             self.pause(self.seconds_per_card)
             self._step("hidden edges (ruler)", "skip", "not measured (no questions asked)")
             return
         hidden = {}
         for edge in RULER_EDGES:
-            answer = self.ask(
+            seen = self.questions.number(
+                f"ruler-{edge}",
                 f"{edge.capitalize()} edge: smallest number whose yellow bar you can see "
-                "(Enter = cannot tell)? "
-            ).strip()
+                "(Enter = cannot tell)? ",
+            )
             # bar k shows, bar k - step does not: the glass hides k - step pixels (up to k - 1)
-            hidden[edge] = max(0, int(answer) - step) if answer.isdigit() else None
+            hidden[edge] = None if seen is None else max(0, seen - step)
         parts = [f"{edge} {'?' if v is None else f'{v} px'}" for edge, v in hidden.items()]
         self.report.hidden = hidden
         self._step("hidden edges (ruler)", "info", "hidden: " + ", ".join(parts))
@@ -590,6 +630,7 @@ class Doctor:
             self._send(test_card(w, h, "Libre Panel", subtitle, round_panel))
             self.say(f"\nThe panel should now show test card {n} ({orientation}).")
             self._question(
+                f"card-{orientation}",
                 f"test card, {orientation}",
                 "Is the white frame visible on all four edges, is 'UP' at the top edge, "
                 "is the text readable (not mirrored) and are RED/GREEN/BLUE the right colours?",
@@ -598,13 +639,17 @@ class Doctor:
         if not round_panel:
             self._ruler(model)
 
-        if self.ask is not None:
-            self.ask("\nBrightness: the panel goes dark, then bright. Watch it and press Enter. ")
+        if self.questions is not None:
+            self.questions.wait(
+                "brightness-watch",
+                "\nBrightness: the panel goes dark, then bright. Watch it and press Enter. ",
+            )
         for percent in (10, 100):
             self._set_brightness(percent)
             self.pause(1.5)
         self._set_brightness(self.brightness)
         self._question(
+            "brightness",
             "brightness (command 14)" if usb else "brightness",
             "Did the panel go dark and then bright?",
         )
@@ -619,6 +664,8 @@ class Doctor:
             seconds, size = self._send(cards[i % 2])
             times.append(seconds)
             sizes.append(size)
+            if len(times) >= 2 and sum(times) >= self.speed_seconds:
+                break
         if times:
             avg = sum(times) / len(times)
             kind = "PNG" if usb else "RGB565"

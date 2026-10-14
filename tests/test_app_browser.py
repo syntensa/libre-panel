@@ -3624,7 +3624,10 @@ def test_settings_about(app_url, isolated_home, monkeypatch):
         hrefs = [links.nth(i).get_attribute("href") for i in range(links.count())]
         assert "https://github.com/syntensa/libre-panel" in hrefs
         assert any("template=panel_support.yml" in href for href in hrefs)  # (filled in)
-        # what is connected the app lists itself; the doctor runs in a terminal
+        # what is connected the app lists itself; the panel test is in Live → Diagnose, and the
+        # doctor runs in a terminal too
+        playwright.expect(page.locator('[data-open="panel-test"]')).to_be_visible()
+        page.locator(".report-terminal summary").click()
         commands = page.locator(".command-row .command")
         assert [commands.nth(i).inner_text().split()[-1] for i in range(commands.count())] == [
             "doctor"

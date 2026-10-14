@@ -656,6 +656,10 @@ a.btn:hover {
   color: var(--text);
 }
 
+a.btn-primary:hover {
+  color: var(--accent-ink); /* the hover above is for quiet buttons: this one keeps its ink */
+}
+
 /* report a panel: three steps */
 .report-steps {
   display: flex;

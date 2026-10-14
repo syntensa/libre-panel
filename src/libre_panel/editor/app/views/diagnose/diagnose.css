@@ -1,0 +1,288 @@
+/* Live → Diagnose (index.js): check and fix, the panel test, the log. The cards are Settings'
+   (settings.css: .settings-card, the health list, the glance). */
+
+.diagnose {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  padding: 24px 28px 32px;
+  overflow-y: auto;
+}
+
+.diagnose-head h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.diagnose-head p {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.diagnose-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .diagnose-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.diagnose-column {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+
+.diagnose-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px 20px;
+}
+
+.diagnose-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.diagnose-mend .diagnose-actions {
+  padding: 16px 20px;
+}
+
+.diagnose-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.diagnose-done {
+  padding: 0 20px 16px;
+  font-size: 13px;
+}
+
+.diagnose-done p,
+.diagnose-body p {
+  margin: 0;
+}
+
+.diagnose-failed {
+  color: var(--danger-text);
+}
+
+.diagnose-hint {
+  font-size: 12.5px;
+}
+
+/* -- the panel test ---------------------------------------------------------------------------- */
+
+.doctor-question {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--accent-softer);
+  border: 1px solid var(--accent);
+}
+
+.doctor-question-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.doctor-question-text p {
+  margin: 0;
+}
+
+.doctor-ask {
+  font-weight: 600;
+}
+
+.doctor-note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.doctor-number {
+  width: 90px;
+}
+
+.doctor-busy {
+  font-size: 14px;
+}
+
+.doctor-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+
+.doctor-step {
+  display: grid;
+  grid-template-columns: 18px minmax(0, auto) minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+}
+
+.doctor-mark {
+  display: inline-flex;
+  color: var(--muted);
+}
+
+.doctor-step.ok .doctor-mark {
+  color: var(--ok);
+}
+
+.doctor-step.fail .doctor-mark,
+.doctor-step.fail .doctor-name {
+  color: var(--danger-text);
+}
+
+.doctor-detail {
+  overflow: hidden;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doctor-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13.5px;
+}
+
+.doctor-result-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.doctor-result-head div {
+  display: flex;
+  flex-direction: column;
+}
+
+.doctor-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.doctor-result.ok .doctor-badge {
+  background: var(--ok);
+  color: #06120e;
+}
+
+.doctor-result.fail .doctor-badge {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.doctor-report pre {
+  max-height: 260px;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border-radius: 10px;
+  background: #080b0f;
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+/* -- the log ------------------------------------------------------------------------------------ */
+
+.diagnose-log-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.diagnose-detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.diagnose-log-box {
+  height: 340px;
+  padding: 10px 12px;
+  overflow: auto;
+  border-radius: 12px;
+  background: #080b0f;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.diagnose-log-box p {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 13px;
+}
+
+.log-entry {
+  display: grid;
+  grid-template-columns: auto 64px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.log-time {
+  color: var(--muted);
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+.log-message {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-entry.warning .log-level,
+.log-entry.warning .log-message {
+  color: var(--warn);
+}
+
+.log-entry.error .log-level,
+.log-entry.error .log-message,
+.log-entry.critical .log-level,
+.log-entry.critical .log-message {
+  color: var(--danger-text);
+}
+
+.log-entry.info .log-message {
+  color: var(--text);
+}

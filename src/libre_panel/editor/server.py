@@ -342,6 +342,22 @@ class EditorState:
         self.start_screen_jobs: Any = None  # the panel's own screens (a test puts a fake panel)
         self.news = News(config_path)  # whom Start tells what is new (news.py)
         self.updates = Updates(config_path)  # whether a newer version is out (updates.py)
+        self._doctor: Any = None  # the panel test of Live → Diagnose (doctor_session.py)
+
+    def doctor(self) -> Any:
+        """The panel test, made on first use: it gives the app's panel loop's panel to the
+        doctor while it runs (a plain editor has none)."""
+        with self._lock:
+            if self._doctor is None:
+                from libre_panel.doctor_session import Session
+
+                def devices() -> str:
+                    return app_settings.Settings(self.config_path, self.controls,
+                                                 self.restart).report()["text"]  # fmt: skip
+
+                panel = getattr(self.controls, "panel", None)
+                self._doctor = Session(panel, self.config_path, devices=devices)
+            return self._doctor
 
     def start_screen(self) -> Any:
         """What writes the panel's boot logo and standby clip (devices/panel_files.py)."""
@@ -1593,6 +1609,59 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error(str(exc))
         self._json({"available": True, **snapshot})
 
+    def _doctor_action(self) -> None:
+        """``POST /api/doctor``: ``{"action": "start"}``, ``{"action": "answer", "answer":
+        {...}}`` or ``{"action": "cancel"}``; answers the test's state (``GET /api/doctor``)."""
+        from libre_panel.doctor_session import SessionError
+
+        payload = self._read_json()
+        if payload is None:
+            return
+        action = payload.get("action") if isinstance(payload, dict) else None
+        session = self.state.doctor()
+        try:
+            if action == "start":
+                answer = session.start()
+            elif action == "answer":
+                answer = session.answer(payload.get("answer"))
+            elif action == "cancel":
+                answer = session.cancel()
+            else:
+                return self._error('expected {"action": "start", "answer" or "cancel"}')
+        except SessionError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        self._json(answer)
+
+    def _logs(self, query: dict[str, list[str]]) -> None:
+        """``GET /api/logs?level=WARNING``: the log's last entries (logview.py) and whether it
+        is written in detail."""
+        from libre_panel import logview
+
+        level = (query.get("level") or ["DEBUG"])[0].upper()
+        self._json({"entries": logview.entries(level), "verbose": logview.verbose(),
+                    "levels": list(logview.LEVELS)})  # fmt: skip
+
+    def _logs_file(self) -> None:
+        """``GET /api/logs/file``: the whole log to keep, without the person's folders."""
+        from libre_panel import logview
+
+        body = logview.text().encode("utf-8")
+        self._send(200, body, "text/plain; charset=utf-8", filename="libre-panel-log.txt")
+
+    def _logs_action(self) -> None:
+        """``POST /api/logs {"verbose": true}``: every detail into the log until the app starts
+        again, or only what matters."""
+        from libre_panel import logview
+
+        payload = self._read_json()
+        if payload is None:
+            return
+        on = payload.get("verbose") if isinstance(payload, dict) else None
+        if not isinstance(on, bool):
+            return self._error('expected {"verbose": true or false}')
+        logview.set_verbose(on)
+        self._json({"verbose": logview.verbose()})
+
     def _app_state(self) -> None:
         """``GET /api/app``: the background app's state, if this editor belongs to one."""
         if self.controls is None:
@@ -1829,6 +1898,9 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/sensors", lambda h, m, u: h._json(h._sensors())),
     Route("GET", "/api/i18n", lambda h, m, u: h._json(h._i18n())),
     Route("GET", "/api/app", lambda h, m, u: h._app_state()),
+    Route("GET", "/api/doctor", lambda h, m, u: h._json(h.state.doctor().status())),
+    Route("GET", "/api/logs", lambda h, m, u: h._logs(parse_qs(u.query))),
+    Route("GET", "/api/logs/file", lambda h, m, u: h._logs_file(), picture=True),
     Route("GET", "/api/hardware", lambda h, m, u: h._hardware(_refresh_asked(u.query))),
     Route("GET", "/api/fan-look", lambda h, m, u: h._fan_look(parse_qs(u.query)), picture=True),
     Route(
@@ -1861,6 +1933,8 @@ ROUTES: tuple[Route, ...] = (
     Route("POST", "/api/templates", lambda h, m, u: h._templates()),
     Route("POST", "/api/detach", lambda h, m, u: h._detach()),
     Route("POST", "/api/app", lambda h, m, u: h._app_action()),
+    Route("POST", "/api/doctor", lambda h, m, u: h._doctor_action()),
+    Route("POST", "/api/logs", lambda h, m, u: h._logs_action()),
     Route("POST", "/api/language", lambda h, m, u: h._set_language()),
     Route("POST", "/api/pages", lambda h, m, u: h._set_panel_page()),
     Route("POST", "/api/sequence", lambda h, m, u: h._set_sequence()),

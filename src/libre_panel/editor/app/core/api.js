@@ -104,6 +104,12 @@ export const endpoints = {
   setSequence: (on, steps) => post("/api/sequence", { on, steps }),
   app: () => get("/api/app"),
   appAction: (action, value) => post("/api/app", { action, value }),
+  // Live → Diagnose: the panel test (doctor_session.py) and the log (logview.py)
+  doctor: () => get("/api/doctor"),
+  doctorAction: (action, answer) => post("/api/doctor", answer === undefined ? { action } : { action, answer }),
+  logs: (level = "DEBUG") => get(`/api/logs?level=${enc(level)}`),
+  setDetailedLog: (verbose) => post("/api/logs", { verbose }),
+  logsFile: () => withToken("/api/logs/file"),
   pluginPages: () => get("/api/plugins/pages"),
   hardware: () => get("/api/hardware"),
   setHardware: (names) => post("/api/hardware", names),

@@ -132,6 +132,14 @@ a rev. C panel stays dark with Libre Panel, please report it with the
 
 ## Check your panel
 
+In the app: *Live → Diagnose → Panel test*. Libre Panel gives the panel to the test while it
+runs, shows the test pictures, asks what you see with buttons and writes the report; *Report
+the panel as working* (or *Report the problem*) then opens the form on GitHub with the report
+filled in, and you send it. The same tab has *Check and fix* (it mends what Libre Panel can
+mend by itself), *Restart the panel* (it lets the panel go and connects it again; no command
+restarts the panel itself) and the log, which it copies and saves without the names of your
+folders.
+
 With a download, in a terminal:
 
 ```bash

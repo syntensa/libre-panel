@@ -1,5 +1,6 @@
 // Live (#/live): what the panel shows now and how it runs; its switch leads to History
-// (#/live/history, ../history), what the memory kept of the last days. A calm line says it in words ("Runs
+// (#/live/history, ../history), what the memory kept of the last days, and to Diagnose
+// (#/live/diagnose, ../diagnose): the panel test, the log and what mends a problem. A calm line says it in words ("Runs
 // smoothly at 50 fps", or what keeps it from running); under it the picture on the panel, the
 // numbers as detail (frame rate against the target, data rate, drawing time, queue, faults) and
 // the end of the log; at the side smooth motion, the sensors, game mode and the other services
@@ -20,6 +21,7 @@ import { navigate, registerView } from "../../shell/views.js";
 import { Slider, Toggle } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { toast, toastError } from "../../ui/toast.js";
+import { DiagnoseView } from "../diagnose/index.js";
 import { HistoryView } from "../history/index.js";
 import { connectedModel } from "../home/panel.js";
 import { SOURCES } from "../settings/sensors.js";
@@ -345,17 +347,18 @@ function LiveActions() {
 
 // -- the view -------------------------------------------------------------------------------------------------
 
-/** Now or History: the two halves of Live. */
-function Switch({ history }) {
+/** Now, History or Diagnose: the parts of Live. */
+function Switch({ part = "" }) {
+  const link = (to, label) => html`<a href=${to ? `#/live/${to}` : "#/live"} aria-current=${part === to ? "page" : undefined}>${label}</a>`;
   return html`<nav class="live-switch" aria-label=${t("Live")}>
-    <a href="#/live" aria-current=${history ? undefined : "page"}>${t("Now")}</a>
-    <a href="#/live/history" aria-current=${history ? "page" : undefined}>${t("History")}</a>
+    ${link("", t("Now"))}${link("history", t("History"))}${link("diagnose", t("Diagnose"))}
   </nav>`;
 }
 
 function LiveView({ rest = "" }) {
   const [part, span] = rest.split("/");
-  if (part === "history") return html`<${HistoryView} rest=${span || ""} switcher=${html`<${Switch} history />`} />`;
+  if (part === "history") return html`<${HistoryView} rest=${span || ""} switcher=${html`<${Switch} part="history" />`} />`;
+  if (part === "diagnose") return html`<${DiagnoseView} switcher=${html`<${Switch} part="diagnose" />`} />`;
   return html`<${LiveNow} />`;
 }
 
@@ -425,6 +428,16 @@ registerCommands([
     icon: "graph",
     rank: 8,
     run: () => navigate("live", "history"),
+  },
+  {
+    id: "live.diagnose",
+    title: () => t("Diagnose"),
+    hint: () => t("test the panel, read the log, mend what is wrong"),
+    keywords: () => t("diagnose doctor test check panel log logs error problem fix repair mend restart reconnect"),
+    group: () => t("Go to"),
+    icon: "pulse",
+    rank: 9,
+    run: () => navigate("live", "diagnose"),
   },
 ]);
 

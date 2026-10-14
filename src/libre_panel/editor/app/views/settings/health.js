@@ -128,6 +128,8 @@ async function readFrameRates(running) {
  * `{id, tone: "error" | "warn" | "info", title, text, action}`, the worst first; `action` is
  * `{label, run}` (a click that mends it) or `{label, go}` (the way to where it is done), or none
  * when the next step is in the text. `ready` is false until the panel's facts are known.
+ * An action marked `safe` changes nothing but Libre Panel's own state and asks for no rights:
+ * Live → Diagnose runs all of them with one click ("Check and fix").
  */
 export function healthOf(facts) {
   const { app, panelInfo: info, unlockInfo: unlock, settings, sourceStates, serviceStates, clipQuestion } = facts;
@@ -159,13 +161,13 @@ export function healthOf(facts) {
       text: t("This window edits the settings and the themes, but the panel gets nothing from it. Start Libre Panel from the Start menu or your list of apps: it then runs in the background, drives the panel and uses what you set here."),
     });
   }
-  if (running && panel.state === "paused") {
+  if (running && panel.state === "paused" && !panel.testing) {
     add({
       id: "paused",
       tone: "warn",
       title: t("The panel is paused"),
       text: t("It shows nothing new until it goes on."),
-      action: { label: t("Resume panel"), run: () => appAction("resume") },
+      action: { label: t("Resume panel"), run: () => appAction("resume"), safe: true },
     });
   }
   if (running && panel.state === "error") {
@@ -174,7 +176,7 @@ export function healthOf(facts) {
       tone: "error",
       title: t("The panel needs attention"),
       text: panel.detail || t("Libre Panel stopped drawing for the panel."),
-      action: go(t("Show the log"), "live"),
+      action: go(t("Show the log"), "live", "diagnose"),
     });
   }
   const file = config?.device?.driver === "virtual"; // the pictures go to a file, as chosen
@@ -206,6 +208,7 @@ export function healthOf(facts) {
         action: {
           label: t("Use the {panel}", { panel: panelName(info.found) }),
           run: async () => (await saveSettings({ "device.model": "auto" })) && loadPanelInfo(),
+          safe: true,
         },
       });
     } else if (why) {
@@ -216,7 +219,11 @@ export function healthOf(facts) {
         text: needs.includes("usb")
           ? `${why} ${t("Your user may not use the USB panel yet: the one-time setup gives the permission.")}`
           : `${why} ${t("Another program may be using it (the panel's own app?): close it, and Libre Panel takes the panel within a few seconds.")}`,
-        action: needs.includes("usb") ? go(t("Set up"), "settings", "sensors/sensor-setup") : null,
+        action: needs.includes("usb")
+          ? go(t("Set up"), "settings", "sensors/sensor-setup")
+          : running
+            ? { label: t("Connect again"), run: restartPanel, safe: true }
+            : null,
       });
     }
   }
@@ -372,7 +379,7 @@ export function healthOf(facts) {
       tone: "warn",
       title: t("No weather has arrived"),
       text: t("Libre Panel could not reach Open-Meteo. It tries again every two minutes; is this computer online?"),
-      action: go(t("Show the log"), "live"),
+      action: go(t("Show the log"), "live", "diagnose"),
     });
   }
 
@@ -386,7 +393,7 @@ export function healthOf(facts) {
         tone: "error",
         title: t("{name}: stopped with a fault", { name }),
         text: row.detail || t("A restart often helps; the log says why."),
-        action: { label: t("Restart"), run: () => restartService(row.name) },
+        action: { label: t("Restart"), run: () => restartService(row.name), safe: true },
       });
     } else if (row.state === "not-installed") {
       add({
@@ -407,7 +414,7 @@ export function healthOf(facts) {
       tone: "info",
       title: t("A change waits for a restart of the panel"),
       text: t("Sensor sources and the weather are set up when the panel starts."),
-      action: { label: t("Restart the panel"), run: restartPanel },
+      action: { label: t("Restart the panel"), run: restartPanel, safe: true },
     });
   }
   items.sort((a, b) => RANK[a.tone] - RANK[b.tone]);

@@ -314,7 +314,7 @@ def test_control_shows_the_panel_its_sources_and_its_services(running, isolated_
     assert panel["panel"]["state"] == "showing" and panel["panel"]["stats"]["fps"] > 0
     assert set(panel["panel"]) == {
         "state", "detail", "hint", "target", "theme", "default_theme", "frames", "mode", "stats",
-        "missing_theme", "notice", "sequence",
+        "missing_theme", "notice", "sequence", "testing",
     }  # fmt: skip
     assert panel["panel"]["missing_theme"] == "" and panel["panel"]["notice"] == ""
     assert panel["panel"]["sequence"] is None  # no screens in turn: the one theme

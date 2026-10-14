@@ -67,6 +67,8 @@ class PanelService:
         self.error = ""
         self.platform = sys.platform  # what the hint about the sensors goes by (tests set it)
         self._paused = False
+        self._held = False  # the panel test has the panel: the loop waits for it (hold())
+        self._before = False  # paused before the test
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -79,8 +81,36 @@ class PanelService:
     def running(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
+    @property
+    def held(self) -> bool:
+        return self._held
+
+    def hold(self) -> bool:
+        """Give the panel to the panel test (doctor_session.py): the loop stops, releases the
+        panel and does not start again, from the tray or a shortcut either, until
+        :meth:`release`. Whether it ran."""
+        ran = self.running and not self._paused
+        self._before = self._paused
+        self._held = True
+        self._paused = True
+        if not self._halt():  # it hangs on the panel: the test would talk to it at the same time
+            self._held, self._paused = False, self._before
+            raise RuntimeError("the panel loop did not let the panel go; restart Libre Panel")
+        return ran
+
+    def release(self, resume: bool) -> None:
+        """The panel test is done: the loop starts again where it ran before, and stays
+        paused where it was."""
+        self._held = False
+        self._paused = self._before
+        if resume:
+            self.start()
+
     def start(self) -> None:
         with self._lock:
+            if self._held:
+                log.info("the panel test has the panel: the panel starts after it")
+                return
             if self.running:
                 return
             self._paused = False
@@ -91,7 +121,8 @@ class PanelService:
             )
             self._thread.start()
 
-    def _halt(self) -> None:
+    def _halt(self) -> bool:
+        """Stop the loop; whether it stopped (it lets the panel go as it does)."""
         with self._lock:
             self._stop.set()
             thread, self._thread = self._thread, None
@@ -99,6 +130,8 @@ class PanelService:
             thread.join(timeout=10)
             if thread.is_alive():
                 log.warning("the panel loop did not stop in time")
+                return False
+        return True
 
     def pause(self) -> None:
         """Stop sending frames and release the panel (another program may use it)."""
@@ -177,6 +210,7 @@ class PanelService:
             state = status.state
         return {
             "state": state,
+            "testing": self._held,  # paused for the panel test (Live → Diagnose)
             "detail": self.error or (status.detail if state == "waiting" else ""),
             # what to do when temperatures and power show "--" (Windows), in the user's language
             "hint": self._hint() if state in ("showing", "waiting") else "",

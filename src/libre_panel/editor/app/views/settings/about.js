@@ -7,6 +7,7 @@ import { t } from "../../core/i18n.js";
 import { loadAbout, loadReport, openFolder } from "../../core/settings.js";
 import { useStore } from "../../core/state.js";
 import { html, useEffect, useState } from "../../lib/preact.js";
+import { navigate } from "../../shell/views.js";
 import { Icon } from "../../ui/icons.js";
 import { Markdown } from "./markdown.js";
 import { Card, Disclosure, Note, SettingRow, copyText } from "./parts.js";
@@ -98,6 +99,14 @@ function HardwareReport() {
       <//>
       <${Step} number="2" id="doctor" title=${t("Check the panel (if it is found but shows something wrong)")}>
         <span class="settings-row-hint">
+          ${t("The panel test shows test pictures on the panel, asks what you see and writes the report, without serial numbers; one click then opens the form with it filled in.")}
+        </span>
+        <div class="report-actions">
+          <button type="button" class="btn" data-open="panel-test" onClick=${() => navigate("live", "diagnose")}>${t("Open the panel test")}</button>
+        </div>
+        <details class="report-terminal">
+          <summary>${t("Or in a terminal")}</summary>
+        <span class="settings-row-hint">
           ${t("The doctor shows test pictures on the panel, asks what you see and writes a report file, without serial numbers. It needs the panel to itself, so it runs outside the app:")}
         </span>
         <ol class="report-how">
@@ -109,6 +118,7 @@ function HardwareReport() {
           <li>${t("At the end it says where it wrote its file: add that file to the report. Then start Libre Panel again.")}</li>
         </ol>
         <${Command} command=${info.doctor} />
+        </details>
       <//>
       <${Step} number="3" id="send" title=${t("Send it")}>
         <span class="settings-row-hint">

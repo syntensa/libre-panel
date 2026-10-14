@@ -904,3 +904,40 @@ def test_on_windows_the_port_is_this_servers_alone():
             del socket.SO_EXCLUSIVEADDRUSE
     linux = Socket()
     assert hold_port(linux, "linux") is True and linux.options == []
+
+
+def test_the_panel_test_and_the_log_have_their_routes(editor, monkeypatch, isolated_home):
+    """Live → Diagnose: the panel test's state and actions, the log's entries, the whole log
+    to keep (a link: the token in its address) and the detail it is written with."""
+    import logging
+    from pathlib import Path
+
+    from libre_panel import logview
+
+    status, body = request(editor.port, "GET", "/api/doctor")
+    assert status == 200 and body["state"] == "idle" and body["steps"] == []
+    assert request(editor.port, "POST", "/api/doctor", {"action": "explode"})[0] == 400
+    status, body = request(editor.port, "POST", "/api/doctor", {"action": "answer", "answer": {}})
+    assert status == 409  # nothing is asked
+
+    log = isolated_home / "logs" / "libre-panel.log"
+    log.parent.mkdir(parents=True)
+    log.write_text(
+        "2026-10-14 10:00:00,001 INFO libre_panel.app: showing theme 'lumen'\n"
+        f"2026-10-14 10:00:01,002 ERROR libre_panel.app: broken: {Path.home() / 'x.toml'}\n",
+        "utf-8",
+    )
+    monkeypatch.setattr(logview, "log_file", lambda: log)
+    status, body = request(editor.port, "GET", "/api/logs?level=warning")
+    assert status == 200 and [e["level"] for e in body["entries"]] == ["ERROR"]
+    assert "~" in body["entries"][0]["message"] and str(Path.home()) not in json.dumps(body)
+    status, body = request(editor.port, "GET", "/api/logs/file")
+    assert status == 200 and b"showing theme" in body and b"broken: ~" in body
+    root = logging.getLogger()
+    before = root.level
+    try:
+        status, body = request(editor.port, "POST", "/api/logs", {"verbose": True})
+        assert status == 200 and body == {"verbose": True}
+        assert request(editor.port, "POST", "/api/logs", {"verbose": "yes"})[0] == 400
+    finally:
+        root.setLevel(before)
