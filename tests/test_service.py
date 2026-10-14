@@ -55,6 +55,33 @@ def test_panel_service_pause_resume_stop(isolated_home):
     assert not service.running
 
 
+def test_a_config_fixed_while_its_error_is_said_is_taken_at_once(isolated_home, monkeypatch):
+    """The panel's loop says a config.toml does not load, then waits for it to change. A fix
+    written right then (the app saves one at once) was taken for the file it waits on, and the
+    panel came back only after RETRY_S: the files are looked at before they are read now."""
+    from libre_panel import service as service_module
+
+    write_config(isolated_home)
+    path = isolated_home / "config.toml"
+    good = path.read_text(encoding="utf-8")
+    path.write_text("fps = 'fast'\n", encoding="utf-8")
+    said = service_module.log.error
+
+    def fixed_as_it_is_said(message, *args):
+        said(message, *args)
+        if message.startswith("panel stopped"):
+            time.sleep(0.05)  # the file's time moves on
+            path.write_text(good, encoding="utf-8")
+
+    monkeypatch.setattr(service_module.log, "error", fixed_as_it_is_said)
+    panel = PanelService()
+    panel.start()
+    try:
+        assert wait_for(lambda: panel.state()["state"] == "showing", 8)  # not RETRY_S (30 s)
+    finally:
+        panel.stop()
+
+
 def test_a_theme_that_is_gone_shows_the_panels_own_and_says_so(isolated_home):
     """A theme config.toml names that is not installed any more (a plugin's that is gone)
     does not stop the panel: it shows its own theme, and the tray and Start say why."""

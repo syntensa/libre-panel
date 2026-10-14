@@ -125,6 +125,10 @@ class PanelService:
 
     def _main(self, stop: threading.Event, status: RunStatus) -> None:
         while not stop.is_set():
+            # what the files are like before they are read: a fix written while the error is
+            # said (the app saves one at once) is a change to it; a watcher made after the
+            # error took the fixed file for the start, and waited out RETRY_S
+            watcher = _Watcher(*self._watch_paths())
             try:
                 config = load_config(self.config_path)
                 self.error = ""
@@ -136,7 +140,6 @@ class PanelService:
             except (ConfigError, ThemeError, DeviceError) as exc:
                 self.error = str(exc)
                 log.error("panel stopped: %s (waiting for the config or theme to change)", exc)
-                watcher = _Watcher(*self._watch_paths())
                 for _ in range(int(self.RETRY_S)):
                     if stop.wait(1.0) or watcher.changed():
                         break
