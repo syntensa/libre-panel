@@ -3,6 +3,7 @@
 import json
 from datetime import UTC, date, datetime, timedelta, timezone
 
+import numpy as np
 import pytest
 from PIL import Image
 
@@ -146,9 +147,12 @@ def test_the_moon_is_lit_on_the_right_side(phase, lit_side):
     snapshot = demo_snapshot(fixed_time=1_700_000_000)
     snapshot.readings["moon.phase"] = Reading("moon.phase", phase)
     image, _ = Renderer(theme).render(snapshot)
-    left, right = image.getpixel((25, 50))[0], image.getpixel((75, 50))[0]
-    assert {"right": right > 200 > left, "left": left > 200 > right,
-            "both": left > 200 and right > 200}[lit_side]  # fmt: skip
+    # the halves of the disc, on average: lit, its seas are darker than its highlands (the
+    # Ocean of Storms on the left most of all), unlit it shows the earthshine only
+    grey = np.asarray(image.convert("L"), np.float32)
+    left, right = grey[30:70, 14:46].mean(), grey[30:70, 54:86].mean()
+    assert {"right": right > 110 > 60 > left, "left": left > 110 > 60 > right,
+            "both": left > 110 and right > 110}[lit_side], (left, right)  # fmt: skip
 
 
 def test_a_slideshow_takes_turns(tmp_path):

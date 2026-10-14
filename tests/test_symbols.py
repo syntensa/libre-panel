@@ -170,7 +170,8 @@ def test_the_rays_turn_and_the_disc_stays():
     a = renderer.render(snap, 100.0)[0].crop((10, 10, 138, 138))
     b = renderer.render(snap, 100.6)[0].crop((10, 10, 138, 138))
     assert not same(a, b)
-    middle = (a.width // 2 - 20, a.height // 2 - 20, a.width // 2 + 20, a.height // 2 + 20)
+    # inside the disc (around it the corona breathes)
+    middle = (a.width // 2 - 16, a.height // 2 - 16, a.width // 2 + 16, a.height // 2 + 16)
     assert same(a.crop(middle), b.crop(middle))  # the disc does not turn
 
 
@@ -216,6 +217,57 @@ def test_a_small_symbol_goes_quicker_than_a_big_one():
     moved_small = abs(drift(small, 3.0) - drift(small, 0.0))
     moved_big = abs(drift(big, 3.0) - drift(big, 0.0))
     assert moved_small > moved_big
+
+
+def test_a_big_symbol_has_more_to_it():
+    k = 160
+    sky = symbols.layers_for("clear", False, k, "flat", COLOURS)[0]
+    assert sky.corona is not None  # the sun glows, small or big
+    night = symbols.layers_for("clear", True, k, "flat", COLOURS)[0]
+    assert night.streak is not None and len(night.stars) == 3 + len(symbols._STARS_BIG)
+    small_night = symbols.layers_for("clear", True, 64, "flat", COLOURS)[0]
+    assert small_night.streak is None and len(small_night.stars) == 3
+    rain = symbols.layers_for("rain", False, k, "flat", COLOURS)[0]
+    assert rain.splash is not None
+    assert symbols.layers_for("rain", False, 64, "flat", COLOURS)[0].splash is None
+    storm = symbols.layers_for("storm", False, k, "flat", COLOURS)[0]
+    assert storm.drop is not None and storm.flash is not None  # a big storm pours
+    assert symbols.layers_for("storm", False, 64, "flat", COLOURS)[0].drop is None
+    assert len(symbols.layers_for("fog", False, k, "flat", COLOURS)[0].bars) == 5
+
+
+def test_a_shooting_star_crosses_a_big_clear_night_now_and_then():
+    k = 160
+    layers = symbols.layers_for("clear", True, k, "flat", COLOURS)[0]
+    streak = layers.streak
+
+    def streaked(t):  # what the shooting star adds to the picture at ``t``
+        with_it = np.asarray(symbols.compose(layers, "clear", True, t), np.float32)
+        layers.streak = None
+        try:
+            without = np.asarray(symbols.compose(layers, "clear", True, t), np.float32)
+        finally:
+            layers.streak = streak
+        return float(np.abs(with_it - without).sum())
+
+    assert streaked(0.3) > 0 and streaked(9.3 + 0.3) > 0  # the first moments of each round
+    assert streaked(5.0) == 0  # and quiet in between
+
+
+def test_snow_crystals_turn_as_they_fall_and_a_flash_lights_the_cloud():
+    k = 160
+    snow = symbols.layers_for("snow", False, k, "flat", COLOURS)[0]
+    symbols.compose(snow, "snow", False, 0.3)
+    symbols.compose(snow, "snow", False, 0.9)
+    assert len(snow.spun) >= 2  # the crystal at more than one angle
+    storm = symbols.layers_for("storm", False, k, "lit", COLOURS)[0]
+
+    def cloud(t):  # the cloud's brightness, where it is
+        a = np.asarray(symbols.compose(storm, "storm", False, t), np.float32)
+        top = a[int(0.25 * k) : int(0.55 * k)]
+        return float((top[..., :3].mean(-1) * top[..., 3]).sum() / max(top[..., 3].sum(), 1))
+
+    assert cloud(0.02) > cloud(1.0) + 15  # lit from within at the flash, then not
 
 
 # -- what the weather is --------------------------------------------------------------------------

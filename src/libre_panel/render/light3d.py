@@ -73,12 +73,9 @@ def _plain(samples: np.ndarray) -> np.ndarray:
 
 
 def _weather_build(folder: Path) -> dict[str, np.ndarray]:
-    bodies = {}
-    for name in BODIES:
-        layers = _layers(folder, name)
-        c, h, w = layers.shape  # at half size: plenty for icons, a quarter of the memory
-        bodies[name] = layers.reshape(c, h // 2, 2, w // 2, 2).mean(axis=(2, 4)).astype(np.float32)
-    return bodies
+    # at the size Blender made them, so that a big symbol keeps every detail of its light;
+    # in half floats, which is half the memory and more than the eye can tell apart
+    return {name: _layers(folder, name).astype(np.float16) for name in BODIES}
 
 
 class Part:
@@ -91,7 +88,7 @@ class Part:
     caller draws flat.
     """
 
-    VERSION = 1
+    VERSION = 2  # 2: the weather bodies at full size, in half floats
 
     def __init__(
         self,
@@ -276,7 +273,7 @@ def body(name: str, kind: str, colour: np.ndarray, size: tuple[int, int],
     box = (margin + (x0 - fx0) * q, margin + (y0 - fy0) * q,
            margin + (x1 - fx0) * q, margin + (y1 - fy0) * q)  # fmt: skip
     layers = np.stack([
-        np.asarray(Image.fromarray(np.pad(source[i], margin), "F").resize(
+        np.asarray(Image.fromarray(np.pad(source[i].astype(np.float32), margin), "F").resize(
             (x1 - x0, y1 - y0), Image.Resampling.BOX, box=box))
         for i in range(4)
     ])  # fmt: skip

@@ -1873,42 +1873,29 @@ class Renderer:
         draw.ellipse([cx - dot, cy - dot, cx + dot, cy + dot], fill=accent)
         return Piece(self._down(layer, w, h), x, y, [x, y, w, h])
 
+    MOON_STEP = 10.0  # how often a moving moon's halo changes, per second
+
     def _draw_moon(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        """The moon as it looks at its phase, lit from the right side (render/moon.py); its
+        halo breathes slowly where the panel is driven faster than once a second."""
         phase = _number(snapshot.value(widget["sensor"]))
         if phase is None:
             return None
         phase = round(phase % 1.0, 3)
-        return self._cached(widget, phase, lambda: self._moon_piece(widget, phase))
+        step = round(now * self.MOON_STEP) if self.animate else None
+        if step is not None:
+            self.moving = True
+        return self._cached(widget, (phase, step), lambda: self._moon_piece(widget, phase, step))
 
-    def _moon_piece(self, widget: dict[str, Any], phase: float) -> Piece:
-        """The moon lit as at ``phase`` (0 new, 0.5 full): a disc, its lit side
-        bounded by the terminator, an ellipse."""
+    def _moon_piece(self, widget: dict[str, Any], phase: float, step: int | None = None) -> Piece:
+        from libre_panel.render import moon
+
         size = max(8, widget["size"])
-        s = SUPERSAMPLE
-        layer, draw = self._canvas(size, size)
-        r = size * s / 2 - s
-        c = size * s / 2
-        if widget["color2"]:
-            draw.ellipse([c - r, c - r, c + r, c + r], fill=self.color(widget["color2"]))
-        turn = math.cos(2 * math.pi * phase)
-        waxing = phase <= 0.5
-        if widget["mirror"]:
-            waxing = not waxing
-        right, left = [], []
-        steps = 90
-        for i in range(steps + 1):
-            dy = -r + 2 * r * i / steps
-            half = math.sqrt(max(0.0, r * r - dy * dy))
-            if waxing:  # lit on the right, from the terminator to the edge
-                right.append((c + half, c + dy))
-                left.append((c + half * turn, c + dy))
-            else:
-                left.append((c - half, c + dy))
-                right.append((c - half * turn, c + dy))
-        if 0.004 < phase < 0.996:
-            draw.polygon(right + left[::-1], fill=self.color(widget["color"]))
+        night = self.color(widget["color2"]) if widget["color2"] else None
+        t = None if step is None else step / self.MOON_STEP
+        image = moon.picture(size, phase, self.color(widget["color"]), night, widget["mirror"], t)
         x, y = widget["x"], widget["y"]
-        return Piece(self._down(layer, size, size), x, y, [x, y, size, size])
+        return Piece(image, x, y, [x, y, size, size])
 
     # -- fans --------------------------------------------------------------
 
