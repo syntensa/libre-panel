@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.6.3 — 2026-10-14
+
+Weather symbols and a moon with much more to them; and the Linux download starts on older
+distributions again.
+
+**New**
+- **Vivid weather symbols and moon**, the new look: the sun glows in a corona that breathes, a
+  bolt lights its cloud from within, snow falls as crystals that turn, fog drifts in soft
+  bands, and the symbols are sharper. The moon looks like the moon: its seas and craters, the
+  earthshine on its dark side and a halo that breathes. A big symbol has more still: rain
+  falls near and far and splashes where it lands, a storm pours, and on a clear night a
+  shooting star crosses now and then
+- The first look stays one click away: *Settings → Weather and place → Weather symbols and
+  moon*, *Classic* or *Vivid*, each tile with a picture of it (`symbols` in config.toml). A
+  theme may give a symbol or the moon a look of its own
+- The TURZX 8.8" (USB) is marked supported: its owners report it runs
+
+**Fixes**
+- The Linux AppImage did not start on older distributions (Ubuntu 22.04 and others of its
+  age): it was built on a newer system and asked for a newer C library (glibc 2.38) than
+  they have. It is built on the oldest Ubuntu still supported now, and each release is
+  checked for it
+- *Start* could take an update for a first start: it read its note of what is new while that
+  was being written, and found it empty
+- A config.toml fixed right after the panel said it does not load was taken only half a minute
+  later
+
 ## 0.6.2 — 2026-10-13
 
 Libre Panel in six languages; keyboard shortcuts for the whole PC; the history of your PC under
