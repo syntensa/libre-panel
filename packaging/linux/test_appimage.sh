@@ -29,6 +29,8 @@ echo "== the programs it carries: ffmpeg encodes the video mode's stream, the ap
 unpacked="$(mktemp -d)"
 (cd "$unpacked" && env -u APPIMAGE_EXTRACT_AND_RUN "$appimage" --appimage-extract > /dev/null)
 python3 "$root/packaging/check_tools.py" "$unpacked/squashfs-root/usr/lib/libre-panel"
+echo "== the C library it needs: no newer than the oldest Ubuntu LTS still supported has"
+python3 "$root/packaging/linux/check_glibc.py" "$unpacked/squashfs-root" "${GLIBC_LIMIT:-2.35}"
 rm -rf "$unpacked"
 
 echo "== autostart entry"

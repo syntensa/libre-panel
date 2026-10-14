@@ -50,6 +50,20 @@ def test_the_setup_and_the_appimage_are_proven_with_the_same_check():
     assert appimage.count("smoke_test.py") == 2 and appimage.count("--tools") >= 2
 
 
+def test_the_appimage_is_built_on_the_oldest_ubuntu_and_checked_for_the_glibc_it_needs(tmp_path):
+    """An AppImage takes glibc from the system it runs on: built on a new runner, it asked for
+    GLIBC_2.38 and did not start on the oldest Ubuntu LTS still supported (the AppImage
+    catalog's test system)."""
+    workflow = read(".github", "workflows", "release.yml")
+    assert re.search(r"- os: ubuntu-22\.04\n\s+name: linux-x64", workflow)
+    appimage = read("packaging", "linux", "test_appimage.sh")
+    assert 'check_glibc.py" "$unpacked/squashfs-root" "${GLIBC_LIMIT:-2.35}"' in appimage
+    check = load("check_glibc_wiring", PACKAGING / "linux" / "check_glibc.py")
+    assert check.shown((2, 38, 0)) == "2.38" and check.shown(()) == "none"
+    (tmp_path / "notes.txt").write_text("not a program", encoding="utf-8")
+    assert check.main(["check_glibc.py", str(tmp_path), "2.35"]) == 1  # nothing to check: said
+
+
 def test_the_downloads_carry_the_notice_that_names_their_sources():
     workflow = read(".github", "workflows", "release.yml")
     assert "Copy-Item LICENSE, README.md, NOTICE.md dist/libre-panel/" in workflow  # Windows

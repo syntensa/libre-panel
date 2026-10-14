@@ -58,7 +58,10 @@ jobs:
         include:
           - os: windows-latest
             name: windows-x64
-          - os: ubuntu-latest
+          # the oldest Ubuntu still offered: an AppImage takes glibc from the system it runs
+          # on, so it is built against the oldest one it is meant for (the AppImage catalog
+          # tests on the oldest LTS still in standard support; test_appimage.sh checks it)
+          - os: ubuntu-22.04
             name: linux-x64
     runs-on: ${{ matrix.os }}
     steps:
