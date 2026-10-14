@@ -26,6 +26,10 @@ CONFIG_FILENAME = "config.toml"
 # The theme of every panel but the bars, and what ``Config.theme`` is where nothing better is
 # known (libre_panel.theme.defaults has the panel's own default).
 DEFAULT_THEME = "libre-default"
+# The looks of the weather symbols and the moon (render/symbols.py, render/moon.py): the first,
+# and the second with more to them
+SYMBOL_PACKS = ("classic", "vivid")
+DEFAULT_SYMBOLS = "classic"
 
 _DEFAULT_CONFIG_TEMPLATE = """\
 # Libre Panel configuration
@@ -72,6 +76,12 @@ language = "auto"
 # Frames per second: values glide smoothly between sensor readings.
 # 1 turns animation off (least CPU and USB traffic).
 fps = 10
+
+# The look of the weather symbols and the moon (or choose it in the app: Settings, Weather
+# and place): "classic", the first, or "vivid", sharper and with more to them (the sun in
+# its corona, rain near and far, snow crystals that turn, the moon as it looks). A theme
+# may give a symbol a look of its own.
+# symbols = "classic"
 
 [device]
 # Your panel. "auto" detects it; list all models with:  libre-panel models
@@ -374,6 +384,7 @@ class Config:
     sequence: SequenceConfig = field(default_factory=SequenceConfig)
     hotkeys: dict[str, str] = field(default_factory=dict)  # action: combination (hotkeys.py)
     hotkeys_enabled: bool = True  # [hotkeys] enabled: off holds no key, the combinations kept
+    symbols: str = DEFAULT_SYMBOLS  # the look of the weather symbols and the moon
     path: Path | None = None
     # config.toml's modification time when it was read: a change made while
     # the program starts up is noticed too.
@@ -483,6 +494,10 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
             raise ConfigError("fps: must be between 1 and 60")
     if "transition" in data:
         cfg.transition = _expect(data["transition"], str, "transition")
+    if "symbols" in data:
+        cfg.symbols = _expect(data["symbols"], str, "symbols").strip()
+        if cfg.symbols not in SYMBOL_PACKS:
+            raise ConfigError(f"symbols: must be one of {', '.join(SYMBOL_PACKS)}")
     if "refresh_ms" in data:
         cfg.refresh_ms = _expect(data["refresh_ms"], int, "refresh_ms")
         if cfg.refresh_ms < 100:

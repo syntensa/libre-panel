@@ -251,17 +251,33 @@ def _bytes(value: Any) -> int:
 # -- weather bodies ------------------------------------------------------------------------
 
 
+_halved: dict[str, tuple[np.ndarray, np.ndarray]] = {}  # body -> (its layers, at half size)
+
+
+def _half(name: str, source: np.ndarray) -> np.ndarray:
+    """A body's layers at half size, as the first look of the symbols draws them (a little
+    softer): made once from the full ones."""
+    kept = _halved.get(name)
+    if kept is None or kept[0] is not source:
+        c, h, w = source.shape
+        half = source.astype(np.float32).reshape(c, h // 2, 2, w // 2, 2).mean(axis=(2, 4))
+        kept = _halved[name] = (source, half)
+    return kept[1]
+
+
 def body(name: str, kind: str, colour: np.ndarray, size: tuple[int, int],
-         centre: tuple[float, float], width: float) -> Image.Image | None:  # fmt: skip
+         centre: tuple[float, float], width: float,
+         fine: bool = True) -> Image.Image | None:  # fmt: skip
     """Weather body ``name`` lit as ``kind`` (:data:`WEATHER`) in ``colour``
     (RGB 0 to 1) on a clear picture of ``size``: its square picture centred
     at ``centre`` (fractions allowed), ``width`` pixels wide. Averaged as an
-    area, so small symbols have no steps. None without the layers."""
+    area, so small symbols have no steps. None without the layers. ``fine``:
+    from the layers at the size Blender made them, else at half of it."""
     data = WEATHER_BODIES.get()
     if data is None:
         return None
     w, h = int(size[0]), int(size[1])
-    source = data[name]
+    source = data[name] if fine else _half(name, data[name])
     q = source.shape[1] / width  # source pixels per pixel
     fx0, fy0 = centre[0] - width / 2, centre[1] - width / 2
     x0, y0 = max(0, math.floor(fx0)), max(0, math.floor(fy0))

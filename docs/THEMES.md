@@ -163,12 +163,12 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `clock` | `format`, `timezone`, `uppercase`, `digits`, `digits_seconds` | date/time with [strftime codes](https://strftime.org), e.g. `%H:%M:%S`, `%A %d %B`; `timezone` e.g. `Asia/Tokyo` (empty: this computer's); `uppercase` sets the weekday and month in capitals, in the language of the panel (MONTAG · 28. SEPTEMBER); `digits` is what the characters that change on the second do: `jump` (the default), `roll` (the old one moves up and out, the new one comes in from below, soft at the edges; all that change roll together) or `fade`, for `digits_seconds` after the second (0.42, as SPUR II's clocks; at most 1); the rest of the second the clock is the plain text, and a text that changes its length jumps |
 | `analog` | `w`, `h`, `timezone`, `color`, `color2`, `face`, `marks`, `seconds`, `hand`, `digits_seconds` | a clock face with hands; `color2` the second hand; `hand` is what the second hand does: `tick` (the default) jumps on the second, `glide` moves to it in `digits_seconds` (0.42) as a clock's rolling digits do and rests for the rest of it, `sweep` goes round without stopping; the face and the other hands are kept, so a moving hand costs a millisecond or two a frame |
 | `countdown` | `target`, `part`, `done` | the time left until `target` (`2026-12-24`, `2026-12-24 18:00`, or `12-24` for every year); `part`: `number` (76, 5:12, 12:33), `unit` (days, hours, minutes), `clock` (05:12:33 left in the day), `text` ("76 days"), `days`, `date`; `done` is shown once it is there ("Today", "Now") |
-| `moon` | `size`, `sensor`, `color`, `color2`, `mirror` | the moon as it is lit (`moon.phase`); `mirror` as seen south of the equator |
+| `moon` | `size`, `sensor`, `color`, `color2`, `mirror`, `pack` | the moon as it is lit (`moon.phase`); `mirror` as seen south of the equator; `pack` its look, as a [weather symbol's](#weather-symbols) |
 | `fan` | `sensor`, `w`, `h`, `color`, `max_rpm`, `frame`, `look`, `paint` | a fan that turns with its speed (default `gpu.fan`), see [Fans](#fans) |
 | `image` | `src`, `w`, `h`, `fit`, `align`, `radius`, `blur`, `slides`, `seconds` | a picture from the theme folder, or one a sensor source has (`@media.cover`: the album cover); `w`/`h` 0 = original size; `fit` `stretch`, `contain` or `cover`; `align` `left`, `center` (the default) or `right` says where a `contain`ed picture stands in its box when it does not fill it, as a logo that is wider or narrower than its slot; `slides`: more pictures, one per line (`photos/*.jpg` takes a folder), each shown `seconds`; `blur` (px, up to 64) blurs it into a backdrop of its colours, as Encore lays the cover behind the whole screen: worked out once per picture, and on another panel it fills its box rather than keep its shape |
 | `weather` | `field`, `format`, `fallback` | `temperature`, `apparent_temperature`, `humidity`, `wind_speed`, `description`, `code` |
 | `icon` | `icon`, `sensor`, `size`, `color`, `stroke` | line icons: cpu, gpu, ram, disk, network, download, upload, temperature, fan, power, clock, sun, moon, cloud, partly, rain, snow, storm, fog, humidity, wind, battery, plug, list, grid, signal, play, pause, up, down, volume, mute — and `weather`, which follows the live weather, or the code in `sensor` (e.g. `weather.day.1.code`), by day or night |
-| `symbol` | `sensor`, `size`, `color`, `moving`, `offset` | a weather symbol that moves (default `weather.code`), see [Weather symbols](#weather-symbols) |
+| `symbol` | `sensor`, `size`, `color`, `moving`, `offset`, `pack` | a weather symbol that moves (default `weather.code`), see [Weather symbols](#weather-symbols) |
 | `downloads` | `state`, `w`, `h`, `font`, `label_font`, `color`, `muted`, `color2`, `done`, `background`, `empty` | a download as the Studio's inset shows it: name, progress, rate, time left and the speed of the last minutes; it reads the state of the `downloads` service, see [Downloads](#downloads) |
 | `calendar` | `w`, `h`, `font`, `font_size`, `color`, `color2`, `muted`, `first_day` | the month as a grid of days, today marked in `color2`; weekday names in `muted` and the language; `first_day` `monday` or `sunday` |
 | `list` | `w`, `h`, `items`, `style`, `columns`, `max_items`, `sort`, `format`, `detail`, `detail_format`, `min`, `max`, `scale`, `levels`, `font`, `font_size`, `label_font`, `uppercase`, `color`, `muted`, `color2`, `background`, `empty`, `color_rules` | readings found by name or pattern, as many as fit, see [Lists](#lists) |
@@ -422,6 +422,15 @@ code it does not know, or no reading at all, is a cloud.
 - `finish` `lit` draws the sun, moon, clouds, drops and bolt as lit bodies (from
   Blender's renders, as the lit weather icon); the default draws them flat.
   `facet` and `acrylic` are not there for a symbol.
+- `pack` is its look: `classic`, the first, as above, or `vivid`, sharper and with
+  more to it: the sun glows in a corona that breathes, a bolt lights its cloud
+  from within, snow falls as crystals that turn, fog drifts in soft bands, the lit
+  bodies keep every pixel Blender made, and the moon is the moon as it looks (its
+  seas and craters, the earthshine on its dark side). From 120 px it has more
+  still: the rays pulse, rain falls near and far and splashes where it lands, a
+  storm pours, and on a clear night a shooting star crosses now and then. `auto`
+  (the default) takes the look the user chose (*Settings → Weather and place*,
+  `symbols` in config.toml), else `classic`. A `moon` widget takes the same.
 
 A symbol is made of layers drawn once for a kind of weather, a size and the
 colours, and kept; a frame only moves, turns and fades them over each other, and

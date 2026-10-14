@@ -2044,7 +2044,16 @@
     "Shift": "Umschalt",
     "Use the shortcuts": "Kürzel verwenden",
     "Off: no key is taken, and the combinations stay for later.": "Aus: Keine Taste wird belegt, und die Kombinationen bleiben für später.",
-    "V1.x hardware; runs, as its owners report": "V1.x-Hardware; läuft, wie seine Besitzer berichten"
+    "V1.x hardware; runs, as its owners report": "V1.x-Hardware; läuft, wie seine Besitzer berichten",
+    "Classic": "Klassisch",
+    "Vivid": "Lebendig",
+    "the first: calm and simple": "das erste: ruhig und schlicht",
+    "sharper, with more to it: a corona, snow crystals, the moon as it looks": "schärfer und mit mehr Leben: eine Sonnenkorona, Schneekristalle, der Mond, wie er aussieht",
+    "Weather symbols and moon": "Wettersymbole und Mond",
+    "How they look on the panel, where a theme leaves it to you. The panel takes it at once.": "Wie sie auf dem Panel aussehen, wo ein Theme es dir überlässt. Das Panel übernimmt es sofort.",
+    "Look of the weather symbols": "Aussehen der Wettersymbole",
+    "classic or vivid, the moon too": "klassisch oder lebendig, auch der Mond",
+    "weather symbols icons moon sun rain snow look style pack animation classic vivid": "wetter symbole icons mond sonne regen schnee aussehen stil paket animation klassisch lebendig weather symbols"
   },
   "fields": {
     "align": "Ausrichtung",
@@ -2181,7 +2190,8 @@
     "rising": "Ansteigend",
     "blur": "Unschärfe",
     "hand": "Sekundenzeiger",
-    "glide_ms": "eigene Gleitzeit (ms)"
+    "glide_ms": "eigene Gleitzeit (ms)",
+    "pack": "Symbolpaket"
   },
   "widgets": {
     "analog": "Analoguhr",
@@ -2310,7 +2320,9 @@
     "outlook": "Nächste Tage",
     "tick": "springt",
     "glide": "gleitet",
-    "sweep": "läuft durch"
+    "sweep": "läuft durch",
+    "classic": "klassisch",
+    "vivid": "lebendig"
   },
   "icons": {
     "battery": "Akku",

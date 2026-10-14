@@ -2,11 +2,13 @@
 sun's rays turn, rain and snow fall, clouds drift and breathe, stars twinkle, fog sways
 and a bolt flashes every few seconds.
 
-A big symbol (:data:`SMALL` px and more) has more to it: the sun glows in a corona that
-breathes and its rays pulse as they turn; rain falls near and far and splashes where it
-lands; snow crystals turn as they sink, near and far; a bolt lights its cloud from within
-while rain pours; fog drifts in soft bands; and on a clear night a shooting star crosses
-now and then. The moon is the moon of ``render.moon`` where the symbol is lit.
+They come in two looks (:data:`PACKS`, ``symbols`` in config.toml, a widget's ``pack``).
+The first, "classic", is the one above. In the second, "vivid", the sun glows in a corona
+that breathes, a bolt lights its cloud from within, snow falls as crystals that turn, fog
+drifts in soft bands, the lit bodies keep every pixel Blender made and the moon is the
+moon of ``render.moon``; a big one (:data:`SMALL` px and more) has more still: the rays
+pulse as they turn, rain falls near and far and splashes where it lands, crystals sink
+near and far, a storm pours, and on a clear night a shooting star crosses now and then.
 
 A symbol is a set of layers, drawn once per kind of weather, size and colours and kept:
 lit from the Blender bodies of ``render.light3d`` (the ``lit`` finish) or flat. A frame
@@ -29,10 +31,12 @@ from typing import Any, NamedTuple
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
+from libre_panel.config import DEFAULT_SYMBOLS, SYMBOL_PACKS
 from libre_panel.render.finish import Finish, register
 from libre_panel.render.light import mix, role_color
 from libre_panel.render.renderer import Piece
 
+PACKS = SYMBOL_PACKS  # the looks: the first, and the second with more to it
 KINDS = ("clear", "mostly", "partly", "overcast", "fog", "drizzle", "rain", "snow", "storm")
 STEP = 25.0  # how often the picture changes, per second
 QUICK = 1.8  # the tempo of a symbol under SMALL px, as a multiple of a big one's
@@ -85,8 +89,9 @@ class Part(NamedTuple):
 class Layers:
     """What a symbol is made of; the animation moves these about."""
 
-    def __init__(self, k: int) -> None:
+    def __init__(self, k: int, rich: bool = False) -> None:
         self.k = k
+        self.rich = rich  # the second look ("vivid")
         self.disc: Part | None = None  # the sun, or the moon's crescent
         self.rays: Part | None = None
         self.centre = (k / 2, k / 2)  # what the rays turn about, in picture pixels
@@ -116,7 +121,8 @@ class Layers:
 
     @property
     def big(self) -> bool:
-        return self.k >= SMALL
+        """The second look at :data:`SMALL` px and more: it has the most to it."""
+        return self.rich and self.k >= SMALL
 
 
 def _part(image: Image.Image, margin: int = 2) -> Part | None:
@@ -158,6 +164,24 @@ def _flat_star(draw: ImageDraw.ImageDraw, x: float, y: float, r: float, fill: An
     a, b = 0.28 * r, 0.28 * r  # the points of the star, and the notches between them
     draw.polygon([(x, y - r), (x + a, y - b), (x + r, y), (x + a, y + b), (x, y + r),
                   (x - a, y + b), (x - r, y), (x - a, y - b)], fill=fill)  # fmt: skip
+
+
+def _flake_classic(side: float, r: float, width: float, fill: Any) -> Part | None:
+    """A snowflake of three crossing lines of half-length ``r``, on a picture ``side`` px."""
+    image, draw = _canvas(side, side)
+    mid = side * OVER / 2
+    for a in (0, math.pi / 3, 2 * math.pi / 3):
+        draw.line([(mid - r * OVER * math.cos(a), mid - r * OVER * math.sin(a)),
+                   (mid + r * OVER * math.cos(a), mid + r * OVER * math.sin(a))],
+                  fill=fill, width=max(1, int(width * OVER)))  # fmt: skip
+    return _part(_reduced(image))
+
+
+def _snow(layers: Layers, k: int, fill: Any) -> Part | None:
+    """The snow of a look: the first's flake, or the second's crystal."""
+    if layers.rich:
+        return _flake(0.14 * k, 0.05 * k, 0.016 * k, fill)
+    return _flake_classic(0.14 * k, 0.05 * k, 0.022 * k, fill)
 
 
 def _flake(side: float, r: float, width: float, fill: Any) -> Part | None:
@@ -248,10 +272,11 @@ def _star_part(k: int, x: float, y: float, r: float, fill: Any) -> Part | None:
     return _part(_reduced(image))
 
 
-def _flat(kind: str, night: bool, k: int, c: dict[str, tuple[int, ...]]) -> Layers:
+def _flat(kind: str, night: bool, k: int, c: dict[str, tuple[int, ...]],
+          rich: bool = False) -> Layers:  # fmt: skip
     """The layers drawn flat, as the mod's flat symbols."""
     g = k * OVER
-    layers = Layers(k)
+    layers = Layers(k, rich)
     if kind in _SKY:
         fx, fy, fr = _SKY[kind][0]
         cx, cy, r = g * fx, g * fy, g * fr
@@ -281,10 +306,19 @@ def _flat(kind: str, night: bool, k: int, c: dict[str, tuple[int, ...]]) -> Laye
             image, draw = _canvas(k, k)
             _flat_cloud(draw, g * cloud[0], g * cloud[1], g * cloud[2], c["cloud"])
             layers.cloud = _part(_reduced(image))
-    elif kind == "fog":
+    elif kind == "fog" and rich:
         bands = list(_BARS) + ([_BAR_BIG] if layers.big else [])
         for i, (x0, x1) in enumerate(bands):
             part = _soft_bar(k, x0, x1, g * (0.30 + i * (0.48 / len(bands))), c["cloud"])
+            if part is not None:
+                layers.bars.append(part)
+    elif kind == "fog":
+        for i, (x0, x1) in enumerate(_BARS):
+            image, draw = _canvas(k, k)
+            y = g * (0.34 + i * 0.12)
+            draw.rounded_rectangle([g * x0, y, g * x1, y + g * 0.05], radius=int(g * 0.025),
+                                   fill=c["cloud"])  # fmt: skip
+            part = _part(_reduced(image))
             if part is not None:
                 layers.bars.append(part)
     else:
@@ -306,7 +340,7 @@ def _flat(kind: str, night: bool, k: int, c: dict[str, tuple[int, ...]]) -> Laye
             draw.ellipse([g * 0.01, g * 0.01, g * 0.05, g * 0.05], fill=c["rain"])
             layers.drop = _part(_reduced(image))
         elif kind == "snow":
-            layers.flake = _flake(0.14 * k, 0.05 * k, 0.016 * k, c["snow"])
+            layers.flake = _snow(layers, k, c["snow"])
         if kind == "storm":
             image, draw = _canvas(k, k)
             draw.polygon([(g * x, g * y) for x, y in _BOLT], fill=c["bolt"])
@@ -317,7 +351,8 @@ def _flat(kind: str, night: bool, k: int, c: dict[str, tuple[int, ...]]) -> Laye
 # -- lit layers --------------------------------------------------------------------------------
 
 
-def _lit(kind: str, night: bool, k: int, c: dict[str, tuple[int, ...]]) -> Layers | None:
+def _lit(kind: str, night: bool, k: int, c: dict[str, tuple[int, ...]],
+         rich: bool = False) -> Layers | None:  # fmt: skip
     """The layers as lit bodies from Blender's renders (``render.light3d``), at the places
     of the flat ones; None while those layers are missing."""
     from libre_panel.render import light3d
@@ -329,14 +364,20 @@ def _lit(kind: str, night: bool, k: int, c: dict[str, tuple[int, ...]]) -> Layer
 
     def body(name: str, shape: str, role: str, cx: float, cy: float, width: float,
              canvas: tuple[int, int] = size) -> Part | None:  # fmt: skip
-        image = light3d.body(name, shape, unit[role], canvas, (cx, cy), width)
+        image = light3d.body(name, shape, unit[role], canvas, (cx, cy), width, fine=rich)
         return None if image is None else _part(image)
 
-    layers = Layers(k)
+    layers = Layers(k, rich)
     if kind in _SKY:
         fx, fy, fr = _SKY[kind][0]
         cx, cy, r = k * fx, k * fy, k * fr
-        if night:  # the moon itself, a waxing crescent with the earthshine on the rest
+        if night and not rich:
+            moon_ = light3d.body("sphere", "moon", unit["moon"], size, (cx, cy), 2.2 * r, False)
+            layers.disc = None if moon_ is None else _part(light3d.crescent(moon_, cx, cy, r))
+            layers.stars = [
+                p for p in (_star_part(k, x, y, r_, c["moon"]) for x, y, r_ in _STARS[kind]) if p
+            ]
+        elif night:  # the moon itself, a waxing crescent with the earthshine on the rest
             from libre_panel.render import moon
 
             d = max(4, round(2.2 * r))
@@ -370,7 +411,7 @@ def _lit(kind: str, night: bool, k: int, c: dict[str, tuple[int, ...]]) -> Layer
         w = max(3, round(0.06 * k))
         layers.drop = body("sphere", "glass", "rain", 0.03 * k, 0.03 * k, 2.2 * 0.02 * k, (w, w))
     elif kind == "snow":  # flakes are too small for depth to read
-        layers.flake = _flake(0.14 * k, 0.05 * k, 0.016 * k, c["snow"])
+        layers.flake = _snow(layers, k, c["snow"])
     if kind == "storm":
         layers.bolt = body("bolt", "bolt", "bolt", 0.54 * k, 0.79 * k, 0.4 * k)
     return layers
@@ -378,8 +419,10 @@ def _lit(kind: str, night: bool, k: int, c: dict[str, tuple[int, ...]]) -> Layer
 
 def _extras(layers: Layers, kind: str, night: bool, k: int,
             c: dict[str, tuple[int, ...]]) -> None:  # fmt: skip
-    """What both styles add: the sun's corona, the flash of a storm's cloud, and a big
-    symbol's more stars, shooting star and splashes."""
+    """What the second look adds in both styles: the sun's corona, the flash of a storm's
+    cloud, and a big symbol's more stars, shooting star and splashes."""
+    if not layers.rich:
+        return
     if kind in _SKY and not night:
         fx, fy, fr = _SKY[kind][0]
         layers.corona = _corona(k, k * fx, k * fy, k * fr, c["sun"])
@@ -402,21 +445,23 @@ _sets: OrderedDict[tuple[Any, ...], Layers] = OrderedDict()
 _lock = threading.Lock()  # the render thread and the helper thread both ask for sets
 
 
-def layers_for(kind: str, night: bool, k: int, style: str,
-               colours: dict[str, tuple[int, ...]]) -> tuple[Layers, str]:  # fmt: skip
-    """The layers of a kind of weather at size ``k``, and the style they are in (``lit``,
-    or ``flat`` where the lit layers are missing). Kept: one set serves every symbol that
-    looks like it."""
+def layers_for(kind: str, night: bool, k: int, style: str, colours: dict[str, tuple[int, ...]],
+               pack: str = DEFAULT_SYMBOLS) -> tuple[Layers, str]:  # fmt: skip
+    """The layers of a kind of weather at size ``k`` in a look (:data:`PACKS`), and the style
+    they are in (``lit``, or ``flat`` where the lit layers are missing). Kept: one set serves
+    every symbol that looks like it."""
     shade = tuple(sorted(colours.items()))
+    rich = pack == "vivid"
     for how in ("lit", "flat") if style == "lit" else ("flat",):
-        key = (kind, night, k, how, shade)
+        key = (kind, night, k, how, shade, rich)
         with _lock:
             hit = _sets.get(key)
             if hit is not None:
                 _sets.move_to_end(key)
         made = hit
         if made is None:
-            made = _lit(kind, night, k, colours) if how == "lit" else _flat(kind, night, k, colours)
+            make = _lit if how == "lit" else _flat
+            made = make(kind, night, k, colours, rich)
             if made is not None:
                 _extras(made, kind, night, k, colours)
         if made is None:
@@ -600,8 +645,9 @@ def compose(layers: Layers, kind: str, night: bool, t: float | None) -> Image.Im
                 y = k * (0.60 + 0.34 * p)
                 x = k * (0.36 + lane * 0.16) + 0.03 * k * math.sin(tau * (p * 1.5 + lane * 0.4))
                 turn = (s * (38.0 if int(lane * 2) % 2 == 0 else -31.0) + lane * 17) % 60.0
-                put(_spun(layers, turn), x - 0.07 * k, y - 0.07 * k,
-                    _fall(p) * (0.55 if scale < 1 else 1.0), stretch=scale)  # fmt: skip
+                flake = _spun(layers, turn) if layers.rich else layers.flake
+                put(flake, x - 0.07 * k, y - 0.07 * k, _fall(p) * (0.55 if scale < 1 else 1.0),
+                    stretch=scale)  # fmt: skip
             elif scale == 1.0:
                 put(layers.flake, k * (0.36 + lane * 0.16) - 0.07 * k, 0.80 * k - 0.07 * k)
 
@@ -679,7 +725,8 @@ def draw(renderer: Any, widget: dict[str, Any], snapshot: Any, now: float,
     k = max(8, widget["size"])
     kind = kind_of(snapshot.value(widget["sensor"]))
     night = night_at(snapshot, widget["sensor"])
-    layers, shown = layers_for(kind, night, k, style, colours(renderer, widget))
+    layers, shown = layers_for(kind, night, k, style, colours(renderer, widget),
+                               renderer.pack(widget))  # fmt: skip
     live = widget["moving"] and renderer.animate
     step = round((now + widget["offset"]) * STEP) if live else None
     if live:
@@ -704,10 +751,10 @@ class LitSymbol(Finish):
     def prepare(self, renderer: Any, widget: dict[str, Any]) -> None:
         """Every kind of weather at this size, so that the first change of weather costs no
         more than any other frame (a lit set takes ten milliseconds or so to make)."""
-        k, shade = max(8, widget["size"]), colours(renderer, widget)
+        k, shade, pack = max(8, widget["size"]), colours(renderer, widget), renderer.pack(widget)
         for kind in KINDS:
             for night in (False, True) if kind in _SKY else (False,):
-                layers_for(kind, night, k, "lit", shade)
+                layers_for(kind, night, k, "lit", shade, pack)
 
 
 register(LitSymbol())

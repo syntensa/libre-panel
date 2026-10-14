@@ -28,6 +28,14 @@ def test_default_template_parses_to_defaults():
     assert cfg.sensors.options["librehardwaremonitor"]["url"].startswith("http://127.0.0.1")
 
 
+def test_the_look_of_the_weather_symbols_is_the_first_unless_the_user_chooses():
+    assert load_config().symbols == parse_config({}).symbols == "classic"
+    assert parse_config({"symbols": "vivid"}).symbols == "vivid"
+    with pytest.raises(ConfigError, match="symbols"):
+        parse_config({"symbols": "retro"})
+    assert '# symbols = "classic"' in DEFAULT_CONFIG_TOML
+
+
 def hardware_names(config):
     hardware = config.hardware
     return hardware.cpu_name, hardware.gpu_name, hardware.memory_name

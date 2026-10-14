@@ -2044,7 +2044,16 @@
     "Shift": "Shift",
     "Use the shortcuts": "Używaj skrótów",
     "Off: no key is taken, and the combinations stay for later.": "Wył.: żaden klawisz nie jest zajęty, a kombinacje zostają na później.",
-    "V1.x hardware; runs, as its owners report": "Sprzęt V1.x; działa, jak mówią jego właściciele"
+    "V1.x hardware; runs, as its owners report": "Sprzęt V1.x; działa, jak mówią jego właściciele",
+    "Classic": "Klasyczny",
+    "Vivid": "Żywy",
+    "the first: calm and simple": "pierwszy: spokojny i prosty",
+    "sharper, with more to it: a corona, snow crystals, the moon as it looks": "ostrzejszy i bogatszy: korona słońca, kryształki śniegu, księżyc taki, jak wygląda",
+    "Weather symbols and moon": "Symbole pogody i księżyc",
+    "How they look on the panel, where a theme leaves it to you. The panel takes it at once.": "Jak wyglądają na panelu, tam gdzie motyw zostawia ci wybór. Panel stosuje go od razu.",
+    "Look of the weather symbols": "Wygląd symboli pogody",
+    "classic or vivid, the moon too": "klasyczny lub żywy, także księżyc",
+    "weather symbols icons moon sun rain snow look style pack animation classic vivid": "pogoda symbole ikony księżyc słońce deszcz śnieg wygląd styl pakiet animacja klasyczny żywy weather symbols"
   },
   "fields": {
     "align": "Wyrównanie",
@@ -2181,7 +2190,8 @@
     "rising": "Rosnąco",
     "blur": "Rozmycie",
     "hand": "Wskazówka sekundowa",
-    "glide_ms": "własny czas płynięcia (ms)"
+    "glide_ms": "własny czas płynięcia (ms)",
+    "pack": "zestaw symboli"
   },
   "widgets": {
     "analog": "Zegar analogowy",
@@ -2310,7 +2320,9 @@
     "outlook": "najbliższe dni",
     "tick": "skacze",
     "glide": "płynie",
-    "sweep": "przebiega"
+    "sweep": "przebiega",
+    "classic": "klasyczny",
+    "vivid": "żywy"
   },
   "icons": {
     "battery": "Bateria",

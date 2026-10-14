@@ -221,24 +221,24 @@ def test_a_small_symbol_goes_quicker_than_a_big_one():
 
 def test_a_big_symbol_has_more_to_it():
     k = 160
-    sky = symbols.layers_for("clear", False, k, "flat", COLOURS)[0]
+    sky = symbols.layers_for("clear", False, k, "flat", COLOURS, "vivid")[0]
     assert sky.corona is not None  # the sun glows, small or big
-    night = symbols.layers_for("clear", True, k, "flat", COLOURS)[0]
+    night = symbols.layers_for("clear", True, k, "flat", COLOURS, "vivid")[0]
     assert night.streak is not None and len(night.stars) == 3 + len(symbols._STARS_BIG)
-    small_night = symbols.layers_for("clear", True, 64, "flat", COLOURS)[0]
+    small_night = symbols.layers_for("clear", True, 64, "flat", COLOURS, "vivid")[0]
     assert small_night.streak is None and len(small_night.stars) == 3
-    rain = symbols.layers_for("rain", False, k, "flat", COLOURS)[0]
+    rain = symbols.layers_for("rain", False, k, "flat", COLOURS, "vivid")[0]
     assert rain.splash is not None
-    assert symbols.layers_for("rain", False, 64, "flat", COLOURS)[0].splash is None
-    storm = symbols.layers_for("storm", False, k, "flat", COLOURS)[0]
+    assert symbols.layers_for("rain", False, 64, "flat", COLOURS, "vivid")[0].splash is None
+    storm = symbols.layers_for("storm", False, k, "flat", COLOURS, "vivid")[0]
     assert storm.drop is not None and storm.flash is not None  # a big storm pours
-    assert symbols.layers_for("storm", False, 64, "flat", COLOURS)[0].drop is None
-    assert len(symbols.layers_for("fog", False, k, "flat", COLOURS)[0].bars) == 5
+    assert symbols.layers_for("storm", False, 64, "flat", COLOURS, "vivid")[0].drop is None
+    assert len(symbols.layers_for("fog", False, k, "flat", COLOURS, "vivid")[0].bars) == 5
 
 
 def test_a_shooting_star_crosses_a_big_clear_night_now_and_then():
     k = 160
-    layers = symbols.layers_for("clear", True, k, "flat", COLOURS)[0]
+    layers = symbols.layers_for("clear", True, k, "flat", COLOURS, "vivid")[0]
     streak = layers.streak
 
     def streaked(t):  # what the shooting star adds to the picture at ``t``
@@ -256,11 +256,11 @@ def test_a_shooting_star_crosses_a_big_clear_night_now_and_then():
 
 def test_snow_crystals_turn_as_they_fall_and_a_flash_lights_the_cloud():
     k = 160
-    snow = symbols.layers_for("snow", False, k, "flat", COLOURS)[0]
+    snow = symbols.layers_for("snow", False, k, "flat", COLOURS, "vivid")[0]
     symbols.compose(snow, "snow", False, 0.3)
     symbols.compose(snow, "snow", False, 0.9)
     assert len(snow.spun) >= 2  # the crystal at more than one angle
-    storm = symbols.layers_for("storm", False, k, "lit", COLOURS)[0]
+    storm = symbols.layers_for("storm", False, k, "lit", COLOURS, "vivid")[0]
 
     def cloud(t):  # the cloud's brightness, where it is
         a = np.asarray(symbols.compose(storm, "storm", False, t), np.float32)
@@ -268,6 +268,38 @@ def test_snow_crystals_turn_as_they_fall_and_a_flash_lights_the_cloud():
         return float((top[..., :3].mean(-1) * top[..., 3]).sum() / max(top[..., 3].sum(), 1))
 
     assert cloud(0.02) > cloud(1.0) + 15  # lit from within at the flash, then not
+
+
+def test_the_first_look_is_as_it_was():
+    """ "classic" (the first look, the default) has none of the second's: no corona, no flash,
+    flakes of three lines, fog in hard bands, no rain in a storm, no shooting star."""
+    k = 160
+    for style in ("flat", "lit"):
+        sky = symbols.layers_for("clear", False, k, style, COLOURS)[0]
+        assert not sky.rich and sky.corona is None and not sky.big
+        night = symbols.layers_for("clear", True, k, style, COLOURS)[0]
+        assert night.streak is None and len(night.stars) == 3
+        storm = symbols.layers_for("storm", False, k, style, COLOURS)[0]
+        assert storm.drop is None and storm.flash is None
+        assert symbols.layers_for("rain", False, k, style, COLOURS)[0].splash is None
+        assert len(symbols.layers_for("fog", False, k, style, COLOURS)[0].bars) == 4
+    snow = symbols.layers_for("snow", False, k, "flat", COLOURS)[0]
+    symbols.compose(snow, "snow", False, 0.3)
+    assert snow.spun == {}  # the flakes do not turn
+    vivid = symbols.layers_for("snow", False, k, "flat", COLOURS, "vivid")[0]
+    assert vivid is not snow and vivid.flake.image.tobytes() != snow.flake.image.tobytes()
+
+
+def test_a_symbol_takes_its_own_look_else_the_one_the_user_chose():
+    def drawn(chosen, **own):
+        renderer = Renderer(theme(symbol(**own)))
+        renderer.symbols = chosen
+        return renderer.render(snapshot(code=0))[0].tobytes()
+
+    assert drawn("classic") != drawn("vivid")  # the sun in its corona
+    assert drawn("classic", pack="vivid") == drawn("vivid")
+    assert drawn("vivid", pack="classic") == drawn("classic")
+    assert drawn("vivid", pack="auto") == drawn("vivid")
 
 
 # -- what the weather is --------------------------------------------------------------------------

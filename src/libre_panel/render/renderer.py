@@ -31,6 +31,7 @@ from typing import Any
 from PIL import Image, ImageChops, ImageColor, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from libre_panel import clock, i18n, timezones
+from libre_panel.config import DEFAULT_SYMBOLS, SYMBOL_PACKS
 from libre_panel.fonts import DEFAULT_FONT, builtin_font_path
 from libre_panel.fonts.fallback import cursive, truetype
 from libre_panel.icons import draw_icon, weather_icon_name
@@ -600,6 +601,8 @@ class Renderer:
         self._rotors: dict[str, fan.Rotor] = {}  # fan widget id -> how it turns (render/fan.py)
         # what the user chose for the fans: their look and colours (config.toml [hardware])
         self.fan_choices = fan.Choices()
+        # the look of the weather symbols and the moon the user chose (config.toml ``symbols``)
+        self.symbols = DEFAULT_SYMBOLS
         self._fans: OrderedDict[tuple[Any, ...], Piece] = OrderedDict()  # fan pieces, by look
         self._downloads: dict[str, tuple[Any, Any]] = {}  # download widget id -> what it shows
         self.screen = self._make_screen()
@@ -1873,19 +1876,57 @@ class Renderer:
         draw.ellipse([cx - dot, cy - dot, cx + dot, cy + dot], fill=accent)
         return Piece(self._down(layer, w, h), x, y, [x, y, w, h])
 
+    def pack(self, widget: dict[str, Any]) -> str:
+        """The look of a symbol or moon widget: its own, else the one the user chose."""
+        own = widget.get("pack", "auto")
+        return own if own in SYMBOL_PACKS else self.symbols
+
     MOON_STEP = 10.0  # how often a moving moon's halo changes, per second
 
     def _draw_moon(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
-        """The moon as it looks at its phase, lit from the right side (render/moon.py); its
-        halo breathes slowly where the panel is driven faster than once a second."""
+        """The moon at its phase: a disc and its lit side in the first look; in the second the
+        moon as it looks, lit from the right side (render/moon.py), its halo breathing slowly
+        where the panel is driven faster than once a second."""
         phase = _number(snapshot.value(widget["sensor"]))
         if phase is None:
             return None
         phase = round(phase % 1.0, 3)
+        if self.pack(widget) == "classic":
+            return self._cached(widget, phase, lambda: self._moon_classic(widget, phase))
         step = round(now * self.MOON_STEP) if self.animate else None
         if step is not None:
             self.moving = True
         return self._cached(widget, (phase, step), lambda: self._moon_piece(widget, phase, step))
+
+    def _moon_classic(self, widget: dict[str, Any], phase: float) -> Piece:
+        """The moon lit as at ``phase`` (0 new, 0.5 full): a disc, its lit side
+        bounded by the terminator, an ellipse."""
+        size = max(8, widget["size"])
+        s = SUPERSAMPLE
+        layer, draw = self._canvas(size, size)
+        r = size * s / 2 - s
+        c = size * s / 2
+        if widget["color2"]:
+            draw.ellipse([c - r, c - r, c + r, c + r], fill=self.color(widget["color2"]))
+        turn = math.cos(2 * math.pi * phase)
+        waxing = phase <= 0.5
+        if widget["mirror"]:
+            waxing = not waxing
+        right, left = [], []
+        steps = 90
+        for i in range(steps + 1):
+            dy = -r + 2 * r * i / steps
+            half = math.sqrt(max(0.0, r * r - dy * dy))
+            if waxing:  # lit on the right, from the terminator to the edge
+                right.append((c + half, c + dy))
+                left.append((c + half * turn, c + dy))
+            else:
+                left.append((c - half, c + dy))
+                right.append((c - half * turn, c + dy))
+        if 0.004 < phase < 0.996:
+            draw.polygon(right + left[::-1], fill=self.color(widget["color"]))
+        x, y = widget["x"], widget["y"]
+        return Piece(self._down(layer, size, size), x, y, [x, y, size, size])
 
     def _moon_piece(self, widget: dict[str, Any], phase: float, step: int | None = None) -> Piece:
         from libre_panel.render import moon

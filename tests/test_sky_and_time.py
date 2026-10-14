@@ -140,13 +140,16 @@ def test_analog_clock_hands_move():
     assert a.tobytes() == b.tobytes()  # without the second hand nothing moves
 
 
+@pytest.mark.parametrize("pack", ["classic", "vivid"])
 @pytest.mark.parametrize(("phase", "lit_side"), [(0.25, "right"), (0.75, "left"), (0.5, "both")])
-def test_the_moon_is_lit_on_the_right_side(phase, lit_side):
+def test_the_moon_is_lit_on_the_right_side(phase, lit_side, pack):
     theme = frame({"type": "moon", "id": "moon", "x": 0, "y": 0, "size": 100,
                    "color": "#ffffff", "color2": "#000000"})  # fmt: skip
     snapshot = demo_snapshot(fixed_time=1_700_000_000)
     snapshot.readings["moon.phase"] = Reading("moon.phase", phase)
-    image, _ = Renderer(theme).render(snapshot)
+    renderer = Renderer(theme)
+    renderer.symbols = pack
+    image, _ = renderer.render(snapshot)
     # the halves of the disc, on average: lit, its seas are darker than its highlands (the
     # Ocean of Storms on the left most of all), unlit it shows the earthshine only
     grey = np.asarray(image.convert("L"), np.float32)

@@ -10,9 +10,12 @@ first asks, and only where config.toml's folder is there.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
+import os
 import re
+import threading
 from pathlib import Path
 
 from libre_panel import __version__
@@ -45,10 +48,16 @@ class News:
     def _write(self, state: dict[str, str]) -> None:
         if not self.path.parent.is_dir():
             return  # nothing is there yet (a first start): asked again, it is worked out again
+        # in whole: a read while it is written (another request, the next start) never finds it
+        # empty and takes it for a first start
+        tmp = self.path.with_name(f"{self.path.name}.{threading.get_ident()}.tmp")
         try:
-            self.path.write_text(json.dumps(state) + "\n", encoding="utf-8")
+            tmp.write_text(json.dumps(state) + "\n", encoding="utf-8")
+            os.replace(tmp, self.path)
         except OSError as exc:
             log.debug("news.json not written: %s", exc)
+            with contextlib.suppress(OSError):
+                tmp.unlink(missing_ok=True)
 
     def state(self) -> dict[str, str]:
         """``{"first": version or "older", "seen": release or ""}``, kept from the first ask."""

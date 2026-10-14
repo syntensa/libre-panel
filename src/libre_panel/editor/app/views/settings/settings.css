@@ -957,6 +957,21 @@ a.btn:hover {
   height: 64px;
 }
 
+/* the looks of the weather symbols (weather.js): three symbols on a panel's ground each */
+.symbol-pack-tiles {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  margin-bottom: 0;
+  padding: 14px 20px 18px;
+}
+
+.fan-look-tile.symbol-pack-tile img {
+  width: 100%;
+  max-width: 240px;
+  height: auto;
+  aspect-ratio: 3;
+  border-radius: 8px;
+}
+
 /* -- the panel's start screen (startscreen.js) ---------------------------------------------- */
 
 .boot-body {

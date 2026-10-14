@@ -21,6 +21,7 @@ from urllib.parse import urlencode
 
 from libre_panel import __version__, i18n
 from libre_panel.config import (
+    SYMBOL_PACKS,
     Config,
     ConfigError,
     config_dir,
@@ -390,6 +391,7 @@ class Settings:
                 "allow_notify": config.allow_notify,
                 "hotkeys": dict(config.hotkeys),
                 "hotkeys_enabled": config.hotkeys_enabled,
+                "symbols": config.symbols,
             },
             "catalog": self._catalog(),
             "restart": self.restart.pending(self.controls),
@@ -953,6 +955,7 @@ RULES: dict[str, Any] = {
     "refresh_ms": lambda n, v, c: _whole(n, v, 100, 3_600_000),
     "check_updates": lambda n, v, c: _flag(n, v),
     "allow_notify": lambda n, v, c: _flag(n, v),
+    "symbols": lambda n, v, c: _choice(n, v, SYMBOL_PACKS),
     "hotkeys.enabled": lambda n, v, c: _flag(n, v),
     "hotkeys.pause": _rule_hotkey,
     "hotkeys.brightness_up": _rule_hotkey,

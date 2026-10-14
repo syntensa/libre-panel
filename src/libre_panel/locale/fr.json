@@ -2044,7 +2044,16 @@
     "Shift": "Maj",
     "Use the shortcuts": "Utiliser les raccourcis",
     "Off: no key is taken, and the combinations stay for later.": "Désactivé : aucune touche n'est prise, et les combinaisons restent pour plus tard.",
-    "V1.x hardware; runs, as its owners report": "Matériel V1.x ; fonctionne, selon ses propriétaires"
+    "V1.x hardware; runs, as its owners report": "Matériel V1.x ; fonctionne, selon ses propriétaires",
+    "Classic": "Classique",
+    "Vivid": "Vivant",
+    "the first: calm and simple": "le premier : calme et sobre",
+    "sharper, with more to it: a corona, snow crystals, the moon as it looks": "plus net et plus vivant : une couronne solaire, des cristaux de neige, la lune telle qu'elle apparaît",
+    "Weather symbols and moon": "Symboles météo et lune",
+    "How they look on the panel, where a theme leaves it to you. The panel takes it at once.": "Leur aspect sur le panneau, là où un thème vous laisse le choix. Le panneau l'applique aussitôt.",
+    "Look of the weather symbols": "Aspect des symboles météo",
+    "classic or vivid, the moon too": "classique ou vivant, la lune aussi",
+    "weather symbols icons moon sun rain snow look style pack animation classic vivid": "météo symboles icônes lune soleil pluie neige aspect style pack animation classique vivant weather symbols"
   },
   "fields": {
     "align": "Alignement",
@@ -2181,7 +2190,8 @@
     "rising": "Montant",
     "blur": "Flou",
     "hand": "Trotteuse",
-    "glide_ms": "propre durée de glissement (ms)"
+    "glide_ms": "propre durée de glissement (ms)",
+    "pack": "jeu de symboles"
   },
   "widgets": {
     "analog": "Horloge analogique",
@@ -2310,7 +2320,9 @@
     "outlook": "prochains jours",
     "tick": "saute",
     "glide": "glisse",
-    "sweep": "balaie"
+    "sweep": "balaie",
+    "classic": "classique",
+    "vivid": "vivant"
   },
   "icons": {
     "battery": "Batterie",

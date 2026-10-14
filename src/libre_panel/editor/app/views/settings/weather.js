@@ -1,11 +1,12 @@
 // Settings → Weather and place: the place first (the weather needs it, and the sun and the moon
 // use it as well), then the weather (off until it is turned on), its units and how often it is
-// asked for. Searching
+// asked for, then the look of the weather symbols and the moon (it takes effect at once). Searching
 // a place sends the name that was typed to Open-Meteo, and the weather sends the place's
 // coordinates there: nothing else leaves this computer for either, and neither happens
 // unasked. The sources are made when the panel starts, so a change takes effect after a
 // restart.
 
+import { endpoints } from "../../core/api.js";
 import { formatNumber, t } from "../../core/i18n.js";
 import { loadSettings, saveSettings, searchPlaces, useConfig } from "../../core/settings.js";
 import { html, useState } from "../../lib/preact.js";
@@ -63,6 +64,35 @@ function WeatherCard() {
     <p class="settings-credit">
       ${t("Weather data by")} <a href="https://open-meteo.com" target="_blank" rel="noopener noreferrer">Open-Meteo.com</a> (CC BY 4.0)
     </p>`;
+}
+
+// -- the look of the symbols -------------------------------------------------------------------
+
+// config.toml's ``symbols`` (config.SYMBOL_PACKS), the first first
+const PACKS = [
+  { id: "classic", label: () => t("Classic"), hint: () => t("the first: calm and simple") },
+  { id: "vivid", label: () => t("Vivid"), hint: () => t("sharper, with more to it: a corona, snow crystals, the moon as it looks") },
+];
+
+/** The look of the weather symbols and the moon, tiles with a picture of each; a theme may give a
+ * symbol a look of its own. */
+function SymbolsCard() {
+  const config = useConfig();
+  if (!config) return null;
+  const current = PACKS.some((pack) => pack.id === config.symbols) ? config.symbols : PACKS[0].id;
+  return html`<${Card} id="symbols" title=${t("Weather symbols and moon")}
+      text=${t("How they look on the panel, where a theme leaves it to you. The panel takes it at once.")}>
+    <div class="fan-look-tiles symbol-pack-tiles" role="radiogroup" aria-label=${t("Look of the weather symbols")}>
+      ${PACKS.map(
+        (pack) => html`<button type="button" role="radio" key=${pack.id} class="fan-look-tile symbol-pack-tile" data-pack=${pack.id}
+          aria-checked=${String(pack.id === current)} onClick=${() => pack.id !== current && saveSettings({ symbols: pack.id })}>
+          <img src=${endpoints.symbolsLookUrl(pack.id)} alt="" width="240" height="80" decoding="async" />
+          <span>${pack.label()}</span>
+          <span class="muted">${pack.hint()}</span>
+        </button>`,
+      )}
+    </div>
+  <//>`;
 }
 
 // -- the place -----------------------------------------------------------------------------------
@@ -170,4 +200,5 @@ function PlaceCard() {
 export const weatherGroups = [
   { id: "place", order: 10, component: PlaceCard, load: loadSettings },
   { id: "weather", order: 20, component: WeatherCard },
+  { id: "symbols", order: 30, component: SymbolsCard },
 ];

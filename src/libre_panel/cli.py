@@ -353,6 +353,7 @@ def _cmd_preview(args: argparse.Namespace) -> int:
     else:
         snapshot = demo_snapshot()
     renderer = Renderer(theme, preview=True)
+    renderer.symbols = config.symbols  # the weather symbols and the moon in the chosen look
     frame, _ = renderer.render(snapshot)
     renderer.close()
     frame.save(args.output)

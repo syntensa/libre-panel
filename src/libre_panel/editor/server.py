@@ -30,8 +30,10 @@ from urllib.parse import ParseResult, parse_qs, unquote, urlparse
 
 from libre_panel import __version__, i18n, modes, notify, sequence
 from libre_panel.config import (
+    DEFAULT_SYMBOLS,
     FAN_LOOKS,
     FAN_PAINTS,
+    SYMBOL_PACKS,
     ConfigError,
     edit_config,
     hardware_name,
@@ -52,7 +54,7 @@ from libre_panel.i18n import t
 from libre_panel.icons import ICON_NAMES
 from libre_panel.render import fan, fan_looks
 from libre_panel.render.renderer import Renderer
-from libre_panel.sensors.base import TIME_SECOND, SensorHub, Snapshot
+from libre_panel.sensors.base import TIME_SECOND, Reading, SensorHub, Snapshot
 from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.sensors.hardware import detected_names
 from libre_panel.theme.adapt import adapt_theme
@@ -363,9 +365,10 @@ class EditorState:
                 self._hub.snapshot()  # rates need a previous sample
             return self._hub.snapshot()
 
-    def fan_choices(self) -> fan.Choices:
-        """What the user chose for the fans in config.toml (their look and colours): the
-        canvas shows them as the panel does. Read again when the file changed."""
+    def _chosen(self) -> tuple[fan.Choices, str]:
+        """What the user chose in config.toml for the fans (their look and colours) and for
+        the weather symbols and the moon (their look): the canvas shows them as the panel
+        does. Read again when the file changed."""
         try:
             stamp = self.config_path.stat().st_mtime_ns if self.config_path else None
         except OSError:
@@ -373,11 +376,18 @@ class EditorState:
         kept = getattr(self, "_fan_choices", None)
         if kept is None or kept[0] != stamp:
             try:
-                choices = fan.Choices.of(load_config(self.config_path))
+                config = load_config(self.config_path)
+                chosen = (fan.Choices.of(config), config.symbols)
             except (ConfigError, OSError):
-                choices = kept[1] if kept is not None else fan.Choices()
-            kept = self._fan_choices = (stamp, choices)
+                chosen = kept[1] if kept is not None else (fan.Choices(), DEFAULT_SYMBOLS)
+            kept = self._fan_choices = (stamp, chosen)
         return kept[1]
+
+    def fan_choices(self) -> fan.Choices:
+        return self._chosen()[0]
+
+    def symbols(self) -> str:
+        return self._chosen()[1]
 
     def follow_config(self) -> None:
         """config.toml was written: the sources of this editor's own hub (a plain editor;
@@ -676,7 +686,7 @@ class EditorHandler(BaseHTTPRequestHandler):
             stamp = (folder / THEME_FILENAME).stat().st_mtime_ns
         except (ThemeError, OSError):
             return self._error("not found", HTTPStatus.NOT_FOUND)
-        key = (theme_id, stamp, width, i18n.language())
+        key = (theme_id, stamp, width, i18n.language(), self.state.symbols())
         with self.state.previews_lock:
             png = self.state.previews.get(key)
         if png is None:
@@ -685,6 +695,7 @@ class EditorHandler(BaseHTTPRequestHandler):
             except ThemeError as exc:
                 return self._error(str(exc), HTTPStatus.NOT_FOUND)
             renderer = Renderer(theme, preview=True)
+            renderer.symbols = key[-1]
             try:
                 frame, _boxes = renderer.render(demo_snapshot(fixed_time=1_700_000_000))
             finally:
@@ -716,6 +727,46 @@ class EditorHandler(BaseHTTPRequestHandler):
         buffer = io.BytesIO()
         image.save(buffer, format="PNG")
         self._send(200, buffer.getvalue(), "image/png")
+
+    _symbol_tiles: dict[str, bytes] = {}
+
+    def _symbols_look(self, query: dict[str, list[str]]) -> None:
+        """``GET /api/symbols-look?pack=vivid``: the weather symbols and the moon in that look
+        as a picture (PNG), on a panel's dark ground: the tiles of Settings show them. The
+        sun behind a cloud and snow, lit, by day, and the moon waxing."""
+        pack = (query.get("pack") or [DEFAULT_SYMBOLS])[0]
+        if pack not in SYMBOL_PACKS:
+            return self._error("unknown look", HTTPStatus.NOT_FOUND)
+        png = self._symbol_tiles.get(pack)
+        if png is None:
+            k = 120
+            theme = parse_theme({
+                "format": "libre-panel-theme/1",
+                "display": {"width": 3 * k, "height": k},
+                "palette": look_theme_parts("arctic")[0],
+                "background": {"color": "#0b1016"},
+                "widgets": [
+                    {"type": "symbol", "id": "sun", "x": 0, "y": 0, "size": k, "finish": "lit",
+                     "sensor": "weather.code"},
+                    {"type": "symbol", "id": "snow", "x": k, "y": 0, "size": k, "finish": "lit",
+                     "sensor": "weather.hour.1.code"},
+                    {"type": "moon", "id": "moon", "x": 2 * k + 10, "y": 10, "size": k - 20},
+                ],
+            })  # fmt: skip
+            snapshot = demo_snapshot(fixed_time=1_700_000_000)
+            for key, value in (("weather.code", 2), ("weather.is_day", 1), ("moon.phase", 0.36),
+                               ("weather.hour.1.code", 73), ("weather.hour.1.day", 1)):  # fmt: skip
+                snapshot.readings[key] = Reading(key, value)
+            renderer = Renderer(theme, preview=True)
+            renderer.symbols = pack
+            try:
+                frame, _boxes = renderer.render(snapshot)
+            finally:
+                renderer.close()
+            buffer = io.BytesIO()
+            frame.save(buffer, format="PNG")
+            png = self._symbol_tiles[pack] = buffer.getvalue()
+        self._send(200, png, "image/png")
 
     def _readings(self, query: dict[str, list[str]]) -> dict[str, Any]:
         """Sensor values for the editor's pickers (``?keys=a,b``; all without it) and
@@ -1378,6 +1429,7 @@ class EditorHandler(BaseHTTPRequestHandler):
                 log.debug("no preview for %s: %s", preset["id"], exc)
                 continue
             renderer = Renderer(theme, preview=True)
+            renderer.symbols = self.state.symbols()
             try:
                 frame, _boxes = renderer.render(snapshot)
             finally:
@@ -1573,6 +1625,7 @@ class EditorHandler(BaseHTTPRequestHandler):
                 log.warning("live sensors unavailable: %s", exc)
         renderer = Renderer(theme, preview=True)
         renderer.fan_choices = self.state.fan_choices()
+        renderer.symbols = self.state.symbols()
         try:
             frame, boxes = renderer.render(snapshot)
             notice = payload.get("notice")
@@ -1634,6 +1687,7 @@ class EditorHandler(BaseHTTPRequestHandler):
             except ThemeError as exc:
                 return self._error(str(exc))
             renderer = Renderer(theme, preview=True)
+            renderer.symbols = self.state.symbols()
             try:
                 frame, _boxes = renderer.render(snapshot)
                 x, y, w, h = renderer.module_boxes["m"]
@@ -1777,6 +1831,9 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/app", lambda h, m, u: h._app_state()),
     Route("GET", "/api/hardware", lambda h, m, u: h._hardware(_refresh_asked(u.query))),
     Route("GET", "/api/fan-look", lambda h, m, u: h._fan_look(parse_qs(u.query)), picture=True),
+    Route(
+        "GET", "/api/symbols-look", lambda h, m, u: h._symbols_look(parse_qs(u.query)), picture=True
+    ),
     Route("GET", "/api/start-screen", lambda h, m, u: h._start_screen()),
     Route(
         "GET",

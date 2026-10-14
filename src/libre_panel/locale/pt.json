@@ -2044,7 +2044,16 @@
     "Shift": "Shift",
     "Use the shortcuts": "Usar os atalhos",
     "Off: no key is taken, and the combinations stay for later.": "Desligado: nenhuma tecla é usada, e as combinações ficam para depois.",
-    "V1.x hardware; runs, as its owners report": "Hardware V1.x; funciona, segundo seus donos"
+    "V1.x hardware; runs, as its owners report": "Hardware V1.x; funciona, segundo seus donos",
+    "Classic": "Clássico",
+    "Vivid": "Vívido",
+    "the first: calm and simple": "o primeiro: calmo e simples",
+    "sharper, with more to it: a corona, snow crystals, the moon as it looks": "mais nítido e com mais vida: uma coroa solar, cristais de neve, a lua como ela aparece",
+    "Weather symbols and moon": "Símbolos do tempo e lua",
+    "How they look on the panel, where a theme leaves it to you. The panel takes it at once.": "Como aparecem no painel, onde um tema deixa a escolha com você. O painel aplica na hora.",
+    "Look of the weather symbols": "Aparência dos símbolos do tempo",
+    "classic or vivid, the moon too": "clássico ou vívido, a lua também",
+    "weather symbols icons moon sun rain snow look style pack animation classic vivid": "tempo clima símbolos ícones lua sol chuva neve aparência estilo pacote animação clássico vívido weather symbols"
   },
   "fields": {
     "align": "Alinhamento",
@@ -2181,7 +2190,8 @@
     "rising": "Subindo",
     "blur": "Desfoque",
     "hand": "Ponteiro dos segundos",
-    "glide_ms": "tempo de deslize próprio (ms)"
+    "glide_ms": "tempo de deslize próprio (ms)",
+    "pack": "pacote de símbolos"
   },
   "widgets": {
     "analog": "Relógio analógico",
@@ -2310,7 +2320,9 @@
     "outlook": "próximos dias",
     "tick": "salta",
     "glide": "desliza",
-    "sweep": "percorre"
+    "sweep": "percorre",
+    "classic": "clássico",
+    "vivid": "vívido"
   },
   "icons": {
     "battery": "Bateria",

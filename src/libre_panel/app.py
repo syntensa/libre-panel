@@ -637,13 +637,14 @@ class MainLoop:
             self.motion.adopt(motion)  # graph histories it began
         renderer.place = _place(config)
         renderer.fan_choices = fan.Choices.of(config)
+        renderer.symbols = config.symbols
         return renderer
 
     @staticmethod
     def _warm_key(theme: Theme, config: Config) -> Any:
         theme_file = _theme_file(theme)
         stamp = _Watcher._stamp(theme_file) if theme_file else None
-        return (str(theme.root), stamp, theme.name, config.fps > 1)
+        return (str(theme.root), stamp, theme.name, config.fps > 1, config.symbols)
 
     def _warmed(
         self, config: Config, host: Any, shown: str, refused: str | None, watcher: _Watcher,
@@ -700,6 +701,7 @@ class MainLoop:
             renderer = Renderer(theme, animate=animate, motion=motion)
             renderer.continuous, renderer.fps, renderer.sample = continuous, fps, sample
             renderer.fan_choices = fan.Choices.of(config)  # their rotors, warmed as shown
+            renderer.symbols = config.symbols  # and the symbols in their look
             # widget by widget between the panel's frames, not while one is drawn
             renderer.warm(snapshot, now, pause=lambda: self.idle.wait(0.1))
             return renderer, motion

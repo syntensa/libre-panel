@@ -20,7 +20,7 @@ from typing import Any
 
 from PIL import ImageColor
 
-from libre_panel.config import FAN_LOOKS, FAN_PAINTS, user_themes_dir
+from libre_panel.config import FAN_LOOKS, FAN_PAINTS, SYMBOL_PACKS, user_themes_dir
 from libre_panel.devices.models import find_model, orientation_of
 from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_font_path, builtin_fonts
 from libre_panel.icons import ICON_NAMES
@@ -82,6 +82,10 @@ def _text_style(tabular: bool) -> dict[str, tuple[str, Any]]:
         "fit": ("enum:shrink|ellipsis", "shrink"),  # how: a smaller font, or cut with …
     }
 
+
+# The look of a weather symbol or the moon (render/symbols.py): "auto" takes the one the user
+# chose (Settings -> Weather and place, ``symbols`` in config.toml), else the first
+PACK_FIELD = ("enum:auto|" + "|".join(SYMBOL_PACKS), "auto")
 
 WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
     "rect": {
@@ -235,6 +239,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "color": ("color", "#f2efe6"),  # the lit part
         "color2": ("color?", "#2b3242"),  # the dark part
         "mirror": ("bool", False),  # as seen south of the equator
+        "pack": PACK_FIELD,
     },
     # A fan: its rotor turns with the sensor's speed (RPM) inside a ring that shows the load.
     "fan": {
@@ -289,6 +294,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "color": ("color", "#ffffff"),  # clouds and the moon (sun, rain, snow: the palette's)
         "moving": ("bool", True),  # off: it stands (it moves where the panel is driven fast)
         "offset": ("number", 0.0),  # seconds its motion is shifted: a row is not in step
+        "pack": PACK_FIELD,
     },
     # A download as the Studio's inset shows it (render/download.py): what loads, its progress,
     # the speed and the time left, and the speed over the last minutes. It reads the state the

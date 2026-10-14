@@ -435,13 +435,14 @@ def test_game_mode_and_more_leads_with_game_mode_and_the_place_comes_first(app_u
         expect(notices.locator(".settings-row-title").first).to_have_text("Notices")
         expect(notices.locator(".settings-disclosure")).to_contain_text("Options · ")
         expect(page.locator(".note")).to_have_count(0)  # (what the note said is the lead now)
-        # the weather needs a place: the place comes first, then the weather
+        # the weather needs a place: the place comes first, then the weather, then the look of
+        # its symbols
         page.goto(f"{app_url}#/settings/weather")
         page.wait_for_selector("#weather")
         ids = page.locator(".settings-main .settings-card").evaluate_all(
             "cards => cards.map((c) => c.id)"
         )
-        assert ids == ["place", "weather"]
+        assert ids == ["place", "weather", "symbols"]
         # no command to type for a window of its own
         page.goto(f"{app_url}#/settings/system")
         page.wait_for_selector("#start")
@@ -679,3 +680,32 @@ def answer_route(data):
         route.fulfill(status=200, content_type="application/json", body=json.dumps(data))
 
     return handler
+
+
+def test_the_look_of_the_weather_symbols_is_chosen_on_a_tile_with_its_picture(
+    app_url,  # noqa: F811
+    isolated_home,
+):
+    """Settings → Weather and place: two tiles, each with a picture of its look; the first is the
+    default, a click writes ``symbols`` to config.toml (the panel takes it at once: no note of a
+    restart). The palette finds it under its own name."""
+    choose_theme(isolated_home, "nimbus")
+    with browser_page(app_url, "settings/weather") as page:
+        tiles = page.locator(".symbol-pack-tile")
+        expect(tiles).to_have_count(2)
+        expect(page.locator('.symbol-pack-tile[data-pack="classic"]')).to_have_attribute(
+            "aria-checked", "true"
+        )
+        page.wait_for_function(
+            "[...document.querySelectorAll('.symbol-pack-tile img')]"
+            ".every((i) => i.naturalWidth > 0)"
+        )  # each with its picture
+        page.locator('.symbol-pack-tile[data-pack="vivid"]').click()
+        waits_for(page, lambda: settings_config().symbols == "vivid")
+        expect(page.locator('.symbol-pack-tile[data-pack="vivid"]')).to_have_attribute(
+            "aria-checked", "true"
+        )
+        expect(page.locator("#symbols .note.warn")).to_have_count(0)
+        page.keyboard.press("Control+k")
+        page.keyboard.type("weather symbols")
+        expect(page.locator(".palette")).to_contain_text("Look of the weather symbols")

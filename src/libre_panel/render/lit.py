@@ -585,12 +585,13 @@ def _flake(cx: float, cy: float, r: float, width: float, color) -> Any:
 
 
 def symbol(name: str, k: int, colours: dict[str, tuple[int, ...]]) -> Image.Image:
-    """Weather symbol ``name`` (an icon name of SYMBOLS) ``k`` px square, lit."""
+    """Weather symbol ``name`` (an icon name of SYMBOLS) ``k`` px square, lit (an icon: from
+    the bodies at half size, which are plenty for it)."""
     out = Image.new("RGBA", (k, k), (0, 0, 0, 0))
     unit = {role: _unit(color) for role, color in colours.items()}
 
     def put(name_: str, kind: str, role: str, cx: float, cy: float, width: float) -> None:
-        part = light3d.body(name_, kind, unit[role], (k, k), (cx * k, cy * k), width * k)
+        part = light3d.body(name_, kind, unit[role], (k, k), (cx * k, cy * k), width * k, False)
         if part is not None:
             out.alpha_composite(part)
 
@@ -605,7 +606,8 @@ def symbol(name: str, k: int, colours: dict[str, tuple[int, ...]]) -> Image.Imag
         sun(0.5, 0.5, 0.21)
     elif name == "moon":
         cx = cy = 0.5 * k
-        disc = light3d.body("sphere", "moon", unit["moon"], (k, k), (cx, cy), 2.2 * 0.21 * k)
+        disc = light3d.body("sphere", "moon", unit["moon"], (k, k), (cx, cy), 2.2 * 0.21 * k,
+                            False)  # fmt: skip
         if disc is not None:
             out.alpha_composite(light3d.crescent(disc, cx, cy, 0.21 * k))
         for sx, sy, sr in ((0.18, 0.22, 0.032), (0.82, 0.24, 0.024), (0.76, 0.80, 0.028)):

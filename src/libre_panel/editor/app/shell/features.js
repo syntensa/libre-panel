@@ -227,6 +227,16 @@ export function registerFeatureCommands() {
       run: toCard("weather/place"),
     },
     {
+      id: "settings.symbols",
+      title: () => t("Look of the weather symbols"),
+      hint: () => t("classic or vivid, the moon too"),
+      keywords: () => t("weather symbols icons moon sun rain snow look style pack animation classic vivid"),
+      group: settings,
+      icon: "weather",
+      rank: 26,
+      run: toCard("weather/symbols"),
+    },
+    {
       id: "settings.games",
       title: () => t("Which programs are games"),
       hint: () => t("game mode"),

@@ -748,6 +748,22 @@ def test_each_fan_look_has_a_picture_for_its_tile(editor, pc):
     assert request(editor.port, "GET", "/api/fan-look?look=rgb")[0] == 404
 
 
+def test_each_look_of_the_weather_symbols_has_a_picture_for_its_tile(editor, pc):
+    import io
+
+    from PIL import Image
+
+    pictures = {}
+    for pack in ("classic", "vivid"):
+        status, body = request(editor.port, "GET", f"/api/symbols-look?pack={pack}")
+        assert status == 200, pack
+        image = Image.open(io.BytesIO(body))
+        assert image.size == (360, 120) and image.getbbox() is not None
+        pictures[pack] = image.tobytes()
+    assert pictures["classic"] != pictures["vivid"]
+    assert request(editor.port, "GET", "/api/symbols-look?pack=retro")[0] == 404
+
+
 def test_an_empty_text_gives_the_found_name_back_and_the_others_stay(editor, pc, isolated_home):
     names(editor, {"cpu": "My CPU", "gpu": "My card"})
     status, data = names(editor, {"cpu": ""})
