@@ -38,7 +38,7 @@ USB-C. They differ in how they show up on the computer:
 | `turing-5.2-usb` | 5.2" | 1280×720 | USB, V1.x | unverified |
 | `turing-8-usb` | 8" | 1280×800 | USB, V1.x | unverified |
 | `turing-8.8` | 8.8" | 1920×480 | USB serial, rev. C (V0.x) | unverified |
-| `turing-8.8-usb` | 8.8" | 1920×480 | USB, V1.x | unverified |
+| `turing-8.8-usb` | 8.8" | 1920×480 | USB, V1.x | **supported** — runs, as its owners report |
 | `turing-9.2-usb` | 9.2" | 1920×480 | USB, V1.x | **supported** — stills and video mode at 50 fps, for hours on end |
 | `turing-12.3-usb` | 12.3" | 1920×720 | USB, V1.x | unverified |
 

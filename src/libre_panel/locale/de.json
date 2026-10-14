@@ -2043,7 +2043,8 @@
     "{keys} needs Ctrl, Alt or Win": "{keys} braucht Strg, Alt oder Win",
     "Shift": "Umschalt",
     "Use the shortcuts": "Kürzel verwenden",
-    "Off: no key is taken, and the combinations stay for later.": "Aus: Keine Taste wird belegt, und die Kombinationen bleiben für später."
+    "Off: no key is taken, and the combinations stay for later.": "Aus: Keine Taste wird belegt, und die Kombinationen bleiben für später.",
+    "V1.x hardware; runs, as its owners report": "V1.x-Hardware; läuft, wie seine Besitzer berichten"
   },
   "fields": {
     "align": "Ausrichtung",

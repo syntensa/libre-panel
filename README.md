@@ -224,7 +224,7 @@ aside when its readings are missing, and costs nothing while no theme shows it.
 
 | Panel | Sizes | Connects as | Status |
 |---|---|---|---|
-| Turing / TURZX | 2.8" round, 4.6", 5.2", 8", 8.8", 9.2", 12.3" | USB device (`1cbe:…`) | 9.2": proven for hours, as stills and as 50 fps video. Other sizes: the same protocol, unverified |
+| Turing / TURZX | 2.8" round, 4.6", 5.2", 8", 8.8", 9.2", 12.3" | USB device (`1cbe:…`) | 9.2": proven for hours, as stills and as 50 fps video. 8.8": runs, as its owners report. Other sizes: the same protocol, unverified |
 | Turing Smart Screen | 2.1" round, 3.5", 5", 8.8" | virtual COM port | unverified |
 | UsbPCMonitor | 3.5", 5", 7" | virtual COM port | unverified |
 | XuanFang | 3.5" | virtual COM port | unverified |

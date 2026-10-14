@@ -40,7 +40,7 @@ class PanelModel:
     shape: str = "rect"  # "rect" or "round"
     usb_ids: tuple[tuple[int, int], ...] = ()
     serial_numbers: tuple[str, ...] = ()
-    # "supported": `libre-panel doctor` passed on this model.
+    # "supported": `libre-panel doctor` passed on this model, or its owners report it runs.
     # "unverified": driver exists, protocol proven on hardware (SPUR II, or
     # turing-smart-screen-python for serial panels), this model not confirmed yet.
     # "planned": no driver yet.
@@ -188,7 +188,7 @@ MODELS: tuple[PanelModel, ...] = (
         1920,
         "usb-turing",
         usb_ids=((0x1CBE, 0x0088),),
-        notes="V1.x hardware",
+        notes="V1.x hardware; runs, as its owners report",
     ),
     PanelModel(
         # The framebuffer is 480x1920, but the bezel hides its last 18 columns:
@@ -297,8 +297,11 @@ _DRIVER_STATUS = {
     protocol: "unverified"
     for protocol in ("usb-turing", "serial-a", "serial-b", "serial-c", "serial-d", "serial-weact")
 }
-# Models confirmed with `libre-panel doctor`; add a model here only with a passing report.
-_CONFIRMED: set[str] = {"turing-9.2-usb"}  # stills and 50 fps video, for hours on end
+# Models confirmed on the panel: with `libre-panel doctor`, or by an owner who reports it runs.
+_CONFIRMED: set[str] = {
+    "turing-9.2-usb",  # stills and 50 fps video, for hours on end
+    "turing-8.8-usb",  # "works wonderfully", an owner's report in the TURZX forum
+}
 MODELS = tuple(
     replace(
         m, driver="supported" if m.id in _CONFIRMED else _DRIVER_STATUS.get(m.protocol, m.driver)

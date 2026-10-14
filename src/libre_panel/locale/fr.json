@@ -2043,7 +2043,8 @@
     "{keys} needs Ctrl, Alt or Win": "{keys} a besoin de Ctrl, Alt ou Win",
     "Shift": "Maj",
     "Use the shortcuts": "Utiliser les raccourcis",
-    "Off: no key is taken, and the combinations stay for later.": "Désactivé : aucune touche n'est prise, et les combinaisons restent pour plus tard."
+    "Off: no key is taken, and the combinations stay for later.": "Désactivé : aucune touche n'est prise, et les combinaisons restent pour plus tard.",
+    "V1.x hardware; runs, as its owners report": "Matériel V1.x ; fonctionne, selon ses propriétaires"
   },
   "fields": {
     "align": "Alignement",
