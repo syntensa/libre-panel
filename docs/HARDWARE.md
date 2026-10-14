@@ -15,6 +15,15 @@ USB-C. They differ in how they show up on the computer:
 
 `libre-panel devices` lists both kinds.
 
+**What a USB serial panel can do.** The USB serial panels are the older kind, and slower: they
+take their pictures pixel by pixel over a serial link (115200 baud for most), where a USB panel
+takes a compressed picture in a few milliseconds. Libre Panel sends a serial panel only the
+part of the picture that changed, so numbers, bars and the clock keep up; a whole picture (at
+the start, for a new theme) takes seconds and builds up while it goes. They have no smooth motion (the video mode is for the
+TURZX USB panels), and parts that move (graphs that scroll, numbers that glide, the weather
+symbols) change less often and less smoothly than on a USB panel. The panel test's speed check
+stops after 20 seconds on them.
+
 **Driver status**
 
 - **supported** — `libre-panel doctor` passed on this model.

@@ -232,10 +232,17 @@ aside when its readings are missing, and costs nothing while no theme shows it.
 | WeAct Display FS V1 | 0.96", 3.5" | virtual COM port | unverified |
 
 *Unverified* means the driver follows a protocol proven on real panels, but nobody has
-confirmed that model with Libre Panel yet. **Own one?** `libre-panel doctor` checks it end to
-end and writes a report without serial numbers; attach it to a
+confirmed that model with Libre Panel yet. **Own one?** The panel test in the app (*Live →
+Diagnose*, or `libre-panel doctor` in a terminal) checks it end to end and writes a report
+without serial numbers; one click opens a
 [panel report](https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml)
-and the model becomes *supported* for everyone. Video mode is for the TURZX USB panels; the
+with it filled in, and the model becomes *supported* for everyone.
+
+**The panels on a virtual COM port are slower.** They are the older kind. Libre Panel sends
+them only what changes, so numbers, bars and the clock keep up; but they have no smooth motion,
+parts that move (graphs that scroll, numbers that glide, the weather symbols) change less often
+and less smoothly than on a USB panel, and a new theme builds up for a moment. For the most
+motion, the TURZX USB panels are the ones to have. Video mode is for the TURZX USB panels; the
 others have no video decoder. Details, Linux permissions and the panels of other brands:
 [docs/HARDWARE.md](docs/HARDWARE.md).
 

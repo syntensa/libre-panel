@@ -77,7 +77,7 @@ function PanelPicker({ configured, onPick }) {
               <span class=${`model-shape${model.shape === "round" ? " round" : ""}`}></span>
               <span class="model-name">${panelName(model)}</span>
               <span class="model-size mono">${model.landscape[0]} × ${model.landscape[1]}</span>
-              <span class="model-proto">${model.protocol_name.startsWith("USB bulk") ? "USB" : t("serial")}</span>
+              <span class="model-proto" title=${model.protocol_name.startsWith("USB bulk") ? null : t("USB serial: slower, without smooth motion")}>${model.protocol_name.startsWith("USB bulk") ? "USB" : t("serial")}</span>
             </button>`,
           )}
         </div>`,
@@ -117,6 +117,9 @@ function PanelFound() {
           : html`${t("Plug it in: Libre Panel looks for it every few seconds. Until then the picture goes to a file.")}`}
       </div>
       ${configured !== "auto" ? html`<div class="settings-row-hint">${t("Chosen by hand. “Detect automatically” goes back to finding it.")}</div>` : null}
+      ${shown && shown.connection !== "usb"
+        ? html`<div class="settings-row-hint" data-serial-note>${t("An older USB serial panel: Libre Panel sends it only what changes, so numbers, bars and the clock keep up. It has no smooth motion, parts that move change less often than on a USB panel, and a new theme builds up for a moment.")}</div>`
+        : null}
       ${why ? html`<div class="panel-found-why"><${Status} tone="warn">${stateText(running.state)}: ${running.detail}<//></div>` : null}
     </div>
     <button ref=${anchor} type="button" class="btn" aria-haspopup="dialog" aria-expanded=${String(open)} onClick=${() => setOpen(!open)}>

@@ -2133,7 +2133,9 @@
     "Yes, all right": "Tak, wszystko dobrze",
     "test the panel, read the log, mend what is wrong": "przetestuj panel, przeczytaj dziennik, napraw, co nie działa",
     "{n} more need you: below, each with its next step.": "Jeszcze {n} potrzebuje ciebie: poniżej, każde z następnym krokiem.",
-    "diagnose doctor test check panel log logs error problem fix repair mend restart reconnect": "diagnostyka doctor test sprawdź panel dziennik log błąd problem napraw popraw uruchom ponownie połącz ponownie"
+    "diagnose doctor test check panel log logs error problem fix repair mend restart reconnect": "diagnostyka doctor test sprawdź panel dziennik log błąd problem napraw popraw uruchom ponownie połącz ponownie",
+    "An older USB serial panel: Libre Panel sends it only what changes, so numbers, bars and the clock keep up. It has no smooth motion, parts that move change less often than on a USB panel, and a new theme builds up for a moment.": "Starszy panel szeregowy USB: Libre Panel wysyła mu tylko to, co się zmienia, więc liczby, paski i zegar nadążają. Nie ma płynnego ruchu, to, co się porusza, zmienia się rzadziej niż na panelu USB, a nowy motyw przez chwilę się wczytuje.",
+    "USB serial: slower, without smooth motion": "Szeregowy USB: wolniejszy, bez płynnego ruchu"
   },
   "fields": {
     "align": "Wyrównanie",

@@ -709,3 +709,21 @@ def test_the_look_of_the_weather_symbols_is_chosen_on_a_tile_with_its_picture(
         page.keyboard.press("Control+k")
         page.keyboard.type("weather symbols")
         expect(page.locator(".palette")).to_contain_text("Look of the weather symbols")
+
+
+@pytest.mark.parametrize(("model", "said"), [("turing-3.5", True), ("turing-9.2-usb", False)])
+def test_an_older_serial_panel_says_what_it_cannot_do(app_url, isolated_home, model, said):  # noqa: F811
+    """Settings → Panel: a panel on a virtual COM port is slower and has no smooth motion, and
+    the card says so under its name; a USB panel's card does not."""
+    isolated_home.mkdir(parents=True, exist_ok=True)
+    (isolated_home / "config.toml").write_text(
+        f'theme = "libre-default"\n\n[device]\nmodel = "{model}"\n', encoding="utf-8"
+    )
+    with browser_page(app_url, "settings/panel") as page:
+        page.wait_for_selector("#panel-found")
+        note = page.locator("#panel-found [data-serial-note]")
+        if said:
+            expect(note).to_contain_text("no smooth motion")
+        else:
+            expect(page.locator("#panel-found")).to_contain_text("USB")
+            expect(note).to_have_count(0)

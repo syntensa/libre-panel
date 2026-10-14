@@ -244,11 +244,17 @@ kostet nichts, solange kein Theme es zeigt.
 | WeAct Display FS V1 | 0,96", 3,5" | virtueller COM-Port | ungeprüft |
 
 *Ungeprüft* heißt: Der Treiber folgt einem Protokoll, das auf echten Panels erprobt ist, aber
-noch niemand hat dieses Modell mit Libre Panel bestätigt. **Du hast eins?** `libre-panel
-doctor` prüft es von Anfang bis Ende und schreibt einen Bericht ohne Seriennummern; häng ihn
-an einen
-[Panel-Bericht](https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml),
-und das Modell gilt für alle als *unterstützt*. Den Videomodus gibt es für die TURZX-USB-Panels;
+noch niemand hat dieses Modell mit Libre Panel bestätigt. **Du hast eins?** Der Panel-Test in
+der App (*Live → Diagnose*, oder `libre-panel doctor` im Terminal) prüft es von Anfang bis
+Ende und schreibt einen Bericht ohne Seriennummern; ein Klick öffnet einen
+[Panel-Bericht](https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml)
+damit ausgefüllt, und das Modell gilt für alle als *unterstützt*.
+
+**Die Panels am virtuellen COM-Port sind langsamer.** Sie sind die ältere Bauart. Libre Panel
+schickt ihnen nur, was sich ändert, sodass Zahlen, Balken und die Uhr mitkommen; aber sie haben
+keine flüssige Bewegung, Bewegtes (scrollende Verläufe, gleitende Zahlen, die Wettersymbole)
+ändert sich seltener und weniger flüssig als auf einem USB-Panel, und ein neues Theme baut sich
+einen Moment lang auf. Für die meiste Bewegung sind die TURZX-USB-Panels die richtigen. Den Videomodus gibt es für die TURZX-USB-Panels;
 die anderen haben keinen Videodecoder. Einzelheiten, Rechte unter Linux und die Panels anderer
 Marken: [docs/HARDWARE.md](docs/HARDWARE.md) (englisch).
 
