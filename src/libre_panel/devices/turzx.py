@@ -179,6 +179,13 @@ class TurzxDisplay(Display):
         return bool(self._impl and self._impl.restarted)
 
     @property
+    def slow(self) -> bool:  # type: ignore[override]
+        """A USB serial panel: the one opened, else the one named (none while it is unknown)."""
+        if self._impl is not None:
+            return self._impl.slow
+        return bool(self.model and self.model.protocol.startswith("serial"))
+
+    @property
     def stream_fps(self) -> int:
         return self._impl.stream_fps if self._impl else 0
 

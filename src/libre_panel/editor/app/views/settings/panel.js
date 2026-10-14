@@ -214,6 +214,32 @@ function VideoCard() {
         <//>`
       : null}
     ${applies && video.gaps.includes("clip") ? html`<${ClipRow} value=${clip} />` : null}
+    <${MotionRow} motion=${config.device.motion} serial=${info.model?.connection === "serial"} />
+  <//>`;
+}
+
+/**
+ * How much moves on the panel (device.motion): calm is a picture a second without gliding,
+ * moving symbols or fades, which the older USB serial panels keep up with; automatic is calm on
+ * them and full on the others.
+ */
+function MotionRow({ motion, serial }) {
+  return html`<${SettingRow}
+    class="motion-row"
+    title=${t("Motion on the panel")}
+    hint=${t("Calm: one picture a second, without gliding, moving symbols or fades, so a slow panel keeps up. Automatic is calm on the older USB serial panels and full on all others.")}
+    status=${motion === "auto" && serial ? html`<${Status}>${t("Calm, as it is a USB serial panel")}<//>` : null}
+  >
+    <${Segmented}
+      label=${t("Motion on the panel")}
+      value=${motion}
+      onChange=${(value) => value !== motion && change({ "device.motion": value })}
+      options=${[
+        { value: "auto", label: t("Automatic") },
+        { value: "full", label: t("Full motion") },
+        { value: "calm", label: t("Calm motion") },
+      ]}
+    />
   <//>`;
 }
 

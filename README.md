@@ -238,11 +238,12 @@ without serial numbers; one click opens a
 [panel report](https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml)
 with it filled in, and the model becomes *supported* for everyone.
 
-**The panels on a virtual COM port are slower.** They are the older kind. Libre Panel sends
-them only what changes, so numbers, bars and the clock keep up; but they have no smooth motion,
-parts that move (graphs that scroll, numbers that glide, the weather symbols) change less often
-and less smoothly than on a USB panel, and a new theme builds up for a moment. For the most
-motion, the TURZX USB panels are the ones to have. Video mode is for the TURZX USB panels; the
+**The panels on a virtual COM port are slower.** They are the older kind. Libre Panel keeps
+their motion calm by itself: a picture a second, of which it sends only the parts that changed,
+so numbers, bars and the clock keep up. Graphs move on a step a second, numbers change without
+gliding, the weather symbols stand still, themes change without a fade, and a new theme builds
+up for a moment. *Settings → Panel → Motion on the panel* turns full motion on for a panel that
+keeps up with it. For the most motion, the TURZX USB panels are the ones to have. Video mode is for the TURZX USB panels; the
 others have no video decoder. Details, Linux permissions and the panels of other brands:
 [docs/HARDWARE.md](docs/HARDWARE.md).
 

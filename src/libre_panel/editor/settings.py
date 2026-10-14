@@ -21,6 +21,7 @@ from urllib.parse import urlencode
 
 from libre_panel import __version__, i18n
 from libre_panel.config import (
+    MOTIONS,
     SYMBOL_PACKS,
     Config,
     ConfigError,
@@ -356,6 +357,7 @@ class Settings:
                     "brightness": device.brightness,
                     "rotate": device.rotate,
                     "orientation": device.orientation,
+                    "motion": device.motion,
                     "output": device.output,
                     "port": device.port,
                 },
@@ -945,6 +947,7 @@ RULES: dict[str, Any] = {
     "device.brightness": lambda n, v, c: _whole(n, v, 0, 100),
     "device.rotate": lambda n, v, c: _choice(n, v, (0, 180)),
     "device.orientation": lambda n, v, c: _choice(n, v, ("", "landscape", "portrait")),
+    "device.motion": lambda n, v, c: _choice(n, v, MOTIONS),
     "device.output": lambda n, v, c: _text(n, v, 260, required=True),
     "device.port": lambda n, v, c: _text(n, v, 64),
     "video.mode": lambda n, v, c: _choice(n, v, ("auto", "on", "off")),

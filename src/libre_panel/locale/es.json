@@ -2135,7 +2135,14 @@
     "{n} more need you: below, each with its next step.": "{n} más te necesitan: abajo, cada uno con su siguiente paso.",
     "diagnose doctor test check panel log logs error problem fix repair mend restart reconnect": "diagnóstico doctor prueba comprobar panel registro log error problema reparar arreglar reiniciar reconectar",
     "An older USB serial panel: Libre Panel sends it only what changes, so numbers, bars and the clock keep up. It has no smooth motion, parts that move change less often than on a USB panel, and a new theme builds up for a moment.": "Un panel serie USB más antiguo: Libre Panel solo le envía lo que cambia, así que los números, las barras y el reloj siguen el ritmo. No tiene movimiento fluido, lo que se mueve cambia menos a menudo que en un panel USB y un tema nuevo tarda un momento en dibujarse.",
-    "USB serial: slower, without smooth motion": "Serie USB: más lento, sin movimiento fluido"
+    "USB serial: slower, without smooth motion": "Serie USB: más lento, sin movimiento fluido",
+    "Motion on the panel": "Movimiento en el panel",
+    "Full motion": "Movimiento completo",
+    "Calm motion": "Movimiento tranquilo",
+    "Calm, as it is a USB serial panel": "Tranquilo, porque es un panel serie USB",
+    "Calm: one picture a second, without gliding, moving symbols or fades, so a slow panel keeps up. Automatic is calm on the older USB serial panels and full on all others.": "Tranquilo: una imagen por segundo, sin deslizamientos, símbolos animados ni fundidos, para que un panel lento pueda seguir. Automático es tranquilo en los paneles serie USB antiguos y completo en todos los demás.",
+    "calm for a slow panel": "tranquilo para un panel lento",
+    "calm animation movement still slow serial gliding fades": "tranquilo animación movimiento quieto lento serie deslizar fundidos"
   },
   "fields": {
     "align": "Alineación",

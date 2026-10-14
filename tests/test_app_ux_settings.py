@@ -714,7 +714,8 @@ def test_the_look_of_the_weather_symbols_is_chosen_on_a_tile_with_its_picture(
 @pytest.mark.parametrize(("model", "said"), [("turing-3.5", True), ("turing-9.2-usb", False)])
 def test_an_older_serial_panel_says_what_it_cannot_do(app_url, isolated_home, model, said):  # noqa: F811
     """Settings → Panel: a panel on a virtual COM port is slower and has no smooth motion, and
-    the card says so under its name; a USB panel's card does not."""
+    the card says so under its name; a USB panel's card does not. Its motion is calm by itself,
+    and full motion is a click away."""
     isolated_home.mkdir(parents=True, exist_ok=True)
     (isolated_home / "config.toml").write_text(
         f'theme = "libre-default"\n\n[device]\nmodel = "{model}"\n', encoding="utf-8"
@@ -722,8 +723,16 @@ def test_an_older_serial_panel_says_what_it_cannot_do(app_url, isolated_home, mo
     with browser_page(app_url, "settings/panel") as page:
         page.wait_for_selector("#panel-found")
         note = page.locator("#panel-found [data-serial-note]")
+        motion = page.locator(".motion-row")
         if said:
             expect(note).to_contain_text("no smooth motion")
+            expect(motion.locator(".settings-row-status")).to_have_text(
+                "Calm, as it is a USB serial panel"
+            )
         else:
             expect(page.locator("#panel-found")).to_contain_text("USB")
             expect(note).to_have_count(0)
+            expect(motion.locator(".settings-row-status")).to_have_count(0)
+        motion.get_by_role("radio", name="Full motion").click()
+        waits_for(page, lambda: settings_config().device.motion == "full")
+        expect(motion.locator(".settings-row-status")).to_have_count(0)

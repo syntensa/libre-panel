@@ -76,6 +76,7 @@ def test_the_settings_are_the_config_with_its_defaults_filled_in(server):
         "brightness": 60,
         "rotate": 0,
         "orientation": "",
+        "motion": "auto",
         "output": "libre-panel-frame.png",
         "port": "",
     }
@@ -201,7 +202,8 @@ def test_a_broken_config_is_told_not_overwritten(server):
 
 
 def test_settings_are_written_with_the_comments_kept(server):
-    status, data = write(server, **{"device.brightness": 35, "device.rotate": 180, "video.fps": 30})
+    status, data = write(server, **{"device.brightness": 35, "device.rotate": 180, "video.fps": 30,
+                                    "device.motion": "calm"})  # fmt: skip
     assert status == 200
     assert data["config"]["device"]["brightness"] == 35 and data["config"]["video"]["fps"] == 30
     config = load_config()
@@ -211,6 +213,7 @@ def test_settings_are_written_with_the_comments_kept(server):
         30,
     )
     assert "# Libre Panel configuration" in config_text()  # the file is the person's
+    assert config.device.motion == "calm" and data["config"]["device"]["motion"] == "calm"
     write(server, **{"video.mode": "off", "video.local_clip": "  usr/data/standby.h264 "})
     assert load_config().device.video.mode == "off"
     assert load_config().device.video.local_clip == "usr/data/standby.h264"  # as typed, trimmed
@@ -261,6 +264,7 @@ def test_a_refused_setting_leaves_all_of_them_as_they_were(server):
         {"device.brightness": "70"},
         {"device.brightness": 70.5},
         {"device.rotate": 90},
+        {"device.motion": "wild"},
         {"device.rotate": False},
         {"device.model": "no-such-panel"},
         {"device.driver": "teleport"},
@@ -1047,7 +1051,7 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
 
     names = {
         "device.model", "device.driver", "device.brightness", "device.rotate", "device.port",
-        "device.orientation",
+        "device.orientation", "device.motion",
         "video.mode", "video.fps", "video.local_clip", "video.clip_asked", "refresh_ms",
         "check_updates", "allow_notify", "symbols", "hotkeys.enabled", "hotkeys.pause",
         "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open",

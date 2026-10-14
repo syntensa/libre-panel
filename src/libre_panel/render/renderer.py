@@ -136,6 +136,55 @@ def changed_region(
     return ImageChops.difference(previous, current).getbbox()
 
 
+def changed_regions(previous: Image.Image | None, current: Image.Image, gap: int = 24,
+                    most: int = 4) -> list[tuple[int, int, int, int]]:  # fmt: skip
+    """The parts that changed as a few boxes, for a panel on a slow link: one box around a
+    clock in one corner and a value in the other is most of the screen, two are small. Rows of
+    changes closer than ``gap`` px are one band, and so are columns within a band; then the two
+    boxes whose joined box adds the fewest pixels are joined until ``most`` are left (each box
+    costs a command and an answer)."""
+    whole = changed_region(previous, current)
+    if whole is None:
+        return []
+    if previous is None or previous.size != current.size or previous.mode != current.mode:
+        return [whole]
+    import numpy as np
+
+    x0, y0, x1, y1 = whole
+    diff = ImageChops.difference(previous.crop(whole), current.crop(whole))
+    changed = np.asarray(diff.convert("L")) > 0
+
+    def runs(flags: Any) -> list[tuple[int, int]]:
+        found: list[tuple[int, int]] = []
+        for i in np.flatnonzero(flags):
+            if found and i - found[-1][1] <= gap:
+                found[-1] = (found[-1][0], int(i) + 1)
+            else:
+                found.append((int(i), int(i) + 1))
+        return found
+
+    boxes = []
+    for top, bottom in runs(changed.any(axis=1)):
+        for left, right in runs(changed[top:bottom].any(axis=0)):
+            boxes.append((x0 + left, y0 + top, x0 + right, y0 + bottom))
+    if len(boxes) > 8 * most:  # changes all over: one box (and no long search for pairs)
+        return [whole]
+
+    def joined(a: tuple[int, ...], b: tuple[int, ...]) -> tuple[int, int, int, int]:
+        return (min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3]))
+
+    def area(box: tuple[int, ...]) -> int:
+        return (box[2] - box[0]) * (box[3] - box[1])
+
+    while len(boxes) > most:
+        pairs = [(i, j) for i in range(len(boxes)) for j in range(i + 1, len(boxes))]
+        i, j = min(pairs, key=lambda p: area(joined(boxes[p[0]], boxes[p[1]]))
+                   - area(boxes[p[0]]) - area(boxes[p[1]]))  # fmt: skip
+        boxes[i] = joined(boxes[i], boxes[j])
+        del boxes[j]
+    return boxes
+
+
 def _drawing(finish: Any, renderer: Renderer) -> Callable[..., Any]:
     """``finish.draw`` as the renderer calls it for a widget, without the reference to the
     renderer that a ``partial`` would keep: the renderer holds it, and a cycle is freed only

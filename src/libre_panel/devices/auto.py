@@ -84,6 +84,10 @@ class AutoDisplay(Display):
     def stream_fps(self) -> int:
         return self._impl.stream_fps if self._impl else 0
 
+    @property
+    def slow(self) -> bool:  # type: ignore[override]
+        return bool(self._impl and self._impl.slow)
+
     def set_brightness(self, percent: int) -> None:
         self._brightness = percent
         if self._impl:

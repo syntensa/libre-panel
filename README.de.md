@@ -251,10 +251,11 @@ Ende und schreibt einen Bericht ohne Seriennummern; ein Klick öffnet einen
 damit ausgefüllt, und das Modell gilt für alle als *unterstützt*.
 
 **Die Panels am virtuellen COM-Port sind langsamer.** Sie sind die ältere Bauart. Libre Panel
-schickt ihnen nur, was sich ändert, sodass Zahlen, Balken und die Uhr mitkommen; aber sie haben
-keine flüssige Bewegung, Bewegtes (scrollende Verläufe, gleitende Zahlen, die Wettersymbole)
-ändert sich seltener und weniger flüssig als auf einem USB-Panel, und ein neues Theme baut sich
-einen Moment lang auf. Für die meiste Bewegung sind die TURZX-USB-Panels die richtigen. Den Videomodus gibt es für die TURZX-USB-Panels;
+hält ihre Bewegung von selbst ruhig: ein Bild pro Sekunde, von dem es nur die geänderten Teile
+schickt, sodass Zahlen, Balken und die Uhr mitkommen. Verläufe rücken einmal pro Sekunde weiter,
+Zahlen wechseln ohne Gleiten, die Wettersymbole stehen still, Themes wechseln ohne Überblendung,
+und ein neues Theme baut sich einen Moment lang auf. *Einstellungen → Panel → Bewegung auf dem
+Panel* schaltet die volle Bewegung für ein Panel ein, das mitkommt. Für die meiste Bewegung sind die TURZX-USB-Panels die richtigen. Den Videomodus gibt es für die TURZX-USB-Panels;
 die anderen haben keinen Videodecoder. Einzelheiten, Rechte unter Linux und die Panels anderer
 Marken: [docs/HARDWARE.md](docs/HARDWARE.md) (englisch).
 

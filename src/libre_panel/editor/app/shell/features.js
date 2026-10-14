@@ -185,6 +185,16 @@ export function registerFeatureCommands() {
       run: toCard("panel/panel-video"),
     },
     {
+      id: "panel.motion",
+      title: () => t("Motion on the panel"),
+      hint: () => t("calm for a slow panel"),
+      keywords: () => t("calm animation movement still slow serial gliding fades"),
+      group: panel,
+      icon: "pulse",
+      rank: 16,
+      run: toCard("panel/panel-video"),
+    },
+    {
       id: "panel.start-screen",
       title: () => t("Start screen: boot logo and standby clip"),
       hint: () => t("what the panel shows by itself"),

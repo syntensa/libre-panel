@@ -24,6 +24,7 @@ class SerialDisplay(Display):
     name = "serial"
     baud = 115200
     rtscts = True
+    slow = True  # pixels over a serial port (Display.slow)
 
     def __init__(self, config, model: PanelModel | None = None, configured: bool = True) -> None:
         super().__init__(config)

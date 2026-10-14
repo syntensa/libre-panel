@@ -17,12 +17,14 @@ USB-C. They differ in how they show up on the computer:
 
 **What a USB serial panel can do.** The USB serial panels are the older kind, and slower: they
 take their pictures pixel by pixel over a serial link (115200 baud for most), where a USB panel
-takes a compressed picture in a few milliseconds. Libre Panel sends a serial panel only the
-part of the picture that changed, so numbers, bars and the clock keep up; a whole picture (at
-the start, for a new theme) takes seconds and builds up while it goes. They have no smooth motion (the video mode is for the
-TURZX USB panels), and parts that move (graphs that scroll, numbers that glide, the weather
-symbols) change less often and less smoothly than on a USB panel. The panel test's speed check
-stops after 20 seconds on them.
+takes a compressed picture in a few milliseconds. So Libre Panel keeps their motion calm by
+itself (`motion = "auto"` in `[device]`): a picture a second, without gliding, moving symbols or
+fades, of which it sends only the parts that changed, as up to four boxes, so numbers, bars and
+the clock keep up; a whole picture (at the start, for a new theme) takes seconds and builds up
+while it goes. `motion = "full"` (*Settings → Panel → Motion on the panel*) gives a serial panel
+the motion of a USB panel, if it keeps up; `"calm"` makes any panel calm. They have no smooth
+motion (the video mode is for the TURZX USB panels). The panel test's speed check stops after
+20 seconds on them.
 
 **Driver status**
 

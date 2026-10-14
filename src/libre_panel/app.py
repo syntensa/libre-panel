@@ -27,7 +27,7 @@ from libre_panel.plugins.render import RenderContext
 from libre_panel.render import fan
 from libre_panel.render.motion import Motion
 from libre_panel.render.overlays import ToastLayer, switch_policy, transition
-from libre_panel.render.renderer import Renderer, changed_region
+from libre_panel.render.renderer import Renderer, changed_region, changed_regions
 from libre_panel.sensors.base import SensorHub, SensorProvider, Snapshot, create_provider
 from libre_panel.sensors.fan_names import FanNames
 from libre_panel.sequence import Rotation
@@ -226,6 +226,9 @@ def sensor_hint(
     return ""
 
 
+Box = tuple[int, int, int, int]
+
+
 class _Link:
     """Keeps the panel connected: a missing or unplugged panel is retried with
     growing pauses instead of ending the program (autostart before USB is up,
@@ -260,9 +263,12 @@ class _Link:
         self.status.state, self.status.detail = "showing", ""
         return True
 
-    def show(self, frame: Image.Image, region: tuple[int, int, int, int], now: float) -> bool:
+    def show(self, frame: Image.Image, region: Box | list[Box], now: float) -> bool:
+        """Send ``frame``'s ``region`` (or each of a list of them, one after the other: a slow
+        panel takes the parts that changed rather than one box around all of them)."""
         try:
-            self.display.show(frame, region)
+            for part in region if isinstance(region, list) else [region]:
+                self.display.show(frame, part)
         except FrameError as exc:
             log.error("frame skipped: %s", exc)
             return False
@@ -327,8 +333,18 @@ def _sequence_state(config: Config, rotation: Rotation) -> dict[str, Any] | None
     return {"index": place.index, "theme": place.theme, "left_s": round(place.left_s, 1)}
 
 
+def calm(config: Config, display: Any) -> bool:
+    """Whether the panel's motion is kept calm (``[device] motion``): a picture a second, no
+    gliding, turning or fading, for a slow panel (a USB serial one) by itself."""
+    motion = config.device.motion
+    return motion == "calm" or (motion == "auto" and bool(getattr(display, "slow", False)))
+
+
 def _fps(config: Config, host: Any, display: Any = None) -> int:
-    """Frames per second: the active mode's, else a streaming display's, else config.fps."""
+    """Frames per second: one where the motion is calm, else the active mode's, else a
+    streaming display's, else config.fps."""
+    if display is not None and not display.streaming and calm(config, display):
+        return 1
     mode = config.modes.get(host.mode or "") if host is not None else None
     if mode is not None and mode.fps:
         return mode.fps
@@ -883,7 +899,9 @@ class MainLoop:
                         # change brought a transition of its own
                         if policy != "follow" or (host is not None and host.switches != switches):
                             ctx = RenderContext(renderer)
-                            kind = transition(chosen or config.transition, ctx)
+                            # a calm panel changes at once: a fade is a whole picture a frame
+                            spec = "cut" if calm(config, display) else chosen or config.transition
+                            kind = transition(spec, ctx)
                             blend = _begin(kind, last_frame, shown_frame, now, toasts) or blend
                         if host is not None:
                             switches = host.switches  # this was the switch
@@ -895,7 +913,8 @@ class MainLoop:
                         on_config(config)
             if host is not None and host.switches != switches and policy != "wait":
                 switches = host.switches  # a mode change that keeps the theme, with a transition
-                kind = transition(host.take_transition(), RenderContext(renderer))
+                spec = host.take_transition()
+                kind = transition("cut" if calm(config, display) else spec, RenderContext(renderer))
                 blend = _begin(kind, last_frame, shown_frame, now, toasts) or blend
             if blend is not playing:
                 began_in = mode
@@ -928,6 +947,8 @@ class MainLoop:
                 renderer.background_builds = streaming
                 renderer.continuous = streaming  # graphs scroll, values glide on
                 renderer.fps = _fps(config, host, display)  # screens may pace animations by it
+                # nothing glides, turns or breathes on a calm panel (it would be sent every frame)
+                renderer.animate = config.fps > 1 and not calm(config, display)
                 if host is not None:  # (while the panel is away they wait there, the newest)
                     toasts.add(host.take_toasts())
                 go_on = getattr(blend[0], "toasts", "wait") in ("over", "hide") if blend else True
@@ -957,6 +978,10 @@ class MainLoop:
                 if streaming:
                     link.show(out, None, started)
                     previous = None
+                elif display.slow:  # the parts that changed, each on its own
+                    parts = changed_regions(previous, out)
+                    if parts:
+                        previous = out if link.show(out, parts, started) else None
                 else:
                     region = changed_region(previous, out)
                     if region is not None:
@@ -987,7 +1012,7 @@ class MainLoop:
         started, next_sample = self.started, self.next_sample
         # While something glides, draw at full fps; otherwise wake for the next
         # reading, but at least twice a second so a seconds clock never skips.
-        interval = 1 / _fps(config, host)
+        interval = 1 / _fps(config, host, self.display)
         if not (renderer.moving or blend is not None or toasts.active):
             interval = max(interval, min(0.5, next_sample - started))
         return max(0.0, interval - (self.clock() - started))

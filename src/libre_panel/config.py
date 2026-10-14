@@ -29,6 +29,8 @@ DEFAULT_THEME = "libre-default"
 # The looks of the weather symbols and the moon (render/symbols.py, render/moon.py): the first,
 # and the second with more to them
 SYMBOL_PACKS = ("classic", "vivid")
+# How much moves on the panel (app.calm): calm where the panel is slow, full, or calm everywhere
+MOTIONS = ("auto", "full", "calm")
 DEFAULT_SYMBOLS = "vivid"
 
 _DEFAULT_CONFIG_TEMPLATE = """\
@@ -98,6 +100,10 @@ rotate = 0
 # theme is then shown in its version for it where it has one (Lumen as Lumen Vertical).
 # Empty: as each theme is made.
 orientation = ""
+# Motion: "auto" keeps it calm on the older USB serial panels, which are slower (symbols stand,
+# numbers jump, a picture a second, no fades between themes) and full on the others; "full"
+# or "calm" for every panel.
+motion = "auto"
 # Where frames go when no panel is used (relative = in this settings folder).
 output = "libre-panel-frame.png"
 # Serial panels (3.5", 5", 2.1" ...) are found by their USB ids. Only if that
@@ -291,6 +297,8 @@ class DeviceConfig:
     # how the panel is mounted: "landscape" or "portrait" (on end) shows each theme in its
     # version for it ("lumen-vertical" for "lumen"); "": as the theme is made
     orientation: str = ""
+    # "auto": calm on the slow USB serial panels, full elsewhere; "full"; "calm" (MOTIONS)
+    motion: str = "auto"
     output: str = "libre-panel-frame.png"
     port: str = ""  # serial panels: the port; empty = found by its USB ids
     video: VideoConfig = field(default_factory=VideoConfig)
@@ -534,6 +542,10 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     if orientation not in ("", "landscape", "portrait"):
         raise ConfigError('device.orientation: "landscape", "portrait" or ""')
     cfg.device.orientation = orientation
+    motion = _expect(dev.get("motion", cfg.device.motion), str, "device.motion")
+    if motion not in MOTIONS:
+        raise ConfigError('device.motion: "auto", "full" or "calm"')
+    cfg.device.motion = motion
     cfg.device.output = _expect(dev.get("output", cfg.device.output), str, "device.output")
     cfg.device.port = _expect(dev.get("port", cfg.device.port), str, "device.port").strip()
     cfg.device.video = _parse_video(_expect(data.get("video", {}), dict, "video"))

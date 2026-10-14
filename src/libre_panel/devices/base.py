@@ -51,6 +51,9 @@ class Display:
     # changed or not; others get only frames that changed, at the configured fps.
     streaming = False
     stream_fps = 0
+    # a slow link (the USB serial panels, pixels over a serial port): the main loop keeps the
+    # motion calm and sends the parts that changed one by one (app.calm, changed_regions)
+    slow = False
     # True once open() brought the panel back after the driver restarted it
     # (a hung video decoder): the main loop tells the services, unlike a replug.
     restarted = False
