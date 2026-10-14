@@ -686,23 +686,23 @@ def test_the_look_of_the_weather_symbols_is_chosen_on_a_tile_with_its_picture(
     app_url,  # noqa: F811
     isolated_home,
 ):
-    """Settings → Weather and place: two tiles, each with a picture of its look; the first is the
+    """Settings → Weather and place: two tiles, each with a picture of its look; the second is the
     default, a click writes ``symbols`` to config.toml (the panel takes it at once: no note of a
     restart). The palette finds it under its own name."""
     choose_theme(isolated_home, "nimbus")
     with browser_page(app_url, "settings/weather") as page:
         tiles = page.locator(".symbol-pack-tile")
         expect(tiles).to_have_count(2)
-        expect(page.locator('.symbol-pack-tile[data-pack="classic"]')).to_have_attribute(
+        expect(page.locator('.symbol-pack-tile[data-pack="vivid"]')).to_have_attribute(
             "aria-checked", "true"
         )
         page.wait_for_function(
             "[...document.querySelectorAll('.symbol-pack-tile img')]"
             ".every((i) => i.naturalWidth > 0)"
         )  # each with its picture
-        page.locator('.symbol-pack-tile[data-pack="vivid"]').click()
-        waits_for(page, lambda: settings_config().symbols == "vivid")
-        expect(page.locator('.symbol-pack-tile[data-pack="vivid"]')).to_have_attribute(
+        page.locator('.symbol-pack-tile[data-pack="classic"]').click()
+        waits_for(page, lambda: settings_config().symbols == "classic")
+        expect(page.locator('.symbol-pack-tile[data-pack="classic"]')).to_have_attribute(
             "aria-checked", "true"
         )
         expect(page.locator("#symbols .note.warn")).to_have_count(0)

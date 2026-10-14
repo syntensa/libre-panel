@@ -271,19 +271,19 @@ def test_snow_crystals_turn_as_they_fall_and_a_flash_lights_the_cloud():
 
 
 def test_the_first_look_is_as_it_was():
-    """ "classic" (the first look, the default) has none of the second's: no corona, no flash,
+    """ "classic" (the first look) has none of the second's: no corona, no flash,
     flakes of three lines, fog in hard bands, no rain in a storm, no shooting star."""
     k = 160
     for style in ("flat", "lit"):
-        sky = symbols.layers_for("clear", False, k, style, COLOURS)[0]
+        sky = symbols.layers_for("clear", False, k, style, COLOURS, "classic")[0]
         assert not sky.rich and sky.corona is None and not sky.big
-        night = symbols.layers_for("clear", True, k, style, COLOURS)[0]
+        night = symbols.layers_for("clear", True, k, style, COLOURS, "classic")[0]
         assert night.streak is None and len(night.stars) == 3
-        storm = symbols.layers_for("storm", False, k, style, COLOURS)[0]
+        storm = symbols.layers_for("storm", False, k, style, COLOURS, "classic")[0]
         assert storm.drop is None and storm.flash is None
-        assert symbols.layers_for("rain", False, k, style, COLOURS)[0].splash is None
-        assert len(symbols.layers_for("fog", False, k, style, COLOURS)[0].bars) == 4
-    snow = symbols.layers_for("snow", False, k, "flat", COLOURS)[0]
+        assert symbols.layers_for("rain", False, k, style, COLOURS, "classic")[0].splash is None
+        assert len(symbols.layers_for("fog", False, k, style, COLOURS, "classic")[0].bars) == 4
+    snow = symbols.layers_for("snow", False, k, "flat", COLOURS, "classic")[0]
     symbols.compose(snow, "snow", False, 0.3)
     assert snow.spun == {}  # the flakes do not turn
     vivid = symbols.layers_for("snow", False, k, "flat", COLOURS, "vivid")[0]

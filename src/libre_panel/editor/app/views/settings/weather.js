@@ -68,7 +68,7 @@ function WeatherCard() {
 
 // -- the look of the symbols -------------------------------------------------------------------
 
-// config.toml's ``symbols`` (config.SYMBOL_PACKS), the first first
+// config.toml's ``symbols`` (config.SYMBOL_PACKS), the first first; "vivid" is the default
 const PACKS = [
   { id: "classic", label: () => t("Classic"), hint: () => t("the first: calm and simple") },
   { id: "vivid", label: () => t("Vivid"), hint: () => t("sharper, with more to it: a corona, snow crystals, the moon as it looks") },
@@ -79,7 +79,7 @@ const PACKS = [
 function SymbolsCard() {
   const config = useConfig();
   if (!config) return null;
-  const current = PACKS.some((pack) => pack.id === config.symbols) ? config.symbols : PACKS[0].id;
+  const current = PACKS.some((pack) => pack.id === config.symbols) ? config.symbols : "vivid";
   return html`<${Card} id="symbols" title=${t("Weather symbols and moon")}
       text=${t("How they look on the panel, where a theme leaves it to you. The panel takes it at once.")}>
     <div class="fan-look-tiles symbol-pack-tiles" role="radiogroup" aria-label=${t("Look of the weather symbols")}>

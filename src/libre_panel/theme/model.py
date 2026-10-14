@@ -84,7 +84,7 @@ def _text_style(tabular: bool) -> dict[str, tuple[str, Any]]:
 
 
 # The look of a weather symbol or the moon (render/symbols.py): "auto" takes the one the user
-# chose (Settings -> Weather and place, ``symbols`` in config.toml), else the first
+# chose (Settings -> Weather and place, ``symbols`` in config.toml), else "vivid"
 PACK_FIELD = ("enum:auto|" + "|".join(SYMBOL_PACKS), "auto")
 
 WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {

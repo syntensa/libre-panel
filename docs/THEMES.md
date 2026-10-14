@@ -430,7 +430,7 @@ code it does not know, or no reading at all, is a cloud.
   still: the rays pulse, rain falls near and far and splashes where it lands, a
   storm pours, and on a clear night a shooting star crosses now and then. `auto`
   (the default) takes the look the user chose (*Settings → Weather and place*,
-  `symbols` in config.toml), else `classic`. A `moon` widget takes the same.
+  `symbols` in config.toml), else `vivid`. A `moon` widget takes the same.
 
 A symbol is made of layers drawn once for a kind of weather, a size and the
 colours, and kept; a frame only moves, turns and fades them over each other, and

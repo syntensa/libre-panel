@@ -29,7 +29,7 @@ DEFAULT_THEME = "libre-default"
 # The looks of the weather symbols and the moon (render/symbols.py, render/moon.py): the first,
 # and the second with more to them
 SYMBOL_PACKS = ("classic", "vivid")
-DEFAULT_SYMBOLS = "classic"
+DEFAULT_SYMBOLS = "vivid"
 
 _DEFAULT_CONFIG_TEMPLATE = """\
 # Libre Panel configuration
@@ -78,10 +78,10 @@ language = "auto"
 fps = 10
 
 # The look of the weather symbols and the moon (or choose it in the app: Settings, Weather
-# and place): "classic", the first, or "vivid", sharper and with more to them (the sun in
-# its corona, rain near and far, snow crystals that turn, the moon as it looks). A theme
-# may give a symbol a look of its own.
-# symbols = "classic"
+# and place): "vivid", sharp and with much to them (the sun in its corona, rain near and
+# far, snow crystals that turn, the moon as it looks), or "classic", the first, calmer one.
+# A theme may give a symbol a look of its own.
+# symbols = "vivid"
 
 [device]
 # Your panel. "auto" detects it; list all models with:  libre-panel models
