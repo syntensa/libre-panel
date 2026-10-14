@@ -189,8 +189,10 @@ def x_display(monkeypatch):
         pytest.skip("needs Xvfb")
     pytest.importorskip("Xlib")
     number = next(n for n in range(140, 200) if not os.path.exists(f"/tmp/.X{n}-lock"))
+    # -noreset: an X server starts over when its last client goes, and one that connects in
+    # that moment (the test's last look, after the shortcuts have let go) is turned away
     server = subprocess.Popen(
-        ["Xvfb", f":{number}", "-screen", "0", "320x240x24", "-nolisten", "tcp"],
+        ["Xvfb", f":{number}", "-screen", "0", "320x240x24", "-nolisten", "tcp", "-noreset"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )

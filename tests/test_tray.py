@@ -196,6 +196,8 @@ def test_the_tray_says_what_keeps_the_temperatures_away_while_it_is_the_case(tra
     from libre_panel.sensors.librehardwaremonitor import LhmStatus
 
     assert wait_for(lambda: tray.app.panel.state()["state"] == "showing")
+    tray.app.panel.platform = "linux"  # nothing to say elsewhere, whatever the sources are (on
+    # a Windows runner LibreHardwareMonitor itself, once it is ready, would have its say)
     tray.refresh()
     quiet = tray.icon.menu_updates
     assert list(items(tray.build_menu()))[1] == "Open Libre Panel"  # nothing to say
