@@ -736,3 +736,30 @@ def test_an_older_serial_panel_says_what_it_cannot_do(app_url, isolated_home, mo
         motion.get_by_role("radio", name="Full motion").click()
         waits_for(page, lambda: settings_config().device.motion == "full")
         expect(motion.locator(".settings-row-status")).to_have_count(0)
+
+
+def test_a_port_that_may_be_a_turing_panel_is_chosen_with_a_click(app_url, isolated_home):  # noqa: F811
+    """Settings → Panel: a port with the USB ids other devices have too (an awake Turing rev. C
+    panel whose serial number Windows does not tell) is offered with the panels it may be; a
+    click on one is the panel."""
+    models = [
+        {"id": m, "label": label, "size": size, "shape": shape, "connection": "serial",
+         "port": "COM12", "sure": False, "video": False}
+        for m, label, size, shape in (
+            ("turing-2.1", 'Turing 2.1" round', [480, 480], "round"),
+            ("turing-5", 'Turing 5"', [800, 480], "rect"),
+            ("turing-8.8", 'Turing 8.8"', [1920, 480], "rect"),
+        )
+    ]  # fmt: skip
+    panel = {
+        "configured": "auto", "found": None, "model": None, "running": None,
+        "maybe": [{"port": "COM12", "models": models}],
+        "video": {"mode": "auto", "fps": 50, "on": False, "usb": True, "gaps": []},
+        "weather_theme": None,
+    }  # fmt: skip
+    with browser_page(app_url, "settings/panel", routes={"**/api/panel": answer(panel)}) as page:
+        maybe = page.locator('[data-maybe-port="COM12"]')
+        expect(maybe).to_contain_text("COM12 may be a Turing panel (rev. C)")
+        expect(maybe.locator("button")).to_have_count(3)
+        maybe.get_by_role("button", name="Turing 8.8″").click()
+        waits_for(page, lambda: settings_config().device.model == "turing-8.8")

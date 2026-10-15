@@ -84,6 +84,19 @@ def find_port(model: PanelModel | None = None, port: str = "") -> FoundPort | No
     return None
 
 
+def gadget_ports() -> list[FoundPort]:
+    """The ports that :func:`find_port` leaves alone without a model: the generic gadget ids
+    of an awake rev. C panel, without its serial number (Windows may not tell it). It may be
+    the panel or another device; the person says which (Settings → Panel, the doctor)."""
+    found = []
+    for info in _ports():
+        if _generic(info):
+            models = tuple(models_for_usb(info.vid, info.pid, info.serial_number))
+            if models:
+                found.append(FoundPort(info.device, models[0], info.serial_number, models))
+    return found
+
+
 def _sibling(model: PanelModel, info: Any, known: list[PanelModel]) -> bool:
     """Whether ``model`` speaks the protocol of the panel on ``info``, whose serial
     number names other models: the UsbPCMonitor 5" and 7" say USB35INCHIPSV2 like

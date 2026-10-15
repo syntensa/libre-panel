@@ -2142,7 +2142,10 @@
     "Calm, as it is a USB serial panel": "Tranquilo, porque es un panel serie USB",
     "Calm: one picture a second, without gliding, moving symbols or fades, so a slow panel keeps up. Automatic is calm on the older USB serial panels and full on all others.": "Tranquilo: una imagen por segundo, sin deslizamientos, símbolos animados ni fundidos, para que un panel lento pueda seguir. Automático es tranquilo en los paneles serie USB antiguos y completo en todos los demás.",
     "calm for a slow panel": "tranquilo para un panel lento",
-    "calm animation movement still slow serial gliding fades": "tranquilo animación movimiento quieto lento serie deslizar fundidos"
+    "calm animation movement still slow serial gliding fades": "tranquilo animación movimiento quieto lento serie deslizar fundidos",
+    "{port} may be a Turing panel (rev. C). Other USB devices have the same USB ids, so Libre Panel talks to it only once you say which panel it is:": "{port} puede ser un panel Turing (rev. C). Otros dispositivos USB tienen los mismos identificadores USB, así que Libre Panel solo se comunica con él cuando dices qué panel es:",
+    "None of them": "Ninguno",
+    "A device has the USB ids of a Turing panel (rev. C), which other USB devices have too. Is it one of these panels?": "Un dispositivo tiene los identificadores USB de un panel Turing (rev. C), que también tienen otros dispositivos USB. ¿Es uno de estos paneles?"
   },
   "fields": {
     "align": "Alineación",

@@ -114,6 +114,7 @@ function questionText(question) {
   if (key === "brightness-watch") return [t("Now the panel goes dark, then bright. Watch it and click Go on.")];
   if (key === "brightness") return [t("Did the panel go dark and then bright?")];
   if (key === "size") return [t("Its USB ids fit several panels. Which one is it?")];
+  if (key === "gadget") return [t("A device has the USB ids of a Turing panel (rev. C), which other USB devices have too. Is it one of these panels?")];
   if (key.startsWith("ruler-") && EDGES[key.slice(6)]) {
     return [t("The panel shows yellow bars along its edges, each with its number: how many pixels deep it is. The frame of the panel may hide the thinnest."), EDGES[key.slice(6)]()];
   }
@@ -205,6 +206,7 @@ function Question({ question, onAnswer }) {
       ${head}
       <div class="diagnose-actions">
         ${(question.options || []).map((label, index) => html`<button type="button" class="btn" key=${index} onClick=${() => onAnswer({ index })}>${label}</button>`)}
+        ${question.key === "gadget" ? html`<button type="button" class="btn" data-answer="none" onClick=${() => onAnswer({})}>${t("None of them")}</button>` : null}
       </div>
     </div>`;
   }

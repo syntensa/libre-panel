@@ -1267,3 +1267,17 @@ a.btn-primary:hover {
   color: var(--accent);
   background: var(--accent-softer);
 }
+
+/* Settings → Panel: a port that may be a Turing panel, its sizes to choose from (panel.js) */
+.panel-maybe {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.panel-maybe-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

@@ -86,6 +86,19 @@ function PanelPicker({ configured, onPick }) {
   </div>`;
 }
 
+/**
+ * A port with the USB ids of an awake Turing panel (rev. C), which other USB devices have too:
+ * Libre Panel talks to it once the person says which panel it is (device.model).
+ */
+function MaybePanel({ maybe, onPick }) {
+  return html`<div class="panel-maybe" data-maybe-port=${maybe.port}>
+    <div class="settings-row-hint">${t("{port} may be a Turing panel (rev. C). Other USB devices have the same USB ids, so Libre Panel talks to it only once you say which panel it is:", { port: maybe.port })}</div>
+    <div class="panel-maybe-choice">
+      ${maybe.models.map((model) => html`<button type="button" class="btn" key=${model.id} onClick=${() => onPick(model.id)}>${panelName(model)}</button>`)}
+    </div>
+  </div>`;
+}
+
 function PanelFound() {
   const info = useStore((s) => s.panelInfo);
   const [open, setOpen] = useState(false);
@@ -121,6 +134,7 @@ function PanelFound() {
         ? html`<div class="settings-row-hint" data-serial-note>${t("An older USB serial panel: Libre Panel sends it only what changes, so numbers, bars and the clock keep up. It has no smooth motion, parts that move change less often than on a USB panel, and a new theme builds up for a moment.")}</div>`
         : null}
       ${why ? html`<div class="panel-found-why"><${Status} tone="warn">${stateText(running.state)}: ${running.detail}<//></div>` : null}
+      ${!found && configured === "auto" ? (info.maybe || []).map((maybe) => html`<${MaybePanel} key=${maybe.port} maybe=${maybe} onPick=${pick} />`) : null}
     </div>
     <button ref=${anchor} type="button" class="btn" aria-haspopup="dialog" aria-expanded=${String(open)} onClick=${() => setOpen(!open)}>
       ${t("Another panel")}

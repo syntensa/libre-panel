@@ -10,6 +10,7 @@ whether the temperatures and power that only it gives arrive.
 
 from __future__ import annotations
 
+import importlib
 import os
 import platform
 import re
@@ -327,13 +328,27 @@ def ruler_card(width: int, height: int, step: int = 2, depth: int = 40) -> Image
     return img
 
 
+# each library by its distribution's name and the module it brings
+LIBRARIES = {"pillow": "PIL", "pyusb": "usb", "pycryptodome": "Crypto",
+             "libusb-package": "libusb_package", "pyserial": "serial"}  # fmt: skip
+
+
 def _versions() -> str:
+    """The libraries' versions: from their metadata, else (the Windows and Linux downloads
+    bundle the modules without it) from the module."""
     parts = []
-    for dist in ("pillow", "pyusb", "pycryptodome", "libusb-package", "pyserial"):
+    for dist, module in LIBRARIES.items():
         try:
             parts.append(f"{dist} {version(dist)}")
+            continue
         except PackageNotFoundError:
+            pass
+        try:
+            found = importlib.import_module(module)
+        except ImportError:
             parts.append(f"{dist} missing")
+        else:
+            parts.append(f"{dist} {getattr(found, '__version__', 'bundled')}")
     return ", ".join(parts)
 
 
@@ -341,19 +356,27 @@ def open_serial_panel(
     port: str = "",
     choose: Callable[[list], object] | None = None,
     model_id: str = "",
+    ask: Callable[[Any], Any] | None = None,
 ):
     """A connected serial panel with a driver, opened; None when there is none.
 
     ``model_id`` (device.model) names the panel; else it is found by its USB ids,
-    and where those fit several sizes ``choose`` picks one of them."""
+    and where those fit several sizes ``choose`` picks one of them. A port with the generic
+    ids that other USB devices have too is opened only where ``ask`` says which panel it is."""
     from libre_panel.config import DeviceConfig
     from libre_panel.devices.models import find_model
-    from libre_panel.devices.serial_link import find_port
+    from libre_panel.devices.serial_link import FoundPort, find_port, gadget_ports
     from libre_panel.devices.turzx import SERIAL_DRIVERS, TurzxDisplay
 
     model = find_model(model_id)
     if model is None or model.protocol not in SERIAL_DRIVERS:
         found = find_port(None, port)
+        if found is None and not port and ask is not None:
+            for maybe in gadget_ports():
+                chosen = ask(maybe)
+                if chosen is not None:
+                    found = FoundPort(maybe.device, chosen, maybe.serial_number, (chosen,))
+                    break
         if found is None or found.model.protocol not in SERIAL_DRIVERS:
             return None
         model, port = found.model, found.device
@@ -439,7 +462,7 @@ class Doctor:
         if open_serial is None:  # the panel in the config, else what is found (asking its size)
 
             def open_serial() -> object:
-                return open_serial_panel(port, self._choose_size, model_id)
+                return open_serial_panel(port, self._choose_size, model_id, self._ask_gadget)
 
         self.open_serial = open_serial
         self.sensors = sensors  # asked for a step of the report, even where no panel is found
@@ -477,6 +500,25 @@ class Doctor:
         index = self.questions.choose("size", "Which one is it?", [m.label for m in candidates])
         chosen = default if index is None else candidates[index]
         self._step("panel size", "info", f"{chosen.label}, as chosen (USB ids fit {labels})")
+        return chosen
+
+    def _ask_gadget(self, found: Any) -> object:
+        """Which panel is on a port with the generic ids of an awake rev. C panel, which other
+        USB devices have too: None (nothing is sent to it) unless the person says."""
+        if self.questions is None:
+            return None
+        self.say(f"\n{found.device} has the USB ids of a Turing panel (rev. C), which other USB "
+                 "devices have too.")  # fmt: skip
+        index = self.questions.choose(
+            "gadget",
+            f"Is the device on {found.device} one of these panels? (Enter: none of them)",
+            [m.label for m in found.candidates],
+        )
+        if index is None:
+            self._step("USB serial panel found", "info", f"{found.device}: not a panel, as told")
+            return None
+        chosen = found.candidates[index]
+        self._step("panel size", "info", f"{chosen.label} on {found.device}, as chosen")
         return chosen
 
     def _send(self, image: Image.Image) -> tuple[float, int]:
@@ -562,6 +604,9 @@ class Doctor:
         return display
 
     def _report_serial_ports(self) -> None:
+        """The ports with a panel's USB ids that were not opened, and why."""
+        from libre_panel.devices.serial_link import GADGET_IDS
+
         try:
             ports = list_serial_ports()
         except DeviceError:
@@ -569,17 +614,21 @@ class Doctor:
         for port in ports:
             if not port["vid"]:
                 continue
-            models = models_for_usb(
-                int(port["vid"], 16), int(port["pid"], 16), port["serial_number"]
-            )
-            if models:
-                names = ", ".join(m.id for m in models)
-                self._step(
-                    "USB serial panel found",
-                    "info",
-                    f"{port['device']} {port['vid']}:{port['pid']} — {names}; "
-                    "its driver is not available yet",
-                )
+            ids = (int(port["vid"], 16), int(port["pid"], 16))
+            models = models_for_usb(*ids, port["serial_number"])
+            if not models:
+                continue
+            names = ", ".join(m.id for m in models)
+            if ids in GADGET_IDS:  # the serial number is said only where it is the panels'
+                number = "none" if not port["serial_number"] else "another (not shown)"
+                why = (f"serial number {number}; these USB ids are other USB devices' too, so "
+                       "Libre Panel talks to it only once the panel is chosen: Settings → "
+                       "Panel → Another panel (device.model = "
+                       + " or ".join(f'"{m.id}"' for m in models) + ")")  # fmt: skip
+            else:
+                why = "not opened"
+            where = f"{port['device']} {port['vid']}:{port['pid']}"
+            self._step("USB serial panel found", "info", f"{where} — {names}; {why}")
 
     def _ruler(self, model, step: int = 2) -> None:
         """Measure the strip the glass hides at each edge (landscape)."""

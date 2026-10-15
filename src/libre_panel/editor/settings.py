@@ -576,6 +576,8 @@ class Settings:
         return {
             "configured": config.device.model,
             "found": found["info"] if found else None,
+            # a port with the ids other USB devices have too: the person says what it is
+            "maybe": self._maybe_panels() if found is None and configured is None else [],
             "model": _model_info(model) if model is not None else None,
             "running": running,
             "video": {
@@ -637,6 +639,22 @@ class Settings:
         if port is not None:
             return {"model": port.model, "info": _model_info(port.model, port.device, port.sure)}
         return None
+
+    @staticmethod
+    def _maybe_panels() -> list[dict[str, Any]]:
+        """The ports with the generic ids of an awake Turing rev. C panel, which Libre Panel
+        does not talk to unasked (serial_link.gadget_ports): each with the panels it may be."""
+        from libre_panel.devices.serial_link import gadget_ports
+
+        try:
+            ports = gadget_ports()
+        except Exception:  # no pyserial
+            log.debug("looking for gadget ports failed", exc_info=True)
+            return []
+        return [
+            {"port": p.device, "models": [_model_info(m, p.device, False) for m in p.candidates]}
+            for p in ports
+        ]
 
     # -- the system -------------------------------------------------------------------------
 

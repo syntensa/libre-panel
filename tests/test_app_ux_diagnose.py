@@ -121,3 +121,19 @@ def test_check_and_fix_says_what_it_did(app_url):  # noqa: F811
         expect(page.locator(".diagnose-done")).to_contain_text(
             "Nothing that Libre Panel could mend by itself."
         )
+
+
+def test_a_port_other_devices_have_too_is_asked_about_and_can_be_none(app_url):  # noqa: F811
+    class Gadget(Doctor):
+        QUESTIONS = [{"key": "gadget", "kind": "choose", "text": "Is the device on COM12 ...?",
+                      "options": ['Turing 2.1" round', 'Turing 5"', 'Turing 8.8"']}]  # fmt: skip
+
+    doctor = Gadget()
+    with browser_page(app_url, "live/diagnose", routes={"**/api/doctor": doctor.route}) as page:
+        page.locator('[data-diagnose="test"]').click()
+        question = page.locator('[data-question="gadget"]')
+        expect(question).to_contain_text("which other USB devices have too")
+        expect(question.locator("button")).to_have_count(4)  # the three, and none of them
+        question.locator('[data-answer="none"]').click()
+        expect(page.locator('[data-diagnose="report"]')).to_be_visible()
+        assert doctor.answers == [{"id": 1}]

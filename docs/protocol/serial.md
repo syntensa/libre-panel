@@ -38,6 +38,9 @@ devices do.
 - **Rev. C awake ids** are the generic Linux USB gadget ids. With
   `model = "auto"` a port with them counts only with the panels' serial
   number, so other gadgets (a Raspberry Pi in gadget mode) are left alone.
+  Windows may not tell that number: *Settings → Panel* then names the port
+  as a possible Turing panel with its sizes to choose from, and the doctor
+  asks which panel it is; nothing is sent to it before.
 - **Partial updates.** Libre Panel sends only the box that changed; the
   reference does the same for its widgets.
 - **Rev. C sizes.** The HELLO answer does not tell the size reliably (a 2.1"

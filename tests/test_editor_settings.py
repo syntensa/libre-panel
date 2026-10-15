@@ -439,10 +439,15 @@ def lacking_ffmpeg(monkeypatch, found=False):
     monkeypatch.setattr(h264, "find_ffmpeg", find)
 
 
-def panel_on_the_bus(monkeypatch, model_id=None, serial=None):
+def panel_on_the_bus(monkeypatch, model_id=None, serial=None, gadget=None):
     from libre_panel.devices import serial_link, turzx_usb
     from libre_panel.devices.models import get_model
 
+    maybe = []
+    if gadget:  # a port with the ids other USB devices have too (find_port leaves it alone)
+        models = tuple(get_model(m) for m in ("turing-2.1", "turing-5", "turing-8.8"))
+        maybe = [serial_link.FoundPort(gadget, models[0], None, models)]
+    monkeypatch.setattr(serial_link, "gadget_ports", lambda: maybe)
     model = get_model(model_id) if model_id else None
     monkeypatch.setattr(turzx_usb, "present_model", lambda: model if not serial else None)
     port = None
@@ -499,6 +504,22 @@ def test_a_serial_panel_has_no_video_mode(server, monkeypatch):
     assert data["video"]["gaps"] == []
 
 
+def test_a_port_other_devices_have_the_ids_of_too_is_offered_with_its_sizes(server, monkeypatch):
+    """An awake Turing rev. C panel whose serial number Windows does not tell has only the ids
+    other USB gadgets have too: the app names the port and the panels it may be; once one is
+    chosen it is that panel."""
+    panel_on_the_bus(monkeypatch, gadget="COM12")
+    _, data = request(server, "GET", "/api/panel")
+    assert data["found"] is None and len(data["maybe"]) == 1
+    maybe = data["maybe"][0]
+    assert maybe["port"] == "COM12"
+    assert [m["id"] for m in maybe["models"]] == ["turing-2.1", "turing-5", "turing-8.8"]
+    assert not maybe["models"][0]["sure"] and maybe["models"][0]["connection"] == "serial"
+    write(server, **{"device.model": "turing-8.8"})
+    _, data = request(server, "GET", "/api/panel")
+    assert data["maybe"] == [] and data["model"]["id"] == "turing-8.8"
+
+
 def test_the_panel_the_person_chose_wins_over_the_one_found(server, monkeypatch):
     panel_on_the_bus(monkeypatch, "turing-9.2-usb")
     write(server, **{"device.model": "turing-8.8-usb"})
@@ -517,8 +538,9 @@ def test_a_looking_that_fails_is_no_panel(server, monkeypatch):
 
     monkeypatch.setattr(turzx_usb, "present_model", broken)
     monkeypatch.setattr(serial_link, "find_port", broken)
+    monkeypatch.setattr(serial_link, "gadget_ports", broken)
     status, data = request(server, "GET", "/api/panel")
-    assert status == 200 and data["found"] is None
+    assert status == 200 and data["found"] is None and data["maybe"] == []
 
 
 def test_the_running_app_tells_how_its_panel_is_doing(make, monkeypatch):

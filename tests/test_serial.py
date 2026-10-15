@@ -580,6 +580,55 @@ def test_doctor_asks_which_panel_it_is(ports, no_waiting):
     assert "turing-5" not in said[-1] and "assumed" in said[-1]
 
 
+def test_doctor_asks_before_it_talks_to_a_port_other_devices_have_too(ports, no_waiting,
+                                                                      monkeypatch):  # fmt: skip
+    """An awake rev. C panel whose serial number the system does not tell (Windows: an 8.8"
+    on COM12, reported in the TURZX forum) has only the ids other USB gadgets have too. The
+    doctor sends it nothing until told which panel it is, and its report says how to choose."""
+    from libre_panel import doctor as doctor_module
+    from libre_panel.doctor import Doctor
+
+    panel = ports(FakeRevC("turing-8.8"), device="COM12", vid=0x0525, pid=0xA4A7)
+    listed = [{"device": "COM12", "vid": "0525", "pid": "a4a7", "serial_number": None}]
+    monkeypatch.setattr(doctor_module, "list_serial_ports", lambda: listed)
+    quiet = Doctor(ask=None, say=lambda text: None, pause=lambda s: None)
+    assert quiet.open_serial() is None and panel.commands == []
+    quiet._report_serial_ports()
+    detail = quiet.report.steps[-1].detail
+    assert detail.startswith(
+        "COM12 0525:a4a7 — turing-2.1, turing-5, turing-8.8; serial number none"
+    )
+    assert "Settings → Panel → Another panel" in detail and '"turing-8.8"' in detail
+    answers = iter(["", "3"])  # first: none of them; then the 8.8"
+    no = Doctor(ask=lambda q: next(answers), say=lambda text: None, pause=lambda s: None)
+    assert no.open_serial() is None and panel.commands == []
+    assert no.report.steps[-1].detail == "COM12: not a panel, as told"
+    asked = []
+    yes = Doctor(ask=lambda q: asked.append(q) or next(answers), say=lambda text: None,
+                 pause=lambda s: None)  # fmt: skip
+    screen = yes.open_serial()
+    try:
+        assert screen.model.id == "turing-8.8" and panel.commands
+    finally:
+        screen.close()
+    assert "Is the device on COM12 one of these panels?" in asked[0]
+    assert yes.report.steps[-1].detail == 'Turing 8.8" on COM12, as chosen'
+
+
+def test_doctor_names_the_libraries_a_download_bundles_without_their_metadata(monkeypatch):
+    from importlib.metadata import PackageNotFoundError
+
+    from libre_panel import doctor as doctor_module
+
+    def no_metadata(dist):
+        raise PackageNotFoundError(dist)
+
+    monkeypatch.setattr(doctor_module, "version", no_metadata)
+    versions = doctor_module._versions()
+    assert "pillow missing" not in versions and "pyserial missing" not in versions
+    assert "pyserial 3." in versions
+
+
 def test_doctor_uses_the_panel_in_the_config(ports, no_waiting):
     from libre_panel.doctor import Doctor
 
