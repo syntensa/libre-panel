@@ -195,17 +195,28 @@ def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
 
 
 def test_card(
-    width: int, height: int, title: str, subtitle: str, round_panel: bool = False
+    width: int,
+    height: int,
+    title: str,
+    subtitle: str,
+    round_panel: bool = False,
+    hidden: dict[str, int] | None = None,
 ) -> Image.Image:
-    """A card that makes cut-off edges, rotation, mirroring and colour mix-ups obvious."""
+    """A card that makes cut-off edges, rotation, mirroring and colour mix-ups obvious.
+
+    ``hidden``: the strips the panel's bezel is known to hide (PanelModel.hidden_edges); the
+    frame goes inside them, so that a frame not seen means more is hidden than known."""
     img = Image.new("RGB", (width, height), "black")
     d = ImageDraw.Draw(img)
     unit = max(8, min(width, height) // 12)
+    edge = {"top": 0, "right": 0, "bottom": 0, "left": 0, **(hidden or {})}
+    x0, y0 = edge["left"], edge["top"]
+    x1, y1 = width - 1 - edge["right"], height - 1 - edge["bottom"]
     if round_panel:
         d.ellipse([0, 0, width - 1, height - 1], outline="white", width=4)
     else:
-        d.rectangle([0, 0, width - 1, height - 1], outline="white", width=4)
-        d.rectangle([10, 10, width - 11, height - 11], outline="#ffd400", width=2)
+        d.rectangle([x0, y0, x1, y1], outline="white", width=4)
+        d.rectangle([x0 + 10, y0 + 10, x1 - 10, y1 - 10], outline="#ffd400", width=2)
     small = _font(max(8, unit // 2))
     inset = unit if not round_panel else int(min(width, height) * 0.2)
     if round_panel:
@@ -676,8 +687,12 @@ class Doctor:
         for n, orientation in enumerate(orientations, 1):
             w, h = model.size(orientation)
             subtitle = f"{model.label} · {w}x{h} {orientation} · card {n}"
-            self._send(test_card(w, h, "Libre Panel", subtitle, round_panel))
+            hidden = {} if round_panel else model.hidden_edges(orientation)
+            self._send(test_card(w, h, "Libre Panel", subtitle, round_panel, hidden))
             self.say(f"\nThe panel should now show test card {n} ({orientation}).")
+            if any(hidden.values()):  # its frame sits inside what the bezel is known to hide
+                strips = ", ".join(f"{edge} {px} px" for edge, px in hidden.items() if px)
+                self.say(f"(The frame keeps inside what the bezel hides here: {strips}.)")
             self._question(
                 f"card-{orientation}",
                 f"test card, {orientation}",

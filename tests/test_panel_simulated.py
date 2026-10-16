@@ -198,6 +198,21 @@ def test_doctor_report_has_no_personal_data(panel):
         assert private not in text
 
 
+def test_the_test_cards_frame_keeps_inside_what_the_bezel_is_known_to_hide():
+    """The 9.2" hides 18 px at the top: its card's white frame starts below them, so that a
+    frame not seen means more is hidden than known (reported as a FAIL on a 9.2")."""
+    from libre_panel.devices.models import find_model
+    from libre_panel.doctor import test_card
+
+    hidden = find_model("turing-9.2-usb").hidden_edges("landscape")
+    card = test_card(1920, 480, "Libre Panel", "card 1", hidden=hidden)
+    white = (255, 255, 255)
+    assert card.getpixel((960, 17)) != white and card.getpixel((960, 18)) == white
+    assert card.getpixel((0, 240)) == white and card.getpixel((960, 479)) == white
+    plain = test_card(1920, 480, "Libre Panel", "card 1")
+    assert plain.getpixel((960, 0)) == white  # without hidden strips: at the very edge
+
+
 @pytest.mark.parametrize("size", [(1920, 480), (960, 320), (1280, 800)])
 def test_ruler_bars_are_exactly_as_deep_as_their_number(size):
     from libre_panel.doctor import RULER_COLOR, ruler_card
