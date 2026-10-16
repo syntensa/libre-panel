@@ -193,6 +193,34 @@ def test_the_log_for_the_app_has_its_entries_and_no_home_folder(tmp_path):
     assert "showing theme" in whole and "/home/jo" not in whole
 
 
+def test_a_step_of_the_loop_that_hangs_writes_where_every_thread_stands(tmp_path, caplog):
+    """A hang after a game (reported: the panel kept Arena, the tray icon went, the log said
+    nothing more) leaves where the threads stood next to the log; the log to send has it."""
+    from libre_panel.app import HANG_FILENAME, _HangWatch
+
+    log = tmp_path / "libre-panel.log"
+    log.write_text("2026-10-15 15:51:20,953 INFO libre_panel.service.game: game over\n", "utf-8")
+    watch = _HangWatch(tmp_path / HANG_FILENAME, seconds=0.3)
+
+    def a_step_that_hangs():
+        time.sleep(0.8)
+
+    try:
+        watch.arm()
+        a_step_that_hangs()
+        watch.disarm()
+        watch.arm()  # a step in time writes nothing
+        watch.disarm()
+    finally:
+        watch.close()
+    hang = (tmp_path / HANG_FILENAME).read_text("utf-8")
+    assert hang.startswith("-- libre-panel ") and hang.count("Timeout") == 1
+    assert "a_step_that_hangs" in hang
+    assert "the panel loop stood still" in caplog.text
+    whole = logview.text(path=log)
+    assert whole.index("game over") < whole.index(HANG_FILENAME) < whole.index("a_step_that_hangs")
+
+
 def test_the_log_is_written_in_detail_until_it_is_switched_off():
     import logging
 

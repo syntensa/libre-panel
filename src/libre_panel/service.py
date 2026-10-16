@@ -18,13 +18,14 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from libre_panel.app import RunStatus, _Watcher, run, sensor_hint
+from libre_panel.app import HANG_FILENAME, RunStatus, _Watcher, run, sensor_hint
 from libre_panel.autostart import Autostart, launch_command
 from libre_panel.config import (
     CONFIG_FILENAME,
     ConfigError,
     config_dir,
     load_config,
+    log_file,
     set_brightness,
     set_config_value,
     user_themes_dir,
@@ -169,7 +170,8 @@ class PanelService:
                     # a change made while the loop did not run (the panel was paused, the
                     # file was broken) reaches the services now; one in step is left alone
                     self.on_config(config)
-                run(config, stop=stop, status=status, host=self.host, on_config=self.on_config)
+                run(config, stop=stop, status=status, host=self.host, on_config=self.on_config,
+                    hang_log=log_file().with_name(HANG_FILENAME))  # fmt: skip
             except (ConfigError, ThemeError, DeviceError) as exc:
                 self.error = str(exc)
                 log.error("panel stopped: %s (waiting for the config or theme to change)", exc)

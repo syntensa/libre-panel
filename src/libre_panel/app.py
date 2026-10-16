@@ -1029,6 +1029,61 @@ class MainLoop:
         self.hub.close()
 
 
+HANG_FILENAME = "libre-panel-hang.log"
+HANG_S = 120.0  # a step of the loop this long is a hang: a whole serial frame takes half a minute
+
+
+class _HangWatch:
+    """Where every thread is when a step of the loop does not end within ``seconds`` (the panel
+    stands still, and the tray may stand with it), written once per hang to ``path``.
+    faulthandler's timer needs no interpreter, so it writes even while a call holds it; a
+    step that ends in time takes it back."""
+
+    def __init__(self, path: Path | None, seconds: float = HANG_S) -> None:
+        self.path, self.seconds = path, seconds
+        self._file: Any = None
+        self._started = 0.0
+
+    def arm(self) -> None:
+        if self.path is None:
+            return
+        import faulthandler
+
+        from libre_panel import __version__
+
+        if self._file is None:
+            try:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                self._file = open(self.path, "a", encoding="utf-8")  # noqa: SIM115 - until close
+                started = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                self._file.write(f"-- libre-panel {__version__}, panel loop started {started}\n")
+                self._file.flush()
+            except OSError as exc:
+                log.debug("no file for a hang: %s", exc)
+                self.path = None
+                return
+        self._started = time.monotonic()
+        faulthandler.dump_traceback_later(self.seconds, file=self._file)
+
+    def disarm(self) -> None:
+        if self._file is None:
+            return
+        import faulthandler
+
+        faulthandler.cancel_dump_traceback_later()
+        took = time.monotonic() - self._started
+        if took >= self.seconds:  # it went on after all: the file says where it stood
+            log.warning("the panel loop stood still for %.0f s; where: %s", took, self.path)
+
+    def close(self) -> None:
+        if self._file is not None:
+            import faulthandler
+
+            faulthandler.cancel_dump_traceback_later()
+            self._file.close()
+            self._file = None
+
+
 def run(
     config: Config,
     once: bool = False,
@@ -1036,6 +1091,7 @@ def run(
     status: RunStatus | None = None,
     host: Any = None,
     on_config: Callable[[Config], None] | None = None,
+    hang_log: Path | None = None,
 ) -> None:
     """Main loop: read sensors at the theme's rate, render at ``config.fps`` so
     values glide between readings, and send only frames that changed. A
@@ -1044,20 +1100,24 @@ def run(
     With ``once`` a single frame is sent and any device error is raised.
     ``status`` is kept up to date for status displays. ``host`` connects the
     services (a :class:`~libre_panel.plugins.PluginHost`); ``on_config`` hears
-    about every config.toml that was loaded.
+    about every config.toml that was loaded. ``hang_log``: where a step that hangs
+    writes where every thread stands (:class:`_HangWatch`).
     """
     stop = stop or threading.Event()
     loop = MainLoop(config, once=once, status=status, host=host, on_config=on_config)
     pacer = _Pacer()
     planned: float | None = None  # when the pacer planned the next streaming frame
     guards = timing.Guards()  # SPUR II's, while this drives the panel
+    watch = _HangWatch(hang_log)
     try:
         if once:
             loop.once()
             return
         guards.start()
         while not stop.is_set():
+            watch.arm()
             loop.step(planned)
+            watch.disarm()
             guards.settled()  # after the first frame
             if loop.streaming:
                 planned = pacer.wait(loop.fps, stop)  # a steady clock
@@ -1066,5 +1126,6 @@ def run(
             pacer.reset()
             stop.wait(loop.pause())
     finally:
+        watch.close()
         guards.stop()
         loop.close()

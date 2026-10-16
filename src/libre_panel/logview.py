@@ -24,6 +24,7 @@ _ENTRY = re.compile(
 )
 MAX_ENTRIES = 500
 MAX_BYTES = 3 << 20  # all three files at most
+HANG_BYTES = 256 << 10  # of the hangs, the last
 QUIET = ("PIL", "urllib3", "asyncio", "comtypes")  # their DEBUG says nothing about the panel
 
 
@@ -68,8 +69,19 @@ def entries(level: str = "DEBUG", limit: int = MAX_ENTRIES, path: Path | None = 
 
 
 def text(path: Path | None = None, home: str | None = None) -> str:
-    """The whole log to save and send along, without the person's folders."""
-    return without_folders(_read(path), home)
+    """The whole log to save and send along, without the person's folders; after it, where
+    the panel loop stood when it hung (app.HANG_FILENAME), if it ever did."""
+    from libre_panel.app import HANG_FILENAME
+
+    whole = _read(path)
+    hang = (path or log_file()).with_name(HANG_FILENAME)
+    try:
+        hangs = hang.read_bytes()[-HANG_BYTES:].decode("utf-8", "replace")
+    except OSError:  # (none: it never hung, or never ran)
+        hangs = ""
+    if "Timeout" in hangs:  # faulthandler's first line of a hang
+        whole += f"\n== {HANG_FILENAME} ==\n{hangs}"
+    return without_folders(whole, home)
 
 
 def verbose() -> bool:
