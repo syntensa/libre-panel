@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.6.4 — 2026-10-16
+
+A panel test in the app, calm motion for the older serial panels, and Lumen centred on the
+bar.
+
+**New**
+- **Live → Diagnose**: the panel test of `libre-panel doctor` in the app, answered with
+  buttons, its report sent to the panel form in one click; the log, its problems first or
+  everything, written in detail on request and saved without your folders; *Check and fix*
+  mends what Libre Panel can mend by itself; *Restart the panel*
+- **Calm motion on the older USB serial panels** (Turing rev. A–D, UsbPCMonitor, XuanFang,
+  Kipye, WeAct): they take their pictures pixel by pixel, so Libre Panel keeps them calm by
+  itself, a picture a second without gliding, moving symbols or fades, and sends the parts
+  that changed as up to four boxes instead of one around all of them. *Settings → Panel →
+  Motion on the panel* gives them full motion, or makes any panel calm (`[device] motion`)
+- Settings → Panel and the README say what a USB serial panel can and cannot do
+- A port with the USB ids of an awake Turing rev. C panel, which other USB devices have too,
+  was left alone where Windows did not tell the panel's serial number (an 8.8" on COM12):
+  *Settings → Panel* now names it with the panels it may be, and the doctor asks which one it
+  is; nothing is sent to it before
+- Should the panel loop ever hang, Libre Panel writes where every part of it stands to
+  `libre-panel-hang.log` next to the log (Live → Diagnose saves it with the log)
+
+**Fixes**
+- Lumen sat about 18 px to the left on the 1920×480 bars: its card had a frame at the very
+  edge, the instruments on the far side none. It now sits as far from both ends; Lumen
+  Vertical too, top and bottom. A grid takes up to 96 cells a side for it
+- The doctor's test card drew its frame where the 9.2" bezel hides 18 px, so the report said
+  "problems found" for a panel that works; the frame keeps inside what the bezel is known to
+  hide. The doctor also called the libraries of the downloads missing
+- A window left open from a run of Libre Panel that hung stayed black when it was started
+  again; it loads the app anew
+
 ## 0.6.3 — 2026-10-14
 
 Weather symbols and a moon with much more to them; and the Linux download starts on older
