@@ -39,7 +39,7 @@
     "smoothing_ms": 600
   },
   "grid": {
-    "columns": 48,
+    "columns": 96,
     "rows": 48,
     "gap": 1,
     "margin": 16
@@ -57,9 +57,9 @@
       "type": "module",
       "id": "card",
       "module": "cards",
-      "col": 0,
+      "col": 1,
       "row": 0,
-      "cols": 18,
+      "cols": 35,
       "rows": 48,
       "items": "playback\nforecast\ndate",
       "change": 0.6,
@@ -397,9 +397,9 @@
       "type": "module",
       "id": "cpu-ring",
       "module": "instrument",
-      "col": 33,
+      "col": 66,
       "row": 0,
-      "cols": 5,
+      "cols": 10,
       "rows": 33,
       "source": "cpu",
       "card": "off"
@@ -424,9 +424,9 @@
       "type": "module",
       "id": "gpu-ring",
       "module": "instrument",
-      "col": 38,
+      "col": 76,
       "row": 0,
-      "cols": 5,
+      "cols": 10,
       "rows": 33,
       "source": "gpu",
       "card": "off"
@@ -451,9 +451,9 @@
       "type": "module",
       "id": "mem-ring",
       "module": "instrument",
-      "col": 43,
+      "col": 86,
       "row": 0,
-      "cols": 5,
+      "cols": 10,
       "rows": 33,
       "source": "mem",
       "card": "off"
@@ -478,9 +478,9 @@
       "type": "module",
       "id": "net",
       "module": "netcard",
-      "col": 33,
+      "col": 66,
       "row": 36,
-      "cols": 15,
+      "cols": 30,
       "rows": 12,
       "card": "off"
     }

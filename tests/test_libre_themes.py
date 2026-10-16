@@ -15,6 +15,7 @@ from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import (
     THEME_FILENAME,
+    ThemeError,
     builtin_themes_dir,
     find_theme,
     load_theme,
@@ -176,6 +177,38 @@ def test_lumen_is_libre_panels_own_and_made_for_the_bars_hidden_strip():
     assert theme.palette["accent"] == "#2EE6D6" and theme.look == {}  # no grid, no dust
     assert by["clock"]["finish"] == "acrylic" and by["seconds"]["color"] == "@accent"
     assert all(w["y"] >= 0 for w in theme.widgets)  # (the strip test draws them: test_models)
+
+
+def test_lumen_sits_as_far_from_both_ends_of_the_bar():
+    """Its card has a frame, the instruments on the far side have none and keep inside their
+    cells: the card sits half a cell in, so the screen is not shifted to the left (reported
+    on a 9.2", whose bezel also hides 2 px at the left)."""
+    from PIL import Image, ImageChops
+
+    _, _, frame, _ = drawn(data_of("lumen"), builtin_themes_dir() / "lumen")
+    frame = frame.convert("RGB")
+    w, h = frame.size
+    ground = Image.new("RGB", frame.size, frame.getpixel((w // 2, 1)))
+    left, top, right, bottom = (
+        ImageChops.difference(frame, ground).convert("L").point(lambda v: 255 if v > 40 else 0)
+    ).getbbox()
+    assert abs(left - (w - right)) <= 4, (left, w - right)
+    assert top - 18 == h - bottom  # under the 9.2"'s hidden strip, as far from the bottom
+    _, _, frame, _ = drawn(data_of("lumen-vertical"), builtin_themes_dir() / "lumen-vertical")
+    frame = frame.convert("RGB")
+    w, h = frame.size
+    ground = Image.new("RGB", frame.size, frame.getpixel((w // 2, 1)))
+    _, top, _, bottom = (
+        ImageChops.difference(frame, ground).convert("L").point(lambda v: 255 if v > 40 else 0)
+    ).getbbox()
+    assert abs(top - (h - bottom)) <= 6, (top, h - bottom)  # standing: its card at the top
+
+
+def test_a_grid_takes_up_to_96_cells_a_side():
+    theme = dict(data_of("lumen"), grid={"columns": 96, "rows": 96})
+    assert parse_theme(theme).grid["columns"] == 96
+    with pytest.raises(ThemeError, match="grid.columns: out of range"):
+        parse_theme(dict(theme, grid={"columns": 97}))
 
 
 def test_lumen_shows_lit_instruments_with_the_names_of_the_hardware():

@@ -27,6 +27,7 @@ from libre_panel.icons import ICON_NAMES
 from libre_panel.theme.modules import (
     BACKDROPS,
     CARDS,
+    GRID_CELLS,
     GRID_DEFAULTS,
     MODULE_FALLBACKS,
     MODULE_KINDS,
@@ -852,7 +853,8 @@ def _parse_screen(
 
 
 def _parse_grid(raw: Any) -> dict[str, int] | None:
-    """``"grid": {"columns": 8, "rows": 2, "gap": 16, "margin": 24}`` (0 = automatic)."""
+    """``"grid": {"columns": 8, "rows": 2, "gap": 16, "margin": 24}`` (0 = automatic), with
+    up to :data:`GRID_CELLS` columns and rows."""
     if raw is None:
         return None
     if not isinstance(raw, dict):
@@ -860,7 +862,7 @@ def _parse_grid(raw: Any) -> dict[str, int] | None:
     grid = {}
     for key, default in GRID_DEFAULTS.items():
         value = _coerce("int", raw.get(key, default), f"grid.{key}")
-        if not 0 <= value <= (48 if key in ("columns", "rows") else 200):
+        if not 0 <= value <= (GRID_CELLS if key in ("columns", "rows") else 200):
             raise ThemeError(f"grid.{key}: out of range")
         grid[key] = value
     return grid

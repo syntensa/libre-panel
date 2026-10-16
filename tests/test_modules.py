@@ -233,6 +233,13 @@ def test_a_grid_has_no_more_cells_than_fit_in_the_frame(size):
     assert grid.columns <= 48 and grid.rows <= 48
 
 
+def test_a_finer_grid_than_48_halves_where_its_cells_would_be_too_small():
+    """Lumen's 96 columns place its card half a cell in; on a 3.5" panel they are its 48 again,
+    so its modules keep whole cells."""
+    assert make_grid(1920, 480, {"columns": 96, "rows": 48, "gap": 1, "margin": 16}).columns == 96
+    assert make_grid(480, 320, {"columns": 96, "rows": 48, "gap": 1, "margin": 16}).columns == 48
+
+
 def test_modules_outside_the_grid_are_moved_in():
     t = theme({"module": "stat", "col": 7, "cols": 4, "row": 5})
     renderer = Renderer(t, preview=True)

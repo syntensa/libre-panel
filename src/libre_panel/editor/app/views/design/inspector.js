@@ -757,7 +757,7 @@ function ThemeDetails({ theme, onBack }) {
                 ["gap", t("gap")],
                 ["margin", t("margin")],
               ].map(([key, text]) => html`<${Field} key=${key} label=${cap(text)}>
-                <${NumberField} label=${text} value=${theme.grid?.[key] ?? 0} min=${0} max=${key === "columns" || key === "rows" ? 48 : 200}
+                <${NumberField} label=${text} value=${theme.grid?.[key] ?? 0} min=${0} max=${key === "columns" || key === "rows" ? 96 : 200}
                   onChange=${setGrid(key)} />
               <//>`)}
             </div>

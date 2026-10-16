@@ -40,7 +40,7 @@
   },
   "grid": {
     "columns": 12,
-    "rows": 48,
+    "rows": 96,
     "gap": 1,
     "margin": 16
   },
@@ -58,9 +58,9 @@
       "id": "card",
       "module": "cards",
       "col": 0,
-      "row": 0,
+      "row": 1,
       "cols": 12,
-      "rows": 12,
+      "rows": 23,
       "items": "playback\nforecast\ndate",
       "change": 0.6,
       "hold": 2.0
@@ -398,9 +398,9 @@
       "id": "cpu-ring",
       "module": "instrument",
       "col": 0,
-      "row": 25,
+      "row": 50,
       "cols": 12,
-      "rows": 6,
+      "rows": 12,
       "source": "cpu",
       "card": "off"
     },
@@ -425,9 +425,9 @@
       "id": "gpu-ring",
       "module": "instrument",
       "col": 0,
-      "row": 31,
+      "row": 62,
       "cols": 12,
-      "rows": 6,
+      "rows": 12,
       "source": "gpu",
       "card": "off"
     },
@@ -452,9 +452,9 @@
       "id": "mem-ring",
       "module": "instrument",
       "col": 0,
-      "row": 37,
+      "row": 74,
       "cols": 12,
-      "rows": 6,
+      "rows": 12,
       "source": "mem",
       "card": "off"
     },
@@ -479,9 +479,9 @@
       "id": "net",
       "module": "netcard",
       "col": 0,
-      "row": 43,
+      "row": 86,
       "cols": 12,
-      "rows": 5,
+      "rows": 10,
       "card": "off"
     }
   ]

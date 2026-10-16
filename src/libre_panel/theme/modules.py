@@ -179,6 +179,7 @@ def _sources() -> dict[str, Source]:
 
 GRID_DEFAULTS: dict[str, int] = {"columns": 0, "rows": 0, "gap": 0, "margin": 0}  # 0 = automatic
 MIN_CELL = 4  # px: a grid never has cells smaller than this (it has fewer of them instead)
+GRID_CELLS = 96  # columns or rows a theme may ask for: half cells of 48 place to about 20 px
 
 
 @dataclass(frozen=True)
@@ -210,6 +211,12 @@ class Grid:
         }
 
 
+def _fitting(cells: int, fit: int) -> int:
+    while cells > max(fit, 48) and cells % 2 == 0:
+        cells //= 2
+    return min(cells, fit)
+
+
 def make_grid(
     width: int, height: int, settings: dict[str, int] | None = None, model: str = "custom"
 ) -> Grid:
@@ -235,9 +242,10 @@ def make_grid(
     target = max(64, min(240, short / 2))
     columns = given["columns"] or max(1, round(usable_w / target))
     rows = given["rows"] or max(1, round(usable_h / target))
-    # no more cells than fit: 48 cells and a gap of 1 px each do not go into 78 px
-    columns = min(columns, max(1, (usable_w + gap) // (MIN_CELL + gap)))
-    rows = min(rows, max(1, (usable_h + gap) // (MIN_CELL + gap)))
+    # no more cells than fit: 48 cells and a gap of 1 px each do not go into 78 px; a grid
+    # finer than 48 halves first, so its modules keep whole cells (96 → 48 on a small panel)
+    columns = _fitting(columns, max(1, (usable_w + gap) // (MIN_CELL + gap)))
+    rows = _fitting(rows, max(1, (usable_h + gap) // (MIN_CELL + gap)))
     cell_w = max(1.0, (usable_w - (columns - 1) * gap) / columns)
     cell_h = max(1.0, (usable_h - (rows - 1) * gap) / rows)
     return Grid(left, top, cell_w, cell_h, gap, columns, rows)
