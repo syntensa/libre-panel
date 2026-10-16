@@ -533,8 +533,12 @@ def test_an_open_window_is_given_the_token_for_its_page(monkeypatch):
         # the page moves to the route and takes the token, which it takes out of its address
         assert ("js", f'location.hash = "#/design&token={TOKEN}"') in fake.calls
         assert shown["url"] == URL + "#/design"  # (the page is known by its name alone)
-        assert window.focus_window(URL, None, OTHER)  # a token alone leaves the route
-        assert ("js", f'location.hash = "#token={OTHER}"') in fake.calls
+        assert window.focus_window(URL, None, TOKEN)  # a token alone leaves the route
+        assert ("js", f'location.hash = "#token={TOKEN}"') in fake.calls
+        # another token from the same server is another run of the app (the one shown hung
+        # and was ended): its page loads anew, as a page left from the old one stayed black
+        assert window.focus_window(URL, "home", OTHER)
+        assert fake.calls[-3] == ("load", URL + "#/home&token=" + OTHER)
         # another server (the app started anew): the page loads from there, with its token
         other = "http://127.0.0.1:9999/"
         assert window.focus_window(other, "look", TOKEN)

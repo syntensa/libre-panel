@@ -518,15 +518,20 @@ class _Requests(threading.Thread):
             self.window.destroy()
             return
         url = words[2]
-        page, _token = access.split_token(url)  # the page is shown without the token in its name
+        page, token = access.split_token(url)  # the page is shown without the token in its name
         current = self.shown["url"]
-        if view_url(page, None) == view_url(current, None) and "#" in url:
-            # the same server: the page goes to the route, and takes a new token if there is one
+        # a token of its own: another run of the app (the one shown may have hung and ended),
+        # whose page is loaded anew; a page left over from that run stayed black
+        known = self.shown.get("token")
+        again = bool(token and known) and token != known
+        if view_url(page, None) == view_url(current, None) and "#" in url and not again:
+            # the same server: the page goes to the route
             route = url.split("#", 1)[1]
             self.window.evaluate_js(f"location.hash = {json.dumps('#' + route)}")
-        elif page != current:
+        elif page != current or again:
             self.window.load_url(url)
         self.shown["url"] = page
+        self.shown["token"] = token or self.shown.get("token")
         if self.shown.get("minimized"):
             self.window.restore()
         self.window.show()  # shown and activated: to the front (the start allowed it)
@@ -646,7 +651,8 @@ def _show(webview: Any, url: str, listener: socket.socket, secret: str) -> int:
         text_select=True,
     )
     bridge._window = window
-    shown = {"url": access.split_token(url)[0], "minimized": False}
+    page, token = access.split_token(url)
+    shown = {"url": page, "token": token, "minimized": False}
 
     def resized(width: int, height: int) -> None:
         if not state["maximized"] and not shown["minimized"]:
