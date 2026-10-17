@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.6.5 — 2026-10-17
+
+Screens for the 12.3" and the 5.2" panels, switches a theme offers, and a panel that goes
+dark when Libre Panel quits.
+
+**New**
+- **The 12.3" (1920×720) and the 5.2" (1280×720)**: Lumen, Arena, Encore, Almanac and the
+  round report laid out for each, with larger type. Libre Panel picks a theme's version for
+  the panel's size by itself (`lumen-1920x720` for Lumen on the 12.3"), before its version
+  for a panel on end; the lists show each theme once
+- Lumen on the 12.3": the weather with the next hours and days on the left (the music has
+  its own screen, Encore), the fans in line with the network, and each part in a frame
+- **A theme's switches** in Look (*This theme's switches*): Lumen on the 12.3" can leave
+  its frames off. The choice holds for every version of the theme (`[switches.lumen]`); a
+  theme offers switches in its `switches`, and widgets that need `switch.<name>` follow them
+- **Dark when Libre Panel quits** (Settings → Panel, off unless chosen; `[device]
+  dark_on_quit`): when Libre Panel quits, Windows shutting down too, the panel shows black
+  and its light goes off, as turing-smart-screen-python turns these panels off; the USB
+  serial panels turn only their light off. A pause leaves the picture as it is
+
+**Fixes**
+- A weather card in a tall box, such as a column of a large panel, was the small weather
+  module with room to spare; it is the card, nearly at its own size, with the next days
+  under the hours
+
 ## 0.6.4 — 2026-10-16
 
 A panel test in the app, calm motion for the older serial panels, and Lumen centred on the
