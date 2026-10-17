@@ -156,10 +156,13 @@ export function snapMove(bounds, dx, dy, { lines, threshold, step = 0, guides: u
   };
   const sx = useGuides && lines ? toLine(x, bounds[2], lines.xs, "v") : null;
   const sy = useGuides && lines ? toLine(y, bounds[3], lines.ys, "h") : null;
+  // where it was is a place to snap to as well: what is not on the grid (the parts of a
+  // detached module) goes back exactly there
+  const home = (moved) => step > 0 && Math.abs(moved) <= Math.max(threshold ?? 0, step / 2);
   if (sx !== null) x = sx;
-  else x = snapTo(x, step);
+  else x = home(dx) ? bounds[0] : snapTo(x, step);
   if (sy !== null) y = sy;
-  else y = snapTo(y, step);
+  else y = home(dy) ? bounds[1] : snapTo(y, step);
   return { dx: Math.round(x - bounds[0]), dy: Math.round(y - bounds[1]), guides };
 }
 

@@ -17,7 +17,7 @@ import { Icon } from "../../ui/icons.js";
 import { toast } from "../../ui/toast.js";
 import { COLOR, ColorSwatches } from "../design/color.js";
 import { FINISH_NAMES, FinishPicture, finishesFor } from "../design/fields.js";
-import { PaletteEditor } from "../design/inspector.js";
+import { Background, PaletteEditor } from "../design/inspector.js";
 import { inspectorState } from "../design/inspector-state.js";
 import { activeLook, applyLook, lookName, looks, specOf, wearLook } from "../design/ops.js";
 import { peeks } from "./stage.js";
@@ -423,8 +423,9 @@ function Volume() {
 
 // -- the theme's own switches (its "switches": frames around every part, ...) --------------------
 
-/** What the theme lets the person switch, each as config.toml has it ([switches.<theme>]) or as
- * the theme begins with it; a change holds for every version of the theme (Lumen on any panel). */
+/** What the theme lets the person switch, each as config.toml has it or as the theme begins with
+ * it. A change holds for every screen that has the switch ([switches]), so frames go on or off
+ * everywhere at once; one this theme was given by itself ([switches.<theme>]) is taken out. */
 function Switches() {
   const config = useConfig();
   useEffect(() => {
@@ -434,15 +435,18 @@ function Switches() {
   const id = store.get().doc?.id;
   if (!offered.length || !id || !config) return null;
   const base = versionBase(id) || id;
+  const chosen = (name) => config.switches?.[base]?.[name] ?? config.switches?.["*"]?.[name];
   const turn = async (name, on) => {
-    if (await saveSettings({ [`switches.${base}.${name}`]: on })) requestRender(0); // drawn as switched
+    const own = config.switches?.[base]?.[name] !== undefined;
+    const changes = { [`switches.${name}`]: on, ...(own ? { [`switches.${base}.${name}`]: null } : {}) };
+    if (await saveSettings(changes)) requestRender(0); // drawn as switched
   };
   return html`<${Section} title=${t("This theme's switches")}>
     ${offered.map(
-      ([name, spec]) => html`<${Toggle} key=${name} label=${t(spec.label)} checked=${config.switches?.[base]?.[name] ?? spec.on !== false}
+      ([name, spec]) => html`<${Toggle} key=${name} label=${t(spec.label)} checked=${chosen(name) ?? spec.on !== false}
         onChange=${(on) => turn(name, on)} />`,
     )}
-    <small class="field-hint">${t("They hold for every version of the theme, on any panel.")}</small>
+    <small class="field-hint">${t("They hold for every screen that has them.")}</small>
   <//>`;
 }
 
@@ -468,6 +472,7 @@ export function LookPanel() {
   return html`<aside class="look-side" aria-label=${t("Look")}>
     <p class="look-intro">${t("Rest the pointer on a choice to try it on the picture; a click keeps it.")}</p>
     <${Colours} />
+    <${Background} theme=${currentTheme()} />
     <${Switches} />
     <${Finish} />
     <${Light} />

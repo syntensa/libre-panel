@@ -860,9 +860,53 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _unblock() -> None:
+    """The release build on Windows: the mark of the internet off its own files, before anything
+    loads .NET (libre_panel.unblock); a start never fails over it."""
+    try:
+        from libre_panel.unblock import unblock_program
+
+        unblock_program()
+    except Exception as exc:  # noqa: BLE001 - only a help: the start goes on without it
+        logging.getLogger(__name__).debug("the download mark stays: %s", exc)
+
+
+def _double_clicked() -> bool:
+    """Whether this console program (libre-panel.exe of the Windows downloads) was started with
+    a double click: Windows then made a console for it alone, not a terminal it runs in."""
+    if sys.platform != "win32" or not getattr(sys, "frozen", False):
+        return False
+    try:
+        import ctypes
+
+        ids = (ctypes.c_uint32 * 4)()
+        return ctypes.windll.kernel32.GetConsoleProcessList(ids, 4) == 1  # type: ignore[attr-defined]
+    except Exception:  # noqa: BLE001 - not known: as from a terminal
+        return False
+
+
+def _hand_over_to_the_app(argv: list[str]) -> bool:
+    """A double click on libre-panel.exe, the command line's program, starts the app as
+    LibrePanel.exe does, and its console goes at once; it would else stay open as long as the
+    app runs, and closing it would end the app. From a terminal it is the command line."""
+    if argv or not _double_clicked():
+        return False
+    from libre_panel.window import WINDOWED_EXE, _detached
+
+    windowed = Path(sys.executable).with_name(WINDOWED_EXE)
+    if not windowed.is_file():
+        return False
+    import subprocess
+
+    subprocess.Popen([str(windowed)], **_detached())  # noqa: S603 - the program's own
+    return True
+
+
 def main(argv: list[str] | None = None, default_command: str = "start") -> int:
     parser = build_parser()
     argv = sys.argv[1:] if argv is None else list(argv)
+    if default_command == "start" and _hand_over_to_the_app(argv):
+        return 0
     if default_command == "start":
         args = parser.parse_args(argv)
     else:  # e.g. LibrePanel.exe: `--background` alone means `tray --background`
@@ -880,6 +924,7 @@ def main(argv: list[str] | None = None, default_command: str = "start") -> int:
         handlers=[logging.StreamHandler()] if sys.stderr else [logging.NullHandler()],
     )
     _threads_on_signal()
+    _unblock()
     from libre_panel import i18n
     from libre_panel.instance import AlreadyRunning
     from libre_panel.theme.model import ThemeError

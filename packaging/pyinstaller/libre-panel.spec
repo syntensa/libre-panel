@@ -175,3 +175,9 @@ if sys.platform == "win32":
     if target.exists():
         shutil.rmtree(target)
     shutil.move(str(built), str(target))
+
+    # .NET loads the programs' libraries also where Windows marked them as downloaded (a zip
+    # unpacked by Explorer) and the mark cannot be taken off (libre_panel.unblock)
+    from libre_panel.unblock import write_netfx_configs
+
+    write_netfx_configs(Path(DISTPATH) / "libre-panel")  # noqa: F821

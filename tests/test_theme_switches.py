@@ -79,21 +79,24 @@ def test_a_switch_is_no_sensor_the_renderer_asks_for():
     assert _reads([rect("frame", "switch.frames, cpu.load")]) == {"cpu.load"}
 
 
-def test_config_keeps_the_choice_by_theme():
-    config = parse_config({"switches": {"lumen": {"frames": False}}})
-    assert config.switches == {"lumen": {"frames": False}}
+def test_config_keeps_the_choice_for_every_theme_and_by_theme():
+    config = parse_config({"switches": {"frames": False, "lumen": {"frames": True}}})
+    assert config.switches == {"*": {"frames": False}, "lumen": {"frames": True}}
     assert parse_config({}).switches == {}
-    for bad in ({"lumen": {"frames": "no"}}, {"lumen": True}, {"Lumen!": {"frames": True}}):
+    for bad in ({"lumen": {"frames": "no"}}, {"frames": "off"}, {"Lumen!": {"frames": True}}):
         with pytest.raises(ConfigError):
             parse_config({"switches": bad})
 
 
-def test_the_choice_holds_for_every_version_of_the_theme():
-    chosen = {"lumen": {"frames": False}, "round-report": {"x": True}}
+def test_the_choice_holds_for_every_version_and_a_theme_s_own_goes_first():
+    chosen = {"*": {"frames": False, "dots": True}, "lumen": {"frames": True},
+              "round-report": {"x": True}}  # fmt: skip
     for name in ("lumen", "lumen-1920x720", "lumen-vertical"):
-        assert switches_for(load_theme(find_theme(name)), chosen) == {"frames": False}
-    assert switches_for(load_theme(find_theme("round-report-1920x720")), chosen) == {"x": True}
-    assert switches_for(parse_theme(load_theme(find_theme("lumen")).to_dict()), chosen) == {}
+        assert switches_for(load_theme(find_theme(name)), chosen) == {"frames": True, "dots": True}
+    report = load_theme(find_theme("round-report-1920x720"))
+    assert switches_for(report, chosen) == {"frames": False, "dots": True, "x": True}
+    unsaved = parse_theme(load_theme(find_theme("lumen")).to_dict())  # (no folder: no name)
+    assert switches_for(unsaved, chosen) == {"frames": False, "dots": True}
 
 
 def test_a_change_of_a_switch_makes_the_panel_draw_the_theme_anew():
@@ -109,3 +112,33 @@ def test_lumen_on_the_12_3_inch_has_frames_around_every_part_to_begin_with():
     assert frames == {"frame-mid", "frame-rings", "frame-net"}
     assert all(w["locked"] for w in theme.widgets if w["id"] in frames)  # backdrops
     assert frames <= drawn(theme) and not frames & drawn(theme, frames=False)
+
+
+FRAMED = sorted(
+    p.name for p in builtin_themes_dir().iterdir()
+    if (p / "theme.json").is_file() and "switch.frames" in (p / "theme.json").read_text("utf-8")
+)  # fmt: skip
+
+
+def test_the_screens_of_libre_panel_have_their_parts_in_frames():
+    assert {"lumen", "lumen-vertical", "lumen-1280x720", "lumen-1920x720", "almanac",
+            "almanac-analog", "encore", "studio", "libre-default"} <= set(FRAMED)  # fmt: skip
+
+
+@pytest.mark.parametrize("name", FRAMED)
+def test_a_screen_s_frames_are_on_to_begin_with_and_go_with_the_switch(name):
+    theme = load_theme(builtin_themes_dir() / name)
+    assert theme.switches["frames"] == {"label": "Frames around every part", "on": True}
+    frames = [w for w in theme.widgets if w.get("needs") == "switch.frames"]
+    assert frames and all(w["type"] == "rect" and w["locked"] for w in frames)
+    for w in frames:  # on the screen, and none over another
+        assert 0 <= w["x"] and w["x"] + w["w"] <= theme.width, w["id"]
+        assert 0 <= w["y"] and w["y"] + w["h"] <= theme.height, w["id"]
+    for a in frames:
+        for b in frames:
+            if a is not b and not a["id"].startswith("frame-month"):
+                apart = (a["x"] + a["w"] <= b["x"] or b["x"] + b["w"] <= a["x"]
+                         or a["y"] + a["h"] <= b["y"] or b["y"] + b["h"] <= a["y"])  # fmt: skip
+                assert apart, (a["id"], b["id"])
+    ids = {w["id"] for w in frames}
+    assert ids <= drawn(theme) and not ids & drawn(theme, frames=False)

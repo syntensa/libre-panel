@@ -297,6 +297,16 @@ export function registerFeatureCommands() {
       run: toCard("system/start"),
     },
     {
+      id: "settings.light",
+      title: () => t("Light mode"),
+      hint: () => t("less memory while the app is closed"),
+      keywords: () => t("memory ram light lean small resources background usage"),
+      group: settings,
+      icon: "gauge",
+      rank: 79,
+      run: toCard("system/start"),
+    },
+    {
       id: "folder.config",
       title: () => t("Open settings folder"),
       hint: () => t("config.toml, plugins and the rest"),

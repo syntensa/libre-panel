@@ -341,6 +341,7 @@ class EditorState:
         self._lock = threading.Lock()
         self.pages: dict[str, Any] = {}  # plugin editor pages, created on first use
         self.previews: dict[tuple, bytes] = {}  # pictures of saved themes
+        self.last_request: float | None = None  # when a page of the app last asked (monotonic)
         self.previews_lock = threading.Lock()
         self.restart = app_settings.Restart()  # settings the panel loop takes in when it restarts
         self.start_screen_jobs: Any = None  # the panel's own screens (a test puts a fake panel)
@@ -415,7 +416,8 @@ class EditorState:
 
     def chosen_switches(self, theme_id: str) -> tuple[tuple[str, bool], ...]:
         """The same by the theme's name, in a form a key of the previews can hold."""
-        chosen = self._chosen()[2].get(version_base(theme_id) or theme_id, {})
+        every = self._chosen()[2]
+        chosen = {**every.get("*", {}), **every.get(version_base(theme_id) or theme_id, {})}
         return tuple(sorted(chosen.items()))
 
     def follow_config(self) -> None:
@@ -524,9 +526,11 @@ class EditorHandler(BaseHTTPRequestHandler):
         if 0 < length <= MAX_ASSET:
             self.rfile.read(length)
 
-    def _error(self, message: str, status: int = 400) -> None:
+    def _error(self, message: str, status: int = 400, reason: str = "") -> None:
+        """An error answer; ``reason`` names a kind the app tells by itself ("token": the page
+        is from an earlier run of Libre Panel)."""
         self._discard_body()
-        self._json({"error": message}, status)
+        self._json({"error": message, **({"reason": reason} if reason else {})}, status)
 
     def _host_ok(self) -> bool:
         """Only the names this server listens under are answered (a web page that reaches it
@@ -599,9 +603,12 @@ class EditorHandler(BaseHTTPRequestHandler):
                     "tray icon, or with the address that libre-panel editor prints."
                 ),
                 HTTPStatus.FORBIDDEN,
+                reason="token",
             )
         if route is None or match is None:
             return self._error("not found", HTTPStatus.NOT_FOUND)
+        if not open_:  # a page of this run of the app asks (light mode, light.py)
+            self.state.last_request = time.monotonic()
         route.handle(self, match, url)
 
     # -- plugin editor pages ---------------------------------------------------

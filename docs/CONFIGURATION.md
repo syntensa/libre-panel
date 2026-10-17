@@ -32,7 +32,7 @@ invalid is refused with the reason, and nothing is written.
 | Sensors | `[sensors] providers` (which sources, and their order; those not in use under *More sources*), the hardware's names, and under *Advanced* `refresh_ms` and `[sensors.librehardwaremonitor]` (`mode`, `url`) |
 | Game mode and more | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
-| Start and system | `language`, `check_updates`, `[hotkeys]`, and starting with the system (`libre-panel autostart`) |
+| Start and system | `language`, `check_updates`, `light_mode`, `[hotkeys]`, and starting with the system (`libre-panel autostart`) |
 | About | nothing: the version, the licence, the notices, how to report a panel, and the folders (with *Open folder*) |
 
 The running Libre Panel follows a change at once, services included (one whose options
@@ -127,6 +127,17 @@ local_clip = ""                # required for "auto" and "on", see below
 clip_asked = false             # true once the app has asked for local_clip (on Start)
 ```
 
+## Light mode
+
+```toml
+light_mode = true              # Settings → Start and system → Light mode; off unless set
+```
+
+While the app's window is closed (or hidden) for a minute, Libre Panel lets go of what only
+the app needs, such as its pictures of every theme, and gives the memory back to the system;
+Windows also takes back the pages the panel does not touch, which is what Task Manager shows.
+The panel draws on as before; the app takes a moment longer to open again.
+
 ## New versions
 
 With `check_updates = true` Libre Panel asks GitHub once a day for its latest release
@@ -213,12 +224,15 @@ theme = "slate"                # any built-in theme, or a folder in the user the
 - **In the app**, *Start* asks "How should it look?" on a first start (no `theme` in
   `config.toml` yet) with the panel's default first, marked *Default*. Choosing a theme
   there, in the tray's *Theme* menu or in Design writes `theme`.
-- **A theme's switches** (*Look*, *This theme's switches*) are kept by the name of the
-  theme, so they hold for every version of it, on any panel size and on end:
+- **A theme's switches** (*Look*, *This theme's switches*): Libre Panel's own screens have
+  frames around their parts, on to begin with. Switched in Look, a switch holds for every
+  screen that has it; a table of a theme's own goes before it, for all its versions:
 
   ```toml
+  [switches]
+  frames = false                 # every screen without its frames ...
   [switches.lumen]
-  frames = false                 # Lumen on the 12.3": its parts without frames
+  frames = true                  # ... but Lumen, on any panel size and on end
   ```
 
 ## A panel on end

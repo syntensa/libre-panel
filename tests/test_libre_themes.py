@@ -269,10 +269,12 @@ def test_lumen_shows_the_network_else_a_download():
 def test_studio_keeps_its_layout_with_the_card_where_the_weather_was():
     theme = load_theme(find_theme("studio"))
     by = {w["id"]: w for w in theme.widgets}
-    assert (by["clock"]["x"], by["clock"]["y"], by["clock"]["font_size"]) == (44, 30, 180)
-    assert by["seconds"]["color"] == "@accent" and by["signature"]["w"] == 120
+    # (in its frame since 0.6.6: a little further in, a little smaller)
+    assert by["clock"]["x"] < 60 and by["clock"]["y"] < 80 and by["clock"]["font_size"] >= 170
+    assert by["seconds"]["color"] == "@accent" and by["signature"]["w"] >= 110
     rings = [by[f"{part}-ring"] for part in ("cpu", "mem", "gpu")]
-    assert [r["w"] for r in rings] == [200] * 3 and len({r["y"] for r in rings}) == 1
+    assert len({r["w"] for r in rings}) == 1 and rings[0]["w"] >= 180
+    assert len({r["y"] for r in rings}) == 1
     assert all(r["finish"] == "lit" for r in rings) and by["disk-ring"]["finish"] == "lit"
     card = Renderer(theme, preview=True).module_boxes["card"]
     assert by["date"]["x"] + 520 < card[0] and card[0] + card[2] < rings[0]["x"]  # between

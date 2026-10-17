@@ -69,6 +69,10 @@ language = "auto"
 # Stream Deck button), with the key in notify.json; see Settings → Services.
 # allow_notify = false
 
+# Light mode: while the app's window is closed, Libre Panel lets go of what only the app needs
+# (its pictures of the themes), so it takes less memory; the app opens a moment slower.
+# light_mode = false
+
 # Keyboard shortcuts for the whole PC (Windows; Linux with X11), set in Settings → Start and
 # system by pressing the keys. The actions: pause, brightness_up, brightness_down, open;
 # enabled = false switches all of them off and keeps the keys written here.
@@ -387,6 +391,7 @@ class Config:
     transition: str = "fade"  # between themes: cut, fade, slide, tube, entrance, or a plugin's
     check_updates: bool | None = None  # a look for a newer version once a day; None: not asked
     allow_notify: bool = False  # other programs may show a notice (notify.py)
+    light_mode: bool = False  # less memory while the app is closed (light.py)
     device: DeviceConfig = field(default_factory=DeviceConfig)
     sensors: SensorsConfig = field(default_factory=SensorsConfig)
     hardware: HardwareConfig = field(default_factory=HardwareConfig)
@@ -397,8 +402,9 @@ class Config:
     hotkeys: dict[str, str] = field(default_factory=dict)  # action: combination (hotkeys.py)
     hotkeys_enabled: bool = True  # [hotkeys] enabled: off holds no key, the combinations kept
     symbols: str = DEFAULT_SYMBOLS  # the look of the weather symbols and the moon
-    # the person's choice of the themes' switches, by theme (all its versions) and switch:
-    # [switches.lumen] frames = false (Theme.switches; Look shows them)
+    # the person's choice of the themes' switches (Theme.switches; Look shows them): for every
+    # theme ([switches] frames = false, kept under "*") and by theme, all its versions
+    # ([switches.lumen] frames = true), which goes before
     switches: dict[str, dict[str, bool]] = field(default_factory=dict)
     path: Path | None = None
     # config.toml's modification time when it was read: a change made while
@@ -472,12 +478,19 @@ def _fans(value: Any) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
 _SWITCH_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 
 
+EVERY_THEME = "*"  # Config.switches: what holds for every theme
+
+
 def _switches(value: Any) -> dict[str, dict[str, bool]]:
-    """``[switches.<theme>]``: each switch of the theme on (true) or off (false)."""
+    """``[switches]``: a switch on (true) or off (false) for every theme, and in
+    ``[switches.<theme>]`` for that theme."""
     chosen: dict[str, dict[str, bool]] = {}
     for theme, table in _expect(value, dict, "switches").items():
         if not _SWITCH_NAME.match(theme):
-            raise ConfigError(f"switches: {theme!r} is not the name of a theme")
+            raise ConfigError(f"switches: {theme!r} is not the name of a theme or a switch")
+        if isinstance(table, bool):  # [switches] frames = false
+            chosen.setdefault(EVERY_THEME, {})[theme] = table
+            continue
         where = f"switches.{theme}"
         for name, on in _expect(table, dict, where).items():
             if not _SWITCH_NAME.match(name):
@@ -538,6 +551,8 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         cfg.check_updates = _expect(data["check_updates"], bool, "check_updates")
     if "allow_notify" in data:
         cfg.allow_notify = _expect(data["allow_notify"], bool, "allow_notify")
+    if "light_mode" in data:
+        cfg.light_mode = _expect(data["light_mode"], bool, "light_mode")
     if "switches" in data:
         cfg.switches = _switches(data["switches"])
     if "hotkeys" in data:

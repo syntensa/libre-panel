@@ -171,6 +171,7 @@ def test_no_route_answers_without_the_token_but_the_apps_own_files(port):
         for wrong in (None, "", "wrong", token[:-1], token + "x", token.swapcase(), "tökén"):
             status, body = ask(port, method, path, wrong)
             assert status == 403 and "token" in body["error"], (method, path, wrong)
+            assert body["reason"] == "token"  # (the app tells a page of an earlier run by it)
         # in the query it does for pictures, which an <img> asks for, and for nothing else
         status, _ = ask(port, method, f"{path}?token={token}")
         assert (status != 403) is route.picture, (method, path)

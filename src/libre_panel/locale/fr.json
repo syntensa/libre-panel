@@ -2147,12 +2147,20 @@
     "None of them": "Aucun d'eux",
     "A device has the USB ids of a Turing panel (rev. C), which other USB devices have too. Is it one of these panels?": "Un appareil a les identifiants USB d'un panneau Turing (rév. C), que d'autres appareils USB ont aussi. Est-ce l'un de ces panneaux ?",
     "This theme's switches": "Interrupteurs de ce thème",
-    "They hold for every version of the theme, on any panel.": "Ils valent pour chaque version du thème, sur tout panneau.",
+    "They hold for every screen that has them.": "Ils valent pour chaque écran qui les a.",
     "Frames around every part": "Un cadre autour de chaque partie",
     "Dark when Libre Panel quits": "Éteint quand Libre Panel se ferme",
     "When Libre Panel quits, Windows shutting down too, the panel shows black and its light goes off; it lights up again when Libre Panel starts. Off: it keeps the last picture.": "Quand Libre Panel se ferme, y compris à l'arrêt de Windows, le panneau affiche du noir et son éclairage s'éteint ; il se rallume au prochain démarrage de Libre Panel. Désactivé : il garde la dernière image.",
     "the panel's light off when it quits": "éclairage du panneau éteint à la fermeture",
-    "dark off black quit close exit shutdown sleep screen off backlight": "sombre éteint noir quitter fermer arrêt veille écran éteint rétroéclairage"
+    "dark off black quit close exit shutdown sleep screen off backlight": "sombre éteint noir quitter fermer arrêt veille écran éteint rétroéclairage",
+    "Light mode": "Mode léger",
+    "While the app's window is closed, Libre Panel lets go of what only the app needs, such as its pictures of the themes, and takes less memory. The panel goes on as it is; the app takes a moment longer to open.": "Tant que la fenêtre de l'application est fermée, Libre Panel libère ce dont seule l'application a besoin, comme ses images des thèmes, et occupe moins de mémoire. Le panneau continue comme avant ; l'application met un instant de plus à s'ouvrir.",
+    "less memory while the app is closed": "moins de mémoire tant que l'application est fermée",
+    "memory ram light lean small resources background usage": "mémoire ram léger sobre petit ressources arrière-plan utilisation",
+    "A part of the {name} module, detached into widgets.": "Une partie du module {name}, détaché en widgets.",
+    "Select all its parts": "Sélectionner toutes ses parties",
+    "Its parts go, with what was changed on them": "Ses parties disparaissent, avec ce qui y a été changé",
+    "Put the module back together": "Réassembler le module"
   },
   "fields": {
     "align": "Alignement",
@@ -2290,7 +2298,8 @@
     "blur": "Flou",
     "hand": "Trotteuse",
     "glide_ms": "propre durée de glissement (ms)",
-    "pack": "jeu de symboles"
+    "pack": "jeu de symboles",
+    "group": "Groupe"
   },
   "widgets": {
     "analog": "Horloge analogique",

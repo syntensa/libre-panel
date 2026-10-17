@@ -226,6 +226,16 @@ def check() -> int:
     return 0 if worked else 1
 
 
+def _unblock() -> None:
+    """The mark of the internet off the service's own files (libre_panel.unblock)."""
+    try:
+        from libre_panel.unblock import unblock_program
+
+        unblock_program()
+    except Exception as exc:  # noqa: BLE001 - only a help
+        log.debug("the download mark stays: %s", exc)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="libre-panel-sensors", description="Libre Panel's sensor service (Windows)."
@@ -239,6 +249,7 @@ def main(argv: list[str] | None = None) -> int:
         format="%(levelname)s %(name)s: %(message)s",
         handlers=[logging.StreamHandler()] if sys.stderr else [logging.NullHandler()],
     )
+    _unblock()  # (before LibreHardwareMonitor, which is .NET)
     if args.check:
         return check()
     _log_to_file()

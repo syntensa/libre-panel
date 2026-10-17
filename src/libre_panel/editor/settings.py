@@ -393,6 +393,7 @@ class Settings:
                 "language": config.language,
                 "check_updates": config.check_updates,
                 "allow_notify": config.allow_notify,
+                "light_mode": config.light_mode,
                 "hotkeys": dict(config.hotkeys),
                 "hotkeys_enabled": config.hotkeys_enabled,
                 "symbols": config.symbols,
@@ -965,10 +966,11 @@ def _rule_hotkey(name: str, value: Any, config: Config) -> str:
 
 
 def _check_switch(name: str, value: Any) -> tuple[str, Any]:
-    """``switches.<theme>.<switch>``: on or off for that theme and all its versions; ``null``
-    takes the choice out, so the theme's own holds again."""
+    """``switches.<switch>``: on or off for every theme that has it; ``switches.<theme>.<switch>``
+    for that theme and all its versions. ``null`` takes the choice out: what holds for every
+    theme, or the theme's own, holds again."""
     parts = name.split(".")
-    if len(parts) != 3 or not all(_SWITCH_PART.match(part) for part in parts[1:]):
+    if len(parts) not in (2, 3) or not all(_SWITCH_PART.match(part) for part in parts[1:]):
         raise SettingsError(f"unknown setting {name!r}")
     if value is None:
         return "unset", None
@@ -996,6 +998,7 @@ RULES: dict[str, Any] = {
     "refresh_ms": lambda n, v, c: _whole(n, v, 100, 3_600_000),
     "check_updates": lambda n, v, c: _flag(n, v),
     "allow_notify": lambda n, v, c: _flag(n, v),
+    "light_mode": lambda n, v, c: _flag(n, v),
     "symbols": lambda n, v, c: _choice(n, v, SYMBOL_PACKS),
     "hotkeys.enabled": lambda n, v, c: _flag(n, v),
     "hotkeys.pause": _rule_hotkey,

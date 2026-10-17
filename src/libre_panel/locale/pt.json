@@ -2147,12 +2147,20 @@
     "None of them": "Nenhum deles",
     "A device has the USB ids of a Turing panel (rev. C), which other USB devices have too. Is it one of these panels?": "Um dispositivo tem os IDs USB de um painel Turing (rev. C), que outros dispositivos USB também têm. É um destes painéis?",
     "This theme's switches": "Opções deste tema",
-    "They hold for every version of the theme, on any panel.": "Valem para cada versão do tema, em qualquer painel.",
+    "They hold for every screen that has them.": "Valem para cada tela que os tenha.",
     "Frames around every part": "Moldura em volta de cada parte",
     "Dark when Libre Panel quits": "Escuro ao fechar o Libre Panel",
     "When Libre Panel quits, Windows shutting down too, the panel shows black and its light goes off; it lights up again when Libre Panel starts. Off: it keeps the last picture.": "Quando o Libre Panel fecha, inclusive ao desligar o Windows, o painel mostra preto e sua luz se apaga; ele acende de novo quando o Libre Panel inicia. Desligado: mantém a última imagem.",
     "the panel's light off when it quits": "luz do painel apagada ao fechar",
-    "dark off black quit close exit shutdown sleep screen off backlight": "escuro desligado preto sair fechar desligar suspender tela desligada luz de fundo"
+    "dark off black quit close exit shutdown sleep screen off backlight": "escuro desligado preto sair fechar desligar suspender tela desligada luz de fundo",
+    "Light mode": "Modo leve",
+    "While the app's window is closed, Libre Panel lets go of what only the app needs, such as its pictures of the themes, and takes less memory. The panel goes on as it is; the app takes a moment longer to open.": "Enquanto a janela do aplicativo está fechada, o Libre Panel libera o que só o aplicativo precisa, como suas imagens dos temas, e ocupa menos memória. O painel continua como está; o aplicativo leva um instante a mais para abrir.",
+    "less memory while the app is closed": "menos memória enquanto o aplicativo está fechado",
+    "memory ram light lean small resources background usage": "memória ram leve enxuto pequeno recursos segundo plano uso",
+    "A part of the {name} module, detached into widgets.": "Uma parte do módulo {name}, separado em widgets.",
+    "Select all its parts": "Selecionar todas as suas partes",
+    "Its parts go, with what was changed on them": "Suas partes somem, com o que foi mudado nelas",
+    "Put the module back together": "Juntar o módulo de novo"
   },
   "fields": {
     "align": "Alinhamento",
@@ -2290,7 +2298,8 @@
     "blur": "Desfoque",
     "hand": "Ponteiro dos segundos",
     "glide_ms": "tempo de deslize próprio (ms)",
-    "pack": "pacote de símbolos"
+    "pack": "pacote de símbolos",
+    "group": "Grupo"
   },
   "widgets": {
     "analog": "Relógio analógico",

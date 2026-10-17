@@ -20,6 +20,8 @@ import {
   applyLook,
   deleteSelection,
   detachModule,
+  reassembleModule,
+  selectGroup,
   duplicateSelection,
   copySelection,
   kindName,
@@ -305,6 +307,20 @@ function DetailFields({ widget, spec, skip }) {
 
 const usePage = () => [useSelector(inspectorState, (state) => state.page), (page) => inspectorState.set({ page })];
 
+/** A part of a detached module: all its parts at once, or the module back as it was. */
+function DetachedGroup({ widget }) {
+  const group = widget.group;
+  const module = group ? store.get().doc?.theme?.detached?.[group] : null;
+  if (!module) return null;
+  return html`<div class="inspector-aside detached-group">
+    <span>${t("A part of the {name} module, detached into widgets.", { name: kindName(module.module) })}</span>
+    <button type="button" class="link-btn" onClick=${() => selectGroup(group)}>${t("Select all its parts")}</button>
+    <button type="button" class="btn" title=${t("Its parts go, with what was changed on them")} onClick=${() => reassembleModule(group)}>
+      <${Icon} name="module" size=${15} /> ${t("Put the module back together")}
+    </button>
+  </div>`;
+}
+
 function WidgetInspector({ widget }) {
   const [page, setPage] = usePage();
   const spec = specOf(widget.type);
@@ -347,6 +363,7 @@ function WidgetInspector({ widget }) {
       sensor=${sensor}
     />
     <div class="inspector-body">
+      <${DetachedGroup} widget=${widget} />
       <${PrimarySections} widget=${widget} keys=${primary} spec=${spec} />
     </div>
     <${Footer} summary=${summary} onDetails=${() => setPage("details")} onDuplicate=${duplicateSelection} onRemove=${deleteSelection} />
@@ -855,7 +872,7 @@ function ThemeDetails({ theme, onBack }) {
 /** The theme's background: a picture over a colour. The picture fills the whole panel, so a
  * colour changed under it showed nothing (Lumen, Encore, Almanac, Nimbus): with a picture, the
  * picture comes first, the colour says it lies under it, and the picture goes in one click. */
-function Background({ theme }) {
+export function Background({ theme }) {
   const background = theme.background || {};
   const image = background.image;
   const setColor = themeChange("bg", (th, v) => (th.background = { ...(th.background || {}), color: v }));

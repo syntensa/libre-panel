@@ -4,6 +4,7 @@
 
 import { authHeaders, withToken } from "/static/token.js";
 import { t } from "./i18n.js";
+import { store } from "./state.js";
 
 export { authHeaders };
 
@@ -56,9 +57,20 @@ export async function api(method, url, body, { raw = false, signal } = {}) {
   if (!response.ok) {
     const error = new Error(readable(data.error || response.statusText || String(response.status), response.status));
     error.status = response.status;
+    if (data.reason === "token") refused(error);
     throw error;
   }
   return data;
+}
+
+/**
+ * The page is from an earlier run of Libre Panel (another access token): the bar on top says so
+ * once (shell/app.js, Offline), and what asked is not told again in a message of its own: a tab
+ * left open over a few restarts would else fill up with them.
+ */
+function refused(error) {
+  error.quiet = true;
+  store.set((state) => ({ app: { ...state.app, gone: true, refused: error.message } }));
 }
 
 export const get = (url, options) => api("GET", url, undefined, options);

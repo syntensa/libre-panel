@@ -54,13 +54,27 @@
   },
   "widgets": [
     {
+      "type": "rect",
+      "id": "frame-clock",
+      "x": 30,
+      "y": 24,
+      "w": 438,
+      "h": 956,
+      "color": "@surface",
+      "outline": "#6D7885",
+      "outline_width": 3,
+      "radius": 18,
+      "locked": true,
+      "needs": "switch.frames"
+    },
+    {
       "type": "clock",
       "id": "hours",
       "x": 249,
-      "y": 6,
+      "y": 72,
       "format": "%H",
       "font": "builtin:Barlow-SemiBold",
-      "font_size": 300,
+      "font_size": 291,
       "color": "@text",
       "digits": "roll",
       "finish": "acrylic",
@@ -70,10 +84,10 @@
       "type": "clock",
       "id": "minutes",
       "x": 249,
-      "y": 272,
+      "y": 331,
       "format": "%M",
       "font": "builtin:Barlow-SemiBold",
-      "font_size": 300,
+      "font_size": 291,
       "color": "@text",
       "digits": "roll",
       "finish": "acrylic",
@@ -83,10 +97,10 @@
       "type": "clock",
       "id": "seconds",
       "x": 249,
-      "y": 603,
+      "y": 652,
       "format": "%S",
       "font": "builtin:Barlow-SemiBold",
-      "font_size": 84,
+      "font_size": 82,
       "color": "@accent",
       "digits": "roll",
       "glow": 0.6,
@@ -96,18 +110,18 @@
     {
       "type": "rect",
       "id": "seconds-groove",
-      "x": 42,
-      "y": 727,
-      "w": 414,
+      "x": 48,
+      "y": 772,
+      "w": 402,
       "h": 2,
       "color": "@track"
     },
     {
       "type": "bar",
       "id": "seconds-run",
-      "x": 42,
-      "y": 727,
-      "w": 414,
+      "x": 48,
+      "y": 772,
+      "w": 402,
       "h": 2,
       "sensor": "time.second",
       "min": 0,
@@ -134,13 +148,13 @@
       "type": "clock",
       "id": "date",
       "x": 249,
-      "y": 837,
+      "y": 879,
       "format": "%d %B %Y",
       "font": "builtin:Barlow-Medium",
-      "font_size": 26,
+      "font_size": 25,
       "color": "@text3",
       "uppercase": true,
-      "letter_spacing": 3,
+      "letter_spacing": 2.9,
       "tabular": false,
       "align": "center"
     },
@@ -154,6 +168,20 @@
       "color": "#0D1219E6",
       "radius": 18,
       "outline": "@line"
+    },
+    {
+      "type": "rect",
+      "id": "frame-month",
+      "x": 30,
+      "y": 1000,
+      "w": 438,
+      "h": 896,
+      "color": null,
+      "outline": "#6D7885",
+      "outline_width": 3,
+      "radius": 18,
+      "locked": true,
+      "needs": "switch.frames"
     },
     {
       "type": "clock",
@@ -208,5 +236,11 @@
       "color2": "@accent",
       "muted": "@dim"
     }
-  ]
+  ],
+  "switches": {
+    "frames": {
+      "label": "Frames around every part",
+      "on": true
+    }
+  }
 }

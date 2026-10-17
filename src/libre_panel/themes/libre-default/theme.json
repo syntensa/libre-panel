@@ -54,6 +54,19 @@
       "locked": true
     },
     {
+      "type": "rect",
+      "id": "frame-rings",
+      "x": 16,
+      "y": 90,
+      "w": 272,
+      "h": 146,
+      "color": "@card",
+      "radius": 12,
+      "outline": "@edge",
+      "locked": true,
+      "needs": "switch.frames"
+    },
+    {
       "type": "clock",
       "id": "clock",
       "x": 16,
@@ -103,17 +116,17 @@
     {
       "type": "gauge",
       "id": "cpu-ring",
-      "x": 20,
-      "y": 94,
-      "w": 124,
-      "h": 124,
+      "x": 30,
+      "y": 97,
+      "w": 115,
+      "h": 115,
       "sensor": "cpu.load",
       "thickness": 11,
       "color": "@accent",
       "background": "#ffffff14",
       "ticks": 0,
       "glow": 0.5,
-      "glow_radius": 7,
+      "glow_radius": 6,
       "color_rules": [
         {
           "above": 90,
@@ -127,11 +140,11 @@
     {
       "type": "metric",
       "id": "cpu-value",
-      "x": 82,
+      "x": 87,
       "y": 138,
       "sensor": "cpu.load",
       "format": "{value:.0f}%",
-      "font_size": 30,
+      "font_size": 28,
       "color": "@text",
       "align": "center",
       "font": "builtin:Barlow-SemiBold",
@@ -141,38 +154,38 @@
     {
       "type": "icon",
       "id": "cpu-icon",
-      "x": 73,
-      "y": 178,
+      "x": 79,
+      "y": 175,
       "icon": "cpu",
-      "size": 18,
+      "size": 17,
       "color": "@accent",
       "stroke": 2
     },
     {
       "type": "text",
       "id": "cpu-label",
-      "x": 82,
-      "y": 223,
+      "x": 87,
+      "y": 216,
       "text": "CPU",
-      "font_size": 13,
+      "font_size": 12,
       "color": "@muted",
       "align": "center",
-      "letter_spacing": 3
+      "letter_spacing": 2.8
     },
     {
       "type": "gauge",
       "id": "ram-ring",
-      "x": 160,
-      "y": 94,
-      "w": 124,
-      "h": 124,
+      "x": 159,
+      "y": 97,
+      "w": 115,
+      "h": 115,
       "sensor": "mem.load",
       "thickness": 11,
       "color": "@violet",
       "background": "#ffffff14",
       "ticks": 0,
       "glow": 0.5,
-      "glow_radius": 7,
+      "glow_radius": 6,
       "color_rules": [
         {
           "above": 90,
@@ -186,11 +199,11 @@
     {
       "type": "metric",
       "id": "ram-value",
-      "x": 222,
+      "x": 217,
       "y": 138,
       "sensor": "mem.load",
       "format": "{value:.0f}%",
-      "font_size": 30,
+      "font_size": 28,
       "color": "@text",
       "align": "center",
       "font": "builtin:Barlow-SemiBold",
@@ -200,23 +213,23 @@
     {
       "type": "icon",
       "id": "ram-icon",
-      "x": 213,
-      "y": 178,
+      "x": 208,
+      "y": 175,
       "icon": "ram",
-      "size": 18,
+      "size": 17,
       "color": "@violet",
       "stroke": 2
     },
     {
       "type": "text",
       "id": "ram-label",
-      "x": 222,
-      "y": 223,
+      "x": 217,
+      "y": 216,
       "text": "MEMORY",
-      "font_size": 13,
+      "font_size": 12,
       "color": "@muted",
       "align": "center",
-      "letter_spacing": 3
+      "letter_spacing": 2.8
     },
     {
       "type": "rect",
@@ -435,5 +448,11 @@
     "backdrop": "flat",
     "display_font": "builtin:Barlow-SemiBold",
     "text_font": "builtin:Barlow-Medium"
+  },
+  "switches": {
+    "frames": {
+      "label": "Frames around every part",
+      "on": true
+    }
   }
 }

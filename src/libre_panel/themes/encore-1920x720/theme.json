@@ -85,6 +85,34 @@
     },
     {
       "type": "rect",
+      "id": "frame-text",
+      "x": 664,
+      "y": 60,
+      "w": 628,
+      "h": 600,
+      "color": null,
+      "outline": "#6D7885",
+      "outline_width": 4,
+      "radius": 42,
+      "locked": true,
+      "needs": "switch.frames"
+    },
+    {
+      "type": "rect",
+      "id": "frame-time",
+      "x": 1316,
+      "y": 60,
+      "w": 580,
+      "h": 600,
+      "color": null,
+      "outline": "#6D7885",
+      "outline_width": 4,
+      "radius": 41,
+      "locked": true,
+      "needs": "switch.frames"
+    },
+    {
+      "type": "rect",
       "id": "cover-frame",
       "x": 40,
       "y": 60,
@@ -314,11 +342,11 @@
     {
       "type": "clock",
       "id": "clock",
-      "x": 1318,
-      "y": 40,
+      "x": 1338,
+      "y": 41,
       "format": "%H:%M",
       "font": "builtin:Barlow-SemiBold",
-      "font_size": 190,
+      "font_size": 175,
       "color": "@text",
       "digits": "roll",
       "finish": "acrylic"
@@ -326,45 +354,45 @@
     {
       "type": "clock",
       "id": "seconds",
-      "x": 1836,
-      "y": 81,
+      "x": 1814,
+      "y": 79,
       "format": "%S",
       "font": "builtin:Barlow-SemiBold",
-      "font_size": 56,
+      "font_size": 51,
       "color": "@accent",
       "digits": "roll",
       "glow": 0.6,
-      "glow_radius": 10
+      "glow_radius": 9
     },
     {
       "type": "clock",
       "id": "date",
-      "x": 1610,
-      "y": 258,
+      "x": 1606,
+      "y": 242,
       "format": "%A · %d %B",
       "font": "builtin:Barlow-Medium",
-      "font_size": 27,
+      "font_size": 25,
       "color": "@text3",
       "uppercase": true,
-      "letter_spacing": 3,
+      "letter_spacing": 2.8,
       "tabular": false,
       "align": "center"
     },
     {
       "type": "rect",
       "id": "seconds-groove",
-      "x": 1318,
-      "y": 312,
-      "w": 584,
+      "x": 1338,
+      "y": 291,
+      "w": 536,
       "h": 2,
       "color": "@track"
     },
     {
       "type": "bar",
       "id": "seconds-run",
-      "x": 1318,
-      "y": 312,
-      "w": 584,
+      "x": 1338,
+      "y": 291,
+      "w": 536,
       "h": 2,
       "sensor": "time.second",
       "min": 0,
@@ -379,11 +407,17 @@
       "type": "module",
       "id": "volume",
       "module": "volume",
-      "col": 33,
-      "row": 40,
-      "cols": 15,
-      "rows": 31,
+      "col": 34,
+      "row": 37,
+      "cols": 13,
+      "rows": 28,
       "card": "off"
     }
-  ]
+  ],
+  "switches": {
+    "frames": {
+      "label": "Frames around every part",
+      "on": true
+    }
+  }
 }

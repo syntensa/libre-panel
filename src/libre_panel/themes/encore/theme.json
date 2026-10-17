@@ -85,6 +85,34 @@
     },
     {
       "type": "rect",
+      "id": "frame-text",
+      "x": 480,
+      "y": 24,
+      "w": 634,
+      "h": 432,
+      "color": null,
+      "outline": "#6D7885",
+      "outline_width": 3,
+      "radius": 30,
+      "locked": true,
+      "needs": "switch.frames"
+    },
+    {
+      "type": "rect",
+      "id": "frame-time",
+      "x": 1134,
+      "y": 24,
+      "w": 762,
+      "h": 432,
+      "color": null,
+      "outline": "#6D7885",
+      "outline_width": 3,
+      "radius": 30,
+      "locked": true,
+      "needs": "switch.frames"
+    },
+    {
+      "type": "rect",
       "id": "cover-frame",
       "x": 24,
       "y": 24,
@@ -314,11 +342,11 @@
     {
       "type": "clock",
       "id": "clock",
-      "x": 1257,
-      "y": 0,
+      "x": 1254,
+      "y": 6,
       "format": "%H:%M",
       "font": "builtin:Barlow-SemiBold",
-      "font_size": 172,
+      "font_size": 164,
       "color": "@text",
       "digits": "roll",
       "finish": "acrylic"
@@ -326,11 +354,11 @@
     {
       "type": "clock",
       "id": "seconds",
-      "x": 1725,
-      "y": 37,
+      "x": 1701,
+      "y": 41,
       "format": "%S",
       "font": "builtin:Barlow-SemiBold",
-      "font_size": 50,
+      "font_size": 48,
       "color": "@accent",
       "digits": "roll",
       "glow": 0.6,
@@ -339,32 +367,32 @@
     {
       "type": "clock",
       "id": "date",
-      "x": 1519,
-      "y": 197,
+      "x": 1504,
+      "y": 194,
       "format": "%A · %d %B",
       "font": "builtin:Barlow-Medium",
-      "font_size": 22,
+      "font_size": 21,
       "color": "@text3",
       "uppercase": true,
-      "letter_spacing": 3,
+      "letter_spacing": 2.9,
       "tabular": false,
       "align": "center"
     },
     {
       "type": "rect",
       "id": "seconds-groove",
-      "x": 1257,
-      "y": 246,
-      "w": 525,
+      "x": 1254,
+      "y": 241,
+      "w": 501,
       "h": 2,
       "color": "@track"
     },
     {
       "type": "bar",
       "id": "seconds-run",
-      "x": 1257,
-      "y": 246,
-      "w": 525,
+      "x": 1254,
+      "y": 241,
+      "w": 501,
       "h": 2,
       "sensor": "time.second",
       "min": 0,
@@ -380,10 +408,16 @@
       "id": "volume",
       "module": "volume",
       "col": 29,
-      "row": 30,
-      "cols": 19,
-      "rows": 17,
+      "row": 29,
+      "cols": 18,
+      "rows": 16,
       "card": "off"
     }
-  ]
+  ],
+  "switches": {
+    "frames": {
+      "label": "Frames around every part",
+      "on": true
+    }
+  }
 }

@@ -1076,7 +1076,8 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "device.model", "device.driver", "device.brightness", "device.rotate", "device.port",
         "device.orientation", "device.motion", "device.dark_on_quit",
         "video.mode", "video.fps", "video.local_clip", "video.clip_asked", "refresh_ms",
-        "check_updates", "allow_notify", "symbols", "hotkeys.enabled", "hotkeys.pause",
+        "check_updates", "allow_notify", "light_mode", "symbols", "hotkeys.enabled",
+        "hotkeys.pause",
         "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open",
         "sensors.providers",
         "sensors.librehardwaremonitor.mode", "sensors.librehardwaremonitor.url",
@@ -1117,14 +1118,16 @@ def test_the_message_says_where_to_set_it_in_german_too(server, elevated):
 # -- the themes' switches (test_theme_switches.py) --------------------------------------------
 
 
-def test_the_settings_switch_a_theme_and_take_the_choice_out_again(server):
-    status, data = write(server, **{"switches.lumen.frames": False})
-    assert status == 200 and data["config"]["switches"] == {"lumen": {"frames": False}}
-    assert "[switches.lumen]" in config_text() and "frames = false" in config_text()
-    status, data = write(server, **{"switches.lumen.frames": None})
+def test_the_settings_switch_every_theme_or_one_and_take_the_choice_out_again(server):
+    status, data = write(server, **{"switches.frames": False})
+    assert status == 200 and data["config"]["switches"] == {"*": {"frames": False}}
+    assert "[switches]" in config_text() and "frames = false" in config_text()
+    status, data = write(server, **{"switches.lumen.frames": True})
+    assert data["config"]["switches"] == {"*": {"frames": False}, "lumen": {"frames": True}}
+    status, data = write(server, **{"switches.lumen.frames": None, "switches.frames": None})
     assert status == 200 and data["config"]["switches"] == {}
-    for name, value in (("switches.lumen", True), ("switches.Lumen!.frames", True),
-                        ("switches.lumen.frames", "off")):  # fmt: skip
+    for name, value in (("switches.Lumen!.frames", True), ("switches.lumen.frames", "off"),
+                        ("switches.a.b.c", True)):  # fmt: skip
         assert write(server, **{name: value})[0] == 400, name
 
 
@@ -1138,6 +1141,12 @@ def test_the_preview_of_the_app_draws_the_theme_as_switched(server):
     body = {"theme": data, "base": "lumen-1920x720"}
     status, shown = request(server, "POST", "/api/render", body)
     assert status == 200 and "frame-mid" in shown["boxes"]
-    write(server, **{"switches.lumen.frames": False})
+    write(server, **{"switches.frames": False})
     status, shown = request(server, "POST", "/api/render", body)
     assert status == 200 and "frame-mid" not in shown["boxes"]
+
+
+def test_light_mode_is_written_as_asked(server):
+    status, data = write(server, light_mode=True)
+    assert status == 200 and data["config"]["light_mode"] is True
+    assert "light_mode = true" in config_text()

@@ -2317,5 +2317,6 @@ def detach(theme: Any, module_id: str) -> list[dict[str, Any]]:
             continue  # (the other cards of a slot are not there: it is its first card)
         part = {k: v for k, v in widget.items() if k not in ("_module", "_card")}
         part["id"] = part["id"].replace("/", "-")
+        part["group"] = module_id  # (to be put back together: Theme.detached)
         parts.append(part)
     return parts

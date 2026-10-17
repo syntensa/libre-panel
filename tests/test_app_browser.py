@@ -983,18 +983,27 @@ def test_look_notices_and_ridge_frames(app_url):
         expect(page.locator(".look-advanced")).to_have_count(0)
 
 
+def test_look_has_the_background_picture_too(app_url):
+    """A picture behind the whole theme was only in Design, under the theme's settings."""
+    with browser_page(app_url, "look") as page:
+        side = page.locator(".look-side")
+        side.locator(".finish-tile").first.wait_for()
+        expect(side.get_by_text("Background", exact=True)).to_be_visible()
+        expect(side.get_by_text("Picture", exact=True)).to_be_visible()
+
+
 def test_look_offers_the_switches_of_the_theme_and_keeps_the_choice_in_the_settings(app_url):
     with browser_page(app_url, "look") as page:
         page.wait_for_selector(".look-side .finish-tile")
-        expect(page.get_by_text("This theme's switches")).to_have_count(0)  # it has none
+        js(page, "window.libre.doc.edit(null, (theme) => { delete theme.switches; })")
+        expect(page.get_by_text("This theme's switches")).to_have_count(0)  # (one without)
         frames = "{frames: {label: 'Frames around every part', on: true}}"
         js(page, f"window.libre.doc.edit(null, (theme) => {{ theme.switches = {frames}; }})")
         toggle = page.get_by_role("switch", name="Frames around every part")
         expect(toggle).to_have_attribute("aria-checked", "true")  # as the theme begins
         toggle.click()
-        base = js(page, "window.libre.store.get().doc.id").removesuffix("-vertical")
         switches = "window.libre.store.get().settings?.config?.switches"
-        page.wait_for_function(f"{switches}?.[{base!r}]?.frames === false")  # in config.toml
+        page.wait_for_function(f"{switches}?.['*']?.frames === false")  # every screen's
         expect(toggle).to_have_attribute("aria-checked", "false")
 
 
@@ -1226,7 +1235,8 @@ def test_the_new_views_speak_german(app_url, isolated_home):
         page.goto(f"{app_url}#/look")
         page.wait_for_selector(".look-side")
         titles = page.locator(".look-side .section-title").all_text_contents()
-        assert titles[:3] == ["Farbwelt", "Oberfläche und Leuchten", "Panel-Licht"]
+        assert titles[:2] == ["Farbwelt", "Hintergrund"] and "Panel-Licht" in titles
+        assert titles.index("Oberfläche und Leuchten") < titles.index("Panel-Licht")
         page.goto(f"{app_url}#/live")
         page.wait_for_selector(".live-side")
         assert page.locator(".live-side .section-title").all_text_contents() == [
@@ -2650,6 +2660,41 @@ def test_a_modules_source_and_detaching_it(page):
     assert widget(page, ring)["source"] == "disk"
 
 
+def test_a_detached_module_is_put_back_together_and_its_parts_move_back_to_their_place(page):
+    new_theme_from_a_layout(page, "Turing 3.5")
+    ring = js(page, "window.libre.doc.widgets().find((w) => w.module === 'ring').id")
+    before = widget(page, ring)
+    js(page, f"window.libre.doc.setSelection([{ring!r}])")
+    page.locator(".details-button").click()
+    page.get_by_role("button", name="Detach into widgets").click()
+    page.wait_for_function(f"!window.libre.doc.widgetById({ring!r})")
+    parts = js(page, "window.libre.store.get().selection")
+    assert js(page, f"window.libre.doc.theme().detached[{ring!r}].module") == "ring"
+    assert {widget(page, part)["group"] for part in parts} == {ring}
+    # one part chosen: all its parts again, or the module back
+    js(page, f"window.libre.doc.setSelection([{parts[0]!r}])")
+    page.get_by_role("button", name="Select all its parts").click()
+    assert sorted(js(page, "window.libre.store.get().selection")) == sorted(parts)
+    js(page, f"window.libre.doc.setSelection([{parts[0]!r}])")
+    page.get_by_role("button", name="Put the module back together").click()
+    back = widget(page, ring)
+    assert back["module"] == "ring" and (back["col"], back["row"]) == (before["col"], before["row"])
+    assert not any(js(page, f"!!window.libre.doc.widgetById({part!r})") for part in parts)
+    assert js(page, "Object.keys(window.libre.doc.theme().detached || {})") == []
+    # moved a little and back with the grid on: where they were, not on the nearest line
+    snapped = js(
+        page,
+        """(async () => {
+        const g = await import('/app/views/design/geometry.js');
+        const bounds = [13, 27, 100, 60];
+        const there = g.snapMove(bounds, 37, 0, { lines: null, threshold: 6, step: 20 });
+        const back = g.snapMove(bounds, 4, -3, { lines: null, threshold: 6, step: 20 });
+        return [there.dx, there.dy, back.dx, back.dy];
+    })()""",
+    )
+    assert snapped[2:] == [0, 0] and snapped[0] != 37  # on the grid away, home again
+
+
 def test_a_detach_that_is_answered_after_its_module_went_changes_nothing(page):
     """The server's answer takes a moment; a module removed meanwhile is not there to be
     replaced (the splice at index -1 replaced the last widget of the theme instead)."""
@@ -3726,6 +3771,30 @@ def test_a_page_of_an_earlier_run_says_what_to_do_not_that_it_will_recover(app_u
         assert "tries again" not in bar.inner_text()
         page.unroute("**/api/app")  # (an answer is an answer: the bar goes)
         expect(bar).to_have_count(0, timeout=10000)
+
+
+def test_a_tab_of_an_earlier_run_has_one_bar_and_no_message_for_every_request(app_url):
+    """Each start of Libre Panel has its own token; a tab of an earlier one is refused all it
+    asks for. The bar says so once; its requests do not add a message each."""
+    import json
+
+    refusal = {"error": "Access token missing or wrong. Open Libre Panel from its tray icon.",
+               "reason": "token"}  # fmt: skip
+
+    def refuse(route, request):
+        route.fulfill(status=403, content_type="application/json", body=json.dumps(refusal))
+
+    # (every refused request is a failed load in the console: allowed, the page's errors not)
+    with browser_page(app_url, "home", allow=("",)) as page:
+        page.wait_for_selector(".theme-card")
+        page.route("**/api/**", refuse)
+        for view in ("settings/panel", "settings/sensors", "look", "live"):
+            js(page, f"location.hash = '#/{view}'")
+            page.wait_for_timeout(300)
+        bar = page.locator(".offline-bar")
+        expect(bar).to_be_visible(timeout=10000)
+        assert bar.inner_text().strip() == refusal["error"]
+        assert page.locator(".toast.error").count() == 0
 
 
 class HardwareNames:

@@ -28,7 +28,9 @@ export function dismiss(id) {
 
 /** An error as a message: its text, never an empty box (a failure without words says so). */
 export const toastError = (error) =>
-  toast(error?.message || (error && typeof error !== "object" ? String(error) : t("Something went wrong.")), { kind: "error" });
+  error?.quiet // (said once elsewhere: a page from an earlier run, core/api.js)
+    ? undefined
+    : toast(error?.message || (error && typeof error !== "object" ? String(error) : t("Something went wrong.")), { kind: "error" });
 
 export function Toasts() {
   const list = useSelector(toasts, (state) => state.list);

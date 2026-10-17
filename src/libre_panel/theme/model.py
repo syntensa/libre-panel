@@ -64,6 +64,9 @@ _COMMON: dict[str, tuple[str, Any]] = {
     "shadow": ("color?", None),
     "shadow_offset": ("int", 3),
     "shadow_blur": ("int", 6),
+    # editor only: the parts of a detached module share the module's id here (Theme.detached
+    # keeps the module, to put it back together)
+    "group": ("string", ""),
 }
 COMMON_FIELDS = _COMMON
 # Fields the editor groups under "Effects".
@@ -516,6 +519,9 @@ class Theme:
     # What the person may switch on or off in this theme: {"frames": {"label": "...", "on":
     # true}}; widgets that need ``switch.frames`` (or ``!switch.frames``) show by it
     switches: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # editor only: the modules detached into widgets, by their id (the widgets' ``group``), as
+    # they were: the editor can put one back together
+    detached: dict[str, dict[str, Any]] = field(default_factory=dict)
     root: Path | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -560,6 +566,8 @@ class Theme:
             data["look"] = deepcopy(self.look)
         if self.switches:
             data["switches"] = deepcopy(self.switches)
+        if self.detached:
+            data["detached"] = deepcopy(self.detached)
         toast = {k: deepcopy(v) for k, v in self.toast.items() if v != TOAST_DEFAULTS[k]}
         if toast:
             data["toast"] = toast
@@ -1014,6 +1022,30 @@ def _parse_switches(raw: Any) -> dict[str, dict[str, Any]]:
     return switches
 
 
+MAX_DETACHED = 64
+
+
+def _parse_detached(
+    raw: Any, palette: dict[str, str], root: Path | None, warnings: list[str]
+) -> dict[str, dict[str, Any]]:
+    """``"detached": {"<id>": {module}}``: modules the editor turned into widgets, as they were
+    (the widgets with their id as ``group`` are what came of them). One that is no module, or
+    does not load, is left out: it cannot be put back together, nothing else changes."""
+    if not isinstance(raw, dict):
+        return {}
+    kept: dict[str, dict[str, Any]] = {}
+    for name, module in list(raw.items())[:MAX_DETACHED]:
+        if not isinstance(module, dict) or module.get("type") != "module":
+            continue
+        try:
+            widget, _ = normalize_widget(module, 0, palette, root)
+        except ThemeError as exc:
+            warnings.append(f"detached.{name}: {exc}")
+            continue
+        kept[str(name)] = widget
+    return kept
+
+
 def parse_theme(data: Any, root: Path | None = None) -> Theme:
     if not isinstance(data, dict):
         raise ThemeError("theme.json must contain an object")
@@ -1115,6 +1147,7 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         toast=_parse_toast(data.get("toast"), palette, root, warnings),
         look=_parse_look(data.get("look"), palette, warnings),
         switches=_parse_switches(data.get("switches")),
+        detached=_parse_detached(data.get("detached"), palette, root, warnings),
         root=root,
         warnings=warnings,
     )
@@ -1180,10 +1213,11 @@ def version_base(name: str) -> str | None:
 
 
 def switches_for(theme: Theme, chosen: dict[str, dict[str, bool]]) -> dict[str, bool]:
-    """The person's choice of the switches of ``theme`` (config.toml's ``[switches.<theme>]``),
-    by the theme its versions are made from: ``[switches.lumen]`` holds for "lumen-1920x720"."""
+    """The person's choice of the switches of ``theme``: config.toml's ``[switches]`` for every
+    theme ("*"), and before it ``[switches.<theme>]``, by the theme its versions are made from
+    (``[switches.lumen]`` holds for "lumen-1920x720")."""
     name = theme.root.name if theme.root is not None else ""
-    return dict(chosen.get(version_base(name) or name, {}))
+    return {**chosen.get("*", {}), **chosen.get(version_base(name) or name, {})}
 
 
 def theme_for(name: str, orientation: str, size: tuple[int, int] | None = None) -> str:

@@ -405,6 +405,21 @@ def test_detach_gives_plain_widgets(server):
     assert status == 200
     ids = [w["id"] for w in data["widgets"]]
     assert "m0-time" in ids and all("_module" not in w for w in data["widgets"])
+    assert {w["group"] for w in data["widgets"]} == {"m0"}  # (to be put back together)
+
+
+def test_a_theme_keeps_its_detached_modules_to_put_them_back_together():
+    from libre_panel.theme.model import parse_theme
+
+    data = module_theme({"module": "clock", "cols": 3})
+    module = dict(data["widgets"][0])
+    data["widgets"] = [{"type": "text", "id": "t", "text": "12:00", "group": "m0"}]
+    data["detached"] = {"m0": module, "junk": {"type": "text", "id": "x"}, "bad": 3}
+    theme = parse_theme(data)
+    assert set(theme.detached) == {"m0"} and theme.detached["m0"]["module"] == "clock"
+    assert theme.widgets[0]["group"] == "m0" and theme.warnings == []
+    again = parse_theme(theme.to_dict())
+    assert again.detached == theme.detached and again.widgets[0]["group"] == "m0"
 
 
 def test_the_app_and_its_fonts_are_served(server):

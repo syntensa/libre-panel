@@ -459,8 +459,14 @@ export async function detachModule(widget) {
     const parts = [];
     edit(null, (current) => {
       const index = current.widgets.findIndex((other) => other.id === id);
+      // the module as it was, kept to put it back together (its parts name it as their group)
+      const kept = current.detached || {};
+      let group = id;
+      for (let n = 2; kept[group]; n++) group = `${id}-${n}`;
+      current.detached = { ...kept, [group]: clone(current.widgets[index]) };
       for (const part of data.widgets) {
         part.id = uniqueId(part.id);
+        part.group = group;
         parts.push(part);
       }
       current.widgets.splice(index, 1, ...parts);
@@ -470,6 +476,30 @@ export async function detachModule(widget) {
   } catch (error) {
     toastError(error);
   }
+}
+
+/** All the parts of a detached module (``group``), to move them as one. */
+export function selectGroup(group) {
+  setSelection(widgets().filter((widget) => widget.group === group).map((widget) => widget.id));
+}
+
+/** A detached module put back together, as it was before it was detached: its parts go, with
+ * what was changed on them; it stands where the first of them was in the order of drawing. */
+export function reassembleModule(group) {
+  let id = null;
+  edit(null, (current) => {
+    const module = current.detached?.[group];
+    if (!module) return;
+    const index = current.widgets.findIndex((widget) => widget.group === group);
+    current.widgets = current.widgets.filter((widget) => widget.group !== group);
+    const back = clone(module);
+    if (current.widgets.some((widget) => widget.id === back.id)) back.id = uniqueId(back.id);
+    current.widgets.splice(Math.max(0, Math.min(index, current.widgets.length)), 0, back);
+    const { [group]: _gone, ...rest } = current.detached;
+    current.detached = rest;
+    id = back.id;
+  });
+  if (id) setSelection([id]);
 }
 
 // -- looks -----------------------------------------------------------------------------

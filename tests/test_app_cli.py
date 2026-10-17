@@ -693,3 +693,31 @@ def test_video_mode_is_expected_from_the_settings_before_a_panel_is_open(tmp_pat
     assert expects(**proven, ffmpeg=str(program)) is True  # proven, and everything is there
     assert expects(**proven, ffmpeg=str(tmp_path / "missing")) is False  # no ffmpeg
     assert expects(model="turing-9.2-usb", ffmpeg=str(program)) is False  # no local_clip
+
+
+def test_a_double_click_on_the_command_line_program_starts_the_app(tmp_path, monkeypatch):
+    """libre-panel.exe started from Explorer (a console of its own) hands over to
+    LibrePanel.exe and ends, so no console stays open with the app; from a terminal, or with a
+    command, it is the command line."""
+    import subprocess
+    import sys
+
+    from libre_panel import cli
+
+    (tmp_path / "libre-panel.exe").touch()
+    (tmp_path / "LibrePanel.exe").touch()
+    started = []
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "libre-panel.exe"))
+    monkeypatch.setattr(subprocess, "Popen", lambda command, **kw: started.append(command))
+    monkeypatch.setattr(cli, "_double_clicked", lambda: True)
+    assert cli.main([]) == 0 and started == [[str(tmp_path / "LibrePanel.exe")]]
+    assert not cli._hand_over_to_the_app(["models"])  # a command: the command line
+    monkeypatch.setattr(cli, "_double_clicked", lambda: False)
+    assert not cli._hand_over_to_the_app([])  # from a terminal
+    assert len(started) == 1
+
+
+def test_off_windows_or_from_the_sources_nothing_is_double_clicked():
+    from libre_panel import cli
+
+    assert cli._double_clicked() is False  # (not the frozen build on Windows)

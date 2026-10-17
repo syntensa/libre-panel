@@ -150,9 +150,12 @@ theme's switches*) without changing the theme: `"switches": {"frames": {"label":
 around every part", "on": true}}` at the top of `theme.json`, at most eight. `label` is what
 Look shows (in the app's language where Libre Panel knows the words), `on` how the theme
 begins. A widget with `"needs": "switch.frames"` shows while the switch is on,
-`"!switch.frames"` while it is off. The choice is kept in `config.toml` under
-`[switches.<theme>]` and holds for every version of the theme. Lumen on the 12.3" frames
-each of its parts this way.
+`"!switch.frames"` while it is off. The choice is kept in `config.toml`: under `[switches]`
+for every theme that has the switch (what Look writes), under `[switches.<theme>]` for one
+theme and all its versions. Libre Panel's own screens frame their parts this way.
+
+The editor keeps a module detached into widgets in `"detached"` (by its id) and gives its
+parts that id as their `group`, so *Put the module back together* can bring it back as it was.
 
 Text-like widgets share `font` (empty = the theme font), `font_size`, `color`,
 `align` (`left`, `center`, `right`; `x` is the left edge, centre or right edge

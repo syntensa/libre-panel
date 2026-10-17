@@ -235,6 +235,10 @@ def _replace_folder(source: Path, target: Path) -> None:
         if leftover.exists():
             shutil.rmtree(leftover)
     shutil.copytree(source, new)
+    if sys.platform == "win32":  # a copy keeps the mark of the internet: .NET would refuse it
+        from libre_panel.unblock import unblock_folder
+
+        unblock_folder(new)
     if target.exists():
         target.rename(old)
     new.rename(target)

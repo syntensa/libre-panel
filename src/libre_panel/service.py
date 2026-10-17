@@ -297,6 +297,18 @@ class EditorService:
         open_window(url, view, config_path=self.config_path, token=self.token)
         return url
 
+    def last_request(self) -> float | None:
+        """When a page of the app last asked something (light mode, light.py)."""
+        server = self._server
+        return None if server is None else server.editor_state.last_request
+
+    def forget_pictures(self) -> None:
+        """The app's pictures of the themes: drawn again when it asks for them."""
+        server = self._server
+        if server is not None:
+            with server.editor_state.previews_lock:
+                server.editor_state.previews.clear()
+
     def stop(self) -> None:
         with self._lock:
             server, self._server = self._server, None
@@ -354,6 +366,15 @@ class BackgroundApp:
         self.quit_requested = threading.Event()
         self._on_quit: list[Callable[[], None]] = []
         self.session_watcher: Any = None  # Windows: stops cleanly at shutdown (tray.run_app)
+        # light mode: what only the app needs goes while it is closed (light.py)
+        from libre_panel import light
+
+        self.light_mode = False
+        self.light = light.Watch(
+            light=lambda: self.light_mode,
+            last_request=self.editor.last_request,
+            release=lambda: light.release(self.editor.forget_pictures),
+        )
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -382,10 +403,12 @@ class BackgroundApp:
             config = load_config(self.config_path)
             self.services.apply(config)
             self.hotkeys.apply(_held(config))
+            self.light_mode = config.light_mode
         except ConfigError as exc:
             log.error("services not started: %s", exc)  # they start once the config is fixed
         self.panel.start()
         url = self.editor.start()
+        self.light.start()
         self._write_instance(url)
         return url
 
@@ -405,6 +428,7 @@ class BackgroundApp:
     def _config_loaded(self, config: Any) -> None:
         """config.toml changed: bring the services in line (in the background, so
         starting or stopping one never stalls the panel)."""
+        self.light_mode = config.light_mode
         threading.Thread(
             target=self.services.apply, args=(config,), name="services", daemon=True
         ).start()
@@ -423,6 +447,7 @@ class BackgroundApp:
         self._config_loaded(config)
 
     def shutdown(self) -> None:
+        self.light.stop()
         self.hotkeys.close()
         self.services.stop()
         self.panel.stop()
