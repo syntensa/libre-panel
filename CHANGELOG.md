@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.6.6 — 2026-10-17
+
+Frames around the parts of every screen, a light mode, and the portable download that works
+on Windows as it is unpacked.
+
+**New**
+- **Frames around every part** of Libre Panel's own screens (Lumen, Encore, Almanac, Almanac
+  Analog, Studio, Libre Default; on the bars, on end, on the 12.3" and the 5.2"), as Lumen on
+  the 12.3" has them, all on one line at the top and the bottom. On to begin with; *Look → This
+  theme's switches* turns them off on every screen at once (`[switches] frames = false`)
+- **Light mode** (*Settings → Start and system*, off unless chosen; `light_mode`): while the
+  app's window is closed, Libre Panel lets go of what only the app needs, such as its pictures
+  of every theme, and Windows takes back what the panel does not touch
+- *Look* has the background picture too (it was only in Design, under the theme's settings)
+- A module detached into widgets can be **put back together** (*Select all its parts*, *Put
+  the module back together* where one of them is chosen); parts moved on the grid snap back
+  to where they were
+- A double click on `libre-panel.exe`, the command line's program, starts the app as
+  `LibrePanel.exe` does, and its console goes at once
+
+**Fixes**
+- **The portable download unpacked by Windows Explorer**: Windows marks every file of a
+  downloaded zip, and the .NET Framework does not load a marked library, so the app's window
+  did not open, LibreHardwareMonitor read nothing ("Failed to resolve Python.Runtime.Loader"),
+  and the sensor service set up from that folder failed too. Libre Panel takes the mark off its
+  own files when it starts and off the service's copy, and .NET may load them anyway
+- A browser tab left open from an earlier start showed an error for every request; it says
+  once, in the bar on top, that it belongs to an earlier start
+
 ## 0.6.5 — 2026-10-17
 
 Screens for the 12.3" and the 5.2" panels, switches a theme offers, and a panel that goes
