@@ -43,7 +43,7 @@ from libre_panel.render.formatting import FormatError, auto_format, safe_format
 from libre_panel.render.motion import MAX_POINTS, RATE, History, Motion, Spring, grid
 from libre_panel.render.motion import number as motion_number
 from libre_panel.sensors.base import Snapshot, want
-from libre_panel.theme.model import COVER_COLOR, Theme, ThemeError, resolve_asset
+from libre_panel.theme.model import COVER_COLOR, SWITCH, Theme, ThemeError, resolve_asset
 from libre_panel.theme.modules import SLOT_KINDS, slot_items
 from libre_panel.theme.modules import expand as expand_modules
 
@@ -544,7 +544,7 @@ def _reads(widgets: list[dict[str, Any]]) -> set[str]:
             keys.add(widget["mark"])
         for need in (widget.get("needs") or "").split(","):
             need = need_key(need)
-            if need:
+            if need and not need.startswith(SWITCH):  # (a switch is the theme's, no sensor)
                 keys.add(need)
         if widget["type"] == "weather":
             keys.add(f"weather.{widget['field']}")
@@ -581,6 +581,9 @@ class Renderer:
         self.snapshot: Snapshot | None = None  # the readings it drew last (context.image)
         self.warnings: list[str] = []
         self.moving = False  # True while an animation has not settled yet
+        # the person's choice of the theme's switches (Theme.switches): {"frames": False}; one
+        # not chosen is as the theme has it
+        self.switches: dict[str, bool] = {}
         self._analog_parts: dict[Any, Image.Image] = {}  # faces and second hands (_analog_part)
         self._fonts: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
         self._digit_width: dict[int, float] = {}
@@ -1429,11 +1432,20 @@ class Renderer:
             self._builder = _Builder()
         return self._builder.submit(job)
 
-    @staticmethod
-    def _missing(widget: dict[str, Any], snapshot: Snapshot) -> bool:
+    def _holds(self, need: str, snapshot: Snapshot) -> bool:
+        """Whether a condition of ``needs`` holds (need_holds); one on a switch of the theme
+        (``switch.frames``, ``!switch.frames``) as the person set it, else as the theme does."""
+        body = need.lstrip("!").strip()
+        if not body.startswith(SWITCH):
+            return need_holds(need, snapshot)
+        name = body[len(SWITCH) :]
+        on = self.switches.get(name, self.theme.switches.get(name, {}).get("on", False))
+        return on != need.startswith("!")
+
+    def _missing(self, widget: dict[str, Any], snapshot: Snapshot) -> bool:
         for need in (widget.get("needs") or "").split(","):  # all of them must hold
             need = need.strip()
-            if need and not need_holds(need, snapshot):
+            if need and not self._holds(need, snapshot):
                 return True
         if widget["type"] == "module":
             return False

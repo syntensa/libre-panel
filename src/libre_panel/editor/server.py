@@ -30,11 +30,13 @@ from urllib.parse import ParseResult, parse_qs, unquote, urlparse
 
 from libre_panel import __version__, i18n, modes, notify, sequence
 from libre_panel.config import (
+    CONFIG_FILENAME,
     DEFAULT_SYMBOLS,
     FAN_LOOKS,
     FAN_PAINTS,
     SYMBOL_PACKS,
     ConfigError,
+    config_dir,
     edit_config,
     hardware_name,
     load_config,
@@ -78,7 +80,9 @@ from libre_panel.theme.model import (
     parse_theme,
     resolve_asset,
     save_theme,
+    switches_for,
     valid_theme_name,
+    version_base,
 )
 from libre_panel.theme.modules import (
     MODULE_KINDS,
@@ -381,21 +385,21 @@ class EditorState:
                 self._hub.snapshot()  # rates need a previous sample
             return self._hub.snapshot()
 
-    def _chosen(self) -> tuple[fan.Choices, str]:
-        """What the user chose in config.toml for the fans (their look and colours) and for
-        the weather symbols and the moon (their look): the canvas shows them as the panel
-        does. Read again when the file changed."""
-        try:
-            stamp = self.config_path.stat().st_mtime_ns if self.config_path else None
+    def _chosen(self) -> tuple[fan.Choices, str, dict[str, dict[str, bool]]]:
+        """What the user chose in config.toml for the fans (their look and colours), for
+        the weather symbols and the moon (their look) and for the themes' switches: the canvas
+        shows them as the panel does. Read again when the file changed."""
+        try:  # (the file load_config reads: without a path of its own, the usual one)
+            stamp = (self.config_path or config_dir() / CONFIG_FILENAME).stat().st_mtime_ns
         except OSError:
             stamp = None
         kept = getattr(self, "_fan_choices", None)
         if kept is None or kept[0] != stamp:
             try:
                 config = load_config(self.config_path)
-                chosen = (fan.Choices.of(config), config.symbols)
+                chosen = (fan.Choices.of(config), config.symbols, config.switches)
             except (ConfigError, OSError):
-                chosen = kept[1] if kept is not None else (fan.Choices(), DEFAULT_SYMBOLS)
+                chosen = kept[1] if kept is not None else (fan.Choices(), DEFAULT_SYMBOLS, {})
             kept = self._fan_choices = (stamp, chosen)
         return kept[1]
 
@@ -404,6 +408,15 @@ class EditorState:
 
     def symbols(self) -> str:
         return self._chosen()[1]
+
+    def switches(self, theme: Any) -> dict[str, bool]:
+        """The person's choice of the switches of ``theme`` (one with its folder)."""
+        return switches_for(theme, self._chosen()[2])
+
+    def chosen_switches(self, theme_id: str) -> tuple[tuple[str, bool], ...]:
+        """The same by the theme's name, in a form a key of the previews can hold."""
+        chosen = self._chosen()[2].get(version_base(theme_id) or theme_id, {})
+        return tuple(sorted(chosen.items()))
 
     def follow_config(self) -> None:
         """config.toml was written: the sources of this editor's own hub (a plain editor;
@@ -702,7 +715,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             stamp = (folder / THEME_FILENAME).stat().st_mtime_ns
         except (ThemeError, OSError):
             return self._error("not found", HTTPStatus.NOT_FOUND)
-        key = (theme_id, stamp, width, i18n.language(), self.state.symbols())
+        chosen = self.state.chosen_switches(theme_id)  # (as the panel shows it)
+        key = (theme_id, stamp, width, i18n.language(), self.state.symbols(), chosen)
         with self.state.previews_lock:
             png = self.state.previews.get(key)
         if png is None:
@@ -711,7 +725,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             except ThemeError as exc:
                 return self._error(str(exc), HTTPStatus.NOT_FOUND)
             renderer = Renderer(theme, preview=True)
-            renderer.symbols = key[-1]
+            renderer.symbols = self.state.symbols()
+            renderer.switches = dict(chosen)
             try:
                 frame, _boxes = renderer.render(demo_snapshot(fixed_time=1_700_000_000))
             finally:
@@ -1695,6 +1710,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         renderer = Renderer(theme, preview=True)
         renderer.fan_choices = self.state.fan_choices()
         renderer.symbols = self.state.symbols()
+        renderer.switches = self.state.switches(theme)
         try:
             frame, boxes = renderer.render(snapshot)
             notice = payload.get("notice")

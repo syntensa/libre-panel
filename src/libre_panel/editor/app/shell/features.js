@@ -185,6 +185,16 @@ export function registerFeatureCommands() {
       run: toCard("panel/panel-video"),
     },
     {
+      id: "panel.dark",
+      title: () => t("Dark when Libre Panel quits"),
+      hint: () => t("the panel's light off when it quits"),
+      keywords: () => t("dark off black quit close exit shutdown sleep screen off backlight"),
+      group: panel,
+      icon: "power",
+      rank: 16,
+      run: toCard("panel/panel-display"),
+    },
+    {
       id: "panel.motion",
       title: () => t("Motion on the panel"),
       hint: () => t("calm for a slow panel"),

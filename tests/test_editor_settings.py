@@ -77,6 +77,7 @@ def test_the_settings_are_the_config_with_its_defaults_filled_in(server):
         "rotate": 0,
         "orientation": "",
         "motion": "auto",
+        "dark_on_quit": False,
         "output": "libre-panel-frame.png",
         "port": "",
     }
@@ -1073,7 +1074,7 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
 
     names = {
         "device.model", "device.driver", "device.brightness", "device.rotate", "device.port",
-        "device.orientation", "device.motion",
+        "device.orientation", "device.motion", "device.dark_on_quit",
         "video.mode", "video.fps", "video.local_clip", "video.clip_asked", "refresh_ms",
         "check_updates", "allow_notify", "symbols", "hotkeys.enabled", "hotkeys.pause",
         "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open",
@@ -1111,3 +1112,32 @@ def test_the_message_says_where_to_set_it_in_german_too(server, elevated):
     assert status == 403
     assert "video.ffmpeg" in data["error"] and "config.toml" in data["error"]
     assert "Administratorrechten" in data["error"]
+
+
+# -- the themes' switches (test_theme_switches.py) --------------------------------------------
+
+
+def test_the_settings_switch_a_theme_and_take_the_choice_out_again(server):
+    status, data = write(server, **{"switches.lumen.frames": False})
+    assert status == 200 and data["config"]["switches"] == {"lumen": {"frames": False}}
+    assert "[switches.lumen]" in config_text() and "frames = false" in config_text()
+    status, data = write(server, **{"switches.lumen.frames": None})
+    assert status == 200 and data["config"]["switches"] == {}
+    for name, value in (("switches.lumen", True), ("switches.Lumen!.frames", True),
+                        ("switches.lumen.frames", "off")):  # fmt: skip
+        assert write(server, **{name: value})[0] == 400, name
+
+
+def test_the_preview_of_the_app_draws_the_theme_as_switched(server):
+    import json
+
+    from libre_panel.theme.model import builtin_themes_dir
+
+    folder = builtin_themes_dir() / "lumen-1920x720"
+    data = json.loads((folder / "theme.json").read_text(encoding="utf-8"))
+    body = {"theme": data, "base": "lumen-1920x720"}
+    status, shown = request(server, "POST", "/api/render", body)
+    assert status == 200 and "frame-mid" in shown["boxes"]
+    write(server, **{"switches.lumen.frames": False})
+    status, shown = request(server, "POST", "/api/render", body)
+    assert status == 200 and "frame-mid" not in shown["boxes"]

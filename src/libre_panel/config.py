@@ -104,6 +104,9 @@ orientation = ""
 # numbers jump, a picture a second, no fades between themes) and full on the others; "full"
 # or "calm" for every panel.
 motion = "auto"
+# true: the panel goes dark when Libre Panel quits (Windows shutting down too), and lights up
+# again when it starts; false: it keeps the last picture.
+dark_on_quit = false
 # Where frames go when no panel is used (relative = in this settings folder).
 output = "libre-panel-frame.png"
 # Serial panels (3.5", 5", 2.1" ...) are found by their USB ids. Only if that
@@ -299,6 +302,7 @@ class DeviceConfig:
     orientation: str = ""
     # "auto": calm on the slow USB serial panels, full elsewhere; "full"; "calm" (MOTIONS)
     motion: str = "auto"
+    dark_on_quit: bool = False  # a black picture and its light off when Libre Panel quits
     output: str = "libre-panel-frame.png"
     port: str = ""  # serial panels: the port; empty = found by its USB ids
     video: VideoConfig = field(default_factory=VideoConfig)
@@ -393,6 +397,9 @@ class Config:
     hotkeys: dict[str, str] = field(default_factory=dict)  # action: combination (hotkeys.py)
     hotkeys_enabled: bool = True  # [hotkeys] enabled: off holds no key, the combinations kept
     symbols: str = DEFAULT_SYMBOLS  # the look of the weather symbols and the moon
+    # the person's choice of the themes' switches, by theme (all its versions) and switch:
+    # [switches.lumen] frames = false (Theme.switches; Look shows them)
+    switches: dict[str, dict[str, bool]] = field(default_factory=dict)
     path: Path | None = None
     # config.toml's modification time when it was read: a change made while
     # the program starts up is noticed too.
@@ -462,6 +469,23 @@ def _fans(value: Any) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
     return names, looks, paints
 
 
+_SWITCH_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+
+
+def _switches(value: Any) -> dict[str, dict[str, bool]]:
+    """``[switches.<theme>]``: each switch of the theme on (true) or off (false)."""
+    chosen: dict[str, dict[str, bool]] = {}
+    for theme, table in _expect(value, dict, "switches").items():
+        if not _SWITCH_NAME.match(theme):
+            raise ConfigError(f"switches: {theme!r} is not the name of a theme")
+        where = f"switches.{theme}"
+        for name, on in _expect(table, dict, where).items():
+            if not _SWITCH_NAME.match(name):
+                raise ConfigError(f"{where}: {name!r} is not the name of a switch")
+            chosen.setdefault(theme, {})[name] = _expect(on, bool, f"{where}.{name}")
+    return chosen
+
+
 def _hotkeys(table: dict[str, Any]) -> dict[str, str]:
     """``[hotkeys]``: each action's combination, written the one way (``Ctrl+Alt+P``); two
     actions cannot share one."""
@@ -514,6 +538,8 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         cfg.check_updates = _expect(data["check_updates"], bool, "check_updates")
     if "allow_notify" in data:
         cfg.allow_notify = _expect(data["allow_notify"], bool, "allow_notify")
+    if "switches" in data:
+        cfg.switches = _switches(data["switches"])
     if "hotkeys" in data:
         table = dict(_expect(data["hotkeys"], dict, "hotkeys"))
         if "enabled" in table:
@@ -546,6 +572,9 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     if motion not in MOTIONS:
         raise ConfigError('device.motion: "auto", "full" or "calm"')
     cfg.device.motion = motion
+    cfg.device.dark_on_quit = _expect(
+        dev.get("dark_on_quit", cfg.device.dark_on_quit), bool, "device.dark_on_quit"
+    )
     cfg.device.output = _expect(dev.get("output", cfg.device.output), str, "device.output")
     cfg.device.port = _expect(dev.get("port", cfg.device.port), str, "device.port").strip()
     cfg.device.video = _parse_video(_expect(data.get("video", {}), dict, "video"))

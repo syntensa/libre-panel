@@ -2145,7 +2145,14 @@
     "calm animation movement still slow serial gliding fades": "ruhig animation bewegung still langsam seriell gleiten überblenden",
     "{port} may be a Turing panel (rev. C). Other USB devices have the same USB ids, so Libre Panel talks to it only once you say which panel it is:": "{port} ist vielleicht ein Turing-Panel (rev. C). Andere USB-Geräte haben dieselben USB-Kennungen, darum spricht Libre Panel es erst an, wenn du sagst, welches Panel es ist:",
     "None of them": "Keins davon",
-    "A device has the USB ids of a Turing panel (rev. C), which other USB devices have too. Is it one of these panels?": "Ein Gerät hat die USB-Kennungen eines Turing-Panels (rev. C), die auch andere USB-Geräte haben. Ist es eines dieser Panels?"
+    "A device has the USB ids of a Turing panel (rev. C), which other USB devices have too. Is it one of these panels?": "Ein Gerät hat die USB-Kennungen eines Turing-Panels (rev. C), die auch andere USB-Geräte haben. Ist es eines dieser Panels?",
+    "This theme's switches": "Schalter dieses Themes",
+    "They hold for every version of the theme, on any panel.": "Sie gelten für jede Version des Themes, auf jedem Panel.",
+    "Frames around every part": "Rahmen um jeden Bereich",
+    "Dark when Libre Panel quits": "Dunkel, wenn Libre Panel beendet wird",
+    "When Libre Panel quits, Windows shutting down too, the panel shows black and its light goes off; it lights up again when Libre Panel starts. Off: it keeps the last picture.": "Wird Libre Panel beendet, auch beim Herunterfahren von Windows, zeigt das Panel Schwarz und sein Licht geht aus; beim nächsten Start von Libre Panel leuchtet es wieder. Aus: Es behält das letzte Bild.",
+    "the panel's light off when it quits": "Licht des Panels aus beim Beenden",
+    "dark off black quit close exit shutdown sleep screen off backlight": "dunkel aus schwarz beenden schließen herunterfahren schlafen bildschirm aus hintergrundbeleuchtung"
   },
   "fields": {
     "align": "Ausrichtung",

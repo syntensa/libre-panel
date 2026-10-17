@@ -27,7 +27,7 @@ from libre_panel.config import ConfigError, config_dir, load_config, set_active_
 from libre_panel.devices.models import MODELS, PanelModel, find_model
 from libre_panel.i18n import t
 from libre_panel.service import BackgroundApp
-from libre_panel.theme.model import THEME_FILENAME, VERTICAL, list_themes
+from libre_panel.theme.model import THEME_FILENAME, list_themes, version_base
 
 log = logging.getLogger(__name__)
 
@@ -108,14 +108,16 @@ def theme_choices(
     more: list[tuple[str, str]] = []
     collections: dict[str, list[tuple[str, str]]] = {}
     for theme in themes:
-        if theme["id"].endswith(VERTICAL) and theme["id"][: -len(VERTICAL)] in ids:
+        if version_base(theme["id"]) in ids:  # ("lumen-vertical", "lumen-1920x720")
             continue
         facts = _theme_facts(theme["path"])
         entry = (theme["id"], facts["name"] or theme["id"])
+        width, height = model.size("landscape") if model is not None else (0, 0)
         fits = (
             model is None
             or facts["model"] == model.id
-            or facts["size"] == sorted(model.size("landscape"))
+            or facts["size"] == sorted((width, height))
+            or f"{theme['id']}-{width}x{height}" in ids  # its version for the panel's size
         )
         if facts["collection"]:
             collections.setdefault(facts["collection"], []).append(entry)
@@ -245,10 +247,9 @@ class Tray:
         """The theme of the panel's normal page, by the id it is chosen by (Lumen, not its
         version for a panel on end)."""
         active = self.app.active_theme()
-        if active and active.endswith(VERTICAL):
-            base = active[: -len(VERTICAL)]
-            if any(theme["id"] == base for theme in list_themes()):
-                return base
+        base = version_base(active) if active else None
+        if base and any(theme["id"] == base for theme in list_themes()):
+            return base
         return active
 
     def _brightness_items(self):

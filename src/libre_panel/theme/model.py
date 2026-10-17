@@ -513,6 +513,9 @@ class Theme:
     style: dict[str, Any] | None = None
     # The panel's look by block ("grid", "light", ...; render.look); {} = none.
     look: dict[str, Any] = field(default_factory=dict)
+    # What the person may switch on or off in this theme: {"frames": {"label": "...", "on":
+    # true}}; widgets that need ``switch.frames`` (or ``!switch.frames``) show by it
+    switches: dict[str, dict[str, Any]] = field(default_factory=dict)
     root: Path | None = None
     warnings: list[str] = field(default_factory=list)
 
@@ -555,6 +558,8 @@ class Theme:
             data["screen"] = deepcopy(self.screen)
         if self.look:
             data["look"] = deepcopy(self.look)
+        if self.switches:
+            data["switches"] = deepcopy(self.switches)
         toast = {k: deepcopy(v) for k, v in self.toast.items() if v != TOAST_DEFAULTS[k]}
         if toast:
             data["toast"] = toast
@@ -985,6 +990,30 @@ def _finish_warnings(widgets: list[dict[str, Any]], warnings: list[str]) -> None
             warnings.append(f"finish {name!r} is not available for {what}; drawn flat")
 
 
+SWITCH = "switch."  # a need on one of the theme's switches: "switch.frames"
+MAX_SWITCHES = 8
+
+
+def _parse_switches(raw: Any) -> dict[str, dict[str, Any]]:
+    """``"switches": {"frames": {"label": "Frames around every part", "on": true}}``: what
+    the person may switch in this theme (Look shows them), and how each is to begin with."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict) or len(raw) > MAX_SWITCHES:
+        raise ThemeError(f"switches: an object of at most {MAX_SWITCHES} name: {{label, on}}")
+    switches = {}
+    for name, spec in raw.items():
+        if not isinstance(name, str) or not _PALETTE_NAME.match(name):
+            raise ThemeError(f"switches: invalid name {name!r} (use a-z, 0-9, - and _)")
+        if not isinstance(spec, dict):
+            raise ThemeError(f'switches.{name}: {{"label": "...", "on": true}}')
+        switches[name] = {
+            "label": _coerce("string", spec.get("label", name), f"switches.{name}.label"),
+            "on": _coerce("bool", spec.get("on", True), f"switches.{name}.on"),
+        }
+    return switches
+
+
 def parse_theme(data: Any, root: Path | None = None) -> Theme:
     if not isinstance(data, dict):
         raise ThemeError("theme.json must contain an object")
@@ -1085,6 +1114,7 @@ def parse_theme(data: Any, root: Path | None = None) -> Theme:
         screen=_parse_screen(data.get("screen"), palette, root, warnings),
         toast=_parse_toast(data.get("toast"), palette, root, warnings),
         look=_parse_look(data.get("look"), palette, warnings),
+        switches=_parse_switches(data.get("switches")),
         root=root,
         warnings=warnings,
     )
@@ -1127,12 +1157,51 @@ def find_theme(name: str) -> Path:
 
 
 VERTICAL = "-vertical"  # "lumen-vertical" is Lumen laid out for a panel that stands on end
+# "lumen-1920x720" is Lumen laid out for a panel of that size (the 12.3"): the version for a
+# panel's own size comes first, then the one for the way it is mounted
+_SIZED = re.compile(r"^(.+)-(\d{2,5})x(\d{2,5})$")
 
 
-def theme_for(name: str, orientation: str) -> str:
+def _installed(name: str) -> bool:
+    try:
+        find_theme(name)
+    except ThemeError:
+        return False
+    return True
+
+
+def version_base(name: str) -> str | None:
+    """The theme ``name`` is a version of ("lumen" for "lumen-vertical" and "lumen-1920x720"),
+    as the name says; None for a theme that is no version."""
+    sized = _SIZED.match(name)
+    if sized:
+        return sized[1]
+    return name[: -len(VERTICAL)] if name.endswith(VERTICAL) else None
+
+
+def switches_for(theme: Theme, chosen: dict[str, dict[str, bool]]) -> dict[str, bool]:
+    """The person's choice of the switches of ``theme`` (config.toml's ``[switches.<theme>]``),
+    by the theme its versions are made from: ``[switches.lumen]`` holds for "lumen-1920x720"."""
+    name = theme.root.name if theme.root is not None else ""
+    return dict(chosen.get(version_base(name) or name, {}))
+
+
+def theme_for(name: str, orientation: str, size: tuple[int, int] | None = None) -> str:
     """The version of the theme ``name`` for a panel mounted ``orientation`` ("landscape",
-    "portrait"; "" leaves it to the theme): "lumen-vertical" for "lumen" on a panel that
+    "portrait"; "" leaves it to the theme) whose frames are ``size`` (if known): its version for
+    that size ("lumen-1920x720" on the 12.3"), else "lumen-vertical" for "lumen" on a panel that
     stands on end and the other way round, where that version is installed; else ``name``."""
+    sized = _SIZED.match(name)
+    if sized and size is not None and (int(sized[2]), int(sized[3])) != tuple(size):
+        if _installed(sized[1]):  # a version for another size: the theme it is one of
+            name = sized[1]
+    if size is not None:
+        base = version_base(name) or name
+        own = f"{base}-{size[0]}x{size[1]}"
+        if own != name and _installed(own):
+            return own
+        if own == name:
+            return name
     if orientation == "portrait" and not name.endswith(VERTICAL):
         other = name + VERTICAL
     elif orientation == "landscape" and name.endswith(VERTICAL):

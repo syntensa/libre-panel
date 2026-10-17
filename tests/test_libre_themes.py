@@ -73,7 +73,7 @@ def test_an_own_screen_draws_whole_with_the_demo(name):
     assert theme.warnings == [] and renderer.warnings == []
     assert frame.size == (theme.width, theme.height) and theme.collection == ""
     snapshot = demo_snapshot(fixed_time=1_700_000_000)
-    shown = {w["id"] for w in theme.widgets if w["visible"] and not Renderer._missing(w, snapshot)}
+    shown = {w["id"] for w in theme.widgets if w["visible"] and not renderer._missing(w, snapshot)}
     assert set(boxes) == shown
     # flat frames: no ridges, nothing the panel light would glint on
     assert not any(w.get("ridge") for w in theme.widgets) and renderer.light_edges == []
@@ -153,7 +153,7 @@ def test_the_day_under_the_clock_steps_aside_while_the_card_shows_it(name):
     dates = [w for w in theme.widgets if w["type"] == "clock" and "%A" in w["format"]]
 
     def shown(snapshot):
-        return [w["id"] for w in dates if not Renderer._missing(w, snapshot)]
+        return [w["id"] for w in dates if not Renderer(theme)._missing(w, snapshot)]
 
     assert len(shown(demo())) == 1  # the weather, and a track
     assert len(shown(demo(media=False))) == 1  # the weather alone
@@ -236,7 +236,7 @@ def test_lumen_draws_the_load_as_light_that_moves_at_spur_iis_pace():
 
 
 def test_lumen_turns_the_fans_that_report_else_lists_the_others():
-    _, by = lumen()
+    theme, by = lumen()
     fans = [w for w in by.values() if w["type"] == "fan"]
     assert [f["sensor"] for f in fans][0] == "gpu.fan"  # the graphics card's first
     assert all(f["needs"] == f["sensor"] for f in fans)  # each only where it reports
@@ -245,8 +245,9 @@ def test_lumen_turns_the_fans_that_report_else_lists_the_others():
     without = demo_snapshot(fixed_time=1_700_000_000)
     for key in [k for k in without.readings if k == "gpu.fan" or k.startswith("fan.lpc.")]:
         del without.readings[key]
-    assert not Renderer._missing(listing, without)  # a PC whose fans have other names
-    assert Renderer._missing(listing, demo_snapshot(fixed_time=1_700_000_000))
+    renderer = Renderer(theme)
+    assert not renderer._missing(listing, without)  # a PC whose fans have other names
+    assert renderer._missing(listing, demo_snapshot(fixed_time=1_700_000_000))
 
 
 def test_lumen_shows_the_network_else_a_download():

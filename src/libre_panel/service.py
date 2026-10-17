@@ -73,6 +73,7 @@ class PanelService:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
+        self._quitting = False  # stop(): Libre Panel quits (the panel may go dark)
 
     @property
     def paused(self) -> bool:
@@ -143,6 +144,9 @@ class PanelService:
         self.start()
 
     def stop(self) -> None:
+        """Libre Panel quits: the loop ends, and the panel goes dark where config.toml says so
+        ([device] dark_on_quit); pausing leaves it as it is."""
+        self._quitting = True
         self._halt()
 
     def _config_path(self) -> Path:
@@ -171,7 +175,8 @@ class PanelService:
                     # file was broken) reaches the services now; one in step is left alone
                     self.on_config(config)
                 run(config, stop=stop, status=status, host=self.host, on_config=self.on_config,
-                    hang_log=log_file().with_name(HANG_FILENAME))  # fmt: skip
+                    hang_log=log_file().with_name(HANG_FILENAME),
+                    quitting=lambda: self._quitting)  # fmt: skip
             except (ConfigError, ThemeError, DeviceError) as exc:
                 self.error = str(exc)
                 log.error("panel stopped: %s (waiting for the config or theme to change)", exc)
@@ -227,6 +232,8 @@ class PanelService:
             "mode": status.mode,
             # where the screens in turn stand: the step, its theme and the seconds left of it
             "sequence": status.sequence if state == "showing" else None,
+            # the size of the panel's frames: the app shows each theme in its version for it
+            "size": list(status.size) if status.size else None,
             # numbers of the last seconds (see libre_panel.meter); none while it does not run
             "stats": status.stats if state in ("showing", "waiting") else {},
         }

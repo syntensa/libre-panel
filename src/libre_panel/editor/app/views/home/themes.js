@@ -7,14 +7,22 @@
 import { endpoints } from "../../core/api.js";
 import { t } from "../../core/i18n.js";
 import { html, useEffect, useRef, useState } from "../../lib/preact.js";
-import { mounted, themeEntry, useMounted, versionFor } from "../../core/orientation.js";
+import { mounted, themeEntry, useMounted, versionBase, versionFor } from "../../core/orientation.js";
+import { store } from "../../core/state.js";
 import { panelName } from "../../shell/panel-popover.js";
 import { Icon } from "../../ui/icons.js";
 
 const same = (a, b) => Boolean(a && b) && a[0] === b[0] && a[1] === b[1];
 
-/** Whether a theme is made for a panel: its model, or its size either way round. */
-export const fitsPanel = (theme, model) => !model || theme.model === model.id || same(theme.size, model.landscape) || same(theme.size, model.portrait);
+const sized = (theme, model) => same(theme.size, model.landscape) || same(theme.size, model.portrait);
+
+/** Whether a theme is made for a panel: its model, or its size either way round, or it has a
+ * version of that size ("lumen-1920x720" makes Lumen one for the 12.3″). */
+export const fitsPanel = (theme, model) =>
+  !model ||
+  theme.model === model.id ||
+  sized(theme, model) ||
+  (store.get().versions || []).some((version) => versionBase(version.id) === theme.id && sized(version, model));
 
 const sourceText = (theme) => (theme.source === "plugin" ? t("from a plugin") : theme.builtin ? t("built in") : t("yours"));
 

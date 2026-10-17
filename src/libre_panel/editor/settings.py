@@ -13,6 +13,7 @@ import logging
 import math
 import os
 import platform
+import re
 import sys
 import threading
 from pathlib import Path
@@ -358,6 +359,7 @@ class Settings:
                     "rotate": device.rotate,
                     "orientation": device.orientation,
                     "motion": device.motion,
+                    "dark_on_quit": device.dark_on_quit,
                     "output": device.output,
                     "port": device.port,
                 },
@@ -394,6 +396,7 @@ class Settings:
                 "hotkeys": dict(config.hotkeys),
                 "hotkeys_enabled": config.hotkeys_enabled,
                 "symbols": config.symbols,
+                "switches": {theme: dict(chosen) for theme, chosen in config.switches.items()},
             },
             "catalog": self._catalog(),
             "restart": self.restart.pending(self.controls),
@@ -498,6 +501,8 @@ class Settings:
         """The change ``("value" or "unset", cleaned value)`` for a setting, or the error."""
         if name.startswith("services."):
             return self._check_option(name, value, config)
+        if name.startswith("switches."):
+            return _check_switch(name, value)
         self._check_rights(name, value, config)
         if value is None:
             if name not in UNSETTABLE:
@@ -959,6 +964,20 @@ def _rule_hotkey(name: str, value: Any, config: Config) -> str:
     return combo
 
 
+def _check_switch(name: str, value: Any) -> tuple[str, Any]:
+    """``switches.<theme>.<switch>``: on or off for that theme and all its versions; ``null``
+    takes the choice out, so the theme's own holds again."""
+    parts = name.split(".")
+    if len(parts) != 3 or not all(_SWITCH_PART.match(part) for part in parts[1:]):
+        raise SettingsError(f"unknown setting {name!r}")
+    if value is None:
+        return "unset", None
+    return "value", _flag(name, value)
+
+
+_SWITCH_PART = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+
+
 RULES: dict[str, Any] = {
     "device.model": _rule_model,
     "device.driver": _rule_driver,
@@ -966,6 +985,7 @@ RULES: dict[str, Any] = {
     "device.rotate": lambda n, v, c: _choice(n, v, (0, 180)),
     "device.orientation": lambda n, v, c: _choice(n, v, ("", "landscape", "portrait")),
     "device.motion": lambda n, v, c: _choice(n, v, MOTIONS),
+    "device.dark_on_quit": lambda n, v, c: _flag(n, v),
     "device.output": lambda n, v, c: _text(n, v, 260, required=True),
     "device.port": lambda n, v, c: _text(n, v, 64),
     "video.mode": lambda n, v, c: _choice(n, v, ("auto", "on", "off")),

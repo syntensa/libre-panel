@@ -30,15 +30,16 @@ class _Ref:
     title, not for bigger letters. ``ok`` says whether it is big enough to be this card."""
 
     def __init__(self, b: _Build, ref_w: float, ref_h: float, least_w: float, floor: float = 0.55,
-                 aspect: float = 1.35):  # fmt: skip
+                 aspect: float = 1.35, height: float | None = None):  # fmt: skip
         self.b = b
-        self.g = min(b.h / ref_h, b.w / least_w)
+        h = b.h if height is None else height  # (``height``: only the top of the box)
+        self.g = min(h / ref_h, b.w / least_w)
         # too small, or too narrow for its height (the card would stand in the middle of a
         # box with room left above and below it): the older module of its kind does better
-        self.ok = self.g >= floor and b.w >= aspect * b.h
+        self.ok = self.g >= floor and b.w >= aspect * h
         self.left = b.x
         # a card that is not as tall stands in the middle
-        self.top = b.y + (b.h - ref_h * self.g) / 2
+        self.top = b.y + (h - ref_h * self.g) / 2
 
     def x(self, v: float) -> float:
         return self.left + v * self.g
@@ -83,12 +84,17 @@ def build_forecast(b: _Build, src: M.Source) -> None:
     with its symbol, its temperature and its chance of rain as a bar.
 
     Where there is no weather a calendar sheet stands in; where the module is small it is the
-    weather module.
+    weather module. A tall one (a column of a large panel) has the card at its top, nearly at
+    the card's own size, and under it the next days as rows.
     """
     ref = _Ref(b, 706, 376, 590)
+    head = b.h
     if not ref.ok:
-        M.build_weather(b, src)
-        return
+        head = round(b.w / 1.5)
+        ref = _Ref(b, 706, 376, 590, height=head)
+        if ref.g < 0.8 or b.h - head < 0.6 * head:
+            M.build_weather(b, src)
+            return
     b.card()
     start = len(b.out)
     M._date_layout(b)
@@ -140,22 +146,26 @@ def build_forecast(b: _Build, src: M.Source) -> None:
                 color=b.c("text3"), width=max(8, room * ref.g * squeeze - gap), font="text_font",
                 tabular=False, fallback="", hide_if_missing=True)  # fmt: skip
 
-    # the rain of the next two hours (blue when it starts or stops soon), and the sun
+    # the rain of the next two hours (blue when it starts or stops soon), and the sun; in a
+    # tall card across it, under the symbol (its column of text is narrow for both)
     line = ref.cap(222, 20)
+    at, room = (ref.x(30), right - ref.x(30)) if head < b.h else (left, width)
     for name, need, role in (("rain", "weather.rain.minutes", "gpu"),
                              ("dry", "!weather.rain.minutes", "text3")):  # fmt: skip
-        b.value(name, "weather.rain.text", "{value}", left, line, small, color=b.c(role),
-                width=width * 0.55, font="text_font", tabular=False, fallback="",
+        b.value(name, "weather.rain.text", "{value}", at, line, small, color=b.c(role),
+                width=room * 0.55, font="text_font", tabular=False, fallback="",
                 fit="ellipsis", needs=need)  # fmt: skip
     for name, key, text, up in (
         ("sun-set", "sun.set", t("Sun until {value}"), 1),
         ("sun-rise", "sun.next_rise", t("Sun from {value}"), 0),
     ):
-        b.value(name, key, text, left + width, line, small, color=b.c("text3"), align="right",
-                width=width * 0.42, font="text_font", tabular=False, fallback="",
+        b.value(name, key, text, at + room, line, small, color=b.c("text3"), align="right",
+                width=room * 0.42, font="text_font", tabular=False, fallback="",
                 fit="ellipsis", needs=f"sun.up={up}")  # fmt: skip
 
-    # the next hours across the card
+    # the next hours across the card (a tall one has room to set them off the line above)
+    drop = ref.s(18) if head < b.h else 0
+    lower = ref.s(4) if head < b.h else 0  # (its bars as far under the degrees as the days')
     step = max(1, min(6, b.module["step"] or 1))  # (the Studio shows the next hours)
     strip = ref.x(24)
     count = int(M._clamp((right - strip) // ref.s(109), 1, 24 // step))
@@ -165,18 +175,36 @@ def build_forecast(b: _Build, src: M.Source) -> None:
         key = f"weather.hour.{step * (i + 1)}"
         cx = strip + cell * (i + 0.5)
         first = len(b.out)
-        b.value(f"h{i}-time", f"{key}.time", "{value}", cx, ref.cap(252, 24), ref.s(24),
+        b.value(f"h{i}-time", f"{key}.time", "{value}", cx, ref.cap(252, 24) + drop, ref.s(24),
                 color=b.c("text2"), align="center", width=cell * 0.95, font="text_font",
                 tabular=False, fallback="")  # fmt: skip
-        b.add("symbol", f"h{i}-symbol", x=round(cx - edge / 2), y=round(ref.y(258)), size=edge,
-              sensor=f"{key}.code", color=clouds, moving=b.module["moving"],
+        b.add("symbol", f"h{i}-symbol", x=round(cx - edge / 2), y=round(ref.y(258) + drop),
+              size=edge, sensor=f"{key}.code", color=clouds, moving=b.module["moving"],
               offset=round(i * 1.7, 2))  # fmt: skip
-        b.value(f"h{i}-temp", f"{key}.temperature", "{value:.0f}°", cx, ref.cap(352, 34),
+        b.value(f"h{i}-temp", f"{key}.temperature", "{value:.0f}°", cx, ref.cap(352, 34) + drop,
                 ref.s(34), align="center", width=cell * 0.92)  # fmt: skip
-        _bar(b, f"h{i}-rain", f"{key}.rain", cx - cell * 0.36, ref.y(358), cell * 0.72, ref.s(9, 3),
-             b.c("gpu"))  # fmt: skip
+        _bar(b, f"h{i}-rain", f"{key}.rain", cx - cell * 0.36, ref.y(358) + drop + lower,
+             cell * 0.72, ref.s(9, 3), b.c("gpu"))  # fmt: skip
         for widget in b.out[first:]:  # a column only while its hour is known
             _need(widget, f"{key}.code")
+    if head < b.h:  # the next days under the card, each under an hour: as many, as wide
+        top = b.y + head + drop
+        days = _Build({**b.module, "module": "outlook", "card": "off"},
+                      [round(strip), round(top), round(right - strip),
+                       round(b.y + b.h - top - ref.s(8))], b.colors, b.style)  # fmt: skip
+        days.ix, days.iy, days.iw, days.ih = strip, top, right - strip, days.h
+        for i in range(min(count, 7)):
+            first = len(days.out)
+            M._outlook_column(days, i, f"weather.day.{i}", count, clouds, b.c("gpu"))
+            for widget in days.out[first:]:  # a day only while it is known
+                _need(widget, f"weather.day.{i}.code")
+        low = max(w["y"] + w.get("h", w.get("size", 0)) for w in days.out)
+        down = max(0, round((top + days.ih - low) / 2))  # the days in the middle of their room
+        for widget in days.out:
+            widget["id"] = "days-" + widget["id"]
+            widget["y"] += down
+            _need(widget, "weather.temperature")  # (without weather: the calendar sheet)
+            b.out.append(widget)
     b.needs = ""
 
 

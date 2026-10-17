@@ -85,7 +85,7 @@ def test_a_spur_screen_draws_whole_with_the_demo(name):
     assert (theme.width, theme.height) == (1920, 480) and frame.size == (1920, 480)
     # SPUR II's grid and dust, as SPUR Classic has them (its frames are flat: no panel light)
     assert set(theme.look) == {"grid", "dust"}
-    shown = {w["id"] for w in theme.widgets if w["visible"] and not Renderer._missing(w, snapshot)}
+    shown = {w["id"] for w in theme.widgets if w["visible"] and not renderer._missing(w, snapshot)}
     assert set(boxes) == shown and len(shown) > 0.8 * len(theme.widgets)
     # flat frames and no ridges (the user's wish): nothing on the screen catches the panel light
     assert not any(w.get("ridge") for w in theme.widgets) and renderer.light_edges == []
@@ -134,7 +134,7 @@ def shown_ids(theme, readings=None, images=None):
 
     found = {k: Reading(k, v) for k, v in (readings or {}).items()}
     snapshot = Snapshot(readings=found, images=images or {})
-    return {w["id"] for w in theme.widgets if not Renderer._missing(w, snapshot)}
+    return {w["id"] for w in theme.widgets if not Renderer(theme)._missing(w, snapshot)}
 
 
 def test_horizon_grows_the_cpu_up_and_the_gpu_down_from_one_line():

@@ -281,6 +281,36 @@ def test_a_small_weather_card_is_the_weather_module():
     assert "kicker" in big and "kicker" not in small
 
 
+def tall_weather(cols):
+    """A weather card in a column of the 12.3" (1920x720), ``cols`` of its 96 columns wide."""
+    theme = parse_theme(
+        {
+            "format": "libre-panel-theme/1",
+            "display": {"model": "turing-12.3-usb", "orientation": "landscape"},
+            "grid": {"columns": 96, "rows": 72, "gap": 1, "margin": 20},
+            "widgets": [{"type": "module", "id": "m", "module": "forecast", "col": 1,
+                         "cols": cols, "row": 0, "rows": 72}],
+        }
+    )  # fmt: skip
+    renderer = Renderer(theme, preview=True)
+    return {w["id"].split("/", 1)[1]: w for w in renderer.widgets if w.get("_module") == "m"}
+
+
+def test_a_tall_weather_card_has_the_card_on_top_and_the_next_days_under_it():
+    parts = tall_weather(28)
+    assert {"kicker", "symbol", "temp", "h0-time", "days-d0-name", "days-d3-symbol"} <= set(parts)
+    hours = max(w["y"] + w.get("h", 0) for k, w in parts.items() if re.fullmatch(r"h\d+-rain", k))
+    days = [w for k, w in parts.items() if k.startswith("days-")]
+    assert min(w["y"] for w in days) > hours  # under the hours, within the card
+    assert max(w["y"] + w.get("h", w.get("size", 0)) for w in days) <= 20 + 680
+    assert all("weather.temperature" in w["needs"] for w in days)  # else the calendar sheet
+    assert not any(k.startswith("days-idle") for k in parts)
+    rain, sun = parts["rain"], parts["sun-rise"]  # across the card: room for both
+    assert rain["x"] < parts["temp"]["x"] and rain["max_width"] + sun["max_width"] > 400
+    narrow = tall_weather(22)  # a narrow column (as on a portrait panel): the weather module
+    assert "kicker" not in narrow and not any(k.startswith("days-") for k in narrow)
+
+
 def test_the_symbols_of_the_weather_card_move_with_the_planned_time():
     snap = snapshot_with()
     _, still, _ = drawn("forecast", snap, animate=True, now=10.0, moving=False)

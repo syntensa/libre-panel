@@ -5,7 +5,9 @@
 
 import { clone, edit, isModule, setSelection, theme as currentTheme, widgets } from "../../core/doc.js";
 import { fieldLabel, formatNumber, t } from "../../core/i18n.js";
-import { loadSettings, useConfig } from "../../core/settings.js";
+import { versionBase } from "../../core/orientation.js";
+import { requestRender } from "../../core/preview.js";
+import { loadSettings, saveSettings, useConfig } from "../../core/settings.js";
 import { store, useStore } from "../../core/state.js";
 import { VOLUME_LOOKS, chooseVolumeLook, showVolume, volumeNotice } from "../../core/volume.js";
 import { html, useEffect, useState } from "../../lib/preact.js";
@@ -419,6 +421,31 @@ function Volume() {
   </div>`;
 }
 
+// -- the theme's own switches (its "switches": frames around every part, ...) --------------------
+
+/** What the theme lets the person switch, each as config.toml has it ([switches.<theme>]) or as
+ * the theme begins with it; a change holds for every version of the theme (Lumen on any panel). */
+function Switches() {
+  const config = useConfig();
+  useEffect(() => {
+    if (!store.get().settings) loadSettings();
+  }, []);
+  const offered = Object.entries(currentTheme()?.switches || {});
+  const id = store.get().doc?.id;
+  if (!offered.length || !id || !config) return null;
+  const base = versionBase(id) || id;
+  const turn = async (name, on) => {
+    if (await saveSettings({ [`switches.${base}.${name}`]: on })) requestRender(0); // drawn as switched
+  };
+  return html`<${Section} title=${t("This theme's switches")}>
+    ${offered.map(
+      ([name, spec]) => html`<${Toggle} key=${name} label=${t(spec.label)} checked=${config.switches?.[base]?.[name] ?? spec.on !== false}
+        onChange=${(on) => turn(name, on)} />`,
+    )}
+    <small class="field-hint">${t("They hold for every version of the theme, on any panel.")}</small>
+  <//>`;
+}
+
 // -- ridge frames: not offered, but a theme that has them can drop them -----------------------------
 
 function Ridges() {
@@ -441,6 +468,7 @@ export function LookPanel() {
   return html`<aside class="look-side" aria-label=${t("Look")}>
     <p class="look-intro">${t("Rest the pointer on a choice to try it on the picture; a click keeps it.")}</p>
     <${Colours} />
+    <${Switches} />
     <${Finish} />
     <${Light} />
     <${Grid} />

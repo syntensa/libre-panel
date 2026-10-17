@@ -145,6 +145,15 @@ the reading is that text (in any case), so a word in the colour of whoever holds
 frame rate down shows only while it does. A game's name can stand where its logo is
 missing: `"needs": "!@game.logo"`.
 
+A theme can offer **switches**, which the person turns on or off in *Look* (under *This
+theme's switches*) without changing the theme: `"switches": {"frames": {"label": "Frames
+around every part", "on": true}}` at the top of `theme.json`, at most eight. `label` is what
+Look shows (in the app's language where Libre Panel knows the words), `on` how the theme
+begins. A widget with `"needs": "switch.frames"` shows while the switch is on,
+`"!switch.frames"` while it is off. The choice is kept in `config.toml` under
+`[switches.<theme>]` and holds for every version of the theme. Lumen on the 12.3" frames
+each of its parts this way.
+
 Text-like widgets share `font` (empty = the theme font), `font_size`, `color`,
 `align` (`left`, `center`, `right`; `x` is the left edge, centre or right edge
 accordingly; `y` is the top of the line), `letter_spacing` (pixels, also

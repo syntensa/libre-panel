@@ -72,7 +72,8 @@ def test_a_modules_numbers_count_to_a_new_reading_as_its_rings_move():
     assert metrics["{value}"] is False  # the processor's name
 
 
-REPORTS = ("round-report", "round-report-vertical", "spur-round-report")
+REPORTS = ("round-report", "round-report-vertical", "round-report-1920x720",
+           "round-report-1280x720", "spur-round-report")  # fmt: skip
 
 
 def test_every_number_of_a_built_in_theme_counts_to_a_new_reading():

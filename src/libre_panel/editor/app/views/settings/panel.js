@@ -263,7 +263,7 @@ function DisplayCard() {
   const config = useConfig();
   const [chosen, setChosen] = useState(null); // the slider stays where it is let go until it is written
   if (!config) return null;
-  const { brightness, rotate } = config.device;
+  const { brightness, rotate, dark_on_quit: dark } = config.device;
   const choose = (value) => {
     if (value === brightness) return;
     setChosen(value);
@@ -292,6 +292,13 @@ function DisplayCard() {
       hint=${t("For a panel that is mounted the other way round. The preview stays the right way up.")}
     >
       <${Toggle} label=${t("Upside down")} checked=${rotate === 180} onChange=${(on) => saveSettings({ "device.rotate": on ? 180 : 0 })} />
+    <//>
+    <${SettingRow}
+      class="dark-row"
+      title=${t("Dark when Libre Panel quits")}
+      hint=${t("When Libre Panel quits, Windows shutting down too, the panel shows black and its light goes off; it lights up again when Libre Panel starts. Off: it keeps the last picture.")}
+    >
+      <${Toggle} label=${t("Dark when Libre Panel quits")} checked=${Boolean(dark)} onChange=${(on) => saveSettings({ "device.dark_on_quit": on })} />
     <//>
   <//>`;
 }

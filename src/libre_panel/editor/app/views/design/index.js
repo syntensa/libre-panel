@@ -6,7 +6,7 @@ import { openTheme } from "../../core/actions.js";
 import { registerCommands, registerProvider } from "../../core/commands.js";
 import { edit, isModule, selectedWidgets, selection, setSelection, single, widgets } from "../../core/doc.js";
 import { t, widgetLabel } from "../../core/i18n.js";
-import { VERTICAL, themeEntry, versionFor } from "../../core/orientation.js";
+import { themeEntry, versionBase, versionFor } from "../../core/orientation.js";
 import { bindKey } from "../../core/shortcuts.js";
 import { setPref, store, useStore } from "../../core/state.js";
 import { html, useRef, useState } from "../../lib/preact.js";
@@ -153,7 +153,7 @@ store.subscribe((state) => {
   mountedAs = way;
   const { doc, dirty, page } = state;
   if (before === undefined || !way || !doc?.id || dirty) return;
-  const theme = doc.id.endsWith(VERTICAL) ? doc.id.slice(0, -VERTICAL.length) : doc.id;
+  const theme = versionBase(doc.id) || doc.id;
   if (themeEntry(theme) && versionFor(theme) !== doc.id) openTheme(theme, { page, ask: false });
 });
 

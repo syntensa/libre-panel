@@ -76,12 +76,15 @@ def dynamic_messages() -> set[str]:
 
 
 def theme_messages() -> set[str]:
-    """The words of the built-in themes that are shown in the panel's language ("translate")."""
+    """The words of the built-in themes that are shown in the panel's language ("translate"),
+    and what Look calls their switches."""
     found = set()
     for path in (SRC / "themes").glob("*/theme.json"):
-        for widget in json.loads(path.read_text(encoding="utf-8")).get("widgets", []):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        for widget in data.get("widgets", []):
             if widget.get("type") == "text" and widget.get("translate"):
                 found.add(widget["text"])
+        found |= {spec["label"] for spec in data.get("switches", {}).values()}
     return found
 
 

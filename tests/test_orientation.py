@@ -45,3 +45,67 @@ def test_a_panel_on_end_shows_the_versions_for_it(isolated_home):
     finally:
         loop.close()
         host.close()
+
+
+TWELVE = ("lumen", "arena", "encore", "almanac", "round-report")  # their 12.3″ and 5.2″ versions
+SIZES = {"1920x720": ((1920, 720), "turing-12.3-usb"), "1280x720": ((1280, 720), "turing-5.2-usb")}
+
+
+def test_a_panel_of_another_size_shows_the_versions_for_its_size():
+    """The 12.3″ (1920x720) shows Lumen, Arena, Encore, Almanac and the round report in their
+    versions for it, laid out for its height with larger type; any other panel the theme
+    itself, and a panel on end its version for that."""
+    for name in TWELVE:
+        for suffix, (size, model) in SIZES.items():
+            own = f"{name}-{suffix}"
+            assert theme_for(name, "landscape", size) == own
+            assert theme_for(name, "", size) == own
+            assert theme_for(own, "landscape", (1920, 480)) == name  # back on a bar
+            assert theme_for(own, "portrait", (480, 1920)) == f"{name}-vertical"
+            assert theme_for(own, "") == own  # the panel not known yet: as chosen
+            version = load_theme(find_theme(own))
+            assert ((version.width, version.height), version.model) == (size, model)
+        # one size's version on a panel of the other size: that size's own
+        assert theme_for(f"{name}-1920x720", "landscape", (1280, 720)) == f"{name}-1280x720"
+    assert theme_for("slate", "landscape", (1920, 720)) == "slate"  # none of its own
+
+
+def test_a_12_3_inch_panel_gets_its_versions_in_the_loop(isolated_home):
+    host = PluginHost()
+    config = demo_config(theme="lumen", modes={"idle": ModeConfig(on=False)})
+    config.device.model = "turing-12.3-usb"
+    loop, clock = loop_for(config, host=host)
+    try:
+        assert step_until(loop, clock, lambda: loop.status.theme == "lumen-1920x720")
+        assert loop.status.size == (1920, 720)
+        host.set_mode("game", by="game")
+        config.modes["game"] = ModeConfig(theme="arena")
+        assert step_until(loop, clock, lambda: loop.status.theme == "arena-1920x720")
+    finally:
+        loop.close()
+        host.close()
+
+
+@pytest.mark.parametrize("suffix", SIZES)
+@pytest.mark.parametrize("name", TWELVE)
+def test_the_versions_for_a_size_draw_whole_with_nothing_running_together(name, suffix):
+    """Larger type in the same width: nothing runs into anything it did not touch on the bar
+    (the frame rate's figure ran into the words beside it), and nothing past the frame."""
+    import json
+
+    from test_libre_themes import drawn, overlapping
+
+    from libre_panel.theme.model import builtin_themes_dir
+
+    def draw(theme_id):
+        folder = builtin_themes_dir() / theme_id
+        return drawn(json.loads((folder / "theme.json").read_text("utf-8")), folder)
+
+    (width, height), _ = SIZES[suffix]
+    theme, renderer, frame, boxes = draw(f"{name}-{suffix}")
+    assert frame.size == (width, height) and theme.warnings == [] and renderer.warnings == []
+    for key, (x, y, w, h) in boxes.items():
+        assert x >= 0 and y >= 0 and x + w <= width and y + h <= height, (key, (x, y, w, h))
+    bar, _, _, bar_boxes = draw(name)
+    new = overlapping(theme, boxes) - overlapping(bar, bar_boxes)
+    assert not new, sorted(tuple(sorted(pair)) for pair in new)

@@ -983,6 +983,21 @@ def test_look_notices_and_ridge_frames(app_url):
         expect(page.locator(".look-advanced")).to_have_count(0)
 
 
+def test_look_offers_the_switches_of_the_theme_and_keeps_the_choice_in_the_settings(app_url):
+    with browser_page(app_url, "look") as page:
+        page.wait_for_selector(".look-side .finish-tile")
+        expect(page.get_by_text("This theme's switches")).to_have_count(0)  # it has none
+        frames = "{frames: {label: 'Frames around every part', on: true}}"
+        js(page, f"window.libre.doc.edit(null, (theme) => {{ theme.switches = {frames}; }})")
+        toggle = page.get_by_role("switch", name="Frames around every part")
+        expect(toggle).to_have_attribute("aria-checked", "true")  # as the theme begins
+        toggle.click()
+        base = js(page, "window.libre.store.get().doc.id").removesuffix("-vertical")
+        switches = "window.libre.store.get().settings?.config?.switches"
+        page.wait_for_function(f"{switches}?.[{base!r}]?.frames === false")  # in config.toml
+        expect(toggle).to_have_attribute("aria-checked", "false")
+
+
 def test_look_shows_a_test_notice_on_the_preview(app_url):
     with browser_page(app_url, "look") as page:
         page.wait_for_selector(".look-picture img")

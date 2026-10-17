@@ -2145,7 +2145,14 @@
     "calm animation movement still slow serial gliding fades": "calmo animação movimento parado lento serial deslizar transições",
     "{port} may be a Turing panel (rev. C). Other USB devices have the same USB ids, so Libre Panel talks to it only once you say which panel it is:": "{port} pode ser um painel Turing (rev. C). Outros dispositivos USB têm os mesmos IDs USB, então o Libre Panel só fala com ele depois que você disser qual painel é:",
     "None of them": "Nenhum deles",
-    "A device has the USB ids of a Turing panel (rev. C), which other USB devices have too. Is it one of these panels?": "Um dispositivo tem os IDs USB de um painel Turing (rev. C), que outros dispositivos USB também têm. É um destes painéis?"
+    "A device has the USB ids of a Turing panel (rev. C), which other USB devices have too. Is it one of these panels?": "Um dispositivo tem os IDs USB de um painel Turing (rev. C), que outros dispositivos USB também têm. É um destes painéis?",
+    "This theme's switches": "Opções deste tema",
+    "They hold for every version of the theme, on any panel.": "Valem para cada versão do tema, em qualquer painel.",
+    "Frames around every part": "Moldura em volta de cada parte",
+    "Dark when Libre Panel quits": "Escuro ao fechar o Libre Panel",
+    "When Libre Panel quits, Windows shutting down too, the panel shows black and its light goes off; it lights up again when Libre Panel starts. Off: it keeps the last picture.": "Quando o Libre Panel fecha, inclusive ao desligar o Windows, o painel mostra preto e sua luz se apaga; ele acende de novo quando o Libre Panel inicia. Desligado: mantém a última imagem.",
+    "the panel's light off when it quits": "luz do painel apagada ao fechar",
+    "dark off black quit close exit shutdown sleep screen off backlight": "escuro desligado preto sair fechar desligar suspender tela desligada luz de fundo"
   },
   "fields": {
     "align": "Alinhamento",

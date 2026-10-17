@@ -38,6 +38,7 @@ from libre_panel.theme.model import (
     ThemeError,
     find_theme,
     load_theme,
+    switches_for,
     theme_for,
 )
 
@@ -190,6 +191,9 @@ class RunStatus:
     # Where the screens in turn stand (None while there are none, or they are off): the step's
     # index and theme, and the seconds left of it
     sequence: dict[str, Any] | None = None
+    # the size of the panel's frames where it is known (the app shows each theme in its
+    # version for it: theme.model.theme_for)
+    size: tuple[int, int] | None = None
     detail: str = ""  # why the panel is not available
     frames: int = 0
     mode: str | None = None  # set by a service, e.g. "game"
@@ -300,13 +304,28 @@ class _Link:
 
 
 def _theme_name(
-    config: Config, host: Any, default: str | None = None, rotation: Rotation | None = None
+    config: Config,
+    host: Any,
+    default: str | None = None,
+    rotation: Rotation | None = None,
+    reported: PanelModel | None = None,
 ) -> str:
     """A theme a service shows, else the active mode's theme, else the step of the screens in
     turn that is due (``rotation`` follows them), else config.toml's; where that names none,
-    the panel's own ``default``. Each in its version for the way the panel is mounted
-    (``device.orientation``: Lumen Vertical for Lumen on a panel on end)."""
-    return theme_for(_named(config, host, default, rotation), config.device.orientation)
+    the panel's own ``default``. Each in its version for the panel: for its size (Lumen for
+    the 12.3" on a 12.3"), else for the way it is mounted (``device.orientation``: Lumen
+    Vertical for Lumen on a panel on end)."""
+    named = _named(config, host, default, rotation)
+    return theme_for(named, config.device.orientation, panel_size(config, reported))
+
+
+def panel_size(config: Config, reported: PanelModel | None = None) -> tuple[int, int] | None:
+    """The size of the panel's frames, as far as it is known without looking on the bus: the
+    configured model's, else the one the display reported; turned as it is mounted."""
+    panel = find_model(config.device.model) or reported
+    if panel is None:
+        return None
+    return panel.size("portrait" if config.device.orientation == "portrait" else "landscape")
 
 
 def _named(config: Config, host: Any, default: str | None, rotation: Rotation | None) -> str:
@@ -544,12 +563,18 @@ class MainLoop:
         panel = panel_model(config.device, self.reported)
         self.default = status.default_theme = default_theme(panel)
         named = theme_for(
-            config.theme if config.theme_given else self.default, config.device.orientation
+            config.theme if config.theme_given else self.default,
+            config.device.orientation,
+            panel_size(config, self.reported),
         )
         # the screens in turn, on the loop's clock
         self.rotation = Rotation(clock)
         self.pages = modes.PageSwitch(clock)  # music's page, the idle clock's
-        shown = _theme_name(config, host, self.default, self.rotation) if not once else named
+        shown = (
+            _theme_name(config, host, self.default, self.rotation, self.reported)
+            if not once
+            else named
+        )
         self.refused: str | None = None  # a requested theme that failed to load
         status.missing_theme = ""
         try:
@@ -654,13 +679,15 @@ class MainLoop:
         renderer.place = _place(config)
         renderer.fan_choices = fan.Choices.of(config)
         renderer.symbols = config.symbols
+        renderer.switches = switches_for(theme, config.switches)
         return renderer
 
     @staticmethod
     def _warm_key(theme: Theme, config: Config) -> Any:
         theme_file = _theme_file(theme)
         stamp = _Watcher._stamp(theme_file) if theme_file else None
-        return (str(theme.root), stamp, theme.name, config.fps > 1, config.symbols)
+        switches = tuple(sorted(switches_for(theme, config.switches).items()))
+        return (str(theme.root), stamp, theme.name, config.fps > 1, config.symbols, switches)
 
     def _warmed(
         self, config: Config, host: Any, shown: str, refused: str | None, watcher: _Watcher,
@@ -670,13 +697,14 @@ class MainLoop:
         warmed up in a thread of its own first (:class:`_Warmup`) while this
         one goes on; nothing to switch to, or a theme that fails, goes ahead."""
         pending = watcher.pending()
-        wanted = _theme_name(config, host, self.default, self.rotation)
+        wanted = _theme_name(config, host, self.default, self.rotation, self.reported)
         if not pending and wanted in (shown, refused):
             return True
         try:
             fresh = load_config(config.path) if pending and config.path else config
             default = self._default_for(fresh)
-            theme = load_theme(find_theme(_theme_name(fresh, host, default, self.rotation)))
+            fresh_name = _theme_name(fresh, host, default, self.rotation, self.reported)
+            theme = load_theme(find_theme(fresh_name))
         except (ConfigError, ThemeError):
             return True  # the switch says why
         if fresh.language != config.language:
@@ -718,6 +746,7 @@ class MainLoop:
             renderer.continuous, renderer.fps, renderer.sample = continuous, fps, sample
             renderer.fan_choices = fan.Choices.of(config)  # their rotors, warmed as shown
             renderer.symbols = config.symbols  # and the symbols in their look
+            renderer.switches = switches_for(theme, config.switches)  # and as switched
             # widget by widget between the panel's frames, not while one is drawn
             renderer.warm(snapshot, now, pause=lambda: self.idle.wait(0.1))
             return renderer, motion
@@ -848,8 +877,9 @@ class MainLoop:
             # transition says otherwise (Transition.on_switch: follow or restart).
             if host is not None:
                 self._follow_pages(config, host, snapshot)
-            wanted = _theme_name(config, host, default, self.rotation)
+            wanted = _theme_name(config, host, default, self.rotation, reported)
             status.sequence = _sequence_state(config, self.rotation)
+            status.size = panel_size(config, reported)
             mode = host.mode if host is not None else None
             playing = blend
             policy = switch_policy(blend[0], wanted, mode, began_in) if blend else None
@@ -862,7 +892,7 @@ class MainLoop:
                     if changed and config.path:
                         fresh = load_config(config.path)
                     fresh_default = self._default_for(fresh)
-                    wanted = _theme_name(fresh, host, fresh_default, self.rotation)
+                    wanted = _theme_name(fresh, host, fresh_default, self.rotation, reported)
                     new_theme = load_theme(find_theme(wanted))
                 except (ConfigError, ThemeError) as exc:
                     log.warning("keeping theme %r: %s", shown, exc)  # e.g. half-written file
@@ -1017,6 +1047,25 @@ class MainLoop:
             interval = max(interval, min(0.5, next_sample - started))
         return max(0.0, interval - (self.clock() - started))
 
+    def go_dark(self) -> None:
+        """Libre Panel quits ([device] dark_on_quit): a black picture, and the panel's light
+        off, as turing-smart-screen-python turns these panels off (they have no command of
+        their own for it); the next start lights it again. A slow panel (USB serial) only has
+        its light turned off: a whole picture takes it up to half a minute."""
+        if not self.link.connected:
+            return
+        if not self.display.slow:
+            try:
+                self.display.show(Image.new("RGB", self.size, "black"), None)
+            except Exception as exc:  # noqa: BLE001 - the light goes off all the same
+                log.debug("no black picture before going dark: %s", exc)
+        try:
+            self.display.set_brightness(0)
+        except Exception as exc:  # noqa: BLE001 - quitting goes on
+            log.warning("the panel did not go dark: %s", exc)
+            return
+        log.info("the panel went dark: Libre Panel quits")
+
     def close(self) -> None:
         if self.host is not None:
             self.host.shown = None  # a paused panel shows no live picture...
@@ -1092,6 +1141,7 @@ def run(
     host: Any = None,
     on_config: Callable[[Config], None] | None = None,
     hang_log: Path | None = None,
+    quitting: Callable[[], bool] | None = None,
 ) -> None:
     """Main loop: read sensors at the theme's rate, render at ``config.fps`` so
     values glide between readings, and send only frames that changed. A
@@ -1101,7 +1151,9 @@ def run(
     ``status`` is kept up to date for status displays. ``host`` connects the
     services (a :class:`~libre_panel.plugins.PluginHost`); ``on_config`` hears
     about every config.toml that was loaded. ``hang_log``: where a step that hangs
-    writes where every thread stands (:class:`_HangWatch`).
+    writes where every thread stands (:class:`_HangWatch`). ``quitting`` says, when the loop
+    ends, whether Libre Panel quits: the panel then goes dark where ``[device] dark_on_quit``
+    says so.
     """
     stop = stop or threading.Event()
     loop = MainLoop(config, once=once, status=status, host=host, on_config=on_config)
@@ -1128,4 +1180,6 @@ def run(
     finally:
         watch.close()
         guards.stop()
+        if quitting is not None and loop.config.device.dark_on_quit and quitting():
+            loop.go_dark()
         loop.close()

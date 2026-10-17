@@ -2145,7 +2145,14 @@
     "calm animation movement still slow serial gliding fades": "tranquilo animación movimiento quieto lento serie deslizar fundidos",
     "{port} may be a Turing panel (rev. C). Other USB devices have the same USB ids, so Libre Panel talks to it only once you say which panel it is:": "{port} puede ser un panel Turing (rev. C). Otros dispositivos USB tienen los mismos identificadores USB, así que Libre Panel solo se comunica con él cuando dices qué panel es:",
     "None of them": "Ninguno",
-    "A device has the USB ids of a Turing panel (rev. C), which other USB devices have too. Is it one of these panels?": "Un dispositivo tiene los identificadores USB de un panel Turing (rev. C), que también tienen otros dispositivos USB. ¿Es uno de estos paneles?"
+    "A device has the USB ids of a Turing panel (rev. C), which other USB devices have too. Is it one of these panels?": "Un dispositivo tiene los identificadores USB de un panel Turing (rev. C), que también tienen otros dispositivos USB. ¿Es uno de estos paneles?",
+    "This theme's switches": "Interruptores de este tema",
+    "They hold for every version of the theme, on any panel.": "Valen para cada versión del tema, en cualquier panel.",
+    "Frames around every part": "Un marco alrededor de cada parte",
+    "Dark when Libre Panel quits": "Oscuro al cerrar Libre Panel",
+    "When Libre Panel quits, Windows shutting down too, the panel shows black and its light goes off; it lights up again when Libre Panel starts. Off: it keeps the last picture.": "Al cerrar Libre Panel, también al apagar Windows, el panel muestra negro y su luz se apaga; vuelve a encenderse cuando Libre Panel arranca. Desactivado: conserva la última imagen.",
+    "the panel's light off when it quits": "luz del panel apagada al cerrar",
+    "dark off black quit close exit shutdown sleep screen off backlight": "oscuro apagado negro salir cerrar apagar suspender pantalla apagada retroiluminación"
   },
   "fields": {
     "align": "Alineación",

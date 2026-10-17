@@ -36,7 +36,7 @@ import {
 import { QUICK_SENSORS, SensorButton, Sparkline, formatValue, sensorName, shortSensorName, useReadings } from "./sensors.js";
 import { uploadAsset } from "../../core/actions.js";
 import { hardwareParts, partOfSensor } from "../../core/hardware.js";
-import { VERTICAL } from "../../core/orientation.js";
+import { versionBase } from "../../core/orientation.js";
 import { panelName, currentModel } from "../../shell/panel-popover.js";
 import { HardwareNameField } from "../settings/hardware.js";
 import { navigate } from "../../shell/views.js";
@@ -882,10 +882,9 @@ function Background({ theme }) {
 function ThemeInspector({ theme }) {
   const [page, setPage] = usePage();
   const builtin = useStore((s) => s.doc?.builtin); // why saving it asks for a name
-  // a theme's version for a panel mounted vertically (Lumen Vertical): the one it goes with
-  const versionOf = useStore((s) =>
-    (s.versions || []).some((item) => item.id === s.doc?.id) ? s.doc.id.slice(0, -VERTICAL.length) : null,
-  );
+  // a theme's version for a panel on end or of a size of its own (Lumen Vertical): the one it
+  // goes with
+  const versionOf = useStore((s) => ((s.versions || []).some((item) => item.id === s.doc?.id) ? versionBase(s.doc.id) : null));
   const specs = store.get().specs;
   const hasModules = Boolean(theme.grid || theme.widgets.some(isModule));
   if (page === "details") return html`<${ThemeDetails} theme=${theme} onBack=${() => setPage("main")} />`;
