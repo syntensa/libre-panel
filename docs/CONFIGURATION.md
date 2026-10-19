@@ -358,15 +358,16 @@ sources you want in front of psutil in any other list.
 
 | Source | Gives | Where |
 |---|---|---|
-| `load` | `cpu.load` and `gpu.load`, measured ten times a second | CPU everywhere, GPU on Windows (any vendor) and on Linux (AMD, NVIDIA) |
+| `load` | `cpu.load`, each core's `cpu.core.<n>.load` and `gpu.load`, measured ten times a second | CPU everywhere, GPU on Windows (any vendor) and on Linux (AMD, NVIDIA) |
 | `psutil` | CPU, memory, drives, network, battery, the busiest programs; temperatures and fans where the system has them (on Linux the `linux` source reads those instead) | everywhere |
 | `linux` | temperatures and fans of the kernel's chips (processor, mainboard, drives, memory), the processor's power and the graphics card (`gpu.*`), without root; see [below](#linux-sensors-and-panel-access) | Linux (in its default list) |
 | `librehardwaremonitor` | temperatures, power, clocks and fans of CPU, GPU and mainboard | Windows (in its default list); the Windows downloads carry what it needs, see [below](#windows-sensors-gpu-power-fans) |
 | `audio` | `audio.volume` (0 while muted) and `audio.muted` (1 or 0) of the default output | Windows, Linux (`wpctl` or `pactl`); in the default list of both |
 
-**Fast load** (`load`): `cpu.load` and, on Windows, `gpu.load` are measured in
-a background thread ten times a second and read on every frame, so bars and
-graphs follow the load as it happens. The other sources give it only once per
+**Fast load** (`load`): `cpu.load`, each core's load and, on Windows,
+`gpu.load` are measured in a background thread ten times a second and read on
+every frame, so bars and graphs follow the load as it happens (a core's over
+the last 0.3 s: a tenth of a second alone flickers). The other sources give it only once per
 reading (`refresh_ms`) or once a second. It needs no other program and no
 administrator rights.
 

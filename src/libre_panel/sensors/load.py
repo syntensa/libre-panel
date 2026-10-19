@@ -1,4 +1,4 @@
-"""CPU and GPU load ten times a second, with no LibreHardwareMonitor and no admin rights.
+"""CPU, core and GPU load ten times a second, with no LibreHardwareMonitor and no admin rights.
 
 Other sources give the load once a second (LibreHardwareMonitor) or only when
 the panel asks (psutil), so bars and graphs run behind what the computer does.
@@ -8,6 +8,8 @@ every frame (``every_frame``). Put it before the other sources in
 
 - ``cpu.load``: on Windows ``GetSystemTimes`` (idle time against total time
   between two samples, about 60 µs a sample), elsewhere ``psutil.cpu_percent``.
+- ``cpu.core.N.load``: every core's load over the last 0.3 s (one sample alone
+  flickers), from psutil's times per core, under the names psutil's source gives.
 - ``gpu.load`` (Windows, any vendor): the performance counters that Task
   Manager shows, read through PDH. There is one 3D engine counter per process
   and engine; they are summed per engine, and the card's load is its busiest
@@ -29,6 +31,7 @@ import logging
 import sys
 import threading
 import time
+from collections import deque
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
@@ -43,12 +46,16 @@ ADAPTER_SECONDS = 60.0  # the graphics card is chosen again every minute
 STALE_SECONDS = 2.0  # a reading older than this is dropped, not shown frozen
 IDLE_SECONDS = 60.0  # nobody looked for this long: the thread ends, and starts on demand
 RETRY_SECONDS = 60.0  # a sampler that could not be made is tried again after this long
+CORE_SECONDS = 0.3  # a core's load is its load over this long
 
 # The labels PsutilProvider gives cpu.load, so lists and themes look the same.
 _LABELS = {"cpu.load": "CPU load", "gpu.load": "GPU load"}
+CORES = "cpu.core."  # every core's load: cpu.core.1.load, cpu.core.2.load ...
+_KEYS = (*_LABELS, CORES)
 _NO_SAMPLER = {
     "cpu.load": "no CPU load from psutil",
     "gpu.load": "no GPU load from the performance counters",
+    CORES: "no load per core from psutil",
 }
 
 _ENGINE_COUNTER = r"\GPU Engine(*engtype_3D)\Utilization Percentage"
@@ -117,7 +124,7 @@ def adapter_load(adapter: str, engines: list[tuple[str, float]]) -> float:
 
 
 class _Sampler(Protocol):
-    def read(self) -> float | None: ...
+    def read(self) -> float | list[float] | None: ...
     def close(self) -> None: ...
 
 
@@ -133,6 +140,49 @@ class _PsutilCpu:
 
     def read(self) -> float | None:
         return self._cpu_percent(interval=None)
+
+    def close(self) -> None:
+        pass
+
+
+def _busy(times: Any) -> tuple[float, float]:
+    """A core's busy and total time from psutil's times of it (as ``cpu_percent`` counts)."""
+    total = sum(times) - getattr(times, "guest", 0.0) - getattr(times, "guest_nice", 0.0)
+    return total - times.idle - getattr(times, "iowait", 0.0), total
+
+
+class _Cores:
+    """Every core's load over the last :data:`CORE_SECONDS`, from psutil's times per core
+    (``cpu_times`` keeps nothing between calls: no other reading is disturbed)."""
+
+    def __init__(self, times: Callable[[], list[Any]] | None = None,
+                 clock: Callable[[], float] = time.monotonic) -> None:  # fmt: skip
+        if times is None:
+            import psutil
+
+            def times() -> list[Any]:
+                return psutil.cpu_times(percpu=True)
+
+        self._times, self._clock = times, clock
+        self._past: deque[tuple[float, list[tuple[float, float]]]] = deque()
+        self._past.append((clock(), [_busy(t) for t in times()]))
+
+    def read(self) -> list[float] | None:
+        now, sample = self._clock(), [_busy(t) for t in self._times()]
+        past = self._past
+        past.append((now, sample))
+        while len(past) > 2 and now - past[1][0] >= CORE_SECONDS:
+            past.popleft()  # (the oldest sample that is at least CORE_SECONDS old stays)
+        before = past[0][1]
+        if len(before) != len(sample):  # a core more or less: start again
+            past.clear()
+            past.append((now, sample))
+            return None
+        loads = []
+        for (busy0, total0), (busy1, total1) in zip(before, sample, strict=True):
+            spent = total1 - total0
+            loads.append(100.0 * (busy1 - busy0) / spent if spent > 0 else 0.0)
+        return loads
 
     def close(self) -> None:
         pass
@@ -311,23 +361,33 @@ def _gpu_sampler(platform: str = sys.platform, prefer: str = "") -> _Sampler | N
 def _open(key: str, prefer: str = "") -> _Sampler | None:
     if key == "cpu.load":
         return _cpu_sampler()
+    if key == CORES:
+        return _Cores()
     return _gpu_sampler(prefer=prefer) if prefer else _gpu_sampler()
 
 
-def _measure(sampler: _Sampler) -> float | None:
+def _measure(sampler: _Sampler) -> float | list[float] | None:
     try:
         value = sampler.read()
     except Exception:  # noqa: BLE001 - one failed sample is no reason to stop
         log.debug("load: a sample failed", exc_info=True)
         return None
+    if isinstance(value, list):  # one per core
+        return [max(0.0, min(100.0, float(v))) for v in value]
     return None if value is None else max(0.0, min(100.0, float(value)))
+
+
+def _family(key: str) -> str:
+    """The key a reading is measured under (every core's under :data:`CORES`)."""
+    return CORES if key.startswith(CORES) else key
 
 
 # -- the provider ------------------------------------------------------------------
 
 
 class LoadProvider(SensorProvider):
-    """``cpu.load`` and ``gpu.load``, measured ten times a second while a theme shows them."""
+    """``cpu.load``, ``cpu.core.N.load`` and ``gpu.load``, measured ten times a second while a
+    theme shows them."""
 
     name = "load"
     # In video mode the bars follow the load on every frame; on the PNG path each
@@ -363,9 +423,14 @@ class LoadProvider(SensorProvider):
             self._thread = threading.Thread(target=self._run, name="sensors-load", daemon=True)
             self._thread.start()
 
-    def _store(self, key: str, value: float, at: float) -> None:
+    def _store(self, key: str, value: float | list[float], at: float) -> None:
         with self._lock:
-            self._values[key] = (at, Reading(key, value, "%", _LABELS[key]))
+            if isinstance(value, list):  # every core's, named as PsutilProvider names them
+                for n, load in enumerate(value, start=1):
+                    core = f"{CORES}{n}.load"
+                    self._values[core] = (at, Reading(core, load, "%", f"Core {n}"))
+            else:
+                self._values[key] = (at, Reading(key, value, "%", _LABELS[key]))
 
     def _make(self, key: str) -> _Sampler | None:
         """A new sampler for ``key``; None if this machine has none (said once)."""
@@ -387,7 +452,7 @@ class LoadProvider(SensorProvider):
         try:
             while not self._stop.is_set():
                 now = time.monotonic()
-                shown = [key for key in _LABELS if wanted(key)]
+                shown = [key for key in _KEYS if wanted(key)]
                 if shown:
                     looked = now
                 elif now - looked > IDLE_SECONDS:
@@ -413,7 +478,7 @@ class LoadProvider(SensorProvider):
                     if value is not None:
                         self._store(key, value, now)
                 with self._lock:  # what no theme shows any more goes
-                    for key in [key for key in self._values if key not in shown]:
+                    for key in [key for key in self._values if _family(key) not in shown]:
                         del self._values[key]
                 self._stop.wait(SAMPLE_SECONDS)
         finally:
@@ -428,7 +493,7 @@ class LoadProvider(SensorProvider):
     def read(self) -> dict[str, Reading]:
         thread = self._thread
         if thread is None or not thread.is_alive():
-            if self._stop.is_set() or not (wanted("cpu.load") or wanted("gpu.load")):
+            if self._stop.is_set() or not any(wanted(key) for key in _KEYS):
                 return {}
             self._start()
         now = time.monotonic()

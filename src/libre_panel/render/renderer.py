@@ -598,6 +598,9 @@ class Renderer:
         self.sample: tuple[float, float] = (0.0, 1.0)  # (when, seconds to the next)
         self._strips: dict[str, _Strips] = {}  # graph id -> its strips (video mode)
         self._cache: dict[str, tuple[Any, Piece]] = {}
+        # a gliding list's bars and its text, and the two as one (_joined)
+        self._joins: dict[str, tuple[Piece, Piece, Piece]] = {}
+        self._list_bars: OrderedDict[tuple[Any, ...], Image.Image] = OrderedDict()
         self._texts: OrderedDict[tuple[str, str, str], Piece] = OrderedDict()
         self._glyphs: OrderedDict[tuple[Any, ...], Image.Image] = OrderedDict()
         self._glyph_lock = threading.Lock()
@@ -2002,6 +2005,7 @@ class Renderer:
     # -- fans --------------------------------------------------------------
 
     FANS = 512  # fan pieces kept: a fan that has turned once round costs a lookup
+    LIST_BARS = 1024  # the bars of lists kept: a core's bar that holds costs a lookup
 
     def _draw_fan(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         """A rotor that turns with the sensor's RPM, in a ring that shows the load. Its
@@ -2213,6 +2217,8 @@ class Renderer:
         lo, hi = widget["min"], widget["max"]
         if hi <= lo:  # the largest value shown fills the bar
             hi = max([lo + 1e-9] + [i.number for i in items if i.number is not None])
+        # the bars glide to a new reading, with the other bars and rings of its sensor
+        glide = widget["smooth"] and widget["levels"] and widget["style"] != "fans"
         rows = []
         for item in items:
             reading = item.reading
@@ -2231,10 +2237,44 @@ class Renderer:
                     )
                 except FormatError:
                     detail = ""
-            frac = _fraction(item.number, lo, hi, widget["scale"])
+            number = item.number
+            if glide and number is not None:
+                spring = {"type": "list", "sensor": item.key, "smooth": True, "min": lo, "max": hi}
+                number = self._eased(spring, number, now)
+            frac = _fraction(number, lo, hi, widget["scale"])
             rows.append((item.name, detail, text, round(frac, 3), _rule_color(widget, item.number)))
-        content = tuple(rows)
-        return self._cached(widget, content, lambda: self._list_piece(widget, rows))
+        texts = tuple(row[:3] + row[4:] for row in rows)  # what the text shows
+        if widget["style"] == "fans":  # the names and numbers stay; the fans turn on them
+            piece = self._cached(widget, texts, lambda: self._list_piece(widget, rows))
+            return self._list_turning(widget, piece, items, hi, now) if piece and items else piece
+        if not (glide and self.animate):
+            return self._cached(widget, tuple(rows), lambda: self._list_piece(widget, rows))
+        # gliding bars: drawn anew while they move, on their own; the text stays as it is
+        wid = widget["id"]
+        text = self._cached(widget, texts, lambda: self._list_piece(widget, rows, "text"))
+        levels = self._cached({**widget, "id": f"{wid}\0levels"}, tuple(rows),
+                              lambda: self._list_piece(widget, rows, "levels"))  # fmt: skip
+        return self._joined(wid, levels, text)
+
+    def _joined(self, wid: str, below: Piece | None, above: Piece | None) -> Piece | None:
+        """Two pieces of a widget as one, ``above`` on ``below`` (kept while both stay)."""
+        if below is None or above is None:
+            return below or above
+        hit = self._joins.get(wid)
+        if hit is not None and hit[0] is below and hit[1] is above:
+            return hit[2]
+        x0, y0 = min(below.x, above.x), min(below.y, above.y)
+        x1 = max(below.x + below.layer.width, above.x + above.layer.width)
+        y1 = max(below.y + below.layer.height, above.y + above.layer.height)
+        if (x0, y0, x1 - x0, y1 - y0) == (below.x, below.y, *below.layer.size):
+            layer = below.layer.copy()
+        else:
+            layer = Image.new("RGBA", (x1 - x0, y1 - y0), (0, 0, 0, 0))
+            layer.alpha_composite(below.layer, (below.x - x0, below.y - y0))
+        layer.alpha_composite(above.layer, (above.x - x0, above.y - y0))
+        piece = replace(below, layer=layer, x=x0, y=y0)
+        self._joins[wid] = (below, above, piece)
+        return piece
 
     def _list_room(self, widget: dict[str, Any], count: int) -> int:
         """How many items fit."""
@@ -2245,6 +2285,8 @@ class Renderer:
             room = int(w // max(4, fs * 0.45))
         elif style == "cells":
             room = int((w // 12) * (h // 12))
+        elif style == "fans":
+            room = self._list_fan_grid(widget, limit)[5]
         else:
             columns, _w, per_column, _h, _beside = self._list_layout(widget, count)
             room = columns * per_column
@@ -2270,11 +2312,11 @@ class Renderer:
                 break
         return columns, column_w, per_column, row_h, beside
 
-    def _list_text(self, layer: Image.Image, text: str, x: float, cap_top: float, size: float,
-                   color: str, font: str, align: str = "left", width: float = 0,
+    def _list_text(self, layer: Image.Image | None, text: str, x: float, cap_top: float,
+                   size: float, color: str, font: str, align: str = "left", width: float = 0,
                    label: bool = False) -> None:  # fmt: skip
-        """Text on a list's layer, its capitals' top at ``cap_top``."""
-        if not text:
+        """Text on a list's layer, its capitals' top at ``cap_top`` (no layer: none)."""
+        if not text or layer is None:
             return
         size = max(6, round(size))
         part = {
@@ -2285,39 +2327,56 @@ class Renderer:
         piece = self._text_piece(part, text, color)
         self._paste(layer, piece.layer, piece.x, piece.y)
 
-    def _list_bar(self, layer: Image.Image, widget: dict[str, Any], frac: float,
+    def _list_bar(self, layer: Image.Image | None, widget: dict[str, Any], frac: float,
                   rule: str | None, box: tuple[float, float, float, float],
                   direction: str = "right") -> None:  # fmt: skip
         x, y, w, h = (round(v) for v in box)
-        if w < 2 or h < 2:
+        if w < 2 or h < 2 or layer is None:
             return
-        accent = self.color(widget["color2"])
-        track = self.color(widget["background"])
-        deep = _lerp(accent, track, 0.55) if track else accent
-        bar = {
-            "radius": min(w, h) // 2, "direction": direction, "segments": 0, "segment_gap": 0,
-            "color": "#{:02x}{:02x}{:02x}{:02x}".format(*deep), "color2": widget["color2"],
-            "background": widget["background"],
-        }  # fmt: skip
-        piece = self._bar_piece(bar, frac, self._paint(bar, rule), x, y, w, h)
-        self._paste(layer, piece.layer, x, y)
+        steps = (h if direction in ("up", "down") else w) * SUPERSAMPLE
+        frac = round(frac * steps) / steps  # (to what can be seen: a gliding bar's are kept)
+        key = (w, h, direction, frac, rule, widget["color2"], widget["background"])
+        image = self._list_bars.get(key)
+        if image is None:
+            accent = self.color(widget["color2"])
+            track = self.color(widget["background"])
+            deep = _lerp(accent, track, 0.55) if track else accent
+            bar = {
+                "radius": min(w, h) // 2, "direction": direction, "segments": 0,
+                "segment_gap": 0, "color": "#{:02x}{:02x}{:02x}{:02x}".format(*deep),
+                "color2": widget["color2"], "background": widget["background"],
+            }  # fmt: skip
+            image = self._bar_piece(bar, frac, self._paint(bar, rule), x, y, w, h).layer
+            self._list_bars[key] = image
+            while len(self._list_bars) > self.LIST_BARS:
+                self._list_bars.popitem(last=False)
+        else:
+            self._list_bars.move_to_end(key)
+        self._paste(layer, image, x, y)
 
-    def _list_piece(self, widget: dict[str, Any], rows: list[tuple]) -> Piece:
+    def _list_piece(self, widget: dict[str, Any], rows: list[tuple],
+                    part: str = "all") -> Piece:  # fmt: skip
+        """The list drawn: all of it, or its ``part`` alone, the "text" or the "levels" (bars
+        and tiles; they glide, the text stays: :meth:`_draw_list`)."""
         w, h = max(1, widget["w"]), max(1, widget["h"])
         margin = max(2, widget["font_size"] // 3)  # room for glyphs that overhang
         layer = Image.new("RGBA", (w + 2 * margin, h + 2 * margin), (0, 0, 0, 0))
         inner = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        texts = inner if part != "levels" else None
+        levels = inner if part != "text" else None
         if not rows:
             if widget["empty"]:
                 size = max(7, widget["font_size"] * 0.7)
-                self._list_text(inner, widget["empty"], w / 2, h / 2 - 0.35 * size, size,
+                self._list_text(texts, widget["empty"], w / 2, h / 2 - 0.35 * size, size,
                                 widget["muted"], widget["label_font"], "center", w)  # fmt: skip
         elif widget["style"] == "columns":
-            self._list_columns(inner, widget, rows)
+            self._list_columns(texts, levels, widget, rows)
         elif widget["style"] == "cells":
-            self._list_cells(inner, widget, rows)
+            self._list_cells(texts, levels, widget, rows)
+        elif widget["style"] == "fans":
+            self._list_fan_texts(texts, widget, rows)
         else:
-            self._list_rows(inner, widget, rows)
+            self._list_rows(texts, levels, widget, rows)
         layer.alpha_composite(inner, (margin, margin))
         x, y = widget["x"], widget["y"]
         return Piece(layer, x - margin, y - margin, [x, y, w, h])
@@ -2325,7 +2384,8 @@ class Renderer:
     def _list_name(self, widget: dict[str, Any], name: str) -> str:
         return name.upper() if widget["uppercase"] else name
 
-    def _list_rows(self, layer: Image.Image, widget: dict[str, Any], rows: list[tuple]) -> None:
+    def _list_rows(self, layer: Image.Image | None, levels: Image.Image | None,
+                   widget: dict[str, Any], rows: list[tuple]) -> None:  # fmt: skip
         h, fs = widget["h"], max(6, widget["font_size"])
         columns, column_w, _per, row_h, beside = self._list_layout(widget, len(rows))
         columns = max(1, min(columns, len(rows)))
@@ -2354,7 +2414,7 @@ class Renderer:
                 self._list_text(layer, self._list_name(widget, name), x0, mid - 0.35 * ls, ls,
                                 widget["muted"], widget["label_font"], width=name_w - fs * 0.4,
                                 label=widget["uppercase"])  # fmt: skip
-                self._list_bar(layer, widget, frac, rule,
+                self._list_bar(levels, widget, frac, rule,
                                (x0 + name_w, mid - bar_h / 2,
                                 column_w - name_w - value_w - fs * 0.5, bar_h))  # fmt: skip
                 self._list_text(layer, text, x0 + column_w, mid - 0.35 * fs, fs, color,
@@ -2378,10 +2438,11 @@ class Renderer:
             self._list_text(layer, text, x0 + column_w, cap, fs, color, widget["font"], "right",
                             column_w * 0.6)  # fmt: skip
             if bars:
-                self._list_bar(layer, widget, frac, rule,
+                self._list_bar(levels, widget, frac, rule,
                                (x0, cap + 0.7 * fs + fs * 0.45, column_w, bar_h))  # fmt: skip
 
-    def _list_columns(self, layer: Image.Image, widget: dict[str, Any], rows: list[tuple]) -> None:
+    def _list_columns(self, layer: Image.Image | None, levels: Image.Image | None,
+                      widget: dict[str, Any], rows: list[tuple]) -> None:  # fmt: skip
         """Upright bars side by side (the cores of a processor)."""
         w, h, fs = widget["w"], widget["h"], max(6, widget["font_size"])
         slot = w / len(rows)
@@ -2395,7 +2456,7 @@ class Renderer:
         bar_w = max(2, min(slot * 0.62, slot - 2, fs * 1.3))
         for i, (_name, _detail, text, frac, rule) in enumerate(rows):
             cx = slot * i + slot / 2
-            self._list_bar(layer, widget, frac, rule,
+            self._list_bar(levels, widget, frac, rule,
                            (cx - bar_w / 2, top, bar_w, bottom - top), "up")  # fmt: skip
             if show_values:
                 self._list_text(layer, text, cx, 0, vs, rule or widget["color"], widget["font"],
@@ -2404,7 +2465,73 @@ class Renderer:
                 self._list_text(layer, names[i], cx, h - ls * 0.7, ls, widget["muted"],
                                 widget["label_font"], "center", slot)  # fmt: skip
 
-    def _list_cells(self, layer: Image.Image, widget: dict[str, Any], rows: list[tuple]) -> None:
+    @staticmethod
+    def _list_fan_grid(widget: dict[str, Any],
+                       count: int) -> tuple[int, int, float, float, int, int]:  # fmt: skip
+        """Fans side by side, as Lumen's (a 50 px fan beside a 26 px number): for ``count`` of
+        them the columns and lines (as even as they go: 2 + 2, not 3 + 1), the width and
+        height of each place, the fan's size, and how many fit at most."""
+        w, h, fs = max(1, widget["w"]), max(1, widget["h"]), max(6, widget["font_size"])
+        size = max(12, round(fs * 1.9))
+        fit = widget["columns"] if widget["columns"] > 0 else max(1, int(w // (size + fs * 4.2)))
+        lines = max(1, int((h + fs * 0.6) // (size + fs * 0.6)))
+        count = max(1, min(count, fit * lines))
+        used = -(-count // fit)
+        columns = fit if widget["columns"] > 0 else -(-count // used)
+        pitch = min(h / used, (size + fs * 0.6) * 1.5)
+        return columns, used, w / columns, pitch, size, fit * lines
+
+    def _list_fan_places(self, widget: dict[str, Any], count: int) -> list[tuple[float, float]]:
+        """Where each fan stands (its top left on the list), the lines in the middle."""
+        columns, used, cell_w, pitch, size, _room = self._list_fan_grid(widget, count)
+        top = (widget["h"] - pitch * used) / 2 + (pitch - size) / 2
+        return [((i % columns) * cell_w, top + (i // columns) * pitch) for i in range(count)]
+
+    def _list_fan_texts(self, layer: Image.Image | None, widget: dict[str, Any],
+                        rows: list[tuple]) -> None:  # fmt: skip
+        """Each fan's name and number beside the place it turns in (:meth:`_list_turning`)."""
+        fs = max(6, widget["font_size"])
+        _c, _l, cell_w, _p, size, _r = self._list_fan_grid(widget, len(rows))
+        ls = max(6, fs * 0.62)  # names
+        block = 0.7 * ls + 0.55 * fs + 0.7 * fs
+        width = cell_w - size - fs * 0.65
+        places = self._list_fan_places(widget, len(rows))
+        for (x0, y0), (name, _detail, text, _frac, rule) in zip(places, rows, strict=True):
+            x, cap = x0 + size + fs * 0.35, y0 + (size - block) / 2
+            name = self._list_name(widget, name)
+            self._list_text(layer, name, x, cap, ls, widget["muted"], widget["label_font"],
+                            width=width, label=widget["uppercase"])  # fmt: skip
+            self._list_text(layer, text, x, cap + 0.7 * ls + 0.55 * fs, fs,
+                            rule or widget["color"], widget["font"], width=width)  # fmt: skip
+
+    def _list_turning(self, widget: dict[str, Any], piece: Piece, items: list[lists.Item],
+                      max_rpm: float, now: float) -> Piece:  # fmt: skip
+        """The fans of a list of them, each turning with its speed (as a fan widget does),
+        on the names and numbers (``piece``, kept while they stay the same)."""
+        size = self._list_fan_grid(widget, len(items))[4]
+        color = self.color(widget["color2"])[:3]
+        frame = "ring" if widget["levels"] else "none"
+        layer = piece.layer.copy()
+        ox, oy = widget["x"] - piece.x, widget["y"] - piece.y
+        for (x0, y0), item in zip(self._list_fan_places(widget, len(items)), items, strict=True):
+            key = f"{widget['id']}\0{item.key}"
+            rotor = self._rotors.get(key)
+            if rotor is None:
+                rotor = self._rotors[key] = fan.Rotor(key)
+            look, paint = self.fan_choices.for_widget({"sensor": item.key})
+            rotor.blades = fan_looks.look(look).blades
+            if self.animate:
+                rotor.advance(item.number, max_rpm, now)
+                self.moving = self.moving or rotor.turning
+            else:
+                rotor.settle(item.number, max_rpm)
+            image = fan.fan_image(color, size, size, rotor, frame, look, paint)
+            x, y = ox + x0 + (size - image.width) / 2, oy + y0 + (size - image.height) / 2
+            self._paste(layer, image, round(x), round(y))
+        return replace(piece, layer=layer)
+
+    def _list_cells(self, layer: Image.Image | None, levels: Image.Image | None,
+                    widget: dict[str, Any], rows: list[tuple]) -> None:  # fmt: skip
         """A grid of tiles, each filled as high as its value (or just its number)."""
         w, h, fs = widget["w"], widget["h"], max(6, widget["font_size"])
         n = len(rows)
@@ -2420,9 +2547,6 @@ class Renderer:
         _size, columns, lines = best
         cell_w = (w - (columns - 1) * gap) / columns
         cell_h = (h - (lines - 1) * gap) / lines
-        s = SUPERSAMPLE
-        track = self.color(widget["background"])
-        accent = self.color(widget["color2"])
         names = [r[0] for r in rows]
         if widget["levels"]:
             names = lists.short_names(names)
@@ -2431,20 +2555,8 @@ class Renderer:
             x0, y0 = col * (cell_w + gap), row * (cell_h + gap)
             cw, ch = round(x0 + cell_w) - round(x0), round(y0 + cell_h) - round(y0)
             radius = min(cw, ch) * 0.16
-            tile, draw = self._canvas(cw, ch)
-            box = [0, 0, cw * s - 1, ch * s - 1]
-            if track:
-                draw.rounded_rectangle(box, radius=radius * s, fill=track)
-            if widget["levels"] and frac > 0:
-                fill = self.color(rule) if rule else accent
-                mask = Image.new("L", tile.size, 0)
-                ImageDraw.Draw(mask).rounded_rectangle(box, radius=radius * s, fill=255)
-                cut = Image.new("L", tile.size, 0)
-                ImageDraw.Draw(cut).rectangle([0, (1 - frac) * ch * s, cw * s, ch * s], fill=170)
-                mask = ImageChops.multiply(mask, cut)
-                tile.paste(Image.new("RGBA", tile.size, fill), (0, 0), mask)
-            tile = self._down(tile, cw, ch)
-            self._paste(layer, tile, round(x0), round(y0))
+            if levels is not None:
+                self._list_tile(levels, widget, (x0, y0, cw, ch), radius, frac, rule)
             vs = min(fs, ch * 0.34, cw / max(2.2, len(text) * 0.62))
             ls = max(6, min(vs * 0.62, ch * 0.2))
             with_name = ch >= vs * 0.7 + ls * 0.7 + ls * 1.6 and cw >= ls * 2 and ls >= 7.5
@@ -2458,6 +2570,27 @@ class Renderer:
                 cap += ls * 0.7 + ls * 0.7
             self._list_text(layer, text, cx, cap, vs, rule or widget["color"], widget["font"],
                             "center", cw * 0.9)  # fmt: skip
+
+    def _list_tile(self, layer: Image.Image, widget: dict[str, Any],
+                   box: tuple[float, float, int, int], radius: float, frac: float,
+                   rule: str | None) -> None:  # fmt: skip
+        """A tile of a list's cells, filled as high as its value."""
+        x0, y0, cw, ch = box
+        s = SUPERSAMPLE
+        track = self.color(widget["background"])
+        tile, draw = self._canvas(cw, ch)
+        corners = [0, 0, cw * s - 1, ch * s - 1]
+        if track:
+            draw.rounded_rectangle(corners, radius=radius * s, fill=track)
+        if widget["levels"] and frac > 0:
+            fill = self.color(rule) if rule else self.color(widget["color2"])
+            mask = Image.new("L", tile.size, 0)
+            ImageDraw.Draw(mask).rounded_rectangle(corners, radius=radius * s, fill=255)
+            cut = Image.new("L", tile.size, 0)
+            ImageDraw.Draw(cut).rectangle([0, (1 - frac) * ch * s, cw * s, ch * s], fill=170)
+            mask = ImageChops.multiply(mask, cut)
+            tile.paste(Image.new("RGBA", tile.size, fill), (0, 0), mask)
+        self._paste(layer, self._down(tile, cw, ch), round(x0), round(y0))
 
     # -- shapes ------------------------------------------------------------
 

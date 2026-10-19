@@ -530,6 +530,16 @@ function ModuleInspector({ widget }) {
             <//>`
           : null}
         ${items}
+        ${widget.module === "temps"
+          ? html`<${Field} label=${t("Fans")} hint=${t("at most so many, below or beside the temperatures where there is room; 0: none")}>
+              <${NumberField} label=${t("Fans")} value=${widget.fans ?? 6} min=${0} max=${12} onChange=${change("fans")} />
+            <//>
+            ${widget.fans !== 0
+              ? html`<${Field} label=${t("Which fans")} hint=${t('one per line: a sensor ("gpu.fan"), a pattern ("fan.*") and a name if you like ("fan.lpc.fan_2 = Front"); empty: the GPU fan first, then the others')}>
+                  <${TextField} multiline rows=${3} mono label=${t("Which fans")} value=${widget.fan_items} placeholder=${info.fan_items} onChange=${change("fan_items")} />
+                <//>`
+              : null}`
+          : null}
         ${widget.module === "analog"
           ? html`<${Field} label=${t("Time zone")} hint=${t('e.g. "Asia/Tokyo" or "America/New_York"')}>
               <${TextField} label=${t("Time zone")} value=${widget.timezone} placeholder=${t("this computer's")} onChange=${change("timezone")} />

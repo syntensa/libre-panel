@@ -543,7 +543,11 @@ def test_list_modules_take_their_readings_and_sorting():
     )
     temps = lists_of(module="temps")
     assert temps["m0/temps"]["items"].startswith("cpu.temp") and "m0/fans" in temps
-    assert temps["m0/fans"]["style"] == "cells"
+    assert temps["m0/fans"]["style"] == "fans" and temps["m0/fans"]["max"] == 3000  # turning
+    assert temps["m0/fans"]["max_items"] == 6 and temps["m0/fans"]["items"].startswith("gpu.fan")
+    assert "m0/fans" not in lists_of(module="temps", fans=0)  # the temperatures alone
+    mine = lists_of(module="temps", fans=2, fan_items="fan.lpc.fan_2 = Front")["m0/fans"]
+    assert mine["max_items"] == 2 and mine["items"] == "fan.lpc.fan_2 = Front"
     mine = lists_of(module="values", items="cpu.load = CPU\nfan.*")
     assert mine["m0/values"]["items"] == "cpu.load = CPU\nfan.*"
     assert module_info()["kinds"]["drives"]["items"] == "disk.*.load"

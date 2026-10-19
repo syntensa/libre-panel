@@ -2160,7 +2160,10 @@
     "A part of the {name} module, detached into widgets.": "Una parte del módulo {name}, separado en widgets.",
     "Select all its parts": "Seleccionar todas sus partes",
     "Its parts go, with what was changed on them": "Sus partes desaparecen, con lo que se cambió en ellas",
-    "Put the module back together": "Volver a unir el módulo"
+    "Put the module back together": "Volver a unir el módulo",
+    "Which fans": "Qué ventiladores",
+    "at most so many, below or beside the temperatures where there is room; 0: none": "como mucho tantos, debajo o al lado de las temperaturas, donde haya sitio; 0: ninguno",
+    "one per line: a sensor (\"gpu.fan\"), a pattern (\"fan.*\") and a name if you like (\"fan.lpc.fan_2 = Front\"); empty: the GPU fan first, then the others": "uno por línea: un sensor (“gpu.fan”), un patrón (“fan.*”) y un nombre si quieres (“fan.lpc.fan_2 = Frontal”); vacío: primero el de la GPU, luego los demás"
   },
   "fields": {
     "align": "Alineación",
@@ -2299,7 +2302,9 @@
     "hand": "Segundero",
     "glide_ms": "tiempo de deslizamiento propio (ms)",
     "pack": "paquete de símbolos",
-    "group": "Grupo"
+    "group": "Grupo",
+    "fans": "Ventiladores",
+    "fan_items": "Qué ventiladores"
   },
   "widgets": {
     "analog": "Reloj analógico",
@@ -2430,7 +2435,8 @@
     "glide": "se desliza",
     "sweep": "recorre",
     "classic": "clásico",
-    "vivid": "vivo"
+    "vivid": "vivo",
+    "fans": "ventiladores"
   },
   "icons": {
     "battery": "Batería",

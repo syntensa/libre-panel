@@ -338,6 +338,7 @@ class _Build:
         self.glow = float(style["glow"])
         self.out: list[dict[str, Any]] = []
         self.needs = ""  # added to every widget (a source's fallback)
+        self.lit_card = False  # a card lit by itself (Kind.finish): framed as its size
 
     # colours
     def c(self, role: str) -> str:
@@ -367,14 +368,23 @@ class _Build:
         the colour of the card it shows), its thin outline."""
         if not self.card_on:
             return
-        radius = round(self.style["radius"] * self.u / 200)
+        radius = round(self.style["radius"] * self.frame_u / 200)
         kind = self.style["card"]
         fill = {"glass": faded(self.c("surface"), 0.9), "flat": self.c("surface")}.get(kind)
         outline = self.c("line") if outline and kind in ("glass", "outline") else None
         self.add(
             "rect", "card", x=self.x, y=self.y, w=self.w, h=self.h, color=fill,
-            radius=radius, outline=outline, outline_width=max(1, round(self.u / 160)),
+            radius=radius, outline=outline, outline_width=max(1, round(self.frame_u / 160)),
         )  # fmt: skip
+
+    @property
+    def frame_u(self) -> float:
+        """What a card's corners and outline scale with: its size, up to half the panel's
+        height (so a big card is framed as the others, not heavier). The lit cards after
+        SPUR II's Studio (Lumen's weather card) keep theirs: round as their size."""
+        if self.lit_card:
+            return self.u
+        return min(self.u, self.style.get(FRAME_U) or self.u)
 
     def _text_fields(self, size: float, cap_top: float, font: str, **kw: Any) -> dict[str, Any]:
         size = max(6, round(size))
@@ -1442,7 +1452,7 @@ def build_image(b: _Build, _src: Source) -> None:
     """A picture, or several in turn (``items``: one per line, "photos/*.jpg" a folder)."""
     b.card()
     pictures = [line.strip() for line in b.module["items"].splitlines() if line.strip()]
-    radius = round(b.style["radius"] * b.u / 200) if b.style["card"] != "none" else 0
+    radius = round(b.style["radius"] * b.frame_u / 200) if b.style["card"] != "none" else 0
     if not pictures:
         b.add("rect", "frame", x=b.x, y=b.y, w=b.w, h=b.h, color=b.c("surface"),
               outline=b.c("line"), radius=radius)  # fmt: skip
@@ -1766,10 +1776,15 @@ def build_text(b: _Build, _src: Source) -> None:
 # -- lists of readings ---------------------------------------------------------
 
 
+# the style's note of what cards are framed by at most (half the panel's height, expand)
+FRAME_U = "\0frame_u"
+
+
 def default_items(kind: str) -> str:
     """What a list module shows while its ``items`` are empty."""
     return {
         "temps": "cpu.temp = CPU\ngpu.temp = GPU\ntemp.*",
+        "fans": f"gpu.fan = {t('GPU fan')}\nfan.*",  # the temperature module's
         "drives": "disk.*.load",
         "cards": DEFAULT_CARDS,
         "world": "America/New_York = New York\nEurope/London = London\nAsia/Tokyo = Tokyo\n"
@@ -1784,27 +1799,36 @@ def _heat_rules(b: _Build, warn: float = 75, crit: float = 88) -> list[dict[str,
 
 
 def build_temps(b: _Build, _src: Source) -> None:
-    """Every temperature as a bar, CPU and GPU first; the fans too when there is room."""
+    """Every temperature as a bar, CPU and GPU first; the fans too when there is room, in a
+    big box each one turning with its speed (as Lumen's)."""
     b.card()
     color = b.tint("accent")
     top = b.head("temperature", b.module["title"] or t("Temperatures"), color)
     items = b.module["items"] or default_items("temps")
-    fans = "fan.*\ngpu.fan"
+    fans, count = b.module["fan_items"] or default_items("fans"), max(0, b.module["fans"])
     x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
     temps = {"min": 20, "max": 100, "color_rules": _heat_rules(b), "format": "{value:.0f}°C",
              "empty": t("No temperature readings")}  # fmt: skip
-    fan_list = {"format": "{value:.0f} RPM", "empty": t("No fan readings"), "uppercase": True}
-    if b.aspect >= 3.0 and b.iw > b.ts * 40:  # long: temperatures | fans
+    fan_list = {"format": "{value:.0f} RPM", "empty": t("No fan readings"), "uppercase": True,
+                "max_items": count}  # fmt: skip
+    if not count:
+        b.listing("temps", items, x, y, w, h, color, "bars" if h > b.ts * 4.5 else "rows", **temps)
+    elif b.aspect >= 3.0 and b.iw > b.ts * 40:  # long: temperatures | fans
         width = (w - b.pad) * 0.6
         b.listing("temps", items, x, y, width, h, color, **temps)
         b.listing("fans", fans, x + width + b.pad, y, w - width - b.pad, h, color, "rows",
                   **fan_list)  # fmt: skip
-    elif (b.large or b.aspect <= 0.72) and h > b.ts * 11:  # big: the fans as tiles below
-        fan_h = _clamp(h * 0.3, b.ts * 4.4, b.ts * 7)
-        b.listing("temps", items, x, y, w, h - fan_h - b.pad, color, **temps)
-        b.listing("fans", fans, x, y + h - fan_h, w, fan_h, color, "cells", b.ts * 1.2,
-                  levels=False, background=mix(b.c("track"), b.c("surface"), 0.35),
-                  max_items=max(1, int(w // (b.ts * 5.5))), columns=0, **fan_list)  # fmt: skip
+    elif (b.large or b.aspect <= 0.72) and h > b.ts * 11:  # big: the fans turning below
+        # their numbers, as Lumen's where two fit side by side (the fans 1.9 times as big)
+        size = max(7, round(_clamp(w / 12.5, 7, b.ts * 1.15)))
+        line = round(size * 1.9) + size
+        side_by_side = max(1, int(w // (round(size * 1.9) + size * 4.2)))
+        wanted = -(-count // side_by_side)  # the lines that hold them
+        lines = int(_clamp(min(wanted, (h * 0.5 + size * 0.6) // line), 1, 4))
+        fan_h = lines * line - size * 0.6 + 1
+        b.listing("temps", items, x, y, w, h - fan_h - b.pad * 1.5, color, **temps)
+        b.listing("fans", fans, x, y + h - fan_h, w, fan_h, color, "fans", size, min=0,
+                  max=3000, **{**fan_list, "format": "{value:.0f}"})  # fmt: skip
     else:
         b.listing("temps", items, x, y, w, h, color, "bars" if h > b.ts * 4.5 else "rows", **temps)
 
@@ -2102,6 +2126,7 @@ def build_module(
         source = kind.sources[0]
     src = sources.get(source, sources["cpu"])
     b = _Build(module, box, colors, style)
+    b.lit_card = kind.finish == "lit"
     fallback = _fallback(module) if kind.sources and source in sources else None
     if fallback is None:
         if kind.sources:  # without its readings the module stays empty
@@ -2133,7 +2158,7 @@ def expand(theme: Any) -> tuple[list[dict[str, Any]], dict[str, list[int]]]:
         return list(theme.widgets), {}
     grid = make_grid(theme.width, theme.height, theme.grid, theme.model)
     colors = colors_of(theme.palette)
-    style = {**STYLE_DEFAULTS, **(theme.style or {})}
+    style = {**STYLE_DEFAULTS, **(theme.style or {}), FRAME_U: min(theme.width, theme.height) / 2}
     widgets: list[dict[str, Any]] = []
     boxes: dict[str, list[int]] = {}
     if style["backdrop"] == "gradient":
@@ -2183,6 +2208,7 @@ def module_info() -> dict[str, Any]:
                 "sources": list(kind.sources),
                 "span": list(kind.span),
                 "items": default_items(key),
+                "fan_items": default_items("fans") if key == "temps" else "",
             }
             for key, kind in kinds().items()
         },

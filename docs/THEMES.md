@@ -222,7 +222,9 @@ the sensor's label.
 
 - `style`: `rows` (name and value), `bars` (with a bar below, or beside the
   name when a row is wide), `columns` (upright bars side by side, the cores
-  of a processor) or `cells` (tiles, filled as high as their value)
+  of a processor), `cells` (tiles, filled as high as their value) or `fans`
+  (each fan turning with its speed beside its name and number, as Lumen's;
+  its ring shows the speed up to `max`, 3000 RPM in the temperature module)
 - `columns` 0 lays rows out side by side when they do not fit one under the
   other; `max_items` 0 shows as many as fit
 - `sort`: `none` (as listed), `high`, `low` or `name`
@@ -230,7 +232,9 @@ the sensor's label.
   `2.4 MB/s`, `3h 5m`); `detail` names a reading beside each one to show
   after its name (`free` for `disk.1.free`) with `detail_format`
 - `min`/`max` give the bars' range; `max` at or below `min` lets the largest
-  value fill its bar. `levels` off shows numbers only
+  value fill its bar. `levels` off shows numbers only. `smooth` (on unless
+  turned off) lets the bars glide to a new reading on the panel, as a bar's
+  do; the numbers say the reading
 - `empty`: a text while nothing is found
 
 ### Facets
@@ -513,7 +517,7 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `network` | download and upload; graphs when wide or large | |
 | `system` | names of processor and graphics card, uptime; the memory's name too when there is room for a fourth row | |
 | `text` | a title (`text`) with an accent line | |
-| `temps` | every temperature as a bar, CPU and GPU first, warm and hot in `warn` and `crit`; the fans beside them when long, as tiles below when big | `items` |
+| `temps` | every temperature as a bar, CPU and GPU first, warm and hot in `warn` and `crit`; the fans beside them when long, below when big, each turning with its speed (as Lumen's) | `items`; `fans` (at most so many, 6; 0: none) and `fan_items` (which, as `items`; empty: the GPU fan first, then the others) |
 | `cores` | the load of every core: tiles when small, columns when wide; the history when big | |
 | `drives` | every drive: how full and how much is free; reading and writing when big | `items` |
 | `processes` | the programs that use the most processor time, or memory (`sort`: `cpu` or `memory`); a program's processes count once | |
@@ -884,7 +888,7 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `disk.load`, `disk.used`, `disk.total`, `disk.read`, `disk.write` | %, GiB, B/s | psutil |
 | `net.down`, `net.up` | B/s | psutil |
 | `fan.<device>.<name>`, `temp.<device>.<name>` | RPM, °C | every fan and temperature: the `linux` source (`temp.k10temp.tctl`, `temp.nvme.composite`, `fan.amdgpu.0`, and the mainboard's fans as `fan.lpc.fan_1` ...), LibreHardwareMonitor (e.g. `temp.cpu.package`, `fan.gpu.gpu_fan_1`) |
-| `cpu.core.<n>.load` | % | each core (thread), from 1 |
+| `cpu.core.<n>.load` | % | each core (thread), from 1; ten times a second from `load`, over the last 0.3 s |
 | `disk.<n>.name`, `.load`, `.used`, `.free`, `.total` | text, %, GiB | each drive, the system drive first |
 | `proc.cpu.<n>.name`, `.value`; `proc.mem.<n>.name`, `.value` | text, % | the eight busiest programs by processor time (of the whole processor) and by memory; counted only while a theme shows them |
 | `net.ip`, `net.ping`, `net.today.down`, `net.today.up` | text, ms, B | the address towards the internet; ping (a connection to `ping`, see the configuration; only while shown); traffic since midnight or since Libre Panel started |

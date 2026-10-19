@@ -47,6 +47,47 @@ def install(monkeypatch, cpu=None, gpu=None):
 # -- the numbers -------------------------------------------------------------------
 
 
+def test_every_core_s_load_is_over_the_last_part_of_a_second(monkeypatch):
+    """A third of a second: one sample of a tenth flickers, a whole second lags behind."""
+    from collections import namedtuple
+
+    times = namedtuple("times", "user system idle")
+    monkeypatch.setattr(load, "CORE_SECONDS", 3)  # (in steps of the clock below)
+    now, feed = [0], [[times(0, 0, 0), times(0, 0, 0)]]
+    cores = load._Cores(times=lambda: feed[-1], clock=lambda: now[0])
+
+    def step(*busy_idle):
+        now[0] += 1
+        feed.append([times(prev.user + b, 0, prev.idle + i)
+                     for prev, (b, i) in zip(feed[-1], busy_idle, strict=True)])  # fmt: skip
+        return cores.read()
+
+    assert step((1, 0), (0, 1)) == [100.0, 0.0]  # core 1 busy, core 2 idle
+    assert step((0, 1), (0, 1)) == [50.0, 0.0]  # over two steps
+    assert step((0, 1), (1, 0)) == pytest.approx([100 / 3, 100 / 3])
+    assert step((0, 1), (1, 0)) == pytest.approx([0.0, 200 / 3])  # the first step is gone
+    feed.append(feed[-1][:1])  # a core less (a machine that changed): start again
+    assert cores.read() is None
+
+
+def test_the_cores_come_from_the_load_source_while_a_theme_shows_them(monkeypatch):
+    install(monkeypatch, cpu=Scripted(30.0))
+    monkeypatch.setattr(load, "_Cores", lambda: Scripted([12.0, 140.0]))
+    provider = load.LoadProvider()
+    theme = show("cpu.core.*.load")
+    try:
+        assert wait_for(lambda: "cpu.core.2.load" in provider.read())
+        got = provider.read()
+        assert got["cpu.core.1.load"] == Reading("cpu.core.1.load", 12.0, "%", "Core 1")
+        assert got["cpu.core.2.load"].value == 100.0  # (no more than all of it)
+        assert "cpu.load" not in got  # (no theme shows it)
+        del theme
+        gc.collect()
+        assert wait_for(lambda: not provider.read())
+    finally:
+        provider.close()
+
+
 def test_cpu_load_between_two_samples():
     # (idle, kernel, user): the kernel time includes the idle time
     assert load.cpu_load((100, 300, 100), (150, 400, 200)) == pytest.approx(75.0)

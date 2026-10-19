@@ -2160,7 +2160,10 @@
     "A part of the {name} module, detached into widgets.": "Część modułu {name}, rozbitego na widżety.",
     "Select all its parts": "Zaznacz wszystkie jego części",
     "Its parts go, with what was changed on them": "Jego części znikają, razem z tym, co w nich zmieniono",
-    "Put the module back together": "Złóż moduł z powrotem"
+    "Put the module back together": "Złóż moduł z powrotem",
+    "Which fans": "Które wentylatory",
+    "at most so many, below or beside the temperatures where there is room; 0: none": "najwyżej tyle, pod temperaturami lub obok nich, gdzie jest miejsce; 0: żadnego",
+    "one per line: a sensor (\"gpu.fan\"), a pattern (\"fan.*\") and a name if you like (\"fan.lpc.fan_2 = Front\"); empty: the GPU fan first, then the others": "jeden na linię: czujnik („gpu.fan”), wzorzec („fan.*”) i ewentualnie nazwa („fan.lpc.fan_2 = Przód”); puste: najpierw wentylator GPU, potem pozostałe"
   },
   "fields": {
     "align": "Wyrównanie",
@@ -2299,7 +2302,9 @@
     "hand": "Wskazówka sekundowa",
     "glide_ms": "własny czas płynięcia (ms)",
     "pack": "zestaw symboli",
-    "group": "Grupa"
+    "group": "Grupa",
+    "fans": "Wentylatory",
+    "fan_items": "Które wentylatory"
   },
   "widgets": {
     "analog": "Zegar analogowy",
@@ -2430,7 +2435,8 @@
     "glide": "płynie",
     "sweep": "przebiega",
     "classic": "klasyczny",
-    "vivid": "żywy"
+    "vivid": "żywy",
+    "fans": "wentylatory"
   },
   "icons": {
     "battery": "Bateria",

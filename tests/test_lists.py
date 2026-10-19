@@ -93,7 +93,7 @@ def list_theme(**fields):
     )  # fmt: skip
 
 
-@pytest.mark.parametrize("style", ["rows", "bars", "columns", "cells"])
+@pytest.mark.parametrize("style", ["rows", "bars", "columns", "cells", "fans"])
 @pytest.mark.parametrize("items", ["cpu.core.*.load", "temp.*\nfan.*", "disk.*.load"])
 def test_every_list_style_draws(style, items):
     renderer = Renderer(list_theme(items=items, style=style, detail="free"), preview=True)
@@ -111,6 +111,47 @@ def test_a_list_shows_as_many_as_fit():
     assert renderer._list_room(renderer.widgets[0], 8) == 6  # side by side
     limited = Renderer(list_theme(max_items=3))
     assert limited._list_room(limited.widgets[0], 8) == 3
+
+
+def cores(**loads):
+    from libre_panel.sensors.base import Snapshot
+
+    keys = {n: f"cpu.core.{n}.load" for n in loads}
+    return Snapshot(readings={keys[n]: Reading(keys[n], v, "%", f"Core {n}")
+                              for n, v in loads.items()})  # fmt: skip
+
+
+@pytest.mark.parametrize("style", ["bars", "columns", "cells"])
+def test_the_bars_of_a_list_glide_to_a_new_reading_on_the_panel(style):
+    """As a bar's: the panel shows them on the way (the text says the reading); a preview,
+    or a list that is not ``smooth``, shows them where they are."""
+    theme = list_theme(items="cpu.core.*.load", style=style)
+    panel = Renderer(theme, animate=True)
+    panel.render(cores(**{"1": 0.0}), now=100.0)
+    panel.render(cores(**{"1": 100.0}), now=100.1)
+    ((_name, _detail, text, frac, _rule),) = panel._cache["list\0levels"][0]
+    assert 0 < frac < 1 and text == "100%" and panel.moving
+    panel.render(cores(**{"1": 100.0}), now=103.0)
+    assert panel._cache["list\0levels"][0][0][3] == 1.0 and not panel.moving
+    for renderer in (Renderer(theme, preview=True),
+                     Renderer(list_theme(items="cpu.core.*.load", style=style, smooth=False),
+                              animate=True)):  # fmt: skip
+        renderer.render(cores(**{"1": 0.0}), now=100.0)
+        renderer.render(cores(**{"1": 100.0}), now=100.1)
+        assert renderer._cache["list"][0][0][3] == 1.0
+
+
+def test_a_list_of_fans_turns_each_one_with_its_speed():
+    theme = list_theme(items="fan.*", style="fans", font_size=20, max=3000)
+    renderer = Renderer(theme, animate=True)
+    assert renderer._list_room(renderer.widgets[0], 20) == 6  # two side by side, three lines
+    snap = demo_snapshot(fixed_time=1_700_000_000)
+    first, _ = renderer.render(snap, now=100.0)
+    second, _ = renderer.render(snap, now=100.2)
+    fans = {key.split("\0")[1] for key in renderer._rotors if key.startswith("list\0")}
+    assert len(fans) == 6 and all(key.startswith(("fan.", "gpu.fan")) for key in fans)
+    assert renderer.moving and first.tobytes() != second.tobytes()  # they turn
+    assert renderer.warnings == []
 
 
 def test_an_empty_list_says_so():

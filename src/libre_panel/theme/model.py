@@ -336,7 +336,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "w": ("int", 240),
         "h": ("int", 160),
         "items": ("text", "cpu.temp = CPU\ngpu.temp = GPU\nfan.*"),
-        "style": ("enum:rows|bars|columns|cells", "bars"),
+        "style": ("enum:rows|bars|columns|cells|fans", "bars"),  # fans: each one turning
         "columns": ("int", 0),  # side by side; 0 = automatic
         "max_items": ("int", 0),  # 0 = as many as fit
         "sort": ("enum:none|high|low|name", "none"),
@@ -347,6 +347,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "max": ("number", 100),  # at or below min: the largest value shown
         "scale": ("enum:linear|sqrt|log", "linear"),
         "levels": ("bool", True),  # bars and filled cells; off: numbers only
+        "smooth": ("bool", True),  # the bars glide to a new reading, as a bar's do
         "font": ("font", ""),  # the values
         "font_size": ("int", 18),
         "label_font": ("font", ""),
@@ -381,6 +382,10 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         # temps, drives, dashboard: the readings to show, one per line ("cpu.temp = CPU");
         # card slots: the cards, one per line ("playback", "forecast if weather.temperature")
         "items": ("text", ""),
+        # temps: at most so many fans, where there is room (0: none), and which, one per line
+        # as the items ("fan.lpc.fan_2 = Front"; empty: the graphics card's, then the others)
+        "fans": ("int", 6),
+        "fan_items": ("text", ""),
         "sort": ("enum:cpu|memory", "cpu"),  # processes: by processor time or memory
         "timezone": ("string", ""),  # analog clock: e.g. "Asia/Tokyo"
         "target": ("string", ""),  # countdown: "2026-12-24", "2026-12-24 18:00", "12-24"
