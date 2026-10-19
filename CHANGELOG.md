@@ -10,6 +10,11 @@ No PresentMon error when Windows shuts down.
   PresentMon on the way out (again after Windows had ended it, and once more to stop its
   recording session). It starts none from the moment Windows asks to end the session
 
+**What comes next**
+- Instead of the many small releases so far, the changes and fixes from now on are
+  collected for **0.7.0**, which comes out as one release after a while. Reports are as
+  welcome as ever: what they bring reaches you with 0.7.0
+
 ## 0.6.8 — 2026-10-19
 
 Arena's cores keep up with the processor, and its fans turn.
