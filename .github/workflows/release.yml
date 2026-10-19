@@ -74,7 +74,8 @@ jobs:
         shell: bash
         run: |
           version=$(python -c "from importlib.metadata import version; print(version('libre-panel'))")
-          numeric=$(python -c "import re, sys; n = re.findall(r'\d+', sys.argv[1])[:3]; print('.'.join((n + ['0'] * 3)[:3]) + '.0')" "$version")
+          # four numbers for Windows: a hotfix's (0.6.8.1) as it is, 0.6.8 and 0.7.0rc1 with a 0
+          numeric=$(python -c "import re, sys; v = sys.argv[1]; n = re.findall(r'\d+', v)[:4 if re.fullmatch(r'[\d.]+', v) else 3]; print('.'.join((n + ['0'] * 4)[:4]))" "$version")
           echo "VERSION=$version" >> "$GITHUB_ENV"
           echo "NUMERIC=$numeric" >> "$GITHUB_ENV"
           case "${{ runner.os }}" in

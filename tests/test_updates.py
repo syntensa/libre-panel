@@ -62,7 +62,9 @@ def rig(tmp_path):
 
 
 def test_versions_compare_by_their_numbers():
-    assert version_key("v0.6.1") == (0, 6, 1) and version_key("0.7") == (0, 7, 0)
+    assert version_key("v0.6.1") == (0, 6, 1, 0) and version_key("0.7") == (0, 7, 0, 0)
+    assert version_key("v0.6.8.1") == (0, 6, 8, 1) and newer("0.6.8.1", "0.6.8")  # a hotfix
+    assert newer("0.6.9", "0.6.8.1") and not newer("0.6.8", "0.6.8.1")
     assert version_key("latest") is None and version_key("v1.2.3-rc1") is None
     assert newer("0.10.0", "0.9.9") and newer("v1.0", "0.6.1")
     assert not newer("0.6.1", "0.6.1") and not newer("0.6.0", "0.6.1") and not newer("x", "0.6")

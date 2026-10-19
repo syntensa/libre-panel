@@ -33,16 +33,17 @@ LATEST_URL = "https://api.github.com/repos/syntensa/libre-panel/releases/latest"
 DAY_S = 24 * 3600
 RETRY_S = 3600  # after no answer: the next try an hour later, not at each look at Start
 NOTES_CHARS = 600  # of the release notes, the start (their first paragraph says what is new)
-VERSION = re.compile(r"v?(\d{1,4})\.(\d{1,4})(?:\.(\d{1,4}))?")
+VERSION = re.compile(r"v?(\d{1,4})\.(\d{1,4})(?:\.(\d{1,4}))?(?:\.(\d{1,4}))?")
 
 
-def version_key(text: str) -> tuple[int, int, int] | None:
-    """``"v0.6.1"`` or ``"0.6"`` as numbers to compare; None for what is no version."""
+def version_key(text: str) -> tuple[int, int, int, int] | None:
+    """``"v0.6.1"``, ``"0.6"`` or a hotfix's ``"0.6.8.1"`` as numbers to compare; None for
+    what is no version."""
     found = VERSION.fullmatch(text.strip())
     if not found:
         return None
-    major, minor, patch = found.groups()
-    return int(major), int(minor), int(patch or 0)
+    major, minor, patch, fix = found.groups()
+    return int(major), int(minor), int(patch or 0), int(fix or 0)
 
 
 def newer(latest: str, current: str = __version__) -> bool:
