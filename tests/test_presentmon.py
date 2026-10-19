@@ -677,6 +677,26 @@ def test_close_ends_the_process_and_the_session_and_the_thread(make):
     provider.close()  # twice is fine
 
 
+def test_while_windows_ends_the_session_no_presentmon_is_started(make, monkeypatch):
+    """Windows refuses a new program then, with a box that names PresentMon (0xc0000142):
+    not again when Windows ended it, nor to stop the recording session on the way out."""
+    from libre_panel import winsession
+
+    provider, launcher, tool = make()
+    theme = show("game.fps")
+    provider.read()
+    first = first_process(launcher)
+    feed_game(first, 10)
+    assert wait_for(lambda: "game.fps" in provider.read())
+    monkeypatch.setattr(winsession, "ENDING", threading.Event())
+    winsession.ENDING.set()
+    first.finish(1)  # Windows ended it
+    time.sleep(0.1)  # far longer than the quick restart (RESTART_SECONDS is 0.01)
+    assert len(launcher.started) == 1
+    provider.close()
+    assert tool.calls == [] and theme is not None
+
+
 def test_a_presentmon_that_does_not_end_when_asked_is_killed(make):
     provider, launcher, _tool = make()
     theme = show("game.fps")

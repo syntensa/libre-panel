@@ -16,7 +16,9 @@ some games refuses to let a new session begin while the game runs, but leaves
 one that is already running alone. So PresentMon runs for as long as the
 ``game`` service is on or a theme shows ``game.*`` readings (it stops a minute
 after neither is), and is started again only slowly while a game runs. It sits
-in a Windows job that ends it with Libre Panel, whatever way Libre Panel ends.
+in a Windows job that ends it with Libre Panel, whatever way Libre Panel ends. While
+Windows ends the session it is not started again, nor to stop its recording session:
+Windows refuses new programs then, with a box that names PresentMon.
 
 Readings: ``game.fps`` (the last second), ``game.frametime`` (ms), ``game.low``
 (the 1% lows of the last 30 s, in fps), ``game.frametime_peak`` (the longest
@@ -50,7 +52,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from libre_panel import bundled
+from libre_panel import bundled, winsession
 from libre_panel.sensors.base import Reading, SensorProvider, wanted
 
 log = logging.getLogger(__name__)
@@ -471,7 +473,7 @@ class PresentMonProvider(SensorProvider):
                 elif run is not None:
                     delay, failures = self._ended(run, failures)
                     run, next_start = None, now + delay
-                if run is None and now >= next_start:
+                if run is None and now >= next_start and not winsession.ending():
                     run = self._begin()
                     if run is None:  # not there, or it would not start
                         next_start = now + NOT_FOUND_SECONDS
@@ -479,7 +481,8 @@ class PresentMonProvider(SensorProvider):
         finally:
             if run is not None:
                 self._end(run.process)
-            self._release_session(self._program)
+            if not winsession.ending():  # (Windows ends the recording session with itself)
+                self._release_session(self._program)
 
     def _begin(self) -> _Run | None:
         program = find_presentmon(self.path)

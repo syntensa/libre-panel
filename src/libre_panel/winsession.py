@@ -10,6 +10,10 @@ A hidden window answers WM_ENDSESSION only after Libre Panel has stopped (or
 after a few seconds; Windows waits about five before it asks the user).
 SetProcessShutdownParameters asks Windows to tell Libre Panel early, before
 most other programs. The SPUR II service found both necessary on the 9.2".
+
+While the session ends, no program may be started: Windows refuses it, and says so in a
+box of its own ("The application was unable to start correctly", 0xc0000142), on the way
+out of Windows. :func:`ending` tells the parts of Libre Panel that start one (PresentMon).
 """
 
 from __future__ import annotations
@@ -27,6 +31,15 @@ WM_QUERYENDSESSION = 0x0011
 WM_ENDSESSION = 0x0016
 # Applications may use 0x100-0x3FF; higher is told earlier.
 EARLY_SHUTDOWN_LEVEL = 0x3FF
+
+# Set from the moment Windows asks whether the session may end, until it ends or another
+# program cancels it
+ENDING = threading.Event()
+
+
+def ending() -> bool:
+    """Whether the Windows session is ending (shut down, restart, sign out): start no program."""
+    return ENDING.is_set()
 
 
 def shut_down_early() -> None:
@@ -144,10 +157,14 @@ class SessionEndWatcher:
 
         def procedure(hwnd, message, wparam, lparam):
             if message == WM_QUERYENDSESSION:
+                ENDING.set()
                 return 1  # Libre Panel never holds up the end of a session
             if message == WM_ENDSESSION:
                 if wparam:  # the session really ends (not cancelled)
+                    ENDING.set()
                     self._end()
+                else:
+                    ENDING.clear()
                 return 0
             if message == WM_DESTROY:
                 user32.PostQuitMessage(0)

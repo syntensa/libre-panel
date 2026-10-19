@@ -14,6 +14,15 @@ from libre_panel.service import BackgroundApp, running_instance  # noqa: E402
 from libre_panel.tray import run_app  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def session_goes_on():
+    """The end of a session that a test plays leaves no trace for the tests after it."""
+    from libre_panel import winsession
+
+    yield
+    winsession.ENDING.clear()
+
+
 def send(hwnd, message, wparam):
     """What Windows does at the end of a session: a message that waits for the answer."""
     import ctypes
@@ -26,17 +35,23 @@ def send(hwnd, message, wparam):
 
 
 def test_session_window_answers_and_stops_once():
-    from libre_panel.winsession import WM_ENDSESSION, WM_QUERYENDSESSION, SessionEndWatcher
+    from libre_panel.winsession import (
+        WM_ENDSESSION,
+        WM_QUERYENDSESSION,
+        SessionEndWatcher,
+        ending,
+    )
 
     calls = []
     watcher = SessionEndWatcher(lambda: calls.append(threading.current_thread().name)).start()
     try:
         assert send(watcher.hwnd, WM_QUERYENDSESSION, 0) == 1  # never blocks shutdown
+        assert ending()  # (from now on no program is started)
         send(watcher.hwnd, WM_ENDSESSION, 0)  # another program cancelled the shutdown
-        assert calls == []
+        assert calls == [] and not ending()
         send(watcher.hwnd, WM_ENDSESSION, 1)
         send(watcher.hwnd, WM_ENDSESSION, 1)
-        assert calls == ["session-end"]
+        assert calls == ["session-end"] and ending()
     finally:
         watcher.stop()
     assert not watcher._thread.is_alive()
