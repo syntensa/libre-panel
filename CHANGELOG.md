@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.7 — 2026-10-19
+
+The Turing 3.5" and the UsbPCMonitor panels turn their screen off when Libre Panel quits.
+
+**Fixes**
+- **Dark when Libre Panel quits** on the Turing 3.5" and the UsbPCMonitor panels: they only
+  went to their darkest brightness, at which the light of some still glows, so the last picture
+  stayed visible where the mainboard keeps the USB ports powered while the PC is off. They turn
+  their screen off as well now, as turing-smart-screen-python does, and on again when Libre
+  Panel starts
+
 ## 0.6.6 — 2026-10-17
 
 Frames around the parts of every screen, a light mode, and the portable download that works
