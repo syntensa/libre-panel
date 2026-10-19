@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.8.1 — 2026-10-19
+
+A hotfix: no PresentMon error when Windows shuts down.
+
+**Fixes**
+- **"PresentMon.exe – Application Error" when Windows shuts down, restarts or signs
+  out**: Windows refuses to start a program while the session ends, and Libre Panel started
+  PresentMon on the way out (again after Windows had ended it, and once more to stop its
+  recording session). It starts none from the moment Windows asks to end the session
+- The update notice knows a hotfix like this one; from 0.6.8.1 on it tells of the next
+
 ## 0.6.8 — 2026-10-19
 
 Arena's cores keep up with the processor, and its fans turn.
