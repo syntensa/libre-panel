@@ -1049,9 +1049,10 @@ class MainLoop:
 
     def go_dark(self) -> None:
         """Libre Panel quits ([device] dark_on_quit): a black picture, and the panel's light
-        off, as turing-smart-screen-python turns these panels off (they have no command of
-        their own for it); the next start lights it again. A slow panel (USB serial) only has
-        its light turned off: a whole picture takes it up to half a minute."""
+        off, as turing-smart-screen-python turns these panels off; a panel with a command of
+        its own for it (Turing rev. A) has its screen turned off as well. The next start lights
+        it again. A slow panel (USB serial) gets no black picture: a whole one takes it up to
+        half a minute."""
         if not self.link.connected:
             return
         if not self.display.slow:
@@ -1061,10 +1062,11 @@ class MainLoop:
                 log.debug("no black picture before going dark: %s", exc)
         try:
             self.display.set_brightness(0)
+            off = self.display.screen_off()
         except Exception as exc:  # noqa: BLE001 - quitting goes on
             log.warning("the panel did not go dark: %s", exc)
             return
-        log.info("the panel went dark: Libre Panel quits")
+        log.info("the panel went dark%s: Libre Panel quits", ", its screen off" if off else "")
 
     def close(self) -> None:
         if self.host is not None:

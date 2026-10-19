@@ -71,7 +71,8 @@ motion = "auto"                # calm on the older USB serial panels (a picture 
                                # no gliding, moving symbols or fades), full on the others;
                                # "full" or "calm" for every panel
 dark_on_quit = false           # true: black and its light off when Libre Panel quits
-                               # (Windows shutting down too); lit again at the next start
+                               # (Windows shutting down too); lit again at the next start;
+                               # Turing 3.5" and UsbPCMonitor turn their screen off too
 output = "libre-panel-frame.png"   # frames go here when no panel is used;
                                    # a relative path is inside the settings folder
 port = ""                      # serial panels: found by their USB ids; only if that

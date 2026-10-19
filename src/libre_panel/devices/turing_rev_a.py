@@ -13,26 +13,32 @@ uses it on these panels:
   and the width and height in that orientation (big endian).
 - 69, six times, asks the model: UsbPCMonitor panels answer six bytes
   (01: 3.5", 02: 5", 03: 7"), the Turing 3.5" does not answer.
+- 108 turns the screen off, 109 on again: 108 only when Libre Panel quits
+  and the panel is to go dark ([device] dark_on_quit; the USB port may keep
+  it powered while the PC is off), 109 each time it connects, as the
+  reference does, so a screen turned off lights up again.
 
 Never sent: 101 (restarts the panel; its port may change), 102 (clears to
-white), 103, 108 and 109 (black, screen off and on): Libre Panel draws every
-pixel itself and leaves the panel as it was.
+white), 103 (black): Libre Panel draws every pixel itself.
 """
 
 from __future__ import annotations
 
 from PIL import Image
 
+from libre_panel.devices.base import DeviceError
 from libre_panel.devices.models import PanelModel, find_model
 from libre_panel.devices.serial_link import FoundPort, rgb565
 from libre_panel.devices.serial_panel import SerialDisplay
 from libre_panel.i18n import t
 
 CMD_HELLO = 69
+CMD_SCREEN_OFF = 108
+CMD_SCREEN_ON = 109
 CMD_SET_BRIGHTNESS = 110
 CMD_SET_ORIENTATION = 121
 CMD_DISPLAY_BITMAP = 197
-NEVER = frozenset({101, 102, 103, 108, 109})  # reset, clear, to black, screen off/on
+NEVER = frozenset({101, 102, 103})  # reset, clear, to black
 
 PORTRAIT, LANDSCAPE = 0, 2
 HELLO_ANSWERS = {  # UsbPCMonitor sizes; the Turing 3.5" does not answer
@@ -81,6 +87,20 @@ class RevADisplay(SerialDisplay):
         if self.configured or answer:
             return found.model
         return find_model("turing-3.5")
+
+    def open(self) -> None:
+        super().open()
+        try:
+            self.link.write(header(CMD_SCREEN_ON))  # (off if Libre Panel turned it off quitting)
+        except DeviceError:
+            self.close()
+            raise
+
+    def screen_off(self) -> bool:
+        if self.link is None:
+            return False
+        self.link.write(header(CMD_SCREEN_OFF))
+        return True
 
     def send_brightness(self, percent: int) -> None:
         self.link.write(header(CMD_SET_BRIGHTNESS, brightness_level(percent)))

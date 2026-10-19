@@ -85,9 +85,21 @@ def test_rev_a_shows_a_landscape_frame_pixel_for_pixel(ports):
     assert panel.orientation == 2 and panel.size == (480, 320)  # landscape, set by the panel
     assert same(frame, panel.screen)
     assert panel.brightness == [brightness_level(40)] == [153]
-    assert panel.commands[0] == 69  # asked for its model first
-    assert not NEVER & set(panel.commands)  # no reset, clear, black or screen off
-    assert panel.closed
+    assert panel.commands[:2] == [69, 109]  # asked for its model first, then its screen on
+    assert not NEVER & set(panel.commands) and 108 not in panel.commands  # no reset, clear...
+    assert panel.closed and panel.lit
+
+
+def test_rev_a_turns_its_screen_off_when_told_and_on_when_it_connects_again(ports):
+    """Libre Panel quits, its panel to go dark: the screen off (the USB port may keep the panel
+    powered while the PC is off); the next start turns it on."""
+    panel = ports(FakeRevA())
+    with display() as screen:
+        screen.show(picture((480, 320)))
+        assert screen.screen_off() and not panel.lit
+    with display():
+        assert panel.lit
+    assert panel.commands.count(108) == 1
 
 
 def test_rev_a_sends_only_the_changed_box(ports):
@@ -193,6 +205,26 @@ def test_main_loop_drives_a_rev_a_panel(ports):
     assert panel.rects[0] == (0, 0, 479, 319) and len(panel.rects) >= 3
     assert panel.brightness and panel.brightness[0] == brightness_level(70)
     assert not NEVER & set(panel.commands)
+
+
+def test_a_rev_a_panel_goes_dark_with_its_screen_off_when_libre_panel_quits(ports):
+    panel = ports(FakeRevA())
+    config = Config(theme="libre-default", fps=10, sensors=SensorsConfig(providers=["demo"]))
+    config.device = DeviceConfig(driver="turzx", model="turing-3.5", dark_on_quit=True)
+    stop = threading.Event()
+    options = {"stop": stop, "quitting": lambda: True}
+    thread = threading.Thread(target=app.run, args=(config,), kwargs=options)
+    thread.start()
+    try:
+        end = time.monotonic() + 20
+        while not panel.rects and time.monotonic() < end:
+            time.sleep(0.05)
+    finally:
+        stop.set()
+        thread.join(20)
+    assert not thread.is_alive() and panel.rects
+    assert panel.commands[-2:] == [110, 108] and panel.brightness[-1] == brightness_level(0)
+    assert not panel.lit  # (and no black picture: too slow)
 
 
 def test_doctor_checks_a_rev_a_panel(ports):

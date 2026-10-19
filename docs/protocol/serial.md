@@ -17,7 +17,7 @@ devices do.
 
 | Family | Panels | USB id (serial number) | Bitmaps | Brightness | Never sent |
 |---|---|---|---|---|---|
-| rev. A (`turing_rev_a.py`) | Turing 3.5", UsbPCMonitor 3.5"/5"/7" | 1a86:5722 (`USB35INCHIPS…`) | 6-byte command, box packed 10 bits per number; RGB565 little endian | 110: 0 brightest – 255 darkest | 101 reset, 102 clear, 103, 108, 109 |
+| rev. A (`turing_rev_a.py`) | Turing 3.5", UsbPCMonitor 3.5"/5"/7" | 1a86:5722 (`USB35INCHIPS…`) | 6-byte command, box packed 10 bits per number; RGB565 little endian | 110: 0 brightest – 255 darkest; 108/109 screen off/on | 101 reset, 102 clear, 103 |
 | rev. B (`turing_rev_b.py`) | XuanFang 3.5", flagship | 1a86:5722 (`2017-2-25`) | 10-byte packets framed by the command; box 16-bit big endian; RGB565 big endian; 50 ms pause after each | 0–255, or only on/off (HELLO says which) | 0xCD backplate LED |
 | rev. C (`turing_rev_c.py`) | Turing 2.1", 5", 8.8" (V0.x) | asleep 1a86:ca21 (`CT21INCH`, `USB7INCH`, `CT88INCH`); awake 0525:a4a7, 1d6b:0121/0106 (`20080411`) | 250-byte blocks; whole frames BGRA, boxes row by row at framebuffer offsets (BGR or BGRA by size and ROM) | 0–255 | RESTART, TURNOFF/TURNON, OPTIONS |
 | rev. D (`kipye_rev_d.py`) | Kipye Qiye 3.5" | 454d:4e41 | box x0, x1, y0, y1 big endian; RGB565 big endian in 64-byte packets (0x50 + 63) | 0–500, sent twice | fill colour, mirrored / upside-down modes |
@@ -25,6 +25,12 @@ devices do.
 
 ## Where Libre Panel differs from the reference
 
+- **Rev. A, screen off.** The reference turns the screen off (108) each
+  time it quits; Libre Panel only with `[device] dark_on_quit` on, after the
+  darkest brightness, and else leaves the last picture. Like the reference
+  it sends 109 (screen on) each time it connects, so a screen turned off
+  lights up again; one whose USB port stays powered while the PC is off
+  stays dark until then.
 - **Rev. C, OPTIONS.** The reference sends it to set the orientation; it
   also stores the panel's start mode and sleep interval, which the owner
   may have set in the vendor app. Rev. C turns frames in software, so

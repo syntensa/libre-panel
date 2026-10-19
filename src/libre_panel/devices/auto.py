@@ -93,6 +93,9 @@ class AutoDisplay(Display):
         if self._impl:
             self._impl.set_brightness(percent)
 
+    def screen_off(self) -> bool:
+        return bool(self._impl and self._impl.screen_off())
+
     def describe(self) -> str:
         return self._impl.describe() if self._impl else t("no panel yet")
 

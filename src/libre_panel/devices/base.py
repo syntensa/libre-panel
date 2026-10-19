@@ -76,6 +76,11 @@ class Display:
     def set_brightness(self, percent: int) -> None:
         """0-100. Drivers without brightness control ignore it."""
 
+    def screen_off(self) -> bool:
+        """Libre Panel quits ([device] dark_on_quit): the panel's own command that turns its
+        screen off, where it has one (its next open() turns it on again); whether it did."""
+        return False
+
     def describe(self) -> str:
         """What frames go to, for status displays (tray, editor)."""
         return self.name

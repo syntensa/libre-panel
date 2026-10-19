@@ -193,6 +193,9 @@ class TurzxDisplay(Display):
         if self._impl:
             self._impl.set_brightness(percent)
 
+    def screen_off(self) -> bool:
+        return bool(self._impl and self._impl.screen_off())
+
     def describe(self) -> str:
         if self._impl is not None:
             return self._impl.describe()

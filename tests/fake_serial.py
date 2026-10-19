@@ -78,6 +78,7 @@ class FakeRevA(FakeSerial):
         self.screen = Image.new("RGB", native, "white")
         self.commands: list[int] = []
         self.brightness: list[int] = []
+        self.lit = True  # its screen on (108 off, 109 on)
         self.rects: list[tuple[int, int, int, int]] = []
         self._buffer = bytearray()
         self._need = 0
@@ -137,6 +138,8 @@ class FakeRevA(FakeSerial):
             else:
                 if command == 110:
                     self.brightness.append(x)
+                elif command in (108, 109):
+                    self.lit = command == 109
                 del buffer[:6]
             self.commands.append(command)
 

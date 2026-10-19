@@ -1,5 +1,6 @@
 """[device] dark_on_quit: the panel goes dark when Libre Panel quits (a black picture and its
-light off, as turing-smart-screen-python turns these panels off), and only then."""
+light off, as turing-smart-screen-python turns these panels off; the screen off where the panel
+has a command for it), and only then."""
 
 import threading
 import time
@@ -16,13 +17,17 @@ class Panel(Display):
 
     def __init__(self, config):
         super().__init__(config)
-        self.frames, self.levels = [], []
+        self.frames, self.levels, self.off = [], [], False
 
     def show(self, frame, region=None):
         self.frames.append(frame.copy())
 
     def set_brightness(self, percent):
         self.levels.append(percent)
+
+    def screen_off(self):
+        self.off = True
+        return True
 
 
 def run_until_stopped(monkeypatch, dark, quitting, slow=False):
@@ -57,13 +62,14 @@ def test_quitting_turns_the_panel_dark(monkeypatch):
     panel = run_until_stopped(monkeypatch, dark=True, quitting=True)
     assert panel.levels[-1] == 0  # its light off, after the last picture...
     assert panel.frames[-1].convert("L").getbbox() is None  # ...a black one
+    assert panel.off  # and its screen, where it has a command for it
 
 
 @pytest.mark.parametrize(("dark", "quitting"), [(False, True), (True, False)])
 def test_the_panel_keeps_its_picture_otherwise(monkeypatch, dark, quitting):
     """The setting off, or the loop stopped for a pause (or a panel test): as it was."""
     panel = run_until_stopped(monkeypatch, dark=dark, quitting=quitting)
-    assert 0 not in panel.levels
+    assert 0 not in panel.levels and not panel.off
     assert panel.frames[-1].convert("L").getbbox() is not None
 
 
