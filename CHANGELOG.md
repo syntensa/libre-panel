@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.8 — 2026-10-19
+
+Arena's cores keep up with the processor, and its fans turn.
+
+**New**
+- **Fans that turn in the temperature module** (Arena): each one with its speed beside its
+  name and number, as Lumen's, instead of tiles. How many (six to begin with; 0: none) and
+  which are the module's to choose in Design (`fans`, `fan_items`); a list shows its
+  readings so too (style `fans`)
+- Arena on the 12.3": the temperatures take the whole height, with room for six fans; the
+  game's card is a little narrower
+
+**Fixes**
+- **CPU cores** (Arena): each core is measured ten times a second now, over the last 0.3 s,
+  and the bars glide to a new reading instead of jumping there every half second. The bars
+  of every list glide as other bars do (`smooth`)
+- The game's card had a heavier frame than the other cards (its corners and outline grew
+  with its size); the cards of a screen are framed alike now. Lumen's and Studio's lit cards
+  stay as they were
+
 ## 0.6.7 — 2026-10-19
 
 The Turing 3.5" and the UsbPCMonitor panels turn their screen off when Libre Panel quits.
