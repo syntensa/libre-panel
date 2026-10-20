@@ -17,6 +17,7 @@ import time
 import tomllib
 import unicodedata
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -114,6 +115,12 @@ dark_on_quit = false
 # true: dark while the computer sleeps (Windows), lit again when it wakes; false: the panel
 # keeps the last picture through the night where its USB port stays powered.
 dark_on_sleep = true
+# true: a brightness of its own at night (0: dark), from night_from to night_to (over
+# midnight too); the brightness above holds the rest of the day.
+night = false
+night_from = "22:00"
+night_to = "07:00"
+night_brightness = 10
 # Where frames go when no panel is used (relative = in this settings folder).
 output = "libre-panel-frame.png"
 # Serial panels (3.5", 5", 2.1" ...) are found by their USB ids. Only if that
@@ -209,6 +216,31 @@ provider = "open-meteo"
 units = "metric"
 update_minutes = 15
 """
+
+
+_TIME_OF_DAY = re.compile(r"\s*([01]?\d|2[0-3]):([0-5]\d)\s*")
+
+
+def time_of_day(text: str) -> int | None:
+    """``"22:00"`` as minutes after midnight; None for what is no time of day."""
+    found = _TIME_OF_DAY.fullmatch(text)
+    return int(found[1]) * 60 + int(found[2]) if found else None
+
+
+def night_now(device: DeviceConfig, now: datetime | None = None) -> bool:
+    """Whether it is night for the panel (``[device] night``, from ``night_from`` to
+    ``night_to``; a night that goes over midnight too)."""
+    start, end = time_of_day(device.night_from), time_of_day(device.night_to)
+    if not device.night or start is None or end is None or start == end:
+        return False
+    now = now or datetime.now()
+    minute = now.hour * 60 + now.minute
+    return start <= minute < end if start < end else minute >= start or minute < end
+
+
+def brightness_now(device: DeviceConfig, now: datetime | None = None) -> int:
+    """The brightness the panel shows now: the night's at night, else its own."""
+    return device.night_brightness if night_now(device, now) else device.brightness
 
 
 def default_providers(platform: str | None = None) -> list[str]:
@@ -311,6 +343,12 @@ class DeviceConfig:
     motion: str = "auto"
     dark_on_quit: bool = False  # a black picture and its light off when Libre Panel quits
     dark_on_sleep: bool = True  # so too while the computer sleeps (Windows), lit when it wakes
+    # a brightness of its own at night (night_now): from night_from to night_to, over midnight
+    # too, "HH:MM"; 0 is dark
+    night: bool = False
+    night_from: str = "22:00"
+    night_to: str = "07:00"
+    night_brightness: int = 10
     output: str = "libre-panel-frame.png"
     port: str = ""  # serial panels: the port; empty = found by its USB ids
     video: VideoConfig = field(default_factory=VideoConfig)
@@ -597,6 +635,17 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     cfg.device.dark_on_sleep = _expect(
         dev.get("dark_on_sleep", cfg.device.dark_on_sleep), bool, "device.dark_on_sleep"
     )
+    cfg.device.night = _expect(dev.get("night", cfg.device.night), bool, "device.night")
+    for name in ("night_from", "night_to"):
+        text = _expect(dev.get(name, getattr(cfg.device, name)), str, f"device.{name}")
+        if time_of_day(text) is None:
+            raise ConfigError(f'device.{name}: a time of day such as "22:00"')
+        setattr(cfg.device, name, "{:02d}:{:02d}".format(*divmod(time_of_day(text), 60)))
+    level = _expect(dev.get("night_brightness", cfg.device.night_brightness), int,
+                    "device.night_brightness")  # fmt: skip
+    if isinstance(level, bool) or not 0 <= level <= 100:
+        raise ConfigError("device.night_brightness: 0 to 100")
+    cfg.device.night_brightness = level
     cfg.device.output = _expect(dev.get("output", cfg.device.output), str, "device.output")
     cfg.device.port = _expect(dev.get("port", cfg.device.port), str, "device.port").strip()
     cfg.device.video = _parse_video(_expect(data.get("video", {}), dict, "video"))

@@ -28,7 +28,7 @@ invalid is refused with the reason, and nothing is written.
 
 | Section | What it changes in `config.toml` |
 |---|---|
-| Panel | `[device]` (`model`, `brightness`, `orientation`, `rotate`, `motion`, `dark_on_quit`, `dark_on_sleep`; under *Advanced* `driver`, `output`, `port`) and `[video]` (`mode`, `fps`, `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
+| Panel | `[device]` (`model`, `brightness`, `orientation`, `rotate`, `motion`, `dark_on_quit`, `dark_on_sleep`, `night`, `night_from`, `night_to`, `night_brightness`; under *Advanced* `driver`, `output`, `port`) and `[video]` (`mode`, `fps`, `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
 | Sensors | `[sensors] providers` (which sources, and their order; those not in use under *More sources*), the hardware's names, and under *Advanced* `refresh_ms` and `[sensors.librehardwaremonitor]` (`mode`, `url`) |
 | Game mode and more | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
@@ -74,6 +74,10 @@ dark_on_quit = false           # true: black and its light off when Libre Panel 
                                # (Windows shutting down too); lit again at the next start;
                                # Turing 3.5" and UsbPCMonitor turn their screen off too
 dark_on_sleep = true           # dark while the computer sleeps (Windows), lit when it wakes
+night = false                  # true: a brightness of its own at night, from night_from to
+night_from = "22:00"           # night_to (over midnight too); 0 is dark. brightness holds
+night_to = "07:00"             # the rest of the day
+night_brightness = 10
 output = "libre-panel-frame.png"   # frames go here when no panel is used;
                                    # a relative path is inside the settings folder
 port = ""                      # serial panels: found by their USB ids; only if that

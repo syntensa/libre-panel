@@ -2166,7 +2166,14 @@
     "one per line: a sensor (\"gpu.fan\"), a pattern (\"fan.*\") and a name if you like (\"fan.lpc.fan_2 = Front\"); empty: the GPU fan first, then the others": "einer pro Zeile: ein Sensor („gpu.fan“), ein Muster („fan.*“), gern mit Namen („fan.lpc.fan_2 = Vorne“); leer: zuerst der GPU-Lüfter, dann die anderen",
     "fans: none that has stood still since Libre Panel started (a header of the mainboard with nothing on it); the graphics card's stays": "Lüfter: keiner, der seit dem Start von Libre Panel stillsteht (ein Anschluss des Mainboards ohne Lüfter); der der Grafikkarte bleibt",
     "Dark while the computer sleeps": "Dunkel, solange der Computer schläft",
-    "The panel goes dark when Windows goes to sleep and lights up again when it wakes. Off: it keeps the last picture, all night where the USB port stays powered.": "Das Panel wird dunkel, wenn Windows in den Energiesparmodus geht, und leuchtet wieder, wenn es aufwacht. Aus: Es behält das letzte Bild, die ganze Nacht, wo der USB-Anschluss Strom behält."
+    "The panel goes dark when Windows goes to sleep and lights up again when it wakes. Off: it keeps the last picture, all night where the USB port stays powered.": "Das Panel wird dunkel, wenn Windows in den Energiesparmodus geht, und leuchtet wieder, wenn es aufwacht. Aus: Es behält das letzte Bild, die ganze Nacht, wo der USB-Anschluss Strom behält.",
+    "At night": "Nachts",
+    "From one time to the other the panel has a brightness of its own, over midnight too; 0 is dark. The brightness above holds the rest of the day.": "Von einer Uhrzeit bis zur anderen hat das Panel eine eigene Helligkeit, auch über Mitternacht; 0 ist dunkel. Die Helligkeit oben gilt den Rest des Tages.",
+    "Night from … to": "Nacht von … bis",
+    "Night begins": "Nacht beginnt",
+    "Night ends": "Nacht endet",
+    "Brightness at night": "Helligkeit nachts",
+    "dark": "dunkel"
   },
   "fields": {
     "align": "Ausrichtung",

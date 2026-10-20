@@ -2166,7 +2166,14 @@
     "one per line: a sensor (\"gpu.fan\"), a pattern (\"fan.*\") and a name if you like (\"fan.lpc.fan_2 = Front\"); empty: the GPU fan first, then the others": "uma por linha: um sensor (“gpu.fan”), um padrão (“fan.*”) e um nome, se quiser (“fan.lpc.fan_2 = Frente”); vazio: primeiro a da GPU, depois as outras",
     "fans: none that has stood still since Libre Panel started (a header of the mainboard with nothing on it); the graphics card's stays": "ventoinhas: nenhuma parada desde que o Libre Panel começou (um conector da placa-mãe sem nada); a da placa de vídeo fica",
     "Dark while the computer sleeps": "Apagado enquanto o computador dorme",
-    "The panel goes dark when Windows goes to sleep and lights up again when it wakes. Off: it keeps the last picture, all night where the USB port stays powered.": "O painel apaga quando o Windows entra em suspensão e acende de novo quando ele acorda. Desligado: ele mantém a última imagem, a noite toda onde a porta USB continua energizada."
+    "The panel goes dark when Windows goes to sleep and lights up again when it wakes. Off: it keeps the last picture, all night where the USB port stays powered.": "O painel apaga quando o Windows entra em suspensão e acende de novo quando ele acorda. Desligado: ele mantém a última imagem, a noite toda onde a porta USB continua energizada.",
+    "At night": "À noite",
+    "From one time to the other the panel has a brightness of its own, over midnight too; 0 is dark. The brightness above holds the rest of the day.": "De um horário a outro o painel tem um brilho próprio, passando da meia-noite também; 0 é apagado. O brilho acima vale para o resto do dia.",
+    "Night from … to": "Noite de … a",
+    "Night begins": "Começo da noite",
+    "Night ends": "Fim da noite",
+    "Brightness at night": "Brilho à noite",
+    "dark": "apagado"
   },
   "fields": {
     "align": "Alinhamento",

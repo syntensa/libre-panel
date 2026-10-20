@@ -16,7 +16,7 @@ from PIL import Image, ImageOps
 
 from libre_panel import clock as loop_clock
 from libre_panel import i18n, modes, timing, winsession
-from libre_panel.config import Config, ConfigError, load_config
+from libre_panel.config import Config, ConfigError, brightness_now, load_config
 from libre_panel.devices.base import Counters, DeviceError, Display, FrameError, create_display
 from libre_panel.devices.models import PanelModel, find_model
 from libre_panel.devices.turzx import video_mode
@@ -523,10 +523,15 @@ class _Warmup:
         self.discard()
 
 
+# what changes on the open panel: brightness (the night's too) and the picture's turn
+_FOLLOWED = ("brightness", "rotate", "night", "night_from", "night_to", "night_brightness")
+NIGHT_CHECK_S = 30.0  # how often the loop looks whether night began or ended
+
+
 def _same_device(a, b) -> bool:
     """Brightness and the picture's turn change on the open panel; anything else
     needs it opened again."""
-    return replace(a, brightness=0, rotate=0) == replace(b, brightness=0, rotate=0)
+    return replace(a, **{name: getattr(b, name) for name in _FOLLOWED}) == b
 
 
 class MainLoop:
@@ -619,7 +624,8 @@ class MainLoop:
         self.size = target_size(config, theme, shown)
         known = {config.path: config.stamp} if config.path and config.stamp else None
         self.watcher = _Watcher(config.path, _theme_file(theme), known=known)
-        self.link = _Link(self.display, config.device.brightness, status)
+        self.link = _Link(self.display, brightness_now(config.device), status)
+        self.night_at = 0.0  # when the loop last looked whether it is night (_follow_night)
         self.toasts = ToastLayer(renderer)
         if host is not None:
             host.judge = self.judge  # ``notify`` says whether a message will show
@@ -826,11 +832,24 @@ class MainLoop:
             return Delivery(False, LEFT_OUT)
         return Delivery(True)
 
+    def _follow_night(self) -> None:
+        """Night began or ended ([device] night): the panel takes its brightness. Looked at
+        twice a minute, on the computer's clock."""
+        now = time.monotonic()
+        if now - self.night_at < NIGHT_CHECK_S:
+            return
+        self.night_at = now
+        wanted = brightness_now(self.config.device)
+        if wanted != self.link.brightness:
+            log.info("the panel's brightness is %d %%: %s", wanted,
+                     "night" if wanted != self.config.device.brightness else "day")  # fmt: skip
+            self.link.set_brightness(wanted)
+
     def once(self) -> None:
         """A single frame to the panel; device errors are raised."""
         config, display, renderer = self.config, self.display, self.renderer
         display.open()
-        display.set_brightness(config.device.brightness)
+        display.set_brightness(brightness_now(config.device))
         frame, _ = renderer.render(self.hub.snapshot())
         frame = fit_frame(frame, self.size, background_of(renderer))
         self.turn = config.device.rotate if _on_panel(display) else 0
@@ -854,6 +873,7 @@ class MainLoop:
         is mounted), or None while the panel is not connected.
         """
         self._follow_panel()  # a panel that has connected may change the default theme
+        self._follow_night()
         config, host, status, hub, on_config = (
             self.config, self.host, self.status, self.hub, self.on_config
         )  # fmt: skip
@@ -906,13 +926,13 @@ class MainLoop:
                         display.close()
                         display = create_display(fresh.device)
                         display.counters = status.counters
-                        link = _Link(display, fresh.device.brightness, status)
+                        link = _Link(display, brightness_now(fresh.device), status)
                         device = fresh.device
                         reported = None  # the new display has not said which panel it is
-                    elif fresh.device.brightness != device.brightness:
-                        link.set_brightness(fresh.device.brightness)
-                        device.brightness = fresh.device.brightness
-                    device.rotate = fresh.device.rotate
+                    for name in _FOLLOWED:  # (on the open panel)
+                        setattr(device, name, getattr(fresh.device, name))
+                    if brightness_now(device) != link.brightness:
+                        link.set_brightness(brightness_now(device))
                     fresh.device, config = device, fresh
                     default = status.default_theme = fresh_default
                     i18n.set_language(config.language)

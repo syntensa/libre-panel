@@ -264,7 +264,7 @@ function DisplayCard() {
   const catalog = useCatalog();
   const [chosen, setChosen] = useState(null); // the slider stays where it is let go until it is written
   if (!config) return null;
-  const { brightness, rotate, dark_on_quit: dark, dark_on_sleep: sleep } = config.device;
+  const { brightness, rotate, dark_on_quit: dark, dark_on_sleep: sleep, night } = config.device;
   const choose = (value) => {
     if (value === brightness) return;
     setChosen(value);
@@ -301,6 +301,14 @@ function DisplayCard() {
     >
       <${Toggle} label=${t("Dark when Libre Panel quits")} checked=${Boolean(dark)} onChange=${(on) => saveSettings({ "device.dark_on_quit": on })} />
     <//>
+    <${SettingRow}
+      class="night-row"
+      title=${t("At night")}
+      hint=${t("From one time to the other the panel has a brightness of its own, over midnight too; 0 is dark. The brightness above holds the rest of the day.")}
+    >
+      <${Toggle} label=${t("At night")} checked=${Boolean(night)} onChange=${(on) => saveSettings({ "device.night": on })} />
+    <//>
+    ${night ? html`<${NightFields} device=${config.device} />` : null}
     ${catalog?.platform === "win32"
       ? html`<${SettingRow}
           class="sleep-row"
@@ -310,6 +318,28 @@ function DisplayCard() {
           <${Toggle} label=${t("Dark while the computer sleeps")} checked=${sleep !== false} onChange=${(on) => saveSettings({ "device.dark_on_sleep": on })} />
         <//>`
       : null}
+  <//>`;
+}
+
+/** When the night begins and ends, and the panel's brightness then. */
+function NightFields({ device }) {
+  const [chosen, setChosen] = useState(null); // as the brightness slider above
+  const level = device.night_brightness;
+  const choose = (value) => {
+    if (value === level) return;
+    setChosen(value);
+    saveSettings({ "device.night_brightness": value }).finally(() => setChosen(null));
+  };
+  return html`<${SettingRow} class="night-times" title=${t("Night from … to")} stacked>
+    <div class="night-fields">
+      <${CommitField} class="time" label=${t("Night begins")} value=${device.night_from} placeholder="22:00"
+        onCommit=${(text) => saveSettings({ "device.night_from": text })} />
+      <span aria-hidden="true">–</span>
+      <${CommitField} class="time" label=${t("Night ends")} value=${device.night_to} placeholder="07:00"
+        onCommit=${(text) => saveSettings({ "device.night_to": text })} />
+    </div>
+    <${Slider} label=${t("Brightness at night")} value=${chosen ?? level} min=${0} max=${100} step=${5}
+      format=${(value) => (value ? `${value} %` : t("dark"))} onCommit=${choose} />
   <//>`;
 }
 

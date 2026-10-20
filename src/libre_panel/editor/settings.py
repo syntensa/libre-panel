@@ -145,6 +145,16 @@ def _choice(name: str, value: Any, allowed: tuple[Any, ...]) -> Any:
     return value
 
 
+def _time_of_day(name: str, value: Any) -> str:
+    """``"7:30"`` as ``"07:30"``; anything else is refused."""
+    from libre_panel.config import time_of_day
+
+    minutes = time_of_day(value) if isinstance(value, str) else None
+    if minutes is None:
+        raise SettingsError(f'{name}: a time of day such as "22:00"')
+    return "{:02d}:{:02d}".format(*divmod(minutes, 60))
+
+
 def _flag(name: str, value: Any) -> bool:
     if not isinstance(value, bool):
         raise SettingsError(f"{name}: expected true or false")
@@ -361,6 +371,10 @@ class Settings:
                     "motion": device.motion,
                     "dark_on_quit": device.dark_on_quit,
                     "dark_on_sleep": device.dark_on_sleep,
+                    "night": device.night,
+                    "night_from": device.night_from,
+                    "night_to": device.night_to,
+                    "night_brightness": device.night_brightness,
                     "output": device.output,
                     "port": device.port,
                 },
@@ -990,6 +1004,10 @@ RULES: dict[str, Any] = {
     "device.motion": lambda n, v, c: _choice(n, v, MOTIONS),
     "device.dark_on_quit": lambda n, v, c: _flag(n, v),
     "device.dark_on_sleep": lambda n, v, c: _flag(n, v),
+    "device.night": lambda n, v, c: _flag(n, v),
+    "device.night_from": lambda n, v, c: _time_of_day(n, v),
+    "device.night_to": lambda n, v, c: _time_of_day(n, v),
+    "device.night_brightness": lambda n, v, c: _whole(n, v, 0, 100),
     "device.output": lambda n, v, c: _text(n, v, 260, required=True),
     "device.port": lambda n, v, c: _text(n, v, 64),
     "video.mode": lambda n, v, c: _choice(n, v, ("auto", "on", "off")),
