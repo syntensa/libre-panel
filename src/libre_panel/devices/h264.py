@@ -32,7 +32,7 @@ from pathlib import Path
 
 import psutil
 
-from libre_panel import bundled
+from libre_panel import bundled, winsession
 from libre_panel.devices.base import DeviceError
 from libre_panel.i18n import t
 
@@ -250,6 +250,8 @@ class Encoder:
         self.errors: collections.deque[str] = collections.deque(maxlen=10)
         self.splitter = PictureSplitter()
         self.pictures = 0
+        if winsession.ending():  # Windows refuses a new program now, with a box that names it
+            raise DeviceError("Windows is ending the session: no ffmpeg now")
         try:
             self.proc = popen(
                 command,

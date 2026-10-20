@@ -15,7 +15,7 @@ from typing import Any
 from PIL import Image, ImageOps
 
 from libre_panel import clock as loop_clock
-from libre_panel import i18n, modes, timing
+from libre_panel import i18n, modes, timing, winsession
 from libre_panel.config import Config, ConfigError, load_config
 from libre_panel.devices.base import Counters, DeviceError, Display, FrameError, create_display
 from libre_panel.devices.models import PanelModel, find_model
@@ -251,7 +251,7 @@ class _Link:
     def ensure(self, now: float) -> bool:
         if self.connected:
             return True
-        if now < self.retry_at:
+        if now < self.retry_at or winsession.ending():  # (no new start on the way out)
             return False
         try:
             self.display.open()
