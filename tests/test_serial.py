@@ -432,6 +432,24 @@ def test_rev_c_whole_frames_as_the_reference_turns_them(ports, no_waiting):
     assert panel.counts == []  # whole frames only
 
 
+def test_rev_c_answers_after_a_restart_are_found_and_asked_for_again(ports, no_waiting):
+    """After the panel loop started again (#7) a status from before may come first, or the
+    panel answers HELLO only after a moment: it is asked three times, half a second apart."""
+    panel = ports(FakeRevC("turing-5"), **AWAKE)
+    panel.stale = b"needReSend:0|renderCnt:3"
+    with display(model="turing-5") as screen:
+        screen.show(picture((800, 480)))
+    assert panel.commands.count(0x01) == 1 and no_waiting == []
+    panel.silent = 2
+    with display(model="turing-5") as screen:
+        screen.show(picture((800, 480)))
+    assert panel.commands.count(0x01) == 1 + 3 and no_waiting == [0.5, 0.5]
+    panel.silent = 3
+    with pytest.raises(DeviceError, match="did not answer"):
+        with display(model="turing-5"):
+            pass
+
+
 def test_rev_c_counts_its_boxes(ports, no_waiting):
     panel = ports(FakeRevC("turing-5"), **AWAKE)
     first, second, box = rev_c_frames("turing-5", "landscape")

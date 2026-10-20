@@ -9,7 +9,9 @@ uses it on these panels:
 - A sleeping panel shows up with other USB ids (1a86:ca21, serial number
   "CT21INCH", "USB7INCH" or "CT88INCH"). Opening its port wakes it; it comes
   back as 0525:a4a7 or 1d6b:0121/0106 (serial number "20080411").
-- HELLO answers 23 bytes, "chs_..." and the ROM version ("...rom1.87"). The
+- HELLO answers 23 bytes, "chs_..." and the ROM version ("...rom1.87"); after
+  the panel loop started again, a status left from before may come first, so the
+  answer is looked for in what follows too, and HELLO is asked three times. The
   size in the answer is not reliable (a 2.1" says 5inch), and neither is
   "CT21INCH" (a 5" sold as UsbPCMonitor sleeps with it too): the model comes
   from the config, from the serial numbers "USB7INCH" and "CT88INCH", or from
@@ -73,6 +75,7 @@ ASLEEP_IDS = {(0x1A86, 0xCA21)}
 AWAKE_IDS = {(0x0525, 0xA4A7), (0x1D6B, 0x0121), (0x1D6B, 0x0106)}
 AWAKE_SERIAL = "20080411"
 WAKE_TRIES = 15
+HELLO_TRIES = 3  # a panel that does not answer is asked again, half a second later
 # Where a box's data may not end in its last 250-byte block (see above).
 UNSAFE_ENDS = frozenset({0, 248, 249})
 
@@ -202,11 +205,21 @@ class RevCDisplay(SerialDisplay):
         return self.link.read(read) if read else b""
 
     def identify(self, found: FoundPort) -> PanelModel:
-        self.link.drain_input()
-        answer = self._command(HELLO, read=23)
-        self.link.drain_input()
-        text = "".join(c for c in answer.decode("ascii", "ignore") if c in string.printable)
-        if not text.startswith("chs_"):
+        for attempt in range(1, HELLO_TRIES + 1):
+            self.link.drain_input()
+            answer = self._command(HELLO, read=23)
+            if b"chs_" not in answer:  # (a status from before the restart may come first)
+                answer += self.link.read(64)
+            self.link.drain_input()
+            text = "".join(c for c in answer.decode("ascii", "ignore") if c in string.printable)
+            if "chs_" in text:
+                text = text[text.index("chs_") :]
+                break
+            log.info("the panel on %s did not answer (%d of %d)", found.device, attempt,
+                     HELLO_TRIES)  # fmt: skip
+            if attempt < HELLO_TRIES:
+                self.sleep(0.5)
+        else:
             raise DeviceError(t("the panel on {port} did not answer", port=found.device))
         try:
             rom = int(text.split(".")[2])

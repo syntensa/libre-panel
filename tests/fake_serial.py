@@ -318,6 +318,8 @@ class FakeRevC(FakeSerial):
         super().__init__()
         self.model, self.rom = model, rom
         self.hello = hello + str(rom).encode()
+        self.silent = 0  # HELLOs it lets pass without an answer
+        self.stale = b""  # what it still had to say, before its answer to HELLO
         self.screen = Image.new("RGB", self.NATIVE[model], "white")
         self.commands: list[int] = []
         self.brightness: list[int] = []
@@ -378,7 +380,11 @@ class FakeRevC(FakeSerial):
             opcode = block[0]
             self.commands.append(opcode)
             if opcode == 0x01:
-                self.answers += self.hello.ljust(23, b"\0")
+                if self.silent:  # (a panel that answers only after a while)
+                    self.silent -= 1
+                else:  # a status left from before may come first
+                    self.answers += self.stale + self.hello.ljust(23, b"\0")
+                    self.stale = b""
             elif opcode in (0x96, 0xCF):  # STOP_MEDIA, QUERY_STATUS: a status
                 self.answers += self.status()
             elif opcode == 0x7B:

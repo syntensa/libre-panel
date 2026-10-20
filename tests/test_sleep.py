@@ -62,3 +62,31 @@ def test_the_session_window_tells_sleep_and_wake():
         watcher._power(event)
     assert calls == ["sleep", "wake", "wake"]  # (0x0A: the power source changed)
     assert threading.current_thread() is threading.main_thread()
+
+
+def test_a_loop_that_stops_late_has_the_panel_to_itself_until_it_ends(monkeypatch, tmp_path):
+    """A restart (pause, then resume) whose old loop has not let the panel go yet: the new
+    loop waits for it, else both would open the panel's port (#7)."""
+    running, release = [], threading.Event()
+
+    def loop(config, stop, quitting, **_):
+        running.append(threading.current_thread())
+        stop.wait(10)
+        release.wait(10)  # (still writing a frame)
+        running.remove(threading.current_thread())
+
+    monkeypatch.setattr(service, "run", loop)
+    monkeypatch.setattr(service, "load_config", lambda path=None: parse_config({}))
+    panel = service.PanelService(tmp_path / "config.toml")
+    monkeypatch.setattr(panel, "HALT_S", 0.05)
+    monkeypatch.setattr(panel, "LINGER_S", 0.05)
+    panel.start()
+    assert wait_for(lambda: len(running) == 1)
+    panel.pause()  # it did not stop in time
+    panel.resume()
+    assert len(running) == 1 and not panel.running  # no second loop beside it
+    release.set()
+    assert wait_for(lambda: not running)
+    panel.resume()
+    assert wait_for(lambda: len(running) == 1)
+    panel.stop()

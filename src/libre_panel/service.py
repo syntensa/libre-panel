@@ -52,6 +52,8 @@ class PanelService:
     """
 
     RETRY_S = 30.0
+    HALT_S = 10.0  # how long a stop waits for the loop to let the panel go
+    LINGER_S = 30.0  # how long a new loop waits for an old one that did not stop in time
 
     def __init__(
         self,
@@ -77,6 +79,9 @@ class PanelService:
         # the computer goes to sleep (sleep()); None, a pause or a restart
         self._ending: bool | str | None = None
         self._asleep = False  # the loop stopped for the computer's sleep: it wakes with it
+        # a loop that did not stop in time (_halt): the next one waits for it, never two
+        # loops on one panel
+        self._lingering: threading.Thread | None = None
 
     @property
     def paused(self) -> bool:
@@ -118,6 +123,13 @@ class PanelService:
                 return
             if self.running:
                 return
+            lingering = self._lingering
+            if lingering is not None and lingering.is_alive():
+                lingering.join(timeout=self.LINGER_S)  # it still has the panel's port
+                if lingering.is_alive():
+                    log.warning("the old panel loop still runs; the panel starts after it")
+                    return
+            self._lingering = None
             self._paused = False
             self._stop = threading.Event()
             self.status = RunStatus()
@@ -132,9 +144,10 @@ class PanelService:
             self._stop.set()
             thread, self._thread = self._thread, None
         if thread is not None:
-            thread.join(timeout=10)
+            thread.join(timeout=self.HALT_S)
             if thread.is_alive():
                 log.warning("the panel loop did not stop in time")
+                self._lingering = thread
                 return False
         return True
 
