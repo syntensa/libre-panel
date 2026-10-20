@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from libre_panel import app
+from libre_panel import app, presence
 from libre_panel.config import ConfigError, DeviceConfig, brightness_now, night_now, parse_config
 
 
@@ -56,7 +56,7 @@ def test_the_loop_takes_the_night_s_brightness_when_it_begins_and_ends(monkeypat
     loop = object.__new__(app.MainLoop)  # (only what _follow_night needs)
     loop.config = parse_config({"device": {"night": True, "brightness": 60,
                                            "night_brightness": 0}})  # fmt: skip
-    loop.link, loop.night_at = Link(), 0.0
+    loop.link, loop.night_at, loop.presence = Link(), 0.0, presence.changes()
     loop._follow_night()
     assert loop.link.brightness == 60
     clock[0], loop.night_at = at(22, 1), 0.0

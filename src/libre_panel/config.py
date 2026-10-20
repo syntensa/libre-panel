@@ -238,8 +238,17 @@ def night_now(device: DeviceConfig, now: datetime | None = None) -> bool:
     return start <= minute < end if start < end else minute >= start or minute < end
 
 
-def brightness_now(device: DeviceConfig, now: datetime | None = None) -> int:
-    """The brightness the panel shows now: the night's at night, else its own."""
+def brightness_now(
+    device: DeviceConfig, now: datetime | None = None, away: bool | None = None
+) -> int:
+    """The brightness the panel shows now: while the person is away (``away``; None: as
+    presence.py has it) the one for then, at night the night's, else its own."""
+    if away is None:
+        from libre_panel import presence
+
+        away = presence.away()
+    if away and device.dark_when_away:
+        return device.away_brightness
     return device.night_brightness if night_now(device, now) else device.brightness
 
 
@@ -349,6 +358,10 @@ class DeviceConfig:
     night_from: str = "22:00"
     night_to: str = "07:00"
     night_brightness: int = 10
+    # while the person is away (the computer locked, its monitor off: presence.py), this
+    # brightness; 0 is dark
+    dark_when_away: bool = True
+    away_brightness: int = 0
     output: str = "libre-panel-frame.png"
     port: str = ""  # serial panels: the port; empty = found by its USB ids
     video: VideoConfig = field(default_factory=VideoConfig)
@@ -743,7 +756,7 @@ def _parse_device(dev: dict[str, Any], where: str) -> DeviceConfig:
     if motion not in MOTIONS:
         raise ConfigError(f'{where}.motion: "auto", "full" or "calm"')
     device.motion = motion
-    for name in ("dark_on_quit", "dark_on_sleep", "night"):
+    for name in ("dark_on_quit", "dark_on_sleep", "night", "dark_when_away"):
         given = dev.get(name, getattr(device, name))
         setattr(device, name, _expect(given, bool, f"{where}.{name}"))
     for name in ("night_from", "night_to"):
@@ -756,6 +769,11 @@ def _parse_device(dev: dict[str, Any], where: str) -> DeviceConfig:
     if isinstance(level, bool) or not 0 <= level <= 100:
         raise ConfigError(f"{where}.night_brightness: 0 to 100")
     device.night_brightness = level
+    level = _expect(dev.get("away_brightness", device.away_brightness), int,
+                    f"{where}.away_brightness")  # fmt: skip
+    if not 0 <= level <= 100:
+        raise ConfigError(f"{where}.away_brightness: 0 to 100")
+    device.away_brightness = level
     device.output = _expect(dev.get("output", device.output), str, f"{where}.output")
     device.port = _expect(dev.get("port", device.port), str, f"{where}.port").strip()
     return device

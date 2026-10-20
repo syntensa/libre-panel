@@ -14,6 +14,9 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
   dark (*Settings → Panel*, `[device] night`)
 - **The panel sleeps with the computer** (Windows): dark while Windows sleeps, lit again
   when it wakes (`dark_on_sleep`, on unless turned off)
+- **Dimmed while you are away** (Windows): while the computer is locked or its monitor is
+  off, every panel takes a brightness for then, dark to begin with, and lights up again when
+  you are back (`dark_when_away`, `away_brightness`; on unless turned off)
 - **Cores** (Arena and the cores module): a bar for each physical core, its threads
   together, where Windows or Linux says which belong together; `threads` shows every thread
 - **The game card** tells what holds the frame rate down (the graphics card, the processor

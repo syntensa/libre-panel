@@ -2187,7 +2187,10 @@
     "The panel's own": "Par défaut pour l’écran",
     "the panel is in use by another panel of Libre Panel": "l’écran est déjà utilisé par un autre écran de Libre Panel",
     "{panel} on": "{panel} activé",
-    "{port} is in use by another panel of Libre Panel": "{port} est déjà utilisé par un autre écran de Libre Panel"
+    "{port} is in use by another panel of Libre Panel": "{port} est déjà utilisé par un autre écran de Libre Panel",
+    "Dimmed while you are away": "Atténué en votre absence",
+    "While the computer is locked or its monitor is off, the panel takes the brightness below; 0 is dark. Back at the computer, it lights up again.": "Tant que l’ordinateur est verrouillé ou que son écran est éteint, l’écran prend la luminosité ci-dessous ; 0 est éteint. De retour à l’ordinateur, il se rallume.",
+    "Brightness while you are away": "Luminosité en votre absence"
   },
   "fields": {
     "align": "Alignement",

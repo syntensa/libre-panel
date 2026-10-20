@@ -267,7 +267,7 @@ function DisplayCard() {
   const catalog = useCatalog();
   const [chosen, setChosen] = useState(null); // the slider stays where it is let go until it is written
   if (!config) return null;
-  const { brightness, rotate, dark_on_quit: dark, dark_on_sleep: sleep, night } = config.device;
+  const { brightness, rotate, dark_on_quit: dark, dark_on_sleep: sleep, night, dark_when_away: away } = config.device;
   const choose = (value) => {
     if (value === brightness) return;
     setChosen(value);
@@ -314,6 +314,16 @@ function DisplayCard() {
     ${night ? html`<${NightFields} device=${config.device} />` : null}
     ${catalog?.platform === "win32"
       ? html`<${SettingRow}
+          class="away-row"
+          title=${t("Dimmed while you are away")}
+          hint=${t("While the computer is locked or its monitor is off, the panel takes the brightness below; 0 is dark. Back at the computer, it lights up again.")}
+        >
+          <${Toggle} label=${t("Dimmed while you are away")} checked=${away !== false} onChange=${(on) => saveSettings({ "device.dark_when_away": on })} />
+        <//>
+        ${away !== false ? html`<${AwayBrightness} level=${config.device.away_brightness} />` : null}`
+      : null}
+    ${catalog?.platform === "win32"
+      ? html`<${SettingRow}
           class="sleep-row"
           title=${t("Dark while the computer sleeps")}
           hint=${t("The panel goes dark when Windows goes to sleep and lights up again when it wakes. Off: it keeps the last picture, all night where the USB port stays powered.")}
@@ -321,6 +331,20 @@ function DisplayCard() {
           <${Toggle} label=${t("Dark while the computer sleeps")} checked=${sleep !== false} onChange=${(on) => saveSettings({ "device.dark_on_sleep": on })} />
         <//>`
       : null}
+  <//>`;
+}
+
+/** The panel's brightness while the person is away (0: dark). */
+function AwayBrightness({ level }) {
+  const [chosen, setChosen] = useState(null); // as the brightness slider above
+  const choose = (value) => {
+    if (value === level) return;
+    setChosen(value);
+    saveSettings({ "device.away_brightness": value }).finally(() => setChosen(null));
+  };
+  return html`<${SettingRow} class="away-brightness" title=${t("Brightness while you are away")}>
+    <${Slider} label=${t("Brightness while you are away")} value=${chosen ?? level} min=${0} max=${100} step=${5}
+      format=${(value) => (value ? `${value} %` : t("dark"))} onCommit=${choose} />
   <//>`;
 }
 

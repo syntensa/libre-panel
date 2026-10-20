@@ -28,7 +28,7 @@ invalid is refused with the reason, and nothing is written.
 
 | Section | What it changes in `config.toml` |
 |---|---|
-| Panel | `[device]` (`model`, `brightness`, `orientation`, `rotate`, `motion`, `dark_on_quit`, `dark_on_sleep`, `night`, `night_from`, `night_to`, `night_brightness`; under *Advanced* `driver`, `output`, `port`) and `[video]` (`mode`, `fps`, `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
+| Panel | `[device]` (`model`, `brightness`, `orientation`, `rotate`, `motion`, `dark_on_quit`, `dark_on_sleep`, `night`, `night_from`, `night_to`, `night_brightness`, `dark_when_away`, `away_brightness`; under *Advanced* `driver`, `output`, `port`) and `[video]` (`mode`, `fps`, `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
 | Sensors | `[sensors] providers` (which sources, and their order; those not in use under *More sources*), the hardware's names, and under *Advanced* `refresh_ms` and `[sensors.librehardwaremonitor]` (`mode`, `url`) |
 | Game mode and more | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
@@ -82,6 +82,8 @@ night = false                  # true: a brightness of its own at night, from ni
 night_from = "22:00"           # night_to (over midnight too); 0 is dark. brightness holds
 night_to = "07:00"             # the rest of the day
 night_brightness = 10
+dark_when_away = true          # the computer locked or its monitor off (Windows): the
+away_brightness = 0            # panel takes away_brightness (0: dark) until you are back
 output = "libre-panel-frame.png"   # frames go here when no panel is used;
                                    # a relative path is inside the settings folder
 port = ""                      # serial panels: found by their USB ids; only if that
@@ -268,7 +270,8 @@ theme = "lumen"                # empty or left out: the panel's own default
 model = "turing-3.5"           # "auto": a panel the others do not use
 port = "COM6"                  # serial panels: which of two of the same kind it is
 brightness = 40
-# rotate = 180, orientation, motion, night, dark_on_quit, dark_on_sleep: as in [device]
+# rotate = 180, orientation, motion, night, dark_on_quit, dark_on_sleep, dark_when_away:
+# as in [device]
 # on = false                   # kept, but not shown
 ```
 

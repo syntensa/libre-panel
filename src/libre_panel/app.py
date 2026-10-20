@@ -15,7 +15,7 @@ from typing import Any
 from PIL import Image, ImageOps
 
 from libre_panel import clock as loop_clock
-from libre_panel import i18n, modes, timing, winsession
+from libre_panel import i18n, modes, presence, timing, winsession
 from libre_panel.config import Config, ConfigError, brightness_now, load_config
 from libre_panel.devices.base import Counters, DeviceError, Display, FrameError, create_display
 from libre_panel.devices.models import PanelModel, find_model
@@ -533,7 +533,10 @@ class _Warmup:
 
 
 # what changes on the open panel: brightness (the night's too) and the picture's turn
-_FOLLOWED = ("brightness", "rotate", "night", "night_from", "night_to", "night_brightness")
+_FOLLOWED = (
+    "brightness", "rotate", "night", "night_from", "night_to", "night_brightness",
+    "dark_when_away", "away_brightness",
+)  # fmt: skip
 NIGHT_CHECK_S = 30.0  # how often the loop looks whether night began or ended
 
 
@@ -637,6 +640,7 @@ class MainLoop:
         self.watcher = _Watcher(config.path, _theme_file(theme), known=known)
         self.link = _Link(self.display, brightness_now(config.device), status)
         self.night_at = 0.0  # when the loop last looked whether it is night (_follow_night)
+        self.presence = presence.changes()  # the person left or came back since: at once
         self.toasts = ToastLayer(renderer)
         if host is not None:
             host.judge = self.judge  # ``notify`` says whether a message will show
@@ -844,16 +848,22 @@ class MainLoop:
         return Delivery(True)
 
     def _follow_night(self) -> None:
-        """Night began or ended ([device] night): the panel takes its brightness. Looked at
-        twice a minute, on the computer's clock."""
+        """Night began or ended ([device] night), or the person left or came back
+        (presence.py, [device] dark_when_away): the panel takes its brightness. The night is
+        looked at twice a minute, on the computer's clock; the person at once."""
         now = time.monotonic()
-        if now - self.night_at < NIGHT_CHECK_S:
+        changes = presence.changes()
+        if now - self.night_at < NIGHT_CHECK_S and changes == self.presence:
             return
-        self.night_at = now
-        wanted = brightness_now(self.config.device)
+        self.night_at, self.presence = now, changes
+        device = self.config.device
+        wanted = brightness_now(device)
         if wanted != self.link.brightness:
-            log.info("the panel's brightness is %d %%: %s", wanted,
-                     "night" if wanted != self.config.device.brightness else "day")  # fmt: skip
+            if presence.away() and device.dark_when_away:
+                why = "the person is away"
+            else:
+                why = "night" if wanted != device.brightness else "day"
+            log.info("the panel's brightness is %d %%: %s", wanted, why)
             self.link.set_brightness(wanted)
 
     def once(self) -> None:

@@ -83,6 +83,8 @@ def test_the_settings_are_the_config_with_its_defaults_filled_in(server):
         "night_from": "22:00",
         "night_to": "07:00",
         "night_brightness": 10,
+        "dark_when_away": True,
+        "away_brightness": 0,
         "output": "libre-panel-frame.png",
         "port": "",
     }
@@ -1081,6 +1083,7 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "device.model", "device.driver", "device.brightness", "device.rotate", "device.port",
         "device.orientation", "device.motion", "device.dark_on_quit", "device.dark_on_sleep",
         "device.night", "device.night_from", "device.night_to", "device.night_brightness",
+        "device.dark_when_away", "device.away_brightness",
         "video.mode", "video.fps", "video.local_clip", "video.clip_asked", "refresh_ms",
         "check_updates", "allow_notify", "light_mode", "symbols", "hotkeys.enabled",
         "hotkeys.pause",

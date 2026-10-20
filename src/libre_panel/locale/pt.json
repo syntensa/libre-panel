@@ -2187,7 +2187,10 @@
     "The panel's own": "O padrão do painel",
     "the panel is in use by another panel of Libre Panel": "o painel já está em uso por outro painel do Libre Panel",
     "{panel} on": "{panel} ligado",
-    "{port} is in use by another panel of Libre Panel": "{port} já está em uso por outro painel do Libre Panel"
+    "{port} is in use by another panel of Libre Panel": "{port} já está em uso por outro painel do Libre Panel",
+    "Dimmed while you are away": "Escurecido enquanto você está ausente",
+    "While the computer is locked or its monitor is off, the panel takes the brightness below; 0 is dark. Back at the computer, it lights up again.": "Enquanto o computador está bloqueado ou o monitor desligado, o painel usa o brilho abaixo; 0 é apagado. De volta ao computador, ele acende de novo.",
+    "Brightness while you are away": "Brilho enquanto você está ausente"
   },
   "fields": {
     "align": "Alinhamento",

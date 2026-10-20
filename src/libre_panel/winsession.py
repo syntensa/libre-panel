@@ -18,7 +18,10 @@ out of Windows. :func:`ending` tells the parts of Libre Panel that start one (Pr
 
 The same window hears when the computer goes to sleep and wakes (WM_POWERBROADCAST; on a
 computer with modern standby once it asked for it, RegisterSuspendResumeNotification): the
-panel then goes dark and lights up again, as turing-smart-screen-python does.
+panel then goes dark and lights up again, as turing-smart-screen-python does. It hears too
+when the session is locked and unlocked (WTSRegisterSessionNotification) and when the monitor
+goes off and on (RegisterPowerSettingNotification, GUID_CONSOLE_DISPLAY_STATE), and tells
+presence.py: the panels dim while the person is away.
 """
 
 from __future__ import annotations
@@ -27,6 +30,8 @@ import logging
 import sys
 import threading
 from collections.abc import Callable
+
+from libre_panel import presence
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +43,12 @@ WM_POWERBROADCAST = 0x0218
 PBT_APMSUSPEND = 0x0004  # the computer goes to sleep
 PBT_APMRESUMESUSPEND = 0x0007  # it woke, a person at it
 PBT_APMRESUMEAUTOMATIC = 0x0012  # it woke (always sent)
+PBT_POWERSETTINGCHANGE = 0x8013  # a power setting asked for changed: the monitor's state
+WM_WTSSESSION_CHANGE = 0x02B1
+WTS_SESSION_LOCK = 0x7
+WTS_SESSION_UNLOCK = 0x8
+# GUID_CONSOLE_DISPLAY_STATE: 0 the monitor is off, 1 on, 2 dimmed
+CONSOLE_DISPLAY_STATE = "6fe69556-704a-47a0-8f24-c28d936fda47"
 # Applications may use 0x100-0x3FF; higher is told earlier.
 EARLY_SHUTDOWN_LEVEL = 0x3FF
 
@@ -116,6 +127,17 @@ class SessionEndWatcher:
         except Exception:  # Windows is waiting; answer in any case
             log.exception("while the computer went to sleep or woke")
 
+    @staticmethod
+    def _session(event: int) -> None:
+        """The session was locked or unlocked."""
+        if event in (WTS_SESSION_LOCK, WTS_SESSION_UNLOCK):
+            presence.set_away(presence.LOCKED, event == WTS_SESSION_LOCK)
+
+    @staticmethod
+    def _display(state: int) -> None:
+        """The monitor went off (0), on (1) or dimmed (2: still on)."""
+        presence.set_away(presence.DISPLAY_OFF, state == 0)
+
     def _end(self) -> None:
         if self.ended:
             return
@@ -124,6 +146,47 @@ class SessionEndWatcher:
             self.on_end()
         except Exception:  # Windows is waiting; answer in any case
             log.exception("while stopping for the end of the session")
+
+    def _setting(self, lparam: int) -> None:
+        """A power setting changed: lparam points to a POWERBROADCAST_SETTING (its GUID, the
+        length of its data, the data); the monitor's state is a DWORD."""
+        import ctypes
+        import uuid
+
+        try:
+            raw = ctypes.string_at(lparam, 20)  # GUID (16) and DataLength (4)
+            if str(uuid.UUID(bytes_le=raw[:16])) != CONSOLE_DISPLAY_STATE:
+                return
+            length = int.from_bytes(raw[16:20], "little")
+            data = ctypes.string_at(lparam + 20, min(length, 4))
+            self._display(int.from_bytes(data, "little"))
+        except (OSError, ValueError):  # never in Windows' way
+            log.debug("a power setting that could not be read", exc_info=True)
+
+    def _ask_for_presence(self, user32) -> None:
+        """Ask Windows to tell the window about locking and the monitor (presence.py)."""
+        import ctypes
+        import uuid
+        from ctypes import wintypes
+
+        try:
+            wtsapi32 = ctypes.WinDLL("wtsapi32", use_last_error=True)
+            wtsapi32.WTSRegisterSessionNotification.argtypes = [wintypes.HWND, wintypes.DWORD]
+            if not wtsapi32.WTSRegisterSessionNotification(self.hwnd, 0):  # this session
+                log.debug("no word of locking (%d)", ctypes.get_last_error())
+        except (OSError, AttributeError) as exc:
+            log.debug("no word of locking: %s", exc)
+        try:
+            guid = (ctypes.c_ubyte * 16).from_buffer_copy(uuid.UUID(CONSOLE_DISPLAY_STATE).bytes_le)
+            user32.RegisterPowerSettingNotification.argtypes = [
+                wintypes.HANDLE, ctypes.c_void_p, wintypes.DWORD
+            ]  # fmt: skip
+            user32.RegisterPowerSettingNotification.restype = wintypes.HANDLE
+            self._guid = guid  # (kept as long as the window)
+            if not user32.RegisterPowerSettingNotification(self.hwnd, ctypes.byref(guid), 0):
+                log.debug("no word of the monitor (%d)", ctypes.get_last_error())
+        except (OSError, AttributeError) as exc:
+            log.debug("no word of the monitor: %s", exc)
 
     def _run(self) -> None:
         import ctypes
@@ -195,8 +258,14 @@ class SessionEndWatcher:
                     ENDING.clear()
                 return 0
             if message == WM_POWERBROADCAST:
-                self._power(wparam)
+                if wparam == PBT_POWERSETTINGCHANGE:
+                    self._setting(lparam)
+                else:
+                    self._power(wparam)
                 return 1  # (TRUE: Libre Panel never holds up a sleep)
+            if message == WM_WTSSESSION_CHANGE:
+                self._session(wparam)
+                return 0
             if message == WM_DESTROY:
                 user32.PostQuitMessage(0)
                 return 0
@@ -226,6 +295,7 @@ class SessionEndWatcher:
             user32.RegisterSuspendResumeNotification(self.hwnd, 0)  # DEVICE_NOTIFY_WINDOW_HANDLE
         except AttributeError:
             pass
+        self._ask_for_presence(user32)
         message = wintypes.MSG()
         while user32.GetMessageW(ctypes.byref(message), None, 0, 0) > 0:
             user32.TranslateMessage(ctypes.byref(message))
