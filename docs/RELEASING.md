@@ -43,8 +43,14 @@ The tag starts `release.yml`: it checks that the tag matches the version and
 that CHANGELOG.md has its section, runs the tests, builds the PyInstaller
 bundles and tests each download. Only when all of that passed, it publishes
 the GitHub Release with all files, its notes taken from the CHANGELOG
-section; a version like `0.2.0rc1` is marked as a pre-release. Then the PyPI
-upload, after approval, if it is set up.
+section. Then the PyPI upload, after approval, if it is set up.
+
+A version like `0.7.0rc1` (with a section `## 0.7.0rc1` in CHANGELOG.md) is a
+pre-release to try before everyone has it: the workflow makes it a **draft**,
+which only those who may write to the repository see, with all its files, and
+leaves PyPI out. *Publish release* on its page makes it a public pre-release;
+the app's update check never offers one, and an installed pre-release hears of
+the release that follows it (`0.7.0` after `0.7.0rc1`).
 
 Every download is tested on its own system before it is attached:
 
