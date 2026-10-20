@@ -1813,11 +1813,15 @@ def build_temps(b: _Build, _src: Source) -> None:
                 "max_items": count, "hide_unused": True}  # fmt: skip
     if not count:
         b.listing("temps", items, x, y, w, h, color, "bars" if h > b.ts * 4.5 else "rows", **temps)
-    elif b.aspect >= 3.0 and b.iw > b.ts * 40:  # long: temperatures | fans
-        width = (w - b.pad) * 0.6
-        b.listing("temps", items, x, y, width, h, color, **temps)
-        b.listing("fans", fans, x + width + b.pad, y, w - width - b.pad, h, color, "rows",
-                  **fan_list)  # fmt: skip
+    elif (b.aspect >= 3.0 and b.iw > b.ts * 40) or (b.aspect >= 1.8 and h > b.ts * 5.5):
+        # long or wide: the temperatures | the fans turning
+        width = (w - b.pad) * (0.6 if b.aspect >= 3.0 else 0.5)
+        style = "bars" if h > b.ts * 6.5 * (2 if b.aspect >= 3.0 else 1) else "rows"
+        b.listing("temps", items, x, y, width, h, color, style, **temps)
+        room = w - width - b.pad  # as many as are readable: three lines, one beside another
+        size = max(7, round(_clamp(min(room / 6.3, h / 7.5), 7, b.ts * 1.15)))  # where it fits
+        b.listing("fans", fans, x + width + b.pad, y, room, h, color, "fans", size, min=0,
+                  max=3000, **{**fan_list, "format": "{value:.0f}"})  # fmt: skip
     elif (b.large or b.aspect <= 0.72) and h > b.ts * 11:  # big: the fans turning below
         # their numbers, as Lumen's where two fit side by side (the fans 1.9 times as big)
         size = max(7, round(_clamp(w / 12.5, 7, b.ts * 1.15)))

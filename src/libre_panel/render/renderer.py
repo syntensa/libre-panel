@@ -2475,7 +2475,7 @@ class Renderer:
         height of each place, the fan's size, and how many fit at most."""
         w, h, fs = max(1, widget["w"]), max(1, widget["h"]), max(6, widget["font_size"])
         size = max(12, round(fs * 1.9))
-        fit = widget["columns"] if widget["columns"] > 0 else max(1, int(w // (size + fs * 4.2)))
+        fit = widget["columns"] if widget["columns"] > 0 else max(1, int(w // (size + fs * 5)))
         lines = max(1, int((h + fs * 0.6) // (size + fs * 0.6)))
         count = max(1, min(count, fit * lines))
         used = -(-count // fit)
@@ -2494,7 +2494,7 @@ class Renderer:
         """Each fan's name and number beside the place it turns in (:meth:`_list_turning`)."""
         fs = max(6, widget["font_size"])
         _c, _l, cell_w, _p, size, _r = self._list_fan_grid(widget, len(rows))
-        ls = max(6, fs * 0.62)  # names
+        ls = max(6, fs * 0.62, min(fs * 0.72, 11))  # names (small fans: a little larger)
         block = 0.7 * ls + 0.55 * fs + 0.7 * fs
         width = cell_w - size - fs * 0.65
         places = self._list_fan_places(widget, len(rows))

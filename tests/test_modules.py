@@ -554,6 +554,18 @@ def test_list_modules_take_their_readings_and_sorting():
     assert module_info()["kinds"]["ring"]["items"] == ""
 
 
+def test_a_wide_or_long_temperature_module_has_its_fans_turning_beside():
+    """Arena on the 9.2" and the 5.2": as many fans as are readable (one column there)."""
+    from libre_panel.theme.model import builtin_themes_dir, load_theme
+
+    for name in ("arena", "arena-1280x720"):
+        renderer = Renderer(load_theme(builtin_themes_dir() / name), preview=True)
+        widgets = {w["id"]: w for w in renderer.widgets}
+        fans, temps = widgets["m4/fans"], widgets["m4/temps"]
+        assert fans["style"] == "fans" and fans["x"] > temps["x"] + temps["w"]
+        assert fans["font_size"] >= 14 and renderer._list_room(fans, 6) >= 3, name
+
+
 @pytest.mark.parametrize("span", [(1, 1), (2, 1), (2, 2)])
 def test_cores_show_every_core(span):
     renderer = Renderer(theme({"module": "cores", "cols": span[0], "rows": span[1]}), preview=True)
