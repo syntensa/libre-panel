@@ -290,11 +290,12 @@ class SensorHub:
 
     def shared(self, max_age: float) -> tuple[dict[str, Reading], dict[str, Any]]:
         """For another panel (:class:`HubView`): the readings and pictures taken last, when
-        they are at most ``max_age`` seconds old, else new ones; the sources are not read
-        twice for two panels that draw at the same pace."""
+        they are younger than ``max_age`` seconds, else new ones; the sources are not read
+        twice for two panels that draw at the same pace. (Younger: Windows' clock moves in
+        steps of about 16 ms before Python 3.13, so readings of a moment ago may be 0 s old.)"""
         with self._lock:
             taken = self._taken
-            if taken is not None and time.monotonic() - taken[0] <= max_age:
+            if taken is not None and time.monotonic() - taken[0] < max_age:
                 return dict(taken[1]), dict(taken[2])
             readings, images = self._take()
             return dict(readings), dict(images)
