@@ -421,16 +421,8 @@ def _quit_on_signals(app: BackgroundApp) -> None:
 SESSION_END_S = 4.5
 
 
-def _stop_with_windows(app: BackgroundApp, stopped: threading.Event):
-    """Stop cleanly when Windows shuts down or the user signs out."""
-    if sys.platform != "win32":
-        return None
-    from libre_panel.winsession import SessionEndWatcher, shut_down_early
-
-    def session_ends() -> None:
-        log.info("Windows is ending the session; stopping the panel")
-        app.quit()
-        stopped.wait(SESSION_END_S)  # answer Windows once the panel is left in order
+def _sleep_and_wake(app: BackgroundApp) -> tuple[Callable[[], None], Callable[[], None]]:
+    """What happens when the computer goes to sleep and when it woke."""
 
     def sleeps() -> None:
         if app.panel.sleep():
@@ -440,6 +432,35 @@ def _stop_with_windows(app: BackgroundApp, stopped: threading.Event):
         if not app.quit_requested.is_set() and app.panel.wake():
             log.info("the computer woke; the panel starts again")
 
+    return sleeps, wakes
+
+
+def _follow_logind(app: BackgroundApp):
+    """Linux: the panel sleeps with the computer and dims while the session is locked
+    (logind.py); nothing where logind or its monitor is missing."""
+    if not sys.platform.startswith("linux"):
+        return None
+    from libre_panel.logind import LogindWatcher
+
+    try:
+        return LogindWatcher(*_sleep_and_wake(app)).start()
+    except OSError as exc:
+        log.info("the panel does not follow sleep and locking: %s", exc)
+        return None
+
+
+def _stop_with_windows(app: BackgroundApp, stopped: threading.Event):
+    """Stop cleanly when Windows shuts down or the user signs out."""
+    if sys.platform != "win32":
+        return _follow_logind(app)
+    from libre_panel.winsession import SessionEndWatcher, shut_down_early
+
+    def session_ends() -> None:
+        log.info("Windows is ending the session; stopping the panel")
+        app.quit()
+        stopped.wait(SESSION_END_S)  # answer Windows once the panel is left in order
+
+    sleeps, wakes = _sleep_and_wake(app)
     try:
         shut_down_early()
         return SessionEndWatcher(session_ends, sleeps, wakes).start()

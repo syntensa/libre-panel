@@ -3210,7 +3210,7 @@ def test_settings_panel(app_url, isolated_home, monkeypatch):
         radio(page, "Smooth motion", "Automatic").click()
         waits_for(page, lambda: settings_config().device.video.mode == "auto")
 
-        slider = page.get_by_role("slider", name="Brightness")
+        slider = page.get_by_role("slider", name="Brightness", exact=True)
         slider.focus()
         slider.press("ArrowLeft")
         slider.press("ArrowLeft")

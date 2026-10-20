@@ -2166,7 +2166,7 @@
     "one per line: a sensor (\"gpu.fan\"), a pattern (\"fan.*\") and a name if you like (\"fan.lpc.fan_2 = Front\"); empty: the GPU fan first, then the others": "jeden na linię: czujnik („gpu.fan”), wzorzec („fan.*”) i ewentualnie nazwa („fan.lpc.fan_2 = Przód”); puste: najpierw wentylator GPU, potem pozostałe",
     "fans: none that has stood still since Libre Panel started (a header of the mainboard with nothing on it); the graphics card's stays": "wentylatory: żaden, który stoi od startu Libre Panel (złącze płyty głównej bez niczego); ten karty graficznej zostaje",
     "Dark while the computer sleeps": "Ciemny, gdy komputer śpi",
-    "The panel goes dark when Windows goes to sleep and lights up again when it wakes. Off: it keeps the last picture, all night where the USB port stays powered.": "Panel gaśnie, gdy Windows przechodzi w uśpienie, i świeci znowu, gdy się budzi. Wyłączone: zachowuje ostatni obraz, całą noc tam, gdzie port USB ma zasilanie.",
+    "The panel goes dark when the computer goes to sleep and lights up again when it wakes. Off: it keeps the last picture, all night where the USB port stays powered.": "Panel gaśnie, gdy komputer przechodzi w uśpienie, i znów się zapala, gdy się budzi. Wyłączone: zachowuje ostatni obraz, całą noc, jeśli port USB pozostaje zasilany.",
     "At night": "W nocy",
     "From one time to the other the panel has a brightness of its own, over midnight too; 0 is dark. The brightness above holds the rest of the day.": "Od jednej godziny do drugiej panel ma własną jasność, także przez północ; 0 to ciemno. Jasność powyżej obowiązuje przez resztę dnia.",
     "Night from … to": "Noc od … do",
@@ -2199,7 +2199,8 @@
     "The theme's": "Z motywu",
     "Windows'": "Z Windows",
     "My own": "Własny",
-    "My accent colour": "Mój kolor akcentu"
+    "My accent colour": "Mój kolor akcentu",
+    "While the session is locked, the panel takes the brightness below; 0 is dark. Unlocked, it lights up again.": "Gdy sesja jest zablokowana, panel przyjmuje jasność poniżej; 0 to ciemno. Po odblokowaniu znów się rozjaśnia."
   },
   "fields": {
     "align": "Wyrównanie",

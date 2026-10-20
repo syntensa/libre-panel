@@ -13,9 +13,9 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
 - **A brightness of its own at night**: from one time to the other, over midnight too, or
   from sunset to sunrise at the weather's place; 0 is dark (*Settings → Panel*,
   `[device] night`)
-- **The panel sleeps with the computer** (Windows): dark while Windows sleeps, lit again
-  when it wakes (`dark_on_sleep`, on unless turned off)
-- **Dimmed while you are away** (Windows): while the computer is locked or its monitor is
+- **The panel sleeps with the computer** (Windows, and Linux with systemd-logind): dark
+  while the computer sleeps, lit again when it wakes (`dark_on_sleep`, on unless turned off)
+- **Dimmed while you are away**: while the computer is locked or (Windows) its monitor is
   off, every panel takes a brightness for then, dark to begin with, and lights up again when
   you are back (`dark_when_away`, `away_brightness`; on unless turned off)
 - **One accent colour for every screen**: Windows' or your own; what is in a theme's accent

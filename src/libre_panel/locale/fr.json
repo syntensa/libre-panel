@@ -2166,7 +2166,7 @@
     "one per line: a sensor (\"gpu.fan\"), a pattern (\"fan.*\") and a name if you like (\"fan.lpc.fan_2 = Front\"); empty: the GPU fan first, then the others": "un par ligne : un capteur (« gpu.fan »), un motif (« fan.* ») et un nom si vous voulez (« fan.lpc.fan_2 = Avant ») ; vide : d'abord celui du GPU, puis les autres",
     "fans: none that has stood still since Libre Panel started (a header of the mainboard with nothing on it); the graphics card's stays": "ventilateurs : aucun qui est à l'arrêt depuis le démarrage de Libre Panel (un connecteur de la carte mère sans rien dessus) ; celui de la carte graphique reste",
     "Dark while the computer sleeps": "Éteint pendant la veille de l'ordinateur",
-    "The panel goes dark when Windows goes to sleep and lights up again when it wakes. Off: it keeps the last picture, all night where the USB port stays powered.": "Le panneau s'éteint quand Windows se met en veille et se rallume à son réveil. Désactivé : il garde la dernière image, toute la nuit là où le port USB reste alimenté.",
+    "The panel goes dark when the computer goes to sleep and lights up again when it wakes. Off: it keeps the last picture, all night where the USB port stays powered.": "L’écran s’éteint quand l’ordinateur se met en veille et se rallume à son réveil. Désactivé : il garde la dernière image, toute la nuit si le port USB reste alimenté.",
     "At night": "La nuit",
     "From one time to the other the panel has a brightness of its own, over midnight too; 0 is dark. The brightness above holds the rest of the day.": "D'une heure à l'autre, le panneau a sa propre luminosité, au-delà de minuit aussi ; 0 l'éteint. La luminosité ci-dessus vaut pour le reste de la journée.",
     "Night from … to": "Nuit de … à",
@@ -2199,7 +2199,8 @@
     "The theme's": "Celle du thème",
     "Windows'": "Celle de Windows",
     "My own": "La mienne",
-    "My accent colour": "Ma couleur d’accent"
+    "My accent colour": "Ma couleur d’accent",
+    "While the session is locked, the panel takes the brightness below; 0 is dark. Unlocked, it lights up again.": "Tant que la session est verrouillée, l’écran prend la luminosité ci-dessous ; 0 est éteint. Déverrouillée, il se rallume."
   },
   "fields": {
     "align": "Alignement",
