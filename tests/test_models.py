@@ -40,12 +40,13 @@ def test_usb_lookup():
 
 def test_driver_status():
     assert {m.driver for m in MODELS if m.protocol == "usb-turing"} <= {"unverified", "supported"}
-    assert get_model("turing-3.5").driver == "unverified"  # rev. A
-    assert get_model("usbpcmonitor-7").driver == "unverified"
+    assert get_model("turing-3.5").driver == "supported"  # rev. A, an owner's report
+    assert get_model("usbpcmonitor-7").driver == "unverified"  # rev. A too, not seen yet
     assert get_model("turing-5").driver == "unverified"  # rev. C
     assert get_model("turing-9.2-usb").driver == "supported"  # stills and video, on the panel
     assert get_model("turing-8.8-usb").driver == "supported"  # an owner's report
-    assert get_model("turing-8.8").driver == "unverified"  # the older one, a serial rev. C
+    assert get_model("turing-12.3-usb").driver == "supported"  # the maintainer's
+    assert get_model("turing-8.8").driver == "supported"  # the older one, a serial rev. C
     assert {m.driver for m in MODELS} <= {"unverified", "supported"}  # every family has one
 
 
