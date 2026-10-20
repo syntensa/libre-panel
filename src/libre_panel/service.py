@@ -73,7 +73,10 @@ class PanelService:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
-        self._quitting = False  # stop(): Libre Panel quits (the panel may go dark)
+        # why the loop ends (the panel may go dark): True, Libre Panel quits (stop()); "sleep",
+        # the computer goes to sleep (sleep()); None, a pause or a restart
+        self._ending: bool | str | None = None
+        self._asleep = False  # the loop stopped for the computer's sleep: it wakes with it
 
     @property
     def paused(self) -> bool:
@@ -146,8 +149,27 @@ class PanelService:
     def stop(self) -> None:
         """Libre Panel quits: the loop ends, and the panel goes dark where config.toml says so
         ([device] dark_on_quit); pausing leaves it as it is."""
-        self._quitting = True
+        self._ending = True
         self._halt()
+
+    def sleep(self) -> bool:
+        """The computer goes to sleep (Windows says so): the loop ends, the panel goes dark
+        where config.toml says so ([device] dark_on_sleep), and :meth:`wake` starts it again.
+        A paused panel, or one the panel test has, stays as it is. Whether it stopped."""
+        if not self.running or self._paused or self._held:
+            return False
+        self._ending, self._asleep = "sleep", True
+        self._halt()
+        self._ending = None
+        return True
+
+    def wake(self) -> bool:
+        """The computer woke: the loop that stopped for its sleep starts again (whether)."""
+        if not self._asleep:
+            return False
+        self._asleep = False
+        self.start()
+        return True
 
     def _config_path(self) -> Path:
         return self.config_path or config_dir() / CONFIG_FILENAME
@@ -176,7 +198,7 @@ class PanelService:
                     self.on_config(config)
                 run(config, stop=stop, status=status, host=self.host, on_config=self.on_config,
                     hang_log=log_file().with_name(HANG_FILENAME),
-                    quitting=lambda: self._quitting)  # fmt: skip
+                    quitting=lambda: self._ending)  # fmt: skip
             except (ConfigError, ThemeError, DeviceError) as exc:
                 self.error = str(exc)
                 log.error("panel stopped: %s (waiting for the config or theme to change)", exc)

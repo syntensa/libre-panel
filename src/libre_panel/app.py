@@ -1143,7 +1143,7 @@ def run(
     host: Any = None,
     on_config: Callable[[Config], None] | None = None,
     hang_log: Path | None = None,
-    quitting: Callable[[], bool] | None = None,
+    quitting: Callable[[], bool | str | None] | None = None,
 ) -> None:
     """Main loop: read sensors at the theme's rate, render at ``config.fps`` so
     values glide between readings, and send only frames that changed. A
@@ -1154,8 +1154,8 @@ def run(
     services (a :class:`~libre_panel.plugins.PluginHost`); ``on_config`` hears
     about every config.toml that was loaded. ``hang_log``: where a step that hangs
     writes where every thread stands (:class:`_HangWatch`). ``quitting`` says, when the loop
-    ends, whether Libre Panel quits: the panel then goes dark where ``[device] dark_on_quit``
-    says so.
+    ends, why: Libre Panel quits (True) or the computer goes to sleep ("sleep"); the panel
+    then goes dark where ``[device] dark_on_quit`` or ``dark_on_sleep`` says so.
     """
     stop = stop or threading.Event()
     loop = MainLoop(config, once=once, status=status, host=host, on_config=on_config)
@@ -1182,6 +1182,7 @@ def run(
     finally:
         watch.close()
         guards.stop()
-        if quitting is not None and loop.config.device.dark_on_quit and quitting():
+        why, device = quitting() if quitting is not None else None, loop.config.device
+        if (why == "sleep" and device.dark_on_sleep) or (why is True and device.dark_on_quit):
             loop.go_dark()
         loop.close()

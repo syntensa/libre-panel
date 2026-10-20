@@ -261,9 +261,10 @@ function MotionRow({ motion, serial }) {
 
 function DisplayCard() {
   const config = useConfig();
+  const catalog = useCatalog();
   const [chosen, setChosen] = useState(null); // the slider stays where it is let go until it is written
   if (!config) return null;
-  const { brightness, rotate, dark_on_quit: dark } = config.device;
+  const { brightness, rotate, dark_on_quit: dark, dark_on_sleep: sleep } = config.device;
   const choose = (value) => {
     if (value === brightness) return;
     setChosen(value);
@@ -300,6 +301,15 @@ function DisplayCard() {
     >
       <${Toggle} label=${t("Dark when Libre Panel quits")} checked=${Boolean(dark)} onChange=${(on) => saveSettings({ "device.dark_on_quit": on })} />
     <//>
+    ${catalog?.platform === "win32"
+      ? html`<${SettingRow}
+          class="sleep-row"
+          title=${t("Dark while the computer sleeps")}
+          hint=${t("The panel goes dark when Windows goes to sleep and lights up again when it wakes. Off: it keeps the last picture, all night where the USB port stays powered.")}
+        >
+          <${Toggle} label=${t("Dark while the computer sleeps")} checked=${sleep !== false} onChange=${(on) => saveSettings({ "device.dark_on_sleep": on })} />
+        <//>`
+      : null}
   <//>`;
 }
 

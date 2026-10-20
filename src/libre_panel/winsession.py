@@ -1,4 +1,5 @@
-"""Windows: stop cleanly when the session ends (shut down, restart, sign out).
+"""Windows: stop cleanly when the session ends (shut down, restart, sign out), and sleep with
+the computer.
 
 At the end of a session Windows sends WM_QUERYENDSESSION and WM_ENDSESSION to
 every top-level window and may end the process as soon as WM_ENDSESSION has
@@ -14,6 +15,10 @@ most other programs. The SPUR II service found both necessary on the 9.2".
 While the session ends, no program may be started: Windows refuses it, and says so in a
 box of its own ("The application was unable to start correctly", 0xc0000142), on the way
 out of Windows. :func:`ending` tells the parts of Libre Panel that start one (PresentMon).
+
+The same window hears when the computer goes to sleep and wakes (WM_POWERBROADCAST; on a
+computer with modern standby once it asked for it, RegisterSuspendResumeNotification): the
+panel then goes dark and lights up again, as turing-smart-screen-python does.
 """
 
 from __future__ import annotations
@@ -29,6 +34,10 @@ WM_DESTROY = 0x0002
 WM_CLOSE = 0x0010
 WM_QUERYENDSESSION = 0x0011
 WM_ENDSESSION = 0x0016
+WM_POWERBROADCAST = 0x0218
+PBT_APMSUSPEND = 0x0004  # the computer goes to sleep
+PBT_APMRESUMESUSPEND = 0x0007  # it woke, a person at it
+PBT_APMRESUMEAUTOMATIC = 0x0012  # it woke (always sent)
 # Applications may use 0x100-0x3FF; higher is told earlier.
 EARLY_SHUTDOWN_LEVEL = 0x3FF
 
@@ -52,16 +61,23 @@ def shut_down_early() -> None:
 
 
 class SessionEndWatcher:
-    """A hidden window that runs ``on_end`` when the Windows session ends.
+    """A hidden window that runs ``on_end`` when the Windows session ends, and ``on_sleep``
+    and ``on_wake`` when the computer goes to sleep and wakes.
 
-    ``on_end`` runs on the window's thread and may block: Windows waits for
-    the answer to WM_ENDSESSION before it ends the process.
+    They run on the window's thread and may block: Windows waits for the answer to
+    WM_ENDSESSION before it ends the process (and gives a sleep about two seconds).
     """
 
-    def __init__(self, on_end: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        on_end: Callable[[], None],
+        on_sleep: Callable[[], None] | None = None,
+        on_wake: Callable[[], None] | None = None,
+    ) -> None:
         if sys.platform != "win32":
             raise OSError("only on Windows")
         self.on_end = on_end
+        self.on_sleep, self.on_wake = on_sleep, on_wake
         self.hwnd: int | None = None
         self.ended = False
         self._ready = threading.Event()
@@ -87,6 +103,18 @@ class SessionEndWatcher:
             ]
             user32.PostMessageW(self.hwnd, WM_CLOSE, 0, 0)
             self._thread.join(5)
+
+    def _power(self, event: int) -> None:
+        """The computer goes to sleep or wakes."""
+        callback = self.on_sleep if event == PBT_APMSUSPEND else self.on_wake
+        if callback is None or event not in (
+            PBT_APMSUSPEND, PBT_APMRESUMESUSPEND, PBT_APMRESUMEAUTOMATIC
+        ):  # fmt: skip
+            return
+        try:
+            callback()
+        except Exception:  # Windows is waiting; answer in any case
+            log.exception("while the computer went to sleep or woke")
 
     def _end(self) -> None:
         if self.ended:
@@ -166,6 +194,9 @@ class SessionEndWatcher:
                 else:
                     ENDING.clear()
                 return 0
+            if message == WM_POWERBROADCAST:
+                self._power(wparam)
+                return 1  # (TRUE: Libre Panel never holds up a sleep)
             if message == WM_DESTROY:
                 user32.PostQuitMessage(0)
                 return 0
@@ -189,6 +220,12 @@ class SessionEndWatcher:
         if not self.hwnd:
             log.warning("session window: CreateWindow failed (%d)", ctypes.get_last_error())
             return
+        try:  # modern standby tells only who asks (Windows 8 and later)
+            user32.RegisterSuspendResumeNotification.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+            user32.RegisterSuspendResumeNotification.restype = wintypes.HANDLE
+            user32.RegisterSuspendResumeNotification(self.hwnd, 0)  # DEVICE_NOTIFY_WINDOW_HANDLE
+        except AttributeError:
+            pass
         message = wintypes.MSG()
         while user32.GetMessageW(ctypes.byref(message), None, 0, 0) > 0:
             user32.TranslateMessage(ctypes.byref(message))

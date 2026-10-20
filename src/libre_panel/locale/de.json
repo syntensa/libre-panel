@@ -2164,7 +2164,9 @@
     "Which fans": "Welche Lüfter",
     "at most so many, below or beside the temperatures where there is room; 0: none": "höchstens so viele, unter oder neben den Temperaturen, wo Platz ist; 0: keine",
     "one per line: a sensor (\"gpu.fan\"), a pattern (\"fan.*\") and a name if you like (\"fan.lpc.fan_2 = Front\"); empty: the GPU fan first, then the others": "einer pro Zeile: ein Sensor („gpu.fan“), ein Muster („fan.*“), gern mit Namen („fan.lpc.fan_2 = Vorne“); leer: zuerst der GPU-Lüfter, dann die anderen",
-    "fans: none that has stood still since Libre Panel started (a header of the mainboard with nothing on it); the graphics card's stays": "Lüfter: keiner, der seit dem Start von Libre Panel stillsteht (ein Anschluss des Mainboards ohne Lüfter); der der Grafikkarte bleibt"
+    "fans: none that has stood still since Libre Panel started (a header of the mainboard with nothing on it); the graphics card's stays": "Lüfter: keiner, der seit dem Start von Libre Panel stillsteht (ein Anschluss des Mainboards ohne Lüfter); der der Grafikkarte bleibt",
+    "Dark while the computer sleeps": "Dunkel, solange der Computer schläft",
+    "The panel goes dark when Windows goes to sleep and lights up again when it wakes. Off: it keeps the last picture, all night where the USB port stays powered.": "Das Panel wird dunkel, wenn Windows in den Energiesparmodus geht, und leuchtet wieder, wenn es aufwacht. Aus: Es behält das letzte Bild, die ganze Nacht, wo der USB-Anschluss Strom behält."
   },
   "fields": {
     "align": "Ausrichtung",

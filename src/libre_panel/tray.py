@@ -432,9 +432,17 @@ def _stop_with_windows(app: BackgroundApp, stopped: threading.Event):
         app.quit()
         stopped.wait(SESSION_END_S)  # answer Windows once the panel is left in order
 
+    def sleeps() -> None:
+        if app.panel.sleep():
+            log.info("the computer went to sleep; the panel stopped until it wakes")
+
+    def wakes() -> None:
+        if not app.quit_requested.is_set() and app.panel.wake():
+            log.info("the computer woke; the panel starts again")
+
     try:
         shut_down_early()
-        return SessionEndWatcher(session_ends).start()
+        return SessionEndWatcher(session_ends, sleeps, wakes).start()
     except OSError as exc:
         log.warning("no clean stop at shutdown: %s", exc)
         return None

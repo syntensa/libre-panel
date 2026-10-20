@@ -30,7 +30,7 @@ class Panel(Display):
         return True
 
 
-def run_until_stopped(monkeypatch, dark, quitting, slow=False):
+def run_until_stopped(monkeypatch, dark, quitting, slow=False, **device):
     made = {}
 
     def create(cfg):
@@ -39,7 +39,7 @@ def run_until_stopped(monkeypatch, dark, quitting, slow=False):
         return made["panel"]
 
     monkeypatch.setattr(app, "create_display", create)
-    config = Config(device=DeviceConfig(driver="turzx", dark_on_quit=dark),
+    config = Config(device=DeviceConfig(driver="turzx", dark_on_quit=dark, **device),
                     sensors=SensorsConfig(providers=["demo"]))  # fmt: skip
     stop = threading.Event()
     options = {"stop": stop, "quitting": lambda: quitting}
@@ -71,6 +71,13 @@ def test_the_panel_keeps_its_picture_otherwise(monkeypatch, dark, quitting):
     panel = run_until_stopped(monkeypatch, dark=dark, quitting=quitting)
     assert 0 not in panel.levels and not panel.off
     assert panel.frames[-1].convert("L").getbbox() is not None
+
+
+@pytest.mark.parametrize("sleep_dark", [True, False])
+def test_the_panel_goes_dark_while_the_computer_sleeps_where_set(monkeypatch, sleep_dark):
+    """[device] dark_on_sleep, whatever dark_on_quit says."""
+    panel = run_until_stopped(monkeypatch, dark=False, quitting="sleep", dark_on_sleep=sleep_dark)
+    assert (panel.levels[-1] == 0) is sleep_dark and panel.off is sleep_dark
 
 
 def test_a_slow_panel_only_has_its_light_turned_off(monkeypatch):

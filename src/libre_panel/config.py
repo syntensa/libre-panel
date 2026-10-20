@@ -111,6 +111,9 @@ motion = "auto"
 # true: the panel goes dark when Libre Panel quits (Windows shutting down too), and lights up
 # again when it starts; false: it keeps the last picture.
 dark_on_quit = false
+# true: dark while the computer sleeps (Windows), lit again when it wakes; false: the panel
+# keeps the last picture through the night where its USB port stays powered.
+dark_on_sleep = true
 # Where frames go when no panel is used (relative = in this settings folder).
 output = "libre-panel-frame.png"
 # Serial panels (3.5", 5", 2.1" ...) are found by their USB ids. Only if that
@@ -307,6 +310,7 @@ class DeviceConfig:
     # "auto": calm on the slow USB serial panels, full elsewhere; "full"; "calm" (MOTIONS)
     motion: str = "auto"
     dark_on_quit: bool = False  # a black picture and its light off when Libre Panel quits
+    dark_on_sleep: bool = True  # so too while the computer sleeps (Windows), lit when it wakes
     output: str = "libre-panel-frame.png"
     port: str = ""  # serial panels: the port; empty = found by its USB ids
     video: VideoConfig = field(default_factory=VideoConfig)
@@ -589,6 +593,9 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     cfg.device.motion = motion
     cfg.device.dark_on_quit = _expect(
         dev.get("dark_on_quit", cfg.device.dark_on_quit), bool, "device.dark_on_quit"
+    )
+    cfg.device.dark_on_sleep = _expect(
+        dev.get("dark_on_sleep", cfg.device.dark_on_sleep), bool, "device.dark_on_sleep"
     )
     cfg.device.output = _expect(dev.get("output", cfg.device.output), str, "device.output")
     cfg.device.port = _expect(dev.get("port", cfg.device.port), str, "device.port").strip()
