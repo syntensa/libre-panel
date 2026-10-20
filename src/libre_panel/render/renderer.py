@@ -2213,6 +2213,8 @@ class Renderer:
 
     def _draw_list(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
         items = lists.pick(widget, snapshot.readings)
+        if widget["hide_unused"]:  # (a mainboard's fan headers with nothing on them)
+            items = [item for item in items if lists.used(item)]
         items = items[: self._list_room(widget, len(items))]
         lo, hi = widget["min"], widget["max"]
         if hi <= lo:  # the largest value shown fills the bar

@@ -2163,7 +2163,8 @@
     "Put the module back together": "Juntar o módulo de novo",
     "Which fans": "Quais ventoinhas",
     "at most so many, below or beside the temperatures where there is room; 0: none": "no máximo tantas, abaixo ou ao lado das temperaturas, onde houver espaço; 0: nenhuma",
-    "one per line: a sensor (\"gpu.fan\"), a pattern (\"fan.*\") and a name if you like (\"fan.lpc.fan_2 = Front\"); empty: the GPU fan first, then the others": "uma por linha: um sensor (“gpu.fan”), um padrão (“fan.*”) e um nome, se quiser (“fan.lpc.fan_2 = Frente”); vazio: primeiro a da GPU, depois as outras"
+    "one per line: a sensor (\"gpu.fan\"), a pattern (\"fan.*\") and a name if you like (\"fan.lpc.fan_2 = Front\"); empty: the GPU fan first, then the others": "uma por linha: um sensor (“gpu.fan”), um padrão (“fan.*”) e um nome, se quiser (“fan.lpc.fan_2 = Frente”); vazio: primeiro a da GPU, depois as outras",
+    "fans: none that has stood still since Libre Panel started (a header of the mainboard with nothing on it); the graphics card's stays": "ventoinhas: nenhuma parada desde que o Libre Panel começou (um conector da placa-mãe sem nada); a da placa de vídeo fica"
   },
   "fields": {
     "align": "Alinhamento",
@@ -2304,7 +2305,8 @@
     "pack": "pacote de símbolos",
     "group": "Grupo",
     "fans": "Ventoinhas",
-    "fan_items": "Quais ventoinhas"
+    "fan_items": "Quais ventoinhas",
+    "hide_unused": "ocultar os não usados"
   },
   "widgets": {
     "analog": "Relógio analógico",

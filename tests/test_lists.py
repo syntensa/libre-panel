@@ -154,6 +154,26 @@ def test_a_list_of_fans_turns_each_one_with_its_speed():
     assert renderer.warnings == []
 
 
+def test_fans_that_never_ran_are_left_out_where_asked(monkeypatch):
+    """A mainboard's header with nothing on it reads 0 all along; a fan that ran once stays,
+    and so does the graphics card's (it stands while the card is cool)."""
+    monkeypatch.setattr(lists, "_RAN", set())
+    found = readings(fan__lpc__fan_1=(0, "RPM", "Fan #1"), fan__lpc__fan_2=(900, "RPM", "Fan #2"),
+                     gpu__fan=(0, "RPM", "GPU fan"))  # fmt: skip
+    shown = [i.key for i in lists.pick({"items": "gpu.fan\nfan.*"}, found) if lists.used(i)]
+    assert shown == ["gpu.fan", "fan.lpc.fan_2"]
+    found["fan.lpc.fan_2"] = Reading("fan.lpc.fan_2", 0, "RPM", "Fan #2")  # it stopped
+    shown = [i.key for i in lists.pick({"items": "fan.*"}, found) if lists.used(i)]
+    assert shown == ["fan.lpc.fan_2"]
+    renderer = Renderer(list_theme(items="fan.*", style="fans", hide_unused=True), preview=True)
+    lists._RAN.clear()
+    snap = demo_snapshot(fixed_time=1_700_000_000)
+    snap.readings["fan.lpc.fan_4"] = Reading("fan.lpc.fan_4", 0, "RPM", "Fan #4")
+    renderer.render(snap)
+    texts = renderer._cache["list"][0]
+    assert texts and "Fan #4" not in [row[0] for row in texts]
+
+
 def test_an_empty_list_says_so():
     snap = demo_snapshot(fixed_time=1_700_000_000)
     quiet = Renderer(list_theme(items="nothing.*"), preview=True)

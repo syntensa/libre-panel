@@ -24,6 +24,10 @@ from libre_panel.sensors.base import Reading
 _GLOB = re.compile(r"[*?\[]")
 MAX_ITEMS = 64
 
+# The fans seen running since Libre Panel started (render.lists.used): a header of the
+# mainboard that has read 0 all along has no fan on it
+_RAN: set[str] = set()
+
 
 @dataclass(frozen=True)
 class Entry:
@@ -73,6 +77,17 @@ def _natural(key: str) -> list[Any]:
 def _sibling(key: str, name: str) -> str:
     head, dot, _last = key.rpartition(".")
     return f"{head}.{name}" if dot else ""
+
+
+def used(item: Item) -> bool:
+    """Whether a fan of a list is one (``hide_unused``): it has run since Libre Panel started,
+    or it is the graphics card's (which stands while the card is cool). A mainboard's header
+    that has read 0 all along has nothing on it."""
+    number = item.number
+    if number is None or number > 0:
+        _RAN.add(item.key)
+        return True
+    return item.key in _RAN or item.key == "gpu.fan" or item.key.startswith("fan.gpu")
 
 
 def pick(widget: dict[str, Any], readings: dict[str, Reading]) -> list[Item]:

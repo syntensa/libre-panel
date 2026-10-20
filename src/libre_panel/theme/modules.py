@@ -1810,7 +1810,7 @@ def build_temps(b: _Build, _src: Source) -> None:
     temps = {"min": 20, "max": 100, "color_rules": _heat_rules(b), "format": "{value:.0f}°C",
              "empty": t("No temperature readings")}  # fmt: skip
     fan_list = {"format": "{value:.0f} RPM", "empty": t("No fan readings"), "uppercase": True,
-                "max_items": count}  # fmt: skip
+                "max_items": count, "hide_unused": True}  # fmt: skip
     if not count:
         b.listing("temps", items, x, y, w, h, color, "bars" if h > b.ts * 4.5 else "rows", **temps)
     elif b.aspect >= 3.0 and b.iw > b.ts * 40:  # long: temperatures | fans

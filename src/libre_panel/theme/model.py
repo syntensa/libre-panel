@@ -348,6 +348,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "scale": ("enum:linear|sqrt|log", "linear"),
         "levels": ("bool", True),  # bars and filled cells; off: numbers only
         "smooth": ("bool", True),  # the bars glide to a new reading, as a bar's do
+        "hide_unused": ("bool", False),  # fans: none that has stood still since the start
         "font": ("font", ""),  # the values
         "font_size": ("int", 18),
         "label_font": ("font", ""),

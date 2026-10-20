@@ -24,6 +24,7 @@ export function hintFor(widget, key, kind) {
   if (key === "scale") return t("sqrt/log keep small values visible (network rates)");
   if (key === "hide_if_missing") return t("hide when the sensor has no value (e.g. weather off)");
   if (key === "needs") return t("show only while this sensor has a value (e.g. weather.temperature); with ! in front, only while it has none");
+  if (key === "hide_unused") return t("fans: none that has stood still since Libre Panel started (a header of the mainboard with nothing on it); the graphics card's stays");
   if (key === "smooth" && widget?.type === "metric") return t("the number glides between readings, together with the bars and rings of its sensor");
   if (key === "seconds" && widget?.type === "graph") return t("video mode: the seconds the curve spans, at any frame rate; 0 = a pixel per point, 25 a second, as SPUR II's graphs (the most fluid)");
   if (key === "sensor" && widget?.type === "module" && widget.source === "fan") return t("which fan; empty: the graphics card's (gpu.fan)");

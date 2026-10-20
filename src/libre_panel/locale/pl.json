@@ -2163,7 +2163,8 @@
     "Put the module back together": "Złóż moduł z powrotem",
     "Which fans": "Które wentylatory",
     "at most so many, below or beside the temperatures where there is room; 0: none": "najwyżej tyle, pod temperaturami lub obok nich, gdzie jest miejsce; 0: żadnego",
-    "one per line: a sensor (\"gpu.fan\"), a pattern (\"fan.*\") and a name if you like (\"fan.lpc.fan_2 = Front\"); empty: the GPU fan first, then the others": "jeden na linię: czujnik („gpu.fan”), wzorzec („fan.*”) i ewentualnie nazwa („fan.lpc.fan_2 = Przód”); puste: najpierw wentylator GPU, potem pozostałe"
+    "one per line: a sensor (\"gpu.fan\"), a pattern (\"fan.*\") and a name if you like (\"fan.lpc.fan_2 = Front\"); empty: the GPU fan first, then the others": "jeden na linię: czujnik („gpu.fan”), wzorzec („fan.*”) i ewentualnie nazwa („fan.lpc.fan_2 = Przód”); puste: najpierw wentylator GPU, potem pozostałe",
+    "fans: none that has stood still since Libre Panel started (a header of the mainboard with nothing on it); the graphics card's stays": "wentylatory: żaden, który stoi od startu Libre Panel (złącze płyty głównej bez niczego); ten karty graficznej zostaje"
   },
   "fields": {
     "align": "Wyrównanie",
@@ -2304,7 +2305,8 @@
     "pack": "zestaw symboli",
     "group": "Grupa",
     "fans": "Wentylatory",
-    "fan_items": "Które wentylatory"
+    "fan_items": "Które wentylatory",
+    "hide_unused": "ukryj nieużywane"
   },
   "widgets": {
     "analog": "Zegar analogowy",
