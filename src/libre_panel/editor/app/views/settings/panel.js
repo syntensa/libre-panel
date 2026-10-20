@@ -285,6 +285,7 @@ function DisplayCard() {
         onCommit=${choose}
       />
     <//>
+    <${AccentRow} accent=${config.accent || ""} windows=${catalog?.platform === "win32"} />
     <${SettingRow}
       title=${t("How the panel is mounted")}
       hint=${t("Libre Panel's screens show in their version for it: Lumen Vertical for Lumen on a bar that stands on end.")}
@@ -331,6 +332,41 @@ function DisplayCard() {
           <${Toggle} label=${t("Dark while the computer sleeps")} checked=${sleep !== false} onChange=${(on) => saveSettings({ "device.dark_on_sleep": on })} />
         <//>`
       : null}
+  <//>`;
+}
+
+/**
+ * An accent colour for every theme instead of its own (config.toml accent): Windows' or one of
+ * the person's; what is in the theme's accent colour takes it.
+ */
+function AccentRow({ accent, windows }) {
+  const own = accent.startsWith("#");
+  const mode = own ? "own" : accent || "theme";
+  const choose = (value) => {
+    if (value === mode) return;
+    saveSettings({ accent: value === "theme" ? "" : value === "own" ? "#E0457B" : value });
+  };
+  return html`<${SettingRow}
+    class="accent-row"
+    title=${t("Accent colour")}
+    hint=${t("Every screen in one colour of your choice: what is in its accent colour takes it. In Design the themes keep their own.")}
+  >
+    <div class="accent-choice">
+      <${Segmented}
+        label=${t("Accent colour")}
+        value=${mode}
+        onChange=${choose}
+        options=${[
+          { value: "theme", label: t("The theme's") },
+          ...(windows || accent === "system" ? [{ value: "system", label: t("Windows'") }] : []),
+          { value: "own", label: t("My own") },
+        ]}
+      />
+      ${own
+        ? html`<input type="color" class="accent-colour" aria-label=${t("My accent colour")} value=${accent.toLowerCase()}
+            onChange=${(event) => saveSettings({ accent: event.currentTarget.value.toUpperCase() })} />`
+        : null}
+    </div>
   <//>`;
 }
 

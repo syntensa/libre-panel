@@ -2193,7 +2193,13 @@
     "Brightness while you are away": "Luminosité en votre absence",
     "From sunset to sunrise": "Du coucher au lever du soleil",
     "At the place of the weather, day by day.": "Au lieu de la météo, jour après jour.",
-    "Choose a place under Weather: until then the night goes from 19:00 to 7:00.": "Choisissez un lieu sous Météo : d’ici là, la nuit va de 19:00 à 7:00."
+    "Choose a place under Weather: until then the night goes from 19:00 to 7:00.": "Choisissez un lieu sous Météo : d’ici là, la nuit va de 19:00 à 7:00.",
+    "Accent colour": "Couleur d’accent",
+    "Every screen in one colour of your choice: what is in its accent colour takes it. In Design the themes keep their own.": "Chaque écran dans une couleur de votre choix : ce qui est dans sa couleur d’accent la prend. Dans Design, les thèmes gardent la leur.",
+    "The theme's": "Celle du thème",
+    "Windows'": "Celle de Windows",
+    "My own": "La mienne",
+    "My accent colour": "Ma couleur d’accent"
   },
   "fields": {
     "align": "Alignement",

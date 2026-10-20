@@ -28,7 +28,7 @@ invalid is refused with the reason, and nothing is written.
 
 | Section | What it changes in `config.toml` |
 |---|---|
-| Panel | `[device]` (`model`, `brightness`, `orientation`, `rotate`, `motion`, `dark_on_quit`, `dark_on_sleep`, `night`, `night_from`, `night_to`, `night_brightness`, `dark_when_away`, `away_brightness`; under *Advanced* `driver`, `output`, `port`) and `[video]` (`mode`, `fps`, `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
+| Panel | `accent`, `[device]` (`model`, `brightness`, `orientation`, `rotate`, `motion`, `dark_on_quit`, `dark_on_sleep`, `night`, `night_from`, `night_to`, `night_brightness`, `dark_when_away`, `away_brightness`; under *Advanced* `driver`, `output`, `port`) and `[video]` (`mode`, `fps`, `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
 | Sensors | `[sensors] providers` (which sources, and their order; those not in use under *More sources*), the hardware's names, and under *Advanced* `refresh_ms` and `[sensors.librehardwaremonitor]` (`mode`, `url`) |
 | Game mode and more | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
@@ -52,6 +52,8 @@ language = "auto"              # "auto" (system language), "en", "de", "fr", "es
 fps = 10                       # 1-60; values glide between readings
 transition = "fade"            # between themes: "cut", "fade", "slide", "tube", "entrance",
                                # or a plugin's
+# accent = "system"           # every theme in one accent colour: "system" (Windows'),
+                               # "#E0457B" (your own); empty or left out: each theme's own
 
 # [[panels]]                   # a panel beside this one (see "More panels at once")
 # theme = "lumen"

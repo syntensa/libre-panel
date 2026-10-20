@@ -133,6 +133,8 @@
 .night-fields { display: flex; align-items: center; gap: 8px; }
 .night-fields .input.time { width: 6.5em; text-align: center; }
 .night-sun { display: flex; align-items: center; gap: 8px; }
+.accent-choice { display: flex; align-items: center; gap: 8px; }
+.accent-colour { width: 36px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; }
 /* the panels beside this one (Settings → Panel → More panels): one block each */
 .more-panel + .more-panel, .settings-card-head + .more-panel { border-top: 1px solid var(--line); }
 .more-panel-head .settings-row-title { font-weight: 600; }

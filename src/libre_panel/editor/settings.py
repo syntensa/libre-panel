@@ -418,6 +418,7 @@ class Settings:
                 "hotkeys": dict(config.hotkeys),
                 "hotkeys_enabled": config.hotkeys_enabled,
                 "symbols": config.symbols,
+                "accent": config.accent,
                 "switches": {theme: dict(chosen) for theme, chosen in config.switches.items()},
                 # the panels beside this one ([[panels]]): written back whole ("panels")
                 "panels": [
@@ -985,6 +986,16 @@ def _panel_device(n: int) -> DeviceConfig:
     return DeviceConfig(**panel_defaults(n))
 
 
+def _rule_accent(name: str, value: Any, config: Config) -> str:
+    """Empty (the themes' own colours), "system" (Windows') or a colour such as "#E0457B"."""
+    from libre_panel.accent import HEX, SYSTEM
+
+    text = _text(name, value, 7).strip()
+    if text and text != SYSTEM and not HEX.fullmatch(text):
+        raise SettingsError(f'{name}: "system", a colour such as "#E0457B", or empty')
+    return text.upper() if text.startswith("#") else text
+
+
 def _rule_providers(name: str, value: Any, config: Config) -> list[str]:
     from libre_panel.sensors.base import available_providers
 
@@ -1082,6 +1093,7 @@ RULES: dict[str, Any] = {
     "allow_notify": lambda n, v, c: _flag(n, v),
     "light_mode": lambda n, v, c: _flag(n, v),
     "symbols": lambda n, v, c: _choice(n, v, SYMBOL_PACKS),
+    "accent": _rule_accent,
     "hotkeys.enabled": lambda n, v, c: _flag(n, v),
     "hotkeys.pause": _rule_hotkey,
     "hotkeys.brightness_up": _rule_hotkey,

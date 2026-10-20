@@ -18,6 +18,8 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
 - **Dimmed while you are away** (Windows): while the computer is locked or its monitor is
   off, every panel takes a brightness for then, dark to begin with, and lights up again when
   you are back (`dark_when_away`, `away_brightness`; on unless turned off)
+- **One accent colour for every screen**: Windows' or your own; what is in a theme's accent
+  colour takes it, on the panel and in the previews (*Settings → Panel*, `accent`)
 - **Cores** (Arena and the cores module): a bar for each physical core, its threads
   together, where Windows or Linux says which belong together; `threads` shows every thread
 - **The game card** tells what holds the frame rate down (the graphics card, the processor

@@ -83,6 +83,7 @@ from libre_panel.theme.model import (
     switches_for,
     valid_theme_name,
     version_base,
+    with_accent,
 )
 from libre_panel.theme.modules import (
     MODULE_KINDS,
@@ -398,9 +399,9 @@ class EditorState:
         if kept is None or kept[0] != stamp:
             try:
                 config = load_config(self.config_path)
-                chosen = (fan.Choices.of(config), config.symbols, config.switches)
+                chosen = (fan.Choices.of(config), config.symbols, config.switches, config.accent)
             except (ConfigError, OSError):
-                chosen = kept[1] if kept is not None else (fan.Choices(), DEFAULT_SYMBOLS, {})
+                chosen = kept[1] if kept is not None else (fan.Choices(), DEFAULT_SYMBOLS, {}, "")
             kept = self._fan_choices = (stamp, chosen)
         return kept[1]
 
@@ -409,6 +410,13 @@ class EditorState:
 
     def symbols(self) -> str:
         return self._chosen()[1]
+
+    def accent(self) -> str | None:
+        """The accent colour every theme takes on the panel (config.toml ``accent``), for the
+        previews of the themes; None: their own."""
+        from libre_panel.accent import accent_of
+
+        return accent_of(self._chosen()[3])
 
     def switches(self, theme: Any) -> dict[str, bool]:
         """The person's choice of the switches of ``theme`` (one with its folder)."""
@@ -723,7 +731,8 @@ class EditorHandler(BaseHTTPRequestHandler):
         except (ThemeError, OSError):
             return self._error("not found", HTTPStatus.NOT_FOUND)
         chosen = self.state.chosen_switches(theme_id)  # (as the panel shows it)
-        key = (theme_id, stamp, width, i18n.language(), self.state.symbols(), chosen)
+        accent = self.state.accent()
+        key = (theme_id, stamp, width, i18n.language(), self.state.symbols(), chosen, accent)
         with self.state.previews_lock:
             png = self.state.previews.get(key)
         if png is None:
@@ -731,7 +740,7 @@ class EditorHandler(BaseHTTPRequestHandler):
                 theme = load_theme(folder)
             except ThemeError as exc:
                 return self._error(str(exc), HTTPStatus.NOT_FOUND)
-            renderer = Renderer(theme, preview=True)
+            renderer = Renderer(with_accent(theme, accent), preview=True)
             renderer.symbols = self.state.symbols()
             renderer.switches = dict(chosen)
             try:

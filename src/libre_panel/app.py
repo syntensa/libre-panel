@@ -16,6 +16,7 @@ from PIL import Image, ImageOps
 
 from libre_panel import clock as loop_clock
 from libre_panel import i18n, modes, presence, timing, winsession
+from libre_panel.accent import accent_of
 from libre_panel.config import Config, ConfigError, brightness_now, load_config
 from libre_panel.devices.base import Counters, DeviceError, Display, FrameError, create_display
 from libre_panel.devices.models import PanelModel, find_model
@@ -46,6 +47,7 @@ from libre_panel.theme.model import (
     load_theme,
     switches_for,
     theme_for,
+    with_accent,
 )
 
 log = logging.getLogger(__name__)
@@ -698,7 +700,8 @@ class MainLoop:
         """The renderer for ``theme``: warmed up if it was, else a new one."""
         warmed = self.warmup.take(self._warm_key(theme, config))
         if warmed is None:
-            renderer = Renderer(theme, animate=config.fps > 1, motion=self.motion)
+            renderer = Renderer(with_accent(theme, accent_of(config.accent)),
+                                animate=config.fps > 1, motion=self.motion)  # fmt: skip
         else:
             renderer, motion = warmed
             renderer.motion = self.motion  # from now on the panel's
@@ -714,7 +717,9 @@ class MainLoop:
         theme_file = _theme_file(theme)
         stamp = _Watcher._stamp(theme_file) if theme_file else None
         switches = tuple(sorted(switches_for(theme, config.switches).items()))
-        return (str(theme.root), stamp, theme.name, config.fps > 1, config.symbols, switches)
+        accent = accent_of(config.accent)
+        return (str(theme.root), stamp, theme.name, config.fps > 1, config.symbols, switches,
+                accent)  # fmt: skip
 
     def _warmed(
         self, config: Config, host: Any, shown: str, refused: str | None, watcher: _Watcher,
@@ -769,7 +774,8 @@ class MainLoop:
         continuous, fps, sample = how
 
         def build() -> tuple[Renderer, Motion]:
-            renderer = Renderer(theme, animate=animate, motion=motion)
+            renderer = Renderer(with_accent(theme, accent_of(config.accent)), animate=animate,
+                                motion=motion)  # fmt: skip
             renderer.continuous, renderer.fps, renderer.sample = continuous, fps, sample
             renderer.fan_choices = fan.Choices.of(config)  # their rotors, warmed as shown
             renderer.symbols = config.symbols  # and the symbols in their look

@@ -4252,3 +4252,16 @@ def test_the_night_follows_the_sun_with_one_switch(app_url, isolated_home):
         page.get_by_label("From sunset to sunrise").click()
         waits_for(page, lambda: settings_config().device.night_from == "22:00")
         expect(page.get_by_label("Night begins")).to_have_value("22:00")
+
+
+def test_an_accent_colour_of_one_s_own_for_every_screen(app_url, isolated_home):
+    choose_theme(isolated_home)
+    with browser_page(app_url, "settings/panel") as page:
+        row = page.locator(".accent-row")
+        radio(page, "Accent colour", "My own").click()
+        waits_for(page, lambda: settings_config().accent == "#E0457B")
+        expect(row.get_by_label("My accent colour")).to_have_value("#e0457b")
+        radio(page, "Accent colour", "The theme's").click()
+        waits_for(page, lambda: settings_config().accent == "")
+        expect(row.get_by_label("My accent colour")).to_have_count(0)
+        assert radio(page, "Accent colour", "Windows'").count() == 0  # (not on Windows)

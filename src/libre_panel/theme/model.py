@@ -14,7 +14,7 @@ import os
 import re
 import shutil
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
@@ -1217,6 +1217,20 @@ def version_base(name: str) -> str | None:
     if sized:
         return sized[1]
     return name[: -len(VERTICAL)] if name.endswith(VERTICAL) else None
+
+
+def with_accent(theme: Theme, colour: str | None) -> Theme:
+    """``theme`` in an accent colour of the person's (config.toml ``accent``, accent.py): the
+    palette's accent, and every entry in the same colour as it (Lumen's cpu), take
+    ``colour``; None: the theme as it is."""
+    base = theme.palette.get("accent")
+    if not colour or not base:
+        return theme
+    palette = {
+        name: colour if value.lower() == base.lower() else value
+        for name, value in theme.palette.items()
+    }
+    return replace(theme, palette=palette)
 
 
 def switches_for(theme: Theme, chosen: dict[str, dict[str, bool]]) -> dict[str, bool]:
