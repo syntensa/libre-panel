@@ -2178,7 +2178,16 @@
     "off: a bar for each core, its threads together, where the processor says which they are": "desligado: uma barra por núcleo, suas threads juntas, onde o processador diz quais são",
     "Limited by": "Limitado por",
     "Frame cap": "Limite de FPS",
-    "Longest frame": "Quadro mais longo"
+    "Longest frame": "Quadro mais longo",
+    "A second or third panel beside this one, each with a screen of its own. They show the same readings in single pictures; smooth motion, the game screen and the screens in turn are this panel's.": "Um segundo ou terceiro painel ao lado deste, cada um com uma tela própria. Eles mostram as mesmas leituras em imagens avulsas; o movimento suave, a tela de jogo e as telas em sequência são deste painel.",
+    "Add a panel": "Adicionar um painel",
+    "Detect automatically takes a panel the others do not use. Two serial panels of the same kind: name the port of each below.": "“Detectar automaticamente” pega um painel que os outros não usam. Dois painéis seriais do mesmo tipo: informe abaixo a porta de cada um.",
+    "More panels": "Mais painéis",
+    "Panel {number}": "Painel {number}",
+    "The panel's own": "O padrão do painel",
+    "the panel is in use by another panel of Libre Panel": "o painel já está em uso por outro painel do Libre Panel",
+    "{panel} on": "{panel} ligado",
+    "{port} is in use by another panel of Libre Panel": "{port} já está em uso por outro painel do Libre Panel"
   },
   "fields": {
     "align": "Alinhamento",

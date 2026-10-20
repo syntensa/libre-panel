@@ -22,15 +22,18 @@ from urllib.parse import urlencode
 
 from libre_panel import __version__, i18n
 from libre_panel.config import (
+    MORE_PANELS,
     MOTIONS,
     SYMBOL_PACKS,
     Config,
     ConfigError,
+    DeviceConfig,
     config_dir,
     default_providers,
     edit_config,
     load_config,
     log_file,
+    panel_defaults,
     user_themes_dir,
 )
 from libre_panel.editor import access
@@ -413,6 +416,11 @@ class Settings:
                 "hotkeys_enabled": config.hotkeys_enabled,
                 "symbols": config.symbols,
                 "switches": {theme: dict(chosen) for theme, chosen in config.switches.items()},
+                # the panels beside this one ([[panels]]): written back whole ("panels")
+                "panels": [
+                    {"theme": panel.theme, "on": panel.on, **_device_table(panel.device)}
+                    for panel in config.panels
+                ],
             },
             "catalog": self._catalog(),
             "restart": self.restart.pending(self.controls),
@@ -502,16 +510,7 @@ class Settings:
         after = default if value is None else value
         if after == before:
             return
-        raise SettingsError(
-            t(
-                "While Libre Panel runs with administrator rights, {name} is not changed here: it "
-                "names a program or a file that would then be started or written with those "
-                "rights. Set it in config.toml in your settings folder; Libre Panel reads it "
-                "from there.",
-                name=name,
-            ),
-            403,
-        )
+        raise _refused_with_rights(name)
 
     def _check(self, name: str, value: Any, config: Config) -> tuple[str, Any]:
         """The change ``("value" or "unset", cleaned value)`` for a setting, or the error."""
@@ -519,6 +518,8 @@ class Settings:
             return self._check_option(name, value, config)
         if name.startswith("switches."):
             return _check_switch(name, value)
+        if name == "panels":
+            return "tables", self._check_panels(value, config)
         self._check_rights(name, value, config)
         if value is None:
             if name not in UNSETTABLE:
@@ -528,6 +529,36 @@ class Settings:
         if rule is None:
             raise SettingsError(f"unknown setting {name!r}")
         return "value", rule(name, value, config)
+
+    def _check_panels(self, value: Any, config: Config) -> list[dict[str, Any]]:
+        """``panels``: the panels beside this one, each a table of ``theme``, ``on`` and the
+        keys of ``[device]``, as :meth:`read` hands them; written as ``[[panels]]`` with what
+        differs from the defaults."""
+        if not isinstance(value, list) or len(value) > MORE_PANELS:
+            raise SettingsError(f"panels: a list of at most {MORE_PANELS} panels")
+        tables = []
+        for n, table in enumerate(value):
+            if not isinstance(table, dict):
+                raise SettingsError(f"panels[{n}]: expected a table")
+            default = {"theme": "", "on": True, **_device_table(_panel_device(n))}
+            now = config.panels[n].device.output if n < len(config.panels) else default["output"]
+            kept = {}
+            for key, item in table.items():
+                name = f"panels[{n}].{key}"
+                if key == "theme":
+                    cleaned = _text(name, item, 64)
+                elif key == "on":
+                    cleaned = _flag(name, item)
+                elif key in DeviceConfig.__dataclass_fields__ and key != "video":
+                    cleaned = RULES[f"device.{key}"](name, item, config)
+                else:
+                    raise SettingsError(f"unknown setting {name!r}")
+                if key == "output" and cleaned != now and access.elevated():
+                    raise _refused_with_rights(name)  # (as device.output)
+                if cleaned != default[key]:
+                    kept[key] = cleaned
+            tables.append(kept)
+        return tables
 
     def _check_option(self, name: str, value: Any, config: Config) -> tuple[str, Any]:
         """``services.<name>.<option>``, as the service's ``options`` spec says. ``null`` takes
@@ -592,7 +623,8 @@ class Settings:
         panel = getattr(self.controls, "panel", None)
         if panel is not None:
             state = panel.state()
-            running = {"state": state["state"], "detail": state["detail"]}
+            running = {"state": state["state"], "detail": state["detail"],
+                       "more": state.get("more", [])}  # fmt: skip
             shown = state.get("theme") or None
         return {
             "configured": config.device.model,
@@ -923,6 +955,31 @@ class Settings:
 
 
 # -- the rules, by the name of the setting -------------------------------------------------------
+
+
+def _refused_with_rights(name: str) -> SettingsError:
+    return SettingsError(
+        t(
+            "While Libre Panel runs with administrator rights, {name} is not changed here: it "
+            "names a program or a file that would then be started or written with those "
+            "rights. Set it in config.toml in your settings folder; Libre Panel reads it "
+            "from there.",
+            name=name,
+        ),
+        403,
+    )
+
+
+def _device_table(device: DeviceConfig) -> dict[str, Any]:
+    """A panel's settings, as ``[device]`` has them (without the video's, which are its own)."""
+    return {
+        key: getattr(device, key) for key in DeviceConfig.__dataclass_fields__ if key != "video"
+    }
+
+
+def _panel_device(n: int) -> DeviceConfig:
+    """What a panel beside the first, ``[[panels]]`` at ``n``, has by default."""
+    return DeviceConfig(**panel_defaults(n))
 
 
 def _rule_providers(name: str, value: Any, config: Config) -> list[str]:

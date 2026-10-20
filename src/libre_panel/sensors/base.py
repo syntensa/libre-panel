@@ -6,6 +6,8 @@ import json
 import logging
 import math
 import re
+import threading
+import time
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -217,6 +219,13 @@ class SensorHub:
         self._history: dict[str, deque[float]] = {}
         self._owners: dict[str, SensorProvider] = {}  # which provider a key came from
         self._fresh_images: set[str] = set()  # the pictures fresh_images last handed back
+        # more panels at once read the sources through it (HubView), each loop in its thread:
+        # a snapshot at a time, and the readings it took last, with when (on time.monotonic);
+        # each source read by one thread at a time, so that a slow one (the sensors of the
+        # hardware, the processes) holds up no other: the readings of every frame go on
+        self._lock = threading.Lock()
+        self._taken: tuple[float, dict[str, Reading], dict[str, Any]] | None = None
+        self._sources: dict[int, threading.Lock] = {}
 
     def _named(self, readings: dict[str, Reading]) -> dict[str, Reading]:
         if self.names is None:
@@ -232,14 +241,25 @@ class SensorHub:
         """Whether any provider wants to be read on every frame."""
         return any(getattr(p, "every_frame", False) for p in self.providers)
 
+    def _source(self, provider: SensorProvider) -> threading.Lock:
+        return self._sources.setdefault(id(provider), threading.Lock())
+
     def _read(self, provider: SensorProvider) -> dict[str, Reading]:
         try:
-            return provider.read()
+            with self._source(provider):
+                return provider.read()
         except Exception:  # a broken sensor must not stop the display
             log.exception("sensor provider %s failed", provider.name)
             return {}
 
-    def snapshot(self) -> Snapshot:
+    def _images(self, provider: SensorProvider) -> dict[str, Any] | None:
+        if not hasattr(provider, "images"):
+            return {}
+        with self._source(provider):
+            return provider.images()
+
+    def _take(self) -> tuple[dict[str, Reading], dict[str, Any]]:
+        """Every source read once: the readings by their names, and the pictures."""
         readings: dict[str, Reading] = {}
         owners: dict[str, SensorProvider] = {}
         for provider in self.providers:
@@ -250,22 +270,34 @@ class SensorHub:
                     owners[key] = provider
         self._owners = owners
         readings = self._named(readings)
-        for key, reading in readings.items():
-            if isinstance(reading.value, (int, float)) and not isinstance(reading.value, bool):
-                self._history.setdefault(key, deque(maxlen=HISTORY_LENGTH)).append(
-                    float(reading.value)
-                )
-        history = {k: list(v) for k, v in self._history.items()}
         images: dict[str, Any] = {}
         for provider in self.providers:
             try:
-                found = provider.images() if hasattr(provider, "images") else {}
+                found = self._images(provider)
             except Exception:  # a broken sensor must not stop the display
                 log.exception("sensor provider %s failed", provider.name)
                 found = {}
             for key, image in (found or {}).items():
                 images.setdefault(key, image)
-        return Snapshot(readings=readings, history=history, images=images)
+        self._taken = (time.monotonic(), readings, images)
+        return readings, images
+
+    def snapshot(self) -> Snapshot:
+        with self._lock:
+            readings, images = self._take()
+            return Snapshot(readings=readings, history=remember(self._history, readings),
+                            images=images)  # fmt: skip
+
+    def shared(self, max_age: float) -> tuple[dict[str, Reading], dict[str, Any]]:
+        """For another panel (:class:`HubView`): the readings and pictures taken last, when
+        they are at most ``max_age`` seconds old, else new ones; the sources are not read
+        twice for two panels that draw at the same pace."""
+        with self._lock:
+            taken = self._taken
+            if taken is not None and time.monotonic() - taken[0] <= max_age:
+                return dict(taken[1]), dict(taken[2])
+            readings, images = self._take()
+            return dict(readings), dict(images)
 
     def follow_config(self, config: Any) -> None:
         """Tell the sources about the config.toml that was loaded (see
@@ -280,7 +312,8 @@ class SensorHub:
             if follow is None:  # a source written without the base class
                 continue
             try:
-                follow(config)
+                with self._source(provider):
+                    follow(config)
             except Exception:  # a broken sensor must not stop the display
                 log.exception("sensor provider %s failed", provider.name)
 
@@ -293,31 +326,37 @@ class SensorHub:
         the keys they supplied (or that nobody supplied); no history. Without
         ``video`` those that follow on every frame only in video mode are left out."""
         readings: dict[str, Reading] = {}
+        owners = self._owners  # (the last snapshot's; a new one replaces it whole)
         for provider in self.providers:
             every = getattr(provider, "every_frame", False)
             if not every or (every == "video" and not video):
                 continue
             for key, reading in self._read(provider).items():
-                if self._owners.get(key, provider) is provider and key not in readings:
+                if owners.get(key, provider) is provider and key not in readings:
                     readings[key] = reading
         return self._named(readings)
 
-    def fresh_images(self, video: bool = True) -> dict[str, Any]:
-        """Between snapshots: the pictures of ``every_frame`` providers (a new cover with its
-        new title, not a second later), and None for one such a provider had and has no more.
-        Cheap: a provider hands back the pictures it holds."""
+    def frame_images(self, video: bool = True) -> dict[str, Any]:
+        """The pictures ``every_frame`` providers hold now (see :meth:`fresh_images`)."""
         images: dict[str, Any] = {}
         for provider in self.providers:
             every = getattr(provider, "every_frame", False)
-            if not every or (every == "video" and not video) or not hasattr(provider, "images"):
+            if not every or (every == "video" and not video):
                 continue
             try:
-                found = provider.images() or {}
+                found = self._images(provider) or {}
             except Exception:  # a broken sensor must not stop the display
                 log.exception("sensor provider %s failed", provider.name)
                 continue
             for key, image in found.items():
                 images.setdefault(key, image)
+        return images
+
+    def fresh_images(self, video: bool = True) -> dict[str, Any]:
+        """Between snapshots: the pictures of ``every_frame`` providers (a new cover with its
+        new title, not a second later), and None for one such a provider had and has no more.
+        Cheap: a provider hands back the pictures it holds."""
+        images = self.frame_images(video)
         gone = self._fresh_images - set(images)
         self._fresh_images = set(images)
         return {**images, **dict.fromkeys(gone)}
@@ -328,3 +367,59 @@ class SensorHub:
                 provider.close()
             except Exception:
                 log.exception("closing sensor provider %s failed", provider.name)
+
+
+def remember(history: dict[str, deque[float]], readings: dict[str, Reading]) -> dict[str, list]:
+    """The numbers among ``readings`` added to ``history``, and the history as a snapshot
+    carries it."""
+    for key, reading in readings.items():
+        if isinstance(reading.value, (int, float)) and not isinstance(reading.value, bool):
+            history.setdefault(key, deque(maxlen=HISTORY_LENGTH)).append(float(reading.value))
+    return {k: list(v) for k, v in history.items()}
+
+
+class HubView:
+    """Another panel's way to the readings (two panels at once, ``[[panels]]``): the first
+    panel's :class:`SensorHub` reads the sources, and this panel takes what it read last when
+    it is new enough (:attr:`SHARE_S`), else has them read anew. Its history is its own, at the
+    pace its theme takes readings, so its graphs run as they would with a hub of their own.
+    The sources follow the first panel's config and close with its loop."""
+
+    SHARE_S = 1.0  # readings this old are new enough: a panel drawing at the same pace reads none
+
+    def __init__(self, hub: SensorHub) -> None:
+        self.hub = hub
+        self._history: dict[str, deque[float]] = {}
+        self._fresh_images: set[str] = set()
+
+    @property
+    def providers(self) -> list[SensorProvider]:
+        return self.hub.providers
+
+    @property
+    def every_frame(self) -> bool:
+        return self.hub.every_frame
+
+    def readings_from(self, provider: SensorProvider) -> int:
+        return self.hub.readings_from(provider)
+
+    def snapshot(self) -> Snapshot:
+        readings, images = self.hub.shared(self.SHARE_S)
+        return Snapshot(readings=readings, history=remember(self._history, readings),
+                        images=images)  # fmt: skip
+
+    def fresh(self, video: bool = True) -> dict[str, Reading]:
+        return self.hub.fresh(video)
+
+    def fresh_images(self, video: bool = True) -> dict[str, Any]:
+        images = self.hub.frame_images(video)
+        gone = self._fresh_images - set(images)
+        self._fresh_images = set(images)
+        return {**images, **dict.fromkeys(gone)}
+
+    def follow_config(self, config: Any) -> None:
+        """Nothing: the first panel's loop tells the sources (its config has the same
+        readings)."""
+
+    def close(self) -> None:
+        """Nothing: the sources close with the first panel's loop."""

@@ -7,6 +7,7 @@ vendors) down to one small class registered under ``libre_panel.devices``.
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from importlib.metadata import entry_points
 from typing import Any
@@ -19,6 +20,30 @@ from libre_panel.devices.models import PanelModel
 
 class DeviceError(RuntimeError):
     pass
+
+
+# Where the panels this process has open are: a serial port, or "usb:<bus>.<address>". With
+# more panels at once ([[panels]]) each loop's search for a panel passes the others' by.
+_TAKEN: set[str] = set()
+_TAKEN_LOCK = threading.Lock()
+
+
+def take_place(place: str) -> bool:
+    """Note that a panel at ``place`` is open; False where one of this process has it already."""
+    with _TAKEN_LOCK:
+        if place in _TAKEN:
+            return False
+        _TAKEN.add(place)
+        return True
+
+
+def leave_place(place: str) -> None:
+    with _TAKEN_LOCK:
+        _TAKEN.discard(place)
+
+
+def place_taken(place: str) -> bool:
+    return place in _TAKEN
 
 
 class FrameError(DeviceError):

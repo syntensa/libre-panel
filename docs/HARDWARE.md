@@ -61,6 +61,11 @@ Their video mode (up to 50 frames a second) encodes with ffmpeg, which the Windo
 downloads carry; nothing else is to be installed. With a pip install, install ffmpeg yourself
 ([Video](CONFIGURATION.md#video)).
 
+Two or more panels can run at once, a USB one and a serial one or two of a kind, each with a
+theme of its own ([More panels at once](CONFIGURATION.md#more-panels-at-once)). Of two
+panels of the same kind each finds one; which shows which theme goes by the order the system
+lists them in, and for serial panels their port settles it.
+
 ## Compatible panels from other brands
 
 Same electronics, different sticker:

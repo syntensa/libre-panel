@@ -554,7 +554,7 @@ def test_the_running_app_tells_how_its_panel_is_doing(make, monkeypatch):
     panel = SimpleNamespace(state=lambda: {"state": "waiting", "detail": "no panel"}, status=None)
     port = make(App(panel=panel))
     _, data = request(port, "GET", "/api/panel")
-    assert data["running"] == {"state": "waiting", "detail": "no panel"}
+    assert data["running"] == {"state": "waiting", "detail": "no panel", "more": []}
 
 
 def test_the_panel_says_whether_its_theme_shows_the_weather(make, isolated_home, monkeypatch):

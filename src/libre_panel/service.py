@@ -271,6 +271,20 @@ class PanelService:
             "size": list(status.size) if status.size else None,
             # numbers of the last seconds (see libre_panel.meter); none while it does not run
             "stats": status.stats if state in ("showing", "waiting") else {},
+            # the panels beside this one ([[panels]]), by their place there, while it runs
+            "more": [
+                {
+                    "index": n,
+                    "state": more.state,
+                    "detail": more.detail if more.state in ("waiting", "error") else "",
+                    "target": more.target,
+                    "theme": more.theme,
+                    "fps": more.stats.get("fps"),
+                }
+                for n, more in sorted(status.more.items())
+            ]
+            if state in ("showing", "waiting")
+            else [],
         }
 
 

@@ -28,7 +28,13 @@ from libre_panel.render import fan
 from libre_panel.render.motion import Motion
 from libre_panel.render.overlays import ToastLayer, switch_policy, transition
 from libre_panel.render.renderer import Renderer, changed_region, changed_regions
-from libre_panel.sensors.base import SensorHub, SensorProvider, Snapshot, create_provider
+from libre_panel.sensors.base import (
+    HubView,
+    SensorHub,
+    SensorProvider,
+    Snapshot,
+    create_provider,
+)
 from libre_panel.sensors.fan_names import FanNames
 from libre_panel.sequence import Rotation
 from libre_panel.theme.defaults import default_theme, panel_model
@@ -202,6 +208,9 @@ class RunStatus:
     stats: dict[str, Any] = field(default_factory=dict)
     counters: Counters = field(default_factory=Counters)  # what the drivers count (shared)
     hub: SensorHub | None = None  # the sensor sources the loop reads, for the editor's pages
+    # the panels beside this one ([[panels]]), by their place in config.toml: what each loop
+    # does (a new dict at each change)
+    more: dict[int, RunStatus] = field(default_factory=dict)
 
 
 def sensor_hint(
@@ -554,9 +563,11 @@ class MainLoop:
         hub: SensorHub | None = None,
         display: Display | None = None,
         clock: Callable[[], float] = loop_clock,
+        panel: int | None = None,
     ) -> None:
         self.status = status = status or RunStatus()
         self.host, self.on_config, self.clock = host, on_config, clock
+        self.panel = panel  # a panel beside [device]'s: config.toml's [[panels]][panel] (run)
         self.warmup = _Warmup()  # the next theme, built while this one shows
         self.idle = threading.Event()  # set between frames: the warm-up works then
         i18n.set_language(config.language)
@@ -910,7 +921,7 @@ class MainLoop:
                 fresh = config
                 try:
                     if changed and config.path:
-                        fresh = load_config(config.path)
+                        fresh = panel_config(load_config(config.path), self.panel)
                     fresh_default = self._default_for(fresh)
                     wanted = _theme_name(fresh, host, fresh_default, self.rotation, reported)
                     new_theme = load_theme(find_theme(wanted))
@@ -1100,6 +1111,85 @@ class MainLoop:
         self.hub.close()
 
 
+def panel_config(config: Config, panel: int | None) -> Config:
+    """The config a loop runs with: config.toml's, or for a panel beside [device]'s, the one
+    of ``[[panels]]`` at ``panel`` (:meth:`Config.for_panel`)."""
+    if panel is None:
+        return config
+    if panel >= len(config.panels) or not config.panels[panel].on:
+        raise ConfigError(f"panels[{panel}]: no longer in config.toml")
+    return config.for_panel(panel)
+
+
+class _MorePanels:
+    """The panels beside [device]'s (``[[panels]]``): each in a loop of its own (:func:`run`
+    with ``panel``), in a thread of its own, on the first panel's readings (:class:`HubView`).
+    Each follows config.toml as the first panel's loop does; one starts as it is added or
+    switched on, ends as it is taken out or off, and all end with the first panel's loop."""
+
+    RETRY_S = 30.0  # after a config or theme that cannot be shown
+    HALT_S = 10.0  # how long an end waits for a loop to let its panel go
+
+    def __init__(
+        self, hub: Any, status: RunStatus, quitting: Callable[[], bool | str | None] | None
+    ) -> None:
+        self.hub, self.status, self.quitting = hub, status, quitting
+        self._runs: dict[int, tuple[threading.Thread, threading.Event]] = {}
+        self._seen: Config | None = None
+
+    def follow(self, config: Config) -> None:
+        """Start and end loops as ``config`` (the first panel's, as loaded) says. Cheap
+        while it is the same: the first panel's loop calls it on every frame."""
+        if config is self._seen:
+            return
+        self._seen = config
+        wanted = {n for n, panel in enumerate(config.panels) if panel.on}
+        for n in sorted(set(self._runs) - wanted):
+            self._end([n])
+        for n in sorted(wanted - set(self._runs)):
+            status, stop = RunStatus(), threading.Event()
+            thread = threading.Thread(
+                target=self._main, args=(n, config, stop, status), name=f"panel-{n + 2}",
+                daemon=True,
+            )  # fmt: skip
+            self._runs[n] = (thread, stop)
+            self.status.more = {**self.status.more, n: status}
+            thread.start()
+
+    def _main(self, n: int, config: Config, stop: threading.Event, status: RunStatus) -> None:
+        while not stop.is_set():
+            try:
+                run(panel_config(config, n), stop=stop, status=status, hub=HubView(self.hub),
+                    panel=n, quitting=self.quitting)  # fmt: skip
+            except (ConfigError, ThemeError, DeviceError) as exc:
+                status.state, status.detail = "error", str(exc)
+                log.error("panel %d stopped: %s", n + 2, exc)
+                stop.wait(self.RETRY_S)
+            except Exception as exc:  # the first panel goes on through a bug in this one's loop
+                status.state, status.detail = "error", f"unexpected error: {exc}"
+                log.exception("the loop of panel %d crashed; starting again", n + 2)
+                stop.wait(5.0)
+            if config.path is not None and not stop.is_set():
+                try:
+                    config = load_config(config.path)
+                except ConfigError:
+                    pass  # the first panel's loop says what is wrong with it
+
+    def _end(self, numbers: list[int]) -> None:
+        runs = [(n, *self._runs.pop(n)) for n in numbers if n in self._runs]
+        for _, _, stop in runs:
+            stop.set()  # all at once: each lets its panel go while the others do
+        for n, thread, _ in runs:
+            thread.join(timeout=self.HALT_S)
+            if thread.is_alive():
+                log.warning("the loop of panel %d did not stop in time", n + 2)
+        gone = {n for n, _, _ in runs}
+        self.status.more = {n: s for n, s in self.status.more.items() if n not in gone}
+
+    def close(self) -> None:
+        self._end(list(self._runs))
+
+
 HANG_FILENAME = "libre-panel-hang.log"
 HANG_S = 120.0  # a step of the loop this long is a hang: a whole serial frame takes half a minute
 
@@ -1164,6 +1254,8 @@ def run(
     on_config: Callable[[Config], None] | None = None,
     hang_log: Path | None = None,
     quitting: Callable[[], bool | str | None] | None = None,
+    hub: Any = None,
+    panel: int | None = None,
 ) -> None:
     """Main loop: read sensors at the theme's rate, render at ``config.fps`` so
     values glide between readings, and send only frames that changed. A
@@ -1176,23 +1268,34 @@ def run(
     writes where every thread stands (:class:`_HangWatch`). ``quitting`` says, when the loop
     ends, why: Libre Panel quits (True) or the computer goes to sleep ("sleep"); the panel
     then goes dark where ``[device] dark_on_quit`` or ``dark_on_sleep`` says so.
+
+    The panels of ``[[panels]]`` run beside it, each in a loop of its own (:class:`_MorePanels`):
+    one of them is this with ``panel``, its place there, and ``hub``, the first panel's readings
+    (a :class:`HubView`); the guards and the hang watch are the first panel's loop's alone.
     """
     stop = stop or threading.Event()
-    loop = MainLoop(config, once=once, status=status, host=host, on_config=on_config)
+    loop = MainLoop(config, once=once, status=status, host=host, on_config=on_config, hub=hub,
+                    panel=panel)  # fmt: skip
     pacer = _Pacer()
     planned: float | None = None  # when the pacer planned the next streaming frame
+    first = panel is None  # the first panel's loop, [device]'s
     guards = timing.Guards()  # SPUR II's, while this drives the panel
-    watch = _HangWatch(hang_log)
+    watch = _HangWatch(hang_log if first else None)  # (faulthandler has one timer)
+    more = _MorePanels(loop.hub, loop.status, quitting) if first and not once else None
     try:
         if once:
             loop.once()
             return
-        guards.start()
+        if first:
+            guards.start()
         while not stop.is_set():
             watch.arm()
             loop.step(planned)
             watch.disarm()
-            guards.settled()  # after the first frame
+            if first:
+                guards.settled()  # after the first frame
+            if more is not None:
+                more.follow(loop.config)
             if loop.streaming:
                 planned = pacer.wait(loop.fps, stop)  # a steady clock
                 continue
@@ -1200,6 +1303,8 @@ def run(
             pacer.reset()
             stop.wait(loop.pause())
     finally:
+        if more is not None:
+            more.close()  # (on the first panel's readings, which close with it)
         watch.close()
         guards.stop()
         why, device = quitting() if quitting is not None else None, loop.config.device

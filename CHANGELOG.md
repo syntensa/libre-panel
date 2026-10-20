@@ -1,6 +1,35 @@
 # Changelog
 
-## 0.6.9 — 2026-10-19
+## 0.7.0 — not released yet
+
+Collected since 0.6.9; this section grows until 0.7.0 comes out.
+
+**New**
+- **More panels at once**: up to three panels beside the first, each with a theme of its
+  own, on the same readings (*Settings → Panel → More panels*, `[[panels]]` in config.toml).
+  A panel that one of them has open is passed by when another looks for its own, so two
+  set to "Detect automatically" find one each
+  ([More panels at once](docs/CONFIGURATION.md#more-panels-at-once))
+- **A brightness of its own at night**: from one time to the other, over midnight too; 0 is
+  dark (*Settings → Panel*, `[device] night`)
+- **The panel sleeps with the computer** (Windows): dark while Windows sleeps, lit again
+  when it wakes (`dark_on_sleep`, on unless turned off)
+- **Cores** (Arena and the cores module): a bar for each physical core, its threads
+  together, where Windows or Linux says which belong together; `threads` shows every thread
+- **The game card** tells what holds the frame rate down (the graphics card, the processor
+  or a frame cap), the 1 % low, the frame time and the longest frame
+- Arena on the 9.2" and the 5.2": the fans turn beside the temperatures
+- The Turing 3.5", the 8.8" (rev. C) and the 12.3" are supported: their owners run them
+
+**Fixes**
+- Fans that never ran (an empty header on the mainboard) no longer fill the temperature
+  module
+- A Turing panel of rev. C that restarted is found again: it is asked three times, and its
+  answer is looked for behind what it said before the restart; a loop that has not let the
+  panel go yet keeps it to itself, so two never talk to it at once (#7)
+- Nothing new starts while Windows ends the session: no ffmpeg, and no new connection to
+  the panel
+
 
 No PresentMon error when Windows shuts down.
 

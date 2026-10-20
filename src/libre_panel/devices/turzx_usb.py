@@ -34,7 +34,14 @@ from typing import Any
 
 from PIL import Image
 
-from libre_panel.devices.base import DeviceError, Display, FrameError
+from libre_panel.devices.base import (
+    DeviceError,
+    Display,
+    FrameError,
+    leave_place,
+    place_taken,
+    take_place,
+)
 from libre_panel.devices.models import MODELS, PanelModel, orientation_of
 from libre_panel.i18n import t
 
@@ -64,6 +71,11 @@ CMD_STOP_STREAM = 123
 CMD_RESTART = 11
 
 USB_PIDS = {pid: m for m in MODELS if m.protocol == "usb-turing" for _vid, pid in m.usb_ids}
+
+
+def _place(device: Any) -> str:
+    """Where a USB device is on the bus, for :func:`take_place`."""
+    return f"usb:{getattr(device, 'bus', None)}.{getattr(device, 'address', None)}"
 
 
 def present_model() -> PanelModel | None:
@@ -197,8 +209,11 @@ class UsbTransport:
     Thread-safe: each command and its reply form one unit.
     """
 
-    def __init__(self, device: Any, ep_out: Any, ep_in: Any, pid: int) -> None:
+    def __init__(
+        self, device: Any, ep_out: Any, ep_in: Any, pid: int, place: str | None = None
+    ) -> None:
         self.device, self.ep_out, self.ep_in, self.pid = device, ep_out, ep_in, pid
+        self.place = place  # where it is on the bus, while it is open (take_place)
         self._lock = threading.RLock()
         self._late = 0  # replies to queries we stopped waiting for; skipped when they come
 
@@ -226,7 +241,10 @@ class UsbTransport:
         device = None
         try:
             for candidate in pids:
-                device = usb.core.find(idVendor=VENDOR_ID, idProduct=candidate, backend=backend)
+                found = usb.core.find(find_all=True, idVendor=VENDOR_ID, idProduct=candidate,
+                                      backend=backend)  # fmt: skip
+                # one that another panel of this process has open is passed by ([[panels]])
+                device = next((d for d in found or [] if not place_taken(_place(d))), None)
                 if device is not None:
                     pid = candidate
                     break
@@ -239,6 +257,20 @@ class UsbTransport:
                     "closed? (it holds the device exclusively)"
                 )
             )
+        place = _place(device)
+        if not take_place(place):  # (between the search and now)
+            raise DeviceError(t("the panel is in use by another panel of Libre Panel"))
+        try:
+            return cls._claimed(device, pid, place)
+        except BaseException:
+            leave_place(place)
+            raise
+
+    @classmethod
+    def _claimed(cls, device: Any, pid: int, place: str) -> UsbTransport:
+        import usb.core
+        import usb.util
+
         try:
             if sys.platform.startswith("linux") and device.is_kernel_driver_active(0):
                 device.detach_kernel_driver(0)
@@ -267,7 +299,7 @@ class UsbTransport:
         ep_out, ep_in = endpoint(usb.util.ENDPOINT_OUT), endpoint(usb.util.ENDPOINT_IN)
         if ep_out is None or ep_in is None:
             raise DeviceError("bulk endpoints not found")
-        return cls(device, ep_out, ep_in, pid)
+        return cls(device, ep_out, ep_in, pid, place)
 
     def drain(self, timeout_ms: int = 50, limit: int = 64) -> int:
         """Discard replies left over from an earlier (crashed) session."""
@@ -368,6 +400,9 @@ class UsbTransport:
                 release()
             except Exception:  # the device may already be gone; closing must never raise
                 pass
+        if self.place is not None:
+            leave_place(self.place)
+            self.place = None
 
 
 class TurzxUsbDisplay(Display):

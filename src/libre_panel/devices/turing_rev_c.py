@@ -143,7 +143,7 @@ class RevCDisplay(SerialDisplay):
         from libre_panel.devices import serial_link
 
         port = getattr(self.config, "port", "")
-        ports = serial_link._ports()
+        ports = serial_link.free(serial_link._ports())
         for info in ports:  # asleep, its serial number may say the size
             hint = find_model(SIZE_SERIALS.get(info.serial_number or "", ""))
             if is_asleep(info) and hint is not None and not self.configured:
@@ -191,7 +191,7 @@ class RevCDisplay(SerialDisplay):
                 serial_link.open_serial(info.device, self.baud, self.rtscts).close()
             except Exception:  # pyserial errors: it is changing its ids
                 pass
-            ports = serial_link._ports()
+            ports = serial_link.free(serial_link._ports())
             if any(is_awake(p) for p in ports):
                 self.sleep(1.0)  # it answers a moment after it shows up
                 return ports

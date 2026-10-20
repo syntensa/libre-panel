@@ -1,8 +1,10 @@
 // Settings → Panel: the panel that was found, smooth motion (the video mode) and its frame
 // rate, the name of the standby clip while smooth motion lacks it, brightness and which way up
 // the panel is mounted, the start screen; under Advanced where the pictures go, the file they go
-// to without a panel, the standby clip's name once it is set, the serial port and ffmpeg.
+// to without a panel, the standby clip's name once it is set, the serial port and ffmpeg; and the
+// panels beside this one, each with its model, theme, brightness and port.
 
+import { themeName } from "../../core/actions.js";
 import { t } from "../../core/i18n.js";
 import {
   loadClipQuestion,
@@ -20,6 +22,7 @@ import { panelName, stateText } from "../../shell/panel-popover.js";
 import { Segmented, Select, Slider, Toggle } from "../../ui/controls.js";
 import { Popover } from "../../ui/layer.js";
 import { MountedChoice } from "../home/panel.js";
+import { fitsPanel } from "../home/themes.js";
 import { Card, CommitField, Disclosure, SettingRow, Status, usePolling } from "./parts.js";
 import { StartScreenCard } from "./startscreen.js";
 
@@ -343,6 +346,118 @@ function NightFields({ device }) {
   <//>`;
 }
 
+// -- more panels at once ------------------------------------------------------------------------
+
+const MORE_PANELS = 3; // beside this one (config.MORE_PANELS)
+const OWN_FILE = /^libre-panel-frame-\d+\.png$/; // a panel's own picture file, by its place
+
+/**
+ * The panels beside this one ([[panels]]): each shows a theme of its own, on the same readings.
+ * They are written back whole; one taken out moves those behind it up, and their picture file
+ * by default with them.
+ */
+function MorePanelsCard() {
+  const config = useConfig();
+  const info = useStore((s) => s.panelInfo);
+  const models = useStore((s) => s.specs?.models || []);
+  const themes = useStore((s) => s.themes || []);
+  if (!config) return null;
+  const panels = config.panels || [];
+  const running = info?.running?.more || [];
+  const write = (next) => change({ panels: next });
+  const edit = (n, changes) => write(panels.map((panel, i) => (i === n ? { ...panel, ...changes } : panel)));
+  const remove = (n) =>
+    write(panels.filter((_, i) => i !== n).map(({ output, ...panel }) => (OWN_FILE.test(output) ? panel : { ...panel, output })));
+  const add = panels.length < MORE_PANELS
+    ? html`<button type="button" class="btn" onClick=${() => write([...panels, {}])}>${t("Add a panel")}</button>`
+    : null;
+  return html`<${Card}
+    id="panel-more"
+    title=${t("More panels")}
+    text=${t("A second or third panel beside this one, each with a screen of its own. They show the same readings in single pictures; smooth motion, the game screen and the screens in turn are this panel's.")}
+    action=${add}
+  >
+    ${panels.map(
+      (panel, n) => html`<${MorePanel}
+        key=${n}
+        n=${n}
+        panel=${panel}
+        running=${running.find((item) => item.index === n)}
+        models=${models}
+        themes=${themes}
+        onChange=${(changes) => edit(n, changes)}
+        onRemove=${() => remove(n)}
+      />`,
+    )}
+  <//>`;
+}
+
+function MoreStatus({ panel, running }) {
+  if (!panel.on) return html`<${Status}>${t("Off")}<//>`;
+  if (!running) return null;
+  if (running.state === "showing")
+    return html`<${Status} tone="ok">${t("Shows {theme}", { theme: themeName(running.theme) })}<//>`;
+  return html`<${Status} tone="warn">${stateText(running.state)}${running.detail ? `: ${running.detail}` : ""}<//>`;
+}
+
+function MorePanel({ n, panel, running, models, themes, onChange, onRemove }) {
+  const [chosen, setChosen] = useState(null); // as the brightness slider above
+  const model = models.find((item) => item.id === panel.model);
+  const name = t("Panel {number}", { number: n + 2 });
+  const brightness = (value) => {
+    if (value === panel.brightness) return;
+    setChosen(value);
+    Promise.resolve(onChange({ brightness: value })).finally(() => setChosen(null));
+  };
+  const fits = (theme) => fitsPanel(theme, model);
+  const themeOptions = [
+    { value: "", label: t("The panel's own") },
+    ...[...themes]
+      .sort((a, b) => Number(!fits(a)) - Number(!fits(b)))
+      .map((theme) => ({ value: theme.id, label: theme.name || theme.id, group: fits(theme) ? "" : t("For other panels") })),
+  ];
+  return html`<div class="more-panel" data-more-panel=${n}>
+    <${SettingRow} class="more-panel-head" title=${model ? `${name}: ${panelName(model)}` : name} status=${html`<${MoreStatus} panel=${panel} running=${running} />`}>
+      <${Toggle} label=${t("{panel} on", { panel: name })} checked=${panel.on !== false} onChange=${(on) => onChange({ on })} />
+      <button type="button" class="btn" onClick=${onRemove}>${t("Remove")}</button>
+    <//>
+    ${panel.on === false ? null : html`<${MoreSettings} n=${n} panel=${panel} models=${models} themes=${themeOptions} chosen=${chosen} onBrightness=${brightness} onChange=${onChange} />`}
+  </div>`;
+}
+
+/** What a panel that runs has to set: its model, theme, brightness, way up and port. */
+function MoreSettings({ n, panel, models, themes, chosen, onBrightness, onChange }) {
+  // (said once, at the first: it holds for all)
+  const hint = n === 0 ? t("Detect automatically takes a panel the others do not use. Two serial panels of the same kind: name the port of each below.") : null;
+  return html`
+    <${SettingRow} title=${t("Panel model")} hint=${hint}>
+      <${Select}
+        label=${t("Panel model")}
+        value=${panel.model || "auto"}
+        options=${[
+          { value: "auto", label: t("Detect automatically") },
+          ...models.map((item) => ({ value: item.id, label: panelName(item), group: item.vendor })),
+        ]}
+        onChange=${(value) => onChange({ model: value })}
+      />
+    <//>
+    <${SettingRow} title=${t("Theme")}>
+      <${Select} label=${t("Theme")} value=${panel.theme || ""} options=${themes} onChange=${(value) => onChange({ theme: value })} />
+    <//>
+    <${SettingRow} title=${t("Brightness")}>
+      <${Slider} label=${t("Brightness")} value=${chosen ?? panel.brightness} min=${0} max=${100} step=${5}
+        format=${(value) => `${value} %`} onCommit=${onBrightness} />
+    <//>
+    <${SettingRow} title=${t("Upside down")}>
+      <${Toggle} label=${t("Upside down")} checked=${panel.rotate === 180} onChange=${(on) => onChange({ rotate: on ? 180 : 0 })} />
+    <//>
+    <${SettingRow} title=${t("Port of a serial panel")}>
+      <${CommitField} label=${t("Port of a serial panel")} value=${panel.port || ""} placeholder="COM6, /dev/ttyACM1" mono
+        onCommit=${(port) => onChange({ port })} />
+    <//>
+  `;
+}
+
 // -- advanced --------------------------------------------------------------------------------
 
 const driverName = (name) =>
@@ -407,5 +522,6 @@ export const panelGroups = [
   { id: "video", order: 20, component: VideoCard },
   { id: "display", order: 30, component: DisplayCard },
   { id: "start-screen", order: 35, component: StartScreenCard },
+  { id: "more", order: 38, component: MorePanelsCard },
   { id: "advanced", order: 40, component: AdvancedCard },
 ];

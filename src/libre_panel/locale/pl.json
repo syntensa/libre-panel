@@ -2178,7 +2178,16 @@
     "off: a bar for each core, its threads together, where the processor says which they are": "wyłączone: jeden pasek na rdzeń, jego wątki razem, tam gdzie procesor mówi, które to są",
     "Limited by": "Ogranicza",
     "Frame cap": "Limit klatek",
-    "Longest frame": "Najdłuższa klatka"
+    "Longest frame": "Najdłuższa klatka",
+    "A second or third panel beside this one, each with a screen of its own. They show the same readings in single pictures; smooth motion, the game screen and the screens in turn are this panel's.": "Drugi lub trzeci panel obok tego, każdy z własnym ekranem. Pokazują te same odczyty w pojedynczych obrazach; płynny ruch, ekran gry i ekrany na zmianę należą do tego panelu.",
+    "Add a panel": "Dodaj panel",
+    "Detect automatically takes a panel the others do not use. Two serial panels of the same kind: name the port of each below.": "„Wykryj automatycznie” bierze panel, którego nie używają pozostałe. Dwa panele szeregowe tego samego rodzaju: podaj poniżej port każdego z nich.",
+    "More panels": "Więcej paneli",
+    "Panel {number}": "Panel {number}",
+    "The panel's own": "Domyślny dla panelu",
+    "the panel is in use by another panel of Libre Panel": "panel jest już używany przez inny panel Libre Panel",
+    "{panel} on": "{panel} włączony",
+    "{port} is in use by another panel of Libre Panel": "{port} jest już używany przez inny panel Libre Panel"
   },
   "fields": {
     "align": "Wyrównanie",

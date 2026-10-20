@@ -53,6 +53,10 @@ fps = 10                       # 1-60; values glide between readings
 transition = "fade"            # between themes: "cut", "fade", "slide", "tube", "entrance",
                                # or a plugin's
 
+# [[panels]]                   # a panel beside this one (see "More panels at once")
+# theme = "lumen"
+# model = "turing-3.5"
+
 # [sequence]                   # screens in turn (see "Screens in turn"), instead of one theme
 # on = true
 # [[sequence.steps]]
@@ -251,6 +255,35 @@ Lumen Vertical on an upright bar, for the normal theme, the pages and the screen
 alike. The app asks on a first start and has the choice on *Start* and in *Settings →
 Panel*; its lists show each theme once, by the name it is chosen by. `rotate = 180` turns
 either way upside down.
+
+## More panels at once
+
+Up to three panels can run beside the one `[device]` names, each with a theme of its own:
+a `[[panels]]` table for each, with the keys of `[device]` and a `theme`. *Settings → Panel →
+More panels* adds and removes them.
+
+```toml
+[[panels]]
+theme = "lumen"                # empty or left out: the panel's own default
+model = "turing-3.5"           # "auto": a panel the others do not use
+port = "COM6"                  # serial panels: which of two of the same kind it is
+brightness = 40
+# rotate = 180, orientation, motion, night, dark_on_quit, dark_on_sleep: as in [device]
+# on = false                   # kept, but not shown
+```
+
+The sensors are read once, for all panels; each panel's graphs run at its own theme's pace.
+Libre Panel never opens a panel twice: a panel that one of them has open is passed by when
+another looks for its own, so two panels set to `"auto"` find one each. A panel of
+`[[panels]]` that is not plugged in is waited for (its `driver` is `"turzx"` unless it says
+otherwise), instead of drawing into a file meanwhile; with `driver = "virtual"` it draws into
+`libre-panel-frame-2.png` (the third into `-3`, and so on) or its own `output`.
+
+The pages (game, music, idle clock), the screens in turn, the notices, the tray's brightness
+and smooth motion (the video mode, with the name of the standby clip that was given for it)
+are the first panel's; the others show their theme in single pictures. A change in config.toml
+reaches every panel, and a panel that is added, switched on or off, or taken out starts or
+ends while the others go on.
 
 ## Pages of the panel
 

@@ -16,7 +16,7 @@ import threading
 import time
 import tomllib
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -422,6 +422,21 @@ class SequenceConfig:
         return self.on and bool(self.steps)
 
 
+# How many panels may run beside the one [device] names ([[panels]])
+MORE_PANELS = 3
+
+
+@dataclass
+class PanelConfig:
+    """A panel beside the one ``[device]`` names (``[[panels]]``, two panels at once): the keys
+    of ``[device]`` for its own, its theme ("": the panel's own) and whether it runs. The
+    readings, the language and the rest of config.toml are the first panel's."""
+
+    theme: str = ""
+    on: bool = True
+    device: DeviceConfig = field(default_factory=DeviceConfig)
+
+
 @dataclass
 class Config:
     # The theme config.toml names; without one the panel's own default shows, and this is
@@ -441,6 +456,7 @@ class Config:
     services: ServicesConfig = field(default_factory=ServicesConfig)
     modes: dict[str, ModeConfig] = field(default_factory=dict)
     sequence: SequenceConfig = field(default_factory=SequenceConfig)
+    panels: list[PanelConfig] = field(default_factory=list)  # [[panels]]: more panels at once
     hotkeys: dict[str, str] = field(default_factory=dict)  # action: combination (hotkeys.py)
     hotkeys_enabled: bool = True  # [hotkeys] enabled: off holds no key, the combinations kept
     symbols: str = DEFAULT_SYMBOLS  # the look of the weather symbols and the moon
@@ -459,6 +475,23 @@ class Config:
     def __post_init__(self) -> None:
         if self.theme_given is None:
             self.theme_given = self.theme != DEFAULT_THEME
+
+    def for_panel(self, index: int) -> Config:
+        """The config the panel ``panels[index]`` runs with: its device and theme and the rest
+        of this one; no screens in turn and no more panels (the pages a service switches to are
+        the first panel's: its loop has no host). Smooth motion (the video mode) is the first
+        panel's: the name of its standby clip goes to the panel it was given for, and to no
+        other; the others get single pictures."""
+        panel = self.panels[index]
+        device = replace(panel.device, video=replace(self.device.video, mode="off"))
+        return replace(
+            self,
+            device=device,
+            theme=panel.theme or DEFAULT_THEME,
+            theme_given=bool(panel.theme),
+            sequence=SequenceConfig(on=False),
+            panels=[],
+        )
 
 
 def _expect(value: Any, kind: type | tuple[type, ...], name: str) -> Any:
@@ -603,51 +636,7 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
             cfg.hotkeys_enabled = _expect(table.pop("enabled"), bool, "hotkeys.enabled")
         cfg.hotkeys = _hotkeys(table)
 
-    dev = _expect(data.get("device", {}), dict, "device")
-    cfg.device.model = _expect(dev.get("model", cfg.device.model), str, "device.model")
-    if cfg.device.model != "auto":
-        from libre_panel.devices.models import find_model
-
-        if find_model(cfg.device.model) is None:
-            raise ConfigError(
-                f"device.model: unknown panel {cfg.device.model!r} (see: libre-panel models)"
-            )
-    cfg.device.driver = _expect(dev.get("driver", cfg.device.driver), str, "device.driver")
-    cfg.device.brightness = _expect(
-        dev.get("brightness", cfg.device.brightness), int, "device.brightness"
-    )
-    if not 0 <= cfg.device.brightness <= 100:
-        raise ConfigError("device.brightness: must be between 0 and 100")
-    cfg.device.rotate = _expect(dev.get("rotate", cfg.device.rotate), int, "device.rotate")
-    if cfg.device.rotate not in (0, 180):
-        raise ConfigError("device.rotate: must be 0, or 180 for upside down")
-    orientation = _expect(dev.get("orientation", cfg.device.orientation), str, "device.orientation")
-    if orientation not in ("", "landscape", "portrait"):
-        raise ConfigError('device.orientation: "landscape", "portrait" or ""')
-    cfg.device.orientation = orientation
-    motion = _expect(dev.get("motion", cfg.device.motion), str, "device.motion")
-    if motion not in MOTIONS:
-        raise ConfigError('device.motion: "auto", "full" or "calm"')
-    cfg.device.motion = motion
-    cfg.device.dark_on_quit = _expect(
-        dev.get("dark_on_quit", cfg.device.dark_on_quit), bool, "device.dark_on_quit"
-    )
-    cfg.device.dark_on_sleep = _expect(
-        dev.get("dark_on_sleep", cfg.device.dark_on_sleep), bool, "device.dark_on_sleep"
-    )
-    cfg.device.night = _expect(dev.get("night", cfg.device.night), bool, "device.night")
-    for name in ("night_from", "night_to"):
-        text = _expect(dev.get(name, getattr(cfg.device, name)), str, f"device.{name}")
-        if time_of_day(text) is None:
-            raise ConfigError(f'device.{name}: a time of day such as "22:00"')
-        setattr(cfg.device, name, "{:02d}:{:02d}".format(*divmod(time_of_day(text), 60)))
-    level = _expect(dev.get("night_brightness", cfg.device.night_brightness), int,
-                    "device.night_brightness")  # fmt: skip
-    if isinstance(level, bool) or not 0 <= level <= 100:
-        raise ConfigError("device.night_brightness: 0 to 100")
-    cfg.device.night_brightness = level
-    cfg.device.output = _expect(dev.get("output", cfg.device.output), str, "device.output")
-    cfg.device.port = _expect(dev.get("port", cfg.device.port), str, "device.port").strip()
+    cfg.device = _parse_device(_expect(data.get("device", {}), dict, "device"), "device")
     cfg.device.video = _parse_video(_expect(data.get("video", {}), dict, "video"))
 
     sensors = dict(_expect(data.get("sensors", {}), dict, "sensors"))
@@ -717,12 +706,84 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
     except StepError as exc:
         raise ConfigError(str(exc)) from exc
 
+    cfg.panels = _panels(data.get("panels", []))
+
     if cfg.weather.enabled and (cfg.weather.latitude is None or cfg.weather.longitude is None):
         raise ConfigError(
             "weather is enabled but no location is set: add weather.latitude and "
             'weather.longitude (find them with: libre-panel location "Your City")'
         )
     return cfg
+
+
+def _parse_device(dev: dict[str, Any], where: str) -> DeviceConfig:
+    """The settings of a panel: ``[device]``, or a ``[[panels]]`` table (``where`` names it)."""
+    device = DeviceConfig()
+    device.model = _expect(dev.get("model", device.model), str, f"{where}.model")
+    if device.model != "auto":
+        from libre_panel.devices.models import find_model
+
+        if find_model(device.model) is None:
+            raise ConfigError(
+                f"{where}.model: unknown panel {device.model!r} (see: libre-panel models)"
+            )
+    device.driver = _expect(dev.get("driver", device.driver), str, f"{where}.driver")
+    device.brightness = _expect(dev.get("brightness", device.brightness), int,
+                                f"{where}.brightness")  # fmt: skip
+    if not 0 <= device.brightness <= 100:
+        raise ConfigError(f"{where}.brightness: must be between 0 and 100")
+    device.rotate = _expect(dev.get("rotate", device.rotate), int, f"{where}.rotate")
+    if device.rotate not in (0, 180):
+        raise ConfigError(f"{where}.rotate: must be 0, or 180 for upside down")
+    orientation = _expect(dev.get("orientation", device.orientation), str, f"{where}.orientation")
+    if orientation not in ("", "landscape", "portrait"):
+        raise ConfigError(f'{where}.orientation: "landscape", "portrait" or ""')
+    device.orientation = orientation
+    motion = _expect(dev.get("motion", device.motion), str, f"{where}.motion")
+    if motion not in MOTIONS:
+        raise ConfigError(f'{where}.motion: "auto", "full" or "calm"')
+    device.motion = motion
+    for name in ("dark_on_quit", "dark_on_sleep", "night"):
+        given = dev.get(name, getattr(device, name))
+        setattr(device, name, _expect(given, bool, f"{where}.{name}"))
+    for name in ("night_from", "night_to"):
+        text = _expect(dev.get(name, getattr(device, name)), str, f"{where}.{name}")
+        if time_of_day(text) is None:
+            raise ConfigError(f'{where}.{name}: a time of day such as "22:00"')
+        setattr(device, name, "{:02d}:{:02d}".format(*divmod(time_of_day(text), 60)))
+    level = _expect(dev.get("night_brightness", device.night_brightness), int,
+                    f"{where}.night_brightness")  # fmt: skip
+    if isinstance(level, bool) or not 0 <= level <= 100:
+        raise ConfigError(f"{where}.night_brightness: 0 to 100")
+    device.night_brightness = level
+    device.output = _expect(dev.get("output", device.output), str, f"{where}.output")
+    device.port = _expect(dev.get("port", device.port), str, f"{where}.port").strip()
+    return device
+
+
+def panel_defaults(n: int) -> dict[str, str]:
+    """What a panel beside the first (``[[panels]]`` at ``n``) has by default where it differs
+    from ``[device]``: one that is not there is waited for ("auto" would draw into a file
+    meanwhile), and its file is its own."""
+    return {"driver": "turzx", "output": f"libre-panel-frame-{n + 2}.png"}
+
+
+def _panels(value: Any) -> list[PanelConfig]:
+    """``[[panels]]``: the panels beside ``[device]``'s, each with the keys of ``[device]``, a
+    ``theme`` and ``on``. Without a driver one is the panel found ("turzx"), and one that
+    writes its frames to a file (``driver = "virtual"``) writes to one of its own."""
+    panels = []
+    tables = _expect(value, list, "panels")
+    if len(tables) > MORE_PANELS:
+        raise ConfigError(f"panels: at most {MORE_PANELS} panels beside [device]")
+    for n, table in enumerate(tables):
+        where = f"panels[{n}]"
+        table = dict(_expect(table, dict, where))
+        theme = _expect(table.pop("theme", ""), str, f"{where}.theme").strip()
+        on = _expect(table.pop("on", True), bool, f"{where}.on")
+        table = {**panel_defaults(n), **table}
+        panels.append(PanelConfig(theme=theme, on=on, device=_parse_device(table, where)))
+    return panels
 
 
 _MAXRATE = re.compile(r"^[0-9]+(\.[0-9]+)?[kKM]?$")

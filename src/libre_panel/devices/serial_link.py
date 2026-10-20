@@ -15,7 +15,7 @@ from typing import Any
 
 from PIL import Image, ImageChops
 
-from libre_panel.devices.base import DeviceError
+from libre_panel.devices.base import DeviceError, leave_place, place_taken, take_place
 from libre_panel.devices.models import MODELS, PanelModel, models_for_usb
 from libre_panel.i18n import t
 
@@ -57,13 +57,18 @@ def _ports() -> list[Any]:
     return list(list_ports.comports())
 
 
+def free(ports: list[Any]) -> list[Any]:
+    """``ports`` without those a panel of this process has open (more panels at once)."""
+    return [info for info in ports if not place_taken(info.device)]
+
+
 def find_port(model: PanelModel | None = None, port: str = "") -> FoundPort | None:
     """The port of a connected serial panel: the first whose USB ids (and serial
     number, where the vendor set one) fit ``model``, or any known serial panel
     when ``model`` is None. ``port`` (device.port) limits the search to that
     port, and is trusted for ``model`` even when its ids say nothing."""
     wanted = [model] if model is not None else [m for m in MODELS if m.protocol in SERIAL_PROTOCOLS]
-    for info in _ports():
+    for info in free(_ports()):
         if port and info.device != port:
             continue
         if model is None and not port and _generic(info):
@@ -132,10 +137,22 @@ class SerialLink:
             ) from exc
         self._errors = (serial.SerialException, OSError)
         self.written = 0  # bytes sent on this link, for the driver's counters
+        if not take_place(device):  # the other panel's loop has it ([[panels]])
+            raise DeviceError(t("{port} is in use by another panel of Libre Panel", port=device))
+        self._taken = True
         try:
             self.port = open_serial(device, baud, rtscts)
         except self._errors as exc:
+            self._leave()
             raise DeviceError(t("cannot open {port}: {error}", port=device, error=exc)) from exc
+        except BaseException:
+            self._leave()
+            raise
+
+    def _leave(self) -> None:
+        if self._taken:
+            self._taken = False
+            leave_place(self.device)
 
     def write(self, data: bytes) -> None:
         try:
@@ -161,6 +178,8 @@ class SerialLink:
             self.port.close()
         except self._errors:
             pass
+        finally:
+            self._leave()
 
 
 def open_serial(device: str, baud: int, rtscts: bool) -> Any:

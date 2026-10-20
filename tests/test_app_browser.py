@@ -4214,3 +4214,24 @@ def test_the_palette_finds_the_setup(app_url, linux_pc):
             "window.libre.commands.availableCommands().map((c) => c.id).includes('setup.open')",
         )
         assert found is True
+
+
+def test_a_second_panel_is_added_given_a_theme_and_taken_out_again(app_url, isolated_home):
+    """Settings → Panel → More panels: a panel beside this one, with a theme and a way up of its
+    own, written to [[panels]]; taken out again, there is none."""
+    choose_theme(isolated_home)
+    with browser_page(app_url, "settings/panel") as page:
+        card = page.locator("#panel-more")
+        expect(card.locator("h2")).to_have_text("More panels")
+        card.get_by_role("button", name="Add a panel").click()
+        waits_for(page, lambda: len(settings_config().panels) == 1)
+        second = card.locator("[data-more-panel='0']")
+        expect(second.locator(".settings-row-title").first).to_have_text("Panel 2")
+        second.get_by_label("Theme").select_option("lumen")
+        waits_for(page, lambda: settings_config().panels[0].theme == "lumen")
+        second.get_by_label("Upside down").click()
+        waits_for(page, lambda: settings_config().panels[0].device.rotate == 180)
+        assert settings_config().device.rotate == 0  # this panel's way up as it was
+        second.get_by_role("button", name="Remove").click()
+        waits_for(page, lambda: settings_config().panels == [])
+        expect(card.locator("[data-more-panel]")).to_have_count(0)
