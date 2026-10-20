@@ -144,6 +144,16 @@ local_clip = ""                # required for "auto" and "on", see below
 clip_asked = false             # true once the app has asked for local_clip (on Start)
 ```
 
+## Backup
+
+*Settings → System → Backup* saves config.toml and your own themes in one file
+(`libre-panel-backup-<date>.zip`), for another computer or to keep, and puts such a file back:
+its config.toml takes the place of the one there (which is kept beside it as
+`config.toml.before-restore`), and its themes are added, written over those of the same name.
+Nothing is written from a file that is not a sound backup. config.toml holds the keys of
+services (Home Assistant's) too: keep a backup to yourself. While Libre Panel runs with
+administrator rights, a backup is not restored from the app.
+
 ## Light mode
 
 ```toml

@@ -20,6 +20,8 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
   you are back (`dark_when_away`, `away_brightness`; on unless turned off)
 - **One accent colour for every screen**: Windows' or your own; what is in a theme's accent
   colour takes it, on the panel and in the previews (*Settings → Panel*, `accent`)
+- **Backup**: your settings and own themes in one file, saved and put back with a click
+  (*Settings → System*), for another computer or to keep
 - **Cores** (Arena and the cores module): a bar for each physical core, its threads
   together, where Windows or Linux says which belong together; `threads` shows every thread
 - **The game card** tells what holds the frame rate down (the graphics card, the processor

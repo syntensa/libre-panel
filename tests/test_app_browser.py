@@ -4265,3 +4265,24 @@ def test_an_accent_colour_of_one_s_own_for_every_screen(app_url, isolated_home):
         waits_for(page, lambda: settings_config().accent == "")
         expect(row.get_by_label("My accent colour")).to_have_count(0)
         assert radio(page, "Accent colour", "Windows'").count() == 0  # (not on Windows)
+
+
+def test_a_backup_is_saved_and_restored_from_settings(app_url, isolated_home, tmp_path):
+    """Settings → System → Backup: the file to keep, and one put back (after a question)."""
+    from libre_panel.backup import make_backup
+
+    choose_theme(isolated_home)
+    with isolated_home.joinpath("config.toml").open("a", encoding="utf-8") as config:
+        config.write("\n[device]\nbrightness = 35\n")
+    saved = tmp_path / "backup.zip"
+    saved.write_bytes(make_backup())
+    (isolated_home / "config.toml").write_text('theme = "slate"\n', encoding="utf-8")
+    with browser_page(app_url, "settings/system") as page:
+        card = page.locator("#system-backup")
+        assert "/api/backup/file" in card.get_by_role("link", name="Save a backup").get_attribute(
+            "href"
+        )
+        card.locator("input[type=file]").set_input_files(str(saved))
+        page.get_by_role("button", name="Restore", exact=True).click()
+        waits_for(page, lambda: settings_config().device.brightness == 35)
+        assert (isolated_home / "config.toml.before-restore").exists()

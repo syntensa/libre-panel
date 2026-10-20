@@ -122,6 +122,9 @@ export const endpoints = {
   logs: (level = "DEBUG") => get(`/api/logs?level=${enc(level)}`),
   setDetailedLog: (verbose) => post("/api/logs", { verbose }),
   logsFile: () => withToken("/api/logs/file"),
+  // Settings → System → Backup: the settings and own themes in one file, and back (backup.py)
+  backupFile: () => withToken("/api/backup/file"),
+  restoreBackup: (bytes) => api("POST", "/api/backup", bytes, { raw: true }),
   pluginPages: () => get("/api/plugins/pages"),
   hardware: () => get("/api/hardware"),
   setHardware: (names) => post("/api/hardware", names),

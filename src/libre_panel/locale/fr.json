@@ -2200,7 +2200,21 @@
     "Windows'": "Celle de Windows",
     "My own": "La mienne",
     "My accent colour": "Ma couleur d’accent",
-    "While the session is locked, the panel takes the brightness below; 0 is dark. Unlocked, it lights up again.": "Tant que la session est verrouillée, l’écran prend la luminosité ci-dessous ; 0 est éteint. Déverrouillée, il se rallume."
+    "While the session is locked, the panel takes the brightness below; 0 is dark. Unlocked, it lights up again.": "Tant que la session est verrouillée, l’écran prend la luminosité ci-dessous ; 0 est éteint. Déverrouillée, il se rallume.",
+    "A file saved here before, on this computer or another.": "Un fichier enregistré ici auparavant, sur cet ordinateur ou un autre.",
+    "Backup": "Sauvegarde",
+    "Restore": "Restaurer",
+    "Restore a backup": "Restaurer une sauvegarde",
+    "Restore this backup?": "Restaurer cette sauvegarde ?",
+    "Save a backup": "Enregistrer une sauvegarde",
+    "The backup is restored: {count} themes": "La sauvegarde est restaurée : {count} thèmes",
+    "While Libre Panel runs with administrator rights, a backup is not restored here: its config.toml may name programs that would be started with those rights.": "Tant que Libre Panel tourne avec des droits d’administrateur, aucune sauvegarde n’est restaurée ici : son config.toml peut nommer des programmes qui seraient lancés avec ces droits.",
+    "Your settings and your own themes in one file: for another computer, or to keep. It holds what config.toml holds, keys of services too: keep it to yourself.": "Vos réglages et vos propres thèmes dans un seul fichier : pour un autre ordinateur, ou à conserver. Il contient ce que contient config.toml, y compris les clés des services : gardez-le pour vous.",
+    "Your settings are replaced by those of the backup; the ones you have now are kept beside them as config.toml.before-restore. Its themes are added, and written over themes of the same name.": "Vos réglages sont remplacés par ceux de la sauvegarde ; les actuels sont conservés à côté sous config.toml.before-restore. Ses thèmes sont ajoutés et remplacent ceux du même nom.",
+    "its config.toml cannot be read: {error}": "son config.toml est illisible : {error}",
+    "the backup is too large": "la sauvegarde est trop volumineuse",
+    "this is not a backup of Libre Panel": "ce n’est pas une sauvegarde de Libre Panel",
+    "{name}: not a file a backup of Libre Panel holds": "{name} : pas un fichier que contient une sauvegarde de Libre Panel"
   },
   "fields": {
     "align": "Alignement",

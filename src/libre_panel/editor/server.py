@@ -1333,6 +1333,44 @@ class EditorHandler(BaseHTTPRequestHandler):
         except DeviceError:
             return None
 
+    def _backup_file(self) -> None:
+        """The person's settings and own themes in one zip, to keep (backup.py)."""
+        from libre_panel.backup import make_backup
+
+        try:
+            data = make_backup(self.state.config_path)
+        except OSError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        name = f"libre-panel-backup-{time.strftime('%Y-%m-%d')}.zip"
+        self._send(200, data, "application/zip", filename=name)
+
+    def _restore_backup(self) -> None:
+        """A backup (the zip's bytes) put in place: its config.toml and its themes. Refused
+        while Libre Panel runs with administrator rights: config.toml may name programs it
+        would start with them."""
+        from libre_panel.backup import MAX_TOTAL, BackupError, restore_backup
+
+        if access.elevated():
+            return self._error(
+                t("While Libre Panel runs with administrator rights, a backup is not restored "
+                  "here: its config.toml may name programs that would be started with those "
+                  "rights."),
+                HTTPStatus.FORBIDDEN,
+            )  # fmt: skip
+        data = self._read_body(MAX_TOTAL)
+        if data is None:
+            return None
+        try:
+            done = restore_backup(data, self.state.config_path)
+        except BackupError as exc:
+            return self._error(str(exc), HTTPStatus.BAD_REQUEST)
+        except OSError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        follow = getattr(self.controls, "follow_config", None)
+        if callable(follow):
+            follow()  # the services take the restored settings; the panel sees the file
+        self._json(done)
+
     def _start_screen_picture(self, query: dict[str, list[str]]) -> None:
         """``?model=turing-9.2-usb&what=logo|clip&w=960``: the boot logo (PNG) or the standby
         clip (an animated PNG) as the app shows them."""
@@ -1938,6 +1976,10 @@ ROUTES: tuple[Route, ...] = (
     Route(
         "GET", "/api/symbols-look", lambda h, m, u: h._symbols_look(parse_qs(u.query)), picture=True
     ),
+    Route(
+        "GET", "/api/backup/file", lambda h, m, u: h._backup_file(), picture=True
+    ),  # a link that downloads it carries the token in its address
+    Route("POST", "/api/backup", lambda h, m, u: h._restore_backup()),
     Route("GET", "/api/start-screen", lambda h, m, u: h._start_screen()),
     Route(
         "GET",

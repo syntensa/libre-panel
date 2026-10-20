@@ -3,15 +3,16 @@
 // daily look for a new version, and, where the app is shown in the browser, what a window of
 // its own needs.
 
+import { endpoints } from "../../core/api.js";
 import { inNativeWindow } from "../../core/app.js";
 import { languageSetting, languages, setLanguage, t } from "../../core/i18n.js";
 import { loadSettings, loadSystem, saveSettings, saveSystem, useConfig } from "../../core/settings.js";
 import { store, useStore } from "../../core/state.js";
-import { html, useEffect, useState } from "../../lib/preact.js";
+import { html, useEffect, useRef, useState } from "../../lib/preact.js";
 import { Select, Toggle } from "../../ui/controls.js";
 import { confirmDialog, openDialog } from "../../ui/dialog.js";
 import { Icon } from "../../ui/icons.js";
-import { toastError } from "../../ui/toast.js";
+import { toast, toastError } from "../../ui/toast.js";
 import { loadUpdate, setCheckUpdates, useUpdate } from "../home/update.js";
 import { HotkeysCard } from "./hotkeys.js";
 import { Card, Note, SettingRow, Status, copyText } from "./parts.js";
@@ -180,7 +181,46 @@ function StartCard() {
   <//>`;
 }
 
+/**
+ * The settings and own themes in one file (backup.py): saved with a click, and put back from one,
+ * which replaces the settings (the ones before are kept beside them) and adds its themes.
+ */
+function BackupCard() {
+  const picker = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const restore = async (file) => {
+    if (!file) return;
+    const sure = await confirmDialog({
+      title: t("Restore this backup?"),
+      message: t("Your settings are replaced by those of the backup; the ones you have now are kept beside them as config.toml.before-restore. Its themes are added, and written over themes of the same name."),
+      confirm: t("Restore"),
+    });
+    if (!sure) return;
+    setBusy(true);
+    try {
+      const done = await endpoints.restoreBackup(await file.arrayBuffer());
+      toast(t("The backup is restored: {count} themes", { count: done.themes.length }), { kind: "success" });
+      await loadSettings();
+    } catch (error) {
+      toastError(error);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return html`<${Card} id="system-backup" title=${t("Backup")} text=${t("Your settings and your own themes in one file: for another computer, or to keep. It holds what config.toml holds, keys of services too: keep it to yourself.")}>
+    <${SettingRow} title=${t("Save a backup")}>
+      <a class="btn" href=${endpoints.backupFile()} download>${t("Save a backup")}</a>
+    <//>
+    <${SettingRow} title=${t("Restore a backup")} hint=${t("A file saved here before, on this computer or another.")}>
+      <input ref=${picker} type="file" accept=".zip,application/zip" hidden
+        onChange=${(event) => { restore(event.currentTarget.files?.[0]); event.currentTarget.value = ""; }} />
+      <button type="button" class="btn" disabled=${busy} onClick=${() => picker.current?.click()}>${t("Restore a backup")}</button>
+    <//>
+  <//>`;
+}
+
 export const systemGroups = [
   { id: "start", order: 10, component: StartCard, load: loadSystem },
   { id: "hotkeys", order: 20, component: HotkeysCard },
+  { id: "backup", order: 30, component: BackupCard },
 ];

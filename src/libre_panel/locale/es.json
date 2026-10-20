@@ -2200,7 +2200,21 @@
     "Windows'": "La de Windows",
     "My own": "La mía",
     "My accent colour": "Mi color de acento",
-    "While the session is locked, the panel takes the brightness below; 0 is dark. Unlocked, it lights up again.": "Mientras la sesión está bloqueada, el panel toma el brillo de abajo; 0 es apagado. Al desbloquearla, se ilumina de nuevo."
+    "While the session is locked, the panel takes the brightness below; 0 is dark. Unlocked, it lights up again.": "Mientras la sesión está bloqueada, el panel toma el brillo de abajo; 0 es apagado. Al desbloquearla, se ilumina de nuevo.",
+    "A file saved here before, on this computer or another.": "Un archivo guardado aquí antes, en este ordenador o en otro.",
+    "Backup": "Copia de seguridad",
+    "Restore": "Restaurar",
+    "Restore a backup": "Restaurar una copia",
+    "Restore this backup?": "¿Restaurar esta copia?",
+    "Save a backup": "Guardar una copia",
+    "The backup is restored: {count} themes": "La copia está restaurada: {count} temas",
+    "While Libre Panel runs with administrator rights, a backup is not restored here: its config.toml may name programs that would be started with those rights.": "Mientras Libre Panel se ejecuta con derechos de administrador, aquí no se restaura ninguna copia: su config.toml puede nombrar programas que se iniciarían con esos derechos.",
+    "Your settings and your own themes in one file: for another computer, or to keep. It holds what config.toml holds, keys of services too: keep it to yourself.": "Tus ajustes y tus propios temas en un archivo: para otro ordenador o para guardarlo. Contiene lo que contiene config.toml, también las claves de servicios: guárdalo para ti.",
+    "Your settings are replaced by those of the backup; the ones you have now are kept beside them as config.toml.before-restore. Its themes are added, and written over themes of the same name.": "Tus ajustes se sustituyen por los de la copia; los actuales se conservan al lado como config.toml.before-restore. Sus temas se añaden y sobrescriben los temas del mismo nombre.",
+    "its config.toml cannot be read: {error}": "su config.toml no se puede leer: {error}",
+    "the backup is too large": "la copia es demasiado grande",
+    "this is not a backup of Libre Panel": "esto no es una copia de Libre Panel",
+    "{name}: not a file a backup of Libre Panel holds": "{name}: no es un archivo que contenga una copia de Libre Panel"
   },
   "fields": {
     "align": "Alineación",

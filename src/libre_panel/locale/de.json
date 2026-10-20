@@ -2200,7 +2200,21 @@
     "Windows'": "Die von Windows",
     "My own": "Eigene",
     "My accent colour": "Meine Akzentfarbe",
-    "While the session is locked, the panel takes the brightness below; 0 is dark. Unlocked, it lights up again.": "Solange die Sitzung gesperrt ist, nimmt das Panel die Helligkeit unten an; 0 ist dunkel. Entsperrt leuchtet es wieder."
+    "While the session is locked, the panel takes the brightness below; 0 is dark. Unlocked, it lights up again.": "Solange die Sitzung gesperrt ist, nimmt das Panel die Helligkeit unten an; 0 ist dunkel. Entsperrt leuchtet es wieder.",
+    "A file saved here before, on this computer or another.": "Eine Datei, die hier gespeichert wurde, auf diesem Computer oder einem anderen.",
+    "Backup": "Sicherung",
+    "Restore": "Einspielen",
+    "Restore a backup": "Sicherung einspielen",
+    "Restore this backup?": "Diese Sicherung einspielen?",
+    "Save a backup": "Sicherung speichern",
+    "The backup is restored: {count} themes": "Die Sicherung ist eingespielt: {count} Themes",
+    "While Libre Panel runs with administrator rights, a backup is not restored here: its config.toml may name programs that would be started with those rights.": "Solange Libre Panel mit Administratorrechten läuft, wird hier keine Sicherung eingespielt: Ihre config.toml kann Programme nennen, die dann mit diesen Rechten gestartet würden.",
+    "Your settings and your own themes in one file: for another computer, or to keep. It holds what config.toml holds, keys of services too: keep it to yourself.": "Deine Einstellungen und eigenen Themes in einer Datei: für einen anderen Computer oder zum Aufheben. Sie enthält, was in der config.toml steht, auch Schlüssel von Diensten: Behalte sie für dich.",
+    "Your settings are replaced by those of the backup; the ones you have now are kept beside them as config.toml.before-restore. Its themes are added, and written over themes of the same name.": "Deine Einstellungen werden durch die der Sicherung ersetzt; die jetzigen bleiben daneben als config.toml.before-restore erhalten. Ihre Themes kommen dazu und überschreiben Themes mit gleichem Namen.",
+    "its config.toml cannot be read: {error}": "seine config.toml ist nicht lesbar: {error}",
+    "the backup is too large": "die Sicherung ist zu groß",
+    "this is not a backup of Libre Panel": "das ist keine Sicherung von Libre Panel",
+    "{name}: not a file a backup of Libre Panel holds": "{name}: keine Datei, die eine Sicherung von Libre Panel enthält"
   },
   "fields": {
     "align": "Ausrichtung",
