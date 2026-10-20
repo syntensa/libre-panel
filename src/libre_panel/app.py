@@ -141,6 +141,12 @@ def _place(config: Config) -> tuple[float, float] | None:
     return None if latitude is None or longitude is None else (latitude, longitude)
 
 
+def _brightness(config: Config) -> int:
+    """The brightness the panel shows now (config.brightness_now), the night's sunset and
+    sunrise at the weather's place."""
+    return brightness_now(config.device, place=_place(config))
+
+
 def background_of(renderer: Renderer) -> tuple[int, int, int]:
     """The theme's background colour, its palette name (``"@bg"``) resolved."""
     return renderer.color(renderer.theme.background_color)[:3]
@@ -638,7 +644,7 @@ class MainLoop:
         self.size = target_size(config, theme, shown)
         known = {config.path: config.stamp} if config.path and config.stamp else None
         self.watcher = _Watcher(config.path, _theme_file(theme), known=known)
-        self.link = _Link(self.display, brightness_now(config.device), status)
+        self.link = _Link(self.display, _brightness(config), status)
         self.night_at = 0.0  # when the loop last looked whether it is night (_follow_night)
         self.presence = presence.changes()  # the person left or came back since: at once
         self.toasts = ToastLayer(renderer)
@@ -857,7 +863,7 @@ class MainLoop:
             return
         self.night_at, self.presence = now, changes
         device = self.config.device
-        wanted = brightness_now(device)
+        wanted = _brightness(self.config)
         if wanted != self.link.brightness:
             if presence.away() and device.dark_when_away:
                 why = "the person is away"
@@ -870,7 +876,7 @@ class MainLoop:
         """A single frame to the panel; device errors are raised."""
         config, display, renderer = self.config, self.display, self.renderer
         display.open()
-        display.set_brightness(brightness_now(config.device))
+        display.set_brightness(_brightness(config))
         frame, _ = renderer.render(self.hub.snapshot())
         frame = fit_frame(frame, self.size, background_of(renderer))
         self.turn = config.device.rotate if _on_panel(display) else 0
@@ -947,13 +953,13 @@ class MainLoop:
                         display.close()
                         display = create_display(fresh.device)
                         display.counters = status.counters
-                        link = _Link(display, brightness_now(fresh.device), status)
+                        link = _Link(display, _brightness(fresh), status)
                         device = fresh.device
                         reported = None  # the new display has not said which panel it is
                     for name in _FOLLOWED:  # (on the open panel)
                         setattr(device, name, getattr(fresh.device, name))
-                    if brightness_now(device) != link.brightness:
-                        link.set_brightness(brightness_now(device))
+                    if _brightness(fresh) != link.brightness:
+                        link.set_brightness(_brightness(fresh))
                     fresh.device, config = device, fresh
                     default = status.default_theme = fresh_default
                     i18n.set_language(config.language)

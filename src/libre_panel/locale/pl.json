@@ -2190,7 +2190,10 @@
     "{port} is in use by another panel of Libre Panel": "{port} jest już używany przez inny panel Libre Panel",
     "Dimmed while you are away": "Przyciemniony, gdy cię nie ma",
     "While the computer is locked or its monitor is off, the panel takes the brightness below; 0 is dark. Back at the computer, it lights up again.": "Gdy komputer jest zablokowany lub jego monitor wyłączony, panel przyjmuje jasność poniżej; 0 to ciemno. Po powrocie do komputera znów się rozjaśnia.",
-    "Brightness while you are away": "Jasność, gdy cię nie ma"
+    "Brightness while you are away": "Jasność, gdy cię nie ma",
+    "From sunset to sunrise": "Od zachodu do wschodu słońca",
+    "At the place of the weather, day by day.": "W miejscu pogody, dzień po dniu.",
+    "Choose a place under Weather: until then the night goes from 19:00 to 7:00.": "Wybierz miejsce w sekcji Pogoda: do tego czasu noc trwa od 19:00 do 7:00."
   },
   "fields": {
     "align": "Wyrównanie",

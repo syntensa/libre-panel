@@ -4235,3 +4235,20 @@ def test_a_second_panel_is_added_given_a_theme_and_taken_out_again(app_url, isol
         second.get_by_role("button", name="Remove").click()
         waits_for(page, lambda: settings_config().panels == [])
         expect(card.locator("[data-more-panel]")).to_have_count(0)
+
+
+def test_the_night_follows_the_sun_with_one_switch(app_url, isolated_home):
+    """Settings → Panel → At night: from sunset to sunrise, at the weather's place; without
+    one, the app says what the night is meanwhile."""
+    choose_theme(isolated_home)
+    with isolated_home.joinpath("config.toml").open("a", encoding="utf-8") as config:
+        config.write("\n[device]\nnight = true\n")
+    with browser_page(app_url, "settings/panel") as page:
+        page.get_by_label("From sunset to sunrise").click()
+        waits_for(page, lambda: settings_config().device.night_from == "sunset")
+        assert settings_config().device.night_to == "sunrise"
+        expect(page.locator("[data-night-sun]")).to_contain_text("19:00")
+        expect(page.get_by_label("Night begins")).to_have_count(0)
+        page.get_by_label("From sunset to sunrise").click()
+        waits_for(page, lambda: settings_config().device.night_from == "22:00")
+        expect(page.get_by_label("Night begins")).to_have_value("22:00")

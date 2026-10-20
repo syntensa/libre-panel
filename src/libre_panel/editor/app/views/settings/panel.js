@@ -348,23 +348,34 @@ function AwayBrightness({ level }) {
   <//>`;
 }
 
-/** When the night begins and ends, and the panel's brightness then. */
+/** When the night begins and ends (at times, or with the sun), and the panel's brightness then. */
 function NightFields({ device }) {
+  const config = useConfig();
   const [chosen, setChosen] = useState(null); // as the brightness slider above
   const level = device.night_brightness;
+  const sun = device.night_from === "sunset" && device.night_to === "sunrise";
+  const placed = config?.weather?.latitude != null && config?.weather?.longitude != null;
   const choose = (value) => {
     if (value === level) return;
     setChosen(value);
     saveSettings({ "device.night_brightness": value }).finally(() => setChosen(null));
   };
+  const follow = (on) =>
+    saveSettings(on ? { "device.night_from": "sunset", "device.night_to": "sunrise" } : { "device.night_from": "22:00", "device.night_to": "07:00" });
   return html`<${SettingRow} class="night-times" title=${t("Night from … to")} stacked>
-    <div class="night-fields">
-      <${CommitField} class="time" label=${t("Night begins")} value=${device.night_from} placeholder="22:00"
-        onCommit=${(text) => saveSettings({ "device.night_from": text })} />
-      <span aria-hidden="true">–</span>
-      <${CommitField} class="time" label=${t("Night ends")} value=${device.night_to} placeholder="07:00"
-        onCommit=${(text) => saveSettings({ "device.night_to": text })} />
+    <div class="night-sun">
+      <${Toggle} label=${t("From sunset to sunrise")} checked=${sun} onChange=${follow} />
+      <span>${t("From sunset to sunrise")}</span>
     </div>
+    ${sun
+      ? html`<div class="settings-row-hint" data-night-sun>${placed ? t("At the place of the weather, day by day.") : t("Choose a place under Weather: until then the night goes from 19:00 to 7:00.")}</div>`
+      : html`<div class="night-fields">
+          <${CommitField} class="time" label=${t("Night begins")} value=${device.night_from} placeholder="22:00"
+            onCommit=${(text) => saveSettings({ "device.night_from": text })} />
+          <span aria-hidden="true">–</span>
+          <${CommitField} class="time" label=${t("Night ends")} value=${device.night_to} placeholder="07:00"
+            onCommit=${(text) => saveSettings({ "device.night_to": text })} />
+        </div>`}
     <${Slider} label=${t("Brightness at night")} value=${chosen ?? level} min=${0} max=${100} step=${5}
       format=${(value) => (value ? `${value} %` : t("dark"))} onCommit=${choose} />
   <//>`;

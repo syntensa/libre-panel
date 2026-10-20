@@ -227,29 +227,70 @@ def time_of_day(text: str) -> int | None:
     return int(found[1]) * 60 + int(found[2]) if found else None
 
 
-def night_now(device: DeviceConfig, now: datetime | None = None) -> bool:
+# The night may begin at sunset and end at sunrise (night_from, night_to) at the weather's
+# place; without one at these times
+SUN_TIMES = {"sunset": "19:00", "sunrise": "07:00"}
+
+
+def night_time(text: str) -> str | None:
+    """A beginning or end of the night as config.toml keeps it: ``"07:05"`` for ``"7:05"``,
+    ``"sunset"`` or ``"sunrise"``; None for anything else."""
+    word = text.strip().lower()
+    if word in SUN_TIMES:
+        return word
+    minutes = time_of_day(text)
+    return None if minutes is None else "{:02d}:{:02d}".format(*divmod(minutes, 60))
+
+
+def night_now(
+    device: DeviceConfig, now: datetime | None = None, place: tuple[float, float] | None = None
+) -> bool:
     """Whether it is night for the panel (``[device] night``, from ``night_from`` to
-    ``night_to``; a night that goes over midnight too)."""
-    start, end = time_of_day(device.night_from), time_of_day(device.night_to)
-    if not device.night or start is None or end is None or start == end:
+    ``night_to``; a night that goes over midnight too). Sunset and sunrise are those of
+    ``place`` (latitude, longitude) on that day; in a polar night it is night all day, under
+    the midnight sun never."""
+    if not device.night:
         return False
     now = now or datetime.now()
-    minute = now.hour * 60 + now.minute
-    return start <= minute < end if start < end else minute >= start or minute < end
+    sun = None
+    if place is not None and {device.night_from, device.night_to} & set(SUN_TIMES):
+        from libre_panel.sensors.sky import sun_times
+
+        sun = sun_times(now.date(), *place)
+        if sun["always"] is not None:
+            return sun["always"] == "night"
+
+    def minute(text: str) -> int | None:
+        if text in SUN_TIMES:
+            if sun is None:
+                return time_of_day(SUN_TIMES[text])
+            at = datetime.fromtimestamp(sun["set" if text == "sunset" else "rise"])
+            return at.hour * 60 + at.minute
+        return time_of_day(text)
+
+    start, end = minute(device.night_from), minute(device.night_to)
+    if start is None or end is None or start == end:
+        return False
+    minute_now = now.hour * 60 + now.minute
+    return start <= minute_now < end if start < end else minute_now >= start or minute_now < end
 
 
 def brightness_now(
-    device: DeviceConfig, now: datetime | None = None, away: bool | None = None
+    device: DeviceConfig,
+    now: datetime | None = None,
+    away: bool | None = None,
+    place: tuple[float, float] | None = None,
 ) -> int:
     """The brightness the panel shows now: while the person is away (``away``; None: as
-    presence.py has it) the one for then, at night the night's, else its own."""
+    presence.py has it) the one for then, at night the night's (its sunset and sunrise at
+    ``place``), else its own."""
     if away is None:
         from libre_panel import presence
 
         away = presence.away()
     if away and device.dark_when_away:
         return device.away_brightness
-    return device.night_brightness if night_now(device, now) else device.brightness
+    return device.night_brightness if night_now(device, now, place) else device.brightness
 
 
 def default_providers(platform: str | None = None) -> list[str]:
@@ -760,10 +801,10 @@ def _parse_device(dev: dict[str, Any], where: str) -> DeviceConfig:
         given = dev.get(name, getattr(device, name))
         setattr(device, name, _expect(given, bool, f"{where}.{name}"))
     for name in ("night_from", "night_to"):
-        text = _expect(dev.get(name, getattr(device, name)), str, f"{where}.{name}")
-        if time_of_day(text) is None:
-            raise ConfigError(f'{where}.{name}: a time of day such as "22:00"')
-        setattr(device, name, "{:02d}:{:02d}".format(*divmod(time_of_day(text), 60)))
+        text = night_time(_expect(dev.get(name, getattr(device, name)), str, f"{where}.{name}"))
+        if text is None:
+            raise ConfigError(f'{where}.{name}: a time of day such as "22:00", or "sunset"')
+        setattr(device, name, text)
     level = _expect(dev.get("night_brightness", device.night_brightness), int,
                     f"{where}.night_brightness")  # fmt: skip
     if isinstance(level, bool) or not 0 <= level <= 100:

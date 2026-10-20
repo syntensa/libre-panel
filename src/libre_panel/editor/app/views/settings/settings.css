@@ -132,6 +132,7 @@
 .night-times .settings-row-control { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
 .night-fields { display: flex; align-items: center; gap: 8px; }
 .night-fields .input.time { width: 6.5em; text-align: center; }
+.night-sun { display: flex; align-items: center; gap: 8px; }
 /* the panels beside this one (Settings → Panel → More panels): one block each */
 .more-panel + .more-panel, .settings-card-head + .more-panel { border-top: 1px solid var(--line); }
 .more-panel-head .settings-row-title { font-weight: 600; }

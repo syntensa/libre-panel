@@ -149,13 +149,14 @@ def _choice(name: str, value: Any, allowed: tuple[Any, ...]) -> Any:
 
 
 def _time_of_day(name: str, value: Any) -> str:
-    """``"7:30"`` as ``"07:30"``; anything else is refused."""
-    from libre_panel.config import time_of_day
+    """``"7:30"`` as ``"07:30"``, or ``"sunset"`` and ``"sunrise"`` (the night's); anything
+    else is refused."""
+    from libre_panel.config import night_time
 
-    minutes = time_of_day(value) if isinstance(value, str) else None
-    if minutes is None:
-        raise SettingsError(f'{name}: a time of day such as "22:00"')
-    return "{:02d}:{:02d}".format(*divmod(minutes, 60))
+    text = night_time(value) if isinstance(value, str) else None
+    if text is None:
+        raise SettingsError(f'{name}: a time of day such as "22:00", or "sunset"')
+    return text
 
 
 def _flag(name: str, value: Any) -> bool:

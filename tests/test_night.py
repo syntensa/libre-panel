@@ -1,6 +1,6 @@
 """[device] night: a brightness of its own at night, from night_from to night_to."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -52,7 +52,8 @@ class Link:
 
 def test_the_loop_takes_the_night_s_brightness_when_it_begins_and_ends(monkeypatch):
     clock = [at(21, 59)]
-    monkeypatch.setattr(app, "brightness_now", lambda device: brightness_now(device, clock[0]))
+    monkeypatch.setattr(app, "brightness_now",
+                        lambda device, **kw: brightness_now(device, clock[0], **kw))  # fmt: skip
     loop = object.__new__(app.MainLoop)  # (only what _follow_night needs)
     loop.config = parse_config({"device": {"night": True, "brightness": 60,
                                            "night_brightness": 0}})  # fmt: skip
@@ -68,3 +69,30 @@ def test_the_loop_takes_the_night_s_brightness_when_it_begins_and_ends(monkeypat
     loop.night_at = 0.0
     loop._follow_night()
     assert loop.link.brightness == 60
+
+
+def test_the_night_may_go_from_sunset_to_sunrise_at_the_weather_s_place():
+    """At 52° north in October the sun sets near 18:00 and rises near 7:40 (local time of
+    the test's machine: the place is on its meridian, so a clock in UTC finds the same)."""
+    from libre_panel.sensors.sky import sun_times
+
+    device = parse_config({"device": {"night": True, "night_from": " Sunset ",
+                                      "night_to": "sunrise"}}).device  # fmt: skip
+    assert (device.night_from, device.night_to) == ("sunset", "sunrise")
+    place = (52.0, 0.0)
+    times = sun_times(at(12).date(), *place)
+    sunset, sunrise = (datetime.fromtimestamp(times[k]) for k in ("set", "rise"))
+    before, after = sunset.replace(second=0) - timedelta(minutes=2), sunset + timedelta(minutes=2)
+    assert not night_now(device, before, place) and night_now(device, after, place)
+    assert night_now(device, sunrise - timedelta(minutes=2), place)
+    assert not night_now(device, sunrise + timedelta(minutes=2), place)
+    # without a place: from 19:00 to 7:00
+    assert night_now(device, at(19, 1)) and not night_now(device, at(18, 59))
+    assert night_now(device, at(6, 59)) and not night_now(device, at(7, 1))
+    # the polar night: night all day; the midnight sun: never
+    december, june = datetime(2026, 12, 21, 12), datetime(2026, 6, 21, 0, 30)
+    assert night_now(device, december, (78.0, 15.0))
+    assert not night_now(device, june, (78.0, 15.0))
+    # only where it is asked for: times of day stay times of day
+    plain = DeviceConfig(night=True, night_from="22:00", night_to="07:00")
+    assert night_now(plain, at(23), (78.0, 15.0)) and not night_now(plain, at(12), (78.0, 15.0))

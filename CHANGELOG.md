@@ -10,8 +10,9 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
   A panel that one of them has open is passed by when another looks for its own, so two
   set to "Detect automatically" find one each
   ([More panels at once](docs/CONFIGURATION.md#more-panels-at-once))
-- **A brightness of its own at night**: from one time to the other, over midnight too; 0 is
-  dark (*Settings → Panel*, `[device] night`)
+- **A brightness of its own at night**: from one time to the other, over midnight too, or
+  from sunset to sunrise at the weather's place; 0 is dark (*Settings → Panel*,
+  `[device] night`)
 - **The panel sleeps with the computer** (Windows): dark while Windows sleeps, lit again
   when it wakes (`dark_on_sleep`, on unless turned off)
 - **Dimmed while you are away** (Windows): while the computer is locked or its monitor is

@@ -80,7 +80,8 @@ dark_on_quit = false           # true: black and its light off when Libre Panel 
 dark_on_sleep = true           # dark while the computer sleeps (Windows), lit when it wakes
 night = false                  # true: a brightness of its own at night, from night_from to
 night_from = "22:00"           # night_to (over midnight too); 0 is dark. brightness holds
-night_to = "07:00"             # the rest of the day
+night_to = "07:00"             # the rest of the day. "sunset" and "sunrise": the sun's at
+                               # the weather's place, day by day (without one 19:00, 7:00)
 night_brightness = 10
 dark_when_away = true          # the computer locked or its monitor off (Windows): the
 away_brightness = 0            # panel takes away_brightness (0: dark) until you are back
