@@ -581,3 +581,17 @@ def test_cores_show_every_thread_where_asked():
     theme_ = theme({"module": "cores", "cols": 2, "rows": 1, "threads": True})
     lists = [w for w in Renderer(theme_, preview=True).widgets if w["type"] == "list"]
     assert [(w["id"], w["items"]) for w in lists] == [("m0/cores", "cpu.core.*.load")]
+
+
+def test_a_big_game_module_says_what_holds_the_frame_rate_down_and_its_longest_frame():
+    renderer = Renderer(theme({"module": "game", "cols": 3, "rows": 3}, model="turing-12.3-usb"),
+                        preview=True)  # fmt: skip
+    snap = snapshot()  # the demo's game: held by the GPU
+    drawn = shown(renderer, snap)
+    assert {"m0/limiter-label", "m0/limiter-gpu", "m0/peak"} <= set(drawn)
+    assert "m0/limiter-cpu" not in drawn and "m0/limiter-cap" not in drawn
+    snap.readings["game.limiter"] = Reading("game.limiter", "cap", "", "Limited by")
+    drawn = shown(renderer, snap)
+    assert "m0/limiter-cap" in drawn and "m0/limiter-gpu" not in drawn
+    del snap.readings["game.limiter"]  # not known (PresentMon 1): no row
+    assert not {"m0/limiter-label", "m0/limiter-cap"} & set(shown(renderer, snap))

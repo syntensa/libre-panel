@@ -1721,15 +1721,30 @@ def build_game(b: _Build, _src: Source) -> None:
     b.label("unit", "FPS", unit_x, cap + CAP * size - CAP * b.ts, b.ts, color=color,
             width=number_w * 0.36)  # fmt: skip
     if number_h > b.ts * 6.5:
+        # what holds the frame rate down (the GPU, the CPU or the game's cap), and the longest
+        # frame since the last reading: a stutter shows
         rows = (("low", "game.low", "{value:.0f}", t("1% low")),
-                ("frametime", "game.frametime", "{value:.1f} ms", t("Frame time")))  # fmt: skip
+                ("frametime", "game.frametime", "{value:.1f} ms", t("Frame time")),
+                ("limiter", "game.limiter", "", t("Limited by")),
+                ("peak", "game.frametime_peak", "{value:.0f} ms", t("Longest frame")))  # fmt: skip
         for i, (name, key, fmt, text) in enumerate(rows):
             line = cap + i * b.ts * 2.4
             if line + CAP * b.ts * 1.2 > y + number_h:
                 break
+            if name != "limiter":
+                b.label(f"{name}-label", text, unit_x, line, b.ts * 0.85, width=number_w * 0.36)
+                b.value(name, key, fmt, unit_x, line + b.ts * 1.1, b.ts * 1.05,
+                        color=b.c("text2"), width=number_w * 0.36,
+                        hide_if_missing=True)  # fmt: skip
+                continue
+            b.needs = "game.fps,game.limiter"
             b.label(f"{name}-label", text, unit_x, line, b.ts * 0.85, width=number_w * 0.36)
-            b.value(name, key, fmt, unit_x, line + b.ts * 1.1, b.ts * 1.05, color=b.c("text2"),
-                    width=number_w * 0.36, hide_if_missing=True)  # fmt: skip
+            for what, said in (("gpu", "GPU"), ("cpu", "CPU"), ("cap", t("Frame cap"))):
+                b.needs = f"game.fps,game.limiter={what}"
+                b.add("text", f"limiter-{what}", x=round(unit_x), text=said, color=b.c("text2"),
+                      max_width=round(number_w * 0.36), tabular=False,
+                      **b._text_fields(b.ts * 1.05, line + b.ts * 1.1, "display_font"))  # fmt: skip
+            b.needs = "game.fps"
         b.out = [w_ for w_ in b.out if w_["id"] != "unit"]  # the rows say what it is
         b.label("unit", "FPS", x, cap + CAP * size + b.ts * 0.8, b.ts, color=color,
                 width=number_w * 0.6)  # fmt: skip

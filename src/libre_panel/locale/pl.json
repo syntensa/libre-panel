@@ -2175,7 +2175,10 @@
     "Brightness at night": "Jasność w nocy",
     "dark": "ciemno",
     "Every thread": "Każdy wątek",
-    "off: a bar for each core, its threads together, where the processor says which they are": "wyłączone: jeden pasek na rdzeń, jego wątki razem, tam gdzie procesor mówi, które to są"
+    "off: a bar for each core, its threads together, where the processor says which they are": "wyłączone: jeden pasek na rdzeń, jego wątki razem, tam gdzie procesor mówi, które to są",
+    "Limited by": "Ogranicza",
+    "Frame cap": "Limit klatek",
+    "Longest frame": "Najdłuższa klatka"
   },
   "fields": {
     "align": "Wyrównanie",

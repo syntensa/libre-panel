@@ -2175,7 +2175,10 @@
     "Brightness at night": "Helligkeit nachts",
     "dark": "dunkel",
     "Every thread": "Jeder Thread",
-    "off: a bar for each core, its threads together, where the processor says which they are": "aus: ein Balken je Kern, seine Threads zusammen, wo der Prozessor sagt, welche es sind"
+    "off: a bar for each core, its threads together, where the processor says which they are": "aus: ein Balken je Kern, seine Threads zusammen, wo der Prozessor sagt, welche es sind",
+    "Limited by": "Begrenzt durch",
+    "Frame cap": "FPS-Limit",
+    "Longest frame": "Längstes Bild"
   },
   "fields": {
     "align": "Ausrichtung",

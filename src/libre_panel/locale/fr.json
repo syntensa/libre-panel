@@ -2175,7 +2175,10 @@
     "Brightness at night": "Luminosité la nuit",
     "dark": "éteint",
     "Every thread": "Chaque thread",
-    "off: a bar for each core, its threads together, where the processor says which they are": "désactivé : une barre par cœur, ses threads ensemble, là où le processeur dit lesquels"
+    "off: a bar for each core, its threads together, where the processor says which they are": "désactivé : une barre par cœur, ses threads ensemble, là où le processeur dit lesquels",
+    "Limited by": "Limité par",
+    "Frame cap": "Limite d'images",
+    "Longest frame": "Image la plus longue"
   },
   "fields": {
     "align": "Alignement",
