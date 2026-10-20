@@ -10,6 +10,8 @@ every frame (``every_frame``). Put it before the other sources in
   between two samples, about 60 µs a sample), elsewhere ``psutil.cpu_percent``.
 - ``cpu.core.N.load``: every core's load over the last 0.3 s (one sample alone
   flickers), from psutil's times per core, under the names psutil's source gives.
+- ``cpu.pcore.N.load``: every physical core's, the mean of its threads (where a core has
+  two, and Windows or Linux tells which: sensors/topology.py).
 - ``gpu.load`` (Windows, any vendor): the performance counters that Task
   Manager shows, read through PDH. There is one 3D engine counter per process
   and engine; they are summed per engine, and the card's load is its busiest
@@ -36,7 +38,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Protocol
 
-from libre_panel.sensors import gpus, nvml
+from libre_panel.sensors import gpus, nvml, topology
 from libre_panel.sensors.base import Reading, SensorProvider, wanted
 
 log = logging.getLogger(__name__)
@@ -51,6 +53,7 @@ CORE_SECONDS = 0.3  # a core's load is its load over this long
 # The labels PsutilProvider gives cpu.load, so lists and themes look the same.
 _LABELS = {"cpu.load": "CPU load", "gpu.load": "GPU load"}
 CORES = "cpu.core."  # every core's load: cpu.core.1.load, cpu.core.2.load ...
+PCORES = "cpu.pcore."  # every physical core's (its threads'), measured with them
 _KEYS = (*_LABELS, CORES)
 _NO_SAMPLER = {
     "cpu.load": "no CPU load from psutil",
@@ -379,7 +382,12 @@ def _measure(sampler: _Sampler) -> float | list[float] | None:
 
 def _family(key: str) -> str:
     """The key a reading is measured under (every core's under :data:`CORES`)."""
-    return CORES if key.startswith(CORES) else key
+    return CORES if key.startswith((CORES, PCORES)) else key
+
+
+def _wanted(key: str) -> bool:
+    """Whether a theme on show reads ``key``'s readings (the cores' with their threads')."""
+    return wanted(key) or (key == CORES and wanted(PCORES))
 
 
 # -- the provider ------------------------------------------------------------------
@@ -403,6 +411,7 @@ class LoadProvider(SensorProvider):
         self._thread: threading.Thread | None = None
         self._prefer = ""  # a part of the name of the graphics card to measure (Linux)
         self._chose_again = threading.Event()  # the card to measure was changed
+        self._cores: tuple[int, list[list[int]] | None] | None = None  # (threads, their cores)
 
     def follow_config(self, config: Any) -> None:
         """The card the ``gpu.*`` readings come from is the one ``[sensors.linux] gpu`` (or, as
@@ -429,8 +438,18 @@ class LoadProvider(SensorProvider):
                 for n, load in enumerate(value, start=1):
                     core = f"{CORES}{n}.load"
                     self._values[core] = (at, Reading(core, load, "%", f"Core {n}"))
+                for n, threads in enumerate(self._physical(len(value)) or [], start=1):
+                    core = f"{PCORES}{n}.load"
+                    mean = sum(value[t] for t in threads) / len(threads)
+                    self._values[core] = (at, Reading(core, mean, "%", f"Core {n}"))
             else:
                 self._values[key] = (at, Reading(key, value, "%", _LABELS[key]))
+
+    def _physical(self, threads: int) -> list[list[int]] | None:
+        """The physical cores of the ``threads`` measured (asked once)."""
+        if self._cores is None or self._cores[0] != threads:
+            self._cores = (threads, topology.physical_cores(threads))
+        return self._cores[1]
 
     def _make(self, key: str) -> _Sampler | None:
         """A new sampler for ``key``; None if this machine has none (said once)."""
@@ -452,7 +471,7 @@ class LoadProvider(SensorProvider):
         try:
             while not self._stop.is_set():
                 now = time.monotonic()
-                shown = [key for key in _KEYS if wanted(key)]
+                shown = [key for key in _KEYS if _wanted(key)]
                 if shown:
                     looked = now
                 elif now - looked > IDLE_SECONDS:
@@ -493,7 +512,7 @@ class LoadProvider(SensorProvider):
     def read(self) -> dict[str, Reading]:
         thread = self._thread
         if thread is None or not thread.is_alive():
-            if self._stop.is_set() or not any(wanted(key) for key in _KEYS):
+            if self._stop.is_set() or not any(_wanted(key) for key in _KEYS):
                 return {}
             self._start()
         now = time.monotonic()

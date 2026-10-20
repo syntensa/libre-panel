@@ -572,3 +572,12 @@ def test_cores_show_every_core(span):
     (cores,) = [w for w in renderer.widgets if w["id"] == "m0/cores"]
     assert cores["style"] == ("cells" if span == (1, 1) else "columns")
     assert renderer._list_room(cores, 8) == 8
+    (threads,) = [w for w in renderer.widgets if w["id"] == "m0/threads"]
+    assert (cores["items"], threads["items"]) == ("cpu.pcore.*.load", "cpu.core.*.load")
+    assert "!cpu.pcore.1.load" in threads["needs"]  # (the threads where no core is told)
+
+
+def test_cores_show_every_thread_where_asked():
+    theme_ = theme({"module": "cores", "cols": 2, "rows": 1, "threads": True})
+    lists = [w for w in Renderer(theme_, preview=True).widgets if w["type"] == "list"]
+    assert [(w["id"], w["items"]) for w in lists] == [("m0/cores", "cpu.core.*.load")]

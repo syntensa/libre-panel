@@ -2173,7 +2173,9 @@
     "Night begins": "Começo da noite",
     "Night ends": "Fim da noite",
     "Brightness at night": "Brilho à noite",
-    "dark": "apagado"
+    "dark": "apagado",
+    "Every thread": "Cada thread",
+    "off: a bar for each core, its threads together, where the processor says which they are": "desligado: uma barra por núcleo, suas threads juntas, onde o processador diz quais são"
   },
   "fields": {
     "align": "Alinhamento",
@@ -2315,7 +2317,8 @@
     "group": "Grupo",
     "fans": "Ventoinhas",
     "fan_items": "Quais ventoinhas",
-    "hide_unused": "ocultar os não usados"
+    "hide_unused": "ocultar os não usados",
+    "threads": "threads"
   },
   "widgets": {
     "analog": "Relógio analógico",

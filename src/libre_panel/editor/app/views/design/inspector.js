@@ -530,6 +530,11 @@ function ModuleInspector({ widget }) {
             <//>`
           : null}
         ${items}
+        ${widget.module === "cores"
+          ? html`<${Field} label=${t("Every thread")} hint=${t("off: a bar for each core, its threads together, where the processor says which they are")}>
+              <${Toggle} label=${t("Every thread")} checked=${Boolean(widget.threads)} onChange=${change("threads")} />
+            <//>`
+          : null}
         ${widget.module === "temps"
           ? html`<${Field} label=${t("Fans")} hint=${t("at most so many, below or beside the temperatures where there is room; 0: none")}>
               <${NumberField} label=${t("Fans")} value=${widget.fans ?? 6} min=${0} max=${12} onChange=${change("fans")} />

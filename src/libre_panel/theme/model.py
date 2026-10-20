@@ -387,6 +387,7 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         # as the items ("fan.lpc.fan_2 = Front"; empty: the graphics card's, then the others)
         "fans": ("int", 6),
         "fan_items": ("text", ""),
+        "threads": ("bool", False),  # cores: every thread, not every core (where known)
         "sort": ("enum:cpu|memory", "cpu"),  # processes: by processor time or memory
         "timezone": ("string", ""),  # analog clock: e.g. "Asia/Tokyo"
         "target": ("string", ""),  # countdown: "2026-12-24", "2026-12-24 18:00", "12-24"

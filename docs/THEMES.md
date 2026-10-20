@@ -518,7 +518,7 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `system` | names of processor and graphics card, uptime; the memory's name too when there is room for a fourth row | |
 | `text` | a title (`text`) with an accent line | |
 | `temps` | every temperature as a bar, CPU and GPU first, warm and hot in `warn` and `crit`; the fans beside them when long, below when big, each turning with its speed (as Lumen's) | `items`; `fans` (at most so many, 6; 0: none) and `fan_items` (which, as `items`; empty: the GPU fan first, then the others) |
-| `cores` | the load of every core: tiles when small, columns when wide; the history when big | |
+| `cores` | the load of every core (its threads together, where the processor says which they are: `cpu.pcore.*`): tiles when small, columns when wide; the history when big | `threads` (every thread instead) |
 | `drives` | every drive: how full and how much is free; reading and writing when big | `items` |
 | `processes` | the programs that use the most processor time, or memory (`sort`: `cpu` or `memory`); a program's processes count once | |
 | `netinfo` | IP address, ping, download, upload, today's traffic, as many as fit; the ping's history when big | |
@@ -889,6 +889,7 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `net.down`, `net.up` | B/s | psutil |
 | `fan.<device>.<name>`, `temp.<device>.<name>` | RPM, °C | every fan and temperature: the `linux` source (`temp.k10temp.tctl`, `temp.nvme.composite`, `fan.amdgpu.0`, and the mainboard's fans as `fan.lpc.fan_1` ...), LibreHardwareMonitor (e.g. `temp.cpu.package`, `fan.gpu.gpu_fan_1`) |
 | `cpu.core.<n>.load` | % | each core (thread), from 1; ten times a second from `load`, over the last 0.3 s |
+| `cpu.pcore.<n>.load` | % | each physical core, the mean of its threads; from `load`, where a core has two and Windows or Linux tells which |
 | `disk.<n>.name`, `.load`, `.used`, `.free`, `.total` | text, %, GiB | each drive, the system drive first |
 | `proc.cpu.<n>.name`, `.value`; `proc.mem.<n>.name`, `.value` | text, % | the eight busiest programs by processor time (of the whole processor) and by memory; counted only while a theme shows them |
 | `net.ip`, `net.ping`, `net.today.down`, `net.today.up` | text, ms, B | the address towards the internet; ping (a connection to `ping`, see the configuration; only while shown); traffic since midnight or since Libre Panel started |

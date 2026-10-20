@@ -2173,7 +2173,9 @@
     "Night begins": "Début de la nuit",
     "Night ends": "Fin de la nuit",
     "Brightness at night": "Luminosité la nuit",
-    "dark": "éteint"
+    "dark": "éteint",
+    "Every thread": "Chaque thread",
+    "off: a bar for each core, its threads together, where the processor says which they are": "désactivé : une barre par cœur, ses threads ensemble, là où le processeur dit lesquels"
   },
   "fields": {
     "align": "Alignement",
@@ -2315,7 +2317,8 @@
     "group": "Groupe",
     "fans": "Ventilateurs",
     "fan_items": "Quels ventilateurs",
-    "hide_unused": "masquer les inutilisés"
+    "hide_unused": "masquer les inutilisés",
+    "threads": "threads"
   },
   "widgets": {
     "analog": "Horloge analogique",

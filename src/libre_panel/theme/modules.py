@@ -1845,16 +1845,22 @@ def build_cores(b: _Build, _src: Source) -> None:
     b.value("value", "cpu.load", "{value:.0f}%", b.ix + b.iw, b.iy, b.ts * 1.6, align="right",
             width=b.iw * 0.3)  # fmt: skip
     x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
-    items = "cpu.core.*.load"
+    # the physical cores where the processor says which threads are one (load source), else
+    # the threads; every thread where the module asks for them
+    shown = [("cores", "cpu.core.*.load", "")]
+    if not b.module["threads"]:
+        shown = [("cores", "cpu.pcore.*.load", "cpu.pcore.1.load"),
+                 ("threads", "cpu.core.*.load", "!cpu.pcore.1.load")]  # fmt: skip
     if b.large and h > b.ts * 12:
         cores_h = h * 0.6
-        b.listing("cores", items, x, y, w, cores_h, color, "columns", b.ts * 1.1)
+        for name, items, needs in shown:
+            b.listing(name, items, x, y, w, cores_h, color, "columns", b.ts * 1.1, needs=needs)
         gy = y + cores_h + b.pad
         b.graph("history", "cpu.load", x, gy, w, b.iy + b.ih - gy, color)
-    elif b.aspect >= 1.45:
-        b.listing("cores", items, x, y, w, h, color, "columns", b.ts * 1.1)
     else:
-        b.listing("cores", items, x, y, w, h, color, "cells", b.ts * 1.4)
+        style, size = ("columns", 1.1) if b.aspect >= 1.45 else ("cells", 1.4)
+        for name, items, needs in shown:
+            b.listing(name, items, x, y, w, h, color, style, b.ts * size, needs=needs)
 
 
 def build_drives(b: _Build, _src: Source) -> None:
