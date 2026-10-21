@@ -2221,7 +2221,19 @@
     "Difference": "Unterschied",
     "Its theme and this panel's change places": "Sein Theme und das dieses Panels tauschen die Plätze",
     "Swap with panel 1": "Mit Panel 1 tauschen",
-    "Which is which?": "Welches ist welches?"
+    "Which is which?": "Welches ist welches?",
+    "A theme for every panel at once, with one click": "Ein Theme für jedes Panel auf einmal, mit einem Klick",
+    "At most 40 characters": "Höchstens 40 Zeichen",
+    "Gaming": "Zocken",
+    "Keep": "Behalten",
+    "Keep as a scene": "Als Szene behalten",
+    "Name of the scene": "Name der Szene",
+    "Next scene": "Nächste Szene",
+    "On: {name}": "An: {name}",
+    "Remove the scene “{name}”?": "Die Szene „{name}“ entfernen?",
+    "Scenes": "Szenen",
+    "The themes stay as they are.": "Die Themes bleiben, wie sie sind.",
+    "What every panel shows now, under a name: one click puts it back on.": "Was jedes Panel jetzt zeigt, unter einem Namen: Ein Klick stellt es wieder her."
   },
   "fields": {
     "align": "Ausrichtung",

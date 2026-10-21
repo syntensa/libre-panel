@@ -1087,7 +1087,7 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "video.mode", "video.fps", "video.local_clip", "video.clip_asked", "refresh_ms",
         "check_updates", "allow_notify", "light_mode", "symbols", "accent", "hotkeys.enabled",
         "hotkeys.pause",
-        "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open",
+        "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open", "hotkeys.next_scene",
         "sensors.providers",
         "sensors.librehardwaremonitor.mode", "sensors.librehardwaremonitor.url",
         "weather.enabled", "weather.units", "weather.update_minutes", "weather.latitude",

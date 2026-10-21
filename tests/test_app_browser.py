@@ -4296,3 +4296,21 @@ def test_a_backup_is_saved_and_restored_from_settings(app_url, isolated_home, tm
         page.get_by_role("button", name="Restore", exact=True).click()
         waits_for(page, lambda: settings_config().device.brightness == 35)
         assert (isolated_home / "config.toml.before-restore").exists()
+
+
+def test_a_scene_is_kept_put_on_and_taken_out_on_start(app_url, isolated_home, monkeypatch):
+    from libre_panel import scenes
+
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url, "home", allow=PICTURE) as page:
+        card = page.locator(".scenes-card")
+        card.get_by_role("button", name="Keep as a scene").click()
+        page.get_by_label("Name of the scene").fill("Evening")
+        page.get_by_role("button", name="Keep", exact=True).click()
+        waits_for(page, lambda: settings_config().scene == "Evening")
+        expect(card.locator(".scene-chip")).to_have_text(["Evening"])
+        card.locator(".scene-chip").click()  # on: off again
+        waits_for(page, lambda: settings_config().scene == "")
+        card.get_by_role("button", name="Remove the scene “Evening”?").click()
+        page.get_by_role("button", name="Remove", exact=True).click()
+        waits_for(page, lambda: scenes.state()["scenes"] == [])

@@ -1282,3 +1282,32 @@
   overflow-wrap: anywhere;
   user-select: all;
 }
+
+/* scenes: a chip to put one on, a cross to take it out */
+.scene-chips li {
+  padding: 0;
+  align-items: center;
+}
+
+.scene-chip,
+.scene-remove {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.scene-chip {
+  padding: 3px 4px 3px 10px;
+}
+
+.scene-remove {
+  display: inline-flex;
+  padding: 3px 8px 3px 2px;
+  color: var(--muted);
+}
+
+.scene-remove:hover {
+  color: var(--text);
+}

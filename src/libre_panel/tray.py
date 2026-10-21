@@ -187,6 +187,7 @@ class Tray:
             ),
             menu.SEPARATOR,
             item(t("Theme"), menu(self._theme_items)),
+            item(t("Scenes"), menu(self._scene_items), visible=lambda _: bool(self._scenes()[0])),
             item(t("Brightness"), menu(self._brightness_items)),
             item(t("Pause panel"), self.toggle_pause, checked=lambda _: app.panel.paused),
             menu.SEPARATOR,
@@ -242,6 +243,31 @@ class Tray:
             yield item(t("More themes"), menu(*(choice(*entry) for entry in more)))
         for name, entries in collections.items():
             yield item(name, menu(*(choice(*entry) for entry in entries)))
+
+    def _scenes(self) -> tuple[list[str], str]:
+        """The scenes' names, and the one that is on ("": none)."""
+        from libre_panel import scenes
+
+        try:
+            state = scenes.state(self.app.config_path)
+        except Exception:  # a config.toml that is half-written: the menu goes on without them
+            return [], ""
+        return [scene["name"] for scene in state["scenes"]], state["on"]
+
+    def _scene_items(self):
+        """The scenes, the one that is on checked; a click on it takes it off."""
+        from libre_panel import scenes
+
+        item = self.pystray.MenuItem
+        names, _ = self._scenes()
+        for name in names:
+            yield item(
+                name,
+                self._later(lambda name: scenes.put_on(
+                    "" if self._scenes()[1] == name else name, self.app.config_path), name),
+                checked=lambda _, name=name: self._scenes()[1] == name,
+                radio=True,
+            )  # fmt: skip
 
     def _chosen(self) -> str | None:
         """The theme of the panel's normal page, by the id it is chosen by (Lumen, not its

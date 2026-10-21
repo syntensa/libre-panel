@@ -104,6 +104,9 @@ export const endpoints = {
   presetPreviews: (palette) => post("/api/preset-previews", { palette }),
   pages: () => get("/api/pages"),
   setPage: (page, change) => post("/api/pages", { page, ...change }),
+  // scenes: a theme for every panel at once (scenes.py)
+  scenes: () => get("/api/scenes"),
+  setScene: (action, name) => post("/api/scenes", { action, name }),
   sequence: () => get("/api/sequence"),
   startScreen: () => get("/api/start-screen"),
   startScreenAction: (action, model) => post("/api/start-screen", { action, model }),

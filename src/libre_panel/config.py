@@ -75,7 +75,8 @@ language = "auto"
 # light_mode = false
 
 # Keyboard shortcuts for the whole PC (Windows; Linux with X11), set in Settings → Start and
-# system by pressing the keys. The actions: pause, brightness_up, brightness_down, open;
+# system by pressing the keys. The actions: pause, brightness_up, brightness_down, open,
+# next_scene;
 # enabled = false switches all of them off and keeps the keys written here.
 # [hotkeys]
 # pause = "Ctrl+Alt+P"
@@ -495,6 +496,21 @@ class PanelConfig:
     brightness_offset: int = 0
 
 
+# How many scenes config.toml may hold, and how long a scene's name may be
+MAX_SCENES = 12
+SCENE_NAME_LENGTH = 40
+
+
+@dataclass
+class SceneConfig:
+    """A scene (``[[scenes]]``): a theme for every panel at once, chosen with one click (Start),
+    a keyboard shortcut or the tray. ``themes``: the first panel's, then those of
+    ``[[panels]]`` in their order; "" leaves that panel's own."""
+
+    name: str
+    themes: list[str] = field(default_factory=list)
+
+
 @dataclass
 class Config:
     # The theme config.toml names; without one the panel's own default shows, and this is
@@ -515,6 +531,9 @@ class Config:
     modes: dict[str, ModeConfig] = field(default_factory=dict)
     sequence: SequenceConfig = field(default_factory=SequenceConfig)
     panels: list[PanelConfig] = field(default_factory=list)  # [[panels]]: more panels at once
+    scenes: list[SceneConfig] = field(default_factory=list)  # [[scenes]]
+    # the scene that is on ("": none): its themes take the place of theme and the panels' own
+    scene: str = ""
     hotkeys: dict[str, str] = field(default_factory=dict)  # action: combination (hotkeys.py)
     hotkeys_enabled: bool = True  # [hotkeys] enabled: off holds no key, the combinations kept
     symbols: str = DEFAULT_SYMBOLS  # the look of the weather symbols and the moon
@@ -790,6 +809,9 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         raise ConfigError(str(exc)) from exc
 
     cfg.panels = _panels(data.get("panels", []))
+    cfg.scenes = _scenes(data.get("scenes", []))
+    cfg.scene = _expect(data.get("scene", ""), str, "scene").strip()
+    _put_on_scene(cfg)
 
     if cfg.weather.enabled and (cfg.weather.latitude is None or cfg.weather.longitude is None):
         raise ConfigError(
@@ -847,6 +869,43 @@ def _parse_device(dev: dict[str, Any], where: str) -> DeviceConfig:
     device.output = _expect(dev.get("output", device.output), str, f"{where}.output")
     device.port = _expect(dev.get("port", device.port), str, f"{where}.port").strip()
     return device
+
+
+def _scenes(value: Any) -> list[SceneConfig]:
+    """``[[scenes]]``: each a ``name`` and the ``themes`` of the panels, the first panel's
+    first."""
+    scenes: list[SceneConfig] = []
+    tables = _expect(value, list, "scenes")
+    if len(tables) > MAX_SCENES:
+        raise ConfigError(f"scenes: at most {MAX_SCENES}")
+    for n, table in enumerate(tables):
+        where = f"scenes[{n}]"
+        table = _expect(table, dict, where)
+        name = " ".join(_expect(table.get("name", ""), str, f"{where}.name").split())
+        if not name or len(name) > SCENE_NAME_LENGTH:
+            raise ConfigError(f"{where}.name: 1 to {SCENE_NAME_LENGTH} characters")
+        if any(scene.name == name for scene in scenes):
+            raise ConfigError(f"{where}.name: {name!r} is there twice")
+        themes = _expect(table.get("themes", []), list, f"{where}.themes")
+        if not 1 <= len(themes) <= 1 + MORE_PANELS:
+            raise ConfigError(f"{where}.themes: 1 to {1 + MORE_PANELS} themes")
+        themes = [_expect(theme, str, f"{where}.themes[]").strip() for theme in themes]
+        scenes.append(SceneConfig(name=name, themes=themes))
+    return scenes
+
+
+def _put_on_scene(cfg: Config) -> None:
+    """The scene that is on (``scene``) gives the panels its themes; one that is not there
+    (taken out) changes nothing."""
+    scene = next((scene for scene in cfg.scenes if scene.name == cfg.scene), None)
+    if scene is None:
+        return
+    first, rest = scene.themes[0], scene.themes[1:]
+    if first:
+        cfg.theme, cfg.theme_given = first, True
+    for panel, theme in zip(cfg.panels, rest, strict=False):
+        if theme:
+            panel.theme = theme
 
 
 def panel_defaults(n: int) -> dict[str, str]:
@@ -1287,8 +1346,11 @@ def set_active_theme(name: str, path: Path | None = None) -> Path:
     path = path or config_dir() / CONFIG_FILENAME
     changes: list[tuple[str, str, Any]] = [("value", "theme", name)]
     try:
-        if load_config(path).sequence.active:
+        config = load_config(path)
+        if config.sequence.active:
             changes.append(("value", "sequence.on", False))
+        if config.scene:  # a theme chosen: the scene is no longer on
+            changes.append(("unset", "scene", None))
     except ConfigError:
         pass  # (the write below says what is wrong with the file)
     return edit_config(*changes, path=path)

@@ -310,6 +310,22 @@ are the first panel's; the others show their theme in single pictures. A change 
 reaches every panel, and a panel that is added, switched on or off, or taken out starts or
 ends while the others go on.
 
+## Scenes
+
+A scene is a theme for every panel at once ("Gaming", "Work"), put on with a click on *Start*
+(*Keep as a scene* keeps what the panels show now), from the tray, or with a keyboard
+shortcut that puts the next one on (`next_scene` in `[hotkeys]`).
+
+```toml
+scene = "Gaming"               # the one that is on; left out: none
+[[scenes]]
+name = "Gaming"
+themes = ["arena", "lumen"]    # the first panel's, then those of [[panels]]; "" leaves one as it is
+```
+
+A theme chosen for a panel by itself afterwards (on *Start*, in the tray, under *More
+panels*) takes the scene off, and a scene stops the screens in turn as a chosen theme does.
+
 ## Pages of the panel
 
 Besides the normal theme (or the screens in turn) the panel has pages it switches to when

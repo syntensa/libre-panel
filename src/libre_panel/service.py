@@ -571,7 +571,7 @@ class BackgroundApp:
 
     def shortcut(self, action: str) -> None:
         """What a keyboard shortcut does (hotkeys.py): pause or resume the panel, turn its
-        brightness up or down a step, or open the app."""
+        brightness up or down a step, open the app, or put the next scene on."""
         from libre_panel.hotkeys import BRIGHTNESS_STEP
 
         if action == "pause":
@@ -582,6 +582,17 @@ class BackgroundApp:
             self.set_brightness(max(0, min(100, (now if now is not None else 50) + step)))
         elif action == "open":
             self.editor.open("home")
+        elif action == "next_scene":  # the scene after the one that is on (scenes.py)
+            from libre_panel import scenes
+
+            try:
+                name = scenes.next_one(self.config_path)
+            except ConfigError as exc:
+                log.warning("no next scene: %s", exc)
+                return
+            if name:
+                log.info("scene: %s", name)
+                self.follow_config()
 
     def set_brightness(self, percent: int) -> None:
         if not 0 <= percent <= 100:

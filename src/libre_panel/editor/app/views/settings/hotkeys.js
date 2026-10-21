@@ -16,6 +16,7 @@ const ACTIONS = () => [
   { id: "pause", name: t("Pause or resume the panel") },
   { id: "brightness_up", name: t("Brightness up") },
   { id: "brightness_down", name: t("Brightness down") },
+  { id: "next_scene", name: t("Next scene") },
   { id: "open", name: t("Open Libre Panel") },
 ];
 

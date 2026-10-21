@@ -23,6 +23,7 @@ import { WhatsNew, showsFirstSteps, showsNews, useNews } from "./news.js";
 import { FirstSteps, PagesCard, StartScreenTile, VolumeTile } from "./overview.js";
 import { MountedChoice, PanelCard, PanelStrip, asksMounting, panelModelNow, usePanelModel } from "./panel.js";
 import { Gallery, ThemeRow, collectionsOf, fitsPanel, startThemes } from "./themes.js";
+import { ScenesCard } from "./scenes.js";
 import { SequenceCard, SequencePage } from "./sequence.js";
 import { SetupCard } from "./setup.js";
 import { UpdateCard } from "./update.js";
@@ -306,6 +307,7 @@ function Launcher({ focus }) {
       <${QuickThemes} />
       <section class="start-more" aria-labelledby="start-more-title">
         <h2 id="start-more-title">${t("More for your panel")}</h2>
+        <${ScenesCard} />
         <${SequenceCard} />
         <${VolumeTile} />
         <${StartScreenTile} />

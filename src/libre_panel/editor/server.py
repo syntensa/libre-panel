@@ -180,6 +180,7 @@ _SETTINGS_GET = {
     "/api/unlock": "unlock",
     "/api/about": "about",
     "/api/report": "report",
+    "/api/scenes": "scenes",
 }
 _SETTINGS_POST = {
     "/api/settings": "write",
@@ -187,6 +188,7 @@ _SETTINGS_POST = {
     "/api/unlock": "set_unlock",
     "/api/location": "search_place",
     "/api/open": "open_folder",
+    "/api/scenes": "set_scene",
 }
 # What a plugin's editor page may serve from its folder.
 _PAGE_TYPES = {

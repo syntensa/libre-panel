@@ -2221,7 +2221,19 @@
     "Difference": "Diferença",
     "Its theme and this panel's change places": "O tema dele e o deste painel trocam de lugar",
     "Swap with panel 1": "Trocar com o painel 1",
-    "Which is which?": "Qual é qual?"
+    "Which is which?": "Qual é qual?",
+    "A theme for every panel at once, with one click": "Um tema para cada painel de uma vez, com um clique",
+    "At most 40 characters": "No máximo 40 caracteres",
+    "Gaming": "Jogos",
+    "Keep": "Guardar",
+    "Keep as a scene": "Guardar como cena",
+    "Name of the scene": "Nome da cena",
+    "Next scene": "Próxima cena",
+    "On: {name}": "Ativa: {name}",
+    "Remove the scene “{name}”?": "Remover a cena “{name}”?",
+    "Scenes": "Cenas",
+    "The themes stay as they are.": "Os temas ficam como estão.",
+    "What every panel shows now, under a name: one click puts it back on.": "O que cada painel mostra agora, com um nome: um clique coloca de volta."
   },
   "fields": {
     "align": "Alinhamento",

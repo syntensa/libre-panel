@@ -23,7 +23,7 @@ from libre_panel.i18n import t
 
 log = logging.getLogger(__name__)
 
-ACTIONS = ("pause", "brightness_up", "brightness_down", "open")
+ACTIONS = ("pause", "brightness_up", "brightness_down", "open", "next_scene")
 BRIGHTNESS_STEP = 10  # percent a shortcut turns the brightness up or down
 
 ORDER = ("Ctrl", "Alt", "Shift", "Win")  # how a combination is written

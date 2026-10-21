@@ -486,6 +486,8 @@ class Settings:
                 kind, cleaned = self._check(str(name), value, config)
                 edits.append((kind, str(name), cleaned))
             self._check_together(changes, config)
+            if "panels" in changes and config.scene:  # a panel's own theme: the scene is off
+                edits.append(("unset", "scene", None))
             try:
                 edit_config(*edits, path=self.config_path)
             except (ConfigError, OSError) as exc:
@@ -610,6 +612,36 @@ class Settings:
             raise SettingsError("weather.latitude and weather.longitude go together")
         if after("weather.enabled", weather.enabled) is True and (lat is None or lon is None):
             raise SettingsError(t("Choose a place first: the weather needs it."))
+
+    # -- scenes ---------------------------------------------------------------------------
+
+    def scenes(self) -> dict[str, Any]:
+        """The scenes and the one that is on (scenes.py)."""
+        from libre_panel import scenes
+
+        try:
+            return scenes.state(self.config_path)
+        except ConfigError as exc:
+            raise SettingsError(str(exc), 409) from exc
+
+    def set_scene(self, payload: Any) -> dict[str, Any]:
+        """``{"action": "on" | "save" | "delete", "name": ...}``: put a scene on ("": none),
+        keep what the panels show as one, or take one out. Answers like :meth:`scenes`."""
+        from libre_panel import scenes
+
+        action = payload.get("action") if isinstance(payload, dict) else None
+        name = payload.get("name", "") if isinstance(payload, dict) else None
+        if action not in ("on", "save", "delete") or not isinstance(name, str):
+            raise SettingsError('expected {"action": "on" | "save" | "delete", "name": ...}')
+        with _WRITING:
+            try:
+                done = {"on": scenes.put_on, "save": scenes.save, "delete": scenes.delete}[action](
+                    name, self.config_path
+                )
+            except ConfigError as exc:
+                raise SettingsError(str(exc)) from exc
+        self._follow()
+        return done
 
     # -- the panel --------------------------------------------------------------------------
 
@@ -1135,6 +1167,7 @@ RULES: dict[str, Any] = {
     "hotkeys.brightness_up": _rule_hotkey,
     "hotkeys.brightness_down": _rule_hotkey,
     "hotkeys.open": _rule_hotkey,
+    "hotkeys.next_scene": _rule_hotkey,
     "sensors.providers": _rule_providers,
     "sensors.librehardwaremonitor.mode": lambda n, v, c: _choice(
         n, v, ("auto", "service", "inprocess", "webserver")
@@ -1151,4 +1184,5 @@ RULES: dict[str, Any] = {
 UNSETTABLE = {
     "refresh_ms", "weather.latitude", "weather.longitude", "weather.place",
     "hotkeys.pause", "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open",
+    "hotkeys.next_scene",
 }  # fmt: skip

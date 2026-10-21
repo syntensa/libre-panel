@@ -12,6 +12,9 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
   with a difference of their own to look alike; *Which is which?* shows each one's number,
   two can swap their themes, and a panel plugged in is offered to be set up
   ([More panels at once](docs/CONFIGURATION.md#more-panels-at-once))
+- **Scenes**: a theme for every panel at once, put on with a click on Start, from the tray or
+  with a keyboard shortcut (the next one); what the panels show is kept as one with a click
+  ([Scenes](docs/CONFIGURATION.md#scenes))
 - **A brightness of its own at night**: from one time to the other, over midnight too, or
   from sunset to sunrise at the weather's place; 0 is dark (*Settings → Panel*,
   `[device] night`)
