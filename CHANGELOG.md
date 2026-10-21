@@ -22,6 +22,8 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
 - **Every panel in Live, the Overview and the tray**: Live shows the picture of the panel
   chosen, the Overview says how each is doing, and the tray switches each on or off and
   gives it a theme
+- **Smooth motion on every panel**: switched on for each panel by itself, with the name of
+  its own standby clip, asked for that panel and never taken from another
 - **Modules from one panel to another**: *Copy to panel 2* and *Move to panel 2* in a
   module's menu in Design, onto free cells of the theme that panel shows (a copy of your own
   where it is built in)

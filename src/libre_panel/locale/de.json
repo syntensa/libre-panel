@@ -2179,7 +2179,6 @@
     "Limited by": "Begrenzt durch",
     "Frame cap": "FPS-Limit",
     "Longest frame": "Längstes Bild",
-    "A second or third panel beside this one, each with a screen of its own. They show the same readings in single pictures; smooth motion, the game screen and the screens in turn are this panel's.": "Ein zweites oder drittes Panel neben diesem, jedes mit einem eigenen Bildschirm. Sie zeigen dieselben Messwerte in Einzelbildern; flüssige Bewegung, der Spielbildschirm und die Bildschirme im Wechsel gehören zu diesem Panel.",
     "Add a panel": "Panel hinzufügen",
     "Detect automatically takes a panel the others do not use. Two serial panels of the same kind: name the port of each below.": "„Automatisch erkennen“ nimmt ein Panel, das die anderen nicht nutzen. Zwei serielle Panels derselben Art: Gib unten jeweils den Port an.",
     "More panels": "Weitere Panels",
@@ -2276,7 +2275,14 @@
     "On panel {number} now, in “{theme}”: a copy of its theme of your own, which it shows from now on": "Jetzt auf Panel {number}, in „{theme}“: eine eigene Kopie seines Themes, die es ab jetzt zeigt",
     "only modules go to another panel": "nur Module lassen sich auf ein anderes Panel bringen",
     "there are no free cells for it on “{theme}”: make room there in Design first": "auf „{theme}“ sind keine Zellen dafür frei: schaffe dort zuerst in Design Platz",
-    "there is no panel {number}": "es gibt kein Panel {number}"
+    "there is no panel {number}": "es gibt kein Panel {number}",
+    "Name of this panel's standby clip": "Name des Standby-Clips dieses Panels",
+    "Smooth motion is not proven on this panel's model yet: it stays at single pictures.": "Flüssige Bewegung ist auf dem Modell dieses Panels noch nicht erprobt: es bleibt bei Einzelbildern.",
+    "This panel's own standby clip, as its own app calls it. Nothing is written until you type it.": "Der eigene Standby-Clip dieses Panels, wie ihn seine App nennt. Geschrieben wird nichts, bis du ihn eintippst.",
+    "This panel's own standby clip, as its own app calls it: {name}. Nothing is written until you choose it.": "Der eigene Standby-Clip dieses Panels, wie ihn seine App nennt: {name}. Geschrieben wird nichts, bis du ihn wählst.",
+    "Up to 50 pictures a second on this panel too, where its model has a decoder for it. Each panel in smooth motion is a video of its own: it costs more of the computer.": "Bis zu 50 Bilder pro Sekunde auch auf diesem Panel, wo sein Modell einen Decoder dafür hat. Jedes Panel in flüssiger Bewegung ist ein eigenes Video: das kostet den Computer mehr.",
+    "Use {name}": "{name} verwenden",
+    "A second or third panel beside this one, each with a screen of its own, on the same readings. The game screen and the screens in turn are this panel's; smooth motion each one switches on for itself.": "Ein zweites oder drittes Panel neben diesem, jedes mit einem eigenen Bild, auf denselben Messwerten. Spielbildschirm und Bildschirme im Wechsel gehören zu diesem Panel; flüssige Bewegung schaltet jedes für sich ein."
   },
   "fields": {
     "align": "Ausrichtung",

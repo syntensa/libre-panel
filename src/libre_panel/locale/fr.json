@@ -2179,7 +2179,6 @@
     "Limited by": "Limité par",
     "Frame cap": "Limite d'images",
     "Longest frame": "Image la plus longue",
-    "A second or third panel beside this one, each with a screen of its own. They show the same readings in single pictures; smooth motion, the game screen and the screens in turn are this panel's.": "Un deuxième ou troisième écran à côté de celui-ci, chacun avec son propre affichage. Ils montrent les mêmes mesures en images successives ; le mouvement fluide, l’écran de jeu et les écrans en alternance sont ceux de cet écran.",
     "Add a panel": "Ajouter un écran",
     "Detect automatically takes a panel the others do not use. Two serial panels of the same kind: name the port of each below.": "« Détecter automatiquement » prend un écran que les autres n’utilisent pas. Deux écrans série du même type : indiquez le port de chacun ci-dessous.",
     "More panels": "Autres écrans",
@@ -2276,7 +2275,14 @@
     "On panel {number} now, in “{theme}”: a copy of its theme of your own, which it shows from now on": "Maintenant sur l’écran {number}, dans « {theme} » : une copie personnelle de son thème, qu’il affiche désormais",
     "only modules go to another panel": "seuls les modules vont sur un autre écran",
     "there are no free cells for it on “{theme}”: make room there in Design first": "il n’y a pas de cellules libres pour lui sur « {theme} » : faites d’abord de la place dans Design",
-    "there is no panel {number}": "il n’y a pas d’écran {number}"
+    "there is no panel {number}": "il n’y a pas d’écran {number}",
+    "Name of this panel's standby clip": "Nom du clip de veille de cet écran",
+    "Smooth motion is not proven on this panel's model yet: it stays at single pictures.": "Le mouvement fluide n’est pas encore éprouvé sur le modèle de cet écran : il reste en images une à une.",
+    "This panel's own standby clip, as its own app calls it. Nothing is written until you type it.": "Le clip de veille propre à cet écran, tel que son application le nomme. Rien n’est écrit tant que vous ne l’avez pas tapé.",
+    "This panel's own standby clip, as its own app calls it: {name}. Nothing is written until you choose it.": "Le clip de veille propre à cet écran, tel que son application le nomme : {name}. Rien n’est écrit tant que vous ne l’avez pas choisi.",
+    "Up to 50 pictures a second on this panel too, where its model has a decoder for it. Each panel in smooth motion is a video of its own: it costs more of the computer.": "Jusqu’à 50 images par seconde sur cet écran aussi, si son modèle a un décodeur pour cela. Chaque écran en mouvement fluide est une vidéo à part : cela demande plus à l’ordinateur.",
+    "Use {name}": "Utiliser {name}",
+    "A second or third panel beside this one, each with a screen of its own, on the same readings. The game screen and the screens in turn are this panel's; smooth motion each one switches on for itself.": "Un deuxième ou troisième écran à côté de celui-ci, chacun avec son propre affichage, sur les mêmes mesures. L’écran de jeu et les écrans en alternance sont ceux de cet écran ; le mouvement fluide, chacun l’active pour lui-même."
   },
   "fields": {
     "align": "Alignement",

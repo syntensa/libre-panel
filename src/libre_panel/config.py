@@ -503,6 +503,12 @@ class PanelConfig:
     # the look of the first panel's theme as it shows (its colours, fonts and module frames)
     # on this panel's own theme; a change in Design follows (theme.model.with_look)
     same_look: bool = False
+    # smooth motion on this panel too (``video = { mode = "auto", local_clip = "..." }``):
+    # its own mode, off to begin with, and the name of its own standby clip, never another
+    # panel's; the rate and the encoder's settings are the first panel's ([video])
+    video_mode: str = "off"
+    local_clip: str = ""
+    clip_asked: bool = False
 
 
 # How many scenes config.toml may hold, and how long a scene's name may be
@@ -573,11 +579,13 @@ class Config:
     def for_panel(self, index: int) -> Config:
         """The config the panel ``panels[index]`` runs with: its device and theme and the rest
         of this one; no screens in turn and no more panels (the pages a service switches to are
-        the first panel's: its loop has no host). Smooth motion (the video mode) is the first
-        panel's: the name of its standby clip goes to the panel it was given for, and to no
-        other; the others get single pictures."""
+        the first panel's: its loop has no host). Smooth motion (the video mode) is each
+        panel's own: its mode (off to begin with) and the name of its own standby clip, never
+        the first panel's, with the first panel's rate and encoder settings."""
         panel = self.panels[index]
-        device = replace(panel.device, video=replace(self.device.video, mode="off"))
+        video = replace(self.device.video, mode=panel.video_mode, local_clip=panel.local_clip,
+                        clip_asked=panel.clip_asked)  # fmt: skip
+        device = replace(panel.device, video=video)
         if panel.follow_brightness:
             first = self.device
 
@@ -958,6 +966,22 @@ def panel_defaults(n: int) -> dict[str, str]:
     return {"driver": "turzx", "output": f"libre-panel-frame-{n + 2}.png"}
 
 
+def _panel_video(value: Any, where: str) -> dict[str, Any]:
+    """A panel's ``video = { mode, local_clip, clip_asked }`` (its own smooth motion)."""
+    table = dict(_expect(value, dict, where))
+    mode = _expect(table.pop("mode", "off"), str, f"{where}.mode")
+    if mode not in ("auto", "off", "on"):
+        raise ConfigError(f'{where}.mode: must be "auto", "off" or "on"')
+    clip = _expect(table.pop("local_clip", ""), str, f"{where}.local_clip")
+    if len(clip.encode("utf-8")) > 200:
+        raise ConfigError(f"{where}.local_clip: at most 200 bytes")
+    asked = _expect(table.pop("clip_asked", False), bool, f"{where}.clip_asked")
+    if table:
+        known = "mode, local_clip, clip_asked"
+        raise ConfigError(f"{where}: unknown key {sorted(table)[0]!r} ({known})")
+    return {"video_mode": mode, "local_clip": clip, "clip_asked": asked}
+
+
 def _panels(value: Any) -> list[PanelConfig]:
     """``[[panels]]``: the panels beside ``[device]``'s, each with the keys of ``[device]``, a
     ``theme`` and ``on``. Without a driver one is the panel found ("turzx"), and one that
@@ -975,6 +999,7 @@ def _panels(value: Any) -> list[PanelConfig]:
         game = _expect(table.pop("game_theme", ""), str, f"{where}.game_theme").strip()
         media = _expect(table.pop("media_theme", ""), str, f"{where}.media_theme").strip()
         look = _expect(table.pop("same_look", False), bool, f"{where}.same_look")
+        video = _panel_video(table.pop("video", {}), f"{where}.video")
         offset = _expect(table.pop("brightness_offset", 0), int, f"{where}.brightness_offset")
         if not -50 <= offset <= 50:
             raise ConfigError(f"{where}.brightness_offset: -50 to 50")
@@ -982,7 +1007,7 @@ def _panels(value: Any) -> list[PanelConfig]:
         panels.append(PanelConfig(theme=theme, on=on, device=_parse_device(table, where),
                                   follow_brightness=follow, brightness_offset=offset,
                                   game_theme=game, media_theme=media,
-                                  same_look=look))  # fmt: skip
+                                  same_look=look, **video))  # fmt: skip
     return panels
 
 

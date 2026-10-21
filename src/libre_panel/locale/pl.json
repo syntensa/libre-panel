@@ -2179,7 +2179,6 @@
     "Limited by": "Ogranicza",
     "Frame cap": "Limit klatek",
     "Longest frame": "Najdłuższa klatka",
-    "A second or third panel beside this one, each with a screen of its own. They show the same readings in single pictures; smooth motion, the game screen and the screens in turn are this panel's.": "Drugi lub trzeci panel obok tego, każdy z własnym ekranem. Pokazują te same odczyty w pojedynczych obrazach; płynny ruch, ekran gry i ekrany na zmianę należą do tego panelu.",
     "Add a panel": "Dodaj panel",
     "Detect automatically takes a panel the others do not use. Two serial panels of the same kind: name the port of each below.": "„Wykryj automatycznie” bierze panel, którego nie używają pozostałe. Dwa panele szeregowe tego samego rodzaju: podaj poniżej port każdego z nich.",
     "More panels": "Więcej paneli",
@@ -2276,7 +2275,14 @@
     "On panel {number} now, in “{theme}”: a copy of its theme of your own, which it shows from now on": "Teraz na panelu {number}, w „{theme}”: własna kopia jego motywu, którą odtąd pokazuje",
     "only modules go to another panel": "na inny panel można przenieść tylko moduły",
     "there are no free cells for it on “{theme}”: make room there in Design first": "w „{theme}” nie ma na niego wolnych komórek: najpierw zrób tam miejsce w Projekcie",
-    "there is no panel {number}": "nie ma panelu {number}"
+    "there is no panel {number}": "nie ma panelu {number}",
+    "Name of this panel's standby clip": "Nazwa klipu czuwania tego panelu",
+    "Smooth motion is not proven on this panel's model yet: it stays at single pictures.": "Płynny ruch nie jest jeszcze sprawdzony na modelu tego panelu: zostają pojedyncze obrazy.",
+    "This panel's own standby clip, as its own app calls it. Nothing is written until you type it.": "Własny klip czuwania tego panelu, tak jak nazywa go jego aplikacja. Nic nie zostanie zapisane, dopóki go nie wpiszesz.",
+    "This panel's own standby clip, as its own app calls it: {name}. Nothing is written until you choose it.": "Własny klip czuwania tego panelu, tak jak nazywa go jego aplikacja: {name}. Nic nie zostanie zapisane, dopóki go nie wybierzesz.",
+    "Up to 50 pictures a second on this panel too, where its model has a decoder for it. Each panel in smooth motion is a video of its own: it costs more of the computer.": "Do 50 obrazów na sekundę także na tym panelu, jeśli jego model ma do tego dekoder. Każdy panel w płynnym ruchu to osobne wideo: bardziej obciąża komputer.",
+    "Use {name}": "Użyj {name}",
+    "A second or third panel beside this one, each with a screen of its own, on the same readings. The game screen and the screens in turn are this panel's; smooth motion each one switches on for itself.": "Drugi lub trzeci panel obok tego, każdy z własnym ekranem, na tych samych odczytach. Ekran gry i ekrany po kolei należą do tego panelu; płynny ruch każdy włącza dla siebie."
   },
   "fields": {
     "align": "Wyrównanie",

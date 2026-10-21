@@ -2179,7 +2179,6 @@
     "Limited by": "受限于",
     "Frame cap": "帧率上限",
     "Longest frame": "最长帧",
-    "A second or third panel beside this one, each with a screen of its own. They show the same readings in single pictures; smooth motion, the game screen and the screens in turn are this panel's.": "在此面板旁增加第二或第三块面板，各自拥有独立屏幕。它们以单张图像显示相同读数；流畅动态、游戏屏幕和屏幕轮播属于主面板。",
     "Add a panel": "添加面板",
     "Detect automatically takes a panel the others do not use. Two serial panels of the same kind: name the port of each below.": "“自动检测”会使用其他面板未使用的面板。若有两块同类型串口面板：请在下方分别指定端口。",
     "More panels": "更多面板",
@@ -2276,7 +2275,14 @@
     "On panel {number} now, in “{theme}”: a copy of its theme of your own, which it shows from now on": "已放到面板 {number} 的“{theme}”中：这是其主题的个人副本，今后该面板将显示它",
     "only modules go to another panel": "只有模块能放到另一块面板上",
     "there are no free cells for it on “{theme}”: make room there in Design first": "“{theme}”上没有空余的格子放它：请先在“设计”中腾出位置",
-    "there is no panel {number}": "没有面板 {number}"
+    "there is no panel {number}": "没有面板 {number}",
+    "Name of this panel's standby clip": "此面板待机动画的名称",
+    "Smooth motion is not proven on this panel's model yet: it stays at single pictures.": "流畅动态尚未在此面板型号上验证：仍保持逐帧图片。",
+    "This panel's own standby clip, as its own app calls it. Nothing is written until you type it.": "此面板自己的待机动画，按其官方应用的名称。在你输入之前不会写入任何内容。",
+    "This panel's own standby clip, as its own app calls it: {name}. Nothing is written until you choose it.": "此面板自己的待机动画，按其官方应用的名称：{name}。在你选择之前不会写入任何内容。",
+    "Up to 50 pictures a second on this panel too, where its model has a decoder for it. Each panel in smooth motion is a video of its own: it costs more of the computer.": "此面板也可达每秒 50 帧（需其型号带有解码器）。每块开启流畅动态的面板都是一路独立视频：会占用更多电脑资源。",
+    "Use {name}": "使用 {name}",
+    "A second or third panel beside this one, each with a screen of its own, on the same readings. The game screen and the screens in turn are this panel's; smooth motion each one switches on for itself.": "在此面板旁再接第二或第三块面板，各自显示自己的画面，使用相同的读数。游戏画面和轮播属于此面板；流畅动态由每块面板各自开启。"
   },
   "fields": {
     "align": "对齐",

@@ -1318,3 +1318,5 @@ a.btn-primary:hover {
 .new-panel-step { margin: -6px 0 10px; }
 .new-panel-body { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin: 4px 0 18px; min-height: 120px; }
 .new-panel-body .select { min-width: 280px; }
+.setting-note { margin: 0; padding: 0 16px 12px; font-size: 13px; color: var(--muted); }
+.setting-note.warn { color: var(--warn); }

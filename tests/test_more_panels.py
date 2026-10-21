@@ -39,8 +39,9 @@ def test_more_panels_are_read_with_the_keys_of_device_and_a_theme():
 
     own = config.for_panel(0)
     assert own.device.model == "turing-3.5"
-    # smooth motion is the first panel's: its clip's name goes to no other panel
+    # smooth motion is each panel's own, off to begin with: the first's clip goes to no other
     assert own.device.video.mode == "off" and config.device.video.mode == "on"
+    assert own.device.video.local_clip == "" and own.device.video.fps == config.device.video.fps
     assert (own.theme, own.theme_given) == ("lumen", True)
     assert not own.sequence.active and own.panels == []  # no screens in turn, no more panels
     assert config.sequence.active and config.device.brightness == 70  # the first's as they were
@@ -216,7 +217,8 @@ def test_the_settings_write_the_panels_back_with_what_differs_from_the_defaults(
     assert load_config(path).device.brightness == 70  # [device] as it was
     for wrong, said in (
         ([{"brightness": 120}], "panels[0].brightness"),
-        ([{"video": {}}], "unknown setting 'panels[0].video'"),
+        ([{"video": {"fps": 30}}], "panels[0].video"),
+        ([{"video": {"mode": "fast"}}], "panels[0].video.mode"),
         ([{}] * 4, "at most 3"),
         ({"theme": "lumen"}, "at most 3"),
     ):
@@ -498,3 +500,31 @@ def test_the_picture_of_all_panels_is_made_from_what_each_shows(isolated_home):
         server.shutdown()
         server.server_close()
         server.editor_state.close()
+
+
+def test_a_panel_beside_the_first_has_smooth_motion_of_its_own_with_its_own_clip(tmp_path):
+    from libre_panel.editor.settings import Restart, Settings
+
+    bar = "turing-9.2-usb"
+    panels = [{"model": bar, "video": {"mode": "auto", "local_clip": "its.h264"}},
+              {"model": bar, "video": {"mode": "on"}}]  # fmt: skip
+    config = parse_config({"video": {"mode": "on", "local_clip": "first.h264", "fps": 40},
+                           "panels": panels})  # fmt: skip
+    own, other = config.for_panel(0).device.video, config.for_panel(1).device.video
+    assert (own.mode, own.local_clip, own.fps) == ("auto", "its.h264", 40)
+    assert (other.mode, other.local_clip) == ("on", "")  # never the first panel's name
+    for wrong in ({"mode": "fast"}, {"local_clip": "x" * 201}, {"fps": 30}, {"clip_asked": "y"}):
+        with pytest.raises(ConfigError, match="panels\\[0\\].video"):
+            parse_config({"panels": [{"video": wrong}]})
+    path = tmp_path / "config.toml"
+    path.write_text('[[panels]]\nmodel = "turing-9.2-usb"\n', encoding="utf-8")
+    settings = Settings(path, None, Restart())
+    panel = settings.read()["config"]["panels"][0]
+    assert panel["video"] == {"mode": "off", "local_clip": "", "clip_asked": False}
+    settings.write({"set": {"panels": [{**panel, "video": {**panel["video"], "mode": "auto"}}]}})
+    assert 'video = { mode = "auto" }' in path.read_text(encoding="utf-8")
+    asked = parse_config({"panels": [{"model": bar, "video": {"mode": "auto"}}]})
+    gaps = settings._more_video(asked, None)
+    assert gaps[0]["usb"] and not gaps[0]["on"] and "clip" in gaps[0]["gaps"]
+    settings.write({"set": {"panels": [{**panel, "video": {"mode": "off"}}]}})
+    assert "video" not in path.read_text(encoding="utf-8")

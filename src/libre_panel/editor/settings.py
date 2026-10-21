@@ -124,6 +124,24 @@ def _whole(name: str, value: Any, low: int, high: int) -> int:
     return value
 
 
+# a panel's own smooth motion as it begins: off, and no clip named (the first panel's is its own)
+PANEL_VIDEO = {"mode": "off", "local_clip": "", "clip_asked": False}
+
+
+def _panel_video(name: str, value: Any) -> dict[str, Any]:
+    """A panel's ``video``: ``{mode, local_clip, clip_asked}``, what differs from it to begin
+    with kept (``{}`` for none)."""
+    if not isinstance(value, dict) or set(value) - set(PANEL_VIDEO):
+        raise SettingsError(f"{name}: expected {{mode, local_clip, clip_asked}}")
+    mode = value.get("mode", "off")
+    if mode not in ("auto", "off", "on"):
+        raise SettingsError(f'{name}.mode: "auto", "off" or "on"')
+    clip = _text(f"{name}.local_clip", value.get("local_clip", ""), 200)
+    asked = _flag(f"{name}.clip_asked", value.get("clip_asked", False))
+    given = {"mode": mode, "local_clip": clip, "clip_asked": asked}
+    return {key: item for key, item in given.items() if item != PANEL_VIDEO[key]}
+
+
 def _place_at(name: str, value: Any) -> list[int] | None:
     """Where a panel stands beside the others (``at``): [x, y] in millimetres, or None."""
     try:
@@ -442,6 +460,11 @@ class Settings:
                         "game_theme": panel.game_theme,
                         "media_theme": panel.media_theme,
                         "same_look": panel.same_look,
+                        "video": {
+                            "mode": panel.video_mode,
+                            "local_clip": panel.local_clip,
+                            "clip_asked": panel.clip_asked,
+                        },  # fmt: skip
                         **_device_table(panel.device),
                     }
                     for panel in config.panels
@@ -569,7 +592,7 @@ class Settings:
                 raise SettingsError(f"panels[{n}]: expected a table")
             default = {"theme": "", "on": True, "follow_brightness": True, "brightness_offset": 0,
                        "game_theme": "", "media_theme": "", "same_look": False,
-                       **_device_table(_panel_device(n))}  # fmt: skip
+                       "video": {}, **_device_table(_panel_device(n))}  # fmt: skip
             now = config.panels[n].device.output if n < len(config.panels) else default["output"]
             kept = {}
             for key, item in table.items():
@@ -580,6 +603,8 @@ class Settings:
                     cleaned = _flag(name, item)
                 elif key == "brightness_offset":
                     cleaned = _whole(name, item, -50, 50)
+                elif key == "video":
+                    cleaned = _panel_video(name, item)
                 elif key in DeviceConfig.__dataclass_fields__ and key != "video":
                     cleaned = RULES[f"device.{key}"](name, item, config)
                 else:
@@ -692,6 +717,8 @@ class Settings:
         return {
             "configured": config.device.model,
             "found": found["info"] if found else None,
+            # each panel beside this one: whether smooth motion runs on it, what it lacks
+            "more_video": self._more_video(config, running),
             # a port with the ids other USB devices have too: the person says what it is
             "maybe": self._maybe_panels() if found is None and configured is None else [],
             "model": _model_info(model) if model is not None else None,
@@ -735,6 +762,30 @@ class Settings:
 
         ask = turzx.clip_question(self._config().device, on_the_bus)
         return {"ask": ask, "name": turzx.VENDOR_CLIP}
+
+    @staticmethod
+    def _more_video(config: Config, running: dict[str, Any] | None) -> list[dict[str, Any]]:
+        """Smooth motion on each panel of ``[[panels]]``: ``{index, usb, on, gaps}``, as for the
+        first panel (its own mode and clip, the first panel's ffmpeg), the model as set or as
+        the running panel said it is."""
+        from libre_panel.devices.models import find_model
+        from libre_panel.devices.turzx import video_gaps, video_mode
+
+        told = {item["index"]: item.get("model") or "" for item in (running or {}).get("more", [])}
+        result = []
+        for n in range(len(config.panels)):
+            video = config.for_panel(n).device.video
+            model = find_model(config.panels[n].device.model) or find_model(told.get(n, ""))
+            usb = model is None or model.protocol == "usb-turing"
+            if video.mode == "off" or not usb:
+                gaps: list[str] = []
+            elif video.mode == "auto":
+                gaps = video_gaps(video, model) if model is not None else []
+            else:
+                gaps = video_gaps(video, model, proven=False)
+            on = video_mode(video, model)[0] if usb else False
+            result.append({"index": n, "usb": usb, "on": on, "gaps": gaps})
+        return result
 
     @staticmethod
     def _find_panel(config: Config) -> dict[str, Any] | None:

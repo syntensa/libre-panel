@@ -531,7 +531,7 @@ function MorePanelsCard() {
   return html`<${Card}
     id="panel-more"
     title=${t("More panels")}
-    text=${t("A second or third panel beside this one, each with a screen of its own. They show the same readings in single pictures; smooth motion, the game screen and the screens in turn are this panel's.")}
+    text=${t("A second or third panel beside this one, each with a screen of its own, on the same readings. The game screen and the screens in turn are this panel's; smooth motion each one switches on for itself.")}
     action=${html`<span class="more-actions">${identify}${photo}${add}</span>`}
   >
     ${spare.map(
@@ -551,6 +551,7 @@ function MorePanelsCard() {
         n=${n}
         panel=${panel}
         running=${running.find((item) => item.index === n)}
+        video=${(info?.more_video || []).find((item) => item.index === n)}
         models=${models}
         themes=${themes}
         companion=${companion}
@@ -584,7 +585,7 @@ function panelThemes(themes, companion, model) {
   ];
 }
 
-function MorePanel({ n, panel, running, models, themes, companion, onChange, onRemove, onSwap }) {
+function MorePanel({ n, panel, running, video, models, themes, companion, onChange, onRemove, onSwap }) {
   const [chosen, setChosen] = useState(null); // as the brightness slider above
   const model = models.find((item) => item.id === panel.model);
   const name = t("Panel {number}", { number: n + 2 });
@@ -600,12 +601,45 @@ function MorePanel({ n, panel, running, models, themes, companion, onChange, onR
       <button type="button" class="btn" title=${t("Its theme and this panel's change places")} onClick=${onSwap}>${t("Swap with panel 1")}</button>
       <button type="button" class="btn" onClick=${onRemove}>${t("Remove")}</button>
     <//>
-    ${panel.on === false ? null : html`<${MoreSettings} n=${n} panel=${panel} models=${models} themes=${themeOptions} chosen=${chosen} onBrightness=${brightness} onChange=${onChange} />`}
+    ${panel.on === false ? null : html`<${MoreSettings} n=${n} panel=${panel} video=${video} models=${models} themes=${themeOptions} chosen=${chosen} onBrightness=${brightness} onChange=${onChange} />`}
   </div>`;
 }
 
 /** What a panel that runs has to set: its model, theme, brightness, way up and port. */
-function MoreSettings({ n, panel, models, themes, chosen, onBrightness, onChange }) {
+/**
+ * Smooth motion on a panel beside the first: its own switch and the name of its own standby
+ * clip, asked for this panel and never taken from another (the panel's video start carries it).
+ */
+function MoreVideo({ panel, video, onChange }) {
+  const name = useStore((s) => s.clipQuestion?.name);
+  const own = panel.video || {};
+  const on = (own.mode || "off") !== "off";
+  useEffect(() => {
+    if (on && !name) loadClipQuestion();
+  }, [on]);
+  const set = (changes) => onChange({ video: { ...own, ...changes } });
+  const gaps = video?.gaps || [];
+  return html`
+    <${SettingRow} title=${t("Smooth motion")} status=${on && video?.on ? html`<${Status} tone="ok">${t("On")}<//>` : null}
+      hint=${t("Up to 50 pictures a second on this panel too, where its model has a decoder for it. Each panel in smooth motion is a video of its own: it costs more of the computer.")}>
+      <${Toggle} label=${t("Smooth motion")} checked=${on} onChange=${(value) => set({ mode: value ? "auto" : "off" })} />
+    <//>
+    ${on && gaps.includes("model") ? html`<p class="setting-note warn">${t("Smooth motion is not proven on this panel's model yet: it stays at single pictures.")}</p>` : null}
+    ${on && gaps.includes("clip")
+      ? html`<${SettingRow} class="clip-row" title=${t("Name of this panel's standby clip")}
+          hint=${name
+            ? t("This panel's own standby clip, as its own app calls it: {name}. Nothing is written until you choose it.", { name })
+            : t("This panel's own standby clip, as its own app calls it. Nothing is written until you type it.")}>
+          <div class="clip-choice">
+            <${CommitField} label=${t("Name of this panel's standby clip")} value=${own.local_clip || ""} mono
+              onCommit=${(text) => set({ local_clip: text, clip_asked: true })} />
+            ${name ? html`<button type="button" class="btn" onClick=${() => set({ local_clip: name, clip_asked: true })}>${t("Use {name}", { name })}</button>` : null}
+          </div>
+        <//>`
+      : null}`;
+}
+
+function MoreSettings({ n, panel, video, models, themes, chosen, onBrightness, onChange }) {
   // (said once, at the first: it holds for all)
   const hint = n === 0 ? t("Detect automatically takes a panel the others do not use. Two serial panels of the same kind: name the port of each below.") : null;
   return html`
@@ -649,6 +683,7 @@ function MoreSettings({ n, panel, models, themes, chosen, onBrightness, onChange
     <${SettingRow} title=${t("Upside down")}>
       <${Toggle} label=${t("Upside down")} checked=${panel.rotate === 180} onChange=${(on) => onChange({ rotate: on ? 180 : 0 })} />
     <//>
+    ${video?.usb ? html`<${MoreVideo} panel=${panel} video=${video} onChange=${onChange} />` : null}
     <${SettingRow} title=${t("Port of a serial panel")}>
       <${CommitField} label=${t("Port of a serial panel")} value=${panel.port || ""} placeholder="COM6, /dev/ttyACM1" mono
         onCommit=${(port) => onChange({ port })} />

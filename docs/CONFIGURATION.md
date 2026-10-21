@@ -291,6 +291,7 @@ port = "COM6"                  # serial panels: which of two of the same kind it
 # game_theme = "lumen-vertical"  # its theme while the first panel shows a game's page,
 # media_theme = "encore"       # and music's ("" or left out: its own as ever)
 # same_look = true             # its theme in the look of the one the first panel shows
+# video = { mode = "auto", local_clip = "..." }  # smooth motion on it too, its own clip
 # follow_brightness = true     # its brightness as the first panel's, at night and while
 # brightness_offset = 10       # you are away too, with this added (-50 to 50: some panels
                                # look brighter than others at the same setting); false:
@@ -335,9 +336,12 @@ another looks for its own, so two panels set to `"auto"` find one each. A panel 
 otherwise), instead of drawing into a file meanwhile; with `driver = "virtual"` it draws into
 `libre-panel-frame-2.png` (the third into `-3`, and so on) or its own `output`.
 
-The pages (game, music, idle clock), the screens in turn, the notices, the tray's brightness
-and smooth motion (the video mode, with the name of the standby clip that was given for it)
-are the first panel's; the others show their theme in single pictures, and one given a theme
+The pages (game, music, idle clock), the screens in turn, the notices and the tray's brightness
+are the first panel's. Smooth motion is each panel's own: off on a panel beside the first
+until it is switched on there (`video = { mode = "auto", local_clip = "..." }` in its table),
+with the name of its own standby clip, asked for that panel and never taken from another, and
+the first panel's rate and encoder settings; each panel in smooth motion is a video of its own,
+which costs more of the computer. One given a theme
 for a game or for music (`game_theme`, `media_theme`) shows it while the first panel shows
 that page. With `same_look` a panel's theme takes the colours of the theme the first panel
 shows (its palette, by name), its background colour, its fonts and how it frames its modules
