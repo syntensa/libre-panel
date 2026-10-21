@@ -744,6 +744,7 @@ class LitSymbol(Finish):
 
     name = "lit"
     types = ("symbol",)
+    later = True  # the first frame makes the kind it shows; the others come after it
 
     def draw(self, renderer: Any, widget: dict[str, Any], snapshot: Any, now: float) -> Any:
         return draw(renderer, widget, snapshot, now, "lit")
@@ -751,10 +752,16 @@ class LitSymbol(Finish):
     def prepare(self, renderer: Any, widget: dict[str, Any]) -> None:
         """Every kind of weather at this size, so that the first change of weather costs no
         more than any other frame (a lit set takes ten milliseconds or so to make)."""
+        for job in self.later_jobs(renderer, widget):
+            job()
+
+    def later_jobs(self, renderer: Any, widget: dict[str, Any]) -> list[Any]:
         k, shade, pack = max(8, widget["size"]), colours(renderer, widget), renderer.pack(widget)
-        for kind in KINDS:
-            for night in (False, True) if kind in _SKY else (False,):
-                layers_for(kind, night, k, "lit", shade, pack)
+        return [
+            lambda kind=kind, night=night: layers_for(kind, night, k, "lit", shade, pack)
+            for kind in KINDS
+            for night in ((False, True) if kind in _SKY else (False,))
+        ]
 
 
 register(LitSymbol())

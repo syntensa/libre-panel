@@ -4,6 +4,7 @@ from datetime import datetime
 
 import numpy as np
 import pytest
+from fake_sensors import wait_for
 from PIL import Image, ImageChops
 
 from libre_panel.render import finish, light3d, symbols
@@ -379,6 +380,29 @@ def test_warming_up_makes_every_kind_of_weather(monkeypatch):
     kept = {key[:3] for key in symbols._sets if key[3] == "lit"}
     assert {(kind, False, 48) for kind in symbols.KINDS} <= kept
     assert {("clear", True, 48), ("partly", True, 48)} <= kept
+
+
+def test_at_the_start_the_other_kinds_of_weather_come_after_the_first_frame():
+    """The theme Libre Panel starts with: its first frame makes the kind it shows, and the
+    others are made after it, one between two frames, in a thread of their own."""
+    import threading
+
+    symbols.forget()
+    renderer = Renderer(theme(symbol(size=40, finish="lit")), animate=True)
+    go, paused = threading.Event(), []
+
+    def pause():
+        paused.append(threading.current_thread().name)
+        go.wait(5)
+
+    renderer.warm(snapshot(0), 1.0, pause=pause, first=True)
+    kept = {key[:3] for key in symbols._sets if key[3] == "lit"}
+    assert ("clear", False, 40) in kept  # the one the first frame shows
+    assert ("snow", False, 40) not in kept  # not yet
+    go.set()
+    assert wait_for(lambda: {(kind, False, 40) for kind in symbols.KINDS}
+                    <= {key[:3] for key in symbols._sets if key[3] == "lit"})  # fmt: skip
+    assert "theme-later" in paused  # (the first frame breathes between its widgets too)
 
 
 def test_the_spec_and_the_theme_loader():

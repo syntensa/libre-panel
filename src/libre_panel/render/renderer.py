@@ -1263,20 +1263,20 @@ class Renderer:
     def _prepare_fans(self) -> None:
         """Every position of the theme's fans: the first frame would read their rotor's
         144 pictures (render/fan.py), about 200 ms."""
-        for widget in self.widgets:
-            if widget["type"] == "fan":
-                color = self.color(widget["color"])
-                if color is not None:
-                    look, paint = self.fan_choices.for_widget(widget)
-                    fan.preload(color[:3], widget["w"], widget["h"], look, paint)
+        for job in self._fan_jobs():
+            job()
 
-    def _prepare_look(self) -> None:
+    def _prepare_look(self, later: list[Callable[[], Any]] | None = None) -> None:
         """Load the light layers and build what the finishes and the look draw
         from, so the first frame loads nothing (SPUR II stalled 118 ms on a
-        layer loaded in a frame)."""
+        layer loaded in a frame). With ``later``, what only a later frame needs (a finish's
+        ``later``: every kind of weather) is put on it instead."""
         for widget in self.widgets:
             finish = self._finishes.get(widget["id"])
             if finish is None:
+                continue
+            if later is not None and finish.later:
+                later += finish.later_jobs(self, widget)
                 continue
             try:
                 finish.prepare(self, widget)
@@ -1285,31 +1285,73 @@ class Renderer:
         if self.look is not None:
             self.look.prepare()
 
+    def _fan_jobs(self) -> list[Callable[[], Any]]:
+        jobs = []
+        for widget in self.widgets:
+            if widget["type"] == "fan":
+                color = self.color(widget["color"])
+                if color is not None:
+                    look, paint = self.fan_choices.for_widget(widget)
+                    jobs += fan.preload_jobs(color[:3], widget["w"], widget["h"], look, paint)
+        return jobs
+
+    def _prepare_later(
+        self, jobs: list[Callable[[], Any]], pause: Callable[[], Any] | None
+    ) -> None:
+        """``jobs`` one by one in a thread of their own, each between two frames (``pause``):
+        what the first frame did not need, ready before a later one asks for it (until then
+        a frame makes what it draws itself)."""
+
+        def work() -> None:
+            for job in jobs:
+                if pause is not None:
+                    pause()
+                try:
+                    job()
+                except Exception:  # a frame makes it when it needs it, and says what fails
+                    log.debug("preparing for later frames failed", exc_info=True)
+
+        threading.Thread(target=work, name="theme-later", daemon=True).start()
+
     def warm(
-        self, snapshot: Snapshot | None, now: float, pause: Callable[[], Any] | None = None
+        self,
+        snapshot: Snapshot | None,
+        now: float,
+        pause: Callable[[], Any] | None = None,
+        first: bool = False,
     ) -> None:
         """Build what the first frames need, away from the render thread: the
         screen's ``prepare()``, the light layers of the look and the finishes,
         the fans' rotors, and one frame of the widgets (cards, texts, icons,
         graph strips). The screen does not draw here: its frames belong to the
         render thread. ``pause`` runs between widgets (to wait while the render
-        thread draws)."""
+        thread draws). ``first``: the theme Libre Panel starts with, whose first frame is
+        waited for: what only a later frame needs (every kind of weather, every position of
+        the fans' rotors, a second or so) is made after it, between frames."""
         screen = self.screen
         if screen is not None:
             try:
                 screen.prepare()
             except Exception as exc:  # a broken plugin must not keep the theme away
                 self._warn(f"screen {self.theme.screen['name']!r} failed to prepare: {exc}")
+        later: list[Callable[[], Any]] | None = [] if first else None
         if self.look is not None or self._finishes:
-            self._prepare_look()
-        self._prepare_fans()
-        if snapshot is None:
-            return
-        self.screen, self._breathe = None, pause
+            self._prepare_look(later)
+        if later is None:
+            self._prepare_fans()
+        else:
+            later += self._fan_jobs()
         try:
-            self.render(snapshot, now)
+            if snapshot is None:
+                return
+            self.screen, self._breathe = None, pause
+            try:
+                self.render(snapshot, now)
+            finally:
+                self.screen, self._breathe = screen, None
         finally:
-            self.screen, self._breathe = screen, None
+            if later:
+                self._prepare_later(later, pause)
 
     def _warm_slots(self, snapshot: Snapshot, now: float) -> None:
         """Draw every card of every slot once, whichever is on show, so that the first change

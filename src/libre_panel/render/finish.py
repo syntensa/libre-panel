@@ -15,6 +15,7 @@ the first time a theme names them, so a theme without one loads nothing.
 from __future__ import annotations
 
 import importlib
+from collections.abc import Callable
 from typing import Any
 
 from libre_panel.theme.model import AUTO, FINISHES
@@ -44,6 +45,13 @@ class Finish:
 
     name = ""
     types: tuple[str, ...] = ()
+    # what ``prepare`` builds is not what the first frame draws, but what a later one may (every
+    # kind of weather): at Libre Panel's start it is built after the first frame
+    later = False
+
+    def later_jobs(self, renderer: Any, widget: dict[str, Any]) -> list[Callable[[], Any]]:
+        """``prepare`` in small steps, for a finish with ``later`` (each between two frames)."""
+        return [lambda: self.prepare(renderer, widget)]
 
     def accepts(self, widget: dict[str, Any]) -> bool:
         """Whether this finish can draw ``widget`` (else it is drawn flat)."""

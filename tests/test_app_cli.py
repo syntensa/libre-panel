@@ -631,10 +631,10 @@ def test_a_first_theme_that_is_not_drawn_in_time_is_left_to_the_first_frame(
     write_ahead_theme(isolated_home)
     stuck, real = threading.Event(), Renderer.warm
 
-    def warm(self, snapshot, now, pause=None):
+    def warm(self, snapshot, now, pause=None, first=False):
         if snapshot is not None:
             stuck.wait(30)  # a drawing that does not end (until the test says so)
-        return real(self, snapshot, now, pause)
+        return real(self, snapshot, now, pause, first)
 
     monkeypatch.setattr(Renderer, "warm", warm)
     monkeypatch.setattr(app_module._Warmup, "LIMIT_S", 0.05)

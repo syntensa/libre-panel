@@ -861,7 +861,7 @@ class MainLoop:
         how = video, fps, (now, every)
         self.idle.set()  # no frame is under way: the drawing need not wait for one
         key = self._warm_key(theme, config, self._dress(config))
-        self.warmup.start(key, self._warm_job(theme, config, now, first, how), now)
+        self.warmup.start(key, self._warm_job(theme, config, now, first, how, first=True), now)
         give_up = time.monotonic() + self.warmup.LIMIT_S  # (wall time, whatever the clock is)
         while not self.warmup.ready(key, now) and time.monotonic() < give_up:
             time.sleep(0.005)
@@ -931,12 +931,14 @@ class MainLoop:
         now: float,
         snapshot: Snapshot | None = None,
         how: tuple[bool, int, tuple[float, float]] | None = None,
+        first: bool = False,
     ) -> Callable[[], tuple[Renderer, Motion]]:
         """Building and drawing ``theme`` once, with copies of what the panel's
         drawing keeps (it goes on meanwhile). It is drawn with the readings the panel
         has now and as it is driven now (video mode or not, its frame rate, when the
         readings were taken), unless ``snapshot`` and ``how`` say so: the first theme
-        has neither yet."""
+        has neither yet (``first``: whose first frame the start waits for; what only later
+        frames need is made after it)."""
         motion = self.motion.copy()
         snapshot = self.snapshot if snapshot is None else snapshot
         if snapshot is not None:  # dicts of its own: this thread goes on replacing them
@@ -959,7 +961,7 @@ class MainLoop:
             renderer.symbols = config.symbols  # and the symbols in their look
             renderer.switches = self._switched(theme, config, source)  # and as switched
             # widget by widget between the panel's frames, not while one is drawn
-            renderer.warm(snapshot, now, pause=lambda: self.idle.wait(0.1))
+            renderer.warm(snapshot, now, pause=lambda: self.idle.wait(0.1), first=first)
             return renderer, motion
 
         return build

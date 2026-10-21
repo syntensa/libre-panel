@@ -440,11 +440,21 @@ def preload(
 ) -> None:  # fmt: skip
     """Everything a fan of this colour, size and look will ask for but its ring: the
     layers, all rotor positions and the blur disc. For a thread that is not drawing a frame."""
+    for job in preload_jobs(color, w, h, look, paint):
+        job()
+
+
+def preload_jobs(
+    color: tuple[int, int, int], w: int, h: int, look: str = fan_looks.DEFAULT,
+    paint: str = "theme",
+) -> list[Callable[[], Any]]:  # fmt: skip
+    """:func:`preload` in steps: a rotor position each, then the blur disc."""
     k = rotor_size(geometry(w, h)[0])
     main, second = colours(look, paint, color)
-    for phase in range(POSITIONS):
-        rotor_image(main, k, phase, look, second)
-    disc_image(main, k, look, second)
+    jobs: list[Callable[[], Any]] = [
+        lambda phase=phase: rotor_image(main, k, phase, look, second) for phase in range(POSITIONS)
+    ]
+    return [*jobs, lambda: disc_image(main, k, look, second)]
 
 
 def geometry(w: int, h: int) -> tuple[int, int, int]:
