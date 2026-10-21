@@ -721,3 +721,43 @@ def test_off_windows_or_from_the_sources_nothing_is_double_clicked():
     from libre_panel import cli
 
     assert cli._double_clicked() is False  # (not the frozen build on Windows)
+
+
+def test_the_next_sample_is_read_between_two_frames_not_in_the_one_that_shows_it():
+    """With ``ahead`` (as run() drives the panel) the readings of the next sample are taken
+    in a thread of their own after the frame before it; the sample's frame takes them."""
+    import threading
+
+    from libre_panel.sensors.base import Reading, SensorHub, SensorProvider
+
+    class Probe(SensorProvider):
+        name = "probe"
+
+        def __init__(self):
+            super().__init__({})
+            self.reads = []
+
+        def read(self):
+            self.reads.append(threading.current_thread().name)
+            return {"probe.n": Reading("probe.n", float(len(self.reads)))}
+
+    probe = Probe()
+    clock = StepClock(1000.0)
+    loop = app_module.MainLoop(Config(theme="slate", refresh_ms=1000), display=MemoryStream(),
+                               clock=clock, hub=SensorHub([probe]))  # fmt: skip
+    loop.ahead = True
+    try:
+        loop.step()  # the first sample: in the frame
+        assert probe.reads == [threading.current_thread().name]
+        while len(probe.reads) < 2:  # frames at 50 fps until the one before the next sample
+            clock.now += 0.02
+            loop.step()
+        assert probe.reads[1].startswith("sample")  # read between two frames
+        assert loop.snapshot.value("probe.n") == 1.0  # not shown yet
+        while loop.snapshot.value("probe.n") != 2.0:
+            clock.now += 0.02
+            loop.step()
+        assert clock.now >= 1001.0  # shown at the sample's time, not before
+        assert len(probe.reads) in (2, 3)  # (the one after is under way)
+    finally:
+        loop.close()

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import sys
 import threading
@@ -507,6 +508,44 @@ def _expects_video(config: Config) -> bool:
     return video_mode(device.video, model)[0]
 
 
+class _Ahead:
+    """The next sample's readings, taken in a thread of its own between two frames: the frame
+    that shows them does not wait for the sources (once a second, every source read and the
+    graphs' history copied, a frame took a few milliseconds longer than the others). It reads
+    as the loops of the other panels do (:class:`HubView`): each source by one thread at a
+    time."""
+
+    def __init__(self) -> None:
+        self.job: concurrent.futures.Future | None = None
+        self._pool: concurrent.futures.ThreadPoolExecutor | None = None
+
+    def start(self, take: Callable[[], Snapshot]) -> None:
+        if self.job is not None:
+            return
+        if self._pool is None:
+            self._pool = concurrent.futures.ThreadPoolExecutor(1, thread_name_prefix="sample")
+        self.job = self._pool.submit(take)
+
+    def take(self) -> Snapshot | None:
+        """The readings taken ahead (waiting for them if they are under way), or None."""
+        job, self.job = self.job, None
+        if job is None:
+            return None
+        try:
+            return job.result()
+        except Exception:  # the frame reads them itself and reports what fails
+            log.exception("taking the readings ahead failed")
+            return None
+
+    def drop(self) -> None:
+        """Readings taken before a change of the config are not the ones to show."""
+        self.job = None
+
+    def close(self) -> None:
+        if self._pool is not None:
+            self._pool.shutdown(wait=False, cancel_futures=True)
+
+
 class _Warmup:
     """The next theme's renderer, built in a thread of its own while the panel
     goes on showing the current theme (SPUR II preloads the same way): its
@@ -612,6 +651,9 @@ class MainLoop:
         self.places_of = places_of
         self.dressed = self._dress(config)  # what the renderer was made in besides its theme
         self.warmup = _Warmup()  # the next theme, built while this one shows
+        # the next sample's readings, taken between two frames (run() switches it on; a test
+        # that drives step() on a clock of its own reads them in the frame)
+        self.ahead, self._ahead = False, _Ahead()
         self.idle = threading.Event()  # set between frames: the warm-up works then
         i18n.set_language(config.language)
         # A config that names no theme shows its panel's own: worked out from the config (or
@@ -1112,6 +1154,7 @@ class MainLoop:
                     default = status.default_theme = fresh_default
                     i18n.set_language(config.language)
                     hub.follow_config(config)  # taken at the sample that follows (next_sample)
+                    self._ahead.drop()  # (what was read before it is not that)
                     renderer.close()
                     theme, renderer = new_theme, self._renderer(new_theme, config)
                     size, previous, next_sample = target_size(config, theme, wanted), None, 0.0
@@ -1146,7 +1189,11 @@ class MainLoop:
                 began_in = mode
             status.mode = host.mode if host is not None else None
             if started >= next_sample or snapshot is None:
-                snapshot, self.first = self.first or hub.snapshot(), None
+                ahead = None if self.first else self._ahead.take()
+                snapshot, self.first = self.first or ahead or hub.snapshot(), None
+                if ahead is not None and hub.every_frame:  # (read before this frame) what
+                    # follows on every frame as it is now: a service's reading, a game's name
+                    ahead.readings.update(hub.fresh(video=display.streaming))
                 if host is not None:
                     snapshot.images = {**snapshot.images, **host.images()}
                     host.latest = snapshot
@@ -1233,6 +1280,10 @@ class MainLoop:
             self.previous = previous
             self.turn, self.snapshot, self.next_sample = turn, snapshot, next_sample
         self.meter.tick(started, self.fps, self.streaming)
+        if self.ahead:  # the next frame is the sample's (give or take half a frame)
+            half = 0.5 / _fps(self.config, self.host, self.display)
+            if self.clock() + self.pause() + half >= self.next_sample:
+                self._ahead.start(self.hub.snapshot)
         return out
 
     def pause(self) -> float:
@@ -1278,6 +1329,7 @@ class MainLoop:
         self.display.close()
         self.toasts.close()
         self.warmup.close()
+        self._ahead.close()
         self.renderer.close()
         self.hub.close()
 
@@ -1481,6 +1533,7 @@ def run(
     stop = stop or threading.Event()
     loop = MainLoop(config, once=once, status=status, host=host, on_config=on_config, hub=hub,
                     panel=panel, mode_of=mode_of, look_of=look_of, places_of=places_of)  # fmt: skip
+    loop.ahead = not once  # the readings between two frames, not in the one that shows them
     pacer = _Pacer()
     planned: float | None = None  # when the pacer planned the next streaming frame
     first = panel is None  # the first panel's loop, [device]'s
