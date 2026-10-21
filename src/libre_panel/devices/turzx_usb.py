@@ -78,6 +78,24 @@ def _place(device: Any) -> str:
     return f"usb:{getattr(device, 'bus', None)}.{getattr(device, 'address', None)}"
 
 
+def free_models() -> list[PanelModel]:
+    """The USB panels on the bus that no panel of this process has open (one more to set up),
+    without opening any."""
+    try:
+        import usb.core
+    except ImportError:
+        return []
+    found = []
+    try:
+        for pid, model in USB_PIDS.items():
+            devices = usb.core.find(find_all=True, idVendor=VENDOR_ID, idProduct=pid,
+                                    backend=_backend())  # fmt: skip
+            found += [model for device in devices or [] if not place_taken(_place(device))]
+    except usb.core.NoBackendError:
+        return []
+    return found
+
+
 def present_model() -> PanelModel | None:
     """The model of a USB panel on the bus, without opening it (None: none there, or no pyusb)."""
     for pid, model in USB_PIDS.items():

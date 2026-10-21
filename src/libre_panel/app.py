@@ -15,7 +15,7 @@ from typing import Any
 from PIL import Image, ImageOps
 
 from libre_panel import clock as loop_clock
-from libre_panel import i18n, modes, presence, timing, winsession
+from libre_panel import i18n, identify, modes, presence, timing, winsession
 from libre_panel.accent import accent_of
 from libre_panel.config import Config, ConfigError, brightness_now, load_config
 from libre_panel.devices.base import Counters, DeviceError, Display, FrameError, create_display
@@ -1051,6 +1051,10 @@ class MainLoop:
                 # decided after _blend: the frame a hiding transition ends shows the toast
                 hidden = blend is not None and getattr(blend[0], "toasts", "wait") == "hide"
                 frame = shown_frame = renderer.shown = toasts.draw(frame, now, hidden=hidden)
+                if identify.showing():  # which panel is which: its number instead, a moment
+                    number = 1 if self.panel is None else self.panel + 2
+                    accent = renderer.theme.palette.get("accent") or "#2EE6D6"
+                    frame = identify.picture(number, frame.size, accent)
                 self.meter.drew(self.clock() - drawing)
                 if host is not None:
                     host.shown = frame  # for the editor's pages: never drawn on from here on

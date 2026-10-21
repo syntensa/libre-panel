@@ -489,6 +489,10 @@ class PanelConfig:
     theme: str = ""
     on: bool = True
     device: DeviceConfig = field(default_factory=DeviceConfig)
+    # its brightness as the first panel's, at night and while the person is away too, with
+    # brightness_offset (-50 to 50) added to look as bright beside it; off: its own
+    follow_brightness: bool = True
+    brightness_offset: int = 0
 
 
 @dataclass
@@ -541,6 +545,22 @@ class Config:
         other; the others get single pictures."""
         panel = self.panels[index]
         device = replace(panel.device, video=replace(self.device.video, mode="off"))
+        if panel.follow_brightness:
+            first = self.device
+
+            def shifted(level: int) -> int:  # (dark stays dark)
+                return level if level == 0 else max(1, min(100, level + panel.brightness_offset))
+
+            device = replace(
+                device,
+                brightness=shifted(first.brightness),
+                night=first.night,
+                night_from=first.night_from,
+                night_to=first.night_to,
+                night_brightness=shifted(first.night_brightness),
+                dark_when_away=first.dark_when_away,
+                away_brightness=shifted(first.away_brightness),
+            )
         return replace(
             self,
             device=device,
@@ -849,8 +869,13 @@ def _panels(value: Any) -> list[PanelConfig]:
         table = dict(_expect(table, dict, where))
         theme = _expect(table.pop("theme", ""), str, f"{where}.theme").strip()
         on = _expect(table.pop("on", True), bool, f"{where}.on")
+        follow = _expect(table.pop("follow_brightness", True), bool, f"{where}.follow_brightness")
+        offset = _expect(table.pop("brightness_offset", 0), int, f"{where}.brightness_offset")
+        if not -50 <= offset <= 50:
+            raise ConfigError(f"{where}.brightness_offset: -50 to 50")
         table = {**panel_defaults(n), **table}
-        panels.append(PanelConfig(theme=theme, on=on, device=_parse_device(table, where)))
+        panels.append(PanelConfig(theme=theme, on=on, device=_parse_device(table, where),
+                                  follow_brightness=follow, brightness_offset=offset))  # fmt: skip
     return panels
 
 

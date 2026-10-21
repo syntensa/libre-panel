@@ -613,6 +613,10 @@ class BackgroundApp:
             if not isinstance(value, bool):
                 raise ValueError("autostart must be true or false")
             self.set_autostart(value)
+        elif action == "identify":  # which panel is which: each shows its number
+            from libre_panel import identify
+
+            identify.show()
         elif action == "quit":
             # Answer the request first; the server stops as part of quitting.
             timer = threading.Timer(0.3, self.quit)

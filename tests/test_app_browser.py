@@ -4232,6 +4232,16 @@ def test_a_second_panel_is_added_given_a_theme_and_taken_out_again(app_url, isol
         second.get_by_label("Upside down").click()
         waits_for(page, lambda: settings_config().panels[0].device.rotate == 180)
         assert settings_config().device.rotate == 0  # this panel's way up as it was
+        # its brightness is the first panel's unless it has its own
+        expect(second.get_by_label("Brightness as panel 1's")).to_be_checked()
+        expect(second.get_by_role("slider", name="Brightness", exact=True)).to_have_count(0)
+        second.get_by_label("Brightness as panel 1's").click()
+        waits_for(page, lambda: settings_config().panels[0].follow_brightness is False)
+        expect(second.get_by_role("slider", name="Brightness", exact=True)).to_have_count(1)
+        # the two themes change places
+        second.get_by_role("button", name="Swap with panel 1").click()
+        waits_for(page, lambda: settings_config().theme == "lumen")
+        assert settings_config().panels[0].theme == "libre-default"
         second.get_by_role("button", name="Remove").click()
         waits_for(page, lambda: settings_config().panels == [])
         expect(card.locator("[data-more-panel]")).to_have_count(0)

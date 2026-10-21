@@ -139,6 +139,8 @@
 .more-panel + .more-panel, .settings-card-head + .more-panel { border-top: 1px solid var(--line); }
 .more-panel-head .settings-row-title { font-weight: 600; }
 #panel-more .settings-card-head .btn { white-space: nowrap; }
+.more-actions { display: flex; gap: 8px; }
+.more-spare { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); }
 .more-panel-head .settings-row-control { display: flex; align-items: center; gap: 8px; }
 
 .settings-row:last-child {

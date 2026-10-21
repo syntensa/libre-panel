@@ -4,7 +4,8 @@
 // to without a panel, the standby clip's name once it is set, the serial port and ffmpeg; and the
 // panels beside this one, each with its model, theme, brightness and port.
 
-import { themeName } from "../../core/actions.js";
+import { normalTheme, themeName } from "../../core/actions.js";
+import { endpoints } from "../../core/api.js";
 import { t } from "../../core/i18n.js";
 import {
   loadClipQuestion,
@@ -15,7 +16,7 @@ import {
   useCatalog,
   useConfig,
 } from "../../core/settings.js";
-import { useStore } from "../../core/state.js";
+import { store, useStore } from "../../core/state.js";
 import { videoState } from "../../core/video.js";
 import { html, useEffect, useRef, useState } from "../../lib/preact.js";
 import { panelName, stateText } from "../../shell/panel-popover.js";
@@ -446,12 +447,32 @@ function MorePanelsCard() {
   const add = panels.length < MORE_PANELS
     ? html`<button type="button" class="btn" onClick=${() => write([...panels, {}])}>${t("Add a panel")}</button>`
     : null;
+  // which is which: each panel shows its number a few seconds (identify.py)
+  const identify = panels.length && info?.running
+    ? html`<button type="button" class="btn" onClick=${() => endpoints.appAction("identify").catch(() => {})}>${t("Which is which?")}</button>`
+    : null;
+  // the themes of this panel and another change places (theirs shown, where it has none)
+  const swap = async (n) => {
+    const first = normalTheme();
+    const other = panels[n].theme || running.find((item) => item.index === n)?.theme;
+    if (!first || !other) return;
+    await write(panels.map((panel, i) => (i === n ? { ...panel, theme: first } : panel)));
+    store.set({ pages: await endpoints.setPage("normal", { theme: other }) });
+  };
+  const spare = panels.length < MORE_PANELS ? info?.spare || [] : [];
   return html`<${Card}
     id="panel-more"
     title=${t("More panels")}
     text=${t("A second or third panel beside this one, each with a screen of its own. They show the same readings in single pictures; smooth motion, the game screen and the screens in turn are this panel's.")}
-    action=${add}
+    action=${html`<span class="more-actions">${identify}${add}</span>`}
   >
+    ${spare.map(
+      (model) => html`<div class="more-spare" key=${`${model.id}${model.port || ""}`} data-spare=${model.id}>
+        <span>${t("Another panel is plugged in: {name}. Show something on it too?", { name: panelName(model) })}</span>
+        <button type="button" class="btn btn-primary"
+          onClick=${() => write([...panels, { model: model.id, ...(model.port ? { port: model.port } : {}) }])}>${t("Set it up")}</button>
+      </div>`,
+    )}
     ${panels.map(
       (panel, n) => html`<${MorePanel}
         key=${n}
@@ -462,6 +483,7 @@ function MorePanelsCard() {
         themes=${themes}
         onChange=${(changes) => edit(n, changes)}
         onRemove=${() => remove(n)}
+        onSwap=${() => swap(n).catch(() => {})}
       />`,
     )}
   <//>`;
@@ -475,7 +497,7 @@ function MoreStatus({ panel, running }) {
   return html`<${Status} tone="warn">${stateText(running.state)}${running.detail ? `: ${running.detail}` : ""}<//>`;
 }
 
-function MorePanel({ n, panel, running, models, themes, onChange, onRemove }) {
+function MorePanel({ n, panel, running, models, themes, onChange, onRemove, onSwap }) {
   const [chosen, setChosen] = useState(null); // as the brightness slider above
   const model = models.find((item) => item.id === panel.model);
   const name = t("Panel {number}", { number: n + 2 });
@@ -494,6 +516,7 @@ function MorePanel({ n, panel, running, models, themes, onChange, onRemove }) {
   return html`<div class="more-panel" data-more-panel=${n}>
     <${SettingRow} class="more-panel-head" title=${model ? `${name}: ${panelName(model)}` : name} status=${html`<${MoreStatus} panel=${panel} running=${running} />`}>
       <${Toggle} label=${t("{panel} on", { panel: name })} checked=${panel.on !== false} onChange=${(on) => onChange({ on })} />
+      <button type="button" class="btn" title=${t("Its theme and this panel's change places")} onClick=${onSwap}>${t("Swap with panel 1")}</button>
       <button type="button" class="btn" onClick=${onRemove}>${t("Remove")}</button>
     <//>
     ${panel.on === false ? null : html`<${MoreSettings} n=${n} panel=${panel} models=${models} themes=${themeOptions} chosen=${chosen} onBrightness=${brightness} onChange=${onChange} />`}
@@ -519,10 +542,18 @@ function MoreSettings({ n, panel, models, themes, chosen, onBrightness, onChange
     <${SettingRow} title=${t("Theme")}>
       <${Select} label=${t("Theme")} value=${panel.theme || ""} options=${themes} onChange=${(value) => onChange({ theme: value })} />
     <//>
-    <${SettingRow} title=${t("Brightness")}>
-      <${Slider} label=${t("Brightness")} value=${chosen ?? panel.brightness} min=${0} max=${100} step=${5}
-        format=${(value) => `${value} %`} onCommit=${onBrightness} />
+    <${SettingRow} title=${t("Brightness as panel 1's")} hint=${t("At night and while you are away too. Some panels look brighter than others at the same setting: even them out with the difference below.")}>
+      <${Toggle} label=${t("Brightness as panel 1's")} checked=${panel.follow_brightness !== false} onChange=${(on) => onChange({ follow_brightness: on })} />
     <//>
+    ${panel.follow_brightness !== false
+      ? html`<${SettingRow} title=${t("Difference")}>
+          <${Slider} label=${t("Difference")} value=${panel.brightness_offset || 0} min=${-30} max=${30} step=${5}
+            format=${(value) => `${value > 0 ? "+" : ""}${value} %`} onCommit=${(value) => onChange({ brightness_offset: value })} />
+        <//>`
+      : html`<${SettingRow} title=${t("Brightness")}>
+          <${Slider} label=${t("Brightness")} value=${chosen ?? panel.brightness} min=${0} max=${100} step=${5}
+            format=${(value) => `${value} %`} onCommit=${onBrightness} />
+        <//>`}
     <${SettingRow} title=${t("Upside down")}>
       <${Toggle} label=${t("Upside down")} checked=${panel.rotate === 180} onChange=${(on) => onChange({ rotate: on ? 180 : 0 })} />
     <//>

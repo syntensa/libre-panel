@@ -284,11 +284,18 @@ More panels* adds and removes them.
 theme = "lumen"                # empty or left out: the panel's own default
 model = "turing-3.5"           # "auto": a panel the others do not use
 port = "COM6"                  # serial panels: which of two of the same kind it is
-brightness = 40
+# follow_brightness = true     # its brightness as the first panel's, at night and while
+# brightness_offset = 10       # you are away too, with this added (-50 to 50: some panels
+                               # look brighter than others at the same setting); false:
+brightness = 40                # its own brightness, night and away settings
 # rotate = 180, orientation, motion, night, dark_on_quit, dark_on_sleep, dark_when_away:
 # as in [device]
 # on = false                   # kept, but not shown
 ```
+
+*Which is which?* there shows each panel's number for a few seconds (the first is 1, those of
+`[[panels]]` 2, 3 and 4), *Swap with panel 1* lets two panels' themes change places, and a
+panel plugged in that none shows anything on is offered to be set up.
 
 The sensors are read once, for all panels; each panel's graphs run at its own theme's pace.
 Libre Panel never opens a panel twice: a panel that one of them has open is passed by when

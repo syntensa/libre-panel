@@ -257,3 +257,76 @@ def test_a_slow_source_holds_up_no_reading_of_every_frame():
     finally:
         release.set()
         taking.join(5)
+
+
+def test_a_panel_follows_the_first_one_s_brightness_with_a_difference_of_its_own():
+    config = parse_config(
+        {
+            "device": {
+                "brightness": 60,
+                "night": True,
+                "night_brightness": 0,
+                "away_brightness": 20,
+            },
+            "panels": [{"brightness_offset": 15}, {"follow_brightness": False, "brightness": 30}],
+        }
+    )
+    follows, own = config.for_panel(0).device, config.for_panel(1).device
+    assert (follows.brightness, follows.night, follows.away_brightness) == (75, True, 35)
+    assert follows.night_brightness == 0  # dark at night stays dark
+    assert (own.brightness, own.night) == (30, False)  # its own
+    with pytest.raises(ConfigError, match=re.escape("panels[0].brightness_offset")):
+        parse_config({"panels": [{"brightness_offset": 70}]})
+    assert parse_config({"device": {"brightness": 95}, "panels": [{"brightness_offset": 20}]}
+                        ).for_panel(0).device.brightness == 100  # fmt: skip
+
+
+def test_each_panel_shows_its_number_for_a_moment(monkeypatch):
+    from libre_panel import identify
+
+    monkeypatch.setattr(identify, "_until", 0.0)  # (put back after the test: shown no longer)
+    picture = identify.picture(2, (480, 320), "#E0457B")
+    assert picture.size == (480, 320) and picture.getbbox() is not None
+    assert picture.getpixel((240, 160)) != (0, 0, 0) or picture.getcolors(256000)  # drawn
+    assert not identify.showing()
+    identify.show(5)
+    assert identify.showing()
+    monkeypatch.setattr(identify.time, "monotonic", lambda: 10**9)  # later
+    assert not identify.showing()
+
+
+def test_the_loop_shows_the_panel_s_number_while_it_is_asked_for(monkeypatch):
+    from test_app_cli import MemoryStream, StepClock
+
+    from libre_panel import identify
+    from libre_panel.config import Config, SensorsConfig
+    from libre_panel.sensors.demo import DemoProvider
+
+    clock = StepClock(1000.0)
+    loop = app.MainLoop(Config(theme="slate", sensors=SensorsConfig(providers=["demo"])),
+                        display=MemoryStream(), clock=clock, panel=1,
+                        hub=SensorHub([DemoProvider({"fixed_time": 1_700_000_000})]))  # fmt: skip
+    try:
+        themed = loop.step()
+        monkeypatch.setattr(identify, "_until", identify.time.monotonic() + 60)
+        clock.now += 0.1
+        numbered = loop.step()
+        accent = loop.renderer.theme.palette.get("accent") or "#2EE6D6"
+        assert numbered.tobytes() == identify.picture(3, themed.size, accent).tobytes()  # panel 3
+    finally:
+        loop.close()
+
+
+def test_a_panel_that_none_shows_anything_on_is_offered_while_all_run(monkeypatch):
+    from libre_panel.devices import serial_link, turzx_usb
+    from libre_panel.devices.models import find_model
+    from libre_panel.editor.settings import Settings
+
+    nine = find_model("turing-9.2-usb")
+    monkeypatch.setattr(turzx_usb, "free_models", lambda: [nine])
+    monkeypatch.setattr(serial_link, "free_panels", lambda: [])
+    running = {"state": "showing", "more": [{"index": 0, "state": "showing"}]}
+    assert [spare["id"] for spare in Settings._spare_panels(running)] == ["turing-9.2-usb"]
+    looking = {"state": "showing", "more": [{"index": 0, "state": "waiting"}]}
+    assert Settings._spare_panels(looking) == []  # it may be the one that panel looks for
+    assert Settings._spare_panels({"state": "paused", "more": []}) == []  # nothing is open then

@@ -2214,7 +2214,14 @@
     "its config.toml cannot be read: {error}": "jej config.toml nie da się odczytać: {error}",
     "the backup is too large": "kopia jest za duża",
     "this is not a backup of Libre Panel": "to nie jest kopia zapasowa Libre Panel",
-    "{name}: not a file a backup of Libre Panel holds": "{name}: to nie plik, który zawiera kopia Libre Panel"
+    "{name}: not a file a backup of Libre Panel holds": "{name}: to nie plik, który zawiera kopia Libre Panel",
+    "Another panel is plugged in: {name}. Show something on it too?": "Podłączono kolejny panel: {name}. Pokazywać na nim też coś?",
+    "At night and while you are away too. Some panels look brighter than others at the same setting: even them out with the difference below.": "Także w nocy i gdy cię nie ma. Niektóre panele przy tym samym ustawieniu wyglądają jaśniej niż inne: wyrównaj to różnicą poniżej.",
+    "Brightness as panel 1's": "Jasność jak panel 1",
+    "Difference": "Różnica",
+    "Its theme and this panel's change places": "Jego motyw i motyw tego panelu zamieniają się miejscami",
+    "Swap with panel 1": "Zamień z panelem 1",
+    "Which is which?": "Który jest który?"
   },
   "fields": {
     "align": "Wyrównanie",

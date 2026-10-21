@@ -422,9 +422,15 @@ class Settings:
                 "switches": {theme: dict(chosen) for theme, chosen in config.switches.items()},
                 # the panels beside this one ([[panels]]): written back whole ("panels")
                 "panels": [
-                    {"theme": panel.theme, "on": panel.on, **_device_table(panel.device)}
+                    {
+                        "theme": panel.theme,
+                        "on": panel.on,
+                        "follow_brightness": panel.follow_brightness,
+                        "brightness_offset": panel.brightness_offset,
+                        **_device_table(panel.device),
+                    }
                     for panel in config.panels
-                ],
+                ],  # fmt: skip
             },
             "catalog": self._catalog(),
             "restart": self.restart.pending(self.controls),
@@ -544,15 +550,18 @@ class Settings:
         for n, table in enumerate(value):
             if not isinstance(table, dict):
                 raise SettingsError(f"panels[{n}]: expected a table")
-            default = {"theme": "", "on": True, **_device_table(_panel_device(n))}
+            default = {"theme": "", "on": True, "follow_brightness": True, "brightness_offset": 0,
+                       **_device_table(_panel_device(n))}  # fmt: skip
             now = config.panels[n].device.output if n < len(config.panels) else default["output"]
             kept = {}
             for key, item in table.items():
                 name = f"panels[{n}].{key}"
                 if key == "theme":
                     cleaned = _text(name, item, 64)
-                elif key == "on":
+                elif key in ("on", "follow_brightness"):
                     cleaned = _flag(name, item)
+                elif key == "brightness_offset":
+                    cleaned = _whole(name, item, -50, 50)
                 elif key in DeviceConfig.__dataclass_fields__ and key != "video":
                     cleaned = RULES[f"device.{key}"](name, item, config)
                 else:
@@ -624,9 +633,11 @@ class Settings:
             gaps = video_gaps(video, model, proven=False)
         running = None
         shown = None
+        spare: list[dict[str, Any]] = []
         panel = getattr(self.controls, "panel", None)
         if panel is not None:
             state = panel.state()
+            spare = self._spare_panels(state)
             running = {"state": state["state"], "detail": state["detail"],
                        "more": state.get("more", [])}  # fmt: skip
             shown = state.get("theme") or None
@@ -637,6 +648,8 @@ class Settings:
             "maybe": self._maybe_panels() if found is None and configured is None else [],
             "model": _model_info(model) if model is not None else None,
             "running": running,
+            # panels plugged in that no panel of the app shows anything on: one more to set up
+            "spare": spare,
             "video": {
                 "mode": video.mode,
                 "fps": video.fps,
@@ -696,6 +709,29 @@ class Settings:
         if port is not None:
             return {"model": port.model, "info": _model_info(port.model, port.device, port.sure)}
         return None
+
+    @staticmethod
+    def _spare_panels(state: dict[str, Any]) -> list[dict[str, Any]]:
+        """The panels on the bus that no loop of the app has open, while every one runs (one
+        that is still looking for its panel may be about to take it): each with its model
+        and, for a serial one, its port."""
+        from libre_panel.devices.serial_link import free_panels
+        from libre_panel.devices.turzx_usb import free_models
+
+        if state.get("state") != "showing":
+            return []
+        if any(more.get("state") != "showing" for more in state.get("more", [])):
+            return []
+        found = []
+        try:
+            found += [_model_info(model) for model in free_models()]
+        except Exception:  # no USB library is no panel
+            log.debug("looking for more USB panels failed", exc_info=True)
+        try:
+            found += [_model_info(p.model, p.device, p.sure) for p in free_panels()]
+        except Exception:  # no pyserial
+            log.debug("looking for more serial panels failed", exc_info=True)
+        return found
 
     @staticmethod
     def _maybe_panels() -> list[dict[str, Any]]:

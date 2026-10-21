@@ -89,6 +89,19 @@ def find_port(model: PanelModel | None = None, port: str = "") -> FoundPort | No
     return None
 
 
+def free_panels() -> list[FoundPort]:
+    """The serial panels plugged in that no panel of this process has open, by their USB ids
+    (not the generic ones of a gadget), without opening any."""
+    found = []
+    for info in free(_ports()):
+        if _generic(info):
+            continue
+        models = tuple(models_for_usb(info.vid, info.pid, info.serial_number))
+        if models:
+            found.append(FoundPort(info.device, models[0], info.serial_number, models))
+    return found
+
+
 def gadget_ports() -> list[FoundPort]:
     """The ports that :func:`find_port` leaves alone without a model: the generic gadget ids
     of an awake rev. C panel, without its serial number (Windows may not tell it). It may be
