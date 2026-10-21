@@ -161,6 +161,16 @@ Panel*: Jeder Screen erscheint dann in seiner Fassung dafür, neu angeordnet sta
 Lumen, Studio, Encore, Nimbus, Almanac, Arena und der Rundenbericht haben je eine, und das
 eigene Bootlogo und der Standby-Clip des Panels werden ebenfalls hochkant gezeichnet.
 
+### Mehrere Panels zugleich
+
+<img src="docs/images/more-panels.png" width="100%" alt="Zwei 9,2-Zoll-Leisten übereinander: Lumen mit dem Titel, der Uhrzeit, den Lüftern und den Ringen, darunter Lumen Companion mit jedem Kern, den Temperaturen mit drehenden Lüftern, den Laufwerken und den Prozessen">
+
+Bis zu vier Panels zugleich, jedes mit eigenem Theme, auf denselben Messwerten. Ein Panel
+neben Lumen bekommt Lumen Companion; unter *Einstellungen → Panel* stehen sie in echter Größe
+neben deinem Monitor, ein Bild kann über alle gehen, eine Szene wechselt alle Panels auf einmal,
+und *Bild aller Panels* speichert das Bild oben, zum Teilen. Live, das Tray und die
+Übersicht zeigen jedes Panel.
+
 ### Jede Panelgröße
 
 <img src="docs/media/small-panel.gif" width="100%" alt="Libre Default auf einem 3,5-Zoll-Panel: die Uhrzeit, leuchtende Ringe für CPU und Arbeitsspeicher, die sich füllen, CPU-Temperatur, Laufwerk und Netzwerk, ein scrollender CPU-Verlauf und eine kleine Karte in der Ecke, die vom laufenden Titel zum Wetter wechselt">

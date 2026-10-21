@@ -94,36 +94,30 @@ def test_who_updated_is_told_what_is_new_once_and_each_thing_is_done_right_there
     updated(isolated_home)
     with browser_page(app_url, "home", routes={"**/api/app": a_panel_app()}, allow=PICTURE) as page:
         card = page.locator(".news-card")
-        expect(card.locator("h2")).to_have_text("What's new in 0.6")
+        expect(card.locator("h2")).to_have_text("What's new in 0.7")
         expect(page.locator(".first-steps")).to_have_count(0)  # who updated knows the rest
         rows = card.locator(".first-step")
         assert rows.evaluate_all("r => r.map((e) => e.dataset.step)") == [
-            "upright",
-            "arena",
-            "overview",
+            "panels",
+            "scenes",
+            "modules",
         ]
-        # bars on end: the choice right there
-        card.locator("[data-step='upright']").get_by_role("radio", name="Vertical").click()
-        waits_for(page, lambda: settings_config().device.orientation == "portrait")
-        expect(card.locator("[data-step='upright']")).to_have_class(re.compile(r"\bdone\b"))
-        # Arena: game mode on, with Arena
-        card.get_by_role("button", name="Use Arena in games").click()
-        waits_for(page, lambda: "game" in settings_config().services.enabled)
-        assert game_theme() == "arena"
-        expect(card.locator("[data-step='arena']")).to_have_class(re.compile(r"\bdone\b"))
-        game = page.locator(".pages-card [data-page='game']")
-        expect(game.get_by_role("switch")).to_have_attribute("aria-checked", "true")
-        # the overview, shown and marked
-        card.get_by_role("button", name="Show me").click()
-        expect(page.locator(".pages-card")).to_have_class(re.compile(r"\bpointed\b"))
-        expect(page.locator(".pages-card")).to_be_in_viewport()
+        # scenes: the card on Start, shown and marked
+        card.locator("[data-step='scenes']").get_by_role("button", name="Show me").click()
+        expect(page.locator(".scenes-card")).to_have_class(re.compile(r"\bpointed\b"))
+        expect(page.locator(".scenes-card")).to_be_in_viewport()
+        expect(card.locator("[data-step='scenes']")).to_have_class(re.compile(r"\bdone\b"))
+        # more panels: to where one is added
+        card.get_by_role("button", name="Add a panel").click()
+        page.wait_for_function("location.hash === '#/settings/panel'")
+        page.goto(f"{app_url}#/home")
         # closed: kept by the server, for the window and any browser alike
         card.get_by_role("button", name="Got it").click()
         expect(card).to_have_count(0)
-        waits_for(page, lambda: news_file(isolated_home)["seen"] == "0.6")
+        waits_for(page, lambda: news_file(isolated_home)["seen"] == "0.7")
         page.reload()
         page.wait_for_selector(".pages-card")
-        page.wait_for_function("window.libre.store.get().news?.seen === '0.6'")
+        page.wait_for_function("window.libre.store.get().news?.seen === '0.7'")
         expect(page.locator(".news-card")).to_have_count(0)
         expect(page.locator(".first-steps")).to_have_count(0)
 

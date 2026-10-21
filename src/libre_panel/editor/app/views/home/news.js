@@ -5,18 +5,16 @@
 // alike, and once.
 
 import { get, post } from "../../core/api.js";
-import { themeName } from "../../core/actions.js";
 import { t } from "../../core/i18n.js";
 import { loadSettings, useConfig } from "../../core/settings.js";
 import { store, useStore } from "../../core/state.js";
 import { html, useEffect, useState } from "../../lib/preact.js";
 import { toastError } from "../../ui/toast.js";
-import { StepList, knownModel, openPages, switchPage, usePages } from "./overview.js";
-import { MountedChoice, asksMounting, usePanelModel } from "./panel.js";
-import { fitsPanel } from "./themes.js";
+import { navigate } from "../../shell/views.js";
+import { StepList } from "./overview.js";
 
 /** The release these news are of. */
-export const RELEASE = "0.6";
+export const RELEASE = "0.7";
 
 const numbers = (version) => String(version).split(/[^0-9]+/).filter(Boolean).map(Number);
 
@@ -73,9 +71,9 @@ async function close() {
   }
 }
 
-/** The part of Start that says what the panel shows when, brought into view and marked. */
-function showOverview() {
-  const card = document.querySelector(".pages-card");
+/** A part of Start (by its class), brought into view and marked. */
+function pointAt(selector) {
+  const card = document.querySelector(selector);
   if (!card) return;
   card.scrollIntoView({ behavior: "smooth", block: "center" });
   card.classList.remove("pointed");
@@ -83,56 +81,38 @@ function showOverview() {
   card.classList.add("pointed");
 }
 
-/** The news of 0.6: bars on end (for a bar), Arena for game mode (where it fits the panel), and
- * Start's new overview. */
+/** The news of 0.7: more panels at once, scenes on Start, and the new modules of Design. */
 export function WhatsNew() {
   const config = useConfig();
-  const pages = usePages();
-  const themes = useStore((s) => s.themes);
-  const { model: shownFor } = usePanelModel();
-  const [looked, setLooked] = useState(false);
+  const [looked, setLooked] = useState({});
   useEffect(() => {
     if (!store.get().settings) loadSettings();
   }, []);
-  if (!config || !pages?.pages) return null;
-  const model = shownFor || knownModel(config);
-  const game = pages.pages.find((page) => page.id === "game");
-  const arena = themes.find((item) => item.id === "arena");
-  const arenaOn = Boolean(game?.on && game.theme === "arena");
+  if (!config) return null;
+  const look = (id) => setLooked((now) => ({ ...now, [id]: true }));
   const items = [
-    asksMounting(model) && {
-      id: "upright",
-      title: t("Bars on end"),
-      text: t("Mounted upright? Every screen now comes in a version for a bar on end."),
-      done: Boolean(config.device?.orientation),
-      action: html`<${MountedChoice} />`,
-    },
-    game &&
-      arena &&
-      fitsPanel(arena, model) && {
-        id: "arena",
-        title: t("Arena for game mode"),
-        text: arenaOn
-          ? t("Game mode is on and shows Arena: the frame rate large, the CPU and the GPU beside it.")
-          : t("Libre Panel's own game screen: the frame rate large with its 1% low, the CPU and the GPU beside it."),
-        done: arenaOn,
-        action: html`<span class="news-actions">
-          <button type="button" class="link-btn" onClick=${openPages}>${t("Open the page")}</button>
-          ${arenaOn
-            ? null
-            : html`<button type="button" class="btn" onClick=${() => switchPage("game", true, "arena")}>
-                ${t("Use {theme} in games", { theme: themeName("arena") })}
-              </button>`}
-        </span>`,
-      },
     {
-      id: "overview",
-      title: t("Start at a glance"),
-      text: t("What the panel shows when, each page with its switch, right here on Start."),
-      done: looked,
-      action: html`<button type="button" class="btn" onClick=${() => (showOverview(), setLooked(true))}>${t("Show me")}</button>`,
+      id: "panels",
+      title: t("More panels at once"),
+      text: t("Up to four panels, each with its own theme, placed where they stand."),
+      done: (config.panels || []).length > 0,
+      action: html`<button type="button" class="btn" onClick=${() => navigate("settings", "panel")}>${t("Add a panel")}</button>`,
     },
-  ].filter(Boolean);
+    {
+      id: "scenes",
+      title: t("Scenes"),
+      text: t("A theme for every panel at once, with one click: keep what they show now as a scene."),
+      done: Boolean(looked.scenes),
+      action: html`<button type="button" class="btn" onClick=${() => (pointAt(".scenes-card"), look("scenes"))}>${t("Show me")}</button>`,
+    },
+    {
+      id: "modules",
+      title: t("New modules"),
+      text: t("Ping, a timer and the power the PC draws, in the library of Design."),
+      done: Boolean(looked.modules),
+      action: html`<button type="button" class="btn" onClick=${() => (look("modules"), navigate("design"))}>${t("Open Design")}</button>`,
+    },
+  ];
   return html`<section class="news-card" aria-labelledby="news-card-title">
     <div class="first-steps-head">
       <h2 id="news-card-title">${t("What's new in {version}", { version: RELEASE })}</h2>

@@ -153,6 +153,16 @@ every screen then shows in its version for a bar on end, laid out anew, not turn
 side: Lumen, Studio, Encore, Nimbus, Almanac, Arena and the round report each have one, and
 the panel's own boot logo and standby clip are drawn upright too.
 
+### More panels at once
+
+<img src="docs/images/more-panels.png" width="100%" alt="Two 9.2-inch bars one above the other: Lumen with the track, the time, the fans and the rings, and Lumen Companion below it with every core, the temperatures with the fans turning, the drives and the processes">
+
+Up to four panels at once, each with its own theme, on the same readings. A panel added
+beside Lumen gets Lumen Companion; *Settings → Panel* places them in their real sizes beside
+your monitor, one picture can go across all of them, a scene changes every panel at
+once, and *Picture of all panels* saves the picture above, to share. Live, the tray and the
+Overview show each panel.
+
 ### Every panel size
 
 <img src="docs/media/small-panel.gif" width="100%" alt="Libre Default on a 3.5-inch panel: the time, lit rings for CPU and memory that fill, the CPU temperature, disk and network, a CPU history that scrolls, and a small card in the corner that changes from the playing track to the weather">

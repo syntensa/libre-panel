@@ -40,7 +40,7 @@ THEMES = ("lumen", "studio", "encore", "nimbus", "almanac", "almanac-analog", "l
 # The pictures made of them, and the screenshots of the app (those need Playwright).
 COMPOSED = ("hero.png", "gallery.png", "social-preview.png", "studio-adapts.png", "vertical.png",
             "module-sizes.png", "weather-sizes.png", "looks.png", "module-layouts.png",
-            "module-catalog.png", "module-layouts-more.png")  # fmt: skip
+            "module-catalog.png", "module-layouts-more.png", "more-panels.png")  # fmt: skip
 APP_SHOTS = ("editor-new.png", "editor.png", "editor-drag.png", "palette.png", "start.png",
              "settings.png")  # fmt: skip
 
@@ -733,6 +733,20 @@ def editor_shots(out: Path) -> None:
         server.shutdown()
 
 
+def more_panels() -> Image.Image:
+    """Two bars, one above the other as under a monitor: Lumen and Lumen Companion beside it,
+    in the picture the app's *Picture of all panels* saves."""
+    from libre_panel import arrangement
+    from libre_panel.devices.models import find_model
+
+    w, h = arrangement.millimetres(find_model("turing-9.2-usb"))
+    first, second = render("lumen"), render("lumen-companion")
+    picture = arrangement.photo([((0, 0, w, h), first, False, 1),
+                                 ((0, h + 30, w, h), second, False, 2)])  # fmt: skip
+    assert picture is not None
+    return picture
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("out", nargs="?", default="docs/images", type=Path)
@@ -766,6 +780,7 @@ def main() -> None:
     module_layouts().save(out / "module-layouts.png", optimize=True)
     module_catalog().save(out / "module-catalog.png", optimize=True)
     new_module_layouts().save(out / "module-layouts-more.png", optimize=True)
+    more_panels().save(out / "more-panels.png", optimize=True)
     try:
         editor_shots(out)
     except ImportError:

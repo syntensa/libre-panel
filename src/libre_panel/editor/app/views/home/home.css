@@ -322,8 +322,9 @@
   gap: 14px;
 }
 
-/* "Show me" of the news: the overview is marked for a moment */
-.pages-card.pointed {
+/* "Show me" of the news: the card is marked for a moment */
+.pages-card.pointed,
+.scenes-card.pointed {
   animation: pointed 1.6s ease-out;
 }
 
