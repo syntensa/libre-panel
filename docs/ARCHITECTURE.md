@@ -178,3 +178,9 @@ be reached); nothing is written on an error.
 | `/api/report` | GET | what a report of a panel says of this computer: `{text, product, form, platform}`; `text` is Libre Panel's version, the system, the panel found and the USB serial ports and USB panels plugged in, by their ids and the models they could be (what `libre-panel devices` lists, without serial numbers); `product` the panel found (empty: none), `form` the report form's address with both filled in. The bus is only looked at, nothing is sent to a panel |
 | `/api/scenes` | GET, POST | the scenes (scenes.py): `{scenes: [{name, themes}], on}`, `themes` the first panel's first; POST `{action: "on" | "save" | "delete", name}` puts one on (`""`: none), keeps what the panels show as one (and puts it on), or takes one out, and answers the same |
 | `/api/open` | POST | `{"folder": "config"}` (or `themes`, `logs`) shows that folder in the file manager |
+
+Beside them, *More panels* takes the picture across the panels with `POST /api/across` (a
+picture's file, its bytes: kept as `across/picture.jpg` in the settings folder without its
+metadata, named in config.toml as `across`, answered with `{across, stamp}`) and shows it,
+small, from `GET /api/across/picture` (with the token in the query too); `{"set": {"across":
+null}}` takes it away.

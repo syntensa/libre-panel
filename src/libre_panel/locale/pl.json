@@ -2248,7 +2248,14 @@
     "No monitor": "Bez monitora",
     "Panel {number}, {label}: drag it, or move it with the arrow keys": "Panel {number}, {label}: przeciągnij go lub przesuń strzałkami",
     "{label}: size not known yet": "{label}: rozmiar jeszcze nieznany",
-    "{width} × {height} cm": "{width} × {height} cm"
+    "{width} × {height} cm": "{width} × {height} cm",
+    "A picture across them…": "Jeden obraz na wszystkich…",
+    "Another picture…": "Inny obraz…",
+    "No picture": "Bez obrazu",
+    "One picture under the themes of all panels, each showing the part where it stands": "Jeden obraz pod motywami wszystkich paneli; każdy pokazuje część tam, gdzie stoi",
+    "the picture has too many pixels": "obraz ma za dużo pikseli",
+    "the picture is larger than {size} MB": "obraz jest większy niż {size} MB",
+    "this is not a picture that can be read": "to nie jest obraz, który da się odczytać"
   },
   "fields": {
     "align": "Wyrównanie",

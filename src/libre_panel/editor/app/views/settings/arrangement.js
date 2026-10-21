@@ -106,15 +106,18 @@ const centimetres = ([width, height]) =>
 /**
  * The panels where they stand, in their real sizes. `items`: [{number, label, mm, round, known,
  * at}] (`at` null: not placed yet). `onPlace` gets the place of every panel, in their order,
- * once one has moved: those not placed yet keep the place they are shown at.
+ * once one has moved: those not placed yet keep the place they are shown at. `picture`: the
+ * address of the picture across the panels (null: none), shown over those that are placed as
+ * the panels show it; `onPicture` gets a file chosen for it, `onNoPicture` takes it away.
  */
-export function Arrangement({ items, onPlace, onReset }) {
+export function Arrangement({ items, onPlace, onReset, picture = null, onPicture, onNoPicture }) {
   const chosen = useStore((s) => s.prefs.monitor || "27");
   const monitor = monitorSize(chosen);
   const [moved, setMoved] = useState(null); // the places while one moves: [at, ...]
   const drag = useRef(null);
   const timer = useRef(null);
   const svg = useRef(null);
+  const picker = useRef(null);
   const [area, setArea] = useState([600, 260]); // the view's size on the screen, in pixels
   useEffect(() => () => clearTimeout(timer.current), []);
   useEffect(() => {
@@ -147,6 +150,18 @@ export function Arrangement({ items, onPlace, onReset }) {
   const text = LABEL_PX * perPixel; // the labels' size, in millimetres of the view
   const places = () => shown.map((item) => [...item.at]);
   const others = (index) => [...shown.filter((_, i) => i !== index), ...(screen ? [screen] : [])];
+  // the picture across them covers the panels that are placed, its middle at theirs (arrangement.py)
+  const covered = picture ? shown.filter((_, i) => items[i].at) : [];
+  const cover = covered.length
+    ? (() => {
+        const x0 = Math.min(...covered.map((item) => item.at[0]));
+        const y0 = Math.min(...covered.map((item) => item.at[1]));
+        const x1 = Math.max(...covered.map((item) => item.at[0] + item.mm[0]));
+        const y1 = Math.max(...covered.map((item) => item.at[1] + item.mm[1]));
+        return [x0, y0, x1 - x0, y1 - y0];
+      })()
+    : null;
+  const pictured = (item) => cover && items[shown.indexOf(item)]?.at;
   // written, then shown as config.toml has it again (the new places, or the old where it failed)
   const commit = (next) => Promise.resolve(onPlace(next)).finally(() => setMoved(null));
 
@@ -201,6 +216,17 @@ export function Arrangement({ items, onPlace, onReset }) {
         ${onReset && items.some((item) => item.at)
           ? html`<button type="button" class="btn" onClick=${onReset}>${t("Line them up again")}</button>`
           : null}
+        ${onPicture
+          ? html`<button type="button" class="btn" title=${t("One picture under the themes of all panels, each showing the part where it stands")}
+              onClick=${() => picker.current?.click()}>${picture ? t("Another picture…") : t("A picture across them…")}</button>
+              <input ref=${picker} type="file" accept="image/*" hidden data-across-file
+                onChange=${(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  event.currentTarget.value = "";
+                  if (file) onPicture(file);
+                }} />`
+          : null}
+        ${picture && onNoPicture ? html`<button type="button" class="btn" onClick=${onNoPicture}>${t("No picture")}</button>` : null}
       </span>
     </div>
     <svg
@@ -213,6 +239,15 @@ export function Arrangement({ items, onPlace, onReset }) {
       onPointerCancel=${up}
     >
       <defs>
+        ${cover
+          ? html`<clipPath id="arranged-covered">
+              ${shown.filter(pictured).map((item) =>
+                item.round
+                  ? html`<ellipse key=${item.number} cx=${item.at[0] + item.mm[0] / 2} cy=${item.at[1] + item.mm[1] / 2} rx=${item.mm[0] / 2} ry=${item.mm[1] / 2} />`
+                  : html`<rect key=${item.number} x=${item.at[0]} y=${item.at[1]} width=${item.mm[0]} height=${item.mm[1]} rx=${Math.min(item.mm[0], item.mm[1]) / 12} />`,
+              )}
+            </clipPath>`
+          : null}
         ${shown.map((item) =>
           html`<clipPath id=${`arranged-${item.number}`} key=${item.number}>
             ${item.round
@@ -227,10 +262,14 @@ export function Arrangement({ items, onPlace, onReset }) {
             <text x=${screen.at[0] + monitor[0] / 2} y=${screen.at[1] + monitor[1] / 2} font-size=${text * 1.2}>${t("Monitor")}</text>
           </g>`
         : null}
+      ${cover
+        ? html`<image class="arrangement-across" href=${picture} x=${cover[0]} y=${cover[1]} width=${cover[2]} height=${cover[3]}
+            preserveAspectRatio="xMidYMid slice" clip-path="url(#arranged-covered)" />`
+        : null}
       ${shown.map(
         (item, i) => html`<g
           key=${item.number}
-          class=${`arrangement-panel${item.known ? "" : " unknown"}${drag.current?.index === i ? " moving" : ""}`}
+          class=${`arrangement-panel${item.known ? "" : " unknown"}${pictured(item) ? " pictured" : ""}${drag.current?.index === i ? " moving" : ""}`}
           data-arranged=${item.number}
           data-at=${item.at.join(",")}
           tabindex="0"
@@ -239,14 +278,14 @@ export function Arrangement({ items, onPlace, onReset }) {
           onPointerDown=${(event) => down(i, event)}
           onKeyDown=${(event) => key(i, event)}
         >
-          ${item.theme
+          ${item.theme && !pictured(item)
             ? html`<image href=${endpoints.previewUrl(item.theme, 320)} x=${item.at[0]} y=${item.at[1]} width=${item.mm[0]} height=${item.mm[1]}
                 preserveAspectRatio="xMidYMid meet" clip-path=${`url(#arranged-${item.number})`} opacity="0.85" />`
             : null}
           ${item.round
             ? html`<ellipse cx=${item.at[0] + item.mm[0] / 2} cy=${item.at[1] + item.mm[1] / 2} rx=${item.mm[0] / 2} ry=${item.mm[1] / 2} />`
             : html`<rect x=${item.at[0]} y=${item.at[1]} width=${item.mm[0]} height=${item.mm[1]} rx=${Math.min(item.mm[0], item.mm[1]) / 12} />`}
-          ${item.theme // over what it shows: in its corner
+          ${(item.theme || pictured(item)) // over what it shows: in its corner
             ? html`<text class="arrangement-number" x=${item.at[0] + text * 1.1} y=${item.at[1] + text * 1.1} font-size=${text * 1.3}>${item.number}</text>`
             : html`<text class="arrangement-number" x=${item.at[0] + item.mm[0] / 2} y=${item.at[1] + item.mm[1] / 2} font-size=${Math.min(text * 2, item.mm[1] * 0.7)}>${item.number}</text>`}
           <text class="arrangement-size" x=${item.at[0] + item.mm[0] / 2} y=${item.at[1] + item.mm[1] + text * 1.3} font-size=${text}>

@@ -14,10 +14,10 @@ from typing import Any
 
 from PIL import Image, ImageOps
 
+from libre_panel import arrangement, i18n, identify, modes, presence, timing, winsession
 from libre_panel import clock as loop_clock
-from libre_panel import i18n, identify, modes, presence, timing, winsession
 from libre_panel.accent import accent_of
-from libre_panel.config import Config, ConfigError, brightness_now, load_config
+from libre_panel.config import Config, ConfigError, brightness_now, config_dir, load_config
 from libre_panel.devices.base import Counters, DeviceError, Display, FrameError, create_display
 from libre_panel.devices.models import PanelModel, find_model
 from libre_panel.devices.turzx import video_mode
@@ -591,6 +591,7 @@ class MainLoop:
         panel: int | None = None,
         mode_of: Callable[[], str | None] | None = None,
         look_of: Callable[[], str] | None = None,
+        places_of: Callable[[], list[arrangement.Rect | None]] | None = None,
     ) -> None:
         self.status = status = status or RunStatus()
         self.host, self.on_config, self.clock = host, on_config, clock
@@ -598,7 +599,10 @@ class MainLoop:
         self.mode_of = mode_of  # for one: the mode the first panel is in (a game, music)
         self.look_of = look_of  # and the theme it shows, for one in its look (same_look)
         self._look_folder: tuple[str, Path | None] = ("", None)  # (that theme's folder, found)
-        self.looked = self._look(config)  # the look the renderer was made in
+        # where every panel stands (the first panel's first), for its part of the picture
+        # across them (config.toml across); set for the first panel's loop by run()
+        self.places_of = places_of
+        self.dressed = self._dress(config)  # what the renderer was made in besides its theme
         self.warmup = _Warmup()  # the next theme, built while this one shows
         self.idle = threading.Event()  # set between frames: the warm-up works then
         i18n.set_language(config.language)
@@ -719,6 +723,37 @@ class MainLoop:
             log.warning("panel %d keeps its own look: %s", (self.panel or 0) + 2, exc)
             return None
 
+    def _across(self, config: Config) -> tuple[str, int, tuple[Any, ...], int] | None:
+        """This panel's part of the picture across the panels (``across``): the picture's file,
+        when it was written, where every panel stands and which of them this is; None without
+        a picture, or while this panel is not placed."""
+        if not config.across or self.places_of is None:
+            return None
+        places = self.places_of()
+        index = 0 if self.panel is None else self.panel + 1
+        if index >= len(places) or places[index] is None:
+            return None
+        folder = config.path.parent if config.path is not None else config_dir()
+        path = arrangement.across_path(config.across, folder)
+        stamp = _Watcher._stamp(path) if path is not None else None
+        if path is None or stamp is None:
+            return None
+        rounded = tuple(None if r is None else tuple(round(v, 1) for v in r) for r in places)
+        return str(path), stamp, rounded, index
+
+    def _dress(self, config: Config) -> tuple[Any, Any]:
+        """What this panel's theme is drawn in besides itself: the first panel's look
+        (:meth:`_look`) and its part of the picture across the panels (:meth:`_across`)."""
+        return self._look(config), self._across(config)
+
+    @staticmethod
+    def _backdrop(across: tuple[str, int, tuple[Any, ...], int] | None) -> Image.Image | None:
+        """The part of the picture across the panels (:meth:`_across`), cut out."""
+        if across is None:
+            return None
+        loaded = arrangement.load(Path(across[0]))
+        return arrangement.part(loaded[0], list(across[2]), across[3]) if loaded else None
+
     @staticmethod
     def _dressed(theme: Theme, config: Config, source: Theme | None) -> Theme:
         """``theme`` as it is drawn: in the first panel's look (``source``), in the accent."""
@@ -756,7 +791,7 @@ class MainLoop:
         every = (config.refresh_ms or theme.refresh_ms) / 1000
         how = video, fps, (now, every)
         self.idle.set()  # no frame is under way: the drawing need not wait for one
-        key = self._warm_key(theme, config, self._look(config))
+        key = self._warm_key(theme, config, self._dress(config))
         self.warmup.start(key, self._warm_job(theme, config, now, first, how), now)
         give_up = time.monotonic() + self.warmup.LIMIT_S  # (wall time, whatever the clock is)
         while not self.warmup.ready(key, now) and time.monotonic() < give_up:
@@ -764,12 +799,12 @@ class MainLoop:
 
     def _renderer(self, theme: Theme, config: Config) -> Renderer:
         """The renderer for ``theme``: warmed up if it was, else a new one."""
-        self.looked = look = self._look(config)
-        warmed = self.warmup.take(self._warm_key(theme, config, look))
-        source = self._look_source(look)
+        self.dressed = dress = self._dress(config)
+        warmed = self.warmup.take(self._warm_key(theme, config, dress))
+        source = self._look_source(dress[0])
         if warmed is None:
             renderer = Renderer(self._dressed(theme, config, source), animate=config.fps > 1,
-                                motion=self.motion)  # fmt: skip
+                                motion=self.motion, backdrop=self._backdrop(dress[1]))  # fmt: skip
         else:
             renderer, motion = warmed
             renderer.motion = self.motion  # from now on the panel's
@@ -781,15 +816,15 @@ class MainLoop:
         return renderer
 
     @staticmethod
-    def _warm_key(theme: Theme, config: Config, look: Any = None) -> Any:
-        """What a renderer is made for: ``theme`` as it is on disk, how it is drawn, and the
-        first panel's look it is in (:meth:`_look`)."""
+    def _warm_key(theme: Theme, config: Config, dress: Any = None) -> Any:
+        """What a renderer is made for: ``theme`` as it is on disk, how it is drawn, and what
+        besides it is drawn in (:meth:`_dress`)."""
         theme_file = _theme_file(theme)
         stamp = _Watcher._stamp(theme_file) if theme_file else None
         switches = tuple(sorted(switches_for(theme, config.switches).items()))
         accent = accent_of(config.accent)
         return (str(theme.root), stamp, theme.name, config.fps > 1, config.symbols, switches,
-                accent, look)  # fmt: skip
+                accent, dress)  # fmt: skip
 
     def _warmed(
         self, config: Config, host: Any, shown: str, refused: str | None, watcher: _Watcher,
@@ -800,7 +835,7 @@ class MainLoop:
         one goes on; nothing to switch to, or a theme that fails, goes ahead."""
         pending = watcher.pending()
         wanted = _theme_name(config, host, self.default, self.rotation, self.reported, self._mode())
-        if not pending and wanted in (shown, refused) and self._look(config) == self.looked:
+        if not pending and wanted in (shown, refused) and self._dress(config) == self.dressed:
             return True
         try:
             fresh = load_config(config.path) if pending and config.path else config
@@ -813,7 +848,7 @@ class MainLoop:
             return True  # the switch says why
         if fresh.language != config.language:
             return True  # a new language: modules are laid out in it, at once
-        key = self._warm_key(theme, fresh, self._look(fresh))
+        key = self._warm_key(theme, fresh, self._dress(fresh))
         if self.warmup.ready(key, now):
             return True
         if not self.warmup.busy:
@@ -844,11 +879,12 @@ class MainLoop:
             current = self.renderer
             how = current.continuous, current.fps, current.sample
         continuous, fps, sample = how
-        source = self._look_source(self._look(config))
+        dress = self._dress(config)
+        source, backdrop = self._look_source(dress[0]), self._backdrop(dress[1])
 
         def build() -> tuple[Renderer, Motion]:
             renderer = Renderer(self._dressed(theme, config, source), animate=animate,
-                                motion=motion)  # fmt: skip
+                                motion=motion, backdrop=backdrop)  # fmt: skip
             renderer.continuous, renderer.fps, renderer.sample = continuous, fps, sample
             renderer.fan_choices = fan.Choices.of(config)  # their rotors, warmed as shown
             renderer.symbols = config.symbols  # and the symbols in their look
@@ -1013,7 +1049,8 @@ class MainLoop:
             may_switch = policy in (None, "follow", "restart")
             may_switch = may_switch and self._warmed(config, host, shown, refused, watcher, now)
             changed = watcher.changed() if may_switch else False
-            relook = may_switch and self._look(config) != self.looked  # the first panel's look
+            # the first panel's look, or where the panels stand under a picture across them
+            relook = may_switch and self._dress(config) != self.dressed
             if may_switch and (changed or relook or (wanted != shown and wanted != refused)):
                 fresh = config
                 try:
@@ -1269,7 +1306,7 @@ class _MorePanels:
             try:
                 run(panel_config(config, n), stop=stop, status=status, hub=HubView(self.hub),
                     panel=n, quitting=self.quitting, mode_of=self._mode,
-                    look_of=self._look)  # fmt: skip
+                    look_of=self._look, places_of=self.places)  # fmt: skip
             except (ConfigError, ThemeError, DeviceError) as exc:
                 status.state, status.detail = "error", str(exc)
                 log.error("panel %d stopped: %s", n + 2, exc)
@@ -1289,6 +1326,25 @@ class _MorePanels:
 
     def _look(self) -> str:
         return self.status.theme  # what the first panel shows: its look for one in it
+
+    def places(self) -> list[arrangement.Rect | None]:
+        """Where every panel stands, in millimetres (the first panel's first, then those of
+        ``[[panels]]``): its place in config.toml, in the size of its model, as set or as the
+        panel said; None for one not placed, or of a size not known yet."""
+        config = self._seen
+        if config is None:
+            return []
+
+        def place(device: Any, status: RunStatus | None) -> arrangement.Rect | None:
+            told = status.model if status is not None else ""
+            model = find_model(device.model) or (find_model(told) if told else None)
+            way = "portrait" if device.orientation == "portrait" else "landscape"
+            size = status.size if status is not None and status.size else None
+            return arrangement.rect(device.at, model, size or (model.size(way) if model else None))
+
+        first = place(config.device, self.status)
+        return [first, *(place(panel.device, self.status.more.get(n))
+                         for n, panel in enumerate(config.panels))]  # fmt: skip
 
     def _end(self, numbers: list[int]) -> None:
         runs = [(n, *self._runs.pop(n)) for n in numbers if n in self._runs]
@@ -1373,6 +1429,7 @@ def run(
     panel: int | None = None,
     mode_of: Callable[[], str | None] | None = None,
     look_of: Callable[[], str] | None = None,
+    places_of: Callable[[], list[arrangement.Rect | None]] | None = None,
 ) -> None:
     """Main loop: read sensors at the theme's rate, render at ``config.fps`` so
     values glide between readings, and send only frames that changed. A
@@ -1389,17 +1446,20 @@ def run(
     The panels of ``[[panels]]`` run beside it, each in a loop of its own (:class:`_MorePanels`):
     one of them is this with ``panel``, its place there, and ``hub``, the first panel's readings
     (a :class:`HubView`); the guards and the hang watch are the first panel's loop's alone.
-    ``mode_of`` and ``look_of`` say the mode the first panel is in and the theme it shows.
+    ``mode_of`` and ``look_of`` say the mode the first panel is in and the theme it shows,
+    ``places_of`` where every panel stands (:meth:`_MorePanels.places`).
     """
     stop = stop or threading.Event()
     loop = MainLoop(config, once=once, status=status, host=host, on_config=on_config, hub=hub,
-                    panel=panel, mode_of=mode_of, look_of=look_of)  # fmt: skip
+                    panel=panel, mode_of=mode_of, look_of=look_of, places_of=places_of)  # fmt: skip
     pacer = _Pacer()
     planned: float | None = None  # when the pacer planned the next streaming frame
     first = panel is None  # the first panel's loop, [device]'s
     guards = timing.Guards()  # SPUR II's, while this drives the panel
     watch = _HangWatch(hang_log if first else None)  # (faulthandler has one timer)
     more = _MorePanels(loop.hub, loop.status, quitting, host) if first and not once else None
+    if more is not None:
+        loop.places_of = more.places  # (where the panels stand, as the first panel's config says)
     try:
         if once:
             loop.once()

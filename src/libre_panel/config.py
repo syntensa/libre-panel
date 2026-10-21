@@ -549,6 +549,9 @@ class Config:
     # an accent colour for every theme instead of its own (accent.py): "" the themes' own,
     # "system" Windows', or "#RRGGBB"
     accent: str = ""
+    # one picture across all panels that are placed (arrangement.py): a file in the settings
+    # folder (or a path of its own); "" none
+    across: str = ""
     # the person's choice of the themes' switches (Theme.switches; Look shows them): for every
     # theme ([switches] frames = false, kept under "*") and by theme, all its versions
     # ([switches.lumen] frames = true), which goes before
@@ -735,6 +738,10 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         cfg.accent = _expect(data["accent"], str, "accent").strip()
         if cfg.accent and cfg.accent != SYSTEM and not HEX.fullmatch(cfg.accent):
             raise ConfigError('accent: "system", a colour such as "#E0457B", or empty')
+    if "across" in data:
+        cfg.across = _expect(data["across"], str, "across").strip()
+        if len(cfg.across) > 300:
+            raise ConfigError("across: at most 300 characters")
     if "refresh_ms" in data:
         cfg.refresh_ms = _expect(data["refresh_ms"], int, "refresh_ms")
         if cfg.refresh_ms < 100:

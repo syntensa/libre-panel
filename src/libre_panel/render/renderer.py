@@ -569,8 +569,12 @@ class Renderer:
         animate: bool = False,
         preview: bool = False,
         motion: Motion | None = None,
+        backdrop: Image.Image | None = None,
     ) -> None:
         self.theme = theme
+        # a picture under the theme instead of its own background picture: the panel's part of
+        # one across all panels (arrangement.py), fitted to the theme's size
+        self.backdrop = backdrop
         self.animate = animate
         self.preview = preview  # an editor preview or a picture, not the panel
         # Gliding values, fading colours and graph histories: the main loop's,
@@ -749,6 +753,9 @@ class Renderer:
             total -= size(self._images.popitem(last=False)[1])
 
     def _load_background(self) -> Image.Image | None:
+        if self.backdrop is not None:
+            fitted = ImageOps.fit(self.backdrop, (self.theme.width, self.theme.height))
+            return fitted.convert("RGBA")
         rel = self.theme.background_image
         if not rel:
             return None

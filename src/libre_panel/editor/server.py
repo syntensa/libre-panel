@@ -1373,6 +1373,49 @@ class EditorHandler(BaseHTTPRequestHandler):
             follow()  # the services take the restored settings; the panel sees the file
         self._json(done)
 
+    def _settings_folder(self) -> Path:
+        path = self.state.config_path
+        return path.parent if path is not None else config_dir()
+
+    def _across_upload(self) -> None:
+        """``POST /api/across`` with a picture's file: the picture across all panels that are
+        placed (arrangement.py), kept in the settings folder without its metadata, and named
+        in config.toml (``across``)."""
+        from libre_panel import arrangement
+
+        data = self._read_body(arrangement.MAX_BYTES)
+        if data is None:
+            return None
+        folder = self._settings_folder()
+        try:
+            name = arrangement.save_picture(data, folder)
+            edit_config(("value", "across", name), path=self.state.config_path)
+        except arrangement.PictureError as exc:
+            return self._error(str(exc), HTTPStatus.BAD_REQUEST)
+        except (ConfigError, OSError) as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        follow = getattr(self.controls, "follow_config", None)
+        if callable(follow):
+            follow()
+        self._json({"across": name, "stamp": (folder / name).stat().st_mtime_ns})
+
+    def _across_picture(self) -> None:
+        """``GET /api/across/picture``: the picture across the panels, small, for the app."""
+        from libre_panel import arrangement
+
+        try:
+            across = load_config(self.state.config_path).across
+        except ConfigError:
+            across = ""
+        loaded = arrangement.load(arrangement.across_path(across, self._settings_folder()))
+        if loaded is None:
+            return self._error("no picture across the panels", HTTPStatus.NOT_FOUND)
+        small = loaded[0].copy()
+        small.thumbnail((1200, 1200))
+        buffer = io.BytesIO()
+        small.save(buffer, "JPEG", quality=85)
+        self._send(200, buffer.getvalue(), "image/jpeg")
+
     def _start_screen_picture(self, query: dict[str, list[str]]) -> None:
         """``?model=turing-9.2-usb&what=logo|clip&w=960``: the boot logo (PNG) or the standby
         clip (an animated PNG) as the app shows them."""
@@ -1982,6 +2025,8 @@ ROUTES: tuple[Route, ...] = (
         "GET", "/api/backup/file", lambda h, m, u: h._backup_file(), picture=True
     ),  # a link that downloads it carries the token in its address
     Route("POST", "/api/backup", lambda h, m, u: h._restore_backup()),
+    Route("POST", "/api/across", lambda h, m, u: h._across_upload()),
+    Route("GET", "/api/across/picture", lambda h, m, u: h._across_picture(), picture=True),
     Route("GET", "/api/start-screen", lambda h, m, u: h._start_screen()),
     Route(
         "GET",

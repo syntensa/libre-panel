@@ -4252,7 +4252,8 @@ def test_a_second_panel_is_added_given_a_theme_and_taken_out_again(app_url, isol
         expect(card.locator("[data-more-panel]")).to_have_count(0)
 
 
-def test_the_panels_are_placed_where_they_stand_in_their_real_sizes(app_url, isolated_home):
+def test_the_panels_are_placed_where_they_stand_in_their_real_sizes(app_url, isolated_home,
+                                                                     tmp_path):  # fmt: skip
     """Settings → Panel → More panels: the panels in their real sizes by a monitor, moved with
     the arrow keys or the mouse, each place written to its table; lined up again, none."""
     choose_theme(isolated_home, "lumen")
@@ -4287,6 +4288,20 @@ def test_the_panels_are_placed_where_they_stand_in_their_real_sizes(app_url, iso
         page.get_by_role("button", name="Line them up again").click()
         waits_for(page, lambda: settings_config().device.at is None)
         assert settings_config().panels[0].device.at is None
+        # one picture across them: kept in the settings folder, and the panels placed for it
+        from PIL import Image
+
+        wide = tmp_path / "wide.png"
+        Image.new("RGB", (800, 300), (200, 80, 40)).save(wide)
+        page.locator("[data-across-file]").set_input_files(str(wide))
+        waits_for(page, lambda: settings_config().across == "across/picture.jpg")
+        waits_for(page, lambda: settings_config().panels[0].device.at is not None)
+        assert settings_config().device.at is not None
+        assert (isolated_home / "across" / "picture.jpg").is_file()
+        expect(view.locator(".arrangement-across")).to_have_count(1)
+        page.get_by_role("button", name="No picture").click()
+        waits_for(page, lambda: settings_config().across == "")
+        expect(view.locator(".arrangement-across")).to_have_count(0)
 
 
 def test_the_night_follows_the_sun_with_one_switch(app_url, isolated_home):

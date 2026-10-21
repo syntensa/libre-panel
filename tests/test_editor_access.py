@@ -134,6 +134,7 @@ def test_the_files_that_need_no_token_are_the_apps_own_and_a_few_pictures():
         "/api/start-screen/picture",  # the panel's boot logo and standby clip in Settings
         "/api/start-screen/file",  # ... and the link that downloads them
         "/api/backup/file",  # the backup to keep, a link in Settings → System
+        "/api/across/picture",  # the picture across the panels, in Settings → Panel
     }
     assert all(route.method == "GET" and not route.public for route in ROUTES if route.picture)
     # another program's notice, with the notify key instead of the token (test_notify.py)

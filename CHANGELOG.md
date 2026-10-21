@@ -23,6 +23,9 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
 - **Where the panels stand**: the panels in their real sizes, each with what it shows, beside
   a monitor to place them by; dragged (or moved with the arrow keys) to where they are, in the
   case, under the monitor or on end, each place kept in config.toml (`at`)
+- **One picture across all panels**: under the themes of the panels that are placed, each
+  showing the part where it stands, of whatever size the panels are; kept without the
+  picture's metadata (*A picture across them…*)
 - **Scenes**: a theme for every panel at once, put on with a click on Start, from the tray or
   with a keyboard shortcut (the next one); what the panels show is kept as one with a click
   ([Scenes](docs/CONFIGURATION.md#scenes))

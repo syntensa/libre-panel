@@ -430,6 +430,7 @@ class Settings:
                 "hotkeys_enabled": config.hotkeys_enabled,
                 "symbols": config.symbols,
                 "accent": config.accent,
+                "across": config.across,
                 "switches": {theme: dict(chosen) for theme, chosen in config.switches.items()},
                 # the panels beside this one ([[panels]]): written back whole ("panels")
                 "panels": [
@@ -1165,6 +1166,7 @@ RULES: dict[str, Any] = {
     "device.dark_when_away": lambda n, v, c: _flag(n, v),
     "device.away_brightness": lambda n, v, c: _whole(n, v, 0, 100),
     "device.at": lambda n, v, c: _place_at(n, v),
+    "across": lambda n, v, c: _text(n, v, 300).strip(),
     "device.output": lambda n, v, c: _text(n, v, 260, required=True),
     "device.port": lambda n, v, c: _text(n, v, 64),
     "video.mode": lambda n, v, c: _choice(n, v, ("auto", "on", "off")),
@@ -1200,5 +1202,5 @@ RULES: dict[str, Any] = {
 UNSETTABLE = {
     "refresh_ms", "weather.latitude", "weather.longitude", "weather.place",
     "hotkeys.pause", "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open",
-    "hotkeys.next_scene", "device.at",
+    "hotkeys.next_scene", "device.at", "across",
 }  # fmt: skip

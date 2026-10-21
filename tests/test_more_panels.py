@@ -412,7 +412,7 @@ def test_a_panel_in_the_first_one_s_look_follows_its_theme_and_a_change_in_desig
                          display=MemoryStream(), clock=StepClock(0.0), panel=0,
                          look_of=lambda: "arena", hub=SensorHub([DemoProvider({})]))  # fmt: skip
     try:
-        assert plain.looked is None  # not asked for: its own look
+        assert plain.dressed == (None, None)  # not asked for: its own look
     finally:
         plain.close()
 

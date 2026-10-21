@@ -309,6 +309,16 @@ farther), to where it stands: in the case, under the monitor, beside it, on end.
 written as `at = [x, y]`, millimetres from a point under the monitor's middle, in `[device]`
 and in the panel's `[[panels]]` table; *Line them up again* takes them out.
 
+*A picture across them…* puts one picture under the themes of all panels that are placed:
+it covers them as one, its middle at theirs, and each shows the part where it stands, instead
+of its theme's own background picture. It is kept in the settings folder as
+`across/picture.jpg`, at most 4096 pixels on its long side and without what the file said
+about itself (where and with what it was taken); *No picture* takes it away.
+
+```toml
+across = "across/picture.jpg"  # one picture across the panels that are placed; "" none
+```
+
 The sensors are read once, for all panels; each panel's graphs run at its own theme's pace.
 Libre Panel never opens a panel twice: a panel that one of them has open is passed by when
 another looks for its own, so two panels set to `"auto"` find one each. A panel of

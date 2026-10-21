@@ -25,7 +25,8 @@ import { Segmented, Select, Slider, Toggle } from "../../ui/controls.js";
 import { Popover } from "../../ui/layer.js";
 import { MountedChoice } from "../home/panel.js";
 import { fitsPanel } from "../home/themes.js";
-import { Arrangement, arrangementItem } from "./arrangement.js";
+import { toastError } from "../../ui/toast.js";
+import { Arrangement, arranged, arrangementItem } from "./arrangement.js";
 import { Card, CommitField, Disclosure, SettingRow, Status, usePolling } from "./parts.js";
 import { StartScreenCard } from "./startscreen.js";
 
@@ -440,6 +441,7 @@ function MorePanelsCard() {
   const models = useStore((s) => s.specs?.models || []);
   const themes = useStore((s) => s.themes || []);
   const shownTheme = useStore((s) => s.app?.panel?.theme); // what panel 1 shows now
+  const [acrossStamp, setAcrossStamp] = useState(0); // a new picture across them: asked anew
   if (!config) return null;
   const panels = config.panels || [];
   const running = info?.running?.more || [];
@@ -496,6 +498,19 @@ function MorePanelsCard() {
   const place = (places) =>
     change({ "device.at": places[0], panels: panels.map((panel, n) => ({ ...panel, at: places[n + 1] })) });
   const lineUp = () => change({ "device.at": null, panels: panels.map((panel) => ({ ...panel, at: null })) });
+  // one picture across them: the panels not placed yet are placed where they are shown, so it
+  // covers them all as the view shows it
+  const picture = config.across ? endpoints.acrossPicture(acrossStamp || config.across) : null;
+  const choosePicture = async (file) => {
+    try {
+      const done = await endpoints.setAcross(await file.arrayBuffer());
+      setAcrossStamp(done.stamp);
+      if (arrangement.some((item) => !item.at)) await place(arranged(arrangement).map((item) => item.at));
+      else await loadSettings();
+    } catch (error) {
+      toastError(error);
+    }
+  };
   return html`<${Card}
     id="panel-more"
     title=${t("More panels")}
@@ -509,7 +524,10 @@ function MorePanelsCard() {
           onClick=${() => added({ model: model.id, ...(model.port ? { port: model.port } : {}) })}>${t("Set it up")}</button>
       </div>`,
     )}
-    ${panels.length ? html`<${Arrangement} items=${arrangement} onPlace=${place} onReset=${lineUp} />` : null}
+    ${panels.length
+      ? html`<${Arrangement} items=${arrangement} onPlace=${place} onReset=${lineUp}
+          picture=${picture} onPicture=${choosePicture} onNoPicture=${() => change({ across: null })} />`
+      : null}
     ${panels.map(
       (panel, n) => html`<${MorePanel}
         key=${n}

@@ -154,8 +154,9 @@
 .arrangement-panel { cursor: grab; outline: none; }
 .arrangement-panel rect, .arrangement-panel ellipse { fill: var(--accent-softer); stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .arrangement-panel rect, .arrangement-panel ellipse { pointer-events: all; } /* (a preview not loaded yet too) */
-.arrangement-panel image ~ rect, .arrangement-panel image ~ ellipse { fill: transparent; }
-.arrangement-panel image ~ .arrangement-number { fill: #fff; paint-order: stroke; stroke: rgba(0, 0, 0, 0.6); stroke-width: 3px; }
+.arrangement-panel image ~ rect, .arrangement-panel image ~ ellipse,
+.arrangement-panel.pictured rect, .arrangement-panel.pictured ellipse { fill: transparent; }
+.arrangement-panel image ~ .arrangement-number, .arrangement-panel.pictured .arrangement-number { fill: #fff; paint-order: stroke; stroke: rgba(0, 0, 0, 0.6); stroke-width: 3px; }
 .arrangement-panel.unknown rect, .arrangement-panel.unknown ellipse { fill: var(--surface-3); stroke: var(--muted); stroke-dasharray: 6 4; }
 .arrangement-panel.moving { cursor: grabbing; }
 .arrangement-panel:focus-visible rect, .arrangement-panel:focus-visible ellipse { stroke: var(--ring); stroke-width: 3; }

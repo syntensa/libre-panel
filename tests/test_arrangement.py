@@ -1,0 +1,109 @@
+"""Where the panels stand, and one picture across all of them (arrangement.py)."""
+
+import io
+import time
+
+import pytest
+from PIL import Image
+
+from libre_panel import app, arrangement
+from libre_panel.devices.models import find_model
+
+
+def halves(size=(1000, 400)):
+    """A picture red on the left half, blue on the right."""
+    picture = Image.new("RGB", size, (0, 0, 255))
+    picture.paste((255, 0, 0), (0, 0, size[0] // 2, size[1]))
+    return picture
+
+
+def test_a_panel_s_size_comes_from_its_model_s_diagonal_and_pixels():
+    wide = arrangement.millimetres(find_model("turing-12.3-usb"))
+    assert wide == pytest.approx((292.5, 109.7), abs=0.1)
+    bar = arrangement.millimetres(find_model("turing-9.2-usb"), (480, 1920))  # on end
+    assert bar == pytest.approx((56.7, 226.7), abs=0.1)
+    assert arrangement.millimetres(None) is None
+    assert arrangement.rect(None, find_model("turing-9.2-usb"), None) is None  # not placed
+    assert arrangement.rect((10, -5), None, None) is None  # its size not known
+
+
+def test_each_panel_shows_the_part_of_the_picture_where_it_stands():
+    picture = halves()
+    left, right = (0.0, 0.0, 200.0, 100.0), (300.0, 0.0, 100.0, 100.0)
+    # the panels together are 400 × 100 mm: the picture covers them, its middle at theirs
+    one = arrangement.part(picture, [left, right], 0)
+    two = arrangement.part(picture, [left, right], 1)
+    assert one.size == (500, 250) and two.size == (250, 250)
+    assert one.getpixel((10, 10)) == (255, 0, 0) and two.getpixel((10, 10)) == (0, 0, 255)
+    assert arrangement.part(picture, [left, None], 1) is None  # not placed: no part
+    alone = arrangement.part(picture, [None, right], 1)  # the only one placed: all of its height
+    assert alone.size == (400, 400)
+
+
+def test_a_picture_given_is_kept_smaller_and_without_its_metadata(tmp_path):
+    exif = Image.Exif()
+    exif[0x010F] = "Camera maker"  # Make
+    exif[0x0110] = "Camera model"  # Model
+    buffer = io.BytesIO()
+    Image.new("RGB", (5000, 1000), (20, 40, 60)).save(buffer, "JPEG", exif=exif.tobytes())
+    name = arrangement.save_picture(buffer.getvalue(), tmp_path)
+    assert name == arrangement.ACROSS_FILE
+    with Image.open(tmp_path / name) as kept:
+        assert kept.size == (4096, 819) and not kept.getexif()
+    with pytest.raises(arrangement.PictureError, match="not a picture"):
+        arrangement.save_picture(b"not a picture", tmp_path)
+    loaded = arrangement.load(tmp_path / name)
+    assert loaded is not None and loaded[0].size == (4096, 819)
+    assert arrangement.load(tmp_path / "gone.jpg") is None
+
+
+def test_a_panel_under_a_picture_across_the_panels_shows_its_part_and_follows_a_move(tmp_path):
+    from test_app_cli import MemoryStream, StepClock
+
+    from libre_panel.config import Config, SensorsConfig
+    from libre_panel.sensors.base import SensorHub
+    from libre_panel.sensors.demo import DemoProvider
+
+    halves((2000, 500)).save(tmp_path / "wide.png")
+    places = [(0.0, 0.0, 292.5, 109.7), (320.0, 0.0, 226.7, 56.7)]
+    clock = StepClock(1000.0)
+    config = Config(theme="slate", across=str(tmp_path / "wide.png"),
+                    sensors=SensorsConfig(providers=["demo"]))  # fmt: skip
+    loop = app.MainLoop(config, display=MemoryStream(), clock=clock, panel=0,
+                        places_of=lambda: list(places),
+                        hub=SensorHub([DemoProvider({"fixed_time": 1_700_000_000})]))  # fmt: skip
+    try:
+        loop.step()
+        backdrop = loop.renderer.backdrop
+        assert backdrop is not None and backdrop.getpixel((backdrop.width - 5, 5)) == (0, 0, 255)
+        places[1] = (0.0, 120.0, 226.7, 56.7)  # moved under the first: the left half
+        give_up = time.monotonic() + 20
+        while time.monotonic() < give_up and loop.renderer.backdrop.getpixel((5, 5))[0] != 255:
+            clock.now += 3.0
+            loop.step()
+            time.sleep(0.05)
+        assert loop.renderer.backdrop.getpixel((5, 5)) == (255, 0, 0)
+    finally:
+        loop.close()
+    plain = app.MainLoop(Config(theme="slate", sensors=SensorsConfig(providers=["demo"])),
+                         display=MemoryStream(), clock=StepClock(0.0), panel=0,
+                         places_of=lambda: list(places),
+                         hub=SensorHub([DemoProvider({})]))  # fmt: skip
+    try:
+        assert plain.renderer.backdrop is None  # no picture across them
+    finally:
+        plain.close()
+
+
+def test_the_places_of_the_panels_come_from_config_and_what_each_panel_said():
+    from libre_panel.config import parse_config
+
+    more = app._MorePanels(None, app.RunStatus(model="turing-12.3-usb", size=(1920, 720)), None)
+    assert more.places() == []  # nothing followed yet
+    bar = {"at": [320, 0], "model": "turing-9.2-usb"}
+    config = parse_config({"device": {"at": [0, 0]}, "panels": [bar, {}]})
+    more._seen = config
+    first, second, third = more.places()
+    assert first == pytest.approx((0, 0, 292.5, 109.7), abs=0.1)  # the size the panel said
+    assert second == pytest.approx((320, 0, 226.7, 56.7), abs=0.1)  # its model's, as set
+    assert third is None  # not placed

@@ -128,6 +128,8 @@ export const endpoints = {
   // Settings → System → Backup: the settings and own themes in one file, and back (backup.py)
   backupFile: () => withToken("/api/backup/file"),
   restoreBackup: (bytes) => api("POST", "/api/backup", bytes, { raw: true }),
+  acrossPicture: (stamp = "") => withToken(`/api/across/picture?v=${enc(String(stamp))}`),
+  setAcross: (bytes) => api("POST", "/api/across", bytes, { raw: true }),
   pluginPages: () => get("/api/plugins/pages"),
   hardware: () => get("/api/hardware"),
   setHardware: (names) => post("/api/hardware", names),
