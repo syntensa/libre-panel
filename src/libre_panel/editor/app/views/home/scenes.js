@@ -45,8 +45,8 @@ export function ScenesCard() {
     if (sure) act("delete", name);
   };
   const { scenes, on } = state;
-  return html`<section class=${`sequence-card scenes-card${on ? " on" : ""}`} aria-label=${t("Scenes")}>
-    <div class="sequence-card-head">
+  return html`<section class=${`scenes-card${on ? " on" : ""}`} aria-label=${t("Scenes")}>
+    <div class="scenes-card-head">
       <span class="more-row-icon" aria-hidden="true"><${Icon} name="layers" size=${16} /></span>
       <span class="more-row-text">
         <strong>${t("Scenes")}</strong>
@@ -55,7 +55,7 @@ export function ScenesCard() {
       <button type="button" class="btn" onClick=${keep}>${t("Keep as a scene")}</button>
     </div>
     ${scenes.length
-      ? html`<ul class="sequence-chips scene-chips">
+      ? html`<ul class="scene-chips">
           ${scenes.map(
             (scene) => html`<li key=${scene.name} class=${scene.name === on ? "current" : ""}>
               <button type="button" class="scene-chip" aria-pressed=${String(scene.name === on)}

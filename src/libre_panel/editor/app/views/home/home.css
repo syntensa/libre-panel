@@ -981,6 +981,7 @@
 
 /* the launcher's "More for your panel": a row each, what it is and the way to it */
 .sequence-card,
+.scenes-card,
 .more-row {
   display: flex;
   flex-direction: column;
@@ -997,11 +998,13 @@
 }
 
 .sequence-card.on,
+.scenes-card.on,
 .more-row.volume-tile.on {
   border-color: var(--accent);
 }
 
 .sequence-card-head,
+.scenes-card-head,
 .sequence-foot {
   display: flex;
   align-items: center;
@@ -1034,6 +1037,7 @@
 }
 
 .sequence-card .btn,
+.scenes-card .btn,
 .more-row .btn {
   flex-shrink: 0;
   height: 32px;
@@ -1054,7 +1058,8 @@
   height: 64px;
 }
 
-.sequence-chips {
+.sequence-chips,
+.scene-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -1063,7 +1068,8 @@
   list-style: none;
 }
 
-.sequence-chips li {
+.sequence-chips li,
+.scene-chips li {
   display: inline-flex;
   gap: 6px;
   padding: 3px 9px;
@@ -1072,7 +1078,8 @@
   font-size: 12.5px;
 }
 
-.sequence-chips li.current {
+.sequence-chips li.current,
+.scene-chips li.current {
   border-color: var(--accent);
   background: var(--accent-softer);
 }
