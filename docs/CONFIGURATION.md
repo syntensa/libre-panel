@@ -28,7 +28,7 @@ invalid is refused with the reason, and nothing is written.
 
 | Section | What it changes in `config.toml` |
 |---|---|
-| Panel | `accent`, `[device]` (`model`, `brightness`, `orientation`, `rotate`, `motion`, `dark_on_quit`, `dark_on_sleep`, `night`, `night_from`, `night_to`, `night_brightness`, `dark_when_away`, `away_brightness`; under *Advanced* `driver`, `output`, `port`) and `[video]` (`mode`, `fps`, `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
+| Panel | `accent`, `[device]` (`model`, `brightness`, `orientation`, `rotate`, `motion`, `dark_on_quit`, `dark_on_sleep`, `night`, `night_from`, `night_to`, `night_brightness`, `dark_when_away`, `away_brightness`, `at` (*More panels*: where it stands); under *Advanced* `driver`, `output`, `port`) and `[video]` (`mode`, `fps`, `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
 | Sensors | `[sensors] providers` (which sources, and their order; those not in use under *More sources*), the hardware's names, and under *Advanced* `refresh_ms` and `[sensors.librehardwaremonitor]` (`mode`, `url`) |
 | Game mode and more | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
@@ -93,6 +93,8 @@ output = "libre-panel-frame.png"   # frames go here when no panel is used;
                                    # a relative path is inside the settings folder
 port = ""                      # serial panels: found by their USB ids; only if that
                                # picks the wrong port: "COM5", "/dev/ttyACM0"
+# at = [-275, 0]               # where it stands beside the others (More panels): its
+                               # picture's top left corner, in millimetres
 
 [sensors]
 # order = priority. Without this line: ["load", "audio", "linux", "psutil"], on Windows
@@ -299,6 +301,13 @@ brightness = 40                # its own brightness, night and away settings
 *Which is which?* there shows each panel's number for a few seconds (the first is 1, those of
 `[[panels]]` 2, 3 and 4), *Swap with panel 1* lets two panels' themes change places, and a
 panel plugged in that none shows anything on is offered to be set up.
+
+Above them the panels stand in their real sizes (from each model's diagonal and pixels, the
+way it is mounted), with what each shows, beside a monitor to place them by (24″ to 34″, or
+none; kept in the app, not in config.toml). Drag one, or move it with the arrow keys (Shift:
+farther), to where it stands: in the case, under the monitor, beside it, on end. Each place is
+written as `at = [x, y]`, millimetres from a point under the monitor's middle, in `[device]`
+and in the panel's `[[panels]]` table; *Line them up again* takes them out.
 
 The sensors are read once, for all panels; each panel's graphs run at its own theme's pace.
 Libre Panel never opens a panel twice: a panel that one of them has open is passed by when

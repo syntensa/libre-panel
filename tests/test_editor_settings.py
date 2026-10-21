@@ -87,6 +87,7 @@ def test_the_settings_are_the_config_with_its_defaults_filled_in(server):
         "away_brightness": 0,
         "output": "libre-panel-frame.png",
         "port": "",
+        "at": None,
     }
     assert (config["video"]["mode"], config["video"]["fps"], config["video"]["local_clip"]) == (
         "auto",
@@ -556,7 +557,8 @@ def test_the_running_app_tells_how_its_panel_is_doing(make, monkeypatch):
     panel = SimpleNamespace(state=lambda: {"state": "waiting", "detail": "no panel"}, status=None)
     port = make(App(panel=panel))
     _, data = request(port, "GET", "/api/panel")
-    assert data["running"] == {"state": "waiting", "detail": "no panel", "more": []}
+    assert data["running"] == {"state": "waiting", "detail": "no panel", "size": None,
+                               "more": []}  # fmt: skip
 
 
 def test_the_panel_says_whether_its_theme_shows_the_weather(make, isolated_home, monkeypatch):
@@ -1083,7 +1085,7 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "device.model", "device.driver", "device.brightness", "device.rotate", "device.port",
         "device.orientation", "device.motion", "device.dark_on_quit", "device.dark_on_sleep",
         "device.night", "device.night_from", "device.night_to", "device.night_brightness",
-        "device.dark_when_away", "device.away_brightness",
+        "device.dark_when_away", "device.away_brightness", "device.at",
         "video.mode", "video.fps", "video.local_clip", "video.clip_asked", "refresh_ms",
         "check_updates", "allow_notify", "light_mode", "symbols", "accent", "hotkeys.enabled",
         "hotkeys.pause",

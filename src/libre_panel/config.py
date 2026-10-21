@@ -406,6 +406,9 @@ class DeviceConfig:
     away_brightness: int = 0
     output: str = "libre-panel-frame.png"
     port: str = ""  # serial panels: the port; empty = found by its USB ids
+    # where the panel stands beside the others (Settings → Panel → More panels): the top left
+    # corner of its picture, in millimetres, as mounted; None: not placed
+    at: tuple[int, int] | None = None
     video: VideoConfig = field(default_factory=VideoConfig)
 
 
@@ -880,7 +883,28 @@ def _parse_device(dev: dict[str, Any], where: str) -> DeviceConfig:
     device.away_brightness = level
     device.output = _expect(dev.get("output", device.output), str, f"{where}.output")
     device.port = _expect(dev.get("port", device.port), str, f"{where}.port").strip()
+    device.at = place_at(dev.get("at"), f"{where}.at")
     return device
+
+
+ARRANGEMENT_MM = 5000  # how far from the first panel's place one may stand, in millimetres
+
+
+def place_at(value: Any, name: str) -> tuple[int, int] | None:
+    """``at = [x, y]``: where a panel stands, in whole millimetres (None, or [], when it is not
+    placed)."""
+    if value is None or value == []:
+        return None
+    if (
+        not isinstance(value, list | tuple)
+        or len(value) != 2
+        or not all(isinstance(v, int) and not isinstance(v, bool) for v in value)
+        or not all(-ARRANGEMENT_MM <= v <= ARRANGEMENT_MM for v in value)
+    ):
+        raise ConfigError(
+            f"{name}: [x, y] in whole millimetres, -{ARRANGEMENT_MM} to {ARRANGEMENT_MM}"
+        )
+    return (value[0], value[1])
 
 
 def _scenes(value: Any) -> list[SceneConfig]:

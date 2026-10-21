@@ -34,6 +34,7 @@ from libre_panel.config import (
     load_config,
     log_file,
     panel_defaults,
+    place_at,
     user_themes_dir,
 )
 from libre_panel.editor import access
@@ -121,6 +122,15 @@ def _whole(name: str, value: Any, low: int, high: int) -> int:
     if not low <= value <= high:
         raise SettingsError(f"{name}: must be between {low} and {high}")
     return value
+
+
+def _place_at(name: str, value: Any) -> list[int] | None:
+    """Where a panel stands beside the others (``at``): [x, y] in millimetres, or None."""
+    try:
+        at = place_at(value, name)
+    except ConfigError as exc:
+        raise SettingsError(str(exc)) from exc
+    return list(at) if at is not None else None
 
 
 def _number(name: str, value: Any, low: float, high: float) -> float:
@@ -383,6 +393,7 @@ class Settings:
                     "away_brightness": device.away_brightness,
                     "output": device.output,
                     "port": device.port,
+                    "at": list(device.at) if device.at else None,
                 },
                 "video": {
                     "mode": video.mode,
@@ -675,7 +686,7 @@ class Settings:
             state = panel.state()
             spare = self._spare_panels(state)
             running = {"state": state["state"], "detail": state["detail"],
-                       "more": state.get("more", [])}  # fmt: skip
+                       "size": state.get("size"), "more": state.get("more", [])}  # fmt: skip
             shown = state.get("theme") or None
         return {
             "configured": config.device.model,
@@ -1153,6 +1164,7 @@ RULES: dict[str, Any] = {
     "device.night_brightness": lambda n, v, c: _whole(n, v, 0, 100),
     "device.dark_when_away": lambda n, v, c: _flag(n, v),
     "device.away_brightness": lambda n, v, c: _whole(n, v, 0, 100),
+    "device.at": lambda n, v, c: _place_at(n, v),
     "device.output": lambda n, v, c: _text(n, v, 260, required=True),
     "device.port": lambda n, v, c: _text(n, v, 64),
     "video.mode": lambda n, v, c: _choice(n, v, ("auto", "on", "off")),
@@ -1188,5 +1200,5 @@ RULES: dict[str, Any] = {
 UNSETTABLE = {
     "refresh_ms", "weather.latitude", "weather.longitude", "weather.place",
     "hotkeys.pause", "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open",
-    "hotkeys.next_scene",
+    "hotkeys.next_scene", "device.at",
 }  # fmt: skip

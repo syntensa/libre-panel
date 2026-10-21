@@ -20,6 +20,9 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
 - **One look on every panel**: a panel beside the first can take the colours, fonts and
   module frames of the theme the first one shows, and follows a change in Design at once
   (*Look as panel 1's*; on for a companion)
+- **Where the panels stand**: the panels in their real sizes, each with what it shows, beside
+  a monitor to place them by; dragged (or moved with the arrow keys) to where they are, in the
+  case, under the monitor or on end, each place kept in config.toml (`at`)
 - **Scenes**: a theme for every panel at once, put on with a click on Start, from the tray or
   with a keyboard shortcut (the next one); what the panels show is kept as one with a click
   ([Scenes](docs/CONFIGURATION.md#scenes))

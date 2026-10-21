@@ -58,6 +58,7 @@ export const store = createStore({
     guides: true,
     live: false, // previews with this computer's sensors
     panel: "library", // the open side panel of the design view (null: closed)
+    monitor: "27", // the monitor where the panels stand is shown (inches, "none")
     ...savedPrefs(),
   },
 });

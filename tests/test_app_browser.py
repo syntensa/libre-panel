@@ -4252,6 +4252,43 @@ def test_a_second_panel_is_added_given_a_theme_and_taken_out_again(app_url, isol
         expect(card.locator("[data-more-panel]")).to_have_count(0)
 
 
+def test_the_panels_are_placed_where_they_stand_in_their_real_sizes(app_url, isolated_home):
+    """Settings → Panel → More panels: the panels in their real sizes by a monitor, moved with
+    the arrow keys or the mouse, each place written to its table; lined up again, none."""
+    choose_theme(isolated_home, "lumen")
+    with isolated_home.joinpath("config.toml").open("a", encoding="utf-8") as config:
+        config.write('\n[device]\nmodel = "turing-12.3-usb"\n'
+                     '\n[[panels]]\nmodel = "turing-9.2-usb"\n')  # fmt: skip
+    with browser_page(app_url, "settings/panel") as page:
+        view = page.locator(".arrangement-view")
+        first, second = view.locator("[data-arranged='1']"), view.locator("[data-arranged='2']")
+        expect(first).to_contain_text("29.3 × 11 cm")  # 12.3″ at 1920 × 720
+        expect(second).to_contain_text("22.7 × 5.7 cm")
+        expect(view.locator(".arrangement-monitor")).to_have_count(1)
+        # not placed yet: in a row under the monitor, beside each other
+        expect(first).to_have_attribute("data-at", "-275,0")
+        expect(second).to_have_attribute("data-at", "48,0")
+        second.focus()
+        for _ in range(4):
+            page.keyboard.press("ArrowDown")
+        waits_for(page, lambda: settings_config().panels[0].device.at == (48, 20))
+        assert settings_config().device.at == (-275, 0)  # the place it was shown at, kept
+        box = first.bounding_box()
+        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        page.mouse.down()
+        page.mouse.move(box["x"] + box["width"] / 2 - 60, box["y"] + box["height"] / 2 + 40,
+                        steps=6)  # fmt: skip
+        page.mouse.up()
+        waits_for(page, lambda: settings_config().device.at != (-275, 0))
+        x, y = settings_config().device.at
+        assert x < -275 and y > 0  # moved left and down
+        page.get_by_label("Monitor beside them").select_option("none")
+        expect(view.locator(".arrangement-monitor")).to_have_count(0)
+        page.get_by_role("button", name="Line them up again").click()
+        waits_for(page, lambda: settings_config().device.at is None)
+        assert settings_config().panels[0].device.at is None
+
+
 def test_the_night_follows_the_sun_with_one_switch(app_url, isolated_home):
     """Settings → Panel → At night: from sunset to sunrise, at the weather's place; without
     one, the app says what the night is meanwhile."""

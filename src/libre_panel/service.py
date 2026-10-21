@@ -280,6 +280,9 @@ class PanelService:
                     "target": more.target,
                     "theme": more.theme,
                     "fps": more.stats.get("fps"),
+                    # its model and the size of its frames, as far as known (where it stands)
+                    "model": more.model,
+                    "size": list(more.size) if more.size else None,
                 }
                 for n, more in sorted(status.more.items())
             ]

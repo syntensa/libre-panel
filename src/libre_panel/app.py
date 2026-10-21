@@ -209,6 +209,7 @@ class RunStatus:
     # the size of the panel's frames where it is known (the app shows each theme in its
     # version for it: theme.model.theme_for)
     size: tuple[int, int] | None = None
+    model: str = ""  # the panel's model, set or reported ("": not known yet)
     detail: str = ""  # why the panel is not available
     frames: int = 0
     mode: str | None = None  # set by a service, e.g. "game"
@@ -556,7 +557,7 @@ class _Warmup:
 # what changes on the open panel: brightness (the night's too) and the picture's turn
 _FOLLOWED = (
     "brightness", "rotate", "night", "night_from", "night_to", "night_brightness",
-    "dark_when_away", "away_brightness",
+    "dark_when_away", "away_brightness", "at",
 )  # fmt: skip
 NIGHT_CHECK_S = 30.0  # how often the loop looks whether night began or ended
 
@@ -1005,6 +1006,7 @@ class MainLoop:
             wanted = _theme_name(config, host, default, self.rotation, reported, self._mode())
             status.sequence = _sequence_state(config, self.rotation)
             status.size = panel_size(config, reported)
+            status.model = getattr(panel_model(config.device, reported), "id", "")
             mode = host.mode if host is not None else None
             playing = blend
             policy = switch_policy(blend[0], wanted, mode, began_in) if blend else None

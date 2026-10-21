@@ -25,6 +25,7 @@ import { Segmented, Select, Slider, Toggle } from "../../ui/controls.js";
 import { Popover } from "../../ui/layer.js";
 import { MountedChoice } from "../home/panel.js";
 import { fitsPanel } from "../home/themes.js";
+import { Arrangement, arrangementItem } from "./arrangement.js";
 import { Card, CommitField, Disclosure, SettingRow, Status, usePolling } from "./parts.js";
 import { StartScreenCard } from "./startscreen.js";
 
@@ -438,6 +439,7 @@ function MorePanelsCard() {
   const info = useStore((s) => s.panelInfo);
   const models = useStore((s) => s.specs?.models || []);
   const themes = useStore((s) => s.themes || []);
+  const shownTheme = useStore((s) => s.app?.panel?.theme); // what panel 1 shows now
   if (!config) return null;
   const panels = config.panels || [];
   const running = info?.running?.more || [];
@@ -467,6 +469,33 @@ function MorePanelsCard() {
   // and while a game runs, Arena's companion beside Arena (the game's page)
   const gaming = themes.some((theme) => theme.id === "arena-companion") ? { game_theme: "arena-companion" } : {};
   const added = (more) => write([...panels, { ...(companion ? { theme: companion.id, same_look: true } : {}), ...gaming, ...more }]);
+  // where they stand, in their real sizes: the first panel's model as set or found
+  const modelOf = (id) => models.find((model) => model.id === id) || null;
+  const device = config.device || {};
+  const arrangement = [
+    arrangementItem({
+      number: 1,
+      model: modelOf(device.model !== "auto" ? device.model : info?.model?.id),
+      size: info?.running?.size,
+      orientation: device.orientation,
+      at: device.at,
+      theme: shownTheme || normalTheme(),
+    }),
+    ...panels.map((panel, n) => {
+      const seen = running.find((item) => item.index === n);
+      return arrangementItem({
+        number: n + 2,
+        model: modelOf(panel.model && panel.model !== "auto" ? panel.model : seen?.model),
+        size: seen?.size,
+        orientation: panel.orientation,
+        at: panel.at,
+        theme: seen?.theme || panel.theme,
+      });
+    }),
+  ];
+  const place = (places) =>
+    change({ "device.at": places[0], panels: panels.map((panel, n) => ({ ...panel, at: places[n + 1] })) });
+  const lineUp = () => change({ "device.at": null, panels: panels.map((panel) => ({ ...panel, at: null })) });
   return html`<${Card}
     id="panel-more"
     title=${t("More panels")}
@@ -480,6 +509,7 @@ function MorePanelsCard() {
           onClick=${() => added({ model: model.id, ...(model.port ? { port: model.port } : {}) })}>${t("Set it up")}</button>
       </div>`,
     )}
+    ${panels.length ? html`<${Arrangement} items=${arrangement} onPlace=${place} onReset=${lineUp} />` : null}
     ${panels.map(
       (panel, n) => html`<${MorePanel}
         key=${n}

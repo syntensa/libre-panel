@@ -142,6 +142,25 @@
 .more-actions { display: flex; gap: 8px; }
 .more-spare { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--line); }
 .more-panel-head .settings-row-control { display: flex; align-items: center; gap: 8px; }
+/* where the panels stand, in their real sizes, by a monitor */
+.arrangement { padding: 12px 16px 14px; border-top: 1px solid var(--line); }
+.arrangement-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.arrangement-text { color: var(--muted); font-size: 13px; max-width: 46em; }
+.arrangement-actions { display: flex; align-items: center; gap: 8px; }
+.arrangement-view { display: block; width: 100%; height: 280px; border-radius: 8px; background: var(--bg-deep); touch-action: none; user-select: none; }
+.arrangement-view text { text-anchor: middle; dominant-baseline: central; font-family: var(--font); pointer-events: none; }
+.arrangement-monitor rect { fill: var(--surface-2); stroke: var(--line-3); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.arrangement-monitor text { fill: var(--faint); }
+.arrangement-panel { cursor: grab; outline: none; }
+.arrangement-panel rect, .arrangement-panel ellipse { fill: var(--accent-softer); stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.arrangement-panel rect, .arrangement-panel ellipse { pointer-events: all; } /* (a preview not loaded yet too) */
+.arrangement-panel image ~ rect, .arrangement-panel image ~ ellipse { fill: transparent; }
+.arrangement-panel image ~ .arrangement-number { fill: #fff; paint-order: stroke; stroke: rgba(0, 0, 0, 0.6); stroke-width: 3px; }
+.arrangement-panel.unknown rect, .arrangement-panel.unknown ellipse { fill: var(--surface-3); stroke: var(--muted); stroke-dasharray: 6 4; }
+.arrangement-panel.moving { cursor: grabbing; }
+.arrangement-panel:focus-visible rect, .arrangement-panel:focus-visible ellipse { stroke: var(--ring); stroke-width: 3; }
+.arrangement-number { fill: var(--text); font-weight: 600; }
+.arrangement-size { fill: var(--text-2); }
 
 .settings-row:last-child {
   border-bottom: none;

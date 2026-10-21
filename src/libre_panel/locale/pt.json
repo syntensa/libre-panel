@@ -2238,7 +2238,17 @@
     "While panel 1 shows the game's page or music's, this panel can show a theme of its own: the temperatures and fans during a game, say.": "Enquanto o painel 1 mostra a página do jogo ou da música, este painel pode mostrar um tema próprio: as temperaturas e as ventoinhas durante um jogo, por exemplo.",
     "Beside panel 1's theme": "Para acompanhar o tema do painel 1",
     "Look as panel 1's": "Visual como o painel 1",
-    "Its theme takes the colours, fonts and module frames of the theme panel 1 shows, and follows a change in Design.": "O tema dele usa as cores, as fontes e as molduras dos módulos do tema que o painel 1 mostra, e acompanha as mudanças feitas em Design."
+    "Its theme takes the colours, fonts and module frames of the theme panel 1 shows, and follows a change in Design.": "O tema dele usa as cores, as fontes e as molduras dos módulos do tema que o painel 1 mostra, e acompanha as mudanças feitas em Design.",
+    "Drag each panel to where it stands: in the case, under the monitor, on end. They are shown in their real sizes.": "Arraste cada painel para onde ele fica: no gabinete, sob o monitor, em pé. Eles aparecem no tamanho real.",
+    "Line them up again": "Colocar em fila de novo",
+    "Monitor": "Monitor",
+    "Monitor beside them": "Monitor ao lado",
+    "Monitor {size}": "Monitor de {size}",
+    "Monitor {size}, ultrawide": "Monitor de {size}, ultrawide",
+    "No monitor": "Sem monitor",
+    "Panel {number}, {label}: drag it, or move it with the arrow keys": "Painel {number}, {label}: arraste ou mova com as setas",
+    "{label}: size not known yet": "{label}: tamanho ainda desconhecido",
+    "{width} × {height} cm": "{width} × {height} cm"
   },
   "fields": {
     "align": "Alinhamento",

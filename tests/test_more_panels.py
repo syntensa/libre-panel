@@ -423,3 +423,27 @@ def test_same_look_is_read_from_the_panel_s_table():
     assert not config.for_panel(1).same_look and not config.same_look
     with pytest.raises(ConfigError, match="same_look"):
         parse_config({"panels": [{"same_look": "yes"}]})
+
+
+def test_where_a_panel_stands_is_read_and_written_and_moves_no_panel(tmp_path):
+    from libre_panel.config import DeviceConfig, load_config
+    from libre_panel.editor.settings import Restart, Settings, SettingsError
+
+    config = parse_config({"device": {"at": [-275, 0]}, "panels": [{"at": [48, 20]}, {}]})
+    assert config.device.at == (-275, 0) and config.panels[0].device.at == (48, 20)
+    assert config.panels[1].device.at is None and config.for_panel(0).device.at == (48, 20)
+    for bad in ([1], [1.5, 2], [True, 0], [9000, 0], "here"):
+        with pytest.raises(ConfigError, match="at"):
+            parse_config({"device": {"at": bad}})
+    assert app._same_device(DeviceConfig(at=(0, 0)), DeviceConfig(at=(5, 5)))  # (opened as it is)
+    path = tmp_path / "config.toml"
+    path.write_text('[[panels]]\ntheme = "lumen"\n', encoding="utf-8")
+    settings = Settings(path, None, Restart())
+    panels = settings.read()["config"]["panels"]
+    settings.write({"set": {"device.at": [10, -40], "panels": [{**panels[0], "at": [250, 0]}]}})
+    config = load_config(path)
+    assert config.device.at == (10, -40) and config.panels[0].device.at == (250, 0)
+    settings.write({"set": {"device.at": None, "panels": [{**panels[0], "at": None}]}})
+    assert "at =" not in path.read_text(encoding="utf-8")
+    with pytest.raises(SettingsError, match="millimetres"):
+        settings.write({"set": {"device.at": [0.5, 0]}})
