@@ -28,6 +28,7 @@ LANGUAGES = {
     "es": "Español",
     "pl": "Polski",
     "pt": "Português (Brasil)",
+    "zh": "简体中文",
 }
 # what follows a day's number before a month's name: "27. September", "27 de septiembre"
 DAY_BEFORE_MONTH = {"de": ".", "es": " de", "pt": " de"}
