@@ -530,6 +530,27 @@ def test_a_panel_beside_the_first_has_smooth_motion_of_its_own_with_its_own_clip
     assert "video" not in path.read_text(encoding="utf-8")
 
 
+def test_a_panel_beside_the_first_takes_its_readings_just_after_the_first_panel_s():
+    from test_app_cli import MemoryStream, StepClock
+
+    from libre_panel.config import Config, SensorsConfig
+    from libre_panel.sensors.demo import DemoProvider
+
+    first = SensorHub([DemoProvider({"fixed_time": 1_700_000_000})])
+    clock = StepClock(1000.0)
+    loop = app.MainLoop(Config(theme="slate", refresh_ms=1000, sensors=SensorsConfig(["demo"])),
+                        display=MemoryStream(), clock=clock, panel=0,
+                        hub=HubView(first))  # fmt: skip
+    try:
+        first.snapshot()  # the first panel's readings, 0.3 s ago
+        first._taken = (first._taken[0] - 0.3, *first._taken[1:])
+        loop.step()
+        # its next ones a moment after the first panel's next: a value glides on both at once
+        assert loop.next_sample == pytest.approx(1000.0 - 0.3 + 1.0 + app.IN_STEP_S, abs=0.02)
+    finally:
+        loop.close()
+
+
 def test_a_panel_beside_the_first_has_what_follows_on_every_frame_as_it_is_now():
     class Services(SensorProvider):  # (as the services' readings come: an alarm)
         name, every_frame = "services", True

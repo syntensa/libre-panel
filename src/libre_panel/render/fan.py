@@ -110,6 +110,63 @@ def turns(rpm: float | None, max_rpm: float) -> float:
     return MIN_TURNS + (MAX_TURNS - MIN_TURNS) * share
 
 
+def _start(key: str) -> float:
+    """Where the blades of a fan stand at first, in blade pitches (0 to 1): every fan in its
+    own position, or they all turn in step."""
+    return (sum(map(ord, key)) % 97) / 97.0
+
+
+class Beat:
+    """Where a fan's blades stand, for every panel that shows it at the same pace: two panels
+    side by side show the same fan in the same position. Each panel's frame adds up the
+    angle to its planned time; a frame a moment behind another panel's takes it back by the
+    speed. One of :class:`Beats`."""
+
+    def __init__(self, angle: float) -> None:
+        self.angle = angle  # in blade pitches, at ``at``
+        self.at: float | None = None
+        self._lock = threading.Lock()
+
+    def begin(self, now: float) -> float:
+        """Where the fan stands for a rotor's first frame (the beat begins then, if it has not
+        begun on another panel)."""
+        with self._lock:
+            if self.at is None:
+                self.at = now
+            return self.angle
+
+    def turn(self, now: float, rate: float) -> float:
+        """The angle at ``now`` (the main loop's clock) of a fan that turns ``rate`` blade
+        pitches a second."""
+        with self._lock:
+            if self.at is None or self.at - now > 0.2:  # the first, or on another clock (a test)
+                self.at = now
+            elif now > self.at:  # after a pause, as far as a frame of 0.2 s at most (as a rotor)
+                self.angle = (self.angle + min(MAX_STEP, rate * min(0.2, now - self.at))) % 1.0
+                self.at = now
+            else:  # another panel drew a frame for a later time
+                return (self.angle - min(MAX_STEP, rate * (self.at - now))) % 1.0
+            return self.angle
+
+
+class Beats:
+    """The beats of the fans, for the renderers of all panels (the main loops share one)."""
+
+    def __init__(self) -> None:
+        self._made: dict[tuple[str, int, int], Beat] = {}
+        self._lock = threading.Lock()
+
+    def of(self, sensor: str, fps: int, blades: int) -> Beat:
+        """The turn of the fan ``sensor`` on every panel that draws ``fps`` frames a second in
+        a look of ``blades`` blades (on panels of other rates each turns as suits its rate)."""
+        key = (sensor, fps, blades)
+        with self._lock:
+            found = self._made.get(key)
+            if found is None:
+                found = self._made[key] = Beat(_start(sensor))
+            return found
+
+
 class Rotor:
     """One fan's turning: where its blades are, how fast it shows, how full its ring
     and how bright it is. Worked out from the planned frame times, never from the
@@ -117,13 +174,14 @@ class Rotor:
 
     The angle is added up from the speed times the time between frames, not
     taken from the time: a speed that moves a little would otherwise throw the
-    rotor to a far position.
+    rotor to a far position. With a :class:`Beat` it is the beat's, the same on
+    every panel that shows the fan.
     """
 
     def __init__(self, key: str, blades: int = BLADES) -> None:
-        # every fan in its own position, or they all turn in step
-        self.angle = (sum(map(ord, key)) % 97) / 97.0  # in blade pitches, 0 to 1
+        self.angle = _start(key)  # in blade pitches, 0 to 1
         self.blades = blades  # the look's: a pitch is a turn over this many
+        self.beat: Beat | None = None
         self.speed = 0.0  # turns a second, shown
         self.ring = 0.0  # share of the ring that glows
         self.light = 1.0
@@ -141,6 +199,8 @@ class Rotor:
         speed, ring, light = self._targets(rpm, max_rpm)
         if self.at is None:  # the first frame: as it is
             self.speed, self.ring, self.light, self.at = speed, ring, light, now
+            if self.beat is not None:  # where the fan stands on the other panels
+                self.angle = self.beat.begin(now)
             return
         dt = max(0.0, min(0.2, now - self.at))
         self.at = now
@@ -153,7 +213,10 @@ class Rotor:
             self.speed = max(0.0, self.speed - FRICTION * dt)
             if self.speed < 0.02:
                 self.speed = 0.0
-        self.angle = (self.angle + min(MAX_STEP, self.speed * self.blades * dt)) % 1.0
+        if self.beat is not None:
+            self.angle = self.beat.turn(now, self.speed * self.blades)
+        else:
+            self.angle = (self.angle + min(MAX_STEP, self.speed * self.blades * dt)) % 1.0
 
     def settle(self, rpm: float | None, max_rpm: float) -> None:
         """No animation (a preview, a picture): show the speed's look, standing."""

@@ -393,6 +393,9 @@ def _sequence_state(config: Config, rotation: Rotation) -> dict[str, Any] | None
 
 
 ALARM = "alarm"  # the notices service's reading, and the page of a panel beside the first
+# a panel beside the first takes its readings this long after the first panel took them, so
+# they glide on both at once (the first panel's frames come up to a frame late)
+IN_STEP_S = 0.1
 
 
 def _alarm(snapshot: Snapshot | None) -> bool:
@@ -648,12 +651,14 @@ class MainLoop:
         mode_of: Callable[[], str | None] | None = None,
         look_of: Callable[[], str] | None = None,
         places_of: Callable[[], list[arrangement.Rect | None]] | None = None,
+        beats: fan.Beats | None = None,
     ) -> None:
         self.status = status = status or RunStatus()
         self.host, self.on_config, self.clock = host, on_config, clock
         self.panel = panel  # a panel beside [device]'s: config.toml's [[panels]][panel] (run)
         self.mode_of = mode_of  # for one: the mode the first panel is in (a game, music)
         self.look_of = look_of  # and the theme it shows, for one in its look (same_look)
+        self.beats = beats or fan.Beats()  # the first panel's: the same fan in step on all
         self._look_folder: tuple[str, Path | None] = ("", None)  # (that theme's folder, found)
         # where every panel stands (the first panel's first), for its part of the picture
         # across them (config.toml across); set for the first panel's loop by run()
@@ -895,6 +900,7 @@ class MainLoop:
             self.motion.adopt(motion)  # graph histories it began
         renderer.place = _place(config)
         renderer.fan_choices = fan.Choices.of(config)
+        renderer.beats = self.beats
         renderer.symbols = config.symbols
         renderer.switches = self._switched(theme, config, source)
         return renderer
@@ -973,6 +979,7 @@ class MainLoop:
                                 motion=motion, backdrop=backdrop)  # fmt: skip
             renderer.continuous, renderer.fps, renderer.sample = continuous, fps, sample
             renderer.fan_choices = fan.Choices.of(config)  # their rotors, warmed as shown
+            renderer.beats = self.beats
             renderer.symbols = config.symbols  # and the symbols in their look
             renderer.switches = self._switched(theme, config, source)  # and as switched
             # widget by widget between the panel's frames, not while one is drawn
@@ -1217,6 +1224,9 @@ class MainLoop:
                     host.emit("sample", snapshot=snapshot)
                 every = (config.refresh_ms or theme.refresh_ms) / 1000
                 next_sample = started + every
+                age = hub.age() if isinstance(hub, HubView) else None
+                if age is not None and age < every:  # just after the first panel's next ones
+                    next_sample = started - age + every + IN_STEP_S
                 renderer.new_sample(now, every)
             elif hub.every_frame:  # cheap sources follow on every frame (a new dict:
                 latest = hub.fresh(video=display.streaming)  # helpers may read the old one)
@@ -1379,9 +1389,11 @@ class _MorePanels:
         status: RunStatus,
         quitting: Callable[[], bool | str | None] | None,
         host: Any = None,
+        beats: fan.Beats | None = None,
     ) -> None:
         self.hub, self.status, self.quitting = hub, status, quitting
         self.host = host  # the first panel's: the mode it is in (a game, music) for the others
+        self.beats = beats  # and where its fans stand, for the same fan in step on every panel
         self._runs: dict[int, tuple[threading.Thread, threading.Event]] = {}
         self._seen: Config | None = None
 
@@ -1409,7 +1421,7 @@ class _MorePanels:
             try:
                 run(panel_config(config, n), stop=stop, status=status, hub=HubView(self.hub),
                     panel=n, quitting=self.quitting, mode_of=self._mode,
-                    look_of=self._look, places_of=self.places)  # fmt: skip
+                    look_of=self._look, places_of=self.places, beats=self.beats)  # fmt: skip
             except (ConfigError, ThemeError, DeviceError) as exc:
                 status.state, status.detail = "error", str(exc)
                 log.error("panel %d stopped: %s", n + 2, exc)
@@ -1531,6 +1543,7 @@ def run(
     mode_of: Callable[[], str | None] | None = None,
     look_of: Callable[[], str] | None = None,
     places_of: Callable[[], list[arrangement.Rect | None]] | None = None,
+    beats: fan.Beats | None = None,
 ) -> None:
     """Main loop: read sensors at the theme's rate, render at ``config.fps`` so
     values glide between readings, and send only frames that changed. A
@@ -1552,14 +1565,20 @@ def run(
     """
     stop = stop or threading.Event()
     loop = MainLoop(config, once=once, status=status, host=host, on_config=on_config, hub=hub,
-                    panel=panel, mode_of=mode_of, look_of=look_of, places_of=places_of)  # fmt: skip
-    loop.ahead = not once  # the readings between two frames, not in the one that shows them
+                    panel=panel, mode_of=mode_of, look_of=look_of, places_of=places_of,
+                    beats=beats)  # fmt: skip
+    # the readings between two frames, not in the one that shows them (a panel beside the
+    # first takes those of the first, read so there)
+    loop.ahead = not once and panel is None
     pacer = _Pacer()
     planned: float | None = None  # when the pacer planned the next streaming frame
     first = panel is None  # the first panel's loop, [device]'s
     guards = timing.Guards()  # SPUR II's, while this drives the panel
     watch = _HangWatch(hang_log if first else None)  # (faulthandler has one timer)
-    more = _MorePanels(loop.hub, loop.status, quitting, host) if first and not once else None
+    more = (
+        _MorePanels(loop.hub, loop.status, quitting, host, loop.beats)
+        if first and not once else None
+    )  # fmt: skip
     if more is not None:
         loop.places_of = more.places  # (where the panels stand, as the first panel's config says)
     try:

@@ -651,6 +651,7 @@ class Renderer:
         # Plugins (docs/PLUGINS.md): a screen draws the frame under the widgets,
         # plugin widget types draw themselves.
         self.fps = 0  # the panel's frame rate, for screens (set by the main loop)
+        self.beats = fan.Beats()  # where the fans stand: the main loop's, for all panels
         self._breathe: Callable[[], None] | None = None  # between widgets (warming up)
         self._plugin_types: dict[str, Any] = {}
         self._screen_last: tuple[Any, Piece] | None = None
@@ -2067,6 +2068,7 @@ class Renderer:
             rotor = self._rotors[wid] = fan.Rotor(wid)
         rotor.blades = fan_looks.look(look).blades
         if self.animate:
+            rotor.beat = self.beats.of(widget["sensor"], self.fps, rotor.blades)  # (every panel's)
             rotor.advance(rpm, widget["max_rpm"], now)
             self.moving = self.moving or rotor.turning
         else:  # a preview or a picture: how it looks at this speed, standing
@@ -2572,6 +2574,7 @@ class Renderer:
             look, paint = self.fan_choices.for_widget({"sensor": item.key})
             rotor.blades = fan_looks.look(look).blades
             if self.animate:
+                rotor.beat = self.beats.of(item.key, self.fps, rotor.blades)
                 rotor.advance(item.number, max_rpm, now)
                 self.moving = self.moving or rotor.turning
             else:

@@ -354,7 +354,10 @@ which costs more of the computer. One given a theme
 for a game or for music (`game_theme`, `media_theme`) shows it while the first panel shows
 that page. While a sensor is at its critical limit (an [alarm](#notices) of the notices) a
 panel shows its `alarm_theme`, Lumen Companion unless you set another (`""`: its own as ever):
-the temperatures, the load and the programs that cause it. With `same_look` a panel's theme takes the colours of the theme the first panel
+the temperatures, the load and the programs that cause it. The panels keep the same beat:
+a panel beside the first takes its readings a moment after the first panel's, so a value
+glides on both at once, and the same fan stands the same on panels that draw at the same
+rate. With `same_look` a panel's theme takes the colours of the theme the first panel
 shows (its palette, by name), its background colour, its fonts and how it frames its modules
 (`style`, and the module frames switched on or off for it); what is where and the pictures
 stay its own, and a change saved in Design shows on both at once. A change in config.toml

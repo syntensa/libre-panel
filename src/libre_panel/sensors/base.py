@@ -290,6 +290,11 @@ class SensorHub:
             return Snapshot(readings=readings, history=remember(self._history, readings),
                             images=images)  # fmt: skip
 
+    def age(self) -> float | None:
+        """How long ago the readings were last taken, in seconds (None: not yet)."""
+        taken = self._taken
+        return None if taken is None else max(0.0, time.monotonic() - taken[0])
+
     def shared(self, max_age: float) -> tuple[dict[str, Reading], dict[str, Any]]:
         """For another panel (:class:`HubView`): the readings and pictures taken last, when
         they are younger than ``max_age`` seconds, else new ones; the sources are not read
@@ -413,6 +418,11 @@ class HubView:
         readings.update(self.hub.fresh())
         return Snapshot(readings=readings, history=remember(self._history, readings),
                         images=images)  # fmt: skip
+
+    def age(self) -> float | None:
+        """How long ago the first panel's loop took the readings this panel shares: its loop
+        takes them a moment after, so a value glides on both at once (MainLoop.step)."""
+        return self.hub.age()
 
     def fresh(self, video: bool = True) -> dict[str, Reading]:
         return self.hub.fresh(video)

@@ -328,3 +328,37 @@ def test_a_fan_stays_round_when_the_theme_is_adapted():
     out = adapt_theme(data, "custom", "landscape", "scale", width=1920, height=480)
     wide = next(w for w in out["widgets"] if w["type"] == "fan")
     assert wide["w"] == wide["h"] == 72  # the smaller scale (480 / 320 = 1.5), not 4 x
+
+
+# -- the same fan on every panel ---------------------------------------------------------
+
+
+def test_the_same_fan_stands_the_same_on_two_panels_at_the_same_pace():
+    beats = fan.Beats()
+    panels = []
+    for wid in ("left", "right"):  # in themes of their own: other widgets, other places
+        renderer = Renderer(theme(widget(id=wid, x=10 if wid == "left" else 60)), animate=True)
+        renderer.beats, renderer.fps = beats, 50
+        panels.append(renderer)
+    alone = Renderer(theme(widget(id="left", x=10)), animate=True)
+    alone.fps = 50
+    for n in range(30):  # the second panel's frames a little after the first's
+        panels[0].render(snapshot(rpm=1500.0), 1.0 + n / 50)
+        panels[1].render(snapshot(rpm=1500.0), 1.004 + n / 50)
+        alone.render(snapshot(rpm=1500.0), 1.0 + n / 50)
+    left, right = panels[0]._rotors["left"], panels[1]._rotors["right"]
+    assert left.angle != alone._rotors["left"].angle  # (on its own it began elsewhere)
+    assert abs(right.angle - left.angle) < 0.05 and left.speed > 0
+    assert beats.of("rpm", 50, left.blades) is left.beat is right.beat
+    assert beats.of("rpm", 25, left.blades) is not left.beat  # a panel at another pace: its own
+
+
+def test_a_beat_goes_on_from_the_latest_frame_and_takes_back_one_behind_it():
+    beat = fan.Beat(0.5)
+    assert beat.turn(10.0, 2.0) == 0.5  # the first frame: as it stands
+    assert beat.turn(10.1, 2.0) == pytest.approx(0.7)
+    assert beat.turn(10.05, 2.0) == pytest.approx(0.6)  # a panel a moment behind
+    assert beat.turn(10.1, 2.0) == pytest.approx(0.7)  # nothing added twice
+    assert beat.turn(50.0, 1.0) == pytest.approx(0.9)  # after a pause: a frame of 0.2 s at most
+    assert beat.turn(5.0, 1.0) == pytest.approx(0.9)  # another clock: on from where it stands
+    assert beat.turn(5.05, 1.0) == pytest.approx(0.95)

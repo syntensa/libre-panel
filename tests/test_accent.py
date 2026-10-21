@@ -66,7 +66,7 @@ def test_the_setting_is_read_and_checked():
 def test_the_panel_draws_its_theme_in_the_chosen_accent():
     theme = load_theme(builtin_themes_dir() / "lumen")
     loop = object.__new__(app.MainLoop)  # (only what _renderer needs)
-    loop.warmup, loop.motion = app._Warmup(), app.Motion()
+    loop.warmup, loop.motion, loop.beats = app._Warmup(), app.Motion(), app.fan.Beats()
     renderer = loop._renderer(theme, Config(theme="lumen", accent="#E0457B"))
     try:
         assert renderer.theme.palette["accent"] == "#E0457B"
