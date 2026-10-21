@@ -107,3 +107,36 @@ def test_the_places_of_the_panels_come_from_config_and_what_each_panel_said():
     assert first == pytest.approx((0, 0, 292.5, 109.7), abs=0.1)  # the size the panel said
     assert second == pytest.approx((320, 0, 226.7, 56.7), abs=0.1)  # its model's, as set
     assert third is None  # not placed
+
+
+def test_a_scene_s_change_goes_across_the_panels_from_the_left(monkeypatch):
+    from dataclasses import replace
+
+    from libre_panel.config import Config
+
+    places = [(0.0, 0.0, 292.5, 109.7), (320.0, 0.0, 226.7, 56.7), None]
+    loop = object.__new__(app.MainLoop)
+    loop.places_of = lambda: places
+    written = 1_000.0
+    monkeypatch.setattr(app.time, "time", lambda: written)  # noticed at once
+    before = Config(scene="Work")
+    after = replace(before, scene="Gaming", stamp=int(written * 1e9))
+    loop.panel = None  # the first panel, on the left: after the lead only
+    assert loop._sweep(before, after) == pytest.approx(app.SWEEP_LEAD_S)
+    loop.panel = 0  # the one on the right: the whole sweep later
+    assert loop._sweep(before, after) == pytest.approx(app.SWEEP_LEAD_S + app.SWEEP_S)
+    loop.panel = 1  # not placed: at once
+    assert loop._sweep(before, after) == 0.0
+    loop.panel = 0
+    assert loop._sweep(after, after) == 0.0  # no scene changed: at once
+    monkeypatch.setattr(app.time, "time", lambda: written + 5)  # noticed late: at once
+    assert loop._sweep(before, after) == 0.0
+
+
+def test_a_transition_that_begins_later_shows_the_old_frame_until_then():
+    from libre_panel.render.overlays import transition
+
+    old, new = Image.new("RGB", (40, 20), "red"), Image.new("RGB", (40, 20), "blue")
+    kind = transition("fade", None)
+    shown, blend = app._blend((kind, old, 10.0), new, 9.5)
+    assert blend is not None and shown.getpixel((5, 5)) == (255, 0, 0)

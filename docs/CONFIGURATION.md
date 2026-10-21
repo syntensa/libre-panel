@@ -353,6 +353,10 @@ themes = ["arena", "lumen"]    # the first panel's, then those of [[panels]]; ""
 A theme chosen for a panel by itself afterwards (on *Start*, in the tray, under *More
 panels*) takes the scene off, and a scene stops the screens in turn as a chosen theme does.
 
+Where the panels are placed (*More panels*), a scene that is put on or off goes across them
+as they stand: the panel farthest to the left changes first, the one farthest to the right
+0.8 seconds after it, each with its own transition.
+
 ## Pages of the panel
 
 Besides the normal theme (or the screens in turn) the panel has pages it switches to when

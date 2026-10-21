@@ -27,7 +27,8 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
   showing the part where it stands, of whatever size the panels are; kept without the
   picture's metadata (*A picture across them…*)
 - **Scenes**: a theme for every panel at once, put on with a click on Start, from the tray or
-  with a keyboard shortcut (the next one); what the panels show is kept as one with a click
+  with a keyboard shortcut (the next one); what the panels show is kept as one with a click,
+  and where the panels are placed the change goes across them from the left to the right
   ([Scenes](docs/CONFIGURATION.md#scenes))
 - **A brightness of its own at night**: from one time to the other, over midnight too, or
   from sunset to sunrise at the weather's place; 0 is dark (*Settings → Panel*,

@@ -454,7 +454,8 @@ def _blend(
 ) -> tuple[Image.Image, tuple[Any, Image.Image, float] | None]:
     """The frame a transition shows now, and the transition if it goes on."""
     kind, old, began = blend
-    progress = (now - began) / kind.duration if kind.duration else 1.0
+    # (one that begins later, across the panels, shows the old frame until then)
+    progress = max(0.0, (now - began) / kind.duration) if kind.duration else 1.0
     if progress >= 1 or old.size != frame.size:
         return frame, None
     try:
@@ -745,6 +746,25 @@ class MainLoop:
         """What this panel's theme is drawn in besides itself: the first panel's look
         (:meth:`_look`) and its part of the picture across the panels (:meth:`_across`)."""
         return self._look(config), self._across(config)
+
+    def _sweep(self, before: Config, after: Config) -> float:
+        """How much later this panel's transition begins: when every panel's theme changes
+        at once (a scene put on or off), the change goes across the panels as they stand,
+        from the left to the right, :data:`SWEEP_S` from the first to the last, all from the
+        moment config.toml was written (each panel notices it in its own time, and warms its
+        theme first: :data:`SWEEP_LEAD_S` is left for that). 0 for any other change, or for a
+        panel that is not placed."""
+        if before.scene == after.scene or self.places_of is None or after.stamp is None:
+            return 0.0
+        places = self.places_of()
+        index = 0 if self.panel is None else self.panel + 1
+        own = places[index] if index < len(places) else None
+        centres = [x + w / 2 for x, _, w, _ in (p for p in places if p is not None)]
+        if own is None or len(centres) < 2 or max(centres) == min(centres):
+            return 0.0
+        share = (own[0] + own[2] / 2 - min(centres)) / (max(centres) - min(centres))
+        begins = after.stamp / 1e9 + SWEEP_LEAD_S + share * SWEEP_S  # (on the wall clock)
+        return max(0.0, min(SWEEP_LEAD_S + SWEEP_S, begins - time.time()))
 
     @staticmethod
     def _backdrop(across: tuple[str, int, tuple[Any, ...], int] | None) -> Image.Image | None:
@@ -1080,6 +1100,7 @@ class MainLoop:
                         setattr(device, name, getattr(fresh.device, name))
                     if _brightness(fresh) != link.brightness:
                         link.set_brightness(_brightness(fresh))
+                    before = config  # (the scene it had: a scene's change goes across them)
                     fresh.device, config = device, fresh
                     default = status.default_theme = fresh_default
                     i18n.set_language(config.language)
@@ -1099,7 +1120,8 @@ class MainLoop:
                             # a calm panel changes at once: a fade is a whole picture a frame
                             spec = "cut" if calm(config, display) else chosen or config.transition
                             kind = transition(spec, ctx)
-                            blend = _begin(kind, last_frame, shown_frame, now, toasts) or blend
+                            begins = now + self._sweep(before, config)
+                            blend = _begin(kind, last_frame, shown_frame, begins, toasts) or blend
                         if host is not None:
                             switches = host.switches  # this was the switch
                             host.emit("theme-changed", theme=wanted)
@@ -1360,6 +1382,11 @@ class _MorePanels:
     def close(self) -> None:
         self._end(list(self._runs))
 
+
+# a scene's change goes across the panels as they stand (MainLoop._sweep): this long from the
+# first to the last, after this long for each to notice it and warm its theme
+SWEEP_S = 0.8
+SWEEP_LEAD_S = 0.8
 
 HANG_FILENAME = "libre-panel-hang.log"
 HANG_S = 120.0  # a step of the loop this long is a hang: a whole serial frame takes half a minute
