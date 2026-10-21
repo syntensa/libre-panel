@@ -2269,7 +2269,14 @@
     "Step {n} of {count}": "第 {n} 步，共 {count} 步",
     "What should it show? The theme made to go beside panel 1's comes first.": "它应该显示什么？与面板 1 的主题搭配的主题排在最前。",
     "Which panel is it? One that is plugged in and shows nothing yet is offered first.": "是哪块面板？已接入但尚未显示内容的面板排在最前。",
-    "{name}, plugged in": "{name}，已接入"
+    "{name}, plugged in": "{name}，已接入",
+    "Copy to panel {number}": "复制到面板 {number}",
+    "Move to panel {number}": "移动到面板 {number}",
+    "On panel {number} now, in “{theme}”": "已放到面板 {number} 的“{theme}”中",
+    "On panel {number} now, in “{theme}”: a copy of its theme of your own, which it shows from now on": "已放到面板 {number} 的“{theme}”中：这是其主题的个人副本，今后该面板将显示它",
+    "only modules go to another panel": "只有模块能放到另一块面板上",
+    "there are no free cells for it on “{theme}”: make room there in Design first": "“{theme}”上没有空余的格子放它：请先在“设计”中腾出位置",
+    "there is no panel {number}": "没有面板 {number}"
   },
   "fields": {
     "align": "对齐",

@@ -131,6 +131,7 @@ export const endpoints = {
   acrossPicture: (stamp = "") => withToken(`/api/across/picture?v=${enc(String(stamp))}`),
   setAcross: (bytes) => api("POST", "/api/across", bytes, { raw: true }),
   panelsPhoto: () => withToken("/api/panels/photo"),
+  sendModules: (panel, modules) => post("/api/panels/send", { panel, modules }),
   pluginPages: () => get("/api/plugins/pages"),
   hardware: () => get("/api/hardware"),
   setHardware: (names) => post("/api/hardware", names),

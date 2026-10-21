@@ -2269,7 +2269,14 @@
     "Step {n} of {count}": "Paso {n} de {count}",
     "What should it show? The theme made to go beside panel 1's comes first.": "¿Qué debe mostrar? El tema hecho para acompañar al del panel 1 va primero.",
     "Which panel is it? One that is plugged in and shows nothing yet is offered first.": "¿Qué panel es? Uno conectado que aún no muestra nada aparece primero.",
-    "{name}, plugged in": "{name}, conectado"
+    "{name}, plugged in": "{name}, conectado",
+    "Copy to panel {number}": "Copiar al panel {number}",
+    "Move to panel {number}": "Mover al panel {number}",
+    "On panel {number} now, in “{theme}”": "Ahora en el panel {number}, en «{theme}»",
+    "On panel {number} now, in “{theme}”: a copy of its theme of your own, which it shows from now on": "Ahora en el panel {number}, en «{theme}»: una copia propia de su tema, que muestra desde ahora",
+    "only modules go to another panel": "solo los módulos pasan a otro panel",
+    "there are no free cells for it on “{theme}”: make room there in Design first": "no hay celdas libres para él en «{theme}»: haz sitio primero allí en Diseño",
+    "there is no panel {number}": "no hay panel {number}"
   },
   "fields": {
     "align": "Alineación",

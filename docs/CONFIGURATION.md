@@ -307,6 +307,9 @@ of the panel chosen above it, the *Overview* in Settings says how each one is do
 tray has a *More panels* menu: each panel's state, a switch and its theme. *Picture of all
 panels* saves one picture of them where they stand, each with what it shows now, to keep or to
 share.
+In *Design*, a module's menu has *Copy to panel 2* and *Move to panel 2*: the module goes on
+free cells of the theme that panel shows, and a theme that comes with Libre Panel gets a copy
+of your own first (`lumen-companion-own`), which the panel shows from then on.
 
 Above them the panels stand in their real sizes (from each model's diagonal and pixels, the
 way it is mounted), with what each shows, beside a monitor to place them by (24″ to 34″, or

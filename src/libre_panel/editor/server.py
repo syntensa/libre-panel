@@ -1433,6 +1433,28 @@ class EditorHandler(BaseHTTPRequestHandler):
         name = f"libre-panel-{time.strftime('%Y-%m-%d')}.png"
         self._send(200, buffer.getvalue(), "image/png", filename=name)
 
+    def _send_modules(self) -> None:
+        """``POST /api/panels/send {"panel": 2, "modules": [...]}``: modules of the theme in
+        Design sent to the theme another panel shows (distribute.py), a copy of its own first
+        where that is built in."""
+        from libre_panel import distribute
+
+        payload = self._read_json()
+        if payload is None:
+            return None
+        number, modules = payload.get("panel"), payload.get("modules")
+        if not isinstance(number, int) or isinstance(number, bool) or not isinstance(modules, list):
+            return self._error('expected {"panel": 2, "modules": [...]}')
+        if not 1 <= len(modules) <= 32 or not all(isinstance(m, dict) for m in modules):
+            return self._error("modules: 1 to 32 of them")
+        status = getattr(getattr(self.controls, "panel", None), "status", None)
+        beside = (getattr(status, "more", {}) or {}).get(number - 2)
+        try:
+            done = distribute.send(modules, number, self.state.config_path, beside)
+        except distribute.SendError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        self._json(done)
+
     def _across_picture(self) -> None:
         """``GET /api/across/picture``: the picture across the panels, small, for the app."""
         from libre_panel import arrangement
@@ -2062,6 +2084,7 @@ ROUTES: tuple[Route, ...] = (
     Route("POST", "/api/across", lambda h, m, u: h._across_upload()),
     Route("GET", "/api/across/picture", lambda h, m, u: h._across_picture(), picture=True),
     Route("GET", "/api/panels/photo", lambda h, m, u: h._panels_photo(), picture=True),
+    Route("POST", "/api/panels/send", lambda h, m, u: h._send_modules()),
     Route("GET", "/api/start-screen", lambda h, m, u: h._start_screen()),
     Route(
         "GET",

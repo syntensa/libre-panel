@@ -22,6 +22,9 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
 - **Every panel in Live, the Overview and the tray**: Live shows the picture of the panel
   chosen, the Overview says how each is doing, and the tray switches each on or off and
   gives it a theme
+- **Modules from one panel to another**: *Copy to panel 2* and *Move to panel 2* in a
+  module's menu in Design, onto free cells of the theme that panel shows (a copy of your own
+  where it is built in)
 - **A panel added step by step**: which one (one plugged in first), how it is mounted and
   what it shows, each step with a suggestion
 - **A picture of all panels**: one PNG of them where they stand, each with what it shows,

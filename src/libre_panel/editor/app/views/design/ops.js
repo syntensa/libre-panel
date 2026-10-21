@@ -546,3 +546,25 @@ export function applyLook(key) {
   edit(null, (current) => wearLook(current, key));
   toast(t("Look: {name}", { name: lookName(key) }));
 }
+
+/**
+ * Modules to the theme another panel shows (distribute.py): copied there, on free cells of its
+ * grid, or moved (then taken out here). A built-in theme there gets a copy of the person's own
+ * first, which that panel shows from then on.
+ */
+export async function sendModules(number, modules, move) {
+  try {
+    const done = await endpoints.sendModules(number, modules);
+    const text = done.copied
+      ? t("On panel {number} now, in “{theme}”: a copy of its theme of your own, which it shows from now on", { number, theme: done.theme })
+      : t("On panel {number} now, in “{theme}”", { number, theme: done.theme });
+    toast(text, { kind: "success" });
+    if (move) deleteSelection({ quiet: true });
+    if (done.copied) {
+      const { refreshThemes } = await import("../../core/actions.js");
+      refreshThemes();
+    }
+  } catch (error) {
+    toastError(error);
+  }
+}

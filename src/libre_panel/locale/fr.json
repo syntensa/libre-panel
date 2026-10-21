@@ -2269,7 +2269,14 @@
     "Step {n} of {count}": "Étape {n} sur {count}",
     "What should it show? The theme made to go beside panel 1's comes first.": "Que doit-il afficher ? Le thème fait pour aller avec celui de l’écran 1 vient en premier.",
     "Which panel is it? One that is plugged in and shows nothing yet is offered first.": "Quel écran est-ce ? Un écran branché qui n’affiche encore rien est proposé en premier.",
-    "{name}, plugged in": "{name}, branché"
+    "{name}, plugged in": "{name}, branché",
+    "Copy to panel {number}": "Copier vers l’écran {number}",
+    "Move to panel {number}": "Déplacer vers l’écran {number}",
+    "On panel {number} now, in “{theme}”": "Maintenant sur l’écran {number}, dans « {theme} »",
+    "On panel {number} now, in “{theme}”: a copy of its theme of your own, which it shows from now on": "Maintenant sur l’écran {number}, dans « {theme} » : une copie personnelle de son thème, qu’il affiche désormais",
+    "only modules go to another panel": "seuls les modules vont sur un autre écran",
+    "there are no free cells for it on “{theme}”: make room there in Design first": "il n’y a pas de cellules libres pour lui sur « {theme} » : faites d’abord de la place dans Design",
+    "there is no panel {number}": "il n’y a pas d’écran {number}"
   },
   "fields": {
     "align": "Alignement",

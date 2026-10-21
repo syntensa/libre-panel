@@ -3,7 +3,7 @@
 
 import { edit, isModule, selectedWidgets, single } from "../../core/doc.js";
 import { enumLabel, fieldLabel, t, widgetLabel } from "../../core/i18n.js";
-import { useStore } from "../../core/state.js";
+import { store, useStore } from "../../core/state.js";
 import { html, useLayoutEffect, useRef, useState } from "../../lib/preact.js";
 import { Chips, IconButton, NumberField } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
@@ -24,6 +24,7 @@ import {
   paste,
   resizeModuleBy,
   selectSameKind,
+  sendModules,
   setFlag,
   sourceLabels,
   specOf,
@@ -64,6 +65,17 @@ export function widgetMenu() {
   }
   if (one && isModule(one)) items.push({ icon: "detach", label: t("Detach into widgets"), run: () => detachModule(one) });
   if (one) items.push({ icon: "sliders", label: t("Fine-tuning"), run: () => inspectorState.set({ page: "details" }) });
+  // modules to the theme another panel shows: copied, or moved (Settings → Panel → More panels)
+  const others = (store.get().settings?.config?.panels || []).map((_, n) => n + 2);
+  if (others.length && chosen.length && chosen.every(isModule)) {
+    items.push("-");
+    for (const number of others) {
+      items.push(
+        { icon: "to-panel", label: t("Copy to panel {number}", { number }), run: () => sendModules(number, chosen, false) },
+        { icon: "to-panel", label: t("Move to panel {number}", { number }), run: () => sendModules(number, chosen, true) },
+      );
+    }
+  }
   items.push("-", { icon: "trash", label: t("Remove"), keys: "delete", danger: true, run: deleteSelection });
   return items;
 }
