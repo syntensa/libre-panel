@@ -28,12 +28,16 @@ const sourceText = (theme) => (theme.source === "plugin" ? t("from a plugin") : 
 
 /**
  * The themes with what Start says about each: whether it is on the panel (`shown`), made for
- * the panel (`fits`) or kept for another page (`special`: the round report), the `collection`
+ * the panel (`fits`) or kept for another page or panel (`special`: the round report, a theme
+ * to go beside another on a second panel, Lumen Companion), the `collection`
  * it belongs to ("" for Libre Panel's own and yours), and a short `note`. On a first start the
  * theme `defaultId` is the panel's own default (`isDefault`: what it shows until another is
  * chosen). Order: the one on the panel or the default, then Libre Panel's own and yours (those
  * that fit first: yours, built in, kept for a page), then the collections' the same way.
  */
+// a theme made to go beside another on a second panel (its versions too): kept for that
+const COMPANION = /-companion(-vertical|-\d+x\d+)?$/;
+
 export function startThemes({ themes, models, pages, model, defaultId = null }) {
   // on a first start the theme config.toml names is the default, not a choice
   const first = pages?.chosen === false;
@@ -55,7 +59,7 @@ export function startThemes({ themes, models, pages, model, defaultId = null }) 
       fits: fitsPanel(theme, model),
       sideways: upright && Boolean(w) && w > h, // on a panel on end, a theme that has no version for it
       collection: typeof theme.collection === "string" ? theme.collection : "",
-      special: special.has(theme.id) && !shown,
+      special: (special.has(theme.id) || COMPANION.test(theme.id)) && !shown,
       isDefault: first && theme.id === defaultId,
       note: where || sourceText(theme),
       own: !theme.builtin && theme.source !== "plugin",

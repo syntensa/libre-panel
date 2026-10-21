@@ -848,6 +848,9 @@ class Desk:
         return Snapshot(readings=self.host.published()).state("report")
 
     def database(self):
+        # what is queued written first: the stop waits only so long (3 s), and a slow disk (a
+        # Windows runner's, new files scanned) may take that to open the file at all
+        self.settle()
         self.manager.stop()  # writes what is left
         return sqlite3.connect(self.service.database)
 

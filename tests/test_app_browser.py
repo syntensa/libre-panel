@@ -154,15 +154,18 @@ def open_collections(page):
 
 def own_themes(page):
     """The ids of Libre Panel's own themes and yours that Start leads with: not a collection's,
-    and not one kept for a page (the round report; music's or the clock's page only while it is
-    on)."""
+    not one kept for a page (the round report; music's or the clock's page only while it is
+    on), and not one to go beside another on a second panel (Lumen Companion)."""
     return js(
         page,
-        """(() => {
+        r"""(() => {
           const { themes, pages } = window.libre.store.get();
           const apart = pages.pages.filter((p) => p.id !== "normal" && p.theme && (p.on || !p.own));
           const kept = new Set(apart.map((p) => p.theme));
-          return themes.filter((t) => !t.collection && !kept.has(t.id)).map((t) => t.id);
+          const companion = /-companion(-vertical|-\d+x\d+)?$/;
+          return themes
+            .filter((t) => !t.collection && !kept.has(t.id) && !companion.test(t.id))
+            .map((t) => t.id);
         })()""",
     )
 
