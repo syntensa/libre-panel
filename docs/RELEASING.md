@@ -46,11 +46,16 @@ the GitHub Release with all files, its notes taken from the CHANGELOG
 section. Then the PyPI upload, after approval, if it is set up.
 
 A version like `0.7.0rc1` (with a section `## 0.7.0rc1` in CHANGELOG.md) is a
-pre-release to try before everyone has it: the workflow makes it a **draft**,
-which only those who may write to the repository see, with all its files, and
-leaves PyPI out. *Publish release* on its page makes it a public pre-release;
-the app's update check never offers one, and an installed pre-release hears of
-the release that follows it (`0.7.0` after `0.7.0rc1`).
+pre-release to try before everyone has it: it becomes a **draft**, which only
+those who may write to the repository see, with all its files, and PyPI is left
+out. Without git: *Actions → Release → Run workflow* on `main`, with the version
+(`0.7.0rc1`) in *Version for a draft release*; a pushed tag `v0.7.0rc1` does the
+same. Not *Draft a new release → Publish release* on github.com: that publishes
+it for everyone. *Publish release* on the draft's page makes it a public
+pre-release (and makes its tag); the app's update check never offers one, and an
+installed pre-release hears of the release that follows it (`0.7.0` after
+`0.7.0rc1`). A run keeps none of the files it built: they are only ever in a
+release (on a public repository anyone signed in could download a run's files).
 
 Every download is tested on its own system before it is attached:
 
@@ -82,9 +87,9 @@ its memory, threads, open files and the panels' frame times every minute, and wr
 `soak/soak.md` with a chart: it passes when the memory grows by less than 5 MB an hour after
 the first ten minutes, the threads and the open files stay level and every panel kept showing.
 
-**Dry run:** start *Release* by hand (Actions → Release → Run workflow). It
-builds and tests everything but publishes nothing; the bundles are attached to
-the run as artifacts.
+**Dry run:** start *Release* by hand (Actions → Release → Run workflow) with the
+version left empty. It builds and tests everything but publishes nothing and
+keeps no files.
 
 The bundles are built from `packaging/pyinstaller/libre-panel.spec`. The icons
 come from `packaging/make_icons.py` (the logo is drawn in

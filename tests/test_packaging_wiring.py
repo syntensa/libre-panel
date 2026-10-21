@@ -125,3 +125,17 @@ def test_ci_runs_every_test_that_needs_a_browser_where_there_is_one():
     assert "test_app_browser.py" in needing
     for name in sorted(needing):
         assert any(Path(name).match(Path(pattern).name) for pattern in listed), name
+
+
+def test_a_release_candidate_is_never_for_everyone():
+    """A pre-release is a draft that only those who may write to the repository see, by hand as
+    by tag; a run keeps none of its files (on a public repository anyone signed in to GitHub
+    could download them), after the release and PyPI, whether they ran or not."""
+    workflow = read(".github", "workflows", "release.yml")
+    publish = workflow[workflow.index("- name: Publish the release with all files") :]
+    assert 'if [ "$pre" = true ]; then flags+=(--draft); fi' in publish  # a pushed tag
+    assert 'artifacts/* --repo "$GITHUB_REPOSITORY" --draft' in publish  # Run workflow
+    assert 'echo "::error::$TAG is published already"' in publish  # never one made public
+    forget = workflow[workflow.index("  forget-the-files:") :]
+    assert "if: always()" in forget and "github-release, pypi]" in forget
+    assert 'gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"' in forget

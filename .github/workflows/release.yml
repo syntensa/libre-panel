@@ -3,8 +3,15 @@ name: Release
 on:
   push:
     tags: ["v*"]
-  # Build and smoke-test the release files without publishing anything.
+  # By hand (Actions -> Release -> Run workflow): build and test the release files; with a
+  # version, they become a draft release of it that only who may write to the repository sees
+  # (a release candidate to try), else nothing is published.
   workflow_dispatch:
+    inputs:
+      draft:
+        description: "Version for a draft release (e.g. 0.7.0rc2); empty: only build and test"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -20,11 +27,13 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev,usb,tray]"
       - name: The tag matches the version
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.draft != ''
+        env:
+          TAG: ${{ inputs.draft != '' && format('v{0}', inputs.draft) || github.ref_name }}
         run: |
           version=$(python -c "from importlib.metadata import version; print(version('libre-panel'))")
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::tag $GITHUB_REF_NAME, but the package version is $version"
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::tag $TAG, but the package version is $version"
             exit 1
           fi
           grep -q "^## $version" CHANGELOG.md || { echo "::error::CHANGELOG.md has no section $version"; exit 1; }
@@ -197,10 +206,13 @@ jobs:
   github-release:
     timeout-minutes: 15
     needs: [python-package, standalone]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.draft != ''
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      TAG: ${{ inputs.draft != '' && format('v{0}', inputs.draft) || github.ref_name }}
+      DRAFT: ${{ inputs.draft }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v4
@@ -209,8 +221,8 @@ jobs:
           merge-multiple: true
       - name: Release notes from CHANGELOG.md
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          base="https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_REF_NAME"
+          version="${TAG#v}"
+          base="https://github.com/$GITHUB_REPOSITORY/blob/$GITHUB_SHA"
           awk -v v="$version" '
             /^## / { if (found) exit; if (index($0, "## " v " ") == 1 || $0 == "## " v) { found = 1; next } }
             found { print }
@@ -223,18 +235,31 @@ jobs:
         run: |
           flags=()
           pre=false
-          case "${GITHUB_REF_NAME#v}" in *a*|*b*|*rc*|*dev*) pre=true; flags+=(--prerelease) ;; esac
-          title="Libre Panel $GITHUB_REF_NAME"
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+          case "${TAG#v}" in *a*|*b*|*rc*|*dev*) pre=true; flags+=(--prerelease) ;; esac
+          title="Libre Panel $TAG"
+          if [ -n "$DRAFT" ]; then
+            # by hand: a draft, which only who may write to the repository sees with its files,
+            # made anew on each run; "Publish release" on its page makes it public and its tag
+            drafted=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft \
+                      --jq .isDraft 2>/dev/null || echo none)
+            if [ "$drafted" = false ]; then
+              echo "::error::$TAG is published already"
+              exit 1
+            elif [ "$drafted" = true ]; then
+              gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes
+            fi
+            gh release create "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY" --draft \
+              --target "$GITHUB_SHA" --title "$title" --notes-file notes.md "${flags[@]}"
+          elif gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             # made on github.com together with its tag: fill it in
-            gh release upload "$GITHUB_REF_NAME" artifacts/* --repo "$GITHUB_REPOSITORY" --clobber
-            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            gh release upload "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
               --title "$title" --notes-file notes.md "${flags[@]}"
           else
             # a pre-release (0.7.0rc1) is a draft: only who may write to the repository sees
             # it and its files, until it is published by hand
             if [ "$pre" = true ]; then flags+=(--draft); fi
-            gh release create "$GITHUB_REF_NAME" artifacts/* --repo "$GITHUB_REPOSITORY" \
+            gh release create "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY" \
               --verify-tag --title "$title" --notes-file notes.md "${flags[@]}"
           fi
 
@@ -257,3 +282,23 @@ jobs:
           name: python-package
           path: dist
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  forget-the-files:
+    # The files are only ever in a release: a run keeps none of them. (On a public repository
+    # anyone signed in to GitHub may download a run's files, a release candidate's too.) After
+    # the release and PyPI, whether they ran or not.
+    if: always()
+    needs: [test, python-package, standalone, github-release, pypi]
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Delete the files of this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --paginate \
+            --jq '.artifacts[].id' | while read -r id; do
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"
+          done
