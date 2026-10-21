@@ -1249,13 +1249,16 @@ limits = [
 
 ## Language
 
-Libre Panel speaks English, German, French, Spanish, Polish and Portuguese
-(Brazil): `"en"`, `"de"`, `"fr"`, `"es"`, `"pl"`, `"pt"`. `language = "auto"`
+Libre Panel speaks English, German, French, Spanish, Polish, Portuguese
+(Brazil) and Simplified Chinese: `"en"`, `"de"`, `"fr"`, `"es"`, `"pl"`, `"pt"`, `"zh"`.
+`language = "auto"`
 follows the system language, and English where Libre Panel does not speak it;
 *Settings → Start and system → Language* (and Ctrl+K) writes this setting. It
 covers the app, the tray menu, messages about the panel, and the panel itself:
 weekday and month names (in German with "27.", in Spanish and Portuguese with
-"27 de", in Polish in the genitive, "27 września"), and weather descriptions. Texts that are part of a theme (such as "CPU TEMP")
+"27 de", in Polish in the genitive, "27 września", in Chinese as "9月27日"), and weather
+descriptions; characters the built-in fonts do not have (Chinese among them) are drawn with
+a font of the system. Texts that are part of a theme (such as "CPU TEMP")
 stay as the theme's author wrote them. Command-line output for diagnostics
 (`models`, `devices`, `sensors`, `doctor`) is in English.
 

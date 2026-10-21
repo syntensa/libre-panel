@@ -183,7 +183,7 @@ it look. **Live** shows how it runs, and with the memory on, the **history**: te
 and power over a day, a week or a month, and the games you played.
 **Keyboard shortcuts** for the whole PC pause the panel, turn its brightness or open the app
 from any window (Windows, Linux with X11), and switch off as a whole. The app speaks English,
-German, French, Spanish, Polish and Portuguese (Brazil).
+German, French, Spanish, Polish, Portuguese (Brazil) and Simplified Chinese.
 
 ## Themes
 

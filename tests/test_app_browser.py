@@ -3575,7 +3575,7 @@ def test_settings_start_and_language(app_url, isolated_home):
         assert page.locator("#settings-title").inner_text() == "Start and system"
         language = page.get_by_role("combobox", name="Language")
         expect_options = ["System", "Deutsch", "English", "Español", "Français", "Polski",
-                          "Português (Brasil)"]  # fmt: skip
+                          "Português (Brasil)", "简体中文"]  # fmt: skip
         assert language.locator("option").all_inner_texts() == expect_options
         language.select_option("de")
         waits_for(page, lambda: settings_config().language == "de")

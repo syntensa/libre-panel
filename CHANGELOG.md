@@ -5,6 +5,8 @@
 Collected since 0.6.9; this section grows until 0.7.0 comes out.
 
 **New**
+- **Simplified Chinese** for the app, the tray and the panel, contributed by @clover1420;
+  dates as "9月27日"
 - **More panels at once**: up to three panels beside the first, each with a theme of its
   own, on the same readings (*Settings → Panel → More panels*, `[[panels]]` in config.toml).
   A panel that one of them has open is passed by when another looks for its own, so two

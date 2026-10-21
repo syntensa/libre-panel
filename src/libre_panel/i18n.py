@@ -32,6 +32,9 @@ LANGUAGES = {
 }
 # what follows a day's number before a month's name: "27. September", "27 de septiembre"
 DAY_BEFORE_MONTH = {"de": ".", "es": " de", "pt": " de"}
+# a day with its month's name written as the language writes it instead: "9月27日"
+MONTH_DAY = {"zh": "{month}月{day}日"}
+_DAY_AND_MONTH = re.compile(r"%-?d\.? %[bB]|%[bB] %-?d")
 DECIMAL_COMMA = {"de", "fr", "es", "pl", "pt"}  # 1,5 rather than 1.5
 LOCALE_DIR = Path(__file__).resolve().parent / "locale"
 
@@ -110,13 +113,17 @@ def format_date(moment: datetime, fmt: str) -> str:
 
     A day number followed by a month name is joined as the language does it: German gives it a
     period ("27. September"), Spanish and Portuguese a "de" ("27 de septiembre"), and Polish
-    names the month in the genitive there ("27 września", ``months_after_day``).
+    names the month in the genitive there ("27 września", ``months_after_day``); Chinese writes
+    the two as numbers, the month first ("9月27日", :data:`MONTH_DAY`).
 
     Only the codes go through ``strftime``, one at a time, never the names or the text around
     them: on Windows, Python before 3.12 passes its format through the ANSI code page, where a
     "ś" is lost (and an "ä" only happens to survive).
     """
     names = catalog(_current)
+    if _current in MONTH_DAY:  # (the month and the day as numbers: no name to look up)
+        both = MONTH_DAY[_current].format(month=moment.month, day=moment.day).replace("%", "%%")
+        fmt = _DAY_AND_MONTH.sub(lambda _: both, fmt)
 
     def code(match: re.Match[str]) -> str:
         token = match.group(0)

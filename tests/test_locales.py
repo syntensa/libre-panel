@@ -1,5 +1,5 @@
-"""French, Spanish, Polish and Portuguese (Brazil): each catalog complete and in step with the
-German one, which test_i18n holds to the code."""
+"""French, Spanish, Polish, Portuguese (Brazil) and Simplified Chinese: each catalog complete and
+in step with the German one, which test_i18n holds to the code."""
 
 import json
 import re
@@ -11,7 +11,7 @@ from i18n_keys import all_messages, tables
 from libre_panel import i18n
 from libre_panel.i18n import format_date
 
-LANGUAGES = ["fr", "es", "pl", "pt"]
+LANGUAGES = ["fr", "es", "pl", "pt", "zh"]
 PLACEHOLDER = re.compile(r"\{[^{}]*\}")
 SHY = "­"
 
@@ -96,6 +96,7 @@ def test_names_of_days_and_months(language):
         ("es", "domingo 27 de septiembre"),
         ("pl", "niedziela 27 września"),
         ("pt", "domingo 27 de setembro"),
+        ("zh", "星期日 9月27日"),
     ],
 )
 def test_dates(language, expected):

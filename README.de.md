@@ -194,7 +194,8 @@ dafür gemacht sind, und sagt, wenn eine neue Version da ist, sofern du es nachs
 Last und Leistung über einen Tag, eine Woche oder einen Monat, dazu die gespielten Spiele.
 **Tastenkürzel** für den ganzen PC halten das Panel an, ändern seine Helligkeit oder öffnen die
 App aus jedem Fenster (Windows, Linux mit X11) und lassen sich als Ganzes ausschalten. Die App
-spricht Deutsch, Englisch, Französisch, Spanisch, Polnisch und Portugiesisch (Brasilien).
+spricht Deutsch, Englisch, Französisch, Spanisch, Polnisch, Portugiesisch (Brasilien) und
+vereinfachtes Chinesisch.
 
 ## Themes
 
