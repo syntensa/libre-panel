@@ -1,12 +1,12 @@
 # Changelog
 
-## 0.7.0 — not released yet
+## 0.7.0rc1 — 2026-10-21
 
-Collected since 0.6.9; this section grows until 0.7.0 comes out.
+A release candidate of 0.7.0, to try before everyone has it: up to four panels at once, placed
+where they stand, with scenes and one picture across them; new modules for the ping, a timer
+and the power the PC draws; and much more that was collected since 0.6.9.
 
 **New**
-- **Simplified Chinese** for the app, the tray and the panel, contributed by @clover1420;
-  dates as "9月27日"
 - **More panels at once**: up to three panels beside the first, each with a theme of its
   own, on the same readings (*Settings → Panel → More panels*, `[[panels]]` in config.toml).
   A panel that one of them has open is passed by when another looks for its own, so two
@@ -19,49 +19,31 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
   with the fans turning, the drives and the processes) and Arena Companion (the temperatures
   large while you play), for the 9.2" either way up and the 12.3"; a panel added beside Lumen
   gets Lumen's, and Arena's for the game's page
-- **Every panel in Live, the Overview and the tray**: Live shows the picture of the panel
-  chosen, the Overview says how each is doing, and the tray switches each on or off and
-  gives it a theme
-- **Smooth motion on every panel**: switched on for each panel by itself, with the name of
-  its own standby clip, asked for that panel and never taken from another
-- **Modules from one panel to another**: *Copy to panel 2* and *Move to panel 2* in a
-  module's menu in Design, onto free cells of the theme that panel shows (a copy of your own
-  where it is built in)
-- **A panel added step by step**: which one (one plugged in first), how it is mounted and
-  what it shows, each step with a suggestion
-- **A picture of all panels**: one PNG of them where they stand, each with what it shows,
-  in a dark frame, to share (*Picture of all panels*)
-- **One look on every panel**: a panel beside the first can take the colours, fonts and
-  module frames of the theme the first one shows, and follows a change in Design at once
-  (*Look as panel 1's*; on for a companion)
 - **Where the panels stand**: the panels in their real sizes, each with what it shows, beside
   a monitor to place them by; dragged (or moved with the arrow keys) to where they are, in the
   case, under the monitor or on end, each place kept in config.toml (`at`)
 - **One picture across all panels**: under the themes of the panels that are placed, each
   showing the part where it stands, of whatever size the panels are; kept without the
   picture's metadata (*A picture across them…*)
+- **One look on every panel**: a panel beside the first can take the colours, fonts and
+  module frames of the theme the first one shows, and follows a change in Design at once
+  (*Look as panel 1's*; on for a companion)
 - **Scenes**: a theme for every panel at once, put on with a click on Start, from the tray or
   with a keyboard shortcut (the next one); what the panels show is kept as one with a click,
   and where the panels are placed the change goes across them from the left to the right
   ([Scenes](docs/CONFIGURATION.md#scenes))
-- **A brightness of its own at night**: from one time to the other, over midnight too, or
-  from sunset to sunrise at the weather's place; 0 is dark (*Settings → Panel*,
-  `[device] night`)
-- **The panel sleeps with the computer** (Windows, and Linux with systemd-logind): dark
-  while the computer sleeps, lit again when it wakes (`dark_on_sleep`, on unless turned off)
-- **Dimmed while you are away**: while the computer is locked or (Windows) its monitor is
-  off, every panel takes a brightness for then, dark to begin with, and lights up again when
-  you are back (`dark_when_away`, `away_brightness`; on unless turned off)
-- **One accent colour for every screen**: Windows' or your own; what is in a theme's accent
-  colour takes it, on the panel and in the previews (*Settings → Panel*, `accent`)
-- **Backup**: your settings and own themes in one file, saved and put back with a click
-  (*Settings → System*), for another computer or to keep
-- **Cores** (Arena and the cores module): a bar for each physical core, its threads
-  together, where Windows or Linux says which belong together; `threads` shows every thread
-- **The game card** tells what holds the frame rate down (the graphics card, the processor
-  or a frame cap), the 1 % low, the frame time and the longest frame
-- Arena on the 9.2" and the 5.2": the fans turn beside the temperatures
-- The Turing 3.5", the 8.8" (rev. C) and the 12.3" are supported: their owners run them
+- **A panel added step by step**: which one (one plugged in first), how it is mounted and
+  what it shows, each step with a suggestion
+- **Modules from one panel to another**: *Copy to panel 2* and *Move to panel 2* in a
+  module's menu in Design, onto free cells of the theme that panel shows (a copy of your own
+  where it is built in)
+- **Smooth motion on every panel**: switched on for each panel by itself, with the name of
+  its own standby clip, asked for that panel and never taken from another
+- **Every panel in Live, the Overview and the tray**: Live shows the picture of the panel
+  chosen, the Overview says how each is doing, and the tray switches each on or off and
+  gives it a theme
+- **A picture of all panels**: one PNG of them where they stand, each with what it shows,
+  in a dark frame, to share (*Picture of all panels*)
 - **New modules**: *Ping* (how long the internet takes to answer, the tries without an
   answer and the history), *Timer* (minutes in a ring that fills, focus and break in turn)
   and *Power use* (the watts now, kWh today and this month, what they cost)
@@ -78,6 +60,26 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
   the frames per second, the 1 % low and the frame time there too
 - **Values from JSON**: what the address of a NAS, a router or another PC answers, or a
   file, as readings for any module (`[sensors.json]`)
+- **A brightness of its own at night**: from one time to the other, over midnight too, or
+  from sunset to sunrise at the weather's place; 0 is dark (*Settings → Panel*,
+  `[device] night`)
+- **The panel sleeps with the computer** (Windows, and Linux with systemd-logind): dark
+  while the computer sleeps, lit again when it wakes (`dark_on_sleep`, on unless turned off)
+- **Dimmed while you are away**: while the computer is locked or (Windows) its monitor is
+  off, every panel takes a brightness for then, dark to begin with, and lights up again when
+  you are back (`dark_when_away`, `away_brightness`; on unless turned off)
+- **One accent colour for every screen**: Windows' or your own; what is in a theme's accent
+  colour takes it, on the panel and in the previews (*Settings → Panel*, `accent`)
+- **Backup**: your settings and own themes in one file, saved and put back with a click
+  (*Settings → System*), for another computer or to keep
+- **Cores** (Arena and the cores module): a bar for each physical core, its threads
+  together, where Windows or Linux says which belong together; `threads` shows every thread
+- **The game card** tells what holds the frame rate down (the graphics card, the processor
+  or a frame cap), the 1 % low, the frame time and the longest frame
+- **Simplified Chinese** for the app, the tray and the panel, contributed by @clover1420;
+  dates as "9月27日"
+- Arena on the 9.2" and the 5.2": the fans turn beside the temperatures
+- The Turing 3.5", the 8.8" (rev. C) and the 12.3" are supported: their owners run them
 
 **Fixes**
 - Fans that never ran (an empty header on the mainboard) no longer fill the temperature
@@ -88,6 +90,7 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
 - Nothing new starts while Windows ends the session: no ffmpeg, and no new connection to
   the panel
 
+## 0.6.9 — 2026-10-19
 
 No PresentMon error when Windows shuts down.
 
@@ -96,11 +99,6 @@ No PresentMon error when Windows shuts down.
   out**: Windows refuses to start a program while the session ends, and Libre Panel started
   PresentMon on the way out (again after Windows had ended it, and once more to stop its
   recording session). It starts none from the moment Windows asks to end the session
-
-**What comes next**
-- Instead of the many small releases so far, the changes and fixes from now on are
-  collected for **0.7.0**, which comes out as one release after a while. Reports are as
-  welcome as ever: what they bring reaches you with 0.7.0
 
 ## 0.6.8 — 2026-10-19
 
