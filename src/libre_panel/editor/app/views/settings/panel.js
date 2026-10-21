@@ -668,6 +668,10 @@ function MoreSettings({ n, panel, video, models, themes, chosen, onBrightness, o
       <${Select} label=${t("While music plays")} value=${panel.media_theme || ""} options=${[{ value: "", label: t("As ever") }, ...themes.slice(1)]}
         onChange=${(value) => onChange({ media_theme: value })} />
     <//>
+    <${SettingRow} title=${t("During an alarm")} hint=${n === 0 ? t("While a sensor is at its critical limit (the warnings of the notices): the temperatures and what keeps the PC busy, say.") : null}>
+      <${Select} label=${t("During an alarm")} value=${panel.alarm_theme ?? "lumen-companion"} options=${[{ value: "", label: t("As ever") }, ...themes.slice(1)]}
+        onChange=${(value) => onChange({ alarm_theme: value })} />
+    <//>
     <${SettingRow} title=${t("Brightness as panel 1's")} hint=${t("At night and while you are away too. Some panels look brighter than others at the same setting: even them out with the difference below.")}>
       <${Toggle} label=${t("Brightness as panel 1's")} checked=${panel.follow_brightness !== false} onChange=${(on) => onChange({ follow_brightness: on })} />
     <//>

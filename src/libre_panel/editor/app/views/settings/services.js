@@ -100,6 +100,10 @@ const OPTIONS = {
     structured: true,
   },
   "notices.quiet_s": { label: () => t("Quiet time between two warnings"), ...SECONDS },
+  "notices.alarm": {
+    label: () => t("An alarm on every panel"),
+    hint: () => t("A sensor at its critical limit: a red edge on every panel, and the panels beside panel 1 show their theme for an alarm."),
+  },
   "game.programs": {
     label: () => t("Programs that are games"),
     hint: () => t("File names; “name.exe = A Better Name” sets the name to show."),

@@ -22,6 +22,7 @@ from urllib.parse import urlencode
 
 from libre_panel import __version__, i18n
 from libre_panel.config import (
+    ALARM_THEME,
     MORE_PANELS,
     MOTIONS,
     SYMBOL_PACKS,
@@ -463,6 +464,7 @@ class Settings:
                         "brightness_offset": panel.brightness_offset,
                         "game_theme": panel.game_theme,
                         "media_theme": panel.media_theme,
+                        "alarm_theme": panel.alarm_theme,
                         "same_look": panel.same_look,
                         "video": {
                             "mode": panel.video_mode,
@@ -597,13 +599,14 @@ class Settings:
             if not isinstance(table, dict):
                 raise SettingsError(f"panels[{n}]: expected a table")
             default = {"theme": "", "on": True, "follow_brightness": True, "brightness_offset": 0,
-                       "game_theme": "", "media_theme": "", "same_look": False,
+                       "game_theme": "", "media_theme": "", "alarm_theme": ALARM_THEME,
+                       "same_look": False,
                        "video": {}, **_device_table(_panel_device(n))}  # fmt: skip
             now = config.panels[n].device.output if n < len(config.panels) else default["output"]
             kept = {}
             for key, item in table.items():
                 name = f"panels[{n}].{key}"
-                if key in ("theme", "game_theme", "media_theme"):
+                if key in ("theme", "game_theme", "media_theme", "alarm_theme"):
                     cleaned = _text(name, item, 64)
                 elif key in ("on", "follow_brightness", "same_look"):
                     cleaned = _flag(name, item)

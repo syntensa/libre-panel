@@ -27,6 +27,7 @@ from libre_panel.meter import Meter
 from libre_panel.plugins.host import LEFT_OUT, NO_PANEL, OFF_IN_THEME, Delivery, Toast
 from libre_panel.plugins.render import RenderContext
 from libre_panel.render import fan
+from libre_panel.render.alarm import AlarmEdge
 from libre_panel.render.motion import Motion
 from libre_panel.render.overlays import ToastLayer, switch_policy, transition
 from libre_panel.render.renderer import Renderer, changed_region, changed_regions
@@ -391,6 +392,14 @@ def _sequence_state(config: Config, rotation: Rotation) -> dict[str, Any] | None
     return {"index": place.index, "theme": place.theme, "left_s": round(place.left_s, 1)}
 
 
+ALARM = "alarm"  # the notices service's reading, and the page of a panel beside the first
+
+
+def _alarm(snapshot: Snapshot | None) -> bool:
+    """Whether a sensor is at its critical limit (the notices service says)."""
+    return snapshot is not None and snapshot.value(ALARM) == 1
+
+
 def calm(config: Config, display: Any) -> bool:
     """Whether the panel's motion is kept calm (``[device] motion``): a picture a second, no
     gliding, turning or fading, for a slow panel (a USB serial one) by itself."""
@@ -724,6 +733,7 @@ class MainLoop:
         self.night_at = 0.0  # when the loop last looked whether it is night (_follow_night)
         self.presence = presence.changes()  # the person left or came back since: at once
         self.toasts = ToastLayer(renderer)
+        self.alarm = AlarmEdge()  # red round the picture when a sensor reaches its crit limit
         if host is not None:
             host.judge = self.judge  # ``notify`` says whether a message will show
         self.blend: tuple[Any, Image.Image, float] | None = None  # a transition under way
@@ -743,8 +753,13 @@ class MainLoop:
             prepare.join(_Warmup.LIMIT_S)
 
     def _mode(self) -> str | None:
-        """The first panel's mode, for a panel beside it (None for the first: its host says)."""
-        return self.mode_of() if self.mode_of is not None else None
+        """The first panel's mode, for a panel beside it (None for the first: its host says);
+        "alarm" while a sensor is at its critical limit, for one with a theme for that."""
+        if self.mode_of is None:
+            return None
+        if _alarm(getattr(self, "snapshot", None)) and ALARM in self.config.modes:
+            return ALARM  # (none yet while the loop is made)
+        return self.mode_of()
 
     def _look(self, config: Config) -> tuple[str, int | None] | None:
         """For a panel beside the first in its look (``same_look``): the theme the first panel
@@ -1243,6 +1258,9 @@ class MainLoop:
                 # decided after _blend: the frame a hiding transition ends shows the toast
                 hidden = blend is not None and getattr(blend[0], "toasts", "wait") == "hide"
                 frame = shown_frame = renderer.shown = toasts.draw(frame, now, hidden=hidden)
+                self.alarm.follow(_alarm(snapshot), now)
+                frame = self.alarm.draw(frame, now, renderer.theme.palette.get("crit"),
+                                        still=not renderer.animate)  # fmt: skip
                 if identify.showing():  # which panel is which: its number instead, a moment
                     number = 1 if self.panel is None else self.panel + 2
                     accent = renderer.theme.palette.get("accent") or "#2EE6D6"

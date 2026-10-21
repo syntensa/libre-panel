@@ -528,3 +528,22 @@ def test_a_panel_beside_the_first_has_smooth_motion_of_its_own_with_its_own_clip
     assert gaps[0]["usb"] and not gaps[0]["on"] and "clip" in gaps[0]["gaps"]
     settings.write({"set": {"panels": [{**panel, "video": {"mode": "off"}}]}})
     assert "video" not in path.read_text(encoding="utf-8")
+
+
+def test_a_panel_beside_the_first_has_what_follows_on_every_frame_as_it_is_now():
+    class Services(SensorProvider):  # (as the services' readings come: an alarm)
+        name, every_frame = "services", True
+
+        def __init__(self):
+            super().__init__()
+            self.alarm = 0
+
+        def read(self):
+            return {"alarm": Reading("alarm", self.alarm)}
+
+    services = Services()
+    first = SensorHub([services])
+    first.snapshot()  # the first panel's readings, a moment ago
+    services.alarm = 1
+    shared = HubView(first).snapshot()
+    assert shared.value("alarm") == 1  # not as it was when the first panel took its readings

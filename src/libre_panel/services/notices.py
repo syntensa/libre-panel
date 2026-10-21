@@ -13,6 +13,11 @@ no theme on the panel shows them. The volume and what is playing are also
 looked at whenever they change between two samples (``host.on("fresh")``), so
 their message comes within a frame or two of the key, not with the next reading
 (up to a second later).
+
+A sensor at its ``crit`` limit is also an alarm: the reading ``alarm`` is 1 (and
+``alarm.text`` says which, as its warning does) until it has been below the limit
+for :data:`ALARM_HOLD_S`, else 0. Every panel's edge turns red for a moment when it
+begins, and a panel beside the first shows its ``alarm_theme`` while it lasts.
 """
 
 from __future__ import annotations
@@ -37,6 +42,7 @@ HINT_AFTER_S = 30.0  # without a volume reading for this long, say what is missi
 COVER = "media.cover"
 APP_ICON = "media.app_icon"  # the icon of the program that plays, if a source brings it
 COVER_WAIT_S = 3.0  # a cover that comes after the title still joins the message
+ALARM_HOLD_S = 10.0  # the alarm stays this long after the last value at a crit limit
 ICONS = {"cpu": "cpu", "gpu": "gpu", "ram": "ram", "mem": "ram", "disk": "disk", "fan": "fan"}
 
 
@@ -122,6 +128,7 @@ class Notices(Service):
         "restarted": ("bool", True),
         "warnings": ("list", []),
         "quiet_s": ("number", 120.0),
+        "alarm": ("bool", True),  # a crit limit reached: on every panel (the "alarm" reading)
     }
 
     def __init__(
@@ -158,6 +165,7 @@ class Notices(Service):
         self._told_events: set[tuple[str, float]] = set()  # (title, start) told already
         self._began = clock()
         self._stopped = False
+        self._alarm_until: float | None = None  # while the alarm is on: when it ends
 
     def start(self) -> None:
         keys = [limit.key for limit in self.limits]
@@ -175,6 +183,8 @@ class Notices(Service):
             self.host.on("fresh", self.on_fresh)
         if self.options["restarted"]:
             self.host.on("panel-restarted", self.on_restarted)
+        if self.options["alarm"] and any(limit.crit is not None for limit in self.limits):
+            self.host.publish("alarm", 0, "", t("Alarm"))
 
     def stop(self) -> None:
         self._stopped = True  # a sample that is under way then says nothing
@@ -195,6 +205,8 @@ class Notices(Service):
             self._check_appointments(snapshot)
         for limit in self.limits:
             self._check_limit(limit, snapshot, now)
+        if self.options["alarm"]:
+            self._check_alarm(snapshot, now)
 
     def on_fresh(self, snapshot: Snapshot, keys: frozenset[str]) -> None:
         """The volume moved, or the track or its state changed, between two samples: tell it
@@ -319,7 +331,6 @@ class Notices(Service):
         limit.told = now
         reading = snapshot.readings.get(limit.key)
         unit = reading.unit if reading else ""
-        name = limit.name or (reading.label if reading else "") or limit.key
         payload: dict[str, Any] = {"label": t("Warning")}
         full = limit.scale or (100.0 if unit == "%" else None)
         if full:
@@ -328,9 +339,25 @@ class Notices(Service):
         if icon is None and unit == "°C":
             icon = "temperature"
         self._tell(
-            WARNING, f"{name} {readable(value)} {unit}".rstrip(), payload,
+            WARNING, _limit_text(limit, snapshot, value), payload,
             key=f"warning:{limit.key}", level="error" if level == 2 else "warning", icon=icon,
         )  # fmt: skip
+
+    def _check_alarm(self, snapshot: Snapshot, now: float) -> None:
+        """``alarm``: 1 while a sensor is at its crit limit, and :data:`ALARM_HOLD_S` after."""
+        for limit in self.limits:
+            value = number(snapshot.value(limit.key))
+            if limit.crit is not None and value is not None and value >= limit.crit:
+                if self._alarm_until is None:
+                    self.host.log.info("alarm: %s", _limit_text(limit, snapshot, value))
+                    self.host.publish("alarm", 1, "", t("Alarm"))
+                self.host.publish("alarm.text", _limit_text(limit, snapshot, value), "", t("Alarm"))
+                self._alarm_until = now + ALARM_HOLD_S
+                return
+        if self._alarm_until is not None and now >= self._alarm_until:
+            self._alarm_until = None
+            self.host.publish("alarm", 0, "", t("Alarm"))
+            self.host.unpublish("alarm.text")
 
     # -- the panel -----------------------------------------------------------------
 
@@ -354,3 +381,11 @@ class Notices(Service):
             text, icon=icon, level=level, seconds=kind.seconds, kind=kind.name, rank=kind.rank,
             payload=payload, key=key or kind.name,
         )  # fmt: skip
+
+
+def _limit_text(limit: Limit, snapshot: Snapshot, value: float) -> str:
+    """The name of the sensor, its value and its unit: "CPU temperature 92 °C"."""
+    reading = snapshot.readings.get(limit.key)
+    unit = reading.unit if reading else ""
+    name = limit.name or (reading.label if reading else "") or limit.key
+    return f"{name} {readable(value)} {unit}".rstrip()

@@ -482,6 +482,8 @@ class SequenceConfig:
 
 # How many panels may run beside the one [device] names ([[panels]])
 MORE_PANELS = 3
+# The theme a panel beside the first shows while a sensor is at its critical limit
+ALARM_THEME = "lumen-companion"
 
 
 @dataclass
@@ -500,6 +502,9 @@ class PanelConfig:
     # its theme while the first panel shows a game's page or music's ("": its own as ever)
     game_theme: str = ""
     media_theme: str = ""
+    # its theme while a sensor is at its critical limit (the notices service's alarm): the
+    # temperatures and what keeps the PC busy ("": its own as ever)
+    alarm_theme: str = ALARM_THEME
     # the look of the first panel's theme as it shows (its colours, fonts and module frames)
     # on this panel's own theme; a change in Design follows (theme.model.with_look)
     same_look: bool = False
@@ -603,7 +608,8 @@ class Config:
                 away_brightness=shifted(first.away_brightness),
             )
         pages = {mode: ModeConfig(theme=theme, on=True) for mode, theme in
-                 (("game", panel.game_theme), ("media", panel.media_theme)) if theme}  # fmt: skip
+                 (("game", panel.game_theme), ("media", panel.media_theme),
+                  ("alarm", panel.alarm_theme)) if theme}  # fmt: skip
         return replace(
             self,
             device=device,
@@ -998,6 +1004,7 @@ def _panels(value: Any) -> list[PanelConfig]:
         follow = _expect(table.pop("follow_brightness", True), bool, f"{where}.follow_brightness")
         game = _expect(table.pop("game_theme", ""), str, f"{where}.game_theme").strip()
         media = _expect(table.pop("media_theme", ""), str, f"{where}.media_theme").strip()
+        alarm = _expect(table.pop("alarm_theme", ALARM_THEME), str, f"{where}.alarm_theme").strip()
         look = _expect(table.pop("same_look", False), bool, f"{where}.same_look")
         video = _panel_video(table.pop("video", {}), f"{where}.video")
         offset = _expect(table.pop("brightness_offset", 0), int, f"{where}.brightness_offset")
@@ -1006,7 +1013,7 @@ def _panels(value: Any) -> list[PanelConfig]:
         table = {**panel_defaults(n), **table}
         panels.append(PanelConfig(theme=theme, on=on, device=_parse_device(table, where),
                                   follow_brightness=follow, brightness_offset=offset,
-                                  game_theme=game, media_theme=media,
+                                  game_theme=game, media_theme=media, alarm_theme=alarm,
                                   same_look=look, **video))  # fmt: skip
     return panels
 

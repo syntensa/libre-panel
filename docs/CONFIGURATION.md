@@ -298,6 +298,7 @@ model = "turing-3.5"           # "auto": a panel the others do not use
 port = "COM6"                  # serial panels: which of two of the same kind it is
 # game_theme = "lumen-vertical"  # its theme while the first panel shows a game's page,
 # media_theme = "encore"       # and music's ("" or left out: its own as ever)
+# alarm_theme = "lumen-companion"  # while a sensor is at its crit limit ("": its own)
 # same_look = true             # its theme in the look of the one the first panel shows
 # video = { mode = "auto", local_clip = "..." }  # smooth motion on it too, its own clip
 # follow_brightness = true     # its brightness as the first panel's, at night and while
@@ -351,7 +352,9 @@ with the name of its own standby clip, asked for that panel and never taken from
 the first panel's rate and encoder settings; each panel in smooth motion is a video of its own,
 which costs more of the computer. One given a theme
 for a game or for music (`game_theme`, `media_theme`) shows it while the first panel shows
-that page. With `same_look` a panel's theme takes the colours of the theme the first panel
+that page. While a sensor is at its critical limit (an [alarm](#notices) of the notices) a
+panel shows its `alarm_theme`, Lumen Companion unless you set another (`""`: its own as ever):
+the temperatures, the load and the programs that cause it. With `same_look` a panel's theme takes the colours of the theme the first panel
 shows (its palette, by name), its background colour, its fonts and how it frames its modules
 (`style`, and the module frames switched on or off for it); what is where and the pictures
 stay its own, and a change saved in Design shows on both at once. A change in config.toml
@@ -894,6 +897,8 @@ microphone = true      # muted or on again; needs "audio" in [sensors] providers
 appointments = 10      # minutes before an appointment begins (0: none); needs "calendar"
 restarted = true       # "Panel restarted"
 quiet_s = 120          # warnings: the same sensor is not told again within this time
+alarm = true           # a crit limit reached: a red edge on every panel, and the panels
+                       # beside the first show their alarm_theme
 
 [[services.notices.warnings]]
 key = "cpu.temp"       # any reading, see: libre-panel sensors
@@ -913,6 +918,11 @@ crit = 85
   never twice within `quiet_s`. A worse level (`crit` after `warn`) is told
   at once, also in the quiet time. A sensor that is past its limit when the
   service starts is told too.
+- A sensor at its `crit` limit is also an **alarm**: every panel's edge pulses red for three
+  seconds (it stays still on a calm panel), and the panels of `[[panels]]` show their
+  `alarm_theme` until the value has been below the limit for ten seconds. Themes can read it
+  too: `alarm` is 1 while it lasts and 0 else, `alarm.text` says which sensor ("CPU
+  temperature 93 °C"), for a widget with `needs = "alarm=1"`. `alarm = false` leaves it out.
 - Notices look at every new reading, that is every `refresh_ms` of the theme.
   The volume is looked at on every frame it moves in, too, so its message comes
   within a frame or two of the volume key, whatever `refresh_ms` is.

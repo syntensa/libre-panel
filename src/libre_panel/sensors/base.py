@@ -408,6 +408,9 @@ class HubView:
 
     def snapshot(self) -> Snapshot:
         readings, images = self.hub.shared(self.SHARE_S)
+        # what follows on every frame (the services' readings: an alarm) as it is now, not as
+        # it was when the shared ones were taken
+        readings.update(self.hub.fresh())
         return Snapshot(readings=readings, history=remember(self._history, readings),
                         images=images)  # fmt: skip
 
