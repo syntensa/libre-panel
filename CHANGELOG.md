@@ -1,10 +1,11 @@
 # Changelog
 
-## 0.7.0rc1 — 2026-10-21
+## 0.7.0rc2 — 2026-10-21
 
 A release candidate of 0.7.0, to try before everyone has it: up to four panels at once, placed
-where they stand, with scenes and one picture across them; new modules for the ping, a timer
-and the power the PC draws; and much more that was collected since 0.6.9.
+where they stand, with scenes, one picture across them, the same beat and an alarm on all of
+them; new modules for the ping, a timer, the power the PC draws and the UPS; a theme in very
+large digits; a portable zip that is portable; and much more that was collected since 0.6.9.
 
 **New**
 - **More panels at once**: up to three panels beside the first, each with a theme of its
@@ -80,6 +81,40 @@ and the power the PC draws; and much more that was collected since 0.6.9.
   dates as "9月27日"
 - Arena on the 9.2" and the 5.2": the fans turn beside the temperatures
 - The Turing 3.5", the 8.8" (rev. C) and the 12.3" are supported: their owners run them
+- **An alarm on every panel**: when a sensor reaches the `crit` limit of its warning, every
+  panel's edge pulses red for three seconds, and the panels beside the first show their
+  theme for an alarm while it lasts, Lumen Companion unless you choose another (*During an
+  alarm* in each panel's settings, `alarm_theme`); themes can read `alarm` and `alarm.text`
+  ([Notices](docs/CONFIGURATION.md#notices))
+- **The same beat on every panel**: a panel beside the first takes its readings a moment
+  after the first panel's, so a value glides on both at once, and the same fan stands the
+  same on panels that draw at the same rate
+- **The UPS** through Network UPS Tools: its battery, runtime, load, power and whether the
+  PC runs on it, from upsd on this PC, a NAS, a Raspberry Pi or WinNUT (`nut` in `[sensors]
+  providers`), with a *UPS* module; a warning on `ups.on_battery` makes the mains going off
+  an alarm ([More sensor sources](docs/CONFIGURATION.md#more-sensor-sources))
+- **High Contrast**: white on black in very large digits, to read from across the room: the
+  temperatures of the processor and the graphics card, orange when warm and red when hot, and
+  the time, for every size from 2.1" to 12.3" and upright; the *Very large number* module
+  shows one reading that way in any theme
+- **The portable zip keeps its settings beside it**, in the folder `data` next to the program,
+  so the whole folder moves to a USB stick or another PC; its first start takes over the
+  settings of an installed Libre Panel, once
+- **The microphone module**: the crossed symbol and "Muted" large in the critical colour
+  while it is muted, calm while it is on
+- **Ping to up to four hosts**, each module showing the one it is given (*Which host*)
+- **Values from JSON set up in the app** (*Settings → Sensors*): a name, the address or file,
+  the fields and their units; the headers stay in config.toml
+- **The tray**: the timer while it runs (start or pause, back to the start), and each panel's
+  brightness, as panel 1's or its own
+
+**Faster and steadier**
+- The first picture comes sooner after the start: what only later frames need (the other
+  kinds of weather, the rotor positions of the fans) is made after it, between frames
+- The next sample's readings are taken between two frames, not in the frame that shows them,
+  so the sources no longer make that frame late
+- A soak test for releases: a day of two panels, its memory, threads and pace
+  ([Releasing](docs/RELEASING.md))
 
 **Fixes**
 - Fans that never ran (an empty header on the mainboard) no longer fill the temperature
