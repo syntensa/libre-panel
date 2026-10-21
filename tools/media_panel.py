@@ -953,6 +953,143 @@ CLIPS: dict[str, PanelClip] = {
     ),
 }  # fmt: skip
 
+# -- several panels at once ---------------------------------------------------------------------
+
+
+class _ClipMonotonic(_FrozenTime):
+    """``time`` for the readings: how old they are is told on the clip's clock, so a panel beside
+    the first shares the first panel's readings at the same frames on every run."""
+
+    def __init__(self, clock: Clock) -> None:
+        self.clock = clock
+
+    def monotonic(self) -> float:
+        return self.clock.now
+
+
+GAP_MM = 30  # between two panels of a clip, as more-panels.png has them
+
+
+@dataclass(frozen=True)
+class PanelsClip:
+    """Several panels at once, where they stand: the first panel's loop and a loop for each panel
+    beside it, on the first panel's readings and in its beat, as the app runs them, in the
+    picture *Picture of all panels* saves.
+
+    ``themes`` are the first panel's theme, then each other panel's; ``alarm`` the theme each
+    panel beside the first shows while a sensor is at its critical limit ("": its own)."""
+
+    about: str
+    themes: tuple[str, ...]
+    seconds: float
+    setup: Callable[[Stage, tuple[str, ...]], None]
+    # where each panel stands, by column and row: one panel's size and a gap of 30 mm apart
+    places: tuple[tuple[int, int], ...]
+    model: str = "turing-9.2-usb"
+    alarm: tuple[str, ...] = ()
+    poster: float = 0.0
+    loop: str = "fade"
+    warmup: float = WARMUP_S
+
+    @property
+    def kind(self) -> str:
+        return "panels"
+
+
+def alarm_at(stage: Stage, start: float, end: float) -> None:
+    """A sensor at its critical limit from ``start`` to ``end`` seconds: the processor's
+    temperature over 90 °C, and the notices service's ``alarm`` (as the app's would say it)."""
+    stage.tweak(surge({"cpu.temp": 34, "cpu.load": 40}, at=start - 0.6, rise=0.6,
+                      hold=end - start, fall=1.0))  # fmt: skip
+
+    def say(on: int) -> Callable[[Stage], None]:
+        return lambda s: s.host.publish(Reading("alarm", on, "", "Alarm"), owner="notices")
+
+    stage.at(start, say(1))
+    stage.at(end, say(0))
+
+
+# Two bars, one above the other: Lumen, and Lumen Companion beside it. A burst of work goes up on
+# both at once, the same fans turning in step; then the processor gets too hot: both edges pulse
+# red, and the second shows High Contrast until it has cooled.
+def more_panels(stage: Stage, themes: tuple[str, ...]) -> None:
+    stage.show(stage.theme(themes[0]))
+    work_burst(stage, at=0.8)
+    alarm_at(stage, 3.6, 6.8)
+
+
+def record_panels(
+    name: str,
+    clip: PanelsClip,
+    settings: Settings,
+    folder: Path,
+    themes: tuple[str, ...] | None = None,
+) -> Recorded:
+    """Run ``clip``'s panels in step, frame by frame, and keep their pictures in ``folder``."""
+    from libre_panel import arrangement
+    from libre_panel.devices.models import find_model
+    from libre_panel.sensors import base
+
+    themes = themes or clip.themes
+    if len(themes) != len(clip.themes):
+        raise ValueError(f"{name} shows {len(clip.themes)} theme(s), not {len(themes)}")
+    w, h = arrangement.millimetres(find_model(clip.model))
+    with workshop(), contextlib.ExitStack() as stack:
+        stage = Stage(settings)
+        stack.enter_context(mock.patch.object(base, "time", _ClipMonotonic(stage.clock)))
+        clip.setup(stage, themes)
+        first = stage._begin()
+        stage.loop = first
+        beside = []
+        for n, theme in enumerate(themes[1:]):
+            alarm = clip.alarm[n] if n < len(clip.alarm) else ""
+            modes = {"alarm": ModeConfig(theme=stage.theme(alarm), on=True)} if alarm else {}
+            config = Config(theme=stage.theme(theme), language="en", fps=settings.fps,
+                            transition="fade", sensors=SensorsConfig(providers=["demo"]),
+                            modes=modes)  # fmt: skip
+            beside.append(MainLoop(
+                config, hub=base.HubView(first.hub), display=Eye(settings.fps),
+                clock=stage.clock, panel=n, mode_of=lambda: stage.host.mode, beats=first.beats,
+            ))  # fmt: skip
+        fps = settings.fps
+        overlap = round(FADE_S * fps) if clip.loop == "fade" else 0
+        sink = FrameSink(folder, fps)
+        events = sorted(stage._events)
+        done = 0
+        try:
+            for n in range(-round(clip.warmup * fps), round((clip.seconds + overlap / fps) * fps)):
+                stage.clock.now = START + n / fps
+                while n >= 0 and done < len(events) and events[done][0] <= n / fps + 1e-9:
+                    events[done][2](stage)
+                    done += 1
+                frames = [loop.step(stage.clock.now) for loop in (first, *beside)]
+                if n < 0:
+                    continue
+                shown = [((c * (w + GAP_MM), r * (h + GAP_MM), w, h), frame.copy(), False, k + 1)
+                         for k, ((c, r), frame) in enumerate(zip(clip.places, frames,
+                                                                 strict=True))]  # fmt: skip
+                picture = arrangement.photo(shown)
+                assert picture is not None
+                sink.add(picture)
+        finally:
+            for loop in (first, *beside):
+                loop.close()
+            stage.host.close()
+        recorded = sink.frames()
+    if overlap:
+        recorded = fade_loop(recorded, overlap)
+    return Recorded(recorded, min(recorded.count - 1, round(clip.poster * fps)))
+
+
+PANELS_CLIPS: dict[str, PanelsClip] = {
+    "more-panels": PanelsClip(
+        "two panels at once: the same beat on both, then an alarm that turns both edges red",
+        ("lumen", "lumen-companion"), 9.0, more_panels, places=((0, 0), (0, 1)),
+        alarm=("contrast",), poster=4.4,
+    ),
+}  # fmt: skip
+
+
 # The panel's own screens: its boot logo, then its standby clip, as the panel shows them.
 START_CLIPS: dict[str, StartClip] = {
     "start-screen": StartClip(
