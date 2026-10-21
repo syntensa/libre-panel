@@ -287,6 +287,7 @@ läuft ohne Administratorrechte.
 | **Bildraten in Spielen** | PresentMon steckt im Download; das dritte Kästchen nimmt dich in die Gruppe *Leistungsprotokollbenutzer* auf | PresentMon steckt im Download; *Alle Sensoren freischalten* nimmt dich auf | nur unter Windows |
 | **Videomodus mit 50 fps** | ffmpeg steckt im Download | ffmpeg steckt im Download | ffmpeg steckt im Download |
 | **USB-Zugriff aufs Panel** | nichts zu tun | nichts zu tun | dieselbe Karte schreibt die udev-Regel |
+| **Einstellungen** | in deinem eigenen Ordner | im Ordner `data` neben dem Programm: Sie ziehen mit um | in deinem eigenen Ordner |
 
 - **Einmal gefragt, dann läuft es.** Windows fragt einmal nach Administratorrechten, beim Setup
   oder bei *Alle Sensoren freischalten*; unter Linux fragt dein System einmal nach dem

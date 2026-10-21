@@ -13,7 +13,11 @@ libre-panel config path     # where it is
 | Windows | `%APPDATA%\LibrePanel\config.toml` |
 | Linux | `~/.config/libre-panel/config.toml` |
 
-Set `LIBRE_PANEL_HOME` to use another folder (portable installs). Changes to
+The portable zip keeps everything in the folder `data` beside `libre-panel.exe` instead, as
+long as the file `portable.txt` lies there too: the whole folder can move to a USB stick or
+another PC. Its first start takes over the settings of a Libre Panel installed for you, once;
+delete `portable.txt` to use your own folder as the setup does. Set `LIBRE_PANEL_HOME` to use
+any other folder. Changes to
 `config.toml` and to the active theme are picked up while running. Choose a folder that
 only you can change, such as one in your profile: a Libre Panel that starts with the
 highest rights runs the programs and plugins this folder names with those rights

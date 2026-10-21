@@ -273,6 +273,7 @@ Libre Panel itself runs without administrator rights.
 | **Game frame rates** | PresentMon is in the download; the third box adds you to *Performance Log Users* | PresentMon is in the download; *Unlock all sensors* adds you | Windows only |
 | **50 fps video mode** | ffmpeg is in the download | ffmpeg is in the download | ffmpeg is in the download |
 | **The panel's USB access** | nothing to do | nothing to do | the same card writes the udev rule |
+| **Settings** | in your own folder | in the folder `data` beside the program: it moves with it | in your own folder |
 
 - **One question.** Windows asks for administrator rights once, for the setup or for *Unlock
   all sensors*; on Linux your system asks for your password once. *Install for me only* is

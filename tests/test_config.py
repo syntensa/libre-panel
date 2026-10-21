@@ -549,3 +549,36 @@ def test_a_write_that_comes_while_another_is_under_way_keeps_both(isolated_home,
     other[0].join(5)
     config = load_config(path)
     assert (config.device.rotate, config.device.brightness) == (180, 30)
+
+
+def test_a_portable_copy_keeps_its_settings_beside_the_program(tmp_path, monkeypatch):
+    from libre_panel import config as config_module
+
+    program = tmp_path / "stick" / "libre-panel.exe"
+    program.parent.mkdir()
+    program.write_bytes(b"")
+    assert config_module.portable_dir(str(program)) is None  # no portable.txt: installed
+    (program.parent / "portable.txt").write_text("portable", encoding="utf-8")
+    assert config_module.portable_dir(str(program)) == program.parent / "data"
+    assert config_module.portable_dir() is None  # (run from Python: never)
+
+    monkeypatch.delenv("LIBRE_PANEL_HOME", raising=False)
+    monkeypatch.setattr(config_module.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(config_module.sys, "executable", str(program))
+    usual = tmp_path / "usual"
+    monkeypatch.setattr(config_module, "usual_dir", lambda: usual)
+    assert config_module.config_dir() == program.parent / "data"
+    assert config_module.take_over_into_portable() is None  # nothing to take over
+    (usual / "themes" / "mine").mkdir(parents=True)
+    (usual / "config.toml").write_text('theme = "mine"\n', encoding="utf-8")
+    (usual / "logs").mkdir()
+    (usual / "logs" / "libre-panel.log").write_text("old", encoding="utf-8")
+    assert config_module.take_over_into_portable() == usual
+    data = program.parent / "data"
+    assert (data / "config.toml").read_text(encoding="utf-8") == 'theme = "mine"\n'
+    assert (data / "themes" / "mine").is_dir() and not (data / "logs").exists()
+    (usual / "config.toml").write_text('theme = "other"\n', encoding="utf-8")
+    assert config_module.take_over_into_portable() is None  # once: then each keeps its own
+    assert "mine" in (data / "config.toml").read_text(encoding="utf-8")
+    monkeypatch.setenv("LIBRE_PANEL_HOME", str(tmp_path / "own"))
+    assert config_module.config_dir() == tmp_path / "own"  # still first

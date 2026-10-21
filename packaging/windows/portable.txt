@@ -1,0 +1,8 @@
+This copy of Libre Panel is portable: its settings, themes and logs are in the folder
+"data" beside libre-panel.exe, so the whole folder can move to a USB stick or another PC.
+
+On its first start it takes over the settings of a Libre Panel installed for you (if there
+are any), once; after that the two keep their own.
+
+Delete this file to keep the settings in your own folder (%APPDATA%\LibrePanel), as the
+installed Libre Panel does.

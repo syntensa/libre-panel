@@ -902,6 +902,15 @@ def _hand_over_to_the_app(argv: list[str]) -> bool:
     return True
 
 
+def _portable() -> None:
+    """A portable copy's first start takes over the settings of the user's own folder."""
+    from libre_panel.config import take_over_into_portable
+
+    came = take_over_into_portable()
+    if came is not None:
+        logging.getLogger(__name__).info("portable: took over the settings of %s", came)
+
+
 def main(argv: list[str] | None = None, default_command: str = "start") -> int:
     parser = build_parser()
     argv = sys.argv[1:] if argv is None else list(argv)
@@ -925,6 +934,7 @@ def main(argv: list[str] | None = None, default_command: str = "start") -> int:
     )
     _threads_on_signal()
     _unblock()
+    _portable()
     from libre_panel import i18n
     from libre_panel.instance import AlreadyRunning
     from libre_panel.theme.model import ThemeError

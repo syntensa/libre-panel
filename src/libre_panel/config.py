@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import os
 import re
+import shutil
 import sys
 import threading
 import time
@@ -22,6 +24,8 @@ from pathlib import Path
 from typing import Any
 
 from libre_panel.sequence import Step, StepError, parse_steps
+
+log = logging.getLogger(__name__)
 
 CONFIG_FILENAME = "config.toml"
 # The theme of every panel but the bars, and what ``Config.theme`` is where nothing better is
@@ -331,19 +335,65 @@ class ConfigError(ValueError):
     """Raised when the configuration file is invalid."""
 
 
+PORTABLE_MARK = "portable.txt"  # beside libre-panel.exe: a portable copy (portable_dir)
+
+
+def portable_dir(program: str | None = None) -> Path | None:
+    """For a portable copy (on a USB stick, in a folder of its own): the folder ``data``
+    beside the program when a file ``portable.txt`` is there too; None for an installed one
+    and for one run from Python."""
+    if program is None:
+        if not getattr(sys, "frozen", False):
+            return None
+        program = sys.executable
+    folder = Path(program).resolve().parent
+    return folder / "data" if (folder / PORTABLE_MARK).is_file() else None
+
+
 def config_dir() -> Path:
     """Per-user directory holding config.toml and user themes.
 
-    LIBRE_PANEL_HOME overrides it (portable installs, tests).
+    LIBRE_PANEL_HOME overrides it (tests, a folder of one's own), then a portable copy's
+    ``data`` folder (:func:`portable_dir`).
     """
     override = os.environ.get("LIBRE_PANEL_HOME")
     if override:
         return Path(override)
+    portable = portable_dir()
+    if portable is not None:
+        return portable
+    return usual_dir()
+
+
+def usual_dir() -> Path:
+    """Where an installed Libre Panel keeps its settings: the user's own folder."""
     if sys.platform == "win32":
         base = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
         return Path(base) / "LibrePanel"
     base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
     return Path(base) / "libre-panel"
+
+
+def take_over_into_portable() -> Path | None:
+    """On the first start of a portable copy: the settings in the user's own folder (where an
+    installed Libre Panel, and the portable copies before 0.7, keep theirs) are copied into its
+    ``data`` folder, once; the logs stay behind. The folder they came from, or None."""
+    portable = None if os.environ.get("LIBRE_PANEL_HOME") else portable_dir()
+    if portable is None or portable.exists():
+        return None
+    usual = usual_dir()
+    if not (usual / "config.toml").is_file():
+        return None
+    part = portable.with_name(portable.name + ".part")
+    try:
+        shutil.rmtree(part, ignore_errors=True)
+        shutil.copytree(usual, part, ignore=shutil.ignore_patterns("logs"))
+        part.rename(portable)
+    except OSError as exc:
+        log.warning("portable: the settings of %s were not taken over: %s", usual, exc)
+        shutil.rmtree(part, ignore_errors=True)
+        return None
+    return usual
 
 
 def user_themes_dir() -> Path:

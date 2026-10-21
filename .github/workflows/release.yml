@@ -157,7 +157,10 @@ jobs:
         shell: pwsh
         run: |
           Copy-Item LICENSE, README.md, NOTICE.md dist/libre-panel/
+          # the zip keeps its settings in the folder "data" beside the program (config.portable_dir)
+          Copy-Item packaging/windows/portable.txt dist/libre-panel/
           7z a "dist/libre-panel-$env:VERSION-windows-x64-portable.zip" ./dist/libre-panel/*
+          Remove-Item dist/libre-panel/portable.txt  # (not for the setup)
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
           & $iscc "/DAppVersion=$env:VERSION" "/DNumericVersion=$env:NUMERIC" packaging\windows\libre-panel.iss
