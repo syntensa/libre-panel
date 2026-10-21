@@ -4510,3 +4510,29 @@ def test_a_panel_added_beside_lumen_shows_lumen_s_companion(app_url, isolated_ho
         look.click()  # its own look
         waits_for(page, lambda: not settings_config().panels[0].same_look)
         assert "same_look" not in (isolated_home / "config.toml").read_text(encoding="utf-8")
+
+
+def test_values_from_json_are_set_up_in_the_settings(app_url, isolated_home):
+    choose_theme(isolated_home)
+    with isolated_home.joinpath("config.toml").open("a", encoding="utf-8") as config:
+        config.write('\n[sensors]\nproviders = ["load", "json", "psutil"]\n')
+    with browser_page(app_url, "settings/sensors") as page:
+        card = page.locator("#json-sources")
+        expect(card).to_contain_text("No source yet.")
+        card.get_by_role("button", name="Add a source").click()
+        waits_for(page, lambda: len(settings_config().sensors.options.get("json", {})
+                                    .get("sources", [])) == 1)  # fmt: skip
+        source = card.locator(".json-source")
+        where = source.get_by_label("Address or file")
+        where.fill("http://192.168.1.10/api/values")
+        where.press("Enter")
+        fields = source.get_by_label("Fields")
+        fields.fill("cpu = cpu\ntemp = sensors[0].value")
+        fields.blur()
+        waits_for(page, lambda: settings_config().sensors.options["json"]["sources"][0]
+                  .get("fields") == {"cpu": "cpu", "temp": "sensors[0].value"})  # fmt: skip
+        kept = settings_config().sensors.options["json"]["sources"][0]
+        assert kept["url"] == "http://192.168.1.10/api/values" and kept["name"] == "source1"
+        source.get_by_role("button", name="Remove this source").click()
+        waits_for(page, lambda: not settings_config().sensors.options.get("json", {})
+                  .get("sources"))  # fmt: skip

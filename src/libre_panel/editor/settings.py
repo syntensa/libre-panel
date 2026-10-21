@@ -429,6 +429,7 @@ class Settings:
                         "mode": mode if mode in MODES else "auto",
                         "url": url if isinstance(url, str) and url else DEFAULT_URL,
                     },
+                    "json": _json_sources(config),
                 },
                 "refresh_ms": config.refresh_ms,
                 "weather": {
@@ -573,6 +574,8 @@ class Settings:
             return _check_switch(name, value)
         if name == "panels":
             return "tables", self._check_panels(value, config)
+        if name == JSON_SOURCES:
+            return "tables", _check_json_sources(value, config)
         self._check_rights(name, value, config)
         if value is None:
             if name not in UNSETTABLE:
@@ -1134,6 +1137,88 @@ def _rule_accent(name: str, value: Any, config: Config) -> str:
     return text.upper() if text.startswith("#") else text
 
 
+JSON_SOURCES = "sensors.json.sources"
+JSON_MOST = 16  # sources (sensors.json_source.MAX_SOURCES)
+
+
+def _json_sources(config: Config) -> dict[str, Any]:
+    """``[sensors.json]`` for the app: how often, and each source as the form edits it. The
+    headers (a token, a password) are not handed out: the form says whether there are some,
+    and keeps them as they are."""
+    options = config.sensors.options.get("json", {})
+    sources = []
+    for entry in options.get("sources") or []:
+        if not isinstance(entry, dict):
+            continue
+        fields, units = entry.get("fields"), entry.get("units")
+        sources.append({
+            "name": str(entry.get("name") or ""),
+            "where": str(entry.get("url") or entry.get("file") or ""),
+            "fields": {str(k): str(v) for k, v in (fields or {}).items()}
+            if isinstance(fields, dict) else {},
+            "units": {str(k): str(v) for k, v in (units or {}).items()}
+            if isinstance(units, dict) else {},
+            "headers": bool(entry.get("headers")),
+        })  # fmt: skip
+    every = options.get("update_s", 30)
+    return {"update_s": every if isinstance(every, int | float) else 30, "sources": sources}
+
+
+def _pairs(name: str, value: Any) -> dict[str, str]:
+    if not isinstance(value, dict) or len(value) > 100:
+        raise SettingsError(f"{name}: a table of at most 100 names")
+    found = {}
+    for key, item in value.items():
+        key = _text(f"{name}.{key}", key, 40, required=True)
+        found[key] = _text(f"{name}.{key}", item, 200)
+    return found
+
+
+def _check_json_sources(value: Any, config: Config) -> list[dict[str, Any]]:
+    """``sensors.json.sources`` as the app's form sends it (each ``{name, where, fields,
+    units}``): written as ``[[sensors.json.sources]]``, ``where`` as ``url`` (http:// or
+    https://) or ``file``, the headers of a source of the same name kept. A file not named
+    yet is refused while Libre Panel runs with administrator rights."""
+    if not isinstance(value, list) or len(value) > JSON_MOST:
+        raise SettingsError(f"{JSON_SOURCES}: a list of at most {JSON_MOST} sources")
+    before = {
+        str(entry.get("name")): entry.get("headers")
+        for entry in config.sensors.options.get("json", {}).get("sources") or []
+        if isinstance(entry, dict) and entry.get("headers")
+    }
+    files = {  # read with the rights Libre Panel has: a new one only in config.toml then
+        str(entry.get("file"))
+        for entry in config.sensors.options.get("json", {}).get("sources") or []
+        if isinstance(entry, dict) and entry.get("file")
+    }
+    tables, names = [], set()
+    for n, source in enumerate(value):
+        where = f"{JSON_SOURCES}[{n}]"
+        if not isinstance(source, dict):
+            raise SettingsError(f"{where}: expected a table")
+        name = _text(f"{where}.name", source.get("name"), 40, required=True)
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+            raise SettingsError(f"{where}.name: letters, digits, - and _ only")
+        if name in names:
+            raise SettingsError(f"{where}.name: {name!r} is there twice")
+        names.add(name)
+        place = _text(f"{where}.where", source.get("where"), 300, required=True)
+        table: dict[str, Any] = {"name": name}
+        table["url" if place.startswith(("http://", "https://")) else "file"] = place
+        if "file" in table and place not in files and access.elevated():
+            raise _refused_with_rights(f"{where}.where")
+        fields = _pairs(f"{where}.fields", source.get("fields") or {})
+        units = _pairs(f"{where}.units", source.get("units") or {})
+        if fields:
+            table["fields"] = fields
+        if units:
+            table["units"] = units
+        if name in before:
+            table["headers"] = before[name]
+        tables.append(table)
+    return tables
+
+
 def _rule_providers(name: str, value: Any, config: Config) -> list[str]:
     from libre_panel.sensors.base import available_providers
 
@@ -1248,6 +1333,7 @@ RULES: dict[str, Any] = {
         n, v, ("auto", "service", "inprocess", "webserver")
     ),
     "sensors.librehardwaremonitor.url": _rule_url,
+    "sensors.json.update_s": lambda n, v, c: _whole(n, v, 2, 3600),
     "weather.enabled": lambda n, v, c: _flag(n, v),
     "weather.units": lambda n, v, c: _choice(n, v, ("metric", "imperial")),
     "weather.update_minutes": lambda n, v, c: _whole(n, v, 5, 1440),

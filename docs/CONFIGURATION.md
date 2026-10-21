@@ -700,7 +700,9 @@ above; the lows are those of MangoHud's samples (one every `log_interval` ms). T
 
 **Values from JSON** (`json.*`): what the address of a NAS, a router, a Proxmox host or a
 second PC answers, or a file another program writes. Nothing to sign up for: the address is
-asked as it is, every `update_s` seconds, in a thread of its own.
+asked as it is, every `update_s` seconds, in a thread of its own. With the source switched on,
+*Settings → Sensors → Values from JSON* sets them up (a name, the address or file, the fields
+and their units); headers stay as config.toml has them.
 
 ```toml
 [sensors]

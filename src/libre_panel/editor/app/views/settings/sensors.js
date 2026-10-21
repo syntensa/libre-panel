@@ -197,6 +197,86 @@ function Sources() {
     <//>`;
 }
 
+// -- values from JSON ([sensors.json]) ----------------------------------------------------------
+
+/** "name = value" lines as a table, and back. */
+const fromLines = (text) =>
+  Object.fromEntries(
+    text
+      .split("\n")
+      .map((line) => line.split("="))
+      .filter((parts) => parts.length >= 2 && parts[0].trim())
+      .map(([key, ...rest]) => [key.trim(), rest.join("=").trim()]),
+  );
+const toLines = (table) => Object.entries(table || {}).map(([key, value]) => `${key} = ${value}`).join("\n");
+
+/** A text of several lines, written when it is left. */
+function LinesField({ value, onCommit, label, placeholder }) {
+  const [draft, setDraft] = useState(null);
+  return html`<textarea
+    class="input mono"
+    rows="3"
+    aria-label=${label}
+    placeholder=${placeholder}
+    spellcheck="false"
+    value=${draft ?? value}
+    onInput=${(event) => setDraft(event.currentTarget.value)}
+    onBlur=${(event) => {
+      const text = event.currentTarget.value;
+      setDraft(null);
+      if (text !== value) onCommit(text);
+    }}
+  ></textarea>`;
+}
+
+function JsonSource({ source, index, change, remove }) {
+  const set = (key) => (value) => change(index, { ...source, [key]: value });
+  return html`<div class="json-source" data-json-source=${source.name || index}>
+    <${SettingRow} title=${t("Name")} hint=${t("The readings are json.{name}.<field>.", { name: source.name || "…" })}>
+      <${CommitField} label=${t("Name")} value=${source.name} mono placeholder="nas" onCommit=${set("name")} />
+    <//>
+    <${SettingRow} title=${t("Address or file")} hint=${source.headers ? t("Its headers (a token, a password) stay as config.toml has them.") : t("http:// or https://, or the path of a file.")}>
+      <${CommitField} label=${t("Address or file")} value=${source.where} mono placeholder="http://192.168.1.10/api/values" onCommit=${set("where")} />
+    <//>
+    <${SettingRow} title=${t("Fields")} hint=${t("One per line: a name = its path in the answer. Empty: every value it has.")} stacked>
+      <${LinesField} label=${t("Fields")} value=${toLines(source.fields)} placeholder=${"cpu = cpu\ntemp = sensors[0].value"} onCommit=${(text) => set("fields")(fromLines(text))} />
+    <//>
+    <${SettingRow} title=${t("Units")} hint=${t("One per line: a name = its unit.")} stacked>
+      <${LinesField} label=${t("Units")} value=${toLines(source.units)} placeholder=${"cpu = %\ntemp = °C"} onCommit=${(text) => set("units")(fromLines(text))} />
+    <//>
+    <div class="row-action"><button type="button" class="link-btn" onClick=${() => remove(index)}>${t("Remove this source")}</button></div>
+  </div>`;
+}
+
+function JsonSources() {
+  const config = useConfig();
+  if (!config || !config.sensors.providers.includes("json")) return null;
+  const json = config.sensors.json || { update_s: 30, sources: [] };
+  const write = (sources) =>
+    saveSettings({ "sensors.json.sources": sources.map(({ name, where, fields, units }) => ({ name, where, fields, units })) });
+  const change = (index, source) => write(json.sources.map((item, n) => (n === index ? source : item)));
+  const remove = (index) => write(json.sources.filter((_, n) => n !== index));
+  const add = () => {
+    const taken = new Set(json.sources.map((source) => source.name));
+    let n = json.sources.length + 1;
+    while (taken.has(`source${n}`)) n += 1;
+    write([...json.sources, { name: `source${n}`, where: "http://", fields: {}, units: {} }]);
+  };
+  return html`<${Card}
+    id="json-sources"
+    title=${t("Values from JSON")}
+    text=${t("What an address answers, or a file holds, as readings for any module: a NAS, a router, another PC. Nothing to sign up for.")}
+    action=${html`<button type="button" class="btn" onClick=${add}>${t("Add a source")}</button>`}
+  >
+    ${json.sources.length
+      ? json.sources.map((source, index) => html`<${JsonSource} key=${index} source=${source} index=${index} change=${change} remove=${remove} />`)
+      : html`<p class="muted">${t("No source yet.")}</p>`}
+    <${SettingRow} title=${t("Asked every")}>
+      <${NumberField} label=${t("Asked every")} value=${json.update_s} min=${2} max=${3600} unit="s" onChange=${(value) => saveSettings({ "sensors.json.update_s": value })} />
+    <//>
+  <//>`;
+}
+
 // -- the sensor service (Windows) ---------------------------------------------------------------
 
 /** The service as Windows has it, as a status mark. */
@@ -354,5 +434,6 @@ function Advanced() {
 export const sensorGroups = [
   { id: "sources", order: 10, component: Sources, load: loadSensorsSection },
   { id: "service", order: 15, component: SensorService, load: loadUnlock }, // Windows only
+  { id: "json", order: 20, component: JsonSources }, // with the source of values from JSON
   { id: "advanced", order: 90, component: Advanced }, // after the hardware's names
 ];

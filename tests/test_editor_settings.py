@@ -1094,6 +1094,7 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "hotkeys.timer", "hotkeys.timer_reset", "hotkeys.mic_mute",
         "sensors.providers",
         "sensors.librehardwaremonitor.mode", "sensors.librehardwaremonitor.url",
+        "sensors.json.update_s",
         "weather.enabled", "weather.units", "weather.update_minutes", "weather.latitude",
         "weather.longitude", "weather.place",
     }  # fmt: skip
@@ -1163,3 +1164,53 @@ def test_light_mode_is_written_as_asked(server):
     status, data = write(server, light_mode=True)
     assert status == 200 and data["config"]["light_mode"] is True
     assert "light_mode = true" in config_text()
+
+
+def test_the_sources_of_values_from_json_are_set_in_the_app_and_keep_their_headers(server):
+    from libre_panel.config import load_config
+
+    write(server, refresh_ms=500)  # (a config.toml to add to)
+    path = config_dir() / "config.toml"
+    with path.open("a", encoding="utf-8") as config:
+        config.write('\n[[sensors.json.sources]]\nname = "nas"\nurl = "http://10.0.0.2/api"\n'
+                     'headers = { Authorization = "Bearer secret" }\n')  # fmt: skip
+    status, data = request(server, "GET", "/api/settings")
+    json = data["config"]["sensors"]["json"]
+    assert json["sources"] == [{"name": "nas", "where": "http://10.0.0.2/api", "fields": {},
+                                "units": {}, "headers": True}]  # fmt: skip
+    assert "secret" not in str(data)  # a token is not handed out
+    sources = [
+        {"name": "nas", "where": "http://10.0.0.2/api/v2", "fields": {"cpu": "cpu"},
+         "units": {"cpu": "%"}},
+        {"name": "room", "where": "C:/Data/room.json", "fields": {}, "units": {}},
+    ]  # fmt: skip
+    status, _ = write(server, **{"sensors.json.sources": sources})
+    assert status == 200
+    kept = load_config().sensors.options["json"]["sources"]
+    assert kept[0] == {
+        "name": "nas",
+        "url": "http://10.0.0.2/api/v2",
+        "fields": {"cpu": "cpu"},
+        "units": {"cpu": "%"},
+        "headers": {"Authorization": "Bearer secret"},
+    }
+    assert kept[1] == {"name": "room", "file": "C:/Data/room.json"}  # fmt: skip
+    bad = [{"name": "two words", "where": "x"}]
+    status, answer = write(server, **{"sensors.json.sources": bad})
+    assert status == 400 and "letters, digits" in answer["error"]
+
+
+def test_with_the_highest_rights_a_json_source_names_no_new_file(server, elevated):
+    from libre_panel.config import load_config
+
+    write(server, refresh_ms=500)
+    path = config_dir() / "config.toml"
+    with path.open("a", encoding="utf-8") as config:
+        config.write('\n[[sensors.json.sources]]\nname = "room"\nfile = "C:/Data/room.json"\n')
+    kept = {"name": "room", "where": "C:/Data/room.json", "fields": {"t": "temp"}}
+    web = {"name": "nas", "where": "http://10.0.0.2/api"}
+    assert write(server, **{"sensors.json.sources": [kept, web]})[0] == 200  # named already
+    other = {"name": "room", "where": "C:/Windows/secret.json"}
+    status, answer = write(server, **{"sensors.json.sources": [other]})
+    assert status == 403 and "administrator" in answer["error"]
+    assert load_config().sensors.options["json"]["sources"][0]["file"] == "C:/Data/room.json"

@@ -1320,3 +1320,15 @@ a.btn-primary:hover {
 .new-panel-body .select { min-width: 280px; }
 .setting-note { margin: 0; padding: 0 16px 12px; font-size: 13px; color: var(--muted); }
 .setting-note.warn { color: var(--warn); }
+
+/* Settings → Sensors → Values from JSON: each source in a block of its own */
+.json-source {
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+  margin-top: 6px;
+}
+.json-source textarea.input {
+  width: 100%;
+  min-height: 4.5em;
+  resize: vertical;
+}
