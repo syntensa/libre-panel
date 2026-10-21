@@ -284,6 +284,8 @@ More panels* adds and removes them.
 theme = "lumen"                # empty or left out: the panel's own default
 model = "turing-3.5"           # "auto": a panel the others do not use
 port = "COM6"                  # serial panels: which of two of the same kind it is
+# game_theme = "lumen-vertical"  # its theme while the first panel shows a game's page,
+# media_theme = "encore"       # and music's ("" or left out: its own as ever)
 # follow_brightness = true     # its brightness as the first panel's, at night and while
 # brightness_offset = 10       # you are away too, with this added (-50 to 50: some panels
                                # look brighter than others at the same setting); false:
@@ -306,7 +308,9 @@ otherwise), instead of drawing into a file meanwhile; with `driver = "virtual"` 
 
 The pages (game, music, idle clock), the screens in turn, the notices, the tray's brightness
 and smooth motion (the video mode, with the name of the standby clip that was given for it)
-are the first panel's; the others show their theme in single pictures. A change in config.toml
+are the first panel's; the others show their theme in single pictures, and one given a theme
+for a game or for music (`game_theme`, `media_theme`) shows it while the first panel shows
+that page. A change in config.toml
 reaches every panel, and a panel that is added, switched on or off, or taken out starts or
 ends while the others go on.
 

@@ -2233,7 +2233,9 @@
     "Remove the scene “{name}”?": "Usunąć scenę „{name}”?",
     "Scenes": "Sceny",
     "The themes stay as they are.": "Motywy zostają takie, jakie są.",
-    "What every panel shows now, under a name: one click puts it back on.": "To, co teraz pokazuje każdy panel, pod nazwą: jedno kliknięcie przywraca to z powrotem."
+    "What every panel shows now, under a name: one click puts it back on.": "To, co teraz pokazuje każdy panel, pod nazwą: jedno kliknięcie przywraca to z powrotem.",
+    "As ever": "Jak zawsze",
+    "While panel 1 shows the game's page or music's, this panel can show a theme of its own: the temperatures and fans during a game, say.": "Gdy panel 1 pokazuje stronę gry lub muzyki, ten panel może pokazywać własny motyw: na przykład temperatury i wentylatory podczas gry."
   },
   "fields": {
     "align": "Wyrównanie",

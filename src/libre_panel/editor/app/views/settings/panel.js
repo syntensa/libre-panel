@@ -542,6 +542,14 @@ function MoreSettings({ n, panel, models, themes, chosen, onBrightness, onChange
     <${SettingRow} title=${t("Theme")}>
       <${Select} label=${t("Theme")} value=${panel.theme || ""} options=${themes} onChange=${(value) => onChange({ theme: value })} />
     <//>
+    <${SettingRow} title=${t("While a game runs")} hint=${n === 0 ? t("While panel 1 shows the game's page or music's, this panel can show a theme of its own: the temperatures and fans during a game, say.") : null}>
+      <${Select} label=${t("While a game runs")} value=${panel.game_theme || ""} options=${[{ value: "", label: t("As ever") }, ...themes.slice(1)]}
+        onChange=${(value) => onChange({ game_theme: value })} />
+    <//>
+    <${SettingRow} title=${t("While music plays")}>
+      <${Select} label=${t("While music plays")} value=${panel.media_theme || ""} options=${[{ value: "", label: t("As ever") }, ...themes.slice(1)]}
+        onChange=${(value) => onChange({ media_theme: value })} />
+    <//>
     <${SettingRow} title=${t("Brightness as panel 1's")} hint=${t("At night and while you are away too. Some panels look brighter than others at the same setting: even them out with the difference below.")}>
       <${Toggle} label=${t("Brightness as panel 1's")} checked=${panel.follow_brightness !== false} onChange=${(on) => onChange({ follow_brightness: on })} />
     <//>

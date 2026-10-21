@@ -494,6 +494,9 @@ class PanelConfig:
     # brightness_offset (-50 to 50) added to look as bright beside it; off: its own
     follow_brightness: bool = True
     brightness_offset: int = 0
+    # its theme while the first panel shows a game's page or music's ("": its own as ever)
+    game_theme: str = ""
+    media_theme: str = ""
 
 
 # How many scenes config.toml may hold, and how long a scene's name may be
@@ -580,6 +583,8 @@ class Config:
                 dark_when_away=first.dark_when_away,
                 away_brightness=shifted(first.away_brightness),
             )
+        pages = {mode: ModeConfig(theme=theme, on=True) for mode, theme in
+                 (("game", panel.game_theme), ("media", panel.media_theme)) if theme}  # fmt: skip
         return replace(
             self,
             device=device,
@@ -587,6 +592,7 @@ class Config:
             theme_given=bool(panel.theme),
             sequence=SequenceConfig(on=False),
             panels=[],
+            modes=pages,  # (those of a game and of music, while the first panel shows them)
         )
 
 
@@ -929,12 +935,15 @@ def _panels(value: Any) -> list[PanelConfig]:
         theme = _expect(table.pop("theme", ""), str, f"{where}.theme").strip()
         on = _expect(table.pop("on", True), bool, f"{where}.on")
         follow = _expect(table.pop("follow_brightness", True), bool, f"{where}.follow_brightness")
+        game = _expect(table.pop("game_theme", ""), str, f"{where}.game_theme").strip()
+        media = _expect(table.pop("media_theme", ""), str, f"{where}.media_theme").strip()
         offset = _expect(table.pop("brightness_offset", 0), int, f"{where}.brightness_offset")
         if not -50 <= offset <= 50:
             raise ConfigError(f"{where}.brightness_offset: -50 to 50")
         table = {**panel_defaults(n), **table}
         panels.append(PanelConfig(theme=theme, on=on, device=_parse_device(table, where),
-                                  follow_brightness=follow, brightness_offset=offset))  # fmt: skip
+                                  follow_brightness=follow, brightness_offset=offset,
+                                  game_theme=game, media_theme=media))  # fmt: skip
     return panels
 
 

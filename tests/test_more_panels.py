@@ -330,3 +330,19 @@ def test_a_panel_that_none_shows_anything_on_is_offered_while_all_run(monkeypatc
     looking = {"state": "showing", "more": [{"index": 0, "state": "waiting"}]}
     assert Settings._spare_panels(looking) == []  # it may be the one that panel looks for
     assert Settings._spare_panels({"state": "paused", "more": []}) == []  # nothing is open then
+
+
+def test_a_panel_shows_a_theme_of_its_own_while_the_first_shows_a_game_or_music():
+    from types import SimpleNamespace
+
+    config = parse_config({"panels": [{"theme": "lumen", "game_theme": "arena",
+                                       "media_theme": "encore"}, {"theme": "slate"}]})  # fmt: skip
+    own, plain = config.for_panel(0), config.for_panel(1)
+    assert app._theme_name(own, None, None, None, None, "game") == "arena"
+    assert app._theme_name(own, None, None, None, None, "media") == "encore"
+    assert app._theme_name(own, None, None, None, None, "idle") == "lumen"  # none given: its own
+    assert app._theme_name(own, None, None, None, None, None) == "lumen"
+    assert app._theme_name(plain, None, None, None, None, "game") == "slate"  # it was given none
+    more = app._MorePanels(SensorHub([]), app.RunStatus(), None, SimpleNamespace(mode="game"))
+    assert more._mode() == "game"  # the first panel's mode, for the others
+    assert app._MorePanels(SensorHub([]), app.RunStatus(), None)._mode() is None

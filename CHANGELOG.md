@@ -10,7 +10,8 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
   A panel that one of them has open is passed by when another looks for its own, so two
   set to "Detect automatically" find one each. Their brightness follows the first panel's,
   with a difference of their own to look alike; *Which is which?* shows each one's number,
-  two can swap their themes, and a panel plugged in is offered to be set up
+  two can swap their themes, a panel plugged in is offered to be set up, and each can show
+  a theme of its own while the first shows a game or music
   ([More panels at once](docs/CONFIGURATION.md#more-panels-at-once))
 - **Scenes**: a theme for every panel at once, put on with a click on Start, from the tray or
   with a keyboard shortcut (the next one); what the panels show is kept as one with a click

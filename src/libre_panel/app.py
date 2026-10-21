@@ -326,13 +326,15 @@ def _theme_name(
     default: str | None = None,
     rotation: Rotation | None = None,
     reported: PanelModel | None = None,
+    mode: str | None = None,
 ) -> str:
     """A theme a service shows, else the active mode's theme, else the step of the screens in
     turn that is due (``rotation`` follows them), else config.toml's; where that names none,
     the panel's own ``default``. Each in its version for the panel: for its size (Lumen for
     the 12.3" on a 12.3"), else for the way it is mounted (``device.orientation``: Lumen
-    Vertical for Lumen on a panel on end)."""
-    named = _named(config, host, default, rotation)
+    Vertical for Lumen on a panel on end). A panel beside the first, without a host, has the
+    first panel's ``mode``: the theme of its own for it ([[panels]] game_theme)."""
+    named = _named(config, host, default, rotation, mode)
     return theme_for(named, config.device.orientation, panel_size(config, reported))
 
 
@@ -345,13 +347,23 @@ def panel_size(config: Config, reported: PanelModel | None = None) -> tuple[int,
     return panel.size("portrait" if config.device.orientation == "portrait" else "landscape")
 
 
-def _named(config: Config, host: Any, default: str | None, rotation: Rotation | None) -> str:
+def _named(
+    config: Config,
+    host: Any,
+    default: str | None,
+    rotation: Rotation | None,
+    mode: str | None = None,
+) -> str:
     if host is not None:
         if host.theme:
             return host.theme
         page = modes.page_theme(config, host.mode)  # (music's page has Encore of its own)
         if page:
             return page
+    elif mode is not None:  # a panel beside the first: only a page it was given a theme for
+        own = config.modes.get(mode)
+        if own is not None and own.theme:
+            return own.theme
     if rotation is not None and config.sequence.active:
         place = rotation.where(config.sequence.steps)
         if place is not None:
@@ -575,10 +587,12 @@ class MainLoop:
         display: Display | None = None,
         clock: Callable[[], float] = loop_clock,
         panel: int | None = None,
+        mode_of: Callable[[], str | None] | None = None,
     ) -> None:
         self.status = status = status or RunStatus()
         self.host, self.on_config, self.clock = host, on_config, clock
         self.panel = panel  # a panel beside [device]'s: config.toml's [[panels]][panel] (run)
+        self.mode_of = mode_of  # for one: the mode the first panel is in (a game, music)
         self.warmup = _Warmup()  # the next theme, built while this one shows
         self.idle = threading.Event()  # set between frames: the warm-up works then
         i18n.set_language(config.language)
@@ -598,7 +612,7 @@ class MainLoop:
         self.rotation = Rotation(clock)
         self.pages = modes.PageSwitch(clock)  # music's page, the idle clock's
         shown = (
-            _theme_name(config, host, self.default, self.rotation, self.reported)
+            _theme_name(config, host, self.default, self.rotation, self.reported, self._mode())
             if not once
             else named
         )
@@ -668,6 +682,10 @@ class MainLoop:
             prepare.start()
             prepare.join(_Warmup.LIMIT_S)
 
+    def _mode(self) -> str | None:
+        """The first panel's mode, for a panel beside it (None for the first: its host says)."""
+        return self.mode_of() if self.mode_of is not None else None
+
     def _draw_ahead(self, theme: Theme, config: Config) -> None:
         """Draw the first theme once before the loop starts, as a switch draws the next one
         (:class:`_Warmup`): its texts, cards, graph strips and fans are made here, in a thread
@@ -729,13 +747,15 @@ class MainLoop:
         warmed up in a thread of its own first (:class:`_Warmup`) while this
         one goes on; nothing to switch to, or a theme that fails, goes ahead."""
         pending = watcher.pending()
-        wanted = _theme_name(config, host, self.default, self.rotation, self.reported)
+        wanted = _theme_name(config, host, self.default, self.rotation, self.reported, self._mode())
         if not pending and wanted in (shown, refused):
             return True
         try:
             fresh = load_config(config.path) if pending and config.path else config
             default = self._default_for(fresh)
-            fresh_name = _theme_name(fresh, host, default, self.rotation, self.reported)
+            fresh_name = _theme_name(
+                fresh, host, default, self.rotation, self.reported, self._mode()
+            )
             theme = load_theme(find_theme(fresh_name))
         except (ConfigError, ThemeError):
             return True  # the switch says why
@@ -930,7 +950,7 @@ class MainLoop:
             # transition says otherwise (Transition.on_switch: follow or restart).
             if host is not None:
                 self._follow_pages(config, host, snapshot)
-            wanted = _theme_name(config, host, default, self.rotation, reported)
+            wanted = _theme_name(config, host, default, self.rotation, reported, self._mode())
             status.sequence = _sequence_state(config, self.rotation)
             status.size = panel_size(config, reported)
             mode = host.mode if host is not None else None
@@ -945,7 +965,9 @@ class MainLoop:
                     if changed and config.path:
                         fresh = panel_config(load_config(config.path), self.panel)
                     fresh_default = self._default_for(fresh)
-                    wanted = _theme_name(fresh, host, fresh_default, self.rotation, reported)
+                    wanted = _theme_name(
+                        fresh, host, fresh_default, self.rotation, reported, self._mode()
+                    )
                     new_theme = load_theme(find_theme(wanted))
                 except (ConfigError, ThemeError) as exc:
                     log.warning("keeping theme %r: %s", shown, exc)  # e.g. half-written file
@@ -1157,9 +1179,14 @@ class _MorePanels:
     HALT_S = 10.0  # how long an end waits for a loop to let its panel go
 
     def __init__(
-        self, hub: Any, status: RunStatus, quitting: Callable[[], bool | str | None] | None
+        self,
+        hub: Any,
+        status: RunStatus,
+        quitting: Callable[[], bool | str | None] | None,
+        host: Any = None,
     ) -> None:
         self.hub, self.status, self.quitting = hub, status, quitting
+        self.host = host  # the first panel's: the mode it is in (a game, music) for the others
         self._runs: dict[int, tuple[threading.Thread, threading.Event]] = {}
         self._seen: Config | None = None
 
@@ -1186,7 +1213,7 @@ class _MorePanels:
         while not stop.is_set():
             try:
                 run(panel_config(config, n), stop=stop, status=status, hub=HubView(self.hub),
-                    panel=n, quitting=self.quitting)  # fmt: skip
+                    panel=n, quitting=self.quitting, mode_of=self._mode)  # fmt: skip
             except (ConfigError, ThemeError, DeviceError) as exc:
                 status.state, status.detail = "error", str(exc)
                 log.error("panel %d stopped: %s", n + 2, exc)
@@ -1200,6 +1227,9 @@ class _MorePanels:
                     config = load_config(config.path)
                 except ConfigError:
                     pass  # the first panel's loop says what is wrong with it
+
+    def _mode(self) -> str | None:
+        return self.host.mode if self.host is not None else None
 
     def _end(self, numbers: list[int]) -> None:
         runs = [(n, *self._runs.pop(n)) for n in numbers if n in self._runs]
@@ -1282,6 +1312,7 @@ def run(
     quitting: Callable[[], bool | str | None] | None = None,
     hub: Any = None,
     panel: int | None = None,
+    mode_of: Callable[[], str | None] | None = None,
 ) -> None:
     """Main loop: read sensors at the theme's rate, render at ``config.fps`` so
     values glide between readings, and send only frames that changed. A
@@ -1301,13 +1332,13 @@ def run(
     """
     stop = stop or threading.Event()
     loop = MainLoop(config, once=once, status=status, host=host, on_config=on_config, hub=hub,
-                    panel=panel)  # fmt: skip
+                    panel=panel, mode_of=mode_of)  # fmt: skip
     pacer = _Pacer()
     planned: float | None = None  # when the pacer planned the next streaming frame
     first = panel is None  # the first panel's loop, [device]'s
     guards = timing.Guards()  # SPUR II's, while this drives the panel
     watch = _HangWatch(hang_log if first else None)  # (faulthandler has one timer)
-    more = _MorePanels(loop.hub, loop.status, quitting) if first and not once else None
+    more = _MorePanels(loop.hub, loop.status, quitting, host) if first and not once else None
     try:
         if once:
             loop.once()
