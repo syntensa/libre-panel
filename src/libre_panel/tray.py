@@ -201,6 +201,7 @@ class Tray:
             item(t("Scenes"), menu(self._scene_items), visible=lambda _: bool(self._scenes()[0])),
             item(t("More panels"), menu(self._more_items), visible=lambda _: bool(self._more())),
             item(t("Brightness"), menu(self._brightness_items)),
+            item(t("Timer"), menu(self._timer_items), visible=lambda _: self._timer() is not None),
             item(t("Pause panel"), self.toggle_pause, checked=lambda _: app.panel.paused),
             menu.SEPARATOR,
             item(t("Design"), self.open_editor),  # the app's tab of that name
@@ -337,10 +338,66 @@ class Tray:
                         checked=lambda _, on=panel.on: on,
                     ),
                     item(t("Theme"), menu(*themes)),
+                    item(t("Brightness"), menu(*self._panel_brightness(n, panel))),
                 ),
             )
         yield menu.SEPARATOR
         yield item(t("Which is which?"), lambda: identify.show())
+
+    def _panel_brightness(self, n: int, panel: Any) -> list[Any]:
+        """A panel's brightness: as the first panel's (and its time of day), or its own."""
+        item = self.pystray.MenuItem
+        follows = panel.follow_brightness
+        choices = [
+            item(
+                t("As panel 1's"),
+                self._later(self._set_panel, n, {"follow_brightness": True}),
+                checked=lambda _, on=follows: on,
+                radio=True,
+            )
+        ]
+        for step in self.app.BRIGHTNESS_STEPS:
+            choices.append(
+                item(
+                    t("Off") if step == 0 else f"{step} %",
+                    self._later(
+                        self._set_panel, n, {"follow_brightness": False, "brightness": step}
+                    ),  # fmt: skip
+                    checked=lambda _, step=step, own=panel.device.brightness: (
+                        not follows and own == step
+                    ),
+                    radio=True,
+                )
+            )
+        return choices
+
+    # -- the timer (the timer service, while it runs) --------------------------
+
+    def _timer(self) -> Any:
+        services = getattr(self.app, "services", None)
+        found = services.running.get("timer") if services is not None else None
+        return found[0] if found else None
+
+    def _timer_line(self) -> str:
+        from libre_panel.services.timer import clock_text
+
+        timer = self._timer()
+        if timer is None:
+            return ""
+        state = timer.state()
+        left = clock_text(state["left"])
+        if not state["running"]:
+            return t("Stopped at {time}", time=left)
+        if timer.break_s > 0:
+            phase = t("Break") if state["phase"] == "break" else t("Focus")
+            return f"{phase} · {left}"
+        return t("Runs · {time} left", time=left)
+
+    def _timer_items(self):
+        item = self.pystray.MenuItem
+        yield item(lambda _: self._timer_line(), None, enabled=False)
+        yield item(t("Start or pause"), self._later(self.app.shortcut, "timer"))
+        yield item(t("Back to the start"), self._later(self.app.shortcut, "timer_reset"))
 
     def _set_panel(self, n: int, changes: dict[str, Any]) -> None:
         """Change the panel ``[[panels]]`` at ``n`` as Settings → Panel → More panels does."""

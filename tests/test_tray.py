@@ -545,8 +545,35 @@ def test_more_panels_are_in_the_tray_each_with_its_state_switch_and_theme(tray, 
     themes["Slate"](tray.icon)
     assert wait_for(lambda: load_config().panels[0].theme == "slate")
     assert load_config().theme == "libre-default"  # the first panel's as it was
+    # its brightness: as the first panel's, or its own
+    shades = items(second["Brightness"].submenu)
+    assert shades["As panel 1's"].checked and not shades["50 %"].checked
+    shades["50 %"](tray.icon)
+    assert wait_for(lambda: load_config().panels[0].follow_brightness is False)
+    assert load_config().panels[0].device.brightness == 50
+    again = items(items(items(items(tray.build_menu())["More panels"].submenu)["Panel 2"].submenu)
+                  ["Brightness"].submenu)  # fmt: skip
+    assert again["50 %"].checked and not again["As panel 1's"].checked
+    again["As panel 1's"](tray.icon)
+    assert wait_for(lambda: load_config().panels[0].follow_brightness is True)
     second["Panel 2 on"](tray.icon)
     assert wait_for(lambda: load_config().panels[0].on is False)
     more["Which is which?"](tray.icon)
     assert identify.showing()
     identify._until = 0.0
+
+
+def test_the_timer_is_in_the_tray_while_it_runs(tray, isolated_home):
+    assert "Timer" not in items(tray.build_menu())  # the service is off
+    with (isolated_home / "config.toml").open("a", encoding="utf-8") as config:
+        config.write('\n[services]\nenabled = ["timer"]\n\n[services.timer]\nminutes = 10\n')
+    tray.app.follow_config()
+    assert wait_for(lambda: "Timer" in items(tray.build_menu()))
+    timer = items(items(tray.build_menu())["Timer"].submenu)
+    assert list(timer)[0] == "Stopped at 10:00"
+    timer["Start or pause"](tray.icon)
+    assert wait_for(lambda: tray._timer().running)
+    assert wait_for(lambda: list(items(items(tray.build_menu())["Timer"].submenu))[0]
+                    .startswith("Runs · "))  # fmt: skip
+    timer["Back to the start"](tray.icon)
+    assert wait_for(lambda: not tray._timer().running)
