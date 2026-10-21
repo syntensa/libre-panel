@@ -94,6 +94,16 @@ def _theme_facts(path: str) -> dict[str, Any]:
     }
 
 
+def _theme_name(theme_id: str) -> str:
+    """A theme's name as its theme.json gives it, else its id."""
+    from libre_panel.theme.model import ThemeError, find_theme
+
+    try:
+        return _theme_facts(str(find_theme(theme_id)))["name"] or theme_id
+    except ThemeError:
+        return theme_id
+
+
 def theme_choices(
     model: PanelModel | None, report: str | None = None
 ) -> tuple[list[tuple[str, str]], list[tuple[str, str]], dict[str, list[tuple[str, str]]]]:
@@ -189,6 +199,7 @@ class Tray:
             menu.SEPARATOR,
             item(t("Theme"), menu(self._theme_items)),
             item(t("Scenes"), menu(self._scene_items), visible=lambda _: bool(self._scenes()[0])),
+            item(t("More panels"), menu(self._more_items), visible=lambda _: bool(self._more())),
             item(t("Brightness"), menu(self._brightness_items)),
             item(t("Pause panel"), self.toggle_pause, checked=lambda _: app.panel.paused),
             menu.SEPARATOR,
@@ -226,14 +237,29 @@ class Tray:
     def _theme_items(self):
         """The themes by name: those made for the panel, then the rest and each collection in
         a submenu of its own. The one on the panel's normal page is checked."""
+        yield from self._theme_menu(
+            *self._panel_model(),
+            choose=lambda theme_id: self._later(set_active_theme, theme_id, self.app.config_path),
+            chosen=self._chosen,
+        )
+
+    def _theme_menu(
+        self,
+        model: PanelModel | None,
+        report: str | None,
+        choose: Callable[[str], Callable[[], None]],
+        chosen: Callable[[], str | None],
+    ):
+        """The themes for ``model`` as :meth:`_theme_items` offers them; ``choose`` makes
+        the action of one, ``chosen`` says which one is checked."""
         item, menu = self.pystray.MenuItem, self.pystray.Menu
-        first, more, collections = theme_choices(*self._panel_model())
+        first, more, collections = theme_choices(model, report)
 
         def choice(theme_id: str, name: str) -> Any:
             return item(
                 name,
-                self._later(set_active_theme, theme_id, self.app.config_path),
-                checked=lambda _, theme_id=theme_id: self._chosen() == theme_id,
+                choose(theme_id),
+                checked=lambda _, theme_id=theme_id: chosen() == theme_id,
                 radio=True,
             )
 
@@ -269,6 +295,62 @@ class Tray:
                 checked=lambda _, name=name: self._scenes()[1] == name,
                 radio=True,
             )  # fmt: skip
+
+    def _more(self) -> list[tuple[int, Any, dict[str, Any] | None]]:
+        """The panels beside the first ([[panels]]): each with its place there, its settings and
+        how it is doing (None while it does not run)."""
+        try:
+            config = load_config(self.app.config_path)
+        except ConfigError:
+            return []
+        running = {item["index"]: item for item in self.app.panel.state().get("more", [])}
+        return [(n, panel, running.get(n)) for n, panel in enumerate(config.panels)]
+
+    def _more_items(self):
+        """Each panel beside the first: how it is doing, on or off, and its theme; and which
+        is which."""
+        from libre_panel import identify
+
+        item, menu = self.pystray.MenuItem, self.pystray.Menu
+        for n, panel, running in self._more():
+            if not panel.on:
+                doing = t("Off")
+            elif running is not None and running["state"] == "showing":
+                doing = t("Shows {theme}", theme=_theme_name(running["theme"]))
+            else:
+                doing = t("Waiting for the panel")
+            told = running["model"] if running is not None else ""
+            model = find_model(panel.device.model) or (find_model(told) if told else None)
+            themes = self._theme_menu(
+                model,
+                None,
+                choose=lambda theme_id, n=n: self._later(self._set_panel, n, {"theme": theme_id}),
+                chosen=lambda n=n: next((p.theme for i, p, _ in self._more() if i == n), None),
+            )
+            yield item(
+                t("Panel {number}", number=n + 2),
+                menu(
+                    item(doing, None, enabled=False),
+                    item(
+                        t("{panel} on", panel=t("Panel {number}", number=n + 2)),
+                        self._later(self._set_panel, n, {"on": not panel.on}),
+                        checked=lambda _, on=panel.on: on,
+                    ),
+                    item(t("Theme"), menu(*themes)),
+                ),
+            )
+        yield menu.SEPARATOR
+        yield item(t("Which is which?"), lambda: identify.show())
+
+    def _set_panel(self, n: int, changes: dict[str, Any]) -> None:
+        """Change the panel ``[[panels]]`` at ``n`` as Settings → Panel → More panels does."""
+        from libre_panel.editor.settings import Restart, Settings
+
+        settings = Settings(self.app.config_path, None, Restart())
+        panels = settings.read()["config"]["panels"]
+        if n < len(panels):
+            panels[n] = {**panels[n], **changes}
+            settings.write({"set": {"panels": panels}})
 
     def _chosen(self) -> str | None:
         """The theme of the panel's normal page, by the id it is chosen by (Lumen, not its

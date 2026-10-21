@@ -210,6 +210,8 @@ class RunStatus:
     # version for it: theme.model.theme_for)
     size: tuple[int, int] | None = None
     model: str = ""  # the panel's model, set or reported ("": not known yet)
+    # the frame on the panel now, as the app's live picture shows it (None while it shows none)
+    shown: Any = None
     detail: str = ""  # why the panel is not available
     frames: int = 0
     mode: str | None = None  # set by a service, e.g. "game"
@@ -1194,6 +1196,7 @@ class MainLoop:
                 self.meter.drew(self.clock() - drawing)
                 if host is not None:
                     host.shown = frame  # for the editor's pages: never drawn on from here on
+                status.shown = frame  # (each panel's, for the live picture of every panel)
                 upside = config.device.rotate if _on_panel(display) else 0
                 if upside != turn:  # turned now, or no longer: the whole frame again
                     previous, turn = None, upside
@@ -1266,6 +1269,7 @@ class MainLoop:
             self.host.shown = None  # a paused panel shows no live picture...
             self.host.judge = None  # ...and no message
         self.status.hub = None
+        self.status.shown = None
         self.display.close()
         self.toasts.close()
         self.warmup.close()

@@ -33,7 +33,7 @@ import { linuxSetup, setupNeeds } from "../../core/setup.js";
 import { store, useStore } from "../../core/state.js";
 import { videoState } from "../../core/video.js";
 import { html, useEffect, useState } from "../../lib/preact.js";
-import { panelName } from "../../shell/panel-popover.js";
+import { panelName, stateText } from "../../shell/panel-popover.js";
 import { navigate } from "../../shell/views.js";
 import { Icon } from "../../ui/icons.js";
 import { SOURCES, withSource } from "./sensors.js";
@@ -530,6 +530,20 @@ export function AtAGlance() {
   const placed = weather.latitude !== null && weather.longitude !== null;
   const rows = [
     { id: "panel", title: t("Panel"), value: panel, tone: info.found ? "ok" : "warn", section: "panel" },
+    // the panels beside it, each as it is doing (Settings → Panel → More panels)
+    ...(config.panels || []).map((more, n) => {
+      const running = (info.running?.more || []).find((item) => item.index === n);
+      const value =
+        more.on === false
+          ? t("Off")
+          : running?.state === "showing"
+            ? t("Shows {theme}", { theme: themeName(running.theme) })
+            : running
+              ? [stateText(running.state), running.detail].filter(Boolean).join(": ")
+              : t("Not running");
+      const tone = more.on === false ? "" : running?.state === "showing" ? "ok" : "warn";
+      return { id: `panel-${n + 2}`, title: t("Panel {number}", { number: n + 2 }), value, tone, section: "panel/panel-more" };
+    }),
     { id: "video", title: t("Smooth motion"), value: video.text, tone: video.tone === "warn" ? "warn" : "", section: "panel/panel-video" },
     {
       id: "sensors",

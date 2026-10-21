@@ -1102,6 +1102,54 @@ def test_live_shows_the_panel_and_runs_its_services(background, isolated_home):
         assert wait_for(lambda: load_config().device.brightness == 30)
 
 
+def test_live_shows_the_picture_of_each_panel(app_url, isolated_home):
+    """With more panels Live chooses whose picture it shows; the numbers stay the first's."""
+    import io
+    import json
+
+    from PIL import Image
+
+    choose_theme(isolated_home)
+    panel = {**app_answer()["panel"],
+             "more": [{"index": 0, "state": "showing", "detail": "", "target": "", "theme":
+                       "lumen-companion", "fps": 10.0, "model": "", "size": None}]}  # fmt: skip
+    asked = []
+    buffer = io.BytesIO()
+    Image.new("RGB", (32, 8), "teal").save(buffer, "JPEG")
+
+    def state(route, request):
+        body = json.dumps({"background": True, "panel": panel})
+        route.fulfill(status=200, content_type="application/json", body=body)
+
+    def live(route, request):
+        asked.append(request.url)
+        route.fulfill(status=200, content_type="image/jpeg", body=buffer.getvalue())
+
+    routes = {"**/api/plugins/control/panel": state, "**/api/plugins/control/live*": live}
+    with browser_page(app_url, "live", routes=routes, allow=("control/live",)) as page:
+        choice = page.get_by_role("radiogroup", name="Which panel's picture")
+        expect(choice.get_by_role("radio")).to_have_text(["Panel 1", "Panel 2"])
+        page.wait_for_selector(".live-picture img")
+        assert asked and "panel=" not in asked[-1]  # the first panel's
+        expect(page.locator(".live-numbers")).to_have_count(1)
+        choice.get_by_role("radio", name="Panel 2").click()
+        expect(page.locator(".live-state")).to_contain_text("Shows Lumen Companion")
+        waits_for(page, lambda: "panel=2" in asked[-1])
+        expect(page.locator(".live-numbers")).to_have_count(0)  # (the first panel's numbers)
+
+
+def test_the_overview_tells_how_each_panel_is_doing(app_url, isolated_home):
+    choose_theme(isolated_home)
+    with isolated_home.joinpath("config.toml").open("a", encoding="utf-8") as config:
+        config.write('\n[[panels]]\ntheme = "lumen"\n\n[[panels]]\non = false\n')
+    with browser_page(app_url, "settings") as page:
+        expect(page.locator("[data-glance=panel-2]")).to_contain_text("Panel 2")
+        expect(page.locator("[data-glance=panel-2] .glance-value")).to_have_text("Not running")
+        expect(page.locator("[data-glance=panel-3] .glance-value")).to_have_text("Off")
+        page.locator("[data-glance=panel-2]").click()
+        expect(page.locator("#panel-more")).to_be_visible()
+
+
 def test_live_says_whether_the_video_mode_is_on_or_what_it_lacks(
     app_url, isolated_home, monkeypatch
 ):

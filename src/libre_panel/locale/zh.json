@@ -2255,7 +2255,9 @@
     "this is not a picture that can be read": "这不是可读取的图片",
     "{label}: size not known yet": "{label}：尺寸尚不清楚",
     "{name}: not a file a backup of Libre Panel holds": "{name}：不是 Libre Panel 备份中应有的文件",
-    "{width} × {height} cm": "{width} × {height} 厘米"
+    "{width} × {height} cm": "{width} × {height} 厘米",
+    "Which panel's picture": "显示哪块面板的画面",
+    "{fps} pictures a second": "每秒 {fps} 帧"
   },
   "fields": {
     "align": "对齐",

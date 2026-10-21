@@ -2255,7 +2255,9 @@
     "One picture under the themes of all panels, each showing the part where it stands": "Jeden obraz pod motywami wszystkich paneli; każdy pokazuje część tam, gdzie stoi",
     "the picture has too many pixels": "obraz ma za dużo pikseli",
     "the picture is larger than {size} MB": "obraz jest większy niż {size} MB",
-    "this is not a picture that can be read": "to nie jest obraz, który da się odczytać"
+    "this is not a picture that can be read": "to nie jest obraz, który da się odczytać",
+    "Which panel's picture": "Obraz którego panelu",
+    "{fps} pictures a second": "{fps} obrazów na sekundę"
   },
   "fields": {
     "align": "Wyrównanie",

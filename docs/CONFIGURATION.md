@@ -300,7 +300,9 @@ brightness = 40                # its own brightness, night and away settings
 
 *Which is which?* there shows each panel's number for a few seconds (the first is 1, those of
 `[[panels]]` 2, 3 and 4), *Swap with panel 1* lets two panels' themes change places, and a
-panel plugged in that none shows anything on is offered to be set up.
+panel plugged in that none shows anything on is offered to be set up. *Live* shows the picture
+of the panel chosen above it, the *Overview* in Settings says how each one is doing, and the
+tray has a *More panels* menu: each panel's state, a switch and its theme.
 
 Above them the panels stand in their real sizes (from each model's diagonal and pixels, the
 way it is mounted), with what each shows, beside a monitor to place them by (24″ to 34″, or

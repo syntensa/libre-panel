@@ -447,3 +447,21 @@ def test_where_a_panel_stands_is_read_and_written_and_moves_no_panel(tmp_path):
     assert "at =" not in path.read_text(encoding="utf-8")
     with pytest.raises(SettingsError, match="millimetres"):
         settings.write({"set": {"device.at": [0.5, 0]}})
+
+
+def test_the_live_picture_of_each_panel_is_asked_for_by_its_number():
+    from types import SimpleNamespace
+
+    from PIL import Image
+
+    from libre_panel.plugins.pages import PageContext
+
+    first, second = Image.new("RGB", (8, 4), "red"), Image.new("RGB", (8, 4), "blue")
+    status = app.RunStatus(more={0: app.RunStatus(shown=second), 1: app.RunStatus()})
+    controls = SimpleNamespace(plugin_host=SimpleNamespace(shown=first),
+                               panel=SimpleNamespace(status=status))  # fmt: skip
+    context = PageContext(controls)
+    assert context.shown_frame() is first and context.shown_frame(1) is first
+    assert context.shown_frame(2) is second
+    assert context.shown_frame(3) is None and context.shown_frame(4) is None  # none yet, none
+    assert PageContext(None).shown_frame(2) is None  # without the background app

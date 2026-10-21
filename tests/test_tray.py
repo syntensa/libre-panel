@@ -525,3 +525,28 @@ def test_quit_goes_on_where_an_x11_tray_s_loop_does_not_end(isolated_home):
     finally:
         never.set()
         app.shutdown()
+
+
+def test_more_panels_are_in_the_tray_each_with_its_state_switch_and_theme(tray, isolated_home):
+    from libre_panel import identify
+
+    assert "More panels" not in items(tray.build_menu())  # none beside the first
+    with (isolated_home / "config.toml").open("a", encoding="utf-8") as config:
+        config.write('\n[[panels]]\ndriver = "virtual"\ntheme = "lumen"\n')
+    assert wait_for(lambda: tray.app.panel.state().get("more"))
+    more = items(items(tray.build_menu())["More panels"].submenu)
+    assert list(more) == ["Panel 2", "Which is which?"]
+    second = items(more["Panel 2"].submenu)
+    assert wait_for(lambda: list(items(items(items(tray.build_menu())["More panels"].submenu)
+                                       ["Panel 2"].submenu))[0].startswith("Shows"))  # fmt: skip
+    assert second["Panel 2 on"].checked
+    themes = items(second["Theme"].submenu)
+    assert themes["Lumen"].checked
+    themes["Slate"](tray.icon)
+    assert wait_for(lambda: load_config().panels[0].theme == "slate")
+    assert load_config().theme == "libre-default"  # the first panel's as it was
+    second["Panel 2 on"](tray.icon)
+    assert wait_for(lambda: load_config().panels[0].on is False)
+    more["Which is which?"](tray.icon)
+    assert identify.showing()
+    identify._until = 0.0

@@ -486,3 +486,6 @@
   background: var(--surface-3);
   color: var(--text);
 }
+
+/* with more panels: whose picture the view shows */
+.live-panels { margin: 2px 0 12px; }

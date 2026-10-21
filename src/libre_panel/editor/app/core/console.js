@@ -17,7 +17,7 @@ export const control = {
   probe: (kind) => post(`${BASE}/probe`, { kind }),
   enableService: (service, enabled) => post(`${BASE}/services/enable`, { service, enabled }),
   restartService: (service) => post(`${BASE}/services/restart`, { service }),
-  liveUrl: (width = 960) => `${BASE}/live?w=${width}&format=jpeg`,
+  liveUrl: (width = 960, panel = 1) => `${BASE}/live?w=${width}&format=jpeg${panel > 1 ? `&panel=${panel}` : ""}`,
 };
 
 /**
@@ -74,7 +74,7 @@ const NO_PICTURE = { src: null, status: 0 };
  * has none), `status` is 0 until an answer, 200, or the error's HTTP status (404: none yet,
  * which is also what a paused panel says; -1: no answer at all). `on: false` stops it.
  */
-export function useLivePicture({ width = 960, every = 250, on = true } = {}) {
+export function useLivePicture({ width = 960, every = 250, on = true, panel = 1 } = {}) {
   const [shown, setShown] = useState(NO_PICTURE);
   const url = useRef(null);
   const keep = (src, status) => {
@@ -92,7 +92,7 @@ export function useLivePicture({ width = 960, every = 250, on = true } = {}) {
       let wait = every;
       if (!document.hidden) {
         try {
-          const response = await fetch(control.liveUrl(width), { headers: authHeaders() });
+          const response = await fetch(control.liveUrl(width, panel), { headers: authHeaders() });
           if (!alive) return;
           if (response.ok) {
             const picture = await response.blob();
@@ -115,6 +115,6 @@ export function useLivePicture({ width = 960, every = 250, on = true } = {}) {
       alive = false;
       clearTimeout(timer);
     };
-  }, [width, every, on]);
+  }, [width, every, on, panel]);
   return on ? shown : NO_PICTURE;
 }

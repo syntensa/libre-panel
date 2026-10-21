@@ -227,7 +227,7 @@ class Control(ConsolePage):
         return {**self._themes(config), "config_problem": problem}
 
     def live(self, request: Request):
-        frame = self.context.shown_frame()
+        frame = self.context.shown_frame(request.integer("panel", 1, 1, 4))  # (which is which)
         if frame is None:
             return 404, {"error": t("no picture yet")}
         kind = request.param("format", "jpeg").lower()

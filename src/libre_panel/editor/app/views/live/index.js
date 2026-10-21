@@ -16,9 +16,10 @@ import { store, useStore } from "../../core/state.js";
 import { statTiles } from "../../core/stats.js";
 import { videoState } from "../../core/video.js";
 import { html, useEffect, useRef, useState } from "../../lib/preact.js";
-import { modeName, panelName } from "../../shell/panel-popover.js";
+import { themeName } from "../../core/actions.js";
+import { modeName, panelName, stateText } from "../../shell/panel-popover.js";
 import { navigate, registerView } from "../../shell/views.js";
-import { Slider, Toggle } from "../../ui/controls.js";
+import { Segmented, Slider, Toggle } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { toast, toastError } from "../../ui/toast.js";
 import { DiagnoseView } from "../diagnose/index.js";
@@ -128,8 +129,8 @@ function RunState({ background, status }) {
 
 // -- the picture and the numbers ------------------------------------------------------------------
 
-function Picture({ state, background }) {
-  const live = useLivePicture({ width: 960, every: 200, on: background && state === "showing" });
+function Picture({ state, background, panel = 1 }) {
+  const live = useLivePicture({ width: 960, every: 200, on: background && state === "showing", panel });
   let note = null;
   if (live.src === null) {
     note =
@@ -372,7 +373,23 @@ function LiveNow() {
   const status = panel.data?.panel || (background ? app.panel : null);
   const state = status?.state;
   const model = connectedModel({ available: background, panel: status }, models);
-  const line = [model ? panelName(model) : status?.target, status?.mode ? modeName(status.mode) : null].filter(Boolean).join(" · ");
+  // with more panels: which one's picture (as Which is which? numbers them), and how it is doing
+  const more = status?.more || [];
+  const [chosen, choose] = useState(1);
+  const beside = more.find((item) => item.index + 2 === chosen) || null;
+  const number = beside ? chosen : 1;
+  const besideLine = beside
+    ? [
+        beside.state === "showing" ? t("Shows {theme}", { theme: themeName(beside.theme) }) : stateText(beside.state),
+        beside.fps ? t("{fps} pictures a second", { fps: beside.fps }) : null,
+        beside.detail || null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
+  const line = beside
+    ? besideLine
+    : [model ? panelName(model) : status?.target, status?.mode ? modeName(status.mode) : null].filter(Boolean).join(" · ");
   return html`<div class="live">
     <div class="live-main">
       <${Switch} />
@@ -380,13 +397,24 @@ function LiveNow() {
         <h2>${t("On the panel now")}</h2>
         ${background && line ? html`<span class="live-state">${line}</span>` : null}
       </div>
-      <${RunState} background=${background} status=${status} />
+      ${background && more.length
+        ? html`<${Segmented}
+            class="live-panels"
+            label=${t("Which panel's picture")}
+            value=${number}
+            options=${[1, ...more.map((item) => item.index + 2)].map((n) => ({ value: n, label: t("Panel {number}", { number: n }) }))}
+            onChange=${choose}
+          />`
+        : null}
+      ${beside ? null : html`<${RunState} background=${background} status=${status} />`}
       ${background
-        ? html`<${Picture} state=${state} background=${background} />
-            <section class="live-numbers" aria-label=${t("In numbers")}>
-              <h3 class="section-title">${t("In numbers")}</h3>
-              <${Tiles} stats=${status?.stats} />
-            </section>`
+        ? html`<${Picture} state=${beside ? beside.state : state} background=${background} panel=${number} />
+            ${beside // (the numbers are the first panel's: its loop drives the readings and the video)
+              ? null
+              : html`<section class="live-numbers" aria-label=${t("In numbers")}>
+                  <h3 class="section-title">${t("In numbers")}</h3>
+                  <${Tiles} stats=${status?.stats} />
+                </section>`}`
         : null}
       <h3 class="section-title live-log-title">${t("Log")}</h3>
       <${LogBox} />

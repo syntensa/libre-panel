@@ -2255,7 +2255,9 @@
     "One picture under the themes of all panels, each showing the part where it stands": "Ein Bild unter den Themes aller Panels; jedes zeigt den Teil, wo es steht",
     "the picture has too many pixels": "das Bild hat zu viele Pixel",
     "the picture is larger than {size} MB": "das Bild ist größer als {size} MB",
-    "this is not a picture that can be read": "das ist kein Bild, das sich lesen lässt"
+    "this is not a picture that can be read": "das ist kein Bild, das sich lesen lässt",
+    "Which panel's picture": "Welches Panel gezeigt wird",
+    "{fps} pictures a second": "{fps} Bilder pro Sekunde"
   },
   "fields": {
     "align": "Ausrichtung",

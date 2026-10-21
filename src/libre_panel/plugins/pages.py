@@ -139,13 +139,19 @@ class PageContext:
         host = self._host
         return host.latest if host is not None else None
 
-    def shown_frame(self) -> Image.Image | None:
+    def shown_frame(self, panel: int = 1) -> Image.Image | None:
         """The frame on the panel now, after transitions and messages, in the theme's
         orientation (not turned for a panel mounted upside down); None before the first
         frame, while the panel is paused and without the background app. Read it only:
-        the main loop may hand the same image out again."""
-        host = self._host
-        return host.shown if host is not None else None
+        the main loop may hand the same image out again. ``panel``: which one, as *Which
+        is which?* numbers them (1: ``[device]``'s, 2 and on: those of ``[[panels]]``)."""
+        if panel == 1:
+            host = self._host
+            return host.shown if host is not None else None
+        status = getattr(getattr(self._controls, "panel", None), "status", None)
+        more = getattr(status, "more", None) or {}
+        beside = more.get(panel - 2)
+        return getattr(beside, "shown", None)
 
     def notify(self, text: str, **options: Any) -> Delivery:
         """A message on the panel, for a test or to answer an action of the page. The
