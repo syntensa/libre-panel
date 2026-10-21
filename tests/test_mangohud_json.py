@@ -186,3 +186,33 @@ def test_the_ping_says_its_host_and_the_share_of_tries_without_an_answer(monkeyp
     assert read["net.ping.lost"].value == 25 and read["net.ping.host"].value == "192.0.2.1"
     assert read["net.ping"].value is not None and read["net.ping"].unit == "ms"
     provider.close()
+
+
+def test_the_ping_connects_to_each_host_named(monkeypatch):
+    provider = psutil_provider.PsutilProvider(
+        {"ping": ["192.0.2.1:443", "192.168.1.1:80", "[2001:db8::1]:443", "example.org"]}
+    )
+    asked = []
+
+    def connect(address, timeout):
+        asked.append(address)
+        if address[0] == "192.168.1.1":
+            raise OSError("no answer")
+        return open(os.devnull)
+
+    monkeypatch.setattr(psutil_provider.socket, "create_connection", connect)
+    read = provider._ping()
+    assert asked == [("192.0.2.1", 443), ("192.168.1.1", 80), ("2001:db8::1", 443),
+                     ("example.org", 443)]  # fmt: skip
+    assert read["net.ping"].value is not None and read["net.ping.host"].value == "192.0.2.1"
+    assert read["net.ping.2"].value is None and read["net.ping.2.lost"].value == 100
+    assert read["net.ping.2.host"].value == "192.168.1.1"
+    assert read["net.ping.4.host"].value == "example.org"
+    provider.close()
+
+
+def test_a_ping_module_shows_the_host_it_is_given():
+    from libre_panel.theme.modules import ping_key
+
+    assert ping_key("") == "net.ping" and ping_key("1") == "net.ping"
+    assert ping_key("3") == "net.ping.3" and ping_key("9") == "net.ping"

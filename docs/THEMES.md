@@ -901,6 +901,7 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `proc.cpu.<n>.name`, `.value`; `proc.mem.<n>.name`, `.value` | text, % | the eight busiest programs by processor time (of the whole processor) and by memory; counted only while a theme shows them |
 | `net.ip`, `net.ping`, `net.today.down`, `net.today.up` | text, ms, B | the address towards the internet; ping (a connection to `ping`, see the configuration; only while shown); traffic since midnight or since Libre Panel started |
 | `net.ping.lost`, `net.ping.host` | %, text | of the last 20 tries of the ping, the share without an answer; the host it connects to |
+| `net.ping.2` to `net.ping.4`, each with `.lost` and `.host` | ms, %, text | the other hosts `[sensors.psutil] ping` names, as the first |
 | `battery.load`, `battery.state`, `battery.left`, `battery.plugged`, `sys.uptime` | %, text, s, 1/0, s | psutil; `state` is "On battery", "Charging" or "Charged" in the language |
 | `audio.volume`, `audio.muted` | %, 1/0 | the volume of the default output (0 while muted) and whether it is muted; needs `"audio"` in `providers` (the default list has it on Windows and Linux), see [Configuration](CONFIGURATION.md#sensor-sources-and-their-order) |
 | `audio.mic.muted`, `audio.mic.volume` | 1/0, % | whether the default microphone is muted, and its level; by the same source, only while shown |

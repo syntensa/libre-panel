@@ -36,6 +36,7 @@ _PSEUDO_FS = {
 _TOP = 8  # top processes kept, per sort
 PING_EVERY = 5.0  # seconds
 PING_TRIES = 20  # net.ping.lost: the share of so many last tries that got no answer
+PING_HOSTS = 4  # the most the ping connects to
 # battery.state: shown in the user's language (the renderer translates it)
 BATTERY_STATES = ("On battery", "Charging", "Charged")
 PROCESSES_EVERY = 2.0
@@ -74,9 +75,14 @@ class PsutilProvider(SensorProvider):
         self._ip, self._ip_at = "", -1e9
         self._day: date | None = None
         self._day_start = None  # counters at midnight (or start)
-        self.ping_target = str(self.options.get("ping", "1.1.1.1:443"))
+        # what the ping connects to: a host:port, or a list of up to four (net.ping.2 ...)
+        given = self.options.get("ping", "1.1.1.1:443")
+        targets = [given] if isinstance(given, str) else list(given or [])
+        self.ping_targets = [str(t).strip() for t in targets if str(t).strip()][:PING_HOSTS]
+        self.ping_targets = self.ping_targets or ["1.1.1.1:443"]
+        self.ping_target = self.ping_targets[0]
         self._background: dict[str, dict[str, Reading]] = {"proc": {}, "ping": {}}
-        self._ping_tries: deque[bool] = deque(maxlen=PING_TRIES)
+        self._ping_tries: list[deque[bool]] = [deque(maxlen=PING_TRIES) for _ in self.ping_targets]
         # False where the Linux source reads the kernel's chips (build_hub): the same files
         self.hwmon = True
         self._threads: dict[str, threading.Thread] = {}
@@ -284,24 +290,30 @@ class PsutilProvider(SensorProvider):
         return out
 
     def _ping(self) -> dict[str, Reading]:
-        host, _, port = self.ping_target.rpartition(":")
-        if not host:
-            host, port = self.ping_target, "443"
-        start = time.perf_counter()
-        try:
-            with socket.create_connection((host, int(port)), timeout=2):
-                pass
-            ms: float | None = (time.perf_counter() - start) * 1000
-        except (OSError, ValueError):
-            ms = None
-        self._ping_tries.append(ms is not None)
-        lost = round(100 * self._ping_tries.count(False) / len(self._ping_tries))
-        return {
-            "net.ping": Reading("net.ping", None if ms is None else round(ms, 1), "ms",
-                                f"Ping {host}" if ms is not None else "Ping"),
-            "net.ping.lost": Reading("net.ping.lost", lost, "%", "Ping lost"),
-            "net.ping.host": Reading("net.ping.host", host, "", "Ping host"),
-        }  # fmt: skip
+        """Each target's time to connect: ``net.ping`` for the first, ``net.ping.2`` and on
+        for the others, each with the share of its last tries that got no answer and its host."""
+        out: dict[str, Reading] = {}
+        for n, target in enumerate(self.ping_targets):
+            host, _, port = target.rpartition(":")
+            if not host or "]" in port:  # no port given ("example.org", "[::1]")
+                host, port = target, "443"
+            host = host.strip("[]")
+            start = time.perf_counter()
+            try:
+                with socket.create_connection((host, int(port)), timeout=2):
+                    pass
+                ms: float | None = (time.perf_counter() - start) * 1000
+            except (OSError, ValueError):
+                ms = None
+            tries = self._ping_tries[n]
+            tries.append(ms is not None)
+            lost = round(100 * tries.count(False) / len(tries))
+            key = "net.ping" if n == 0 else f"net.ping.{n + 1}"
+            out[key] = Reading(key, None if ms is None else round(ms, 1), "ms",
+                               f"Ping {host}" if ms is not None else "Ping")  # fmt: skip
+            out[f"{key}.lost"] = Reading(f"{key}.lost", lost, "%", "Ping lost")
+            out[f"{key}.host"] = Reading(f"{key}.host", host, "", "Ping host")
+        return out
 
     def close(self) -> None:
         self._stop.set()

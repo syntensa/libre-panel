@@ -120,7 +120,9 @@ url = "http://127.0.0.1:8085/data.json"   # the web server (mode "webserver", an
 # disk = "C:\\"                # the drive behind disk.load (default: the system drive)
 # ping = "1.1.1.1:443"         # what net.ping connects to (host:port), only while a
                                # theme shows the ping (the Ping module: net.ping.lost, the
-                               # share of the last 20 tries without an answer, and its host)
+                               # share of the last 20 tries without an answer, and its host);
+                               # or up to four: ["1.1.1.1:443", "192.168.1.1:80"], the others
+                               # as net.ping.2 to net.ping.4 (the module's "Which host")
 
 [hardware]
 # cpu_name = ""                # the names themes show (cpu.name, gpu.name, mem.name):

@@ -554,6 +554,13 @@ function ModuleInspector({ widget }) {
               <${TextField} label=${t("Time zone")} value=${widget.timezone} placeholder=${t("this computer's")} onChange=${change("timezone")} />
             <//>`
           : null}
+        ${widget.module === "ping"
+          ? html`<${Field} label=${t("Which host")} hint=${t("Of those [sensors.psutil] ping names in config.toml: the first is the internet, unless you name others.")}>
+              <${Select} label=${t("Which host")} value=${["2", "3", "4"].includes(widget.target) ? widget.target : "1"}
+                options=${["1", "2", "3", "4"].map((n) => ({ value: n, label: t("Host {n}", { n }) }))}
+                onChange=${(value) => change("target")(value === "1" ? "" : value)} />
+            <//>`
+          : null}
         ${widget.module === "countdown"
           ? html`<${Field} label=${t("Counts down to")} hint=${t('"2026-12-24", "2026-12-24 18:00", or "12-24" for every year; the title names it')}>
               <${TextField} label=${t("Counts down to")} value=${widget.target} placeholder="01-01" onChange=${change("target")} />

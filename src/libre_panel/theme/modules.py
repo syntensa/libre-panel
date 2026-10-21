@@ -2018,14 +2018,22 @@ def _number_rows_history(b: _Build, sensor: str, fmt: str, pairs: list[tuple[str
         number(x, y, w, h)
 
 
+def ping_key(target: str) -> str:
+    """The reading of the ping a module shows: its ``target`` is which of the hosts of
+    ``[sensors.psutil] ping`` (1, the first, to 4)."""
+    n = target.strip()
+    return f"net.ping.{n}" if n in ("2", "3", "4") else "net.ping"
+
+
 def build_ping(b: _Build, _src: Source) -> None:
-    """How long the internet (or the host of ``[sensors.psutil] ping``) takes to answer, with
-    its history and the share of tries without an answer."""
+    """How long the internet (or a host of ``[sensors.psutil] ping``, the module's ``target``)
+    takes to answer, with its history and the share of tries without an answer."""
     b.card()
     color = b.tint("net")
+    key = ping_key(b.module["target"])
     top = b.head("signal", b.module["title"] or t("Ping"), color)
-    pairs = [("net.ping.lost", "{value:.0f}%", t("Lost")), ("net.ping.host", "{value}", t("Host"))]
-    _number_rows_history(b, "net.ping", "{value:.0f} ms", pairs, color, top)
+    pairs = [(f"{key}.lost", "{value:.0f}%", t("Lost")), (f"{key}.host", "{value}", t("Host"))]
+    _number_rows_history(b, key, "{value:.0f} ms", pairs, color, top)
 
 
 def build_power(b: _Build, _src: Source) -> None:
