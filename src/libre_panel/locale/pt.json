@@ -2257,7 +2257,10 @@
     "the picture is larger than {size} MB": "a imagem tem mais de {size} MB",
     "this is not a picture that can be read": "isto não é uma imagem que possa ser lida",
     "Which panel's picture": "A imagem de qual painel",
-    "{fps} pictures a second": "{fps} imagens por segundo"
+    "{fps} pictures a second": "{fps} imagens por segundo",
+    "Picture of all panels": "Imagem de todos os painéis",
+    "One picture of all panels where they stand, each with what it shows now: to keep or to share": "Uma imagem de todos os painéis onde ficam, cada um com o que mostra agora: para guardar ou compartilhar",
+    "the panels show no picture now": "os painéis não mostram imagem agora"
   },
   "fields": {
     "align": "Alinhamento",

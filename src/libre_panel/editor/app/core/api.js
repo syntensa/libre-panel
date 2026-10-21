@@ -130,6 +130,7 @@ export const endpoints = {
   restoreBackup: (bytes) => api("POST", "/api/backup", bytes, { raw: true }),
   acrossPicture: (stamp = "") => withToken(`/api/across/picture?v=${enc(String(stamp))}`),
   setAcross: (bytes) => api("POST", "/api/across", bytes, { raw: true }),
+  panelsPhoto: () => withToken("/api/panels/photo"),
   pluginPages: () => get("/api/plugins/pages"),
   hardware: () => get("/api/hardware"),
   setHardware: (names) => post("/api/hardware", names),

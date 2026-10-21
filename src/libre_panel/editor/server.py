@@ -1399,6 +1399,40 @@ class EditorHandler(BaseHTTPRequestHandler):
             follow()
         self._json({"across": name, "stamp": (folder / name).stat().st_mtime_ns})
 
+    def _panels_photo(self) -> None:
+        """``GET /api/panels/photo``: one picture of all panels that are on, where they stand
+        (Settings → Panel → More panels), each with what it shows now, to keep or share."""
+        from libre_panel import arrangement
+        from libre_panel.devices.models import find_model
+
+        status = getattr(getattr(self.controls, "panel", None), "status", None)
+        try:
+            config = load_config(self.state.config_path)
+        except ConfigError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        if status is None:
+            return self._error(t("the panels show no picture now"), HTTPStatus.NOT_FOUND)
+        more = getattr(status, "more", {}) or {}
+        statuses = [status, *(more.get(n) for n in range(len(config.panels)))]
+        host = getattr(self.controls, "plugin_host", None)
+        frames = [getattr(host, "shown", None), *(getattr(s, "shown", None) for s in statuses[1:])]
+        devices = [config.device, *(panel.device for panel in config.panels)]
+        on = [True, *(panel.on for panel in config.panels)]
+        panels = []
+        for n, rect in enumerate(arrangement.laid_out(config, statuses)):
+            if rect is None or not on[n]:
+                continue
+            told = getattr(statuses[n], "model", "") or ""
+            model = find_model(devices[n].model) or (find_model(told) if told else None)
+            panels.append((rect, frames[n], getattr(model, "shape", "") == "round", n + 1))
+        if not any(frame is not None for _, frame, _, _ in panels):
+            return self._error(t("the panels show no picture now"), HTTPStatus.NOT_FOUND)
+        picture = arrangement.photo(panels)
+        buffer = io.BytesIO()
+        picture.save(buffer, "PNG", optimize=True)
+        name = f"libre-panel-{time.strftime('%Y-%m-%d')}.png"
+        self._send(200, buffer.getvalue(), "image/png", filename=name)
+
     def _across_picture(self) -> None:
         """``GET /api/across/picture``: the picture across the panels, small, for the app."""
         from libre_panel import arrangement
@@ -2027,6 +2061,7 @@ ROUTES: tuple[Route, ...] = (
     Route("POST", "/api/backup", lambda h, m, u: h._restore_backup()),
     Route("POST", "/api/across", lambda h, m, u: h._across_upload()),
     Route("GET", "/api/across/picture", lambda h, m, u: h._across_picture(), picture=True),
+    Route("GET", "/api/panels/photo", lambda h, m, u: h._panels_photo(), picture=True),
     Route("GET", "/api/start-screen", lambda h, m, u: h._start_screen()),
     Route(
         "GET",

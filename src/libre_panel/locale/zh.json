@@ -2257,7 +2257,10 @@
     "{name}: not a file a backup of Libre Panel holds": "{name}：不是 Libre Panel 备份中应有的文件",
     "{width} × {height} cm": "{width} × {height} 厘米",
     "Which panel's picture": "显示哪块面板的画面",
-    "{fps} pictures a second": "每秒 {fps} 帧"
+    "{fps} pictures a second": "每秒 {fps} 帧",
+    "Picture of all panels": "所有面板的合影",
+    "One picture of all panels where they stand, each with what it shows now: to keep or to share": "一张所有面板按实际位置排列的图片，每块显示当前画面：可保存或分享",
+    "the panels show no picture now": "面板当前没有显示画面"
   },
   "fields": {
     "align": "对齐",

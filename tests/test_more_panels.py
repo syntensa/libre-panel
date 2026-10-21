@@ -465,3 +465,36 @@ def test_the_live_picture_of_each_panel_is_asked_for_by_its_number():
     assert context.shown_frame(2) is second
     assert context.shown_frame(3) is None and context.shown_frame(4) is None  # none yet, none
     assert PageContext(None).shown_frame(2) is None  # without the background app
+
+
+def test_the_picture_of_all_panels_is_made_from_what_each_shows(isolated_home):
+    import threading
+    from types import SimpleNamespace
+
+    from PIL import Image
+    from test_editor_server import request
+
+    from libre_panel.editor.server import make_server
+
+    isolated_home.mkdir(parents=True, exist_ok=True)
+    (isolated_home / "config.toml").write_text(
+        '[device]\nmodel = "turing-12.3-usb"\n\n[[panels]]\nmodel = "turing-9.2-usb"\n',
+        encoding="utf-8",
+    )
+    status = app.RunStatus(more={0: app.RunStatus(shown=Image.new("RGB", (1920, 480), "blue"))})
+    controls = SimpleNamespace(
+        panel=SimpleNamespace(status=status),
+        plugin_host=SimpleNamespace(shown=Image.new("RGB", (1920, 720))),
+    )
+    server = make_server(port=0, controls=controls)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    port = server.server_address[1]
+    try:
+        code, body = request(port, "GET", "/api/panels/photo")
+        assert code == 200 and body[:8] == b"\x89PNG\r\n\x1a\n"
+        controls.plugin_host.shown, status.more[0].shown = None, None
+        assert request(port, "GET", "/api/panels/photo")[0] == 404  # none shows a picture
+    finally:
+        server.shutdown()
+        server.server_close()
+        server.editor_state.close()

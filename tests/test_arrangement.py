@@ -140,3 +140,39 @@ def test_a_transition_that_begins_later_shows_the_old_frame_until_then():
     kind = transition("fade", None)
     shown, blend = app._blend((kind, old, 10.0), new, 9.5)
     assert blend is not None and shown.getpixel((5, 5)) == (255, 0, 0)
+
+
+def test_the_panels_not_placed_stand_in_a_row_beside_those_that_are():
+    from libre_panel.config import parse_config
+
+    loose = parse_config({"device": {"model": "turing-12.3-usb"},
+                          "panels": [{"model": "turing-9.2-usb"}, {}]})  # fmt: skip
+    first, second, third = arrangement.laid_out(loose, [None, None, None])
+    assert first[:2] == (-275, 0.0) and second[0] == pytest.approx(-275 + 292.5 + 30, abs=0.1)
+    assert third is None  # neither a model nor a size it said
+    told = app.RunStatus(size=(480, 320))  # a panel of a model not known says its size
+    assert arrangement.laid_out(loose, [None, None, told])[2][2] == pytest.approx(480 * 0.118)
+    placed = parse_config({"device": {"model": "turing-12.3-usb", "at": [0, 0]},
+                           "panels": [{"model": "turing-9.2-usb"}]})  # fmt: skip
+    first, second = arrangement.laid_out(placed, [None, None])
+    assert first[:2] == (0.0, 0.0) and second[:2] == pytest.approx((322.5, 0.0), abs=0.1)
+
+
+def test_a_picture_of_all_panels_shows_each_where_it_stands():
+    wide, bar = (
+        Image.new("RGB", (1920, 720), (200, 0, 0)),
+        Image.new("RGB", (1920, 480), (0, 0, 200)),
+    )
+    panels = [
+        ((0.0, 0.0, 292.5, 109.7), wide, False, 1),
+        ((33.0, 125.0, 226.7, 56.7), bar, False, 2),
+    ]
+    picture = arrangement.photo(panels)
+    per = 1920 / 226.7  # as dense as the densest: the 9.2" bar at its own size
+    assert picture.width == pytest.approx((292.5 + 2 * (292.5 * 0.08 + 12)) * per, abs=2)
+    margin = (292.5 * 0.08 + 12) * per
+    assert picture.getpixel((round(margin + 50), round(margin + 50))) == (200, 0, 0)
+    assert picture.getpixel((round(margin + 40 * per), round(margin + 150 * per))) == (0, 0, 200)
+    assert max(picture.size) <= arrangement.PHOTO_MAX_SIDE
+    dark = arrangement.photo([((0.0, 0.0, 50.0, 50.0), None, True, 2)])  # nothing shown yet
+    assert dark.size[0] == dark.size[1] and arrangement.photo([]) is None

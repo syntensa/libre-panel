@@ -456,6 +456,11 @@ function MorePanelsCard() {
   const identify = panels.length && info?.running
     ? html`<button type="button" class="btn" onClick=${() => endpoints.appAction("identify").catch(() => {})}>${t("Which is which?")}</button>`
     : null;
+  // one picture of them all where they stand, each with what it shows now: to keep or share
+  const photo = panels.length && info?.running
+    ? html`<a class="btn" href=${endpoints.panelsPhoto()} download data-panels-photo
+        title=${t("One picture of all panels where they stand, each with what it shows now: to keep or to share")}>${t("Picture of all panels")}</a>`
+    : null;
   // the themes of this panel and another change places (theirs shown, where it has none)
   const swap = async (n) => {
     const first = normalTheme();
@@ -515,7 +520,7 @@ function MorePanelsCard() {
     id="panel-more"
     title=${t("More panels")}
     text=${t("A second or third panel beside this one, each with a screen of its own. They show the same readings in single pictures; smooth motion, the game screen and the screens in turn are this panel's.")}
-    action=${html`<span class="more-actions">${identify}${add}</span>`}
+    action=${html`<span class="more-actions">${identify}${photo}${add}</span>`}
   >
     ${spare.map(
       (model) => html`<div class="more-spare" key=${`${model.id}${model.port || ""}`} data-spare=${model.id}>

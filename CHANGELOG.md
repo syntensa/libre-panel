@@ -22,6 +22,8 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
 - **Every panel in Live, the Overview and the tray**: Live shows the picture of the panel
   chosen, the Overview says how each is doing, and the tray switches each on or off and
   gives it a theme
+- **A picture of all panels**: one PNG of them where they stand, each with what it shows,
+  in a dark frame, to share (*Picture of all panels*)
 - **One look on every panel**: a panel beside the first can take the colours, fonts and
   module frames of the theme the first one shows, and follows a change in Design at once
   (*Look as panel 1's*; on for a companion)

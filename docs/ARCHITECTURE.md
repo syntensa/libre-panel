@@ -183,4 +183,6 @@ Beside them, *More panels* takes the picture across the panels with `POST /api/a
 picture's file, its bytes: kept as `across/picture.jpg` in the settings folder without its
 metadata, named in config.toml as `across`, answered with `{across, stamp}`) and shows it,
 small, from `GET /api/across/picture` (with the token in the query too); `{"set": {"across":
-null}}` takes it away.
+null}}` takes it away. `GET /api/panels/photo` is one PNG of all panels that are on, where they
+stand, each with what it shows now (404 while none shows a picture), for *Picture of all
+panels* there.

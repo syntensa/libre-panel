@@ -1360,17 +1360,10 @@ class _MorePanels:
         config = self._seen
         if config is None:
             return []
-
-        def place(device: Any, status: RunStatus | None) -> arrangement.Rect | None:
-            told = status.model if status is not None else ""
-            model = find_model(device.model) or (find_model(told) if told else None)
-            way = "portrait" if device.orientation == "portrait" else "landscape"
-            size = status.size if status is not None and status.size else None
-            return arrangement.rect(device.at, model, size or (model.size(way) if model else None))
-
-        first = place(config.device, self.status)
-        return [first, *(place(panel.device, self.status.more.get(n))
-                         for n, panel in enumerate(config.panels))]  # fmt: skip
+        more = self.status.more
+        return arrangement.places(
+            config, [self.status, *(more.get(n) for n in range(len(config.panels)))]
+        )
 
     def _end(self, numbers: list[int]) -> None:
         runs = [(n, *self._runs.pop(n)) for n in numbers if n in self._runs]
