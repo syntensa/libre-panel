@@ -69,6 +69,19 @@ Every download is tested on its own system before it is attached:
   `system-setup --linux` finds its way in the bare environment pkexec runs a program in
   (`packaging/linux/test_appimage.sh`).
 
+**Soak test:** before a release that changes how the panels run, let the app run for a day
+with two panels and look at what it did:
+
+```bash
+python tools/soak.py --hours 24          # --video for the video mode (needs ffmpeg)
+```
+
+It starts the background app in a settings folder of its own (two virtual 9.2" bars, Lumen and
+Lumen Companion, on the demo readings, with the notices, the timer and the power service), notes
+its memory, threads, open files and the panels' frame times every minute, and writes
+`soak/soak.md` with a chart: it passes when the memory grows by less than 5 MB an hour after
+the first ten minutes, the threads and the open files stay level and every panel kept showing.
+
 **Dry run:** start *Release* by hand (Actions → Release → Run workflow). It
 builds and tests everything but publishes nothing; the bundles are attached to
 the run as artifacts.
