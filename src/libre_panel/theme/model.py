@@ -1233,6 +1233,34 @@ def with_accent(theme: Theme, colour: str | None) -> Theme:
     return replace(theme, palette=palette)
 
 
+def with_look(theme: Theme, source: Theme | None) -> Theme:
+    """``theme`` in the look of ``source``, for a panel beside the first in the first panel's
+    look (config.toml ``[[panels]] same_look``): the colours of its palette, by name (and
+    those only ``theme`` has stay), its background colour, its fonts and how its modules are
+    framed (``style``: cards, corners, glow). What is where, the pictures and the effects
+    stay ``theme``'s; so does a font of ``source``'s own folder, which ``theme`` cannot reach.
+    None, or ``theme`` itself: the theme as it is."""
+    if source is None or (source.root is not None and source.root == theme.root):
+        return theme
+
+    def reachable(font: str) -> bool:
+        return not font or font.startswith(BUILTIN_PREFIX)
+
+    style = theme.style
+    if source.style is not None:
+        style = {**(theme.style or {}), **source.style}
+        for key in ("display_font", "text_font"):
+            if not reachable(source.style.get(key, "")):
+                style[key] = (theme.style or STYLE_DEFAULTS).get(key) or DEFAULT_FONT
+    return replace(
+        theme,
+        palette={**theme.palette, **source.palette},
+        background_color=source.background_color,
+        font=source.font if reachable(source.font) else theme.font,
+        style=style,
+    )
+
+
 def switches_for(theme: Theme, chosen: dict[str, dict[str, bool]]) -> dict[str, bool]:
     """The person's choice of the switches of ``theme``: config.toml's ``[switches]`` for every
     theme ("*"), and before it ``[switches.<theme>]``, by the theme its versions are made from

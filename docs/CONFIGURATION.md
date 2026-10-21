@@ -286,6 +286,7 @@ model = "turing-3.5"           # "auto": a panel the others do not use
 port = "COM6"                  # serial panels: which of two of the same kind it is
 # game_theme = "lumen-vertical"  # its theme while the first panel shows a game's page,
 # media_theme = "encore"       # and music's ("" or left out: its own as ever)
+# same_look = true             # its theme in the look of the one the first panel shows
 # follow_brightness = true     # its brightness as the first panel's, at night and while
 # brightness_offset = 10       # you are away too, with this added (-50 to 50: some panels
                                # look brighter than others at the same setting); false:
@@ -310,7 +311,10 @@ The pages (game, music, idle clock), the screens in turn, the notices, the tray'
 and smooth motion (the video mode, with the name of the standby clip that was given for it)
 are the first panel's; the others show their theme in single pictures, and one given a theme
 for a game or for music (`game_theme`, `media_theme`) shows it while the first panel shows
-that page. A change in config.toml
+that page. With `same_look` a panel's theme takes the colours of the theme the first panel
+shows (its palette, by name), its background colour, its fonts and how it frames its modules
+(`style`, and the module frames switched on or off for it); what is where and the pictures
+stay its own, and a change saved in Design shows on both at once. A change in config.toml
 reaches every panel, and a panel that is added, switched on or off, or taken out starts or
 ends while the others go on.
 

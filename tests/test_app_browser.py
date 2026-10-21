@@ -4327,6 +4327,11 @@ def test_a_panel_added_beside_lumen_shows_lumen_s_companion(app_url, isolated_ho
         page.locator("#panel-more").get_by_role("button", name="Add a panel").click()
         waits_for(page, lambda: len(settings_config().panels) == 1)
         assert settings_config().panels[0].theme == "lumen-companion"
-        expect(page.locator("[data-more-panel='0']").get_by_label("Theme")).to_have_value(
-            "lumen-companion"
-        )
+        assert settings_config().panels[0].same_look  # in panel 1's look, as Design changes it
+        more = page.locator("[data-more-panel='0']")
+        expect(more.get_by_label("Theme")).to_have_value("lumen-companion")
+        look = more.get_by_label("Look as panel 1's")
+        expect(look).to_be_checked()
+        look.click()  # its own look
+        waits_for(page, lambda: not settings_config().panels[0].same_look)
+        assert "same_look" not in (isolated_home / "config.toml").read_text(encoding="utf-8")

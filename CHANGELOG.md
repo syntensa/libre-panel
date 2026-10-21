@@ -17,6 +17,9 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
   with the fans turning, the drives and the processes) and Arena Companion (the temperatures
   large while you play), for the 9.2" either way up and the 12.3"; a panel added beside Lumen
   gets Lumen's, and Arena's for the game's page
+- **One look on every panel**: a panel beside the first can take the colours, fonts and
+  module frames of the theme the first one shows, and follows a change in Design at once
+  (*Look as panel 1's*; on for a companion)
 - **Scenes**: a theme for every panel at once, put on with a click on Start, from the tray or
   with a keyboard shortcut (the next one); what the panels show is kept as one with a click
   ([Scenes](docs/CONFIGURATION.md#scenes))

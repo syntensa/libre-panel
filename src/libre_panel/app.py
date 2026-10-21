@@ -48,6 +48,7 @@ from libre_panel.theme.model import (
     switches_for,
     theme_for,
     with_accent,
+    with_look,
 )
 
 log = logging.getLogger(__name__)
@@ -588,11 +589,15 @@ class MainLoop:
         clock: Callable[[], float] = loop_clock,
         panel: int | None = None,
         mode_of: Callable[[], str | None] | None = None,
+        look_of: Callable[[], str] | None = None,
     ) -> None:
         self.status = status = status or RunStatus()
         self.host, self.on_config, self.clock = host, on_config, clock
         self.panel = panel  # a panel beside [device]'s: config.toml's [[panels]][panel] (run)
         self.mode_of = mode_of  # for one: the mode the first panel is in (a game, music)
+        self.look_of = look_of  # and the theme it shows, for one in its look (same_look)
+        self._look_folder: tuple[str, Path | None] = ("", None)  # (that theme's folder, found)
+        self.looked = self._look(config)  # the look the renderer was made in
         self.warmup = _Warmup()  # the next theme, built while this one shows
         self.idle = threading.Event()  # set between frames: the warm-up works then
         i18n.set_language(config.language)
@@ -686,6 +691,48 @@ class MainLoop:
         """The first panel's mode, for a panel beside it (None for the first: its host says)."""
         return self.mode_of() if self.mode_of is not None else None
 
+    def _look(self, config: Config) -> tuple[str, int | None] | None:
+        """For a panel beside the first in its look (``same_look``): the theme the first panel
+        shows and when its theme.json last changed (a change in Design follows at once); None
+        for any other panel, or while the first shows none."""
+        if not config.same_look or self.look_of is None:
+            return None
+        name = self.look_of()
+        if not name:
+            return None
+        if self._look_folder[0] != name:  # (looked for once per theme, not on every frame)
+            try:
+                self._look_folder = (name, find_theme(name))
+            except ThemeError:
+                self._look_folder = (name, None)
+        folder = self._look_folder[1]
+        return name, _Watcher._stamp(folder / THEME_FILENAME) if folder is not None else None
+
+    def _look_source(self, look: tuple[str, int | None] | None) -> Theme | None:
+        """The theme whose look this panel takes (:meth:`_look`), loaded; None: its own."""
+        if look is None or self._look_folder[1] is None:
+            return None
+        try:
+            return load_theme(self._look_folder[1])
+        except ThemeError as exc:
+            log.warning("panel %d keeps its own look: %s", (self.panel or 0) + 2, exc)
+            return None
+
+    @staticmethod
+    def _dressed(theme: Theme, config: Config, source: Theme | None) -> Theme:
+        """``theme`` as it is drawn: in the first panel's look (``source``), in the accent."""
+        return with_accent(with_look(theme, source), accent_of(config.accent))
+
+    @staticmethod
+    def _switched(theme: Theme, config: Config, source: Theme | None) -> dict[str, bool]:
+        """The person's choice of ``theme``'s switches; in the first panel's look, those both
+        themes have (its module frames) as they are chosen for the first panel's."""
+        own = switches_for(theme, config.switches)
+        if source is None:
+            return own
+        theirs = switches_for(source, config.switches)
+        return {**own, **{name: on for name, on in theirs.items() if name in theme.switches}}
+
     def _draw_ahead(self, theme: Theme, config: Config) -> None:
         """Draw the first theme once before the loop starts, as a switch draws the next one
         (:class:`_Warmup`): its texts, cards, graph strips and fans are made here, in a thread
@@ -708,7 +755,7 @@ class MainLoop:
         every = (config.refresh_ms or theme.refresh_ms) / 1000
         how = video, fps, (now, every)
         self.idle.set()  # no frame is under way: the drawing need not wait for one
-        key = self._warm_key(theme, config)
+        key = self._warm_key(theme, config, self._look(config))
         self.warmup.start(key, self._warm_job(theme, config, now, first, how), now)
         give_up = time.monotonic() + self.warmup.LIMIT_S  # (wall time, whatever the clock is)
         while not self.warmup.ready(key, now) and time.monotonic() < give_up:
@@ -716,10 +763,12 @@ class MainLoop:
 
     def _renderer(self, theme: Theme, config: Config) -> Renderer:
         """The renderer for ``theme``: warmed up if it was, else a new one."""
-        warmed = self.warmup.take(self._warm_key(theme, config))
+        self.looked = look = self._look(config)
+        warmed = self.warmup.take(self._warm_key(theme, config, look))
+        source = self._look_source(look)
         if warmed is None:
-            renderer = Renderer(with_accent(theme, accent_of(config.accent)),
-                                animate=config.fps > 1, motion=self.motion)  # fmt: skip
+            renderer = Renderer(self._dressed(theme, config, source), animate=config.fps > 1,
+                                motion=self.motion)  # fmt: skip
         else:
             renderer, motion = warmed
             renderer.motion = self.motion  # from now on the panel's
@@ -727,17 +776,19 @@ class MainLoop:
         renderer.place = _place(config)
         renderer.fan_choices = fan.Choices.of(config)
         renderer.symbols = config.symbols
-        renderer.switches = switches_for(theme, config.switches)
+        renderer.switches = self._switched(theme, config, source)
         return renderer
 
     @staticmethod
-    def _warm_key(theme: Theme, config: Config) -> Any:
+    def _warm_key(theme: Theme, config: Config, look: Any = None) -> Any:
+        """What a renderer is made for: ``theme`` as it is on disk, how it is drawn, and the
+        first panel's look it is in (:meth:`_look`)."""
         theme_file = _theme_file(theme)
         stamp = _Watcher._stamp(theme_file) if theme_file else None
         switches = tuple(sorted(switches_for(theme, config.switches).items()))
         accent = accent_of(config.accent)
         return (str(theme.root), stamp, theme.name, config.fps > 1, config.symbols, switches,
-                accent)  # fmt: skip
+                accent, look)  # fmt: skip
 
     def _warmed(
         self, config: Config, host: Any, shown: str, refused: str | None, watcher: _Watcher,
@@ -748,7 +799,7 @@ class MainLoop:
         one goes on; nothing to switch to, or a theme that fails, goes ahead."""
         pending = watcher.pending()
         wanted = _theme_name(config, host, self.default, self.rotation, self.reported, self._mode())
-        if not pending and wanted in (shown, refused):
+        if not pending and wanted in (shown, refused) and self._look(config) == self.looked:
             return True
         try:
             fresh = load_config(config.path) if pending and config.path else config
@@ -761,7 +812,7 @@ class MainLoop:
             return True  # the switch says why
         if fresh.language != config.language:
             return True  # a new language: modules are laid out in it, at once
-        key = self._warm_key(theme, fresh)
+        key = self._warm_key(theme, fresh, self._look(fresh))
         if self.warmup.ready(key, now):
             return True
         if not self.warmup.busy:
@@ -792,14 +843,15 @@ class MainLoop:
             current = self.renderer
             how = current.continuous, current.fps, current.sample
         continuous, fps, sample = how
+        source = self._look_source(self._look(config))
 
         def build() -> tuple[Renderer, Motion]:
-            renderer = Renderer(with_accent(theme, accent_of(config.accent)), animate=animate,
+            renderer = Renderer(self._dressed(theme, config, source), animate=animate,
                                 motion=motion)  # fmt: skip
             renderer.continuous, renderer.fps, renderer.sample = continuous, fps, sample
             renderer.fan_choices = fan.Choices.of(config)  # their rotors, warmed as shown
             renderer.symbols = config.symbols  # and the symbols in their look
-            renderer.switches = switches_for(theme, config.switches)  # and as switched
+            renderer.switches = self._switched(theme, config, source)  # and as switched
             # widget by widget between the panel's frames, not while one is drawn
             renderer.warm(snapshot, now, pause=lambda: self.idle.wait(0.1))
             return renderer, motion
@@ -959,7 +1011,8 @@ class MainLoop:
             may_switch = policy in (None, "follow", "restart")
             may_switch = may_switch and self._warmed(config, host, shown, refused, watcher, now)
             changed = watcher.changed() if may_switch else False
-            if may_switch and (changed or (wanted != shown and wanted != refused)):
+            relook = may_switch and self._look(config) != self.looked  # the first panel's look
+            if may_switch and (changed or relook or (wanted != shown and wanted != refused)):
                 fresh = config
                 try:
                     if changed and config.path:
@@ -998,7 +1051,7 @@ class MainLoop:
                     known = {config.path: config.stamp} if config.path and config.stamp else None
                     watcher = _Watcher(config.path, _theme_file(theme), known=known)
                     toasts.set_renderer(renderer)
-                    if wanted != shown:
+                    if wanted != shown or relook:
                         chosen = host.take_transition() if host is not None else None
                         # a following one uncovers the new theme, unless a mode
                         # change brought a transition of its own
@@ -1213,7 +1266,8 @@ class _MorePanels:
         while not stop.is_set():
             try:
                 run(panel_config(config, n), stop=stop, status=status, hub=HubView(self.hub),
-                    panel=n, quitting=self.quitting, mode_of=self._mode)  # fmt: skip
+                    panel=n, quitting=self.quitting, mode_of=self._mode,
+                    look_of=self._look)  # fmt: skip
             except (ConfigError, ThemeError, DeviceError) as exc:
                 status.state, status.detail = "error", str(exc)
                 log.error("panel %d stopped: %s", n + 2, exc)
@@ -1230,6 +1284,9 @@ class _MorePanels:
 
     def _mode(self) -> str | None:
         return self.host.mode if self.host is not None else None
+
+    def _look(self) -> str:
+        return self.status.theme  # what the first panel shows: its look for one in it
 
     def _end(self, numbers: list[int]) -> None:
         runs = [(n, *self._runs.pop(n)) for n in numbers if n in self._runs]
@@ -1313,6 +1370,7 @@ def run(
     hub: Any = None,
     panel: int | None = None,
     mode_of: Callable[[], str | None] | None = None,
+    look_of: Callable[[], str] | None = None,
 ) -> None:
     """Main loop: read sensors at the theme's rate, render at ``config.fps`` so
     values glide between readings, and send only frames that changed. A
@@ -1329,10 +1387,11 @@ def run(
     The panels of ``[[panels]]`` run beside it, each in a loop of its own (:class:`_MorePanels`):
     one of them is this with ``panel``, its place there, and ``hub``, the first panel's readings
     (a :class:`HubView`); the guards and the hang watch are the first panel's loop's alone.
+    ``mode_of`` and ``look_of`` say the mode the first panel is in and the theme it shows.
     """
     stop = stop or threading.Event()
     loop = MainLoop(config, once=once, status=status, host=host, on_config=on_config, hub=hub,
-                    panel=panel, mode_of=mode_of)  # fmt: skip
+                    panel=panel, mode_of=mode_of, look_of=look_of)  # fmt: skip
     pacer = _Pacer()
     planned: float | None = None  # when the pacer planned the next streaming frame
     first = panel is None  # the first panel's loop, [device]'s

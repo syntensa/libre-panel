@@ -466,7 +466,7 @@ function MorePanelsCard() {
   const companion = normal ? themes.find((theme) => theme.id === `${versionBase(normal) || normal}-companion`) : null;
   // and while a game runs, Arena's companion beside Arena (the game's page)
   const gaming = themes.some((theme) => theme.id === "arena-companion") ? { game_theme: "arena-companion" } : {};
-  const added = (more) => write([...panels, { ...(companion ? { theme: companion.id } : {}), ...gaming, ...more }]);
+  const added = (more) => write([...panels, { ...(companion ? { theme: companion.id, same_look: true } : {}), ...gaming, ...more }]);
   return html`<${Card}
     id="panel-more"
     title=${t("More panels")}
@@ -551,6 +551,9 @@ function MoreSettings({ n, panel, models, themes, chosen, onBrightness, onChange
     <//>
     <${SettingRow} title=${t("Theme")}>
       <${Select} label=${t("Theme")} value=${panel.theme || ""} options=${themes} onChange=${(value) => onChange({ theme: value })} />
+    <//>
+    <${SettingRow} title=${t("Look as panel 1's")} hint=${t("Its theme takes the colours, fonts and module frames of the theme panel 1 shows, and follows a change in Design.")}>
+      <${Toggle} label=${t("Look as panel 1's")} checked=${panel.same_look === true} onChange=${(on) => onChange({ same_look: on })} />
     <//>
     <${SettingRow} title=${t("While a game runs")} hint=${n === 0 ? t("While panel 1 shows the game's page or music's, this panel can show a theme of its own: the temperatures and fans during a game, say.") : null}>
       <${Select} label=${t("While a game runs")} value=${panel.game_theme || ""} options=${[{ value: "", label: t("As ever") }, ...themes.slice(1)]}

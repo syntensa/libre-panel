@@ -2236,7 +2236,9 @@
     "What every panel shows now, under a name: one click puts it back on.": "Ce que chaque écran affiche maintenant, sous un nom : un clic le remet en place.",
     "As ever": "Comme d’habitude",
     "While panel 1 shows the game's page or music's, this panel can show a theme of its own: the temperatures and fans during a game, say.": "Tant que l’écran 1 affiche la page du jeu ou de la musique, cet écran peut afficher un thème à lui : les températures et les ventilateurs pendant une partie, par exemple.",
-    "Beside panel 1's theme": "Pour aller avec le thème de l’écran 1"
+    "Beside panel 1's theme": "Pour aller avec le thème de l’écran 1",
+    "Look as panel 1's": "Apparence comme l’écran 1",
+    "Its theme takes the colours, fonts and module frames of the theme panel 1 shows, and follows a change in Design.": "Son thème prend les couleurs, les polices et les cadres des modules du thème que montre l’écran 1, et suit les changements faits dans Design."
   },
   "fields": {
     "align": "Alignement",

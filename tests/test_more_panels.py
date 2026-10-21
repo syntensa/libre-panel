@@ -346,3 +346,80 @@ def test_a_panel_shows_a_theme_of_its_own_while_the_first_shows_a_game_or_music(
     more = app._MorePanels(SensorHub([]), app.RunStatus(), None, SimpleNamespace(mode="game"))
     assert more._mode() == "game"  # the first panel's mode, for the others
     assert app._MorePanels(SensorHub([]), app.RunStatus(), None)._mode() is None
+
+
+def test_a_theme_in_another_s_look_takes_its_colours_fonts_and_frames():
+    from libre_panel.theme.model import find_theme, load_theme, with_look
+
+    own, first = load_theme(find_theme("lumen-companion")), load_theme(find_theme("arena"))
+    looked = with_look(own, first)
+    assert looked.palette["accent"] == first.palette["accent"] != own.palette["accent"]
+    assert looked.style["radius"] == first.style["radius"] == 18
+    assert looked.background_color == first.background_color
+    assert looked.widgets == own.widgets and looked.background_image == own.background_image
+    assert with_look(own, None) is own and with_look(own, own) is own
+    slate = load_theme(find_theme("slate"))  # a palette of other names: those it has
+    assert with_look(own, slate).palette["text2"] == own.palette["text2"]
+    assert with_look(own, slate).palette["cpu"] == slate.palette["cpu"]
+    assert with_look(own, slate).style == own.style  # (slate frames no modules of its own)
+
+
+def test_a_panel_in_the_first_one_s_look_follows_its_theme_and_a_change_in_design(tmp_path):
+    import os
+    import shutil
+
+    from test_app_cli import MemoryStream, StepClock
+
+    from libre_panel.config import Config, SensorsConfig, user_themes_dir
+    from libre_panel.sensors.demo import DemoProvider
+    from libre_panel.theme.model import find_theme, load_theme
+
+    mine = user_themes_dir() / "mine"
+    shutil.copytree(find_theme("arena"), mine)
+    first = ["mine"]
+    clock = StepClock(1000.0)
+    loop = app.MainLoop(Config(theme="lumen-companion", same_look=True,
+                               sensors=SensorsConfig(providers=["demo"])),
+                        display=MemoryStream(), clock=clock, panel=0, look_of=lambda: first[0],
+                        hub=SensorHub([DemoProvider({"fixed_time": 1_700_000_000})]))  # fmt: skip
+
+    def accent_after_a_while(expected):
+        give_up = time.monotonic() + 20
+        while time.monotonic() < give_up:  # the switch is warmed up first, between frames
+            clock.now += 3.0
+            loop.step()
+            if loop.renderer.theme.palette["accent"].upper() == expected.upper():
+                break
+            time.sleep(0.05)
+        return loop.renderer.theme.palette["accent"].upper()
+
+    try:
+        loop.step()
+        assert loop.shown == "lumen-companion"
+        assert loop.renderer.theme.palette["accent"] == load_theme(mine).palette["accent"]
+        path = mine / "theme.json"
+        path.write_text(path.read_text(encoding="utf-8").replace(
+            load_theme(mine).palette["accent"], "#FF3366"), encoding="utf-8")  # fmt: skip
+        later = path.stat().st_mtime_ns + 2_000_000_000
+        os.utime(path, ns=(later, later))
+        assert accent_after_a_while("#FF3366") == "#FF3366"  # saved in Design: followed
+        first[0] = "lumen"
+        lumen = load_theme(find_theme("lumen")).palette["accent"]
+        assert accent_after_a_while(lumen) == lumen.upper() and loop.shown == "lumen-companion"
+    finally:
+        loop.close()
+    plain = app.MainLoop(Config(theme="lumen-companion", sensors=SensorsConfig(providers=["demo"])),
+                         display=MemoryStream(), clock=StepClock(0.0), panel=0,
+                         look_of=lambda: "arena", hub=SensorHub([DemoProvider({})]))  # fmt: skip
+    try:
+        assert plain.looked is None  # not asked for: its own look
+    finally:
+        plain.close()
+
+
+def test_same_look_is_read_from_the_panel_s_table():
+    config = parse_config({"panels": [{"theme": "lumen-companion", "same_look": True}, {}]})
+    assert config.panels[0].same_look and config.for_panel(0).same_look
+    assert not config.for_panel(1).same_look and not config.same_look
+    with pytest.raises(ConfigError, match="same_look"):
+        parse_config({"panels": [{"same_look": "yes"}]})

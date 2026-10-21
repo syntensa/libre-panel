@@ -429,6 +429,7 @@ class Settings:
                         "brightness_offset": panel.brightness_offset,
                         "game_theme": panel.game_theme,
                         "media_theme": panel.media_theme,
+                        "same_look": panel.same_look,
                         **_device_table(panel.device),
                     }
                     for panel in config.panels
@@ -555,7 +556,7 @@ class Settings:
             if not isinstance(table, dict):
                 raise SettingsError(f"panels[{n}]: expected a table")
             default = {"theme": "", "on": True, "follow_brightness": True, "brightness_offset": 0,
-                       "game_theme": "", "media_theme": "",
+                       "game_theme": "", "media_theme": "", "same_look": False,
                        **_device_table(_panel_device(n))}  # fmt: skip
             now = config.panels[n].device.output if n < len(config.panels) else default["output"]
             kept = {}
@@ -563,7 +564,7 @@ class Settings:
                 name = f"panels[{n}].{key}"
                 if key in ("theme", "game_theme", "media_theme"):
                     cleaned = _text(name, item, 64)
-                elif key in ("on", "follow_brightness"):
+                elif key in ("on", "follow_brightness", "same_look"):
                     cleaned = _flag(name, item)
                 elif key == "brightness_offset":
                     cleaned = _whole(name, item, -50, 50)
