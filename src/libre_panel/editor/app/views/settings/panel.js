@@ -6,6 +6,7 @@
 
 import { normalTheme, themeName } from "../../core/actions.js";
 import { endpoints } from "../../core/api.js";
+import { versionBase } from "../../core/orientation.js";
 import { t } from "../../core/i18n.js";
 import {
   loadClipQuestion,
@@ -445,7 +446,7 @@ function MorePanelsCard() {
   const remove = (n) =>
     write(panels.filter((_, i) => i !== n).map(({ output, ...panel }) => (OWN_FILE.test(output) ? panel : { ...panel, output })));
   const add = panels.length < MORE_PANELS
-    ? html`<button type="button" class="btn" onClick=${() => write([...panels, {}])}>${t("Add a panel")}</button>`
+    ? html`<button type="button" class="btn" onClick=${() => added({})}>${t("Add a panel")}</button>`
     : null;
   // which is which: each panel shows its number a few seconds (identify.py)
   const identify = panels.length && info?.running
@@ -460,6 +461,12 @@ function MorePanelsCard() {
     store.set({ pages: await endpoints.setPage("normal", { theme: other }) });
   };
   const spare = panels.length < MORE_PANELS ? info?.spare || [] : [];
+  // the theme that goes beside panel 1's: its companion, where it has one (Lumen Companion)
+  const normal = normalTheme();
+  const companion = normal ? themes.find((theme) => theme.id === `${versionBase(normal) || normal}-companion`) : null;
+  // and while a game runs, Arena's companion beside Arena (the game's page)
+  const gaming = themes.some((theme) => theme.id === "arena-companion") ? { game_theme: "arena-companion" } : {};
+  const added = (more) => write([...panels, { ...(companion ? { theme: companion.id } : {}), ...gaming, ...more }]);
   return html`<${Card}
     id="panel-more"
     title=${t("More panels")}
@@ -470,7 +477,7 @@ function MorePanelsCard() {
       (model) => html`<div class="more-spare" key=${`${model.id}${model.port || ""}`} data-spare=${model.id}>
         <span>${t("Another panel is plugged in: {name}. Show something on it too?", { name: panelName(model) })}</span>
         <button type="button" class="btn btn-primary"
-          onClick=${() => write([...panels, { model: model.id, ...(model.port ? { port: model.port } : {}) }])}>${t("Set it up")}</button>
+          onClick=${() => added({ model: model.id, ...(model.port ? { port: model.port } : {}) })}>${t("Set it up")}</button>
       </div>`,
     )}
     ${panels.map(
@@ -481,6 +488,7 @@ function MorePanelsCard() {
         running=${running.find((item) => item.index === n)}
         models=${models}
         themes=${themes}
+        companion=${companion}
         onChange=${(changes) => edit(n, changes)}
         onRemove=${() => remove(n)}
         onSwap=${() => swap(n).catch(() => {})}
@@ -497,7 +505,7 @@ function MoreStatus({ panel, running }) {
   return html`<${Status} tone="warn">${stateText(running.state)}${running.detail ? `: ${running.detail}` : ""}<//>`;
 }
 
-function MorePanel({ n, panel, running, models, themes, onChange, onRemove, onSwap }) {
+function MorePanel({ n, panel, running, models, themes, companion, onChange, onRemove, onSwap }) {
   const [chosen, setChosen] = useState(null); // as the brightness slider above
   const model = models.find((item) => item.id === panel.model);
   const name = t("Panel {number}", { number: n + 2 });
@@ -509,9 +517,11 @@ function MorePanel({ n, panel, running, models, themes, onChange, onRemove, onSw
   const fits = (theme) => fitsPanel(theme, model);
   const themeOptions = [
     { value: "", label: t("The panel's own") },
+    ...(companion ? [{ value: companion.id, label: companion.name || companion.id, group: t("Beside panel 1's theme") }] : []),
     ...[...themes]
+      .filter((theme) => theme !== companion)
       .sort((a, b) => Number(!fits(a)) - Number(!fits(b)))
-      .map((theme) => ({ value: theme.id, label: theme.name || theme.id, group: fits(theme) ? "" : t("For other panels") })),
+      .map((theme) => ({ value: theme.id, label: theme.name || theme.id, group: fits(theme) ? t("Themes") : t("For other panels") })),
   ];
   return html`<div class="more-panel" data-more-panel=${n}>
     <${SettingRow} class="more-panel-head" title=${model ? `${name}: ${panelName(model)}` : name} status=${html`<${MoreStatus} panel=${panel} running=${running} />`}>

@@ -13,6 +13,10 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
   two can swap their themes, a panel plugged in is offered to be set up, and each can show
   a theme of its own while the first shows a game or music
   ([More panels at once](docs/CONFIGURATION.md#more-panels-at-once))
+- **Companion themes for a second panel**: Lumen Companion (every core, the temperatures
+  with the fans turning, the drives and the processes) and Arena Companion (the temperatures
+  large while you play), for the 9.2" either way up and the 12.3"; a panel added beside Lumen
+  gets Lumen's, and Arena's for the game's page
 - **Scenes**: a theme for every panel at once, put on with a click on Start, from the tray or
   with a keyboard shortcut (the next one); what the panels show is kept as one with a click
   ([Scenes](docs/CONFIGURATION.md#scenes))

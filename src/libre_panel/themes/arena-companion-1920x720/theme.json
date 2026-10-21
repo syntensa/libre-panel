@@ -1,0 +1,77 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "Arena Companion",
+  "author": "Libre Panel contributors",
+  "license": "CC0-1.0",
+  "description": "Beside Arena on a second panel while you play: the temperatures large with the fans turning, every core, and what takes the most besides the game.",
+  "display": {
+    "model": "turing-12.3-usb",
+    "orientation": "landscape",
+    "width": 1920,
+    "height": 720
+  },
+  "palette": {
+    "bg": "#0A1119",
+    "bg2": "#060A0F",
+    "surface": "#14202E",
+    "line": "#1F3147",
+    "track": "#162332",
+    "text": "#EEF6FF",
+    "text2": "#B8CAE0",
+    "text3": "#8CA0B8",
+    "accent": "#13E5D7",
+    "cpu": "#13E5D7",
+    "gpu": "#A3AEFF",
+    "mem": "#E0A8FF",
+    "disk": "#8FD3FF",
+    "net": "#7EE8A6",
+    "warn": "#FFCB6B",
+    "crit": "#FF7A85"
+  },
+  "font": "builtin:Barlow-Medium",
+  "background": {
+    "color": "#0A1119",
+    "image": null
+  },
+  "refresh_ms": 500,
+  "animation": {
+    "smoothing_ms": 500
+  },
+  "style": {
+    "card": "glass",
+    "radius": 18,
+    "glow": 0.6,
+    "backdrop": "gradient",
+    "display_font": "builtin:Barlow-SemiBold",
+    "text_font": "builtin:Barlow-Medium"
+  },
+  "widgets": [
+    {
+      "type": "module",
+      "id": "m-temps-0-0",
+      "module": "temps",
+      "col": 0,
+      "row": 0,
+      "cols": 4,
+      "rows": 3
+    },
+    {
+      "type": "module",
+      "id": "m-cores-4-0",
+      "module": "cores",
+      "col": 4,
+      "row": 0,
+      "cols": 2,
+      "rows": 3
+    },
+    {
+      "type": "module",
+      "id": "m-processes-6-0",
+      "module": "processes",
+      "col": 6,
+      "row": 0,
+      "cols": 2,
+      "rows": 3
+    }
+  ]
+}

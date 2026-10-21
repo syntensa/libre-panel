@@ -4225,6 +4225,8 @@ def test_a_second_panel_is_added_given_a_theme_and_taken_out_again(app_url, isol
         expect(card.locator("h2")).to_have_text("More panels")
         card.get_by_role("button", name="Add a panel").click()
         waits_for(page, lambda: len(settings_config().panels) == 1)
+        # what goes beside Libre Default and beside Arena, where there is such a theme
+        assert settings_config().panels[0].game_theme == "arena-companion"
         second = card.locator("[data-more-panel='0']")
         expect(second.locator(".settings-row-title").first).to_have_text("Panel 2")
         second.get_by_label("Theme").select_option("lumen")
@@ -4314,3 +4316,14 @@ def test_a_scene_is_kept_put_on_and_taken_out_on_start(app_url, isolated_home, m
         card.get_by_role("button", name="Remove the scene “Evening”?").click()
         page.get_by_role("button", name="Remove", exact=True).click()
         waits_for(page, lambda: scenes.state()["scenes"] == [])
+
+
+def test_a_panel_added_beside_lumen_shows_lumen_s_companion(app_url, isolated_home):
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url, "settings/panel") as page:
+        page.locator("#panel-more").get_by_role("button", name="Add a panel").click()
+        waits_for(page, lambda: len(settings_config().panels) == 1)
+        assert settings_config().panels[0].theme == "lumen-companion"
+        expect(page.locator("[data-more-panel='0']").get_by_label("Theme")).to_have_value(
+            "lumen-companion"
+        )

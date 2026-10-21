@@ -337,11 +337,14 @@ light. Each is plain JSON; none names a piece of hardware.
 | `almanac-analog` | 8.8" / 9.2" bar | Almanac with a clock face whose second hand glides to each second, the time and the date beside it |
 | `arena` | 8.8" / 9.2" bar | for game mode, made of [modules](#modules): the game's frame rate large with its 1% low, frame time and its course, the CPU and the GPU as instruments, every core's load and the temperatures; the first screen game mode's page offers |
 | `round-report` | 8.8" / 9.2" bar | what the `memory` service shows after a game (`report_theme`), in three cards: the round (the game's name, with its logo where the `game` service kept one, when and how long it was, the average frame rate large against the average of the earlier rounds, the 1% low, the frame time and who held the rate down as one bar, the GPU's share from the left and the CPU's from the right, the frame cap's between them), the share of the round at each frame rate with a tick where the earlier rounds' average stands, and the highest temperatures, power and video memory against their average. It reads the `report.*` readings ([Plugins](PLUGINS.md#the-round-report)), so its headings follow the language of the panel; a first round says so and shows no comparison. SPUR II's report is `spur-round-report` |
+| `lumen-companion` | 8.8" / 9.2" bar | for a [second panel](CONFIGURATION.md#more-panels-at-once) beside Lumen, what Lumen does not show: every core of the processor, the temperatures with the fans turning, the drives and the processes that take the most; the app offers it for a panel added beside Lumen |
+| `arena-companion` | 8.8" / 9.2" bar | for a second panel beside Arena while a game runs: the temperatures large with the fans turning, every core and what takes the most besides the game; a panel added gets it for the game's page (`game_theme`) |
 | `libre-default` | 3.5" | two lit rings, the CPU's temperature, the disk and the network, a history that scrolls past at SPUR II's pace, and a small slot in the corner: what plays, the weather or the day |
 
 Each screen of the bars has a version for a bar on end (480×1920): `lumen-vertical`,
 `studio-vertical`, `encore-vertical`, `nimbus-vertical`, `almanac-vertical`,
-`almanac-analog-vertical`, `arena-vertical` and `round-report-vertical`, laid out anew, clear of the strip the 9.2" bar's frame hides on the left. A
+`almanac-analog-vertical`, `arena-vertical`, `round-report-vertical`, `lumen-companion-vertical`
+and `arena-companion-vertical`, laid out anew, clear of the strip the 9.2" bar's frame hides on the left. A
 theme of your own gets one the same way: a theme named `<id>-vertical` is shown in place of
 `<id>` where `device.orientation = "portrait"` ([a panel on
 end](CONFIGURATION.md#a-panel-on-end)), and the lists show the two as one.
