@@ -541,6 +541,7 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `timer` | the time left of the [timer](CONFIGURATION.md#timer) in a ring that fills as it runs, whether it is focus or break, and the rounds when long | |
 | `mic` | whether the microphone is muted: the crossed symbol and "Muted" in the critical colour while it is, calm while it is on, "No microphone" where there is none (`audio.mic.muted`) | |
 | `power` | the watts the PC draws now; the energy of today and of the month and what they cost, where there is room; the history when long ([Power use](CONFIGURATION.md#power-use)) | |
+| `ups` | the battery of the UPS in large numbers; its runtime, load, power and state where there is room; the history when long ([the UPS](CONFIGURATION.md#more-sensor-sources)) | |
 | `playback` | the playback card of SPUR II's Studio screen: cover, state, title, artist, app and progress ([Cards](#cards)); the music module where it is small | |
 | `forecast` | the weather card of the Studio screen: a moving symbol, the temperature and the day's range, the details, the rain and the sun, the next hours ([Cards](#cards)); the weather module where it is small | |
 | `download` | the download card: the Studio's inset for a download ([Cards](#cards)); "No download running" otherwise | |
@@ -914,6 +915,7 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `mqtt.<topic with dots>` (`.field` for JSON) | | [MQTT](CONFIGURATION.md#more-sensor-sources) |
 | `game.fps`, `game.frametime`, `game.low`, `game.app` | fps, ms, fps, text | the game being played, through [PresentMon](CONFIGURATION.md#more-sensor-sources) (Windows) or MangoHud's log (Linux) |
 | `json.<name>.<field>` | as the answer says | [values from JSON](CONFIGURATION.md#more-sensor-sources): an address or a file |
+| `ups.charge`, `ups.runtime`, `ups.load`, `ups.power`, `ups.input`, `ups.on_battery`, `ups.status` | %, min, %, W, V, 1/0, text | [the UPS](CONFIGURATION.md#more-sensor-sources) through Network UPS Tools |
 | `timer.left`, `.text`, `.running`, `.share`, `.phase`, `.rounds` | s, "24:13", 1/0, 0-1, text | the [timer](CONFIGURATION.md#timer) service |
 | `power.watts`, `power.today`, `power.month`, `power.today.cost`, `power.month.cost` | W, kWh, the currency | the [power use](CONFIGURATION.md#power-use) service |
 | `game.frametime_peak`, `game.limiter` | ms, text | the longest frame time since the last reading (0 while a game runs and no frame came: a graph of it never stops), and who holds the frame rate down: `cpu`, `gpu` or `cap` |

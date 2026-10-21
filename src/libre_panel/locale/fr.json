@@ -2605,7 +2605,8 @@
     "ping": "Ping",
     "timer": "Minuteur",
     "power": "Consommation",
-    "mic": "Microphone"
+    "mic": "Microphone",
+    "ups": "Onduleur"
   },
   "icons": {
     "battery": "Batterie",

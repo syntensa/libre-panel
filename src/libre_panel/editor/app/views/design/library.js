@@ -15,7 +15,7 @@ import { TYPE_ICONS } from "./inspector.js";
 import { moduleKinds } from "./ops.js";
 
 const MODULE_GROUPS = {
-  system: ["ring", "stat", "graph", "bars", "network", "system", "temps", "cores", "drives", "processes", "netinfo", "ping", "power", "battery", "values"],
+  system: ["ring", "stat", "graph", "bars", "network", "system", "temps", "cores", "drives", "processes", "netinfo", "ping", "power", "battery", "ups", "values"],
   time: ["clock", "date", "analog", "world", "countdown", "timer", "sun", "moon", "weather", "outlook", "agenda"],
   media: ["music", "volume", "mic", "image", "text"],
   game: ["game"],

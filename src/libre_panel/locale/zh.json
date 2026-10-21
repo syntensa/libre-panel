@@ -2605,7 +2605,8 @@
     "ping": "延迟",
     "timer": "计时器",
     "power": "耗电",
-    "mic": "麦克风"
+    "mic": "麦克风",
+    "ups": "UPS 电源"
   },
   "icons": {
     "battery": "电池",

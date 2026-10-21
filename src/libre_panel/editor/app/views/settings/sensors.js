@@ -62,6 +62,10 @@ export const SOURCES = {
     title: () => t("Values from JSON"),
     hint: () => t("What the address of a NAS, a router or another PC answers, or a file. Set up in config.toml."),
   },
+  nut: {
+    title: () => t("UPS"),
+    hint: () => t("The battery, the runtime and the load of a UPS, through Network UPS Tools (NUT) on this PC, a NAS or a Raspberry Pi. Set up in config.toml."),
+  },
   demo: {
     title: () => t("Demo values"),
     hint: () => t("Invented values, to try a theme without real sensors."),
@@ -69,7 +73,7 @@ export const SOURCES = {
   media: { title: () => t("What is playing"), hint: () => t("The title, the cover and the player of the music that plays.") },
   sky: { title: () => t("Sun and moon"), hint: () => t("Sunrise, sunset and the phase of the moon.") },
 };
-const ORDER = ["load", "audio", "librehardwaremonitor", "linux", "psutil", "presentmon", "calendar", "homeassistant", "mqtt", "json", "demo"];
+const ORDER = ["load", "audio", "librehardwaremonitor", "linux", "psutil", "presentmon", "calendar", "homeassistant", "mqtt", "json", "nut", "demo"];
 
 /** Whether a source can work on this system (`platform` is Python's sys.platform). */
 function worksHere(name, platform) {

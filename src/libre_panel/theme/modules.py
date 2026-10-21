@@ -2078,6 +2078,22 @@ def build_timer(b: _Build, _src: Source) -> None:
         _pairs(b, [("timer.rounds", "{value:.0f}", t("Rounds"))], tx, y, b.ix + b.iw - tx, h)
 
 
+def build_ups(b: _Build, _src: Source) -> None:
+    """The UPS (the ``nut`` source): its battery, how long it lasts, its load and power, and
+    whether the PC runs on it."""
+    b.card()
+    color = b.tint("net")
+    top = b.head("battery", b.module["title"] or t("UPS"), color)
+    pairs = [
+        ("ups.runtime", "{value:.0f} min", t("Runtime")),
+        ("ups.load", "{value:.0f} %", t("Load")),
+        ("ups.power", "{value:.0f} W", t("Power")),
+        ("ups.status", "{value}", t("State")),
+    ]
+    _number_rows_history(b, "ups.charge", "{value:.0f} %", pairs, color, top,
+                         history=b.aspect >= 3.2 or (b.large and b.aspect >= 2.0))  # fmt: skip
+
+
 MIC = "audio.mic.muted"
 
 
@@ -2245,6 +2261,7 @@ def kinds() -> dict[str, Kind]:
         "timer": Kind(t("Timer"), build_timer, span=(2, 1)),
         "power": Kind(t("Power use"), build_power, span=(2, 1)),
         "mic": Kind(t("Microphone"), build_mic),
+        "ups": Kind(t("UPS"), build_ups, span=(2, 1)),
         # the cards after SPUR II's Studio screen: lit by themselves (theme.cards)
         "playback": Kind(t("Playback card"), cards.build_playback, span=(3, 2), finish="lit"),
         "forecast": Kind(t("Weather card"), cards.build_forecast, span=(3, 2), finish="lit"),
@@ -2266,7 +2283,7 @@ MODULE_KINDS = (
     "temps", "cores", "drives", "processes", "netinfo", "battery", "values",
     "sun", "analog", "world", "countdown", "image", "music", "agenda", "game",
     "playback", "forecast", "download", "instrument", "cards", "netcard", "volume", "moon",
-    "outlook", "ping", "timer", "power", "mic",
+    "outlook", "ping", "timer", "power", "mic", "ups",
 )  # fmt: skip
 # Kinds that hold several cards and show one (render.slot); "netcard" is two: a download
 # while one runs, else the network

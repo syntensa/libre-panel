@@ -2605,7 +2605,8 @@
     "ping": "Ping",
     "timer": "Temporizador",
     "power": "Consumo",
-    "mic": "Micrófono"
+    "mic": "Micrófono",
+    "ups": "SAI"
   },
   "icons": {
     "battery": "Batería",

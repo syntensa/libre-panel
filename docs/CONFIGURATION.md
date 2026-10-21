@@ -736,6 +736,29 @@ Each field is `json.<name>.<field>` (`json.nas.temp`), a number or a text (true 
 1 MB. An address that does not answer is said once in the log, and its values stay for three
 times `update_s`.
 
+**The UPS** (`ups.*`), through [Network UPS Tools](https://networkupstools.org/): NUT's
+server `upsd` says how the UPS stands to anyone on its port, on this PC, a NAS (Synology and
+QNAP run one), a Raspberry Pi, or WinNUT on Windows. Nothing to sign up for:
+
+```toml
+[sensors]
+providers = ["load", "psutil", "nut"]
+
+[sensors.nut]
+host = "127.0.0.1"     # where upsd runs; a NAS: its address (allow this PC in its settings)
+port = 3493
+ups = ""               # its name in ups.conf ("": the first upsd has)
+update_s = 5
+# username = "..."     # only where upsd wants one to read (upsd.users)
+# password = "..."
+```
+
+The readings are `ups.charge` (%), `ups.runtime` (minutes), `ups.load` (%), `ups.power` (W,
+as the UPS says, or its load of the nominal power), `ups.input` (V), `ups.on_battery` (1
+while the mains is off) and `ups.status` ("On mains", "On battery", "Battery low"); the UPS
+module shows them. A warning with `key = "ups.on_battery"` and `crit = 1` in the
+[notices](#notices) turns the mains going off into an alarm on every panel.
+
 Show these readings with the Dashboard module (`ha.sensor.living_room_temperature
 = Living room`, one per line), a list, or any widget with a `sensor`.
 `libre-panel sensors` lists what is there.

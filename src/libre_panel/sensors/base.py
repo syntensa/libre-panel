@@ -171,6 +171,7 @@ _BUILTIN_PROVIDERS = {
     "hardware": "libre_panel.sensors.hardware:HardwareProvider",
     "mangohud": "libre_panel.sensors.mangohud:MangoHudProvider",
     "json": "libre_panel.sensors.json_source:JsonProvider",
+    "nut": "libre_panel.sensors.nut:NutProvider",
 }
 
 
