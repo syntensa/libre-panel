@@ -2260,7 +2260,16 @@
     "{fps} pictures a second": "{fps} obrazów na sekundę",
     "Picture of all panels": "Obraz wszystkich paneli",
     "One picture of all panels where they stand, each with what it shows now: to keep or to share": "Jeden obraz wszystkich paneli tam, gdzie stoją, każdy z tym, co teraz pokazuje: do zachowania lub udostępnienia",
-    "the panels show no picture now": "panele nie pokazują teraz obrazu"
+    "the panels show no picture now": "panele nie pokazują teraz obrazu",
+    "Add the panel": "Dodaj panel",
+    "Found": "Znalezione",
+    "How is it mounted? A bar can lie on its side or stand on end, under the monitor or in the case.": "Jak jest zamontowany? Pasek może leżeć lub stać pionowo, pod monitorem albo w obudowie.",
+    "Next": "Dalej",
+    "Others": "Inne",
+    "Step {n} of {count}": "Krok {n} z {count}",
+    "What should it show? The theme made to go beside panel 1's comes first.": "Co ma pokazywać? Motyw dopasowany do motywu panelu 1 jest pierwszy.",
+    "Which panel is it? One that is plugged in and shows nothing yet is offered first.": "Który to panel? Podłączony, który jeszcze nic nie pokazuje, jest proponowany jako pierwszy.",
+    "{name}, plugged in": "{name}, podłączony"
   },
   "fields": {
     "align": "Wyrównanie",

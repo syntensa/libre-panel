@@ -4267,6 +4267,51 @@ def test_the_palette_finds_the_setup(app_url, linux_pc):
         assert found is True
 
 
+def through_the_steps(page):
+    """A panel added as each step of it suggests (newpanel.js)."""
+    dialog = page.locator(".new-panel")
+    for _ in range(2):
+        dialog.get_by_role("button", name="Next").click()
+    dialog.get_by_role("button", name="Add the panel").click()
+    expect(dialog).to_have_count(0)
+
+
+def test_a_new_panel_is_added_step_by_step(app_url, isolated_home):
+    """Which panel, how it is mounted and what it shows, each step with a choice made; back
+    goes back, and Cancel adds none."""
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url, "settings/panel") as page:
+        card = page.locator("#panel-more")
+        card.get_by_role("button", name="Add a panel").click()
+        dialog = page.locator(".new-panel")
+        expect(dialog).to_have_attribute("data-new-panel", "panel")
+        dialog.get_by_role("button", name="Cancel").click()
+        expect(dialog).to_have_count(0)
+        assert settings_config().panels == []  # none added
+        card.get_by_role("button", name="Add a panel").click()
+        dialog.get_by_label("Panel model").select_option("turing-9.2-usb")
+        expect(dialog.locator(".new-panel-step")).to_contain_text("Step 1 of 3 · Turing 9.2″")
+        dialog.get_by_role("button", name="Next").click()
+        expect(dialog).to_have_attribute("data-new-panel", "mounted")
+        mounted = "[role='radiogroup'][aria-label='How the panel is mounted'] [role='radio']"
+        dialog.locator(mounted, has_text="Vertical").click()  # (Settings has one for panel 1)
+        dialog.get_by_label("Upside down").click()
+        dialog.get_by_role("button", name="Next").click()
+        expect(dialog.get_by_label("Theme")).to_have_value("lumen-companion")  # beside Lumen
+        expect(dialog.get_by_label("Look as panel 1's")).to_be_checked()
+        dialog.get_by_role("button", name="Back").click()
+        expect(dialog).to_have_attribute("data-new-panel", "mounted")
+        dialog.get_by_role("button", name="Next").click()
+        dialog.get_by_label("Brightness as panel 1's").click()
+        dialog.get_by_role("button", name="Add the panel").click()
+        waits_for(page, lambda: len(settings_config().panels) == 1)
+        panel = settings_config().panels[0]
+        assert (panel.device.model, panel.device.orientation, panel.device.rotate) == (
+            "turing-9.2-usb", "portrait", 180)  # fmt: skip
+        assert panel.theme == "lumen-companion" and panel.same_look
+        assert not panel.follow_brightness and panel.game_theme == "arena-companion"
+
+
 def test_a_second_panel_is_added_given_a_theme_and_taken_out_again(app_url, isolated_home):
     """Settings → Panel → More panels: a panel beside this one, with a theme and a way up of its
     own, written to [[panels]]; taken out again, there is none."""
@@ -4275,6 +4320,7 @@ def test_a_second_panel_is_added_given_a_theme_and_taken_out_again(app_url, isol
         card = page.locator("#panel-more")
         expect(card.locator("h2")).to_have_text("More panels")
         card.get_by_role("button", name="Add a panel").click()
+        through_the_steps(page)  # as each step suggests it
         waits_for(page, lambda: len(settings_config().panels) == 1)
         # what goes beside Libre Default and beside Arena, where there is such a theme
         assert settings_config().panels[0].game_theme == "arena-companion"
@@ -4425,6 +4471,7 @@ def test_a_panel_added_beside_lumen_shows_lumen_s_companion(app_url, isolated_ho
     choose_theme(isolated_home, "lumen")
     with browser_page(app_url, "settings/panel") as page:
         page.locator("#panel-more").get_by_role("button", name="Add a panel").click()
+        through_the_steps(page)
         waits_for(page, lambda: len(settings_config().panels) == 1)
         assert settings_config().panels[0].theme == "lumen-companion"
         assert settings_config().panels[0].same_look  # in panel 1's look, as Design changes it

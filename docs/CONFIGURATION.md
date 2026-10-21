@@ -279,7 +279,9 @@ either way upside down.
 
 Up to three panels can run beside the one `[device]` names, each with a theme of its own:
 a `[[panels]]` table for each, with the keys of `[device]` and a `theme`. *Settings → Panel →
-More panels* adds and removes them.
+More panels* adds and removes them: *Add a panel* asks, step by step, which panel it is (one
+plugged in that shows nothing yet first), how it is mounted and what it shows, each step with
+a choice made already.
 
 ```toml
 [[panels]]

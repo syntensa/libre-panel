@@ -2260,7 +2260,16 @@
     "{fps} pictures a second": "每秒 {fps} 帧",
     "Picture of all panels": "所有面板的合影",
     "One picture of all panels where they stand, each with what it shows now: to keep or to share": "一张所有面板按实际位置排列的图片，每块显示当前画面：可保存或分享",
-    "the panels show no picture now": "面板当前没有显示画面"
+    "the panels show no picture now": "面板当前没有显示画面",
+    "Add the panel": "添加面板",
+    "Found": "已找到",
+    "How is it mounted? A bar can lie on its side or stand on end, under the monitor or in the case.": "它是怎么安装的？条形屏可以横放或竖放，放在显示器下方或机箱内。",
+    "Next": "下一步",
+    "Others": "其他",
+    "Step {n} of {count}": "第 {n} 步，共 {count} 步",
+    "What should it show? The theme made to go beside panel 1's comes first.": "它应该显示什么？与面板 1 的主题搭配的主题排在最前。",
+    "Which panel is it? One that is plugged in and shows nothing yet is offered first.": "是哪块面板？已接入但尚未显示内容的面板排在最前。",
+    "{name}, plugged in": "{name}，已接入"
   },
   "fields": {
     "align": "对齐",

@@ -26,7 +26,9 @@ import { Popover } from "../../ui/layer.js";
 import { MountedChoice } from "../home/panel.js";
 import { fitsPanel } from "../home/themes.js";
 import { toastError } from "../../ui/toast.js";
+import { openDialog } from "../../ui/dialog.js";
 import { Arrangement, arranged, arrangementItem } from "./arrangement.js";
+import { NewPanel } from "./newpanel.js";
 import { Card, CommitField, Disclosure, SettingRow, Status, usePolling } from "./parts.js";
 import { StartScreenCard } from "./startscreen.js";
 
@@ -450,7 +452,7 @@ function MorePanelsCard() {
   const remove = (n) =>
     write(panels.filter((_, i) => i !== n).map(({ output, ...panel }) => (OWN_FILE.test(output) ? panel : { ...panel, output })));
   const add = panels.length < MORE_PANELS
-    ? html`<button type="button" class="btn" onClick=${() => added({})}>${t("Add a panel")}</button>`
+    ? html`<button type="button" class="btn" onClick=${() => newPanel({})}>${t("Add a panel")}</button>`
     : null;
   // which is which: each panel shows its number a few seconds (identify.py)
   const identify = panels.length && info?.running
@@ -475,7 +477,17 @@ function MorePanelsCard() {
   const companion = normal ? themes.find((theme) => theme.id === `${versionBase(normal) || normal}-companion`) : null;
   // and while a game runs, Arena's companion beside Arena (the game's page)
   const gaming = themes.some((theme) => theme.id === "arena-companion") ? { game_theme: "arena-companion" } : {};
-  const added = (more) => write([...panels, { ...(companion ? { theme: companion.id, same_look: true } : {}), ...gaming, ...more }]);
+  const suggested = { ...(companion ? { theme: companion.id, same_look: true } : {}), ...gaming };
+  // step by step: which panel, how it is mounted, what it shows (newpanel.js)
+  const newPanel = async (start) => {
+    const spareNow = panels.length < MORE_PANELS ? info?.spare || [] : [];
+    const chosen = await openDialog(
+      (close) => html`<${NewPanel} close=${close} start=${start} models=${models} spare=${spareNow}
+        themes=${panelThemes(themes, companion, models.find((item) => item.id === start.model) || null)} suggested=${suggested} />`,
+      { label: t("Add a panel") },
+    );
+    if (chosen) await write([...panels, chosen]);
+  };
   // where they stand, in their real sizes: the first panel's model as set or found
   const modelOf = (id) => models.find((model) => model.id === id) || null;
   const device = config.device || {};
@@ -526,7 +538,7 @@ function MorePanelsCard() {
       (model) => html`<div class="more-spare" key=${`${model.id}${model.port || ""}`} data-spare=${model.id}>
         <span>${t("Another panel is plugged in: {name}. Show something on it too?", { name: panelName(model) })}</span>
         <button type="button" class="btn btn-primary"
-          onClick=${() => added({ model: model.id, ...(model.port ? { port: model.port } : {}) })}>${t("Set it up")}</button>
+          onClick=${() => newPanel({ model: model.id, ...(model.port ? { port: model.port } : {}) })}>${t("Set it up")}</button>
       </div>`,
     )}
     ${panels.length
@@ -558,6 +570,20 @@ function MoreStatus({ panel, running }) {
   return html`<${Status} tone="warn">${stateText(running.state)}${running.detail ? `: ${running.detail}` : ""}<//>`;
 }
 
+/** The themes a panel beside the first can show: its own, the companion of panel 1's theme, then
+ * those made for `model` and those for other panels. */
+function panelThemes(themes, companion, model) {
+  const fits = (theme) => fitsPanel(theme, model);
+  return [
+    { value: "", label: t("The panel's own") },
+    ...(companion ? [{ value: companion.id, label: companion.name || companion.id, group: t("Beside panel 1's theme") }] : []),
+    ...[...themes]
+      .filter((theme) => theme !== companion)
+      .sort((a, b) => Number(!fits(a)) - Number(!fits(b)))
+      .map((theme) => ({ value: theme.id, label: theme.name || theme.id, group: fits(theme) ? t("Themes") : t("For other panels") })),
+  ];
+}
+
 function MorePanel({ n, panel, running, models, themes, companion, onChange, onRemove, onSwap }) {
   const [chosen, setChosen] = useState(null); // as the brightness slider above
   const model = models.find((item) => item.id === panel.model);
@@ -567,15 +593,7 @@ function MorePanel({ n, panel, running, models, themes, companion, onChange, onR
     setChosen(value);
     Promise.resolve(onChange({ brightness: value })).finally(() => setChosen(null));
   };
-  const fits = (theme) => fitsPanel(theme, model);
-  const themeOptions = [
-    { value: "", label: t("The panel's own") },
-    ...(companion ? [{ value: companion.id, label: companion.name || companion.id, group: t("Beside panel 1's theme") }] : []),
-    ...[...themes]
-      .filter((theme) => theme !== companion)
-      .sort((a, b) => Number(!fits(a)) - Number(!fits(b)))
-      .map((theme) => ({ value: theme.id, label: theme.name || theme.id, group: fits(theme) ? t("Themes") : t("For other panels") })),
-  ];
+  const themeOptions = panelThemes(themes, companion, model);
   return html`<div class="more-panel" data-more-panel=${n}>
     <${SettingRow} class="more-panel-head" title=${model ? `${name}: ${panelName(model)}` : name} status=${html`<${MoreStatus} panel=${panel} running=${running} />`}>
       <${Toggle} label=${t("{panel} on", { panel: name })} checked=${panel.on !== false} onChange=${(on) => onChange({ on })} />
