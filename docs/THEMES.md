@@ -536,7 +536,10 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `music` | what is playing: cover, title, artist, album, progress and times; "Nothing playing" otherwise | |
 | `volume` | the volume: a speaker, the level in percent and levels that rise as on a mixer; muted, the speaker crossed and the word; upright in a tall module. Read by the `audio` source | |
 | `agenda` | the next events of your calendars, the one going on marked; two columns when long | |
-| `game` | the frame rate of the game being played, its 1% lows and frame time; the history when long or big; "No game running" otherwise ([PresentMon](CONFIGURATION.md#more-sensor-sources)) | |
+| `game` | the frame rate of the game being played, its 1% lows and frame time; the history when long or big; "No game running" otherwise ([PresentMon](CONFIGURATION.md#more-sensor-sources), MangoHud on Linux) | |
+| `ping` | how long the internet takes to answer (`net.ping`, the host of `[sensors.psutil] ping`), the share of tries without an answer and the host; the history when long or big | |
+| `timer` | the time left of the [timer](CONFIGURATION.md#timer) in a ring that fills as it runs, whether it is focus or break, and the rounds when long | |
+| `power` | the watts the PC draws now; the energy of today and of the month and what they cost, where there is room; the history when long ([Power use](CONFIGURATION.md#power-use)) | |
 | `playback` | the playback card of SPUR II's Studio screen: cover, state, title, artist, app and progress ([Cards](#cards)); the music module where it is small | |
 | `forecast` | the weather card of the Studio screen: a moving symbol, the temperature and the day's range, the details, the rain and the sun, the next hours ([Cards](#cards)); the weather module where it is small | |
 | `download` | the download card: the Studio's inset for a download ([Cards](#cards)); "No download running" otherwise | |
@@ -896,8 +899,10 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `disk.<n>.name`, `.load`, `.used`, `.free`, `.total` | text, %, GiB | each drive, the system drive first |
 | `proc.cpu.<n>.name`, `.value`; `proc.mem.<n>.name`, `.value` | text, % | the eight busiest programs by processor time (of the whole processor) and by memory; counted only while a theme shows them |
 | `net.ip`, `net.ping`, `net.today.down`, `net.today.up` | text, ms, B | the address towards the internet; ping (a connection to `ping`, see the configuration; only while shown); traffic since midnight or since Libre Panel started |
+| `net.ping.lost`, `net.ping.host` | %, text | of the last 20 tries of the ping, the share without an answer; the host it connects to |
 | `battery.load`, `battery.state`, `battery.left`, `battery.plugged`, `sys.uptime` | %, text, s, 1/0, s | psutil; `state` is "On battery", "Charging" or "Charged" in the language |
 | `audio.volume`, `audio.muted` | %, 1/0 | the volume of the default output (0 while muted) and whether it is muted; needs `"audio"` in `providers` (the default list has it on Windows and Linux), see [Configuration](CONFIGURATION.md#sensor-sources-and-their-order) |
+| `audio.mic.muted`, `audio.mic.volume` | 1/0, % | whether the default microphone is muted, and its level; by the same source, only while shown |
 | `sun.rise`, `sun.set`, `sun.noon`, `sun.next_rise`, `sun.daylight`, `sun.up`, `sun.progress`, `sun.elevation` | "07:42", s, 1/0, 0–1, ° | computed for the place in `[weather]` (no internet needed); `progress` is how much of the day has passed, empty at night |
 | `time.second` | s | the seconds of the minute with their fraction (0 to 60), at the time of each frame: a bar on it runs through the minute without steps (Studio's seconds run) |
 | `moon.phase`, `moon.illumination`, `moon.name`, `moon.age`, `moon.full_in`, `moon.new_in` | 0–1, %, text, days | computed; `phase` 0 new, 0.5 full; `name` in the language |
@@ -905,7 +910,10 @@ names and huge widths are rejected; the widget then shows its `fallback`.
 | `calendar.<n>.title`, `.when`, `.day`, `.time`, `.location`, `.calendar`, `.start`, `.minutes`, `.now`; `calendar.events`, `calendar.today` | text, s, min | the next events (1 = the next or the one going on), [calendars](CONFIGURATION.md#more-sensor-sources) |
 | `ha.<entity id>`, `ha.<entity id>.<attribute>` | as Home Assistant says | [Home Assistant](CONFIGURATION.md#more-sensor-sources) |
 | `mqtt.<topic with dots>` (`.field` for JSON) | | [MQTT](CONFIGURATION.md#more-sensor-sources) |
-| `game.fps`, `game.frametime`, `game.low`, `game.app` | fps, ms, fps, text | the game being played, through [PresentMon](CONFIGURATION.md#more-sensor-sources) (Windows) |
+| `game.fps`, `game.frametime`, `game.low`, `game.app` | fps, ms, fps, text | the game being played, through [PresentMon](CONFIGURATION.md#more-sensor-sources) (Windows) or MangoHud's log (Linux) |
+| `json.<name>.<field>` | as the answer says | [values from JSON](CONFIGURATION.md#more-sensor-sources): an address or a file |
+| `timer.left`, `.text`, `.running`, `.share`, `.phase`, `.rounds` | s, "24:13", 1/0, 0-1, text | the [timer](CONFIGURATION.md#timer) service |
+| `power.watts`, `power.today`, `power.month`, `power.today.cost`, `power.month.cost` | W, kWh, the currency | the [power use](CONFIGURATION.md#power-use) service |
 | `game.frametime_peak`, `game.limiter` | ms, text | the longest frame time since the last reading (0 while a game runs and no frame came: a graph of it never stops), and who holds the frame rate down: `cpu`, `gpu` or `cap` |
 | `game.name` | text | the name of the game while the `game` service has the panel in game mode ([Configuration](CONFIGURATION.md#game-mode)); its logo is the picture `@game.logo`, which stays after the game for the round report, until the next one |
 | `session.time`, `session.fps`, `session.level.<n>`, `session.<peak>_max` | s, fps, %, °C / W / GB | the game being played, added up while it is: how long, the mean frame rate, the share of the time at each frame-rate range, the highest temperature, power and video memory since it began; published by the `memory` service ([Plugins](PLUGINS.md#the-round-under-way)) |

@@ -81,6 +81,11 @@ def build_hub(config: Config, demo: bool = False) -> SensorHub:
             providers.append(SkyProvider(place))
         if "media" not in given:  # idle until a theme shows what is playing
             providers.append(MediaProvider(config.sensors.options.get("media", {})))
+        if sys.platform.startswith("linux") and "mangohud" not in given:
+            from libre_panel.sensors.mangohud import MangoHudProvider
+
+            # a game's frame rate from MangoHud's log, read only while a theme shows it
+            providers.append(MangoHudProvider(config.sensors.options.get("mangohud", {})))
         if not given & {"hardware", "demo"}:  # a demo has names of its own, made up
             providers.append(HardwareProvider())  # the names of this PC, and [hardware]
     hub = SensorHub(providers, names=FanNames())  # the fans by the names they go by

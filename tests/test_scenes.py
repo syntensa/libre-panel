@@ -1,5 +1,7 @@
 """Scenes: a theme for every panel at once, put on with a click, a shortcut or the tray."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from libre_panel import scenes
@@ -91,6 +93,7 @@ def test_the_shortcut_puts_the_next_scene_on(config_path):
 
     app = object.__new__(service.BackgroundApp)
     app.config_path, followed = config_path, []
+    app.plugin_host = SimpleNamespace(emit=lambda event, **data: None)  # (the services hear it)
     app.follow_config = lambda: followed.append(True)
     app.shortcut("next_scene")
     assert load_config(config_path).scene == "Gaming" and followed == [True]

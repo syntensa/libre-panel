@@ -10,6 +10,7 @@ import os
 import socket
 import threading
 import time
+from collections import deque
 from datetime import date
 from typing import Any
 
@@ -34,6 +35,7 @@ _PSEUDO_FS = {
 }  # fmt: skip
 _TOP = 8  # top processes kept, per sort
 PING_EVERY = 5.0  # seconds
+PING_TRIES = 20  # net.ping.lost: the share of so many last tries that got no answer
 # battery.state: shown in the user's language (the renderer translates it)
 BATTERY_STATES = ("On battery", "Charging", "Charged")
 PROCESSES_EVERY = 2.0
@@ -74,6 +76,7 @@ class PsutilProvider(SensorProvider):
         self._day_start = None  # counters at midnight (or start)
         self.ping_target = str(self.options.get("ping", "1.1.1.1:443"))
         self._background: dict[str, dict[str, Reading]] = {"proc": {}, "ping": {}}
+        self._ping_tries: deque[bool] = deque(maxlen=PING_TRIES)
         # False where the Linux source reads the kernel's chips (build_hub): the same files
         self.hwmon = True
         self._threads: dict[str, threading.Thread] = {}
@@ -288,10 +291,17 @@ class PsutilProvider(SensorProvider):
         try:
             with socket.create_connection((host, int(port)), timeout=2):
                 pass
+            ms: float | None = (time.perf_counter() - start) * 1000
         except (OSError, ValueError):
-            return {"net.ping": Reading("net.ping", None, "ms", "Ping")}
-        ms = (time.perf_counter() - start) * 1000
-        return {"net.ping": Reading("net.ping", round(ms, 1), "ms", f"Ping {host}")}
+            ms = None
+        self._ping_tries.append(ms is not None)
+        lost = round(100 * self._ping_tries.count(False) / len(self._ping_tries))
+        return {
+            "net.ping": Reading("net.ping", None if ms is None else round(ms, 1), "ms",
+                                f"Ping {host}" if ms is not None else "Ping"),
+            "net.ping.lost": Reading("net.ping.lost", lost, "%", "Ping lost"),
+            "net.ping.host": Reading("net.ping.host", host, "", "Ping host"),
+        }  # fmt: skip
 
     def close(self) -> None:
         self._stop.set()

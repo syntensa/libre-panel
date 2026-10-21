@@ -129,7 +129,7 @@ while Libre Panel runs.
 | `host.show_theme(name, transition=None, priority=0, mode=ANY_MODE)` / `host.restore_theme(transition=None)` | show another theme for a while; `config.toml` stays as it is. `transition`: `cut`, `fade`, `slide`, a plugin's, or `(name, {parameters})`; default from `config.toml`. `mode=None`: only while no mode is on; `mode="game"`: only in that mode |
 | `host.set_mode(name, transition=None)` / `host.mode` | switch to a mode from `[modes.<name>]`; `None` ends it. A transition plays also when the theme stays |
 | `host.notify(text, icon=None, level="info", seconds=None, kind="", rank=0, payload=None, key="")` | a short message on the panel (see *Toasts*). It returns a `Delivery`: true when the message will show, else `reason` says why (`"theme"`, `"screen"`, `"no-panel"`) |
-| `host.on(event, callback)` | `panel-connected`, `panel-lost`, `panel-restarted` (after `panel-connected`, when the panel came back from a restart that cleared a hung video decoder, not from a replug), `theme-changed` (`theme=`), `mode-changed` (`mode=`), `sample` (`snapshot=`) and `fresh` (`snapshot=`, `keys=`), see below, `quit`; callbacks run in an event thread |
+| `host.on(event, callback)` | `panel-connected`, `panel-lost`, `panel-restarted` (after `panel-connected`, when the panel came back from a restart that cleared a hung video decoder, not from a replug), `theme-changed` (`theme=`), `mode-changed` (`mode=`), `sample` (`snapshot=`) and `fresh` (`snapshot=`, `keys=`), see below, `shortcut` (`action=`: a keyboard shortcut of `[hotkeys]` was pressed, or its button in the app: `timer`, `timer_reset`, `mic_mute` and the others), `quit`; callbacks run in an event thread |
 | `host.data_dir` | `<settings>/plugins-data/<service>/` for the service's files |
 | `host.log` | a logger named after the service |
 
@@ -250,7 +250,9 @@ do. Their names cannot be used by a plugin.
 
 | Service | What it does |
 |---|---|
-| `notices` | messages for the volume, a new track, sensors that cross a limit and a panel that restarted |
+| `notices` | messages for the volume, a new track, the microphone muted, an appointment soon, sensors that cross a limit and a panel that restarted |
+| `timer` | minutes counted down, focus and break in turn, started by a keyboard shortcut or in the app |
+| `power` | the watts the PC draws and the energy of today and of the month, with what it costs |
 | `game` | game mode: finds the game you play (a list of programs, Steam's library) and switches the mode with an entrance, and back |
 | `autopilot` | picks the theme by rules: music, microphone, load, program, time of day |
 | `devices` | messages for drives, USB devices and controllers that come and go, a full drive and a hot SSD (Windows) |

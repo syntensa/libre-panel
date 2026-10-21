@@ -1,7 +1,8 @@
 """Notices: short messages for what happens around the panel.
 
-The volume turning, a new track, a sensor that crosses a limit, the panel that
-came back from a restart. Each one is a toast with a kind, a key, a rank and
+The volume turning, a new track, the microphone muted or on again, an appointment
+that begins soon, a sensor that crosses a limit, the panel that came back from a
+restart. Each one is a toast with a kind, a key, a rank and
 a payload, so the theme's toast style draws it (the band or the card) and the
 theme's ``toast.off`` and the screen's ``suppresses`` decide whether it
 shows. The service only decides *when* something is worth a message.
@@ -30,6 +31,8 @@ from libre_panel.services.readings import is_playing, number, readable
 
 VOLUME_STEP = 1.0  # percent: a smaller change is no news
 VOLUME_KEYS = frozenset({"audio.volume", "audio.muted"})
+MIC_KEY = "audio.mic.muted"
+APPOINTMENTS = 3  # the next ones looked at for a notice before they begin
 HINT_AFTER_S = 30.0  # without a volume reading for this long, say what is missing
 COVER = "media.cover"
 APP_ICON = "media.app_icon"  # the icon of the program that plays, if a source brings it
@@ -48,6 +51,8 @@ class Kind(NamedTuple):
 
 VOLUME = Kind("volume", 0, None)
 MUSIC = Kind("music", 1, 5.0)
+MICROPHONE = Kind("microphone", 2, 3.0)
+APPOINTMENT = Kind("appointment", 2, 10.0)
 WARNING = Kind("warning", 2, 5.0)
 PANEL = Kind("panel", 2, 8.0)  # long enough for the first full frame after a restart
 
@@ -103,7 +108,8 @@ def parse_limit(entry: Any, where: str, report: Callable[[str], None]) -> Limit 
 
 
 class Notices(Service):
-    """Messages for the volume, a new track, sensors past a limit and a panel restart."""
+    """Messages for the volume, a new track, the microphone, an appointment soon, sensors past
+    a limit and a panel restart."""
 
     name = "notices"
     api = 1
@@ -111,6 +117,8 @@ class Notices(Service):
         "volume": ("bool", True),
         "volume_look": ("string", ""),  # "": the theme's toast style; else volume_looks.py's
         "music": ("bool", True),
+        "microphone": ("bool", True),
+        "appointments": ("int", 10),  # minutes before one begins; 0: none
         "restarted": ("bool", True),
         "warnings": ("list", []),
         "quiet_s": ("number", 120.0),
@@ -146,6 +154,8 @@ class Notices(Service):
         self._hinted = False
         self._track: tuple[str, str] | None = None  # (title, artist) of what plays
         self._late: tuple[tuple[str, str], float] | None = None  # told without a cover, until
+        self._mic: bool | None = None  # muted, as last seen
+        self._told_events: set[tuple[str, float]] = set()  # (title, start) told already
         self._began = clock()
         self._stopped = False
 
@@ -155,9 +165,13 @@ class Notices(Service):
             keys += sorted(VOLUME_KEYS)
         if self.options["music"]:
             keys += ["media.*"]
+        if self.options["microphone"]:
+            keys.append(MIC_KEY)
+        if self.options["appointments"] > 0:
+            keys += [f"calendar.{n}.*" for n in range(1, APPOINTMENTS + 1)]
         self.host.want(*keys)
         self.host.on("sample", self.on_sample)
-        if self.options["volume"] or self.options["music"]:
+        if self.options["volume"] or self.options["music"] or self.options["microphone"]:
             self.host.on("fresh", self.on_fresh)
         if self.options["restarted"]:
             self.host.on("panel-restarted", self.on_restarted)
@@ -175,6 +189,10 @@ class Notices(Service):
             self._check_volume(snapshot, now)
         if self.options["music"]:
             self._check_music(snapshot, now, "the sample")
+        if self.options["microphone"]:
+            self._check_microphone(snapshot)
+        if self.options["appointments"] > 0:
+            self._check_appointments(snapshot)
         for limit in self.limits:
             self._check_limit(limit, snapshot, now)
 
@@ -187,6 +205,43 @@ class Notices(Service):
             self._check_volume(snapshot, self.clock())
         if self.options["music"] and any(key.startswith("media.") for key in keys):
             self._check_music(snapshot, self.clock(), "a frame")
+        if self.options["microphone"] and MIC_KEY in keys:
+            self._check_microphone(snapshot)
+
+    def _check_microphone(self, snapshot: Snapshot) -> None:
+        value = number(snapshot.value(MIC_KEY))
+        if value is None:
+            return
+        muted, before = bool(value), self._mic
+        self._mic = muted
+        if before is None or muted == before:
+            return  # the first value is no change
+        text = t("Microphone muted") if muted else t("Microphone on")
+        payload = {"label": t("Microphone"), "muted": muted}
+        self._tell(MICROPHONE, text, payload, icon="mic_off" if muted else "mic")
+
+    def _check_appointments(self, snapshot: Snapshot) -> None:
+        """An appointment that begins within ``appointments`` minutes, told once."""
+        lead = self.options["appointments"]
+        for n in range(1, APPOINTMENTS + 1):
+            title = snapshot.value(f"calendar.{n}.title")
+            minutes = number(snapshot.value(f"calendar.{n}.minutes"))
+            start = number(snapshot.value(f"calendar.{n}.start"))
+            if not isinstance(title, str) or minutes is None or start is None:
+                continue
+            if snapshot.value(f"calendar.{n}.time") == t("All day"):
+                continue  # a day, not a time to be somewhere
+            if not 0 <= minutes <= lead or (title, start) in self._told_events:
+                continue
+            self._told_events.add((title, start))
+            clock = snapshot.value(f"calendar.{n}.time")
+            text = (t("In {minutes} min: {title}", minutes=max(1, round(minutes)), title=title)
+                    if minutes >= 0.5 else t("Now: {title}", title=title))  # fmt: skip
+            payload: dict[str, Any] = {"label": t("Appointment")}
+            if isinstance(clock, str) and clock:
+                payload["label"] = f"{t('Appointment')} · {clock}"
+            self._tell(APPOINTMENT, text, payload, key=f"appointment:{title}:{start:.0f}",
+                       icon="calendar")  # fmt: skip
 
     def _check_volume(self, snapshot: Snapshot, now: float) -> None:
         volume = number(snapshot.value("audio.volume"))

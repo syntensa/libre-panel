@@ -17,6 +17,7 @@ export const control = {
   probe: (kind) => post(`${BASE}/probe`, { kind }),
   enableService: (service, enabled) => post(`${BASE}/services/enable`, { service, enabled }),
   restartService: (service) => post(`${BASE}/services/restart`, { service }),
+  shortcut: (action) => post(`${BASE}/shortcut`, { action }),
   liveUrl: (width = 960, panel = 1) => `${BASE}/live?w=${width}&format=jpeg${panel > 1 ? `&panel=${panel}` : ""}`,
 };
 

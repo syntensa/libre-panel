@@ -31,6 +31,7 @@ from libre_panel.theme.model import ThemeError, find_theme, list_themes
 LIVE_WIDTH = 960  # the live picture is this wide unless asked otherwise
 JPEG_QUALITY = 78
 PICTURES = {"jpeg": "image/jpeg", "png": "image/png"}  # the formats of the live picture
+BUTTONS = ("timer", "timer_reset", "mic_mute")  # the shortcuts the app has buttons for
 RESTARTABLE = ("running", "stopped", "failed")  # a service in these states can be restarted
 
 
@@ -175,6 +176,7 @@ class Control(ConsolePage):
         ("POST", "services/enable"): "enable",
         ("POST", "services/restart"): "restart",
         ("POST", "theme"): "theme",
+        ("POST", "shortcut"): "shortcut",
     }
 
     def __init__(self, context: Any) -> None:
@@ -363,6 +365,16 @@ class Control(ConsolePage):
             raise Refused(t("{name} is not enabled in config.toml", name=name), 404) from None
         code, detail = service_state(state, True)
         return {"service": name, "state": code, "detail": detail}
+
+    def shortcut(self, request: Request) -> dict[str, Any]:
+        """What a keyboard shortcut does, from a button: the timer (``timer``,
+        ``timer_reset``) and the microphone (``mic_mute``)."""
+        action = request.text("action")
+        if action not in BUTTONS:
+            raise Refused(t("action is one of {actions}", actions=", ".join(BUTTONS)))
+        if not self.context.shortcut(action):
+            raise Refused(t("This editor does not run the services."), 404)
+        return {"action": action, "done": True}
 
     def theme(self, request: Request) -> dict[str, Any]:
         mode, theme = request.text("mode"), request.body.get("theme")

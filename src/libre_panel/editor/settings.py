@@ -48,9 +48,12 @@ LICENSE = {"id": "GPL-3.0-or-later", "url": "https://www.gnu.org/licenses/gpl-3.
 MAX_NOTICE = 200_000
 # The built-in services in the order the app lists them (game mode and its round report first,
 # the section is named after it); plugins' come after them.
-SERVICE_ORDER = ("game", "memory", "notices", "autopilot", "devices", "cooling", "downloads")
+SERVICE_ORDER = (
+    "game", "memory", "notices", "autopilot", "devices", "cooling", "downloads", "timer", "power",
+)  # fmt: skip
 # Sources that start by themselves; they are listed only where config.toml names them.
-IMPLICIT_SOURCES = ("media", "sky", "hardware")  # hardware: the names of this PC
+# hardware: the names of this PC; mangohud: a game's frame rate on Linux
+IMPLICIT_SOURCES = ("media", "sky", "hardware", "mangohud")
 # The sensors and the weather are made once when the panel loop starts.
 RESTART_PREFIXES = ("sensors.", "weather.")
 FOLDERS = ("config", "themes", "logs")
@@ -1237,6 +1240,9 @@ RULES: dict[str, Any] = {
     "hotkeys.brightness_down": _rule_hotkey,
     "hotkeys.open": _rule_hotkey,
     "hotkeys.next_scene": _rule_hotkey,
+    "hotkeys.timer": _rule_hotkey,
+    "hotkeys.timer_reset": _rule_hotkey,
+    "hotkeys.mic_mute": _rule_hotkey,
     "sensors.providers": _rule_providers,
     "sensors.librehardwaremonitor.mode": lambda n, v, c: _choice(
         n, v, ("auto", "service", "inprocess", "webserver")
@@ -1253,5 +1259,6 @@ RULES: dict[str, Any] = {
 UNSETTABLE = {
     "refresh_ms", "weather.latitude", "weather.longitude", "weather.place",
     "hotkeys.pause", "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open",
-    "hotkeys.next_scene", "device.at", "across",
+    "hotkeys.next_scene", "hotkeys.timer", "hotkeys.timer_reset", "hotkeys.mic_mute",
+    "device.at", "across",
 }  # fmt: skip

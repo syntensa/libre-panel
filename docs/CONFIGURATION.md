@@ -119,7 +119,8 @@ url = "http://127.0.0.1:8085/data.json"   # the web server (mode "webserver", an
 [sensors.psutil]
 # disk = "C:\\"                # the drive behind disk.load (default: the system drive)
 # ping = "1.1.1.1:443"         # what net.ping connects to (host:port), only while a
-                               # theme shows the ping
+                               # theme shows the ping (the Ping module: net.ping.lost, the
+                               # share of the last 20 tries without an answer, and its host)
 
 [hardware]
 # cpu_name = ""                # the names themes show (cpu.name, gpu.name, mem.name):
@@ -182,8 +183,10 @@ switches it and looks at once (*Look now*).
 ## Keyboard shortcuts
 
 Key combinations for the whole PC, whatever window is in front: pause or resume the panel,
-turn its brightness up or down a step (10 %), or open Libre Panel. Set them in *Settings →
-Start and system → Keyboard shortcuts* by pressing the keys, or in config.toml:
+turn its brightness up or down a step (10 %), open Libre Panel, put the next scene on, start
+or pause the [timer](#timer) and set it back, or mute the microphone and turn it on again.
+Set them in *Settings → Start and system → Keyboard shortcuts* by pressing the keys, or in
+config.toml:
 
 ```toml
 [hotkeys]
@@ -192,6 +195,9 @@ pause = "Ctrl+Alt+P"
 brightness_up = "Ctrl+Alt+Up"
 brightness_down = "Ctrl+Alt+Down"
 open = "Ctrl+Alt+L"
+timer = "Ctrl+Alt+T"            # start or pause the timer service
+timer_reset = "Ctrl+Alt+R"
+mic_mute = "Ctrl+Alt+M"         # the default microphone (Windows; Linux with wpctl or pactl)
 ```
 
 *Use the shortcuts* at the top of the card switches them all off and on (`enabled`): off,
@@ -671,6 +677,55 @@ as that installation is
   seconds, and the frame rates are there again when the game is over. PresentMon
   is stopped with Libre Panel, also if Libre Panel is killed.
 
+On **Linux** the same readings come from [MangoHud](https://github.com/flightlessmango/MangoHud),
+the overlay many games run with (`mangohud %command%` in Steam): Libre Panel reads the log
+MangoHud writes while it logs, nothing else. MangoHud logs from the start with this in
+`~/.config/MangoHud/MangoHud.conf` (Shift+F2 starts and stops it by hand):
+
+```ini
+output_folder=/home/you/mangologs
+autostart_log=1
+log_interval=100
+```
+
+Libre Panel looks in the folder MangoHud.conf names (else the home folder), or in the one
+given in `[sensors.mangohud] folder = "..."`, for the newest log written in the last ten
+seconds. The source needs no entry in `providers`: on Linux it is there by itself and reads
+only while a theme shows `game.*`. `game.fps`, `game.frametime`, `game.low`,
+`game.frametime_peak` and `game.app` (the program, from the log's name) mean what they mean
+above; the lows are those of MangoHud's samples (one every `log_interval` ms). There is no
+`game.limiter`.
+
+**Values from JSON** (`json.*`): what the address of a NAS, a router, a Proxmox host or a
+second PC answers, or a file another program writes. Nothing to sign up for: the address is
+asked as it is, every `update_s` seconds, in a thread of its own.
+
+```toml
+[sensors]
+providers = ["load", "psutil", "json"]
+
+[sensors.json]
+update_s = 30
+
+[[sensors.json.sources]]
+name = "nas"
+url = "http://192.168.1.10:61208/api/4/quicklook"
+fields = { cpu = "cpu", temp = "sensors[0].value" }   # empty: every value it has
+units = { cpu = "%", temp = "°C" }
+# headers = { Authorization = "Bearer ..." }          # where the address wants one
+
+[[sensors.json.sources]]
+name = "room"
+file = "C:/Data/room.json"
+```
+
+Each field is `json.<name>.<field>` (`json.nas.temp`), a number or a text (true and false as
+1 and 0). A field's path goes into the answer by names and list places (`a.b[0].c`). Without
+`fields` every value down to three levels is read, at most 100, named by its path
+(`json.room.kitchen.temp`). Only `http://` and `https://` addresses; an answer is at most
+1 MB. An address that does not answer is said once in the log, and its values stay for three
+times `update_s`.
+
 Show these readings with the Dashboard module (`ha.sensor.living_room_temperature
 = Living room`, one per line), a list, or any widget with a `sensor`.
 `libre-panel sensors` lists what is there.
@@ -821,6 +876,8 @@ leaves that band out by itself: it would only cover them.
 | `volume` | the volume has moved by at least 1 since the last message, or is muted or unmuted; the value the service starts with is no change | the level with a bar, or "Muted" |
 | `music` | a new track starts playing; not a pause, a resume, or the track that was playing at the start | title and artist, with the cover and the icon of the player when a source brings them |
 | `warning` | a sensor reaches a limit you set | "CPU temperature 92 °C", in the theme's warning colour at `warn` and its critical one at `crit` |
+| `microphone` | the default microphone is muted, or turned on again; the state the service starts with is no change | "Microphone muted", "Microphone on" |
+| `appointment` | an appointment of the [calendars](#more-sensor-sources) begins within `appointments` minutes (once each; not a day-long one) | "In 10 min: Dentist", with its time |
 | `panel` | the panel is back from a restart that cleared a hung video decoder (not from a replug) | "Panel restarted 21:05" |
 
 ```toml
@@ -829,6 +886,8 @@ volume = true          # the volume; needs "audio" in [sensors] providers (the d
 volume_look = ""       # how the volume shows on every screen: "bar", "levels", "ring", "big",
                        # or "" for the theme's notice style
 music = true           # a new track
+microphone = true      # muted or on again; needs "audio" in [sensors] providers
+appointments = 10      # minutes before an appointment begins (0: none); needs "calendar"
 restarted = true       # "Panel restarted"
 quiet_s = 120          # warnings: the same sensor is not told again within this time
 
@@ -865,6 +924,53 @@ crit = 85
 - Texts follow the language setting. Each notice has its own `key`, so the
   same one again (the volume while it turns) changes in place instead of
   coming again.
+
+### Timer
+
+Minutes counted down on the panel, with a notice when they are up. With `break_minutes`
+focus and break take turns: when the focus time is up the break begins by itself, and after
+the break the next focus waits to be started. A [keyboard shortcut](#keyboard-shortcuts)
+starts and pauses it (`timer`) and sets it back (`timer_reset`); so do the buttons on its
+card in *Settings → Game mode and more*. The Timer module shows it.
+
+```toml
+[services]
+enabled = ["notices", "timer"]
+
+[services.timer]
+minutes = 25
+break_minutes = 5      # 0: no break, a plain timer
+notice = true          # "Time is up", "Time for a break", "The break is over"
+```
+
+| Reading | |
+|---|---|
+| `timer.left`, `timer.text` | the time left, in seconds and as `24:13` |
+| `timer.running` | 1 while it runs |
+| `timer.share` | how much of the time has passed, 0 to 1 (the module's ring) |
+| `timer.phase` | "Timer", or "Focus" and "Break" |
+| `timer.rounds` | the focus times finished since the service started |
+
+### Power use
+
+The watts the PC draws, and the energy of today and of this month with what it costs. The
+watts are those of the sensors (`cpu.power` and `gpu.power`: LibreHardwareMonitor on
+Windows, the `linux` source) and `rest_w` for the rest of the PC: the mainboard, drives,
+fans and what the power supply loses, some 40 to 80 W. It is an estimate; only a meter at
+the socket knows. The Power use module shows it.
+
+```toml
+[services.power]
+sensors = ["cpu.power", "gpu.power"]
+rest_w = 50
+price = 0.30           # per kWh; 0: no cost
+currency = "€"
+```
+
+`power.watts`, `power.today` and `power.month` (kWh), with a price `power.today.cost` and
+`power.month.cost`. The totals are kept in the service's folder (`plugins-data/power/`) every
+minute and when it stops, so a restart loses nothing; a new day and a new month begin at
+zero, and time the PC sleeps is not counted.
 
 ### Game mode
 

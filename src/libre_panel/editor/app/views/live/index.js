@@ -43,6 +43,8 @@ const SOURCE_ABOUT = () => ({
   "open-meteo": "Open-Meteo",
   calendar: t("your appointments"),
   presentmon: t("frame rates of games"),
+  mangohud: t("frame rates of games, from MangoHud's log"),
+  json: t("values from addresses and files"),
   demo: t("made-up readings"),
   services: t("what game mode and the other services publish"),
   hardware: t("the names of the processor, the graphics card and the memory"),
@@ -53,6 +55,7 @@ const SOURCE_NAMES = () => ({
   "open-meteo": t("Weather"),
   services: t("Game mode and more"),
   hardware: t("Hardware names"),
+  mangohud: "MangoHud",
 });
 
 const sourceName = (name) => SOURCES[name]?.title() ?? SOURCE_NAMES()[name] ?? name;
@@ -65,6 +68,8 @@ const SERVICE_ABOUT = () => ({
   memory: t("records a game and reports after it"),
   cooling: t("checks FanControl's curves"),
   downloads: t("Steam and the browsers"),
+  timer: t("minutes counted down"),
+  power: t("watts, kWh and what they cost"),
 });
 
 const serviceName = (name) => SERVICES[name]?.title() ?? name;

@@ -60,6 +60,8 @@ ICON_NAMES = (
     "down",
     "volume",
     "mute",
+    "mic",
+    "mic_off",
     "weather",
 )
 
@@ -359,6 +361,18 @@ def _mute(pen: _Pen) -> None:
     pen.line((21, 9), (15.5, 15))
 
 
+def _mic(pen: _Pen) -> None:
+    pen.rect(9, 2.5, 15, 14.5, 3)
+    pen.arc(12, 11, 7, 0, 180)
+    pen.line((12, 18), (12, 21.5))
+    pen.line((8.5, 21.5), (15.5, 21.5))
+
+
+def _mic_off(pen: _Pen) -> None:
+    _mic(pen)
+    pen.line((4, 3), (20, 21))
+
+
 def _up(pen: _Pen) -> None:
     pen.line((12, 20), (12, 4.5))
     pen.line((6, 10.5), (12, 4.5), (18, 10.5))
@@ -528,6 +542,8 @@ _ICONS: dict[str, Callable[[_Pen], None]] = {
     "down": _down,
     "volume": _volume,
     "mute": _mute,
+    "mic": _mic,
+    "mic_off": _mic_off,
 }
 
 

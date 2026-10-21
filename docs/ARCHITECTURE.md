@@ -146,6 +146,7 @@ rules.
 | `POST control/services/enable` | `{service, enabled}` | `{service, enabled, state, detail}`: writes `services.enabled`; the state is `pending` until the app has followed (a moment). Asking twice writes once; an unknown service cannot be switched on (404) |
 | `POST control/services/restart` | `{service}` | `{service, state, detail}`: stops the service and starts it again (404 when it is not enabled or this editor runs no services) |
 | `POST control/theme` | `{mode, theme}` | `{mode, theme}`: `mode` is `"normal"` or `"game"`; for `"game"` an empty `theme` means the normal one's |
+| `POST control/shortcut` | `{action}` | `{action, done}`: does what that keyboard shortcut does, from a button of the app: `timer` (start or pause the timer), `timer_reset`, `mic_mute` (404 when this editor runs no services) |
 
 `/api/plugins/autopilot/` (the rules are `[[services.autopilot.rules]]` in config.toml,
 [Configuration](CONFIGURATION.md)):

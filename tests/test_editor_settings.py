@@ -136,13 +136,14 @@ def test_the_catalog_names_the_sources_the_drivers_and_the_services_with_their_o
     catalog = data["catalog"]
     sources = {source["name"]: source for source in catalog["providers"]}
     assert sources["psutil"]["builtin"] and {"load", "audio", "calendar", "demo"} <= set(sources)
-    assert catalog["implicit_providers"] == ["media", "sky", "hardware"]
+    assert catalog["implicit_providers"] == ["media", "sky", "hardware", "mangohud"]
     assert catalog["default_providers"] == default_providers()
     assert {"auto", "turzx", "virtual"} <= set(catalog["drivers"])
     assert catalog["lhm_modes"] == ["auto", "service", "inprocess", "webserver"]
     services = catalog["services"]
     assert [service["name"] for service in services] == [
-        "game", "memory", "notices", "autopilot", "devices", "cooling", "downloads",
+        "game", "memory", "notices", "autopilot", "devices", "cooling", "downloads", "timer",
+        "power",
     ]  # fmt: skip
     game = next(service for service in services if service["name"] == "game")
     options = {option["key"]: option for option in game["options"]}
@@ -1090,6 +1091,7 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "check_updates", "allow_notify", "light_mode", "symbols", "accent", "across",
         "hotkeys.enabled", "hotkeys.pause",
         "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open", "hotkeys.next_scene",
+        "hotkeys.timer", "hotkeys.timer_reset", "hotkeys.mic_mute",
         "sensors.providers",
         "sensors.librehardwaremonitor.mode", "sensors.librehardwaremonitor.url",
         "weather.enabled", "weather.units", "weather.update_minutes", "weather.latitude",

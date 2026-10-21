@@ -76,7 +76,7 @@ language = "auto"
 
 # Keyboard shortcuts for the whole PC (Windows; Linux with X11), set in Settings → Start and
 # system by pressing the keys. The actions: pause, brightness_up, brightness_down, open,
-# next_scene;
+# next_scene, timer (start or pause the timer service), timer_reset, mic_mute (the microphone);
 # enabled = false switches all of them off and keeps the keys written here.
 # [hotkeys]
 # pause = "Ctrl+Alt+P"

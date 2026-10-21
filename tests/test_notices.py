@@ -63,7 +63,8 @@ def desk():
     made = []
 
     def make(**options):
-        options = {"volume": False, "music": False, "restarted": False, **options}
+        options = {"volume": False, "music": False, "microphone": False, "appointments": 0,
+                   "restarted": False, **options}  # fmt: skip
         config = Config(services=ServicesConfig(["notices"], {"notices": options}))
         made.append(Desk(config))
         return made[-1]
@@ -532,3 +533,39 @@ def test_the_volume_is_told_in_the_look_chosen_for_every_screen(desk):
     other.sample(volume(30))
     [toast] = other.sample(volume(40))
     assert "look" not in toast.payload
+
+
+# -- the microphone and appointments -----------------------------------------------------------
+
+
+def test_muting_the_microphone_and_turning_it_on_again_is_told(desk):
+    d = desk(microphone=True, appointments=0)
+    assert wanted("audio.mic.muted")  # read although no theme shows it
+    assert d.sample([Reading("audio.mic.muted", 0)]) == []  # the first value is no change
+    toasts = d.fresh([Reading("audio.mic.muted", 1)])
+    assert [(t.text, t.kind, t.icon) for t in toasts] == [("Microphone muted", "microphone",
+                                                           "mic_off")]  # fmt: skip
+    assert d.sample([Reading("audio.mic.muted", 1)]) == []
+    assert [t.text for t in d.fresh([Reading("audio.mic.muted", 0)])] == ["Microphone on"]
+
+
+def appointment(minutes, title="Dentist", start=1_800_000_000.0, time="14:00"):
+    return [Reading("calendar.1.title", title), Reading("calendar.1.minutes", minutes, "min"),
+            Reading("calendar.1.start", start, "s"), Reading("calendar.1.time", time)]  # fmt: skip
+
+
+def test_an_appointment_is_told_once_so_many_minutes_before_it_begins(desk):
+    d = desk(microphone=False, appointments=10)
+    assert d.sample(appointment(25)) == []
+    toasts = d.sample(appointment(9.6))
+    assert [(t.text, t.kind) for t in toasts] == [("In 10 min: Dentist", "appointment")]
+    assert toasts[0].payload["label"] == "Appointment · 14:00"
+    assert d.sample(appointment(5)) == [] and d.sample(appointment(0.2)) == []  # told once
+    assert [t.text for t in d.sample(appointment(0.1, "Call", 1_800_003_600.0))] == ["Now: Call"]
+    assert d.sample(appointment(3, "Holiday", 1_800_090_000.0, "All day")) == []  # a day
+
+
+def test_no_appointment_is_told_with_the_option_at_0(desk):
+    d = desk(microphone=False, appointments=0)
+    assert not wanted("calendar.1.title")
+    assert d.sample(appointment(5)) == []

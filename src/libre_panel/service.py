@@ -574,8 +574,11 @@ class BackgroundApp:
 
     def shortcut(self, action: str) -> None:
         """What a keyboard shortcut does (hotkeys.py): pause or resume the panel, turn its
-        brightness up or down a step, open the app, or put the next scene on."""
+        brightness up or down a step, open the app, put the next scene on, or mute the
+        microphone; and the services hear of it (the timer starts, pauses or goes back)."""
         from libre_panel.hotkeys import BRIGHTNESS_STEP
+
+        self.plugin_host.emit("shortcut", action=action)
 
         if action == "pause":
             self.act("resume" if self.panel.paused else "pause")
@@ -596,6 +599,10 @@ class BackgroundApp:
             if name:
                 log.info("scene: %s", name)
                 self.follow_config()
+        elif action == "mic_mute":
+            from libre_panel.sensors.audio import toggle_microphone
+
+            toggle_microphone()
 
     def set_brightness(self, percent: int) -> None:
         if not 0 <= percent <= 100:

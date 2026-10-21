@@ -1,5 +1,6 @@
 """Keyboard shortcuts for the whole PC: a key combination does one thing of the background app,
-whatever window is in front (pause the panel, its brightness, open the app).
+whatever window is in front (pause the panel, its brightness, open the app, the next scene, the
+timer, the microphone's mute).
 
 config.toml's ``[hotkeys]`` names them, ``pause = "Ctrl+Alt+P"`` (Settings → Start and system
 sets them by pressing the keys). Windows registers them with the system (``RegisterHotKey``);
@@ -23,7 +24,10 @@ from libre_panel.i18n import t
 
 log = logging.getLogger(__name__)
 
-ACTIONS = ("pause", "brightness_up", "brightness_down", "open", "next_scene")
+ACTIONS = (
+    "pause", "brightness_up", "brightness_down", "open", "next_scene", "timer", "timer_reset",
+    "mic_mute",
+)  # fmt: skip
 BRIGHTNESS_STEP = 10  # percent a shortcut turns the brightness up or down
 
 ORDER = ("Ctrl", "Alt", "Shift", "Win")  # how a combination is written

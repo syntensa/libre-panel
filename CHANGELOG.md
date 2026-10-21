@@ -62,6 +62,22 @@ Collected since 0.6.9; this section grows until 0.7.0 comes out.
   or a frame cap), the 1 % low, the frame time and the longest frame
 - Arena on the 9.2" and the 5.2": the fans turn beside the temperatures
 - The Turing 3.5", the 8.8" (rev. C) and the 12.3" are supported: their owners run them
+- **New modules**: *Ping* (how long the internet takes to answer, the tries without an
+  answer and the history), *Timer* (minutes in a ring that fills, focus and break in turn)
+  and *Power use* (the watts now, kWh today and this month, what they cost)
+- **Timer**: started and paused with a keyboard shortcut or in the app, a notice when the
+  time is up; with a break, focus and break take turns
+  ([Timer](docs/CONFIGURATION.md#timer))
+- **Power use**: the watts of the processor and the graphics card and the rest of the PC
+  added up, kWh of today and of the month, kept over a restart, with the cost at your price
+  ([Power use](docs/CONFIGURATION.md#power-use))
+- **Microphone**: a notice when it is muted or on again, and a keyboard shortcut that mutes
+  it (Windows; Linux with wpctl or pactl)
+- **Appointments**: a notice minutes before one of your calendars begins
+- **Game frame rate on Linux** from MangoHud's log: the game screen and the game module show
+  the frames per second, the 1 % low and the frame time there too
+- **Values from JSON**: what the address of a NAS, a router or another PC answers, or a
+  file, as readings for any module (`[sensors.json]`)
 
 **Fixes**
 - Fans that never ran (an empty header on the mainboard) no longer fill the temperature

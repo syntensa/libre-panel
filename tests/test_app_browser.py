@@ -3446,7 +3446,8 @@ def test_settings_services(app_url, isolated_home):
         page.wait_for_selector(".settings-card.service")
         cards = page.locator(".settings-card.service")
         assert [cards.nth(i).get_attribute("data-service") for i in range(cards.count())] == [
-            "game", "memory", "notices", "autopilot", "devices", "cooling", "downloads",
+            "game", "memory", "notices", "autopilot", "devices", "cooling", "downloads", "timer",
+            "power",
         ]  # fmt: skip
         assert page.locator("[role='switch'][aria-checked='true']").count() == 0  # off until asked
         game = page.locator("[data-service='game']")
@@ -3535,6 +3536,29 @@ def test_settings_services_of_the_running_app(isolated_home):
             page.wait_for_function(
                 "document.querySelector(\"[data-service='notices'] .status\") === null"
             )
+    finally:
+        app.quit()
+        app.shutdown()
+
+
+def test_the_timer_is_started_and_set_back_from_its_card(isolated_home):
+    """The timer's card has the buttons of its keyboard shortcuts while it runs."""
+    from test_service import wait_for
+
+    app = settings_app(isolated_home)
+    url = app.start()
+    try:
+        with browser_page(url, "settings/services") as page:
+            card = page.locator("[data-service='timer']")
+            expect(card).to_contain_text("Minutes counted down on the panel")
+            expect(card.locator(".timer-buttons")).to_have_count(0)  # off: no buttons
+            card.get_by_role("switch", name="Timer", exact=True).click()
+            assert wait_for(lambda: app.services.state.get("timer") == "running")
+            card.get_by_role("button", name="Start or pause").click()
+            assert wait_for(lambda: app.services.running["timer"][0].running)
+            card.get_by_role("button", name="Back to the start").click()
+            assert wait_for(lambda: not app.services.running["timer"][0].running)
+            assert app.plugin_host.published()["timer.text"].value == "25:00"
     finally:
         app.quit()
         app.shutdown()

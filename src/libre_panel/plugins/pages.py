@@ -183,6 +183,14 @@ class PageContext:
         manager = self._manager
         return dict(manager.state) if manager is not None else {}
 
+    def shortcut(self, action: str) -> bool:
+        """Do what a keyboard shortcut does (``timer``, ``timer_reset``, ``mic_mute``), from a
+        button of the app; False without the background app."""
+        if self._controls is None or not hasattr(self._controls, "shortcut"):
+            return False
+        self._controls.shortcut(action)
+        return True
+
     def restart_service(self, name: str) -> str:
         """Stop and start an enabled service again (with its options); its new state."""
         manager = self._manager

@@ -169,6 +169,8 @@ _BUILTIN_PROVIDERS = {
     "sky": "libre_panel.sensors.sky:SkyProvider",
     "presentmon": "libre_panel.sensors.presentmon:PresentMonProvider",
     "hardware": "libre_panel.sensors.hardware:HardwareProvider",
+    "mangohud": "libre_panel.sensors.mangohud:MangoHudProvider",
+    "json": "libre_panel.sensors.json_source:JsonProvider",
 }
 
 

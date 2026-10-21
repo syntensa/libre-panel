@@ -158,6 +158,29 @@ def demo_details(t: float, waves: dict[str, Reading]) -> dict[str, Reading]:
     out["audio.muted"] = Reading("audio.muted", 0, "", "Muted")
     out["net.today.down"] = Reading("net.today.down", 3.42e9, "B", "Received today")
     out["net.today.up"] = Reading("net.today.up", 6.1e8, "B", "Sent today")
+    out["net.ping.lost"] = Reading("net.ping.lost", 0, "%", "Ping lost")
+    out["net.ping.host"] = Reading("net.ping.host", "1.1.1.1", "", "Ping host")
+    out["audio.mic.muted"] = Reading("audio.mic.muted", 0, "", "Microphone muted")
+    out["audio.mic.volume"] = Reading("audio.mic.volume", 80.0, "%", "Microphone level")
+    # the power service's and the timer's, as they would publish them
+    watts = waves["cpu.power"].value + waves["gpu.power"].value + 50
+    out["power.watts"] = Reading("power.watts", round(watts, 1), "W", "Power")
+    for key, value, unit, label in (
+        ("power.today", 2.84, "kWh", "Energy today"),
+        ("power.month", 61.2, "kWh", "Energy this month"),
+        ("power.today.cost", 0.85, "€", "Cost today"),
+        ("power.month.cost", 18.36, "€", "Cost this month"),
+    ):
+        out[key] = Reading(key, value, unit, label)
+    left = 25 * 60 - (t % (25 * 60))
+    out["timer.left"] = Reading("timer.left", round(left, 1), "s", "Time left")
+    out["timer.text"] = Reading(
+        "timer.text", f"{int(left // 60):02d}:{int(left % 60):02d}", "", "Time left"
+    )
+    out["timer.share"] = Reading("timer.share", round(1 - left / (25 * 60), 4), "", "Time passed")
+    out["timer.running"] = Reading("timer.running", 1, "", "Timer runs")
+    out["timer.phase"] = Reading("timer.phase", "Focus", "", "Timer")
+    out["timer.rounds"] = Reading("timer.rounds", 2, "", "Rounds")
     return out
 
 

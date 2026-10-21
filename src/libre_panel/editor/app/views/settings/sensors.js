@@ -58,6 +58,10 @@ export const SOURCES = {
     hint: () => t("The entities of your Home Assistant. Set up in config.toml."),
   },
   mqtt: { title: () => "MQTT", hint: () => t("What your devices publish. Set up in config.toml.") },
+  json: {
+    title: () => t("Values from JSON"),
+    hint: () => t("What the address of a NAS, a router or another PC answers, or a file. Set up in config.toml."),
+  },
   demo: {
     title: () => t("Demo values"),
     hint: () => t("Invented values, to try a theme without real sensors."),
@@ -65,7 +69,7 @@ export const SOURCES = {
   media: { title: () => t("What is playing"), hint: () => t("The title, the cover and the player of the music that plays.") },
   sky: { title: () => t("Sun and moon"), hint: () => t("Sunrise, sunset and the phase of the moon.") },
 };
-const ORDER = ["load", "audio", "librehardwaremonitor", "linux", "psutil", "presentmon", "calendar", "homeassistant", "mqtt", "demo"];
+const ORDER = ["load", "audio", "librehardwaremonitor", "linux", "psutil", "presentmon", "calendar", "homeassistant", "mqtt", "json", "demo"];
 
 /** Whether a source can work on this system (`platform` is Python's sys.platform). */
 function worksHere(name, platform) {

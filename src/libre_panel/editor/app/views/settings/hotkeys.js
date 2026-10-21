@@ -17,6 +17,9 @@ const ACTIONS = () => [
   { id: "brightness_up", name: t("Brightness up") },
   { id: "brightness_down", name: t("Brightness down") },
   { id: "next_scene", name: t("Next scene") },
+  { id: "timer", name: t("Start or pause the timer") },
+  { id: "timer_reset", name: t("Set the timer back") },
+  { id: "mic_mute", name: t("Mute the microphone or turn it on") },
   { id: "open", name: t("Open Libre Panel") },
 ];
 

@@ -1957,6 +1957,119 @@ def build_netinfo(b: _Build, _src: Source) -> None:
         b.out[-1]["needs"] = "net.ping"
 
 
+def _pairs(b: _Build, pairs: list[tuple[str, str, str]], x: float, y: float, w: float,
+           h: float) -> None:  # fmt: skip
+    """Readings as rows of a name and a value (sensor, format, name), as many as fit."""
+    count = min(len(pairs), int(h // (b.ts * 1.9)))
+    if count < 1 or w < b.ts * 5:
+        return
+    row = min(h / count, b.ts * 3.0)
+    size = min(row * 0.55, b.ts * 1.5, w * 0.11)
+    top = y + (h - row * count) / 2
+    for i, (sensor, fmt, name) in enumerate(pairs[:count]):
+        base = top + i * row + (row - CAP * size) / 2
+        b.label(f"r{i}-label", name, x, base + CAP * (size - b.ts) / 2, b.ts, width=w * 0.45)
+        b.value(f"r{i}", sensor, fmt, x + w, base, size, align="right", width=w * 0.53,
+                fallback="--", fit="ellipsis")  # fmt: skip
+
+
+def _number_rows_history(b: _Build, sensor: str, fmt: str, pairs: list[tuple[str, str, str]],
+                         color: str, top: float, history: bool = True) -> None:  # fmt: skip
+    """A big number under the head; beside or under it the ``pairs`` where there is room, and
+    the number's history (ping, power)."""
+    x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
+    tall, wide = b.aspect <= 0.72, b.aspect >= 2.0
+    stacked = (b.large and not wide) or tall
+    rows_h = len(pairs) * b.ts * 2.2
+
+    def number(nx: float, ny: float, nw: float, nh: float) -> None:
+        size = min(nh * 0.62, nw * 0.3)
+        b.value("value", sensor, fmt, nx, ny + (nh - CAP * size) / 2, size, width=nw,
+                fallback="--")  # fmt: skip
+
+    def graph(gx: float, gy: float, gw: float, gh: float) -> None:
+        b.graph("history", sensor, gx, gy, gw, gh, color, 0, None)
+        b.out[-1]["needs"] = sensor
+
+    if stacked:
+        number_h = min(h * 0.36, b.iw * 0.4)
+        number(x, y, w, number_h)
+        rest_y = y + number_h + b.pad * 0.5
+        rest = b.iy + b.ih - rest_y
+        rows = min(rows_h, rest if not history else rest * 0.5)
+        _pairs(b, pairs, x, rest_y, w, rows)
+        if history and rest - rows > b.ts * 3:
+            graph(x, rest_y + rows + b.pad * 0.5, w, rest - rows - b.pad * 0.5)
+    elif wide:
+        big = b.large or b.aspect >= 3.2
+        number_w = w * (0.3 if big and pairs and history else 0.42)
+        number(x, y, number_w, h)
+        rest_x = x + number_w + b.pad
+        rest_w = b.ix + b.iw - rest_x
+        if pairs and history and big:
+            rows_w = rest_w * 0.55
+            _pairs(b, pairs, rest_x, y, rows_w, h)
+            graph(rest_x + rows_w + b.pad * 1.5, y, rest_w - rows_w - b.pad * 1.5, h)
+        elif pairs:
+            _pairs(b, pairs, rest_x + b.pad, y, rest_w - b.pad, h)
+        elif history:
+            graph(rest_x, y, rest_w, h)
+    else:
+        number(x, y, w, h)
+
+
+def build_ping(b: _Build, _src: Source) -> None:
+    """How long the internet (or the host of ``[sensors.psutil] ping``) takes to answer, with
+    its history and the share of tries without an answer."""
+    b.card()
+    color = b.tint("net")
+    top = b.head("signal", b.module["title"] or t("Ping"), color)
+    pairs = [("net.ping.lost", "{value:.0f}%", t("Lost")), ("net.ping.host", "{value}", t("Host"))]
+    _number_rows_history(b, "net.ping", "{value:.0f} ms", pairs, color, top)
+
+
+def build_power(b: _Build, _src: Source) -> None:
+    """The watts the PC draws now, and the energy of today and of the month with what it costs
+    (the ``power`` service)."""
+    b.card()
+    color = b.tint("gpu")
+    top = b.head("power", b.module["title"] or t("Power use"), color)
+    pairs = [
+        ("power.today", "{value:.2f} kWh", t("Today")),
+        ("power.today.cost", "{value:.2f} {unit}", t("Cost today")),
+        ("power.month", "{value:.1f} kWh", t("This month")),
+        ("power.month.cost", "{value:.2f} {unit}", t("Cost this month")),
+    ]
+    _number_rows_history(b, "power.watts", "{value:.0f} W", pairs, color, top,
+                         history=b.aspect >= 3.2 or (b.large and b.aspect >= 2.0))  # fmt: skip
+
+
+def build_timer(b: _Build, _src: Source) -> None:
+    """The time left of the timer (the ``timer`` service) in a ring that fills as it runs, and
+    whether it is focus or break."""
+    b.card()
+    color = b.tint("accent")
+    top = b.head("hourglass", b.module["title"] or t("Timer"), color)
+    x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
+    wide = w / max(1, h) >= 1.8
+    d = max(8, min(h, w * (0.5 if wide else 1.0)))
+    rx = x if wide else x + (w - d) / 2
+    ry = y + (h - d) / 2
+    b.ring("ring", "timer.share", rx, ry, d, color, 0, 1)
+    size, small = d * 0.22, max(7, d * 0.08)
+    gap = d * 0.05
+    cap = ry + (d - (CAP * size + gap + CAP * small)) / 2
+    b.value("left", "timer.text", "{value}", rx + d / 2, cap, size, align="center",
+            width=d * 0.72, fallback="--:--")  # fmt: skip
+    if d > b.ts * 5:
+        b.value("phase", "timer.phase", "{value}", rx + d / 2, cap + CAP * size + gap, small,
+                color=color, align="center", width=d * 0.6, font="text_font", tabular=False,
+                fallback="", hide_if_missing=True)  # fmt: skip
+    if wide and w - d - b.pad * 1.5 > b.ts * 5:
+        tx = rx + d + b.pad * 1.5
+        _pairs(b, [("timer.rounds", "{value:.0f}", t("Rounds"))], tx, y, b.ix + b.iw - tx, h)
+
+
 def build_battery(b: _Build, _src: Source) -> None:
     """The battery's charge, whether it charges and the time left; its history when big."""
     b.card()
@@ -2070,6 +2183,9 @@ def kinds() -> dict[str, Kind]:
         "outlook": Kind(t("Next days"), build_outlook, span=(3, 1), finish="lit"),
         "agenda": Kind(t("Agenda"), build_agenda, span=(2, 2)),
         "game": Kind(t("Game FPS"), build_game, span=(2, 1)),
+        "ping": Kind(t("Ping"), build_ping, span=(2, 1)),
+        "timer": Kind(t("Timer"), build_timer, span=(2, 1)),
+        "power": Kind(t("Power use"), build_power, span=(2, 1)),
         # the cards after SPUR II's Studio screen: lit by themselves (theme.cards)
         "playback": Kind(t("Playback card"), cards.build_playback, span=(3, 2), finish="lit"),
         "forecast": Kind(t("Weather card"), cards.build_forecast, span=(3, 2), finish="lit"),
@@ -2091,7 +2207,7 @@ MODULE_KINDS = (
     "temps", "cores", "drives", "processes", "netinfo", "battery", "values",
     "sun", "analog", "world", "countdown", "image", "music", "agenda", "game",
     "playback", "forecast", "download", "instrument", "cards", "netcard", "volume", "moon",
-    "outlook",
+    "outlook", "ping", "timer", "power",
 )  # fmt: skip
 # Kinds that hold several cards and show one (render.slot); "netcard" is two: a download
 # while one runs, else the network

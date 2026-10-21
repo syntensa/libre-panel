@@ -1,8 +1,11 @@
-"""Volume and mute of the default output device, while a theme shows them.
+"""Volume and mute of the default output device, while a theme shows them; and whether the
+default microphone is muted.
 
-Readings: ``audio.volume`` (0-100 %, 0 while muted) and ``audio.muted`` (1 or 0).
-They are read on every frame (``every_frame``), so a volume bar follows the
-volume keys at once.
+Readings: ``audio.volume`` (0-100 %, 0 while muted) and ``audio.muted`` (1 or 0);
+``audio.mic.muted`` (1 or 0) and ``audio.mic.volume`` (its level, 0-100 %), read only while
+a theme or a service asks for ``audio.mic.*``. They are read on every frame
+(``every_frame``), so a volume bar follows the volume keys at once.
+:func:`toggle_microphone` mutes the microphone or turns it on again (a keyboard shortcut).
 
 - Windows: Core Audio through ctypes, no package and no admin rights. Windows
   reports every change itself (a hand-built ``IAudioEndpointVolumeCallback``);
@@ -101,7 +104,27 @@ def _sample_pactl(path: str) -> tuple[float, bool] | None:
     return level, bool(out is not None and parse_pactl_mute(out))
 
 
+def _mic_wpctl(path: str) -> tuple[float, bool] | None:
+    out = _run([path, "get-volume", "@DEFAULT_AUDIO_SOURCE@"])
+    return None if out is None else parse_wpctl(out)
+
+
+def _mic_pactl(path: str) -> tuple[float, bool] | None:
+    out = _run([path, "get-source-mute", "@DEFAULT_SOURCE@"])
+    muted = None if out is None else parse_pactl_mute(out)
+    if muted is None:
+        return None
+    out = _run([path, "get-source-volume", "@DEFAULT_SOURCE@"])
+    level = None if out is None else parse_pactl_volume(out)
+    return (level if level is not None else 0.0), muted
+
+
 _LINUX_TOOLS = (("wpctl", _sample_wpctl), ("pactl", _sample_pactl))
+_LINUX_MIC_TOOLS = (("wpctl", _mic_wpctl), ("pactl", _mic_pactl))
+_LINUX_MIC_TOGGLE = (
+    ("wpctl", ["set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"]),
+    ("pactl", ["set-source-mute", "@DEFAULT_SOURCE@", "toggle"]),
+)
 
 
 class _Source(Protocol):
@@ -158,6 +181,7 @@ class _Commands:
 CLSCTX_ALL = 23
 COINIT_MULTITHREADED = 0
 E_RENDER, E_CONSOLE = 0, 0  # EDataFlow and ERole: the default device for playing sound
+E_CAPTURE = 1  # EDataFlow: the default device for recording, the microphone
 E_NOINTERFACE = -2147467262  # 0x80004002 as a signed HRESULT
 
 _CLSID_ENUMERATOR = "{BCDE0395-E52F-467C-8E3D-C4579291692E}"  # MMDeviceEnumerator
@@ -173,6 +197,7 @@ _DEVICE_GET_ID = 5
 _VOLUME_REGISTER = 3
 _VOLUME_UNREGISTER = 4
 _VOLUME_GET_LEVEL = 9  # GetMasterVolumeLevelScalar
+_VOLUME_SET_MUTE = 14
 _VOLUME_GET_MUTE = 15
 
 # WINFUNCTYPE exists only on Windows, where it is stdcall; elsewhere (the tests) cdecl does.
@@ -287,7 +312,8 @@ class _VolumeCallback:
 
 
 class _CoreAudio:
-    """The volume of the default output device through Core Audio, with bare ctypes.
+    """The volume of the default output device (or, with ``flow`` E_CAPTURE, of the default
+    microphone) through Core Audio, with bare ctypes.
 
     COM belongs to the thread that starts it: make it, ``sample``, ``check_device``
     and ``close`` it in one thread, which joins the multi-threaded apartment (so
@@ -296,9 +322,12 @@ class _CoreAudio:
     device.
     """
 
-    def __init__(self, on_change: Callable[[float, bool], None], ole32: Any = None) -> None:
+    def __init__(
+        self, on_change: Callable[[float, bool], None], ole32: Any = None, flow: int = E_RENDER
+    ) -> None:
         self.events = False  # Windows tells about changes by itself
         self._on_change = on_change
+        self._flow = flow
         self._ole32 = ole32 if ole32 is not None else ctypes.WinDLL("ole32")
         self._com = False  # CoInitializeEx worked, so CoUninitialize is due
         self._enumerator: ctypes.c_void_p | None = None
@@ -342,9 +371,9 @@ class _CoreAudio:
             ctypes.c_int32,
             ctypes.POINTER(ctypes.c_void_p),
         )
-        _check(get(self._enumerator, E_RENDER, E_CONSOLE, ctypes.byref(device)))
+        _check(get(self._enumerator, self._flow, E_CONSOLE, ctypes.byref(device)))
         if not device:
-            raise OSError("no output device")
+            raise OSError("no output device" if self._flow == E_RENDER else "no microphone")
         device_id = None
         text = ctypes.c_wchar_p()
         try:
@@ -388,6 +417,13 @@ class _CoreAudio:
         self._get_mute = _method(volume, _VOLUME_GET_MUTE, ctypes.POINTER(ctypes.c_int32))
         self._get_level = _method(volume, _VOLUME_GET_LEVEL, ctypes.POINTER(ctypes.c_float))
         self._register()
+
+    def set_mute(self, muted: bool) -> None:
+        """Mute the device, or turn it on again; raises OSError if Windows refuses."""
+        if self._volume is None:
+            raise OSError("no device")
+        set_mute = _method(self._volume, _VOLUME_SET_MUTE, ctypes.c_int32, ctypes.c_void_p)
+        _check(set_mute(self._volume, 1 if muted else 0, None))
 
     def _register(self) -> None:
         if self._callback is None:
@@ -464,6 +500,46 @@ def _open_source(on_change: Callable[[float, bool], None], platform: str = sys.p
     return _Commands(_LINUX_TOOLS, LINUX_POLL_SECONDS)
 
 
+def _open_mic(on_change: Callable[[float, bool], None], platform: str = sys.platform) -> _Source:
+    """The way to read the microphone's mute on this machine; raises OSError if there is none."""
+    if platform == "win32":
+        return _CoreAudio(on_change, flow=E_CAPTURE)
+    return _Commands(_LINUX_MIC_TOOLS, LINUX_POLL_SECONDS)
+
+
+def toggle_microphone(platform: str = sys.platform) -> bool:
+    """Mute the default microphone, or turn it on again (a keyboard shortcut). True if it was
+    done; where it cannot be (no microphone, no tool), False, and the log says why."""
+    if platform == "win32":
+        result: list[bool] = []
+
+        def flip() -> None:  # COM in a thread of its own, made and ended there
+            mic = None
+            try:
+                mic = _CoreAudio(lambda _level, _muted: None, flow=E_CAPTURE)
+                state = mic.sample()
+                if state is None:
+                    raise OSError("the microphone cannot be read")
+                mic.set_mute(not state[1])
+                result.append(True)
+            except OSError as exc:
+                log.warning("audio: the microphone cannot be muted: %s", exc)
+            finally:
+                if mic is not None:
+                    mic.close()
+
+        worker = threading.Thread(target=flip, name="audio-mic-toggle", daemon=True)
+        worker.start()
+        worker.join(COMMAND_TIMEOUT)
+        return bool(result)
+    for name, arguments in _LINUX_MIC_TOGGLE:
+        path = shutil.which(name)
+        if path and _run([path, *arguments]) is not None:
+            return True
+    log.warning("audio: the microphone cannot be muted: needs wpctl or pactl")
+    return False
+
+
 class AudioProvider(SensorProvider):
     """``audio.volume`` and ``audio.muted`` while a theme shows them."""
 
@@ -473,6 +549,7 @@ class AudioProvider(SensorProvider):
     def __init__(self, options: dict[str, Any] | None = None) -> None:
         super().__init__(options)
         self._state: tuple[float, dict[str, Reading]] | None = None  # (when, readings)
+        self._mic: tuple[float, dict[str, Reading]] | None = None  # the microphone's
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -495,6 +572,38 @@ class AudioProvider(SensorProvider):
         with self._lock:
             self._state = (time.monotonic(), readings)
 
+    def _publish_mic(self, level: float, muted: bool) -> None:
+        level = round(max(0.0, min(100.0, level)), 1)
+        readings = {
+            "audio.mic.muted": Reading(
+                "audio.mic.muted", 1 if muted else 0, "", "Microphone muted"
+            ),
+            "audio.mic.volume": Reading("audio.mic.volume", level, "%", "Microphone level"),
+        }
+        with self._lock:
+            self._mic = (time.monotonic(), readings)
+
+    def _open_mic(self) -> _Source | None:
+        try:
+            return _open_mic(self._publish_mic)
+        except Exception as exc:  # noqa: BLE001 - no microphone, or none just now
+            log.debug("audio: the microphone cannot be read: %s", exc)
+            return None
+
+    def _microphone(self, mic: _Source | None, now: float, retry: float) -> tuple[Any, float]:
+        """One look at the microphone, while its readings are wanted: (the source, when to try
+        to open one again)."""
+        if mic is None:
+            if now < retry:
+                return None, retry
+            mic = self._open_mic()
+            if mic is None:
+                return None, now + RETRY_SECONDS
+        state = self._sample(mic)
+        if state is not None:
+            self._publish_mic(*state)
+        return mic, retry
+
     def _open(self) -> _Source | None:
         try:
             source = _open_source(self._publish)
@@ -515,6 +624,8 @@ class AudioProvider(SensorProvider):
 
     def _run(self) -> None:
         source: _Source | None = None
+        mic: _Source | None = None
+        mic_retry = 0.0
         looked = time.monotonic()
         device_at = 0.0
         try:
@@ -524,6 +635,8 @@ class AudioProvider(SensorProvider):
                     looked = now
                 elif now - looked > IDLE_SECONDS:
                     return
+                if wanted("audio.mic"):
+                    mic, mic_retry = self._microphone(mic, now, mic_retry)
                 if source is None:
                     source = self._open()
                     if source is None:
@@ -558,10 +671,12 @@ class AudioProvider(SensorProvider):
                 self._stop.wait(source.interval)
         finally:
             with self._lock:
-                self._state = None
-            if source is not None:
+                self._state = self._mic = None
+            for opened in (source, mic):
+                if opened is None:
+                    continue
                 try:
-                    source.close()  # in this thread: COM belongs to it
+                    opened.close()  # in this thread: COM belongs to it
                 except Exception:  # noqa: BLE001 - nothing left to do about it
                     log.debug("audio: closing failed", exc_info=True)
 
@@ -572,10 +687,12 @@ class AudioProvider(SensorProvider):
                 return {}
             self._start()
         with self._lock:
-            state = self._state
-        if state is None or time.monotonic() - state[0] > STALE_SECONDS:
-            return {}
-        return dict(state[1])
+            states = (self._state, self._mic)
+        out: dict[str, Reading] = {}
+        for state in states:
+            if state is not None and time.monotonic() - state[0] <= STALE_SECONDS:
+                out.update(state[1])
+        return out
 
     def close(self) -> None:
         self._stop.set()

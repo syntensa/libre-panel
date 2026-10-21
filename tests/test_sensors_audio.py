@@ -837,3 +837,57 @@ def test_the_real_core_audio_of_windows():
     if outcome[0][0] == "device":
         state = outcome[0][1]
         assert state is None or (0.0 <= state[0] <= 100.0 and isinstance(state[1], bool))
+
+
+# -- the microphone -------------------------------------------------------------------------
+
+MIC_WPCTL = ("/usr/bin/wpctl", "get-volume", "@DEFAULT_AUDIO_SOURCE@")
+MIC_PACTL_MUTE = ("/usr/bin/pactl", "get-source-mute", "@DEFAULT_SOURCE@")
+MIC_PACTL_VOLUME = ("/usr/bin/pactl", "get-source-volume", "@DEFAULT_SOURCE@")
+
+
+def test_the_microphone_is_asked_for_the_default_source_on_linux(monkeypatch):
+    tools = FakeTools(monkeypatch, {"wpctl", "pactl"}, {MIC_WPCTL: "Volume: 0.80 [MUTED]\n"})
+    mic = audio._open_mic(lambda level, muted: None, "linux")
+    assert mic.sample() == (pytest.approx(80.0), True)
+    assert tools.commands == [list(MIC_WPCTL)]
+    prints = {MIC_PACTL_MUTE: "Mute: no\n", MIC_PACTL_VOLUME: "Volume: mono: 39321 /  60%\n"}
+    FakeTools(monkeypatch, {"pactl"}, prints)
+    mic = audio._open_mic(lambda level, muted: None, "linux")
+    assert mic.sample() == (60.0, False)
+
+
+def test_the_microphone_is_muted_and_turned_on_again_by_the_tool_there_is(monkeypatch):
+    tools = FakeTools(monkeypatch, {"pactl"}, {
+        ("/usr/bin/pactl", "set-source-mute", "@DEFAULT_SOURCE@", "toggle"): "",
+    })  # fmt: skip
+    assert audio.toggle_microphone("linux") is True
+    assert tools.commands == [["/usr/bin/pactl", "set-source-mute", "@DEFAULT_SOURCE@", "toggle"]]
+    FakeTools(monkeypatch, set(), {})
+    assert audio.toggle_microphone("linux") is False  # no tool: said in the log, nothing breaks
+
+
+def test_the_microphone_is_read_only_while_it_is_asked_for(monkeypatch):
+    install(monkeypatch, FakeSource((40.0, False)))
+    mics = []
+
+    def open_mic(on_change):
+        mics.append(on_change)
+        return FakeSource((75.0, True))
+
+    monkeypatch.setattr(audio, "_open_mic", open_mic)
+    theme = show("audio.volume")
+    provider = audio.AudioProvider()
+    try:
+        provider.read()
+        assert wait_for(lambda: "audio.volume" in provider.read())
+        assert "audio.mic.muted" not in provider.read() and mics == []  # nobody asked
+        notices = show("audio.mic.muted")
+        assert wait_for(lambda: "audio.mic.muted" in provider.read())
+        read = provider.read()
+        assert read["audio.mic.muted"].value == 1 and read["audio.mic.volume"].value == 75.0
+        assert read["audio.volume"].value == 40.0 and len(mics) == 1
+        del notices
+    finally:
+        provider.close()
+    del theme

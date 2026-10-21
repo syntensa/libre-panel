@@ -38,6 +38,7 @@ EVENTS = (
     "mode-changed",
     "sample",  # a new snapshot of the readings (snapshot=), about every refresh_ms
     "fresh",  # between two samples, readings that follow on every frame changed (snapshot=, keys=)
+    "shortcut",  # a keyboard shortcut of [hotkeys] was pressed, or its button in the app (action=)
     "quit",
 )
 NEWEST = ("sample", "fresh")  # delivered in a thread of their own, only the newest of each
@@ -252,7 +253,8 @@ class ServiceHost:
         ``mode-changed``, ``sample`` (``snapshot=``: a new snapshot of the readings,
         about every ``refresh_ms``), ``fresh`` (``snapshot=``, ``keys=``: a reading
         of a source that follows on every frame, the volume, changed between two
-        samples; ``keys`` are the readings that did) and ``quit``. Callbacks run in
+        samples; ``keys`` are the readings that did), ``shortcut`` (``action=``: a keyboard
+        shortcut of ``[hotkeys]`` was pressed, such as ``timer``) and ``quit``. Callbacks run in
         an event thread; a slow ``sample`` or ``fresh`` callback is handed the newest
         one when it is free again, not every one."""
         self._hub.listen(event, callback, owner=self.name)

@@ -132,6 +132,21 @@ ON_DEMAND = (
     ("weather.rain.minutes", "min", "Rain starts or stops"),
     ("weather.rain.text", "", "Rain"),
     ("net.ping", "ms", "Ping"),
+    ("net.ping.lost", "%", "Ping lost"),
+    ("net.ping.host", "", "Ping host"),
+    ("audio.mic.muted", "", "Microphone muted"),
+    ("audio.mic.volume", "%", "Microphone level"),
+    ("power.watts", "W", "Power"),
+    ("power.today", "kWh", "Energy today"),
+    ("power.month", "kWh", "Energy this month"),
+    ("power.today.cost", "€", "Cost today"),  # (the currency of [services.power])
+    ("power.month.cost", "€", "Cost this month"),
+    ("timer.left", "s", "Time left"),
+    ("timer.text", "", "Time left"),
+    ("timer.running", "", "Timer runs"),
+    ("timer.share", "", "Time passed"),
+    ("timer.phase", "", "Timer"),
+    ("timer.rounds", "", "Rounds"),
 )
 # Pictures a source or service has, for an image widget (``"src": "@media.cover"``). They are
 # no readings: they come marked ``picture``, and a sensor field leaves them out.

@@ -5,6 +5,7 @@
 // change starts again by itself (the section's lead says so).
 
 import { refreshPages } from "../../core/actions.js";
+import { control } from "../../core/console.js";
 import { t } from "../../core/i18n.js";
 import {
   enableService,
@@ -20,6 +21,7 @@ import { html, useEffect, useState } from "../../lib/preact.js";
 import { navigate } from "../../shell/views.js";
 import { NumberField, Select, Toggle } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
+import { toastError } from "../../ui/toast.js";
 import { PageThemeSelect } from "../design/pages.js";
 import { NotifyCard } from "./notify.js";
 import { CommitField, SettingRow, Status, usePolling } from "./parts.js";
@@ -55,6 +57,14 @@ export const SERVICES = {
     title: () => t("Downloads"),
     hint: () => t("Notes what Steam and the browser are downloading, for a screen that shows it."),
   },
+  timer: {
+    title: () => t("Timer"),
+    hint: () => t("Minutes counted down on the panel, with a notice when they are up; with a break, focus and break take turns. A keyboard shortcut starts it, or the buttons here."),
+  },
+  power: {
+    title: () => t("Power use"),
+    hint: () => t("The watts the PC draws, from the sensors of the processor and the graphics card, and the energy of today and of the month with what it costs."),
+  },
 };
 
 const SECONDS = { unit: "s", min: 0, max: 86400 };
@@ -75,6 +85,14 @@ const OPTIONS = {
     ],
   },
   "notices.music": { label: () => t("A new track") },
+  "notices.microphone": { label: () => t("The microphone muted or on again") },
+  "notices.appointments": {
+    label: () => t("An appointment that begins soon"),
+    hint: () => t("Minutes before it begins, from the calendars of the sensors; 0: none."),
+    unit: "min",
+    min: 0,
+    max: 240,
+  },
   "notices.restarted": { label: () => t("The panel was restarted") },
   "notices.warnings": {
     label: () => t("Warnings for sensors"),
@@ -139,6 +157,13 @@ const OPTIONS = {
   "downloads.browser": { label: () => t("Downloads of the browser"), hint: () => t("The part files in the Downloads folder.") },
   "downloads.folder": { label: () => t("Downloads folder"), hint: () => t("Only if it is not the system's.") },
   "downloads.min_mb": { label: () => t("Ignore downloads smaller than"), unit: "MB", min: 0, max: 100000 },
+  "timer.minutes": { label: () => t("Minutes"), unit: "min", min: 1, max: 1440 },
+  "timer.break_minutes": { label: () => t("Break"), hint: () => t("0: no break, a plain timer."), unit: "min", min: 0, max: 240 },
+  "timer.notice": { label: () => t("A notice when the time is up") },
+  "power.sensors": { label: () => t("Sensors that add up to the watts"), hint: () => t("Sensors such as cpu.power and gpu.power.") },
+  "power.rest_w": { label: () => t("The rest of the PC"), hint: () => t("Mainboard, drives, fans and what the power supply loses, in watts: some 40 to 80."), unit: "W", min: 0, max: 2000 },
+  "power.price": { label: () => t("Price of a kWh"), hint: () => t("0: no cost."), min: 0, max: 100, step: 0.01 },
+  "power.currency": { label: () => t("Currency") },
 };
 
 const optionLabel = (service, option) => OPTIONS[`${service}.${option.key}`]?.label() ?? option.key.replace(/_/g, " ");
@@ -280,6 +305,15 @@ function ServiceStatus({ row, enabled, loaded, background }) {
   return null;
 }
 
+/** The timer's buttons: start or pause it and set it back, as its keyboard shortcuts do. */
+function TimerButtons() {
+  const press = (action) => control.shortcut(action).catch(toastError);
+  return html`<${SettingRow} class="timer-buttons" title=${t("The timer now")} hint=${t("As the keyboard shortcuts do.")}>
+    <button type="button" class="btn" onClick=${() => press("timer")}>${t("Start or pause")}</button>
+    <button type="button" class="btn" onClick=${() => press("timer_reset")}>${t("Back to the start")}</button>
+  <//>`;
+}
+
 /** The theme game mode shows ([modes.game] in config.toml): chosen here, beside the service,
  * as well as on the pages of Design. */
 function GameScreen() {
@@ -318,6 +352,7 @@ function ServiceCard({ service, config, row, loaded, background }) {
       </div>
     </div>
     ${service.name === "game" ? html`<${GameScreen} />` : null}
+    ${service.name === "timer" && enabled && background && row?.state === "running" ? html`<${TimerButtons} />` : null}
     ${service.options.length
       ? html`<button type="button" class="settings-disclosure small" aria-expanded=${String(open)} aria-controls=${`${id}-options`} onClick=${() => setOpen(!open)}>
             <span>${t("Options")} · ${service.options.length}</span>
