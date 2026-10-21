@@ -1233,6 +1233,15 @@ def with_accent(theme: Theme, colour: str | None) -> Theme:
     return replace(theme, palette=palette)
 
 
+_COMPANION = re.compile(r"-companion(-vertical|-\d+x\d+)?$")
+
+
+def is_companion(name: str) -> bool:
+    """Whether the theme ``name`` is made to go beside another on a second panel (Lumen
+    Companion, its versions too): kept for that, as the round report is for its page."""
+    return bool(_COMPANION.search(name))
+
+
 def with_look(theme: Theme, source: Theme | None) -> Theme:
     """``theme`` in the look of ``source``, for a panel beside the first in the first panel's
     look (config.toml ``[[panels]] same_look``): the colours of its palette, by name (and

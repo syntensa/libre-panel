@@ -27,7 +27,7 @@ from libre_panel.config import ConfigError, config_dir, load_config, set_active_
 from libre_panel.devices.models import MODELS, PanelModel, find_model
 from libre_panel.i18n import t
 from libre_panel.service import BackgroundApp
-from libre_panel.theme.model import THEME_FILENAME, list_themes, version_base
+from libre_panel.theme.model import THEME_FILENAME, is_companion, list_themes, version_base
 
 log = logging.getLogger(__name__)
 
@@ -99,7 +99,8 @@ def theme_choices(
 ) -> tuple[list[tuple[str, str]], list[tuple[str, str]], dict[str, list[tuple[str, str]]]]:
     """The themes the tray offers for the panel, as (id, name), by name, in three parts, as Start
     shows them: those made for ``model`` (all where it is not known); the others ("More
-    themes": other panels, and ``report``, the round report's); and each collection's (the
+    themes": other panels, ``report``, the round report's, and those to go beside another on a
+    second panel); and each collection's (the
     screens Libre Panel grew out of), apart. A theme's version for a panel on end
     ("lumen-vertical") is not listed: it is chosen as its theme."""
     themes = list_themes()
@@ -121,7 +122,7 @@ def theme_choices(
         )
         if facts["collection"]:
             collections.setdefault(facts["collection"], []).append(entry)
-        elif fits and theme["id"] != report:
+        elif fits and theme["id"] != report and not is_companion(theme["id"]):
             first.append(entry)
         else:
             more.append(entry)

@@ -258,6 +258,7 @@ def test_the_theme_menu_offers_the_panel_s_themes_by_name(tray):
     assert first == ["Almanac", "Almanac Analog", "Arena", "Encore", "Lumen", "Nimbus", "Studio"]
     more = items(themes["More themes"].submenu)
     assert {"Libre Default", "Column", "Slate", "Round report"} <= set(more)
+    assert {"Lumen Companion", "Arena Companion"} <= set(more)  # for a second panel
     assert "Lumen" not in more and "SPUR II" in items(themes["SPUR II"].submenu)
     assert more["Libre Default"].checked  # config.toml names it: checked where it is
     themes["Lumen"](tray.icon)
