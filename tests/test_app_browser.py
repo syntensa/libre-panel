@@ -1134,7 +1134,11 @@ def test_live_shows_the_picture_of_each_panel(app_url, isolated_home):
         expect(page.locator(".live-numbers")).to_have_count(1)
         choice.get_by_role("radio", name="Panel 2").click()
         expect(page.locator(".live-state")).to_contain_text("Shows Lumen Companion")
-        waits_for(page, lambda: "panel=2" in asked[-1])
+        for _ in range(200):  # (the page's requests are answered only while Playwright waits)
+            if "panel=2" in asked[-1]:
+                break
+            page.wait_for_timeout(50)
+        assert "panel=2" in asked[-1]
         expect(page.locator(".live-numbers")).to_have_count(0)  # (the first panel's numbers)
 
 
