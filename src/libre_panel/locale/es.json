@@ -2604,7 +2604,8 @@
     "fans": "ventiladores",
     "ping": "Ping",
     "timer": "Temporizador",
-    "power": "Consumo"
+    "power": "Consumo",
+    "mic": "Micrófono"
   },
   "icons": {
     "battery": "Batería",

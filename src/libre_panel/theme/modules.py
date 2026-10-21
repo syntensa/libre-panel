@@ -2070,6 +2070,56 @@ def build_timer(b: _Build, _src: Source) -> None:
         _pairs(b, [("timer.rounds", "{value:.0f}", t("Rounds"))], tx, y, b.ix + b.iw - tx, h)
 
 
+MIC = "audio.mic.muted"
+
+
+def build_mic(b: _Build, _src: Source) -> None:
+    """Whether the microphone is muted: the crossed symbol and the word large in the critical
+    colour while it is, calm while it is on, and said where there is no microphone (the audio
+    source: Windows, Linux with wpctl or pactl)."""
+    b.card()
+    calm, alarm = b.c("text3"), b.module.get("color") or b.c("crit")
+    a = b.aspect
+    wide = a >= 1.5
+    title = (b.module["title"] or t("Microphone")).upper()
+    if wide:
+        d = min(b.ih * 0.72, b.iw * 0.34)
+        ix, iy = b.ix + (b.ih - d) / 2 * 0.4, b.iy + (b.ih - d) / 2
+        tx, tw = ix + d + b.pad, b.ix + b.iw - (ix + d + b.pad)
+        size = min(b.ih * 0.34, tw / 4.2)
+        cap = b.iy + (b.ih - (CAP * size + b.ts * 1.9)) / 2 + b.ts * 1.9
+        label_y, align, x = cap - b.ts * 1.9, "left", tx
+    else:
+        d = min(b.iw * 0.55, b.ih * 0.5)
+        tw = b.iw
+        size = min(b.ih * 0.17, tw / 4.2)
+        block = d + b.ts * 1.2 + CAP * size + b.ts * 0.9 + CAP * b.ts  # centred in the box
+        ix, iy = b.ix + (b.iw - d) / 2, b.iy + max(0.0, (b.ih - block) / 2)
+        cap = iy + d + b.ts * 1.2
+        label_y, align, x = cap + CAP * size + b.ts * 0.9, "center", b.ix + b.iw / 2
+    for name, icon, color, need in (
+        ("muted-icon", "mic_off", alarm, f"{MIC}=1"),
+        ("on-icon", "mic", calm, f"{MIC}=0"),
+        ("none-icon", "mic", faded(calm, 0.5), f"!{MIC}"),
+    ):
+        b.icon(name, icon, ix, iy, d, color)
+        b.out[-1]["needs"] = need
+        if name == "muted-icon":
+            b.out[-1].update(glow=round(0.6 * b.glow, 2), glow_radius=max(2, round(d / 10)))
+    for name, text, color, need in (
+        ("muted", t("Muted"), alarm, f"{MIC}=1"),
+        ("on", t("On"), b.c("text"), f"{MIC}=0"),
+        ("none", t("No microphone"), calm, f"!{MIC}"),
+    ):
+        small = name == "none"
+        text_size = size * (0.6 if small else 1.0)
+        b.add("text", name, x=round(x), text=text, color=color, align=align, needs=need,
+              max_width=round(tw), fit="shrink",
+              **b._text_fields(text_size, cap + (CAP * size - CAP * text_size) / 2,
+                               "display_font"))  # fmt: skip
+    b.label("title", title, x, label_y, b.ts, color=calm, align=align, width=tw)
+
+
 def build_battery(b: _Build, _src: Source) -> None:
     """The battery's charge, whether it charges and the time left; its history when big."""
     b.card()
@@ -2186,6 +2236,7 @@ def kinds() -> dict[str, Kind]:
         "ping": Kind(t("Ping"), build_ping, span=(2, 1)),
         "timer": Kind(t("Timer"), build_timer, span=(2, 1)),
         "power": Kind(t("Power use"), build_power, span=(2, 1)),
+        "mic": Kind(t("Microphone"), build_mic),
         # the cards after SPUR II's Studio screen: lit by themselves (theme.cards)
         "playback": Kind(t("Playback card"), cards.build_playback, span=(3, 2), finish="lit"),
         "forecast": Kind(t("Weather card"), cards.build_forecast, span=(3, 2), finish="lit"),
@@ -2207,7 +2258,7 @@ MODULE_KINDS = (
     "temps", "cores", "drives", "processes", "netinfo", "battery", "values",
     "sun", "analog", "world", "countdown", "image", "music", "agenda", "game",
     "playback", "forecast", "download", "instrument", "cards", "netcard", "volume", "moon",
-    "outlook", "ping", "timer", "power",
+    "outlook", "ping", "timer", "power", "mic",
 )  # fmt: skip
 # Kinds that hold several cards and show one (render.slot); "netcard" is two: a download
 # while one runs, else the network

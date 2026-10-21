@@ -2604,7 +2604,8 @@
     "fans": "wentylatory",
     "ping": "Ping",
     "timer": "Minutnik",
-    "power": "Zużycie energii"
+    "power": "Zużycie energii",
+    "mic": "Mikrofon"
   },
   "icons": {
     "battery": "Bateria",

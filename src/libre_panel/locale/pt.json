@@ -2604,7 +2604,8 @@
     "fans": "ventoinhas",
     "ping": "Ping",
     "timer": "Timer",
-    "power": "Consumo de energia"
+    "power": "Consumo de energia",
+    "mic": "Microfone"
   },
   "icons": {
     "battery": "Bateria",

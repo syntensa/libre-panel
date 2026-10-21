@@ -539,6 +539,7 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `game` | the frame rate of the game being played, its 1% lows and frame time; the history when long or big; "No game running" otherwise ([PresentMon](CONFIGURATION.md#more-sensor-sources), MangoHud on Linux) | |
 | `ping` | how long the internet takes to answer (`net.ping`, the host of `[sensors.psutil] ping`), the share of tries without an answer and the host; the history when long or big | |
 | `timer` | the time left of the [timer](CONFIGURATION.md#timer) in a ring that fills as it runs, whether it is focus or break, and the rounds when long | |
+| `mic` | whether the microphone is muted: the crossed symbol and "Muted" in the critical colour while it is, calm while it is on, "No microphone" where there is none (`audio.mic.muted`) | |
 | `power` | the watts the PC draws now; the energy of today and of the month and what they cost, where there is room; the history when long ([Power use](CONFIGURATION.md#power-use)) | |
 | `playback` | the playback card of SPUR II's Studio screen: cover, state, title, artist, app and progress ([Cards](#cards)); the music module where it is small | |
 | `forecast` | the weather card of the Studio screen: a moving symbol, the temperature and the day's range, the details, the rain and the sun, the next hours ([Cards](#cards)); the weather module where it is small | |

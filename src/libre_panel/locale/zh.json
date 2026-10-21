@@ -2604,7 +2604,8 @@
     "fans": "风扇",
     "ping": "延迟",
     "timer": "计时器",
-    "power": "耗电"
+    "power": "耗电",
+    "mic": "麦克风"
   },
   "icons": {
     "battery": "电池",

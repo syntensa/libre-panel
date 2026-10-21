@@ -17,7 +17,7 @@ import { moduleKinds } from "./ops.js";
 const MODULE_GROUPS = {
   system: ["ring", "stat", "graph", "bars", "network", "system", "temps", "cores", "drives", "processes", "netinfo", "ping", "power", "battery", "values"],
   time: ["clock", "date", "analog", "world", "countdown", "timer", "sun", "moon", "weather", "outlook", "agenda"],
-  media: ["music", "volume", "image", "text"],
+  media: ["music", "volume", "mic", "image", "text"],
   game: ["game"],
 };
 

@@ -2604,7 +2604,8 @@
     "fans": "Lüfter",
     "ping": "Ping",
     "timer": "Timer",
-    "power": "Stromverbrauch"
+    "power": "Stromverbrauch",
+    "mic": "Mikrofon"
   },
   "icons": {
     "battery": "Akku",

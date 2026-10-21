@@ -94,6 +94,7 @@ export const MODULE_ICONS = {
   ping: "pulse",
   timer: "countdown",
   power: "power",
+  mic: "volume",
 };
 
 export const iconOf = (widget) => (isModule(widget) ? MODULE_ICONS[widget.module] || "module" : TYPE_ICONS[widget.type] || "plugin");
