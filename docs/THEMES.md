@@ -515,6 +515,7 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `outlook` | the next days, today first, at most a week: each with its name, a symbol that moves, the high and the low and the chance of rain; side by side when long, one under the other when tall or big; while the weather is off, a line that says where it is set. Lit by itself, as the cards | |
 | `ring` | a ring with the load; details, the hardware's name and a history graph as it grows | `cpu`, `gpu`, `mem`, `disk` |
 | `stat` | a large number; a bar, a history graph and details as it grows | as `ring`, `net`, or `sensor` with `sensor` and `format` |
+| `huge` | one reading as large as the card allows, its name small above it; orange from 80 °C and red from 90 °C (a share: 85 and 95 %), as High Contrast shows the temperatures | as `stat` |
 | `graph` | a history graph under its name and value | as `stat` |
 | `bars` | rows with bars for CPU, RAM, disk and GPU, as many as fit | |
 | `network` | download and upload; graphs when wide or large | |

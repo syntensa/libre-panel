@@ -49,6 +49,10 @@ export const panelSize = () => store.get().app?.panel?.size || null;
  * where that version is installed; else the theme itself (as theme.model.theme_for). */
 export function versionFor(id, themes = installed(), way = mounted(), size = panelSize()) {
   if (!id) return id;
+  // turned as it is mounted (as the app's panel_size), also before the app has said its new size
+  if (size && ((way === "portrait" && size[0] > size[1]) || (way === "landscape" && size[0] < size[1]))) {
+    size = [size[1], size[0]];
+  }
   const sized = SIZED.exec(id);
   const same = sized && size && Number(sized[2]) === size[0] && Number(sized[3]) === size[1];
   if (sized && !same && known(themes, sized[1])) id = sized[1];

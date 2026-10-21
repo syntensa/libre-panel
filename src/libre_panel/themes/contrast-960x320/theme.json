@@ -1,0 +1,92 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "High Contrast 4.6″",
+  "author": "Libre Panel contributors",
+  "license": "CC0-1.0",
+  "description": "White on black in very large digits, for eyes that need it and for a panel read from across the room: the temperatures of the processor and the graphics card, orange when warm and red when hot, and the time.",
+  "display": {
+    "model": "turing-4.6-usb",
+    "orientation": "landscape",
+    "width": 960,
+    "height": 320
+  },
+  "palette": {
+    "bg": "#000000",
+    "bg2": "#000000",
+    "surface": "#000000",
+    "line": "#FFFFFF",
+    "track": "#3A3A3A",
+    "text": "#FFFFFF",
+    "text2": "#F2F2F2",
+    "text3": "#E6E6E6",
+    "dim": "#BDBDBD",
+    "accent": "#FFD60A",
+    "cpu": "#FFD60A",
+    "gpu": "#00E5FF",
+    "mem": "#FFFFFF",
+    "disk": "#FFFFFF",
+    "net": "#00FF85",
+    "warn": "#FF9F0A",
+    "crit": "#FF453A"
+  },
+  "font": "builtin:Barlow-SemiBold",
+  "background": {
+    "color": "@bg",
+    "image": null
+  },
+  "refresh_ms": 1000,
+  "animation": {
+    "smoothing_ms": 400
+  },
+  "grid": {
+    "columns": 3,
+    "rows": 1,
+    "gap": 6,
+    "margin": 6
+  },
+  "style": {
+    "card": "outline",
+    "radius": 8,
+    "glow": 0,
+    "backdrop": "flat",
+    "display_font": "builtin:Barlow-Bold",
+    "text_font": "builtin:Barlow-SemiBold"
+  },
+  "widgets": [
+    {
+      "type": "module",
+      "id": "m-cpu",
+      "module": "huge",
+      "source": "sensor",
+      "sensor": "cpu.temp",
+      "format": "{value:.0f}°",
+      "title": "CPU",
+      "col": 0,
+      "row": 0,
+      "cols": 1,
+      "rows": 1
+    },
+    {
+      "type": "module",
+      "id": "m-gpu",
+      "module": "huge",
+      "source": "sensor",
+      "sensor": "gpu.temp",
+      "format": "{value:.0f}°",
+      "title": "GPU",
+      "col": 1,
+      "row": 0,
+      "cols": 1,
+      "rows": 1
+    },
+    {
+      "type": "module",
+      "id": "m-time",
+      "module": "clock",
+      "col": 2,
+      "row": 0,
+      "cols": 1,
+      "rows": 1
+    }
+  ]
+}

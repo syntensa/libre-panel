@@ -2036,6 +2036,33 @@ def build_ping(b: _Build, _src: Source) -> None:
     _number_rows_history(b, key, "{value:.0f} ms", pairs, color, top)
 
 
+HUGE_LIMITS = {"°": (80, 90), "%": (85, 95)}  # warn and crit, by the unit in the format
+
+
+def build_huge(b: _Build, src: Source) -> None:
+    """One reading as large as the card allows, its name small above it, in the warning and
+    the critical colour from 80 and 90 °C (a share: 85 and 95 %): a screen to read from
+    across the room (High Contrast)."""
+    b.card()
+    sensor, fmt, title = src.load, src.fmt, b.module["title"] or src.label
+    if b.module["source"] == "sensor":
+        sensor = b.module["sensor"] or "cpu.temp"
+        fmt = b.module["format"] or "{value:.0f}°"
+        title = b.module["title"] or sensor
+    label = max(7.0, min(b.ih * 0.13, b.ts * 1.8))
+    b.label("title", title, b.ix + b.iw / 2, b.iy, label, color=b.c("text2"), width=b.iw,
+            align="center")  # fmt: skip
+    top = b.iy + label * (CAP + 0.7)
+    h = b.iy + b.ih - top
+    size = min(h * 0.86 / CAP, b.iw / 2.3)  # four characters: "100%", "72°C"
+    rules = []
+    for mark, (warn, crit) in HUGE_LIMITS.items():
+        if mark in fmt:
+            rules = [{"above": warn, "color": b.c("warn")}, {"above": crit, "color": b.c("crit")}]
+    b.value("value", sensor, fmt, b.ix + b.iw / 2, top + (h - CAP * size) / 2, size,
+            align="center", width=b.iw, fallback="--", color_rules=rules)  # fmt: skip
+
+
 def build_power(b: _Build, _src: Source) -> None:
     """The watts the PC draws now, and the energy of today and of the month with what it costs
     (the ``power`` service)."""
@@ -2234,6 +2261,7 @@ def kinds() -> dict[str, Kind]:
         "weather": Kind(t("Weather"), build_weather, span=(2, 1)),
         "ring": Kind(t("Ring"), build_ring, ("cpu", "gpu", "mem", "disk")),
         "stat": Kind(t("Big number"), build_stat, readings),
+        "huge": Kind(t("Very large number"), build_huge, readings),
         "graph": Kind(t("History"), build_graph, readings, span=(2, 1)),
         "bars": Kind(t("Bars"), build_bars, span=(1, 2)),
         "network": Kind(t("Network"), build_network, span=(2, 1)),
@@ -2283,7 +2311,7 @@ MODULE_KINDS = (
     "temps", "cores", "drives", "processes", "netinfo", "battery", "values",
     "sun", "analog", "world", "countdown", "image", "music", "agenda", "game",
     "playback", "forecast", "download", "instrument", "cards", "netcard", "volume", "moon",
-    "outlook", "ping", "timer", "power", "mic", "ups",
+    "outlook", "ping", "timer", "power", "mic", "ups", "huge",
 )  # fmt: skip
 # Kinds that hold several cards and show one (render.slot); "netcard" is two: a download
 # while one runs, else the network

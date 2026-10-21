@@ -212,6 +212,7 @@ German, French, Spanish, Polish, Portuguese (Brazil) and Simplified Chinese.
 | **Orbit** | round 2.1" and 2.8" | three rings around a large clock |
 | **Column** | 3.5" portrait | the clock, a row per resource and the network |
 | **Pico** | 0.96" (160×80) | CPU with its temperature, and memory |
+| **High Contrast** | every size from 2.1" to 12.3", upright too | white on black in very large digits, to read from across the room: the temperatures of the processor and the graphics card, orange when warm and red when hot, and the time |
 
 Every theme moves to any other panel from the panel button at the top of *Design*. Themes
 are plain JSON with their pictures and fonts, and cannot run code

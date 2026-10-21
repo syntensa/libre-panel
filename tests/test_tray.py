@@ -255,7 +255,8 @@ def test_the_theme_menu_offers_the_panel_s_themes_by_name(tray):
     set_config_value("device.model", "turing-9.2-usb")
     themes = items(items(tray.build_menu())["Theme"].submenu)
     first = list(themes)[: list(themes).index("More themes")]
-    assert first == ["Almanac", "Almanac Analog", "Arena", "Encore", "Lumen", "Nimbus", "Studio"]
+    assert first == ["Almanac", "Almanac Analog", "Arena", "Encore", "High Contrast", "Lumen",
+                     "Nimbus", "Studio"]  # fmt: skip
     more = items(themes["More themes"].submenu)
     assert {"Libre Default", "Column", "Slate", "Round report"} <= set(more)
     assert {"Lumen Companion", "Arena Companion"} <= set(more)  # for a second panel

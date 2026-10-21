@@ -13,6 +13,7 @@ from playwright.sync_api import expect  # noqa: E402
 
 from libre_panel.editor import access  # noqa: E402
 from libre_panel.editor.server import make_server  # noqa: E402
+from libre_panel.theme.model import version_base  # noqa: E402
 
 
 class AppUrl(str):
@@ -382,8 +383,14 @@ def test_a_first_start_offers_the_themes_for_the_panel_it_found(app_url, isolate
         expect(strip).to_contain_text("Your panel is here: Turing 9.2″")
         expect(strip).to_contain_text("1920 × 480")
         themes = js(page, "window.libre.store.get().themes")
+        versions = js(page, "window.libre.store.get().versions")
         own = set(own_themes(page))
-        fits = {i["id"] for i in themes if i["id"] in own and i["size"] == [1920, 480]}
+
+        def made_for(*sizes):  # in its own size, or with a version for it (High Contrast)
+            ids = {i["id"] for i in themes if i["size"] in sizes}
+            return (ids | {version_base(v["id"]) for v in versions if v["size"] in sizes}) & own
+
+        fits = made_for([1920, 480], [480, 1920])
         assert fits and set(shown_themes(page)) == fits and len(fits) < len(themes)
         assert shown_themes(page)[0] == "lumen" and default_theme_card(page) == ["lumen"]
         # the way to the others, and back
@@ -397,9 +404,7 @@ def test_a_first_start_offers_the_themes_for_the_panel_it_found(app_url, isolate
         page.get_by_role("button", name="Another panel").click()
         page.locator(".popover .model-row", has_text="Turing 3.5").first.click()
         expect(strip).to_contain_text("Themes for Turing 3.5″")
-        small = {
-            i["id"] for i in themes if i["id"] in own and i["size"] in ([480, 320], [320, 480])
-        }
+        small = made_for([480, 320], [320, 480])
         expect(page.locator(".theme-card")).to_have_count(len(small))
         assert set(shown_themes(page)) == small
         assert shown_themes(page)[0] == "libre-default"  # the default of the panel named now
@@ -730,7 +735,7 @@ def test_a_collection_does_not_lead_a_first_start_or_the_quick_list(app_url, iso
         assert page.locator(".theme-collection").count() == 0  # nothing of a collection is offered
         # made for the 9.2" panel: Libre Panel's own, its default first, the others A to Z
         assert shown_themes(page) == ["lumen", "almanac", "almanac-analog", "arena", "encore",
-                                      "nimbus", "studio"]  # fmt: skip
+                                      "contrast", "nimbus", "studio"]  # fmt: skip
         page.get_by_role("button", name="See all").click()
         expect(page.locator(".theme-collection")).to_have_count(2)  # closed, at the end
         assert page.locator(".theme-card[data-theme='spur-ii']").count() == 0

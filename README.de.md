@@ -224,6 +224,7 @@ vereinfachtes Chinesisch.
 | **Orbit** | rund, 2,1" und 2,8" | drei Ringe um eine große Uhr |
 | **Column** | 3,5" hochkant | die Uhr, eine Zeile je Ressource und das Netzwerk |
 | **Pico** | 0,96" (160×80) | CPU mit Temperatur, und Arbeitsspeicher |
+| **High Contrast** | jede Größe von 2,1" bis 12,3", auch hochkant | Weiß auf Schwarz in sehr großen Ziffern, auch von weitem lesbar: die Temperaturen von Prozessor und Grafikkarte, orange wenn warm, rot wenn heiß, und die Uhrzeit |
 
 Jedes Theme lässt sich oben in *Gestalten* über den Panel-Knopf auf jedes andere Panel
 bringen. Themes sind schlichtes JSON mit ihren Bildern und Schriften und können keinen Code
