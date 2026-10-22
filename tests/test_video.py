@@ -629,8 +629,9 @@ def test_a_slow_panel_slows_the_frames_down_instead_of_restarting_ffmpeg(panel):
     try:
         panel.block_delay = 0.05  # 20 blocks a second
         durations = []
-        # large pictures; ffmpeg itself holds about 15 frames before it pushes back
-        for frame in noisy_frames(45):
+        # large pictures; ffmpeg and the pipes hold some 15 to 30 frames before they push back
+        # (ffmpeg 8 more than 6), so the panel's pace shows in the frames after them
+        for frame in noisy_frames(60):
             started = time.monotonic()
             display.show(frame)  # as fast as it goes
             durations.append(time.monotonic() - started)
