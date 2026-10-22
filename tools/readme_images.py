@@ -27,7 +27,7 @@ from libre_panel.render.renderer import Renderer
 from libre_panel.sensors.base import Reading
 from libre_panel.sensors.demo import demo_snapshot
 from libre_panel.theme.adapt import adapt_theme
-from libre_panel.theme.model import find_theme, load_theme, parse_theme
+from libre_panel.theme.model import find_theme, load_theme, pair_version, parse_theme
 from libre_panel.theme.modules import LOOKS, look_theme_parts, make_grid, templates
 
 WHEN = datetime(2026, 10, 9, 10, 8, 24).timestamp()  # a Friday morning
@@ -35,8 +35,9 @@ BG_TOP, BG_BOTTOM = (13, 20, 29), (6, 9, 13)
 TX_1, TX_3, ACCENT = (238, 246, 255), (140, 160, 184), (19, 229, 215)
 
 # Each theme as the panel shows it: Libre Panel's own first, the bars before the small panels.
-THEMES = ("lumen", "studio", "encore", "nimbus", "almanac", "almanac-analog", "libre-default",
-          "slate", "orbit", "column", "pico", "spur-ii")  # fmt: skip
+THEMES = ("lumen", "lumen-companion", "studio", "encore", "nimbus", "almanac", "almanac-analog",
+          "arena", "agents", "contrast", "libre-default", "slate", "orbit", "column", "pico",
+          "spur-ii")  # fmt: skip
 # The pictures made of them, and the screenshots of the app (those need Playwright).
 COMPOSED = ("hero.png", "gallery.png", "social-preview.png", "studio-adapts.png", "vertical.png",
             "module-sizes.png", "weather-sizes.png", "looks.png", "module-layouts.png",
@@ -70,6 +71,16 @@ def snapshot():
         "moon.new_in": (18.9, "d", "New moon in"),
     }  # fmt: skip
     for key, (value, unit, label) in moon.items():
+        snap.readings[key] = Reading(key, value, unit, label)
+    # the newer modules' sources: the ping, a UPS, the microphone (muted, to show it)
+    more = {
+        "net.ping": (14.0, "ms", "Ping"), "net.ping.lost": (0.0, "%", "Lost"),
+        "net.ping.host": ("1.1.1.1", "", "Host"), "ups.charge": (100.0, "%", "UPS charge"),
+        "ups.runtime": (38.0, "min", "UPS runtime"), "ups.load": (21.0, "%", "UPS load"),
+        "ups.power": (126.0, "W", "UPS power"), "ups.status": ("Online", "", "UPS state"),
+        "audio.mic.muted": (1, "", "Microphone muted"),
+    }  # fmt: skip
+    for key, (value, unit, label) in more.items():
         snap.readings[key] = Reading(key, value, unit, label)
     return snap
 
@@ -510,16 +521,19 @@ CATALOG = [  # (section, [(kind, options, cols, rows)])
         ("graph", {"source": "net"}, 2, 1), ("bars", {}, 2, 1),
         ("temps", {}, 2, 1), ("cores", {}, 2, 1), ("drives", {}, 2, 1),
         ("processes", {}, 2, 1), ("network", {}, 2, 1), ("netinfo", {}, 2, 1),
-        ("battery", {}, 2, 1), ("game", {}, 2, 1),
+        ("ping", {}, 2, 1), ("battery", {}, 2, 1), ("power", {}, 2, 1), ("ups", {}, 2, 1),
+        ("game", {}, 2, 1), ("huge", {"source": "cpu"}, 2, 1),
     ]),
     ("Time and the sky", [
         ("clock", {}, 2, 1), ("date", {}, 2, 1), ("analog", {}, 2, 1),
         ("world", {}, 2, 1), ("countdown", {"target": "12-24", "title": "Christmas"}, 2, 1),
-        ("sun", {}, 2, 1), ("moon", {}, 2, 1), ("weather", {}, 2, 1), ("outlook", {}, 2, 1),
+        ("timer", {}, 2, 1), ("sun", {}, 2, 1), ("moon", {}, 2, 1), ("weather", {}, 2, 1),
+        ("outlook", {}, 2, 1),
     ]),
     ("Your things", [
-        ("music", {}, 2, 1), ("volume", {}, 2, 1), ("agenda", {}, 2, 1), ("values", {}, 2, 1),
-        ("image", {}, 2, 1), ("system", {}, 2, 1), ("text", {"text": "Libre Panel"}, 2, 1),
+        ("music", {}, 2, 1), ("volume", {}, 2, 1), ("mic", {}, 2, 1), ("agenda", {}, 2, 1),
+        ("values", {}, 2, 1), ("ai", {}, 2, 1), ("image", {}, 2, 1), ("system", {}, 2, 1),
+        ("text", {"text": "Libre Panel"}, 2, 1),
     ]),
 ]  # fmt: skip
 
@@ -740,7 +754,8 @@ def more_panels() -> Image.Image:
     from libre_panel.devices.models import find_model
 
     w, h = arrangement.millimetres(find_model("turing-9.2-usb"))
-    first, second = render("lumen"), render("lumen-companion")
+    # the first panel as the app shows it while a companion runs beside it: its pair version
+    first, second = render(pair_version("lumen") or "lumen"), render("lumen-companion")
     picture = arrangement.photo([((0, 0, w, h), first, False, 1),
                                  ((0, h + 30, w, h), second, False, 2)])  # fmt: skip
     assert picture is not None

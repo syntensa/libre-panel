@@ -55,7 +55,14 @@ from libre_panel.sensors.demo import DemoProvider, demo_history, demo_report
 from libre_panel.sequence import Step
 from libre_panel.services.notices import Notices
 from libre_panel.theme.adapt import adapt_theme
-from libre_panel.theme.model import THEME_FORMAT, find_theme, parse_theme, save_theme
+from libre_panel.theme.model import (
+    THEME_FORMAT,
+    find_theme,
+    load_theme,
+    pair_version,
+    parse_theme,
+    save_theme,
+)
 from libre_panel.theme.modules import look_theme_parts, make_grid
 
 START = 1000.0  # the loop's clock at the first frame of a clip (the number is arbitrary)
@@ -430,7 +437,10 @@ class Stage:
 
     # -- running
 
-    def _begin(self) -> MainLoop:
+    def _begin(self, at: float = START) -> MainLoop:
+        """The panel's main loop, its first frame due at ``at``, with the history its graphs
+        would have by then (read before the loop draws its first theme ahead, as the app does
+        with the readings it has)."""
         config = Config(
             theme=self.start,
             language="en",
@@ -444,18 +454,18 @@ class Stage:
             sequence=SequenceConfig(True, [Step(theme, s) for theme, s in self.turns]),
         )
         hub = SensorHub([self.speakers, ClipDemo(self.clock, self._tweaks, self.period)])
+        every = (config.refresh_ms or load_theme(find_theme(self.start)).refresh_ms) / 1000
+        for k in range(
+            min(PREFILL_MAX, round(PREFILL_S / every)), 0, -1
+        ):  # what graphs drew so far
+            self.clock.now = at - k * every
+            hub.snapshot()
+        self.clock.now = at
         loop = MainLoop(
             config, host=self.host, hub=hub, display=Eye(self.settings.fps), clock=self.clock
         )
         if self.leave_s is not None:
             loop.pages.leave_s = self.leave_s
-        every = (config.refresh_ms or loop.theme.refresh_ms) / 1000
-        for k in range(
-            min(PREFILL_MAX, round(PREFILL_S / every)), 0, -1
-        ):  # what graphs drew so far
-            self.clock.now = START - k * every
-            hub.snapshot()
-        self.clock.now = START
         options = apply_options(Notices.options, {"music": False, "restarted": False}, "notices")
         self.notices = Notices(
             ServiceHost(self.host, "notices"), options, clock=self.clock,
@@ -470,7 +480,7 @@ class Stage:
         A frame is only good until the next is asked for (the renderer draws on it again):
         take what you need before going on."""
         fps = self.settings.fps
-        self.loop = self._begin()
+        self.loop = self._begin(START - round(warmup * fps) / fps)
         events = sorted(self._events)
         done = 0
         try:
@@ -1009,11 +1019,12 @@ def alarm_at(stage: Stage, start: float, end: float) -> None:
     stage.at(end, say(0))
 
 
-# Two bars, one above the other: Lumen, and Lumen Companion beside it. A burst of work goes up on
-# both at once, the same fans turning in step; then the processor gets too hot: both edges pulse
-# red, and the second shows High Contrast until it has cooled.
+# Two bars, one above the other: Lumen (its pair version), and Lumen Companion beside it. A burst
+# of work goes up on both at once, the same fans turning in step; then the processor gets too hot:
+# both edges pulse red, and the second shows High Contrast until it has cooled.
 def more_panels(stage: Stage, themes: tuple[str, ...]) -> None:
-    stage.show(stage.theme(themes[0]))
+    # as the app does while a companion runs beside it: the first panel's pair version
+    stage.show(stage.theme(pair_version(themes[0]) or themes[0]))
     work_burst(stage, at=0.8)
     alarm_at(stage, 3.6, 6.8)
 
@@ -1038,7 +1049,7 @@ def record_panels(
         stage = Stage(settings)
         stack.enter_context(mock.patch.object(base, "time", _ClipMonotonic(stage.clock)))
         clip.setup(stage, themes)
-        first = stage._begin()
+        first = stage._begin(START - round(clip.warmup * settings.fps) / settings.fps)
         stage.loop = first
         beside = []
         for n, theme in enumerate(themes[1:]):
@@ -1085,7 +1096,7 @@ PANELS_CLIPS: dict[str, PanelsClip] = {
     "more-panels": PanelsClip(
         "two panels at once: the same beat on both, then an alarm that turns both edges red",
         ("lumen", "lumen-companion"), 9.0, more_panels, places=((0, 0), (0, 1)),
-        alarm=("contrast",), poster=4.4,
+        alarm=("contrast",), poster=3.0,
     ),
 }  # fmt: skip
 

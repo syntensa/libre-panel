@@ -2366,9 +2366,11 @@ def _ai_agent(b: _Build, name: str, x: float, y: float, w: float, h: float,
             hide_if_missing=True)  # fmt: skip
     row = line + small * 2.0
     bar_h = max(4, round(small * 0.5))
+    # when a window begins anew, where it fits between the window's name and its share
+    reset = tw >= small * 15
     for window, label in meters[:rows]:
         b.label(f"{name}-{window}-label", label, tx, row, small * 0.9, width=tw * 0.5)
-        if window != "context":  # when the window begins anew, beside how much of it is used
+        if window != "context" and reset:
             b.value(f"{name}-{window}-reset", f"{key}.{window}_reset", "{value:duration}",
                     tx + tw - small * 4.2, row, small * 0.9, color=calm, align="right",
                     width=tw * 0.3, font="text_font", tabular=False, fallback="",

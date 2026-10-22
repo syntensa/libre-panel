@@ -1,12 +1,16 @@
 # Changelog
 
-## 0.7.0rc6 — 2026-10-22
+## 0.7.0 — 2026-10-22
 
-A release candidate of 0.7.0, to try before everyone has it: up to four panels at once, placed
-where they stand, a pair of screens that share out what they show, with scenes, one picture
-across them, the same beat and an alarm on all of them; new modules for the ping, a timer, the
-power the PC draws and the UPS; a screen of what Claude Code and Codex do; a theme in very
-large digits; a portable zip that is portable; and much more that was collected since 0.6.9.
+Up to four panels at once, placed where they stand: a companion screen beside the first that
+shows what the first one leaves out, so nothing is on both, with scenes, one picture across
+them, the same beat and an alarm on all of them. A screen of what Claude Code and Codex do;
+new modules for the ping, a timer, the power the PC draws, the microphone and a UPS; High
+Contrast, in very large digits; drivers for panels of JONSBO, Lian Li, Hongtai and VMAX; one
+look for every card on every screen; a portable zip that is portable; and much more since
+0.6.9.
+
+![Two bars at once: Lumen, and Lumen Companion below it with every core, the temperatures, the drives and the processes, in the same beat](https://raw.githubusercontent.com/syntensa/libre-panel/v0.7.0/docs/media/more-panels.gif)
 
 **New**
 - **AI activity**: what Claude Code and Codex do on this PC, on the panel: working, waiting
@@ -193,6 +197,8 @@ large digits; a portable zip that is portable; and much more that was collected 
 - `tools/panels_bench.py`: how much two panels in video mode slow each other down
 
 **Fixes**
+- The AI activity module at two cells wrote when a limit begins anew over the limit's name:
+  that time is left out where it does not fit between the name and the share
 - Arena's rings moved in jerks where Lumen's glide: a lit ring's light was made whole for every
   value, ten milliseconds a frame on the 12.3", so its pictures came late. It is now the light
   of the whole ring up to the tip, made anew only around the tip: the same pixels, a third of

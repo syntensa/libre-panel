@@ -560,3 +560,20 @@ def test_claude_code_alone_also_shows_how_full_its_context_is():
     assert shown <= alone
     assert not any(key.startswith("ai.codex.") for key in alone)
     assert "ai.codex.state" in both and "ai.claude.context" not in both  # (side by side: alike)
+
+
+def test_the_module_says_when_a_window_begins_anew_only_where_it_fits():
+    from libre_panel.theme.modules import expand
+
+    def shown(cols, rows):
+        data = {"format": "libre-panel-theme/1", "name": "ai",
+                "display": {"model": "turing-9.2-usb"},
+                "widgets": [{"type": "module", "id": "m0", "module": "ai", "col": 0, "row": 0,
+                             "cols": cols, "rows": rows}]}  # fmt: skip
+        widgets, _boxes = expand(parse_theme(data))
+        return {w["id"].split("/")[1] for w in widgets if w["id"].endswith(("-reset", "-label"))}
+
+    windows = {f"{a}-{window}" for a in ("claude", "codex") for window in ("five_hour", "week")}
+    # two cells: the name of each window and its share, with no room for the time between them
+    assert shown(2, 1) == {f"{w}-label" for w in windows}
+    assert shown(4, 2) == {f"{w}-label" for w in windows} | {f"{w}-reset" for w in windows}

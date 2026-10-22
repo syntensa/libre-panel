@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Libre Panel: free software for USB system-monitor panels</title>
-<meta name="description" content="Libre Panel drives the small USB system-monitor panels by TURZX, Turing Smart Screen, WeAct, Kipye and others: video mode up to 50 fps, cards, notices, game mode and an app to design your own. Works out of the box: sensors, fans, GPU and ffmpeg come with it. Free and open source, for Windows and Linux, no account, no cloud.">
+<meta name="description" content="Libre Panel drives the small USB system-monitor panels by TURZX, Turing Smart Screen, WeAct, Kipye and others: video mode up to 50 fps, up to four panels at once, cards, notices, game mode and an app to design your own. Works out of the box: sensors, fans, GPU and ffmpeg come with it. Free and open source, for Windows and Linux, no account, no cloud.">
 <link rel="canonical" href="https://syntensa.github.io/libre-panel/">
 <link rel="alternate" hreflang="en" href="https://syntensa.github.io/libre-panel/">
 <link rel="alternate" hreflang="de" href="https://syntensa.github.io/libre-panel/de/">
@@ -68,12 +68,12 @@
 <main id="main">
   <section class="hero" id="top" aria-labelledby="hero-title">
     <div class="wrap hero-copy">
-      <p class="news"><span class="dot"></span><span>New in 0.5: video mode, cards, notices and an app of its own</span>
+      <p class="news"><span class="dot"></span><span>New in 0.7: up to four panels at once, companion screens, AI activity and 35 modules</span>
         <a href="https://github.com/syntensa/libre-panel/releases/latest">What's new</a></p>
       <h1 id="hero-title">Your PC's vitals as <em>moving light</em>.</h1>
       <p class="lead">Libre Panel drives the small USB system-monitor panels sold as TURZX, Turing
-        Smart Screen, WeAct, Kipye and more: your processor, graphics card, fans, network, what is
-        playing and the weather, at up to 50 frames a second. It works out of the box: the downloads
+        Smart Screen, WeAct, Kipye and more, up to four at once: your processor, graphics card, fans,
+        network, what is playing and the weather, at up to 50 frames a second. It works out of the box: the downloads
         carry what the features run, and the setup does the rest after one question. Free and open
         source, for Windows and Linux, without an account or a cloud.</p>
       <div class="actions">
@@ -101,7 +101,8 @@
           <li><span class="dot" style="background: var(--gpu)"></span>0.96" to 12.3", round and portrait</li>
           <li><span class="dot" style="background: var(--ram)"></span>Windows and Linux</li>
           <li><span class="dot" style="background: var(--net)"></span>No account, no cloud</li>
-          <li><span class="dot" style="background: var(--warn)"></span>English and German</li>
+          <li><span class="dot" style="background: var(--accent)"></span>Up to four panels at once</li>
+          <li><span class="dot" style="background: var(--warn)"></span>Seven languages</li>
         </ul>
       </div>
     </div>
@@ -113,8 +114,8 @@
         <p class="kicker">A 30-second tour</p>
         <h2 id="tour-title">A panel that moves with your PC</h2>
         <p>Every clip here is Libre Panel itself, recorded frame by frame with demo values: Lumen on the
-          9.2" bar, Studio for the notice, Encore, Nimbus and Almanac, Libre Default on a 3.5" panel,
-          and the panel's own start screen as Libre Panel draws it.</p>
+          9.2" bar, Studio for the notice, Encore, Nimbus and Almanac, two bars at once, Libre Default on
+          a 3.5" panel, and the panel's own start screen as Libre Panel draws it.</p>
       </div>
 
       <article class="feature feature-wide">
@@ -311,6 +312,42 @@
         </figure>
       </article>
 
+      <article class="feature feature-wide">
+        <div class="feature-copy">
+          <div><span class="label">More panels</span><h3>Up to four panels, in one beat</h3></div>
+          <p>Each panel with its own theme, on the same readings and in the same beat. A panel added
+            beside Lumen gets Lumen Companion: every core, the temperatures with the fans turning,
+            the drives and the processes, while Lumen leaves out what its companion shows, so nothing
+            is on both. Encore, Almanac and Arena have companions too. When a sensor reaches its
+            critical limit, every panel's edge pulses red.</p>
+          <p class="note">Settings → Panel places them in their real sizes beside your monitor. One
+            picture can go across all of them, a scene changes every panel with one click, and each
+            has its own start screen.</p>
+        </div>
+        <figure class="media">
+          <video loop muted playsinline preload="none" width="2430" height="1724" data-lazy data-poster="media/more-panels.png" aria-label="Two 9.2-inch bars one above the other: Lumen, and Lumen Companion below it with every core, the temperatures, the drives and the processes; a burst of work goes up on both in the same beat, then the processor gets too hot, both edges pulse red and the second panel shows High Contrast until it has cooled">
+            <source src="media/more-panels.webm" type="video/webm">
+            <source src="media/more-panels.mp4" type="video/mp4">
+          </video>
+          <noscript><img src="media/more-panels.gif" width="960" height="681" loading="lazy" alt="Two panels at once: Lumen and Lumen Companion"></noscript>
+          <button class="toggle" type="button" data-playing="false" data-pause="Pause the clip" data-play="Play the clip" aria-label="Play the clip"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+        </figure>
+      </article>
+
+      <article class="feature feature-wide">
+        <div class="feature-copy">
+          <div><span class="label">AI activity</span><h3>What Claude Code and Codex are doing</h3></div>
+          <p>Working, waiting for you or idle, each with a moving sign, the tool at work, and how much
+            of the plan's limits of five hours and of the week is used, with the time until they
+            begin anew.</p>
+          <p class="note">Settings → Services → AI activity shows what it adds to the programs'
+            settings before it writes, and takes it out again. Nothing leaves this PC.</p>
+        </div>
+        <figure class="media">
+          <img src="images/agents.png" width="1920" height="480" loading="lazy" decoding="async" alt="Agents on a 9.2-inch bar: Claude Code working with the tool at work, Codex waiting for you, each with how much of five hours and seven days is used, beside the time">
+        </figure>
+      </article>
+
       <article class="feature">
         <div class="feature-copy">
           <span class="label">Every panel</span>
@@ -356,7 +393,7 @@
         <h2 id="app-title">Everything in one window</h2>
         <p>Libre Panel's app opens in a window of its own and draws every picture with the panel's own
           renderer: what you see is what the panel shows. It speaks English, German, French, Spanish,
-          Polish and Portuguese (Brazil), and keyboard shortcuts for the whole PC pause the panel,
+          Polish, Portuguese (Brazil) and Simplified Chinese, and keyboard shortcuts for the whole PC pause the panel,
           turn its brightness or open it from any window.</p>
         <ul class="views">
           <li><b>Start</b> the panel and its themes</li>
@@ -376,8 +413,8 @@
           <button class="toggle" type="button" data-playing="false" data-pause="Pause the clip" data-play="Play the clip" aria-label="Play the clip"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
         </div>
         <figcaption><strong>Design</strong>Drag building blocks onto the panel. A module fits itself to
-          the room you give it and shows more the larger it is: 28 of them, from every core to your
-          next appointment.</figcaption>
+          the room you give it and shows more the larger it is: 35 of them, from every core to the
+          ping, a timer, the power the PC draws and your next appointment.</figcaption>
       </figure>
       <div class="app-grid">
         <figure class="tile">
@@ -466,6 +503,30 @@
             A clock with the month: the time large beside the month with today and the week; Almanac
             Analog has a face whose second hand glides.</figcaption>
         </figure>
+        <figure class="theme wide">
+          <div class="theme-picture"><img src="images/arena.png" width="1920" height="480" loading="lazy" decoding="async" alt="Arena"></div>
+          <figcaption><span class="theme-name">Arena <span class="size">8.8" and 9.2"</span></span>
+            For game mode: the frame rate large with its 1% low, the frame time and what holds it
+            back, CPU and GPU as instruments, every core and the temperatures.</figcaption>
+        </figure>
+        <figure class="theme wide">
+          <div class="theme-picture"><img src="images/lumen-companion.png" width="1920" height="480" loading="lazy" decoding="async" alt="Lumen Companion"></div>
+          <figcaption><span class="theme-name">Lumen Companion <span class="chip chip-accent">Beside Lumen</span><span class="size">8.8" and 9.2"</span></span>
+            For a second panel: every core, the temperatures with the fans turning, the drives and the
+            processes. Arena, Encore and Almanac have companions too.</figcaption>
+        </figure>
+        <figure class="theme wide">
+          <div class="theme-picture"><img src="images/agents.png" width="1920" height="480" loading="lazy" decoding="async" alt="Agents"></div>
+          <figcaption><span class="theme-name">Agents <span class="size">8.8", 9.2" and 12.3"</span></span>
+            What Claude Code and Codex do, and how much of the plan's limits is used, beside the
+            time; Agents Claude shows Claude Code alone.</figcaption>
+        </figure>
+        <figure class="theme wide">
+          <div class="theme-picture"><img src="images/contrast.png" width="1920" height="480" loading="lazy" decoding="async" alt="High Contrast"></div>
+          <figcaption><span class="theme-name">High Contrast <span class="size">2.1" to 12.3", upright too</span></span>
+            White on black in very large digits, to read from across the room: the processor's and
+            the graphics card's temperatures, orange when warm and red when hot, and the time.</figcaption>
+        </figure>
         <figure class="theme">
           <div class="theme-picture"><img src="images/libre-default.png" width="480" height="320" loading="lazy" decoding="async" alt="Libre Default"></div>
           <figcaption><span class="theme-name">Libre Default <span class="chip chip-accent">Default</span><span class="size">3.5"</span></span>
@@ -493,7 +554,7 @@
         </figure>
         <figure class="theme mine">
           <div class="theme-picture"><img src="images/looks.png" width="2042" height="1021" loading="lazy" decoding="async" alt="The same layout in six looks: Arctic, Neon, Graphite, Paper, Sunset and Mono"></div>
-          <figcaption><span class="theme-name">Your own <span class="chip chip-quiet">28 modules · 6 looks</span></span>
+          <figcaption><span class="theme-name">Your own <span class="chip chip-quiet">35 modules · 6 looks</span></span>
             Start from a layout or any theme. Themes are plain JSON with their pictures and fonts,
             cannot run code, and are easy to share.</figcaption>
         </figure>
@@ -511,7 +572,7 @@
             <li>A part steps aside when its readings are missing: the disk takes the ring of a graphics
               card that reports nothing.</li>
             <li>Nothing playing and no weather: the card shows the day.</li>
-            <li>Dates and weather in English or German, for the place you set.</li>
+            <li>Dates and weather in seven languages, for the place you set.</li>
           </ul>
         </div>
         <figure class="media media-plain">
@@ -592,8 +653,9 @@
               <span class="desc">From Open-Meteo, with the next hours and the rain of the next two hours;
                 no API key.</span></li>
             <li><b>And more</b>
-              <span class="desc">Every core, drive and fan, calendars, Home Assistant, MQTT, sunrise and
-                the moon, and PresentMon for games.</span></li>
+              <span class="desc">Every core, drive and fan, the ping to up to four hosts, a UPS through
+                Network UPS Tools, values from JSON, calendars, Home Assistant, MQTT, sunrise and the
+                moon, PresentMon for games, and MangoHud on Linux.</span></li>
           </ul>
         </div>
         <div class="card">
@@ -610,6 +672,10 @@
               FanControl's curves against what the PC did; reads, never writes.</span></li>
             <li><b>Downloads</b><span class="chip off">off</span><span class="desc">Steam and browser
               downloads for the network card.</span></li>
+            <li><b>AI activity</b><span class="chip off">off</span><span class="desc">What Claude
+              Code and Codex do, from their own hooks, on this PC only.</span></li>
+            <li><b>Timer and power use</b><span class="chip off">off</span><span class="desc">Focus
+              and break in turn; the watts the PC draws, kWh and what they cost.</span></li>
             <li><b>Autopilot</b><span class="chip off">off</span><span class="desc">Picks the theme by
               the rules you write.</span></li>
             <li><b>Devices</b><span class="chip off">off</span><span class="desc">Drives, USB devices and
@@ -626,18 +692,22 @@
         <p class="kicker">Panels</p>
         <h2 id="panels-title">The panels it drives</h2>
         <p>Every one plugs in with USB. TURZX USB panels are USB devices with a video decoder; the
-          others show up as a virtual COM port.</p>
+          older kind shows up as a virtual COM port, and the newest here are USB devices of their own.</p>
       </div>
       <table class="table">
         <thead><tr><th scope="col">Panel</th><th scope="col">Sizes</th><th scope="col">Connects as</th><th scope="col">Status</th></tr></thead>
         <tbody>
-          <tr><th scope="row">Turing / TURZX</th><td data-label="Sizes">2.8" round, 4.6", 5.2", 8", 8.8", 9.2", 12.3"</td><td data-label="Connects as">USB device, video mode</td>
-            <td class="status"><span class="state ok">Runs on the 9.2" and 8.8"</span><small>Hours of stills and 50 fps video on the 9.2", the 8.8" as its owners report; the other sizes speak the same protocol</small></td></tr>
-          <tr><th scope="row">Turing Smart Screen</th><td data-label="Sizes">2.1" round, 3.5", 5", 8.8"</td><td data-label="Connects as">virtual COM port</td><td class="status"><span class="state wait">Unverified</span></td></tr>
+          <tr><th scope="row">Turing / TURZX</th><td data-label="Sizes">1.6", 2.1" round, 2.8" round, 4.6", 5.2", 8", 8.8", 9.2", 12.3"</td><td data-label="Connects as">USB device, video mode</td>
+            <td class="status"><span class="state ok">Runs on the 9.2", 8.8" and 12.3"</span><small>Hours of stills and 50 fps video on the 9.2", the 8.8" and 12.3" as their owners report; the other sizes speak the same protocol</small></td></tr>
+          <tr><th scope="row">Turing Smart Screen</th><td data-label="Sizes">2.1" round, 3.5", 5", 8.8"</td><td data-label="Connects as">virtual COM port</td><td class="status"><span class="state ok">Runs on the 3.5" and 8.8"</span><small>As their owners report; the 2.1" and 5" are unverified</small></td></tr>
           <tr><th scope="row">UsbPCMonitor</th><td data-label="Sizes">3.5", 5", 7"</td><td data-label="Connects as">virtual COM port</td><td class="status"><span class="state wait">Unverified</span></td></tr>
           <tr><th scope="row">XuanFang</th><td data-label="Sizes">3.5"</td><td data-label="Connects as">virtual COM port</td><td class="status"><span class="state wait">Unverified</span></td></tr>
           <tr><th scope="row">Kipye Qiye</th><td data-label="Sizes">3.5"</td><td data-label="Connects as">virtual COM port</td><td class="status"><span class="state wait">Unverified</span></td></tr>
           <tr><th scope="row">WeAct Display FS V1</th><td data-label="Sizes">0.96", 3.5"</td><td data-label="Connects as">virtual COM port</td><td class="status"><span class="state wait">Unverified</span></td></tr>
+          <tr><th scope="row">JONSBO</th><td data-label="Sizes">ZC-360 fan screens (3 × 3.38"), TF3-360SC pump (3.5"), DS916 (9.16"), DS339 (3.39")</td><td data-label="Connects as">USB devices</td><td class="status"><span class="state wait">New, unverified</span><small>Drivers after other projects' notes, without smooth motion</small></td></tr>
+          <tr><th scope="row">Lian Li</th><td data-label="Sizes">Universal Screen 8.8" and 9.2", HydroShift II LCD and OLED Curve</td><td data-label="Connects as">USB device, JPEG pictures</td><td class="status"><span class="state wait">New, unverified</span></td></tr>
+          <tr><th scope="row">Hongtai / Jungle Leopard</th><td data-label="Sizes">960×480, the strip 1920×462 (Chill Arc 360 and other screens on its firmware)</td><td data-label="Connects as">USB serial port, JPEG pictures</td><td class="status"><span class="state wait">New, unverified</span></td></tr>
+          <tr><th scope="row">VMAX</th><td data-label="Sizes">4.6", 960×320</td><td data-label="Connects as">USB display chip (MS9132)</td><td class="status"><span class="state wait">New, unverified</span><small>Choose the model: not found by "auto"</small></td></tr>
         </tbody>
       </table>
       <div class="callout">
@@ -676,9 +746,12 @@
           <li><b>New versions</b>Start asks once whether to look. Say yes, and once a day one request
             asks GitHub for the latest release; it carries the version you have, nothing about you or
             your panel.</li>
-          <li><b>What you connect yourself</b>Calendars, Home Assistant and MQTT talk to the addresses you
-            give them. The ping of the network details module connects to 1.1.1.1 while it is on the
-            panel, and a cover a player names by a web address is loaded from there.</li>
+          <li><b>What you connect yourself</b>Calendars, Home Assistant, MQTT, a JSON address and a UPS
+            talk to the addresses you give them. The ping connects to 1.1.1.1 (or the hosts you set)
+            while a theme shows it, and a cover a player names by a web address is loaded from there.</li>
+          <li><b>AI activity</b>Off until you switch it on and set up Claude Code or Codex. Their hooks
+            hand what they do to Libre Panel on this PC only; for the plan's usage Libre Panel asks the
+            programs, which ask their own servers with your sign-in.</li>
           <li><b>The optional services</b>Keep what they learn on this PC, in a file you can open or
             delete. FanControl's configuration is read, never written. No track title, window title or
             file name is read.</li>
@@ -727,7 +800,7 @@
       </ol>
       <div class="python">
         <p>With Python instead:</p>
-<pre><code>pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.5.0"
+<pre><code>pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.7.0"
 libre-panel tray               <span class="c"># the background app with its tray icon</span>
 libre-panel doctor             <span class="c"># check your panel, write a report</span></code></pre>
       </div>

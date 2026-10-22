@@ -45,7 +45,8 @@
 
 Plug in the panel, start Libre Panel, and it shows your processor, graphics card, memory,
 fans, network, what is playing and the weather outside, in a theme you pick or build
-yourself. It runs quietly in the tray and takes the vendor app's place.
+yourself, on up to four panels at once. It runs quietly in the tray and takes the vendor
+app's place.
 
 **Everything works out of the box.** Sensors, fans, graphics card, game frame rates (Windows)
 and the 50 fps video mode need no other program. The downloads carry what the features run;
@@ -155,13 +156,31 @@ the panel's own boot logo and standby clip are drawn upright too.
 
 ### More panels at once
 
-<img src="docs/images/more-panels.png" width="100%" alt="Two 9.2-inch bars one above the other: Lumen with the track, the time, the fans and the rings, and Lumen Companion below it with every core, the temperatures with the fans turning, the drives and the processes">
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/images/more-panels.png">
+  <img src="docs/media/more-panels.gif" width="100%" alt="Two 9.2-inch bars one above the other: Lumen with the track, the time and the rings, and Lumen Companion below it with every core, the temperatures with the fans turning, the drives and the processes; a burst of work goes up on both in the same beat, then the processor gets too hot, both edges pulse red and the second panel shows High Contrast until it has cooled">
+</picture>
 
-Up to four panels at once, each with its own theme, on the same readings. A panel added
-beside Lumen gets Lumen Companion; *Settings → Panel* places them in their real sizes beside
-your monitor, one picture can go across all of them, a scene changes every panel at
-once, and *Picture of all panels* saves the picture above, to share. Live, the tray and the
-Overview show each panel.
+Up to four panels at once, each with its own theme, on the same readings and in the same
+beat. A panel added beside Lumen gets **Lumen Companion**: every core, the temperatures with
+the fans turning, the drives and the processes, while Lumen leaves out what its companion
+shows, so nothing is on both. Encore, Almanac and Arena have companions too, and a companion
+follows the first panel into a game. *Settings → Panel* places the panels in their real sizes
+beside your monitor; one picture can go across all of them, a scene puts a theme on every
+panel with one click, and a module moves from one panel to another. When a sensor reaches its
+critical limit, every panel's edge pulses red. Each panel has its own start screen, Live, the
+tray and the Overview show each one, and *Picture of all panels* saves them where they stand,
+to share.
+
+### What your AI tools are doing
+
+<img src="docs/images/agents.png" width="100%" alt="Agents on a 9.2-inch bar: Claude Code working, with its moving sign and the tool at work, Codex waiting for you, each with how much of the plan's five hours and seven days is used and when they begin anew, beside the time">
+
+**Agents** shows what Claude Code and Codex do on this PC: working, waiting for you or idle,
+each with a moving sign, the tool at work, and how much of the plan's limits is used with the
+time until they begin anew. *Settings → Services → AI activity* shows what it adds to the
+programs' settings before it writes, and takes it out again; nothing leaves this PC
+([AI activity](docs/CONFIGURATION.md#ai-activity)).
 
 ### Every panel size
 
@@ -175,7 +194,8 @@ out for it. Libre Default, here on a 3.5" panel, is the default on every panel b
 <img src="docs/media/app-drag-module.gif" width="100%" alt="Design: a weather module is dragged from the library onto a 3.5-inch panel and made wider, and shows more as it grows">
 
 **Design**: drag building blocks onto the panel. A module fits itself to the room you give
-it and shows more the larger it is; 28 of them, from every core to your next appointment.
+it and shows more the larger it is; 35 of them, from every core to the ping, a timer, the
+power the PC draws and your next appointment.
 
 <img src="docs/media/app-look.gif" width="100%" alt="Look: a click on the colour world Neon recolours the whole of Lumen, and a test notice shows how notices will look">
 
@@ -213,6 +233,7 @@ German, French, Spanish, Polish, Portuguese (Brazil) and Simplified Chinese.
 | **Orbit** | round 2.1" and 2.8" | three rings around a large clock |
 | **Column** | 3.5" portrait | the clock, a row per resource and the network |
 | **Pico** | 0.96" (160×80) | CPU with its temperature, and memory |
+| **Companions** | a panel beside the first, 9.2" either way up and 12.3" | Lumen Companion (every core, the temperatures with the fans, the drives, the processes), Arena Companion, Encore Companion and Almanac Companion: what the first panel's screen leaves out, while it leaves out what they show |
 | **High Contrast** | every size from 2.1" to 12.3", upright too | white on black in very large digits, to read from across the room: the temperatures of the processor and the graphics card, orange when warm and red when hot, and the time |
 
 Every theme moves to any other panel from the panel button at the top of *Design*. Themes
@@ -222,14 +243,16 @@ are plain JSON with their pictures and fonts, and cannot run code
 screens of SPUR II as a legacy collection, see [Where it started](#where-it-started).
 
 <details>
-<summary><b>All 28 modules</b>: the building blocks of your own themes</summary>
+<summary><b>All 35 modules</b>: the building blocks of your own themes</summary>
 <br>
-<p align="center"><img src="docs/images/module-catalog.png" width="100%" alt="Every module at two cells: ring, big number, history, bars, temperatures, CPU cores, drives, processes, network, network details, battery, game FPS; time, calendar, analog clock, world clock, countdown, sun and moon, moon, weather, next days; music, volume, agenda, dashboard, picture, system and title"></p>
+<p align="center"><img src="docs/images/module-catalog.png" width="100%" alt="Every module at two cells: ring, big number, history, bars, temperatures, CPU cores, drives, processes, network, network details, ping, battery, power use, UPS, game FPS, very large number; time, calendar, analog clock, world clock, countdown, timer, sun and moon, moon, weather, next days; music, volume, microphone, agenda, dashboard, AI activity, picture, system and title"></p>
 
-Hardware down to every core, drive and fan; clocks for any time zone, a countdown, sunrise,
-sunset and the moon (computed, no internet); what is playing, your calendars (any `.ics`),
-Home Assistant and MQTT values, a slideshow. Each module shows more the larger it is, steps
-aside when its readings are missing, and costs nothing while no theme shows it.
+Hardware down to every core, drive and fan, the ping, the power the PC draws and what it
+costs, a UPS; clocks for any time zone, a countdown, a timer, sunrise, sunset and the moon
+(computed, no internet); what is playing, whether the microphone is muted, your calendars (any
+`.ics`), Home Assistant, MQTT and JSON values, what Claude Code and Codex do, a slideshow.
+Each module shows more the larger it is, steps aside when its readings are missing, and costs
+nothing while no theme shows it.
 </details>
 
 ## Supported panels
@@ -340,7 +363,7 @@ downloads carry and what each system sets up: [Out of the box](#out-of-the-box).
 With Python instead:
 
 ```bash
-pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.5.0"
+pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.7.0"
 libre-panel tray                    # the background app with its tray icon; opens its window
 libre-panel autostart enable        # start it whenever you log in
 ```
@@ -381,8 +404,8 @@ every start.
 - **Notices from other programs** are off until you allow them, and then taken only from this
   PC and only with the key Libre Panel made for them.
 - **What you connect yourself** talks to the address you give it: calendars (`.ics`),
-  Home Assistant, MQTT. The ping of the network details module connects to 1.1.1.1 (or the
-  host you set) while that module is on the panel, and a cover that a player names by a web
+  Home Assistant, MQTT, a JSON address, a UPS's upsd. The ping connects to 1.1.1.1 (or the
+  hosts you set) while a theme shows it, and a cover that a player names by a web
   address is loaded from there.
 - **The optional services** keep what they learn on this PC: the memory and the round report
   in a SQLite file you can open or delete; the cooling analysis reads FanControl's

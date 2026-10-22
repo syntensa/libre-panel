@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Libre Panel: freie Software für USB-Systemmonitor-Panels</title>
-<meta name="description" content="Libre Panel steuert die kleinen USB-Systemmonitor-Panels von TURZX, Turing Smart Screen, WeAct, Kipye und anderen: Videomodus mit bis zu 50 fps, Karten, Hinweise, Spielmodus und eine App zum Gestalten. Funktioniert sofort, out of the box: Sensoren, Lüfter, GPU und ffmpeg sind dabei. Frei und quelloffen, für Windows und Linux, ohne Konto, ohne Cloud.">
+<meta name="description" content="Libre Panel steuert die kleinen USB-Systemmonitor-Panels von TURZX, Turing Smart Screen, WeAct, Kipye und anderen: Videomodus mit bis zu 50 fps, bis zu vier Panels zugleich, Karten, Hinweise, Spielmodus und eine App zum Gestalten. Funktioniert sofort, out of the box: Sensoren, Lüfter, GPU und ffmpeg sind dabei. Frei und quelloffen, für Windows und Linux, ohne Konto, ohne Cloud.">
 <link rel="canonical" href="https://syntensa.github.io/libre-panel/de/">
 <link rel="alternate" hreflang="en" href="https://syntensa.github.io/libre-panel/">
 <link rel="alternate" hreflang="de" href="https://syntensa.github.io/libre-panel/de/">
@@ -68,11 +68,11 @@
 <main id="main">
   <section class="hero" id="top" aria-labelledby="hero-title">
     <div class="wrap hero-copy">
-      <p class="news"><span class="dot"></span><span>Neu in 0.5: Videomodus, Karten, Hinweise und eine eigene App</span>
+      <p class="news"><span class="dot"></span><span>Neu in 0.7: bis zu vier Panels zugleich, Companion-Screens, KI-Aktivität und 35 Module</span>
         <a href="https://github.com/syntensa/libre-panel/releases/latest">Was ist neu</a></p>
       <h1 id="hero-title">Die Werte deines PCs als <em>bewegtes Licht</em>.</h1>
       <p class="lead">Libre Panel steuert die kleinen USB-Systemmonitor-Panels, die als TURZX, Turing
-        Smart Screen, WeAct, Kipye und unter vielen anderen Namen verkauft werden: Prozessor,
+        Smart Screen, WeAct, Kipye und unter vielen anderen Namen verkauft werden, bis zu vier zugleich: Prozessor,
         Grafikkarte, Lüfter, Netzwerk, was gerade läuft und das Wetter, mit bis zu 50 Bildern pro
         Sekunde. Es funktioniert out of the box: Die Downloads bringen mit, was die Funktionen
         ausführen, und das Setup richtet den Rest nach einer einzigen Frage ein. Frei und quelloffen,
@@ -102,7 +102,8 @@
           <li><span class="dot" style="background: var(--gpu)"></span>0,96" bis 12,3", rund und hochkant</li>
           <li><span class="dot" style="background: var(--ram)"></span>Windows und Linux</li>
           <li><span class="dot" style="background: var(--net)"></span>Ohne Konto, ohne Cloud</li>
-          <li><span class="dot" style="background: var(--warn)"></span>Deutsch und Englisch</li>
+          <li><span class="dot" style="background: var(--accent)"></span>Bis zu vier Panels zugleich</li>
+          <li><span class="dot" style="background: var(--warn)"></span>Sieben Sprachen</li>
         </ul>
       </div>
     </div>
@@ -114,8 +115,8 @@
         <p class="kicker">In 30 Sekunden</p>
         <h2 id="tour-title">Ein Panel, das sich mit deinem PC bewegt</h2>
         <p>Jeder Clip hier ist Libre Panel selbst, Bild für Bild aufgenommen mit Demo-Werten: Lumen auf
-          der 9,2"-Leiste, Studio für den Hinweis, Encore, Nimbus und Almanac, Libre Default auf einem
-          3,5"-Panel und der eigene Startbildschirm des Panels, wie Libre Panel ihn zeichnet.</p>
+          der 9,2"-Leiste, Studio für den Hinweis, Encore, Nimbus und Almanac, zwei Leisten zugleich,
+          Libre Default auf einem 3,5"-Panel und der eigene Startbildschirm des Panels, wie Libre Panel ihn zeichnet.</p>
       </div>
 
       <article class="feature feature-wide">
@@ -318,6 +319,43 @@
         </figure>
       </article>
 
+      <article class="feature feature-wide">
+        <div class="feature-copy">
+          <div><span class="label">Mehrere Panels</span><h3>Bis zu vier Panels, in einem Takt</h3></div>
+          <p>Jedes Panel mit eigenem Theme, auf denselben Messwerten und im selben Takt. Ein Panel neben
+            Lumen bekommt Lumen Companion: jeden Kern, die Temperaturen mit drehenden Lüftern, die
+            Laufwerke und die Prozesse, und Lumen lässt weg, was sein Companion zeigt, sodass nichts
+            doppelt steht. Encore, Almanac und Arena haben auch einen. Erreicht ein Sensor seine
+            kritische Grenze, pulsiert der Rand jedes Panels rot.</p>
+          <p class="note">Einstellungen → Panel stellt sie in echter Größe neben deinen Monitor. Ein Bild
+            kann über alle gehen, eine Szene wechselt mit einem Klick jedes Panel, und jedes hat seinen
+            eigenen Startbildschirm.</p>
+        </div>
+        <figure class="media">
+          <video loop muted playsinline preload="none" width="2430" height="1724" data-lazy data-poster="../media/more-panels.png" aria-label="Zwei 9,2-Zoll-Leisten übereinander: Lumen, darunter Lumen Companion mit jedem Kern, den Temperaturen, den Laufwerken und den Prozessen; eine Last steigt auf beiden im selben Takt, dann wird der Prozessor zu heiß, beide Ränder pulsieren rot und das zweite Panel zeigt High Contrast, bis er abgekühlt ist">
+            <source src="../media/more-panels.webm" type="video/webm">
+            <source src="../media/more-panels.mp4" type="video/mp4">
+          </video>
+          <noscript><img src="../media/more-panels.gif" width="960" height="681" loading="lazy" alt="Zwei Panels zugleich: Lumen und Lumen Companion"></noscript>
+          <button class="toggle" type="button" data-playing="false" data-pause="Clip anhalten" data-play="Clip abspielen" aria-label="Clip abspielen"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
+        </figure>
+      </article>
+
+      <article class="feature feature-wide">
+        <div class="feature-copy">
+          <div><span class="label">KI-Aktivität</span><h3>Was Claude Code und Codex gerade tun</h3></div>
+          <p>Arbeitet, wartet auf dich oder ruht, jedes mit einem bewegten Zeichen, dem Werkzeug bei
+            der Arbeit und wie viel von den Limits des Abos für fünf Stunden und die Woche verbraucht
+            ist, mit der Zeit, bis sie neu beginnen.</p>
+          <p class="note">Unter Einstellungen → Dienste → KI-Aktivität siehst du, was in den
+            Einstellungen der Programme ergänzt wird, bevor etwas geschrieben wird, und nimmst es dort
+            wieder heraus. Nichts verlässt diesen PC.</p>
+        </div>
+        <figure class="media">
+          <img src="../images/agents.png" width="1920" height="480" loading="lazy" decoding="async" alt="Agents auf einer 9,2-Zoll-Leiste: Claude Code arbeitet mit dem Werkzeug bei der Arbeit, Codex wartet auf dich, jedes mit dem verbrauchten Anteil von fünf Stunden und sieben Tagen, neben der Uhrzeit">
+        </figure>
+      </article>
+
       <article class="feature">
         <div class="feature-copy">
           <span class="label">Jedes Panel</span>
@@ -363,7 +401,8 @@
         <h2 id="app-title">Alles in einem Fenster</h2>
         <p>Die App von Libre Panel öffnet sich in einem eigenen Fenster und zeichnet jedes Bild mit dem
           Renderer des Panels: Was du siehst, zeigt auch das Panel. Sie spricht Deutsch, Englisch,
-          Französisch, Spanisch, Polnisch und Portugiesisch (Brasilien), und Tastenkürzel für den
+          Französisch, Spanisch, Polnisch, Portugiesisch (Brasilien) und vereinfachtes Chinesisch, und
+          Tastenkürzel für den
           ganzen PC halten das Panel an, ändern seine Helligkeit oder öffnen sie aus jedem Fenster.</p>
         <ul class="views">
           <li><b>Start</b> das Panel und seine Themes</li>
@@ -383,8 +422,8 @@
           <button class="toggle" type="button" data-playing="false" data-pause="Clip anhalten" data-play="Clip abspielen" aria-label="Clip abspielen"><svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg></button>
         </div>
         <figcaption><strong>Gestalten</strong>Bausteine aufs Panel ziehen. Ein Modul passt sich dem Platz
-          an, den du ihm gibst, und zeigt umso mehr, je größer es ist: 28 davon, von jedem Kern bis zum
-          nächsten Termin.</figcaption>
+          an, den du ihm gibst, und zeigt umso mehr, je größer es ist: 35 davon, von jedem Kern über
+          den Ping, einen Timer und den Stromverbrauch des PCs bis zum nächsten Termin.</figcaption>
       </figure>
       <div class="app-grid">
         <figure class="tile">
@@ -474,6 +513,30 @@
             Eine Uhr mit dem Monat: die Uhrzeit groß neben dem Monat mit heute und der
             Kalenderwoche; Almanac Analog hat ein Zifferblatt mit gleitendem Sekundenzeiger.</figcaption>
         </figure>
+        <figure class="theme wide">
+          <div class="theme-picture"><img src="../images/arena.png" width="1920" height="480" loading="lazy" decoding="async" alt="Arena"></div>
+          <figcaption><span class="theme-name">Arena <span class="size">8,8" und 9,2"</span></span>
+            Für den Spielmodus: die Bildrate groß mit ihrem 1-%-Tief, der Frametime und was sie
+            bremst, CPU und GPU als Instrumente, jeder Kern und die Temperaturen.</figcaption>
+        </figure>
+        <figure class="theme wide">
+          <div class="theme-picture"><img src="../images/lumen-companion.png" width="1920" height="480" loading="lazy" decoding="async" alt="Lumen Companion"></div>
+          <figcaption><span class="theme-name">Lumen Companion <span class="chip chip-accent">Neben Lumen</span><span class="size">8,8" und 9,2"</span></span>
+            Für ein zweites Panel: jeder Kern, die Temperaturen mit drehenden Lüftern, die Laufwerke
+            und die Prozesse. Arena, Encore und Almanac haben auch einen Companion.</figcaption>
+        </figure>
+        <figure class="theme wide">
+          <div class="theme-picture"><img src="../images/agents.png" width="1920" height="480" loading="lazy" decoding="async" alt="Agents"></div>
+          <figcaption><span class="theme-name">Agents <span class="size">8,8", 9,2" und 12,3"</span></span>
+            Was Claude Code und Codex tun und wie viel von den Limits des Abos verbraucht ist, neben
+            der Uhrzeit; Agents Claude zeigt Claude Code allein.</figcaption>
+        </figure>
+        <figure class="theme wide">
+          <div class="theme-picture"><img src="../images/contrast.png" width="1920" height="480" loading="lazy" decoding="async" alt="High Contrast"></div>
+          <figcaption><span class="theme-name">High Contrast <span class="size">2,1" bis 12,3", auch hochkant</span></span>
+            Weiß auf Schwarz in sehr großen Ziffern, auch von weitem lesbar: die Temperaturen von
+            Prozessor und Grafikkarte, orange wenn warm, rot wenn heiß, und die Uhrzeit.</figcaption>
+        </figure>
         <figure class="theme">
           <div class="theme-picture"><img src="../images/libre-default.png" width="480" height="320" loading="lazy" decoding="async" alt="Libre Default"></div>
           <figcaption><span class="theme-name">Libre Default <span class="chip chip-accent">Standard</span><span class="size">3,5"</span></span>
@@ -501,7 +564,7 @@
         </figure>
         <figure class="theme mine">
           <div class="theme-picture"><img src="../images/looks.png" width="2042" height="1021" loading="lazy" decoding="async" alt="Dasselbe Layout in sechs Looks: Arctic, Neon, Graphite, Paper, Sunset und Mono"></div>
-          <figcaption><span class="theme-name">Dein eigenes <span class="chip chip-quiet">28 Module · 6 Looks</span></span>
+          <figcaption><span class="theme-name">Dein eigenes <span class="chip chip-quiet">35 Module · 6 Looks</span></span>
             Beginn mit einem Layout oder einem beliebigen Theme. Themes sind schlichtes JSON mit ihren
             Bildern und Schriften, können keinen Code ausführen und lassen sich leicht teilen.</figcaption>
         </figure>
@@ -520,7 +583,7 @@
             <li>Ein Teil tritt zur Seite, wenn seine Messwerte fehlen: Das Laufwerk übernimmt den Ring
               einer Grafikkarte, die nichts meldet.</li>
             <li>Läuft nichts und gibt es kein Wetter, zeigt die Karte den Tag.</li>
-            <li>Datum und Wetter auf Deutsch oder Englisch, für den Ort, den du einstellst.</li>
+            <li>Datum und Wetter in sieben Sprachen, für den Ort, den du einstellst.</li>
           </ul>
         </div>
         <figure class="media media-plain">
@@ -603,8 +666,9 @@
               <span class="desc">Von Open-Meteo, mit den nächsten Stunden und dem Regen der nächsten zwei
                 Stunden; ohne API-Schlüssel.</span></li>
             <li><b>Und mehr</b>
-              <span class="desc">Jeder Kern, jedes Laufwerk und jeder Lüfter, Kalender, Home Assistant,
-                MQTT, Sonnenaufgang und Mond, und PresentMon für Spiele.</span></li>
+              <span class="desc">Jeder Kern, jedes Laufwerk und jeder Lüfter, der Ping zu bis zu vier
+                Hosts, eine USV über Network UPS Tools, Werte aus JSON, Kalender, Home Assistant, MQTT,
+                Sonnenaufgang und Mond, PresentMon für Spiele und MangoHud unter Linux.</span></li>
           </ul>
         </div>
         <div class="card">
@@ -622,6 +686,10 @@
               von FanControl gegen das, was der PC getan hat; liest, schreibt nie.</span></li>
             <li><b>Downloads</b><span class="chip off">aus</span><span class="desc">Downloads von Steam
               und aus dem Browser für die Netzwerk-Karte.</span></li>
+            <li><b>KI-Aktivität</b><span class="chip off">aus</span><span class="desc">Was Claude
+              Code und Codex tun, aus ihren eigenen Hooks, nur auf diesem PC.</span></li>
+            <li><b>Timer und Stromverbrauch</b><span class="chip off">aus</span><span class="desc">Fokus
+              und Pause im Wechsel; die Watt, die der PC zieht, kWh und was sie kosten.</span></li>
             <li><b>Autopilot</b><span class="chip off">aus</span><span class="desc">Wählt das Theme nach
               den Regeln, die du schreibst.</span></li>
             <li><b>Geräte</b><span class="chip off">aus</span><span class="desc">Laufwerke, USB-Geräte
@@ -638,18 +706,22 @@
         <p class="kicker">Panels</p>
         <h2 id="panels-title">Die Panels, die es ansteuert</h2>
         <p>Jedes wird per USB angeschlossen. TURZX-USB-Panels sind USB-Geräte mit Videodecoder; die
-          anderen melden sich als virtueller COM-Port.</p>
+          ältere Art meldet sich als virtueller COM-Port, und die neuesten hier sind eigene USB-Geräte.</p>
       </div>
       <table class="table">
         <thead><tr><th scope="col">Panel</th><th scope="col">Größen</th><th scope="col">Meldet sich als</th><th scope="col">Stand</th></tr></thead>
         <tbody>
-          <tr><th scope="row">Turing / TURZX</th><td data-label="Größen">rund 2,8", 4,6", 5,2", 8", 8,8", 9,2", 12,3"</td><td data-label="Meldet sich als">USB-Gerät, Videomodus</td>
-            <td class="status"><span class="state ok">Läuft auf dem 9,2" und 8,8"</span><small>Stundenlang als Standbild und als Video mit 50 fps auf dem 9,2", das 8,8" laut seinen Besitzern; die anderen Größen sprechen dasselbe Protokoll</small></td></tr>
-          <tr><th scope="row">Turing Smart Screen</th><td data-label="Größen">rund 2,1", 3,5", 5", 8,8"</td><td data-label="Meldet sich als">virtueller COM-Port</td><td class="status"><span class="state wait">Ungeprüft</span></td></tr>
+          <tr><th scope="row">Turing / TURZX</th><td data-label="Größen">1,6", rund 2,1", rund 2,8", 4,6", 5,2", 8", 8,8", 9,2", 12,3"</td><td data-label="Meldet sich als">USB-Gerät, Videomodus</td>
+            <td class="status"><span class="state ok">Läuft auf dem 9,2", 8,8" und 12,3"</span><small>Stundenlang als Standbild und als Video mit 50 fps auf dem 9,2", das 8,8" und das 12,3" laut ihren Besitzern; die anderen Größen sprechen dasselbe Protokoll</small></td></tr>
+          <tr><th scope="row">Turing Smart Screen</th><td data-label="Größen">rund 2,1", 3,5", 5", 8,8"</td><td data-label="Meldet sich als">virtueller COM-Port</td><td class="status"><span class="state ok">Läuft auf dem 3,5" und 8,8"</span><small>Laut ihren Besitzern; das 2,1" und das 5" sind ungeprüft</small></td></tr>
           <tr><th scope="row">UsbPCMonitor</th><td data-label="Größen">3,5", 5", 7"</td><td data-label="Meldet sich als">virtueller COM-Port</td><td class="status"><span class="state wait">Ungeprüft</span></td></tr>
           <tr><th scope="row">XuanFang</th><td data-label="Größen">3,5"</td><td data-label="Meldet sich als">virtueller COM-Port</td><td class="status"><span class="state wait">Ungeprüft</span></td></tr>
           <tr><th scope="row">Kipye Qiye</th><td data-label="Größen">3,5"</td><td data-label="Meldet sich als">virtueller COM-Port</td><td class="status"><span class="state wait">Ungeprüft</span></td></tr>
           <tr><th scope="row">WeAct Display FS V1</th><td data-label="Größen">0,96", 3,5"</td><td data-label="Meldet sich als">virtueller COM-Port</td><td class="status"><span class="state wait">Ungeprüft</span></td></tr>
+          <tr><th scope="row">JONSBO</th><td data-label="Größen">ZC-360-Lüfterdisplays (3 × 3,38"), TF3-360SC-Pumpe (3,5"), DS916 (9,16"), DS339 (3,39")</td><td data-label="Meldet sich als">USB-Geräte</td><td class="status"><span class="state wait">Neu, ungeprüft</span><small>Treiber nach den Notizen anderer Projekte, ohne flüssige Bewegung</small></td></tr>
+          <tr><th scope="row">Lian Li</th><td data-label="Größen">Universal Screen 8,8" und 9,2", HydroShift II LCD und OLED Curve</td><td data-label="Meldet sich als">USB-Gerät, JPEG-Bilder</td><td class="status"><span class="state wait">Neu, ungeprüft</span></td></tr>
+          <tr><th scope="row">Hongtai / Jungle Leopard</th><td data-label="Größen">960×480, die Leiste 1920×462 (Chill Arc 360 und andere Displays mit dieser Firmware)</td><td data-label="Meldet sich als">USB-Serial-Port, JPEG-Bilder</td><td class="status"><span class="state wait">Neu, ungeprüft</span></td></tr>
+          <tr><th scope="row">VMAX</th><td data-label="Größen">4,6", 960×320</td><td data-label="Meldet sich als">USB-Displaychip (MS9132)</td><td class="status"><span class="state wait">Neu, ungeprüft</span><small>Modell wählen: „auto“ findet es nicht</small></td></tr>
         </tbody>
       </table>
       <div class="callout">
@@ -690,10 +762,13 @@
           <li><b>Neue Versionen</b>Start fragt einmal, ob nachgesehen werden soll. Sagst du ja, geht
             einmal am Tag eine Anfrage an GitHub nach der neuesten Version; sie trägt nur deine
             Versionsnummer, nichts über dich oder dein Panel.</li>
-          <li><b>Was du selbst anbindest</b>Kalender, Home Assistant und MQTT sprechen mit den Adressen,
-            die du ihnen gibst. Der Ping des Moduls Netzwerkdetails verbindet sich mit 1.1.1.1, solange
-            es auf dem Panel ist, und ein Cover, das ein Player per Webadresse nennt, wird von dort
-            geladen.</li>
+          <li><b>Was du selbst anbindest</b>Kalender, Home Assistant, MQTT, eine JSON-Adresse und eine
+            USV sprechen mit den Adressen, die du ihnen gibst. Der Ping verbindet sich mit 1.1.1.1
+            (oder den Hosts, die du einstellst), solange ein Theme ihn zeigt, und ein Cover, das ein
+            Player per Webadresse nennt, wird von dort geladen.</li>
+          <li><b>KI-Aktivität</b>Aus, bis du sie einschaltest und Claude Code oder Codex einrichtest.
+            Ihre Hooks geben, was sie tun, nur auf diesem PC an Libre Panel weiter; für die Nutzung des
+            Abos fragt Libre Panel die Programme, die mit deiner Anmeldung ihre eigenen Server fragen.</li>
           <li><b>Die optionalen Dienste</b>Behalten, was sie lernen, auf diesem PC, in einer Datei, die du
             öffnen oder löschen kannst. Die Konfiguration von FanControl wird gelesen, nie geschrieben.
             Kein Titel, kein Fenstertitel und kein Dateiname wird gelesen.</li>
@@ -746,7 +821,7 @@
       </ol>
       <div class="python">
         <p>Mit Python:</p>
-<pre><code>pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.5.0"
+<pre><code>pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.7.0"
 libre-panel tray               <span class="c"># die Hintergrund-App mit Tray-Symbol</span>
 libre-panel doctor             <span class="c"># das Panel prüfen, Bericht schreiben</span></code></pre>
       </div>

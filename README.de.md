@@ -45,7 +45,8 @@
 
 Panel anstecken, Libre Panel starten: Es zeigt Prozessor, Grafikkarte, Arbeitsspeicher,
 Lüfter, Netzwerk, was gerade läuft und das Wetter draußen, in einem Theme, das du auswählst
-oder selbst baust. Es läuft unauffällig im Tray und ersetzt die Hersteller-App.
+oder selbst baust, auf bis zu vier Panels zugleich. Es läuft unauffällig im Tray und ersetzt
+die Hersteller-App.
 
 **Alles funktioniert sofort, out of the box.** Sensoren, Lüfter, Grafikkarte, Bildraten in
 Spielen (Windows) und der Videomodus mit 50 fps brauchen kein weiteres Programm. Die Downloads
@@ -163,13 +164,32 @@ eigene Bootlogo und der Standby-Clip des Panels werden ebenfalls hochkant gezeic
 
 ### Mehrere Panels zugleich
 
-<img src="docs/images/more-panels.png" width="100%" alt="Zwei 9,2-Zoll-Leisten übereinander: Lumen mit dem Titel, der Uhrzeit, den Lüftern und den Ringen, darunter Lumen Companion mit jedem Kern, den Temperaturen mit drehenden Lüftern, den Laufwerken und den Prozessen">
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="docs/images/more-panels.png">
+  <img src="docs/media/more-panels.gif" width="100%" alt="Zwei 9,2-Zoll-Leisten übereinander: Lumen mit dem Titel, der Uhrzeit und den Ringen, darunter Lumen Companion mit jedem Kern, den Temperaturen mit drehenden Lüftern, den Laufwerken und den Prozessen; eine Last steigt auf beiden im selben Takt, dann wird der Prozessor zu heiß, beide Ränder pulsieren rot und das zweite Panel zeigt High Contrast, bis er abgekühlt ist">
+</picture>
 
-Bis zu vier Panels zugleich, jedes mit eigenem Theme, auf denselben Messwerten. Ein Panel
-neben Lumen bekommt Lumen Companion; unter *Einstellungen → Panel* stehen sie in echter Größe
-neben deinem Monitor, ein Bild kann über alle gehen, eine Szene wechselt alle Panels auf einmal,
-und *Bild aller Panels* speichert das Bild oben, zum Teilen. Live, das Tray und die
-Übersicht zeigen jedes Panel.
+Bis zu vier Panels zugleich, jedes mit eigenem Theme, auf denselben Messwerten und im selben
+Takt. Ein Panel neben Lumen bekommt **Lumen Companion**: jeden Kern, die Temperaturen mit
+drehenden Lüftern, die Laufwerke und die Prozesse, und Lumen lässt weg, was sein Companion
+zeigt, sodass nichts doppelt steht. Encore, Almanac und Arena haben auch einen, und ein
+Companion folgt dem ersten Panel ins Spiel. Unter *Einstellungen → Panel* stehen die Panels in
+echter Größe neben deinem Monitor; ein Bild kann über alle gehen, eine Szene legt mit einem
+Klick auf jedes Panel ein Theme, und ein Modul zieht von einem Panel aufs andere. Erreicht ein
+Sensor seine kritische Grenze, pulsiert der Rand jedes Panels rot. Jedes Panel hat seinen
+eigenen Startbildschirm, Live, das Tray und die Übersicht zeigen jedes, und *Bild aller Panels*
+speichert sie, wie sie stehen, zum Teilen.
+
+### Was deine KI-Werkzeuge gerade tun
+
+<img src="docs/images/agents.png" width="100%" alt="Agents auf einer 9,2-Zoll-Leiste: Claude Code arbeitet, mit seinem bewegten Zeichen und dem Werkzeug bei der Arbeit, Codex wartet auf dich, jedes mit dem verbrauchten Anteil von fünf Stunden und sieben Tagen des Abos und wann sie neu beginnen, neben der Uhrzeit">
+
+**Agents** zeigt, was Claude Code und Codex auf diesem PC tun: arbeitet, wartet auf dich oder
+ruht, jedes mit einem bewegten Zeichen, dem Werkzeug bei der Arbeit und wie viel von den
+Limits des Abos verbraucht ist, mit der Zeit, bis sie neu beginnen. Unter *Einstellungen →
+Dienste → KI-Aktivität* siehst du, was in den Einstellungen der Programme ergänzt wird, bevor
+etwas geschrieben wird, und nimmst es dort wieder heraus; nichts verlässt diesen PC
+([KI-Aktivität](docs/CONFIGURATION.md#ai-activity)).
 
 ### Jede Panelgröße
 
@@ -184,8 +204,8 @@ außer den 8,8"- und 9,2"-Leisten.
 <img src="docs/media/app-drag-module.gif" width="100%" alt="Gestalten: ein Wetter-Modul wird aus der Bibliothek auf ein 3,5-Zoll-Panel gezogen, breiter gemacht und zeigt beim Wachsen mehr">
 
 **Gestalten**: Bausteine aufs Panel ziehen. Ein Modul passt sich dem Platz an, den du ihm
-gibst, und zeigt umso mehr, je größer es ist; 28 davon, von jedem Kern bis zum nächsten
-Termin.
+gibst, und zeigt umso mehr, je größer es ist; 35 davon, von jedem Kern über den Ping, einen
+Timer und den Stromverbrauch des PCs bis zum nächsten Termin.
 
 <img src="docs/media/app-look.gif" width="100%" alt="Look: ein Klick auf die Farbwelt Neon färbt ganz Lumen um, und ein Testhinweis zeigt, wie Hinweise aussehen werden">
 
@@ -225,6 +245,7 @@ vereinfachtes Chinesisch.
 | **Orbit** | rund, 2,1" und 2,8" | drei Ringe um eine große Uhr |
 | **Column** | 3,5" hochkant | die Uhr, eine Zeile je Ressource und das Netzwerk |
 | **Pico** | 0,96" (160×80) | CPU mit Temperatur, und Arbeitsspeicher |
+| **Companions** | ein Panel neben dem ersten, 9,2" in beiden Richtungen und 12,3" | Lumen Companion (jeder Kern, die Temperaturen mit den Lüftern, die Laufwerke, die Prozesse), Arena Companion, Encore Companion und Almanac Companion: was der Screen des ersten Panels weglässt, während er weglässt, was sie zeigen |
 | **High Contrast** | jede Größe von 2,1" bis 12,3", auch hochkant | Weiß auf Schwarz in sehr großen Ziffern, auch von weitem lesbar: die Temperaturen von Prozessor und Grafikkarte, orange wenn warm, rot wenn heiß, und die Uhrzeit |
 
 Jedes Theme lässt sich oben in *Gestalten* über den Panel-Knopf auf jedes andere Panel
@@ -234,15 +255,16 @@ ausführen ([Theme-Format](docs/THEMES.md)). Eins gebaut, das dir gefällt? Teil
 acht Bildschirme von SPUR II als Legacy-Sammlung, siehe [Wo alles begann](#wo-alles-begann).
 
 <details>
-<summary><b>Alle 28 Module</b>: die Bausteine eigener Themes</summary>
+<summary><b>Alle 35 Module</b>: die Bausteine eigener Themes</summary>
 <br>
-<p align="center"><img src="docs/images/module-catalog.png" width="100%" alt="Jedes Modul auf zwei Zellen: Ring, große Zahl, Verlauf, Balken, Temperaturen, CPU-Kerne, Laufwerke, Prozesse, Netzwerk, Netzwerkdetails, Akku, Spiel-FPS; Uhrzeit, Kalender, Analoguhr, Weltuhr, Countdown, Sonne und Mond, Mond, Wetter, die nächsten Tage; Musik, Lautstärke, Termine, Dashboard, Bild, System und Titel"></p>
+<p align="center"><img src="docs/images/module-catalog.png" width="100%" alt="Jedes Modul auf zwei Zellen: Ring, große Zahl, Verlauf, Balken, Temperaturen, CPU-Kerne, Laufwerke, Prozesse, Netzwerk, Netzwerkdetails, Ping, Akku, Stromverbrauch, USV, Spiel-FPS, sehr große Zahl; Uhrzeit, Kalender, Analoguhr, Weltuhr, Countdown, Timer, Sonne und Mond, Mond, Wetter, die nächsten Tage; Musik, Lautstärke, Mikrofon, Termine, Dashboard, KI-Aktivität, Bild, System und Titel"></p>
 
-Hardware bis zu jedem Kern, jedem Laufwerk und jedem Lüfter; Uhren für jede Zeitzone, ein
-Countdown, Sonnenauf- und -untergang und der Mond (berechnet, ohne Internet); was gerade
-läuft, deine Kalender (jede `.ics`), Werte aus Home Assistant und MQTT, eine Diashow. Jedes
-Modul zeigt umso mehr, je größer es ist, tritt zur Seite, wenn seine Messwerte fehlen, und
-kostet nichts, solange kein Theme es zeigt.
+Hardware bis zu jedem Kern, jedem Laufwerk und jedem Lüfter, der Ping, der Strom, den der PC
+zieht, und was er kostet, eine USV; Uhren für jede Zeitzone, ein Countdown, ein Timer,
+Sonnenauf- und -untergang und der Mond (berechnet, ohne Internet); was gerade läuft, ob das
+Mikrofon stumm ist, deine Kalender (jede `.ics`), Werte aus Home Assistant, MQTT und JSON, was
+Claude Code und Codex tun, eine Diashow. Jedes Modul zeigt umso mehr, je größer es ist, tritt
+zur Seite, wenn seine Messwerte fehlen, und kostet nichts, solange kein Theme es zeigt.
 </details>
 
 ## Unterstützte Panels
@@ -358,7 +380,7 @@ jedes System einrichtet: [Sofort startklar](#sofort-startklar).
 Mit Python:
 
 ```bash
-pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.5.0"
+pipx install "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v0.7.0"
 libre-panel tray                    # die Hintergrund-App mit Tray-Symbol; öffnet ihr Fenster
 libre-panel autostart enable        # bei jeder Anmeldung starten
 ```
@@ -401,8 +423,8 @@ Anfragen mit einem geheimen Token, der bei jedem Start neu ist.
 - **Hinweise von anderen Programmen** sind aus, bis du sie erlaubst, und kommen dann nur von
   diesem PC und nur mit dem Schlüssel, den Libre Panel dafür erstellt hat.
 - **Was du selbst anbindest**, spricht mit der Adresse, die du ihm gibst: Kalender (`.ics`),
-  Home Assistant, MQTT. Der Ping des Moduls Netzwerkdetails verbindet sich mit 1.1.1.1 (oder
-  dem Host, den du einstellst), solange das Modul auf dem Panel ist, und ein Cover, das ein
+  Home Assistant, MQTT, eine JSON-Adresse, der upsd einer USV. Der Ping verbindet sich mit
+  1.1.1.1 (oder den Hosts, die du einstellst), solange ein Theme ihn zeigt, und ein Cover, das ein
   Player per Webadresse nennt, wird von dort geladen.
 - **Die optionalen Dienste** behalten, was sie lernen, auf diesem PC: Gedächtnis und
   Rundenbericht in einer SQLite-Datei, die du öffnen oder löschen kannst; die Kühlungsanalyse
