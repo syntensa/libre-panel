@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.0rc4 — 2026-10-22
+## 0.7.0rc5 — 2026-10-22
 
 A release candidate of 0.7.0, to try before everyone has it: up to four panels at once, placed
 where they stand, a pair of screens that share out what they show, with scenes, one picture
