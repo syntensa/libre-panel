@@ -152,6 +152,13 @@ large digits; a portable zip that is portable; and much more that was collected 
   the fields and their units; the headers stay in config.toml
 - **The tray**: the timer while it runs (start or pause, back to the start), and each panel's
   brightness, as panel 1's or its own
+- **Nothing twice beside a companion**: in every size and on end, the first panel's screen
+  and its companion share no value. Lumen and Arena have their pair versions for the 5.2" and
+  for bars on end too (without the fans, or the cores and temperatures, which the companion
+  shows); the companions' cores leave out the processor's load and its history, which the
+  first panel's ring and graph show (*Whole processor* in the cores module); and Encore's and
+  Almanac's companions say "No weather set up" while the weather is off, instead of the date
+  and the month that the first panel shows (*Without weather* in the weather module)
 - **One look for every card**: Lumen, Encore, Almanac, Studio and the round report frame
   their cards as the modules and the companions do, in every size: a faint line, corners
   and line as thick as the card's size up to half the panel's height. Lumen's card for the
@@ -208,6 +215,7 @@ large digits; a portable zip that is portable; and much more that was collected 
 - Writing the standby clip on the Start screen page ended in an error after the clip was on
   the panel; its name now goes into the first panel's settings only where the clip went to
   that panel
+- *Sun & moon* without a place set up drew the night's symbol over the moon on the 12.3"
 - *Sun & moon* in a low, wide place left out its arc with an error; where the arc has no
   room, the times stay
 - The weather module on a panel on end (tall and narrow) showed today alone under a large empty

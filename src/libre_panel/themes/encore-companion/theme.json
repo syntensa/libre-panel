@@ -126,7 +126,8 @@
       "col": 12,
       "row": 1,
       "cols": 22,
-      "rows": 46
+      "rows": 46,
+      "fallback": "none"
     },
     {
       "type": "module",

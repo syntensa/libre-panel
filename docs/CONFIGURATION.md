@@ -300,12 +300,15 @@ theme, and those for a game, music and an alarm); *To the panel* puts the theme 
 **A companion beside the first panel.** Lumen, Arena, Encore and Almanac each have a companion
 for a second panel (Lumen Companion, Arena Companion, Encore Companion, Almanac Companion), for
 the 9.2" either way up and the 12.3". While a companion shows on a panel beside it, the first
-panel shows its theme's pair version, which leaves out what the companion shows: Lumen without
-its fans (the companion has them with every core, the other temperatures, the drives and the
-processes), Arena with the game and the two chips large (the companion has the temperatures,
-fans, cores, the ping and the processes), Encore without the cover (the companion shows it large,
-with the weather and the sun and moon); Almanac has nothing twice and stays as it is, beside
-the weather of the next hours and days, the sun and moon and your appointments. A companion
+panel shows its theme's pair version (in every size, on end too), which leaves out what the
+companion shows: Lumen without its fans (the companion has them with every core, the other
+temperatures, the drives and the processes), Arena with the game and the two chips large (the
+companion has the temperatures, fans, cores, the ping and the processes), Encore without the
+cover (the companion shows it large, with the weather and the sun and moon); Almanac has nothing
+twice and stays as it is, beside the weather of the next hours and days, the sun and moon and
+your appointments. No value shows on both: a companion's cores leave out the processor's load
+(the first panel's ring shows it), and its weather card says that no weather is set up instead
+of showing the date while the weather is off. A companion
 follows the first panel's page: Arena's beside Arena while you play, Encore's while music
 plays, Almanac's at rest, unless its `game_theme`, `media_theme` (or a page in Design) names a
 theme of its own. A companion that is away a moment (a reconnect) keeps the pair for ten

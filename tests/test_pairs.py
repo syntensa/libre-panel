@@ -28,7 +28,10 @@ def test_a_pair_version_is_a_version_of_its_theme():
     for name in PAIRED:
         assert pair_version(name) == f"{name}-pair"
         assert pair_version(f"{name}-1920x720") == f"{name}-pair-1920x720"
-    assert pair_version("lumen-vertical") is None  # none made: the theme as it is
+    for name in ("lumen", "arena"):  # on end and on the 5.2" too
+        assert pair_version(f"{name}-vertical") == f"{name}-pair-vertical"
+        assert pair_version(f"{name}-1280x720") == f"{name}-pair-1280x720"
+    assert pair_version("encore-vertical") is None  # none made: nothing to leave out
     assert pair_version("almanac") is None  # Almanac has nothing its companion shows
     assert pair_version("nimbus") is None and pair_version("lumen-companion") is None
     assert pair_version("lumen-pair-1920x720") is None
@@ -93,9 +96,10 @@ def test_a_pair_version_leaves_out_what_its_companion_shows():
         theme = json.loads((builtin_themes_dir() / name / "theme.json").read_text(encoding="utf-8"))
         return theme["widgets"]
 
-    for size in ("", "-1920x720"):
+    for size in ("", "-1920x720", "-1280x720", "-vertical"):
         assert not [w for w in widgets(f"lumen-pair{size}") if w["type"] == "fan"]
         assert {w.get("module") for w in widgets(f"arena-pair{size}")} == {"game", "instrument"}
+    for size in ("", "-1920x720"):
         assert not [w for w in widgets(f"encore-pair{size}") if w["id"] == "cover"]
     for name in COMPANIONS:
         for version in ("", "-vertical", "-1920x720"):
@@ -113,3 +117,61 @@ def test_a_pair_version_has_its_version_for_the_12_3():
     assert theme_for("lumen-pair-1920x720", "landscape", (1920, 462)) == "lumen-pair"
     assert theme_for("lumen-vertical", "landscape", (1920, 720)) == "lumen-1920x720"
     assert theme_for("lumen-1920x720", "landscape", (1920, 720)) == "lumen-1920x720"
+
+
+def _shown(name):
+    """What the theme ``name`` shows, drawn: the readings (each list's rows as they are
+    picked), the histories, the time and the date; also what shows only without a reading
+    (the date in place of the weather)."""
+    import re
+
+    from libre_panel.render import lists
+    from libre_panel.render.renderer import Renderer
+    from libre_panel.sensors.demo import demo_snapshot
+    from libre_panel.theme.model import load_theme
+
+    snap = demo_snapshot(fixed_time=1_700_000_000)
+    readings = snap.readings
+
+    def key(sensor):
+        reading = readings.get(sensor)
+        return reading.origin or sensor if reading is not None else sensor
+
+    renderer = Renderer(load_theme(builtin_themes_dir() / name), preview=True)
+    renderer.render(snap)
+    out = set()
+    for w in renderer.widgets:
+        if w["type"] == "list":
+            out |= {("value", key(item.key)) for item in lists.pick(w, readings)}
+        elif w["type"] == "graph" and w.get("sensor"):
+            out.add(("history", key(w["sensor"])))
+        elif w.get("sensor"):
+            out.add(("value", key(w["sensor"])))
+        elif w["type"] == "weather":
+            out.add(("value", f"weather.{w['field']}"))
+        elif w["type"] == "calendar":
+            out.add(("date", ""))
+        elif w["type"] in ("clock", "analog_clock"):
+            date = re.search(r"%[aAbBdejmUVWy]", w.get("format") or "")
+            out.add(("date", "") if date else ("time", ""))
+    return out
+
+
+def test_no_screen_beside_its_companion_shows_what_the_companion_shows():
+    """Every version of a theme (each size, upright too) beside every version of its
+    companion: what the first panel shows while the companion runs (its pair version, where
+    there is one) and what the companion shows have nothing in common, not the processor's
+    load (the cores' total), not the fans, and not the date (the weather card's while no
+    weather is set up, which is off out of the box)."""
+    names = sorted(p.name for p in builtin_themes_dir().iterdir() if (p / "theme.json").exists())
+    for name in COMPANIONS:
+        mains = [n for n in names if (n == name or n.startswith(f"{name}-"))
+                 and not is_companion(n) and "-pair" not in n]  # fmt: skip
+        companions = [n for n in names if is_companion(n) and n.startswith(f"{name}-companion")]
+        assert mains and len(companions) == 3
+        shown = {c: _shown(c) for c in companions}
+        for main in mains:
+            first = pair_version(main) or main
+            on_first = _shown(first)
+            for companion in companions:
+                assert not on_first & shown[companion], (first, companion)

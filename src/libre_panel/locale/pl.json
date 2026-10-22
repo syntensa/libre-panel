@@ -1,5 +1,12 @@
 {
   "messages": {
+    "No weather set up": "Nie skonfigurowano pogody",
+    "Without weather": "Bez pogody",
+    "while no place is set up or no weather has arrived": "dopóki nie skonfigurowano miejsca lub nie dotarła pogoda",
+    "the date": "data",
+    "say that none is set up": "informacja, że nic nie skonfigurowano",
+    "Whole processor": "Cały procesor",
+    "its load beside the title, and its history where there is room; off where the screen beside it shows them": "jego obciążenie obok tytułu i jego historia, gdzie jest miejsce; wyłączone tam, gdzie pokazuje je ekran obok",
     "Set up for another address: set it up again": "Skonfigurowano dla innego adresu: skonfiguruj ponownie",
     "Set up; its last report came {ago} ago": "Skonfigurowano; ostatni sygnał {ago} temu",
     "Set up; no report from it yet": "Skonfigurowano; jeszcze bez sygnału",
@@ -2540,6 +2547,7 @@
     "ticks": "Podziałka",
     "timezone": "Strefa czasowa",
     "title": "Tytuł",
+    "total": "Cały procesor",
     "uppercase": "Nazwy wielkimi literami",
     "visible": "widoczny",
     "w": "szer",

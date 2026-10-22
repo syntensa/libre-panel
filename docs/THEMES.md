@@ -186,7 +186,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `calendar` | `w`, `h`, `font`, `font_size`, `color`, `color2`, `muted`, `first_day` | the month as a grid of days, today marked in `color2`; weekday names in `muted` and the language; `first_day` `monday` or `sunday` |
 | `list` | `w`, `h`, `items`, `style`, `columns`, `max_items`, `sort`, `format`, `detail`, `detail_format`, `min`, `max`, `scale`, `levels`, `font`, `font_size`, `label_font`, `uppercase`, `color`, `muted`, `color2`, `background`, `empty`, `color_rules` | readings found by name or pattern, as many as fit, see [Lists](#lists) |
 | `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur`, `ridge` | cards, frames, separators; `backdrop_blur` gives frosted glass, `ridge` a ridge (see [Look and finish](#look-and-finish)) |
-| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `moving`, `hold`, `change`, `slide`, `time` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
+| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `threads`, `total`, `moving`, `hold`, `change`, `slide`, `time` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
 
 `scale` is `linear`, `sqrt` or `log`: the latter two keep small values visible
 on huge ranges such as network rates.
@@ -513,7 +513,7 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 |---|---|---|
 | `clock` | time, seconds when wide, date; hours over minutes when tall | |
 | `date` | a calendar sheet: day, weekday, month; the month's days beside or under it when large | |
-| `weather` | symbol, temperature, sky; feels-like, humidity and wind; a forecast when there is room: as columns when long (3 × 1) or big, as rows when tall; days and hours together on a big wide one (4 × 2); a calendar while the weather is off | |
+| `weather` | symbol, temperature, sky; feels-like, humidity and wind; a forecast when there is room: as columns when long (3 × 1) or big, as rows when tall; days and hours together on a big wide one (4 × 2); a calendar while the weather is off | `fallback` (`none`: it says that no weather is set up instead of showing the date, for a screen beside one with the date) |
 | `outlook` | the next days, today first, at most a week: each with its name, a symbol that moves, the high and the low and the chance of rain; side by side when long, one under the other when tall or big; while the weather is off, a line that says where it is set. Lit by itself, as the cards | |
 | `ring` | a ring with the load; details, the hardware's name and a history graph as it grows | `cpu`, `gpu`, `mem`, `disk` |
 | `stat` | a large number; a bar, a history graph and details as it grows | as `ring`, `net`, or `sensor` with `sensor` and `format` |
@@ -524,7 +524,7 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
 | `system` | names of processor and graphics card, uptime; the memory's name too when there is room for a fourth row | |
 | `text` | a title (`text`) with an accent line | |
 | `temps` | every temperature as a bar, CPU and GPU first, warm and hot in `warn` and `crit`; the fans beside them when long, below when big, each turning with its speed (as Lumen's) | `items`; `fans` (at most so many, 6; 0: none) and `fan_items` (which, as `items`; empty: the GPU fan first, then the others) |
-| `cores` | the load of every core (its threads together, where the processor says which they are: `cpu.pcore.*`): tiles when small, columns when wide; the history when big | `threads` (every thread instead) |
+| `cores` | the load of every core (its threads together, where the processor says which they are: `cpu.pcore.*`): tiles when small, columns when wide; the processor's load beside the title and its history when big | `threads` (every thread instead), `total` (`false`: without the processor's load and its history, for a screen beside one that shows them) |
 | `drives` | every drive: how full and how much is free; reading and writing when big | `items` |
 | `processes` | the programs that use the most processor time, or memory (`sort`: `cpu` or `memory`); a program's processes count once | |
 | `netinfo` | IP address, ping, download, upload, today's traffic, as many as fit; the ping's history when big | |
@@ -559,7 +559,8 @@ processor's name, temperature and power; 3×1 or 2×2 a history graph.
   entry) the look's colour for its source.
 - `fallback`: what a module shows when its source has no readings. `auto`
   shows the disk instead of a missing GPU; `none` leaves the cells empty; or
-  name a source.
+  name a source. The weather module's `none` says that no weather is set up
+  where the date would stand in for it.
 - `card`: `auto` (cards for all but clock and title), `on` or `off`.
 - `forecast` (weather): `auto` (days; days and hours on a big wide module),
   `days`, `hours`, `both` or `off`; `step` is the hours between two hourly

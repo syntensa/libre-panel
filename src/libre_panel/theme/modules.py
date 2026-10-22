@@ -837,13 +837,18 @@ def _sheet(b: _Build, x: float, y: float, w: float, h: float) -> None:
 def build_weather(b: _Build, _src: Source) -> None:
     """The weather of the configured place, with a forecast when there is room.
 
-    A calendar sheet stands in while there is no weather. The forecast shows
-    days or hours (``forecast``): as columns beside or under the weather now,
+    A calendar sheet stands in while there is no weather; with ``fallback`` "none" (a
+    companion, beside a screen that shows the date) it says that none is set up. The
+    forecast shows days or hours (``forecast``): as columns beside or under the weather now,
     as rows in a tall module.
     """
     b.card()
     start = len(b.out)
-    _date_layout(b)
+    if b.module["fallback"] == "none":
+        b.label("setup", t("No weather set up"), b.ix + b.iw / 2,
+                b.iy + b.ih / 2 - CAP * b.ts / 2, b.ts, align="center", width=b.iw)  # fmt: skip
+    else:
+        _date_layout(b)
     for widget in b.out[start:]:
         widget["needs"] = "!weather.temperature"
     start = len(b.out)
@@ -1206,7 +1211,7 @@ def _sun(b: _Build, x: float, y: float, w: float, h: float, details: bool = Fals
         b.icon("sun-icon", "sun", cx - icon / 2, base - icon - d * 0.04, icon, color)
         b.out[-1]["needs"] = "sun.progress"
         b.icon("night-icon", "moon", cx - icon / 2, base - icon - d * 0.04, icon, b.c("text2"))
-        b.out[-1]["needs"] = "!sun.progress"
+        b.out[-1]["needs"] = "sun.rise,!sun.progress"  # night where the sun's times are known
     size = b.ts * 1.3
     cap = base + b.ts * 0.7
     mark = b.ts * 1.5
@@ -1866,12 +1871,15 @@ def build_temps(b: _Build, _src: Source) -> None:
 
 
 def build_cores(b: _Build, _src: Source) -> None:
-    """The load of every core: columns side by side, or tiles; the history when big."""
+    """The load of every core: columns side by side, or tiles; the whole processor's beside
+    the title and its history when big, unless ``total`` is off."""
     b.card()
     color = b.tint("cpu")
+    total = b.module["total"]
     top = b.head("cpu", b.module["title"] or t("CPU cores"), color, b.ts * 3.6)
-    b.value("value", "cpu.load", "{value:.0f}%", b.ix + b.iw, b.iy, b.ts * 1.6, align="right",
-            width=b.iw * 0.3)  # fmt: skip
+    if total:
+        b.value("value", "cpu.load", "{value:.0f}%", b.ix + b.iw, b.iy, b.ts * 1.6,
+                align="right", width=b.iw * 0.3)  # fmt: skip
     x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
     # the physical cores where the processor says which threads are one (load source), else
     # the threads; every thread where the module asks for them
@@ -1879,14 +1887,15 @@ def build_cores(b: _Build, _src: Source) -> None:
     if not b.module["threads"]:
         shown = [("cores", "cpu.pcore.*.load", "cpu.pcore.1.load"),
                  ("threads", "cpu.core.*.load", "!cpu.pcore.1.load")]  # fmt: skip
-    if b.large and h > b.ts * 12:
+    big = b.large and h > b.ts * 12
+    if total and big:
         cores_h = h * 0.6
         for name, items, needs in shown:
             b.listing(name, items, x, y, w, cores_h, color, "columns", b.ts * 1.1, needs=needs)
         gy = y + cores_h + b.pad
         b.graph("history", "cpu.load", x, gy, w, b.iy + b.ih - gy, color)
-    else:
-        style, size = ("columns", 1.1) if b.aspect >= 1.45 else ("cells", 1.4)
+    else:  # (a big one without the history: its columns the whole height)
+        style, size = ("columns", 1.1) if b.aspect >= 1.45 or big else ("cells", 1.4)
         for name, items, needs in shown:
             b.listing(name, items, x, y, w, h, color, style, b.ts * size, needs=needs)
 

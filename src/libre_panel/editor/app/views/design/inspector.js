@@ -458,6 +458,12 @@ function ModuleInspector({ widget }) {
                   options=${Object.entries(fallbacks).map(([value, text]) => ({ value, label: text }))} />
               <//>`
             : null}
+          ${widget.module === "weather"
+            ? html`<${Field} label=${t("Without weather")} hint=${t("while no place is set up or no weather has arrived")}>
+                <${Chips} label=${t("Without weather")} value=${widget.fallback === "none" ? "none" : "auto"} onChange=${change("fallback")}
+                  options=${[["auto", t("the date")], ["none", t("say that none is set up")]].map(([value, label]) => ({ value, label }))} />
+              <//>`
+            : null}
           ${widget.module === "weather" && ["hours", "both", "auto"].includes(widget.forecast)
             ? html`<${Field} label=${t("Hours between columns")}>
                 <${NumberField} label=${t("Hours between columns")} value=${widget.step} min=${1} max=${6} onChange=${change("step")} />
@@ -551,6 +557,9 @@ function ModuleInspector({ widget }) {
         ${widget.module === "cores"
           ? html`<${Field} label=${t("Every thread")} hint=${t("off: a bar for each core, its threads together, where the processor says which they are")}>
               <${Toggle} label=${t("Every thread")} checked=${Boolean(widget.threads)} onChange=${change("threads")} />
+            <//>
+            <${Field} label=${t("Whole processor")} hint=${t("its load beside the title, and its history where there is room; off where the screen beside it shows them")}>
+              <${Toggle} label=${t("Whole processor")} checked=${widget.total !== false} onChange=${change("total")} />
             <//>`
           : null}
         ${widget.module === "temps"

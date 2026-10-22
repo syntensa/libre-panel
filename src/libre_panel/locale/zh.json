@@ -1,5 +1,12 @@
 {
   "messages": {
+    "No weather set up": "未设置天气",
+    "Without weather": "无天气时",
+    "while no place is set up or no weather has arrived": "尚未设置地点或尚未收到天气时",
+    "the date": "日期",
+    "say that none is set up": "提示尚未设置",
+    "Whole processor": "整个处理器",
+    "its load beside the title, and its history where there is room; off where the screen beside it shows them": "标题旁显示其负载，有空间时显示其历史；旁边的屏幕已显示时关闭",
     "Set up for another address: set it up again": "已为另一个地址设置：请重新设置",
     "Set up; its last report came {ago} ago": "已设置；上次报告在 {ago} 前",
     "Set up; no report from it yet": "已设置；尚无报告",
@@ -2540,6 +2547,7 @@
     "ticks": "刻度标记",
     "timezone": "时区",
     "title": "标题",
+    "total": "整个处理器",
     "uppercase": "名称大写",
     "visible": "可见",
     "w": "宽",

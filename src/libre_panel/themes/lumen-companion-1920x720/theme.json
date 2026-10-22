@@ -54,7 +54,8 @@
       "col": 0,
       "row": 0,
       "cols": 3,
-      "rows": 3
+      "rows": 3,
+      "total": false
     },
     {
       "type": "module",

@@ -63,7 +63,8 @@
       "col": 3,
       "row": 0,
       "cols": 3,
-      "rows": 1
+      "rows": 1,
+      "total": false
     },
     {
       "type": "module",

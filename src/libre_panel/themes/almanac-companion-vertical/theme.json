@@ -54,7 +54,8 @@
       "col": 0,
       "row": 0,
       "cols": 2,
-      "rows": 4
+      "rows": 4,
+      "fallback": "none"
     },
     {
       "type": "module",

@@ -1,0 +1,80 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "Arena Vertical",
+  "author": "Libre Panel contributors",
+  "license": "CC0-1.0",
+  "description": "Arena beside its companion on a second panel: the game's frame rate and frame times large, with the processor and the graphics card; the temperatures, fans, cores and the ping are on the companion.",
+  "display": {
+    "model": "turing-9.2-usb",
+    "orientation": "portrait",
+    "width": 480,
+    "height": 1920
+  },
+  "palette": {
+    "bg": "#0A1119",
+    "bg2": "#060A0F",
+    "surface": "#14202E",
+    "line": "#1F3147",
+    "track": "#162332",
+    "text": "#EEF6FF",
+    "text2": "#B8CAE0",
+    "text3": "#8CA0B8",
+    "accent": "#13E5D7",
+    "cpu": "#13E5D7",
+    "gpu": "#A3AEFF",
+    "mem": "#E0A8FF",
+    "disk": "#8FD3FF",
+    "net": "#7EE8A6",
+    "warn": "#FFCB6B",
+    "crit": "#FF7A85"
+  },
+  "font": "builtin:Barlow-Medium",
+  "background": {
+    "color": "#0A1119",
+    "image": null
+  },
+  "refresh_ms": 500,
+  "animation": {
+    "smoothing_ms": 500
+  },
+  "style": {
+    "card": "glass",
+    "radius": 18,
+    "glow": 0.6,
+    "backdrop": "gradient",
+    "display_font": "builtin:Barlow-SemiBold",
+    "text_font": "builtin:Barlow-Medium"
+  },
+  "look": {},
+  "widgets": [
+    {
+      "type": "module",
+      "id": "m-game-0-0",
+      "module": "game",
+      "col": 0,
+      "row": 0,
+      "cols": 2,
+      "rows": 6
+    },
+    {
+      "type": "module",
+      "id": "m-instrument-0-3",
+      "module": "instrument",
+      "col": 0,
+      "row": 6,
+      "cols": 1,
+      "rows": 2,
+      "source": "cpu"
+    },
+    {
+      "type": "module",
+      "id": "m-instrument-1-3",
+      "module": "instrument",
+      "col": 1,
+      "row": 6,
+      "cols": 1,
+      "rows": 2,
+      "source": "gpu"
+    }
+  ]
+}

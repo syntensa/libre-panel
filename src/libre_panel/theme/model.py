@@ -397,6 +397,9 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "fans": ("int", 6),
         "fan_items": ("text", ""),
         "threads": ("bool", False),  # cores: every thread, not every core (where known)
+        # cores: the whole processor's load beside the title, and its history where there is
+        # room (off in a companion: the screen beside it shows them)
+        "total": ("bool", True),
         "sort": ("enum:cpu|memory", "cpu"),  # processes: by processor time or memory
         "timezone": ("string", ""),  # analog clock: e.g. "Asia/Tokyo"
         "target": ("string", ""),  # countdown: "2026-12-24", "2026-12-24 18:00", "12-24"

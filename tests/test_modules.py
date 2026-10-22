@@ -631,3 +631,36 @@ def test_a_label_in_chinese_is_measured_in_the_font_that_draws_it(tmp_path):
     finally:
         fallback.set_fallbacks(before)
         modules._width_per_size.cache_clear()
+
+
+def test_cores_without_the_total_leave_out_the_processors_load_and_its_history():
+    """A companion's cores: the screen beside it shows the processor's load already."""
+    for model, cols, rows in (("turing-12.3-usb", 3, 3), ("turing-9.2-usb", 3, 2)):
+        on, _ = expand(theme({"module": "cores", "cols": cols, "rows": rows}, model=model))
+        off, _ = expand(theme({"module": "cores", "cols": cols, "rows": rows, "total": False},
+                              model=model))  # fmt: skip
+        assert "m0/value" in {w["id"] for w in on}
+        assert not {w.get("sensor") for w in off} & {"cpu.load"}
+        assert not [w for w in off if w["type"] == "graph"]
+        cores = [w for w in off if w["type"] == "list"]
+        assert cores and {w["style"] for w in cores} == {"columns"}  # tall: no tiles
+    big, _ = expand(theme({"module": "cores", "cols": 3, "rows": 3}, model="turing-12.3-usb"))
+    assert [w for w in big if w["type"] == "graph" and w["sensor"] == "cpu.load"]
+
+
+def test_the_weather_without_weather_says_so_where_it_is_not_to_show_the_date():
+    """Beside a screen with the date (a companion), the weather card shows no calendar while
+    no weather is set up: it says that none is."""
+    auto, _ = expand(theme({"module": "weather", "cols": 4, "rows": 2}))
+    assert {w["type"] for w in auto if w.get("needs") == "!weather.temperature"} >= {"clock"}
+    none, _ = expand(theme({"module": "weather", "cols": 4, "rows": 2, "fallback": "none"}))
+    without = [w for w in none if w.get("needs") == "!weather.temperature"]
+    assert [w["id"] for w in without] == ["m0/setup"] and without[0]["text"] == "NO WEATHER SET UP"
+    assert not [w for w in none if w["type"] in ("clock", "calendar")]
+
+
+def test_the_night_over_the_suns_arc_needs_the_suns_times():
+    """Without a place there are no sun times: the moon alone, no night symbol over it."""
+    parts, _ = expand(theme({"module": "sun", "cols": 3, "rows": 2}, model="turing-12.3-usb"))
+    night = next(w for w in parts if w["id"].endswith("night-icon"))
+    assert set(night["needs"].split(",")) == {"sun.rise", "!sun.progress"}
