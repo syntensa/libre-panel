@@ -73,13 +73,13 @@ def test_the_loop_shows_lumen_on_a_configured_bar_and_libre_default_elsewhere(is
 
 
 def test_the_loop_asks_the_usb_bus_for_an_automatic_model(monkeypatch, isolated_home):
-    monkeypatch.setattr(turzx_usb, "present_model", lambda: NINE)
+    monkeypatch.setattr(turzx_usb, "present_model", lambda *_: NINE)
     loop, _ = loop_for(demo_config(DeviceConfig()))  # driver "auto", model "auto"
     try:
         assert loop.status.theme == "lumen" and loop.status.default_theme == "lumen"
     finally:
         loop.close()
-    monkeypatch.setattr(turzx_usb, "present_model", lambda: None)
+    monkeypatch.setattr(turzx_usb, "present_model", lambda *_: None)
     loop, _ = loop_for(demo_config(DeviceConfig()))
     try:
         assert loop.status.theme == "libre-default"  # no panel known yet
@@ -107,7 +107,7 @@ def test_the_theme_drawn_ahead_is_the_one_worked_out_for_the_panel(monkeypatch, 
     config names the panel or the USB bus says which it is, and no other is built to be switched
     away from."""
     built = renderers_built(monkeypatch)
-    monkeypatch.setattr(turzx_usb, "present_model", lambda: NINE)
+    monkeypatch.setattr(turzx_usb, "present_model", lambda *_: NINE)
     for device in (
         DeviceConfig(model="turing-9.2-usb", driver="virtual"),  # named in config.toml
         DeviceConfig(),  # found on the bus
@@ -138,7 +138,7 @@ def test_the_bus_is_asked_once_for_a_changed_driver(monkeypatch, isolated_home):
     """A switch looks at the new config at every frame while its theme is warmed up: the
     panel the change asks for is looked for once, not at each of those frames."""
     asked = []
-    monkeypatch.setattr(turzx_usb, "present_model", lambda: asked.append("bus") or NINE)
+    monkeypatch.setattr(turzx_usb, "present_model", lambda *_: asked.append("bus") or NINE)
     loop, _ = loop_for(demo_config(DeviceConfig(driver="virtual")))
     try:
         fresh = demo_config(DeviceConfig(driver="auto"))

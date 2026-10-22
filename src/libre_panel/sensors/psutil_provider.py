@@ -40,6 +40,11 @@ PING_HOSTS = 4  # the most the ping connects to
 # battery.state: shown in the user's language (the renderer translates it)
 BATTERY_STATES = ("On battery", "Charging", "Charged")
 PROCESSES_EVERY = 2.0
+# The scan of all processes takes the interpreter in bursts of at most so long, then leaves it
+# to the panels' loops a moment: on Windows hundreds of processes take a good part of a second,
+# which held every panel's frame (all panels stood still for a moment every few seconds).
+SCAN_BURST_S = 0.002
+SCAN_PAUSE_S = 0.002
 
 
 def _system_disk() -> str:
@@ -265,7 +270,11 @@ class PsutilProvider(SensorProvider):
     def _processes(self) -> dict[str, Reading]:
         cores = psutil.cpu_count() or 1
         rows = []
+        burst = time.perf_counter()
         for proc in psutil.process_iter(["name", "memory_percent"]):
+            if time.perf_counter() - burst > SCAN_BURST_S:
+                time.sleep(SCAN_PAUSE_S)
+                burst = time.perf_counter()
             try:
                 cpu = proc.cpu_percent(interval=None) / cores
             except (psutil.Error, OSError):

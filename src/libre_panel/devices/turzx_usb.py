@@ -42,7 +42,7 @@ from libre_panel.devices.base import (
     place_taken,
     take_place,
 )
-from libre_panel.devices.models import MODELS, PanelModel, orientation_of
+from libre_panel.devices.models import MODELS, PanelModel, find_model, orientation_of
 from libre_panel.i18n import t
 
 log = logging.getLogger(__name__)
@@ -96,11 +96,43 @@ def free_models() -> list[PanelModel]:
     return found
 
 
-def present_model() -> PanelModel | None:
-    """The model of a USB panel on the bus, without opening it (None: none there, or no pyusb)."""
-    for pid, model in USB_PIDS.items():
-        if UsbTransport.present(pid):
-            return model
+def present_model(beside: tuple[str, ...] = ()) -> PanelModel | None:
+    """The model of the USB panel ``UsbTransport.open`` would take for a panel set to "auto"
+    (``beside``: what the other panels name), without opening it; None: none there, or no
+    pyusb."""
+    try:
+        import usb.core
+    except ImportError:
+        return None
+    try:
+        found = _pick(None, beside, usb.core, _backend(), free=False)  # (its own may be open)
+    except usb.core.NoBackendError:
+        return None
+    return USB_PIDS.get(found[1]) if found is not None else None
+
+
+def _pick(
+    pid: int | None, beside: tuple[str, ...], core: Any, backend: Any, free: bool = True
+) -> tuple[Any, int] | None:
+    """The device a panel takes: of ``pid``, else of any TURZX model (``"auto"``), one that no
+    panel of this process has open (``free``; else any there is). With "auto" the models other
+    panels name (``beside``) come last, and such a one is left to them unless the bus has more
+    of it than they name: the 12.3" set to "auto" beside a 9.2" never takes the 9.2"."""
+    named: dict[int, int] = {}
+    for model_id in beside:
+        model = find_model(model_id)
+        for _vid, other in model.usb_ids if model else ():
+            named[other] = named.get(other, 0) + 1
+    pids = [pid] if pid is not None else sorted(USB_PIDS, key=lambda each: each in named)
+    for candidate in pids:
+        found = list(core.find(find_all=True, idVendor=VENDOR_ID, idProduct=candidate,
+                               backend=backend) or [])  # fmt: skip
+        if pid is None and len(found) <= named.get(candidate, 0):
+            continue  # another panel's
+        # one that another panel of this process has open is passed by ([[panels]])
+        device = next((d for d in found if not (free and place_taken(_place(d)))), None)
+        if device is not None:
+            return device, candidate
     return None
 
 
@@ -248,26 +280,19 @@ class UsbTransport:
             return False
 
     @classmethod
-    def open(cls, pid: int | None = None) -> UsbTransport:
+    def open(cls, pid: int | None = None, beside: tuple[str, ...] = ()) -> UsbTransport:
+        """The panel of ``pid``, else (``None``, "auto") one of any model, leaving those the
+        other panels name (``beside``) to them: see :func:`_pick`."""
         try:
             import usb.core
             import usb.util
         except ImportError as exc:
             raise DeviceError("pyusb is missing: pip install 'libre-panel[usb]'") from exc
-        backend = _backend()
-        pids = [pid] if pid is not None else list(USB_PIDS)
-        device = None
         try:
-            for candidate in pids:
-                found = usb.core.find(find_all=True, idVendor=VENDOR_ID, idProduct=candidate,
-                                      backend=backend)  # fmt: skip
-                # one that another panel of this process has open is passed by ([[panels]])
-                device = next((d for d in found or [] if not place_taken(_place(d))), None)
-                if device is not None:
-                    pid = candidate
-                    break
+            picked = _pick(pid, beside, usb.core, _backend())
         except usb.core.NoBackendError as exc:
             raise DeviceError("libusb not found: pip install libusb-package") from exc
+        device, pid = picked if picked is not None else (None, None)
         if device is None or pid is None:
             raise DeviceError(
                 t(
@@ -440,7 +465,7 @@ class TurzxUsbDisplay(Display):
 
     def open(self) -> None:
         pid = self.model.usb_ids[0][1] if self.model and self.model.usb_ids else None
-        self.transport = UsbTransport.open(pid)
+        self.transport = UsbTransport.open(pid, getattr(self.config, "beside", ()))
         self.model = self.model or USB_PIDS.get(self.transport.pid)
         try:
             self.transport.sync()

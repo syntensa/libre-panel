@@ -425,3 +425,19 @@ def test_a_symbol_stays_square_when_the_theme_is_adapted():
     assert big["size"] == 90  # the smaller scale (480 / 320 = 1.5), not 4 x
     cx = (100 + 30) * 4
     assert abs(big["x"] + big["size"] / 2 - cx) <= 1
+
+
+def test_a_kept_set_is_not_counted_again_on_every_frame(monkeypatch):
+    """Every symbol asks for its set on every frame: counting all kept sets' bytes each time
+    took more of a video frame than drawing the symbol (Nimbus, and Lumen's forecast)."""
+    symbols.forget()
+    counted = []
+    size = symbols.Layers.size.fget
+    monkeypatch.setattr(
+        symbols.Layers, "size", property(lambda self: counted.append(1) or size(self))
+    )
+    first = symbols.layers_for("rain", False, 64, "flat", COLOURS)[0]
+    made = len(counted)
+    for _ in range(20):
+        assert symbols.layers_for("rain", False, 64, "flat", COLOURS)[0] is first
+    assert made >= 1 and len(counted) == made  # counted when it was made, not when kept

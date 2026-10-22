@@ -1176,24 +1176,30 @@ def build_sun(b: _Build, _src: Source) -> None:
     del start
 
 
+ARC_MIN = 16  # px: the sun's arc, at the least
+
+
 def _sun(b: _Build, x: float, y: float, w: float, h: float, details: bool = False) -> None:
     color = b.tint("warn")
     text_h = b.ts * (4.6 if details else 2.4)
-    d = min(w, (h - text_h) * 2)
+    d = max(0.0, min(w, (h - text_h) * 2))
+    if d < ARC_MIN:  # a box too low for the arc keeps the times
+        d = 0.0
     cx = x + w / 2
     base = y + d / 2  # the horizon: the arc's ends
-    b.add(
-        "gauge", "arc", x=round(cx - d / 2), y=round(y), w=round(d), h=round(d),
-        sensor="sun.progress", min=0, max=1, start_angle=180, end_angle=360,
-        thickness=max(3, round(d * 0.055)), color=b.deep(color), color2=color,
-        background=b.c("track"), cap="round", glow=round(0.45 * b.glow, 2),
-        glow_radius=max(2, round(d * 0.04)), smooth=True,
-    )  # fmt: skip
-    icon = d * 0.26
-    b.icon("sun-icon", "sun", cx - icon / 2, base - icon - d * 0.04, icon, color)
-    b.out[-1]["needs"] = "sun.progress"
-    b.icon("night-icon", "moon", cx - icon / 2, base - icon - d * 0.04, icon, b.c("text2"))
-    b.out[-1]["needs"] = "!sun.progress"
+    if d:
+        b.add(
+            "gauge", "arc", x=round(cx - d / 2), y=round(y), w=round(d), h=round(d),
+            sensor="sun.progress", min=0, max=1, start_angle=180, end_angle=360,
+            thickness=max(3, round(d * 0.055)), color=b.deep(color), color2=color,
+            background=b.c("track"), cap="round", glow=round(0.45 * b.glow, 2),
+            glow_radius=max(2, round(d * 0.04)), smooth=True,
+        )  # fmt: skip
+        icon = d * 0.26
+        b.icon("sun-icon", "sun", cx - icon / 2, base - icon - d * 0.04, icon, color)
+        b.out[-1]["needs"] = "sun.progress"
+        b.icon("night-icon", "moon", cx - icon / 2, base - icon - d * 0.04, icon, b.c("text2"))
+        b.out[-1]["needs"] = "!sun.progress"
     size = b.ts * 1.3
     cap = base + b.ts * 0.7
     mark = b.ts * 1.5

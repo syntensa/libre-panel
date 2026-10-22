@@ -10,6 +10,7 @@ from editor_token import token_of
 from fake_hardware import PC, TIDY
 
 from libre_panel.config import load_config
+from libre_panel.devices.panel_files import STANDBY_CLIP
 from libre_panel.editor import access
 from libre_panel.editor.server import make_server
 from libre_panel.sensors import hardware
@@ -956,3 +957,36 @@ def test_the_panel_test_and_the_log_have_their_routes(editor, monkeypatch, isola
         assert request(editor.port, "POST", "/api/logs", {"verbose": "yes"})[0] == 400
     finally:
         root.setLevel(before)
+
+
+@pytest.mark.parametrize(("panels", "named"), [("", True), ("beside", False), ("first", True)])
+def test_a_standby_clip_written_is_named_in_its_own_panel_s_settings(panels, named, tmp_path):
+    """On the person's click: the first panel's video mode then plays it. Written to a panel
+    beside the first (a 9.2" beside a 12.3"), it is not the first one's."""
+    path = tmp_path / "config.toml"
+    first = "turing-12.3-usb" if panels == "beside" else "turing-9.2-usb"
+    text = f'[device]\nmodel = "{first}"\n'
+    if panels:
+        text += '[[panels]]\nmodel = "turing-9.2-usb"\n' if panels == "beside" else (
+            '[[panels]]\nmodel = "turing-12.3-usb"\n')  # fmt: skip
+    path.write_text(text, encoding="utf-8")
+    srv = make_server(port=0, config_path=path)
+    written = []
+    srv.editor_state.start_screen_jobs = SimpleNamespace(
+        write_clip=lambda brightness, model, mounted: (
+            written.append(model)
+            or {"model": "turing-9.2-usb", "standby_clip": 3, "name": "standby.h264"}
+        ),
+    )
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = srv.server_address[1]
+        status, body = request(port, "POST", "/api/start-screen", {"action": "clip"})
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        srv.editor_state.close()
+    assert status == 200 and body["standby_clip"] == 3 and written
+    video = load_config(path).device.video
+    assert (video.local_clip == STANDBY_CLIP) is named and video.clip_asked is named

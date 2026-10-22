@@ -24,7 +24,7 @@ def panel(monkeypatch):
     """The 9.2" panel is plugged in; UsbTransport.open finds it."""
     fake = FakePanel()
 
-    def open_transport(pid=None):
+    def open_transport(pid=None, beside=()):
         if fake.unplugged:
             raise DeviceError("no Turing/TURZX USB panel found")
         return transport_for(fake)

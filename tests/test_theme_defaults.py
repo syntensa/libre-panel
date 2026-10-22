@@ -2,6 +2,7 @@
 Default on every other panel. The rule, which panel a config is for, and config.toml."""
 
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 
@@ -98,23 +99,26 @@ def test_a_display_that_said_which_panel_it_is_settles_an_automatic_model(monkey
 
 @pytest.mark.parametrize("driver", ["auto", "turzx"])
 def test_with_an_automatic_model_the_usb_bus_is_asked_for_the_panel(monkeypatch, driver):
-    monkeypatch.setattr(turzx_usb, "present_model", lambda: NINE)
+    monkeypatch.setattr(turzx_usb, "present_model", lambda *_: NINE)
     assert panel_model(DeviceConfig(driver=driver)) is NINE
-    monkeypatch.setattr(turzx_usb, "present_model", lambda: None)
+    monkeypatch.setattr(turzx_usb, "present_model", lambda *_: None)
     assert panel_model(DeviceConfig(driver=driver)) is None
 
 
 def test_the_usb_bus_is_found_by_ids_and_never_opened(monkeypatch):
+    import usb.core
+
     seen = []
 
-    def present(pid):
-        seen.append(pid)
-        return pid == 0x0092
+    def find(find_all, idVendor, idProduct, backend):
+        seen.append(idProduct)
+        return [SimpleNamespace(bus=1, address=4)] if idProduct == 0x0092 else []
 
     def opened(*args):
         pytest.fail("a panel was opened")
 
-    monkeypatch.setattr(turzx_usb.UsbTransport, "present", staticmethod(present))
+    monkeypatch.setattr(usb.core, "find", find)
+    monkeypatch.setattr(turzx_usb, "_backend", lambda: None)
     monkeypatch.setattr(turzx_usb.UsbTransport, "open", staticmethod(opened))
     assert panel_model(DeviceConfig()) is NINE and 0x0092 in seen
 
@@ -126,7 +130,7 @@ def test_a_driver_that_does_not_look_for_a_turzx_panel_has_no_bus_to_ask(monkeyp
 
 
 def test_a_bus_that_cannot_be_read_is_no_panel(monkeypatch):
-    def broken():
+    def broken(*args):
         raise OSError("no libusb")
 
     monkeypatch.setattr(turzx_usb, "present_model", broken)
@@ -155,7 +159,7 @@ def test_the_normal_theme_is_the_one_named_else_the_panels_default(monkeypatch):
     assert not bar.theme_given and normal_theme(bar) == "lumen"
     assert normal_theme(Config(device=DeviceConfig(model="turing-3.5"))) == "libre-default"
     assert normal_theme(bar, running="libre-default") == "libre-default"  # the running app knows
-    monkeypatch.setattr(turzx_usb, "present_model", lambda: NINE)
+    monkeypatch.setattr(turzx_usb, "present_model", lambda *_: NINE)
     assert normal_theme(Config()) == "lumen"  # a bar on the bus
     assert normal_theme(Config(), running="libre-default") == "libre-default"
 

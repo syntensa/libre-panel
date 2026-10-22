@@ -41,7 +41,7 @@ def ports(monkeypatch):
             raise serial.SerialException(f"could not open port {device}")
         return attached[device][1]
 
-    def no_usb_panel(pid=None):
+    def no_usb_panel(pid=None, beside=()):
         raise DeviceError("no Turing/TURZX USB panel found")
 
     monkeypatch.setattr(serial_link, "_ports", lambda: [p for p, _ in attached.values()])
@@ -232,7 +232,7 @@ def test_doctor_checks_a_rev_a_panel(ports):
 
     panel = ports(FakeRevA())
 
-    def no_usb_panel(pid=None):
+    def no_usb_panel(pid=None, beside=()):
         raise DeviceError("no Turing/TURZX USB panel found")
 
     # two test cards, the ruler (top, bottom, left, right), Enter, brightness

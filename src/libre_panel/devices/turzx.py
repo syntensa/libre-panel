@@ -119,7 +119,7 @@ class TurzxDisplay(Display):
             if probed is None and video.mode == "auto":
                 from libre_panel.devices.turzx_usb import present_model
 
-                probed = present_model()
+                probed = present_model(self.config.beside)
             on, missing = video_mode(video, probed)
             told = "; ".join(missing)
             if told and told != _told:

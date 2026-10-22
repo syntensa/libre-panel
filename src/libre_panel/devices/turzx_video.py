@@ -443,9 +443,11 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             self._restart_panel(self._error)  # a new connection does not help
         if self._error is not None:
             self._heal(self._error)
-        frame = frame.convert("RGB")
         self._last_frame = frame
-        data = frame.tobytes()
+        if frame.mode in ("RGB", "RGBA"):  # the RGB bytes straight away: no copy of the picture
+            data = frame.tobytes("raw", "RGB")
+        else:
+            data = frame.convert("RGB").tobytes()
         encoder = self.encoder
         if encoder is None or encoder.size != frame.size or not encoder.alive:
             if encoder is not None and encoder.size == frame.size:

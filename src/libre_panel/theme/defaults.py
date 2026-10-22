@@ -52,7 +52,7 @@ def panel_model(device: DeviceConfig, reported: PanelModel | None = None) -> Pan
     from libre_panel.devices import turzx_usb
 
     try:
-        return turzx_usb.present_model()
+        return turzx_usb.present_model(device.beside)
     except Exception:  # no USB library or backend: no panel is known
         log.debug("looking for a USB panel failed", exc_info=True)
         return None

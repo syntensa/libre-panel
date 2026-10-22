@@ -595,3 +595,15 @@ def test_a_big_game_module_says_what_holds_the_frame_rate_down_and_its_longest_f
     assert "m0/limiter-cap" in drawn and "m0/limiter-gpu" not in drawn
     del snap.readings["game.limiter"]  # not known (PresentMon 1): no row
     assert not {"m0/limiter-label", "m0/limiter-cap"} & set(shown(renderer, snap))
+
+
+@pytest.mark.parametrize("box", [[0, 0, 400, 30], [0, 0, 120, 25], [0, 0, 300, 40]])
+def test_the_sun_in_a_box_too_low_for_its_arc_keeps_the_times(box):
+    """Moved freely in the editor to a low, wide place, the arc's size came out below none."""
+    from libre_panel.theme import modules as M
+
+    t = theme({"module": "sun", "cols": 2, "rows": 1})
+    style = {**M.STYLE_DEFAULTS, **(t.style or {}), M.FRAME_U: min(t.width, t.height) / 2}
+    out = M.build_module(t.widgets[0], box, M.colors_of(t.palette), style)
+    assert all(w["w"] >= M.ARC_MIN for w in out if w["id"].endswith("arc"))
+    assert {w["id"].split("/")[-1] for w in out} >= {"rise", "set"}

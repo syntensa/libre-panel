@@ -20,7 +20,7 @@ from libre_panel.doctor_session import Session, SessionError  # noqa: E402
 def panel(monkeypatch):
     fake = FakePanel()
 
-    def open_transport(pid=None):
+    def open_transport(pid=None, beside=()):
         if fake.unplugged:
             raise DeviceError("no Turing/TURZX USB panel found")
         return transport_for(fake)

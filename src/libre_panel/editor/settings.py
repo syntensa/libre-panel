@@ -614,7 +614,7 @@ class Settings:
                     cleaned = _whole(name, item, -50, 50)
                 elif key == "video":
                     cleaned = _panel_video(name, item)
-                elif key in DeviceConfig.__dataclass_fields__ and key != "video":
+                elif key in DeviceConfig.__dataclass_fields__ and key not in _NOT_IN_TABLE:
                     cleaned = RULES[f"device.{key}"](name, item, config)
                 else:
                     raise SettingsError(f"unknown setting {name!r}")
@@ -764,7 +764,7 @@ class Settings:
 
         def on_the_bus() -> Any:
             try:
-                return present_model()
+                return present_model(self._config().device.beside)
             except Exception:  # no USB library is no panel
                 log.debug("looking for a USB panel failed", exc_info=True)
                 return None
@@ -803,7 +803,7 @@ class Settings:
         from libre_panel.devices.turzx_usb import present_model
 
         try:
-            model = present_model()
+            model = present_model(config.device.beside)
         except Exception:  # no USB library is no panel
             log.debug("looking for a USB panel failed", exc_info=True)
             model = None
@@ -1118,10 +1118,17 @@ def _refused_with_rights(name: str) -> SettingsError:
     )
 
 
+# what [device] has that a panel's table does not: the video's settings are their own, and
+# ``beside`` is worked out from [[panels]]
+_NOT_IN_TABLE = ("video", "beside")
+
+
 def _device_table(device: DeviceConfig) -> dict[str, Any]:
-    """A panel's settings, as ``[device]`` has them (without the video's, which are its own)."""
+    """A panel's settings, as ``[device]`` has them."""
     return {
-        key: getattr(device, key) for key in DeviceConfig.__dataclass_fields__ if key != "video"
+        key: getattr(device, key)
+        for key in DeviceConfig.__dataclass_fields__
+        if key not in _NOT_IN_TABLE
     }
 
 

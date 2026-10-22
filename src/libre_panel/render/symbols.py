@@ -466,13 +466,13 @@ def layers_for(kind: str, night: bool, k: int, style: str, colours: dict[str, tu
                 _extras(made, kind, night, k, colours)
         if made is None:
             continue
-        with _lock:
-            _sets[key] = made
-            _sets.move_to_end(key)
-            total = sum(layers.size for layers in _sets.values())
-            while total > BUDGET and len(_sets) > 1:
-                _, gone = _sets.popitem(last=False)
-                total -= gone.size
+        if hit is None:  # (a kept one is counted already: every symbol asks on every frame)
+            with _lock:
+                _sets[key] = made
+                total = sum(layers.size for layers in _sets.values())
+                while total > BUDGET and len(_sets) > 1:
+                    _, gone = _sets.popitem(last=False)
+                    total -= gone.size
         return made, how
     raise AssertionError("flat layers are always there")
 

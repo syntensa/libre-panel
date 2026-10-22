@@ -460,6 +460,9 @@ class DeviceConfig:
     # corner of its picture, in millimetres, as mounted; None: not placed
     at: tuple[int, int] | None = None
     video: VideoConfig = field(default_factory=VideoConfig)
+    # the models the other panels name (not "auto"), worked out from [[panels]]: with model
+    # "auto" a panel of such a model is that panel's, unless there are more of it on the bus
+    beside: tuple[str, ...] = field(default=(), compare=False)
 
 
 @dataclass
@@ -640,7 +643,9 @@ class Config:
         panel = self.panels[index]
         video = replace(self.device.video, mode=panel.video_mode, local_clip=panel.local_clip,
                         clip_asked=panel.clip_asked)  # fmt: skip
-        device = replace(panel.device, video=video)
+        named = [self.device, *(p.device for n, p in enumerate(self.panels) if n != index)]
+        beside = tuple(other.model for other in named if other.model != "auto")
+        device = replace(panel.device, video=video, beside=beside)
         if panel.follow_brightness:
             first = self.device
 
@@ -895,6 +900,7 @@ def parse_config(data: dict[str, Any], path: Path | None = None) -> Config:
         raise ConfigError(str(exc)) from exc
 
     cfg.panels = _panels(data.get("panels", []))
+    cfg.device.beside = tuple(p.device.model for p in cfg.panels if p.device.model != "auto")
     cfg.scenes = _scenes(data.get("scenes", []))
     cfg.scene = _expect(data.get("scene", ""), str, "scene").strip()
     _put_on_scene(cfg)

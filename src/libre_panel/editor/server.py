@@ -35,7 +35,9 @@ from libre_panel.config import (
     FAN_LOOKS,
     FAN_PAINTS,
     SYMBOL_PACKS,
+    Config,
     ConfigError,
+    DeviceConfig,
     config_dir,
     edit_config,
     hardware_name,
@@ -497,6 +499,21 @@ class Route:
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "pattern", _compile(self.template))
+
+
+def _first_panel_s(config: Config, written: dict[str, Any]) -> bool:
+    """Whether the start screen just written (its ``model``) is the first panel's: alone it is;
+    beside others it is the first panel's model, as set or (``"auto"``) as found on the bus. A
+    clip on another panel is never named in the first's settings."""
+    if not config.panels:
+        return True
+    model = config.device.model
+    if model == "auto":
+        from libre_panel.devices import turzx_usb
+
+        found = turzx_usb.present_model(config.device.beside)
+        model = found.id if found is not None else ""
+    return bool(model) and written.get("model") == model
 
 
 class EditorHandler(BaseHTTPRequestHandler):
@@ -1310,9 +1327,10 @@ class EditorHandler(BaseHTTPRequestHandler):
         from libre_panel.devices import panel_files
 
         try:
-            configured = load_config(self.state.config_path).device.model
+            device = load_config(self.state.config_path).device
         except ConfigError:
-            configured = "auto"
+            device = DeviceConfig()
+        configured = device.model
         way = self._mounted()
         usb = [model.id for model in panel_files.models()]
         model = configured if configured in usb else None
@@ -1320,7 +1338,7 @@ class EditorHandler(BaseHTTPRequestHandler):
             try:
                 from libre_panel.devices.turzx_usb import present_model
 
-                found = present_model()
+                found = present_model(device.beside)
                 model = found.id if found is not None and found.id in usb else None
             except Exception:  # (no pyusb, no access: nothing found)
                 model = None
@@ -1557,7 +1575,8 @@ class EditorHandler(BaseHTTPRequestHandler):
                 result = screen.remove_logo(model)
             else:
                 result = screen.write_clip(config.device.brightness, model, self._mounted())
-                if not config.video.local_clip:  # the video mode names the clip it plays
+                # the video mode names the clip it plays: the first panel's, where it went there
+                if not config.device.video.local_clip and _first_panel_s(config, result):
                     edit_config(("value", "video.local_clip", panel_files.STANDBY_CLIP),
                                 ("value", "video.clip_asked", True),
                                 path=self.state.config_path)  # fmt: skip

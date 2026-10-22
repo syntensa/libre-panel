@@ -4,6 +4,7 @@ panel's readings, never on the panel another loop has open."""
 import re
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 from fake_serial import FakeRevA
@@ -568,3 +569,87 @@ def test_a_panel_beside_the_first_has_what_follows_on_every_frame_as_it_is_now()
     services.alarm = 1
     shared = HubView(first).snapshot()
     assert shared.value("alarm") == 1  # not as it was when the first panel took its readings
+
+
+def test_the_log_file_says_which_panel_beside_the_first_speaks(tmp_path, monkeypatch):
+    import logging
+    import threading
+
+    from libre_panel import cli
+
+    monkeypatch.setattr(cli, "log_file", lambda: tmp_path / "libre-panel.log")
+    root = logging.getLogger()
+    before = list(root.handlers)
+    try:
+        cli._log_file()
+        log = logging.getLogger("libre_panel.devices.turzx_usb")
+        log.warning('connected to Turing 9.2"')
+        beside = threading.Thread(target=log.warning, args=('connected to Turing 9.2"',),
+                                  name="panel-2")  # fmt: skip
+        beside.start()
+        beside.join()
+    finally:
+        for handler in set(root.handlers) - set(before):
+            root.removeHandler(handler)
+            handler.close()
+    first, second = (tmp_path / "libre-panel.log").read_text(encoding="utf-8").splitlines()
+    assert first.endswith('turzx_usb: connected to Turing 9.2"')
+    assert second.endswith('turzx_usb: panel 2: connected to Turing 9.2"')
+
+
+class Bus:
+    """USB devices by product id, as ``usb.core`` finds them."""
+
+    def __init__(self, *pids):
+        self.devices = [
+            SimpleNamespace(idProduct=pid, bus=1, address=n) for n, pid in enumerate(pids)
+        ]
+
+    def find(self, find_all, idVendor, idProduct, backend):
+        return [d for d in self.devices if d.idProduct == idProduct]
+
+
+def _pid(model):
+    from libre_panel.devices.models import find_model
+
+    return find_model(model).usb_ids[0][1]
+
+
+def test_a_panel_set_to_auto_leaves_the_model_another_panel_names_to_it():
+    from libre_panel.devices import turzx_usb
+
+    nine, twelve = _pid("turing-9.2-usb"), _pid("turing-12.3-usb")
+    both = Bus(nine, twelve)
+    device, pid = turzx_usb._pick(None, ("turing-9.2-usb",), both, None)
+    assert pid == twelve  # the 12.3" beside a 9.2", whatever the bus lists first
+    assert turzx_usb._pick(None, ("turing-9.2-usb",), Bus(nine), None) is None  # the other's
+    two = Bus(nine, nine)  # two of a kind: one is the named panel's, the other free
+    assert turzx_usb._pick(None, ("turing-9.2-usb",), two, None)[1] == nine
+    assert turzx_usb._pick(nine, ("turing-9.2-usb",), Bus(nine), None)[1] == nine  # named: its own
+    assert turzx_usb._pick(None, (), both, None) is not None  # alone: the first there is
+
+
+def test_each_panel_knows_the_models_the_others_name():
+    config = parse_config({"device": {"model": "auto"},
+                           "panels": [{"model": "turing-9.2-usb"}, {"model": "auto"}]})  # fmt: skip
+    assert config.device.beside == ("turing-9.2-usb",)
+    assert config.for_panel(0).device.beside == ()  # the first and the third are "auto"
+    assert config.for_panel(1).device.beside == ("turing-9.2-usb",)
+
+
+def test_the_model_found_for_auto_is_the_one_its_panel_has_open(monkeypatch):
+    """Settings and the default theme ask while the panel runs: its own place is taken then."""
+    import usb.core
+
+    from libre_panel.devices import base, turzx_usb
+
+    bus = Bus(_pid("turing-9.2-usb"), _pid("turing-12.3-usb"))
+    monkeypatch.setattr(usb.core, "find", bus.find)
+    monkeypatch.setattr(turzx_usb, "_backend", lambda: None)
+    for device in bus.devices:  # both panels run
+        assert base.take_place(turzx_usb._place(device))
+    try:
+        assert turzx_usb.present_model(("turing-9.2-usb",)).id == "turing-12.3-usb"
+    finally:
+        for device in bus.devices:
+            base.leave_place(turzx_usb._place(device))

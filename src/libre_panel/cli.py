@@ -51,9 +51,22 @@ def _log_file() -> Path:
     path = log_file()
     path.parent.mkdir(parents=True, exist_ok=True)
     handler = RotatingFileHandler(path, maxBytes=1_000_000, backupCount=2, encoding="utf-8")
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    handler.addFilter(_PanelOfThread())
+    handler.setFormatter(
+        logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(panel)s%(message)s")
+    )
     logging.getLogger().addHandler(handler)
     return path
+
+
+class _PanelOfThread(logging.Filter):
+    """``panel 2: `` before what the loop of a panel beside the first says: with two panels
+    of a kind "connected to Turing 9.2\"" tells nothing of whose it is."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        name = record.threadName or ""
+        record.panel = f"panel {name[6:]}: " if name.startswith("panel-") else ""
+        return True
 
 
 def _background(args: argparse.Namespace, use_icon: bool, open_editor: bool) -> int:

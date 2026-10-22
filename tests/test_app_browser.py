@@ -655,7 +655,7 @@ def test_a_running_panel_switches_by_itself_and_the_trays_line_goes(isolated_hom
     from libre_panel.devices.base import DeviceError
     from libre_panel.service import BackgroundApp
 
-    def no_panel(pid=None):
+    def no_panel(pid=None, beside=()):
         raise DeviceError("no panel")
 
     monkeypatch.setattr(turzx_usb.UsbTransport, "open", staticmethod(no_panel))

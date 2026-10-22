@@ -274,6 +274,28 @@ def test_processes_are_counted_once_per_program(monkeypatch):
     assert out["proc.mem.1.name"].value == "game" and out["proc.mem.2.value"].value == 5.0
 
 
+def test_the_scan_of_the_processes_leaves_the_interpreter_to_the_panels_now_and_then(monkeypatch):
+    """On Windows a scan of hundreds of processes takes a good part of a second: in one go it
+    held every panel's frame (both panels stood still a moment every few seconds)."""
+    clock = [0.0]
+
+    class Proc:
+        pid, info = 7, {"name": "busy.exe", "memory_percent": 1.0}
+
+        def cpu_percent(self, interval=None):
+            clock[0] += 0.001  # a millisecond of the interpreter for each
+            return 1.0
+
+    pauses = []
+    monkeypatch.setattr(psutil_provider.psutil, "process_iter", lambda attrs: [Proc()] * 300)
+    monkeypatch.setattr(psutil_provider.time, "perf_counter", lambda: clock[0])
+    monkeypatch.setattr(psutil_provider.time, "sleep", pauses.append)
+    out = psutil_provider.PsutilProvider()._processes()
+    assert out["proc.cpu.1.name"].value == "busy"
+    burst = psutil_provider.SCAN_BURST_S / 0.001
+    assert len(pauses) >= 300 / (burst + 1) - 1 and set(pauses) == {psutil_provider.SCAN_PAUSE_S}
+
+
 def test_costly_sensors_wait_until_a_theme_shows_them(monkeypatch):
     gc.collect()
     monkeypatch.setattr(base, "_WANTED", {})

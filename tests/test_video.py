@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image, ImageChops, ImageDraw, ImageStat
@@ -219,10 +220,10 @@ def test_why_the_video_mode_is_off_is_logged_once_while_auto_looks_for_the_panel
     monkeypatch.setattr(turzx, "_told", "")  # nothing said before this test
     nine = get_model("turing-9.2-usb")
 
-    def busy(pid=None):
+    def busy(pid=None, beside=()):
         raise DeviceError("the panel is in use by another program")
 
-    monkeypatch.setattr(turzx_usb, "present_model", lambda: nine)
+    monkeypatch.setattr(turzx_usb, "present_model", lambda *_: nine)
     monkeypatch.setattr(turzx_usb.UsbTransport, "open", staticmethod(busy))
     monkeypatch.setattr(serial_link, "find_port", lambda *args, **kwargs: None)
     ffmpeg = tmp_path / "ffmpeg"
@@ -247,7 +248,7 @@ def test_why_the_video_mode_is_off_is_logged_once_while_auto_looks_for_the_panel
 def panel(monkeypatch):
     fake = FakePanel()
 
-    def open_transport(pid=None):
+    def open_transport(pid=None, beside=()):
         if not fake.present:
             raise DeviceError("no Turing/TURZX USB panel found")
         return transport_for(fake)
@@ -779,11 +780,15 @@ def test_video_mode_through_the_turzx_driver(panel):
 def test_auto_video_mode_on_a_detected_panel(panel, monkeypatch, caplog):
     """``model = "auto"``: the panel on the bus is looked up without opening it,
     and the 9.2" streams; what is missing is logged once, not on every reconnect."""
+    import usb.core
+
     from libre_panel.devices.turzx import TurzxDisplay
 
-    monkeypatch.setattr(
-        turzx_usb.UsbTransport, "present", staticmethod(lambda pid: pid == panel.pid)
-    )
+    def find(find_all, idVendor, idProduct, backend):
+        return [SimpleNamespace(bus=1, address=9)] if idProduct == panel.pid else []
+
+    monkeypatch.setattr(usb.core, "find", find)
+    monkeypatch.setattr(turzx_usb, "_backend", lambda: None)
     found = TurzxDisplay(
         DeviceConfig(
             driver="turzx", model="auto", video=VideoConfig(local_clip="usr/data/clip.h264")
@@ -961,7 +966,7 @@ def running_panel(home, monkeypatch, panel):
     opened = []
     real = turzx_usb.UsbTransport.open
 
-    def counted(pid=None):
+    def counted(pid=None, beside=()):
         opened.append(pid)
         return real(pid)
 

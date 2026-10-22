@@ -459,7 +459,7 @@ def panel_on_the_bus(monkeypatch, model_id=None, serial=None, gadget=None):
         maybe = [serial_link.FoundPort(gadget, models[0], None, models)]
     monkeypatch.setattr(serial_link, "gadget_ports", lambda: maybe)
     model = get_model(model_id) if model_id else None
-    monkeypatch.setattr(turzx_usb, "present_model", lambda: model if not serial else None)
+    monkeypatch.setattr(turzx_usb, "present_model", lambda *_: model if not serial else None)
     port = None
     if serial:
         found = get_model(serial)

@@ -77,7 +77,7 @@ def test_the_editor_alone_works_the_default_out_from_the_config(isolated_home, m
         status, pages = request(port, "GET", "/api/pages")
         assert pages["pages"][0]["theme"] == "lumen" and pages["default"] == "lumen"
         assert pages["chosen"] is False and pages["shown"] is None
-        monkeypatch.setattr(turzx_usb, "present_model", lambda: NINE)  # or a bar on the bus
+        monkeypatch.setattr(turzx_usb, "present_model", lambda *_: NINE)  # or a bar on the bus
         (isolated_home / "config.toml").write_text("fps = 5\n", encoding="utf-8")
         assert request(port, "GET", "/api/pages")[1]["pages"][0]["theme"] == "lumen"
         (isolated_home / "config.toml").write_text('theme = "slate"\n', encoding="utf-8")
