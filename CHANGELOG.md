@@ -174,6 +174,19 @@ large digits; a portable zip that is portable; and much more that was collected 
 - `tools/panels_bench.py`: how much two panels in video mode slow each other down
 
 **Fixes**
+- A panel beside the first (a companion screen) showed "--" for the ping and no processes:
+  its process now tells the first panel's what its theme reads, so the sources there count
+  the processes, ask the ping and read the sensors of LibreHardwareMonitor for it too
+- The processes' share of the processor no longer stays at 0: it is counted from each
+  process's CPU seconds between two counts, not from psutil's own count, which began again
+  whenever the game mode's list of the programs made its entries anew
+- Look follows the panel chosen in the header (Panel 1 | Panel 2) as Design does: it opens
+  the theme that panel shows, and the panel's chip names that panel's model and how it runs
+  (it named the model the open theme was made for, and the first panel's state)
+- AI activity: *Settings* says "Set up" in every language once it is (German said
+  "Einrichten", as on the button), when each program last reported, that only its sessions
+  on this PC report, and offers to set it up again where its hooks call an address Libre Panel
+  no longer listens on
 - Windows: the temperatures, power and clocks come from LibreHardwareMonitor 0.9.7 (a preview
   build of it), which reads newer processors right, the Threadripper 9000 among them; with
   0.9.6 it showed temperatures such as 130 °C

@@ -8,6 +8,7 @@ import { appAction, quitApp } from "../core/app.js";
 import { t } from "../core/i18n.js";
 import { setPref, store, useStore } from "../core/state.js";
 import { statTiles } from "../core/stats.js";
+import { targetStatus } from "../core/target.js";
 import { html, useRef, useState } from "../lib/preact.js";
 import { NumberField, Row, Segmented, Slider, Toggle } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
@@ -211,18 +212,21 @@ function Running({ app, onClose }) {
 
 /** The chip: the panel the theme is for, and how the real one is doing. */
 export function PanelChip() {
-  const { theme, models, app, size } = useStore((s) => ({
+  // the panel chosen in the header (Panel 1 | Panel 2): its state and its model, else the model
+  // the open theme is made for
+  const { theme, models, app, size, chosen } = useStore((s) => ({
     theme: s.doc?.theme,
     models: s.specs?.models || [],
     app: s.app,
     size: s.render.size,
+    chosen: targetStatus(s),
     rev: s.rev,
   }));
   const [open, setOpen] = useState(false);
   const anchor = useRef(null);
   if (!theme) return null;
-  const model = modelOf(theme, models);
-  const panel = app.available ? app.panel || {} : null;
+  const model = models.find((item) => item.id === chosen?.model) || modelOf(theme, models);
+  const panel = app.available ? chosen || {} : null;
   const gone = app.quit || app.gone; // it quit, or does not answer: what it said last is not true now
   const state = gone ? "gone" : panel ? panel.state : "preview";
   let detail = `${size[0]} × ${size[1]}`;

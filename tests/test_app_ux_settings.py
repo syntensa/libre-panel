@@ -606,6 +606,7 @@ def test_ai_activity_shows_what_it_adds_then_sets_up_and_takes_it_out(
     monkeypatch.setenv("USERPROFILE", str(home))
     monkeypatch.delenv("CODEX_HOME", raising=False)
     monkeypatch.setattr(agents, "program", lambda name: "/bin/claude" if name == "claude" else None)
+    monkeypatch.setattr(agents, "BOARD", agents.Board())  # (nothing heard from anyone yet)
     choose_theme(isolated_home, "lumen")
     set_config_value("services.enabled", ["agents"])
     settings = home / ".claude" / "settings.json"
@@ -623,9 +624,28 @@ def test_ai_activity_shows_what_it_adds_then_sets_up_and_takes_it_out(
         page.locator(".dialog").get_by_role("button", name="Set up").click()
         expect(claude.get_by_role("button", name="Remove")).to_be_visible()
         assert agents.installed(agents.read_settings(settings))["status_line"]
+        # set up, nothing heard yet: where it reports from
+        expect(claude.locator(".settings-row-status")).to_have_text("Set up; no report from it yet")
+        expect(claude.locator("[data-agents-waiting]")).to_contain_text("Sessions in the cloud")
+        agents.BOARD.hook("claude", {"hook_event_name": "SessionStart", "session_id": "s"})
+        expect(claude.locator(".settings-row-status")).to_contain_text(
+            "its last report came", timeout=10_000
+        )  # (the card asks again every few seconds)
+        expect(claude.locator("[data-agents-waiting]")).to_have_count(0)
         claude.get_by_role("button", name="Remove").click()
         expect(claude).to_contain_text("Not set up yet")
         assert agents.read_settings(settings) == {}
+        # set up for the address Libre Panel had before its port was taken: set it up again
+        agents.write_settings(settings, agents.claude_plan({}, 1, agents.key(create=True), True))
+        page.reload()
+        claude = page.locator("[data-service='agents'] [data-agent='claude']")
+        expect(claude.locator(".settings-row-status")).to_have_text(
+            "Set up for another address: set it up again"
+        )
+        claude.get_by_role("button", name="Set up again").click()
+        page.locator(".dialog").get_by_role("button", name="Set up").click()
+        expect(claude.get_by_role("button", name="Set up again")).to_have_count(0)
+        assert agents.installed(agents.read_settings(settings))["port"] != 1
 
 
 def test_a_shortcut_is_set_by_pressing_the_keys_and_taken_away_again(app_url, isolated_home):  # noqa: F811

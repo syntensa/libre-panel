@@ -9,9 +9,17 @@ import { html, useEffect, useState } from "../../lib/preact.js";
 import { Toggle } from "../../ui/controls.js";
 import { openDialog } from "../../ui/dialog.js";
 import { toast, toastError } from "../../ui/toast.js";
-import { SettingRow, Status } from "./parts.js";
+import { SettingRow, Status, usePolling } from "./parts.js";
 
 const NAMES = { claude: "Claude Code", codex: "Codex" };
+
+/** "12 s", "5 min", "3 h": how long ago, short. */
+const ago = (seconds) =>
+  seconds < 60
+    ? t("{n} s", { n: Math.round(seconds) })
+    : seconds < 3600
+      ? t("{n} min", { n: Math.round(seconds / 60) })
+      : t("{n} h", { n: Math.round(seconds / 3600) });
 
 /** What setting up adds, to be confirmed: the settings file as it will be. */
 function preview(agent, plan) {
@@ -57,16 +65,25 @@ function AgentRow({ agent, info, reload }) {
       toastError(error);
     }
   };
+  // set up for the address Libre Panel had then: it listens on another now (its port was taken)
+  const moved = Boolean(state.hooks && state.port && info.port && state.port !== info.port);
   const status = state.problem
     ? html`<${Status} tone="error">${state.problem}<//>`
-    : state.hooks
-      ? html`<${Status} tone="ok">${t("Set up")}<//>`
-      : html`<${Status}>${state.program ? t("Not set up yet") : t("Not found on this PC")}<//>`;
+    : moved
+      ? html`<${Status} tone="warn">${t("Set up for another address: set it up again")}<//>`
+      : state.hooks
+        ? state.heard != null
+          ? html`<${Status} tone="ok">${t("Set up; its last report came {ago} ago", { ago: ago(state.heard) })}<//>`
+          : html`<${Status} tone="warn">${t("Set up; no report from it yet")}<//>`
+        : html`<${Status}>${state.program ? t("Not set up yet") : t("Not found on this PC")}<//>`;
   return html`<${SettingRow} stacked class="agents-row" data-agent=${agent} title=${NAMES[agent]}
       hint=${agent === "claude"
         ? t("Its hooks say when it works and when it waits for you; its status line brings the plan's usage while a session runs.")
         : t("Its hooks say when it works and when it waits for you.")}>
     <span class="settings-row-status">${status}</span>
+    ${state.hooks && state.heard == null && !moved
+      ? html`<span class="settings-row-hint" data-agents-waiting>${t("It reports from its next session on this PC: in a terminal, an editor or the desktop app. Sessions in the cloud do not reach this PC.")}</span>`
+      : null}
     ${agent === "claude" && !state.hooks
       ? state.other_status_line
         ? html`<span class="settings-row-hint">${t("Claude Code has a status line of its own: Libre Panel leaves it as it is.")}</span>`
@@ -76,6 +93,7 @@ function AgentRow({ agent, info, reload }) {
           </div>`
       : null}
     <div class="command-row">
+      ${moved ? html`<button type="button" class="btn btn-primary" onClick=${setUp}>${t("Set up again")}</button>` : null}
       ${state.hooks
         ? html`<button type="button" class="btn" onClick=${remove}>${t("Remove")}</button>`
         : html`<button type="button" class="btn btn-primary" disabled=${Boolean(state.problem)} onClick=${setUp}>${t("Set up")}</button>`}
@@ -89,6 +107,7 @@ export function AgentsSetup() {
   useEffect(() => {
     reload();
   }, []);
+  usePolling(() => get("/api/ai/setup").then(setInfo).catch(() => {}), 5000); // its last report
   if (!info) return null;
   return html`<div class="agents-setup" data-agents-setup>
     ${["claude", "codex"].map((agent) => html`<${AgentRow} key=${agent} agent=${agent} info=${info} reload=${reload} />`)}

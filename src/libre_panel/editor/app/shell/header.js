@@ -2,8 +2,8 @@
 // tabs (each says what it is for), the search field, always right after the tabs, and the way to
 // the settings, by name, which leads back to where the person was when pressed in Settings.
 
-import { applyToPanel, confirmDiscard, openTheme, panelState } from "../core/actions.js";
-import { chooseTarget, designPages, useTarget } from "../core/target.js";
+import { applyToPanel, confirmDiscard, openChosenPanelTheme, panelState } from "../core/actions.js";
+import { chooseTarget, useTarget } from "../core/target.js";
 import { redo, undo } from "../core/doc.js";
 import { t } from "../core/i18n.js";
 import { firstStart, store, useStore } from "../core/state.js";
@@ -13,7 +13,7 @@ import { IconButton, Segmented } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { dialogOpen } from "../ui/dialog.js";
 import { openPalette, paletteOpen } from "../ui/palette.js";
-import { allViews, leaveSettings, navigate, settingsReturn, viewHint } from "./views.js";
+import { allViews, leaveSettings, navigate, settingsReturn, showsTheme, viewHint } from "./views.js";
 
 const titleOf = (view) => (typeof view.title === "function" ? view.title() : view.title);
 
@@ -75,21 +75,18 @@ function SettingsButton({ active }) {
   </button>`;
 }
 
-/** "Panel 1 | Panel 2", while more panels are set up: the panel Live shows and Design edits
- * (target.js). In Design the theme the chosen panel shows opens, after asking about unsaved
- * changes. */
+/** "Panel 1 | Panel 2", while more panels are set up: the panel Live shows and Design and Look
+ * edit (target.js). The theme the chosen panel shows opens: in Design and Look after asking
+ * about unsaved changes, elsewhere where there are none. */
 function PanelSwitch() {
   const count = useStore((s) => 1 + (s.settings?.config?.panels?.length || 0));
   const number = useTarget();
   if (count < 2) return null;
   const choose = async (n) => {
     if (n === number) return;
-    const design = store.get().route.view === "design";
-    if (design && !(await confirmDiscard())) return;
-    await chooseTarget(n, async () => {
-      const theme = designPages()?.pages?.[0]?.theme;
-      if (design && theme) await openTheme(theme, { ask: false, page: "normal" });
-    });
+    const editing = showsTheme(); // (Design, Look)
+    if (editing && !(await confirmDiscard())) return;
+    await chooseTarget(n, () => openChosenPanelTheme({ force: editing }));
   };
   return html`<${Segmented}
     class="panel-switch"

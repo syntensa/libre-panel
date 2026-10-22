@@ -1,5 +1,9 @@
 {
   "messages": {
+    "Set up for another address: set it up again": "Configurado para outro endereço: configure de novo",
+    "Set up; its last report came {ago} ago": "Configurado; último sinal há {ago}",
+    "Set up; no report from it yet": "Configurado; ainda sem sinal",
+    "It reports from its next session on this PC: in a terminal, an editor or the desktop app. Sessions in the cloud do not reach this PC.": "Ele informa a partir da próxima sessão neste PC: em um terminal, um editor ou o app de desktop. Sessões na nuvem não chegam a este PC.",
     "Not yet seen on the hardware.": "Ainda não testado no hardware.",
     "Not yet seen on the hardware. It takes whole JPEG pictures over a USB serial port: a few a second, no smooth motion, and a busy picture loses detail. When Libre Panel quits, the panel shows its own animation again.": "Ainda não testado no hardware. Recebe imagens JPEG inteiras por uma porta serial USB: poucas por segundo, sem movimento suave, e uma imagem carregada perde detalhes. Quando o Libre Panel fecha, o painel volta a mostrar a própria animação.",
     "Not yet seen on the hardware. \"Detect automatically\" does not find it (USB-to-HDMI adapters have the same chip): choose it by hand. On Windows it needs the maker's driver, which comes with the maker's program. It has no backlight control: dimming darkens the picture. No smooth motion.": "Ainda não testado no hardware. \"Detectar automaticamente\" não o encontra (adaptadores USB-HDMI têm o mesmo chip): escolha-o manualmente. No Windows ele precisa do driver do fabricante, que vem com o programa do fabricante. Não tem controle da luz de fundo: escurecer deixa a imagem mais escura. Sem movimento suave.",

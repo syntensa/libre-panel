@@ -12,6 +12,7 @@ from libre_panel.config import load_config
 from libre_panel.devices import base
 from libre_panel.panel_process import RemoteStatus
 from libre_panel.render import fan
+from libre_panel.sensors.base import wanted
 
 CONFIG = """theme = "lumen"
 fps = 10
@@ -49,10 +50,14 @@ def test_a_panel_beside_the_first_runs_in_a_process_of_its_own(tmp_path, monkeyp
         assert wait_for(lambda: (tmp_path / "second.png").exists(), timeout=10)
         said = [r for r in caplog.records if "in a process of its own" in r.getMessage()]
         assert said and said[0].threadName == "panel-2"  # its log lines, as its own
+        # what its theme reads is wanted here too, where the sources are: Lumen shows no
+        # processes, its companion does, so the processes are counted for it
+        assert wait_for(lambda: wanted("proc."), timeout=10)
     finally:
         stop.set()
         loop.join(30)
     assert not loop.is_alive()
+    assert not wanted("proc.")  # (its process ended: nobody wants them any more)
 
 
 def test_a_panel_whose_process_cannot_start_runs_in_a_thread(tmp_path, monkeypatch):

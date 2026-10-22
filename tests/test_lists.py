@@ -4,6 +4,7 @@ import gc
 import json
 from collections import namedtuple
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -263,38 +264,57 @@ def test_fedora_atomic_shows_the_disk_not_its_image(monkeypatch):
 
 
 def test_processes_are_counted_once_per_program(monkeypatch):
-    class Proc:
-        def __init__(self, pid, name, cpu, mem):
-            self.pid, self.info, self._cpu = pid, {"name": name, "memory_percent": mem}, cpu
+    """Their share of the processor from their CPU seconds between two counts, whatever
+    Process objects psutil hands out: new ones each time here, as when another list of the
+    processes (the game mode's) made them anew and psutil's own count began again at 0."""
+    times = namedtuple("times", "user system")
 
-        def cpu_percent(self, interval=None):
-            return self._cpu
+    def listing(seconds):  # (pid, name, cores busy, memory %): new objects every time
+        rows = [
+            (0, "System Idle Process", 7.0, 0),
+            (10, "chrome.exe", 0.4, 3.0),
+            (11, "chrome.exe", 0.2, 2.0),
+            (12, "game.exe", 0.5, 9.0),
+            (13, "", 0.9, 9.0),
+        ]
+        return [SimpleNamespace(pid=pid, info={"name": name, "memory_percent": mem,
+                                               "cpu_times": times(busy * seconds, 0.0)})
+                for pid, name, busy, mem in rows]  # fmt: skip
 
-    procs = [Proc(0, "System Idle Process", 700, 0), Proc(10, "chrome.exe", 40, 3.0),
-             Proc(11, "chrome.exe", 20, 2.0), Proc(12, "game.exe", 50, 9.0),
-             Proc(13, "", 99, 9.0)]  # fmt: skip
-    monkeypatch.setattr(psutil_provider.psutil, "process_iter", lambda attrs: procs)
+    clock = [100.0]
+    monkeypatch.setattr(psutil_provider.time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(psutil_provider.psutil, "cpu_count", lambda: 10)
-    out = psutil_provider.PsutilProvider()._processes()
+    provider = psutil_provider.PsutilProvider()
+    monkeypatch.setattr(psutil_provider.psutil, "process_iter", lambda attrs: listing(100.0))
+    first = provider._processes()
+    assert first["proc.cpu.1.value"].value == 0.0  # (one count: nothing to compare with yet)
+    assert first["proc.mem.1.name"].value == "game"  # (the memory is there at once)
+    clock[0] += 2.0
+    monkeypatch.setattr(psutil_provider.psutil, "process_iter", lambda attrs: listing(102.0))
+    out = provider._processes()
     assert out["proc.cpu.1.name"].value == "chrome" and out["proc.cpu.1.value"].value == 6.0
-    assert out["proc.cpu.2.name"].value == "game" and "proc.cpu.3.name" not in out
+    assert out["proc.cpu.2.name"].value == "game" and out["proc.cpu.2.value"].value == 5.0
+    assert "proc.cpu.3.name" not in out  # (not the idle process, nor one without a name)
     assert out["proc.mem.1.name"].value == "game" and out["proc.mem.2.value"].value == 5.0
+    clock[0] += 2.0  # a process id taken by a new program: its seconds begin anew, not below 0
+    monkeypatch.setattr(psutil_provider.psutil, "process_iter", lambda attrs: listing(1.0))
+    assert provider._processes()["proc.cpu.1.value"].value == 0.0
 
 
 def test_the_scan_of_the_processes_leaves_the_interpreter_to_the_panels_now_and_then(monkeypatch):
     """On Windows a scan of hundreds of processes takes a good part of a second: in one go it
     held every panel's frame (both panels stood still a moment every few seconds)."""
     clock = [0.0]
+    times = namedtuple("times", "user system")
 
-    class Proc:
-        pid, info = 7, {"name": "busy.exe", "memory_percent": 1.0}
-
-        def cpu_percent(self, interval=None):
+    def listing(attrs):
+        for _ in range(300):
             clock[0] += 0.001  # a millisecond of the interpreter for each
-            return 1.0
+            yield SimpleNamespace(pid=7, info={"name": "busy.exe", "memory_percent": 1.0,
+                                               "cpu_times": times(1.0, 0.0)})  # fmt: skip
 
     pauses = []
-    monkeypatch.setattr(psutil_provider.psutil, "process_iter", lambda attrs: [Proc()] * 300)
+    monkeypatch.setattr(psutil_provider.psutil, "process_iter", listing)
     monkeypatch.setattr(psutil_provider.time, "perf_counter", lambda: clock[0])
     monkeypatch.setattr(psutil_provider.time, "sleep", pauses.append)
     out = psutil_provider.PsutilProvider()._processes()

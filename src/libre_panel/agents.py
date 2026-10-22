@@ -136,6 +136,8 @@ class Agent:
     tokens_today: float | None = None
     tokens_week: float | None = None
     usage_error: str = ""
+    heard: float = 0.0  # when it last said something (a hook, its status line); 0: never
+    heard_what: str = ""  # what that was (the hook's event, "statusLine")
 
 
 class Board:
@@ -156,6 +158,7 @@ class Board:
         event = str(data.get("hook_event_name") or "")
         key, now = _session(data.get("session_id")), self.clock()
         with self._lock:
+            self._heard(agent, now, event[:40] or "?")
             sessions = self.agents[agent].sessions
             if event == "SessionEnd":
                 sessions.pop(key, None)
@@ -196,6 +199,7 @@ class Board:
         cost = data.get("cost") if isinstance(data.get("cost"), dict) else {}
         limits = data.get("rate_limits") if isinstance(data.get("rate_limits"), dict) else {}
         with self._lock:
+            self._heard(agent, now, "statusLine")
             known = self.agents[agent]
             if model.get("display_name"):
                 known.model = str(model["display_name"])[:40]
@@ -213,6 +217,18 @@ class Board:
                 known.sessions.setdefault(key, Session(changed=now)).seen = now
             self.changed.set()
             return self._line(known, now)
+
+    def _heard(self, agent: str, now: float, what: str) -> None:
+        known = self.agents[agent]
+        if not known.heard:
+            log.info("AI activity: the first word from %s (%s)", agent, what)
+        known.heard, known.heard_what = now, what
+
+    def last_heard(self, agent: str) -> tuple[float | None, str]:
+        """How many seconds ago the agent last said something, and what (None: never)."""
+        with self._lock:
+            known = self.agents[agent]
+            return (max(0.0, self.clock() - known.heard) if known.heard else None), known.heard_what
 
     @staticmethod
     def _line(known: Agent, now: float) -> str:
@@ -624,14 +640,20 @@ def without_ours(settings: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def installed(settings: dict[str, Any]) -> dict[str, bool]:
-    """Whether Libre Panel's hooks are in ``settings``, and whose status line there is."""
+_PORT = re.compile(r"127\.0\.0\.1:(\d+)" + re.escape(MARK))
+
+
+def installed(settings: dict[str, Any]) -> dict[str, Any]:
+    """Whether Libre Panel's hooks are in ``settings``, whose status line there is, and the
+    port Libre Panel's hooks call (None: none of them)."""
     hooks = settings.get("hooks") if isinstance(settings.get("hooks"), dict) else {}
     ours = any(isinstance(g, list) and any(_ours(x) for x in g) for g in hooks.values())
     line = settings.get("statusLine")
     line_ours = isinstance(line, dict) and MARK in str(line.get("command", ""))
     other = bool(line) and not line_ours
-    return {"hooks": ours, "status_line": line_ours, "other_status_line": other}
+    found = _PORT.search(json.dumps(hooks)) if ours else None
+    return {"hooks": ours, "status_line": line_ours, "other_status_line": other,
+            "port": int(found.group(1)) if found else None}  # fmt: skip
 
 
 def read_settings(path: Path) -> dict[str, Any]:

@@ -1,5 +1,9 @@
 {
   "messages": {
+    "Set up for another address: set it up again": "已为另一个地址设置：请重新设置",
+    "Set up; its last report came {ago} ago": "已设置；上次报告在 {ago} 前",
+    "Set up; no report from it yet": "已设置；尚无报告",
+    "It reports from its next session on this PC: in a terminal, an editor or the desktop app. Sessions in the cloud do not reach this PC.": "它将从此电脑上的下一个会话起报告：终端、编辑器或桌面应用中的会话。云端会话无法到达此电脑。",
     "Not yet seen on the hardware.": "尚未在实机上验证。",
     "Not yet seen on the hardware. It takes whole JPEG pictures over a USB serial port: a few a second, no smooth motion, and a busy picture loses detail. When Libre Panel quits, the panel shows its own animation again.": "尚未在实机上验证。它通过 USB 串口接收整张 JPEG 图片：每秒只有几张，无流畅动态，画面复杂时会损失细节。Libre Panel 退出后，面板会重新显示它自带的动画。",
     "Not yet seen on the hardware. \"Detect automatically\" does not find it (USB-to-HDMI adapters have the same chip): choose it by hand. On Windows it needs the maker's driver, which comes with the maker's program. It has no backlight control: dimming darkens the picture. No smooth motion.": "尚未在实机上验证。“自动检测”找不到它（USB 转 HDMI 适配器使用同一芯片）：请手动选择。在 Windows 上需要厂商的驱动程序，它随厂商的软件一起安装。它无法控制背光：调暗只会让画面变暗。无流畅动态。",

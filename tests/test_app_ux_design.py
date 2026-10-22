@@ -421,6 +421,43 @@ def test_design_edits_the_theme_of_the_panel_chosen_in_the_header(app_url, isola
         page.wait_for_function("window.libre.store.get().doc?.id === 'lumen'")
 
 
+def test_look_and_the_panel_chip_follow_the_panel_chosen_in_the_header(app_url, isolated_home):  # noqa: F811
+    """Look edits what Design edits: Panel 2 in the header opens the theme panel 2 shows there
+    too, and the chip names the chosen panel's model as it runs (the 12.3" first, the 9.2"
+    beside it), not the model the open theme was made for."""
+    import json
+
+    from test_app_browser import app_answer
+
+    choose_theme(isolated_home, "lumen")
+    with isolated_home.joinpath("config.toml").open("a", encoding="utf-8") as config:
+        config.write('\n[[panels]]\nmodel = "turing-9.2-usb"\ntheme = "lumen-companion"\n')
+    answer = app_answer()
+    answer["panel"] = {**answer["panel"], "theme": "lumen", "model": "turing-12.3-usb",
+                       "more": [{"index": 0, "state": "showing", "detail": "", "target": "",
+                                 "theme": "lumen-companion", "model": "turing-9.2-usb",
+                                 "size": None}]}  # fmt: skip
+
+    def app(route, request):
+        if request.method != "GET":
+            return route.continue_()
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(answer))
+
+    with browser_page(app_url, "look", routes={"**/api/app": app}) as page:
+        page.wait_for_function("window.libre.store.get().doc?.id?.startsWith('lumen')")
+        chip = page.locator(".panel-chip-name")
+        expect(chip).to_contain_text("12.3")
+        switch = page.get_by_role("radiogroup", name="Which panel Live shows and Design edits")
+        switch.get_by_role("radio", name="Panel 2").click()
+        page.wait_for_function(
+            "window.libre.store.get().doc?.id?.startsWith('lumen-companion')"
+        )  # (in Look too, not only in Design)
+        expect(chip).to_contain_text("9.2")
+        switch.get_by_role("radio", name="Panel 1").click()
+        page.wait_for_function("!window.libre.store.get().doc?.id?.startsWith('lumen-companion')")
+        expect(chip).to_contain_text("12.3")
+
+
 def test_while_its_companion_runs_design_edits_the_pair_version(app_url, isolated_home):  # noqa: F811
     """The panel shows Lumen's pair version beside its companion: Design opens that one, and a
     copy of one's own goes with a copy of Lumen ("lumen-mine-pair")."""

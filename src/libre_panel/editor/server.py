@@ -1342,9 +1342,11 @@ class EditorHandler(BaseHTTPRequestHandler):
                     state, problem = agents.installed(current), ""
                 except (OSError, ValueError) as exc:
                     state, problem = {}, str(exc)
+                ago, what = agents.BOARD.last_heard(agent)
                 found[agent] = {"program": agents.program(agent) is not None, "path": str(path),
-                                **state, "problem": problem}  # fmt: skip
-            return self._json({"on": on, **found})
+                                **state, "problem": problem, "heard": ago,
+                                "heard_what": what}  # fmt: skip
+            return self._json({"on": on, "port": self.server.server_address[1], **found})
         payload = self._read_json()
         if payload is None:
             return None

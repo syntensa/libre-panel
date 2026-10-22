@@ -17,7 +17,7 @@ import { statTiles } from "../../core/stats.js";
 import { videoState } from "../../core/video.js";
 import { chooseTarget } from "../../core/target.js";
 import { html, useEffect, useRef, useState } from "../../lib/preact.js";
-import { themeName } from "../../core/actions.js";
+import { openChosenPanelTheme, themeName } from "../../core/actions.js";
 import { modeName, panelName, stateText } from "../../shell/panel-popover.js";
 import { navigate, registerView } from "../../shell/views.js";
 import { Segmented, Slider, Toggle } from "../../ui/controls.js";
@@ -383,7 +383,7 @@ function LiveNow() {
   const more = status?.more || [];
   // the header's choice (target.js), as chosen: Live has the panels the app says are running
   const chosen = useStore((s) => Number(s.prefs.target) || 1);
-  const choose = (n) => chooseTarget(n);
+  const choose = (n) => chooseTarget(n, () => openChosenPanelTheme()); // (Design and Look follow)
   const beside = more.find((item) => item.index + 2 === chosen) || null;
   const number = beside ? chosen : 1;
   const besideLine = beside

@@ -12,7 +12,10 @@ panels stand, whether the app quits, *Which is which?*, and the device places it
 hold. The panel's process (:func:`child`) runs its loop on those (:func:`libre_panel.app.run`
 with its ``[[panels]]`` table, which it reads and follows itself) and says back how it is doing
 (:class:`RemoteStatus`), the picture it shows when the app asks (Live, the picture of all
-panels) and the device places it holds. Its log lines go to the first's log, with its number.
+panels), the device places it holds, and the readings its theme reads: the sources in the
+first panel's process do costly work (the processes, the ping, a sensor of LibreHardwareMonitor)
+only while a theme there wants it, so they are told of this one's too. Its log lines go to the
+first's log, with its number.
 """
 
 from __future__ import annotations
@@ -101,6 +104,7 @@ class PanelProcess:
         self.heard = False  # whether the process said a word (it started)
         self._held: set[str] = set()  # the device places the process holds (as it said)
         self._marked: set[str] = set()  # those of them noted as taken here
+        self._wanting = _Wanting()  # the readings its theme reads, wanted here in its name
         status._ask = lambda: self._send(("shown?",))
         self.process = ctx.Process(target=child, args=(n, str(path), theirs, self._logs),
                                    name=f"panel-{n + 2}", daemon=True)  # fmt: skip
@@ -135,6 +139,7 @@ class PanelProcess:
             self.process.join(2.0)
         self._stop.set()
         self._unmark()
+        _forget(self._wanting)
         try:
             self._conn.close()
         except OSError:
@@ -200,6 +205,10 @@ class PanelProcess:
                     setattr(self.status, name, value)
             elif kind == "shown":
                 self.status.took(message[1])
+            elif kind == "wants":  # what its theme reads: the sources here read it too
+                from libre_panel.sensors.base import want
+
+                want(self._wanting, frozenset(message[1]))
             elif kind == "places":  # the device it holds: none of this process's takes it
                 self._held = set(message[1])
                 for place in self._held - self._marked:
@@ -228,6 +237,16 @@ class PanelProcess:
             if record is None:
                 return
             logging.getLogger(record.name).handle(record)
+
+
+class _Wanting:
+    """Who wants the readings a panel's process said its theme reads (sensors.base.want)."""
+
+
+def _forget(wanting: _Wanting) -> None:
+    from libre_panel.sensors.base import want
+
+    want(wanting, frozenset())
 
 
 # -- the panel's side ------------------------------------------------------------------------
@@ -316,13 +335,20 @@ class _Link:
         self.send(("shown", buffer.getvalue()))
 
     def tell(self) -> None:
-        """How the panel is doing, and the device places it holds, every :data:`STATUS_S`."""
+        """How the panel is doing and the device places it holds, every :data:`STATUS_S`, and
+        the readings its theme reads whenever they change."""
         from libre_panel.devices import base
+        from libre_panel.sensors.base import wanted_keys
 
+        told: frozenset[str] | None = None
         while not self.stop.wait(STATUS_S):
             status = self.status
             self.send(("status", {name: getattr(status, name) for name in SENT}))
             self.send(("places", sorted(base.places_taken() - self._foreign)))
+            wants = wanted_keys()
+            if wants != told:
+                self.send(("wants", sorted(wants)))
+                told = wants
 
 
 def _remote_hub(link: _Link) -> Any:

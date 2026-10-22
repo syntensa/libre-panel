@@ -87,6 +87,7 @@ class PsutilProvider(SensorProvider):
         self.ping_targets = self.ping_targets or ["1.1.1.1:443"]
         self.ping_target = self.ping_targets[0]
         self._background: dict[str, dict[str, Reading]] = {"proc": {}, "ping": {}}
+        self._cpu_seen: dict[int, tuple[float, float]] = {}  # pid: its CPU seconds, and when
         self._ping_tries: list[deque[bool]] = [deque(maxlen=PING_TRIES) for _ in self.ping_targets]
         # False where the Linux source reads the kernel's chips (build_hub): the same files
         self.hwmon = True
@@ -268,21 +269,32 @@ class PsutilProvider(SensorProvider):
         thread.start()
 
     def _processes(self) -> dict[str, Reading]:
+        """The programs that use the most processor time since the last count, and the most
+        memory. The processor's share comes from each process's CPU seconds between two counts,
+        kept here by its id: not from psutil's own count, which lives on its Process objects
+        and starts again at 0 for one that another part of Libre Panel's list made anew."""
         cores = psutil.cpu_count() or 1
         rows = []
+        seen: dict[int, tuple[float, float]] = {}
         burst = time.perf_counter()
-        for proc in psutil.process_iter(["name", "memory_percent"]):
+        for proc in psutil.process_iter(["name", "memory_percent", "cpu_times"]):
             if time.perf_counter() - burst > SCAN_BURST_S:
                 time.sleep(SCAN_PAUSE_S)
                 burst = time.perf_counter()
-            try:
-                cpu = proc.cpu_percent(interval=None) / cores
-            except (psutil.Error, OSError):
+            times = proc.info.get("cpu_times")
+            if times is None:  # (not ours to read)
                 continue
+            now, spent = time.monotonic(), times.user + times.system
+            seen[proc.pid] = (spent, now)
+            before = self._cpu_seen.get(proc.pid)
+            cpu = 0.0
+            if before is not None and now > before[1]:
+                cpu = max(0.0, spent - before[0]) / (now - before[1]) / cores * 100
             name = proc.info.get("name") or ""
             if not name or proc.pid == 0 or name.lower() in ("system idle process", "idle"):
                 continue
-            rows.append((name, cpu, proc.info.get("memory_percent") or 0.0))
+            rows.append((name, min(100.0, cpu), proc.info.get("memory_percent") or 0.0))
+        self._cpu_seen = seen
         merged: dict[str, list[float]] = {}  # one row per program (browsers have many)
         for name, cpu, mem in rows:
             total = merged.setdefault(name, [0.0, 0.0])

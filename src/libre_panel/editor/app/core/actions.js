@@ -103,6 +103,13 @@ export async function openTheme(id, { page, ask = true } = {}) {
   }
 }
 
+/** Open the theme the panel chosen in the header shows (target.js): Design and Look are about
+ * it. Without ``force``, a theme with unsaved changes stays open. */
+export async function openChosenPanelTheme({ force = false } = {}) {
+  const theme = designPages()?.pages?.[0]?.theme;
+  if (theme && (force || !store.get().dirty)) await openTheme(theme, { ask: false, page: "normal" });
+}
+
 /** Start a new, unsaved theme. */
 export async function startTheme(theme, { ask = true } = {}) {
   if (ask && !(await confirmDiscard())) return false;

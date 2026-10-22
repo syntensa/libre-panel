@@ -84,6 +84,24 @@ def test_the_state_follows_the_hooks():
     assert board.state("claude")[0] == "off"
 
 
+def test_the_board_knows_when_each_agent_last_said_something(caplog):
+    clock = Clock()
+    board = agents.Board(clock)
+    assert board.last_heard("claude") == (None, "")
+    with caplog.at_level("INFO"):
+        hook(board, "SessionStart")
+        clock.now += 30
+        hook(board, "PreToolUse", tool_name="Read")
+    assert [r.getMessage() for r in caplog.records if "first word" in r.getMessage()] == [
+        "AI activity: the first word from claude (SessionStart)"
+    ]  # (once, the first time)
+    clock.now += 12
+    assert board.last_heard("claude") == (12.0, "PreToolUse")
+    board.status("claude", {"model": {"display_name": "Opus"}})
+    assert board.last_heard("claude") == (0.0, "statusLine")
+    assert board.last_heard("codex") == (None, "")
+
+
 def test_a_session_that_went_quiet():
     clock = Clock()
     board = agents.Board(clock)
@@ -313,15 +331,17 @@ def test_set_up_and_taken_out_again_keeping_what_is_the_persons_own():
         '-s -f -m 2 --data-binary "@-" "http://127.0.0.1:8765/api/ai/hook?agent=claude&key=k3y"'
     )
     assert agents.installed(plan) == {"hooks": True, "status_line": False,
-                                      "other_status_line": True}  # fmt: skip
+                                      "other_status_line": True, "port": 8765}  # fmt: skip
     again = agents.claude_plan(plan, 9000, "k3y", status_line=True)  # replaced, not doubled
     assert len(again["hooks"]["Stop"]) == 2 and ":9000/" in str(again["hooks"]["Stop"][1])
+    assert agents.installed(again)["port"] == 9000  # (the address it calls now)
     assert agents.without_ours(again) == own
     bare = agents.claude_plan({}, 8765, "k", status_line=True)
     assert bare["statusLine"] == {"type": "command",
                                   "command": agents.status_command(8765, "k")}  # fmt: skip
     assert agents.installed(bare) == {"hooks": True, "status_line": True,
-                                      "other_status_line": False}  # fmt: skip
+                                      "other_status_line": False, "port": 8765}  # fmt: skip
+    assert agents.installed(own)["port"] is None
     assert agents.without_ours(bare) == {}
     assert "statusLine" not in agents.claude_plan({}, 8765, "k", status_line=False)
     codex = agents.codex_plan({"hooks": {}}, 8765, "k")
@@ -445,6 +465,12 @@ def test_settings_show_what_is_added_then_add_and_remove_it(server):
     assert status == 200 and done["backup"] is None and (home / ".codex" / "hooks.json").exists()
     status, found = request(port, "GET", "/api/ai/setup")
     assert found["on"] and found["claude"]["hooks"] and found["codex"]["hooks"]
+    assert found["port"] == port and found["claude"]["port"] == port  # (where the hooks call)
+    assert found["claude"]["heard"] is None  # nothing heard yet
+    key = agents.read_key()
+    sent(port, f"/api/ai/hook?agent=claude&key={key}", {"hook_event_name": "Stop"})
+    status, found = request(port, "GET", "/api/ai/setup")
+    assert found["claude"]["heard"] == 0.0 and found["claude"]["heard_what"] == "Stop"
     set_config_value("services.enabled", [])  # switched off, it can still be taken out
     for agent in ("claude", "codex"):
         status, done = request(port, "POST", "/api/ai/setup", {"agent": agent, "action": "remove"})

@@ -1062,7 +1062,10 @@ Each hook is a `curl` (`curl.exe` on Windows) that hands the event to Libre Pane
 `127.0.0.1`, with a key of its own kept in `ai.json` beside config.toml. It runs beside the
 program and does nothing when Libre Panel is not running. A copy of the file as it was is kept
 beside it (`settings.json.libre-panel.bak`, once: the first copy is yours); *Remove* takes out
-only Libre Panel's entries, those that call `/api/ai/`.
+only Libre Panel's entries, those that call `/api/ai/`. The card says when each program last
+reported. Only its sessions on this PC report (in a terminal, an editor or the desktop app);
+sessions in the cloud do not reach it. Where Libre Panel had to take another port (its own
+was taken when it started), the card says so and sets the hooks up again with a click.
 
 ```toml
 [services]
