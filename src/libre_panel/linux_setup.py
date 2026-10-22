@@ -44,7 +44,8 @@ from libre_panel.i18n import t
 
 log = logging.getLogger(__name__)
 
-USB_VENDOR = "1cbe"  # TURZX USB panels, the ids the udev rule is for
+# the USB vendor ids the udev rule is for: TURZX USB panels, the JONSBO ZC-360's screens
+USB_VENDORS = ("1cbe", "43a8", "345f")
 UDEV_RULES = "/etc/udev/rules.d/60-libre-panel.rules"
 RAPL_RULES = "/etc/udev/rules.d/60-libre-panel-rapl.rules"
 MODULES = "/etc/modules-load.d/libre-panel.conf"
@@ -302,11 +303,10 @@ def _reload(facts: Facts, changed: set[str]) -> Step:
     udevadm = facts.tools.get("udevadm", "udevadm")
     runs: list[Action] = [Run((udevadm, "control", "--reload-rules"))]
     if "usb" in changed:
-        runs.append(
-            Run(
-                (udevadm, "trigger", "--subsystem-match=usb", f"--attr-match=idVendor={USB_VENDOR}")
-            )
-        )
+        runs += [
+            Run((udevadm, "trigger", "--subsystem-match=usb", f"--attr-match=idVendor={vendor}"))
+            for vendor in USB_VENDORS
+        ]
     if "powercap" in changed:
         runs.append(Run((udevadm, "trigger", "--subsystem-match=powercap")))
     return Step("reload", tuple(runs))
@@ -524,7 +524,7 @@ def _panel(root: Path, can: Callable[[Path, int], bool]) -> tuple[bool, bool]:
         return False, False
     present = denied = False
     for entry in entries:
-        if (_text(folder / entry / "idVendor") or "").lower() != USB_VENDOR:
+        if (_text(folder / entry / "idVendor") or "").lower() not in USB_VENDORS:
             continue
         present = True
         bus, number = _text(folder / entry / "busnum"), _text(folder / entry / "devnum")
@@ -538,7 +538,7 @@ def _panel(root: Path, can: Callable[[Path, int], bool]) -> tuple[bool, bool]:
 def _rule_elsewhere(root: Path) -> bool:
     """Whether a rules file other than ours already gives the panels to the person."""
     ours = Path(UDEV_RULES).name
-    pattern = re.compile(rf'idVendor\}}=="{USB_VENDOR}"', re.IGNORECASE)
+    patterns = [re.compile(rf'idVendor\}}=="{vendor}"', re.IGNORECASE) for vendor in USB_VENDORS]
     for folder in RULE_FOLDERS:
         try:
             names = sorted(os.listdir(root / folder.lstrip("/")))
@@ -547,7 +547,8 @@ def _rule_elsewhere(root: Path) -> bool:
         for name in names:
             if name.endswith(".rules") and name != ours:
                 text = _text(root / folder.lstrip("/") / name) or ""
-                if pattern.search(text) and ("uaccess" in text or "MODE" in text):
+                covered = all(pattern.search(text) for pattern in patterns)
+                if covered and ("uaccess" in text or "MODE" in text):
                     return True
     return False
 

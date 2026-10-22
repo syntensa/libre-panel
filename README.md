@@ -241,6 +241,10 @@ aside when its readings are missing, and costs nothing while no theme shows it.
 | XuanFang | 3.5" | virtual COM port | unverified |
 | Kipye Qiye | 3.5" | virtual COM port | unverified |
 | WeAct Display FS V1 | 0.96", 3.5" | virtual COM port | unverified |
+| JONSBO ZC-360 (fan screens) | 3 × 3.38", driven as one picture of 1920×180 | USB devices (`43a8:0e61`) | unverified |
+| JONSBO TF3-360SC (AIO) | pump: 3.5", 640×480; fans: the ZC-360's three screens, a panel beside it | USB devices (`1cbe:0035`, `43a8:0e61`) | unverified |
+| JONSBO DS916 | 9.16", 1920×462 | USB serial port (`33c3:f101`), JPEG pictures | unverified |
+| JONSBO DS339 | 3.39", 960×376; choose the model (not found by "auto") | USB display chip MS9132 (`345f:9132`) | unverified |
 
 *Unverified* means the driver follows a protocol proven on real panels, but nobody has
 confirmed that model with Libre Panel yet. **Own one?** The panel test in the app (*Live →

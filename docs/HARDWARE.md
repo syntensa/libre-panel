@@ -77,6 +77,59 @@ Same electronics, different sticker:
 | `kipye-3.5` | Kipye Qiye | 480×320 | rev. D | unverified |
 | `weact-3.5`, `weact-0.96` | WeAct Studio Display FS V1 | 480×320, 160×80 | WeAct | unverified |
 
+## JONSBO
+
+### ZC-360
+
+The ZC-360 (and the fans of the TF3-360) carries three 3.38" screens of 640×180, one under
+each of its three 120 mm fans. Each screen is a USB device of its own (`43a8:0e61`,
+"TURZX-338inch-r"); Libre Panel drives the three as **one panel of 1920×180**, the screens
+side by side (`device.model = "jonsbo-zc360"`, or found by `auto`), and shows Lumen in a
+version for it: what plays, the time, CPU and GPU, a part on each screen.
+
+- The screens are written one after the other, as the vendor's protocol is known to stay
+  clean that way; a screen whose part did not change is not written. Expect some 8 frames a
+  second when all three change, and more when one does.
+- Their order from left to right is that of their serial numbers. *Which is which?* (*Settings →
+  Panels*) shows each screen its number; where the parts sit in the wrong order, `device.port = "2,1,3"` puts the
+  left part on screen 2, the middle one on screen 1 and the right one on screen 3.
+- Close the vendor's app first: a screen has one owner at a time. Should a screen show parts of
+  the JONSBO logo under the picture after much plugging and unplugging, switch the PC off and
+  on again: the controllers keep that state until they lose power.
+- On Linux, `libre-panel system-setup --linux` gives your user access to the screens as it does
+  to the TURZX panels.
+
+The protocol comes from the notes of the MIT-licensed
+[jonsbo-zc360-linux-driver](https://github.com/RimuruNava/jonsbo-zc360-linux-driver).
+
+### JONSBO TF3-360SC
+
+The TF3-360SC (an AIO) has four screens: the ZC-360's three under its fans (above), and a
+3.5" screen of 640×480 on the pump, a TURZX USB panel inside (`1cbe:0035`,
+`device.model = "jonsbo-tf3-pump"`, or found by `auto`) that Libre Panel drives like the other
+TURZX panels. Show something on both: the pump as the first panel and the fans as a panel
+beside it (*Settings → Panels*), or the other way round. Both are unverified; that the pump is
+a TURZX panel comes from the notes of the MIT-licensed
+[jonsbo-tf3-linux-driver](https://github.com/purplebrain23/jonsbo-tf3-linux-driver).
+
+### JONSBO DS916 and DS339
+
+Neither has a TURZX controller inside; their protocols come from the JONSBO drivers of
+[InfoPanel](https://github.com/habibrehmansg/infopanel) (GPL-3.0). Both are unverified.
+
+- **DS916** (9.16", 1920×462, `device.model = "jonsbo-ds916"`, or found by `auto`): a USB
+  serial port (`33c3:f101`) that takes whole JPEG pictures. It shows Lumen like the 9.2" bars.
+  When it gets no picture for a moment it shows its own animation again, so Libre Panel sends
+  the last picture again while nothing changes. It has no command for its backlight, so the
+  brightness goes into the pixels, and none to turn its screen off: after Libre Panel quits
+  it shows its own animation.
+- **DS339** (3.39", 960×376, `device.model = "jonsbo-ds339"`): a USB display chip, the
+  MacroSilicon MS9132 (`345f:9132`). USB-to-HDMI adapters have the same chip, so `auto` never
+  opens it; choose the model in *Settings → Panel*. On Windows its pictures need the driver
+  that JONSBO's app installs (install the app once, then close it); on Linux,
+  `libre-panel system-setup --linux` gives your user access to it. The brightness goes into
+  the pixels; quitting with `dark_on_quit` turns it off.
+
 ## Lian Li and others
 
 Lian Li LCDs (UNI FAN TL LCD, Galahad II LCD, HydroShift, Universal Screen,

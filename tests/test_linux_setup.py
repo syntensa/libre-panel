@@ -140,6 +140,8 @@ def test_a_new_computer_gets_the_rule_the_driver_and_a_reload():
     assert reload == [
         ("/usr/bin/udevadm", "control", "--reload-rules"),
         ("/usr/bin/udevadm", "trigger", "--subsystem-match=usb", "--attr-match=idVendor=1cbe"),
+        ("/usr/bin/udevadm", "trigger", "--subsystem-match=usb", "--attr-match=idVendor=43a8"),
+        ("/usr/bin/udevadm", "trigger", "--subsystem-match=usb", "--attr-match=idVendor=345f"),
     ]
 
 
@@ -357,7 +359,7 @@ def test_doing_it_twice_changes_nothing_the_second_time():
     again = setup.apply(plan(facts()), system)  # the same plan again, from a stale reading
     assert system.files == files
     assert again[0].items == {UDEV_RULES: "unchanged"}
-    assert again[1].items == {"nct6775": "loaded"} and len(system.ran) == ran + 2  # only udevadm
+    assert again[1].items == {"nct6775": "loaded"} and len(system.ran) == ran + 4  # only udevadm
 
 
 def test_the_first_driver_that_finds_its_chip_ends_the_search():
@@ -498,7 +500,11 @@ def test_a_computer_in_a_folder_is_read(tmp_path):
     root.write("sys/block/sdb/device/vendor", "Generic ")
     root.powercap("intel-rapl:0", "package-0", energy=5)
     root.write("etc/udev/rules.d/60-libre-panel.rules", "# ours\n")
-    root.write("etc/udev/rules.d/99-other.rules", 'ATTRS{idVendor}=="1CBE", TAG+="uaccess"\n')
+    root.write(
+        "etc/udev/rules.d/99-other.rules",  # (a rule that gives every kind of USB panel)
+        'ATTRS{idVendor}=="1CBE", TAG+="uaccess"\nATTRS{idVendor}=="43a8", TAG+="uaccess"\n'
+        'ATTRS{idVendor}=="345f", TAG+="uaccess"\n',
+    )
     root.write("etc/modules-load.d/libre-panel.conf", "nct6775\n")
     for name in ("sys/class/powercap/intel-rapl:0/energy_uj",):
         os.chmod(root.root / name, 0o400)

@@ -4,5 +4,11 @@
 #   sudo udevadm control --reload-rules
 # then unplug and replug the panel.
 
-# Turing / TURZX V1.x USB panels (2.8" round, 4.6", 5.2", 8", 8.8", 9.2", 12.3")
+# Turing / TURZX V1.x USB panels (2.8" round, 3.5" on JONSBO's TF3-360SC pump, 4.6", 5.2", 8", 8.8", 9.2", 12.3")
 SUBSYSTEM=="usb", ATTRS{idVendor}=="1cbe", MODE="0660", TAG+="uaccess"
+
+# JONSBO ZC-360: the three screens under its fans (3.38", "TURZX-338inch-r")
+SUBSYSTEM=="usb", ATTRS{idVendor}=="43a8", ATTRS{idProduct}=="0e61", MODE="0660", TAG+="uaccess"
+
+# JONSBO DS339: its USB display chip (MacroSilicon MS9132)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="345f", ATTRS{idProduct}=="9132", MODE="0660", TAG+="uaccess"

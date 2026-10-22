@@ -1,4 +1,5 @@
-"""Turing / TURZX V1.x USB panels (VID 0x1CBE): 2.8" round, 4.6", 5.2", 8", 8.8", 9.2", 12.3".
+"""Turing / TURZX V1.x USB panels (VID 0x1CBE): 2.8" round, 3.5" (on the pump of JONSBO's
+TF3-360SC), 4.6", 5.2", 8", 8.8", 9.2", 12.3".
 
 The protocol comes from the GPL-3.0 reference implementation
 turing-smart-screen-python (Matthieu Houdebine) and was verified on real

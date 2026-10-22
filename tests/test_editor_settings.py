@@ -449,8 +449,8 @@ def lacking_ffmpeg(monkeypatch, found=False):
     monkeypatch.setattr(h264, "find_ffmpeg", find)
 
 
-def panel_on_the_bus(monkeypatch, model_id=None, serial=None, gadget=None):
-    from libre_panel.devices import serial_link, turzx_usb
+def panel_on_the_bus(monkeypatch, model_id=None, serial=None, gadget=None, zc360=False):
+    from libre_panel.devices import jonsbo_zc360, serial_link, turzx_usb
     from libre_panel.devices.models import get_model
 
     maybe = []
@@ -460,6 +460,7 @@ def panel_on_the_bus(monkeypatch, model_id=None, serial=None, gadget=None):
     monkeypatch.setattr(serial_link, "gadget_ports", lambda: maybe)
     model = get_model(model_id) if model_id else None
     monkeypatch.setattr(turzx_usb, "present_model", lambda *_: model if not serial else None)
+    monkeypatch.setattr(jonsbo_zc360, "present", lambda: zc360)
     port = None
     if serial:
         found = get_model(serial)
@@ -503,6 +504,18 @@ def test_on_asks_for_no_proof_but_still_for_the_clip_name_and_ffmpeg(server, mon
     write(server, **{"video.mode": "on"})
     _, data = request(server, "GET", "/api/panel")
     assert data["video"]["gaps"] == ["clip", "ffmpeg"] and data["video"]["on"] is True
+
+
+def test_a_zc360_is_found_as_one_usb_panel_of_three_screens(server, monkeypatch):
+    panel_on_the_bus(monkeypatch, zc360=True)
+    _, data = request(server, "GET", "/api/panel")
+    found = data["found"]
+    assert data["model"]["id"] == "jonsbo-zc360" and found["size"] == [1920, 180]
+    assert found["connection"] == "usb" and found["screens"] == 3  # (Which is which? for it)
+    assert data["video"]["usb"] is False and data["video"]["gaps"] == []
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    _, data = request(server, "GET", "/api/panel")
+    assert data["found"]["screens"] == 1
 
 
 def test_a_serial_panel_has_no_video_mode(server, monkeypatch):

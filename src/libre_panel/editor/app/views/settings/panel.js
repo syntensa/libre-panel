@@ -454,8 +454,9 @@ function MorePanelsCard() {
   const add = panels.length < MORE_PANELS
     ? html`<button type="button" class="btn" onClick=${() => newPanel({})}>${t("Add a panel")}</button>`
     : null;
-  // which is which: each panel shows its number a few seconds (identify.py)
-  const identify = panels.length && info?.running
+  // which is which: each panel (and each screen of the ZC-360) shows its number a few seconds
+  // (identify.py)
+  const identify = (panels.length || info?.model?.screens > 1) && info?.running
     ? html`<button type="button" class="btn" onClick=${() => endpoints.appAction("identify").catch(() => {})}>${t("Which is which?")}</button>`
     : null;
   // one picture of them all where they stand, each with what it shows now: to keep or share

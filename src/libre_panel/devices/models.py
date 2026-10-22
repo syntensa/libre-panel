@@ -25,6 +25,9 @@ PROTOCOLS = {
     "serial-d": "USB serial, Kipye rev. D",
     "serial-weact": "USB serial, WeAct Studio",
     "usb-turing": "USB bulk (VID 0x1CBE), Turing V1.x hardware",
+    "usb-jonsbo": "USB bulk (VID 0x43A8), three screens driven as one",
+    "serial-jonsbo": "USB serial (VID 0x33C3), whole JPEG pictures",
+    "usb-ms9132": "USB bulk (MacroSilicon MS9132), a USB display chip",
 }
 
 
@@ -290,12 +293,68 @@ MODELS: tuple[PanelModel, ...] = (
         usb_ids=((0x1A86, 0xFE0C),),
         notes="serial number starts with AD",
     ),
+    PanelModel(
+        "jonsbo-zc360",
+        "JONSBO",
+        "ZC-360 fan screens",
+        9.8,  # three 3.38" screens of 640x180 side by side: one picture of 1920x180
+        180,
+        1920,
+        "usb-jonsbo",
+        usb_ids=((0x43A8, 0x0E61),),
+        notes='three 3.38" screens under the fans, each a USB device ("TURZX-338inch-r")',
+    ),
+    PanelModel(
+        "jonsbo-tf3-pump",
+        "JONSBO",
+        "TF3-360SC pump screen",
+        3.5,
+        480,
+        640,
+        "usb-turing",
+        usb_ids=((0x1CBE, 0x0035),),
+        # (its fans carry the ZC-360's three screens: a panel of their own beside it)
+        notes="the screen on the pump of the TF3-360SC AIO, a TURZX USB panel inside",
+    ),
+    PanelModel(
+        "jonsbo-ds916",
+        "JONSBO",
+        "DS916",
+        9.16,
+        462,
+        1920,
+        "serial-jonsbo",
+        usb_ids=((0x33C3, 0xF101),),
+        notes="a case screen with a controller of its own (not a TURZX one) that takes JPEG",
+    ),
+    PanelModel(
+        "jonsbo-ds339",
+        "JONSBO",
+        "DS339",
+        3.39,
+        376,
+        960,
+        "usb-ms9132",
+        usb_ids=((0x345F, 0x9132),),
+        # (USB-to-HDMI adapters have the chip too: never opened unless the config names it)
+        notes="a USB display chip (MS9132), not found by auto: choose the model",
+    ),
 )
 
 # Families with a driver (devices/turzx.py lists them); the rest is planned.
 _DRIVER_STATUS = {
     protocol: "unverified"
-    for protocol in ("usb-turing", "serial-a", "serial-b", "serial-c", "serial-d", "serial-weact")
+    for protocol in (
+        "usb-turing",
+        "serial-a",
+        "serial-b",
+        "serial-c",
+        "serial-d",
+        "serial-weact",
+        "usb-jonsbo",
+        "serial-jonsbo",
+        "usb-ms9132",
+    )
 }
 # Models confirmed on the panel: with `libre-panel doctor`, or by an owner who reports it runs.
 _CONFIRMED: set[str] = {

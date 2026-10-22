@@ -8,6 +8,8 @@ vendors) down to one small class registered under ``libre_panel.devices``.
 from __future__ import annotations
 
 import threading
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from importlib.metadata import entry_points
 from typing import Any
@@ -74,6 +76,64 @@ class Counters:
     usb_errors: int = 0  # errors on the panel's link that made the driver reconnect
     panel_restarts: int = 0  # video: restarts of the panel to clear a hung decoder
     ffmpeg_restarts: int = 0  # video: times ffmpeg stopped by itself and was started again
+
+
+def dimmed(picture: Image.Image, percent: int) -> Image.Image:
+    """``picture`` at ``percent`` of its brightness: the brightness of a panel that has no
+    command for its backlight goes into the pixels."""
+    if percent >= 100:
+        return picture
+    level = max(0, percent) / 100
+    return picture.point([int(value * level) for value in range(256)] * len(picture.getbands()))
+
+
+class KeepShowing:
+    """For a panel that shows a picture of its own again when it gets none for a while (the
+    JONSBO DS916, DS339): ``send`` sends the last picture again from a thread of its own
+    whenever nothing went out for ``every`` seconds. The driver sends under ``lock`` and calls
+    :meth:`sent` after; a fault of the thread is raised by the next :meth:`check`."""
+
+    def __init__(self, every: float, send: Callable[[], None], name: str = "keep-showing") -> None:
+        self.every = every
+        self.lock = threading.Lock()
+        self._send = send
+        self._name = name
+        self._last = time.monotonic()
+        self._fault: DeviceError | None = None
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        self._stop.clear()
+        self._last = time.monotonic()
+        self._thread = threading.Thread(target=self._run, name=self._name, daemon=True)
+        self._thread.start()
+
+    def sent(self) -> None:
+        self._last = time.monotonic()
+
+    def check(self) -> None:
+        fault, self._fault = self._fault, None
+        if fault is not None:
+            raise fault
+
+    def stop(self) -> None:
+        self._stop.set()
+        thread, self._thread = self._thread, None
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=2)
+
+    def _run(self) -> None:
+        while not self._stop.wait(min(0.25, self.every / 2)):
+            with self.lock:
+                if self._stop.is_set() or time.monotonic() - self._last < self.every:
+                    continue
+                try:
+                    self._send()
+                except DeviceError as exc:
+                    self._fault = exc
+                    return
+                self._last = time.monotonic()
 
 
 class Display:
@@ -154,8 +214,11 @@ def create_display(config: DeviceConfig) -> Display:
     return getattr(module, attr)(config)
 
 
-def list_usb_devices(vendor_ids: tuple[int, ...] = (0x1CBE,)) -> list[dict[str, Any]]:
-    """Plain USB panels (Turing V1.x hardware); needs pyusb and a libusb backend."""
+def list_usb_devices(
+    vendor_ids: tuple[int, ...] = (0x1CBE, 0x43A8, 0x345F),
+) -> list[dict[str, Any]]:
+    """Plain USB panels (Turing V1.x hardware, the JONSBO ZC-360's screens, the MS9132 chip of
+    the JONSBO DS339); needs pyusb and a libusb backend."""
     try:
         import usb.core
     except ImportError as exc:

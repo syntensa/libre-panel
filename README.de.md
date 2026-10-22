@@ -254,6 +254,10 @@ kostet nichts, solange kein Theme es zeigt.
 | XuanFang | 3,5" | virtueller COM-Port | ungeprüft |
 | Kipye Qiye | 3,5" | virtueller COM-Port | ungeprüft |
 | WeAct Display FS V1 | 0,96", 3,5" | virtueller COM-Port | ungeprüft |
+| JONSBO ZC-360 (Lüfter-Displays) | 3 × 3,38", gesteuert als ein Bild von 1920×180 | USB-Geräte (`43a8:0e61`) | ungeprüft |
+| JONSBO TF3-360SC (AIO) | Pumpe: 3,5", 640×480; Lüfter: die drei Displays des ZC-360, ein Panel daneben | USB-Geräte (`1cbe:0035`, `43a8:0e61`) | ungeprüft |
+| JONSBO DS916 | 9,16", 1920×462 | USB-Seriell-Port (`33c3:f101`), JPEG-Bilder | ungeprüft |
+| JONSBO DS339 | 3,39", 960×376; Modell auswählen (wird von „auto“ nicht gefunden) | USB-Display-Chip MS9132 (`345f:9132`) | ungeprüft |
 
 *Ungeprüft* heißt: Der Treiber folgt einem Protokoll, das auf echten Panels erprobt ist, aber
 noch niemand hat dieses Modell mit Libre Panel bestätigt. **Du hast eins?** Der Panel-Test in

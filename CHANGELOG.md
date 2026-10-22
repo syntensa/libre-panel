@@ -9,6 +9,19 @@ power the PC draws and the UPS; a theme in very large digits; a portable zip tha
 and much more that was collected since 0.6.9.
 
 **New**
+- **JONSBO ZC-360**: the three screens under its fans (3.38", 640x180 each) as one panel of
+  1920x180, with Lumen in a version for it, a part on each screen: what plays, the time, CPU and
+  GPU. Found by `auto`; the screens are written one after the other, and one whose part did
+  not change is not written. Not yet seen on the hardware: its protocol comes from the notes
+  of the MIT-licensed jonsbo-zc360-linux-driver
+  ([#13](https://github.com/syntensa/libre-panel/issues/13), [Hardware](docs/HARDWARE.md))
+- **JONSBO TF3-360SC**: the screen on the pump of this AIO (3.5", 640x480) is a TURZX USB
+  panel inside and runs as one, found by `auto`; its fans carry the ZC-360's three screens,
+  a panel beside it. Not yet seen on the hardware ([Hardware](docs/HARDWARE.md))
+- **JONSBO DS916 and DS339**: the 9.16" case screen (1920x462, found by `auto`, Lumen as on
+  the 9.2" bars) and the 3.39" one (960x376, chosen in *Settings → Panel*: its USB display
+  chip is in USB-to-HDMI adapters too). Neither is a TURZX panel; their protocols come from
+  InfoPanel's drivers (GPL-3.0). Not yet seen on the hardware ([Hardware](docs/HARDWARE.md))
 - **More panels at once**: up to three panels beside the first, each with a theme of its
   own, on the same readings (*Settings → Panels*, `[[panels]]` in config.toml).
   A panel that one of them has open is passed by when another looks for its own, so two

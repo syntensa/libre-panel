@@ -21,7 +21,7 @@ from libre_panel.i18n import t
 
 log = logging.getLogger(__name__)
 
-SERIAL_PROTOCOLS = ("serial-a", "serial-b", "serial-c", "serial-d", "serial-weact")
+SERIAL_PROTOCOLS = ("serial-a", "serial-b", "serial-c", "serial-d", "serial-weact", "serial-jonsbo")
 # Generic Linux USB gadget serial ids, which awake rev. C panels use, and so do
 # other devices (a Raspberry Pi as a USB gadget, development boards). Without a
 # model in the config such a port counts only with the panels' serial number.

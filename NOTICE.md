@@ -18,6 +18,25 @@ resolution and the video-mode init, and whose screens are the `spur-ii`,
 letters, rendered once in Blender, without colour) are its author's work, given
 to Libre Panel under GPL-3.0-or-later.
 
+**jonsbo-zc360-linux-driver** — Copyright (c) 2026 Lucille Hon and the earlier
+work it builds on, MIT. <https://github.com/RimuruNava/jonsbo-zc360-linux-driver>.
+The JONSBO ZC-360 protocol (the command and frame packets, their DES key, the
+commands, the first frame's commit, the order the screens are written in and why)
+comes from its notes, made from USB captures and the vendor's Windows
+application. Libre Panel's driver (`devices/jonsbo_zc360.py`) is its own code.
+
+**jonsbo-tf3-linux-driver** — purplebrain23, MIT.
+<https://github.com/purplebrain23/jonsbo-tf3-linux-driver>. That the pump's screen of the
+JONSBO TF3-360SC is a TURZX USB panel (`1cbe:0035`), and that its fans carry the ZC-360's
+screens, comes from its notes.
+
+**InfoPanel** — habibrehmansg/infopanel and its contributors, GPL-3.0.
+<https://github.com/habibrehmansg/infopanel>. The protocols of the JONSBO DS916 (its
+handshake and the JPEG pictures) and DS339 (the MS9132 chip's start, its EDID, the mode
+numbers, the frame header and when its output is turned on) come from its JONSBO drivers,
+made from the vendor's application and USB captures. Libre Panel's drivers
+(`devices/jonsbo_ds916.py`, `devices/jonsbo_ds339.py`) are its own code.
+
 **LibreHardwareMonitor** (MPL-2.0) — the sensor source for the GPU,
 temperatures, power and fans on Windows. The Windows downloads carry its
 library and read it inside Libre Panel (see "Windows downloads" below); a

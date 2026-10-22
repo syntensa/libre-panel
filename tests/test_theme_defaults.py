@@ -13,7 +13,7 @@ from libre_panel.devices.models import MODELS, get_model
 from libre_panel.theme.defaults import default_theme, is_bar, normal_theme, panel_model
 
 # The panels whose frame is 1920x480: both 8.8" (USB, and the serial V0.x one) and the 9.2"
-BARS = ["turing-8.8", "turing-8.8-usb", "turing-9.2-usb"]
+BARS = ["turing-8.8", "turing-8.8-usb", "turing-9.2-usb", "jonsbo-zc360", "jonsbo-ds916"]
 OTHERS = [model.id for model in MODELS if model.id not in BARS]
 NINE, THREE, FIVE = (get_model(id) for id in ("turing-9.2-usb", "turing-3.5", "turing-5"))
 

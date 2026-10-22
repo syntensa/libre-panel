@@ -249,6 +249,12 @@ def _plain(value: Any) -> Any:
 # -- the facts about the panel and the system ----------------------------------------------------
 
 
+def _screens(model: Any) -> int:
+    from libre_panel.devices import jonsbo_zc360
+
+    return jonsbo_zc360.SCREENS if model.id == jonsbo_zc360.MODEL_ID else 1
+
+
 def _model_info(model: Any, port: str | None = None, sure: bool = True) -> dict[str, Any]:
     """A panel model as the app shows it: its name, its size the way round it is mounted,
     how it is connected."""
@@ -257,10 +263,13 @@ def _model_info(model: Any, port: str | None = None, sure: bool = True) -> dict[
         "label": model.label,
         "size": list(model.size("landscape")),
         "shape": model.shape,
-        "connection": "usb" if model.protocol == "usb-turing" else "serial",
+        "connection": "usb" if model.protocol.startswith("usb") else "serial",
         "port": port,
         "sure": sure,
         "video": model.video,
+        # screens that show it together (the ZC-360: three), each told its number by "Which is
+        # which?" as panels are
+        "screens": _screens(model),
     }
 
 
@@ -798,12 +807,16 @@ class Settings:
 
     @staticmethod
     def _find_panel(config: Config) -> dict[str, Any] | None:
-        """A panel on the bus: a TURZX USB one, else a serial one by its USB ids."""
+        """A panel on the bus: a TURZX USB one, a ZC-360, else a serial one by its USB ids."""
+        from libre_panel.devices import jonsbo_zc360
+        from libre_panel.devices.models import get_model
         from libre_panel.devices.serial_link import find_port
         from libre_panel.devices.turzx_usb import present_model
 
         try:
             model = present_model(config.device.beside)
+            if model is None and jonsbo_zc360.present():
+                model = get_model(jonsbo_zc360.MODEL_ID)
         except Exception:  # no USB library is no panel
             log.debug("looking for a USB panel failed", exc_info=True)
             model = None
