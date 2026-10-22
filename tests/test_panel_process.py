@@ -44,7 +44,9 @@ def test_a_panel_beside_the_first_runs_in_a_process_of_its_own(tmp_path, monkeyp
         assert wait_for(lambda: beside.state == "showing", timeout=90)
         assert beside.theme == "lumen-companion" and beside.target
         assert wait_for(lambda: beside.shown is not None, timeout=10)  # its picture, for Live
-        assert beside.shown.size[0] > 0 and (tmp_path / "second.png").exists()
+        assert beside.shown.size[0] > 0
+        # (the picture is noted for Live before the panel's driver writes it)
+        assert wait_for(lambda: (tmp_path / "second.png").exists(), timeout=10)
         said = [r for r in caplog.records if "in a process of its own" in r.getMessage()]
         assert said and said[0].threadName == "panel-2"  # its log lines, as its own
     finally:
