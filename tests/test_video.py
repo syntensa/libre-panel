@@ -893,6 +893,11 @@ def test_pacer_plans_each_frame_on_a_steady_grid():
     assert pacer.wait(50, stop) == pytest.approx(clock.now)
 
 
+# The main loop's timing on a small theme: a loaded Windows runner drew an 800x480 frame in more
+# than its 20 ms and so fell off the grid, which says nothing of the loop.
+SMALL = "pico"
+
+
 def test_the_main_loop_draws_streaming_frames_at_their_planned_time(monkeypatch):
     times = []
     real_renderer = app.Renderer
@@ -904,7 +909,7 @@ def test_the_main_loop_draws_streaming_frames_at_their_planned_time(monkeypatch)
 
     monkeypatch.setattr(app, "Renderer", Recording)
     monkeypatch.setattr(app, "create_display", StreamingDisplay)
-    config = Config(theme="slate", fps=5, sensors=SensorsConfig(providers=["demo"]))
+    config = Config(theme=SMALL, fps=5, sensors=SensorsConfig(providers=["demo"]))
     stop = threading.Event()
     thread = threading.Thread(target=app.run, args=(config,), kwargs={"stop": stop})
     thread.start()
@@ -946,7 +951,7 @@ def test_main_loop_sends_every_frame_at_the_stream_rate(monkeypatch, tmp_path):
         return renderers[-1]
 
     monkeypatch.setattr(app, "Renderer", renderer)
-    config = Config(theme="slate", fps=5, sensors=SensorsConfig(providers=["demo"]))
+    config = Config(theme=SMALL, fps=5, sensors=SensorsConfig(providers=["demo"]))
     stop = threading.Event()
     thread = threading.Thread(target=app.run, args=(config,), kwargs={"stop": stop})
     thread.start()
