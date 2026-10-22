@@ -7,8 +7,9 @@ import { toast, toastError } from "../ui/toast.js";
 import { endpoints } from "./api.js";
 import { clone, commit, docSerial, markClean, openDoc, setSelection, touch, updateDoc } from "./doc.js";
 import { t } from "./i18n.js";
-import { isVersion, versionBase, versionFor } from "./orientation.js";
+import { isVersion, rootOf, versionFor } from "./orientation.js";
 import { store } from "./state.js";
+import { designPages, refreshBeside, setDesignPage, target } from "./target.js";
 
 export const THEME_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 export const PALETTE_NAME = /^[a-z][a-z0-9_-]{0,31}$/;
@@ -37,6 +38,7 @@ export async function refreshPages() {
   } catch {
     store.set({ pages: null }); // a broken config.toml: the pages are not shown
   }
+  if (target() > 1) await refreshBeside(); // and those of the panel Design is about
 }
 
 /** The theme the panel shows normally (config.toml's), if known. */
@@ -57,7 +59,7 @@ export async function refreshAssets() {
 
 /** The page of the panel a theme is shown on: "normal", "report", a mode's name, or null. */
 export function pageOf(id) {
-  const pages = store.get().pages?.pages || [];
+  const pages = designPages()?.pages || [];
   return (id && pages.find((page) => page.theme === id)?.id) || null;
 }
 
@@ -163,8 +165,9 @@ export async function saveAs() {
   const taken = new Set(all.map((theme) => theme.id));
   // a copy of a version for a panel on end keeps its ending after the copy's name:
   // "lumen-mine-vertical" goes with "lumen-mine", a copy of Lumen, as "lumen-vertical" with "lumen"
-  // (and "lumen-mine-1920x720" with "lumen-mine", as "lumen-1920x720" with "lumen")
-  const end = doc.builtin && doc.id && isVersion({ id: doc.id }, all) ? doc.id.slice(versionBase(doc.id).length) : "";
+  // (and "lumen-mine-1920x720" with "lumen-mine", as "lumen-1920x720" with "lumen"; the pair
+  // version "lumen-mine-pair-1920x720" too)
+  const end = doc.builtin && doc.id && isVersion({ id: doc.id }, all) ? doc.id.slice(rootOf(doc.id).length) : "";
   const first = end
     ? slug(copy ? t("{name} (mine)", { name: themeName(doc.id.slice(0, -end.length)) }) : doc.theme.name)
     : slug(copy || doc.theme.name) || "my-theme"; // (a folder that is taken gets a number: below)
@@ -218,10 +221,11 @@ export async function saveAs() {
  * and the theme of the page it is open for (its version for a panel on end counts), and that
  * page is on; "changed" when it is that page's theme with changes not saved; else "other".
  */
-export function panelState({ doc, dirty, page, pages } = store.get()) {
-  const target = (pages?.pages || []).find((item) => item.id === (page || "normal"));
-  const there = Boolean(doc?.id && target?.theme && (target.theme === doc.id || versionFor(target.theme) === doc.id));
-  if (!there || (target.id !== "normal" && !target.on)) return "other";
+export function panelState(state = store.get()) {
+  const { doc, dirty, page } = state;
+  const shown = (designPages(state)?.pages || []).find((item) => item.id === (page || "normal"));
+  const there = Boolean(doc?.id && shown?.theme && (shown.theme === doc.id || versionFor(shown.theme) === doc.id));
+  if (!there || (shown.id !== "normal" && !shown.on)) return "other";
   return dirty ? "changed" : "shown";
 }
 
@@ -233,9 +237,9 @@ export async function applyToPanel() {
   if ((dirty || !doc.id) && !(await save())) return false;
   const { doc: saved, page } = store.get();
   try {
-    store.set({ pages: await endpoints.setPage(page || "normal", { theme: saved.id }) });
+    await setDesignPage(page || "normal", { theme: saved.id }); // (on the panel the app is about)
     if (!page) store.set({ page: "normal" });
-    toast(t("“{name}” is now shown on the panel", { name: saved.theme.name || saved.id }), { kind: "success" });
+    toast(onPanelText(saved.theme.name || saved.id), { kind: "success" });
     return true;
   } catch (error) {
     toastError(error);
@@ -250,7 +254,7 @@ export async function applyToPanel() {
  */
 export async function showOnPanel(id) {
   try {
-    store.set({ pages: await endpoints.setPage("normal", { theme: id }) });
+    await setDesignPage("normal", { theme: id });
   } catch (error) {
     toastError(error);
     return false;
@@ -258,8 +262,14 @@ export async function showOnPanel(id) {
   const { doc, dirty } = store.get();
   if (!dirty && doc?.id !== id) await openTheme(id, { ask: false, page: "normal" });
   else if (doc?.id === id && !store.get().page) store.set({ page: "normal" });
-  toast(t("“{name}” is now shown on the panel", { name: themeName(id) }), { kind: "success" });
+  toast(onPanelText(themeName(id)), { kind: "success" });
   return true;
+}
+
+/** "“Lumen” is now shown on the panel", with the panel's number beside others. */
+function onPanelText(name) {
+  const n = target();
+  return n > 1 ? t("“{name}” is now shown on panel {number}", { name, number: n }) : t("“{name}” is now shown on the panel", { name });
 }
 
 /** Ask for a file (accept: ".json", "image/*", ...); null when none was picked. */

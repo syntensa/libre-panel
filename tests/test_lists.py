@@ -51,6 +51,13 @@ def test_items_by_name_pattern_and_exclusion():
         ("fan.board.10", "Fan 10"),
     ]
     assert lists.read_keys("cpu.temp = CPU\n!temp.acpi*\nfan.*") == {"cpu.temp", "fan.*"}
+    # left out, it is left out under its other key too (beside a panel that shows it)
+    assert picked("!cpu.temp\ntemp.*", found) == [
+        ("temp.acpitz.1", "ACPI 1"),
+        ("temp.nvme.composite", "NVMe Composite"),
+    ]
+    copied = {**found, "temp.cpu.package": Reading("temp.cpu.package", 61.0, origin="cpu.temp")}
+    assert "temp.cpu.package" not in dict(picked("!cpu.temp\ntemp.*", copied))
 
 
 def test_names_come_from_a_reading_beside_them():

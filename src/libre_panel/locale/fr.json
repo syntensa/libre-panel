@@ -2355,7 +2355,17 @@
     "What an address answers, or a file holds, as readings for any module: a NAS, a router, another PC. Nothing to sign up for.": "Ce qu’une adresse répond ou ce qu’un fichier contient, comme mesures pour n’importe quel module : un NAS, un routeur, un autre PC. Sans inscription.",
     "Which host": "Quel hôte",
     "While a sensor is at its critical limit (the warnings of the notices): the temperatures and what keeps the PC busy, say.": "Tant qu’un capteur est à sa limite critique (les avertissements des notifications) : les températures et ce qui occupe le PC, par exemple.",
-    "http:// or https://, or the path of a file.": "http:// ou https://, ou le chemin d’un fichier."
+    "http:// or https://, or the path of a file.": "http:// ou https://, ou le chemin d’un fichier.",
+    "Which panel Live shows and Design edits": "Le panneau que Live montre et que Design modifie",
+    "“{name}” is now shown on panel {number}": "« {name} » est maintenant affiché sur le panneau {number}",
+    "While panel 1 shows a game": "Pendant que le panneau 1 montre un jeu",
+    "While a sensor is at its critical limit": "Tant qu’un capteur est à sa limite critique",
+    "The companion of panel 1's theme": "Le compagnon du thème du panneau 1",
+    "Its own theme": "Son propre thème",
+    "Panel {number} goes with panel 1: while panel 1 shows a game, music or the clock at rest, a companion shows the companion of panel 1's theme there (Arena Companion beside Arena), unless a page here has a theme of its own.": "Le panneau {number} suit le panneau 1 : quand le panneau 1 montre un jeu, de la musique ou l’horloge au repos, un compagnon y montre le compagnon du thème du panneau 1 (Arena Companion à côté d’Arena), sauf si une page ici a son propre thème.",
+    "What panel {number} shows when": "Ce que le panneau {number} montre et quand",
+    "More panels beside the first: what each shows, where they stand and which one is which.": "D’autres panneaux à côté du premier : ce que chacun montre, où ils se trouvent et lequel est lequel.",
+    "Panels": "Panneaux"
   },
   "fields": {
     "align": "Alignement",

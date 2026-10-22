@@ -46,6 +46,12 @@ def place_taken(place: str) -> bool:
     return place in _TAKEN
 
 
+def places_taken() -> set[str]:
+    """The places noted as taken (a panel's own process tells the first panel's of its own)."""
+    with _TAKEN_LOCK:
+        return set(_TAKEN)
+
+
 class FrameError(DeviceError):
     """This frame cannot be shown (e.g. too large); the connection is fine."""
 

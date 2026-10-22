@@ -412,6 +412,30 @@ def settle(panel, quiet=0.3, timeout=5.0, at_least=0):
 
 
 @needs_ffmpeg
+def test_a_frame_goes_to_ffmpeg_without_a_copy_of_it(panel, monkeypatch):
+    """The RGB bytes are taken from the frame as the renderer made it (RGBA): a copy of the
+    picture on every frame was a good part of a frame's time, on two panels at once more so."""
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    frames = [frame.convert("RGBA") for frame in moving_frames(20)]
+    real, converted = Image.Image.convert, []
+
+    def convert(self, *args, **kwargs):
+        converted.append(self.mode)
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "convert", convert)
+    stream_frames(display, frames)
+    assert converted == []
+    monkeypatch.undo()
+    settle(panel, timeout=15, at_least=15)
+    display.close()
+    for source, picture in zip(frames, decode(panel.stream()), strict=False):
+        native = source.convert("RGB").transpose(Image.Transpose.ROTATE_270)
+        assert max(ImageStat.Stat(ImageChops.difference(native, picture)).mean) < 6
+
+
+@needs_ffmpeg
 def test_video_display_end_to_end(panel):
     display = TurzxVideoDisplay(video_config())
     display.open()
@@ -1204,3 +1228,23 @@ def test_the_png_path_counts_bytes_and_a_reconnect(panel):
         assert counters.usb_errors == 1 and counters.bytes == 3 * size
     finally:
         display.close()
+
+
+def test_a_frame_s_bytes_come_in_one_piece_and_as_tobytes_makes_them(monkeypatch):
+    from libre_panel.devices import turzx_video
+
+    for mode in ("RGB", "RGBA"):
+        frame = Image.effect_noise((64, 24), 60).convert(mode)
+        assert turzx_video.rgb_bytes(frame) == frame.tobytes("raw", "RGB")
+
+    real, calls = Image._getencoder, []
+
+    def other_pillow(*args):  # one whose encoders take other arguments: tobytes still works
+        calls.append(args)
+        if len(calls) == 1:
+            raise TypeError("setimage() takes other arguments")
+        return real(*args)
+
+    monkeypatch.setattr(Image, "_getencoder", other_pillow)
+    frame = Image.new("RGBA", (5, 3), (10, 20, 30, 40))
+    assert turzx_video.rgb_bytes(frame) == bytes((10, 20, 30)) * 15 and len(calls) == 2

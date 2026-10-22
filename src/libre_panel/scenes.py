@@ -4,7 +4,7 @@ Start, a keyboard shortcut (the next one) or the tray.
 A scene is kept in config.toml (``[[scenes]]``: its name and the themes, the first panel's
 first) and the one that is on in ``scene``; config.parse_config gives the panels its themes.
 A theme chosen for a panel by itself afterwards takes the scene off (config.set_active_theme,
-Settings → Panel → More panels).
+Settings → Panels).
 """
 
 from __future__ import annotations

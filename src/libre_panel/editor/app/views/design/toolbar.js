@@ -65,7 +65,7 @@ export function widgetMenu() {
   }
   if (one && isModule(one)) items.push({ icon: "detach", label: t("Detach into widgets"), run: () => detachModule(one) });
   if (one) items.push({ icon: "sliders", label: t("Fine-tuning"), run: () => inspectorState.set({ page: "details" }) });
-  // modules to the theme another panel shows: copied, or moved (Settings → Panel → More panels)
+  // modules to the theme another panel shows: copied, or moved (Settings → Panels)
   const others = (store.get().settings?.config?.panels || []).map((_, n) => n + 2);
   if (others.length && chosen.length && chosen.every(isModule)) {
     items.push("-");

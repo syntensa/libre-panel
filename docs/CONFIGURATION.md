@@ -290,10 +290,32 @@ either way upside down.
 ## More panels at once
 
 Up to three panels can run beside the one `[device]` names, each with a theme of its own:
-a `[[panels]]` table for each, with the keys of `[device]` and a `theme`. *Settings → Panel →
-More panels* adds and removes them: *Add a panel* asks, step by step, which panel it is (one
-plugged in that shows nothing yet first), how it is mounted and what it shows, each step with
-a choice made already.
+a `[[panels]]` table for each, with the keys of `[device]` and a `theme`. *Settings → Panels*
+adds and removes them: *Add a panel* asks, step by step, which panel it is (one plugged in
+that shows nothing yet first), how it is mounted and what it shows, each step with a choice
+made already. With more than one panel the app's header has *Panel 1 | Panel 2*: the panel
+*Live* shows and *Design* edits, in its size and the way it is mounted, with its own pages (its
+theme, and those for a game, music and an alarm); *To the panel* puts the theme on that panel.
+
+**A companion beside the first panel.** Lumen, Arena, Encore and Almanac each have a companion
+for a second panel (Lumen Companion, Arena Companion, Encore Companion, Almanac Companion), for
+the 9.2" either way up and the 12.3". While a companion shows on a panel beside it, the first
+panel shows its theme's pair version, which leaves out what the companion shows: Lumen without
+its fans (the companion has them with every core, the other temperatures, the drives and the
+processes), Arena with the game and the two chips large (the companion has the temperatures,
+fans, cores, the ping and the processes), Encore without the cover (the companion shows it large,
+with the weather and the sun and moon); Almanac has nothing twice and stays as it is, beside
+the weather of the next hours and days, the sun and moon and your appointments. A companion
+follows the first panel's page: Arena's beside Arena while you play, Encore's while music
+plays, Almanac's at rest, unless its `game_theme`, `media_theme` (or a page in Design) names a
+theme of its own. A companion that is away a moment (a reconnect) keeps the pair for ten
+seconds.
+
+**Each panel at its own pace.** The app runs each panel beside the first in a process of its
+own, on the first panel's readings: two panels in the smooth mode do not wait for each other,
+and each draws about as fast as it does alone. What such a panel says goes to the app's log
+(`panel 2: …`); one whose process cannot start runs inside the app as before. `libre-panel run`
+keeps all panels in one process.
 
 ```toml
 [[panels]]
@@ -301,7 +323,8 @@ theme = "lumen"                # empty or left out: the panel's own default
 model = "turing-3.5"           # "auto": a panel the others do not use
 port = "COM6"                  # serial panels: which of two of the same kind it is
 # game_theme = "lumen-vertical"  # its theme while the first panel shows a game's page,
-# media_theme = "encore"       # and music's ("" or left out: its own as ever)
+# media_theme = "encore"       # and music's ("" or left out: its own as ever; a companion
+                               # shows the companion of the first panel's theme then)
 # alarm_theme = "lumen-companion"  # while a sensor is at its crit limit ("": its own)
 # same_look = true             # its theme in the look of the one the first panel shows
 # video = { mode = "auto", local_clip = "..." }  # smooth motion on it too, its own clip

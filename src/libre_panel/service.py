@@ -211,7 +211,7 @@ class PanelService:
                     self.on_config(config)
                 run(config, stop=stop, status=status, host=self.host, on_config=self.on_config,
                     hang_log=log_file().with_name(HANG_FILENAME),
-                    quitting=lambda: self._ending)  # fmt: skip
+                    quitting=lambda: self._ending, apart=True)  # fmt: skip
             except (ConfigError, ThemeError, DeviceError) as exc:
                 self.error = str(exc)
                 log.error("panel stopped: %s (waiting for the config or theme to change)", exc)

@@ -87,6 +87,17 @@ its memory, threads, open files and the panels' frame times every minute, and wr
 `soak/soak.md` with a chart: it passes when the memory grows by less than 5 MB an hour after
 the first ten minutes, the threads and the open files stay level and every panel kept showing.
 
+How much two panels in video mode slow each other down (they share one interpreter):
+
+```bash
+python tools/panels_bench.py             # Lumen on a 12.3" and Lumen Companion on end
+python tools/panels_bench.py --slow-scan # with a scan of the processes as slow as on Windows
+```
+
+It prints each panel's frame time alone and beside the other (median and slowest); a frame
+beside the other should stay well below 20 ms (50 frames a second) on the machines it is made
+for.
+
 **Dry run:** start *Release* by hand (Actions → Release → Run workflow) with the
 version left empty. It builds and tests everything but publishes nothing and
 keeps no files.

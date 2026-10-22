@@ -102,8 +102,8 @@ export const endpoints = {
   detach: (theme, base, id) => post("/api/detach", { theme, base, id }),
   modulePreviews: (palette, style) => post("/api/module-previews", { palette, style }),
   presetPreviews: (palette) => post("/api/preset-previews", { palette }),
-  pages: () => get("/api/pages"),
-  setPage: (page, change) => post("/api/pages", { page, ...change }),
+  pages: (panel = 1) => get(panel > 1 ? `/api/pages?panel=${panel}` : "/api/pages"),
+  setPage: (page, change, panel = 1) => post("/api/pages", { page, ...change, ...(panel > 1 ? { panel } : {}) }),
   // scenes: a theme for every panel at once (scenes.py)
   scenes: () => get("/api/scenes"),
   setScene: (action, name) => post("/api/scenes", { action, name }),

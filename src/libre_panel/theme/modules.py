@@ -863,16 +863,21 @@ def build_weather(b: _Build, _src: Source) -> None:
             _forecast(b, x, b.iy + half + b.pad, w, half, "hours", prefix="h")
         else:
             _forecast(b, x, b.iy, w, b.ih, mode)
+    elif mode != "off" and a <= 0.72 and b.ih >= b.iw * 1.8:  # tall: the forecast as rows
+        both = chosen == "both" or (chosen == "auto" and b.ih >= b.ts * 44)
+        top = b.ih * (0.24 if both else 0.42)  # (a panel on end: the hours, then the days)
+        _weather_now(b, b.ix, b.iy, b.iw, top, details=b.large)
+        y, h = b.iy + top + b.pad * 0.5, b.ih - top - b.pad * 0.5
+        if both:
+            half = (h - b.pad) / 2
+            _forecast(b, b.ix, y, b.iw, half, "hours", rows=True, prefix="h")
+            _forecast(b, b.ix, y + half + b.pad, b.iw, half, "days", rows=True)
+        else:
+            _forecast(b, b.ix, y, b.iw, h, mode, rows=True)
     elif mode != "off" and b.large:  # big: now above the forecast
         top = b.ih * 0.5
         _weather_now(b, b.ix, b.iy, b.iw, top, details=False)
         _forecast(b, b.ix, b.iy + top + b.pad * 0.5, b.iw, b.ih - top - b.pad * 0.5, mode)
-    elif mode != "off" and a <= 0.72 and b.ih >= b.iw * 1.8:  # tall: the forecast as rows
-        top = b.ih * 0.42
-        _weather_now(b, b.ix, b.iy, b.iw, top, details=False)
-        _forecast(
-            b, b.ix, b.iy + top + b.pad * 0.5, b.iw, b.ih - top - b.pad * 0.5, mode, rows=True
-        )
     else:
         _weather_now(b, b.ix, b.iy, b.iw, b.ih, details=b.large or a >= 2.3)
     for widget in b.out[start:]:

@@ -93,6 +93,8 @@ def used(item: Item) -> bool:
 def pick(widget: dict[str, Any], readings: dict[str, Reading]) -> list[Item]:
     entries = parse_items(widget.get("items", ""))
     excluded = [e.pattern for e in entries if e.exclude]
+    # what a reading left out repeats is left out too ("!cpu.temp", which is temp.k10temp.tctl)
+    repeated = {readings[p].origin for p in excluded if p in readings and readings[p].origin}
     detail = widget.get("detail", "")
     items: list[Item] = []
     seen: set[str] = set()
@@ -108,7 +110,10 @@ def pick(widget: dict[str, Any], readings: dict[str, Reading]) -> list[Item]:
             origin = reading.origin or key
             if reading.value is None or origin in seen or key in seen:
                 continue
-            if any(fnmatch.fnmatchcase(key, pattern) for pattern in excluded):
+            if key in repeated or any(  # left out by its key, or by the one it repeats
+                fnmatch.fnmatchcase(key, pattern) or fnmatch.fnmatchcase(origin, pattern)
+                for pattern in excluded
+            ):
                 continue
             seen.update((origin, key))
             name = entry.name

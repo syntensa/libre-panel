@@ -256,6 +256,12 @@ a:hover {
   flex: 1;
 }
 
+/* Panel 1 | Panel 2: the panel Live shows and Design edits (header.js) */
+.topbar .panel-switch {
+  flex: none;
+  margin: 0 4px;
+}
+
 .tabs {
   margin-left: 16px;
   display: flex;

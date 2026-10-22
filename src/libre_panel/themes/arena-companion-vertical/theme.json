@@ -1,9 +1,9 @@
 {
   "format": "libre-panel-theme/1",
-  "name": "Arena Companion Vertical",
+  "name": "Arena Companion",
   "author": "Libre Panel contributors",
   "license": "CC0-1.0",
-  "description": "Beside Arena on a second panel while you play: the temperatures large with the fans turning, every core, and what takes the most besides the game.",
+  "description": "Beside Arena on a second panel while you play: the temperatures Arena does not show with the fans turning, every core, the ping and what takes the most besides the game.",
   "display": {
     "model": "turing-9.2-usb",
     "orientation": "portrait",
@@ -53,16 +53,26 @@
       "col": 0,
       "row": 0,
       "cols": 2,
-      "rows": 4
+      "rows": 3,
+      "items": "!cpu.temp\n!gpu.temp\ntemp.*"
     },
     {
       "type": "module",
-      "id": "m-cores-0-4",
+      "id": "m-cores-0-3",
       "module": "cores",
       "col": 0,
-      "row": 4,
+      "row": 3,
       "cols": 2,
       "rows": 2
+    },
+    {
+      "type": "module",
+      "id": "m-ping-0-5",
+      "module": "ping",
+      "col": 0,
+      "row": 5,
+      "cols": 2,
+      "rows": 1
     },
     {
       "type": "module",

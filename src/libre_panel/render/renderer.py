@@ -639,6 +639,10 @@ class Renderer:
         # static screen costs little at 50 fps. The result is pixel-identical.
         self.incremental = True
         self._last: tuple[list[tuple[str, Piece]], Image.Image] | None = None
+        # The last canvas in RGB, as it was (never handed out), and the parts of the canvas
+        # composed since (None: all of it): only those are converted for the next frame.
+        self._rgb: tuple[Image.Image, Image.Image] | None = None
+        self._fresh: list[tuple[Image.Image, tuple[int, int, int, int]]] | None = None
         # Per region, what lies under the first piece that changes (a graph that
         # moves every frame over a card): the same pieces need not be laid again.
         self._underlays: dict[tuple[int, int, int, int], tuple[list[Piece], Image.Image]] = {}
@@ -1092,12 +1096,33 @@ class Renderer:
             changed = {wid for wid, piece in pieces if before.get(wid) is not piece}
         if last is None or area > 0.6 * theme.width * theme.height:
             canvas = self._compose_region(pieces, full, changed)
+            self._fresh = None
         else:
             canvas = last[1]
             for region in regions:
-                canvas.paste(self._compose_region(pieces, region, changed), region[:2])
+                part = self._compose_region(pieces, region, changed)
+                canvas.paste(part, region[:2])
+                if self._fresh is not None:
+                    self._fresh.append((part, region))
         self._last = (pieces, canvas)
         return canvas
+
+    def _as_rgb(self, canvas: Image.Image) -> Image.Image:
+        """The frame of ``canvas``, in RGB: a new picture each time (the loop keeps frames and
+        draws on them), made from the last one where only parts of the canvas are new, so that
+        a frame converts those parts, not the whole canvas."""
+        kept, fresh = self._rgb, self._fresh
+        if not self.incremental:
+            self._rgb = None
+            return canvas.convert("RGB")
+        if kept is None or kept[0] is not canvas or fresh is None:
+            rgb = canvas.convert("RGB")
+        else:
+            rgb = kept[1]
+            for part, region in fresh:
+                rgb.paste(part.convert("RGB"), region[:2])
+        self._rgb, self._fresh = (canvas, rgb), []
+        return rgb.copy()
 
     def _cached(
         self, widget: dict[str, Any], content: Any, build: Callable[[], Piece | None]
@@ -1457,8 +1482,9 @@ class Renderer:
             self.look.compose(pieces, snapshot, now)  # the grid beneath, the sun's gloss on top
         canvas = self._compose(pieces)
         if dust:
+            self._rgb = self._fresh = None  # (made of the whole canvas)
             canvas = self._dusted(canvas, now)  # RGB once there is dust on it
-        frame = canvas if canvas.mode == "RGB" else canvas.convert("RGB")
+        frame = canvas if canvas.mode == "RGB" else self._as_rgb(canvas)
         return (frame if self.look is None else self.look.finish(frame, now)), boxes
 
     # -- dust --------------------------------------------------------------

@@ -1211,12 +1211,49 @@ def _installed(name: str) -> bool:
 
 
 def version_base(name: str) -> str | None:
-    """The theme ``name`` is a version of ("lumen" for "lumen-vertical" and "lumen-1920x720"),
-    as the name says; None for a theme that is no version."""
+    """The theme ``name`` is a version of ("lumen" for "lumen-vertical", "lumen-1920x720" and
+    "lumen-pair"), as the name says; None for a theme that is no version."""
     sized = _SIZED.match(name)
     if sized:
         return sized[1]
-    return name[: -len(VERTICAL)] if name.endswith(VERTICAL) else None
+    for ending in (VERTICAL, PAIR):
+        if name.endswith(ending) and len(name) > len(ending):
+            return name[: -len(ending)]
+    return None
+
+
+# "lumen-pair" is Lumen while a companion shows beside it on another panel (Lumen Companion):
+# what the companion shows is left out ("lumen-pair-1920x720" on the 12.3")
+PAIR = "-pair"
+
+
+def _root(name: str) -> str:
+    """The theme a version is one of, through all its endings ("lumen" for
+    "lumen-pair-1920x720")."""
+    while (base := version_base(name)) is not None:
+        name = base
+    return name
+
+
+def pair_version(shown: str) -> str | None:
+    """The version of ``shown`` (a theme in its version for the panel: theme_for) for a panel
+    with a companion beside it, where that is installed: "lumen-pair-1920x720" for
+    "lumen-1920x720", "lumen-pair" for "lumen"; None for a theme without one."""
+    if is_companion(shown) or PAIR + "-" in shown or shown.endswith(PAIR):
+        return None
+    base = version_base(shown) or shown
+    paired = f"{base}{PAIR}{shown[len(base) :]}"
+    return paired if _installed(paired) else None
+
+
+def companion_for(first: str) -> str | None:
+    """The companion of the theme the first panel shows ("arena-companion" while it shows
+    Arena, its pair version too), where one is installed; None else."""
+    root = _root(first)
+    if is_companion(root):
+        return None
+    name = f"{root}-companion"
+    return name if _installed(name) else None
 
 
 def with_accent(theme: Theme, colour: str | None) -> Theme:
@@ -1288,7 +1325,9 @@ def theme_for(name: str, orientation: str, size: tuple[int, int] | None = None) 
         if _installed(sized[1]):  # a version for another size: the theme it is one of
             name = sized[1]
     if size is not None:
-        base = version_base(name) or name
+        # (a pair version keeps its ending: "lumen-pair-1920x720" for "lumen-pair")
+        sized = _SIZED.match(name)
+        base = sized[1] if sized else name[: -len(VERTICAL)] if name.endswith(VERTICAL) else name
         own = f"{base}-{size[0]}x{size[1]}"
         if own != name and _installed(own):
             return own

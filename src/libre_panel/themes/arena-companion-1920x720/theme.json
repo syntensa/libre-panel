@@ -3,7 +3,7 @@
   "name": "Arena Companion",
   "author": "Libre Panel contributors",
   "license": "CC0-1.0",
-  "description": "Beside Arena on a second panel while you play: the temperatures large with the fans turning, every core, and what takes the most besides the game.",
+  "description": "Beside Arena on a second panel while you play: the temperatures Arena does not show with the fans turning, every core, the ping and what takes the most besides the game.",
   "display": {
     "model": "turing-12.3-usb",
     "orientation": "landscape",
@@ -52,17 +52,27 @@
       "module": "temps",
       "col": 0,
       "row": 0,
-      "cols": 4,
-      "rows": 3
+      "cols": 3,
+      "rows": 3,
+      "items": "!cpu.temp\n!gpu.temp\ntemp.*"
     },
     {
       "type": "module",
-      "id": "m-cores-4-0",
+      "id": "m-cores-3-0",
       "module": "cores",
-      "col": 4,
+      "col": 3,
       "row": 0,
-      "cols": 2,
-      "rows": 3
+      "cols": 3,
+      "rows": 2
+    },
+    {
+      "type": "module",
+      "id": "m-ping-3-2",
+      "module": "ping",
+      "col": 3,
+      "row": 2,
+      "cols": 3,
+      "rows": 1
     },
     {
       "type": "module",

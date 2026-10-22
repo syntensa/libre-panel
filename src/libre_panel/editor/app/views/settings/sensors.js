@@ -234,7 +234,7 @@ function LinesField({ value, onCommit, label, placeholder }) {
 }
 
 function JsonSource({ source, index, change, remove }) {
-  const set = (key) => (value) => change(index, { ...source, [key]: value });
+  const set = (key) => (value) => change(index, key, value);
   return html`<div class="json-source" data-json-source=${source.name || index}>
     <${SettingRow} title=${t("Name")} hint=${t("The readings are json.{name}.<field>.", { name: source.name || "…" })}>
       <${CommitField} label=${t("Name")} value=${source.name} mono placeholder="nas" onCommit=${set("name")} />
@@ -256,16 +256,22 @@ function JsonSources() {
   const config = useConfig();
   if (!config || !config.sensors.providers.includes("json")) return null;
   const json = config.sensors.json || { update_s: 30, sources: [] };
-  const write = (sources) =>
-    saveSettings({ "sensors.json.sources": sources.map(({ name, where, fields, units }) => ({ name, where, fields, units })) });
-  const change = (index, source) => write(json.sources.map((item, n) => (n === index ? source : item)));
-  const remove = (index) => write(json.sources.filter((_, n) => n !== index));
-  const add = () => {
-    const taken = new Set(json.sources.map((source) => source.name));
-    let n = json.sources.length + 1;
-    while (taken.has(`source${n}`)) n += 1;
-    write([...json.sources, { name: `source${n}`, where: "http://", fields: {}, units: {} }]);
-  };
+  // each change made to the sources as the write before it left them: the address and then
+  // the fields at once keep both
+  const write = (edit) =>
+    saveSettings((latest) => ({
+      "sensors.json.sources": edit(latest?.sensors?.json?.sources || []).map(({ name, where, fields, units }) => ({ name, where, fields, units })),
+    }));
+  const change = (index, key, value) =>
+    write((sources) => sources.map((item, n) => (n === index ? { ...item, [key]: value } : item)));
+  const remove = (index) => write((sources) => sources.filter((_, n) => n !== index));
+  const add = () =>
+    write((sources) => {
+      const taken = new Set(sources.map((source) => source.name));
+      let n = sources.length + 1;
+      while (taken.has(`source${n}`)) n += 1;
+      return [...sources, { name: `source${n}`, where: "http://", fields: {}, units: {} }];
+    });
   return html`<${Card}
     id="json-sources"
     title=${t("Values from JSON")}

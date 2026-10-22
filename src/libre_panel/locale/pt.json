@@ -2355,7 +2355,17 @@
     "What an address answers, or a file holds, as readings for any module: a NAS, a router, another PC. Nothing to sign up for.": "O que um endereço responde ou um arquivo contém, como leituras para qualquer módulo: um NAS, um roteador, outro PC. Sem cadastro.",
     "Which host": "Qual host",
     "While a sensor is at its critical limit (the warnings of the notices): the temperatures and what keeps the PC busy, say.": "Enquanto um sensor está no limite crítico (os avisos das notificações): as temperaturas e o que ocupa o PC, por exemplo.",
-    "http:// or https://, or the path of a file.": "http:// ou https://, ou o caminho de um arquivo."
+    "http:// or https://, or the path of a file.": "http:// ou https://, ou o caminho de um arquivo.",
+    "Which panel Live shows and Design edits": "O painel que o Ao vivo mostra e o Design edita",
+    "“{name}” is now shown on panel {number}": "“{name}” agora aparece no painel {number}",
+    "While panel 1 shows a game": "Enquanto o painel 1 mostra um jogo",
+    "While a sensor is at its critical limit": "Enquanto um sensor está no seu limite crítico",
+    "The companion of panel 1's theme": "O acompanhante do tema do painel 1",
+    "Its own theme": "O próprio tema",
+    "Panel {number} goes with panel 1: while panel 1 shows a game, music or the clock at rest, a companion shows the companion of panel 1's theme there (Arena Companion beside Arena), unless a page here has a theme of its own.": "O painel {number} acompanha o painel 1: enquanto o painel 1 mostra um jogo, música ou o relógio em repouso, um acompanhante mostra ali o acompanhante do tema do painel 1 (Arena Companion ao lado da Arena), a menos que uma página aqui tenha um tema próprio.",
+    "What panel {number} shows when": "O que o painel {number} mostra e quando",
+    "More panels beside the first: what each shows, where they stand and which one is which.": "Mais painéis ao lado do primeiro: o que cada um mostra, onde ficam e qual é qual.",
+    "Panels": "Painéis"
   },
   "fields": {
     "align": "Alinhamento",

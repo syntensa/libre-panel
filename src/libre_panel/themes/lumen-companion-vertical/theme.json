@@ -1,9 +1,9 @@
 {
   "format": "libre-panel-theme/1",
-  "name": "Lumen Companion Vertical",
+  "name": "Lumen Companion",
   "author": "Libre Panel contributors",
   "license": "CC0-1.0",
-  "description": "Beside Lumen on a second panel: what it does not show. Every core of the processor, the temperatures with the fans turning, the drives and what takes the most.",
+  "description": "Beside Lumen on a second panel: every core, the temperatures Lumen does not show with the fans turning, the drives and the processes.",
   "display": {
     "model": "turing-9.2-usb",
     "orientation": "portrait",
@@ -63,7 +63,8 @@
       "col": 0,
       "row": 2,
       "cols": 2,
-      "rows": 3
+      "rows": 3,
+      "items": "!cpu.temp\n!gpu.temp\ntemp.*"
     },
     {
       "type": "module",

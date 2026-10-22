@@ -759,6 +759,9 @@ export const panelGroups = [
   { id: "video", order: 20, component: VideoCard },
   { id: "display", order: 30, component: DisplayCard },
   { id: "start-screen", order: 35, component: StartScreenCard },
-  { id: "more", order: 38, component: MorePanelsCard },
   { id: "advanced", order: 40, component: AdvancedCard },
 ];
+
+// Settings → Panels: the panels beside the first, where they stand and what they show, a section
+// of its own (it was a card at the end of the first panel's)
+export const panelsGroups = [{ id: "more", order: 10, component: MorePanelsCard, load: loadPanelSection }];

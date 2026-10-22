@@ -400,7 +400,7 @@ class Tray:
         yield item(t("Back to the start"), self._later(self.app.shortcut, "timer_reset"))
 
     def _set_panel(self, n: int, changes: dict[str, Any]) -> None:
-        """Change the panel ``[[panels]]`` at ``n`` as Settings → Panel → More panels does."""
+        """Change the panel ``[[panels]]`` at ``n`` as Settings → Panels does."""
         from libre_panel.editor.settings import Restart, Settings
 
         settings = Settings(self.app.config_path, None, Restart())

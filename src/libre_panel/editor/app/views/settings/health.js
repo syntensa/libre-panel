@@ -530,7 +530,7 @@ export function AtAGlance() {
   const placed = weather.latitude !== null && weather.longitude !== null;
   const rows = [
     { id: "panel", title: t("Panel"), value: panel, tone: info.found ? "ok" : "warn", section: "panel" },
-    // the panels beside it, each as it is doing (Settings → Panel → More panels)
+    // the panels beside it, each as it is doing (Settings → Panels)
     ...(config.panels || []).map((more, n) => {
       const running = (info.running?.more || []).find((item) => item.index === n);
       const value =
@@ -542,7 +542,7 @@ export function AtAGlance() {
               ? [stateText(running.state), running.detail].filter(Boolean).join(": ")
               : t("Not running");
       const tone = more.on === false ? "" : running?.state === "showing" ? "ok" : "warn";
-      return { id: `panel-${n + 2}`, title: t("Panel {number}", { number: n + 2 }), value, tone, section: "panel/panel-more" };
+      return { id: `panel-${n + 2}`, title: t("Panel {number}", { number: n + 2 }), value, tone, section: "panels/panel-more" };
     }),
     { id: "video", title: t("Smooth motion"), value: video.text, tone: video.tone === "warn" ? "warn" : "", section: "panel/panel-video" },
     {

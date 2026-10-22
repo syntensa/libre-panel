@@ -2355,7 +2355,17 @@
     "What an address answers, or a file holds, as readings for any module: a NAS, a router, another PC. Nothing to sign up for.": "Lo que responde una dirección o contiene un archivo, como lecturas para cualquier módulo: un NAS, un router, otro PC. Sin registrarse.",
     "Which host": "Qué host",
     "While a sensor is at its critical limit (the warnings of the notices): the temperatures and what keeps the PC busy, say.": "Mientras un sensor está en su límite crítico (los avisos de las notificaciones): por ejemplo las temperaturas y lo que mantiene ocupado el PC.",
-    "http:// or https://, or the path of a file.": "http:// o https://, o la ruta de un archivo."
+    "http:// or https://, or the path of a file.": "http:// o https://, o la ruta de un archivo.",
+    "Which panel Live shows and Design edits": "El panel que muestra Live y edita Diseño",
+    "“{name}” is now shown on panel {number}": "«{name}» se muestra ahora en el panel {number}",
+    "While panel 1 shows a game": "Mientras el panel 1 muestra un juego",
+    "While a sensor is at its critical limit": "Mientras un sensor está en su límite crítico",
+    "The companion of panel 1's theme": "El acompañante del tema del panel 1",
+    "Its own theme": "Su propio tema",
+    "Panel {number} goes with panel 1: while panel 1 shows a game, music or the clock at rest, a companion shows the companion of panel 1's theme there (Arena Companion beside Arena), unless a page here has a theme of its own.": "El panel {number} va con el panel 1: mientras el panel 1 muestra un juego, música o el reloj en reposo, un acompañante muestra allí el acompañante del tema del panel 1 (Arena Companion junto a Arena), salvo que una página aquí tenga un tema propio.",
+    "What panel {number} shows when": "Qué muestra el panel {number} y cuándo",
+    "More panels beside the first: what each shows, where they stand and which one is which.": "Más paneles junto al primero: qué muestra cada uno, dónde están y cuál es cuál.",
+    "Panels": "Paneles"
   },
   "fields": {
     "align": "Alineación",

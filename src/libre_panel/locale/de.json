@@ -2355,7 +2355,17 @@
     "What an address answers, or a file holds, as readings for any module: a NAS, a router, another PC. Nothing to sign up for.": "Was eine Adresse antwortet oder eine Datei enthält, als Messwerte für jedes Modul: ein NAS, ein Router, ein anderer PC. Ohne Anmeldung.",
     "Which host": "Welcher Host",
     "While a sensor is at its critical limit (the warnings of the notices): the temperatures and what keeps the PC busy, say.": "Solange ein Sensor an seiner kritischen Grenze ist (die Warnungen der Benachrichtigungen): etwa die Temperaturen und was den PC beschäftigt.",
-    "http:// or https://, or the path of a file.": "http:// oder https://, oder der Pfad einer Datei."
+    "http:// or https://, or the path of a file.": "http:// oder https://, oder der Pfad einer Datei.",
+    "Which panel Live shows and Design edits": "Welches Panel Live zeigt und Design bearbeitet",
+    "“{name}” is now shown on panel {number}": "„{name}“ ist jetzt auf Panel {number}",
+    "While panel 1 shows a game": "Während Panel 1 ein Spiel zeigt",
+    "While a sensor is at its critical limit": "Solange ein Sensor an seiner kritischen Grenze ist",
+    "The companion of panel 1's theme": "Der Begleiter des Themes von Panel 1",
+    "Its own theme": "Sein eigenes Theme",
+    "Panel {number} goes with panel 1: while panel 1 shows a game, music or the clock at rest, a companion shows the companion of panel 1's theme there (Arena Companion beside Arena), unless a page here has a theme of its own.": "Panel {number} geht mit Panel 1 mit: Zeigt Panel 1 ein Spiel, Musik oder die Uhr in der Ruhe, zeigt ein Begleiter dort den Begleiter des Themes von Panel 1 (Arena Companion neben Arena), außer eine Seite hier hat ein eigenes Theme.",
+    "What panel {number} shows when": "Was Panel {number} wann zeigt",
+    "More panels beside the first: what each shows, where they stand and which one is which.": "Weitere Panels neben dem ersten: was jedes zeigt, wo sie stehen und welches welches ist.",
+    "Panels": "Panels"
   },
   "fields": {
     "align": "Ausrichtung",

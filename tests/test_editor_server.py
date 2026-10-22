@@ -990,3 +990,35 @@ def test_a_standby_clip_written_is_named_in_its_own_panel_s_settings(panels, nam
     assert status == 200 and body["standby_clip"] == 3 and written
     video = load_config(path).device.video
     assert (video.local_clip == STANDBY_CLIP) is named and video.clip_asked is named
+
+
+def test_the_pages_of_a_panel_beside_the_first_are_read_and_written(tmp_path):
+    """Design about panel 2: its theme, and those of a game, music and an alarm; one without its
+    own follows panel 1's theme with its companion."""
+    path = tmp_path / "config.toml"
+    beside = 'model = "turing-9.2-usb"\norientation = "portrait"\ntheme = "lumen-companion"\n'
+    path.write_text(f'theme = "lumen"\n[[panels]]\n{beside}', encoding="utf-8")
+    srv = make_server(port=0, config_path=path)
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = srv.server_address[1]
+        status, body = request(port, "GET", "/api/pages?panel=2")
+        assert status == 200 and body["panel"] == 2
+        pages = {page["id"]: page for page in body["pages"]}
+        assert list(pages) == ["normal", "game", "media", "alarm"]
+        assert pages["normal"]["theme"] == "lumen-companion" and pages["normal"]["companion"]
+        assert pages["media"]["theme"] is None and pages["media"]["follows"]
+        assert pages["alarm"]["theme"] == "lumen-companion" and not pages["alarm"]["follows"]
+        change = {"panel": 2, "page": "media", "theme": "encore-companion"}
+        status, body = request(port, "POST", "/api/pages", change)
+        assert status == 200 and load_config(path).panels[0].media_theme == "encore-companion"
+        status, _ = request(port, "POST", "/api/pages", {**change, "theme": ""})
+        assert status == 200 and load_config(path).panels[0].media_theme == ""
+        assert request(port, "POST", "/api/pages", {**change, "panel": 5})[0] == 404
+        assert request(port, "GET", "/api/pages?panel=3")[0] == 404
+        assert load_config(path).theme == "lumen"  # the first panel's is as it was
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        srv.editor_state.close()

@@ -1,4 +1,4 @@
-"""Where the panels stand (Settings → Panel → More panels), and one picture across all of them.
+"""Where the panels stand (Settings → Panels), and one picture across all of them.
 
 Each panel's picture has a size in millimetres, from its model's diagonal and pixels, the way it
 is mounted, and a place where the person put it (config.toml ``at = [x, y]``: the top left
@@ -86,7 +86,7 @@ def places(config: Any, statuses: list[Any]) -> list[Rect | None]:
 
 def laid_out(config: Any, statuses: list[Any]) -> list[Rect | None]:
     """Every panel where it is shown to stand: its place, or, not placed, in a row with the
-    others not placed, beside those that are (as Settings → Panel → More panels lays them
+    others not placed, beside those that are (as Settings → Panels lays them
     out); None for one whose size is not known at all."""
     devices = [config.device, *(panel.device for panel in config.panels)]
     statuses = list(statuses) + [None] * (len(devices) - len(statuses))

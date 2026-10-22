@@ -4,7 +4,7 @@
 import { t } from "../../core/i18n.js";
 import { restartPanel } from "../../core/settings.js";
 import { useStore } from "../../core/state.js";
-import { html, useEffect, useState } from "../../lib/preact.js";
+import { html, useEffect, useRef, useState } from "../../lib/preact.js";
 import { Icon } from "../../ui/icons.js";
 import { toast } from "../../ui/toast.js";
 
@@ -55,7 +55,15 @@ export function SettingRow({ title, hint, status, stacked = false, class: classN
  */
 export function CommitField({ value, onCommit, label, placeholder, mono = false, class: className = "" }) {
   const [draft, setDraft] = useState(null);
-  useEffect(() => setDraft(null), [value]);
+  // what is typed goes when the value changes from outside, not as the field first shows
+  // (that effect comes after the first paint: a quick typist would lose what came before it)
+  const shown = useRef(value);
+  useEffect(() => {
+    if (shown.current !== value) {
+      shown.current = value;
+      setDraft(null);
+    }
+  }, [value]);
   const commit = (event) => {
     const text = event.currentTarget.value.trim();
     if (text !== (value ?? "")) Promise.resolve(onCommit(text)).finally(() => setDraft(null));

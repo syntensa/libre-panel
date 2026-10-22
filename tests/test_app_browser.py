@@ -4313,7 +4313,7 @@ def test_a_new_panel_is_added_step_by_step(app_url, isolated_home):
     """Which panel, how it is mounted and what it shows, each step with a choice made; back
     goes back, and Cancel adds none."""
     choose_theme(isolated_home, "lumen")
-    with browser_page(app_url, "settings/panel") as page:
+    with browser_page(app_url, "settings/panels") as page:
         card = page.locator("#panel-more")
         card.get_by_role("button", name="Add a panel").click()
         dialog = page.locator(".new-panel")
@@ -4346,10 +4346,10 @@ def test_a_new_panel_is_added_step_by_step(app_url, isolated_home):
 
 
 def test_a_second_panel_is_added_given_a_theme_and_taken_out_again(app_url, isolated_home):
-    """Settings → Panel → More panels: a panel beside this one, with a theme and a way up of its
+    """Settings → Panels: a panel beside this one, with a theme and a way up of its
     own, written to [[panels]]; taken out again, there is none."""
     choose_theme(isolated_home)
-    with browser_page(app_url, "settings/panel") as page:
+    with browser_page(app_url, "settings/panels") as page:
         card = page.locator("#panel-more")
         expect(card.locator("h2")).to_have_text("More panels")
         card.get_by_role("button", name="Add a panel").click()
@@ -4381,13 +4381,13 @@ def test_a_second_panel_is_added_given_a_theme_and_taken_out_again(app_url, isol
 
 def test_the_panels_are_placed_where_they_stand_in_their_real_sizes(app_url, isolated_home,
                                                                      tmp_path):  # fmt: skip
-    """Settings → Panel → More panels: the panels in their real sizes by a monitor, moved with
-    the arrow keys or the mouse, each place written to its table; lined up again, none."""
+    """Settings → Panels: the panels in their real sizes by a monitor, moved with the arrow keys
+    or the mouse, each place written to its table; lined up again, none."""
     choose_theme(isolated_home, "lumen")
     with isolated_home.joinpath("config.toml").open("a", encoding="utf-8") as config:
         config.write('\n[device]\nmodel = "turing-12.3-usb"\n'
                      '\n[[panels]]\nmodel = "turing-9.2-usb"\n')  # fmt: skip
-    with browser_page(app_url, "settings/panel") as page:
+    with browser_page(app_url, "settings/panels") as page:
         view = page.locator(".arrangement-view")
         first, second = view.locator("[data-arranged='1']"), view.locator("[data-arranged='2']")
         expect(first).to_contain_text("29.3 × 11 cm")  # 12.3″ at 1920 × 720
@@ -4502,7 +4502,7 @@ def test_a_scene_is_kept_put_on_and_taken_out_on_start(app_url, isolated_home, m
 
 def test_a_panel_added_beside_lumen_shows_lumen_s_companion(app_url, isolated_home):
     choose_theme(isolated_home, "lumen")
-    with browser_page(app_url, "settings/panel") as page:
+    with browser_page(app_url, "settings/panels") as page:
         page.locator("#panel-more").get_by_role("button", name="Add a panel").click()
         through_the_steps(page)
         waits_for(page, lambda: len(settings_config().panels) == 1)

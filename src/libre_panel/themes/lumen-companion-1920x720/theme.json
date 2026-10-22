@@ -3,7 +3,7 @@
   "name": "Lumen Companion",
   "author": "Libre Panel contributors",
   "license": "CC0-1.0",
-  "description": "Beside Lumen on a second panel: what it does not show. Every core of the processor, the temperatures with the fans turning, the drives and what takes the most.",
+  "description": "Beside Lumen on a second panel: every core, the temperatures Lumen does not show with the fans turning, the drives and the processes.",
   "display": {
     "model": "turing-12.3-usb",
     "orientation": "landscape",
@@ -63,7 +63,8 @@
       "col": 3,
       "row": 0,
       "cols": 3,
-      "rows": 3
+      "rows": 3,
+      "items": "!cpu.temp\n!gpu.temp\ntemp.*"
     },
     {
       "type": "module",

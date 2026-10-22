@@ -29,7 +29,7 @@ export const stateText = (state) =>
   })[state] || state;
 
 /** The name of a mode for people: "game" → "In game". */
-const MODE_NAMES = { game: () => t("In game"), media: () => t("Music"), idle: () => t("Idle") };
+const MODE_NAMES = { game: () => t("In game"), media: () => t("Music"), idle: () => t("Idle"), alarm: () => t("Alarm") };
 export const modeName = (mode) =>
   MODE_NAMES[mode] ? MODE_NAMES[mode]() : mode ? mode.charAt(0).toUpperCase() + mode.slice(1) : t("Normal");
 

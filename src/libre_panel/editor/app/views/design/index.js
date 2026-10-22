@@ -6,7 +6,8 @@ import { openTheme } from "../../core/actions.js";
 import { registerCommands, registerProvider } from "../../core/commands.js";
 import { edit, isModule, selectedWidgets, selection, setSelection, single, widgets } from "../../core/doc.js";
 import { t, widgetLabel } from "../../core/i18n.js";
-import { themeEntry, versionBase, versionFor } from "../../core/orientation.js";
+import { rootOf, themeEntry, versionBase, versionFor } from "../../core/orientation.js";
+import { targetStatus } from "../../core/target.js";
 import { bindKey } from "../../core/shortcuts.js";
 import { setPref, store, useStore } from "../../core/state.js";
 import { html, useRef, useState } from "../../lib/preact.js";
@@ -155,6 +156,22 @@ store.subscribe((state) => {
   if (before === undefined || !way || !doc?.id || dirty) return;
   const theme = versionBase(doc.id) || doc.id;
   if (themeEntry(theme) && versionFor(theme) !== doc.id) openTheme(theme, { page, ask: false });
+});
+
+// With a companion beside it the panel shows the pair version of its theme (Lumen without its
+// fans), without it the theme itself again: the open theme follows that too.
+let followed;
+store.subscribe((state) => {
+  const shown = targetStatus(state)?.theme;
+  const { doc, dirty, page } = state;
+  const seen = `${shown}|${doc?.id}|${(state.versions || []).length}`; // (the versions come late)
+  if (!shown || seen === followed) return;
+  followed = seen;
+  if (!doc?.id || dirty) return;
+  const theme = rootOf(doc.id);
+  if (shown && rootOf(shown) === theme && themeEntry(theme) && versionFor(theme) !== doc.id) {
+    openTheme(theme, { page, ask: false });
+  }
 });
 
 // -- keys ---------------------------------------------------------------------------------------

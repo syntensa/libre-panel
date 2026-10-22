@@ -1,0 +1,144 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "Encore Companion",
+  "author": "Libre Panel contributors",
+  "license": "CC0-1.0",
+  "description": "Beside Encore on a second panel while music plays: the cover large on its own colours, the weather and the sun and moon; what plays is on Encore.",
+  "display": {
+    "model": "turing-9.2-usb",
+    "orientation": "portrait",
+    "width": 480,
+    "height": 1920
+  },
+  "palette": {
+    "bg": "#0A0E13",
+    "bg2": "#06090D",
+    "surface": "#0D1219",
+    "line": "#1F2A36",
+    "track": "#18212C",
+    "text": "#E8EEF4",
+    "text2": "#C9D3DE",
+    "text3": "#93A1B2",
+    "dim": "#5F6E80",
+    "accent": "#2EE6D6",
+    "cpu": "#2EE6D6",
+    "gpu": "#7F9CFF",
+    "mem": "#C792FF",
+    "disk": "#5FB6FF",
+    "net": "#34D399",
+    "warn": "#F5C46B",
+    "crit": "#F87171"
+  },
+  "font": "builtin:Barlow-Medium",
+  "background": {
+    "color": "@bg",
+    "image": "assets/backdrop.png"
+  },
+  "refresh_ms": 1000,
+  "animation": {
+    "smoothing_ms": 600
+  },
+  "grid": {
+    "columns": 12,
+    "rows": 48,
+    "gap": 1,
+    "margin": 16
+  },
+  "toast": {
+    "off": [
+      "volume"
+    ]
+  },
+  "style": {
+    "card": "glass",
+    "radius": 14,
+    "glow": 0.6,
+    "backdrop": "flat",
+    "display_font": "builtin:Barlow-SemiBold",
+    "text_font": "builtin:Barlow-Medium"
+  },
+  "widgets": [
+    {
+      "type": "image",
+      "id": "ambient",
+      "x": 18,
+      "y": 0,
+      "w": 462,
+      "h": 1920,
+      "src": "@media.cover",
+      "fit": "cover",
+      "blur": 56,
+      "opacity": 0.9,
+      "needs": "@media.cover"
+    },
+    {
+      "type": "rect",
+      "id": "veil",
+      "x": 18,
+      "y": 0,
+      "w": 462,
+      "h": 1920,
+      "color": "#0A0E1338",
+      "color2": "#0A0E13F2",
+      "gradient": "vertical",
+      "needs": "@media.cover"
+    },
+    {
+      "type": "rect",
+      "id": "cover-frame",
+      "x": 18,
+      "y": 0,
+      "w": 462,
+      "h": 462,
+      "color": "#121A24"
+    },
+    {
+      "type": "icon",
+      "id": "cover-icon",
+      "x": 175,
+      "y": 157,
+      "icon": "music",
+      "size": 148,
+      "color": "@dim",
+      "stroke": 1.6,
+      "needs": "!@media.cover"
+    },
+    {
+      "type": "image",
+      "id": "cover",
+      "x": 18,
+      "y": 0,
+      "w": 462,
+      "h": 462,
+      "src": "@media.cover",
+      "fit": "cover",
+      "shadow": "#00000099",
+      "shadow_offset": 6,
+      "shadow_blur": 22
+    },
+    {
+      "type": "module",
+      "id": "m-weather-1-13",
+      "module": "weather",
+      "col": 1,
+      "row": 13,
+      "cols": 10,
+      "rows": 19
+    },
+    {
+      "type": "module",
+      "id": "m-sun-1-33",
+      "module": "sun",
+      "col": 1,
+      "row": 33,
+      "cols": 10,
+      "rows": 14
+    }
+  ],
+  "switches": {
+    "frames": {
+      "label": "Frames around every part",
+      "on": true
+    }
+  }
+}

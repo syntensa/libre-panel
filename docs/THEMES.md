@@ -216,7 +216,8 @@ temp.*              every reading that matches, in natural order (core 2 before 
 ```
 
 A reading that repeats another under a friendlier key (`cpu.temp` is one of
-the `temp.*` readings) is shown once. Without a name on its line, the name
+the `temp.*` readings) is shown once; `!cpu.temp` leaves it out under either key
+(Lumen Companion lists the temperatures Lumen does not show so). Without a name on its line, the name
 comes from a reading beside it (`disk.1.name` for `disk.1.load`), else from
 the sensor's label.
 

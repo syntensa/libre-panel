@@ -5,23 +5,26 @@
 
 import { loadSettings } from "./settings.js";
 import { store, useStore } from "./state.js";
+import { targetStatus, targetTable } from "./target.js";
 
 export const VERTICAL = "-vertical";
 
 let asked = false;
 
-/** How the panel is mounted ("" until config.toml has been read). */
+/** How the panel is mounted ("" until config.toml has been read): the panel the app is about
+ * (the header's choice, target.js). */
 export function mounted() {
   const settings = store.get().settings;
   if (!settings && !asked) {
     asked = true;
     loadSettings();
   }
-  return settings?.config?.device?.orientation || "";
+  const beside = targetTable();
+  return (beside ? beside.orientation : settings?.config?.device?.orientation) || "";
 }
 
 export const useMounted = () => {
-  useStore((s) => s.settings?.config?.device?.orientation);
+  useStore((s) => (targetTable(s) || s.settings?.config?.device)?.orientation);
   return mounted();
 };
 
@@ -33,21 +36,35 @@ const installed = () => [...store.get().themes, ...(store.get().versions || [])]
 // "lumen-1920x720" is Lumen for a panel of that size (the 12.3"): it comes first on one
 const SIZED = /^(.+)-(\d{2,5})x(\d{2,5})$/;
 
-/** The theme a version is one of ("lumen" for "lumen-vertical" and "lumen-1920x720"), as its
- * name says; null for a theme that is no version. */
+// "lumen-pair" is Lumen while a companion shows beside it on another panel (theme.model.PAIR)
+const PAIR = "-pair";
+
+/** The theme a version is one of ("lumen" for "lumen-vertical", "lumen-1920x720" and
+ * "lumen-pair"), as its name says; null for a theme that is no version. */
 export function versionBase(id) {
   const sized = SIZED.exec(id || "");
   if (sized) return sized[1];
-  return id?.endsWith(VERTICAL) ? id.slice(0, -VERTICAL.length) : null;
+  for (const ending of [VERTICAL, PAIR]) if (id?.endsWith(ending) && id.length > ending.length) return id.slice(0, -ending.length);
+  return null;
 }
 
-/** The size of the panel's frames, where the running app knows it. */
-export const panelSize = () => store.get().app?.panel?.size || null;
+/** The size of the panel's frames, where the running app knows it (of the panel the app is
+ * about). */
+export const panelSize = () => targetStatus()?.size || null;
 
 /** The version of a theme the panel shows: its version for the panel's size ("lumen-1920x720"
  * on the 12.3"), else "lumen-vertical" for "lumen" on a bar on end, and the other way round,
  * where that version is installed; else the theme itself (as theme.model.theme_for). */
 export function versionFor(id, themes = installed(), way = mounted(), size = panelSize()) {
+  const version = plainVersion(id, themes, way, size);
+  // while a companion runs beside it the panel shows the pair version ("lumen-pair-1920x720"):
+  // Design edits, and the pictures show, what the panel shows
+  const shown = targetStatus()?.theme;
+  const base = versionBase(version) || version;
+  return shown && version && shown === `${base}${PAIR}${version.slice(base.length)}` && known(themes, shown) ? shown : version;
+}
+
+function plainVersion(id, themes, way, size) {
   if (!id) return id;
   // turned as it is mounted (as the app's panel_size), also before the app has said its new size
   if (size && ((way === "portrait" && size[0] > size[1]) || (way === "landscape" && size[0] < size[1]))) {
@@ -64,6 +81,13 @@ export function versionFor(id, themes = installed(), way = mounted(), size = pan
   const base = id.endsWith(VERTICAL) ? id.slice(0, -VERTICAL.length) : null;
   if (way === "landscape" && base && known(themes, base)) return base;
   return id;
+}
+
+/** The theme a version is one of through all its endings: "lumen" for "lumen-pair-1920x720". */
+export function rootOf(id) {
+  let root = id;
+  for (let base = versionBase(root); base; base = versionBase(root)) root = base;
+  return root;
 }
 
 /** Whether a theme is another's version ("lumen-vertical" or "lumen-1920x720" beside

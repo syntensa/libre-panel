@@ -462,7 +462,7 @@ def test_the_sections_speak_german(app_url, monkeypatch):  # noqa: F811
         expect(card.locator(".settings-row-title").first).to_have_text("Flüssige Bewegung")
         expect(card.get_by_role("button", name="Diesen Namen nehmen")).to_be_visible()
         nav = page.locator(".settings-nav button")
-        expect(nav.nth(3)).to_have_text("Spielmodus und mehr")
+        expect(nav.nth(4)).to_have_text("Spielmodus und mehr")  # (after Panel, Panels, Sensoren)
         page.goto(f"{app_url}#/settings/sensors")
         expect(page.locator("#sensor-sources h2")).to_have_text("Woher die Werte kommen")
         expect(page.locator(".sources-more")).to_contain_text("Weitere Quellen")

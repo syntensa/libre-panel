@@ -45,8 +45,11 @@ from libre_panel.theme.model import (
     THEME_FILENAME,
     Theme,
     ThemeError,
+    companion_for,
     find_theme,
+    is_companion,
     load_theme,
+    pair_version,
     switches_for,
     theme_for,
     with_accent,
@@ -338,15 +341,21 @@ def _theme_name(
     rotation: Rotation | None = None,
     reported: PanelModel | None = None,
     mode: str | None = None,
+    paired: bool = False,
+    first: str | None = None,
 ) -> str:
     """A theme a service shows, else the active mode's theme, else the step of the screens in
     turn that is due (``rotation`` follows them), else config.toml's; where that names none,
     the panel's own ``default``. Each in its version for the panel: for its size (Lumen for
     the 12.3" on a 12.3"), else for the way it is mounted (``device.orientation``: Lumen
-    Vertical for Lumen on a panel on end). A panel beside the first, without a host, has the
-    first panel's ``mode``: the theme of its own for it ([[panels]] game_theme)."""
-    named = _named(config, host, default, rotation, mode)
-    return theme_for(named, config.device.orientation, panel_size(config, reported))
+    Vertical for Lumen on a panel on end), and while a companion runs beside it (``paired``)
+    its pair version, which leaves out what the companion shows (Lumen without the fans). A
+    panel beside the first, without a host, has the first panel's ``mode``: the theme of its
+    own for it ([[panels]] game_theme); a companion without one follows the theme the
+    first panel shows (``first``: Arena Companion beside Arena)."""
+    named = _named(config, host, default, rotation, mode, first)
+    shown = theme_for(named, config.device.orientation, panel_size(config, reported))
+    return (pair_version(shown) or shown) if paired else shown
 
 
 def panel_size(config: Config, reported: PanelModel | None = None) -> tuple[int, int] | None:
@@ -364,6 +373,7 @@ def _named(
     default: str | None,
     rotation: Rotation | None,
     mode: str | None = None,
+    first: str | None = None,
 ) -> str:
     if host is not None:
         if host.theme:
@@ -375,6 +385,10 @@ def _named(
         own = config.modes.get(mode)
         if own is not None and own.theme:
             return own.theme
+    if first and is_companion(config.theme):  # beside Encore, Encore's companion
+        follow = companion_for(first)
+        if follow:
+            return follow
     if rotation is not None and config.sequence.active:
         place = rotation.where(config.sequence.steps)
         if place is not None:
@@ -393,6 +407,7 @@ def _sequence_state(config: Config, rotation: Rotation) -> dict[str, Any] | None
 
 
 ALARM = "alarm"  # the notices service's reading, and the page of a panel beside the first
+PAIR_HOLD_S = 10.0  # a companion that is away a moment (a reconnect) keeps the pair versions
 # a panel beside the first takes its readings this long after the first panel took them, so
 # they glide on both at once (the first panel's frames come up to a frame late)
 IN_STEP_S = 0.1
@@ -686,7 +701,15 @@ class MainLoop:
         self.rotation = Rotation(clock)
         self.pages = modes.PageSwitch(clock)  # music's page, the idle clock's
         shown = (
-            _theme_name(config, host, self.default, self.rotation, self.reported, self._mode())
+            _theme_name(
+                config,
+                host,
+                self.default,
+                self.rotation,
+                self.reported,
+                self._mode(),
+                **self._pairing(),
+            )
             if not once
             else named
         )
@@ -765,6 +788,22 @@ class MainLoop:
         if _alarm(getattr(self, "snapshot", None)) and ALARM in self.config.modes:
             return ALARM  # (none yet while the loop is made)
         return self.mode_of()
+
+    def _pairing(self) -> dict[str, Any]:
+        """For the first panel, whether a companion runs beside it (``paired``: its themes'
+        pair versions), and PAIR_HOLD_S after the last one was seen, so a reconnect does not
+        switch back and forth; for a panel beside it, the theme the first one shows
+        (``first``), which a companion follows."""
+        if getattr(self, "panel", None) is not None:
+            look_of = getattr(self, "look_of", None)
+            return {"first": (look_of() if look_of is not None else "") or None}
+        status = getattr(self, "status", None)
+        more = getattr(status, "more", None) or {}
+        now = self.clock()
+        if any(each.state == "showing" and is_companion(each.theme) for each in more.values()):
+            self._paired_at = now
+        seen = getattr(self, "_paired_at", None)
+        return {"paired": seen is not None and now - seen < PAIR_HOLD_S}
 
     def _look(self, config: Config) -> tuple[str, int | None] | None:
         """For a panel beside the first in its look (``same_look``): the theme the first panel
@@ -924,14 +963,28 @@ class MainLoop:
         warmed up in a thread of its own first (:class:`_Warmup`) while this
         one goes on; nothing to switch to, or a theme that fails, goes ahead."""
         pending = watcher.pending()
-        wanted = _theme_name(config, host, self.default, self.rotation, self.reported, self._mode())
+        wanted = _theme_name(
+            config,
+            host,
+            self.default,
+            self.rotation,
+            self.reported,
+            self._mode(),
+            **self._pairing(),
+        )
         if not pending and wanted in (shown, refused) and self._dress(config) == self.dressed:
             return True
         try:
             fresh = load_config(config.path) if pending and config.path else config
             default = self._default_for(fresh)
             fresh_name = _theme_name(
-                fresh, host, default, self.rotation, self.reported, self._mode()
+                fresh,
+                host,
+                default,
+                self.rotation,
+                self.reported,
+                self._mode(),
+                **self._pairing(),
             )
             theme = load_theme(find_theme(fresh_name))
         except (ConfigError, ThemeError):
@@ -1132,7 +1185,9 @@ class MainLoop:
             # transition says otherwise (Transition.on_switch: follow or restart).
             if host is not None:
                 self._follow_pages(config, host, snapshot)
-            wanted = _theme_name(config, host, default, self.rotation, reported, self._mode())
+            wanted = _theme_name(
+                config, host, default, self.rotation, reported, self._mode(), **self._pairing()
+            )
             status.sequence = _sequence_state(config, self.rotation)
             status.size = panel_size(config, reported)
             status.model = getattr(panel_model(config.device, reported), "id", "")
@@ -1151,7 +1206,13 @@ class MainLoop:
                         fresh = panel_config(load_config(config.path), self.panel)
                     fresh_default = self._default_for(fresh)
                     wanted = _theme_name(
-                        fresh, host, fresh_default, self.rotation, reported, self._mode()
+                        fresh,
+                        host,
+                        fresh_default,
+                        self.rotation,
+                        reported,
+                        self._mode(),
+                        **self._pairing(),
                     )
                     new_theme = load_theme(find_theme(wanted))
                 except (ConfigError, ThemeError) as exc:
@@ -1382,6 +1443,7 @@ class _MorePanels:
 
     RETRY_S = 30.0  # after a config or theme that cannot be shown
     HALT_S = 10.0  # how long an end waits for a loop to let its panel go
+    REVIVE_S = 10.0  # how often a panel's process that ended is looked for
 
     def __init__(
         self,
@@ -1390,16 +1452,22 @@ class _MorePanels:
         quitting: Callable[[], bool | str | None] | None,
         host: Any = None,
         beats: fan.Beats | None = None,
+        apart: bool = False,
     ) -> None:
         self.hub, self.status, self.quitting = hub, status, quitting
         self.host = host  # the first panel's: the mode it is in (a game, music) for the others
         self.beats = beats  # and where its fans stand, for the same fan in step on every panel
-        self._runs: dict[int, tuple[threading.Thread, threading.Event]] = {}
+        # each in a process of its own (the background app: panel_process.py), else a thread
+        self.apart = apart
+        self._runs: dict[int, Any] = {}  # a thread and its stop, or a PanelProcess
         self._seen: Config | None = None
+        self._checked = 0.0
+        self._in_threads: set[int] = set()  # panels whose process could not start
 
     def follow(self, config: Config) -> None:
         """Start and end loops as ``config`` (the first panel's, as loaded) says. Cheap
         while it is the same: the first panel's loop calls it on every frame."""
+        self._revive()
         if config is self._seen:
             return
         self._seen = config
@@ -1407,34 +1475,53 @@ class _MorePanels:
         for n in sorted(set(self._runs) - wanted):
             self._end([n])
         for n in sorted(wanted - set(self._runs)):
-            status, stop = RunStatus(), threading.Event()
-            thread = threading.Thread(
-                target=self._main, args=(n, config, stop, status), name=f"panel-{n + 2}",
-                daemon=True,
-            )  # fmt: skip
-            self._runs[n] = (thread, stop)
-            self.status.more = {**self.status.more, n: status}
-            thread.start()
+            self._start(n, config)
+
+    def _start(self, n: int, config: Config) -> None:
+        if self.apart and config.path is not None and n not in self._in_threads:
+            from libre_panel.panel_process import PanelProcess, RemoteStatus
+
+            remote = RemoteStatus()
+            try:
+                self._runs[n] = PanelProcess(n, config.path, self, remote)
+            except (OSError, RuntimeError, ValueError) as exc:  # (no process: as a thread)
+                log.warning("panel %d runs in the app's own process: %s", n + 2, exc)
+                self._in_threads.add(n)
+            else:
+                self.status.more = {**self.status.more, n: remote}
+                return
+        status, stop = RunStatus(), threading.Event()
+        thread = threading.Thread(
+            target=self._main, args=(n, config, stop, status), name=f"panel-{n + 2}",
+            daemon=True,
+        )  # fmt: skip
+        self._runs[n] = (thread, stop)
+        self.status.more = {**self.status.more, n: status}
+        thread.start()
+
+    def _revive(self) -> None:
+        """A panel's process that ended by itself starts again; one that never said a word
+        (it could not start: a build without it) runs as a thread from then on."""
+        now = time.monotonic()
+        if now - self._checked < self.REVIVE_S or self._seen is None:
+            return
+        self._checked = now
+        for n, each in list(self._runs.items()):
+            if isinstance(each, tuple) or each.alive():
+                continue
+            each.join(0.0)
+            del self._runs[n]
+            if not each.heard:
+                log.warning("panel %d's process did not start; it runs in the app's own", n + 2)
+                self._in_threads.add(n)
+            else:
+                log.warning("panel %d's process ended; starting it again", n + 2)
+            self._start(n, self._seen)
 
     def _main(self, n: int, config: Config, stop: threading.Event, status: RunStatus) -> None:
-        while not stop.is_set():
-            try:
-                run(panel_config(config, n), stop=stop, status=status, hub=HubView(self.hub),
-                    panel=n, quitting=self.quitting, mode_of=self._mode,
-                    look_of=self._look, places_of=self.places, beats=self.beats)  # fmt: skip
-            except (ConfigError, ThemeError, DeviceError) as exc:
-                status.state, status.detail = "error", str(exc)
-                log.error("panel %d stopped: %s", n + 2, exc)
-                stop.wait(self.RETRY_S)
-            except Exception as exc:  # the first panel goes on through a bug in this one's loop
-                status.state, status.detail = "error", f"unexpected error: {exc}"
-                log.exception("the loop of panel %d crashed; starting again", n + 2)
-                stop.wait(5.0)
-            if config.path is not None and not stop.is_set():
-                try:
-                    config = load_config(config.path)
-                except ConfigError:
-                    pass  # the first panel's loop says what is wrong with it
+        run_beside(n, config, stop, status, HubView(self.hub), quitting=self.quitting,
+                   mode_of=self._mode, look_of=self._look, places_of=self.places,
+                   beats=self.beats)  # fmt: skip
 
     def _mode(self) -> str | None:
         return self.host.mode if self.host is not None else None
@@ -1455,18 +1542,56 @@ class _MorePanels:
         )
 
     def _end(self, numbers: list[int]) -> None:
-        runs = [(n, *self._runs.pop(n)) for n in numbers if n in self._runs]
-        for _, _, stop in runs:
-            stop.set()  # all at once: each lets its panel go while the others do
-        for n, thread, _ in runs:
-            thread.join(timeout=self.HALT_S)
-            if thread.is_alive():
+        runs = [(n, self._runs.pop(n)) for n in numbers if n in self._runs]
+        for _, each in runs:  # all at once: each lets its panel go while the others do
+            each[1].set() if isinstance(each, tuple) else each.stop()
+        for n, each in runs:
+            if isinstance(each, tuple):
+                each[0].join(timeout=self.HALT_S)
+                late = each[0].is_alive()
+            else:
+                late = not each.join(self.HALT_S)
+            if late:
                 log.warning("the loop of panel %d did not stop in time", n + 2)
-        gone = {n for n, _, _ in runs}
+        gone = {n for n, _ in runs}
         self.status.more = {n: s for n, s in self.status.more.items() if n not in gone}
 
     def close(self) -> None:
         self._end(list(self._runs))
+
+
+def run_beside(
+    n: int,
+    config: Config | Path,
+    stop: threading.Event,
+    status: Any,
+    hub: Any,
+    **loop: Any,
+) -> None:
+    """The loop of the panel beside the first at ``[[panels]]`` ``n`` until ``stop``: on the
+    first panel's ``config``, or the config.toml at that path in the panel's own process
+    (panel_process.py), again after a config or theme it cannot show (:attr:`_MorePanels.RETRY_S`)
+    and after a bug in it, with ``config.toml`` read anew. ``loop``: :func:`run`'s ``quitting``,
+    ``mode_of``, ``look_of``, ``places_of`` and ``beats``."""
+    path = config if isinstance(config, Path) else config.path
+    while not stop.is_set():
+        try:
+            if isinstance(config, Path):
+                config = load_config(config)
+            run(panel_config(config, n), stop=stop, status=status, hub=hub, panel=n, **loop)
+        except (ConfigError, ThemeError, DeviceError) as exc:
+            status.state, status.detail = "error", str(exc)
+            log.error("panel %d stopped: %s", n + 2, exc)
+            stop.wait(_MorePanels.RETRY_S)
+        except Exception as exc:  # the first panel goes on through a bug in this one's loop
+            status.state, status.detail = "error", f"unexpected error: {exc}"
+            log.exception("the loop of panel %d crashed; starting again", n + 2)
+            stop.wait(5.0)
+        if path is not None and not stop.is_set():
+            try:
+                config = load_config(path)
+            except ConfigError:
+                pass  # the first panel's loop says what is wrong with it
 
 
 # a scene's change goes across the panels as they stand (MainLoop._sweep): this long from the
@@ -1544,6 +1669,7 @@ def run(
     look_of: Callable[[], str] | None = None,
     places_of: Callable[[], list[arrangement.Rect | None]] | None = None,
     beats: fan.Beats | None = None,
+    apart: bool = False,
 ) -> None:
     """Main loop: read sensors at the theme's rate, render at ``config.fps`` so
     values glide between readings, and send only frames that changed. A
@@ -1576,7 +1702,7 @@ def run(
     guards = timing.Guards()  # SPUR II's, while this drives the panel
     watch = _HangWatch(hang_log if first else None)  # (faulthandler has one timer)
     more = (
-        _MorePanels(loop.hub, loop.status, quitting, host, loop.beats)
+        _MorePanels(loop.hub, loop.status, quitting, host, loop.beats, apart=apart)
         if first and not once else None
     )  # fmt: skip
     if more is not None:

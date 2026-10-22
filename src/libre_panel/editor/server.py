@@ -77,6 +77,7 @@ from libre_panel.theme.model import (
     WIDGET_SPECS,
     ThemeError,
     find_theme,
+    is_companion,
     list_themes,
     load_theme,
     parse_theme,
@@ -501,6 +502,20 @@ class Route:
         object.__setattr__(self, "pattern", _compile(self.template))
 
 
+# a panel beside the first: its pages, by the [[panels]] key of each one's theme
+BESIDE_PAGES = {"normal": "theme", "game": "game_theme", "media": "media_theme",
+                "alarm": "alarm_theme"}  # fmt: skip
+
+
+def _panel_number(text: str | None, config: Config) -> int | None:
+    """``?panel=2``: the panel's number (1 the first), None for one that is not there."""
+    try:
+        number = int(text or "1")
+    except ValueError:
+        return None
+    return number if 1 <= number <= len(config.panels) + 1 else None
+
+
 def _first_panel_s(config: Config, written: dict[str, Any]) -> bool:
     """Whether the start screen just written (its ``model``) is the first panel's: alone it is;
     beside others it is the first panel's model, as set or (``"auto"``) as found on the bus. A
@@ -904,13 +919,14 @@ class EditorHandler(BaseHTTPRequestHandler):
             log.debug("no panel state: %s", exc)
             return {}
 
-    def _panel_pages(self) -> None:
+    def _panel_pages(self, query: dict[str, list[str]] | None = None) -> None:
         """The pages of the panel: the theme it shows normally (config.toml's, else the
         panel's own default), the theme of each mode ([modes.<name>], game mode's among
         them, with its frame rate; None: the normal one) and the round report's (the memory
         service's ``report_theme``), and which page is on show now, whether config.toml names
         a theme at all (``chosen``) and the panel's own ``default``. The console's
-        ``control/themes`` has the first two."""
+        ``control/themes`` has the first two. ``?panel=2``: those of a panel beside the first
+        (:meth:`_beside_pages`)."""
         from libre_panel.services.game import MODE as GAME_MODE
         from libre_panel.services.memory import Memory
 
@@ -918,6 +934,11 @@ class EditorHandler(BaseHTTPRequestHandler):
             config = load_config(self.state.config_path)
         except ConfigError as exc:
             return self._error(str(exc), HTTPStatus.CONFLICT)
+        number = _panel_number((query or {}).get("panel", ["1"])[0], config)
+        if number is None:
+            return self._error("no such panel", HTTPStatus.NOT_FOUND)
+        if number > 1:
+            return self._json(self._beside_pages(config, number - 2))
         panel = self._panel_state()
         # the panel's own default: the running app's word, else worked out from the config
         default = panel.get("default_theme") or default_theme(panel_model(config.device))
@@ -1087,6 +1108,26 @@ class EditorHandler(BaseHTTPRequestHandler):
         i18n.set_language(setting)  # the tray and the panel follow at once
         self._json(self._i18n())
 
+    def _beside_pages(self, config: Config, n: int) -> dict[str, Any]:
+        """The pages of the panel beside the first at ``[[panels]]`` ``n``: its theme, and the
+        theme it shows while the first panel is in a game, plays music or is at rest, and
+        during an alarm. A page without one (None) shows the companion of the first panel's
+        theme where its own is a companion (Arena Companion beside Arena), else its own."""
+        panel = config.panels[n]
+        running = self._panel_state().get("more") or []
+        now = next((item for item in running if item.get("index") == n), {})
+        follows = is_companion(panel.theme)
+        pages = [{"id": "normal", "theme": panel.theme or now.get("theme") or None,
+                  "beside": True, "companion": follows}]  # fmt: skip
+        for page, key in BESIDE_PAGES.items():
+            if page == "normal":
+                continue
+            theme = getattr(panel, key) or None
+            pages.append({"id": page, "theme": theme, "on": True, "beside": True,
+                          "follows": follows and theme is None and page != "alarm"})  # fmt: skip
+        return {"pages": pages, "shown": now.get("theme"), "mode": None, "chosen": True,
+                "default": panel.theme, "panel": n + 2}  # fmt: skip
+
     def _set_panel_page(self) -> None:
         """``{"page": ..., "theme": ...}`` and, for a mode, ``{"fps": ...}``: what a page of
         the panel shows, written to config.toml. ``page`` is "normal", "report" (the round
@@ -1099,6 +1140,8 @@ class EditorHandler(BaseHTTPRequestHandler):
         page = payload.get("page") if isinstance(payload, dict) else None
         if not isinstance(page, str) or not _MODE_NAME.fullmatch(page):
             return self._error('expected {"page": "normal", "report" or a mode, ...}')
+        if payload.get("panel", 1) != 1:
+            return self._set_beside_page(payload, page)
         theme = payload.get("theme")
         fps = payload.get("fps")
         on = payload.get("on")
@@ -1142,6 +1185,43 @@ class EditorHandler(BaseHTTPRequestHandler):
         except (ConfigError, OSError) as exc:
             return self._error(str(exc), HTTPStatus.CONFLICT)
         self._panel_pages()
+
+    def _set_beside_page(self, payload: dict[str, Any], page: str) -> None:
+        """``{"panel": 2, "page": "media", "theme": ...}``: the theme a page of a panel beside
+        the first shows (an empty one: the companion of the first panel's theme, else its
+        own), written to its ``[[panels]]`` table."""
+        try:
+            config = load_config(self.state.config_path)
+        except ConfigError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        number = _panel_number(str(payload.get("panel")), config)
+        theme = payload.get("theme")
+        if number is None or number < 2:
+            return self._error("no such panel", HTTPStatus.NOT_FOUND)
+        if (
+            page not in BESIDE_PAGES
+            or not isinstance(theme, str)
+            or (page == "normal" and not theme)
+        ):
+            return self._error(
+                "a page of a panel beside the first: normal, game, media or alarm, with a theme "
+                "(none: the companion's, for all but normal)"
+            )
+        try:
+            if theme:
+                find_theme(theme)
+            settings = app_settings.Settings(self.state.config_path, self.controls,
+                                             self.state.restart)  # fmt: skip
+            tables = settings.read()["config"]["panels"]
+            tables[number - 2] = {**tables[number - 2], BESIDE_PAGES[page]: theme}
+            settings.write({"set": {"panels": tables}})
+        except ThemeError as exc:
+            return self._error(str(exc))
+        except app_settings.SettingsError as exc:
+            return self._error(str(exc), exc.status)
+        except (ConfigError, OSError) as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        self._json(self._beside_pages(load_config(self.state.config_path), number - 2))
 
     def _see_news(self) -> None:
         """``{"seen": "0.6"}``: the card of a release's news was closed (news.py)."""
@@ -1434,7 +1514,7 @@ class EditorHandler(BaseHTTPRequestHandler):
 
     def _panels_photo(self) -> None:
         """``GET /api/panels/photo``: one picture of all panels that are on, where they stand
-        (Settings → Panel → More panels), each with what it shows now, to keep or share."""
+        (Settings → Panels), each with what it shows now, to keep or share."""
         from libre_panel import arrangement
         from libre_panel.devices.models import find_model
 
@@ -2085,7 +2165,7 @@ ROUTES: tuple[Route, ...] = (
         picture=True,
     ),
     Route("GET", "/api/readings", lambda h, m, u: h._json(h._readings(parse_qs(u.query)))),
-    Route("GET", "/api/pages", lambda h, m, u: h._panel_pages()),
+    Route("GET", "/api/pages", lambda h, m, u: h._panel_pages(parse_qs(u.query))),
     Route("GET", "/api/sequence", lambda h, m, u: h._sequence()),
     Route("GET", "/api/news", lambda h, m, u: h._json(h.state.news.state())),
     Route("GET", "/api/update", lambda h, m, u: h._update(parse_qs(u.query))),

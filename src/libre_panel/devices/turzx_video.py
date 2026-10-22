@@ -99,6 +99,22 @@ def transparent_layer(size: tuple[int, int]) -> bytes:
     return encode_png_rgba(Image.new("RGBA", size, (0, 0, 0, 0)), compress_level=9)
 
 
+def rgb_bytes(frame: Image.Image) -> bytes:
+    """The RGB bytes of an RGB or RGBA ``frame`` in one piece: Image.tobytes makes them in
+    pieces of 64 KB and joins them, a second copy of the picture on every frame (4 MB on the
+    12.3"). As tobytes makes them where Pillow does not take this way."""
+    try:
+        frame.load()
+        encoder = Image._getencoder(frame.mode, "raw", ("RGB",))
+        encoder.setimage(frame.im, (0, 0, *frame.size))
+        _, done, data = encoder.encode(frame.width * frame.height * 3)
+        if done == 1 and len(data) == frame.width * frame.height * 3:
+            return data
+    except Exception:  # (another Pillow)
+        pass
+    return frame.tobytes("raw", "RGB")
+
+
 class DecoderHung(DeviceError):
     """The panel's decoder stopped taking pictures; reconnecting does not help."""
 
@@ -445,7 +461,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             self._heal(self._error)
         self._last_frame = frame
         if frame.mode in ("RGB", "RGBA"):  # the RGB bytes straight away: no copy of the picture
-            data = frame.tobytes("raw", "RGB")
+            data = rgb_bytes(frame)
         else:
             data = frame.convert("RGB").tobytes()
         encoder = self.encoder

@@ -15,6 +15,7 @@ import { loadPanelInfo } from "../../core/settings.js";
 import { store, useStore } from "../../core/state.js";
 import { statTiles } from "../../core/stats.js";
 import { videoState } from "../../core/video.js";
+import { chooseTarget } from "../../core/target.js";
 import { html, useEffect, useRef, useState } from "../../lib/preact.js";
 import { themeName } from "../../core/actions.js";
 import { modeName, panelName, stateText } from "../../shell/panel-popover.js";
@@ -380,7 +381,9 @@ function LiveNow() {
   const model = connectedModel({ available: background, panel: status }, models);
   // with more panels: which one's picture (as Which is which? numbers them), and how it is doing
   const more = status?.more || [];
-  const [chosen, choose] = useState(1);
+  // the header's choice (target.js), as chosen: Live has the panels the app says are running
+  const chosen = useStore((s) => Number(s.prefs.target) || 1);
+  const choose = (n) => chooseTarget(n);
   const beside = more.find((item) => item.index + 2 === chosen) || null;
   const number = beside ? chosen : 1;
   const besideLine = beside

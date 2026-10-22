@@ -456,7 +456,7 @@ class DeviceConfig:
     away_brightness: int = 0
     output: str = "libre-panel-frame.png"
     port: str = ""  # serial panels: the port; empty = found by its USB ids
-    # where the panel stands beside the others (Settings → Panel → More panels): the top left
+    # where the panel stands beside the others (Settings → Panels): the top left
     # corner of its picture, in millimetres, as mounted; None: not placed
     at: tuple[int, int] | None = None
     video: VideoConfig = field(default_factory=VideoConfig)

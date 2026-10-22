@@ -156,6 +156,21 @@ class Beats:
         self._made: dict[tuple[str, int, int], Beat] = {}
         self._lock = threading.Lock()
 
+    def export(self) -> list[tuple[tuple[str, int, int], float, float]]:
+        """Where each beat stands, and when (the main loops' clock: ``time.monotonic``), for a
+        panel in a process of its own (panel_process.py)."""
+        with self._lock:
+            made = list(self._made.items())
+        return [(key, beat.angle, beat.at) for key, beat in made if beat.at is not None]
+
+    def adopt(self, beats: list[tuple[tuple[str, int, int], float, float]]) -> None:
+        """Stand where another process's beats stand (:meth:`export`): the same fan in step
+        on every panel, whichever process draws it."""
+        for key, angle, at in beats:
+            beat = self.of(*key)
+            with beat._lock:
+                beat.angle, beat.at = angle, at
+
     def of(self, sensor: str, fps: int, blades: int) -> Beat:
         """The turn of the fan ``sensor`` on every panel that draws ``fps`` frames a second in
         a look of ``blades`` blades (on panels of other rates each turns as suits its rate)."""

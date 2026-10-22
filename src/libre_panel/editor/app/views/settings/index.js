@@ -15,7 +15,7 @@ import { Icon } from "../../ui/icons.js";
 import { aboutGroups } from "./about.js";
 import { HardwareNames } from "./hardware.js";
 import { AtAGlance, HealthCard, useHealth } from "./health.js";
-import { panelGroups } from "./panel.js";
+import { panelGroups, panelsGroups } from "./panel.js";
 import { Note } from "./parts.js";
 import { registerSettingsGroup, registerSettingsSection, settingsGroups, settingsSections } from "./sections.js";
 import { sensorGroups } from "./sensors.js";
@@ -35,6 +35,12 @@ registerSettingsSection({
   order: 10,
   title: () => t("Panel"),
   text: () => t("Which panel is connected, smooth motion, brightness, how it is mounted and its start screen."),
+});
+registerSettingsSection({
+  id: "panels",
+  order: 12,
+  title: () => t("Panels"),
+  text: () => t("More panels beside the first: what each shows, where they stand and which one is which."),
 });
 registerSettingsSection({
   id: "sensors",
@@ -75,6 +81,7 @@ for (const [section, groups] of Object.entries({
     { id: "glance", order: 20, component: AtAGlance },
   ],
   panel: panelGroups,
+  panels: panelsGroups,
   sensors: sensorGroups,
   services: serviceGroups,
   weather: weatherGroups,

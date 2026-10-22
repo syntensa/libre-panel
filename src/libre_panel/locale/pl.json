@@ -2355,7 +2355,17 @@
     "What an address answers, or a file holds, as readings for any module: a NAS, a router, another PC. Nothing to sign up for.": "To, co odpowiada adres lub zawiera plik, jako odczyty dla dowolnego modułu: NAS, router, inny komputer. Bez zakładania konta.",
     "Which host": "Który host",
     "While a sensor is at its critical limit (the warnings of the notices): the temperatures and what keeps the PC busy, say.": "Dopóki czujnik jest na granicy krytycznej (ostrzeżenia powiadomień): na przykład temperatury i to, co obciąża komputer.",
-    "http:// or https://, or the path of a file.": "http:// lub https://, albo ścieżka pliku."
+    "http:// or https://, or the path of a file.": "http:// lub https://, albo ścieżka pliku.",
+    "Which panel Live shows and Design edits": "Który panel pokazuje Live i edytuje Projekt",
+    "“{name}” is now shown on panel {number}": "„{name}” jest teraz na panelu {number}",
+    "While panel 1 shows a game": "Gdy panel 1 pokazuje grę",
+    "While a sensor is at its critical limit": "Gdy czujnik jest na swojej granicy krytycznej",
+    "The companion of panel 1's theme": "Towarzysz motywu panelu 1",
+    "Its own theme": "Jego własny motyw",
+    "Panel {number} goes with panel 1: while panel 1 shows a game, music or the clock at rest, a companion shows the companion of panel 1's theme there (Arena Companion beside Arena), unless a page here has a theme of its own.": "Panel {number} idzie za panelem 1: gdy panel 1 pokazuje grę, muzykę albo zegar w spoczynku, towarzysz pokazuje tam towarzysza motywu panelu 1 (Arena Companion obok Areny), chyba że strona tutaj ma własny motyw.",
+    "What panel {number} shows when": "Co i kiedy pokazuje panel {number}",
+    "More panels beside the first: what each shows, where they stand and which one is which.": "Kolejne panele obok pierwszego: co pokazuje każdy, gdzie stoją i który jest który.",
+    "Panels": "Panele"
   },
   "fields": {
     "align": "Wyrównanie",

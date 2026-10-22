@@ -2355,7 +2355,17 @@
     "What an address answers, or a file holds, as readings for any module: a NAS, a router, another PC. Nothing to sign up for.": "把某个地址的响应或文件内容作为任意模块的读数：NAS、路由器、另一台电脑。无需注册。",
     "Which host": "哪个主机",
     "While a sensor is at its critical limit (the warnings of the notices): the temperatures and what keeps the PC busy, say.": "当传感器处于临界值时（通知中的警告）：例如显示温度以及占用电脑的程序。",
-    "http:// or https://, or the path of a file.": "http:// 或 https://，或文件路径。"
+    "http:// or https://, or the path of a file.": "http:// 或 https://，或文件路径。",
+    "Which panel Live shows and Design edits": "实时显示、设计编辑的是哪块面板",
+    "“{name}” is now shown on panel {number}": "“{name}”现在显示在面板 {number} 上",
+    "While panel 1 shows a game": "面板 1 显示游戏时",
+    "While a sensor is at its critical limit": "传感器处于临界值时",
+    "The companion of panel 1's theme": "面板 1 主题的伴侣主题",
+    "Its own theme": "它自己的主题",
+    "Panel {number} goes with panel 1: while panel 1 shows a game, music or the clock at rest, a companion shows the companion of panel 1's theme there (Arena Companion beside Arena), unless a page here has a theme of its own.": "面板 {number} 跟随面板 1：面板 1 显示游戏、音乐或空闲时钟时，伴侣主题会在这里显示面板 1 主题的伴侣（Arena 旁边是 Arena Companion），除非这里的某个页面有自己的主题。",
+    "What panel {number} shows when": "面板 {number} 何时显示什么",
+    "More panels beside the first: what each shows, where they stand and which one is which.": "第一块面板旁边的更多面板：各自显示什么、放在哪里、哪块是哪块。",
+    "Panels": "面板"
   },
   "fields": {
     "align": "对齐",

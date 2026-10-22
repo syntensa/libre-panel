@@ -2,13 +2,14 @@
 // tabs (each says what it is for), the search field, always right after the tabs, and the way to
 // the settings, by name, which leads back to where the person was when pressed in Settings.
 
-import { applyToPanel, panelState } from "../core/actions.js";
+import { applyToPanel, confirmDiscard, openTheme, panelState } from "../core/actions.js";
+import { chooseTarget, designPages, useTarget } from "../core/target.js";
 import { redo, undo } from "../core/doc.js";
 import { t } from "../core/i18n.js";
 import { firstStart, store, useStore } from "../core/state.js";
 import { bindKey, keyLabel } from "../core/shortcuts.js";
 import { html } from "../lib/preact.js";
-import { IconButton } from "../ui/controls.js";
+import { IconButton, Segmented } from "../ui/controls.js";
 import { Icon } from "../ui/icons.js";
 import { dialogOpen } from "../ui/dialog.js";
 import { openPalette, paletteOpen } from "../ui/palette.js";
@@ -74,6 +75,31 @@ function SettingsButton({ active }) {
   </button>`;
 }
 
+/** "Panel 1 | Panel 2", while more panels are set up: the panel Live shows and Design edits
+ * (target.js). In Design the theme the chosen panel shows opens, after asking about unsaved
+ * changes. */
+function PanelSwitch() {
+  const count = useStore((s) => 1 + (s.settings?.config?.panels?.length || 0));
+  const number = useTarget();
+  if (count < 2) return null;
+  const choose = async (n) => {
+    if (n === number) return;
+    const design = store.get().route.view === "design";
+    if (design && !(await confirmDiscard())) return;
+    await chooseTarget(n, async () => {
+      const theme = designPages()?.pages?.[0]?.theme;
+      if (design && theme) await openTheme(theme, { ask: false, page: "normal" });
+    });
+  };
+  return html`<${Segmented}
+    class="panel-switch"
+    label=${t("Which panel Live shows and Design edits")}
+    value=${number}
+    options=${Array.from({ length: count }, (_, i) => ({ value: i + 1, label: t("Panel {number}", { number: i + 1 }) }))}
+    onChange=${choose}
+  />`;
+}
+
 export function Header({ view }) {
   const route = useStore((s) => s.route);
   // the question "How should it look?" is asked on its own: the other views have nothing to show yet
@@ -99,6 +125,7 @@ export function Header({ view }) {
             >${titleOf(item)}</a>`,
           )}
         </nav>`}
+    <${PanelSwitch} />
     ${parts.center ? html`<${parts.center} />` : html`<${SearchTrigger} wide />`}
     <div class="topbar-flex"></div>
     ${parts.actions ? html`<${parts.actions} />` : null}

@@ -109,7 +109,7 @@ def test_who_updated_is_told_what_is_new_once_and_each_thing_is_done_right_there
         expect(card.locator("[data-step='scenes']")).to_have_class(re.compile(r"\bdone\b"))
         # more panels: to where one is added
         card.get_by_role("button", name="Add a panel").click()
-        page.wait_for_function("location.hash === '#/settings/panel'")
+        page.wait_for_function("location.hash === '#/settings/panels'")
         page.goto(f"{app_url}#/home")
         # closed: kept by the server, for the window and any browser alike
         card.get_by_role("button", name="Got it").click()

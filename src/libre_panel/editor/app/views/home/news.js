@@ -96,7 +96,7 @@ export function WhatsNew() {
       title: t("More panels at once"),
       text: t("Up to four panels, each with its own theme, placed where they stand."),
       done: (config.panels || []).length > 0,
-      action: html`<button type="button" class="btn" onClick=${() => navigate("settings", "panel")}>${t("Add a panel")}</button>`,
+      action: html`<button type="button" class="btn" onClick=${() => navigate("settings", "panels")}>${t("Add a panel")}</button>`,
     },
     {
       id: "scenes",

@@ -1,5 +1,5 @@
 """Which panel is which: for a few seconds each panel shows its number, large, instead of its
-theme (Settings → Panel → More panels). The first panel ([device]) is 1, those of
+theme (Settings → Panels). The first panel ([device]) is 1, those of
 ``[[panels]]`` 2, 3 and 4 in their order there.
 """
 
@@ -26,6 +26,11 @@ def show(seconds: float = SHOW_S) -> None:
 
 def showing() -> bool:
     return time.monotonic() < _until
+
+
+def left() -> float:
+    """The seconds the numbers show yet (0: they do not), for a panel's own process."""
+    return max(0.0, _until - time.monotonic())
 
 
 @lru_cache(maxsize=8)
