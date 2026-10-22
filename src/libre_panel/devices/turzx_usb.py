@@ -400,6 +400,25 @@ class UsbTransport:
             raise DeviceError(f"command {cmd}: unexpected reply {reply[:16].hex(' ')}")
         return reply
 
+    def push(
+        self, cmd: int, args: bytes, payload: bytes, timeout_ms: int = 5000, reply_ms: int = 200
+    ) -> bytes | None:
+        """A command and its payload in one write, whose reply may not come (Lian Li's
+        pictures): the reply, or None."""
+        import usb.core
+
+        with self._lock:
+            try:
+                self.ep_out.write(build_packet(cmd, args) + payload, timeout_ms)
+            except usb.core.USBError as exc:
+                raise DeviceError(f"USB error on command {cmd}: {exc}") from exc
+            try:
+                return bytes(self.ep_in.read(READ_LEN, reply_ms))
+            except usb.core.USBTimeoutError:
+                return None
+            except usb.core.USBError as exc:
+                raise DeviceError(f"USB error on command {cmd}: {exc}") from exc
+
     def query(self, cmd: int, timeout_ms: int = 400) -> bytes | None:
         """A status request. While the panel decodes video it sometimes answers
         late; then this returns None and the late answer is skipped later."""

@@ -1,7 +1,7 @@
-"""JONSBO DS339: a 3.39" screen of 376x960 (960x376 lying down) that sits on a graphics card
-or in a case, on a USB 2.0 header. It is a USB display chip, the MacroSilicon MS9132
-(345f:9132), as USB-to-HDMI adapters have it too: Libre Panel opens it only where
-``device.model = "jonsbo-ds339"`` says so, never by ``auto``.
+"""Panels behind a USB display chip, the MacroSilicon MS9132 (345f:9132): the JONSBO DS339
+(3.39", 376x960, 960x376 lying down, on a graphics card or in a case) and the VMAX 4.6"
+(320x960). USB-to-HDMI adapters have the chip too: Libre Panel opens it only where
+``device.model`` names such a panel, never by ``auto``. The panel's EDID says its size.
 
 The protocol as InfoPanel (GPL-3.0, habibrehmansg/infopanel; from the ms912x Linux drivers and
 a USB capture of the vendor's application on a DS339) documents it:
@@ -50,7 +50,7 @@ log = logging.getLogger(__name__)
 
 VENDOR_ID = 0x345F
 PRODUCT_ID = 0x9132
-MODEL_ID = "jonsbo-ds339"
+MODEL_ID = "jonsbo-ds339"  # (the one it was made for)
 CONTROL, VIDEO = 0, 3  # the interfaces: HID feature reports, and the frames
 ENDPOINT_OUT = 0x04
 CHUNK = 64 * 1024
@@ -169,20 +169,21 @@ def _device() -> Any:
         raise DeviceError("no libusb backend found (see docs/HARDWARE.md)") from exc
 
 
-class Ds339Display(Display):
-    name = "jonsbo-ds339"
+class Ms9132Display(Display):
+    name = "ms9132"
 
     def __init__(self, config, model: PanelModel | None = None, configured: bool = True) -> None:
         super().__init__(config)
         self.model = model or get_model(MODEL_ID)
         self.device: Any = None
         self.place = ""
-        self.size = (376, 960)  # the framebuffer, standing on end; its EDID may say otherwise
+        # the framebuffer, standing on end, as the model says; its EDID may say otherwise
+        self.size = (self.model.native_width, self.model.native_height)
         self.brightness = 100
         self.frames = 0
         self._picture: Image.Image | None = None
         self._packet = b""
-        self._keeper = KeepShowing(AGAIN_S, self._again, name="ds339-keep")
+        self._keeper = KeepShowing(AGAIN_S, self._again, name="ms9132-keep")
 
     def describe(self) -> str:
         return self.model.label
@@ -202,10 +203,12 @@ class Ds339Display(Display):
 
         device = _device()
         if device is None:
-            raise DeviceError(t("no JONSBO DS339 on the USB bus"))
+            raise DeviceError(t("no {panel} on the USB bus", panel=self.model.label))
         place = f"usb:{getattr(device, 'bus', None)}.{getattr(device, 'address', None)}"
         if not take_place(place):
-            raise DeviceError(t("another panel of Libre Panel has the DS339 open"))
+            raise DeviceError(
+                t("another panel of Libre Panel has the {panel} open", panel=self.model.label)
+            )
         self.device, self.place, self.frames = device, place, 0
         try:
             self._claim()
@@ -218,16 +221,18 @@ class Ds339Display(Display):
             if size is not None and size in VIC:
                 self.size = size
             elif size is not None:
-                log.warning("DS339: its EDID says %dx%d, a size without a known mode", *size)
+                log.warning("MS9132: its EDID says %dx%d, a size without a known mode", *size)
             self._mode(*self.size, VIC.get(self.size, VIC[(376, 960)]))
         except usb.core.USBError as exc:
             self.close()
             self.counters.usb_errors += 1
-            raise DeviceError(t("the DS339 did not start: {error}", error=exc)) from exc
+            raise DeviceError(
+                t("the {panel} did not start: {error}", panel=self.model.label, error=exc)
+            ) from exc
         except BaseException:
             self.close()
             raise
-        log.info("JONSBO DS339, %dx%d", *self.size)
+        log.info("%s, %dx%d", self.model.label, *self.size)
         self._keeper.start()
 
     def _claim(self) -> None:
@@ -275,7 +280,7 @@ class Ds339Display(Display):
 
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
         if self.device is None:
-            raise DeviceError(t("the DS339 is not open"))
+            raise DeviceError(t("the {panel} is not open", panel=self.model.label))
         native = to_native(frame, self.size)
         packet = frame_packet(dimmed(native, self.brightness))
         with self._keeper.lock:
@@ -302,7 +307,9 @@ class Ds339Display(Display):
                     self.report(report)
         except usb.core.USBError as exc:
             self.counters.usb_errors += 1
-            raise DeviceError(t("the DS339 stopped answering: {error}", error=exc)) from exc
+            raise DeviceError(
+                t("the {panel} stopped answering: {error}", panel=self.model.label, error=exc)
+            ) from exc
         self._packet = packet
         self._keeper.sent()
 
@@ -315,8 +322,10 @@ class Ds339Display(Display):
             return False
         import usb.core
 
+        self._keeper.stop()  # (nothing goes out again to a panel turned off)
         try:
-            self.report(POWER_OFF)
+            with self._keeper.lock:
+                self.report(POWER_OFF)
         except usb.core.USBError:
             return False
         return True

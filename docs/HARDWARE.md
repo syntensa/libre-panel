@@ -41,7 +41,9 @@ motion (the video mode is for the TURZX USB panels). The panel test's speed chec
 
 | Model id | Size | Resolution (landscape) | Connection | Driver |
 |---|---|---|---|---|
+| `turing-1.6-usb` | 1.6" | 400×400 | USB, V1.x | unverified |
 | `turing-2.1` | 2.1" round | 480×480 | USB serial, rev. C | unverified |
+| `turing-2.1-usb` | 2.1" round | 480×480 | USB, V1.x | unverified |
 | `turing-2.8-usb` | 2.8" round | 480×480 | USB, V1.x | unverified |
 | `turing-3.5` | 3.5" | 480×320 | USB serial, rev. A | **supported** — runs, as its owners report |
 | `turing-4.6-usb` | 4.6" | 960×320 | USB, V1.x | unverified |
@@ -130,14 +132,35 @@ Neither has a TURZX controller inside; their protocols come from the JONSBO driv
   `libre-panel system-setup --linux` gives your user access to it. The brightness goes into
   the pixels; quitting with `dark_on_quit` turns it off.
 
+## Hongtai / Jungle Leopard
+
+Cooler screens on Hongtai's firmware: the Jungle Leopard Chill Arc 360 (480×960) and the
+strip of the family (1920×462), and the white-label screens that carry it (MSI EZ Display,
+Thermaltake, ZOTAC and others). They are a USB serial port (`33c3:7788`, found by `auto`)
+that takes JPEG pictures; the panel says its size, which tells the two models apart. Other
+white-label product ids of the family run once `device.model` and `device.port` name them.
+The backlight is the panel's own (0–100). The protocol comes from
+[InfoPanel](https://github.com/habibrehmansg/infopanel) (GPL-3.0); unverified. Libre Panel
+never sends the commands that restart the panel, update its firmware, change its serial number,
+region or screen timeouts, or switch the pump's motor.
+
+## VMAX 4.6"
+
+The VMAX 4.6" (960×320) is a MacroSilicon MS9132 USB display chip like the JONSBO DS339's and
+runs on the same driver: choose `vmax-4.6` (*Settings → Panel*); `auto` does not open the chip.
+Unverified.
+
 ## Lian Li and others
 
-Lian Li LCDs (UNI FAN TL LCD, Galahad II LCD, HydroShift, Universal Screen,
-Lancool 207 Digital, …) do **not** use the TURZX protocol. They speak Lian Li's
-own HID / wireless / USB protocols, documented by the MIT-licensed
-[lian-li-linux](https://github.com/sgtaziz/lian-li-linux) project. Because
-Libre Panel separates drivers from themes, a Lian Li driver can be added as its
-own package later; the same themes would then work on those screens too.
+The **Lian Li Universal Screen** (8.8", 9.2") and the **HydroShift II** LCD (480×480) and OLED
+Curve (2288×1080) speak a protocol close to TURZX's (`1cbe:a088`, `a092`, `a034`, `a068`,
+found by `auto`): Libre Panel sends them JPEG pictures to their background layer, clears the
+layer above it once, and waits when the panel says pictures pile up. As
+[InfoPanel](https://github.com/habibrehmansg/infopanel) documents it from the MIT-licensed
+[lian-li-linux](https://github.com/sgtaziz/lian-li-linux) driver; unverified.
+
+Lian Li's other LCDs (UNI FAN TL LCD, Galahad II LCD, Lancool 207 Digital, …) speak Lian Li's
+own HID and wireless protocols, which lian-li-linux documents; they have no driver here yet.
 
 Not supported and not planned for now: Waveshare USB monitors, GUITION 3.5",
 Fuldho 3.5", AX206/AIDA64-style frames.

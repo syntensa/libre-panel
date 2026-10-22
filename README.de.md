@@ -248,7 +248,7 @@ kostet nichts, solange kein Theme es zeigt.
 
 | Panel | Größen | Meldet sich als | Stand |
 |---|---|---|---|
-| Turing / TURZX | rund 2,8", 4,6", 5,2", 8", 8,8", 9,2", 12,3" | USB-Gerät (`1cbe:…`) | 9,2": stundenlang erprobt, als Standbild und als Video mit 50 fps. 8,8" und 12,3": laufen, wie ihre Besitzer berichten. Andere Größen: dasselbe Protokoll, ungeprüft |
+| Turing / TURZX | 1,6", rund 2,1", rund 2,8", 4,6", 5,2", 8", 8,8", 9,2", 12,3" | USB-Gerät (`1cbe:…`) | 9,2": stundenlang erprobt, als Standbild und als Video mit 50 fps. 8,8" und 12,3": laufen, wie ihre Besitzer berichten. Andere Größen: dasselbe Protokoll, ungeprüft |
 | Turing Smart Screen | rund 2,1", 3,5", 5", 8,8" | virtueller COM-Port | 3,5" und 8,8": laufen, wie ihre Besitzer berichten. 2,1" und 5": ungeprüft |
 | UsbPCMonitor | 3,5", 5", 7" | virtueller COM-Port | ungeprüft |
 | XuanFang | 3,5" | virtueller COM-Port | ungeprüft |
@@ -258,6 +258,9 @@ kostet nichts, solange kein Theme es zeigt.
 | JONSBO TF3-360SC (AIO) | Pumpe: 3,5", 640×480; Lüfter: die drei Displays des ZC-360, ein Panel daneben | USB-Geräte (`1cbe:0035`, `43a8:0e61`) | ungeprüft |
 | JONSBO DS916 | 9,16", 1920×462 | USB-Seriell-Port (`33c3:f101`), JPEG-Bilder | ungeprüft |
 | JONSBO DS339 | 3,39", 960×376; Modell auswählen (wird von „auto“ nicht gefunden) | USB-Display-Chip MS9132 (`345f:9132`) | ungeprüft |
+| VMAX 4,6" | 960×320; Modell auswählen (wird von „auto“ nicht gefunden) | USB-Display-Chip MS9132 (`345f:9132`) | ungeprüft |
+| Hongtai / Jungle Leopard (Chill Arc 360; MSI EZ Display, Thermaltake, ZOTAC und weitere Displays mit dieser Firmware) | 960×480, die Leiste 1920×462 | USB-Seriell-Port (`33c3:7788`), JPEG-Bilder | ungeprüft |
+| Lian Li Universal Screen, HydroShift II LCD und OLED Curve | Leisten mit 8,8" und 9,2", 480×480, 2288×1080 | USB-Gerät (`1cbe:a088`, `a092`, `a034`, `a068`) | ungeprüft |
 
 *Ungeprüft* heißt: Der Treiber folgt einem Protokoll, das auf echten Panels erprobt ist, aber
 noch niemand hat dieses Modell mit Libre Panel bestätigt. **Du hast eins?** Der Panel-Test in

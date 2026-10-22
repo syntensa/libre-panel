@@ -450,7 +450,7 @@ def lacking_ffmpeg(monkeypatch, found=False):
 
 
 def panel_on_the_bus(monkeypatch, model_id=None, serial=None, gadget=None, zc360=False):
-    from libre_panel.devices import jonsbo_zc360, serial_link, turzx_usb
+    from libre_panel.devices import jonsbo_zc360, lianli_usb, serial_link, turzx_usb
     from libre_panel.devices.models import get_model
 
     maybe = []
@@ -461,6 +461,7 @@ def panel_on_the_bus(monkeypatch, model_id=None, serial=None, gadget=None, zc360
     model = get_model(model_id) if model_id else None
     monkeypatch.setattr(turzx_usb, "present_model", lambda *_: model if not serial else None)
     monkeypatch.setattr(jonsbo_zc360, "present", lambda: zc360)
+    monkeypatch.setattr(lianli_usb, "present_model", lambda: None)
     port = None
     if serial:
         found = get_model(serial)

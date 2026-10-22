@@ -34,8 +34,11 @@ screens, comes from its notes.
 <https://github.com/habibrehmansg/infopanel>. The protocols of the JONSBO DS916 (its
 handshake and the JPEG pictures) and DS339 (the MS9132 chip's start, its EDID, the mode
 numbers, the frame header and when its output is turned on) come from its JONSBO drivers,
-made from the vendor's application and USB captures. Libre Panel's drivers
-(`devices/jonsbo_ds916.py`, `devices/jonsbo_ds339.py`) are its own code.
+made from the vendor's application and USB captures; so do those of the Hongtai / Jungle
+Leopard screens (JL-PROTOCOL.md: the command frame, the picture's envelope, the keep-alive) and
+of Lian Li's TURZX-like screens (from the MIT-licensed lian-li-linux driver: the JPEG layer,
+the cleared PNG layer, the picture queue). Libre Panel's drivers (`devices/jonsbo_ds916.py`,
+`devices/ms9132.py`, `devices/hongtai.py`, `devices/lianli_usb.py`) are its own code.
 
 **LibreHardwareMonitor** (MPL-2.0) — the sensor source for the GPU,
 temperatures, power and fans on Windows. The Windows downloads carry its

@@ -4,7 +4,8 @@
 #   sudo udevadm control --reload-rules
 # then unplug and replug the panel.
 
-# Turing / TURZX V1.x USB panels (2.8" round, 3.5" on JONSBO's TF3-360SC pump, 4.6", 5.2", 8", 8.8", 9.2", 12.3")
+# Turing / TURZX V1.x USB panels (1.6" to 12.3", the pump of JONSBO's TF3-360SC), and Lian Li's
+# Universal Screen and HydroShift II, which speak a protocol close to theirs
 SUBSYSTEM=="usb", ATTRS{idVendor}=="1cbe", MODE="0660", TAG+="uaccess"
 
 # JONSBO ZC-360: the three screens under its fans (3.38", "TURZX-338inch-r")

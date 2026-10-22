@@ -35,11 +35,13 @@ SERIAL_DRIVERS = {
     "serial-d": "libre_panel.devices.kipye_rev_d:RevDDisplay",
     "serial-weact": "libre_panel.devices.weact:WeActDisplay",
     "serial-jonsbo": "libre_panel.devices.jonsbo_ds916:Ds916Display",
+    "serial-hongtai": "libre_panel.devices.hongtai:HongtaiDisplay",
 }
 # the drivers of the panels that are neither TURZX USB nor serial, made as the serial ones
 OTHER_DRIVERS = {
     "usb-jonsbo": "libre_panel.devices.jonsbo_zc360:Zc360Display",
-    "usb-ms9132": "libre_panel.devices.jonsbo_ds339:Ds339Display",  # (never found by auto)
+    "usb-ms9132": "libre_panel.devices.ms9132:Ms9132Display",  # (never found by auto)
+    "usb-lianli": "libre_panel.devices.lianli_usb:LianLiDisplay",
 }
 DRIVERS = {**SERIAL_DRIVERS, **OTHER_DRIVERS}
 
@@ -154,8 +156,9 @@ class TurzxDisplay(Display):
         return impl
 
     def _open_any(self) -> Display:
-        """A USB panel, else a JONSBO ZC-360, else a serial one (``device.model = "auto"``)."""
-        from libre_panel.devices import jonsbo_zc360
+        """A USB panel, else a Lian Li screen, else a JONSBO ZC-360, else a serial one
+        (``device.model = "auto"``)."""
+        from libre_panel.devices import jonsbo_zc360, lianli_usb
         from libre_panel.devices.serial_link import find_port
 
         usb = self._driver(None)
@@ -165,6 +168,11 @@ class TurzxDisplay(Display):
         except DeviceError as exc:
             usb.close()
             missing = exc
+        lianli = lianli_usb.present_model()
+        if lianli is not None:
+            impl = self._driver(lianli, configured=False)
+            impl.open()
+            return impl
         if jonsbo_zc360.present():
             impl = self._driver(find_model(jonsbo_zc360.MODEL_ID), configured=False)
             impl.open()

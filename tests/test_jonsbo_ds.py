@@ -12,8 +12,7 @@ from fake_serial import FakeSerial, port_info
 from PIL import Image
 
 from libre_panel.config import DeviceConfig
-from libre_panel.devices import base, serial_link, turzx_usb
-from libre_panel.devices import jonsbo_ds339 as ds339
+from libre_panel.devices import base, ms9132, serial_link, turzx_usb
 from libre_panel.devices import jonsbo_ds916 as ds916
 from libre_panel.devices.base import DeviceError
 from libre_panel.devices.models import get_model, models_for_usb
@@ -165,7 +164,7 @@ class FakeMs9132:
         raise AssertionError("it is configured already")
 
     def ctrl_transfer(self, request_type, request, value, index, data_or_length, timeout):
-        assert value == 0x0300 and index == ds339.CONTROL
+        assert value == 0x0300 and index == ms9132.CONTROL
         if request_type == 0x21:  # SET_REPORT
             report = bytes(data_or_length)
             assert len(report) == 8
@@ -179,20 +178,20 @@ class FakeMs9132:
         return self._reply
 
     def write(self, endpoint, data, timeout):
-        assert endpoint == ds339.ENDPOINT_OUT and len(data) <= ds339.CHUNK
+        assert endpoint == ms9132.ENDPOINT_OUT and len(data) <= ms9132.CHUNK
         if self.broken:
             raise usb.core.USBError("gone")
         self.data += bytes(data)
         width, height = self.size()
         if len(self.data) == 8 + width * height * 3 + 8:  # a whole frame
-            assert self.data.endswith(ds339.TRAILER)
+            assert self.data.endswith(ms9132.TRAILER)
             assert int.from_bytes(self.data[6:8], "big") == height | 0x8000
             self.frames.append(bytes(self.data))
             self.data.clear()
         return len(data)
 
     def size(self) -> tuple[int, int]:
-        return ds339.edid_size(self.edid) or (376, 960)
+        return ms9132.edid_size(self.edid) or (376, 960)
 
     def picture(self) -> Image.Image:
         blue, green, red = Image.frombytes("RGB", self.size(), self.frames[-1][8:-8]).split()
@@ -205,19 +204,19 @@ class FakeMs9132:
 @pytest.fixture
 def chip(monkeypatch):
     fake = FakeMs9132()
-    monkeypatch.setattr(ds339, "_device", lambda: fake)
-    monkeypatch.setattr(ds339.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(ms9132, "_device", lambda: fake)
+    monkeypatch.setattr(ms9132.time, "sleep", lambda seconds: None)
     for name in ("claim_interface", "release_interface", "dispose_resources"):
         monkeypatch.setattr(usb.util, name, lambda device, *args: device.claimed.add(*args[:1]))
-    monkeypatch.setattr(ds339, "AGAIN_S", 30)
+    monkeypatch.setattr(ms9132, "AGAIN_S", 30)
     return fake
 
 
 def test_the_ds339_is_started_as_the_vendor_does_and_shown_bgr_frames(chip):
     with TurzxDisplay(DeviceConfig(driver="turzx", model="jonsbo-ds339")) as screen:
         impl = screen._impl
-        assert isinstance(impl, ds339.Ds339Display) and impl.size == (376, 960)
-        assert chip.reports[: len(ds339.START)] == list(ds339.START)  # the vendor's start
+        assert isinstance(impl, ms9132.Ms9132Display) and impl.size == (376, 960)
+        assert chip.reports[: len(ms9132.START)] == list(ms9132.START)  # the vendor's start
         assert chip.sent(0xA6, 0x02)[0][2] == 171  # the mode of 376x960
         assert chip.sent(0xA6, 0x04) and not chip.sent(0xA6, 0x05, 0x01)  # output still off
         screen.show(landscape((960, 376)))
@@ -231,7 +230,7 @@ def test_the_ds339_is_started_as_the_vendor_does_and_shown_bgr_frames(chip):
         assert len(chip.frames) == 3 and len(chip.sent(0xA6, 0x05, 0x01)) == 1
         screen.set_brightness(0)
         assert chip.picture().getpixel((370, 5)) == (0, 0, 0)
-        assert screen.screen_off() and chip.reports[-1] == ds339.POWER_OFF
+        assert screen.screen_off() and chip.reports[-1] == ms9132.POWER_OFF
     assert not base.place_taken("usb:1.9")
 
 
@@ -267,6 +266,6 @@ def test_the_models_of_both():
     nine, three = get_model("jonsbo-ds916"), get_model("jonsbo-ds339")
     assert nine.size("landscape") == (1920, 462) and default_theme(nine) == "lumen"
     assert three.size("landscape") == (960, 376) and default_theme(three) == "libre-default"
-    assert models_for_usb(0x33C3, 0xF101) == [nine] and models_for_usb(0x345F, 0x9132) == [three]
+    assert models_for_usb(0x33C3, 0xF101) == [nine] and three in models_for_usb(0x345F, 0x9132)
     assert nine.driver == three.driver == "unverified"
-    assert ds339.edid_size(edid(376, 960)) == (376, 960) and ds339.edid_size(bytes(128)) is None
+    assert ms9132.edid_size(edid(376, 960)) == (376, 960) and ms9132.edid_size(bytes(128)) is None

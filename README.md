@@ -235,7 +235,7 @@ aside when its readings are missing, and costs nothing while no theme shows it.
 
 | Panel | Sizes | Connects as | Status |
 |---|---|---|---|
-| Turing / TURZX | 2.8" round, 4.6", 5.2", 8", 8.8", 9.2", 12.3" | USB device (`1cbe:…`) | 9.2": proven for hours, as stills and as 50 fps video. 8.8" and 12.3": run, as their owners report. Other sizes: the same protocol, unverified |
+| Turing / TURZX | 1.6", 2.1" round, 2.8" round, 4.6", 5.2", 8", 8.8", 9.2", 12.3" | USB device (`1cbe:…`) | 9.2": proven for hours, as stills and as 50 fps video. 8.8" and 12.3": run, as their owners report. Other sizes: the same protocol, unverified |
 | Turing Smart Screen | 2.1" round, 3.5", 5", 8.8" | virtual COM port | 3.5" and 8.8": run, as their owners report. 2.1" and 5": unverified |
 | UsbPCMonitor | 3.5", 5", 7" | virtual COM port | unverified |
 | XuanFang | 3.5" | virtual COM port | unverified |
@@ -245,6 +245,9 @@ aside when its readings are missing, and costs nothing while no theme shows it.
 | JONSBO TF3-360SC (AIO) | pump: 3.5", 640×480; fans: the ZC-360's three screens, a panel beside it | USB devices (`1cbe:0035`, `43a8:0e61`) | unverified |
 | JONSBO DS916 | 9.16", 1920×462 | USB serial port (`33c3:f101`), JPEG pictures | unverified |
 | JONSBO DS339 | 3.39", 960×376; choose the model (not found by "auto") | USB display chip MS9132 (`345f:9132`) | unverified |
+| VMAX 4.6" | 960×320; choose the model (not found by "auto") | USB display chip MS9132 (`345f:9132`) | unverified |
+| Hongtai / Jungle Leopard (Chill Arc 360; MSI EZ Display, Thermaltake, ZOTAC and other screens on its firmware) | 960×480, the strip 1920×462 | USB serial port (`33c3:7788`), JPEG pictures | unverified |
+| Lian Li Universal Screen, HydroShift II LCD and OLED Curve | 8.8" and 9.2" bars, 480×480, 2288×1080 | USB device (`1cbe:a088`, `a092`, `a034`, `a068`) | unverified |
 
 *Unverified* means the driver follows a protocol proven on real panels, but nobody has
 confirmed that model with Libre Panel yet. **Own one?** The panel test in the app (*Live →

@@ -375,13 +375,15 @@ def open_serial_panel(
     and where those fit several sizes ``choose`` picks one of them. A port with the generic
     ids that other USB devices have too is opened only where ``ask`` says which panel it is."""
     from libre_panel.config import DeviceConfig
-    from libre_panel.devices import jonsbo_zc360
+    from libre_panel.devices import jonsbo_zc360, lianli_usb
     from libre_panel.devices.models import find_model
     from libre_panel.devices.serial_link import FoundPort, find_port, gadget_ports
     from libre_panel.devices.turzx import OTHER_DRIVERS, SERIAL_DRIVERS, TurzxDisplay
 
     model = find_model(model_id)
-    if model is None and jonsbo_zc360.present():  # (its own USB ids: no TURZX panel)
+    if model is None:  # (no TURZX panel: their own USB ids)
+        model = lianli_usb.present_model()
+    if model is None and jonsbo_zc360.present():
         model = find_model(jonsbo_zc360.MODEL_ID)
     if model is not None and model.protocol in OTHER_DRIVERS:
         pass

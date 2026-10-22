@@ -28,6 +28,8 @@ PROTOCOLS = {
     "usb-jonsbo": "USB bulk (VID 0x43A8), three screens driven as one",
     "serial-jonsbo": "USB serial (VID 0x33C3), whole JPEG pictures",
     "usb-ms9132": "USB bulk (MacroSilicon MS9132), a USB display chip",
+    "serial-hongtai": "USB serial (VID 0x33C3, 2 Mbaud), Hongtai / Jungle Leopard JPEG frames",
+    "usb-lianli": "USB bulk (VID 0x1CBE), Lian Li's TURZX-like protocol with JPEG frames",
 }
 
 
@@ -103,6 +105,29 @@ MODELS: tuple[PanelModel, ...] = (
         shape="round",
         usb_ids=_REV_C_IDS,
         serial_numbers=("CT21INCH", "20080411"),
+    ),
+    PanelModel(
+        "turing-1.6-usb",
+        TURING,
+        "Turing",
+        1.6,
+        400,
+        400,
+        "usb-turing",
+        usb_ids=((0x1CBE, 0x0016),),
+        notes="V1.x hardware",
+    ),
+    PanelModel(
+        "turing-2.1-usb",
+        TURING,
+        "Turing",
+        2.1,
+        480,
+        480,
+        "usb-turing",
+        shape="round",
+        usb_ids=((0x1CBE, 0x0021),),
+        notes="V1.x hardware",
     ),
     PanelModel(
         "turing-2.8-usb",
@@ -339,6 +364,80 @@ MODELS: tuple[PanelModel, ...] = (
         # (USB-to-HDMI adapters have the chip too: never opened unless the config names it)
         notes="a USB display chip (MS9132), not found by auto: choose the model",
     ),
+    PanelModel(
+        "vmax-4.6",
+        "VMAX",
+        "VMAX",
+        4.6,
+        320,
+        960,
+        "usb-ms9132",
+        usb_ids=((0x345F, 0x9132),),
+        notes="a USB display chip (MS9132), not found by auto: choose the model",
+    ),
+    PanelModel(
+        "hongtai-480x960",
+        "Hongtai",
+        "Hongtai cooler screen",
+        5,
+        480,
+        960,
+        "serial-hongtai",
+        usb_ids=((0x33C3, 0x7788),),
+        notes="Jungle Leopard Chill Arc 360; MSI EZ Display, Thermaltake, ZOTAC and others",
+    ),
+    PanelModel(
+        "hongtai-1920x462",
+        "Hongtai",
+        "Hongtai strip screen",
+        9.16,
+        462,
+        1920,
+        "serial-hongtai",
+        usb_ids=((0x33C3, 0x7788),),
+        notes="the strip of the Hongtai / Jungle Leopard family",
+    ),
+    PanelModel(
+        "lianli-universal-8.8",
+        "Lian Li",
+        "Lian Li Universal Screen",
+        8.8,
+        480,
+        1920,
+        "usb-lianli",
+        usb_ids=((0x1CBE, 0xA088),),
+    ),
+    PanelModel(
+        "lianli-universal-9.2",
+        "Lian Li",
+        "Lian Li Universal Screen",
+        9.2,
+        464,
+        1920,
+        "usb-lianli",
+        usb_ids=((0x1CBE, 0xA092),),
+    ),
+    PanelModel(
+        "lianli-hydroshift2-lcd",
+        "Lian Li",
+        "Lian Li HydroShift II LCD",
+        2.1,
+        480,
+        480,
+        "usb-lianli",
+        usb_ids=((0x1CBE, 0xA034),),
+        notes="the LCD-C's screen; the LCD-S has 3.4\" of the same 480x480",
+    ),
+    PanelModel(
+        "lianli-hydroshift2-oled",
+        "Lian Li",
+        "Lian Li HydroShift II OLED Curve",
+        6.67,
+        2288,  # (its framebuffer lies: landscape)
+        1080,
+        "usb-lianli",
+        usb_ids=((0x1CBE, 0xA068),),
+    ),
 )
 
 # Families with a driver (devices/turzx.py lists them); the rest is planned.
@@ -354,6 +453,8 @@ _DRIVER_STATUS = {
         "usb-jonsbo",
         "serial-jonsbo",
         "usb-ms9132",
+        "serial-hongtai",
+        "usb-lianli",
     )
 }
 # Models confirmed on the panel: with `libre-panel doctor`, or by an owner who reports it runs.

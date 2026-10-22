@@ -22,6 +22,11 @@ and much more that was collected since 0.6.9.
   the 9.2" bars) and the 3.39" one (960x376, chosen in *Settings → Panel*: its USB display
   chip is in USB-to-HDMI adapters too). Neither is a TURZX panel; their protocols come from
   InfoPanel's drivers (GPL-3.0). Not yet seen on the hardware ([Hardware](docs/HARDWARE.md))
+- **More panels from InfoPanel's notes**, all found by `auto` but the VMAX: the Hongtai /
+  Jungle Leopard cooler screens and the white-label ones on their firmware (MSI EZ Display,
+  Thermaltake, ZOTAC, …), Lian Li's Universal Screen and HydroShift II LCD and OLED Curve,
+  the Turing 1.6" and 2.1" USB panels and the VMAX 4.6". Not yet seen on the hardware
+  ([Hardware](docs/HARDWARE.md))
 - **More panels at once**: up to three panels beside the first, each with a theme of its
   own, on the same readings (*Settings → Panels*, `[[panels]]` in config.toml).
   A panel that one of them has open is passed by when another looks for its own, so two
