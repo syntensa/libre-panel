@@ -607,3 +607,27 @@ def test_the_sun_in_a_box_too_low_for_its_arc_keeps_the_times(box):
     out = M.build_module(t.widgets[0], box, M.colors_of(t.palette), style)
     assert all(w["w"] >= M.ARC_MIN for w in out if w["id"].endswith("arc"))
     assert {w["id"].split("/")[-1] for w in out} >= {"rise", "set"}
+
+
+def test_a_label_in_chinese_is_measured_in_the_font_that_draws_it(tmp_path):
+    """Barlow has no Chinese: a label is measured, as it is drawn, in the system's font for it,
+    so the rows under a ring are laid out for it and the label is not shrunk to a speck."""
+    from fake_fonts import make_font
+    from PIL import ImageFont
+
+    from libre_panel.fonts import builtin_font_path, fallback
+    from libre_panel.theme import modules
+
+    square = make_font(tmp_path / "han.ttf", "温度功率频率")  # each a square, as a Han character
+    before = fallback.set_fallbacks(fallback.Fallbacks([(str(square), None, 0)]))
+    modules._width_per_size.cache_clear()
+    try:
+        assert modules._width_per_size("builtin:Barlow-Medium", "温度") == pytest.approx(2.0)
+        barlow = ImageFont.truetype(str(builtin_font_path("builtin:Barlow-Medium")), 100)
+        assert modules._width_per_size("builtin:Barlow-Medium", "TEMP") == pytest.approx(
+            barlow.getlength("TEMP") / 100
+        )  # what Barlow has, as before
+        assert modules._width_per_size("my-own.ttf", "温度") == 2.0  # a font of the theme's own
+    finally:
+        fallback.set_fallbacks(before)
+        modules._width_per_size.cache_clear()

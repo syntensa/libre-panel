@@ -142,6 +142,10 @@ and much more that was collected since 0.6.9.
 - `tools/panels_bench.py`: how much two panels in video mode slow each other down
 
 **Fixes**
+- Chinese, Japanese and Korean labels under the rings (Lumen, Studio) are as large as the
+  English ones: their width is measured in the font that draws them, so they are no longer
+  shrunk to fit a place made for a Latin word
+  ([#12](https://github.com/syntensa/libre-panel/issues/12))
 - Settings keeps what is typed into a field the moment it appears (the address of a JSON
   source just added), and two quick changes to a JSON source keep both
 - A panel set to "Detect automatically" no longer takes the model another panel names: the

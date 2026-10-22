@@ -15,16 +15,18 @@ them gets the "arctic" look of SPUR II. Labels are in the user's language.
 from __future__ import annotations
 
 import math
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
-from PIL import ImageColor, ImageFont
+from PIL import ImageColor
 
 from libre_panel import timezones
 from libre_panel.devices.models import find_model
 from libre_panel.fonts import builtin_font_path
+from libre_panel.fonts.fallback import truetype
 from libre_panel.i18n import t
 
 # -- looks -------------------------------------------------------------------
@@ -260,11 +262,14 @@ CLOCK_WIDTH = 2.65  # "00:00" in font sizes
 
 @lru_cache(maxsize=64)
 def _width_per_size(font: str, text: str) -> float:
-    """How wide ``text`` is in ``font``, per pixel of font size."""
+    """How wide ``text`` is in ``font``, per pixel of font size, as the panel draws it: what the
+    font has no glyph for (Chinese, Japanese, Korean) in the system font that draws it."""
     path = builtin_font_path(font)
-    if path is None:  # a theme's own font: about as wide as Barlow
-        return CLOCK_WIDTH if text == "00:00" else len(text) * 0.55
-    return ImageFont.truetype(str(path), 100).getlength(text) / 100
+    if path is None:  # a theme's own font: about as wide as Barlow, a wide character a square
+        if text == "00:00":
+            return CLOCK_WIDTH
+        return sum(1.0 if unicodedata.east_asian_width(ch) in "WF" else 0.55 for ch in text)
+    return truetype(str(path), 100).getlength(text) / 100
 
 
 def _clamp(value: float, low: float, high: float) -> float:
