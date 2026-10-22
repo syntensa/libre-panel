@@ -58,10 +58,7 @@ the app. It asks once, for administrator rights on Windows and for your password
 
 ### Smooth, in video mode
 
-<p>
-  <img src="docs/media/close-up-rings.gif" width="49%" alt="A close-up of Lumen's rings for CPU, GPU and RAM: lit arcs that fill as the load rises and numbers that count to each new reading">
-  <img src="docs/media/close-up-curves.gif" width="49%" alt="A close-up of Lumen's load history and fans: the lit curves of CPU and GPU scroll, and four fans turn faster as they speed up">
-</p>
+<img src="docs/images/hero.png" width="100%" alt="Lumen on a 9.2-inch panel: what is playing with its cover, the time with the load as light, the fans, and lit rings for CPU, GPU and RAM">
 
 TURZX USB panels have a video decoder, and Libre Panel feeds it up to 50 frames a second.
 Numbers count to each new reading, rings and bars glide, graphs scroll a little on every
@@ -95,7 +92,7 @@ on.
 
 ### Game mode
 
-<img src="docs/media/game-entrance.gif" width="100%" alt="A game starts: the screen closes to a line, the game's name lights up in a band, and the game screen opens with the frame rate, its 1% low, the frame time, CPU and GPU; when it ends, the same way back">
+<img src="docs/images/arena.png" width="100%" alt="Arena, the game screen: the frame rate large with its 1% low, the frame time and what holds it back, its course, CPU and GPU as instruments, every core and the temperatures with the fans">
 
 Start a game, from a list of your own or your Steam library, and the screen closes to a
 line, the game's name lights up and the game screen opens: the frame rate, its 1% low and
@@ -108,7 +105,7 @@ optional report compares it with your last ten.
 
 ### Screens for music, weather and time
 
-<img src="docs/media/encore.gif" width="100%" alt="Encore: the cover large with its colours behind the whole screen, the track, artist and album, the time with rolling digits, and the volume as levels that rise and fall as it is turned">
+<img src="docs/images/encore.png" width="100%" alt="Encore: the cover large with its colours behind the whole screen, the track, artist and album, the time and the volume as levels">
 
 **Encore** is for music: the cover large and its colours behind the whole screen, the time
 with rolling digits, and the volume as levels that rise while you turn it.

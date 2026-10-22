@@ -59,10 +59,7 @@ Administratorrechten, unter Linux nach deinem Passwort
 
 ### Flüssig im Videomodus
 
-<p>
-  <img src="docs/media/close-up-rings.gif" width="49%" alt="Nahaufnahme der Ringe von Lumen für CPU, GPU und RAM: leuchtende Bögen, die sich mit der Last füllen, und Zahlen, die zum nächsten Messwert zählen">
-  <img src="docs/media/close-up-curves.gif" width="49%" alt="Nahaufnahme von Verlauf und Lüftern bei Lumen: die leuchtenden Kurven von CPU und GPU scrollen, vier Lüfter drehen schneller, wenn sie hochlaufen">
-</p>
+<img src="docs/images/hero.png" width="100%" alt="Lumen auf einem 9,2-Zoll-Panel: was läuft, mit Cover, die Uhrzeit mit der Last als Licht, die Lüfter und leuchtende Ringe für CPU, GPU und RAM">
 
 TURZX-USB-Panels haben einen Videodecoder, und Libre Panel füttert ihn mit bis zu 50 Bildern
 pro Sekunde. Zahlen zählen zum nächsten Messwert, Ringe und Balken gleiten, Verläufe scrollen
@@ -98,7 +95,7 @@ nur von diesem PC aus. Wie jeder Dienst sind sie aus, bis du sie einschaltest.
 
 ### Spielmodus
 
-<img src="docs/media/game-entrance.gif" width="100%" alt="Ein Spiel startet: der Bildschirm schließt sich zu einer Linie, der Name des Spiels leuchtet in einem Band auf, und der Spielbildschirm öffnet sich mit FPS, 1-%-Low, Frametime, CPU und GPU; am Ende derselbe Weg zurück">
+<img src="docs/images/arena.png" width="100%" alt="Arena, der Spielscreen: die Bildrate groß mit ihrem 1-%-Tief, der Frametime und was sie bremst, ihrem Verlauf, CPU und GPU als Instrumente, jeder Kern und die Temperaturen mit den Lüftern">
 
 Starte ein Spiel aus deiner eigenen Liste oder deiner Steam-Bibliothek, und der Bildschirm
 schließt sich zu einer Linie, der Name des Spiels leuchtet auf, und der Spielbildschirm
@@ -112,7 +109,7 @@ zehn.
 
 ### Bildschirme für Musik, Wetter und Uhrzeit
 
-<img src="docs/media/encore.gif" width="100%" alt="Encore: das Cover groß mit seinen Farben hinter dem ganzen Bildschirm, Titel, Künstler und Album, die Uhrzeit mit rollenden Ziffern und die Lautstärke als Pegel, die beim Drehen steigen und fallen">
+<img src="docs/images/encore.png" width="100%" alt="Encore: das Cover groß mit seinen Farben hinter dem ganzen Screen, Titel, Künstler und Album, die Uhrzeit und die Lautstärke als Pegel">
 
 **Encore** ist für Musik: das Cover groß und seine Farben hinter dem ganzen Bildschirm, die
 Uhrzeit mit rollenden Ziffern und die Lautstärke als Pegel, die steigen, während du drehst.
