@@ -158,7 +158,13 @@ class Slot:
         card = {**M.STYLE_DEFAULTS, **(self.renderer.theme.style or {})}["card"]
         if module["card"] == "off" or card in ("none", "flat"):
             return 0
-        return max(1, round(min(self.box[2], self.box[3]) / 140))
+        return max(1, round(self._frame_u(self.box[2], self.box[3]) / 160))
+
+    def _frame_u(self, w: int, h: int) -> float:
+        """What the frame's corners and thickness scale with, as a module's card has it
+        (theme.modules): the module's size, up to half the panel's height."""
+        theme = self.renderer.theme
+        return min(w, h, min(theme.width, theme.height) / 2)
 
     def _playing(self, snapshot: Any, now: float) -> bool:
         """A track that plays, or that has been paused for less than ``hold`` seconds."""
@@ -391,7 +397,7 @@ class Slot:
 
     def _outline(self, w: int, h: int) -> Image.Image:
         style = {**M.STYLE_DEFAULTS, **(self.renderer.theme.style or {})}
-        radius = round(style["radius"] * min(w, h) / 200)  # as the module's card has it
+        radius = round(style["radius"] * self._frame_u(w, h) / 200)  # as the module's card has it
         big = Image.new("L", (w * SUPER, h * SUPER), 0)
         ImageDraw.Draw(big).rounded_rectangle(
             [0, 0, w * SUPER - 1, h * SUPER - 1], radius=radius * SUPER, outline=255,

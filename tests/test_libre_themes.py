@@ -182,7 +182,8 @@ def test_lumen_is_libre_panels_own_and_made_for_the_bars_hidden_strip():
 def test_lumen_sits_as_far_from_both_ends_of_the_bar():
     """Its card has a frame, the instruments on the far side have none and keep inside their
     cells: the card sits half a cell in, so the screen is not shifted to the left (reported
-    on a 9.2", whose bezel also hides 2 px at the left)."""
+    on a 9.2", whose bezel also hides 2 px at the left). The frames' line is the faint one of
+    the module cards: it counts from 20 levels off the ground on."""
     from PIL import Image, ImageChops
 
     _, _, frame, _ = drawn(data_of("lumen"), builtin_themes_dir() / "lumen")
@@ -190,7 +191,7 @@ def test_lumen_sits_as_far_from_both_ends_of_the_bar():
     w, h = frame.size
     ground = Image.new("RGB", frame.size, frame.getpixel((w // 2, 1)))
     left, top, right, bottom = (
-        ImageChops.difference(frame, ground).convert("L").point(lambda v: 255 if v > 40 else 0)
+        ImageChops.difference(frame, ground).convert("L").point(lambda v: 255 if v > 20 else 0)
     ).getbbox()
     assert abs(left - (w - right)) <= 4, (left, w - right)
     assert top - 18 == h - bottom  # under the 9.2"'s hidden strip, as far from the bottom
@@ -199,7 +200,7 @@ def test_lumen_sits_as_far_from_both_ends_of_the_bar():
     w, h = frame.size
     ground = Image.new("RGB", frame.size, frame.getpixel((w // 2, 1)))
     _, top, _, bottom = (
-        ImageChops.difference(frame, ground).convert("L").point(lambda v: 255 if v > 40 else 0)
+        ImageChops.difference(frame, ground).convert("L").point(lambda v: 255 if v > 20 else 0)
     ).getbbox()
     assert abs(top - (h - bottom)) <= 6, (top, h - bottom)  # standing: its card at the top
 

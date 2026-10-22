@@ -343,7 +343,6 @@ class _Build:
         self.glow = float(style["glow"])
         self.out: list[dict[str, Any]] = []
         self.needs = ""  # added to every widget (a source's fallback)
-        self.lit_card = False  # a card lit by itself (Kind.finish): framed as its size
 
     # colours
     def c(self, role: str) -> str:
@@ -385,10 +384,8 @@ class _Build:
     @property
     def frame_u(self) -> float:
         """What a card's corners and outline scale with: its size, up to half the panel's
-        height (so a big card is framed as the others, not heavier). The lit cards after
-        SPUR II's Studio (Lumen's weather card) keep theirs: round as their size."""
-        if self.lit_card:
-            return self.u
+        height (so a big card is framed as the others, not heavier). Every card has it, the
+        lit ones too (render.slot frames a slot by the same rule)."""
         return min(self.u, self.style.get(FRAME_U) or self.u)
 
     def _text_fields(self, size: float, cap_top: float, font: str, **kw: Any) -> dict[str, Any]:
@@ -2484,7 +2481,6 @@ def build_module(
         source = kind.sources[0]
     src = sources.get(source, sources["cpu"])
     b = _Build(module, box, colors, style)
-    b.lit_card = kind.finish == "lit"
     fallback = _fallback(module) if kind.sources and source in sources else None
     if fallback is None:
         if kind.sources:  # without its readings the module stays empty

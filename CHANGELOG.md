@@ -152,6 +152,10 @@ large digits; a portable zip that is portable; and much more that was collected 
   the fields and their units; the headers stay in config.toml
 - **The tray**: the timer while it runs (start or pause, back to the start), and each panel's
   brightness, as panel 1's or its own
+- **One look for every card**: Lumen, Encore, Almanac, Studio and the round report frame
+  their cards as the modules and the companions do, in every size: a faint line, corners
+  and line as thick as the card's size up to half the panel's height. Lumen's card for the
+  weather and what plays keeps its colour, framed as the cards beside it
 
 **Faster and steadier**
 - The first picture comes sooner after the start: what only later frames need (the other

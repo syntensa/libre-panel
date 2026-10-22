@@ -61,9 +61,9 @@
       "w": 438,
       "h": 956,
       "color": "@surface",
-      "outline": "#6D7885",
-      "outline_width": 3,
-      "radius": 18,
+      "outline": "@line",
+      "outline_width": 2,
+      "radius": 17,
       "locked": true,
       "needs": "switch.frames"
     },
@@ -166,8 +166,9 @@
       "w": 438,
       "h": 896,
       "color": "#0D1219E6",
-      "radius": 18,
-      "outline": "@line"
+      "radius": 17,
+      "outline": "@line",
+      "outline_width": 2
     },
     {
       "type": "rect",
@@ -176,10 +177,10 @@
       "y": 1000,
       "w": 438,
       "h": 896,
-      "color": null,
-      "outline": "#6D7885",
-      "outline_width": 3,
-      "radius": 18,
+      "color": "@surface",
+      "outline": "@line",
+      "outline_width": 2,
+      "radius": 17,
       "locked": true,
       "needs": "switch.frames"
     },

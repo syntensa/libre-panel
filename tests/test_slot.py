@@ -644,7 +644,8 @@ def test_the_frame_is_a_flat_thin_line_and_follows_the_style():
     alpha = np.asarray(piece.layer.getchannel("A"))
     h, w = alpha.shape
     assert (piece.x, piece.y, w, h) == tuple(renderer.module_boxes["m"])
-    assert box.width == max(1, round(min(w, h) / 140))
+    unit = min(w, h, min(renderer.theme.width, renderer.theme.height) / 2)
+    assert box.width == max(1, round(unit / 160))  # as thick as a module card's outline
     column = alpha[:, w // 2]
     assert int((column > 127).sum()) == 2 * box.width  # one line at the top, one at the bottom
     assert column[: box.width].min() >= 200 and column[box.width + 2 : -box.width - 2].max() <= 3
@@ -782,3 +783,34 @@ def test_a_theme_with_a_slot_survives_a_round_trip_and_detaches_its_first_card()
     assert any(w["type"] == "downloads" for w in plain) and not any(
         w["type"] == "symbol" for w in plain
     )
+
+
+def test_on_a_big_panel_a_lit_card_and_a_slot_are_framed_as_the_cards_beside_them():
+    """Lumen 12.3's weather card had rounder corners and a heavier line than the cards beside
+    it (a lit card was framed as its own size): every card now has the same, as the
+    companions have it."""
+    t = parse_theme(
+        {
+            "format": "libre-panel-theme/1",
+            "display": {"model": "turing-12.3-usb", "orientation": "landscape"},
+            "widgets": [
+                {"type": "module", "id": "m", "module": "cards", "cols": 3, "rows": 3},
+                {"type": "module", "id": "c", "module": "cores", "col": 3, "cols": 3, "rows": 3},
+            ],
+        }
+    )
+    style = {**M.STYLE_DEFAULTS, **(t.style or {}), M.FRAME_U: min(t.width, t.height) / 2}
+    colors = M.colors_of(t.palette)
+    box = [0, 0, 600, 680]
+    frames = {}
+    for kind in ("forecast", "playback", "cores"):
+        built = M.build_module({**t.widgets[1], "module": kind}, box, colors, style)
+        card = next(w for w in built if w["id"] == "card")
+        frames[kind] = card["radius"]
+    assert len(set(frames.values())) == 1, frames
+    renderer = Renderer(t, animate=False)
+    renderer.render(demo(), 0.0)
+    there = M.build_module({**t.widgets[1], "module": "cores"}, renderer.module_boxes["m"],
+                           colors, style)  # fmt: skip
+    card = next(w for w in there if w["id"] == "card")
+    assert renderer._slots["m"].width == card["outline_width"]  # the slot's line as thick

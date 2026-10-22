@@ -55,7 +55,7 @@
       "w": 438,
       "h": 560,
       "color": "#0D1219E6",
-      "radius": 22,
+      "radius": 17,
       "outline": "@line",
       "outline_width": 2
     },
@@ -493,7 +493,7 @@
       "w": 438,
       "h": 600,
       "color": "#0D1219E6",
-      "radius": 22,
+      "radius": 17,
       "outline": "@line",
       "outline_width": 2
     },
@@ -893,7 +893,7 @@
       "w": 438,
       "h": 640,
       "color": "#0D1219E6",
-      "radius": 22,
+      "radius": 17,
       "outline": "@line",
       "outline_width": 2
     },
