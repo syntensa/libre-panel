@@ -2,7 +2,7 @@
 
 import time
 
-__version__ = "0.7.0rc3"
+__version__ = "0.7.0rc4"
 
 
 def clock() -> float:
