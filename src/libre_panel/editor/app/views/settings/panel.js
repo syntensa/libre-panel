@@ -80,6 +80,7 @@ function PanelPicker({ configured, onPick }) {
               role="option"
               key=${model.id}
               class="model-row"
+              title=${model.limits || null}
               aria-selected=${String(model.id === configured)}
               onClick=${() => onPick(model.id)}
             >
@@ -139,7 +140,8 @@ function PanelFound() {
           : html`${t("Plug it in: Libre Panel looks for it every few seconds. Until then the picture goes to a file.")}`}
       </div>
       ${configured !== "auto" ? html`<div class="settings-row-hint">${t("Chosen by hand. “Detect automatically” goes back to finding it.")}</div>` : null}
-      ${shown && shown.connection !== "usb"
+      ${shown?.limits ? html`<div class="settings-row-hint" data-limits-note>${shown.limits}</div>` : null}
+      ${shown && shown.connection !== "usb" && !shown.limits
         ? html`<div class="settings-row-hint" data-serial-note>${t("An older USB serial panel: Libre Panel sends it only what changes, so numbers, bars and the clock keep up. It has no smooth motion, parts that move change less often than on a USB panel, and a new theme builds up for a moment.")}</div>`
         : null}
       ${why ? html`<div class="panel-found-why"><${Status} tone="warn">${stateText(running.state)}: ${running.detail}<//></div>` : null}

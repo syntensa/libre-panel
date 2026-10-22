@@ -219,6 +219,7 @@ vereinfachtes Chinesisch.
 | **Nimbus** | 8,8"- und 9,2"-Leisten | fürs Wetter: jetzt und die nächsten Stunden, die nächsten Tage, der Mond, wie er heute Nacht leuchtet, eine kleine Uhr |
 | **Almanac** | 8,8"- und 9,2"-Leisten | eine Uhr mit dem Monat: die Uhrzeit groß oder auf einem Zifferblatt mit gleitendem Sekundenzeiger (**Almanac Analog**), daneben der Monat mit heute und der Kalenderwoche |
 | **Arena** | 8,8"- und 9,2"-Leisten | für den Spielmodus: die FPS des Spiels groß mit 1-%-Low, Frametime und Verlauf, CPU und GPU als Instrumente, jeder Kern, die Temperaturen und, klein in der Ecke, die Uhrzeit |
+| **Agents** | 8,8"- und 9,2"-Leisten, 12,3" | was Claude Code und Codex tun: ein bewegtes Zeichen für jedes (arbeitet, wartet auf dich, ruht), das Werkzeug bei der Arbeit, wie viel von den Limits des Abos verbraucht ist und wann sie neu beginnen, neben der Uhrzeit; **Agents Claude** zeigt Claude Code allein, mit der Auslastung seines Kontexts ([KI-Aktivität](docs/CONFIGURATION.md#ai-activity)) |
 | **Libre Default** | 3,5" (480×320); der Standard auf allen anderen Panels | zwei leuchtende Ringe, Temperatur, Laufwerk und Netzwerk, ein scrollender Verlauf; in der Ecke, was läuft, das Wetter oder der Tag |
 | **Slate** | 5" (800×480) | vier Karten: CPU, GPU, Arbeitsspeicher und Netzwerk |
 | **Orbit** | rund, 2,1" und 2,8" | drei Ringe um eine große Uhr |
@@ -263,7 +264,13 @@ kostet nichts, solange kein Theme es zeigt.
 | Lian Li Universal Screen, HydroShift II LCD und OLED Curve | Leisten mit 8,8" und 9,2", 480×480, 2288×1080 | USB-Gerät (`1cbe:a088`, `a092`, `a034`, `a068`) | ungeprüft |
 
 *Ungeprüft* heißt: Der Treiber folgt einem Protokoll, das auf echten Panels erprobt ist, aber
-noch niemand hat dieses Modell mit Libre Panel bestätigt. **Du hast eins?** Der Panel-Test in
+noch niemand hat dieses Modell mit Libre Panel bestätigt. **Die Panels von JONSBO, Hongtai, VMAX
+und Lian Li sind hier neu**: Ihre Treiber folgen den Notizen anderer Projekte, und noch niemand
+hat sie mit Libre Panel betrieben. Keines hat flüssige Bewegung; das DS916, die Hongtai-Displays
+und die von Lian Li nehmen ganze JPEG-Bilder (die von Hongtai wenige pro Sekunde); DS916, DS339
+und VMAX haben keine Steuerung der Hintergrundbeleuchtung, Dimmen macht also das Bild dunkler;
+DS339 und VMAX brauchen unter Windows den Treiber des Herstellers. *Einstellungen → Panel* nennt
+unter dem Namen des Panels, was es nicht kann ([alles dazu](docs/HARDWARE.md)). **Du hast eins?** Der Panel-Test in
 der App (*Live → Diagnose*, oder `libre-panel doctor` im Terminal) prüft es von Anfang bis
 Ende und schreibt einen Bericht ohne Seriennummern; ein Klick öffnet einen
 [Panel-Bericht](https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml)
@@ -401,6 +408,10 @@ Anfragen mit einem geheimen Token, der bei jedem Start neu ist.
   Rundenbericht in einer SQLite-Datei, die du öffnen oder löschen kannst; die Kühlungsanalyse
   liest die Konfiguration von FanControl und schreibt sie nie. Kein Titel, kein Fenstertitel
   und kein Dateiname wird gelesen.
+- **Die KI-Aktivität** ist aus, bis du sie einschaltest und Claude Code oder Codex einrichtest.
+  Ihre Hooks geben, was sie tun, nur an Libre Panel auf diesem PC weiter, mit einem eigenen
+  Schlüssel; für die Nutzung des Abos fragt Libre Panel die Programme, die mit deiner Anmeldung
+  bei ihren eigenen Servern nachfragen.
 - **Die Namen deiner Hardware** landen nie im Log, und `libre-panel doctor` schreibt keine
   Seriennummern und keine persönlichen Pfade in seinen Bericht.
 

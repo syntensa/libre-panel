@@ -55,6 +55,11 @@ export const ICONS = {
   analog: '<circle cx="12" cy="12" r="9"/><path d="M12 6.5V12l-3.5 2.5"/><path d="M12 3v1.5M21 12h-1.5M12 21v-1.5M3 12h1.5"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   countdown: '<path d="M7 3h10M7 21h10"/><path d="M8 3c0 5 8 6 8 9s-8 4-8 9M16 3c0 5-8 6-8 9s8 4 8 9"/>',
+  agent:
+    '<circle cx="12" cy="12" r="8" stroke-opacity=".35"/>' +
+    '<circle cx="12" cy="4" r="2.2" fill="currentColor" stroke="none"/>' +
+    '<circle cx="6.6" cy="6.2" r="1.7" fill="currentColor" fill-opacity=".6" stroke="none"/>' +
+    DOT(4, 11.4),
   moon: '<path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.8"/><path d="M21 16l-5-5-9 9"/>',
   weather: '<path d="M7 18h10a4 4 0 00.5-8 6 6 0 00-11.5 1.5A3.5 3.5 0 007 18z"/>',

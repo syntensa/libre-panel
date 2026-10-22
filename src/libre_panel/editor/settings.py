@@ -51,6 +51,7 @@ MAX_NOTICE = 200_000
 # the section is named after it); plugins' come after them.
 SERVICE_ORDER = (
     "game", "memory", "notices", "autopilot", "devices", "cooling", "downloads", "timer", "power",
+    "agents",
 )  # fmt: skip
 # Sources that start by themselves; they are listed only where config.toml names them.
 # hardware: the names of this PC; mangohud: a game's frame rate on Linux
@@ -267,6 +268,7 @@ def _model_info(model: Any, port: str | None = None, sure: bool = True) -> dict[
         "port": port,
         "sure": sure,
         "video": model.video,
+        "limits": t(model.limits) if model.limits else "",
         # screens that show it together (the ZC-360: three), each told its number by "Which is
         # which?" as panels are
         "screens": _screens(model),

@@ -2258,6 +2258,102 @@ def _battery_state(b: _Build, x: float, cap: float, width: float, align: str = "
             hide_if_missing=True)  # fmt: skip
 
 
+AI_NAMES = {"claude": "Claude Code", "codex": "Codex"}
+
+
+def build_ai(b: _Build, _src: Source) -> None:
+    """What Claude Code and Codex do (the agents service): their sign, moving while they work
+    or wait for you, the state in words, the tool at work, and how much of the plan's 5-hour
+    and weekly limits is used, with the time until each begins anew. Both side by side, or one
+    over the other, or the one the module's ``agent`` names."""
+    b.card()
+    which = b.module.get("agent") or "both"
+    names = ["claude", "codex"] if which == "both" else [which]
+    if len(names) == 1:
+        boxes = [(b.ix, b.iy, b.iw, b.ih)]
+    elif b.aspect >= 1.6:  # side by side
+        w = (b.iw - b.pad) / 2
+        boxes = [(b.ix, b.iy, w, b.ih), (b.ix + w + b.pad, b.iy, w, b.ih)]
+    else:  # one over the other
+        h = (b.ih - b.pad) / 2
+        boxes = [(b.ix, b.iy, b.iw, h), (b.ix, b.iy + h + b.pad, b.iw, h)]
+    for name, box in zip(names, boxes, strict=True):
+        _ai_agent(b, name, *box, alone=len(names) == 1)
+
+
+def _ai_agent(b: _Build, name: str, x: float, y: float, w: float, h: float,
+              alone: bool = False) -> None:  # fmt: skip
+    """One agent's part: its name, sign and state, and below the state the rows of the plan's
+    limits that fit; alone (Claude Code's own screen) also how full its context is."""
+    key = f"ai.{name}"
+    color, wait, calm = b.tint("accent"), b.c("warn"), b.c("text3")
+    title = max(7.0, min(b.ts * 1.05, h * 0.11))
+    b.label(f"{name}-name", AI_NAMES[name], x, y, title, color=calm, width=w)
+    top = y + title * 1.9
+    room = max(8.0, y + h - top)
+    wide = w / room >= 1.5
+    if wide:
+        d = min(room * 0.9, w * 0.32)
+        sign_x, sign_y = x, top + (room - d) / 2
+        tx, tw, align = x + d + b.pad, max(8.0, x + w - (x + d + b.pad)), "left"
+        text_top, text_room = top, room
+    else:
+        d = min(room * 0.32, w * 0.5)
+        sign_x, sign_y = x + (w - d) / 2, top
+        tx, tw, align = x, w, "center"
+        text_top, text_room = top + d + b.pad * 0.6, max(8.0, y + h - (top + d + b.pad * 0.6))
+    ax = tx if align == "left" else tx + tw / 2
+    words = (
+        ("working", t("Working"), b.c("text")),
+        ("waiting", t("Waiting for you"), wait),
+        ("idle", t("Idle"), b.c("text2")),
+        ("off", t("Not running"), calm),
+    )
+    small = max(7.0, min(b.ts * 1.0, text_room * 0.12))
+    size = max(8.0, min(text_room * (0.26 if wide else 0.2), tw / 6.5))
+    meters = [("five_hour", t("5 hours")), ("week", t("7 days"))]
+    if alone and name == "claude":  # (its status line tells it)
+        meters.append(("context", t("Context")))
+    fit = (text_room - size * CAP - small * 2.0) // (small * 1.5 + small * 0.9 + 6)
+    rows = max(0, min(len(meters), int(fit)))
+    rows = 0 if rows == 1 and not alone else rows  # (side by side: both rows or none)
+    block = CAP * size + small * 2.0 + rows * (small * 1.5 + max(4, small * 0.5) + small * 0.6)
+    free = max(0.0, text_room - block)
+    if wide:
+        cap = text_top + free / 2
+    else:  # the sign and the words together, a little above the middle
+        sign_y += free * 0.4
+        cap = text_top + free * 0.4
+    b.add("agent", f"{name}-sign", x=round(sign_x), y=round(sign_y), size=max(8, round(d)),
+          sensor=f"{key}.state", color=color, color2=wait, muted=calm)  # fmt: skip
+    for state, word, tone in words:
+        b.add("text", f"{name}-{state}", x=round(ax), text=word, color=tone, align=align,
+              needs=f"{key}.state={state}", max_width=round(tw), fit="shrink",
+              **b._text_fields(size, cap, "display_font"))  # fmt: skip
+    line = cap + CAP * size + small * 1.0
+    b.value(f"{name}-tool", f"{key}.tool", "{value}", ax, line, small, color=calm, align=align,
+            width=tw, font="text_font", tabular=False, needs=f"{key}.state=working",
+            fallback="", hide_if_missing=True)  # fmt: skip
+    b.value(f"{name}-model", f"{key}.model", "{value}", ax, line, small, color=calm,
+            align=align, width=tw, font="text_font", tabular=False,
+            needs=f"{key}.state!=working,{key}.state!=off", fallback="",
+            hide_if_missing=True)  # fmt: skip
+    row = line + small * 2.0
+    bar_h = max(4, round(small * 0.5))
+    for window, label in meters[:rows]:
+        b.label(f"{name}-{window}-label", label, tx, row, small * 0.9, width=tw * 0.5)
+        if window != "context":  # when the window begins anew, beside how much of it is used
+            b.value(f"{name}-{window}-reset", f"{key}.{window}_reset", "{value:duration}",
+                    tx + tw - small * 4.2, row, small * 0.9, color=calm, align="right",
+                    width=tw * 0.3, font="text_font", tabular=False, fallback="",
+                    hide_if_missing=True)  # fmt: skip
+        b.value(f"{name}-{window}", f"{key}.{window}", "{value:.0f} %", tx + tw, row,
+                small * 0.9, align="right", width=tw * 0.25, fallback="--")  # fmt: skip
+        b.bar(f"{name}-{window}-bar", f"{key}.{window}", tx, row + small * 1.3, tw, bar_h, color)
+        b.out[-1]["color_rules"] = _heat_rules(b, 80, 95)
+        row += small * 1.5 + bar_h + small * 0.6
+
+
 @dataclass(frozen=True)
 class Kind:
     name: str
@@ -2306,6 +2402,7 @@ def kinds() -> dict[str, Kind]:
         "power": Kind(t("Power use"), build_power, span=(2, 1)),
         "mic": Kind(t("Microphone"), build_mic),
         "ups": Kind(t("UPS"), build_ups, span=(2, 1)),
+        "ai": Kind(t("AI activity"), build_ai, span=(2, 1)),
         # the cards after SPUR II's Studio screen: lit by themselves (theme.cards)
         "playback": Kind(t("Playback card"), cards.build_playback, span=(3, 2), finish="lit"),
         "forecast": Kind(t("Weather card"), cards.build_forecast, span=(3, 2), finish="lit"),
@@ -2327,7 +2424,7 @@ MODULE_KINDS = (
     "temps", "cores", "drives", "processes", "netinfo", "battery", "values",
     "sun", "analog", "world", "countdown", "image", "music", "agenda", "game",
     "playback", "forecast", "download", "instrument", "cards", "netcard", "volume", "moon",
-    "outlook", "ping", "timer", "power", "mic", "ups", "huge",
+    "outlook", "ping", "timer", "power", "mic", "ups", "huge", "ai",
 )  # fmt: skip
 # Kinds that hold several cards and show one (render.slot); "netcard" is two: a download
 # while one runs, else the network

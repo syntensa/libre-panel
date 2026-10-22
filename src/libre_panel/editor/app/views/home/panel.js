@@ -88,7 +88,7 @@ function PanelPicker({ models, current, connected, onPick, onClose }) {
             <div class="model-vendor">${group.vendor}</div>
             ${group.models.map(
               (model) => html`<button type="button" role="option" key=${model.id} aria-selected=${String(model.id === current?.id)}
-                class="model-row" onClick=${() => onPick(model.id)}>
+                class="model-row" title=${model.limits || null} onClick=${() => onPick(model.id)}>
                 <span class=${`model-shape${model.shape === "round" ? " round" : ""}`}></span>
                 <span class="model-name">${panelName(model)}</span>
                 <span class="model-size mono">${model.landscape[0]} × ${model.landscape[1]}</span>

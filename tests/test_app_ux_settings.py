@@ -592,6 +592,42 @@ def test_other_programs_get_a_key_and_an_address_once_it_is_switched_on(app_url,
         assert notify.read_key() != old
 
 
+def test_ai_activity_shows_what_it_adds_then_sets_up_and_takes_it_out(
+    app_url,  # noqa: F811
+    isolated_home,
+    tmp_path,
+    monkeypatch,
+):
+    from libre_panel import agents
+    from libre_panel.config import set_config_value
+
+    home = tmp_path / "user"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    monkeypatch.setattr(agents, "program", lambda name: "/bin/claude" if name == "claude" else None)
+    choose_theme(isolated_home, "lumen")
+    set_config_value("services.enabled", ["agents"])
+    settings = home / ".claude" / "settings.json"
+    with browser_page(app_url, "settings/services") as page:
+        card = page.locator("[data-service='agents']")
+        expect(card).to_contain_text("AI activity")
+        claude = card.locator("[data-agent='claude']")
+        expect(claude).to_contain_text("Not set up yet")
+        expect(card.locator("[data-agent='codex']")).to_contain_text("Not found on this PC")
+        claude.get_by_role("button", name="Set up").click()
+        shown = page.locator(".dialog [data-agents-preview]")
+        expect(shown).to_contain_text("/api/ai/hook?agent=claude")
+        expect(shown).to_contain_text("statusLine")
+        assert not settings.exists()  # not before it is confirmed
+        page.locator(".dialog").get_by_role("button", name="Set up").click()
+        expect(claude.get_by_role("button", name="Remove")).to_be_visible()
+        assert agents.installed(agents.read_settings(settings))["status_line"]
+        claude.get_by_role("button", name="Remove").click()
+        expect(claude).to_contain_text("Not set up yet")
+        assert agents.read_settings(settings) == {}
+
+
 def test_a_shortcut_is_set_by_pressing_the_keys_and_taken_away_again(app_url, isolated_home):  # noqa: F811
     choose_theme(isolated_home, "lumen")
     # (the settings refuse two of the shortcuts: a 400 the browser logs)
@@ -736,6 +772,21 @@ def test_an_older_serial_panel_says_what_it_cannot_do(app_url, isolated_home, mo
         motion.get_by_role("radio", name="Full motion").click()
         waits_for(page, lambda: settings_config().device.motion == "full")
         expect(motion.locator(".settings-row-status")).to_have_count(0)
+
+
+def test_a_panel_written_from_notes_says_what_it_cannot_do(app_url, isolated_home):  # noqa: F811
+    """Settings → Panel: what the panel cannot do under its name, in place of what an older
+    serial panel says (the DS916 is on a serial port too, but takes whole pictures)."""
+    isolated_home.mkdir(parents=True, exist_ok=True)
+    (isolated_home / "config.toml").write_text(
+        'theme = "libre-default"\n\n[device]\nmodel = "jonsbo-ds916"\n', encoding="utf-8"
+    )
+    with browser_page(app_url, "settings/panel") as page:
+        page.wait_for_selector("#panel-found")
+        note = page.locator("#panel-found [data-limits-note]")
+        expect(note).to_contain_text("Not yet seen on the hardware")
+        expect(note).to_contain_text("no backlight control")
+        expect(page.locator("#panel-found [data-serial-note]")).to_have_count(0)
 
 
 def test_a_port_that_may_be_a_turing_panel_is_chosen_with_a_click(app_url, isolated_home):  # noqa: F811

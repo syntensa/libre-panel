@@ -245,6 +245,15 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "mirror": ("bool", False),  # as seen south of the equator
         "pack": PACK_FIELD,
     },
+    # The sign of an AI agent at work (render/agent.py): working, waiting for you, idle, off,
+    # as its reading says (ai.claude.state, ai.codex.state).
+    "agent": {
+        "size": ("int", 64),
+        "sensor": ("sensor", "ai.claude.state"),
+        "color": ("color", "#2ee6d6"),  # working and idle
+        "color2": ("color", "#f5b942"),  # waiting for you
+        "muted": ("color", "#5b6474"),  # off
+    },
     # A fan: its rotor turns with the sensor's speed (RPM) inside a ring that shows the load.
     "fan": {
         "sensor": ("sensor", "gpu.fan"),
@@ -404,6 +413,8 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         # the playback card: the time at the right of the progress, the track's length (3:47)
         # or what is left of it (-2:24)
         "time": ("enum:total|remaining", "total"),
+        # AI activity: Claude Code, Codex, or both side by side
+        "agent": ("enum:both|claude|codex", "both"),
     },
 }
 
@@ -435,6 +446,7 @@ PRIMARY_FIELDS: dict[str, tuple[str, ...]] = {
     "analog": ("timezone", "hand", "color", "color2", "seconds"),
     "countdown": ("target", "part", "color", "font_size"),
     "moon": ("color", "color2", "mirror"),
+    "agent": ("sensor", "color", "color2"),
     "image": ("src", "fit", "slides", "seconds"),
     "weather": ("field", "format", "color", "font_size"),
     "icon": ("icon", "finish", "color", "sensor"),
@@ -1277,6 +1289,16 @@ def is_companion(name: str) -> bool:
     """Whether the theme ``name`` is made to go beside another on a second panel (Lumen
     Companion, its versions too): kept for that, as the round report is for its page."""
     return bool(_COMPANION.search(name))
+
+
+_AGENTS = re.compile(r"^agents(-|$)")
+
+
+def is_agents_screen(name: str) -> bool:
+    """Whether the theme ``name`` is a screen of the AI agents (Agents, Agents Claude, their
+    versions): kept apart from the panel's first themes, as it shows nothing until AI activity
+    is set up."""
+    return bool(_AGENTS.search(name))
 
 
 def with_look(theme: Theme, source: Theme | None) -> Theme:

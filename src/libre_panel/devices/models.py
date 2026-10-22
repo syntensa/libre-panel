@@ -51,6 +51,9 @@ class PanelModel:
     # "planned": no driver yet.
     driver: str = "planned"
     notes: str = ""
+    # What the panel cannot do, or does otherwise than a TURZX USB panel, for its owner to
+    # know before it surprises them (Settings → Panel says it under its name); "" for none.
+    limits: str = ""
     # Pixels of the framebuffer (native, portrait) behind the bezel:
     # top, right, bottom, left. Measured with the ruler card of `libre-panel doctor`.
     hidden: tuple[int, int, int, int] = (0, 0, 0, 0)
@@ -465,9 +468,51 @@ _CONFIRMED: set[str] = {
     "turing-3.5",  # rev. A: runs, its screen turned off with the command Libre Panel sends
     "turing-8.8",  # rev. C: runs since 0.6.4, an owner's report
 }
+# What the panels whose drivers were written from other projects' notes cannot do (their
+# drivers say why); each begins with what all of them share: nobody has run them yet.
+_UNSEEN = "Not yet seen on the hardware."
+_JPEG_SERIAL = (
+    "Not yet seen on the hardware. It takes whole JPEG pictures over a USB serial port: a few a "
+    "second, no smooth motion, and a busy picture loses detail. When Libre Panel quits, the "
+    "panel shows its own animation again."
+)
+_MS9132 = (
+    'Not yet seen on the hardware. "Detect automatically" does not find it (USB-to-HDMI '
+    "adapters have the same chip): choose it by hand. On Windows it needs the maker's driver, "
+    "which comes with the maker's program. It has no backlight control: dimming darkens the "
+    "picture. No smooth motion."
+)
+_LIANLI = (
+    "Not yet seen on the hardware. It takes whole JPEG pictures: no smooth motion. Close "
+    "L-Connect while Libre Panel runs: two programs cannot drive it at once."
+)
+_LIMITS = {
+    "turing-1.6-usb": _UNSEEN,
+    "turing-2.1-usb": _UNSEEN,
+    "jonsbo-tf3-pump": _UNSEEN,
+    "jonsbo-zc360": (
+        "Not yet seen on the hardware. Its three screens take their pictures one after the "
+        "other, so what moves changes less often than on a single panel. No smooth motion."
+    ),
+    "jonsbo-ds916": (
+        "Not yet seen on the hardware. It takes whole JPEG pictures: no smooth motion, and "
+        "fine detail may soften. It has no backlight control: dimming darkens the picture. "
+        "When Libre Panel quits, the panel shows its own animation again."
+    ),
+    "jonsbo-ds339": _MS9132,
+    "vmax-4.6": _MS9132,
+    "hongtai-480x960": _JPEG_SERIAL,
+    "hongtai-1920x462": _JPEG_SERIAL,
+    "lianli-universal-8.8": _LIANLI,
+    "lianli-universal-9.2": _LIANLI,
+    "lianli-hydroshift2-lcd": _LIANLI,
+    "lianli-hydroshift2-oled": _LIANLI,
+}
 MODELS = tuple(
     replace(
-        m, driver="supported" if m.id in _CONFIRMED else _DRIVER_STATUS.get(m.protocol, m.driver)
+        m,
+        driver="supported" if m.id in _CONFIRMED else _DRIVER_STATUS.get(m.protocol, m.driver),
+        limits=_LIMITS.get(m.id, m.limits),
     )
     for m in MODELS
 )

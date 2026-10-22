@@ -2078,6 +2078,28 @@ class Renderer:
         x, y = widget["x"], widget["y"]
         return Piece(image, x, y, [x, y, size, size])
 
+    # -- AI agents ---------------------------------------------------------
+
+    def _draw_agent(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        """The sign of an AI agent at work (render/agent.py) for the state its reading says
+        (``ai.claude.state``): it moves while the agent works or waits for you."""
+        from libre_panel.render import agent
+
+        state = snapshot.value(widget["sensor"])
+        state = state if state in ("working", "waiting", "idle") else "off"
+        at = agent.step(state, now) if self.animate else None
+        if at is not None:
+            self.moving = True
+        size = max(8, widget["size"])
+        colors = tuple(self.color(widget[field]) for field in ("color", "color2", "muted"))
+        x, y = widget["x"], widget["y"]
+
+        def build() -> Piece:
+            image = agent.picture(size, state, at, *colors)
+            return Piece(image, x, y, [x, y, size, size])
+
+        return self._cached(widget, (state, at, colors, size), build)
+
     # -- fans --------------------------------------------------------------
 
     FANS = 512  # fan pieces kept: a fan that has turned once round costs a lookup

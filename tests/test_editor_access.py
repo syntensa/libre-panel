@@ -138,10 +138,13 @@ def test_the_files_that_need_no_token_are_the_apps_own_and_a_few_pictures():
         "/api/panels/photo",  # ... and the picture of all panels, a link that downloads it
     }
     assert all(route.method == "GET" and not route.public for route in ROUTES if route.picture)
-    # another program's notice, with the notify key instead of the token (test_notify.py)
+    # another program's notice, with the notify key instead of the token (test_notify.py), and
+    # the AI agents' hooks and status line, with the AI key (test_agents.py)
     assert {(r.method, r.template) for r in ROUTES if r.notify} == {
         ("GET", "/api/notify"),
         ("POST", "/api/notify"),
+        ("POST", "/api/ai/hook"),
+        ("POST", "/api/ai/status"),
     }
     assert not any(route.notify and (route.public or route.picture) for route in ROUTES)
     # and nothing is answered but through the routes

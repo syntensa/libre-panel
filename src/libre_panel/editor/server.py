@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import ParseResult, parse_qs, unquote, urlparse
 
-from libre_panel import __version__, i18n, modes, notify, sequence
+from libre_panel import __version__, agents, i18n, modes, notify, sequence
 from libre_panel.config import (
     CONFIG_FILENAME,
     DEFAULT_SYMBOLS,
@@ -1002,8 +1002,9 @@ class EditorHandler(BaseHTTPRequestHandler):
             preset["name"] = i18n.t(preset["name"])
         models = [{**m.to_dict(), "default_theme": default_theme(m)} for m in MODELS]
         for model in models:
-            if model.get("notes"):
-                model["notes"] = i18n.t(model["notes"])
+            for said in ("notes", "limits"):
+                if model.get(said):
+                    model[said] = i18n.t(model[said])
         widgets = {t: {k: list(v) for k, v in spec.items()} for t, spec in WIDGET_SPECS.items()}
         plugins = _plugin_specs()
         widgets.update(plugins["widgets"])
@@ -1287,6 +1288,98 @@ class EditorHandler(BaseHTTPRequestHandler):
 
         delivery = PageContext(self.controls, self.state.config_path).notify(**options)
         self._json({"shown": delivery.shown, "reason": delivery.reason})
+
+    def _ai_in(self, kind: str, url: ParseResult) -> None:
+        """A hook event of Claude Code or Codex, or Claude Code's status line (agents.py): only
+        while AI activity is on (Settings → Services) and with the AI key (``?key=`` or the
+        header). The status line is answered with the line it shows."""
+        params: dict[str, str] = {k: v[0] for k, v in parse_qs(url.query).items()}
+        try:
+            config = load_config(self.state.config_path)
+        except ConfigError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        if "agents" not in config.services.enabled:
+            return self._error(
+                t("AI activity is switched off (Settings → Services)."), HTTPStatus.FORBIDDEN
+            )
+        given = self.headers.get(agents.HEADER) or params.get("key", "")
+        if not access.matches(given, agents.read_key()):
+            return self._error(t("The AI key is missing or wrong."), HTTPStatus.FORBIDDEN)
+        agent = params.get("agent", "")
+        if agent not in agents.AGENTS:
+            return self._error("agent: claude or codex")
+        body = self._read_body(agents.MAX_BODY)
+        if body is None:
+            return None
+        try:
+            data = json.loads(body.decode("utf-8") or "{}")
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return self._error("invalid JSON")
+        if not isinstance(data, dict):
+            return self._error("expected a JSON object")
+        if kind == "hook":
+            agents.BOARD.hook(agent, data)
+            return self._send(HTTPStatus.NO_CONTENT, b"", "text/plain")
+        line = agents.BOARD.status(agent, data)
+        self._send(HTTPStatus.OK, line.encode("utf-8"), "text/plain; charset=utf-8")
+
+    def _ai_setup(self, method: str) -> None:
+        """For Settings: whether Claude Code and Codex are there and set up (GET); with
+        ``{"agent", "action": "preview" | "install" | "remove", "status_line"}`` (POST) what
+        Libre Panel adds to their settings, or adds it (a copy of the file is kept), or takes
+        it out again."""
+        try:
+            config = load_config(self.state.config_path)
+        except ConfigError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        on = "agents" in config.services.enabled
+        paths = {"claude": agents.claude_settings_path(), "codex": agents.codex_hooks_path()}
+        if method == "GET":
+            found = {}
+            for agent, path in paths.items():
+                try:
+                    current = agents.read_settings(path)
+                    state, problem = agents.installed(current), ""
+                except (OSError, ValueError) as exc:
+                    state, problem = {}, str(exc)
+                found[agent] = {"program": agents.program(agent) is not None, "path": str(path),
+                                **state, "problem": problem}  # fmt: skip
+            return self._json({"on": on, **found})
+        payload = self._read_json()
+        if payload is None:
+            return None
+        agent = payload.get("agent") if isinstance(payload, dict) else None
+        action = payload.get("action") if isinstance(payload, dict) else None
+        if agent not in paths or action not in ("preview", "install", "remove"):
+            return self._error('expected {"agent": "claude"|"codex", "action": ...}')
+        if not on and action != "remove":
+            return self._error(
+                t("AI activity is switched off (Settings → Services)."), HTTPStatus.CONFLICT
+            )
+        path = paths[agent]
+        try:
+            current = agents.read_settings(path)
+        except (OSError, ValueError) as exc:
+            return self._error(t("{file} cannot be read: {error}", file=str(path), error=exc))
+        if action == "remove":
+            after = agents.without_ours(current)
+        else:
+            port, secret = self.server.server_address[1], agents.key(create=True)
+            if agent == "claude":
+                line = payload.get("status_line") is True
+                after = agents.claude_plan(current, port, secret, line)
+            else:
+                after = agents.codex_plan(current, port, secret)
+        text = json.dumps(after, indent=2, ensure_ascii=False)
+        if action == "preview":
+            before = json.dumps(current, indent=2, ensure_ascii=False)
+            return self._json({"path": str(path), "after": text, "before": before})
+        try:
+            kept = agents.write_settings(path, after)
+        except OSError as exc:
+            return self._error(t("{file} cannot be written: {error}", file=str(path), error=exc))
+        self._json({"done": True, "path": str(path), "backup": str(kept) if kept else None,
+                    **agents.installed(after)})  # fmt: skip
 
     def _notify_key(self, renew: bool = False) -> None:
         """For Settings: the notify key (made where there is none; ``renew``: a new one), the
@@ -2171,6 +2264,10 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/update", lambda h, m, u: h._update(parse_qs(u.query))),
     Route("GET", "/api/history", lambda h, m, u: h._history(parse_qs(u.query))),
     # a notice from another program: with the notify key instead of the token (notify.py)
+    Route("POST", "/api/ai/hook", lambda h, m, u: h._ai_in("hook", u), notify=True),
+    Route("POST", "/api/ai/status", lambda h, m, u: h._ai_in("status", u), notify=True),
+    Route("GET", "/api/ai/setup", lambda h, m, u: h._ai_setup("GET")),
+    Route("POST", "/api/ai/setup", lambda h, m, u: h._ai_setup("POST")),
     Route("GET", "/api/notify", lambda h, m, u: h._outside_notice("GET", u), notify=True),
     Route("POST", "/api/notify", lambda h, m, u: h._outside_notice("POST", u), notify=True),
     Route("GET", "/api/notify-key", lambda h, m, u: h._notify_key()),

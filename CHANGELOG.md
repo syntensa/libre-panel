@@ -5,10 +5,20 @@
 A release candidate of 0.7.0, to try before everyone has it: up to four panels at once, placed
 where they stand, a pair of screens that share out what they show, with scenes, one picture
 across them, the same beat and an alarm on all of them; new modules for the ping, a timer, the
-power the PC draws and the UPS; a theme in very large digits; a portable zip that is portable;
-and much more that was collected since 0.6.9.
+power the PC draws and the UPS; a screen of what Claude Code and Codex do; a theme in very
+large digits; a portable zip that is portable; and much more that was collected since 0.6.9.
 
 **New**
+- **AI activity**: what Claude Code and Codex do on this PC, on the panel: working, waiting
+  for you, idle or not running, each with a moving sign of Libre Panel's own; the tool at
+  work, the model, and how much of the plan's limits of five hours and of the week is used,
+  with the time until they begin anew. A module, and the themes Agents (both side by side)
+  and Agents Claude (Claude Code alone, with how full its context is), each for 9.2" and 12.3".
+  Set up in *Settings → Services → AI activity*, which shows what it adds to the programs'
+  settings before it writes (their hooks, and Claude Code's status line if it has none of its
+  own), keeps a copy, and takes it out again. In the background it asks the programs
+  themselves for the plan's usage, without a message to the model; Libre Panel sends nothing
+  off this PC ([AI activity](docs/CONFIGURATION.md#ai-activity))
 - **JONSBO ZC-360**: the three screens under its fans (3.38", 640x180 each) as one panel of
   1920x180, with Lumen in a version for it, a part on each screen: what plays, the time, CPU and
   GPU. Found by `auto`; the screens are written one after the other, and one whose part did
@@ -27,6 +37,10 @@ and much more that was collected since 0.6.9.
   Thermaltake, ZOTAC, …), Lian Li's Universal Screen and HydroShift II LCD and OLED Curve,
   the Turing 1.6" and 2.1" USB panels and the VMAX 4.6". Not yet seen on the hardware
   ([Hardware](docs/HARDWARE.md))
+- **What a panel cannot do**, said under its name in *Settings → Panel* and when you point at
+  it in the lists: for the panels above, that nobody has run them yet, and where they have no
+  smooth motion, take whole JPEG pictures, have no backlight control, are not found by `auto`
+  or need the maker's driver ([Hardware](docs/HARDWARE.md))
 - **More panels at once**: up to three panels beside the first, each with a theme of its
   own, on the same readings (*Settings → Panels*, `[[panels]]` in config.toml).
   A panel that one of them has open is passed by when another looks for its own, so two

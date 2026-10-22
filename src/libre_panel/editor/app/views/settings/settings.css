@@ -1332,3 +1332,20 @@ a.btn-primary:hover {
   min-height: 4.5em;
   resize: vertical;
 }
+
+/* AI activity: what setting up adds, to read before it is done */
+.agents-line {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.agents-line label {
+  cursor: pointer;
+}
+
+.agents-preview {
+  max-height: 22rem;
+  overflow: auto;
+  white-space: pre;
+}

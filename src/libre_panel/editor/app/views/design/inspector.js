@@ -57,6 +57,7 @@ export const TYPE_ICONS = {
   analog: "analog",
   countdown: "countdown",
   moon: "moon",
+  agent: "agent",
   image: "image",
   weather: "weather",
   icon: "icon",
@@ -96,6 +97,7 @@ export const MODULE_ICONS = {
   power: "power",
   mic: "volume",
   ups: "battery",
+  ai: "agent",
 };
 
 export const iconOf = (widget) => (isModule(widget) ? MODULE_ICONS[widget.module] || "module" : TYPE_ICONS[widget.type] || "plugin");
@@ -116,6 +118,7 @@ const SECTION_OF = {
   icon: "shows",
   timezone: "shows",
   first_day: "shows",
+  agent: "shows",
   finish: "style",
   style: "style",
   fit: "style",
@@ -523,6 +526,16 @@ function ModuleInspector({ widget }) {
                   ["both", t("days and hours")],
                   ["off", t("off")],
                 ].map(([value, text]) => ({ value, label: text }))} />
+            <//>`
+          : null}
+        ${widget.module === "ai"
+          ? html`<${Field} label=${t("Which agents")}>
+              <${Segmented} label=${t("Which agents")} value=${widget.agent || "both"} onChange=${change("agent")}
+                options=${[
+                  { value: "both", label: t("both") },
+                  { value: "claude", label: enumLabel("claude") },
+                  { value: "codex", label: enumLabel("codex") },
+                ]} />
             <//>`
           : null}
         ${widget.module === "processes"

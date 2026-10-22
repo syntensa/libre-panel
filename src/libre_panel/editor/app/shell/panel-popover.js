@@ -84,6 +84,7 @@ function PanelChoice({ theme, models }) {
                 key=${model.id}
                 aria-selected=${String(model.id === current)}
                 class="model-row"
+                title=${model.limits || null}
                 onClick=${() => model.id !== current && change({ model: model.id })}
               >
                 <span class="model-shape ${model.shape === "round" ? "round" : ""}"></span>

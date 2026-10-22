@@ -27,7 +27,13 @@ from libre_panel.config import ConfigError, config_dir, load_config, set_active_
 from libre_panel.devices.models import MODELS, PanelModel, find_model
 from libre_panel.i18n import t
 from libre_panel.service import BackgroundApp
-from libre_panel.theme.model import THEME_FILENAME, is_companion, list_themes, version_base
+from libre_panel.theme.model import (
+    THEME_FILENAME,
+    is_agents_screen,
+    is_companion,
+    list_themes,
+    version_base,
+)
 
 log = logging.getLogger(__name__)
 
@@ -132,7 +138,12 @@ def theme_choices(
         )
         if facts["collection"]:
             collections.setdefault(facts["collection"], []).append(entry)
-        elif fits and theme["id"] != report and not is_companion(theme["id"]):
+        elif (
+            fits
+            and theme["id"] != report
+            and not is_companion(theme["id"])
+            and not is_agents_screen(theme["id"])
+        ):
             first.append(entry)
         else:
             more.append(entry)

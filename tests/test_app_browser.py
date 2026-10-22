@@ -156,7 +156,8 @@ def open_collections(page):
 def own_themes(page):
     """The ids of Libre Panel's own themes and yours that Start leads with: not a collection's,
     not one kept for a page (the round report; music's or the clock's page only while it is
-    on), and not one to go beside another on a second panel (Lumen Companion)."""
+    on), not one to go beside another on a second panel (Lumen Companion), and not the AI
+    agents' screens (Agents)."""
     return js(
         page,
         r"""(() => {
@@ -164,8 +165,10 @@ def own_themes(page):
           const apart = pages.pages.filter((p) => p.id !== "normal" && p.theme && (p.on || !p.own));
           const kept = new Set(apart.map((p) => p.theme));
           const companion = /-companion(-vertical|-\d+x\d+)?$/;
+          const agents = /^agents(-|$)/;
           return themes
-            .filter((t) => !t.collection && !kept.has(t.id) && !companion.test(t.id))
+            .filter((t) => !t.collection && !kept.has(t.id))
+            .filter((t) => !companion.test(t.id) && !agents.test(t.id))
             .map((t) => t.id);
         })()""",
     )
@@ -2228,7 +2231,8 @@ def test_a_round_panel_and_the_strip_its_frame_hides(page):
     assert strip.bounding_box()["height"] == pytest.approx(18 * zoom, abs=1)
     assert "18 px" in strip.get_attribute("title")
     assert page.locator(".panel-canvas.round").count() == 0
-    page.locator(".model-row", has_text="Turing 2.1").click()
+    # (the serial one; a USB one of the same size is beside it)
+    page.locator(".model-row", has_text="Turing 2.1").filter(has_text="serial").click()
     page.wait_for_function("window.libre.store.get().render.size.join() === '480,480'")
     assert page.locator(".panel-canvas.round").count() == 1
     assert page.locator(".hidden-strip").count() == 0  # a round panel hides nothing
@@ -3452,7 +3456,7 @@ def test_settings_services(app_url, isolated_home):
         cards = page.locator(".settings-card.service")
         assert [cards.nth(i).get_attribute("data-service") for i in range(cards.count())] == [
             "game", "memory", "notices", "autopilot", "devices", "cooling", "downloads", "timer",
-            "power",
+            "power", "agents",
         ]  # fmt: skip
         assert page.locator("[role='switch'][aria-checked='true']").count() == 0  # off until asked
         game = page.locator("[data-service='game']")

@@ -33,7 +33,9 @@ motion (the video mode is for the TURZX USB panels). The panel test's speed chec
   (USB panels: by SPUR II on the 9.2"; USB serial panels: by
   [turing-smart-screen-python](https://github.com/mathoudebine/turing-smart-screen-python),
   whose protocol Libre Panel follows), but nobody has confirmed this model with
-  Libre Panel yet. Please run `libre-panel doctor` and report the result.
+  Libre Panel yet. Please run `libre-panel doctor` and report the result. For the panels of
+  JONSBO, Hongtai, VMAX and Lian Li (and the Turing 1.6" and 2.1" USB panels) the protocol
+  comes from other projects' notes and captures: nobody has run them with Libre Panel yet.
 - **planned** — the panel is in the catalog (editor menu, sizes), the driver is
   not written yet. Design themes now; they will work once the driver lands.
 
@@ -78,6 +80,21 @@ Same electronics, different sticker:
 | `xuanfang-3.5` | XuanFang rev. B / flagship | 480×320 | rev. B | unverified |
 | `kipye-3.5` | Kipye Qiye | 480×320 | rev. D | unverified |
 | `weact-3.5`, `weact-0.96` | WeAct Studio Display FS V1 | 480×320, 160×80 | WeAct | unverified |
+
+**What the newer panels cannot do.** *Settings → Panel* says it under the panel's name, and
+the panel lists show it when you point at one.
+
+| Panel | Found by `auto` | Smooth motion | Backlight | Dark on quit (`dark_on_quit`) | Good to know |
+|---|---|---|---|---|---|
+| JONSBO ZC-360 | yes | no | its own (0–100) | yes | the three screens take their pictures one after the other: some 8 a second when all three change |
+| JONSBO TF3-360SC pump, Turing 1.6" and 2.1" USB | yes | not proven | its own | yes | TURZX USB panels inside |
+| JONSBO DS916 | yes | no | none: dimming darkens the picture | no: it shows its own animation again | whole JPEG pictures; fine detail may soften |
+| JONSBO DS339, VMAX 4.6" | no: choose the model | no | none: dimming darkens the picture | yes: turned off | on Windows the maker's driver, which its app installs |
+| Hongtai / Jungle Leopard | yes | no | its own (0–100) | no: it shows its own animation again | whole JPEG pictures of at most 80 KB over a serial port: a few a second, and a busy picture loses detail |
+| Lian Li | yes | no | its own (0–100) | not known yet | whole JPEG pictures; close L-Connect while Libre Panel runs |
+
+For all of them: close the maker's own program first. Two programs cannot drive one panel at
+once.
 
 ## JONSBO
 

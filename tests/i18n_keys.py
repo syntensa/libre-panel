@@ -72,6 +72,7 @@ def dynamic_messages() -> set[str]:
         | {"Unknown"}
         | {p["name"] for p in PRESETS}
         | {m.notes for m in MODELS if m.notes}
+        | {m.limits for m in MODELS if m.limits}
     )
 
 

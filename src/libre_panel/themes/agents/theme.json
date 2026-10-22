@@ -1,0 +1,75 @@
+{
+  "format": "libre-panel-theme/1",
+  "name": "Agents",
+  "author": "Libre Panel contributors",
+  "license": "CC0-1.0",
+  "description": "What Claude Code and Codex do: each one's sign moving while it works or waits for you, the tool at work and how much of the plan's 5-hour and weekly limits is used (AI activity, Settings → Services). The time beside them.",
+  "display": {
+    "model": "turing-9.2-usb",
+    "orientation": "landscape",
+    "width": 1920,
+    "height": 480
+  },
+  "palette": {
+    "bg": "#0A1119",
+    "bg2": "#060A0F",
+    "surface": "#14202E",
+    "line": "#1F3147",
+    "track": "#162332",
+    "text": "#EEF6FF",
+    "text2": "#B8CAE0",
+    "text3": "#8CA0B8",
+    "accent": "#13E5D7",
+    "cpu": "#13E5D7",
+    "gpu": "#A3AEFF",
+    "mem": "#E0A8FF",
+    "disk": "#8FD3FF",
+    "net": "#7EE8A6",
+    "warn": "#FFCB6B",
+    "crit": "#FF7A85"
+  },
+  "style": {
+    "card": "glass",
+    "radius": 18,
+    "glow": 0.6,
+    "backdrop": "gradient",
+    "display_font": "builtin:Barlow-SemiBold",
+    "text_font": "builtin:Barlow-Medium"
+  },
+  "font": "builtin:Barlow-Medium",
+  "background": {
+    "color": "@bg",
+    "image": null
+  },
+  "refresh_ms": 1000,
+  "animation": {
+    "smoothing_ms": 450
+  },
+  "grid": {
+    "columns": 8,
+    "rows": 2,
+    "gap": 16,
+    "margin": 24
+  },
+  "widgets": [
+    {
+      "type": "module",
+      "id": "m0",
+      "module": "ai",
+      "col": 0,
+      "row": 0,
+      "cols": 6,
+      "rows": 2,
+      "agent": "both"
+    },
+    {
+      "type": "module",
+      "id": "m1",
+      "module": "clock",
+      "col": 6,
+      "row": 0,
+      "cols": 2,
+      "rows": 2
+    }
+  ]
+}

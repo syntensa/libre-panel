@@ -283,3 +283,24 @@ def test_the_models_our_drivers_serve_as_they_are():
     vmax = get_model("vmax-4.6")
     assert vmax.protocol == "usb-ms9132" and vmax.size("landscape") == (960, 320)
     assert {m.id for m in models_for_usb(0x33C3, 0x7788)} == {"hongtai-480x960", "hongtai-1920x462"}
+
+
+def test_each_panel_written_from_notes_says_what_it_cannot_do():
+    """Settings → Panel says it under the panel's name: nobody has run them yet, and what each
+    does otherwise than a TURZX USB panel."""
+    from libre_panel.devices.models import MODELS
+    from libre_panel.editor.settings import _model_info
+
+    new = ("usb-jonsbo", "serial-jonsbo", "usb-ms9132", "serial-hongtai", "usb-lianli")
+    for model in MODELS:
+        if model.protocol in new or model.id in ("turing-1.6-usb", "turing-2.1-usb"):
+            assert model.limits.startswith("Not yet seen on the hardware."), model.id
+    for model_id in ("jonsbo-ds916", "hongtai-480x960", "lianli-universal-8.8", "vmax-4.6"):
+        assert "no smooth motion" in get_model(model_id).limits.lower()
+    for model_id in ("jonsbo-ds339", "vmax-4.6"):
+        limits = get_model(model_id).limits
+        assert "choose it by hand" in limits and "Windows" in limits
+    assert "L-Connect" in get_model("lianli-hydroshift2-oled").limits
+    assert get_model("turing-9.2-usb").limits == ""  # (a panel that runs says nothing)
+    assert _model_info(get_model("jonsbo-ds916"))["limits"] == get_model("jonsbo-ds916").limits
+    assert _model_info(get_model("turing-9.2-usb"))["limits"] == ""

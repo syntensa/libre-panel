@@ -31,6 +31,7 @@ const WIDGET_NAMES = {
   analog: "Analog clock",
   countdown: "Countdown",
   moon: "Moon phase",
+  agent: "AI sign",
   fan: "Fan",
   image: "Picture",
   weather: "Weather",

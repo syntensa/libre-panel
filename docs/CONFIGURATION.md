@@ -1039,6 +1039,55 @@ currency = "€"
 minute and when it stops, so a restart loses nothing; a new day and a new month begin at
 zero, and time the PC sleeps is not counted.
 
+### AI activity
+
+What Claude Code and Codex do on this PC: working, waiting for you (a question, a
+permission), idle or not running; the tool at work, the model, and how much of the plan's
+limits of five hours and of the week is used. The AI activity module shows it, with a sign of
+its own for each state (no maker's logo). Two themes are made for it, each for the 9.2" and the
+12.3" panel, under *All themes*: Agents (Claude Code and Codex side by side) and Agents Claude
+(Claude Code alone, with how full its context is).
+
+Switch it on in *Settings → Services → AI activity*, then *Set up* each program there. The app
+shows what it adds before it writes it:
+
+- **Claude Code**: hooks in `~/.claude/settings.json` (on Windows in
+  `%USERPROFILE%\.claude\settings.json`) for when a session starts and ends, a prompt, a
+  tool, a permission, a notice, compacting and the end of a turn; and if you like, and it has
+  none of its own, its status line, which brings the plan's usage while a session runs.
+- **Codex**: the same hooks in `~/.codex/hooks.json` (or in `CODEX_HOME`). Codex asks you
+  once to trust them.
+
+Each hook is a `curl` (`curl.exe` on Windows) that hands the event to Libre Panel on
+`127.0.0.1`, with a key of its own kept in `ai.json` beside config.toml. It runs beside the
+program and does nothing when Libre Panel is not running. A copy of the file as it was is kept
+beside it (`settings.json.libre-panel.bak`, once: the first copy is yours); *Remove* takes out
+only Libre Panel's entries, those that call `/api/ai/`.
+
+```toml
+[services]
+enabled = ["agents"]
+
+[services.agents]
+claude_usage = true   # ask Claude Code for the plan's usage every three minutes
+codex_usage = true    # ask Codex's app-server every minute
+```
+
+While a theme shows `ai.*`, the service asks the programs themselves for the plan's usage, also
+without a terminal open: Claude Code (2.1.293 and later) answers a usage request that sends
+no message to the model and keeps no session; Codex's `app-server` tells its limits and the
+tokens of the day. One program at a time, and after a failure only every 15 minutes. Libre
+Panel sends nothing off this PC; the programs ask their own servers with your sign-in.
+
+The readings, for `claude` and `codex`: `ai.<agent>.state` (`working`, `waiting`, `idle`,
+`off`), `.busy` (2 waiting for you, 1 working, 0 idle, -1 off: for colours and conditions),
+`.tool`, `.since` (seconds in the state), `.sessions`, `.model`, `.context` (% of the context
+window), `.cost` ($ of the session, Claude Code's estimate), `.five_hour` and `.week` (% of the
+plan's limits used), each with `_reset` (seconds until the window begins anew; show it with
+`{value:duration}`) and `_age` (seconds since it was read), and Codex's `.tokens_today` and
+`.tokens_week`. A widget can show a part only in a state:
+`"needs": "ai.claude.state=waiting"`.
+
 ### Game mode
 
 The panel changes by itself when you play: it switches to the mode `game`

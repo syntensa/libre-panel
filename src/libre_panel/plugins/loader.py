@@ -53,6 +53,7 @@ BUILT_IN = "built in"  # the source of what Libre Panel brings itself
 # metadata. A plugin cannot use their names. Imported on first use.
 BUILT_IN_PARTS: dict[str, dict[str, str]] = {
     "services": {
+        "agents": "libre_panel.services.agents:Agents",
         "autopilot": "libre_panel.services.autopilot:Autopilot",
         "cooling": "libre_panel.services.cooling:Cooling",
         "devices": "libre_panel.services.devices:Devices",

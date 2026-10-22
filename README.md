@@ -207,6 +207,7 @@ German, French, Spanish, Polish, Portuguese (Brazil) and Simplified Chinese.
 | **Nimbus** | 8.8" and 9.2" bars | for the weather: now and the next hours, the next days, the moon as it is lit tonight, a small clock |
 | **Almanac** | 8.8" and 9.2" bars | a clock with the month: the time large, or on a face whose second hand glides (**Almanac Analog**), beside the month with today and the week |
 | **Arena** | 8.8" and 9.2" bars | for game mode: the game's frame rate large with its 1% low, frame time and course, CPU and GPU as instruments, every core, the temperatures and, small in a corner, the time |
+| **Agents** | 8.8" and 9.2" bars, 12.3" | what Claude Code and Codex do: a moving sign for each (working, waiting for you, idle), the tool at work, how much of the plan's limits is used and when they begin anew, beside the time; **Agents Claude** shows Claude Code alone, with how full its context is ([AI activity](docs/CONFIGURATION.md#ai-activity)) |
 | **Libre Default** | 3.5" (480×320); the default on every other panel | two lit rings, temperature, disk and network, a history that scrolls; what plays, the weather or the day in the corner |
 | **Slate** | 5" (800×480) | four cards: CPU, GPU, memory and network |
 | **Orbit** | round 2.1" and 2.8" | three rings around a large clock |
@@ -250,7 +251,13 @@ aside when its readings are missing, and costs nothing while no theme shows it.
 | Lian Li Universal Screen, HydroShift II LCD and OLED Curve | 8.8" and 9.2" bars, 480×480, 2288×1080 | USB device (`1cbe:a088`, `a092`, `a034`, `a068`) | unverified |
 
 *Unverified* means the driver follows a protocol proven on real panels, but nobody has
-confirmed that model with Libre Panel yet. **Own one?** The panel test in the app (*Live →
+confirmed that model with Libre Panel yet. **The panels of JONSBO, Hongtai, VMAX and Lian Li
+are new here**: their drivers follow other projects' notes, and nobody has run them with Libre
+Panel yet. None of them has smooth motion; the DS916, the Hongtai screens and Lian Li's take
+whole JPEG pictures (the Hongtai ones a few a second); the DS916, the DS339 and the VMAX have no
+backlight control, so dimming darkens the picture; the DS339 and the VMAX need the maker's
+driver on Windows. *Settings → Panel* says what a panel cannot do under its name
+([all of it](docs/HARDWARE.md)). **Own one?** The panel test in the app (*Live →
 Diagnose*, or `libre-panel doctor` in a terminal) checks it end to end and writes a report
 without serial numbers; one click opens a
 [panel report](https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml)
@@ -380,6 +387,9 @@ every start.
 - **The optional services** keep what they learn on this PC: the memory and the round report
   in a SQLite file you can open or delete; the cooling analysis reads FanControl's
   configuration and never writes it. No track title, window title or file name is read.
+- **AI activity** is off until you switch it on and set up Claude Code or Codex. Their hooks
+  hand what they do to Libre Panel on this PC only, with a key of its own; for the plan's
+  usage Libre Panel asks the programs, which ask their own servers with your sign-in.
 - **The hardware's names** never go to the log, and `libre-panel doctor` writes no serial
   numbers or personal paths into its report.
 

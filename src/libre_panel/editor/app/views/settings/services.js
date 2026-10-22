@@ -23,6 +23,7 @@ import { NumberField, Select, Toggle } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
 import { toastError } from "../../ui/toast.js";
 import { PageThemeSelect } from "../design/pages.js";
+import { AgentsSetup } from "./agents.js";
 import { NotifyCard } from "./notify.js";
 import { CommitField, SettingRow, Status, usePolling } from "./parts.js";
 
@@ -60,6 +61,10 @@ export const SERVICES = {
   timer: {
     title: () => t("Timer"),
     hint: () => t("Minutes counted down on the panel, with a notice when they are up; with a break, focus and break take turns. A keyboard shortcut starts it, or the buttons here."),
+  },
+  agents: {
+    title: () => t("AI activity"),
+    hint: () => t("What Claude Code and Codex do: working, waiting for you, idle, and how much of the plan's limits is used. From their hooks and, in the background, from the programs themselves; Libre Panel sends nothing off this PC."),
   },
   power: {
     title: () => t("Power use"),
@@ -164,6 +169,14 @@ const OPTIONS = {
   "timer.minutes": { label: () => t("Minutes"), unit: "min", min: 1, max: 1440 },
   "timer.break_minutes": { label: () => t("Break"), hint: () => t("0: no break, a plain timer."), unit: "min", min: 0, max: 240 },
   "timer.notice": { label: () => t("A notice when the time is up") },
+  "agents.claude_usage": {
+    label: () => t("Ask Claude Code for the plan's usage"),
+    hint: () => t("Every three minutes while a theme shows it, also without a terminal open: a usage request without a message to the model (Claude Code 2.1.293 and later)."),
+  },
+  "agents.codex_usage": {
+    label: () => t("Ask Codex for the plan's usage"),
+    hint: () => t("Every minute while a theme shows it, from Codex's app-server, also without a terminal open."),
+  },
   "power.sensors": { label: () => t("Sensors that add up to the watts"), hint: () => t("Sensors such as cpu.power and gpu.power.") },
   "power.rest_w": { label: () => t("The rest of the PC"), hint: () => t("Mainboard, drives, fans and what the power supply loses, in watts: some 40 to 80."), unit: "W", min: 0, max: 2000 },
   "power.price": { label: () => t("Price of a kWh"), hint: () => t("0: no cost."), min: 0, max: 100, step: 0.01 },
@@ -357,6 +370,7 @@ function ServiceCard({ service, config, row, loaded, background }) {
     </div>
     ${service.name === "game" ? html`<${GameScreen} />` : null}
     ${service.name === "timer" && enabled && background && row?.state === "running" ? html`<${TimerButtons} />` : null}
+    ${service.name === "agents" && enabled ? html`<${AgentsSetup} />` : null}
     ${service.options.length
       ? html`<button type="button" class="settings-disclosure small" aria-expanded=${String(open)} aria-controls=${`${id}-options`} onClick=${() => setOpen(!open)}>
             <span>${t("Options")} · ${service.options.length}</span>

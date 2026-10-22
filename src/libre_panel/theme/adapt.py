@@ -56,7 +56,7 @@ def _scale_widget(widget: dict[str, Any], sx: float, sy: float) -> dict[str, Any
             out[key] = max(minimum.get(key, 0), round(out[key] * s))
             if key in ("glow_radius", "shadow_blur", "backdrop_blur", "blur"):
                 out[key] = min(out[key], BLUR_MAX)  # (a theme holds no more than that)
-    if widget["type"] in ("icon", "symbol", "moon"):  # square: keep it square and centred
+    if widget["type"] in ("icon", "symbol", "moon", "agent"):  # square: keep it square, centred
         size = max(8, round(widget["size"] * s))
         cx = (widget["x"] + widget["size"] / 2) * sx
         cy = (widget["y"] + widget["size"] / 2) * sy
