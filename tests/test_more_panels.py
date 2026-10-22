@@ -632,6 +632,21 @@ def test_a_panel_set_to_auto_leaves_the_model_another_panel_names_to_it():
     assert turzx_usb._pick(None, (), both, None) is not None  # alone: the first there is
 
 
+def test_the_start_screen_finds_the_second_of_two_alike_as_its_loop_did():
+    """All panels let go for the Start screen: the second of two 9.2" is the one its loop took
+    after the first's (``skip``), of the model it names or of any (``"auto"``)."""
+    from libre_panel.devices import turzx_usb
+
+    nine, twelve = _pid("turing-9.2-usb"), _pid("turing-12.3-usb")
+    two = Bus(nine, nine)
+    first, second = (turzx_usb._pick(nine, (), two, None, skip=k)[0] for k in (0, 1))
+    assert (first.address, second.address) == (0, 1)
+    assert turzx_usb._pick(nine, (), two, None, skip=2) is None  # no third
+    mixed = Bus(twelve, nine)  # both "auto": the loops took them in the order of the search
+    found = [turzx_usb._pick(None, (), mixed, None, skip=k)[1] for k in (0, 1)]
+    assert sorted(found) == sorted((nine, twelve)) and found[0] != found[1]
+
+
 def test_each_panel_knows_the_models_the_others_name():
     config = parse_config({"device": {"model": "auto"},
                            "panels": [{"model": "turing-9.2-usb"}, {"model": "auto"}]})  # fmt: skip

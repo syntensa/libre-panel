@@ -973,7 +973,7 @@ def test_a_standby_clip_written_is_named_in_its_own_panel_s_settings(panels, nam
     srv = make_server(port=0, config_path=path)
     written = []
     srv.editor_state.start_screen_jobs = SimpleNamespace(
-        write_clip=lambda brightness, model, mounted: (
+        write_clip=lambda brightness, model, mounted, where: (
             written.append(model)
             or {"model": "turing-9.2-usb", "standby_clip": 3, "name": "standby.h264"}
         ),
@@ -990,6 +990,54 @@ def test_a_standby_clip_written_is_named_in_its_own_panel_s_settings(panels, nam
     assert status == 200 and body["standby_clip"] == 3 and written
     video = load_config(path).device.video
     assert (video.local_clip == STANDBY_CLIP) is named and video.clip_asked is named
+
+
+def test_panel_two_gets_its_own_start_screen_and_its_clip_in_its_own_settings(tmp_path):
+    """The Start screen of the panel chosen at the top: panel 2 (a 9.2" on end beside a 12.3")
+    is opened where its loop finds it, drawn upright and in its own brightness, and its clip is
+    named in its own [[panels]] video, not in the first panel's; two panels alike: the second
+    passes over the first's."""
+    path = tmp_path / "config.toml"
+    path.write_text('[device]\nmodel = "turing-12.3-usb"\n[[panels]]\nmodel = "turing-9.2-usb"\n'
+                    'orientation = "portrait"\nbrightness = 40\nfollow_brightness = false\n'
+                    '[[panels]]\nmodel = "turing-9.2-usb"\n', encoding="utf-8")  # fmt: skip
+    srv = make_server(port=0, config_path=path)
+    asked = []
+
+    def write_clip(brightness, model, mounted, where):
+        asked.append((brightness, mounted, where))
+        return {"model": "turing-9.2-usb", "standby_clip": 3, "name": STANDBY_CLIP}
+
+    srv.editor_state.start_screen_jobs = SimpleNamespace(
+        write_clip=write_clip,
+        write_logo=lambda model, mounted, where: asked.append((mounted, where)) or {"boot_logo": 9},
+    )
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    try:
+        port = srv.server_address[1]
+        status, body = request(port, "GET", "/api/start-screen?panel=1")
+        assert status == 200 and body["panel"] == 1 and body["model"] == "turing-9.2-usb"
+        assert body["orientation"] == "portrait"
+        status, body = request(port, "POST", "/api/start-screen", {"action": "clip", "panel": 1})
+        assert status == 200 and body["standby_clip"] == 3
+        status, _ = request(port, "POST", "/api/start-screen", {"action": "logo", "panel": 2})
+        assert status == 200
+        assert request(port, "POST", "/api/start-screen", {"action": "logo", "panel": 3})[0] == 400
+        assert (
+            request(port, "POST", "/api/start-screen", {"action": "logo", "panel": "2"})[0] == 400
+        )
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        srv.editor_state.close()
+    beside = ("turing-12.3-usb", "turing-9.2-usb")
+    assert asked[0] == (40, "portrait", (beside, 0))  # its own brightness, upright
+    assert asked[1] == ("landscape", (beside, 1))  # the second 9.2": past the first one's
+    config = load_config(path)
+    assert config.device.video.local_clip == "" and not config.device.video.clip_asked
+    assert config.panels[0].local_clip == STANDBY_CLIP and config.panels[0].clip_asked
+    assert config.panels[1].local_clip == "" and config.panels[0].device.brightness == 40
 
 
 def test_the_pages_of_a_panel_beside_the_first_are_read_and_written(tmp_path):

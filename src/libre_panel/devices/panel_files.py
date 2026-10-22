@@ -252,13 +252,19 @@ def names_in(listing: bytes) -> list[str]:
 # -- what the app asks for ----------------------------------------------------------------------
 
 
-Opener = Callable[[PanelModel | None], tuple[Any, PanelModel]]
+Opener = Callable[..., tuple[Any, PanelModel]]
+# Which panel: what the other panels name, and how many alike to pass over (UsbTransport.open)
+Where = tuple[tuple[str, ...], int]
+FIRST: Where = ((), 0)
 
 
-def open_panel(model: PanelModel | None = None) -> tuple[UsbTransport, PanelModel]:
-    """The TURZX USB panel on the bus (``model`` if given), opened and in step."""
+def open_panel(
+    model: PanelModel | None = None, beside: tuple[str, ...] = (), skip: int = 0
+) -> tuple[UsbTransport, PanelModel]:
+    """The TURZX USB panel on the bus (``model`` if given), opened and in step; ``beside`` and
+    ``skip`` find a panel beside the first as its loop does."""
     pid = model.usb_ids[0][1] if model is not None and model.usb_ids else None
-    transport = UsbTransport.open(pid)
+    transport = UsbTransport.open(pid, beside, skip)
     found = USB_PIDS.get(transport.pid) or model
     if found is None:
         transport.close()
@@ -280,14 +286,15 @@ class StartScreen:
         self.opener = opener
         self.ffmpeg = ffmpeg
 
-    def _with_panel(self, model: PanelModel | None, job: Callable[[PanelFiles, PanelModel], Any]):
-        transport, found = self.opener(model)
+    def _with_panel(self, model: PanelModel | None, job: Callable[[PanelFiles, PanelModel], Any],
+                    where: Where = FIRST):  # fmt: skip
+        transport, found = self.opener(model) if where == FIRST else self.opener(model, *where)
         try:
             return job(PanelFiles(transport), found)
         finally:
             transport.close()
 
-    def state(self, model: PanelModel | None = None) -> dict[str, Any]:
+    def state(self, model: PanelModel | None = None, where: Where = FIRST) -> dict[str, Any]:
         def job(files: PanelFiles, found: PanelModel) -> dict[str, Any]:
             return {
                 "model": found.id,
@@ -296,11 +303,12 @@ class StartScreen:
                 "standby_clip": files.size(STANDBY_CLIP),
             }
 
-        return self._with_panel(model, job)
+        return self._with_panel(model, job, where)
 
     def write_logo(
-        self, model: PanelModel | None = None, orientation: str = "landscape"
-    ) -> dict[str, Any]:
+        self, model: PanelModel | None = None, orientation: str = "landscape",
+        where: Where = FIRST,
+    ) -> dict[str, Any]:  # fmt: skip
         """The boot logo written and shown (it shows at the next cold start)."""
 
         def job(files: PanelFiles, found: PanelModel) -> dict[str, Any]:
@@ -310,20 +318,21 @@ class StartScreen:
             files.show_jpeg(BOOT_LOGO)
             return {"model": found.id, "boot_logo": len(data)}
 
-        return self._with_panel(model, job)
+        return self._with_panel(model, job, where)
 
-    def remove_logo(self, model: PanelModel | None = None) -> dict[str, Any]:
+    def remove_logo(self, model: PanelModel | None = None, where: Where = FIRST) -> dict[str, Any]:
         """The boot logo taken away: the factory logo shows again at the next cold start."""
 
         def job(files: PanelFiles, found: PanelModel) -> dict[str, Any]:
             files.delete(BOOT_LOGO)
             return {"model": found.id, "boot_logo": files.size(BOOT_LOGO)}
 
-        return self._with_panel(model, job)
+        return self._with_panel(model, job, where)
 
     def write_clip(
-        self, brightness: int, model: PanelModel | None = None, orientation: str = "landscape"
-    ) -> dict[str, Any]:
+        self, brightness: int, model: PanelModel | None = None, orientation: str = "landscape",
+        where: Where = FIRST,
+    ) -> dict[str, Any]:  # fmt: skip
         """The standby clip written, played (as it will be) and saved as what the panel
         starts with."""
         from libre_panel.devices.h264 import find_ffmpeg
@@ -338,7 +347,7 @@ class StartScreen:
             files.save_start(brightness)
             return {"model": found.id, "standby_clip": len(data), "name": STANDBY_CLIP}
 
-        return self._with_panel(model, job)
+        return self._with_panel(model, job, where)
 
 
 def preview_png(model: PanelModel, width: int = 960, orientation: str = "landscape") -> bytes:

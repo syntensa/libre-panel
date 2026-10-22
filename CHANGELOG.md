@@ -159,6 +159,10 @@ large digits; a portable zip that is portable; and much more that was collected 
   first panel's ring and graph show (*Whole processor* in the cores module); and Encore's and
   Almanac's companions say "No weather set up" while the weather is off, instead of the date
   and the month that the first panel shows (*Without weather* in the weather module)
+- **The start screen of every panel**: with more panels, *Settings → Panel → Start screen*
+  writes the boot logo and the standby clip of the panel chosen at the top, in its size and
+  the way it is mounted, and names that panel's clip in its own settings
+  ([The panel's start screen](docs/CONFIGURATION.md#the-panels-start-screen))
 - **Arena fills its cards**: the game card's 1 % low, frame time, what holds the frame rate
   down and the longest frame are as large as the room beside the number lets them be, two
   by two where it is wide; Arena's rings beside a companion on the 9.2" show the temperature

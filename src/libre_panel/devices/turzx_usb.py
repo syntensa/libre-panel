@@ -97,28 +97,32 @@ def free_models() -> list[PanelModel]:
     return found
 
 
-def present_model(beside: tuple[str, ...] = ()) -> PanelModel | None:
+def present_model(beside: tuple[str, ...] = (), skip: int = 0) -> PanelModel | None:
     """The model of the USB panel ``UsbTransport.open`` would take for a panel set to "auto"
-    (``beside``: what the other panels name), without opening it; None: none there, or no
-    pyusb."""
+    (``beside``: what the other panels name; ``skip``: see :func:`_pick`), without opening it;
+    None: none there, or no pyusb."""
     try:
         import usb.core
     except ImportError:
         return None
     try:
-        found = _pick(None, beside, usb.core, _backend(), free=False)  # (its own may be open)
+        # (its own may be open)
+        found = _pick(None, beside, usb.core, _backend(), free=False, skip=skip)
     except usb.core.NoBackendError:
         return None
     return USB_PIDS.get(found[1]) if found is not None else None
 
 
 def _pick(
-    pid: int | None, beside: tuple[str, ...], core: Any, backend: Any, free: bool = True
-) -> tuple[Any, int] | None:
+    pid: int | None, beside: tuple[str, ...], core: Any, backend: Any, free: bool = True,
+    skip: int = 0,
+) -> tuple[Any, int] | None:  # fmt: skip
     """The device a panel takes: of ``pid``, else of any TURZX model (``"auto"``), one that no
     panel of this process has open (``free``; else any there is). With "auto" the models other
     panels name (``beside``) come last, and such a one is left to them unless the bus has more
-    of it than they name: the 12.3" set to "auto" beside a 9.2" never takes the 9.2"."""
+    of it than they name: the 12.3" set to "auto" beside a 9.2" never takes the 9.2". ``skip``
+    passes over so many that would do first: while all panels are let go (the Start screen),
+    the one the second of two alike took, as its loop opened it after the first's."""
     named: dict[int, int] = {}
     for model_id in beside:
         model = find_model(model_id)
@@ -131,9 +135,11 @@ def _pick(
         if pid is None and len(found) <= named.get(candidate, 0):
             continue  # another panel's
         # one that another panel of this process has open is passed by ([[panels]])
-        device = next((d for d in found if not (free and place_taken(_place(d)))), None)
-        if device is not None:
-            return device, candidate
+        open_ = [d for d in found if not (free and place_taken(_place(d)))]
+        if skip >= len(open_):
+            skip -= len(open_)
+            continue
+        return open_[skip], candidate
     return None
 
 
@@ -281,16 +287,18 @@ class UsbTransport:
             return False
 
     @classmethod
-    def open(cls, pid: int | None = None, beside: tuple[str, ...] = ()) -> UsbTransport:
+    def open(
+        cls, pid: int | None = None, beside: tuple[str, ...] = (), skip: int = 0
+    ) -> UsbTransport:
         """The panel of ``pid``, else (``None``, "auto") one of any model, leaving those the
-        other panels name (``beside``) to them: see :func:`_pick`."""
+        other panels name (``beside``) to them, passing over ``skip``: see :func:`_pick`."""
         try:
             import usb.core
             import usb.util
         except ImportError as exc:
             raise DeviceError("pyusb is missing: pip install 'libre-panel[usb]'") from exc
         try:
-            picked = _pick(pid, beside, usb.core, _backend())
+            picked = _pick(pid, beside, usb.core, _backend(), skip=skip)
         except usb.core.NoBackendError as exc:
             raise DeviceError("libusb not found: pip install libusb-package") from exc
         device, pid = picked if picked is not None else (None, None)

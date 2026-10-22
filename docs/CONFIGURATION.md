@@ -498,6 +498,11 @@ the middle. The card shows them as they will look.
 - **The standby clip replaces** the one the panel has (`usr/data/standby.h264`, the vendor
   app's name); that one cannot be read back first. Where `video.local_clip` is empty, the
   video mode is then told this name.
+- **With more panels** the card is the one of the panel chosen at the top (*Panel 1 |
+  Panel 2*): its own logo and clip, in its size and the way it is mounted, written to that
+  panel alone, and a clip there is named in its own `[[panels]]` `video`, never in another's.
+  Of two panels alike, the second is the second of that model on the USB bus, as its loop
+  found it.
 - **What is on the panel** lists its folder and the sizes of both files.
 - **JPEG** and **H.264** download the files as the panel takes them.
 

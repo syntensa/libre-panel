@@ -516,18 +516,47 @@ def _panel_number(text: str | None, config: Config) -> int | None:
     return number if 1 <= number <= len(config.panels) + 1 else None
 
 
-def _first_panel_s(config: Config, written: dict[str, Any]) -> bool:
-    """Whether the start screen just written (its ``model``) is the first panel's: alone it is;
-    beside others it is the first panel's model, as set or (``"auto"``) as found on the bus. A
-    clip on another panel is never named in the first's settings."""
-    if not config.panels:
-        return True
-    model = config.device.model
-    if model == "auto":
-        from libre_panel.devices import turzx_usb
+def _whole_of(query: dict[str, list[str]] | None, name: str) -> int:
+    """A whole number of the query (``?panel=1``); 0 where it is none."""
+    raw = ((query or {}).get(name) or [""])[0]
+    return int(raw) if raw.isdigit() else 0
 
-        found = turzx_usb.present_model(config.device.beside)
-        model = found.id if found is not None else ""
+
+def _panel_at(config: Config, n: int) -> tuple[DeviceConfig, tuple[tuple[str, ...], int]] | None:
+    """Panel ``n`` (0: the one [device] names, 1: the first of [[panels]] ...): its device, and
+    where its loop finds it on the bus: the models the other panels name, and how many panels
+    before it name the same (two alike: the second's is the second on the bus); None past the
+    last."""
+    if n == 0:
+        device = config.device
+    elif 1 <= n <= len(config.panels):
+        device = config.for_panel(n - 1).device
+    else:
+        return None
+    models = [config.device.model, *(panel.device.model for panel in config.panels)]
+    return device, (device.beside, models[:n].count(device.model))
+
+
+def _panel_model(device: DeviceConfig, where: tuple[tuple[str, ...], int]) -> str:
+    """The model of a panel: as set, or (``"auto"``) as found on the bus where it is."""
+    if device.model != "auto":
+        return device.model
+    from libre_panel.devices import turzx_usb
+
+    found = turzx_usb.present_model(*where)
+    return found.id if found is not None else ""
+
+
+def _panel_s(config: Config, n: int, written: dict[str, Any]) -> bool:
+    """Whether the start screen just written (its ``model``) is panel ``n``'s: the only panel's
+    is; beside others it is that panel's model, as set or as found on the bus where it is. A
+    clip on another panel is never named in its settings."""
+    if n == 0 and not config.panels:
+        return True
+    place = _panel_at(config, n)
+    if place is None:
+        return False
+    model = _panel_model(*place)
     return bool(model) and written.get("model") == model
 
 
@@ -1486,34 +1515,38 @@ class EditorHandler(BaseHTTPRequestHandler):
 
     # -- the panel's own screens (devices/panel_files.py) -------------------------------------
 
-    def _mounted(self) -> str:
-        """How the panel is mounted, for its own screens: "portrait" for a bar on end (they
-        are drawn upright), else "landscape"."""
+    def _mounted(self, n: int = 0) -> str:
+        """How panel ``n`` (0: the first) is mounted, for its own screens: "portrait" for a bar
+        on end (they are drawn upright), else "landscape"."""
         try:
-            way = load_config(self.state.config_path).device.orientation
+            place = _panel_at(load_config(self.state.config_path), n)
         except ConfigError:
-            way = ""
+            place = None
+        way = place[0].orientation if place is not None else ""
         return "portrait" if way == "portrait" else "landscape"
 
-    def _start_screen(self) -> None:
+    def _start_screen(self, query: dict[str, list[str]] | None = None) -> None:
         """The TURZX USB panels whose boot logo and standby clip Libre Panel can make, and the
-        one at hand: the one config.toml names, else the one on the USB bus; drawn upright for
-        a bar on end."""
+        one at hand: panel ``panel`` (0, the first, if not given), as config.toml names it, else
+        as found on the USB bus where it is; drawn upright for a bar on end."""
         from libre_panel.devices import panel_files
 
+        n = _whole_of(query, "panel")
         try:
-            device = load_config(self.state.config_path).device
+            config = load_config(self.state.config_path)
         except ConfigError:
-            device = DeviceConfig()
+            config = None
+        place = _panel_at(config, n) if config is not None else None
+        device, where = place if place is not None else (DeviceConfig(), panel_files.FIRST)
         configured = device.model
-        way = self._mounted()
+        way = self._mounted(n)
         usb = [model.id for model in panel_files.models()]
         model = configured if configured in usb else None
         if model is None:
             try:
                 from libre_panel.devices.turzx_usb import present_model
 
-                found = present_model(device.beside)
+                found = present_model(*where)
                 model = found.id if found is not None and found.id in usb else None
             except Exception:  # (no pyusb, no access: nothing found)
                 model = None
@@ -1529,6 +1562,7 @@ class EditorHandler(BaseHTTPRequestHandler):
                     for m in panel_files.models()
                 ],  # fmt: skip
                 "model": model,
+                "panel": n,
                 "orientation": way,
                 "runs_panel": self.controls is not None,
                 "names": {"logo": panel_files.BOOT_LOGO, "clip": panel_files.STANDBY_CLIP},
@@ -1693,7 +1727,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             width = max(120, min(1920, int((query.get("w") or ["960"])[0])))
         except ValueError:
             width = 960
-        picture = panel_files.cached_preview(model.id, what, width, self._mounted())
+        way = self._mounted(_whole_of(query, "panel"))
+        picture = panel_files.cached_preview(model.id, what, width, way)
         self._send(200, picture, "image/png")
 
     def _start_screen_file(self, query: dict[str, list[str]]) -> None:
@@ -1706,7 +1741,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         if model is None or what not in ("logo", "clip"):
             return self._error("unknown panel or file", HTTPStatus.NOT_FOUND)
         try:
-            data = panel_files.cached_file(model.id, what, self._mounted())
+            data = panel_files.cached_file(model.id, what, self._mounted(_whole_of(query, "panel")))
         except DeviceError as exc:
             return self._error(str(exc), HTTPStatus.CONFLICT)
         name = f"{model.id}-{'boot.jpg' if what == 'logo' else 'standby.h264'}"
@@ -1714,10 +1749,10 @@ class EditorHandler(BaseHTTPRequestHandler):
         self._send(200, data, kind, filename=name)
 
     def _start_screen_action(self) -> None:
-        """``{"action": "state" | "logo" | "remove-logo" | "clip", "model": ...}``: what is on
-        the panel, or its boot logo or standby clip written or taken away. Only on the
-        person's own click: the panel's themes are paused first (and stay paused, so the
-        panel shows what was written; the app resumes them)."""
+        """``{"action": "state" | "logo" | "remove-logo" | "clip", "model": ..., "panel": n}``:
+        what is on panel ``n`` (0, the first, if not given), or its boot logo or standby clip
+        written or taken away. Only on the person's own click: the panels' themes are paused
+        first (and stay paused, so the panel shows what was written; the app resumes them)."""
         from libre_panel.devices import panel_files
 
         payload = self._read_json()
@@ -1732,29 +1767,35 @@ class EditorHandler(BaseHTTPRequestHandler):
                 model = panel_files.model_of(str(payload["model"]))
             except DeviceError as exc:
                 return self._error(str(exc))
+        n = payload.get("panel", 0)
+        if isinstance(n, bool) or not isinstance(n, int):
+            return self._error("panel: expected a whole number")
         try:
             config = load_config(self.state.config_path)
         except ConfigError as exc:
             return self._error(str(exc), HTTPStatus.CONFLICT)
+        place = _panel_at(config, n)
+        if place is None:
+            return self._error(f"panel {n}: there is no such panel")
+        device, where = place
+        way = self._mounted(n)
         paused = False
         if self.controls is not None:
-            self.controls.act("pause")  # the panel is free for this, and stays so
+            self.controls.act("pause")  # the panels are free for this, and stay so
             paused = True
         screen = self.state.start_screen()
         try:
             if action == "state":
-                result = screen.state(model)
+                result = screen.state(model, where)
             elif action == "logo":
-                result = screen.write_logo(model, self._mounted())
+                result = screen.write_logo(model, way, where)
             elif action == "remove-logo":
-                result = screen.remove_logo(model)
+                result = screen.remove_logo(model, where)
             else:
-                result = screen.write_clip(config.device.brightness, model, self._mounted())
-                # the video mode names the clip it plays: the first panel's, where it went there
-                if not config.device.video.local_clip and _first_panel_s(config, result):
-                    edit_config(("value", "video.local_clip", panel_files.STANDBY_CLIP),
-                                ("value", "video.clip_asked", True),
-                                path=self.state.config_path)  # fmt: skip
+                result = screen.write_clip(device.brightness, model, way, where)
+                # the video mode names the clip it plays: the panel's own, where it went there
+                if not device.video.local_clip and _panel_s(config, n, result):
+                    self._name_clip(n)
         except DeviceError as exc:
             log.warning("start screen: %s failed: %s", action, exc)
             return self._json({"error": str(exc), "paused": paused}, HTTPStatus.CONFLICT)
@@ -1762,6 +1803,26 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._json({"error": str(exc), "paused": paused}, HTTPStatus.CONFLICT)
         log.info("start screen: %s done: %s", action, result)
         self._json({**result, "paused": paused})
+
+    def _name_clip(self, n: int) -> None:
+        """The standby clip just written named as what panel ``n`` plays in the video mode:
+        in [device] video for the first, in its own [[panels]] video for another."""
+        from libre_panel.devices import panel_files
+
+        if n == 0:
+            edit_config(("value", "video.local_clip", panel_files.STANDBY_CLIP),
+                        ("value", "video.clip_asked", True),
+                        path=self.state.config_path)  # fmt: skip
+            return
+        settings = app_settings.Settings(self.state.config_path, self.controls, self.state.restart)
+        panels = settings.read()["config"]["panels"]
+        video = panels[n - 1]["video"]
+        panels[n - 1]["video"] = {**video, "local_clip": panel_files.STANDBY_CLIP,
+                                  "clip_asked": True}  # fmt: skip
+        try:
+            settings.write({"set": {"panels": panels}})
+        except app_settings.SettingsError as exc:
+            raise ConfigError(str(exc)) from exc
 
     def _settings(self, method: str, body: bool = False) -> None:
         """A route of the Settings (editor/settings.py): its answer, or why it is refused."""
@@ -2298,7 +2359,7 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/across/picture", lambda h, m, u: h._across_picture(), picture=True),
     Route("GET", "/api/panels/photo", lambda h, m, u: h._panels_photo(), picture=True),
     Route("POST", "/api/panels/send", lambda h, m, u: h._send_modules()),
-    Route("GET", "/api/start-screen", lambda h, m, u: h._start_screen()),
+    Route("GET", "/api/start-screen", lambda h, m, u: h._start_screen(parse_qs(u.query))),
     Route(
         "GET",
         "/api/start-screen/picture",
