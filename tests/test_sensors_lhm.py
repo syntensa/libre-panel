@@ -248,3 +248,24 @@ def test_this_pcs_own_web_server_is_asked_past_a_system_proxy(monkeypatch):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_amounts_of_data_read_as_before_from_0_9_7_on():
+    """LibreHardwareMonitor 0.9.7 tells every amount of data in bytes, under one type (its web
+    server in a unit that reads well); 0.9.6 told GB, and a graphics card's memory in MB
+    (SmallData). The readings stay as they were, whichever tells them."""
+    sensor, gib, mib = lhm.LhmSensor, 2**30, 2**20
+    gpu = ("/gpu-nvidia/0", "NVIDIA GeForce")
+    newer = [
+        sensor("/gpu-nvidia/0/data/1", *gpu, "Data", "GPU Memory Used", 577 * mib, "B"),
+        sensor("/gpu-nvidia/0/data/2", *gpu, "Data", "GPU Memory Total", 16.0, "GB"),
+        sensor("/ram/data/0", "/ram", "Generic Memory", "Data", "Memory Used", 12 * gib, "B"),
+        sensor("/ram/data/1", "/ram", "Generic Memory", "Data", "Memory Available", 20.5, "GB"),
+    ]
+    got = lhm.readings_from_sensors(newer)
+    assert got["gpu.mem.used"].value == pytest.approx(577) and got["gpu.mem.used"].unit == "MB"
+    assert got["lhm:/gpu-nvidia/0/data/2"].value == pytest.approx(16384)
+    assert (got["lhm:/ram/data/0"].value, got["lhm:/ram/data/0"].unit) == (pytest.approx(12), "GB")
+    assert got["lhm:/ram/data/1"].value == pytest.approx(20.5)
+    older = [sensor("/gpu-nvidia/0/smalldata/1", *gpu, "SmallData", "GPU Memory Used", 577.0, "MB")]
+    assert lhm.readings_from_sensors(older)["gpu.mem.used"].value == 577.0  # 0.9.6: as it was

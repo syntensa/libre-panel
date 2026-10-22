@@ -593,7 +593,9 @@ def dot_net(monkeypatch):
     }.items():
         monkeypatch.setitem(sys.modules, name, module)
     monkeypatch.setattr(sys, "path", list(sys.path))
-    return types.SimpleNamespace(calls=calls, runtime=runtime, pythonnet=pythonnet, clr=clr)
+    return types.SimpleNamespace(
+        calls=calls, runtime=runtime, pythonnet=pythonnet, clr=clr, hardware=hardware
+    )
 
 
 def test_the_libraries_load_in_their_order_on_the_net_framework(dot_net, tmp_path):
@@ -609,6 +611,19 @@ def test_the_libraries_load_in_their_order_on_the_net_framework(dot_net, tmp_pat
     assert computer.IsMotherboardEnabled and computer.IsNetworkEnabled
     assert not hasattr(computer, "IsStorageEnabled")
     assert ("open", sorted(vars(computer))) in dot_net.calls
+
+
+def test_an_amount_of_data_is_in_bytes_from_0_9_7_on(dot_net, tmp_path, monkeypatch):
+    """0.9.7 tells every amount of data in bytes, under one type; 0.9.6 told GB, and MB as
+    SmallData (librehardwaremonitor._as_before makes them the same)."""
+    monkeypatch.setitem(inside._UNITS, "data", "GB")
+    folder = library_folder(tmp_path)
+    dot_net.hardware.SensorType = type("SensorType", (), {"Data": 12, "Throughput": 13})
+    inside.load_library(folder)
+    assert inside._UNITS["data"] == "B"
+    dot_net.hardware.SensorType = type("SensorType", (), {"Data": 12, "SmallData": 13})
+    inside.load_library(folder)
+    assert inside._UNITS["data"] == "GB"  # 0.9.6 (a dll_dir of one's own)
 
 
 def test_a_runtime_that_pythonnet_has_already_started_is_not_used(dot_net, tmp_path):

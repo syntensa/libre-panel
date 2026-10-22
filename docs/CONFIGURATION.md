@@ -1652,7 +1652,7 @@ dll_dir = "C:\\Program Files\\lhm-libs"
 
 A 32-bit Python needs `--arch x86`. `dll_dir` can also be the folder of an
 unpacked [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases)
-0.9.6 download, which holds the same libraries.
+download (0.9.6 or a 0.9.7 build), which holds the same libraries.
 
 Libre Panel loads these libraries with the rights it has itself, and for the CPU's
 temperatures that means administrator rights. So keep them where only administrators can change

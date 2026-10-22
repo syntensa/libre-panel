@@ -62,10 +62,10 @@ licence of each was read before the version was pinned (2026-10-10).
 
 | Library | Version | Licence | Copyright | Source code |
 |---|---|---|---|---|
-| LibreHardwareMonitorLib | 0.9.6 | MPL-2.0 | LibreHardwareMonitor and Contributors; in part Michael Möller and Contributors (OpenHardwareMonitor) | <https://github.com/LibreHardwareMonitor/LibreHardwareMonitor>, commit `3d331e3370efb858411f19511373eff65a218701` |
-| RAMSPDToolkit-NDD | 1.4.2 | MPL-2.0 | Florian K. | <https://github.com/Blacktempel/RAMSPDToolkit>, commit `3b47b960e0830fef344624ad5e389675d5f0a1ce` |
-| DiskInfoToolkit | 1.1.2 | MPL-2.0 | Florian K. | <https://github.com/Blacktempel/DiskInfoToolkit>, commit `25319eae5781e75bcf141e844ceab2afe94d40ea` |
-| BlackSharp.Core | 1.0.7 | MPL-2.0 | Florian K. | <https://github.com/Blacktempel/BlackSharp>, commit `c70b735c6cec123ee8a046ac4a0bc6c606f52cf0` |
+| LibreHardwareMonitorLib | 0.9.7-pre769 (a preview build of 0.9.7) | MPL-2.0 | LibreHardwareMonitor and Contributors; in part Michael Möller and Contributors (OpenHardwareMonitor) | <https://github.com/LibreHardwareMonitor/LibreHardwareMonitor>, commit `a8381734697f901ed3a99706bab62c867c4bb62e` |
+| RAMSPDToolkit-NDD | 1.6.3 | MPL-2.0 | Florian K. | <https://github.com/Blacktempel/RAMSPDToolkit>, commit `69aab150784385dc2733a31f3332f646ab3c2e16` |
+| DiskInfoToolkit | 2.2.1 | MPL-2.0 | Florian K. | <https://github.com/Blacktempel/DiskInfoToolkit>, commit `87ffc498301c92ef61d2b8c3066928bf4cf51409` |
+| BlackSharp.Core | 1.2.2 | MPL-2.0 | Florian K. | <https://github.com/Blacktempel/BlackSharp>, commit `ee9cdfeefcfee0f5c4c9fb8919dcce5f89bce7cc` |
 | HidSharp | 2.6.4 | Apache-2.0 | James F. Bellinger | <https://software.seekye.com/hidsharp> |
 | System.Memory, System.Runtime.CompilerServices.Unsafe | 4.6.3, 6.1.2 | MIT | .NET Foundation and Contributors | <https://github.com/dotnet/maintenance-packages>, commit `f62ca0009b038cab4725a720f386623a969d73ad` |
 | System.Buffers, System.Numerics.Vectors | 4.6.1, 4.6.1 | MIT | .NET Foundation and Contributors | <https://github.com/dotnet/maintenance-packages>, commit `6b84308c9ad012f53240d72c1d716d7e42546483` |
@@ -84,15 +84,15 @@ in `_internal\lhm\licenses`, the same list with each file's SHA-256 in
   `licenses\HidSharp-LICENSE.txt`, as the package has it.
 - **MIT** (the four System libraries): `licenses\MIT-dotnet-foundation.txt`.
 - **PawnIO modules inside LibreHardwareMonitorLib (LGPL-2.1-or-later).**
-  LibreHardwareMonitorLib.dll embeds twelve modules of
+  LibreHardwareMonitorLib.dll embeds fourteen modules of
   [PawnIO.Modules](https://github.com/namazso/PawnIO.Modules) (Copyright (C)
-  namazso and contributors; signed builds of release 0.1.6): AMDFamily0F,
-  AMDFamily10, AMDFamily17, IntelMSR, IsaBridgeEC, LpcACPIEC, LpcCrOSEC, LpcIO,
-  RyzenSMU, SmbusI801, SmbusNCT6793 and SmbusPIIX4. LibreHardwareMonitor names
-  them in its own list of third-party notices. Their licence is the GNU Lesser
-  General Public License, version 2.1 or (at your option) any later version
-  (`licenses\LGPL-2.1.txt`); their source code is in the repository named above
-  (`IsaBridgeEC.p` came into it after release 0.1.6, with release 0.2.0). The
+  namazso and contributors; signed builds): AMDFamily0F, AMDFamily10,
+  AMDFamily17, IntelMSR, IsaBridgeEC, LpcACPIEC, LpcCrOSEC, LpcIO, Nvidia,
+  RyzenSMU, SmbusI801, SmbusIntelSkylakeIMC, SmbusNCT6793 and SmbusPIIX4.
+  LibreHardwareMonitor names them in its own list of third-party notices. Their
+  licence is the GNU Lesser General Public License, version 2.1 or (at your option)
+  any later version (`licenses\LGPL-2.1.txt`); their source code is in the
+  repository named above. The
   modules are data that LibreHardwareMonitor hands to the PawnIO driver; Libre
   Panel does not change or use them otherwise.
 - **The PawnIO driver is a program of its own** (GPL-2.0-or-later, with an

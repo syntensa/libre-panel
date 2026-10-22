@@ -68,13 +68,13 @@ class Library:
 
 
 # In the order Libre Panel loads them (libre_panel/sensors/lhm_inprocess.py: LIBRARIES).
-# The newest stable LibreHardwareMonitorLib (0.9.6) with the versions of its companions that
-# its package asks for, which also are what a Libre Panel mod ran with: each file here has the
-# SHA-256 of the one that worked there. DiskInfoToolkit reads the drives (the sensor service
-# opens them) and asks for BlackSharp.Core 1.0.7, as LibreHardwareMonitor 0.9.6 itself ships
-# it; the mod ran 1.0.4, which RAMSPDToolkit names (BlackSharp.Core has no strong name, so the
-# .NET Framework takes 1.0.7 for both). HidSharp is its netstandard2.0 build, which the .NET
-# Framework 4.7.2 and later run (there is a net35 one too).
+# LibreHardwareMonitorLib 0.9.7 as its preview build 769 (0.9.6, the last stable one, reads
+# a Threadripper 9000 wrong: #14) with the versions of its companions that its package asks
+# for: RAMSPDToolkit-NDD 1.6.3 and DiskInfoToolkit 2.2.1, which both ask for BlackSharp.Core
+# 1.2.2, as LibreHardwareMonitorLib itself is built against (BlackSharp.Core has no strong
+# name). DiskInfoToolkit reads the drives (the sensor service opens them). HidSharp is its
+# netstandard2.0 build, which the .NET Framework 4.7.2 and later run (there is a net35 one
+# too). An amount of data comes in bytes from 0.9.7 on (librehardwaremonitor.py: _as_before).
 LIBRARIES = (
     Library(
         "System.Memory",
@@ -118,33 +118,33 @@ LIBRARIES = (
     ),
     Library(
         "BlackSharp.Core",
-        "1.0.7",
-        "4f713fe18ee7c85a7c49f28309adaa815714333326aa81fd4d4a81619ecaa0ab",
+        "1.2.2",
+        "1cd4c0a1290abbb476ddb118c8461c00a446fe2c971413946a7ab2c7dfa571a1",
         "lib/net472/BlackSharp.Core.dll",
         "BlackSharp.Core.dll",
-        "cafb93afcc8d8a367e21f619673d05c06887d8964867fed1371f02ded1cd3e23",
+        "b17fec1a6fa78e562c7cd09a38ca9c11210e3f55a64d7eb08fa94479e4b2f861",
         "MPL-2.0",
-        "https://github.com/Blacktempel/BlackSharp/tree/c70b735c6cec123ee8a046ac4a0bc6c606f52cf0",
+        "https://github.com/Blacktempel/BlackSharp/tree/ee9cdfeefcfee0f5c4c9fb8919dcce5f89bce7cc",
     ),
     Library(
         "RAMSPDToolkit-NDD",
-        "1.4.2",
-        "57c893824a68c71538055f242586616d4205a671c300897c21b2a6f88270ce64",
+        "1.6.3",
+        "e61f6f7a09837fe77ef6c30f0d9519aa5f55dd52bf208df2ff827585938922ae",
         "lib/net472/RAMSPDToolkit-NDD.dll",
         "RAMSPDToolkit-NDD.dll",
-        "b6882354c7c8ec186617e421507743dbfae09c5c1fc24cef76a1d0c0c26651de",
+        "07da7ef6794c941e41dc10dcbccdd2ce7426aac6b84f0e080ffeced9716db5c9",
         "MPL-2.0",
-        "https://github.com/Blacktempel/RAMSPDToolkit/tree/3b47b960e0830fef344624ad5e389675d5f0a1ce",
+        "https://github.com/Blacktempel/RAMSPDToolkit/tree/69aab150784385dc2733a31f3332f646ab3c2e16",
     ),
     Library(
         "DiskInfoToolkit",
-        "1.1.2",
-        "a997f0b3701e20b2ab9296e07ee4f74f877e75015277fb6bd314ade1e2c4db13",
+        "2.2.1",
+        "e1f9774e4d26121e35ca1c1d2f17c3680d66cb31aa1d71efb06ffd49555d907e",
         "lib/net472/DiskInfoToolkit.dll",
         "DiskInfoToolkit.dll",
-        "1acbf51b3c10c51c986cf43021680d34a2e38d9a5ba652bcfa9a1b5f7fc09800",
+        "b29d26b6216187533866860d21ca72bfe79a6e7c2535f889c908ccb33f2b5b7a",
         "MPL-2.0",
-        "https://github.com/Blacktempel/DiskInfoToolkit/tree/25319eae5781e75bcf141e844ceab2afe94d40ea",
+        "https://github.com/Blacktempel/DiskInfoToolkit/tree/87ffc498301c92ef61d2b8c3066928bf4cf51409",
     ),
     Library(
         "HidSharp",
@@ -159,17 +159,17 @@ LIBRARIES = (
     ),
     Library(
         "LibreHardwareMonitorLib",
-        "0.9.6",
-        "60db5e0d9135f4658b385cae139d3b9eaeac0a8e867d322d20b5dbe4c4039197",
+        "0.9.7-pre769",
+        "56afd67642885f161b9c81f516b7c821bc30281841dac558db6617314bfb9831",
         "runtimes/{arch}/lib/net472/LibreHardwareMonitorLib.dll",
         "LibreHardwareMonitorLib.dll",
         {
-            "x64": "6ebc194316536ba61af5be24508ad9fcbb2ecc685e716c12e787c79530f66bf0",
-            "x86": "61acb0df4c05de343481ca3b56455942f121bb19e8402b4c221192d0bc9af694",
-            "arm64": "155a6df244002b2f399f09edb881ec148f0e6545f1e494af657d5666093d86d2",
+            "x64": "4dd83164ddab726a2bc971518a9fd5c69140b2940cc554d8b8ddc3010acda401",
+            "x86": "d6724309fe58f34842786afa96b62eaf5889e154f87ce2a787599652b4299d69",
+            "arm64": "61f949f04d52e84eea37f2e4dad8a6d86c9f999cba832419b405bb4e55e0cc30",
         },
         "MPL-2.0 (with PawnIO modules under LGPL-2.1-or-later inside)",
-        "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/tree/3d331e3370efb858411f19511373eff65a218701",
+        "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/tree/a8381734697f901ed3a99706bab62c867c4bb62e",
     ),
 )
 

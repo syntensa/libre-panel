@@ -6,7 +6,7 @@ LibreHardwareMonitor's .NET library itself, through pythonnet, and reads its sen
 thread of its own. ``LibreHardwareMonitorProvider`` takes this way when it can
 (``mode = "auto"``) and keeps asking the web server otherwise.
 
-- **.NET Framework only.** LibreHardwareMonitor 0.9.6 on CoreCLR stops in its mutex code
+- **.NET Framework only.** LibreHardwareMonitor (0.9.6, 0.9.7) on CoreCLR stops in its mutex code
   (seen as ``ArgumentNullException: identity``), so pythonnet is told to start ``netfx``.
   Where pythonnet already runs on another runtime (a plugin loaded it first) this source
   steps aside.
@@ -207,6 +207,12 @@ def load_library(dll_dir: Path) -> Any:
             from LibreHardwareMonitor.Hardware import Computer
         except ImportError as exc:
             raise LhmUnavailable(f"{LIBRARY}.dll has no Computer to open: {exc}") from exc
+        try:  # 0.9.7 tells every amount of data in bytes; 0.9.6 told GB, and MB as SmallData
+            from LibreHardwareMonitor.Hardware import SensorType
+        except ImportError:
+            pass
+        else:
+            _UNITS["data"] = "GB" if hasattr(SensorType, "SmallData") else "B"
         return Computer
 
 

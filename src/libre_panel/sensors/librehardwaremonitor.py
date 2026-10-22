@@ -175,6 +175,28 @@ def sensors_from_tree(tree: dict[str, Any]) -> Iterator[LhmSensor]:
         )
 
 
+# An amount of data in bytes, by the unit LibreHardwareMonitor tells it in
+_SIZES = {"B": 1, "KB": 2**10, "MB": 2**20, "GB": 2**30, "TB": 2**40}
+
+
+def _as_before(sensor: LhmSensor) -> LhmSensor:
+    """An amount of data as LibreHardwareMonitor 0.9.6 tells it, whichever tells it: 0.9.7 has
+    one type for every amount, in bytes (its web server: in a unit that reads well), where 0.9.6
+    told GB ("Data") and a graphics card's memory in MB ("SmallData"), which is what the keys
+    here are made from (``gpu.mem.used``, the memory's GB)."""
+    kind = sensor.sensor_type.lower()
+    if kind not in ("data", "smalldata"):
+        return sensor
+    size = _SIZES.get(sensor.unit.strip().upper().replace("IB", "B"))
+    if size is None:
+        return sensor
+    small = kind == "smalldata" or _kind(sensor.sensor_id) == "gpu"
+    kind, unit, per = ("SmallData", "MB", 2**20) if small else ("Data", "GB", 2**30)
+    if sensor.sensor_type == kind and sensor.unit == unit:
+        return sensor
+    return dataclasses.replace(sensor, sensor_type=kind, value=sensor.value * size / per, unit=unit)
+
+
 def _gpu_rank(device: _Device) -> tuple[int, float]:
     """Dedicated GPUs first: NVIDIA, then AMD/Intel with more than 2 GB of own memory."""
     total = device.sensors.get(("smalldata", "GPU Memory Total"))
@@ -199,7 +221,7 @@ def readings_from_sensors(
     from (none for a name), so that a caller can tell which sensors a key needs."""
     out: dict[str, Reading] = {}
     devices: dict[str, _Device] = {}
-    for sensor in sensors:
+    for sensor in map(_as_before, sensors):
         reading = Reading(f"lhm:{sensor.sensor_id}", sensor.value, sensor.unit, sensor.label)
         out[reading.key] = reading
         device = devices.get(sensor.hardware_id)

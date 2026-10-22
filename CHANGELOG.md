@@ -142,6 +142,11 @@ and much more that was collected since 0.6.9.
 - `tools/panels_bench.py`: how much two panels in video mode slow each other down
 
 **Fixes**
+- Windows: the temperatures, power and clocks come from LibreHardwareMonitor 0.9.7 (a preview
+  build of it), which reads newer processors right, the Threadripper 9000 among them; with
+  0.9.6 it showed temperatures such as 130 °C
+  ([#14](https://github.com/syntensa/libre-panel/issues/14)). Memory, drives and the graphics
+  card's memory read in the same units as before
 - Chinese, Japanese and Korean labels under the rings (Lumen, Studio) are as large as the
   English ones: their width is measured in the font that draws them, so they are no longer
   shrunk to fit a place made for a Latin word
