@@ -1,15 +1,16 @@
 # Changelog
 
-## 0.7.0rc2 — 2026-10-21
+## 0.7.0rc3 — 2026-10-22
 
 A release candidate of 0.7.0, to try before everyone has it: up to four panels at once, placed
-where they stand, with scenes, one picture across them, the same beat and an alarm on all of
-them; new modules for the ping, a timer, the power the PC draws and the UPS; a theme in very
-large digits; a portable zip that is portable; and much more that was collected since 0.6.9.
+where they stand, a pair of screens that share out what they show, with scenes, one picture
+across them, the same beat and an alarm on all of them; new modules for the ping, a timer, the
+power the PC draws and the UPS; a theme in very large digits; a portable zip that is portable;
+and much more that was collected since 0.6.9.
 
 **New**
 - **More panels at once**: up to three panels beside the first, each with a theme of its
-  own, on the same readings (*Settings → Panel → More panels*, `[[panels]]` in config.toml).
+  own, on the same readings (*Settings → Panels*, `[[panels]]` in config.toml).
   A panel that one of them has open is passed by when another looks for its own, so two
   set to "Detect automatically" find one each. Their brightness follows the first panel's,
   with a difference of their own to look alike; *Which is which?* shows each one's number,
@@ -17,9 +18,21 @@ large digits; a portable zip that is portable; and much more that was collected 
   a theme of its own while the first shows a game or music
   ([More panels at once](docs/CONFIGURATION.md#more-panels-at-once))
 - **Companion themes for a second panel**: Lumen Companion (every core, the temperatures
-  with the fans turning, the drives and the processes) and Arena Companion (the temperatures
-  large while you play), for the 9.2" either way up and the 12.3"; a panel added beside Lumen
-  gets Lumen's, and Arena's for the game's page
+  Lumen does not show with the fans turning, the drives and the processes), Arena Companion
+  (the temperatures and fans, the cores, the ping and the processes while you play), Encore
+  Companion (the cover large, the weather, the sun and moon while music plays) and Almanac
+  Companion (the weather of the next hours and days, the sun and moon and your appointments at
+  rest), for the 9.2" either way up and the 12.3"; a panel added beside Lumen gets Lumen's
+- **The pair**: while a companion shows beside it, the first panel shows its screen without
+  what the companion shows: Lumen without the fans and with a longer history, Arena with the
+  game and the two chips large, Encore with what plays in large words and the cover on the
+  companion; nothing is on both. The companion follows the first panel's page by itself
+  (Arena's beside Arena, Encore's beside Encore, Almanac's at rest), and a moment away (a
+  reconnect) does not switch back and forth
+- **Panel 1 | Panel 2 in the header**: the panel Live shows and Design edits; Design opens the
+  theme that panel shows, in its size and the way it is mounted, with its own pages (its theme,
+  and those for a game, music and an alarm), and *To the panel* puts it on that panel. The
+  panels have a section of their own in Settings (*Panels*)
 - **Where the panels stand**: the panels in their real sizes, each with what it shows, beside
   a monitor to place them by; dragged (or moved with the arrow keys) to where they are, in the
   case, under the monitor or on end, each place kept in config.toml (`at`)
@@ -115,8 +128,34 @@ large digits; a portable zip that is portable; and much more that was collected 
   so the sources no longer make that frame late
 - A soak test for releases: a day of two panels, its memory, threads and pace
   ([Releasing](docs/RELEASING.md))
+- Two panels in the smooth mode no longer stand still together every few seconds: the list
+  of the processes (Lumen Companion) is read in short bursts with pauses between them, so no
+  panel's frame waits for it
+- Each panel beside the first runs in a process of its own in the app: two panels in the
+  smooth mode no longer wait for each other, and each draws about as fast as it does alone
+  (where a process cannot start, the panel runs as before)
+- Every frame costs less, 10 to 45 % on the 12.3" and 15 % on the 9.2": a frame converts only
+  the parts of the picture that changed, the smooth mode hands the picture to ffmpeg in one
+  piece, and the weather symbols (Nimbus, Lumen's forecast) no longer count all the kept
+  pictures on every frame
+- The log says which panel speaks (`panel 2: …`) for the panels beside the first
+- `tools/panels_bench.py`: how much two panels in video mode slow each other down
 
 **Fixes**
+- Settings keeps what is typed into a field the moment it appears (the address of a JSON
+  source just added), and two quick changes to a JSON source keep both
+- A panel set to "Detect automatically" no longer takes the model another panel names: the
+  12.3" stays the 12.3" when a 9.2" set as panel 2 is plugged in, also after a reconnect and
+  in Settings
+- Writing the standby clip on the Start screen page ended in an error after the clip was on
+  the panel; its name now goes into the first panel's settings only where the clip went to
+  that panel
+- *Sun & moon* in a low, wide place left out its arc with an error; where the arc has no
+  room, the times stay
+- The weather module on a panel on end (tall and narrow) showed today alone under a large empty
+  space; it lists the days, and with room the hours too, as rows
+- A list that leaves out a reading (`!cpu.temp`) leaves it out under its other names too
+  (`CPU Package`)
 - Fans that never ran (an empty header on the mainboard) no longer fill the temperature
   module
 - A Turing panel of rev. C that restarted is found again: it is asked three times, and its
