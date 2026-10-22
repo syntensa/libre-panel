@@ -545,9 +545,12 @@ def test_a_panel_beside_the_first_takes_its_readings_just_after_the_first_panel_
     try:
         first.snapshot()  # the first panel's readings, 0.3 s ago
         first._taken = (first._taken[0] - 0.3, *first._taken[1:])
+        since = time.monotonic()
         loop.step()
+        late = time.monotonic() - since  # (the readings are older by the step's own time)
         # its next ones a moment after the first panel's next: a value glides on both at once
-        assert loop.next_sample == pytest.approx(1000.0 - 0.3 + 1.0 + app.IN_STEP_S, abs=0.02)
+        due = 1000.0 - 0.3 + 1.0 + app.IN_STEP_S
+        assert due - late - 0.02 <= loop.next_sample <= due + 0.02
     finally:
         loop.close()
 
