@@ -191,6 +191,9 @@ WIDGET_SPECS: dict[str, dict[str, tuple[str, Any]]] = {
         "fill_alpha": ("number", 0),  # how opaque the fill is, 0 to 1 (0: 0.25, a fade 0.45)
         "direction": ("enum:up|down", "up"),  # down: hangs from the top, filled from there
         "inset": ("bool", True),  # the line stays inside (off: the range spans the box)
+        # the glow kept between the box's sides: a graph from one edge of its card to the
+        # other (the game's) does not shine past them
+        "clip": ("bool", False),
         # a dot of this radius (px) in the line's colour at the newest point of the line, with
         # the widget's glow around it, as the end of SPUR II's Horizon curves (0: none)
         "end_dot": ("number", 0),

@@ -1,6 +1,7 @@
 """The look of a theme: finishes (render.finish, render.lit, render.light3d)
 and the panel's look block (render.look: grid, panel light)."""
 
+import math
 import os
 import sys
 from datetime import UTC, datetime
@@ -787,3 +788,26 @@ def test_lit_widgets_and_the_look_at_panel_sizes(size):
     frame, _ = a.render(history(), 0.8)
     assert frame.size == size and a.warnings == []
     assert changed_region(frame, b.render(history(), 0.8)[0]) is None
+
+
+@pytest.mark.parametrize(
+    ("size", "thickness", "sweep", "halo"),
+    [(278, 15, (-90, 270), 9.0), (115, 6, (-90, 270), 6.0), (182, 10, (135, 405), 6.0)],
+)
+def test_a_rings_light_is_its_whole_sweeps_up_to_the_tip_pixel_for_pixel(
+    size, thickness, sweep, halo
+):
+    """A gliding ring's light was made whole for every value: on the 12.3" (Arena's) ten
+    milliseconds a frame, so its pictures came late and it moved in jerks. It is the light
+    of the whole sweep up to the tip, made anew only around the tip (and the start of a
+    closed ring): as the light made whole, at every value and in every colour."""
+    widget = {"w": size, "h": size, "thickness": thickness, "start_angle": sweep[0],
+              "end_angle": sweep[1]}  # fmt: skip
+    stroke, room = max(2, round(thickness * lit.RING_CORE)), math.ceil(3 * halo)
+    for colour in ((19, 229, 215), (255, 120, 40)):
+        for frac in (0.001, 0.02, 0.3, 0.5, 0.9, 0.996, 1.0):
+            whole = lit.light(lit._arc(widget, frac, stroke, room), np.asarray(colour, np.float32),
+                              halo).astype(np.float32)  # fmt: skip
+            made = np.asarray(lit._ring_light(widget, frac, colour, stroke, room, halo), np.float32)
+            shown = [a[..., :3] * a[..., 3:4] / 255 for a in (whole, made)]
+            assert np.abs(shown[0] - shown[1]).max() <= 1.5, (frac, colour)

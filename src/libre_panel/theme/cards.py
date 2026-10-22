@@ -417,9 +417,10 @@ def build_instrument(b: _Build, src: M.Source) -> None:
     else:
         d = b.iw / 1.12
         count = min(len(rows), 3)
-        while True:  # as many rows as fit with a ring that is not much smaller
+        while True:  # as many rows as fit with a ring at least half as large (a square card
+            # of Arena beside its companion showed the ring alone, in a lot of room)
             need = 1.38 + (0.287 + 0.268 * (count - 1) if count else 0)
-            if count == 0 or b.ih / need >= 0.7 * d:
+            if count == 0 or b.ih / need >= 0.5 * d:
                 break
             count -= 1
         d = min(d, b.ih / (1.38 + (0.287 + 0.268 * (count - 1) if count else 0)))

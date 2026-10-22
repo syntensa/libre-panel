@@ -5,6 +5,7 @@ import pytest
 from libre_panel.config import ConfigError, parse_config
 from libre_panel.icons import ICON_NAMES, draw_icon, weather_icon_name
 from libre_panel.render.renderer import Renderer
+from libre_panel.render.renderer import _Strip as Strip_
 from libre_panel.sensors.base import Reading, Snapshot
 from libre_panel.theme.adapt import adapt_theme
 from libre_panel.theme.model import THEME_FORMAT, ThemeError, parse_theme
@@ -445,7 +446,7 @@ def test_a_late_strip_keeps_the_curve_where_it_is():
     graph = spike_graph(per_frame=True, line_width=2, glow=0.5, glow_radius=6)
     late = Renderer(theme(graph, animation={"smoothing_ms": 400}, size=(200, 60)), animate=True)
     late.continuous = late.background_builds = True
-    late._builder = builder = LateBuilder()
+    late._strip_builder = builder = LateBuilder()
     on_time = Renderer(theme(graph, animation={"smoothing_ms": 400}, size=(200, 60)), animate=True)
     on_time.continuous = True
     late.fps = on_time.fps = 50
@@ -471,7 +472,7 @@ def test_graphs_keep_moving_when_their_strips_come_from_the_helper_thread(monkey
     renderer = Renderer(theme(spike_graph(per_frame=per_frame), size=(200, 60)))
     renderer.continuous = renderer.background_builds = True
     renderer.fps = 50
-    renderer._builder = builder = LateBuilder()
+    renderer._strip_builder = builder = LateBuilder()
     calls = []
     real = renderer._graph_layer
     monkeypatch.setattr(renderer, "_graph_layer", lambda *a, **k: calls.append(1) or real(*a, **k))
@@ -816,3 +817,89 @@ def test_needs_can_ask_for_what_a_reading_is_or_for_a_picture():
     from libre_panel.render.renderer import _reads
 
     assert _reads(t.widgets) == {"game.limiter", "media.playing", "game.logo"}
+
+
+def own_range_graph(**kw):
+    """A graph on its own range (no ``min``, no ``max``), as the game's frame rate."""
+    return spike_graph(min=None, max=None, **kw)
+
+
+def test_a_graph_on_its_own_range_glides_instead_of_jumping():
+    """Arena's frame rate on the 12.3" scaled up and down in jumps: its range was the values'
+    of every picture, so a peak coming into the window or leaving it moved the whole curve at
+    once. The range keeps room around the values, widens at once where they leave it (they
+    glide themselves), narrows only once they used little of it for a while, and glides from
+    one range to the next. No value is ever outside it."""
+    renderer = Renderer(theme(own_range_graph(), size=(200, 60)), animate=True)
+    widget = renderer.widgets[0]
+    bounds, moving = renderer._glided_bounds(widget, [100.0, 140.0], 0.0)
+    assert bounds == pytest.approx((96.0, 144.0)) and not moving  # a tenth of the span as room
+    bounds, moving = renderer._glided_bounds(widget, [100.0, 200.0], 0.1)  # a peak comes in
+    assert bounds[1] >= 200.0 and moving  # the peak inside at once ...
+    highs = [
+        renderer._glided_bounds(widget, [100.0, 200.0], 0.1 + k / 10)[0][1] for k in range(1, 30)
+    ]
+    assert highs[-1] == pytest.approx(210.0, abs=0.5)  # ... and room above it soon after
+    assert all(b >= a for a, b in zip(highs, highs[1:], strict=False))
+    # the peak leaves the window: the range stays for a while, then narrows, gliding
+    shown = []
+    for k in range(1, 100):
+        (low, high), _ = renderer._glided_bounds(widget, [100.0, 140.0], 3.0 + k / 10)
+        assert low <= 100.0 and high >= 140.0
+        shown.append(high)
+    assert shown[10] == pytest.approx(210.0, abs=0.5)  # a second later: as it was
+    assert shown[-1] == pytest.approx(144.0, abs=0.5)  # in the end: the values', with room
+    assert max(a - b for a, b in zip(shown, shown[1:], strict=False)) < 0.2 * (210 - 90)
+    fixed = Renderer(theme(spike_graph(), size=(200, 60)), animate=True)  # a range of its own
+    assert fixed._glided_bounds(fixed.widgets[0], [10.0, 20.0], 0.0) == ((0, 100), False)
+
+
+def test_between_two_strips_the_window_is_stretched_to_the_range_of_the_moment():
+    """In video mode the curve goes onto strips, each drawn in one range; while the range
+    glides, every frame stretches the window it shows to the range of that moment, so it
+    moves on every frame, not in the strips' steps: as if drawn in that range."""
+    import numpy
+
+    renderer = Renderer(theme(own_range_graph(line_width=2), size=(200, 60)))
+    widget = renderer.widgets[0]
+    values = [100.0 + 40.0 * ((k % 20) / 19) for k in range(400)]
+
+    def drawn(bounds):
+        strip = renderer._draw_strip(widget, values, 0, 1.0, 1, Strip_(0, 0.0, 99.0, ()), bounds)
+        return strip.phases[0].crop((20, 0, 180, 60))
+
+    def rows(layer):  # the line's row in every column
+        alpha = numpy.asarray(layer.getchannel("A"), float)
+        return (alpha * numpy.arange(60)[:, None]).sum(axis=0) / alpha.sum(axis=0)
+
+    first, now = (95.0, 145.0), (92.0, 150.0)
+    stretched = renderer._restretch(widget, drawn(first), 0, first, now)
+    assert numpy.abs(rows(stretched) - rows(drawn(now))).max() < 0.6
+    assert numpy.abs(rows(drawn(first)) - rows(drawn(now))).max() > 2  # (it does move)
+
+
+def test_while_its_range_glides_a_graph_asks_for_its_strips_more_often():
+    renderer = Renderer(theme(own_range_graph(), size=(200, 60)), animate=True)
+    renderer.continuous, renderer.fps = True, 50
+    renderer.new_sample(100.0, 1.0)
+    renderer.render(reading(10.0, SPIKE), 100.0)
+    strips = renderer._strips["g"]
+    assert renderer.STRIP_GLIDE_S < renderer.STRIP_EVERY_S
+    strips.ready.gliding = True
+    strips.asked = 100.0
+    renderer.render(reading(10.0, SPIKE), 100.0 + renderer.STRIP_GLIDE_S + 0.01)
+    assert strips.asked > 100.0  # asked again, before STRIP_EVERY_S
+
+
+def test_a_clipped_graph_keeps_its_glow_between_its_sides():
+    """The game's graph runs from one edge of its card to the other: its glow must not
+    shine past them (``clip``); above and below it stays."""
+    glowing = own_range_graph(x=40, w=120, glow=0.6, glow_radius=6, fill=True)
+    for clip in (False, True):
+        renderer = Renderer(theme({**glowing, "clip": clip}, size=(200, 60)))
+        frame, _ = renderer.render(Snapshot(history={"v": SPIKE}))
+        lit = [x for x in range(200) if any(frame.getpixel((x, y))[0] > 8 for y in range(60))]
+        if clip:
+            assert min(lit) >= 40 and max(lit) <= 159
+        else:
+            assert min(lit) < 40 or max(lit) > 159  # (it reaches past them otherwise)

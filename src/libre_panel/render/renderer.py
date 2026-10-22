@@ -102,12 +102,13 @@ class _Builder:
     """One daemon thread that builds pieces for the renderer.
 
     One thread, so fonts (FreeType faces are not thread-safe) are never used
-    twice at once; a daemon, so it can never keep the program alive.
+    twice at once; a daemon, so it can never keep the program alive. The graphs'
+    strips, which draw no text, have one of their own.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, name: str = "render-builder") -> None:
         self._jobs: queue.Queue[tuple[Future, Callable[[], Any]] | None] = queue.Queue()
-        self._thread = threading.Thread(target=self._work, name="render-builder", daemon=True)
+        self._thread = threading.Thread(target=self._work, name=name, daemon=True)
         self._thread.start()
 
     def submit(self, job: Callable[[], Any]) -> Future:
@@ -601,6 +602,7 @@ class Renderer:
         self.continuous = False
         self.sample: tuple[float, float] = (0.0, 1.0)  # (when, seconds to the next)
         self._strips: dict[str, _Strips] = {}  # graph id -> its strips (video mode)
+        self._ranges: dict[str, _Range] = {}  # graph id -> its own range as it glides
         self._cache: dict[str, tuple[Any, Piece]] = {}
         # a gliding list's bars and its text, and the two as one (_joined)
         self._joins: dict[str, tuple[Piece, Piece, Piece]] = {}
@@ -651,6 +653,10 @@ class Renderer:
         # with the previous piece; the change shows a frame or two later.
         self.background_builds = False
         self._builder: _Builder | None = None
+        # the graphs' strips in a thread of their own (they draw no text): a big one takes
+        # tens of milliseconds, and a ring's next picture waited behind it, so the ring
+        # stood still for frames and then jumped (Arena on the 12.3")
+        self._strip_builder: _Builder | None = None
         self._pending: dict[str, tuple[Any, Future]] = {}
         # Plugins (docs/PLUGINS.md): a screen draws the frame under the widgets,
         # plugin widget types draw themselves.
@@ -850,7 +856,8 @@ class Renderer:
         if out is None:
             return replace(piece, layer=layer, box=box, light=light)
         out.alpha_composite(layer, (pad, pad))
-        return replace(piece, layer=out, x=piece.x - pad, y=piece.y - pad, box=box, light=light)
+        done = replace(piece, layer=out, x=piece.x - pad, y=piece.y - pad, box=box, light=light)
+        return _clip_sides(done) if widget.get("clip") else done
 
     def _halo(
         self, widget: dict[str, Any], layer: Image.Image, exact: bool = False
@@ -1182,6 +1189,9 @@ class Renderer:
         if self._builder is not None:
             self._builder.close()
             self._builder = None
+        if self._strip_builder is not None:
+            self._strip_builder.close()
+            self._strip_builder = None
         if self.screen is not None:
             try:
                 self.screen.close()
@@ -3084,11 +3094,15 @@ class Renderer:
             strips = self._strips.get(widget["id"])
             strip = strips.ready if strips is not None else None
             bounds = strip.bounds if strip is not None else None
+            if strip is not None:  # where the curve is drawn in this frame
+                bounds = self._range_now(widget, now) or bounds
         else:
             values = _gaps(snapshot.history.get(key, [])[-max(2, widget["history"]) :])
             value, scale = (values[-1] if len(values) > 1 else None), SUPERSAMPLE
             known = [v for v in values if v is not None]
             bounds = self._graph_bounds(widget, known) if known and len(values) > 1 else None
+            if bounds is not None:  # the graph's own range, as it draws it
+                bounds = self._range_now(widget, now) or bounds
         if value is None or bounds is None:
             return None
         first, last = self._range_rows(widget, scale)
@@ -3150,13 +3164,109 @@ class Renderer:
             return self._timeline(widget, snapshot, now)
         slots = max(2, widget["history"])
         values = _gaps(snapshot.history.get(widget["sensor"], [])[-slots:])
-        key = (len(values), tuple(values[-3:]), values[0] if values else None)
-        return self._cached(widget, key, lambda: self._graph_piece(widget, values, slots))
+        numbers = [v for v in values if v is not None]
+        bounds = None
+        if numbers:
+            bounds, moving = self._glided_bounds(widget, numbers, now)
+            self.moving = self.moving or moving
+        key = (len(values), tuple(values[-3:]), values[0] if values else None, bounds)
+        return self._cached(widget, key, lambda: self._graph_piece(widget, values, slots, bounds))
 
-    def _graph_piece(self, widget: dict[str, Any], values: list[float], slots: int) -> Piece:
+    def _graph_piece(
+        self, widget: dict[str, Any], values: list[float], slots: int,
+        bounds: tuple[float, float] | None = None,
+    ) -> Piece:  # fmt: skip
         x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
-        layer = self._graph_layer(widget, values, slots, w, slots - len(values))
+        layer = self._graph_layer(widget, values, slots, w, slots - len(values), bounds=bounds)
         return Piece(self._down(layer, w, h), x, y, [x, y, w, h])
+
+    # -- a graph's own range -------------------------------------------------
+    #
+    # A graph without ``min`` and ``max`` (the game's frame rate) takes the range of the
+    # values it shows. Taken anew for every picture, it jumped whenever a peak came into the
+    # window or left it, and the whole curve with it. It glides instead: wider at once where
+    # the values leave it (they glide themselves, so it widens smoothly), narrower only once
+    # they have used little of it for a while, and from one range to the next over a moment.
+
+    RANGE_ROOM = 0.1  # room above and below the values, of their span
+    RANGE_GLIDE_S = 0.6  # the range on show reaches a new one at this pace (a time constant)
+    RANGE_NARROW_S = 3.0  # it narrows once the values have used ...
+    RANGE_USED = 0.6  # ... less than this share of it for so long
+
+    def _glided_bounds(
+        self, widget: dict[str, Any], numbers: list[float], now: float
+    ) -> tuple[tuple[float, float], bool]:
+        """The range to draw a graph with now, and whether it still glides."""
+        lo, hi = self._graph_bounds(widget, numbers)
+        fixed_lo, fixed_hi = widget["min"] is not None, widget["max"] is not None
+        if fixed_lo and fixed_hi:
+            return (lo, hi), False
+        room = (hi - lo) * self.RANGE_ROOM
+        want = (lo if fixed_lo else lo - room, hi if fixed_hi else hi + room)
+        state = self._ranges.get(widget["id"])
+        if state is None or now < state.at or not self.animate:  # (still: the values, roomy)
+            self._ranges[widget["id"]] = _Range(want, now, (lo, hi))
+            return want, False
+        # on to now on the way it was going (a new target takes over from here on) ...
+        k = 1 - math.exp(-(now - state.at) / self.RANGE_GLIDE_S)
+        shown = tuple(a + (b - a) * k for a, b in zip(state.shown, state.target, strict=True))
+        shown = (min(shown[0], lo), max(shown[1], hi))  # the values always inside
+        target = state.target  # ... and where to now
+        if want[0] < target[0] or want[1] > target[1]:  # the values leave it: wider at once
+            target = (min(target[0], want[0]), max(target[1], want[1]))
+            state.full = now
+        elif hi - lo >= self.RANGE_USED * (target[1] - target[0]):
+            state.full = now
+        elif now - state.full >= self.RANGE_NARROW_S:  # little of it used for a while
+            target, state.full = want, now
+        state.target, state.shown, state.at, state.values = target, shown, now, (lo, hi)
+        near = (target[1] - target[0]) * 0.002
+        return shown, abs(shown[0] - target[0]) > near or abs(shown[1] - target[1]) > near
+
+    def _range_now(self, widget: dict[str, Any], now: float) -> tuple[float, float] | None:
+        """A graph's own range at ``now``, on its way to the one it glides to (in video mode
+        between two strips); None for a graph with ``min`` and ``max``, or none drawn yet."""
+        state = self._ranges.get(widget["id"])
+        if state is None or (widget["min"] is not None and widget["max"] is not None):
+            return None
+        if not self.animate:
+            return state.shown
+        k = 1 - math.exp(-max(0.0, now - state.at) / self.RANGE_GLIDE_S)
+        lo, hi = (a + (b - a) * k for a, b in zip(state.shown, state.target, strict=True))
+        lo, hi = min(lo, state.values[0]), max(hi, state.values[1])
+        live = self.motion.value(widget["sensor"], now) if self.continuous else None
+        if isinstance(live, int | float):  # the newest point, at the right edge, inside too
+            lo, hi = min(lo, live), max(hi, live)
+        return lo, hi
+
+    def _restretch(
+        self, widget: dict[str, Any], layer: Image.Image, pad: int, drawn: tuple[float, float],
+        now_range: tuple[float, float],
+    ) -> Image.Image:  # fmt: skip
+        """``layer`` (a strip's window, ``pad`` px larger on every side), drawn in the range
+        ``drawn``, as it looks in ``now_range``: stretched or squeezed upright, a few per cent
+        at most (the strips follow the range ten times a second), so it glides on every
+        frame. A curve on a scale other than linear, or hung from the top, stays as drawn."""
+        if widget.get("scale", "linear") != "linear" or widget.get("direction") == "down":
+            return layer
+        first, last = self._range_rows(widget, self.STRIP_SCALE)
+        first, length = first / self.STRIP_SCALE, (last - first) / self.STRIP_SCALE
+        span, span_now = drawn[1] - drawn[0], now_range[1] - now_range[0]
+        if span <= 0 or span_now <= 0:
+            return layer
+        a = span / span_now  # a row of the drawn curve, r, is a * r + c now
+        c = first + length - length * (drawn[1] - now_range[0]) / span_now - a * first
+        if max(abs(c), abs((a - 1) * (first + length) + c)) < 0.3:  # under a third of a pixel
+            return layer
+        # row y of the result shows row y / a + top of the layer: a resize of that band
+        width, height = layer.size
+        top = pad - (pad + c) / a
+        bottom = top + height / a
+        y0, y1 = math.floor(top) - 1, math.ceil(bottom) + 1  # (beyond the layer: clear)
+        band = layer.crop((0, y0, width, y1))
+        return band.resize(
+            (width, height), Image.Resampling.BILINEAR, box=(0, top - y0, width, bottom - y0)
+        )
 
     # -- graphs in video mode ------------------------------------------------
     #
@@ -3171,6 +3281,7 @@ class Renderer:
     STRIP_SCALE = 2  # drawn twice as large: half-pixel steps, as SPUR II's curves
     STRIP_AHEAD_S = 0.5  # a strip reaches this far past the next reading
     STRIP_EVERY_S = 0.25  # a graph asks for a new strip at most this often
+    STRIP_GLIDE_S = 0.1  # ... and this often while its own range glides (small steps)
     STRIP_PARTS = 8  # a slow graph's steps are cut into at most this many
 
     def _graph_seconds(self, widget: dict[str, Any]) -> float:
@@ -3219,14 +3330,15 @@ class Renderer:
             job = self._strip_job(widget, history, now, per_point, every, margin, parts)
             strip = strips.ready = job()
         valid = self._valid_until(strip, key)
-        due = valid < strip.until or now >= strip.until - self.STRIP_EVERY_S
-        if due and strips.building is None and now - strips.asked >= self.STRIP_EVERY_S:
+        due = strip.gliding or valid < strip.until or now >= strip.until - self.STRIP_EVERY_S
+        every_s = self.STRIP_GLIDE_S if strip.gliding else self.STRIP_EVERY_S
+        if due and strips.building is None and now - strips.asked >= every_s:
             strips.asked = now
             job = self._strip_job(widget, history, now, per_point, every, margin, parts)
             if self.background_builds:
-                if self._builder is None:
-                    self._builder = _Builder()
-                strips.building = self._builder.submit(job)
+                if self._strip_builder is None:
+                    self._strip_builder = _Builder("render-strips")
+                strips.building = self._strip_builder.submit(job)
             else:
                 strip = strips.ready = job()
                 valid = strip.until
@@ -3239,7 +3351,12 @@ class Renderer:
         patch = valid < now and (
             self._apart(widget, strip, now) >= 0.4 or self._apart(widget, strip, beyond) >= 4
         )
-        content = ("timeline", id(strip), offset, phase, part)
+        now_range = self._range_now(widget, now)  # (its own range: where it is this frame)
+        if now_range is not None:
+            now_range = (round(now_range[0], 3), round(now_range[1], 3))
+            if now_range == tuple(round(v, 3) for v in strip.bounds):
+                now_range = None
+        content = ("timeline", id(strip), offset, phase, part, now_range)
         hit = self._cache.get(wid)
         if not patch and hit is not None and hit[0] == content:
             return hit[1]
@@ -3263,8 +3380,12 @@ class Renderer:
             layer = _between(
                 window(phase * strip.parts, offset, left), following, part, strip.parts
             )
+        if now_range is not None:  # its own range glides: on its way in every frame
+            layer = self._restretch(widget, layer, pad, strip.bounds, now_range)
         x, y = widget["x"], widget["y"]
         piece = Piece(layer, x - pad, y - pad, [x, y, w, h])
+        if widget.get("clip"):
+            piece = _clip_sides(piece)
         self._cache[wid] = (None if patch else content, piece)
         return piece
 
@@ -3346,25 +3467,34 @@ class Renderer:
         made = spring.made if spring is not None else 0
         pieces = tuple(spring.pieces) if spring is not None else ()
         until = (last + ahead) / RATE
+        # its range from the values up to now: those it draws ahead come in over the next
+        # moment, and the range with them (the strips follow it ten times a second)
+        numbers = [v for v in values[: (last - first) // every + 1] if v is not None]
+        numbers = numbers or [v for v in values if v is not None]
+        bounds, gliding = (0.0, 1.0), False
+        if numbers:
+            bounds, gliding = self._glided_bounds(widget, numbers, now)
 
         def job() -> _Strip:
             strip = _Strip(made, now, until, pieces)
-            strip.parts = parts
-            return self._draw_strip(widget, values, first, per_point, every, strip)
+            strip.parts, strip.gliding = parts, gliding
+            return self._draw_strip(widget, values, first, per_point, every, strip, bounds)
 
         return job
 
     def _draw_strip(
         self, widget: dict[str, Any], values: list[float | None], first: int, per_point: float,
-        every: int, strip: _Strip,
+        every: int, strip: _Strip, bounds: tuple[float, float] | None = None,
     ) -> _Strip:  # fmt: skip
         """Draw the curve through ``values`` (point ``first`` on, every
-        ``every``-th) onto ``strip``: an image per half-pixel step, glow and all,
-        and per part of a step (``strip.parts``) one between it and the next."""
+        ``every``-th) onto ``strip`` in the value range ``bounds`` (default: the values'):
+        an image per half-pixel step, glow and all, and per part of a step
+        (``strip.parts``) one between it and the next."""
         s, h = self.STRIP_SCALE, widget["h"]
         widget = self._dense(widget, every * per_point)
         numbers = [v for v in values if v is not None]
-        bounds = self._graph_bounds(widget, numbers) if numbers else (0.0, 1.0)
+        if bounds is None:
+            bounds = self._graph_bounds(widget, numbers) if numbers else (0.0, 1.0)
         top = self._fade_top(widget, numbers, bounds, s)
         origin = math.floor(first * per_point) - 1  # the strip's left edge, at ``s``
         last = first + (len(values) - 1) * every
@@ -3576,11 +3706,36 @@ class _Strip:
         self.phases: list[Image.Image] = []
         self.parts = 1
         self.halo: Image.Image | None = None  # the glow alone, for beside the window
+        self.gliding = False  # drawn while the graph's own range glided: the next comes soon
 
     def covers(self, left: int, w: int, s: int) -> bool:
         """Whether a window of ``w`` pixels from ``left`` (at scale ``s``) lies on it."""
         offset = left - self.origin
         return offset >= 0 and offset // s + w <= self.width
+
+
+def _clip_sides(piece: Piece) -> Piece:
+    """``piece`` without what lies left and right of its box (its glow there)."""
+    x, _, w, _ = piece.box or (piece.x, 0, piece.layer.width, 0)
+    left = max(0, x - piece.x)
+    right = min(piece.layer.width, x + w - piece.x)
+    if left == 0 and right == piece.layer.width:
+        return piece
+    layer = piece.layer.crop((left, 0, right, piece.layer.height))
+    return replace(piece, layer=layer, x=piece.x + left)
+
+
+class _Range:
+    """A graph's own range as it glides (Renderer._glided_bounds)."""
+
+    def __init__(
+        self, bounds: tuple[float, float], now: float, values: tuple[float, float]
+    ) -> None:
+        self.shown = bounds  # the range drawn last
+        self.target = bounds  # the range it glides to
+        self.at = now  # when it was drawn
+        self.full = now  # when the values last used much of the target
+        self.values = values  # the lowest and highest value then: always inside
 
 
 class _Strips:

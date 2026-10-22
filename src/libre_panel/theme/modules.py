@@ -1740,39 +1740,59 @@ def build_game(b: _Build, _src: Source) -> None:
             width=number_w * 0.36)  # fmt: skip
     if number_h > b.ts * 6.5:
         # what holds the frame rate down (the GPU, the CPU or the game's cap), and the longest
-        # frame since the last reading: a stutter shows
+        # frame since the last reading: a stutter shows. As large as the room beside the
+        # number lets them be, two by two where it is wide (on the 12.3" they stood small in
+        # a lot of room)
         rows = (("low", "game.low", "{value:.0f}", t("1% low")),
                 ("frametime", "game.frametime", "{value:.1f} ms", t("Frame time")),
                 ("limiter", "game.limiter", "", t("Limited by")),
                 ("peak", "game.frametime_peak", "{value:.0f} ms", t("Longest frame")))  # fmt: skip
+        room_w = number_w * 0.36
+        cols = 2 if room_w >= b.ts * 12 else 1
+        lines, col_w = math.ceil(len(rows) / cols), room_w / cols
+        step = max(b.ts * 2.4, min(number_h * 0.9 / lines, col_w * 0.6))
+        value_size = max(b.ts * 1.05, step * 0.4)
+        label_size = max(b.ts * 0.85, min(step * 0.17, b.ts * 1.2))
+        compact = step <= b.ts * 2.4  # (a small card: the rows from the number's top, as ever)
+        block = step * (lines - 1) + label_size * 1.3 + CAP * value_size
+        first = cap if compact else y + (number_h - block) / 2
         for i, (name, key, fmt, text) in enumerate(rows):
-            line = cap + i * b.ts * 2.4
-            if line + CAP * b.ts * 1.2 > y + number_h:
+            line = first + (i // cols) * step
+            at = unit_x + (i % cols) * col_w
+            below = line + label_size * 1.3  # the value's cap line, under its name
+            end = line + CAP * b.ts * 1.2 if compact else below + CAP * value_size
+            if end > y + number_h:
                 break
+            width = col_w - b.ts * 0.5
             if name != "limiter":
-                b.label(f"{name}-label", text, unit_x, line, b.ts * 0.85, width=number_w * 0.36)
-                b.value(name, key, fmt, unit_x, line + b.ts * 1.1, b.ts * 1.05,
-                        color=b.c("text2"), width=number_w * 0.36,
+                b.label(f"{name}-label", text, at, line, label_size, width=width)
+                b.value(name, key, fmt, at, below, value_size, color=b.c("text2"), width=width,
                         hide_if_missing=True)  # fmt: skip
                 continue
             b.needs = "game.fps,game.limiter"
-            b.label(f"{name}-label", text, unit_x, line, b.ts * 0.85, width=number_w * 0.36)
+            b.label(f"{name}-label", text, at, line, label_size, width=width)
             for what, said in (("gpu", "GPU"), ("cpu", "CPU"), ("cap", t("Frame cap"))):
                 b.needs = f"game.fps,game.limiter={what}"
-                b.add("text", f"limiter-{what}", x=round(unit_x), text=said, color=b.c("text2"),
-                      max_width=round(number_w * 0.36), tabular=False,
-                      **b._text_fields(b.ts * 1.05, line + b.ts * 1.1, "display_font"))  # fmt: skip
+                b.add("text", f"limiter-{what}", x=round(at), text=said, color=b.c("text2"),
+                      max_width=round(width), tabular=False,
+                      **b._text_fields(value_size, below, "display_font"))  # fmt: skip
             b.needs = "game.fps"
         b.out = [w_ for w_ in b.out if w_["id"] != "unit"]  # the rows say what it is
         b.label("unit", "FPS", x, cap + CAP * size + b.ts * 0.8, b.ts, color=color,
                 width=number_w * 0.6)  # fmt: skip
     if graph:
-        if stacked:
-            gx, gy, gw, gh = x, y + number_h + b.pad, w, h - number_h - b.pad
+        clip = False
+        if stacked:  # under the numbers from one edge of the card to the other, inside its line
+            edge = max(1, round(b.frame_u / 160)) if b.card_on else 0
+            radius = round(b.style["radius"] * b.frame_u / 200) if b.card_on else 0
+            gx, gy, gw = b.x + edge, y + number_h + b.pad, b.w - 2 * edge
+            gh = b.y + b.h - edge - radius / 2 - gy  # (its fill fades out above the corners)
+            clip = True
         else:
             gx = x + number_w + b.pad
             gy, gw, gh = y, x + w - gx, h
         b.graph("history", "game.fps", gx, gy, gw, gh, color, None, None)  # its own range
+        b.out[-1]["clip"] = clip
     b.needs = "!game.fps"
     icon = min(b.iw, b.ih) * 0.3
     b.icon("idle-icon", "gamepad", b.ix + (b.iw - icon) / 2, b.iy + b.ih / 2 - icon * 0.8, icon,

@@ -159,6 +159,10 @@ large digits; a portable zip that is portable; and much more that was collected 
   first panel's ring and graph show (*Whole processor* in the cores module); and Encore's and
   Almanac's companions say "No weather set up" while the weather is off, instead of the date
   and the month that the first panel shows (*Without weather* in the weather module)
+- **Arena fills its cards**: the game card's 1 % low, frame time, what holds the frame rate
+  down and the longest frame are as large as the room beside the number lets them be, two
+  by two where it is wide; Arena's rings beside a companion on the 9.2" show the temperature
+  and the power under them
 - **One look for every card**: Lumen, Encore, Almanac, Studio and the round report frame
   their cards as the modules and the companions do, in every size: a faint line, corners
   and line as thick as the card's size up to half the panel's height. Lumen's card for the
@@ -185,6 +189,20 @@ large digits; a portable zip that is portable; and much more that was collected 
 - `tools/panels_bench.py`: how much two panels in video mode slow each other down
 
 **Fixes**
+- Arena's rings moved in jerks where Lumen's glide: a lit ring's light was made whole for every
+  value, ten milliseconds a frame on the 12.3", so its pictures came late. It is now the light
+  of the whole ring up to the tip, made anew only around the tip: the same pixels, a third of
+  the time (every lit ring gains, Lumen's too); and the graphs' strips are drawn in a thread
+  of their own, so a ring's picture no longer waits behind them
+- Arena reads its values once a second and glides 0.6 s, as Lumen: it asked twice a second,
+  but LibreHardwareMonitor gives new temperatures, power and clocks once a second, so its
+  rings glided half a second and stood still for the other half, and the processor's load
+  in half-second windows made them twitch
+- Arena's frame rate (on the 12.3" most of all) scaled up and down in jumps whenever a peak
+  came into the graph or left it: a graph on its own range now keeps room around the values,
+  widens at once as they rise, narrows only after a while, and glides there, on every frame
+  in the smooth mode. The game's graph runs from one edge of its card to the other, its glow
+  kept inside (`clip`)
 - A panel beside the first (a companion screen) showed "--" for the ping and no processes:
   its process now tells the first panel's what its theme reads, so the sources there count
   the processes, ask the ping and read the sensors of LibreHardwareMonitor for it too

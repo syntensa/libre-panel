@@ -664,3 +664,20 @@ def test_the_night_over_the_suns_arc_needs_the_suns_times():
     parts, _ = expand(theme({"module": "sun", "cols": 3, "rows": 2}, model="turing-12.3-usb"))
     night = next(w for w in parts if w["id"].endswith("night-icon"))
     assert set(night["needs"].split(",")) == {"sun.rise", "!sun.progress"}
+
+
+@pytest.mark.parametrize(
+    ("model", "cols", "rows"), [("turing-12.3-usb", 5, 3), ("turing-9.2-usb", 4, 2)]
+)
+def test_the_games_graph_runs_from_one_edge_of_its_card_to_the_other(model, cols, rows):
+    """Arena's frame rate on the 12.3" stopped short of the card's edges: under the numbers
+    it spans the card inside its line, its glow kept between them (``clip``), and ends above
+    the rounded corners, where its fill has faded out."""
+    parts, _ = expand(theme({"module": "game", "cols": cols, "rows": rows}, model=model))
+    card = next(w for w in parts if w["id"] == "m0/card")
+    graph = next(w for w in parts if w["type"] == "graph")
+    line = card["outline_width"]
+    assert graph["x"] == card["x"] + line and graph["w"] == card["w"] - 2 * line
+    assert graph["clip"] is True and graph["min"] is None and graph["max"] is None
+    bottom = graph["y"] + graph["h"]
+    assert card["y"] + card["h"] - card["radius"] <= bottom <= card["y"] + card["h"] - line

@@ -352,6 +352,100 @@ def _arc(widget: dict[str, Any], frac: float, stroke: int, room: int) -> np.ndar
     return _PICTURES.get(key, make)
 
 
+def _arc_part(widget: dict[str, Any], frac: float, stroke: int, room: int,
+              box: tuple[int, int, int, int]) -> np.ndarray:  # fmt: skip
+    """:func:`_arc`'s coverage in ``box`` (x0, y0, x1, y1) of its canvas alone, drawn on the
+    same grid: the same pixels there."""
+    u = 2
+    w, h, th = widget["w"], widget["h"], widget["thickness"]
+    x0, y0, x1, y1 = box
+    mask = Image.new("L", ((x1 - x0) * u, (y1 - y0) * u), 0)
+    cx, cy = (w + 2 * room) * u / 2 - x0 * u, (h + 2 * room) * u / 2 - y0 * u
+    rx, ry = (w - th) / 2 + stroke / 2, (h - th) / 2 + stroke / 2
+    start, end = widget["start_angle"], widget["end_angle"]
+    ImageDraw.Draw(mask).arc(
+        [cx - rx * u, cy - ry * u, cx + rx * u, cy + ry * u], start,
+        start + (end - start) * frac, fill=255, width=max(1, stroke * u),
+    )  # fmt: skip
+    return np.asarray(mask.resize((x1 - x0, y1 - y0), Image.Resampling.LANCZOS), np.float32) / 255
+
+
+def _sweep_light(widget: dict[str, Any], stroke: int, room: int, halo: float):
+    """The light of a ring's whole sweep without its colour: how opaque (L) and how far
+    towards white (L) each pixel is (:func:`light`'s, which is linear in the colour)."""
+
+    def make() -> tuple[Image.Image, Image.Image]:
+        rgba = light(_arc(widget, 1.0, stroke, room), np.zeros(3, np.float32), halo)
+        return Image.fromarray(rgba[..., 3]), Image.fromarray(rgba[..., 0])  # (black: white share)
+
+    key = ("sweep-light", widget["w"], widget["h"], widget["thickness"], widget["start_angle"],
+           widget["end_angle"], stroke, room, halo)  # fmt: skip
+    return _PICTURES.get(key, make)
+
+
+def _ring_light(widget: dict[str, Any], frac: float, colour: Any, stroke: int, room: int,
+                halo: float) -> Image.Image:  # fmt: skip
+    """The light of a ring's arc of ``frac`` in ``colour``, as :func:`light` makes it of
+    :func:`_arc`, pixel for pixel: the light of the whole sweep (made once) up to the arc's
+    tip, and around the tip, and the start of a closed ring, the light made anew in a small
+    window. Made whole for every value, a gliding ring of the 12.3" took ten milliseconds
+    a frame and came late (Arena's); this takes a few."""
+    w, h = widget["w"], widget["h"]
+    width, height = w + 2 * room, h + 2 * room
+    start, end = widget["start_angle"], widget["end_angle"]
+    tip = start + (end - start) * frac
+    c = np.asarray(colour[:3], np.float32)
+    opaque, white = _sweep_light(widget, stroke, room, halo)
+    rgb = Image.composite(
+        Image.new("RGB", (width, height), (255, 255, 255)),
+        Image.new("RGB", (width, height), tuple(int(v) for v in colour[:3])), white,
+    )  # fmt: skip
+    sweep = rgb.convert("RGBA")
+    sweep.putalpha(opaque)
+    gap = 360 - abs(end - start)
+    sector = Image.new("L", (width, height), 0)
+    far = width + height
+    ImageDraw.Draw(sector).pieslice(
+        [width / 2 - far, height / 2 - far, width / 2 + far, height / 2 + far],
+        min(start, end) - gap / 2, max(tip, min(start, end) - gap / 2), fill=255,
+    )  # fmt: skip
+    out = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    out.paste(sweep, (0, 0), sector)
+    radius = (min(w, h) - widget["thickness"]) / 2
+    reach = math.ceil(stroke / 2 + 3 * halo) + 3  # how far the tip changes the light
+    margin = math.ceil(3 * halo) + 4  # the coverage it is made of around that
+
+    def window(angle: float) -> tuple[tuple[int, int, int, int], tuple[int, int, int, int]]:
+        x = width / 2 + (w - widget["thickness"]) / 2 * math.cos(math.radians(angle))
+        y = height / 2 + (h - widget["thickness"]) / 2 * math.sin(math.radians(angle))
+        inner = (max(0, math.floor(x - reach)), max(0, math.floor(y - reach)),
+                 min(width, math.ceil(x + reach)), min(height, math.ceil(y + reach)))  # fmt: skip
+        outer = (max(0, inner[0] - margin), max(0, inner[1] - margin),
+                 min(width, inner[2] + margin), min(height, inner[3] + margin))  # fmt: skip
+        return inner, outer
+
+    def patch(inner, outer) -> Image.Image:
+        local = light(_arc_part(widget, frac, stroke, room, outer), c, halo)
+        x0, y0 = inner[0] - outer[0], inner[1] - outer[1]
+        return Image.fromarray(local, "RGBA").crop(
+            (x0, y0, x0 + inner[2] - inner[0], y0 + inner[3] - inner[1])
+        )
+
+    tip_inner, tip_outer = window(tip)
+    if gap * math.pi / 180 * radius < 2 * reach + 2:  # closed: the sweep's light has no start
+        inner, outer = window(start)
+        apart = (tip_outer[2] <= outer[0] or outer[2] <= tip_outer[0]
+                 or tip_outer[3] <= outer[1] or outer[3] <= tip_outer[1])  # fmt: skip
+        if apart:  # its start the same at every value but these: kept
+            key = ("ring-start", w, h, widget["thickness"], start, end, tuple(c), stroke, room)
+            start_patch = _PICTURES.get(key, lambda: patch(inner, outer))
+        else:
+            start_patch = patch(inner, outer)
+        out.paste(start_patch, inner[:2])
+    out.paste(patch(tip_inner, tip_outer), tip_inner[:2])
+    return out
+
+
 def gauge_piece(renderer: Any, widget: dict[str, Any], frac: float, paint) -> Piece:
     """The lit ring: its groove, and the value's arc of light on it."""
     x, y, w, h = widget["x"], widget["y"], widget["w"], widget["h"]
@@ -364,13 +458,8 @@ def gauge_piece(renderer: Any, widget: dict[str, Any], frac: float, paint) -> Pi
     if frac > 0:
         a, b = paint
         stroke = max(2, round(widget["thickness"] * RING_CORE))
-        mask = _arc(widget, frac, stroke, room)
         colour = a if b is None else mix(b[:3], a[:3], frac)  # a gradient: where the arc ends
-        key = ("ring-light", w, h, widget["thickness"], widget["start_angle"],
-               widget["end_angle"], frac, tuple(colour), stroke, room)  # fmt: skip
-        rgba = _PICTURES.get(key, lambda: light(mask, np.asarray(colour[:3], np.float32),
-                                                RING_HALO * unit))  # fmt: skip
-        image = Image.fromarray(rgba, "RGBA")
+        image = _ring_light(widget, frac, colour, stroke, room, RING_HALO * unit)
         if a[3] < 255:
             image = _alpha_scaled(image, a[3] / 255)
         canvas.alpha_composite(image)

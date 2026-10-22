@@ -445,9 +445,9 @@ def test_a_value_that_is_not_a_number_is_a_gap_in_a_graphs_history():
     drawn = []
     made = renderer._graph_piece
 
-    def spy(widget, values, slots):
+    def spy(widget, values, slots, *bounds):
         drawn.append(values)
-        return made(widget, values, slots)
+        return made(widget, values, slots, *bounds)
 
     renderer._graph_piece = spy
     renderer.render(Snapshot(readings={"v": Reading("v", 50.0)}, history={"v": history}))
@@ -470,14 +470,14 @@ def test_a_weather_code_that_is_no_number_is_a_cloud_not_a_missing_icon():
 
 def lived(name, frames=4):
     """A renderer of a built-in theme as the main loop drives it in video mode (the helper
-    thread, the dust), a few frames in, and the thread that builds for it."""
+    threads, the dust), a few frames in, and the threads that build for it."""
     renderer = Renderer(load_theme(find_theme(name)), animate=True)
     renderer.continuous = renderer.background_builds = True
     renderer.fps = 25
     for k in range(frames):
         renderer.render(demo_snapshot(fixed_time=1_700_000_000), 10.0 + k / 25)
-    builder = renderer._builder
-    return renderer, builder._thread if builder is not None else None
+    builders = (renderer._builder, renderer._strip_builder)
+    return renderer, [builder._thread for builder in builders if builder is not None]
 
 
 @pytest.mark.parametrize("name", BUILTIN)
@@ -488,9 +488,9 @@ def test_a_renderer_the_loop_lets_go_of_is_freed_with_its_last_reference(name):
     import gc
     import weakref
 
-    renderer, thread = lived(name)
+    renderer, threads = lived(name)
     renderer.close()
-    if thread is not None:
+    for thread in threads:
         thread.join(10)
     ref = weakref.ref(renderer)
     gc.collect()
@@ -510,12 +510,12 @@ def test_a_renderer_frozen_at_the_first_frame_is_freed_when_it_is_let_go_of(name
     import gc
     import weakref
 
-    renderer, thread = lived(name)
+    renderer, threads = lived(name)
     gc.collect()
     gc.freeze()
     try:
         renderer.close()
-        if thread is not None:
+        for thread in threads:
             thread.join(10)
         ref = weakref.ref(renderer)
         del renderer

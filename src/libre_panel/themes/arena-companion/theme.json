@@ -33,9 +33,9 @@
     "color": "#0A1119",
     "image": null
   },
-  "refresh_ms": 500,
+  "refresh_ms": 1000,
   "animation": {
-    "smoothing_ms": 500
+    "smoothing_ms": 600
   },
   "style": {
     "card": "glass",
