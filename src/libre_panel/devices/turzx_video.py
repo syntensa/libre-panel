@@ -442,7 +442,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         rotate = 270 if orientation_of(*size) == "landscape" else 180  # as to_native
         settings = self.settings
         if settings.maxrate == "auto":
-            place = str(getattr(self.transport, "place", None) or self.transport.pid)
+            transport = self.transport  # (None in a test that starts the encoder alone)
+            place = str(getattr(transport, "place", None) or getattr(transport, "pid", "") or "")
             key = (self.model.id if self.model else "", place, size)
             self.rate = RATES.get(key)
             if self.rate is None:
