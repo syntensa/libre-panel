@@ -193,7 +193,9 @@ the [protocol notes](protocol/thermalright.md). Unverified.
 
 Not yet: the 9.16" with the LY1 controller (`0416:5409`), which only InfoPanel documents, and
 Thermalright's other screens (Frozen Warframe, Elite Vision, the AIO pump screens and others on
-`0416:5302`, `0416:5406`, `87ad:70db` and as USB mass storage), whose pictures differ.
+`0416:5302`, `0416:5406`, `87ad:70db` and as USB mass storage), whose pictures differ. One of
+them on `0416:5302` says what it is when asked: Libre Panel names it in the log, leaves it
+alone and looks on for other panels.
 
 ## BeadaPanel
 

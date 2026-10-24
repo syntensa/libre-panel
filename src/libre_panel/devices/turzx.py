@@ -188,8 +188,12 @@ class TurzxDisplay(Display):
         other = other_usb_model()
         if other is not None:
             impl = self._driver(other, configured=False)
-            impl.open()
-            return impl
+            try:
+                impl.open()
+                return impl
+            except DeviceError as exc:  # (a screen of a kind it does not drive: look on)
+                impl.close()
+                missing = exc
         if jonsbo_zc360.present():
             impl = self._driver(find_model(jonsbo_zc360.MODEL_ID), configured=False)
             impl.open()

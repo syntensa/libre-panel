@@ -230,6 +230,26 @@ def test_auto_finds_a_trofeo_after_the_turzx_panels_and_lian_li(bus, monkeypatch
         assert screen.model.id == "thermalright-trofeo-6.86"
 
 
+def test_auto_looks_on_past_a_thermalright_screen_it_does_not_drive(bus, monkeypatch):
+    """0416:5302 is the id of many of Thermalright's screens: one of another kind does not keep
+    auto from the panels after it."""
+    from libre_panel.devices import jonsbo_zc360
+
+    def no_usb_panel(pid=None, beside=(), skip=0):
+        raise DeviceError("no Turing/TURZX USB panel found")
+
+    looked = []
+    monkeypatch.setattr(turzx_usb.UsbTransport, "open", staticmethod(no_usb_panel))
+    monkeypatch.setattr(lianli_usb, "present_model", lambda: None)
+    monkeypatch.setattr(jonsbo_zc360, "present", lambda: looked.append("zc360") or False)
+    monkeypatch.setattr(serial_link, "_ports", lambda: [])
+    hid = FakeHidScreen(kind=0x3A)
+    bus((hid, 0x5302))
+    with pytest.raises(DeviceError, match="does not know yet"):  # (when there is no other)
+        opened().open()
+    assert looked == ["zc360"] and not taken(hid)
+
+
 def test_the_packets_of_a_picture():
     exact = bytes(range(256)) * 31  # 7936 bytes: 16 packets of 496, no filler
     writes = thermalright.bulk_writes(exact)
