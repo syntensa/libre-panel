@@ -50,7 +50,7 @@ motion (the video mode is for the TURZX USB panels). The panel test's speed chec
 | `turing-3.5` | 3.5" | 480×320 | USB serial, rev. A | **supported** — runs, as its owners report |
 | `turing-4.6-usb` | 4.6" | 960×320 | USB, V1.x | unverified |
 | `turing-5` | 5" | 800×480 | USB serial, rev. C | unverified |
-| `turing-5.2-usb` | 5.2" | 1280×720 | USB, V1.x | unverified |
+| `turing-5.2-usb` | 5.2" | 1280×720 | USB, V1.x | unverified — stills as JPEG: it shows no PNG |
 | `turing-8-usb` | 8" | 1280×800 | USB, V1.x | unverified |
 | `turing-8.8` | 8.8" | 1920×480 | USB serial, rev. C (V0.x) | **supported** — runs, as its owners report |
 | `turing-8.8-usb` | 8.8" | 1920×480 | USB, V1.x | **supported** — runs, as its owners report |
@@ -60,6 +60,14 @@ motion (the video mode is for the TURZX USB panels). The panel test's speed chec
 USB (V1.x) panels identify as VID `0x1CBE` with a size-specific PID; see
 [protocol notes](protocol/turzx-usb.md). The 9.2" panel is 480×1920, not the
 462×1920 listed elsewhere — measured on the device.
+
+Stills go as PNG where that is proven, on the 9.2" and the 12.3" (about 9 a second without
+the video mode). The 5.2" shows nothing of a PNG, so Libre Panel sends it JPEG
+stills, which its hardware decodes; `still = "jpeg"` in `[device]` (*Settings → Panel →
+Advanced*, *Stills*) does that on any TURZX USB panel. A JPEG still on the 9.2" is 464 pixels
+wide, not 480: its decoder works in blocks of 16 and only 462 columns show, and a wider JPEG
+wraps round. Libre Panel leaves out the 16 columns beyond, all behind the bezel, and never
+stretches the picture ([JPEG stills](protocol/turzx-usb.md#jpeg-stills-101)).
 
 Their video mode (up to 50 frames a second) encodes with ffmpeg, which the Windows and Linux
 downloads carry; nothing else is to be installed. With a pip install, install ffmpeg yourself
@@ -283,7 +291,8 @@ check `doctor` waits for Enter, so you are watching the panel when it dims.
 Known so far: the 9.2" hides 18 px at the top in landscape (on the left in
 portrait). The editor shows such a strip as a hatched guide and snaps to its
 edge; the built-in layouts keep text and values out of it. Nothing is cut
-off or moved: a background may run under the bezel. With `rotate = 180`
+off or moved: a background may run under the bezel (with JPEG stills the
+9.2" gets only 2 of those 18 rows, see above). With `rotate = 180`
 (upside down) the strip is at the opposite edge of the picture; the layouts
 do not know that yet.
 

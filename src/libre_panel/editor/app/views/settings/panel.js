@@ -1,8 +1,9 @@
 // Settings → Panel: the panel that was found, smooth motion (the video mode) and its frame
 // rate, the name of the standby clip while smooth motion lacks it, brightness and which way up
 // the panel is mounted, the start screen; under Advanced where the pictures go, the file they go
-// to without a panel, the standby clip's name once it is set, the serial port and ffmpeg; and the
-// panels beside this one, each with its model, theme, brightness and port.
+// to without a panel, how a TURZX USB panel takes its stills, the standby clip's name once it is
+// set, the serial port and ffmpeg; and the panels beside this one, each with its model, theme,
+// brightness and port.
 
 import { normalTheme, themeName } from "../../core/actions.js";
 import { endpoints } from "../../core/api.js";
@@ -860,6 +861,30 @@ const driverName = (name) =>
     virtual: t("Never the panel (a file only)"),
   })[name] || name;
 
+/**
+ * How a TURZX USB panel takes its pictures without smooth motion (device.still): as PNG, the
+ * layer over the video, or as JPEG, the one under it, which its hardware decodes. Automatic is
+ * JPEG on the 5.2", which shows no PNG, and PNG on the others, where it is proven.
+ */
+function StillsRow({ still }) {
+  return html`<${SettingRow}
+    class="stills-row"
+    title=${t("Stills")}
+    hint=${t("How the pictures go to the panel without smooth motion. Automatic: JPEG on the 5.2″, which shows no PNG, and PNG on the others.")}
+  >
+    <${Segmented}
+      label=${t("Stills")}
+      value=${still}
+      onChange=${(value) => value !== still && change({ "device.still": value })}
+      options=${[
+        { value: "auto", label: t("Automatic") },
+        // (the formats' names, the same in every language)
+        ...["png", "jpeg"].map((value) => ({ value, label: value.toUpperCase() })),
+      ]}
+    />
+  <//>`;
+}
+
 function AdvancedCard() {
   const config = useConfig();
   const catalog = useCatalog();
@@ -874,6 +899,8 @@ function AdvancedCard() {
   />`;
   // the clip's name is asked for above while it is missing; once it is there it is kept here
   const clip = info && videoApplies(config, info) && !info.video.gaps.includes("clip");
+  // a model that is known, and a TURZX USB one (the video's "usb" is also true for none known)
+  const turzx = Boolean(info?.model && info.video.usb);
   return html`<${Disclosure}
     id="panel-advanced"
     title=${t("Advanced")}
@@ -890,6 +917,7 @@ function AdvancedCard() {
     <${SettingRow} title=${t("Picture file")} hint=${t("Where the pictures go when no panel is used. A short name is in the settings folder.")}>
       ${text("device.output", t("Picture file"), "libre-panel-frame.png")}
     <//>
+    ${turzx ? html`<${StillsRow} still=${config.device.still} />` : null}
     ${clip
       ? html`<${SettingRow} title=${t("Name of the standby clip")} hint=${t("The clip your panel plays by itself when the PC starts, as its own app names it. Smooth motion needs it.")}>
           <${ClipField} value=${config.video.local_clip} />

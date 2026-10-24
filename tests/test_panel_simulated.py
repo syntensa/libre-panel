@@ -1,5 +1,7 @@
 """Driver, main loop and doctor against the simulated panel."""
 
+import io
+import struct
 import threading
 import time
 
@@ -54,6 +56,66 @@ def test_driver_reconnects_after_a_hiccup(panel):
     display.show(Image.new("RGB", (1920, 480)))
     assert panel.commands == [10, 14, 10, 14, 102]  # resync, brightness again, frame
     assert len(panel.frames) == 1
+
+
+def jpeg_stills_on(panel, frame, model=None):
+    """What a 102 and a 101 of ``frame`` weigh on ``panel`` (the transparent layer, the still)."""
+    native = (model.native_width, model.native_height) if model else panel.native
+    layer = len(turzx_usb.transparent_layer(native))
+    return layer, len(turzx_usb.encode_jpeg(turzx_usb.to_native(frame), model=model))
+
+
+def test_jpeg_stills_go_under_a_layer_made_transparent_once(panel):
+    """With ``still = "jpeg"`` the 9.2" gets 101s of its decoder's 464 columns; the PNG layer over
+    them is made transparent once, and again on the new connection after a hiccup."""
+    display = TurzxUsbDisplay(DeviceConfig(driver="turzx", still="jpeg"))
+    display.open()
+    frame = Image.new("RGB", (1920, 480), "teal")
+    display.show(frame)
+    display.show(frame)
+    assert panel.commands == [10, 102, 101, 101]
+    assert panel.frames[0].getextrema()[3] == (0, 0)  # the layer over the stills: see-through
+    assert [jpeg.size for jpeg in panel.jpegs] == [(464, 1920)] * 2
+    red, green, blue = panel.jpegs[0].getpixel((100, 100))  # turned as the PNG frames are
+    assert red < 20 and abs(green - 128) < 8 and abs(blue - 128) < 8
+    layer, still = jpeg_stills_on(panel, frame, display.model)
+    assert display.counters.bytes == layer + 2 * still
+    panel.fail_next_writes = 1
+    display.show(frame)  # reconnects: the layer again, then the still
+    assert panel.commands[4:] == [10, 102, 101]
+    assert len(panel.jpegs) == 3 and display.counters.usb_errors == 1
+    assert display.counters.bytes == 2 * layer + 3 * still
+    display.close()
+
+
+def test_the_5_2_takes_its_stills_as_jpeg_by_itself(monkeypatch):
+    """The 5.2" shows nothing of a PNG: with ``still = "auto"`` it gets JPEGs of its whole
+    framebuffer (720 is whole blocks of 16)."""
+    fake = FakePanel(pid=0x0050, native=(720, 1280))
+    monkeypatch.setattr(
+        turzx_usb.UsbTransport,
+        "open",
+        staticmethod(lambda pid=None, beside=(): transport_for(fake)),
+    )
+    display = TurzxUsbDisplay(DeviceConfig(driver="turzx"))
+    display.open()
+    display.show(Image.new("RGB", (1280, 720), "orange"))
+    display.show(Image.new("RGB", (1280, 720), "orange"))
+    display.close()
+    assert display.model.id == "turing-5.2-usb"
+    assert fake.commands == [10, 102, 101, 101]
+    assert fake.frames[0].size == (720, 1280) and fake.frames[0].getextrema()[3] == (0, 0)
+    assert [jpeg.size for jpeg in fake.jpegs] == [(720, 1280)] * 2
+
+
+def test_the_fake_panel_refuses_a_jpeg_of_the_framebuffer_s_width_on_the_9_2(panel):
+    """A 480-wide JPEG wraps on the 9.2": the simulated panel says so, as a test would need."""
+    transport = transport_for(panel)
+    buffer = io.BytesIO()
+    Image.new("RGB", (480, 1920)).save(buffer, format="JPEG")
+    jpeg = buffer.getvalue()
+    with pytest.raises(AssertionError, match="decoder's layer"):
+        transport.command(101, struct.pack(">I", len(jpeg)), jpeg)
 
 
 def test_driver_gives_up_when_unplugged(panel):

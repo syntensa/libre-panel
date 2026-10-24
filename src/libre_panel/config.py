@@ -36,6 +36,8 @@ DEFAULT_THEME = "libre-default"
 SYMBOL_PACKS = ("classic", "vivid")
 # How much moves on the panel (app.calm): calm where the panel is slow, full, or calm everywhere
 MOTIONS = ("auto", "full", "calm")
+# How a TURZX USB panel takes its stills: "auto" (JPEG on the 5.2", PNG elsewhere), "png", "jpeg"
+STILLS = ("auto", "png", "jpeg")
 DEFAULT_SYMBOLS = "vivid"
 
 _DEFAULT_CONFIG_TEMPLATE = """\
@@ -455,6 +457,10 @@ class DeviceConfig:
     orientation: str = ""
     # "auto": calm on the slow USB serial panels, full elsewhere; "full"; "calm" (MOTIONS)
     motion: str = "auto"
+    # TURZX USB panels: each still as "png" (102, the layer over the video) or "jpeg" (101, the
+    # layer under it, decoded in hardware: faster); "auto" is JPEG on the 5.2", which shows no
+    # PNG, and PNG on the others, where it is proven (STILLS)
+    still: str = "auto"
     dark_on_quit: bool = False  # a black picture and its light off when Libre Panel quits
     dark_on_sleep: bool = True  # so too while the computer sleeps (Windows), lit when it wakes
     # a brightness of its own at night (night_now): from night_from to night_to, over midnight
@@ -953,6 +959,10 @@ def _parse_device(dev: dict[str, Any], where: str) -> DeviceConfig:
     if motion not in MOTIONS:
         raise ConfigError(f'{where}.motion: "auto", "full" or "calm"')
     device.motion = motion
+    still = _expect(dev.get("still", device.still), str, f"{where}.still")
+    if still not in STILLS:
+        raise ConfigError(f'{where}.still: "auto", "png" or "jpeg"')
+    device.still = still
     for name in ("dark_on_quit", "dark_on_sleep", "night", "dark_when_away"):
         given = dev.get(name, getattr(device, name))
         setattr(device, name, _expect(given, bool, f"{where}.{name}"))

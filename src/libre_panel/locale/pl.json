@@ -2484,7 +2484,9 @@
     "auto is high on the 9.2\" and the 12.3\" (measured to show there; it compresses far better) and baseline elsewhere; main and high ask more of the panel's decoder.": "auto to high na 9,2\" i 12,3\" (tam sprawdzono, że obraz jest; kompresuje znacznie lepiej) i baseline gdzie indziej; main i high więcej wymagają od dekodera panelu.",
     "auto is the graphics card's encoder where it was measured to show and ffmpeg can start it (AMD's), else x264 on the processor. NVIDIA's and Intel's are an experiment. An encoder that cannot start says why in the log.": "auto to koder karty graficznej tam, gdzie sprawdzono, że obraz jest, i ffmpeg może go uruchomić (AMD), inaczej x264 na procesorze. NVIDIA i Intel to eksperyment. Koder, który nie startuje, mówi w dzienniku dlaczego.",
     "the PC was slow": "PC był wolny",
-    "x264's crf: lower is sharper and needs more bits. 20 is the default, 18 near lossless to the eye, 25 the first measurement's. (NVIDIA's encoder takes it too; AMD's and Intel's take their quality from the cap.)": "crf x264: niższy jest ostrzejszy i potrzebuje więcej bitów. 20 to wartość domyślna, 18 dla oka niemal bezstratne, 25 to wartość z pierwszego pomiaru. (Koder NVIDIA też go przyjmuje; kodery AMD i Intela biorą jakość z górnej granicy.)"
+    "x264's crf: lower is sharper and needs more bits. 20 is the default, 18 near lossless to the eye, 25 the first measurement's. (NVIDIA's encoder takes it too; AMD's and Intel's take their quality from the cap.)": "crf x264: niższy jest ostrzejszy i potrzebuje więcej bitów. 20 to wartość domyślna, 18 dla oka niemal bezstratne, 25 to wartość z pierwszego pomiaru. (Koder NVIDIA też go przyjmuje; kodery AMD i Intela biorą jakość z górnej granicy.)",
+    "Stills": "Obrazy statyczne",
+    "How the pictures go to the panel without smooth motion. Automatic: JPEG on the 5.2″, which shows no PNG, and PNG on the others.": "Jak obrazy trafiają do panelu bez płynnego ruchu. Automatycznie: JPEG na 5,2″, który nie wyświetla PNG, i PNG na pozostałych."
   },
   "fields": {
     "agent": "agent",
