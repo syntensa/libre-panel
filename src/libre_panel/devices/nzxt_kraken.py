@@ -235,7 +235,7 @@ class KrakenDisplay(Display):
                 time.sleep(0.2)
                 for bucket in BUCKETS:
                     self._ask(0x32, 0x02, bucket)
-        except usb.core.USBError as exc:
+        except (usb.core.USBError, OSError) as exc:  # (OSError: the hidraw node's)
             self.close()
             self.counters.usb_errors += 1
             raise DeviceError(

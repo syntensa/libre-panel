@@ -156,7 +156,7 @@ class ThermaltakeDisplay(Display):
                             "the {panel} did not start: {error}",
                             panel=self.describe(),
                             error=f"{name}: no 200",
-                        )  # fmt: skip
+                        )
                     )
         except usb.core.USBError as exc:
             self.close()
