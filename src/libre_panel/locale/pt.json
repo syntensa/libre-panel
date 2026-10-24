@@ -2484,7 +2484,14 @@
     "auto is high on the 9.2\" and the 12.3\" (measured to show there; it compresses far better) and baseline elsewhere; main and high ask more of the panel's decoder.": "auto é high no de 9,2\" e no de 12,3\" (verificado que aparece lá; comprime muito melhor) e baseline nos demais; main e high exigem mais do decodificador do painel.",
     "auto is the graphics card's encoder where it was measured to show and ffmpeg can start it (AMD's), else x264 on the processor. NVIDIA's and Intel's are an experiment. An encoder that cannot start says why in the log.": "auto é o codificador da placa de vídeo onde foi verificado que aparece e o ffmpeg consegue iniciá-lo (AMD), senão x264 no processador. NVIDIA e Intel são um experimento. Um codificador que não inicia diz o porquê no log.",
     "the PC was slow": "o PC estava lento",
-    "x264's crf: lower is sharper and needs more bits. 20 is the default, 18 near lossless to the eye, 25 the first measurement's. (NVIDIA's encoder takes it too; AMD's and Intel's take their quality from the cap.)": "O crf do x264: mais baixo é mais nítido e precisa de mais bits. 20 é o padrão, 18 quase sem perdas aos olhos, 25 o da primeira medição. (O codificador da NVIDIA também o usa; os da AMD e da Intel tiram a qualidade do teto.)"
+    "x264's crf: lower is sharper and needs more bits. 20 is the default, 18 near lossless to the eye, 25 the first measurement's. (NVIDIA's encoder takes it too; AMD's and Intel's take their quality from the cap.)": "O crf do x264: mais baixo é mais nítido e precisa de mais bits. 20 é o padrão, 18 quase sem perdas aos olhos, 25 o da primeira medição. (O codificador da NVIDIA também o usa; os da AMD e da Intel tiram a qualidade do teto.)",
+    "Brightness and mounting of this panel: Settings → Panel.": "Brilho e montagem deste painel: Ajustes → Painel.",
+    "CPU and GPU, and {rest} W for the rest of the PC": "CPU e GPU, mais {rest} W para o resto do PC",
+    "Cost": "Custo",
+    "Energy": "Energia",
+    "Pause panels": "Pausar os painéis",
+    "Resume panels": "Retomar os painéis",
+    "at {price} {currency} per kWh": "a {price} {currency} por kWh"
   },
   "fields": {
     "agent": "agente",

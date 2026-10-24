@@ -11,6 +11,7 @@ import { VERTICAL, themeEntry, useMounted, versionFor } from "../../core/orienta
 import { saveSettings } from "../../core/settings.js";
 import { setPref, store, useStore } from "../../core/state.js";
 import { runtime } from "../../core/stats.js";
+import { designPages, target, targetStatus, useTarget } from "../../core/target.js";
 import { html, useRef, useState } from "../../lib/preact.js";
 import { modeName, panelName, stateText } from "../../shell/panel-popover.js";
 import { navigate } from "../../shell/views.js";
@@ -42,9 +43,10 @@ const protocolName = (model) => (model.protocol_name.startsWith("USB bulk") ? "U
 /** How the model's panel plugs in, unless another model has the same name (two Turing 8.8″). */
 const connection = (model, models) => (models.filter((other) => other.label === model.label).length > 1 ? null : protocolName(model));
 
-/** The state of the panel as the card says it: a title, the dot's state and the line below. */
-export function panelSummary(app, model, shown) {
-  const panel = app.panel || {};
+/** The state of the panel as the card says it: a title, the dot's state and the line below.
+ * ``status``: the panel's, where it is not the first (target.js). */
+export function panelSummary(app, model, shown, status = app.panel) {
+  const panel = status || {};
   const stats = panel.stats || {};
   const name = model ? panelName(model) : null;
   const theme = themeName(panel.theme || shown);
@@ -151,20 +153,23 @@ export function PanelStrip({ compact = false }) {
 
 // -- the card of the launcher ------------------------------------------------------------------
 
-/** The theme on the panel: the one the panel says, else config.toml's. */
-const shownTheme = (app) => (app.available && app.panel?.theme) || normalTheme();
+/** The theme on the panel the app is about: the one the panel says, else the one its pages
+ * name (a panel beside the first), else config.toml's. */
+const shownTheme = (app, status = app.panel) =>
+  (app.available && status?.theme) || (target() > 1 ? designPages()?.pages?.[0]?.theme : null) || normalTheme();
 
 /** Open the theme on the panel in Design (asks about unsaved changes first). */
 export async function editShown() {
-  const id = shownTheme(store.get().app);
-  if (id && store.get().doc?.id !== id && !(await openTheme(id, { page: "normal" }))) return;
+  const state = store.get();
+  const id = shownTheme(state.app, targetStatus(state));
+  if (id && state.doc?.id !== id && !(await openTheme(id, { page: "normal" }))) return;
   navigate("design");
 }
 
-function Picture({ app, theme, size }) {
+function Picture({ app, status, number, theme, size }) {
   const running = app.available && !app.quit;
-  const state = app.panel?.state;
-  const live = useLivePicture({ width: 960, every: 1000, on: running && state === "showing" });
+  const state = status?.state;
+  const live = useLivePicture({ width: 960, every: 1000, on: running && state === "showing", panel: number });
   const ratio = size ? `${size[0]} / ${size[1]}` : "4 / 1";
   let note = null;
   if (running && live.src === null) {
@@ -234,11 +239,16 @@ function pictureSize(model, theme, way) {
 export function PanelCard() {
   const { app } = useStore((s) => ({ app: s.app, themes: s.themes, versions: s.versions }));
   const way = useMounted();
+  const models = useStore((s) => s.specs?.models || []);
+  const number = useTarget(); // the panel the header chose: Start shows that one
+  const status = useStore((s) => targetStatus(s));
+  const first = number === 1;
   const { connected } = usePanelModel();
+  const model = first ? connected : connectedModel({ available: app.available, panel: status }, models);
   const running = app.available && !app.quit;
-  const shown = shownTheme(app);
-  const summary = app.available ? panelSummary(app, connected, shown) : null;
-  const paused = app.panel?.state === "paused";
+  const shown = shownTheme(app, status);
+  const summary = app.available ? panelSummary(app, model, shown, status) : null;
+  const paused = status?.state === "paused";
   return html`<section class="panel-card" aria-label=${t("Panel")}>
     <div class="panel-card-head">
       <span class=${`state-dot ${summary ? summary.state : "none"}`} aria-hidden="true"></span>
@@ -255,8 +265,19 @@ export function PanelCard() {
         <${Icon} name="pencil" size=${16} strokeWidth=${2.2} /> ${t("Edit theme")}
       </button>
     </div>
-    <${Picture} app=${app} theme=${shown} size=${pictureSize(running ? connected : null, shown, way)} />
-    ${running
+    <${Picture} app=${app} status=${status} number=${number} theme=${shown}
+      size=${first ? pictureSize(running ? connected : null, shown, way) : status?.size || pictureSize(running ? model : null, shown, "landscape")} />
+    ${running && !first
+      ? html`<div class="panel-card-controls">
+          <button type="button" class="btn" onClick=${() => appAction(paused ? "resume" : "pause")}>
+            <${Icon} name=${paused ? "play" : "pause"} size=${14} /> ${paused ? t("Resume panels") : t("Pause panels")}
+          </button>
+          <span class="muted">${t("Brightness and mounting of this panel: Settings → Panel.")}</span>
+          <span class="grow"></span>
+          <button type="button" class="link-btn" onClick=${() => navigate("settings", "panel")}>${t("Panel settings")}</button>
+        </div>`
+      : null}
+    ${running && first
       ? html`<div class="panel-card-controls">
           <button type="button" class="btn" onClick=${() => appAction(paused ? "resume" : "pause")}>
             <${Icon} name=${paused ? "play" : "pause"} size=${14} /> ${paused ? t("Resume panel") : t("Pause panel")}

@@ -1311,7 +1311,10 @@ class EditorHandler(BaseHTTPRequestHandler):
             found = history.history(history.database(config), span, time.time())
         except ValueError as exc:
             return self._error(str(exc))
-        self._json({**found, "memory": "memory" in config.services.enabled})
+        power = None  # the span's energy and its cost, where the power service prices it
+        if "power" in config.services.enabled:
+            power = history.energy(found["summary"], config.services.options.get("power") or {})
+        self._json({**found, "memory": "memory" in config.services.enabled, "power": power})
 
     def _outside_notice(self, method: str, url: ParseResult) -> None:
         """A notice from another program (notify.py): only where ``allow_notify`` is on and

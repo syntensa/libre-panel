@@ -231,12 +231,19 @@ function Chart({ chart, data, span }) {
 
 // -- the rest --------------------------------------------------------------------------------------------
 
-function Summary({ summary }) {
+function Summary({ summary, power }) {
   const tiles = [
     { id: "cpu", label: t("CPU temperature"), value: `${whole(summary.cpu_temp)} °C`, note: t("peak {value} °C", { value: whole(summary.cpu_temp_max) }) },
     { id: "gpu", label: t("GPU temperature"), value: `${whole(summary.gpu_temp)} °C`, note: t("peak {value} °C", { value: whole(summary.gpu_temp_max) }) },
     { id: "kept", label: t("Kept"), value: duration(summary.minutes * 60), note: t("of which {time} in games", { time: duration(summary.game_minutes * 60) }) },
   ];
+  if (power) {
+    // the power service prices the electricity: what the time kept added up to, as it counts
+    tiles.push(
+      { id: "energy", label: t("Energy"), value: `${power.kwh.toFixed(2)} kWh`, note: t("CPU and GPU, and {rest} W for the rest of the PC", { rest: Math.round(power.rest_w) }) },
+      { id: "cost", label: t("Cost"), value: `${power.cost.toFixed(2)} ${power.currency}`, note: t("at {price} {currency} per kWh", { price: power.price, currency: power.currency }) },
+    );
+  }
   return html`<div class="history-tiles" role="list">
     ${tiles.map(
       (tile) => html`<div key=${tile.id} class="history-tile" role="listitem" data-tile=${tile.id}>
@@ -343,7 +350,7 @@ export function HistoryView({ rest, switcher }) {
         </div>`
       : null}
     ${kept
-      ? html`<${Summary} summary=${data.summary} />
+      ? html`<${Summary} summary=${data.summary} power=${data.power} />
           ${CHARTS().map((chart) => html`<${Chart} key=${chart.id} chart=${chart} data=${data} span=${span} />`)}
           <div class="history-lists">
             <${Games} games=${data.games} />

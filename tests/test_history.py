@@ -78,6 +78,21 @@ def test_the_summary_counts_the_minutes_kept_and_those_in_games(db):
     assert history(db, "week", NOW)["summary"]["minutes"] == 41
 
 
+def test_the_span_s_energy_and_cost_as_the_power_service_prices_it(db):
+    """The minutes' watts add up: the CPU's (twice each minute's number here), the GPU's
+    (unknown here) and the rest of the PC at the power service's ``rest_w``, priced per kWh;
+    nothing without a price, or without minutes."""
+    from libre_panel.editor.history import energy
+
+    day = history(db, "day", NOW)["summary"]
+    assert day["cpu_watt_minutes"] == 4070.0 and day["gpu_watt_minutes"] is None
+    found = energy(day, {"price": 0.3, "rest_w": 50, "currency": "€"})
+    assert found == {"kwh": 0.1, "cost": 0.03, "price": 0.3, "currency": "€", "rest_w": 50.0}
+    assert energy(day, {"price": 0}) is None and energy(day, {}) is None
+    assert energy({"minutes": 0}, {"price": 0.3}) is None
+    assert energy(day, {"price": "no"}) is None
+
+
 def test_the_last_rounds_and_the_games_played_most(db):
     found = history(db, "month", NOW)
     assert [r["game"] for r in found["rounds"]] == ["Doom", "Hades", "Doom"]  # newest first

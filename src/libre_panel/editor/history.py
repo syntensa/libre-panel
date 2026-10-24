@@ -58,13 +58,14 @@ def _summary(con: sqlite3.Connection, since: int) -> dict[str, Any]:
     row = con.execute(
         "SELECT COUNT(*), SUM(CASE WHEN mode = 'game' THEN 1 ELSE 0 END),"
         " AVG(cpu_temp), MAX(cpu_temp_max), AVG(gpu_temp), MAX(gpu_temp_max),"
-        " AVG(cpu_load), AVG(gpu_load), MAX(cpu_power_max), MAX(gpu_power_max)"
+        " AVG(cpu_load), AVG(gpu_load), MAX(cpu_power_max), MAX(gpu_power_max),"
+        " SUM(cpu_power), SUM(gpu_power)"
         " FROM minutes WHERE ts >= ?",
         [since],
     ).fetchone()
     names = (
         "cpu_temp", "cpu_temp_max", "gpu_temp", "gpu_temp_max", "cpu_load", "gpu_load",
-        "cpu_power_max", "gpu_power_max",
+        "cpu_power_max", "gpu_power_max", "cpu_watt_minutes", "gpu_watt_minutes",
     )  # fmt: skip
     return {
         "minutes": row[0] or 0,
@@ -103,6 +104,30 @@ def _games(con: sqlite3.Connection, since: int) -> list[dict[str, Any]]:
          zip(keys, row, strict=True)}
         for row in rows
     ]  # fmt: skip
+
+
+def energy(summary: dict[str, Any], options: dict[str, Any]) -> dict[str, Any] | None:
+    """The energy the span's minutes add up to and what it cost, as the power service
+    counts it ([services.power]: the CPU's and the GPU's watts a minute at a time, and
+    ``rest_w`` for the rest of the PC, at ``price`` per kWh): ``{kwh, cost, price, currency,
+    rest_w}``; None without a price (the cost is not switched on) or without minutes."""
+    try:
+        price = float(options.get("price", 0) or 0)
+        rest = float(options.get("rest_w", 0) or 0)
+    except (TypeError, ValueError):
+        return None
+    minutes = summary.get("minutes") or 0
+    if price <= 0 or not minutes:
+        return None
+    watt_minutes = (summary.get("cpu_watt_minutes") or 0) + (summary.get("gpu_watt_minutes") or 0)
+    kwh = (watt_minutes + rest * minutes) / 60 / 1000
+    return {
+        "kwh": round(kwh, 2),
+        "cost": round(kwh * price, 2),
+        "price": price,
+        "currency": str(options.get("currency", "€") or "€"),
+        "rest_w": rest,
+    }
 
 
 def history(path: Path, span: str, now: float) -> dict[str, Any]:

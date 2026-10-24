@@ -362,3 +362,44 @@ def test_installed_with_pip_the_card_gives_the_command(app_url, isolated_home): 
         expect(card.locator("code")).to_contain_text("libre-panel@v9.1.0")
         expect(card.get_by_role("link", name="Download")).to_have_count(0)
         expect(card.get_by_role("link", name="What is new")).to_be_visible()
+
+
+def test_start_shows_the_panel_the_header_chose_and_the_header_counts_every_panel(
+    isolated_home, monkeypatch
+):
+    """With three panels (the first and two beside it, PNG files here) the header offers
+    Panel 1, 2 and 3, and Start's card shows the chosen one: its state, its theme, its
+    picture; the first panel's controls (brightness, upside down) stay the first's."""
+    from test_service import FakeRegistry
+
+    from libre_panel.autostart import Autostart
+    from libre_panel.service import BackgroundApp
+
+    isolated_home.mkdir(parents=True, exist_ok=True)
+    out = isolated_home.as_posix()
+    (isolated_home / "config.toml").write_text(
+        f'theme = "libre-default"\nfps = 5\n\n[device]\ndriver = "virtual"\n'
+        f'output = "{out}/one.png"\n'
+        f'\n[[panels]]\ndriver = "virtual"\ntheme = "pico"\noutput = "{out}/two.png"\n'
+        f'\n[[panels]]\ndriver = "virtual"\ntheme = "slate"\noutput = "{out}/three.png"\n',
+        encoding="utf-8",
+    )
+    app = BackgroundApp(port=0, autostart=Autostart("win32", registry=FakeRegistry()))
+    url = app.start()
+    try:
+        with browser_page(url, "home", allow=PICTURE) as page:
+            switch = page.get_by_role("radiogroup", name="Which panel Live shows and Design edits")
+            expect(switch.get_by_role("radio")).to_have_count(3)
+            page.wait_for_selector(".panel-card .state-dot.showing")
+            expect(page.locator(".panel-card h2")).to_contain_text("Libre Default")
+            expect(page.locator(".panel-card-brightness")).to_have_count(1)
+            switch.get_by_role("radio", name="Panel 2").click()
+            expect(page.locator(".panel-card h2")).to_contain_text("Pico", timeout=20000)
+            expect(page.locator(".panel-card-brightness")).to_have_count(0)
+            switch.get_by_role("radio", name="Panel 3").click()
+            expect(page.locator(".panel-card h2")).to_contain_text("Slate", timeout=20000)
+            switch.get_by_role("radio", name="Panel 1").click()
+            expect(page.locator(".panel-card h2")).to_contain_text("Libre Default")
+    finally:
+        app.quit()
+        app.shutdown()
