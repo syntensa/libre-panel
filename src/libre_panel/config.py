@@ -418,19 +418,23 @@ class VideoConfig:
     # Reported to the panel. Its player shows pictures strictly at this rate and
     # never catches up, so it must be above ``fps`` (SPUR II: 60 for 50).
     device_fps: int = 60
-    crf: int = 25
+    # quality: 20 is sharp at little cost (measured on the 12.3" and the 9.2": about 3-4 Mbit/s
+    # at 50 fps on a screen that moves), 25 was the first measurement's
+    crf: int = 20
     preset: str = "superfast"
     keyframe_s: float = 10.0
     # the highest bit rate: "auto" starts at 2 Mbit/s for the 9.2" (1920x480 at 50 fps), more
     # for a panel with more pixels or frames (the 12.3": 3 Mbit/s), then follows the panel: a
-    # step down while it takes less than it is sent, a step up after a calm minute (1-32 Mbit/s);
+    # step down while it takes less than it is sent (never below the start), a step up after a
+    # calm minute (up to 32 Mbit/s);
     # or a rate such as "1500k", "4M"
     maxrate: str = "auto"
-    # An experiment beyond what was measured on the 9.2" (baseline, libx264): the profiles
-    # main and high ask more of the panel's decoder; h264_nvenc (NVIDIA), h264_amf (AMD) and
-    # h264_qsv (Intel) encode on the graphics card, at little cost to the processor
-    profile: str = "baseline"  # "baseline" | "main" | "high"
-    encoder: str = "libx264"  # "libx264" | "h264_nvenc" | "h264_amf" | "h264_qsv"
+    # The profile: "auto" is high on the 9.2" and the 12.3" (measured to show there; it
+    # compresses far better), baseline elsewhere. The encoder: "auto" is the graphics card's
+    # where it was measured to show and ffmpeg can start it (AMD's h264_amf), else x264 on the
+    # processor; h264_nvenc (NVIDIA) and h264_qsv (Intel) are an experiment to set by hand
+    profile: str = "auto"  # "auto" | "baseline" | "main" | "high"
+    encoder: str = "auto"  # "auto" | "libx264" | "h264_nvenc" | "h264_amf" | "h264_qsv"
     ffmpeg: str = ""  # path to ffmpeg; empty = the download's own (bundled.py), else PATH
     # The name the video start command (110) needs: the panel's own standby
     # clip, so its standby behaviour stays as it was.

@@ -31,7 +31,7 @@ import shutil
 import subprocess
 import sys
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -44,10 +44,14 @@ from libre_panel.i18n import t
 log = logging.getLogger(__name__)
 
 X264_PRESETS = ("ultrafast", "superfast", "veryfast", "faster", "fast", "medium")
-# Beyond what was measured on the 9.2" (baseline, libx264): an experiment. main and high ask
-# more of the panel's decoder; the hardware encoders put the work on the graphics card.
-PROFILES = ("baseline", "main", "high")
-ENCODERS = ("libx264", "h264_nvenc", "h264_amf", "h264_qsv")
+# "auto": high where it was measured to show (HIGH_PROFILE_MODELS), baseline elsewhere; main
+# and high ask more of the panel's decoder, and compress better.
+PROFILES = ("auto", "baseline", "main", "high")
+# "auto": the graphics card's encoder where it was measured to show and ffmpeg can start it
+# (AUTO_ENCODERS, in that order), else x264 on the processor. The others are an experiment.
+ENCODERS = ("auto", "libx264", "h264_nvenc", "h264_amf", "h264_qsv")
+HIGH_PROFILE_MODELS = frozenset({"turing-9.2-usb", "turing-12.3-usb"})
+AUTO_ENCODERS = ("h264_amf",)
 
 NAL_SLICE, NAL_IDR = 1, 5
 # NAL types that open a new picture when they follow a slice (H.264 7.4.1.2.3):
@@ -62,13 +66,13 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 @dataclass(frozen=True)
 class EncoderSettings:
     fps: int = 50
-    crf: int = 25
+    crf: int = 20
     preset: str = "superfast"
     keyframe_s: float = 10.0
     maxrate: str = "auto"  # "auto": REFERENCE_RATE scaled by the pixels and the frame rate
     threads: int = 1  # frame threads add a frame of latency each
-    profile: str = "baseline"  # PROFILES
-    encoder: str = "libx264"  # ENCODERS
+    profile: str = "high"  # PROFILES, resolved (never "auto" here: resolve_profile)
+    encoder: str = "libx264"  # ENCODERS, resolved (never "auto" here: resolve_encoder)
 
 
 # The bit rate measured on the 9.2": 2 Mbit/s for its 1920x480 pixels at 50 frames a second.
@@ -111,6 +115,51 @@ def mbit(maxrate: str) -> float:
         return 0.0
 
 
+def resolve_profile(profile: str, model_id: str) -> str:
+    """The H.264 profile for a panel: "auto" is high where it was measured to show (the 9.2"
+    and the 12.3", whose decoder takes 1080p60 of it), baseline elsewhere."""
+    if profile != "auto":
+        return profile
+    return "high" if model_id in HIGH_PROFILE_MODELS else "baseline"
+
+
+_PROBED: dict[tuple[str, str], bool] = {}
+
+
+def encoder_works(ffmpeg: str, encoder: str) -> bool:
+    """Whether ``ffmpeg`` can encode with ``encoder`` on this PC (a hardware encoder needs
+    its card and its driver): two small pictures through it, asked once per run."""
+    key = (ffmpeg, encoder)
+    if key not in _PROBED:
+        command = [
+            ffmpeg, "-hide_banner", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
+            "-s", "64x64", "-framerate", "5", "-i", "-", "-frames:v", "2", "-c:v", encoder,
+            "-f", "null", "-",
+        ]  # fmt: skip
+        try:
+            done = subprocess.run(
+                command, input=bytes(64 * 64 * 3 * 2), capture_output=True, timeout=20,
+                creationflags=NO_WINDOW,
+            )  # fmt: skip
+            _PROBED[key] = done.returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            _PROBED[key] = False
+        if not _PROBED[key]:
+            log.info("video: %s cannot encode here; x264 does", encoder)
+    return _PROBED[key]
+
+
+def resolve_encoder(encoder: str, ffmpeg: str, failed: Collection[str] = ()) -> str:
+    """The encoder to start: the one set, or with "auto" the first of AUTO_ENCODERS that
+    works here and did not fail before (``failed``), else libx264."""
+    if encoder != "auto":
+        return encoder
+    for candidate in AUTO_ENCODERS:
+        if candidate not in failed and encoder_works(ffmpeg, candidate):
+            return candidate
+    return "libx264"
+
+
 def bit_rate(settings: EncoderSettings, size: tuple[int, int]) -> str:
     """The highest bit rate for pictures of ``size``, as ffmpeg takes it: the settings' own,
     or with "auto" the rate it starts with (:func:`auto_rate`)."""
@@ -122,7 +171,10 @@ def bit_rate(settings: EncoderSettings, size: tuple[int, int]) -> str:
 class RateControl:
     """The bit rate of ``maxrate`` "auto" while the panel runs.
 
-    It starts at :func:`auto_rate` and moves along :data:`RATE_STEPS`. A step down when the
+    It starts at :func:`auto_rate` and moves along :data:`RATE_STEPS` from there up: below
+    the start it never goes, since a panel that cannot keep up at that rate cannot keep up
+    with the pictures themselves (fewer frames a second help, fewer bits do not; the 9.2"
+    at 60 fps showed it), and :attr:`floored` says when that happened. A step down when the
     panel takes less than it is sent, seen within a window of :attr:`WINDOW_S` either as the
     sender waiting for room in the panel's queue :attr:`TROUBLE_WAITS` times (its decoder
     lags) or as half the blocks, :attr:`TROUBLE_SLOW` at least, taking longer than a frame
@@ -141,9 +193,10 @@ class RateControl:
     HOLD_S = 600.0
 
     def __init__(self, start: float) -> None:
-        self.steps = sorted({*RATE_STEPS, start})
+        self.steps = [step for step in sorted({*RATE_STEPS, start}) if step >= start]
         self.rate = start
         self.changes = 0
+        self.floored = False  # trouble at the start rate: the frames, not the bits
         self._base: tuple[int, int, int] | None = None  # the counts when the window began
         self._window = self._calm = 0.0
         self._held: dict[float, float] = {}  # step -> until when it is not tried
@@ -164,7 +217,9 @@ class RateControl:
             fails = self._failed.get(self.rate, 0)
             self._failed[self.rate] = fails + 1
             self._held[self.rate] = now + self.HOLD_S * 2**fails
-            return self._move(-1)
+            moved = self._move(-1)
+            self.floored = moved is None
+            return moved
         if now - self._calm < self.CALM_S:
             return None
         above = self._beside(+1)

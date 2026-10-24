@@ -24,13 +24,13 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-# What the video mode was measured with on the 9.2" (docs/protocol/turzx-usb.md).
+# The video mode's defaults (config.py VideoConfig): what every step starts from.
 MEASURED: dict[str, Any] = {
     "video.maxrate": "auto",
-    "video.crf": 25,
+    "video.crf": 20,
     "video.preset": "superfast",
-    "video.profile": "baseline",
-    "video.encoder": "libx264",
+    "video.profile": "auto",
+    "video.encoder": "auto",
     "video.keyframe_s": 10.0,
     "video.fps": 50,
     "video.device_fps": 60,
@@ -88,15 +88,19 @@ def judge(samples: list[dict[str, Any]], first: dict[str, Any], last: dict[str, 
     """One panel's numbers over a step, and the verdict: "failed" when no pictures reached
     the panel, the panel had to be restarted or ffmpeg kept stopping; "stutter" when the
     frame rate fell under nine tenths of the target or the sender kept waiting for room;
-    "no video" when the panel was not in video mode; else "ok"."""
+    "pc" when the frame rate fell but the drawing took most of a frame's time (the PC, not
+    the panel: a game was running); "no video" when the panel was not in video mode; else
+    "ok"."""
     fps, kbps, blocks = (
         _mean(samples, "fps"),
         _mean(samples, "kbps"),
         _mean(samples, "blocks_per_s"),
     )
+    render = _mean(samples, "render_ms")
     target = last.get("target_fps") or first.get("target_fps")
     waits, drops = _delta(first, last, "waits"), _delta(first, last, "drops")
     faults = _delta(first, last, "usb_errors", "panel_restarts", "ffmpeg_restarts")
+    slow = fps is not None and target and fps < 0.9 * target
     if not samples or last.get("max_depth") is None and blocks is None:
         verdict = "no video"
     elif (
@@ -105,13 +109,18 @@ def judge(samples: list[dict[str, Any]], first: dict[str, Any], last: dict[str, 
         or _delta(first, last, "ffmpeg_restarts") >= 2
     ):
         verdict = "failed"
-    elif (fps is not None and target and fps < 0.9 * target) or waits > 10 or drops > 5:
+    elif waits > 10 or drops > 5:
+        verdict = "stutter"
+    elif slow and render is not None and target and render > 0.8 * 1000 / target:
+        verdict = "pc"
+    elif slow:
         verdict = "stutter"
     else:
         verdict = "ok"
     return {
         "fps": fps,
         "target_fps": target,
+        "render_ms": render,
         "kbps": kbps,
         "blocks_per_s": blocks,
         "bit_rate": last.get("bit_rate"),
@@ -122,7 +131,7 @@ def judge(samples: list[dict[str, Any]], first: dict[str, Any], last: dict[str, 
     }
 
 
-WORST = ("no video", "ok", "stutter", "failed")
+WORST = ("no video", "ok", "pc", "stutter", "failed")
 
 
 class ExperimentError(ValueError):

@@ -152,17 +152,25 @@ x264, Constrained Baseline, yuv420p, Annex B:
   the player drains), which the flow control below prevents.
 - Libre Panel scales `-maxrate` with the pixels and the frame rate: 2M is for
   1920×480 at 50 fps; the 12.3" (1920×720) starts at 3M. From there "auto"
-  follows the panel along 1 · 1.5 · 2 · 3 · 4 · 6 · 8 · 12 · 16 · 24 · 32 Mbit/s: a step down when,
+  follows the panel up the steps 4 · 6 · 8 · 12 · 16 · 24 · 32 Mbit/s (never
+  below its start: a panel that cannot keep up there cannot keep up with the
+  pictures, as the 9.2" at 60 fps showed): a step down when,
   within 10 s, the sender waited for room in the queue five times (the decoder
   lags) or half the blocks (25 at least) took longer than 20 ms to send (the
   link lags; a healthy block takes about 1 ms), a step up after 60 s without
   that (a failed step is held off for 10 min, twice as long each time it fails
   again). Each step starts ffmpeg anew: x264 cannot change its rate on the way.
-- Untested on the panels, offered as an experiment (`video.profile`,
-  `video.encoder`): the profiles main and high (CABAC, 8×8 transform; the
-  T113's decoder takes them, whether the firmware does is the question) and
-  the hardware encoders h264_nvenc, h264_amf, h264_qsv, each set to no
-  B-frames, one slice, the same keyframe spacing and rate cap.
+- Measured on the 12.3" with a 9.2" beside it (2026-10, Settings → Panel →
+  Video experiment, during a game): the 12.3" took every step without the
+  sender waiting for room, nothing dropped, no faults, with caps up to 32M
+  and streams up to 447 KB/s (AMD's encoder); crf 18 cost 190 KB/s at 21
+  fps there and 244 KB/s at 48 fps on the 9.2"; the profiles **main and
+  high show**, and so does **h264_amf** (AMD), alone and with high. So the
+  defaults are crf 20, profile high on these two, and AMD's encoder where
+  ffmpeg can start it. The 9.2" at 60 fps (70 told) **cannot**: 55 delivered,
+  the sender waited 65 times. The hardware encoders h264_nvenc and h264_qsv
+  are set to the same (no B-frames, one slice, the keyframe spacing, the
+  cap) and remain an experiment until someone sees them show.
 - Inside the 12.3" (board `QS400_123inch_V1.1`, 2025-12) sits an Allwinner
   T113-S3 with a custom top mark (eLQFP128, dual Cortex-A7, 128 MB DDR3 in the
   package, SPI flash, USB 2.0 OTG). Its decoder takes H.264 up to 1080p@60, so

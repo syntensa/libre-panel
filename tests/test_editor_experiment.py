@@ -51,6 +51,10 @@ def test_a_panel_s_numbers_are_judged():
     assert judge([stats()], first, stats(panel_restarts=1))["verdict"] == "failed"
     assert judge([stats()], first, stats(ffmpeg_restarts=2))["verdict"] == "failed"
     assert judge([stats()], first, stats(ffmpeg_restarts=1))["verdict"] == "ok"  # one is a hiccup
+    # the frame rate fell while the drawing took most of a frame's time: the PC, not the panel
+    busy = judge([stats(fps=22.0, render_ms=19.0)], first, last)
+    assert (busy["verdict"], busy["render_ms"]) == ("pc", 19.0)
+    assert judge([stats(fps=22.0, render_ms=4.0)], first, last)["verdict"] == "stutter"
     none = {"fps": 2.0, "target_fps": 10, "max_depth": None, "blocks_per_s": None}
     assert judge([none], none, none)["verdict"] == "no video"
     assert judge([], {}, {})["verdict"] == "no video"
@@ -112,7 +116,7 @@ def test_the_run_tries_every_step_judges_every_panel_and_brings_the_settings_bac
     assert app.written[0] == {**MEASURED}  # each step starts from the measured settings
     assert app.written[1] == {**MEASURED, "video.crf": 18}
     assert app.written[-1] == {**MEASURED, "video.crf": 22}  # the person's own, back
-    assert app.video["crf"] == 22 and app.video["profile"] == "baseline"
+    assert app.video["crf"] == 22 and app.video["profile"] == "auto"
     by_id = {r["id"]: r for r in run.results}
     assert [p["panel"] for p in by_id["auto"]["panels"]] == [1, 2]
     assert by_id["auto"]["verdict"] == "ok"

@@ -495,8 +495,8 @@ def test_the_video_experiment_writes_each_choice_at_once_and_leads_back(
     with browser_page(app_url, "settings/panel") as page:
         card = page.locator("#panel-video-experiment")
         expect(card).to_contain_text("Video experiment")
-        back = card.get_by_role("button", name="Back to the measured settings")
-        expect(back).to_be_disabled()  # nothing but the measured settings yet
+        back = card.get_by_role("button", name="Back to the defaults")
+        expect(back).to_be_disabled()  # nothing but the defaults yet
         radio(page, "Quality", "18").click()
         waits_for(page, lambda: settings_config().device.video.crf == 18)
         radio(page, "Cap on the bit rate", "16 Mbit/s").click()
@@ -512,9 +512,9 @@ def test_the_video_experiment_writes_each_choice_at_once_and_leads_back(
         expect(card.locator(".experiment-log")).to_contain_text("Nothing about the video")
         expect(back).to_be_enabled()
         back.click()
-        waits_for(page, lambda: settings_config().device.video.crf == 25)
+        waits_for(page, lambda: settings_config().device.video.crf == 20)
         video = settings_config().device.video
-        assert (video.maxrate, video.profile, video.encoder) == ("auto", "baseline", "libx264")
+        assert (video.maxrate, video.profile, video.encoder) == ("auto", "auto", "auto")
         assert (video.fps, video.device_fps) == (50, 60)
         expect(back).to_be_disabled()
 

@@ -246,9 +246,9 @@ function VideoCard() {
   ${applies ? html`<${ExperimentCard} video=${config.video} />` : null}`;
 }
 
-// What the video mode was measured with on the 9.2"; the experiment's "Back to the measured" writes it.
-const MEASURED = { "video.maxrate": "auto", "video.crf": 25, "video.preset": "superfast", "video.profile": "baseline",
-                   "video.encoder": "libx264", "video.keyframe_s": 10, "video.fps": 50, "video.device_fps": 60 };  // fmt: skip
+// The video mode's defaults (config.py); the experiment's "Back to the defaults" writes them.
+const MEASURED = { "video.maxrate": "auto", "video.crf": 20, "video.preset": "superfast", "video.profile": "auto",
+                   "video.encoder": "auto", "video.keyframe_s": 10, "video.fps": 50, "video.device_fps": 60 };  // fmt: skip
 const RATES = ["auto", "4M", "8M", "16M", "24M", "32M"];
 const QUALITIES = [16, 18, 20, 22, 25];
 const PRESETS = ["ultrafast", "superfast", "veryfast"];
@@ -272,7 +272,7 @@ const STEP_LABELS = () => ({
   "fps-60": t("60 frames a second"),
   flood: t("flood: 24 Mbit/s at quality 16"),
 });
-const VERDICTS = () => ({ ok: t("ok"), stutter: t("stutters"), failed: t("failed"), "no video": t("no video") });
+const VERDICTS = () => ({ ok: t("ok"), pc: t("the PC was slow"), stutter: t("stutters"), failed: t("failed"), "no video": t("no video") });
 const num = (value, digits = 0) => (value == null ? "–" : Number(value).toFixed(digits));
 
 /** The results as plain text, to paste into an issue. */
@@ -358,19 +358,20 @@ function ExperimentCard({ video }) {
   return html`<${Card}
     id="panel-video-experiment"
     title=${t("Video experiment")}
-    text=${t("What your panel takes beyond what was measured on the 9.2\". Each change starts the panel's video anew; the tiles say how it is doing, the log's lines what the video mode did. If the panel shows nothing, go back to the measured settings.")}
-    action=${html`<button type="button" class="btn" disabled=${measured} onClick=${() => change(MEASURED)}>${t("Back to the measured settings")}</button>`}
+    text=${t("What your panel takes beyond the defaults. Each change starts the panel's video anew; the tiles say how it is doing, the log's lines what the video mode did. If the panel shows nothing, go back to the defaults.")}
+    action=${html`<button type="button" class="btn" disabled=${measured} onClick=${() => change(MEASURED)}>${t("Back to the defaults")}</button>`}
   >
     ${row(t("Cap on the bit rate"), t("auto starts at the measured rate and follows the panel: a step down while it takes less than it is sent, a step up after a calm minute. A fixed cap holds."), "maxrate", RATES, (value) => (value === "auto" ? t("auto") : value.replace("M", " Mbit/s")))}
-    ${row(t("Quality"), t("x264's crf: lower is sharper and needs more bits. 25 was measured; 18 is near lossless to the eye. (NVIDIA's encoder takes it too; AMD's and Intel's take their quality from the cap.)"), "crf", QUALITIES)}
+    ${row(t("Quality"), t("x264's crf: lower is sharper and needs more bits. 20 is the default, 18 near lossless to the eye, 25 the first measurement's. (NVIDIA's encoder takes it too; AMD's and Intel's take their quality from the cap.)"), "crf", QUALITIES)}
     ${row(t("Encoder speed"), t("x264's preset: ultrafast asks the least of the processor, veryfast compresses best."), "preset", PRESETS)}
-    ${row(t("Profile"), t("baseline was measured; main and high compress better and ask more of the panel's decoder."), "profile", ["baseline", "main", "high"])}
-    <${SettingRow} title=${t("Encoder")} hint=${t("x264 on the processor, or the graphics card's encoder at little cost to the processor. An encoder that cannot start says why in the log.")}>
+    ${row(t("Profile"), t("auto is high on the 9.2\" and the 12.3\" (measured to show there; it compresses far better) and baseline elsewhere; main and high ask more of the panel's decoder."), "profile", ["auto", "baseline", "main", "high"], (value) => (value === "auto" ? t("auto") : value))}
+    <${SettingRow} title=${t("Encoder")} hint=${t("auto is the graphics card's encoder where it was measured to show and ffmpeg can start it (AMD's), else x264 on the processor. NVIDIA's and Intel's are an experiment. An encoder that cannot start says why in the log.")}>
       <${Select}
         label=${t("Encoder")}
         value=${video.encoder}
         onChange=${(value) => change({ "video.encoder": value })}
         options=${[
+          { value: "auto", label: t("auto") },
           { value: "libx264", label: t("x264 (processor)") },
           { value: "h264_amf", label: t("AMD (h264_amf)") },
           { value: "h264_nvenc", label: t("NVIDIA (h264_nvenc)") },

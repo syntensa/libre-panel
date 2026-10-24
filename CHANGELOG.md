@@ -3,6 +3,14 @@
 ## 0.7.1rc3 — 2026-10-24
 
 **Changes**
+- **Sharper and cheaper video, measured**: the video mode's quality is crf 20 (was 25), the
+  profile is high on the 9.2" and the 12.3" (measured to show there; it compresses far
+  better), and the encoder is the graphics card's where it was measured to show and ffmpeg
+  can start it (AMD's `h264_amf`; one that stops before its first picture is left out, x264
+  takes over), so a game leaves the processor to the game. The bit rate's ladder never goes
+  below its start: a panel that cannot keep up there cannot keep up with the pictures (the
+  9.2" at 60 frames a second), and the log says so. The run of the video experiment tells
+  "the PC was slow" from "stutters" by the drawing time ([Video](docs/CONFIGURATION.md#video))
 - **The screens use their room**: the card of what plays (Lumen, Encore, every size) sets the
   title, the artist and the player a size larger in the middle of the room between the state
   and the progress; Almanac's clock is a tenth larger on the 9.2" and 12.3", and Almanac

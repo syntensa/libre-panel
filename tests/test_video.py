@@ -24,10 +24,11 @@ from libre_panel.config import (  # noqa: E402
     VideoConfig,
     parse_config,
 )
-from libre_panel.devices import turzx_usb, turzx_video  # noqa: E402
+from libre_panel.devices import h264, turzx_usb, turzx_video  # noqa: E402
 from libre_panel.devices.base import Counters, DeviceError, Display  # noqa: E402
 from libre_panel.devices.h264 import (  # noqa: E402
     EncoderSettings,
+    EncoderStopped,
     PictureSplitter,
     RateControl,
     ffmpeg_command,
@@ -95,7 +96,7 @@ def test_ffmpeg_command_follows_the_measured_settings():
     text = " ".join(cmd)
     assert "-s 1920x480" in text and "-vf transpose=1" in text
     assert "sliced-threads=0" in text and "keyint=500:min-keyint=500" in text
-    assert "-profile:v baseline" in text and "repeat-headers=1" in text
+    assert "-profile:v high" in text and "repeat-headers=1" in text and "-crf 20" in text
     assert "hflip,vflip" in " ".join(ffmpeg_command("ffmpeg", (480, 1920), 180, EncoderSettings()))
 
 
@@ -116,37 +117,86 @@ def test_the_bit_rate_grows_with_the_pixels_and_the_frame_rate():
 def test_auto_rate_follows_the_panel_s_queue():
     """ "auto" steps down while the sender keeps waiting for room in the panel's queue, up
     again after a calm minute, and holds a failed step off: ten minutes, then twenty."""
-    control, c = RateControl(3.0), Counters()
+    control, c = RateControl(2.0), Counters()
     assert control.judge(c, 0.0) is None  # the first window begins
+    assert all(control.judge(c, float(second)) is None for second in range(1, 60))
+    assert control.judge(c, 60.0) == 3.0  # a calm minute: a step up
     c.waits += RateControl.TROUBLE_WAITS  # within the window: the panel's decoder lags
-    assert control.judge(c, 1.0) == 2.0
-    assert all(control.judge(c, float(second)) is None for second in range(2, 300))
+    assert control.judge(c, 61.0) == 2.0  # back down, and 3.0 is held off
+    assert all(control.judge(c, float(second)) is None for second in range(62, 661))
     assert control.rate == 2.0  # a calm while, but 3.0 failed lately
-    assert control.judge(c, 602.0) == 3.0  # ten minutes later it is tried again
+    assert control.judge(c, 661.0) == 3.0  # ten minutes later it is tried again
     c.blocks += 100
     c.slow_blocks += RateControl.TROUBLE_SLOW  # a quarter of the blocks slow: a busy PC
-    assert control.judge(c, 603.0) is None
+    assert control.judge(c, 662.0) is None
     c.slow_blocks += RateControl.TROUBLE_SLOW  # half of them: the panel's link lags
-    assert control.judge(c, 605.0) == 2.0
+    assert control.judge(c, 664.0) == 2.0
     assert control.judge(c, 1000.0) is None  # now held off for twenty minutes
     assert control.judge(c, 1900.0) == 3.0
-    assert control.changes == 4
+    assert control.changes == 5
 
     climbing, calm = RateControl(2.0), Counters()  # calm all along: up the steps to the top
     assert climbing.judge(calm, 0.0) is None
     seen = [climbing.judge(calm, float(second)) for second in range(1, 600)]
     assert [rate for rate in seen if rate] == [3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0]
 
-    floor = RateControl(1.0)
-    assert floor.judge(calm, 0.0) is None
+    floor = RateControl(3.0)  # the start is the floor: below it the frames are the trouble
+    assert floor.steps[0] == 3.0 and floor.judge(calm, 0.0) is None
     calm.waits += 9
-    assert floor.judge(calm, 1.0) is None and floor.rate == 1.0  # nothing below
+    assert floor.judge(calm, 1.0) is None and floor.rate == 3.0 and floor.floored
 
     odd = RateControl(2.4)  # a start between the steps is a step of its own
-    assert odd.steps == [1.0, 1.5, 2.0, 2.4, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0]
+    assert odd.steps == [2.4, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0]
 
     assert mbit("auto") == 0.0 and mbit("1500k") == 1.5 and mbit("4M") == 4.0
     assert mbit("2000000") == 2.0 and mbit("2.5M") == 2.5
+
+
+def test_the_profile_and_the_encoder_of_auto_are_resolved_per_panel_and_pc(monkeypatch):
+    from libre_panel.devices.h264 import encoder_works, resolve_encoder, resolve_profile
+
+    assert resolve_profile("auto", "turing-12.3-usb") == "high"
+    assert resolve_profile("auto", "turing-9.2-usb") == "high"
+    assert resolve_profile("auto", "turing-8.8-usb") == "baseline"  # not measured there
+    assert resolve_profile("main", "turing-12.3-usb") == "main"
+    probed = []
+
+    def works(ffmpeg, encoder):
+        probed.append(encoder)
+        return encoder == "h264_amf" and ffmpeg == "with-card"
+
+    monkeypatch.setattr(h264, "encoder_works", works)
+    assert resolve_encoder("auto", "with-card") == "h264_amf"
+    assert resolve_encoder("auto", "without") == "libx264"
+    assert resolve_encoder("auto", "with-card", failed={"h264_amf"}) == "libx264"  # it stopped
+    assert resolve_encoder("h264_nvenc", "without") == "h264_nvenc" and probed  # as set
+    monkeypatch.setattr(h264, "_PROBED", {})
+    assert encoder_works("/no/such/ffmpeg", "h264_amf") is False  # no ffmpeg: no
+    assert h264._PROBED == {("/no/such/ffmpeg", "h264_amf"): False}  # asked once
+
+
+@needs_ffmpeg
+def test_auto_takes_x264_where_no_card_encodes_and_leaves_an_encoder_that_stops(panel, monkeypatch):
+    """ffmpeg here has no card: "auto" probes AMD's encoder once and encodes with x264. An
+    encoder "auto" chose that stops before its first picture is left out from then on,
+    uncounted as a restart."""
+    monkeypatch.setattr(h264, "_PROBED", {})
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    try:
+        frames = moving_frames(4)
+        display.show(frames[0])
+        assert "libx264" in display.encoder.command and display.encoder.name == "libx264"
+        assert h264._PROBED == {(display._ffmpeg, "h264_amf"): False} or h264._PROBED == {}
+        # as if "auto" had chosen a card's encoder that then stopped at once
+        display.encoder.name = "h264_amf"
+        display.encoder.pictures = 0
+        assert display._gave_up(EncoderStopped("no device")) is True
+        assert display._encoders_failed == {"h264_amf"} and display.counters.ffmpeg_restarts == 0
+        display.encoder.pictures = 3  # one that showed pictures and then stopped is a restart
+        assert display._gave_up(EncoderStopped("gone")) is False
+    finally:
+        display.close()
 
 
 def test_find_ffmpeg(tmp_path, monkeypatch):
@@ -166,14 +216,14 @@ def test_find_ffmpeg(tmp_path, monkeypatch):
 
 def test_video_config():
     video = parse_config({"video": {"mode": "on", "fps": 30, "device_fps": 40}}).device.video
-    assert (video.mode, video.fps, video.device_fps, video.crf) == ("on", 30, 40, 25)
+    assert (video.mode, video.fps, video.device_fps, video.crf) == ("on", 30, 40, 20)
     assert parse_config({}).device.video.mode == "auto"
     assert parse_config({"video": {"mode": "off"}}).device.video.mode == "off"
     assert parse_config({"video": {"maxrate": "auto"}}).device.video.maxrate == "auto"
     for bad in ({"mode": "always"}, {"fps": 50, "device_fps": 40}, {"maxrate": "fast"}):
         with pytest.raises(ConfigError):
             parse_config({"video": bad})
-    assert (video.profile, video.encoder) == ("baseline", "libx264")
+    assert (video.profile, video.encoder) == ("auto", "auto")
     tried = parse_config({"video": {"profile": "high", "encoder": "h264_amf"}}).device.video
     assert (tried.profile, tried.encoder) == ("high", "h264_amf")
     for bad in ({"profile": "main10"}, {"encoder": "h264_videotoolbox"}):
@@ -197,7 +247,7 @@ def test_profiles_and_hardware_encoders_are_an_experiment():
         assert got[got.index("-profile:v") + 1] == "main"
         assert got[got.index("-bf") + 1] == "0" and got[got.index("-g") + 1] == str(keyint)
         assert got[got.index("-maxrate") + 1] == "3.0M" and got[-3:] == ["-f", "h264", "-"]
-    amf = command(encoder="h264_amf")  # AMD names the baseline profile differently
+    amf = command(encoder="h264_amf", profile="baseline")  # AMD names baseline differently
     assert amf[amf.index("-profile:v") + 1] == "constrained_baseline"
     with pytest.raises(ValueError):
         command(encoder="h264_videotoolbox")
@@ -686,21 +736,25 @@ def test_an_ffmpeg_that_keeps_stopping_gives_up_but_reconnects_do_not_count(pane
 @needs_ffmpeg
 def test_auto_rate_steps_down_on_a_slow_panel_and_the_counters_say_the_cap(panel, monkeypatch):
     monkeypatch.setattr(turzx_video, "RATES", {})
-    display = TurzxVideoDisplay(video_config())  # maxrate "auto": 2 Mbit/s on the 9.2"
+    display = TurzxVideoDisplay(video_config())  # maxrate "auto": 2 Mbit/s to start with
     display.open()
     try:
         panel.block_delay = 0.05  # 20 blocks a second: every block takes longer than a frame
         frames = noisy_frames(20)
         display.show(frames[0])
         assert display.rate is not None and display.counters.bit_rate == 2.0
-        assert "2.0M" in display.encoder.command
+        assert "2.0M" in display.encoder.command and "libx264" in display.encoder.command
+        display.rate.rate = 3.0  # as after a calm minute: a step up, and ffmpeg anew at it
+        display._stop_encoder()
+        display.show(frames[0])
+        assert display.counters.bit_rate == 3.0 and "3.0M" in display.encoder.command
         deadline = time.monotonic() + 20.0  # ffmpeg and the pipes hold some frames first
         for frame in itertools.cycle(frames[1:]):
             display.show(frame)
-            if display.rate.rate < 2.0 or time.monotonic() > deadline:
+            if display.rate.rate < 3.0 or time.monotonic() > deadline:
                 break
-        assert display.rate.rate == 1.5  # one step down, with ffmpeg started anew
-        assert display.counters.bit_rate == 1.5 and "1.5M" in display.encoder.command
+        assert display.rate.rate == 2.0  # one step down, with ffmpeg started anew
+        assert display.counters.bit_rate == 2.0 and "2.0M" in display.encoder.command
         assert list(turzx_video.RATES.values()) == [display.rate]
         assert next(iter(turzx_video.RATES))[::2] == ("turing-9.2-usb", (1920, 480))
     finally:

@@ -66,6 +66,8 @@ from libre_panel.devices.h264 import (
     find_ffmpeg,
     mbit,
     rate_text,
+    resolve_encoder,
+    resolve_profile,
 )
 from libre_panel.devices.models import PanelModel, orientation_of
 from libre_panel.devices.turzx_usb import (
@@ -354,6 +356,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self.session: VideoSession | None = None
         self.encoder: Encoder | None = None
         self.rate: RateControl | None = None  # of maxrate "auto", once the picture size is known
+        self._encoders_failed: set[str] = set()  # of "auto": one that stopped before a picture
+        self._encoder_said = ""  # the encoder the log was told of
         self._ffmpeg: str | None = None
         self._pictures: queue.Queue[bytes] = queue.Queue(maxsize=2)
         self._sender: threading.Thread | None = None
@@ -441,6 +445,15 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self._stop_encoder()
         rotate = 270 if orientation_of(*size) == "landscape" else 180  # as to_native
         settings = self.settings
+        model_id = self.model.id if self.model else ""
+        settings = replace(
+            settings,
+            profile=resolve_profile(settings.profile, model_id),
+            encoder=resolve_encoder(settings.encoder, self._ffmpeg, self._encoders_failed),
+        )
+        if settings.encoder != self._encoder_said:
+            self._encoder_said = settings.encoder
+            log.info("video: encoding with %s, profile %s", settings.encoder, settings.profile)
         if settings.maxrate == "auto":
             transport = self.transport  # (None in a test that starts the encoder alone)
             place = str(getattr(transport, "place", None) or getattr(transport, "pid", "") or "")
@@ -469,6 +482,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             self.counters.drops += 1  # the stream was replaced, or the panel failed meanwhile
 
         self.encoder = Encoder(command, size, deliver)
+        self.encoder.name = settings.encoder
 
     def _stop_encoder(self) -> None:
         if self.encoder is not None:
@@ -487,6 +501,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         before = control.rate
         rate = control.judge(self.counters, time.monotonic())
         if rate is None:
+            self._floor_said()
             return
         log.info(
             "video: bit rate %s -> %s (%s)",
@@ -495,6 +510,17 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             "the panel takes less than it is sent" if rate < before else "calm for a minute",
         )
         self._stop_encoder()
+
+    def _floor_said(self) -> None:
+        """Once: the panel cannot keep up at the lowest rate, so it is the pictures."""
+        control = self.rate
+        if control is not None and control.floored and not getattr(self, "_floor_told", False):
+            self._floor_told = True
+            log.warning(
+                "video: the panel takes fewer pictures than it is sent at %s already; fewer "
+                "frames a second (video.fps) would help, fewer bits would not",
+                rate_text(control.rate),
+            )
 
     # -- frames ------------------------------------------------------------------
 
@@ -521,9 +547,23 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         except EncoderStopped as exc:
             if self._error is not None:
                 return  # the panel failed meanwhile; the next frame reconnects
-            self._restarting(str(exc))
+            if self._gave_up(exc):
+                pass  # (counted as no restart: "auto" moves on to the next encoder)
+            else:
+                self._restarting(str(exc))
             self._start_encoder(frame.size)
             self._feed(data)
+
+    def _gave_up(self, exc: Exception) -> bool:
+        """Whether an encoder "auto" chose stopped before its first picture (the card or the
+        driver would not have it): then "auto" leaves it out from here on."""
+        encoder = self.encoder
+        name = getattr(encoder, "name", "")
+        if self.settings.encoder != "auto" or name == "libx264" or encoder.pictures:
+            return False
+        self._encoders_failed.add(name)
+        log.warning("video: %s stopped before a picture (%s); x264 takes over", name, exc)
+        return True
 
     def _feed(self, data: bytes) -> None:
         """Hand a frame to ffmpeg. Waiting is right while the panel sets the pace
