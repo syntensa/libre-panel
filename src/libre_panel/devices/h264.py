@@ -15,7 +15,7 @@ project (docs/protocol/turzx-usb.md, "Video layer"):
   with more pixels (the 12.3": 1920x720) or more frames starts with proportionally more
   (``maxrate`` "auto", :func:`auto_rate`), so its pictures and lettering stay as sharp; and
   "auto" then follows the panel (:class:`RateControl`): a step down while the panel takes
-  less than it is sent, a step up again after a calm minute, up to 16 Mbit/s.
+  less than it is sent, a step up again after a calm minute, up to 32 Mbit/s.
 
 :class:`PictureSplitter` cuts ffmpeg's output into pictures by their NAL
 units. That works however the pipe splits the bytes (Windows pipes deliver
@@ -44,6 +44,10 @@ from libre_panel.i18n import t
 log = logging.getLogger(__name__)
 
 X264_PRESETS = ("ultrafast", "superfast", "veryfast", "faster", "fast", "medium")
+# Beyond what was measured on the 9.2" (baseline, libx264): an experiment. main and high ask
+# more of the panel's decoder; the hardware encoders put the work on the graphics card.
+PROFILES = ("baseline", "main", "high")
+ENCODERS = ("libx264", "h264_nvenc", "h264_amf", "h264_qsv")
 
 NAL_SLICE, NAL_IDR = 1, 5
 # NAL types that open a new picture when they follow a slice (H.264 7.4.1.2.3):
@@ -63,6 +67,8 @@ class EncoderSettings:
     keyframe_s: float = 10.0
     maxrate: str = "auto"  # "auto": REFERENCE_RATE scaled by the pixels and the frame rate
     threads: int = 1  # frame threads add a frame of latency each
+    profile: str = "baseline"  # PROFILES
+    encoder: str = "libx264"  # ENCODERS
 
 
 # The bit rate measured on the 9.2": 2 Mbit/s for its 1920x480 pixels at 50 frames a second.
@@ -71,7 +77,7 @@ REFERENCE_RATE = (2.0, 1920 * 480, 50)
 # JPEG stills were measured on the 9.2", and other hosts stream 16-24 Mbit/s of H.264 to the
 # 5.2": docs/protocol/turzx-usb.md); the top is where the encoder's cost outgrows what a
 # panel's dots can show.
-RATE_STEPS = (1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0)
+RATE_STEPS = (1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0)
 
 
 def auto_rate(settings: EncoderSettings, size: tuple[int, int]) -> float:
@@ -242,33 +248,53 @@ def ffmpeg_command(
     video_filter = ROTATION_FILTERS[rotate]
     if video_filter:
         command += ["-vf", video_filter]
-    return command + [
-        "-c:v",
-        "libx264",
-        "-profile:v",
-        "baseline",
-        "-preset",
-        settings.preset,
-        "-tune",
-        "zerolatency",
-        "-threads",
-        str(settings.threads),
-        "-crf",
-        str(settings.crf),
-        "-maxrate",
-        maxrate,
-        "-bufsize",
-        maxrate,
-        "-x264-params",
-        # zerolatency turns slice threads on; the panel needs one slice per picture
-        f"sliced-threads=0:bframes=0:scenecut=0:keyint={keyint}:min-keyint={keyint}"
-        ":ipratio=2.0:repeat-headers=1",
-        "-pix_fmt",
-        "yuv420p",
-        "-f",
-        "h264",
-        "-",
-    ]
+    return command + codec_args(settings, keyint, maxrate) + ["-f", "h264", "-"]
+
+
+def codec_args(settings: EncoderSettings, keyint: int, maxrate: str) -> list[str]:
+    """The encoder's part of the command: x264 as measured on the 9.2", or (an experiment)
+    a hardware encoder with the nearest settings: no B-frames, a keyframe every ``keyint``
+    pictures, the rate capped at ``maxrate``; each makes one slice per picture by default."""
+    encoder, profile = settings.encoder, settings.profile
+    if encoder == "libx264":
+        return [
+            "-c:v",
+            "libx264",
+            "-profile:v",
+            profile,
+            "-preset",
+            settings.preset,
+            "-tune",
+            "zerolatency",
+            "-threads",
+            str(settings.threads),
+            "-crf",
+            str(settings.crf),
+            "-maxrate",
+            maxrate,
+            "-bufsize",
+            maxrate,
+            "-x264-params",
+            # zerolatency turns slice threads on; the panel needs one slice per picture
+            f"sliced-threads=0:bframes=0:scenecut=0:keyint={keyint}:min-keyint={keyint}"
+            ":ipratio=2.0:repeat-headers=1",
+            "-pix_fmt",
+            "yuv420p",
+        ]
+    common = ["-bf", "0", "-g", str(keyint), "-maxrate", maxrate, "-bufsize", maxrate]
+    common += ["-pix_fmt", "nv12"]
+    if encoder == "h264_nvenc":  # NVIDIA: the quality of crf, within the cap
+        tuned = ["-preset", "p1", "-tune", "ll", "-zerolatency", "1", "-no-scenecut", "1"]
+        rate = ["-rc", "vbr", "-cq", str(settings.crf), "-b:v", "0", "-forced-idr", "1"]
+        return ["-c:v", "h264_nvenc", "-profile:v", profile, *tuned, *rate, *common]
+    if encoder == "h264_amf":  # AMD: the rate sets the quality
+        amf_profile = "constrained_baseline" if profile == "baseline" else profile
+        tuned = ["-usage", "lowlatency", "-quality", "speed", "-rc", "vbr_peak", "-b:v", maxrate]
+        return ["-c:v", "h264_amf", "-profile:v", amf_profile, *tuned, *common]
+    if encoder == "h264_qsv":  # Intel: the rate sets the quality
+        tuned = ["-preset", "veryfast", "-look_ahead", "0", "-b:v", maxrate]
+        return ["-c:v", "h264_qsv", "-profile:v", profile, *tuned, *common]
+    raise ValueError(f"video.encoder {encoder!r}: one of {', '.join(ENCODERS)}")
 
 
 def nal_units(data: bytes) -> list[tuple[int, int]]:

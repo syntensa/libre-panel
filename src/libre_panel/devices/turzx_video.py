@@ -347,6 +347,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             preset=self.video.preset,
             keyframe_s=self.video.keyframe_s,
             maxrate=self.video.maxrate,
+            profile=self.video.profile,
+            encoder=self.video.encoder,
         )
         self.session: VideoSession | None = None
         self.encoder: Encoder | None = None

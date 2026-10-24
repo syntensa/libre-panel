@@ -423,9 +423,14 @@ class VideoConfig:
     keyframe_s: float = 10.0
     # the highest bit rate: "auto" starts at 2 Mbit/s for the 9.2" (1920x480 at 50 fps), more
     # for a panel with more pixels or frames (the 12.3": 3 Mbit/s), then follows the panel: a
-    # step down while it takes less than it is sent, a step up after a calm minute (1-16 Mbit/s);
+    # step down while it takes less than it is sent, a step up after a calm minute (1-32 Mbit/s);
     # or a rate such as "1500k", "4M"
     maxrate: str = "auto"
+    # An experiment beyond what was measured on the 9.2" (baseline, libx264): the profiles
+    # main and high ask more of the panel's decoder; h264_nvenc (NVIDIA), h264_amf (AMD) and
+    # h264_qsv (Intel) encode on the graphics card, at little cost to the processor
+    profile: str = "baseline"  # "baseline" | "main" | "high"
+    encoder: str = "libx264"  # "libx264" | "h264_nvenc" | "h264_amf" | "h264_qsv"
     ffmpeg: str = ""  # path to ffmpeg; empty = the download's own (bundled.py), else PATH
     # The name the video start command (110) needs: the panel's own standby
     # clip, so its standby behaviour stays as it was.
@@ -1082,7 +1087,7 @@ _MAXRATE = re.compile(r"^(auto|[0-9]+(\.[0-9]+)?[kKM]?)$")
 
 
 def _parse_video(v: dict[str, Any]) -> VideoConfig:
-    from libre_panel.devices.h264 import X264_PRESETS
+    from libre_panel.devices.h264 import ENCODERS, PROFILES, X264_PRESETS
 
     video = VideoConfig()
     video.mode = _expect(v.get("mode", video.mode), str, "video.mode")
@@ -1100,6 +1105,12 @@ def _parse_video(v: dict[str, Any]) -> VideoConfig:
     video.preset = _expect(v.get("preset", video.preset), str, "video.preset")
     if video.preset not in X264_PRESETS:
         raise ConfigError(f"video.preset: must be one of {', '.join(X264_PRESETS)}")
+    video.profile = _expect(v.get("profile", video.profile), str, "video.profile")
+    if video.profile not in PROFILES:
+        raise ConfigError(f"video.profile: must be one of {', '.join(PROFILES)}")
+    video.encoder = _expect(v.get("encoder", video.encoder), str, "video.encoder")
+    if video.encoder not in ENCODERS:
+        raise ConfigError(f"video.encoder: must be one of {', '.join(ENCODERS)}")
     video.keyframe_s = float(
         _expect(v.get("keyframe_s", video.keyframe_s), (int, float), "video.keyframe_s")
     )

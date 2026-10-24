@@ -1573,7 +1573,9 @@ answer too.
 | `crf` | 25 | quality, 0–51; lower is sharper and needs more USB bandwidth |
 | `preset` | `"superfast"` | x264 speed preset |
 | `keyframe_s` | 10 | seconds between keyframes; below 3 flat backgrounds visibly pulse |
-| `maxrate` | `"auto"` | highest bit rate: `"auto"` starts at 2 Mbit/s for the 9.2" (1920×480 at 50 fps) and proportionally more for a panel with more pixels or frames (the 12.3": 3 Mbit/s), then follows the panel along 1 · 1.5 · 2 · 3 · 4 · 6 · 8 · 12 · 16 Mbit/s: a step down while the panel takes less than it is sent, a step up after a calm minute; the *Data rate* tile under Live says the cap in force. Or a fixed rate such as `"1500k"` or `"4M"` |
+| `maxrate` | `"auto"` | highest bit rate: `"auto"` starts at 2 Mbit/s for the 9.2" (1920×480 at 50 fps) and proportionally more for a panel with more pixels or frames (the 12.3": 3 Mbit/s), then follows the panel along 1 · 1.5 · 2 · 3 · 4 · 6 · 8 · 12 · 16 · 24 · 32 Mbit/s: a step down while the panel takes less than it is sent, a step up after a calm minute; the *Data rate* tile under Live says the cap in force. Or a fixed rate such as `"1500k"` or `"4M"` |
+| `profile` | `"baseline"` | the H.264 profile: `"baseline"` is what was measured on the 9.2"; `"main"` and `"high"` ask more of the panel's decoder (an experiment: if the panel shows nothing, go back) |
+| `encoder` | `"libx264"` | the encoder: `"libx264"` on the processor, as measured; `"h264_nvenc"` (NVIDIA), `"h264_amf"` (AMD) or `"h264_qsv"` (Intel) on the graphics card, at little cost to the processor (an experiment; `crf` and `preset` are x264's, a hardware encoder takes the quality from `maxrate`, NVIDIA's from `crf` too). What ffmpeg says about an encoder it cannot start is in the log |
 | `ffmpeg` | `""` | path to ffmpeg; empty = the download's own, else look in `PATH` |
 | `local_clip` | `""` | see above |
 | `clip_asked` | `false` | `true` once the app has asked for `local_clip` (a name written there, or *Not now*); then it does not ask again |

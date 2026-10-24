@@ -134,8 +134,8 @@ def test_auto_rate_follows_the_panel_s_queue():
 
     climbing, calm = RateControl(2.0), Counters()  # calm all along: up the steps to the top
     assert climbing.judge(calm, 0.0) is None
-    seen = [climbing.judge(calm, float(second)) for second in range(1, 400)]
-    assert [rate for rate in seen if rate] == [3.0, 4.0, 6.0, 8.0, 12.0, 16.0]
+    seen = [climbing.judge(calm, float(second)) for second in range(1, 600)]
+    assert [rate for rate in seen if rate] == [3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0]
 
     floor = RateControl(1.0)
     assert floor.judge(calm, 0.0) is None
@@ -143,7 +143,7 @@ def test_auto_rate_follows_the_panel_s_queue():
     assert floor.judge(calm, 1.0) is None and floor.rate == 1.0  # nothing below
 
     odd = RateControl(2.4)  # a start between the steps is a step of its own
-    assert odd.steps == [1.0, 1.5, 2.0, 2.4, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0]
+    assert odd.steps == [1.0, 1.5, 2.0, 2.4, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0, 24.0, 32.0]
 
     assert mbit("auto") == 0.0 and mbit("1500k") == 1.5 and mbit("4M") == 4.0
     assert mbit("2000000") == 2.0 and mbit("2.5M") == 2.5
@@ -173,6 +173,34 @@ def test_video_config():
     for bad in ({"mode": "always"}, {"fps": 50, "device_fps": 40}, {"maxrate": "fast"}):
         with pytest.raises(ConfigError):
             parse_config({"video": bad})
+    assert (video.profile, video.encoder) == ("baseline", "libx264")
+    tried = parse_config({"video": {"profile": "high", "encoder": "h264_amf"}}).device.video
+    assert (tried.profile, tried.encoder) == ("high", "h264_amf")
+    for bad in ({"profile": "main10"}, {"encoder": "h264_videotoolbox"}):
+        with pytest.raises(ConfigError):
+            parse_config({"video": bad})
+
+
+def test_profiles_and_hardware_encoders_are_an_experiment():
+    """The command takes the profile and the encoder of the settings; a hardware encoder
+    gets the nearest of x264's: no B-frames, the keyframe spacing, the cap on the rate."""
+    size, keyint = (1920, 720), 500
+
+    def command(**changes):
+        return ffmpeg_command("ffmpeg", size, 270, EncoderSettings(**changes))
+
+    high = command(profile="high")
+    assert high[high.index("-profile:v") + 1] == "high" and "libx264" in high
+    for encoder in ("h264_nvenc", "h264_amf", "h264_qsv"):
+        got = command(encoder=encoder, profile="main")
+        assert got[got.index("-c:v") + 1] == encoder and "-x264-params" not in got
+        assert got[got.index("-profile:v") + 1] == "main"
+        assert got[got.index("-bf") + 1] == "0" and got[got.index("-g") + 1] == str(keyint)
+        assert got[got.index("-maxrate") + 1] == "3.0M" and got[-3:] == ["-f", "h264", "-"]
+    amf = command(encoder="h264_amf")  # AMD names the baseline profile differently
+    assert amf[amf.index("-profile:v") + 1] == "constrained_baseline"
+    with pytest.raises(ValueError):
+        command(encoder="h264_videotoolbox")
 
 
 def test_auto_video_mode_needs_a_proven_panel_the_clip_name_and_ffmpeg(tmp_path):
