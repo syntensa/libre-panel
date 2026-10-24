@@ -83,11 +83,25 @@
     },
     {
       "type": "rect",
-      "id": "frame-left",
+      "id": "frame-fans",
       "x": 39,
       "y": 398,
       "w": 445,
-      "h": 302,
+      "h": 76,
+      "color": "@surface",
+      "outline": "@line",
+      "outline_width": 2,
+      "radius": 21,
+      "locked": true,
+      "needs": "switch.frames"
+    },
+    {
+      "type": "rect",
+      "id": "frame-left",
+      "x": 39,
+      "y": 494,
+      "w": 445,
+      "h": 206,
       "color": "@surface",
       "outline": "@line",
       "outline_width": 2,
@@ -260,7 +274,7 @@
       "color": "@text3",
       "letter_spacing": 0.9,
       "tabular": false,
-      "max_width": 56,
+      "max_width": 60,
       "fit": "ellipsis",
       "needs": "gpu.fan"
     },
@@ -304,7 +318,7 @@
       "color": "@text3",
       "letter_spacing": 0.9,
       "tabular": false,
-      "max_width": 56,
+      "max_width": 60,
       "fit": "ellipsis",
       "needs": "fan.lpc.fan_1"
     },
@@ -348,7 +362,7 @@
       "color": "@text3",
       "letter_spacing": 0.9,
       "tabular": false,
-      "max_width": 56,
+      "max_width": 60,
       "fit": "ellipsis",
       "needs": "fan.lpc.fan_2"
     },
@@ -392,7 +406,7 @@
       "color": "@text3",
       "letter_spacing": 0.9,
       "tabular": false,
-      "max_width": 56,
+      "max_width": 60,
       "fit": "ellipsis",
       "needs": "fan.lpc.fan_3"
     },
@@ -521,9 +535,9 @@
       "id": "net",
       "module": "netcard",
       "col": 2,
-      "row": 48,
+      "row": 52,
       "cols": 21,
-      "rows": 22,
+      "rows": 18,
       "card": "off"
     }
   ],

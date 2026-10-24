@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.7.1 — unreleased
+
+**Changes**
+- **The screens use their room**: the card of what plays (Lumen, Encore, every size) sets the
+  title, the artist and the player a size larger in the middle of the room between the state
+  and the progress; Almanac's clock is a tenth larger on the 9.2" and 12.3", and Almanac
+  Analog's day and date stand under its digits; a clock module with room to spare runs the
+  seconds along a line under the date, as Almanac does (Agents); the processes card shows four
+  rows where it showed three, in one column where it is narrow; Lumen on the 5.2" gives its
+  fans a card of their own above the download; the clock face has a faint rim
+- **Names no longer cut short**: the network details module says "IP", "Down", "Up",
+  "Received" and "Sent" where the full names would end in dots, and Lumen's fan names on the
+  5.2" have the room they need
+- **Agents** say for how long each one has been working, waiting or idle, beside the tool
+
 ## 0.7.0 — 2026-10-22
 
 Up to four panels at once, placed where they stand: a companion screen beside the first that

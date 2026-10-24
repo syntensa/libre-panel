@@ -2005,6 +2005,10 @@ class Renderer:
             draw.ellipse([cx - r, cy - r, cx + r - 1, cy + r - 1], fill=self.color(widget["face"]))
         if widget["marks"] and part != "hand":
             marks = self.color(widget["marks"])
+            # a faint rim, as the lit rings have an edge: the face stands off the card
+            rim = (*marks[:3], round(marks[3] * 0.4))
+            draw.ellipse([cx - r, cy - r, cx + r - 1, cy + r - 1], outline=rim,
+                         width=max(1, round(r * 0.012)))  # fmt: skip
             fine = min(w, h) >= 110
             for tick in range(60):
                 hourly = tick % 5 == 0

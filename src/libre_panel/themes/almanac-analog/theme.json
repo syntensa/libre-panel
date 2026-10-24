@@ -86,7 +86,7 @@
     {
       "type": "clock",
       "id": "clock",
-      "x": 604,
+      "x": 644,
       "y": 106,
       "format": "%H:%M",
       "font": "builtin:Barlow-SemiBold",
@@ -98,7 +98,7 @@
     {
       "type": "clock",
       "id": "seconds",
-      "x": 925,
+      "x": 965,
       "y": 130,
       "format": "%S",
       "font": "builtin:Barlow-SemiBold",
@@ -111,7 +111,7 @@
     {
       "type": "clock",
       "id": "weekday",
-      "x": 512,
+      "x": 644,
       "y": 257,
       "format": "%A",
       "font": "builtin:Barlow-SemiBold",
@@ -122,7 +122,7 @@
     {
       "type": "clock",
       "id": "date",
-      "x": 604,
+      "x": 644,
       "y": 304,
       "format": "%d %B %Y",
       "font": "builtin:Barlow-Medium",

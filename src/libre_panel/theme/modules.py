@@ -764,6 +764,11 @@ def build_clock(b: _Build, _src: Source) -> None:
     size = min(b.ih / (1 + date_ratio * 2.2), b.iw / (clock_width + (0.62 if seconds else 0)))
     date_size = max(8, size * date_ratio)
     block = CAP * size + date_size * 1.1 + CAP * date_size
+    # the seconds run along a line under the date where the card has room (Almanac's)
+    line = b.ih - block > size * 0.9
+    line_h, line_gap = max(2, round(size * 0.012)), date_size * 1.6
+    if line:
+        block += line_gap + line_h
     top = b.iy + (b.ih - block) / 2
     left = a >= 1.45
     x = b.ix if left else b.ix + b.iw / 2
@@ -776,8 +781,18 @@ def build_clock(b: _Build, _src: Source) -> None:
         b.clock("seconds", "%S", sx, top, size * 0.36, color=b.c("accent"),
                 glow=round(0.7 * b.glow, 2), glow_radius=max(2, round(size / 16)))  # fmt: skip
     fmt = "%A · %d %B" if b.iw > size * 4.2 else "%a %d %b"
-    b.clock("date", fmt, x, top + CAP * size + date_size * 1.1, date_size, color=b.c("text2"),
-            align=align, width=b.iw, font="text_font", tabular=False)  # fmt: skip
+    date_top = top + CAP * size + date_size * 1.1
+    b.clock("date", fmt, x, date_top, date_size, color=b.c("text2"), align=align, width=b.iw,
+            font="text_font", tabular=False)  # fmt: skip
+    if line:
+        line_w = clock_width * size + (size * 0.62 if seconds else 0)
+        lx = x if left else x - line_w / 2
+        ly = date_top + CAP * date_size + line_gap
+        b.add("rect", "seconds-groove", x=round(lx), y=round(ly), w=round(line_w), h=line_h,
+              color=b.c("track"))  # fmt: skip
+        b.add("bar", "seconds-run", x=round(lx), y=round(ly), w=round(line_w), h=line_h,
+              sensor="time.second", min=0, max=60, color=b.c("accent"), background=None,
+              radius=0, smooth=False, end_dot=round(line_h * 2.25, 1))  # fmt: skip
 
 
 def build_date(b: _Build, _src: Source) -> None:
@@ -1954,9 +1969,12 @@ def build_processes(b: _Build, _src: Source) -> None:
             color=b.c("text3"), align="right")  # fmt: skip
     x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
     bars = (b.large or b.aspect <= 0.72) and h > b.ts * 10
+    # rows a little smaller than the bars, so four fit a short card; a narrow card keeps
+    # them in one column, the few that matter large enough to read
     b.listing("processes", "proc.mem.*.value" if memory else "proc.cpu.*.value", x, y, w, h,
-              color, "bars" if bars else "rows", format="{value:.1f}%", min=0, max=0,
-              uppercase=False, empty=t("Waiting for the first count …"))  # fmt: skip
+              color, "bars" if bars else "rows", b.ts * (1.3 if bars else 1.15),
+              columns=1 if not bars and b.iw < b.ts * 30 else 0, format="{value:.1f}%",
+              min=0, max=0, uppercase=False, empty=t("Waiting for the first count …"))  # fmt: skip
 
 
 def build_values(b: _Build, _src: Source) -> None:
@@ -1979,14 +1997,16 @@ def build_netinfo(b: _Build, _src: Source) -> None:
     b.card()
     color = b.tint("net")
     top = b.head("network", b.module["title"] or t("Network"), color)
-    items = "\n".join(
-        f"{key} = {name}"
-        for key, name in (
-            ("net.ip", t("IP address")), ("net.ping", t("Ping")),
-            ("net.down", t("Download")), ("net.up", t("Upload")),
-            ("net.today.down", t("Received today")), ("net.today.up", t("Sent today")),
-        )
+    # the names in full where the rows are wide; short where they would be cut
+    narrow = b.iw < b.ts * 30
+    names = (
+        ("net.ip", "IP" if narrow else t("IP address")), ("net.ping", t("Ping")),
+        ("net.down", t("Down") if narrow else t("Download")),
+        ("net.up", t("Up") if narrow else t("Upload")),
+        ("net.today.down", t("Received") if narrow else t("Received today")),
+        ("net.today.up", t("Sent") if narrow else t("Sent today")),
     )  # fmt: skip
+    items = "\n".join(f"{key} = {name}" for key, name in names)
     x, y, w, h = b.ix, b.iy + top, b.iw, b.ih - top
     graph = (b.large or b.aspect <= 0.72) and h > b.ts * 14
     rows_h = h * 0.62 if graph else h
@@ -2357,13 +2377,20 @@ def _ai_agent(b: _Build, name: str, x: float, y: float, w: float, h: float,
               needs=f"{key}.state={state}", max_width=round(tw), fit="shrink",
               **b._text_fields(size, cap, "display_font"))  # fmt: skip
     line = cap + CAP * size + small * 1.0
+    # since when it is so, at the right of the line, where the line is wide enough for both
+    since = align == "left" and tw >= small * 14
+    words_w = tw * 0.62 if since else tw
     b.value(f"{name}-tool", f"{key}.tool", "{value}", ax, line, small, color=calm, align=align,
-            width=tw, font="text_font", tabular=False, needs=f"{key}.state=working",
+            width=words_w, font="text_font", tabular=False, needs=f"{key}.state=working",
             fallback="", hide_if_missing=True)  # fmt: skip
     b.value(f"{name}-model", f"{key}.model", "{value}", ax, line, small, color=calm,
-            align=align, width=tw, font="text_font", tabular=False,
+            align=align, width=words_w, font="text_font", tabular=False,
             needs=f"{key}.state!=working,{key}.state!=off", fallback="",
             hide_if_missing=True)  # fmt: skip
+    if since:
+        b.value(f"{name}-since", f"{key}.since", "{value:duration}", tx + tw, line, small,
+                color=calm, align="right", width=tw * 0.34, font="text_font", tabular=False,
+                needs=f"{key}.state!=off", fallback="", hide_if_missing=True)  # fmt: skip
     row = line + small * 2.0
     bar_h = max(4, round(small * 0.5))
     # when a window begins anew, where it fits between the window's name and its share

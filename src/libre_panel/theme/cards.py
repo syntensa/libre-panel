@@ -237,18 +237,20 @@ def build_playback(b: _Build, src: M.Source) -> None:
         b.label(name, text, left + ref.s(30), top, label, width=width - ref.s(30))
         _need(b.out[-1], f"media.playing={state}")
 
-    b.value("title", "media.title", "{value}", left, ref.cap(118, 40), ref.s(40), width=width,
+    # the title, the artist and the app, as a block in the middle of the room between the
+    # state and the progress
+    b.value("title", "media.title", "{value}", left, ref.cap(146, 44), ref.s(44), width=width,
             tabular=False, fallback="", fit="ellipsis", hide_if_missing=True)  # fmt: skip
-    b.value("artist", "media.artist", "{value}", left, ref.cap(160, 28), ref.s(28),
+    b.value("artist", "media.artist", "{value}", left, ref.cap(192, 30), ref.s(30),
             color=b.c("text2"), width=width, font="text_font", tabular=False, fallback="",
             fit="ellipsis", hide_if_missing=True)  # fmt: skip
 
     # the app that plays it: its icon, and its name
-    icon = ref.s(30)
-    b.add("image", "app-icon", x=round(left), y=round(ref.y(182)), w=icon, h=icon,
+    icon = ref.s(32)
+    b.add("image", "app-icon", x=round(left), y=round(ref.y(216)), w=icon, h=icon,
           src="@media.app_icon", fit="contain")  # fmt: skip
-    for name, shift, need in (("app", 40, "@media.app_icon"), ("app-bare", 0, "!@media.app_icon")):
-        b.value(name, "media.source", "{value}", left + ref.s(shift), ref.cap(206, 20), ref.s(20),
+    for name, shift, need in (("app", 42, "@media.app_icon"), ("app-bare", 0, "!@media.app_icon")):
+        b.value(name, "media.source", "{value}", left + ref.s(shift), ref.cap(240, 22), ref.s(22),
                 color=b.c("text3"), width=width - ref.s(shift), font="text_font",
                 tabular=False, fallback="", fit="ellipsis", hide_if_missing=True,
                 needs=need)  # fmt: skip

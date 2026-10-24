@@ -2430,7 +2430,9 @@
     "Panel {number} goes with panel 1: while panel 1 shows a game, music or the clock at rest, a companion shows the companion of panel 1's theme there (Arena Companion beside Arena), unless a page here has a theme of its own.": "面板 {number} 跟随面板 1：面板 1 显示游戏、音乐或空闲时钟时，伴侣主题会在这里显示面板 1 主题的伴侣（Arena 旁边是 Arena Companion），除非这里的某个页面有自己的主题。",
     "What panel {number} shows when": "面板 {number} 何时显示什么",
     "More panels beside the first: what each shows, where they stand and which one is which.": "第一块面板旁边的更多面板：各自显示什么、放在哪里、哪块是哪块。",
-    "Panels": "面板"
+    "Panels": "面板",
+    "Received": "已接收",
+    "Sent": "已发送"
   },
   "fields": {
     "agent": "智能体",

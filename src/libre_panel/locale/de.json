@@ -2430,7 +2430,9 @@
     "Panel {number} goes with panel 1: while panel 1 shows a game, music or the clock at rest, a companion shows the companion of panel 1's theme there (Arena Companion beside Arena), unless a page here has a theme of its own.": "Panel {number} geht mit Panel 1 mit: Zeigt Panel 1 ein Spiel, Musik oder die Uhr in der Ruhe, zeigt ein Begleiter dort den Begleiter des Themes von Panel 1 (Arena Companion neben Arena), außer eine Seite hier hat ein eigenes Theme.",
     "What panel {number} shows when": "Was Panel {number} wann zeigt",
     "More panels beside the first: what each shows, where they stand and which one is which.": "Weitere Panels neben dem ersten: was jedes zeigt, wo sie stehen und welches welches ist.",
-    "Panels": "Panels"
+    "Panels": "Panels",
+    "Received": "Empfangen",
+    "Sent": "Gesendet"
   },
   "fields": {
     "agent": "Agent",

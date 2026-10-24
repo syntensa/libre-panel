@@ -2430,7 +2430,9 @@
     "Panel {number} goes with panel 1: while panel 1 shows a game, music or the clock at rest, a companion shows the companion of panel 1's theme there (Arena Companion beside Arena), unless a page here has a theme of its own.": "Le panneau {number} suit le panneau 1 : quand le panneau 1 montre un jeu, de la musique ou l’horloge au repos, un compagnon y montre le compagnon du thème du panneau 1 (Arena Companion à côté d’Arena), sauf si une page ici a son propre thème.",
     "What panel {number} shows when": "Ce que le panneau {number} montre et quand",
     "More panels beside the first: what each shows, where they stand and which one is which.": "D’autres panneaux à côté du premier : ce que chacun montre, où ils se trouvent et lequel est lequel.",
-    "Panels": "Panneaux"
+    "Panels": "Panneaux",
+    "Received": "Reçu",
+    "Sent": "Envoyé"
   },
   "fields": {
     "agent": "agent",
