@@ -97,6 +97,20 @@ def test_ffmpeg_command_follows_the_measured_settings():
     assert "hflip,vflip" in " ".join(ffmpeg_command("ffmpeg", (480, 1920), 180, EncoderSettings()))
 
 
+def test_the_bit_rate_grows_with_the_pixels_and_the_frame_rate():
+    from libre_panel.devices.h264 import bit_rate
+
+    auto = EncoderSettings()
+    assert bit_rate(auto, (1920, 480)) == "2.0M"  # the 9.2", as measured
+    assert bit_rate(auto, (1920, 720)) == "3.0M"  # the 12.3": half as many pixels again
+    assert bit_rate(auto, (480, 480)) == "2.0M"  # a small panel keeps the measured rate
+    assert bit_rate(EncoderSettings(fps=25), (1920, 720)) == "2.0M"  # half the frames
+    assert bit_rate(EncoderSettings(maxrate="1500k"), (1920, 720)) == "1500k"  # your own
+    assert "-maxrate 3.0M -bufsize 3.0M" in " ".join(
+        ffmpeg_command("ffmpeg", (1920, 720), 270, auto)
+    )
+
+
 def test_find_ffmpeg(tmp_path, monkeypatch):
     with pytest.raises(DeviceError, match="ffmpeg not found"):
         find_ffmpeg(str(tmp_path / "missing"))
@@ -117,6 +131,7 @@ def test_video_config():
     assert (video.mode, video.fps, video.device_fps, video.crf) == ("on", 30, 40, 25)
     assert parse_config({}).device.video.mode == "auto"
     assert parse_config({"video": {"mode": "off"}}).device.video.mode == "off"
+    assert parse_config({"video": {"maxrate": "auto"}}).device.video.maxrate == "auto"
     for bad in ({"mode": "always"}, {"fps": 50, "device_fps": 40}, {"maxrate": "fast"}):
         with pytest.raises(ConfigError):
             parse_config({"video": bad})

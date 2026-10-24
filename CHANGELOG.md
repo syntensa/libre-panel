@@ -20,6 +20,11 @@
   say where the frame rate went, not only where it is now
 - **Encore beside a companion on the 12.3"** sets the title, the artist and the album a size
   larger in the middle of its card
+- **Sharper video on the 12.3"**: the video mode's bit rate was capped at 2 Mbit/s for every
+  panel, measured on the 9.2"; the 12.3" has half as many pixels again, and a screen that
+  moves on every frame (Arena's graph) made the encoder coarsen the whole picture, lettering
+  included. The cap now grows with the pixels and the frame rate (`maxrate` "auto": 3 Mbit/s
+  on the 12.3"); a rate of your own still holds ([Video](docs/CONFIGURATION.md#video))
 
 ## 0.7.0 — 2026-10-22
 

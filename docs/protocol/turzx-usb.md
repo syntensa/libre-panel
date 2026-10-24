@@ -144,6 +144,8 @@ x264, Constrained Baseline, yuv420p, Annex B:
 - ffmpeg rotates (`transpose=1` = PIL's `ROTATE_270`); the stream is
   bit-identical to rotating before encoding.
 - Throughput about 170–300 KB/s. Flooding the device (MB/s) breaks playback.
+- Libre Panel scales `-maxrate` with the pixels and the frame rate: 2M is for
+  1920×480 at 50 fps; the 12.3" (1920×720) gets 3M.
 
 **verified**
 

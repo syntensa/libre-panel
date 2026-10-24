@@ -421,7 +421,9 @@ class VideoConfig:
     crf: int = 25
     preset: str = "superfast"
     keyframe_s: float = 10.0
-    maxrate: str = "2M"
+    # the highest bit rate: "auto" is 2 Mbit/s for the 9.2" (1920x480 at 50 fps), more for a
+    # panel with more pixels or frames (the 12.3": 3 Mbit/s); or a rate such as "1500k", "4M"
+    maxrate: str = "auto"
     ffmpeg: str = ""  # path to ffmpeg; empty = the download's own (bundled.py), else PATH
     # The name the video start command (110) needs: the panel's own standby
     # clip, so its standby behaviour stays as it was.
@@ -1074,7 +1076,7 @@ def _panels(value: Any) -> list[PanelConfig]:
     return panels
 
 
-_MAXRATE = re.compile(r"^[0-9]+(\.[0-9]+)?[kKM]?$")
+_MAXRATE = re.compile(r"^(auto|[0-9]+(\.[0-9]+)?[kKM]?)$")
 
 
 def _parse_video(v: dict[str, Any]) -> VideoConfig:
@@ -1103,7 +1105,7 @@ def _parse_video(v: dict[str, Any]) -> VideoConfig:
         raise ConfigError("video.keyframe_s: must be between 1 and 60 seconds")
     video.maxrate = _expect(v.get("maxrate", video.maxrate), str, "video.maxrate")
     if not _MAXRATE.match(video.maxrate):
-        raise ConfigError('video.maxrate: a bit rate such as "2M" or "1500k"')
+        raise ConfigError('video.maxrate: "auto", or a bit rate such as "2M" or "1500k"')
     video.ffmpeg = _expect(v.get("ffmpeg", video.ffmpeg), str, "video.ffmpeg")
     video.local_clip = _expect(v.get("local_clip", video.local_clip), str, "video.local_clip")
     if len(video.local_clip.encode("utf-8")) > 200:

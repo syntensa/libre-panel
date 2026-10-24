@@ -1573,7 +1573,7 @@ answer too.
 | `crf` | 25 | quality, 0–51; lower is sharper and needs more USB bandwidth |
 | `preset` | `"superfast"` | x264 speed preset |
 | `keyframe_s` | 10 | seconds between keyframes; below 3 flat backgrounds visibly pulse |
-| `maxrate` | `"2M"` | highest bit rate, e.g. `"1500k"` |
+| `maxrate` | `"auto"` | highest bit rate: `"auto"` is 2 Mbit/s for the 9.2" (1920×480 at 50 fps) and proportionally more for a panel with more pixels or frames (the 12.3": 3 Mbit/s), never less; or a rate such as `"1500k"` or `"4M"` |
 | `ffmpeg` | `""` | path to ffmpeg; empty = the download's own, else look in `PATH` |
 | `local_clip` | `""` | see above |
 | `clip_asked` | `false` | `true` once the app has asked for `local_clip` (a name written there, or *Not now*); then it does not ask again |

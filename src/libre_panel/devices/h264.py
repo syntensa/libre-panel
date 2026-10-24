@@ -11,6 +11,9 @@ project (docs/protocol/turzx-usb.md, "Video layer"):
   ``repeat-headers=1`` lets the decoder join at any keyframe.
 - ffmpeg rotates into the panel's framebuffer (``transpose``); the stream is
   bit-identical to rotating in Python and costs the render loop nothing.
+- The bit rate was capped at 2 Mbit/s there, for 1920x480 at 50 frames a second. A panel
+  with more pixels (the 12.3": 1920x720) or more frames gets proportionally more
+  (``maxrate`` "auto", :func:`bit_rate`), so its pictures and lettering stay as sharp.
 
 :class:`PictureSplitter` cuts ffmpeg's output into pictures by their NAL
 units. That works however the pipe splits the bytes (Windows pipes deliver
@@ -56,8 +59,24 @@ class EncoderSettings:
     crf: int = 25
     preset: str = "superfast"
     keyframe_s: float = 10.0
-    maxrate: str = "2M"
+    maxrate: str = "auto"  # "auto": REFERENCE_RATE scaled by the pixels and the frame rate
     threads: int = 1  # frame threads add a frame of latency each
+
+
+# The bit rate measured on the 9.2": 2 Mbit/s for its 1920x480 pixels at 50 frames a second.
+REFERENCE_RATE = (2.0, 1920 * 480, 50)
+
+
+def bit_rate(settings: EncoderSettings, size: tuple[int, int]) -> str:
+    """The highest bit rate for pictures of ``size``, as ffmpeg takes it: the settings' own,
+    or with "auto" the reference rate scaled by the pixels and the frame rate, and never
+    less than the reference (a small panel has the bandwidth to spare)."""
+    if settings.maxrate != "auto":
+        return settings.maxrate
+    rate, pixels, fps = REFERENCE_RATE
+    width, height = size
+    scaled = rate * (width * height / pixels) * (settings.fps / fps)
+    return f"{max(rate, round(scaled, 1)):.1f}M"
 
 
 # How ffmpeg turns a theme frame into the panel's framebuffer, per rotation
@@ -101,6 +120,7 @@ def ffmpeg_command(
     """ffmpeg reading raw RGB frames of ``size`` on stdin, writing H.264 (Annex B) to stdout."""
     width, height = size
     keyint = max(1, round(settings.fps * settings.keyframe_s))
+    maxrate = bit_rate(settings, size)
     command = [
         ffmpeg,
         "-hide_banner",
@@ -135,9 +155,9 @@ def ffmpeg_command(
         "-crf",
         str(settings.crf),
         "-maxrate",
-        settings.maxrate,
+        maxrate,
         "-bufsize",
-        settings.maxrate,
+        maxrate,
         "-x264-params",
         # zerolatency turns slice threads on; the panel needs one slice per picture
         f"sliced-threads=0:bframes=0:scenecut=0:keyint={keyint}:min-keyint={keyint}"
