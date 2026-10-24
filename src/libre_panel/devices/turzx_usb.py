@@ -190,6 +190,19 @@ def decode_packet(packet: bytes) -> bytes:
     return plain[:500]
 
 
+def firmware_of(reply: bytes) -> str:
+    """The firmware's name in the sync reply: the ASCII after ``turzx_`` (the 9.2" answers
+    ``turzx_00`` and bytes that change with every connection, the 5.2" ``turzx_0001_0015``
+    at ``[8:]`` as jijiechen/turing-monitor reads it); "" when there is none."""
+    start = reply.find(b"turzx_", 0, 64)
+    if start < 0:
+        return ""
+    end = start
+    while end < len(reply) and end - start < 32 and 0x20 < reply[end] < 0x7F:
+        end += 1
+    return reply[start:end].decode("ascii")
+
+
 def brightness_arg(percent: int) -> int:
     """0-100 % -> the panel's 0-102 scale."""
     return int(max(0, min(100, percent)) / 100 * 102)
@@ -496,15 +509,15 @@ class TurzxUsbDisplay(Display):
         self.transport = UsbTransport.open(pid, getattr(self.config, "beside", ()))
         self.model = self.model or USB_PIDS.get(self.transport.pid)
         try:
-            self.transport.sync()
+            reply = self.transport.sync()
         except DeviceError:
             self.close()
             raise
-        # (The bytes after the handshake reply's first two change with every
-        # connection: no identifier worth logging.)
+        self.firmware = firmware_of(reply)  # the 9.2" says little here, other panels more
         log.info(
-            "connected to %s",
+            "connected to %s%s",
             self.model.label if self.model else f"PID {self.transport.pid:04x}",
+            f" (firmware {self.firmware})" if self.firmware else "",
         )
 
     def describe(self) -> str:

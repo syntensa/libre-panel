@@ -135,7 +135,7 @@ def test_auto_rate_follows_the_panel_s_queue():
     climbing, calm = RateControl(2.0), Counters()  # calm all along: up the steps to the top
     assert climbing.judge(calm, 0.0) is None
     seen = [climbing.judge(calm, float(second)) for second in range(1, 400)]
-    assert [rate for rate in seen if rate] == [3.0, 4.0, 6.0, 8.0]
+    assert [rate for rate in seen if rate] == [3.0, 4.0, 6.0, 8.0, 12.0, 16.0]
 
     floor = RateControl(1.0)
     assert floor.judge(calm, 0.0) is None
@@ -143,7 +143,7 @@ def test_auto_rate_follows_the_panel_s_queue():
     assert floor.judge(calm, 1.0) is None and floor.rate == 1.0  # nothing below
 
     odd = RateControl(2.4)  # a start between the steps is a step of its own
-    assert odd.steps == [1.0, 1.5, 2.0, 2.4, 3.0, 4.0, 6.0, 8.0]
+    assert odd.steps == [1.0, 1.5, 2.0, 2.4, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0]
 
     assert mbit("auto") == 0.0 and mbit("1500k") == 1.5 and mbit("4M") == 4.0
     assert mbit("2000000") == 2.0 and mbit("2.5M") == 2.5

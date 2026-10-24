@@ -17,6 +17,7 @@ from libre_panel.devices.turzx_usb import (  # noqa: E402
     build_packet,
     decode_packet,
     encode_png_rgba,
+    firmware_of,
     to_native,
 )
 
@@ -30,6 +31,15 @@ def test_packet_layout():
     assert plain[0] == 102
     assert plain[2:4] == b"\x1a\x6d"
     assert struct.unpack(">I", plain[8:12])[0] == 119_000
+
+
+def test_the_firmware_s_name_is_read_from_the_sync_reply():
+    assert firmware_of(bytes([10, 0xC8]) + b"turzx_00" + bytes(502)) == "turzx_00"
+    assert firmware_of(bytes([10, 0xC8, 0, 0, 0, 0, 0, 0]) + b"turzx_0001_0015" + bytes(489)) == (
+        "turzx_0001_0015"
+    )
+    assert firmware_of(bytes([10, 0xC8]) + b"turzx_00\x9f\x11" + bytes(500)) == "turzx_00"
+    assert firmware_of(bytes([10, 0xC8]) + bytes(510)) == ""
 
 
 def test_brightness_scale():

@@ -57,7 +57,7 @@ send a sync and check the echo (up to three attempts). **verified**
 
 | Id | Meaning | Arguments / notes |
 |---|---|---|
-| 10 | sync / hello | reply `0A C8` + ASCII `turzx_00` **verified** |
+| 10 | sync / hello | reply `0A C8` + ASCII `turzx_00` **verified** (and bytes that change with every connection on the 9.2"; the 5.2" answers a firmware version `turzx_0001_0015` at `[8:]`, as jijiechen/turing-monitor reads it; Libre Panel logs what follows `turzx_` when it connects) |
 | 14 | brightness | `[8]` = 0–102 (percent × 1.02) |
 | 15 | frame rate | `[8]` = fps; also sets the panel's own playback rate |
 | 17 | H.264 block size | reply 0 on the 9.2" → default 202752 **verified** |
@@ -143,10 +143,16 @@ x264, Constrained Baseline, yuv420p, Annex B:
   `repeat-headers=1` lets the decoder join at any keyframe.
 - ffmpeg rotates (`transpose=1` = PIL's `ROTATE_270`); the stream is
   bit-identical to rotating before encoding.
-- Throughput about 170–300 KB/s. Flooding the device (MB/s) breaks playback.
+- The stream above took about 170–300 KB/s: that is its own rate at the 2M
+  cap, not a limit of the link. The link carries far more: 12–16 MB/s of JPEG
+  stills were measured on the 9.2" (20 fps of 800 KB frames; sjcsoftware/
+  turzx-linux, docs/protocol.md), and jijiechen/turing-monitor streams H.264
+  to the 5.2" at 30 fps with 16 Mbit/s by default and 24 Mbit/s "for sharper
+  output". What breaks playback is flooding the *queue* (sending faster than
+  the player drains), which the flow control below prevents.
 - Libre Panel scales `-maxrate` with the pixels and the frame rate: 2M is for
   1920×480 at 50 fps; the 12.3" (1920×720) starts at 3M. From there "auto"
-  follows the panel along 1 · 1.5 · 2 · 3 · 4 · 6 · 8 Mbit/s: a step down when,
+  follows the panel along 1 · 1.5 · 2 · 3 · 4 · 6 · 8 · 12 · 16 Mbit/s: a step down when,
   within 10 s, the sender waited for room in the queue five times (the decoder
   lags) or half the blocks (25 at least) took longer than 20 ms to send (the
   link lags; a healthy block takes about 1 ms), a step up after 60 s without

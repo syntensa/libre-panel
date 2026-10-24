@@ -15,7 +15,7 @@ project (docs/protocol/turzx-usb.md, "Video layer"):
   with more pixels (the 12.3": 1920x720) or more frames starts with proportionally more
   (``maxrate`` "auto", :func:`auto_rate`), so its pictures and lettering stay as sharp; and
   "auto" then follows the panel (:class:`RateControl`): a step down while the panel takes
-  less than it is sent, a step up again after a calm minute, up to 8 Mbit/s.
+  less than it is sent, a step up again after a calm minute, up to 16 Mbit/s.
 
 :class:`PictureSplitter` cuts ffmpeg's output into pictures by their NAL
 units. That works however the pipe splits the bytes (Windows pipes deliver
@@ -67,9 +67,11 @@ class EncoderSettings:
 
 # The bit rate measured on the 9.2": 2 Mbit/s for its 1920x480 pixels at 50 frames a second.
 REFERENCE_RATE = (2.0, 1920 * 480, 50)
-# The steps "auto" moves along, in Mbit/s: a panel takes 170-300 KB/s on its USB link
-# (docs/protocol/turzx-usb.md), the top is for one that takes more.
-RATE_STEPS = (1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0)
+# The steps "auto" moves along, in Mbit/s. The link itself carries far more (12-16 MB/s of
+# JPEG stills were measured on the 9.2", and other hosts stream 16-24 Mbit/s of H.264 to the
+# 5.2": docs/protocol/turzx-usb.md); the top is where the encoder's cost outgrows what a
+# panel's dots can show.
+RATE_STEPS = (1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0, 16.0)
 
 
 def auto_rate(settings: EncoderSettings, size: tuple[int, int]) -> float:
