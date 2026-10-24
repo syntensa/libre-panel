@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.1rc3 — 2026-10-24
+## 0.7.1rc4 — 2026-10-24
 
 **Changes**
 - **Sharper and cheaper video, measured**: the video mode's quality is crf 20 (was 25), the
