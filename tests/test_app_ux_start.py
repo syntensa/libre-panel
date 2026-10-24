@@ -1,9 +1,11 @@
 """Start in a real browser: the order of the launcher, what is new for who updated, the first
 steps for who began with this version, the mounting question where it matters, the actions of
-the gallery and the screens in turn; skipped without Playwright or Chromium."""
+the gallery (sharing a theme and the community's themes too) and the screens in turn; skipped
+without Playwright or Chromium."""
 
 import json
 import re
+import zipfile
 
 import pytest
 
@@ -26,6 +28,7 @@ from test_app_browser import (  # noqa: E402, F401
     waits_for,
     windows_download,
 )
+from test_share import GitHub, github  # noqa: E402, F401
 
 from libre_panel import __version__  # noqa: E402
 
@@ -195,9 +198,9 @@ def test_the_panels_card_shows_the_theme_while_the_panel_shows_nothing(
         expect(page.locator(".panel-card h2")).to_have_text("Waiting for the panel")
 
 
-def test_every_card_of_the_gallery_names_both_its_actions(app_url, isolated_home):  # noqa: F811
-    """A click on a card puts it on the panel (its name says so); "Edit" is always there, with
-    its name, and covers nothing of the card's text in either language."""
+def test_every_card_of_the_gallery_names_its_actions(app_url, isolated_home):  # noqa: F811
+    """A click on a card puts it on the panel (its name says so); "Edit" and "Export…" are always
+    there, with their names, and cover nothing of the card's text in either language."""
     from libre_panel import i18n
 
     choose_theme(isolated_home, "lumen")
@@ -210,12 +213,14 @@ def test_every_card_of_the_gallery_names_both_its_actions(app_url, isolated_home
         edit = almanac.get_by_role("button", name="Edit “Almanac”")
         expect(edit).to_be_visible()  # without a pointer over it
         expect(edit).to_have_text("Edit")
+        expect(almanac.get_by_role("button", name="Export “Almanac”…")).to_be_visible()
         assert page.locator(".theme-card-edit").count() == len(shown_themes(page))
+        assert page.locator(".theme-card-export").count() == len(shown_themes(page))
     i18n.set_language("de")
     with browser_page(app_url, "home/themes", allow=PICTURE) as page:
         page.wait_for_selector(".theme-card")
         for card in page.locator(".theme-card").all():
-            edit = card.locator(".theme-card-edit").bounding_box()
+            edit = card.locator(".theme-card-actions").bounding_box()
             for part in (".theme-card-name", ".theme-card-note"):
                 text = card.locator(part).bounding_box()
                 apart = (
@@ -362,3 +367,98 @@ def test_installed_with_pip_the_card_gives_the_command(app_url, isolated_home): 
         expect(card.locator("code")).to_contain_text("libre-panel@v9.1.0")
         expect(card.get_by_role("link", name="Download")).to_have_count(0)
         expect(card.get_by_role("link", name="What is new")).to_be_visible()
+
+
+# -- sharing a theme ---------------------------------------------------------------------------
+
+
+def test_a_theme_goes_out_as_a_file_and_comes_back_in_from_one(
+    app_url,  # noqa: F811
+    isolated_home,
+    tmp_path,
+):
+    """Export… on a card saves the theme as a .zip; Import… (or the file dropped on the gallery)
+    adds a shared one to yours, and the gallery shows it marked, in view and focused. A file
+    that is no theme is said so in words."""
+    choose_theme(isolated_home, "lumen")
+    allow = (*PICTURE, "name=holiday.zip")  # (the server says no to that one, on purpose)
+    with browser_page(app_url, "home/themes", allow=allow) as page:
+        page.wait_for_selector(".theme-card")
+        with page.expect_download() as download:
+            page.get_by_role("button", name="Export “Almanac”…").click()
+        assert download.value.suggested_filename == "almanac.zip"
+        saved = tmp_path / "almanac.zip"
+        download.value.save_as(saved)
+        with zipfile.ZipFile(saved) as archive:
+            assert archive.namelist() == ["almanac/theme.json", "almanac/assets/backdrop.png"]
+        with page.expect_file_chooser() as chooser:
+            page.get_by_role("button", name="Import…").click()
+        chooser.value.set_files(str(saved))
+        card = page.locator(".theme-card[data-theme='almanac-2']")
+        expect(card).to_have_class(re.compile(r"\bselected\b"))
+        expect(card.locator(".theme-card-main")).to_be_focused()
+        expect(card).to_be_in_viewport()
+        assert (isolated_home / "themes" / "almanac-2" / "assets" / "backdrop.png").is_file()
+        # dropped on the gallery, the same file comes in once more
+        page.evaluate(
+            """(bytes) => {
+              const data = new DataTransfer();
+              const file = new File([new Uint8Array(bytes)], "almanac.zip");
+              data.items.add(file);
+              const gallery = document.querySelector(".start.gallery");
+              for (const kind of ["dragover", "drop"]) {
+                const options = { dataTransfer: data, bubbles: true, cancelable: true };
+                gallery.dispatchEvent(new DragEvent(kind, options));
+              }
+            }""",
+            list(saved.read_bytes()),
+        )
+        expect(page.locator(".theme-card[data-theme='almanac-3']")).to_have_class(
+            re.compile(r"\bselected\b")
+        )
+        bad = tmp_path / "holiday.zip"
+        bad.write_bytes(b"holiday photos, not a zip")
+        with page.expect_file_chooser() as chooser:
+            page.get_by_role("button", name="Import…").click()
+        chooser.value.set_files(str(bad))
+        expect(page.locator(".toast.error")).to_contain_text("This file is not a .zip")
+        assert sorted(path.name for path in (isolated_home / "themes").iterdir()) == [
+            "almanac-2",
+            "almanac-3",
+        ]
+
+
+def test_the_community_themes_are_asked_for_once_opened_and_one_installs(
+    app_url,  # noqa: F811
+    isolated_home,
+    github,  # noqa: F811
+):
+    """Nothing is asked of GitHub until "Community themes" is opened; then each theme shows with
+    its picture, its author and its panels, and Install adds it to yours, marked in the gallery."""
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url, "home/themes", allow=PICTURE) as page:
+        toggle = page.get_by_role("button", name=re.compile("^Community themes"))
+        expect(toggle).to_have_attribute("aria-expanded", "false")
+        assert GitHub.asked == []
+        toggle.click()
+        card = page.locator(".community-card[data-community='aurora']")
+        expect(card).to_contain_text("Aurora")
+        expect(card).to_contain_text("by Someone")
+        expect(card).to_contain_text("480 × 320 · 1920 × 480")
+        expect(card).to_contain_text("Northern lights.")
+        page.wait_for_function(
+            'document.querySelector(".community-card img")?.naturalWidth === 48'
+        )  # the picture, through Libre Panel's server
+        card.get_by_role("button", name="Install “Aurora”").click()
+        mine = page.locator(".theme-card[data-theme='aurora']")
+        expect(mine).to_have_class(re.compile(r"\bselected\b"))
+        assert (isolated_home / "themes" / "aurora" / "theme.json").is_file()
+
+
+def test_offline_the_community_themes_say_so_quietly(app_url, isolated_home):  # noqa: F811
+    choose_theme(isolated_home, "lumen")
+    with browser_page(app_url, "home/themes", allow=PICTURE) as page:
+        page.get_by_role("button", name=re.compile("^Community themes")).click()
+        note = page.locator(".community-themes .community-note")
+        expect(note).to_have_text("The community themes cannot be reached right now.")
+        expect(page.locator(".toast.error")).to_have_count(0)

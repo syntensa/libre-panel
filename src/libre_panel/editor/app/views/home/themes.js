@@ -89,11 +89,14 @@ function Picture({ item, width }) {
 
 /**
  * A theme as a card with its picture: a click chooses it (`onChoose`: it goes on the panel), and
- * `onEdit` (if given) adds a button that says so and opens it for editing.
+ * `onEdit` (if given) adds a button that says so and opens it for editing, `onExport` one that
+ * saves it as a file to share. `item.selected` marks the card (a theme just added).
  */
-export function ThemeCard({ item, big = false, label, onChoose, onEdit }) {
+export function ThemeCard({ item, big = false, label, onChoose, onEdit, onExport }) {
   const name = item.name || item.id;
-  return html`<article class=${`theme-card${item.shown ? " current" : ""}${big ? " big" : ""}${onEdit ? " editable" : ""}`} data-theme=${item.id}>
+  const actions = onEdit || onExport;
+  const kind = `${item.shown ? " current" : ""}${big ? " big" : ""}${actions ? " editable" : ""}${onExport ? " exportable" : ""}${item.selected ? " selected" : ""}`;
+  return html`<article class=${`theme-card${kind}`} data-theme=${item.id}>
     <button type="button" class="theme-card-main" aria-label=${label} aria-current=${item.shown ? "true" : undefined} onClick=${() => onChoose(item)}>
       <span class="theme-card-picture">
         <${Picture} item=${item} width=${big ? 960 : 640} />
@@ -111,10 +114,20 @@ export function ThemeCard({ item, big = false, label, onChoose, onEdit }) {
         <span class="theme-card-note">${item.note}</span>
       </span>
     </button>
-    ${onEdit
-      ? html`<button type="button" class="btn theme-card-edit" aria-label=${t("Edit “{name}”", { name })} onClick=${() => onEdit(item)}>
-          <${Icon} name="pencil" size=${14} /> ${t("Edit")}
-        </button>`
+    ${actions
+      ? html`<span class="theme-card-actions">
+          ${onExport
+            ? html`<button type="button" class="btn theme-card-export" aria-label=${t("Export “{name}”…", { name })}
+                title=${t("Export “{name}”…", { name })} onClick=${() => onExport(item)}>
+                <${Icon} name="download" size=${14} />
+              </button>`
+            : null}
+          ${onEdit
+            ? html`<button type="button" class="btn theme-card-edit" aria-label=${t("Edit “{name}”", { name })} onClick=${() => onEdit(item)}>
+                <${Icon} name="pencil" size=${14} /> ${t("Edit")}
+              </button>`
+            : null}
+        </span>`
       : null}
   </article>`;
 }
@@ -134,12 +147,12 @@ export function ThemeRow({ item, label, onChoose }) {
   </button>`;
 }
 
-function Grid({ items, big, onChoose, onEdit, label, name }) {
+function Grid({ items, big, onChoose, onEdit, onExport, label, name }) {
   const upright = useMounted() === "portrait"; // tall pictures: narrow cards
   return html`<div class=${`theme-grid${big ? " big" : ""}${upright ? " upright" : ""}`} role="list" aria-label=${name || t("Themes")}>
     ${items.map(
       (item) => html`<div role="listitem" key=${item.id} class="theme-grid-item">
-        <${ThemeCard} item=${item} big=${big} label=${label(item)} onChoose=${onChoose} onEdit=${onEdit} />
+        <${ThemeCard} item=${item} big=${big} label=${label(item)} onChoose=${onChoose} onEdit=${onEdit} onExport=${onExport} />
       </div>`,
     )}
   </div>`;
@@ -180,14 +193,14 @@ function Collection({ name, items, alone, asked, ...more }) {
  * The cards: Libre Panel's own themes and yours in a grid, then one closed group for each
  * collection the themes name (A to Z; `asked` opens one). `big` makes the cards of the grid large.
  */
-export function Gallery({ items, big = false, asked = "", onChoose, onEdit, label }) {
+export function Gallery({ items, big = false, asked = "", onChoose, onEdit, onExport, label }) {
   const own = items.filter((item) => !item.collection);
   const names = collectionsOf(items).map((set) => set.name);
   return html`<div class="theme-gallery">
-    ${own.length ? html`<${Grid} items=${own} big=${big} onChoose=${onChoose} onEdit=${onEdit} label=${label} />` : null}
+    ${own.length ? html`<${Grid} items=${own} big=${big} onChoose=${onChoose} onEdit=${onEdit} onExport=${onExport} label=${label} />` : null}
     ${names.map(
       (name) => html`<${Collection} key=${name} name=${name} items=${items.filter((item) => item.collection === name)}
-        alone=${!own.length && names.length === 1} asked=${name === asked} onChoose=${onChoose} onEdit=${onEdit} label=${label} />`,
+        alone=${!own.length && names.length === 1} asked=${name === asked} onChoose=${onChoose} onEdit=${onEdit} onExport=${onExport} label=${label} />`,
     )}
   </div>`;
 }

@@ -235,8 +235,11 @@ German, French, Spanish, Polish, Portuguese (Brazil) and Simplified Chinese.
 
 Every theme moves to any other panel from the panel button at the top of *Design*. Themes
 are plain JSON with their pictures and fonts, and cannot run code
-([theme format](docs/THEMES.md)). Made one you like? Share it in
-[Discussions](https://github.com/syntensa/libre-panel/discussions). Also built in: the eight
+([theme format](docs/THEMES.md)). Made one you like? *Export…* on its card in *Start →
+Themes* saves it as one `.zip`, and *Import…* there adds one someone gave you. Share it in
+[Discussions](https://github.com/syntensa/libre-panel/discussions), or with everyone among the
+[community themes](community/themes/README.md), which the app lists and installs with a
+click. Also built in: the eight
 screens of SPUR II as a legacy collection, see [Where it started](#where-it-started).
 
 <details>

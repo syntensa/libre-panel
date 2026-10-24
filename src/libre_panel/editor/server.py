@@ -50,6 +50,7 @@ from libre_panel.devices.base import DeviceError
 from libre_panel.devices.models import MODELS, PROTOCOLS
 from libre_panel.editor import access, history
 from libre_panel.editor import settings as app_settings
+from libre_panel.editor.community import Community, CommunityError
 from libre_panel.editor.news import News
 from libre_panel.editor.presets import presets_for_editor
 from libre_panel.editor.updates import Updates
@@ -96,6 +97,7 @@ from libre_panel.theme.modules import (
     module_info,
     templates,
 )
+from libre_panel.theme.share import MAX_ZIP, ShareError, export_theme, import_theme
 
 log = logging.getLogger(__name__)
 
@@ -368,6 +370,7 @@ class EditorState:
         self.start_screen_jobs: Any = None  # the panel's own screens (a test puts a fake panel)
         self.news = News(config_path)  # whom Start tells what is new (news.py)
         self.updates = Updates(config_path)  # whether a newer version is out (updates.py)
+        self.community = Community()  # the themes the community shares (community.py)
         self._doctor: Any = None  # the panel test of Live → Diagnose (doctor_session.py)
         self._experiment: Any = None  # the video experiment's run (experiment.py)
 
@@ -668,13 +671,13 @@ class EditorHandler(BaseHTTPRequestHandler):
             given = (parse_qs(url.query).get(access.NAME) or [""])[0]
         return access.matches(given, self.token)
 
-    def _read_body(self, limit: int) -> bytes | None:
+    def _read_body(self, limit: int, too_large: str = "request too large") -> bytes | None:
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             length = -1
         if length < 0 or length > limit:
-            self._error("request too large", HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
+            self._error(too_large, HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
             return None
         self._body_read = True
         return self.rfile.read(length)
@@ -2317,6 +2320,60 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error(str(exc))
         self._json({"ok": True, "id": theme_id, "path": str(folder)})
 
+    def _export_theme(self, theme_id: str) -> None:
+        """A theme as one .zip to give to someone: its theme.json and the pictures and fonts it
+        names (theme/share.py)."""
+        try:
+            data, filename = export_theme(theme_id)
+        except ShareError as exc:
+            return self._error(str(exc))
+        except ThemeError as exc:
+            return self._error(str(exc), HTTPStatus.NOT_FOUND)
+        self._send(200, data, "application/zip", filename=filename)
+
+    def _import_theme(self, query: dict[str, list[str]]) -> None:
+        """``POST /api/themes/import`` with a shared theme's .zip as the body (its bytes, and
+        ``?name=`` the file's name): put in the person's themes folder under a name of its own
+        (theme/share.py), answered with ``{id, name, files}``. A theme named "import" is saved
+        here as any other: its body is JSON, an import's a zip."""
+        if self.headers.get("Content-Type", "").startswith("application/json"):
+            return self._save("import")
+        too_large = t("The file is larger than {size} MB: a shared theme may be at most that.",
+                      size=MAX_ZIP // (1024 * 1024))  # fmt: skip
+        data = self._read_body(MAX_ZIP, too_large)
+        if data is None:
+            return None
+        try:
+            done = import_theme(data, name=(query.get("name") or [""])[0])
+        except ShareError as exc:
+            return self._error(str(exc))
+        except OSError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        self._json(done)
+
+    def _community_preview(self, theme_id: str) -> None:
+        """The preview of a theme the community shares, as GitHub has it (kept an hour)."""
+        data = self.state.community.preview(theme_id)
+        if data is None:
+            return self._error("not found", HTTPStatus.NOT_FOUND)
+        self._send(200, data, "image/png")
+
+    def _community_install(self) -> None:
+        """``{"id": "aurora"}``: a theme the community shares, downloaded, checked against the
+        list's SHA-256 and put in the person's themes folder (community.py)."""
+        payload = self._read_json()
+        if payload is None:
+            return None
+        if not isinstance(payload, dict) or not isinstance(payload.get("id"), str):
+            return self._error('expected {"id": "<the id of a theme in the community list>"}')
+        try:
+            done = self.state.community.install(payload["id"])
+        except (CommunityError, ShareError) as exc:
+            return self._error(str(exc))
+        except OSError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        self._json(done)
+
     def _upload_asset(self, theme_id: str, query: dict[str, list[str]]) -> None:
         name = (query.get("name") or [""])[0]
         if not valid_theme_name(theme_id):
@@ -2374,6 +2431,15 @@ ROUTES: tuple[Route, ...] = (
         "GET",
         "/api/themes/{theme}/preview",
         lambda h, m, u: h._theme_preview(m["theme"], parse_qs(u.query)),
+        picture=True,
+    ),
+    Route("GET", "/api/themes/{theme}/export", lambda h, m, u: h._export_theme(m["theme"])),
+    # the themes the community shares: the list and the previews, from GitHub (community.py)
+    Route("GET", "/api/community/themes", lambda h, m, u: h._json(h.state.community.themes())),
+    Route(
+        "GET",
+        "/api/community/themes/{theme}/preview",
+        lambda h, m, u: h._community_preview(m["theme"]),
         picture=True,
     ),
     Route("GET", "/api/readings", lambda h, m, u: h._json(h._readings(parse_qs(u.query)))),
@@ -2468,6 +2534,8 @@ ROUTES: tuple[Route, ...] = (
         "/api/themes/{theme}/assets",
         lambda h, m, u: h._upload_asset(m["theme"], parse_qs(u.query)),
     ),
+    Route("POST", "/api/themes/import", lambda h, m, u: h._import_theme(parse_qs(u.query))),
+    Route("POST", "/api/community/install", lambda h, m, u: h._community_install()),
     Route("POST", "/api/themes/{theme*}", lambda h, m, u: h._save(m["theme"])),
 )
 

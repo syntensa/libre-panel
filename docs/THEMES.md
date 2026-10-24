@@ -12,8 +12,9 @@ my-theme/
 
 Built-in themes live in `src/libre_panel/themes/`; your own go into the user
 themes folder (`libre-panel config path` shows the config folder, themes are in
-its `themes/` subfolder). A user theme with the same name as a built-in one
-wins. The editor writes this format for you; this page is for people who want
+its `themes/` subfolder), and so do the themes you import or install from the
+community ([Sharing a theme](#sharing-a-theme)). A user theme with the same name as a
+built-in one wins. The editor writes this format for you; this page is for people who want
 to write or review themes by hand.
 
 ## theme.json
@@ -939,8 +940,58 @@ The forecast keys are counted from the moment they are read, so "the next
 hour" stays true between two weather updates. `rain` is the chance of
 rain in percent, and `weather.rain.minutes` is counted the same way.
 
-## Sharing themes
+## Sharing a theme
 
-Zip the theme folder. Only include fonts and images you may redistribute and
-put the license in `theme.json`. Themes cannot run code, and file references
-cannot leave the theme folder, so a shared theme is as safe as a picture.
+On *Start → Themes*, **Export…** on a theme's card (the arrow beside *Edit*) saves it as
+`<name>.zip`, yours as much as a built-in one: the theme folder with its `theme.json` and
+the pictures and fonts the theme names (a background, an image, a font, the lines of a
+slideshow, `photos/*.jpg` for a folder of them), nothing else of the folder. The `theme.json`
+in it is the theme as the editor saves it, without the lines that name a whole path (a slide
+from `C:/Users/…`, which no other computer has) or one of your own folders (your home or the
+settings folder): they would say who made it and where. Only include fonts and pictures you
+may redistribute, and put the license in `theme.json`.
+
+**Import…** at the top of the page (or the file dropped on the page) adds such a `.zip` to
+your themes, and the gallery shows it marked. The theme's folder takes the name of the folder
+in the zip (`aurora`), else of the file; where that name is taken, by a theme of yours or a
+built-in one, a number follows it (`lumen-2`, so an exported Lumen comes back beside the
+built-in one). A zip of a folder made by hand works too: `theme.json` at its top or in one
+folder.
+
+An import trusts nothing in the file and checks it all before anything is written:
+
+- at most 20 MB, and 50 MB unpacked, in at most 1000 files;
+- no path that leaves the folder (`../`), names a whole path (`/…`, `C:…`) or uses `\`, no
+  links, nothing locked with a password;
+- only `theme.json`, pictures (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`) and fonts (`.ttf`,
+  `.otf`), each what its name says (by its first bytes); anything else, a `.svg` or a
+  program, refuses the whole file, while what macOS and Windows put into a zip by themselves
+  (`__MACOSX/`, `.DS_Store`, `Thumbs.db`) is left out;
+- a `theme.json` Libre Panel loads (UTF-8, without a byte order mark, at most 2 MB).
+
+Of the pictures and fonts, only those the theme names are kept. What is refused is said in
+words, and nothing of it is left behind. Themes cannot run code, and file references cannot
+leave the theme folder, so a shared theme is as safe as a picture. *Open a theme file* on
+Start and *Import…* in the theme menu still open a lone `theme.json` in Design, without its
+pictures and fonts.
+
+## Community themes
+
+*Start → Themes → Community themes* lists the themes people share in the project's
+repository: `community/themes/index.json` on GitHub, beside each theme's `.zip` and picture.
+The section is closed until you open it, and only then does Libre Panel ask GitHub for the
+list (the app's page never talks to GitHub itself: Libre Panel's server asks, and passes the
+list and the pictures on). It keeps the list and the pictures for an hour; without an answer
+(offline, GitHub away) the section says so, and Libre Panel asks again a minute later at the
+soonest. The requests carry what any does (the computer's address, `libre-panel/<version>`),
+nothing of you or your panel.
+
+Each theme shows with its picture, its name, its author, the panel sizes it is made for and
+what it shows. **Install** downloads its zip from beside the list (a redirect to another
+host is not followed), checks it against the SHA-256 the list names (a file that differs is
+not installed) and then imports it as above, so it lands among your themes, marked, in a
+folder named as the list names it.
+
+To share yours with everyone: export it, add the zip and a picture under `community/themes/`
+in a pull request, with an entry in `index.json`. How, and the format of the list, are in
+[community/themes/README.md](../community/themes/README.md).

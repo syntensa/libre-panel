@@ -127,6 +127,7 @@ def test_the_files_that_need_no_token_are_the_apps_own_and_a_few_pictures():
     assert pictures == {
         "/api/themes/{theme}/assets/{rel+}",
         "/api/themes/{theme}/preview",
+        "/api/community/themes/{theme}/preview",  # a community theme's, from GitHub through here
         "/api/plugins/{page}/{rest*}",
         "/api/fan-look",  # a fan's look on its tile in Settings
         "/api/symbols-look",  # ... and the weather symbols' look on theirs

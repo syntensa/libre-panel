@@ -5,13 +5,13 @@
 // and Start goes on to the launcher: the panel's picture, then the question about smooth motion
 // (clip.js) and the first steps. Built on the shell: see ../../README.md.
 
-import { blankTheme, importTheme, openTheme, showOnPanel, startTheme } from "../../core/actions.js";
+import { blankTheme, importTheme, openTheme, pickFile, showOnPanel, startTheme } from "../../core/actions.js";
 import { registerCommands, registerProvider } from "../../core/commands.js";
 import { t } from "../../core/i18n.js";
 import { useMounted } from "../../core/orientation.js";
 import { loadUnlock, runUnlock } from "../../core/settings.js";
 import { firstStart, store, useStore } from "../../core/state.js";
-import { html, useEffect, useState } from "../../lib/preact.js";
+import { html, useEffect, useRef, useState } from "../../lib/preact.js";
 import { panelName } from "../../shell/panel-popover.js";
 import { navigate, registerView } from "../../shell/views.js";
 import { Segmented } from "../../ui/controls.js";
@@ -25,6 +25,7 @@ import { MountedChoice, PanelCard, PanelStrip, asksMounting, panelModelNow, useP
 import { Gallery, ThemeRow, collectionsOf, fitsPanel, startThemes } from "./themes.js";
 import { ScenesCard } from "./scenes.js";
 import { SequenceCard, SequencePage } from "./sequence.js";
+import { CommunityThemes, exportZip, importZip, useDropFile } from "./sharing.js";
 import { SetupCard } from "./setup.js";
 import { UpdateCard } from "./update.js";
 
@@ -161,9 +162,28 @@ function FirstStart({ focus }) {
 function ThemesPage({ asked }) {
   const { model, items } = useStartThemes();
   const [scope, setScope] = useState("fits");
+  const [selected, setSelected] = useState(""); // a theme just added (imported, installed)
+  const focused = useRef("");
   const fitting = items.filter((item) => item.fits);
   const filtered = model && scope === "fits" && fitting.length ? fitting : items;
-  return html`<div class="start gallery">
+  const shown = filtered.map((item) => (item.id === selected ? { ...item, selected: true } : item));
+  // the theme just added is marked and in view, its card focused; one made for another panel
+  // shows among all sizes
+  useEffect(() => {
+    if (!selected || focused.current === selected) return;
+    if (!filtered.some((item) => item.id === selected)) {
+      if (items.some((item) => item.id === selected)) setScope("all");
+      return;
+    }
+    const card = document.querySelector(`.theme-card[data-theme="${CSS.escape(selected)}"]`);
+    card?.scrollIntoView({ block: "center" });
+    card?.querySelector(".theme-card-main")?.focus({ preventScroll: true });
+    focused.current = selected;
+  }, [selected, filtered.length]);
+  const select = (id) => id && setSelected(id);
+  const [dropping, drop] = useDropFile(async (file) => select(await importZip(file)));
+  const pick = async () => select(await importZip(await pickFile(".zip,application/zip")));
+  return html`<div class=${`start gallery${dropping ? " dropping" : ""}`} ...${drop}>
     <${PanelStrip} compact />
     <div class="start-head">
       <div>
@@ -171,16 +191,22 @@ function ThemesPage({ asked }) {
         <h1>${t("Themes")}</h1>
         <p class="muted">${t("A click on a theme puts it on the panel; Edit opens it in Design.")}</p>
       </div>
-      ${model && fitting.length < items.length
-        ? html`<${Segmented} label=${t("Which themes")} value=${scope} onChange=${setScope}
-            options=${[
-              { value: "fits", label: t("For {panel}", { panel: panelName(model) }) },
-              { value: "all", label: t("All sizes") },
-            ]} />`
-        : null}
+      <div class="start-head-tools">
+        ${model && fitting.length < items.length
+          ? html`<${Segmented} label=${t("Which themes")} value=${scope} onChange=${setScope}
+              options=${[
+                { value: "fits", label: t("For {panel}", { panel: panelName(model) }) },
+                { value: "all", label: t("All sizes") },
+              ]} />`
+          : null}
+        <button type="button" class="btn theme-import" title=${t("A theme someone shared as a .zip, added to your themes. Dropping the file on this page does the same.")}
+          onClick=${pick}><${Icon} name="upload" size=${16} /> ${t("Import…")}</button>
+      </div>
     </div>
-    <${Gallery} items=${filtered} asked=${asked} label=${themeLabel} onChoose=${choose} onEdit=${edit} />
+    <${Gallery} items=${shown} asked=${asked} label=${themeLabel} onChoose=${choose} onEdit=${edit} onExport=${exportZip} />
+    <${CommunityThemes} onInstalled=${select} />
     <${StartActions} />
+    ${dropping ? html`<div class="gallery-drop" aria-hidden="true"><${Icon} name="upload" size=${22} /> ${t("Drop the .zip to add the theme to yours")}</div>` : null}
   </div>`;
 }
 
