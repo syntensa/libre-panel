@@ -46,6 +46,9 @@ log = logging.getLogger(__name__)
 
 # the USB vendor ids the udev rule is for: TURZX USB panels, the JONSBO ZC-360's screens
 USB_VENDORS = ("1cbe", "43a8", "345f")
+# and the screens whose vendor id other devices have too, with their product ids: Thermalright's
+# Trofeo Vision (0416 is Winbond's)
+USB_PRODUCTS = (("0416", "5302"), ("0416", "5408"))
 UDEV_RULES = "/etc/udev/rules.d/60-libre-panel.rules"
 RAPL_RULES = "/etc/udev/rules.d/60-libre-panel-rapl.rules"
 MODULES = "/etc/modules-load.d/libre-panel.conf"
@@ -307,6 +310,18 @@ def _reload(facts: Facts, changed: set[str]) -> Step:
             Run((udevadm, "trigger", "--subsystem-match=usb", f"--attr-match=idVendor={vendor}"))
             for vendor in USB_VENDORS
         ]
+        runs += [
+            Run(
+                (
+                    udevadm,
+                    "trigger",
+                    "--subsystem-match=usb",
+                    f"--attr-match=idVendor={vendor}",
+                    f"--attr-match=idProduct={product}",
+                )
+            )
+            for vendor, product in USB_PRODUCTS
+        ]
     if "powercap" in changed:
         runs.append(Run((udevadm, "trigger", "--subsystem-match=powercap")))
     return Step("reload", tuple(runs))
@@ -524,7 +539,9 @@ def _panel(root: Path, can: Callable[[Path, int], bool]) -> tuple[bool, bool]:
         return False, False
     present = denied = False
     for entry in entries:
-        if (_text(folder / entry / "idVendor") or "").lower() not in USB_VENDORS:
+        vendor = (_text(folder / entry / "idVendor") or "").lower()
+        product = (_text(folder / entry / "idProduct") or "").lower()
+        if vendor not in USB_VENDORS and (vendor, product) not in USB_PRODUCTS:
             continue
         present = True
         bus, number = _text(folder / entry / "busnum"), _text(folder / entry / "devnum")
@@ -539,6 +556,10 @@ def _rule_elsewhere(root: Path) -> bool:
     """Whether a rules file other than ours already gives the panels to the person."""
     ours = Path(UDEV_RULES).name
     patterns = [re.compile(rf'idVendor\}}=="{vendor}"', re.IGNORECASE) for vendor in USB_VENDORS]
+    patterns += [
+        re.compile(rf'idProduct\}}=="{product}"', re.IGNORECASE)
+        for _vendor, product in USB_PRODUCTS
+    ]
     for folder in RULE_FOLDERS:
         try:
             names = sorted(os.listdir(root / folder.lstrip("/")))

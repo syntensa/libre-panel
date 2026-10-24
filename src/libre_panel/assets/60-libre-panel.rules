@@ -13,3 +13,7 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="43a8", ATTRS{idProduct}=="0e61", MODE="0660"
 
 # JONSBO DS339: its USB display chip (MacroSilicon MS9132)
 SUBSYSTEM=="usb", ATTRS{idVendor}=="345f", ATTRS{idProduct}=="9132", MODE="0660", TAG+="uaccess"
+
+# Thermalright's Trofeo Vision: the 6.86" (a HID device) and the 9.16" and 11.3" bars
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0416", ATTRS{idProduct}=="5302", MODE="0660", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0416", ATTRS{idProduct}=="5408", MODE="0660", TAG+="uaccess"

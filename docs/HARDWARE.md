@@ -34,8 +34,9 @@ motion (the video mode is for the TURZX USB panels). The panel test's speed chec
   [turing-smart-screen-python](https://github.com/mathoudebine/turing-smart-screen-python),
   whose protocol Libre Panel follows), but nobody has confirmed this model with
   Libre Panel yet. Please run `libre-panel doctor` and report the result. For the panels of
-  JONSBO, Hongtai, VMAX and Lian Li (and the Turing 1.6" and 2.1" USB panels) the protocol
-  comes from other projects' notes and captures: nobody has run them with Libre Panel yet.
+  JONSBO, Hongtai, VMAX, Lian Li and Thermalright (and the Turing 1.6" and 2.1" USB panels) the
+  protocol comes from other projects' notes and captures: nobody has run them with Libre Panel
+  yet.
 - **planned** — the panel is in the catalog (editor menu, sizes), the driver is
   not written yet. Design themes now; they will work once the driver lands.
 
@@ -92,6 +93,7 @@ the panel lists show it when you point at one.
 | JONSBO DS339, VMAX 4.6" | no: choose the model | no | none: dimming darkens the picture | yes: turned off | on Windows the maker's driver, which its app installs |
 | Hongtai / Jungle Leopard | yes | no | its own (0–100) | no: it shows its own animation again | whole JPEG pictures of at most 80 KB over a serial port: a few a second, and a busy picture loses detail |
 | Lian Li | yes | no | its own (0–100) | not known yet | whole JPEG pictures; close L-Connect while Libre Panel runs |
+| Thermalright Trofeo Vision | yes | no | none: dimming darkens the picture | no: it shows its own picture again | whole JPEG pictures; close TRCC while Libre Panel runs |
 
 For all of them: close the maker's own program first. Two programs cannot drive one panel at
 once.
@@ -166,6 +168,29 @@ region or screen timeouts, or switch the pump's motor.
 The VMAX 4.6" (960×320) is a MacroSilicon MS9132 USB display chip like the JONSBO DS339's and
 runs on the same driver: choose `vmax-4.6` (*Settings → Panel*); `auto` does not open the chip.
 Unverified.
+
+## Thermalright Trofeo Vision
+
+| Model id | Size | Resolution (landscape) | Connection | Driver |
+|---|---|---|---|---|
+| `thermalright-trofeo-6.86` | 6.86" | 1280×480 | USB HID (`0416:5302`) | unverified |
+| `thermalright-trofeo-9.16` | 9.16" | 1920×462 | USB (`0416:5408`) | unverified |
+| `thermalright-trofeo-11.3` | 11.3" | 1920×440 | USB (`0416:5408`) | unverified |
+
+Found by `auto`; the screen says which one it is when it is opened (the 9.16" and the 11.3"
+share their USB id). Libre Panel sends JPEG pictures as Thermalright's own program (TRCC)
+does: the 9.16" gets 1920×462 although it calls itself 1920×480, and pictures are turned
+the way TRCC turns them for the screen's variant. Neither has a command for its backlight
+that is known, so the brightness goes into the pixels; a bar that gets no picture for a few
+seconds shows its logo again, so the last picture goes again twice a second. Close TRCC first.
+On Linux, `libre-panel system-setup --linux` gives your user access to both. The protocol
+comes from the MIT-licensed [turing-smart-screen](https://github.com/usausa/turing-smart-screen)
+(.NET, by usausa) and [InfoPanel](https://github.com/habibrehmansg/infopanel) (GPL-3.0); see
+the [protocol notes](protocol/thermalright.md). Unverified.
+
+Not yet: the 9.16" with the LY1 controller (`0416:5409`), which only InfoPanel documents, and
+Thermalright's other screens (Frozen Warframe, Elite Vision, the AIO pump screens and others on
+`0416:5302`, `0416:5406`, `87ad:70db` and as USB mass storage), whose pictures differ.
 
 ## Lian Li and others
 

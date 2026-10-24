@@ -30,6 +30,7 @@ PROTOCOLS = {
     "usb-ms9132": "USB bulk (MacroSilicon MS9132), a USB display chip",
     "serial-hongtai": "USB serial (VID 0x33C3, 2 Mbaud), Hongtai / Jungle Leopard JPEG frames",
     "usb-lianli": "USB bulk (VID 0x1CBE), Lian Li's TURZX-like protocol with JPEG frames",
+    "usb-thermalright": "USB bulk or HID (VID 0x0416), Thermalright's Trofeo Vision, JPEG frames",
 }
 
 
@@ -441,6 +442,36 @@ MODELS: tuple[PanelModel, ...] = (
         "usb-lianli",
         usb_ids=((0x1CBE, 0xA068),),
     ),
+    PanelModel(
+        "thermalright-trofeo-9.16",
+        "Thermalright",
+        "Thermalright Trofeo Vision",
+        9.16,
+        462,
+        1920,
+        "usb-thermalright",
+        usb_ids=((0x0416, 0x5408),),
+    ),
+    PanelModel(
+        "thermalright-trofeo-11.3",
+        "Thermalright",
+        "Thermalright Trofeo Vision",
+        11.3,
+        440,
+        1920,
+        "usb-thermalright",
+        usb_ids=((0x0416, 0x5408),),
+    ),
+    PanelModel(
+        "thermalright-trofeo-6.86",
+        "Thermalright",
+        "Thermalright Trofeo Vision",
+        6.86,
+        480,
+        1280,
+        "usb-thermalright",
+        usb_ids=((0x0416, 0x5302),),
+    ),
 )
 
 # Families with a driver (devices/turzx.py lists them); the rest is planned.
@@ -458,6 +489,7 @@ _DRIVER_STATUS = {
         "usb-ms9132",
         "serial-hongtai",
         "usb-lianli",
+        "usb-thermalright",
     )
 }
 # Models confirmed on the panel: with `libre-panel doctor`, or by an owner who reports it runs.
@@ -486,6 +518,11 @@ _LIANLI = (
     "Not yet seen on the hardware. It takes whole JPEG pictures: no smooth motion. Close "
     "L-Connect while Libre Panel runs: two programs cannot drive it at once."
 )
+_TROFEO = (
+    "Not yet seen on the hardware. It takes whole JPEG pictures: no smooth motion. It has no "
+    "backlight control: dimming darkens the picture. Close Thermalright's program while Libre "
+    "Panel runs. When Libre Panel quits, the panel shows its own picture again."
+)
 _LIMITS = {
     "turing-1.6-usb": _UNSEEN,
     "turing-2.1-usb": _UNSEEN,
@@ -507,6 +544,7 @@ _LIMITS = {
     "lianli-universal-9.2": _LIANLI,
     "lianli-hydroshift2-lcd": _LIANLI,
     "lianli-hydroshift2-oled": _LIANLI,
+    **{m.id: _TROFEO for m in MODELS if m.protocol == "usb-thermalright"},
 }
 MODELS = tuple(
     replace(

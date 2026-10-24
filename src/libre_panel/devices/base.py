@@ -220,15 +220,26 @@ def list_usb_devices(
     vendor_ids: tuple[int, ...] = (0x1CBE, 0x43A8, 0x345F),
 ) -> list[dict[str, Any]]:
     """Plain USB panels (Turing V1.x hardware, the JONSBO ZC-360's screens, the MS9132 chip of
-    the JONSBO DS339); needs pyusb and a libusb backend."""
+    the JONSBO DS339) by their vendor ids, and the catalog's other USB screens by their own
+    (a vendor id such as Thermalright's has other devices too); needs pyusb and a libusb
+    backend."""
+    from libre_panel.devices.models import MODELS
+
     try:
         import usb.core
     except ImportError as exc:
         raise DeviceError("pyusb is not installed: pip install 'libre-panel[usb]'") from exc
+    products = sorted(
+        {ids for m in MODELS if m.protocol.startswith("usb") for ids in m.usb_ids}
+        - {ids for m in MODELS for ids in m.usb_ids if ids[0] in vendor_ids}
+    )
     found = []
     try:
         for vid in vendor_ids:
             for dev in usb.core.find(find_all=True, idVendor=vid) or []:
+                found.append({"vid": f"{dev.idVendor:04x}", "pid": f"{dev.idProduct:04x}"})
+        for vid, pid in products:
+            for dev in usb.core.find(find_all=True, idVendor=vid, idProduct=pid) or []:
                 found.append({"vid": f"{dev.idVendor:04x}", "pid": f"{dev.idProduct:04x}"})
     except usb.core.NoBackendError as exc:
         raise DeviceError("no libusb backend found (see docs/HARDWARE.md)") from exc
