@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.1rc5 — 2026-10-24
+
+**Changes**
+- **Stills as JPEG on TURZX USB panels**: `[device] still = "auto" | "png" | "jpeg"` says how a
+  panel takes its pictures without smooth motion. JPEG (command 101) goes to the layer under
+  the PNG one and is decoded in hardware; the frame is cut to the decoder's layer (464
+  columns on the 9.2", behind the bezel), 4:4:4 at quality 90, lower on busy frames. "auto"
+  is JPEG on the 5.2", which shows nothing of a PNG, and PNG on the others, where it is
+  proven. Settings → Panel → Advanced has the switch (Stills).
+
 ## 0.7.1rc4 — 2026-10-24
 
 **Changes**

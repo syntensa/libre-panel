@@ -1,8 +1,9 @@
 """A simulated Turing V1.x USB panel for tests.
 
 It checks every packet the way the real device needs it (DES, magic, trailer,
-size field, RGBA PNG) and answers with echo + ACK, including the 512-byte
-replies whose zero-length packet trips up readers that ask for exactly 512.
+size field, RGBA PNG, a JPEG as wide as the decoder's layer) and answers with
+echo + ACK, including the 512-byte replies whose zero-length packet trips up
+readers that ask for exactly 512.
 
 The video path is simulated too: 110 must carry a name, 121 blocks go into a
 ring of five (overflow silently drops the oldest, as on the panel), and a
@@ -37,7 +38,11 @@ class FakePanel:
         self.native = native
         self.clock = clock
         self.commands: list[int] = []
-        self.frames: list[Image.Image] = []
+        self.frames: list[Image.Image] = []  # the PNG layer (102)
+        self.jpegs: list[Image.Image] = []  # the layer under it (101)
+        # The JPEG decoder's layer: on the 9.2" 464 columns (29 blocks of 16, 462 of them show),
+        # not the framebuffer's 480; a JPEG of 480 wraps its last rows onto the first.
+        self.jpeg_width = 464 if pid == 0x0092 else native[0]
         self.brightness: list[int] = []
         self.pending: list[bytes] = []
         self.unplugged = False
@@ -113,6 +118,14 @@ class FakePanel:
             with Image.open(io.BytesIO(payload)) as png:
                 assert png.size == self.native, f"frame {png.size} != framebuffer {self.native}"
                 self.frames.append(png.copy())
+        if cmd == 101:
+            assert len(payload) <= 1024 * 1024, "payload over 1 MiB: the panel times out"
+            with Image.open(io.BytesIO(payload)) as jpeg:
+                assert jpeg.format == "JPEG" and jpeg.mode == "RGB", (jpeg.format, jpeg.mode)
+                assert not jpeg.info.get("progressive"), "the decoder takes baseline JPEGs"
+                wanted = (self.jpeg_width, self.native[1])
+                assert jpeg.size == wanted, f"JPEG {jpeg.size} != the decoder's layer {wanted}"
+                self.jpegs.append(jpeg.copy())
         if cmd == 14:
             assert 0 <= plain[8] <= 102
             self.brightness.append(plain[8])

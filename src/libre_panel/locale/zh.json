@@ -2491,7 +2491,9 @@
     "Energy": "电量",
     "Pause panels": "暂停面板",
     "Resume panels": "恢复面板",
-    "at {price} {currency} per kWh": "按每 kWh {price} {currency}"
+    "at {price} {currency} per kWh": "按每 kWh {price} {currency}",
+    "Stills": "静态图像",
+    "How the pictures go to the panel without smooth motion. Automatic: JPEG on the 5.2″, which shows no PNG, and PNG on the others.": "关闭流畅动态时图像如何发送到面板。自动：5.2 英寸款用 JPEG（它不显示 PNG），其他面板用 PNG。"
   },
   "fields": {
     "agent": "智能体",

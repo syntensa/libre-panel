@@ -80,8 +80,8 @@ from libre_panel.devices.turzx_usb import (
     UsbTransport,
     brightness_arg,
     encode_frame,
-    encode_png_rgba,
     to_native,
+    transparent_layer,
 )
 from libre_panel.i18n import t
 
@@ -99,11 +99,6 @@ DEFAULT_BLOCK = 202752
 # The player's rate after power-on. Set again on exit, because the panel's own
 # standby clip plays at the last rate set (at 60 it stutters).
 POWER_ON_FPS = 30
-
-
-def transparent_layer(size: tuple[int, int]) -> bytes:
-    """A fully transparent PNG layer. Opaque black would hide the video completely."""
-    return encode_png_rgba(Image.new("RGBA", size, (0, 0, 0, 0)), compress_level=9)
 
 
 def rgb_bytes(frame: Image.Image) -> bytes:

@@ -32,7 +32,7 @@ invalid is refused with the reason, and nothing is written.
 
 | Section | What it changes in `config.toml` |
 |---|---|
-| Panel | `accent`, `[device]` (`model`, `brightness`, `orientation`, `rotate`, `motion`, `dark_on_quit`, `dark_on_sleep`, `night`, `night_from`, `night_to`, `night_brightness`, `dark_when_away`, `away_brightness`, `at` (*More panels*: where it stands); under *Advanced* `driver`, `output`, `port`) and `[video]` (`mode`, `fps`, `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
+| Panel | `accent`, `[device]` (`model`, `brightness`, `orientation`, `rotate`, `motion`, `dark_on_quit`, `dark_on_sleep`, `night`, `night_from`, `night_to`, `night_brightness`, `dark_when_away`, `away_brightness`, `at` (*More panels*: where it stands); under *Advanced* `driver`, `output`, `still` (TURZX USB panels), `port`) and `[video]` (`mode`, `fps`, `local_clip` while smooth motion lacks it; under *Advanced* `ffmpeg`, and `local_clip` once it is set) |
 | Sensors | `[sensors] providers` (which sources, and their order; those not in use under *More sources*), the hardware's names, and under *Advanced* `refresh_ms` and `[sensors.librehardwaremonitor]` (`mode`, `url`) |
 | Game mode and more | `[services] enabled` and the options of each `[services.<name>]` table: switches, numbers, texts and lists of texts or numbers. The rules of the autopilot have their own page (*Edit*, under the autopilot), the warnings of `notices` and the limits of `cooling` are still written here |
 | Weather and place | `[weather]` (`enabled`, `latitude`, `longitude`, `place`, `units`, `update_minutes`) |
@@ -80,6 +80,10 @@ orientation = ""               # "portrait": a bar that stands on end, see A pan
 motion = "auto"                # calm on the older USB serial panels (a picture a second,
                                # no gliding, moving symbols or fades), full on the others;
                                # "full" or "calm" for every panel
+still = "auto"                 # TURZX USB panels without the video mode: each picture as
+                               # "png" or as "jpeg" (decoded by the panel's hardware:
+                               # faster); "auto" is JPEG on the 5.2", which shows no PNG,
+                               # and PNG on the others
 dark_on_quit = false           # true: black and its light off when Libre Panel quits
                                # (Windows shutting down too); lit again at the next start;
                                # Turing 3.5" and UsbPCMonitor turn their screen off too
@@ -335,8 +339,8 @@ port = "COM6"                  # serial panels: which of two of the same kind it
 # brightness_offset = 10       # you are away too, with this added (-50 to 50: some panels
                                # look brighter than others at the same setting); false:
 brightness = 40                # its own brightness, night and away settings
-# rotate = 180, orientation, motion, night, dark_on_quit, dark_on_sleep, dark_when_away:
-# as in [device]
+# rotate = 180, orientation, motion, still, night, dark_on_quit, dark_on_sleep,
+# dark_when_away: as in [device]
 # on = false                   # kept, but not shown
 ```
 
@@ -1530,7 +1534,9 @@ local_clip = "usr/data/standby.h264"
 With `mode = "auto"` (the default) the video mode is on by itself where it is
 proven, today the 9.2", as soon as ffmpeg is found and `local_clip` is set.
 `libre-panel doctor` and the log say what is missing. `mode = "on"` tries it on
-every TURZX USB panel; `"off"` keeps single PNG frames. In the app, *Settings →
+every TURZX USB panel; `"off"` keeps single frames, PNG or JPEG as `[device] still` says
+(JPEG by itself on the 5.2", see [the protocol notes](protocol/turzx-usb.md#jpeg-stills-101)).
+In the app, *Settings →
 Panel* shows the same as *Smooth motion* (on with its frame rate, or what is still missing),
 sets the mode and the frame rate (25, 30 or 50), and while the clip's name is missing asks
 for it: the field is empty until you type a name, and *Use this name* takes the vendor app's.

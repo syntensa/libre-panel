@@ -11,7 +11,7 @@ Wire format: every command is one 512-byte packet. 500 bytes of plain text
 ([0] command id, [2:4] magic 1A 6D, [4:8] milliseconds since local midnight,
 little endian, [8:] arguments) are DES-CBC encrypted with key = IV =
 ``slv3tuzx`` (zero padded to 504 bytes); bytes 510/511 carry the trailer
-A1 1A. A payload (PNG, H.264) follows the packet in the same bulk transfer.
+A1 1A. A payload (PNG, JPEG, H.264) follows the packet in the same bulk transfer.
 The panel answers on the bulk IN endpoint: byte 0 echoes the command id,
 0xC8 means "accepted" (not "displayed").
 
@@ -65,6 +65,8 @@ MAX_PAYLOAD = 1024 * 1024
 CMD_SYNC = 10
 CMD_BRIGHTNESS = 14
 CMD_FRAME_RATE = 15
+# A JPEG still to the layer under the PNG one, decoded in hardware (``device.still``).
+CMD_UPLOAD_JPEG = 101
 CMD_UPLOAD_PNG = 102
 CMD_STOP_STREAM = 123
 # Restarts the panel (it is back after about 5 s). Sent only to clear a hung
@@ -72,6 +74,13 @@ CMD_STOP_STREAM = 123
 CMD_RESTART = 11
 
 USB_PIDS = {pid: m for m in MODELS if m.protocol == "usb-turing" for _vid, pid in m.usb_ids}
+
+# 4:4:4 at 90 keeps coloured text crisp (sjcsoftware/turzx-linux); busy frames step down.
+JPEG_QUALITY = 90
+JPEG_FALLBACK = (75, 60, 45)
+# The models whose stills go as JPEG with ``device.still = "auto"``: the 5.2" shows nothing
+# of a PNG (jijiechen/turing-monitor). PNG is proven on the 9.2" and the 12.3".
+JPEG_STILLS = ("turing-5.2-usb",)
 
 
 def _place(device: Any) -> str:
@@ -216,11 +225,18 @@ def encode_png_rgba(image: Image.Image, compress_level: int = 2) -> bytes:
     return buffer.getvalue()
 
 
+def transparent_layer(size: tuple[int, int]) -> bytes:
+    """A fully transparent PNG layer. Opaque black would hide the video, or the JPEG stills,
+    completely."""
+    return encode_png_rgba(Image.new("RGBA", size, (0, 0, 0, 0)), compress_level=9)
+
+
 def encode_frame(image: Image.Image) -> bytes:
     """PNG for one frame, within the panel's payload limit.
 
     Level 2 is fast (about 12 ms for 1920x480, SPUR II); busy frames fall
-    back to level 9. JPEG is no fallback: the 9.2" panel shows it wrongly.
+    back to level 9. JPEG is no fallback: it goes to the layer under the
+    PNG one (:func:`encode_jpeg`).
     """
     png = encode_png_rgba(image, 2)
     if len(png) > MAX_PAYLOAD:
@@ -231,6 +247,50 @@ def encode_frame(image: Image.Image) -> bytes:
             f"{MAX_PAYLOAD // 1024} KB); use fewer photos or gradients in the theme"
         )
     return png
+
+
+def jpeg_width(model: PanelModel | None, width: int) -> int:
+    """How wide a JPEG still is for a framebuffer ``width`` columns wide.
+
+    The panel's JPEG decoder works in blocks of 16 columns, and its layer is as wide as the
+    columns that show, rounded up to whole blocks: 464 on the 9.2" (29 x 16, of which 462
+    show), not the 480 of its framebuffer. A 480-wide JPEG wraps its last rows onto the first
+    ~70 there (sjcsoftware/turzx-linux). The columns past it are those the bezel hides at the
+    framebuffer's right edge (``hidden``); where none are hidden the width stays.
+    """
+    shown = width - (model.hidden[1] if model is not None else 0)
+    return -(-shown // 16) * 16
+
+
+def encode_jpeg(
+    image: Image.Image, quality: int = JPEG_QUALITY, model: PanelModel | None = None
+) -> bytes:
+    """A baseline JPEG (4:4:4) of a native frame for 101, within the panel's payload limit.
+
+    The frame is cut to :func:`jpeg_width` from the left, never stretched: on the 9.2" the
+    16 columns past 464 go, all behind the bezel. Busy frames take a lower quality.
+    """
+    width = jpeg_width(model, image.width)
+    if width != image.width:
+        image = image.crop((0, 0, width, image.height))
+    rgb = image.convert("RGB")
+    for step in (quality, *(lower for lower in JPEG_FALLBACK if lower < quality)):
+        buffer = io.BytesIO()
+        rgb.save(buffer, format="JPEG", quality=step, subsampling=0)
+        if buffer.tell() <= MAX_PAYLOAD:
+            return buffer.getvalue()
+    raise FrameError(
+        f"frame too detailed for the panel ({buffer.tell() // 1024} KB, limit "
+        f"{MAX_PAYLOAD // 1024} KB); use fewer photos or gradients in the theme"
+    )
+
+
+def still_format(still: str, model: PanelModel | None) -> str:
+    """How a panel takes its stills with ``device.still``: "png" or "jpeg"; "auto" is JPEG
+    on the models of :data:`JPEG_STILLS`, else PNG."""
+    if still != "auto":
+        return still
+    return "jpeg" if model is not None and model.id in JPEG_STILLS else "png"
 
 
 def to_native(frame: Image.Image) -> Image.Image:
@@ -490,7 +550,8 @@ class UsbTransport:
 
 
 class TurzxUsbDisplay(Display):
-    """Bitmap path: every frame is sent as a full RGBA PNG (about 9 fps on 9.2").
+    """Bitmap path: every frame is sent as a full RGBA PNG (about 9 fps on 9.2"), or as a JPEG
+    to the layer under it (``device.still``; the 5.2" shows no PNG).
 
     The smooth 25-50 fps path (H.264 background layer, command 110 + 121) is
     :class:`~libre_panel.devices.turzx_video.TurzxVideoDisplay`.
@@ -503,8 +564,10 @@ class TurzxUsbDisplay(Display):
         self.model = model
         self.transport: UsbTransport | None = None
         self.brightness: int | None = None
+        self._layer_clear = False  # the PNG layer was made transparent on this connection
 
     def open(self) -> None:
+        self._layer_clear = False
         pid = self.model.usb_ids[0][1] if self.model and self.model.usb_ids else None
         self.transport = UsbTransport.open(pid, getattr(self.config, "beside", ()))
         self.model = self.model or USB_PIDS.get(self.transport.pid)
@@ -528,10 +591,18 @@ class TurzxUsbDisplay(Display):
         if self.transport:
             self.transport.command(CMD_BRIGHTNESS, bytes([brightness_arg(percent)]))
 
+    def stills(self) -> str:
+        """How this panel takes its stills: "png" or "jpeg" (``device.still``)."""
+        return still_format(getattr(self.config, "still", "auto"), self.model)
+
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
-        png = encode_frame(to_native(frame))
+        native = to_native(frame)
+        if self.stills() == "jpeg":
+            data, send = encode_jpeg(native, model=self.model), self._send_jpeg
+        else:
+            data, send = encode_frame(native), self._send_png
         try:
-            self._send_png(png)
+            send(data)
         except DeviceError as exc:
             # A replug, standby or a crashed earlier session leaves the pipe out of
             # step; one fresh connection with a resync usually fixes it (SPUR II).
@@ -541,13 +612,27 @@ class TurzxUsbDisplay(Display):
             self.open()
             if self.brightness is not None:
                 self.set_brightness(self.brightness)
-            self._send_png(png)
+            send(data)
 
     def _send_png(self, png: bytes) -> None:
         if self.transport is None:
             raise DeviceError("panel not open")
         self.transport.command(CMD_UPLOAD_PNG, struct.pack(">I", len(png)), png, timeout_ms=5000)
         self.counters.bytes += len(png)
+
+    def _send_jpeg(self, jpeg: bytes) -> None:
+        if self.transport is None:
+            raise DeviceError("panel not open")
+        if not self._layer_clear:
+            # The PNG layer lies over the JPEG one and keeps what it showed last, across
+            # reconnects too: an opaque picture there would hide every JPEG. So it is made
+            # transparent once a connection, as the video mode does (sjcsoftware/turzx-linux).
+            model = self.model
+            size = (model.native_width, model.native_height) if model else (480, 1920)
+            self._send_png(transparent_layer(size))
+            self._layer_clear = True
+        self.transport.command(CMD_UPLOAD_JPEG, struct.pack(">I", len(jpeg)), jpeg, timeout_ms=5000)
+        self.counters.bytes += len(jpeg)
 
     def close(self) -> None:
         if self.transport is not None:

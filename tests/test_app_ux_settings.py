@@ -383,6 +383,7 @@ def test_smooth_motion_asks_for_the_clip_and_takes_the_panels_own_name_on_a_clic
             "Advanced",
             "Where the pictures go",
             "Picture file",
+            "Stills",
             "Name of the standby clip",
             "Port of a serial panel",
             "Video program (ffmpeg)",
@@ -392,6 +393,41 @@ def test_smooth_motion_asks_for_the_clip_and_takes_the_panels_own_name_on_a_clic
         waits_for(page, lambda: settings_config().device.video.mode == "off")
         expect(page.get_by_role("radiogroup", name="Frames per second")).to_have_count(0)
         expect(page.get_by_label("Name of the standby clip")).to_have_count(0)
+
+
+def test_a_turzx_usb_panel_takes_its_stills_as_chosen_under_advanced(
+    app_url,  # noqa: F811
+    isolated_home,
+    monkeypatch,
+):
+    """Settings → Panel → Advanced: how a TURZX USB panel takes its stills, automatic (JPEG on
+    the 5.2", which shows no PNG), PNG or JPEG, written on the click; a serial panel has no
+    such row."""
+    from test_app_browser import radio
+    from test_editor_settings import panel_on_the_bus
+
+    panel_on_the_bus(monkeypatch, "turing-5.2-usb")
+    with browser_page(app_url, "settings/panel/panel-advanced") as page:
+        row = page.locator("#panel-advanced .stills-row")
+        expect(row.locator(".settings-row-title")).to_have_text("Stills")
+        expect(row.locator(".settings-row-hint")).to_contain_text("JPEG on the 5.2″")
+        expect(radio(page, "Stills", "Automatic")).to_have_attribute("aria-checked", "true")
+        assert not (isolated_home / "config.toml").exists()  # nothing written by looking
+        radio(page, "Stills", "JPEG").click()
+        waits_for(page, lambda: settings_config().device.still == "jpeg")
+        expect(radio(page, "Stills", "JPEG")).to_have_attribute("aria-checked", "true")
+        radio(page, "Stills", "PNG").click()
+        waits_for(page, lambda: settings_config().device.still == "png")
+    (isolated_home / "config.toml").write_text(
+        'theme = "libre-default"\n\n[device]\nmodel = "turing-3.5"\n', encoding="utf-8"
+    )
+    panel_on_the_bus(monkeypatch)
+    with browser_page(app_url, "settings/panel/panel-advanced") as page:
+        expect(page.locator("#panel-found [data-serial-note]")).to_be_visible()  # it is known
+        expect(page.locator("#panel-advanced .settings-row-title").nth(2)).to_have_text(
+            "Picture file"
+        )
+        expect(page.locator("#panel-advanced .stills-row")).to_have_count(0)
 
 
 def test_the_sensors_lead_with_what_is_in_use_and_fold_the_rest(app_url, isolated_home):  # noqa: F811

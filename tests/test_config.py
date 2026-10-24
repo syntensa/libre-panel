@@ -160,6 +160,8 @@ def test_weather_with_location():
         {"device": {"brightness": True}},
         {"device": {"rotate": 90}},
         {"device": {"rotate": "180"}},
+        {"device": {"still": "gif"}},
+        {"device": {"still": True}},
         {"weather": {"units": "kelvin"}},
         {"refresh_ms": 10},
     ],

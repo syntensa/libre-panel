@@ -9,7 +9,8 @@ Sources: the GPL-3.0 reference implementation in
 (`library/lcd/lcd_comm_turing_usb.py`) and measurements on a 9.2" panel made
 in the SPUR II project. Statements marked **verified** were observed on that
 panel; everything else comes from the reference and still needs confirmation
-per model.
+per model. The JPEG stills follow the notes of two other projects (see
+*JPEG stills (101)*).
 
 ## Transport
 
@@ -62,7 +63,7 @@ send a sync and check the echo (up to three attempts). **verified**
 | 15 | frame rate | `[8]` = fps; also sets the panel's own playback rate |
 | 17 | H.264 block size | reply 0 on the 9.2" → default 202752 **verified** |
 | 100 | storage info | all zero: no card in the 9.2" **verified** |
-| 101 | JPEG frame | did not display correctly on the 9.2" |
+| 101 | JPEG frame | `[8:12]` = size, big endian; payload = baseline JPEG, to the layer under 102. On the 9.2" only 464 columns wide (see *JPEG stills (101)*) |
 | 102 | PNG frame / overlay | `[8:12]` = size, big endian; payload = PNG |
 | 110 | start local video playback | `[8:12]` = name length, `[16:]` = name. Clears the framebuffer (needed before streaming) and copies the name into the panel's settings **in memory** **verified** |
 | 111 | stop local playback | **verified** |
@@ -88,12 +89,58 @@ decoder*). 12 **halts** the panel until it loses power: never send it.
   visible area is 1920×462, the reference library's size. In landscape the
   strip is the frame's top 18 rows; in portrait (ROTATE_180) its left 18
   columns. Measured with a 1 px ruler; the catalog carries it as data
-  (`hidden`) for layouts and the editor, and nothing crops the frame.
+  (`hidden`) for layouts and the editor, and nothing crops a PNG frame (a
+  JPEG still is 464 columns wide, 2 into the strip; see below).
   **verified**
 - PNG frames must be **colour type 6 (RGBA)**. With RGB the decoder is off by
   one byte per pixel and tiles the image four times. **verified**
 - A full PNG frame takes about 87 ms on the device → roughly **9 fps** for full
   frames. **verified**
+
+## JPEG stills (101)
+
+Libre Panel sends stills as JPEG where `[device] still` says so: `"jpeg"` on
+any TURZX USB panel, and `"auto"` on the 5.2". The facts come from
+[sjcsoftware/turzx-linux](https://github.com/sjcsoftware/turzx-linux/blob/main/docs/protocol.md)
+(verified there on a 9.2", firmware `turzx_0001_0015`) and
+[jijiechen/turing-monitor](https://github.com/jijiechen/turing-monitor/blob/main/docs/PROTOCOL.md)
+(5.2"); Libre Panel has not been seen sending them on hardware yet.
+
+- **The packet** is built like 102: `[8:12]` = the payload's size, big
+  endian; a baseline JPEG follows the packet in the same transfer, below
+  1 MiB like every payload. The panel decodes it in hardware (a PNG in
+  software: about 9 full frames a second).
+- **The width is whole blocks of 16.** On the 9.2" the layers are **464**
+  pixels wide (29 × 16, the alignment of the hardware JPEG decoder), not
+  480. A 480-wide JPEG is decoded with the wrong stride: the picture is
+  roughly right, but its last rows wrap onto the first ~70 (garbage with
+  diagonal streaks at one end) and the other end is never updated. That is
+  why 101 "did not display correctly" on the 9.2" in SPUR II. About 462 of
+  the 464 columns show behind the bezel, which fits the 18 columns measured
+  here: 480 − 18 = 462, rounded up to whole blocks = 464. So Libre Panel
+  cuts the native frame to its first 464 columns (464–479 lie behind the
+  bezel) and never stretches it. Where nothing is hidden the width stays
+  the framebuffer's: 720 on the 5.2" and the 12.3", whole blocks already
+  (turzx-linux suggests a width rounded up to a multiple of 16 for the
+  other models, which this gives).
+- **Subsampling:** 4:4:4 and 4:2:0 both decode once the width is right
+  (4:2:2 untested). Libre Panel uses 4:4:4 at quality 90 for crisp
+  coloured text, as turzx-linux does; a frame that would be larger than
+  1 MiB takes quality 75, 60 or 45.
+- **Two layers.** A JPEG goes to the base layer, where the video plays; the
+  PNG of 102 is an overlay above it with per-pixel alpha, and it **keeps its
+  last content, even across reconnects**: an old opaque PNG hides every
+  later JPEG. Before its first JPEG on each connection Libre Panel sends a
+  fully transparent PNG of the framebuffer's size, as the video mode does
+  (and as the vendor app does before streaming).
+- **Speed:** on the 9.2" turzx-linux measured about 20 fps for 800 KB
+  frames of noise and more than 45 fps for simple ones (12–16 MB/s), where
+  full PNG frames give about 9 fps. turing-monitor measured about 8 fps
+  with 30 KB frames on the 5.2".
+- **The 5.2" shows no PNG.** It acknowledges 102 and shows nothing
+  (turing-monitor); 101 is its only still path, so `"auto"` takes JPEG
+  there. PNG stays the default on the others, where it is proven (9.2",
+  12.3").
 
 ## Two layers: H.264 video + PNG overlay (smooth path)
 

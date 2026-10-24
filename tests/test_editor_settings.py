@@ -77,6 +77,7 @@ def test_the_settings_are_the_config_with_its_defaults_filled_in(server):
         "rotate": 0,
         "orientation": "",
         "motion": "auto",
+        "still": "auto",
         "dark_on_quit": False,
         "dark_on_sleep": True,
         "night": False,
@@ -229,6 +230,16 @@ def test_settings_are_written_with_the_comments_kept(server):
     assert load_config().device.video.local_clip == "usr/data/standby.h264"  # as typed, trimmed
 
 
+def test_how_a_turzx_usb_panel_takes_its_stills_is_written_and_read(server):
+    _, data = request(server, "GET", "/api/settings")
+    assert data["config"]["device"]["still"] == "auto"
+    status, data = write(server, **{"device.still": "jpeg"})
+    assert status == 200 and data["config"]["device"]["still"] == "jpeg"
+    assert load_config().device.still == "jpeg" and 'still = "jpeg"' in config_text()
+    status, _ = write(server, panels=[{"model": "turing-5.2-usb", "still": "png"}])
+    assert status == 200 and load_config().panels[0].device.still == "png"
+
+
 def test_the_video_experiment_s_settings_are_written_and_checked(server):
     tried = {"video.maxrate": "16M", "video.crf": 18, "video.preset": "ultrafast",
              "video.profile": "high", "video.encoder": "h264_amf", "video.keyframe_s": 2,
@@ -321,6 +332,8 @@ def test_a_refused_setting_leaves_all_of_them_as_they_were(server):
         {"device.brightness": 70.5},
         {"device.rotate": 90},
         {"device.motion": "wild"},
+        {"device.still": "gif"},
+        {"device.still": True},
         {"device.rotate": False},
         {"device.model": "no-such-panel"},
         {"device.driver": "teleport"},
@@ -1146,7 +1159,7 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "device.model", "device.driver", "device.brightness", "device.rotate", "device.port",
         "device.orientation", "device.motion", "device.dark_on_quit", "device.dark_on_sleep",
         "device.night", "device.night_from", "device.night_to", "device.night_brightness",
-        "device.dark_when_away", "device.away_brightness", "device.at",
+        "device.dark_when_away", "device.away_brightness", "device.at", "device.still",
         "video.mode", "video.fps", "video.local_clip", "video.clip_asked", "refresh_ms",
         "video.device_fps", "video.crf", "video.preset", "video.keyframe_s", "video.maxrate",
         "video.profile", "video.encoder",

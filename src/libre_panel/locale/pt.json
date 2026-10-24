@@ -2491,7 +2491,9 @@
     "Energy": "Energia",
     "Pause panels": "Pausar os painéis",
     "Resume panels": "Retomar os painéis",
-    "at {price} {currency} per kWh": "a {price} {currency} por kWh"
+    "at {price} {currency} per kWh": "a {price} {currency} por kWh",
+    "Stills": "Imagens estáticas",
+    "How the pictures go to the panel without smooth motion. Automatic: JPEG on the 5.2″, which shows no PNG, and PNG on the others.": "Como as imagens chegam ao painel sem movimento suave. Automático: JPEG no de 5,2″, que não mostra PNG, e PNG nos outros."
   },
   "fields": {
     "agent": "agente",
