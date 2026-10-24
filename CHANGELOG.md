@@ -14,6 +14,12 @@
   "Received" and "Sent" where the full names would end in dots, and Lumen's fan names on the
   5.2" have the room they need
 - **Agents** say for how long each one has been working, waiting or idle, beside the tool
+- **The ring instrument can show the course of the load** along the bottom of a tall card,
+  under its rows (*Course of the load* in the module's settings, `history`): Arena beside a
+  companion on the 12.3" shows it for the processor and the graphics card, so the two cards
+  say where the frame rate went, not only where it is now
+- **Encore beside a companion on the 12.3"** sets the title, the artist and the album a size
+  larger in the middle of its card
 
 ## 0.7.0 — 2026-10-22
 

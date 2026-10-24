@@ -562,6 +562,11 @@ function ModuleInspector({ widget }) {
               <${Toggle} label=${t("Whole processor")} checked=${widget.total !== false} onChange=${change("total")} />
             <//>`
           : null}
+        ${widget.module === "instrument"
+          ? html`<${Field} label=${t("Course of the load")} hint=${t("the load of the last minute along the bottom of a tall card, under the rows")}>
+              <${Toggle} label=${t("Course of the load")} checked=${Boolean(widget.history)} onChange=${change("history")} />
+            <//>`
+          : null}
         ${widget.module === "temps"
           ? html`<${Field} label=${t("Fans")} hint=${t("at most so many, below or beside the temperatures where there is room; 0: none")}>
               <${NumberField} label=${t("Fans")} value=${widget.fans ?? 6} min=${0} max=${12} onChange=${change("fans")} />

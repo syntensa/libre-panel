@@ -2432,7 +2432,9 @@
     "More panels beside the first: what each shows, where they stand and which one is which.": "Mais painéis ao lado do primeiro: o que cada um mostra, onde ficam e qual é qual.",
     "Panels": "Painéis",
     "Received": "Recebido",
-    "Sent": "Enviado"
+    "Sent": "Enviado",
+    "Course of the load": "Evolução da carga",
+    "the load of the last minute along the bottom of a tall card, under the rows": "a carga do último minuto ao longo da base de um cartão alto, abaixo das linhas"
   },
   "fields": {
     "agent": "agente",

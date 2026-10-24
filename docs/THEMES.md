@@ -186,7 +186,7 @@ the font smaller, `ellipsis` cuts the text with "…" (for hardware names).
 | `calendar` | `w`, `h`, `font`, `font_size`, `color`, `color2`, `muted`, `first_day` | the month as a grid of days, today marked in `color2`; weekday names in `muted` and the language; `first_day` `monday` or `sunday` |
 | `list` | `w`, `h`, `items`, `style`, `columns`, `max_items`, `sort`, `format`, `detail`, `detail_format`, `min`, `max`, `scale`, `levels`, `font`, `font_size`, `label_font`, `uppercase`, `color`, `muted`, `color2`, `background`, `empty`, `color_rules` | readings found by name or pattern, as many as fit, see [Lists](#lists) |
 | `rect` | `w`, `h`, `color`, `color2`, `gradient`, `radius`, `outline`, `outline_width`, `backdrop_blur`, `ridge` | cards, frames, separators; `backdrop_blur` gives frosted glass, `ridge` a ridge (see [Look and finish](#look-and-finish)) |
-| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `threads`, `total`, `moving`, `hold`, `change`, `slide`, `time` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
+| `module` | `module`, `col`, `row`, `cols`, `rows`, `source`, `sensor`, `format`, `title`, `text`, `color`, `fallback`, `card`, `forecast`, `step`, `items`, `sort`, `threads`, `total`, `history`, `moving`, `hold`, `change`, `slide`, `time` | a building block on the grid, see [Modules](#modules) and [Cards](#cards) |
 
 `scale` is `linear`, `sqrt` or `log`: the latter two keep small values visible
 on huge ranges such as network rates.

@@ -120,7 +120,8 @@
       "change": 0.6,
       "slide": 0,
       "time": "total",
-      "finish": "auto"
+      "finish": "auto",
+      "history": true
     },
     {
       "type": "module",
@@ -162,7 +163,8 @@
       "change": 0.6,
       "slide": 0,
       "time": "total",
-      "finish": "auto"
+      "finish": "auto",
+      "history": true
     }
   ],
   "style": {

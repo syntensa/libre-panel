@@ -2432,7 +2432,9 @@
     "More panels beside the first: what each shows, where they stand and which one is which.": "第一块面板旁边的更多面板：各自显示什么、放在哪里、哪块是哪块。",
     "Panels": "面板",
     "Received": "已接收",
-    "Sent": "已发送"
+    "Sent": "已发送",
+    "Course of the load": "负载走势",
+    "the load of the last minute along the bottom of a tall card, under the rows": "高卡片底部沿边显示最近一分钟的负载，位于各行之下"
   },
   "fields": {
     "agent": "智能体",

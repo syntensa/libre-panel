@@ -412,6 +412,7 @@ def build_instrument(b: _Build, src: M.Source) -> None:
     b.card()
     rows = list(_rows().get(src.role, src.details))
     wide = b.aspect >= 1.3
+    history = 0.0  # the height of the course of the load, below the rows
     # sizes follow the ring's diameter (164 px with its groove 10 px thick in the Studio)
     if wide:
         d = min(b.ih * 0.92, b.iw * 0.46)
@@ -425,7 +426,14 @@ def build_instrument(b: _Build, src: M.Source) -> None:
             if count == 0 or b.ih / need >= 0.5 * d:
                 break
             count -= 1
-        d = min(d, b.ih / (1.38 + (0.287 + 0.268 * (count - 1) if count else 0)))
+        d = min(d, b.ih / need)
+        # the course of the load along the bottom (``history``), where the card is tall
+        # enough for it with the ring still three fifths as wide as the card
+        if b.module["history"]:
+            spare = b.ih - need * 0.62 * b.iw / 1.12
+            if spare >= 4.5 * b.ts:
+                history = min(spare, 0.4 * b.ih)
+                d = min(d, (b.ih - history - b.pad) / need)
     d = max(24, round(d))
     u = d / 164
     pad = 0.05 * d
@@ -433,7 +441,7 @@ def build_instrument(b: _Build, src: M.Source) -> None:
         cx, top = b.ix + pad + d / 2, b.iy + (b.ih - d) / 2
     else:
         total = d * (1.33 + (0.287 + 0.268 * (count - 1) if count else 0)) + pad
-        cx, top = b.ix + b.iw / 2, b.iy + (b.ih - total) / 2 + pad
+        cx, top = b.ix + b.iw / 2, b.iy + (b.ih - history - total) / 2 + pad
 
     b.add("gauge", "ring", x=round(cx - d / 2), y=round(top), w=d, h=d, sensor=src.load,
           min=0 if src.low is None else src.low, max=100 if src.high is None else src.high,
@@ -521,6 +529,15 @@ def build_instrument(b: _Build, src: M.Source) -> None:
         for widget in b.out[first:]:
             if widget["id"] != f"r{i}" and not (kept and widget["id"] == f"r{i}-label"):
                 _need(widget, sensor)  # (no unit where there is no number)
+    if history:  # from one edge of the card to the other, inside its line, as the game card's
+        edge = max(1, round(b.frame_u / 160)) if b.card_on else 0
+        radius = round(b.style["radius"] * b.frame_u / 200) if b.card_on else 0
+        gy = b.iy + b.ih - history
+        gh = b.y + b.h - edge - radius / 2 - gy  # (its fill fades out above the corners)
+        low = 0 if src.low is None else src.low
+        high = 100 if src.high is None else src.high
+        b.graph("history", src.load, b.x + edge, gy, b.w - 2 * edge, gh, color, low, high)
+        b.out[-1]["clip"] = True
 
 
 def _sample(number: str, unit: str) -> str:
