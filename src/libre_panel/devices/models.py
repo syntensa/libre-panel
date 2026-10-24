@@ -32,6 +32,7 @@ PROTOCOLS = {
     "usb-lianli": "USB bulk (VID 0x1CBE), Lian Li's TURZX-like protocol with JPEG frames",
     "usb-thermalright": "USB bulk or HID (VID 0x0416), Thermalright's Trofeo Vision, JPEG frames",
     "usb-beada": "USB bulk (VID 0x4E58), BeadaPanel's Panel-Link, 16-bit frames",
+    "usb-nzxt": "USB bulk and HID (VID 0x1E71), an NZXT Kraken's LCD, frames through its memory",
 }
 
 
@@ -598,6 +599,50 @@ MODELS: tuple[PanelModel, ...] = (
         "usb-beada",
         usb_ids=((0x4E58, 0x1001),),
     ),
+    PanelModel(
+        "nzxt-kraken-z",
+        "NZXT",
+        "NZXT Kraken Z",
+        2.36,
+        320,
+        320,
+        "usb-nzxt",
+        shape="round",
+        usb_ids=((0x1E71, 0x3008),),
+    ),
+    PanelModel(
+        "nzxt-kraken-2023",
+        "NZXT",
+        "NZXT Kraken 2023",
+        1.54,
+        240,
+        240,
+        "usb-nzxt",
+        shape="round",
+        usb_ids=((0x1E71, 0x300E),),
+    ),
+    PanelModel(
+        "nzxt-kraken-elite-2024",
+        "NZXT",
+        "NZXT Kraken Elite RGB 2024",
+        2.72,
+        640,
+        640,
+        "usb-nzxt",
+        shape="round",
+        usb_ids=((0x1E71, 0x3012),),
+    ),
+    PanelModel(
+        "nzxt-kraken-plus-2024",
+        "NZXT",
+        "NZXT Kraken Plus 2024",
+        1.54,
+        240,
+        240,
+        "usb-nzxt",
+        shape="round",
+        usb_ids=((0x1E71, 0x3014),),
+    ),
 )
 
 # Families with a driver (devices/turzx.py lists them); the rest is planned.
@@ -617,6 +662,7 @@ _DRIVER_STATUS = {
         "usb-lianli",
         "usb-thermalright",
         "usb-beada",
+        "usb-nzxt",
     )
 }
 # Models confirmed on the panel: with `libre-panel doctor`, or by an owner who reports it runs.
@@ -655,6 +701,11 @@ _BEADA = (
     "smooth motion, and soft gradients show steps. Close the maker's program while Libre Panel "
     "runs: two programs cannot drive it at once."
 )
+_KRAKEN = (
+    "Not yet seen on the hardware. Each picture goes through the cooler's picture memory: a few "
+    "a second, no smooth motion. Close NZXT CAM while Libre Panel runs. When Libre Panel quits, "
+    "the cooler shows the liquid's temperature again."
+)
 _LIMITS = {
     "turing-1.6-usb": _UNSEEN,
     "turing-2.1-usb": _UNSEEN,
@@ -678,6 +729,7 @@ _LIMITS = {
     "lianli-hydroshift2-oled": _LIANLI,
     **{m.id: _TROFEO for m in MODELS if m.protocol == "usb-thermalright"},
     **{m.id: _BEADA for m in MODELS if m.protocol == "usb-beada"},
+    **{m.id: _KRAKEN for m in MODELS if m.protocol == "usb-nzxt"},
 }
 MODELS = tuple(
     replace(

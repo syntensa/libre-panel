@@ -34,9 +34,9 @@ motion (the video mode is for the TURZX USB panels). The panel test's speed chec
   [turing-smart-screen-python](https://github.com/mathoudebine/turing-smart-screen-python),
   whose protocol Libre Panel follows), but nobody has confirmed this model with
   Libre Panel yet. Please run `libre-panel doctor` and report the result. For the panels of
-  JONSBO, Hongtai, VMAX, Lian Li, Thermalright and BeadaPanel (and the Turing 1.6" and 2.1" USB
-  panels) the protocol comes from other projects' notes and captures and from the makers' own
-  sources: nobody has run them with Libre Panel yet.
+  JONSBO, Hongtai, VMAX, Lian Li, Thermalright, BeadaPanel and NZXT (and the Turing 1.6" and
+  2.1" USB panels) the protocol comes from other projects' notes and captures and from the
+  makers' own sources: nobody has run them with Libre Panel yet.
 - **planned** — the panel is in the catalog (editor menu, sizes), the driver is
   not written yet. Design themes now; they will work once the driver lands.
 
@@ -95,6 +95,7 @@ the panel lists show it when you point at one.
 | Lian Li | yes | no | its own (0–100) | not known yet | whole JPEG pictures; close L-Connect while Libre Panel runs |
 | Thermalright Trofeo Vision | yes | no | none: dimming darkens the picture | no: it shows its own picture again | whole JPEG pictures; close TRCC while Libre Panel runs |
 | BeadaPanel | yes | no | its own | yes: the backlight off | whole pictures in 16-bit colour, a few a second |
+| NZXT Kraken (LCD) | yes | no | its own (0–100) | yes: brightness 0 | each picture goes through the cooler's memory: a few a second; close NZXT CAM |
 
 For all of them: close the maker's own program first. Two programs cannot drive one panel at
 once.
@@ -222,6 +223,38 @@ announced them). The protocol comes from the maker's own sources (NXElec's demos
 Pi daemon, the [beada](https://github.com/JT365/beada) Linux driver) and
 [InfoPanel](https://github.com/habibrehmansg/infopanel); see the
 [protocol notes](protocol/beadapanel.md). Unverified.
+
+## NZXT Kraken with an LCD
+
+| Model id | Size | Resolution | USB id | Driver |
+|---|---|---|---|---|
+| `nzxt-kraken-z` | 2.36" round | 320×320 | `1e71:3008` (Kraken Z53, Z63, Z73) | unverified |
+| `nzxt-kraken-2023` | 1.54" round | 240×240 | `1e71:300e` (Kraken 2023) | unverified |
+| `nzxt-kraken-elite-2024` | 2.72" round | 640×640 | `1e71:3012` (Kraken Elite RGB 2024) | unverified |
+| `nzxt-kraken-plus-2024` | 1.54" round | 240×240 | `1e71:3014` (Kraken Plus 2024) | unverified |
+
+The screen on the pump, found by `auto`. Libre Panel writes only the screen's commands, never
+the pump's or the fans' (set those with the mainboard, liquidctl or CoolerControl, which can run
+beside it as long as only one program drives the screen). Each picture goes into the cooler's
+picture memory first (two of its 16 "buckets" in turn, which it forgets when it loses power)
+and is then shown: a few pictures a second. The cooler shows uploaded pictures as they are, so
+Libre Panel turns them the way the cooler is set to turn its own screens (NZXT CAM sets that).
+The brightness is the cooler's own; `dark_on_quit` sets it to 0, and when Libre Panel quits
+the cooler shows the liquid's temperature again. Close NZXT CAM first.
+
+**Linux.** The cooler is two USB interfaces: the pictures go to its vendor interface (USB access
+as for the other panels), its screen's commands through its HID interface, which stays with the
+kernel (the `nzxt-kraken3` hwmon driver reads the liquid's temperature through it, and Libre
+Panel can show that sensor). Libre Panel opens that interface's `/dev/hidraw*` node, so your
+user needs access to it too: the udev rule of `libre-panel system-setup --linux` gives both
+(`SUBSYSTEM=="usb"` and `KERNEL=="hidraw*"` for these ids). Nothing is detached from the kernel.
+On Windows liquidctl reaches the vendor interface through WinUSB with no driver to replace (its
+list of devices gives the Krakens no Zadig note); unverified with Libre Panel.
+
+The protocol comes from [liquidctl](https://github.com/liquidctl/liquidctl) (GPL-3.0,
+`kraken3.py`) and [krakenlcd](https://github.com/ossini/krakenlcd) (GPL-3.0, verified on a
+Kraken Z53); see the [protocol notes](protocol/nzxt-kraken.md). Not yet: the Kraken Elite 2023
+(`1e71:300c`), whose LCD liquidctl lists as broken; the Kraken X models have no screen.
 
 ## Lian Li and others
 

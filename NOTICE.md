@@ -57,6 +57,14 @@ messages and their checksum, the panel's information, the model codes, the strea
 the backlight's range) comes from them. Libre Panel's driver (`devices/beadapanel.py`) is its
 own code.
 
+**liquidctl** — Copyright Tom Frey, Jonas Malaco, Shady Nawara and contributors,
+GPL-3.0-or-later. <https://github.com/liquidctl/liquidctl>. The protocol of the NZXT Krakens'
+LCD (the screen's reports, the brightness and the turn, the picture memory's buckets, the
+picture's header, the Kraken 2023's firmware 2) comes from its `kraken3.py`. **krakenlcd** —
+ossini, GPL-3.0-or-later. <https://github.com/ossini/krakenlcd>. Its notes, made on a Kraken
+Z53, add the header's own transfer, the two buckets in turn and the hidraw node. Libre Panel's
+driver (`devices/nzxt_kraken.py`) is its own code.
+
 **LibreHardwareMonitor** (MPL-2.0) — the sensor source for the GPU,
 temperatures, power and fans on Windows. The Windows downloads carry its
 library and read it inside Libre Panel (see "Windows downloads" below); a
@@ -238,7 +246,7 @@ licence:
 The WebView2 runtime that draws the window is not in the downloads: Windows 11 has it,
 and Windows 10 gets it with Microsoft Edge.
 
-Product names such as TURZX, Turing Smart Screen, Lian Li, Thermalright, BeadaPanel, WeAct and
-Noctua (and its fans' model names) are trademarks of their respective owners; Libre Panel is not
-affiliated with them. The fan looks named after Noctua's fans are drawings of Libre Panel's own, made
-from the blades' shape, without any of Noctua's pictures or logos.
+Product names such as TURZX, Turing Smart Screen, Lian Li, Thermalright, BeadaPanel, NZXT,
+Kraken, WeAct and Noctua (and its fans' model names) are trademarks of their respective owners;
+Libre Panel is not affiliated with them. The fan looks named after Noctua's fans are drawings of
+Libre Panel's own, made from the blades' shape, without any of Noctua's pictures or logos.

@@ -150,9 +150,11 @@ def test_a_new_computer_gets_the_rule_the_driver_and_a_reload():
                 f"--attr-match=idVendor={v}",
                 f"--attr-match=idProduct={p}",
             )
-            for v, p in (("0416", "5302"), ("0416", "5408"), ("4e58", "1001"))
+            for v, p in setup.USB_PRODUCTS
         ),  # (other makers' screens, by their product ids)
+        ("/usr/bin/udevadm", "trigger", "--subsystem-match=hidraw"),  # (a Kraken's commands)
     ]
+    assert ("4e58", "1001") in setup.USB_PRODUCTS and ("1e71", "3008") in setup.USB_PRODUCTS
 
 
 def test_the_energy_counters_stay_closed_unless_asked_for():
@@ -369,7 +371,7 @@ def test_doing_it_twice_changes_nothing_the_second_time():
     again = setup.apply(plan(facts()), system)  # the same plan again, from a stale reading
     assert system.files == files
     assert again[0].items == {UDEV_RULES: "unchanged"}
-    udevadm = 1 + len(setup.USB_VENDORS) + len(setup.USB_PRODUCTS)  # reload, then the triggers
+    udevadm = 2 + len(setup.USB_VENDORS) + len(setup.USB_PRODUCTS)  # reload, then the triggers
     assert again[1].items == {"nct6775": "loaded"} and len(system.ran) == ran + udevadm  # only
 
 
@@ -517,7 +519,11 @@ def test_a_computer_in_a_folder_is_read(tmp_path):
         'ATTRS{idVendor}=="345f", TAG+="uaccess"\n'
         'ATTRS{idVendor}=="0416", ATTRS{idProduct}=="5302", TAG+="uaccess"\n'
         'ATTRS{idVendor}=="0416", ATTRS{idProduct}=="5408", TAG+="uaccess"\n'
-        'ATTRS{idVendor}=="4e58", ATTRS{idProduct}=="1001", TAG+="uaccess"\n',
+        'ATTRS{idVendor}=="4e58", ATTRS{idProduct}=="1001", TAG+="uaccess"\n'
+        + "".join(
+            f'ATTRS{{idVendor}}=="1e71", ATTRS{{idProduct}}=="{pid}", TAG+="uaccess"\n'
+            for pid in ("3008", "300e", "3012", "3014")
+        ),
     )
     root.write("etc/modules-load.d/libre-panel.conf", "nct6775\n")
     for name in ("sys/class/powercap/intel-rapl:0/energy_uj",):

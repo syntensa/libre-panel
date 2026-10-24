@@ -44,16 +44,17 @@ OTHER_DRIVERS = {
     "usb-lianli": "libre_panel.devices.lianli_usb:LianLiDisplay",
     "usb-thermalright": "libre_panel.devices.thermalright:TrofeoDisplay",
     "usb-beada": "libre_panel.devices.beadapanel:BeadaDisplay",
+    "usb-nzxt": "libre_panel.devices.nzxt_kraken:KrakenDisplay",
 }
 DRIVERS = {**SERIAL_DRIVERS, **OTHER_DRIVERS}
 
 
 def other_usb_model() -> PanelModel | None:
-    """The USB screen of another maker on the bus (Lian Li, Thermalright, BeadaPanel), as
-    ``auto`` would find it, in this order, without opening it; None for none."""
-    from libre_panel.devices import beadapanel, lianli_usb, thermalright
+    """The USB screen of another maker on the bus (Lian Li, Thermalright, BeadaPanel, an NZXT
+    Kraken), as ``auto`` would find it, in this order, without opening it; None for none."""
+    from libre_panel.devices import beadapanel, lianli_usb, nzxt_kraken, thermalright
 
-    for family in (lianli_usb, thermalright, beadapanel):
+    for family in (lianli_usb, thermalright, beadapanel, nzxt_kraken):
         model = family.present_model()
         if model is not None:
             return model
@@ -170,8 +171,8 @@ class TurzxDisplay(Display):
         return impl
 
     def _open_any(self) -> Display:
-        """A USB panel, else another maker's USB screen (Lian Li, Thermalright, BeadaPanel), else
-        a JONSBO ZC-360, else a serial one (``device.model = "auto"``)."""
+        """A USB panel, else another maker's USB screen (Lian Li, Thermalright, BeadaPanel, NZXT),
+        else a JONSBO ZC-360, else a serial one (``device.model = "auto"``)."""
         from libre_panel.devices import jonsbo_zc360
         from libre_panel.devices.serial_link import find_port
 

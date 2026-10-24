@@ -47,8 +47,16 @@ log = logging.getLogger(__name__)
 # the USB vendor ids the udev rule is for: TURZX USB panels, the JONSBO ZC-360's screens
 USB_VENDORS = ("1cbe", "43a8", "345f")
 # and other makers' screens, with their product ids (a vendor id may have other devices too):
-# Thermalright's Trofeo Vision (0416 is Winbond's), BeadaPanel
-USB_PRODUCTS = (("0416", "5302"), ("0416", "5408"), ("4e58", "1001"))
+# Thermalright's Trofeo Vision (0416 is Winbond's), BeadaPanel, NZXT's Krakens with an LCD
+USB_PRODUCTS = (
+    ("0416", "5302"),
+    ("0416", "5408"),
+    ("4e58", "1001"),
+    ("1e71", "3008"),
+    ("1e71", "300e"),
+    ("1e71", "3012"),
+    ("1e71", "3014"),
+)
 UDEV_RULES = "/etc/udev/rules.d/60-libre-panel.rules"
 RAPL_RULES = "/etc/udev/rules.d/60-libre-panel-rapl.rules"
 MODULES = "/etc/modules-load.d/libre-panel.conf"
@@ -322,6 +330,8 @@ def _reload(facts: Facts, changed: set[str]) -> Step:
             )
             for vendor, product in USB_PRODUCTS
         ]
+        # the hidraw nodes too: a Kraken's screen takes its commands through its own
+        runs.append(Run((udevadm, "trigger", "--subsystem-match=hidraw")))
     if "powercap" in changed:
         runs.append(Run((udevadm, "trigger", "--subsystem-match=powercap")))
     return Step("reload", tuple(runs))
