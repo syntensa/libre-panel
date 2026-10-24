@@ -229,6 +229,41 @@ def test_settings_are_written_with_the_comments_kept(server):
     assert load_config().device.video.local_clip == "usr/data/standby.h264"  # as typed, trimmed
 
 
+def test_the_video_experiment_s_settings_are_written_and_checked(server):
+    tried = {"video.maxrate": "16M", "video.crf": 18, "video.preset": "ultrafast",
+             "video.profile": "high", "video.encoder": "h264_amf", "video.keyframe_s": 2,
+             "video.fps": 60, "video.device_fps": 70}  # fmt: skip
+    status, data = write(server, **tried)
+    assert status == 200, data
+    video = load_config().device.video
+    assert (video.maxrate, video.crf, video.preset, video.profile) == (
+        "16M",
+        18,
+        "ultrafast",
+        "high",
+    )
+    assert (video.encoder, video.keyframe_s, video.fps, video.device_fps) == (
+        "h264_amf",
+        2.0,
+        60,
+        70,
+    )
+    served = data["config"]["video"]
+    assert (served["maxrate"], served["encoder"], served["device_fps"]) == ("16M", "h264_amf", 70)
+    for bad in (
+        {"video.maxrate": "fast"},
+        {"video.crf": 52},
+        {"video.preset": "placebo"},
+        {"video.profile": "main10"},
+        {"video.encoder": "h264_videotoolbox"},
+        {"video.keyframe_s": 0},
+        {"video.device_fps": 121},
+    ):
+        status, data = write(server, **bad)
+        assert status == 400, (bad, data)
+    assert load_config().device.video.maxrate == "16M"  # nothing of that was written
+
+
 def test_writes_that_come_at_once_all_arrive(server):
     """Each starts from the file the one before left: none is lost."""
     changes = [
@@ -1102,6 +1137,8 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "device.night", "device.night_from", "device.night_to", "device.night_brightness",
         "device.dark_when_away", "device.away_brightness", "device.at",
         "video.mode", "video.fps", "video.local_clip", "video.clip_asked", "refresh_ms",
+        "video.device_fps", "video.crf", "video.preset", "video.keyframe_s", "video.maxrate",
+        "video.profile", "video.encoder",
         "check_updates", "allow_notify", "light_mode", "symbols", "accent", "across",
         "hotkeys.enabled", "hotkeys.pause",
         "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open", "hotkeys.next_scene",

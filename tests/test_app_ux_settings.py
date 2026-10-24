@@ -478,6 +478,46 @@ RUN_STATE = """async ([background, status]) => {
 }"""
 
 
+def test_the_video_experiment_writes_each_choice_at_once_and_leads_back(
+    app_url,  # noqa: F811
+    isolated_home,
+    monkeypatch,
+):
+    """Settings → Panel → Video experiment: the cap, the quality, the speed, the profile, the
+    encoder and the keyframes, each written on the click; Live's tiles and the log's lines
+    about the video under them; and a way back to what was measured, greyed while it holds."""
+    from test_app_browser import radio
+    from test_editor_settings import lacking_ffmpeg, panel_on_the_bus
+
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    lacking_ffmpeg(monkeypatch, found=True)
+    with browser_page(app_url, "settings/panel") as page:
+        card = page.locator("#panel-video-experiment")
+        expect(card).to_contain_text("Video experiment")
+        back = card.get_by_role("button", name="Back to the measured settings")
+        expect(back).to_be_disabled()  # nothing but the measured settings yet
+        radio(page, "Quality", "18").click()
+        waits_for(page, lambda: settings_config().device.video.crf == 18)
+        radio(page, "Cap on the bit rate", "16 Mbit/s").click()
+        waits_for(page, lambda: settings_config().device.video.maxrate == "16M")
+        radio(page, "Profile", "high").click()
+        waits_for(page, lambda: settings_config().device.video.profile == "high")
+        page.get_by_label("Encoder", exact=True).select_option("h264_amf")
+        waits_for(page, lambda: settings_config().device.video.encoder == "h264_amf")
+        radio(page, "Frames per second", "60").click()  # the panel is told 70 with it
+        waits_for(page, lambda: settings_config().device.video.device_fps == 70)
+        assert settings_config().device.video.fps == 60
+        expect(card.locator(".live-tile")).to_have_count(5)  # as Live shows them
+        expect(card.locator(".experiment-log")).to_contain_text("Nothing about the video")
+        expect(back).to_be_enabled()
+        back.click()
+        waits_for(page, lambda: settings_config().device.video.crf == 25)
+        video = settings_config().device.video
+        assert (video.maxrate, video.profile, video.encoder) == ("auto", "baseline", "libx264")
+        assert (video.fps, video.device_fps) == (50, 60)
+        expect(back).to_be_disabled()
+
+
 def test_live_says_how_the_panel_runs_in_a_calm_sentence(app_url):  # noqa: F811
     """The numbers are the detail; the sentence above them says what they mean: smooth, slower
     than planned (and what helps), picture by picture, waiting (and why), paused, a fault."""

@@ -29,10 +29,13 @@
   gets as sharp a picture as its USB link takes; the *Data rate* tile under Live says the cap
   in force. A rate of your own still holds ([Video](docs/CONFIGURATION.md#video))
 - **An experiment for the video mode**, for those who want to try what the panels take beyond
-  what was measured on the 9.2": `profile` (`main`, `high`) and `encoder` (`h264_nvenc`,
-  `h264_amf`, `h264_qsv`: the graphics card encodes, at little cost to the processor) under
-  `[device.video]`; the panel's firmware name is in the log when it connects
-  ([Video](docs/CONFIGURATION.md#video))
+  what was measured on the 9.2": a card *Video experiment* under Settings → Panel with the bit
+  rate's cap, the quality, x264's speed, the profile (`main`, `high`), the encoder
+  (`h264_nvenc`, `h264_amf`, `h264_qsv`: the graphics card encodes, at little cost to the
+  processor), the keyframe spacing and 60 frames a second, each written at once, with Live's
+  tiles and the log's lines about the video underneath, and a way back to the measured
+  settings; the same under `[device.video]` in config.toml. The panel's firmware name is in
+  the log when it connects ([Video](docs/CONFIGURATION.md#video))
 
 ## 0.7.0 — 2026-10-22
 

@@ -38,6 +38,7 @@ from libre_panel.config import (
     place_at,
     user_themes_dir,
 )
+from libre_panel.devices.h264 import ENCODERS, PROFILES, X264_PRESETS
 from libre_panel.editor import access
 from libre_panel.i18n import t
 
@@ -173,6 +174,15 @@ def _text(name: str, value: Any, limit: int, required: bool = False) -> str:
     if len(value.encode("utf-8")) > limit:
         raise SettingsError(f"{name}: at most {limit} bytes")
     return value
+
+
+_RATE = re.compile(r"^(auto|[0-9]+(\.[0-9]+)?[kKM]?)$")  # as config.toml takes video.maxrate
+
+
+def _rate(name: str, value: Any) -> str:
+    if not isinstance(value, str) or not _RATE.match(value.strip()):
+        raise SettingsError(f'{name}: "auto", or a bit rate such as "2M" or "1500k"')
+    return value.strip()
 
 
 def _choice(name: str, value: Any, allowed: tuple[Any, ...]) -> Any:
@@ -431,6 +441,13 @@ class Settings:
                 "video": {
                     "mode": video.mode,
                     "fps": video.fps,
+                    "device_fps": video.device_fps,
+                    "crf": video.crf,
+                    "preset": video.preset,
+                    "keyframe_s": video.keyframe_s,
+                    "maxrate": video.maxrate,
+                    "profile": video.profile,
+                    "encoder": video.encoder,
                     "local_clip": video.local_clip,
                     "clip_asked": video.clip_asked,
                     "ffmpeg": video.ffmpeg,
@@ -1336,6 +1353,13 @@ RULES: dict[str, Any] = {
     "device.port": lambda n, v, c: _text(n, v, 64),
     "video.mode": lambda n, v, c: _choice(n, v, ("auto", "on", "off")),
     "video.fps": lambda n, v, c: _whole(n, v, 1, 60),
+    "video.device_fps": lambda n, v, c: _whole(n, v, 1, 120),
+    "video.crf": lambda n, v, c: _whole(n, v, 0, 51),
+    "video.preset": lambda n, v, c: _choice(n, v, X264_PRESETS),
+    "video.keyframe_s": lambda n, v, c: _number(n, v, 1, 60),
+    "video.maxrate": lambda n, v, c: _rate(n, v),
+    "video.profile": lambda n, v, c: _choice(n, v, PROFILES),
+    "video.encoder": lambda n, v, c: _choice(n, v, ENCODERS),
     "video.local_clip": lambda n, v, c: _text(n, v, 200),
     "video.clip_asked": lambda n, v, c: _flag(n, v),
     "video.ffmpeg": lambda n, v, c: _text(n, v, 260),

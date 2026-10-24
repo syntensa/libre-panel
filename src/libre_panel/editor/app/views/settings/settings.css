@@ -271,6 +271,21 @@
 }
 
 /* the standby clip's name: the field, and the button that takes the panel's own name */
+.experiment-tiles {
+  margin-top: 14px;
+}
+
+.experiment-log {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--panel-2, rgba(127, 127, 127, 0.08));
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .clip-choice {
   display: flex;
   flex-wrap: wrap;

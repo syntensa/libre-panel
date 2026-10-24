@@ -6,6 +6,8 @@
 
 import { normalTheme, themeName } from "../../core/actions.js";
 import { endpoints } from "../../core/api.js";
+import { control, usePolled } from "../../core/console.js";
+import { statTiles } from "../../core/stats.js";
 import { versionBase } from "../../core/orientation.js";
 import { t } from "../../core/i18n.js";
 import {
@@ -209,7 +211,7 @@ function VideoCard() {
   if (!config || !info) return null;
   const { mode, fps, local_clip: clip } = config.video;
   const video = info.video;
-  const rates = [25, 30, 50, ...(fps && ![25, 30, 50].includes(fps) ? [fps] : [])].sort((a, b) => a - b);
+  const rates = [25, 30, 50, 60, ...(fps && ![25, 30, 50, 60].includes(fps) ? [fps] : [])].sort((a, b) => a - b);
   const applies = videoApplies(config, info);
   return html`<${Card} id="panel-video">
     <${SettingRow}
@@ -229,17 +231,90 @@ function VideoCard() {
       />
     <//>
     ${applies
-      ? html`<${SettingRow} title=${t("Frames per second")} hint=${t("50 is the smoothest; 25 and 30 ask less of the PC.")}>
+      ? html`<${SettingRow} title=${t("Frames per second")} hint=${t("50 is the smoothest; 25 and 30 ask less of the PC. 60 is an experiment: the panel is told 70, so that its player stays ahead.")}>
           <${Segmented}
             label=${t("Frames per second")}
             value=${fps}
-            onChange=${(value) => change({ "video.fps": value })}
+            onChange=${(value) => change({ "video.fps": value, "video.device_fps": value >= 60 ? value + 10 : 60 })}
             options=${rates.map((rate) => ({ value: rate, label: String(rate) }))}
           />
         <//>`
       : null}
     ${applies && video.gaps.includes("clip") ? html`<${ClipRow} value=${clip} />` : null}
     <${MotionRow} motion=${config.device.motion} serial=${info.model?.connection === "serial"} />
+  <//>
+  ${applies ? html`<${ExperimentCard} video=${config.video} />` : null}`;
+}
+
+// What the video mode was measured with on the 9.2"; the experiment's "Back to the measured" writes it.
+const MEASURED = { "video.maxrate": "auto", "video.crf": 25, "video.preset": "superfast", "video.profile": "baseline",
+                   "video.encoder": "libx264", "video.keyframe_s": 10, "video.fps": 50, "video.device_fps": 60 };  // fmt: skip
+const RATES = ["auto", "4M", "8M", "16M", "24M", "32M"];
+const QUALITIES = [16, 18, 20, 22, 25];
+const PRESETS = ["ultrafast", "superfast", "veryfast"];
+const KEYFRAMES = [2, 5, 10];
+const EXPERIMENT_LINE = /video|ffmpeg|firmware|decoder/i;
+
+/** The experiment's settings as they are, with a value of the person's own kept in the choices. */
+const withOwn = (choices, own) => (choices.includes(own) ? choices : [...choices, own]);
+
+/**
+ * Settings → Panel → Video experiment: what the panels take beyond what was measured on the 9.2"
+ * (the bit rate's cap, the quality, x264's speed, the profile, the encoder, the keyframes), each
+ * written at once (the panel's video starts anew), with how the panel is doing underneath (the
+ * tiles of Live, every second) and the log's lines about the video (every three seconds), so
+ * that a try and its outcome are on one page.
+ */
+function ExperimentCard({ video }) {
+  const panel = usePolled(control.panel, 1000);
+  const log = usePolled(() => control.log(200), 3000);
+  const stats = panel.data?.panel?.stats;
+  const lines = (log.data?.lines || []).filter((line) => EXPERIMENT_LINE.test(line)).slice(-8);
+  const measured = Object.entries(MEASURED).every(([key, value]) => video[key.slice(6)] === value);
+  const row = (title, hint, key, choices, label = String) => html`<${SettingRow} title=${title} hint=${hint}>
+    <${Segmented}
+      label=${title}
+      value=${video[key]}
+      onChange=${(value) => change({ [`video.${key}`]: value })}
+      options=${withOwn(choices, video[key]).map((value) => ({ value, label: label(value) }))}
+    />
+  <//>`;
+  return html`<${Card}
+    id="panel-video-experiment"
+    title=${t("Video experiment")}
+    text=${t("What your panel takes beyond what was measured on the 9.2\". Each change starts the panel's video anew; the tiles say how it is doing, the log's lines what the video mode did. If the panel shows nothing, go back to the measured settings.")}
+    action=${html`<button type="button" class="btn" disabled=${measured} onClick=${() => change(MEASURED)}>${t("Back to the measured settings")}</button>`}
+  >
+    ${row(t("Cap on the bit rate"), t("auto starts at the measured rate and follows the panel: a step down while it takes less than it is sent, a step up after a calm minute. A fixed cap holds."), "maxrate", RATES, (value) => (value === "auto" ? t("auto") : value.replace("M", " Mbit/s")))}
+    ${row(t("Quality"), t("x264's crf: lower is sharper and needs more bits. 25 was measured; 18 is near lossless to the eye. (NVIDIA's encoder takes it too; AMD's and Intel's take their quality from the cap.)"), "crf", QUALITIES)}
+    ${row(t("Encoder speed"), t("x264's preset: ultrafast asks the least of the processor, veryfast compresses best."), "preset", PRESETS)}
+    ${row(t("Profile"), t("baseline was measured; main and high compress better and ask more of the panel's decoder."), "profile", ["baseline", "main", "high"])}
+    <${SettingRow} title=${t("Encoder")} hint=${t("x264 on the processor, or the graphics card's encoder at little cost to the processor. An encoder that cannot start says why in the log.")}>
+      <${Select}
+        label=${t("Encoder")}
+        value=${video.encoder}
+        onChange=${(value) => change({ "video.encoder": value })}
+        options=${[
+          { value: "libx264", label: t("x264 (processor)") },
+          { value: "h264_amf", label: t("AMD (h264_amf)") },
+          { value: "h264_nvenc", label: t("NVIDIA (h264_nvenc)") },
+          { value: "h264_qsv", label: t("Intel (h264_qsv)") },
+        ]}
+      />
+    <//>
+    ${row(t("Keyframe every"), t("Seconds between keyframes. 10 was measured; at a high bit rate a short spacing no longer makes flat areas pulse, and a glitch heals sooner."), "keyframe_s", KEYFRAMES, (value) => t("{n} s", { n: value }))}
+    <div class="live-tiles experiment-tiles" role="list" aria-label=${t("How the panel is doing")}>
+      ${statTiles(stats).map(
+        (tile) => html`<div class=${`live-tile ${tile.level}`} role="listitem" key=${tile.id} data-tile=${tile.id} title=${tile.title}>
+          <span class="live-tile-label">${tile.label}</span>
+          <b class="mono">${tile.value}</b>
+          <small>${tile.note}</small>
+        </div>`,
+      )}
+    </div>
+    <div class="experiment-log mono" role="log" aria-label=${t("The log's lines about the video")}>
+      ${lines.length ? lines.map((line) => html`<div key=${line}>${line.replace(/^\S+ (\S+)[.,]\d+ \w+ [\w.]+: /, "$1  ")}</div>`) : html`<div class="muted">${t("Nothing about the video in the log yet.")}</div>`}
+    </div>
   <//>`;
 }
 
