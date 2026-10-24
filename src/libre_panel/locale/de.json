@@ -1459,7 +1459,6 @@
     "Use the connected panel": "Das angeschlossene Panel verwenden",
     "Video mode: the deepest queue the panel reported (it holds five pictures and the driver waits above two), how often the driver waited for room, and how many pictures it threw away unsent.": "Videomodus: die tiefste Warteschlange, die das Panel gemeldet hat (es fasst fünf Bilder, und der Treiber wartet ab zwei), wie oft der Treiber auf Platz gewartet hat und wie viele Bilder er ungesendet verworfen hat.",
     "Visibility": "Sichtbarkeit",
-    "What goes to the panel, in KB/s (1 KB = 1000 bytes); not counted for the PNG file.": "Was zum Panel geht, in KB/s (1 KB = 1000 Bytes); für die PNG-Datei nicht gezählt.",
     "What the panel shows now": "Was das Panel jetzt zeigt",
     "Which themes": "Welche Themes",
     "Your panel is here: {panel}": "Dein Panel ist da: {panel}",
@@ -2434,7 +2433,9 @@
     "Received": "Empfangen",
     "Sent": "Gesendet",
     "Course of the load": "Verlauf der Last",
-    "the load of the last minute along the bottom of a tall card, under the rows": "die Last der letzten Minute am unteren Rand einer hohen Karte, unter den Zeilen"
+    "the load of the last minute along the bottom of a tall card, under the rows": "die Last der letzten Minute am unteren Rand einer hohen Karte, unter den Zeilen",
+    "KB/s · up to {rate} Mbit/s": "KB/s · bis {rate} Mbit/s",
+    "What goes to the panel, in KB/s (1 KB = 1000 bytes); not counted for the PNG file. In video mode also the bit rate's cap: with maxrate \"auto\" it steps down while the panel takes less than it is sent, and up again after a calm minute.": "Was zum Panel geht, in KB/s (1 KB = 1000 Bytes); für die PNG-Datei nicht gezählt. Im Videomodus auch die Obergrenze der Bitrate: mit maxrate \"auto\" geht sie eine Stufe hinunter, solange das Panel weniger abnimmt, als es bekommt, und nach einer ruhigen Minute wieder hinauf."
   },
   "fields": {
     "agent": "Agent",

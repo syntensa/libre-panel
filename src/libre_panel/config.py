@@ -421,8 +421,10 @@ class VideoConfig:
     crf: int = 25
     preset: str = "superfast"
     keyframe_s: float = 10.0
-    # the highest bit rate: "auto" is 2 Mbit/s for the 9.2" (1920x480 at 50 fps), more for a
-    # panel with more pixels or frames (the 12.3": 3 Mbit/s); or a rate such as "1500k", "4M"
+    # the highest bit rate: "auto" starts at 2 Mbit/s for the 9.2" (1920x480 at 50 fps), more
+    # for a panel with more pixels or frames (the 12.3": 3 Mbit/s), then follows the panel: a
+    # step down while it takes less than it is sent, a step up after a calm minute (1-8 Mbit/s);
+    # or a rate such as "1500k", "4M"
     maxrate: str = "auto"
     ffmpeg: str = ""  # path to ffmpeg; empty = the download's own (bundled.py), else PATH
     # The name the video start command (110) needs: the panel's own standby

@@ -79,6 +79,7 @@ class Meter:
             "kbps": rate(2, 1000.0) if counters.bytes else None,  # KB (1000 bytes) sent per second
             "blocks_per_s": rate(3) if video else None,
             "max_depth": counters.max_depth if video else None,
+            "bit_rate": counters.bit_rate if video else None,
             "waits": counters.waits if video else None,
             "drops": counters.drops if video else None,
             "usb_errors": counters.usb_errors,

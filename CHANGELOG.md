@@ -24,7 +24,10 @@
   panel, measured on the 9.2"; the 12.3" has half as many pixels again, and a screen that
   moves on every frame (Arena's graph) made the encoder coarsen the whole picture, lettering
   included. The cap now grows with the pixels and the frame rate (`maxrate` "auto": 3 Mbit/s
-  on the 12.3"); a rate of your own still holds ([Video](docs/CONFIGURATION.md#video))
+  on the 12.3" to start with) and then follows the panel: a step down while the panel takes
+  less than it is sent, a step up again after a calm minute, between 1 and 8 Mbit/s, so each panel
+  gets as sharp a picture as its USB link takes; the *Data rate* tile under Live says the cap
+  in force. A rate of your own still holds ([Video](docs/CONFIGURATION.md#video))
 
 ## 0.7.0 — 2026-10-22
 

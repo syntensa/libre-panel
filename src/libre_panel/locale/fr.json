@@ -1459,7 +1459,6 @@
     "Use the connected panel": "Utiliser le panneau connecté",
     "Video mode: the deepest queue the panel reported (it holds five pictures and the driver waits above two), how often the driver waited for room, and how many pictures it threw away unsent.": "Mode vidéo : la file la plus profonde signalée par le panneau (il contient cinq images et le pilote attend au-delà de deux), combien de fois le pilote a attendu de la place, et combien d'images il a jetées sans les envoyer.",
     "Visibility": "Visibilité",
-    "What goes to the panel, in KB/s (1 KB = 1000 bytes); not counted for the PNG file.": "Ce qui part vers le panneau, en Ko/s (1 Ko = 1000 octets) ; non compté pour le fichier PNG.",
     "What the panel shows now": "Ce que le panneau affiche maintenant",
     "Which themes": "Quels thèmes",
     "Your panel is here: {panel}": "Votre panneau est là : {panel}",
@@ -2434,7 +2433,9 @@
     "Received": "Reçu",
     "Sent": "Envoyé",
     "Course of the load": "Évolution de la charge",
-    "the load of the last minute along the bottom of a tall card, under the rows": "la charge de la dernière minute le long du bas d’une carte haute, sous les lignes"
+    "the load of the last minute along the bottom of a tall card, under the rows": "la charge de la dernière minute le long du bas d’une carte haute, sous les lignes",
+    "KB/s · up to {rate} Mbit/s": "Ko/s · jusqu'à {rate} Mbit/s",
+    "What goes to the panel, in KB/s (1 KB = 1000 bytes); not counted for the PNG file. In video mode also the bit rate's cap: with maxrate \"auto\" it steps down while the panel takes less than it is sent, and up again after a calm minute.": "Ce qui part vers le panneau, en Ko/s (1 Ko = 1000 octets) ; non compté pour le fichier PNG. En mode vidéo aussi le plafond du débit : avec maxrate « auto », il descend d'un cran tant que le panneau absorbe moins qu'il ne reçoit, et remonte après une minute calme."
   },
   "fields": {
     "agent": "agent",

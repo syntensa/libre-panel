@@ -29,8 +29,10 @@ from libre_panel.devices.base import Counters, DeviceError, Display  # noqa: E40
 from libre_panel.devices.h264 import (  # noqa: E402
     EncoderSettings,
     PictureSplitter,
+    RateControl,
     ffmpeg_command,
     find_ffmpeg,
+    mbit,
     nal_units,
     slice_count,
 )
@@ -109,6 +111,42 @@ def test_the_bit_rate_grows_with_the_pixels_and_the_frame_rate():
     assert "-maxrate 3.0M -bufsize 3.0M" in " ".join(
         ffmpeg_command("ffmpeg", (1920, 720), 270, auto)
     )
+
+
+def test_auto_rate_follows_the_panel_s_queue():
+    """ "auto" steps down while the sender keeps waiting for room in the panel's queue, up
+    again after a calm minute, and holds a failed step off: ten minutes, then twenty."""
+    control, c = RateControl(3.0), Counters()
+    assert control.judge(c, 0.0) is None  # the first window begins
+    c.waits += RateControl.TROUBLE_WAITS  # within the window: the panel's decoder lags
+    assert control.judge(c, 1.0) == 2.0
+    assert all(control.judge(c, float(second)) is None for second in range(2, 300))
+    assert control.rate == 2.0  # a calm while, but 3.0 failed lately
+    assert control.judge(c, 602.0) == 3.0  # ten minutes later it is tried again
+    c.blocks += 100
+    c.slow_blocks += RateControl.TROUBLE_SLOW  # a quarter of the blocks slow: a busy PC
+    assert control.judge(c, 603.0) is None
+    c.slow_blocks += RateControl.TROUBLE_SLOW  # half of them: the panel's link lags
+    assert control.judge(c, 605.0) == 2.0
+    assert control.judge(c, 1000.0) is None  # now held off for twenty minutes
+    assert control.judge(c, 1900.0) == 3.0
+    assert control.changes == 4
+
+    climbing, calm = RateControl(2.0), Counters()  # calm all along: up the steps to the top
+    assert climbing.judge(calm, 0.0) is None
+    seen = [climbing.judge(calm, float(second)) for second in range(1, 400)]
+    assert [rate for rate in seen if rate] == [3.0, 4.0, 6.0, 8.0]
+
+    floor = RateControl(1.0)
+    assert floor.judge(calm, 0.0) is None
+    calm.waits += 9
+    assert floor.judge(calm, 1.0) is None and floor.rate == 1.0  # nothing below
+
+    odd = RateControl(2.4)  # a start between the steps is a step of its own
+    assert odd.steps == [1.0, 1.5, 2.0, 2.4, 3.0, 4.0, 6.0, 8.0]
+
+    assert mbit("auto") == 0.0 and mbit("1500k") == 1.5 and mbit("4M") == 4.0
+    assert mbit("2000000") == 2.0 and mbit("2.5M") == 2.5
 
 
 def test_find_ffmpeg(tmp_path, monkeypatch):
@@ -615,6 +653,36 @@ def test_an_ffmpeg_that_keeps_stopping_gives_up_but_reconnects_do_not_count(pane
             stream_frames(display, frames[:3])
     finally:
         display.close()
+
+
+@needs_ffmpeg
+def test_auto_rate_steps_down_on_a_slow_panel_and_the_counters_say_the_cap(panel, monkeypatch):
+    monkeypatch.setattr(turzx_video, "RATES", {})
+    display = TurzxVideoDisplay(video_config())  # maxrate "auto": 2 Mbit/s on the 9.2"
+    display.open()
+    try:
+        panel.block_delay = 0.05  # 20 blocks a second: every block takes longer than a frame
+        frames = noisy_frames(60)
+        display.show(frames[0])
+        assert display.rate is not None and display.counters.bit_rate == 2.0
+        assert "2.0M" in display.encoder.command
+        for frame in frames[1:]:
+            display.show(frame)
+            if display.rate.rate < 2.0:
+                break
+        assert display.rate.rate == 1.5  # one step down, with ffmpeg started anew
+        assert display.counters.bit_rate == 1.5 and "1.5M" in display.encoder.command
+        assert turzx_video.RATES[("turing-9.2-usb", (1920, 480))] is display.rate
+    finally:
+        panel.block_delay = 0.0
+        display.close()
+    fixed = TurzxVideoDisplay(video_config(maxrate="1500k"))
+    fixed.open()
+    try:
+        fixed.show(frames[0])
+        assert fixed.rate is None and fixed.counters.bit_rate == 1.5
+    finally:
+        fixed.close()
 
 
 @needs_ffmpeg

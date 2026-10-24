@@ -145,7 +145,18 @@ x264, Constrained Baseline, yuv420p, Annex B:
   bit-identical to rotating before encoding.
 - Throughput about 170–300 KB/s. Flooding the device (MB/s) breaks playback.
 - Libre Panel scales `-maxrate` with the pixels and the frame rate: 2M is for
-  1920×480 at 50 fps; the 12.3" (1920×720) gets 3M.
+  1920×480 at 50 fps; the 12.3" (1920×720) starts at 3M. From there "auto"
+  follows the panel along 1 · 1.5 · 2 · 3 · 4 · 6 · 8 Mbit/s: a step down when,
+  within 10 s, the sender waited for room in the queue five times (the decoder
+  lags) or half the blocks (25 at least) took longer than 20 ms to send (the
+  link lags; a healthy block takes about 1 ms), a step up after 60 s without
+  that (a failed step is held off for 10 min, twice as long each time it fails
+  again). Each step starts ffmpeg anew: x264 cannot change its rate on the way.
+- Inside the 12.3" (board `QS400_123inch_V1.1`, 2025-12) sits an Allwinner
+  T113-S3 with a custom top mark (eLQFP128, dual Cortex-A7, 128 MB DDR3 in the
+  package, SPI flash, USB 2.0 OTG). Its decoder takes H.264 up to 1080p@60, so
+  the bit rate a panel takes is bounded by its firmware's USB-to-decoder path,
+  not by the decoder: what "auto" measures.
 
 **verified**
 

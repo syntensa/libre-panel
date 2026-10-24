@@ -1459,7 +1459,6 @@
     "Use the connected panel": "使用已连接的面板",
     "Video mode: the deepest queue the panel reported (it holds five pictures and the driver waits above two), how often the driver waited for room, and how many pictures it threw away unsent.": "视频模式：面板报告的最大队列深度（可容纳五张图像，驱动在超过两张时等待）、驱动等待空位的次数，以及丢弃未发送的图像数量。",
     "Visibility": "可见性",
-    "What goes to the panel, in KB/s (1 KB = 1000 bytes); not counted for the PNG file.": "发送到面板的数据量，单位 KB/s（1 KB = 1000 字节）；不计入 PNG 文件。",
     "What the panel shows now": "面板当前显示的内容",
     "Which themes": "选择哪些主题",
     "Your panel is here: {panel}": "你的面板在这里：{panel}",
@@ -2434,7 +2433,9 @@
     "Received": "已接收",
     "Sent": "已发送",
     "Course of the load": "负载走势",
-    "the load of the last minute along the bottom of a tall card, under the rows": "高卡片底部沿边显示最近一分钟的负载，位于各行之下"
+    "the load of the last minute along the bottom of a tall card, under the rows": "高卡片底部沿边显示最近一分钟的负载，位于各行之下",
+    "KB/s · up to {rate} Mbit/s": "KB/s · 上限 {rate} Mbit/s",
+    "What goes to the panel, in KB/s (1 KB = 1000 bytes); not counted for the PNG file. In video mode also the bit rate's cap: with maxrate \"auto\" it steps down while the panel takes less than it is sent, and up again after a calm minute.": "发送到面板的数据量，单位 KB/s（1 KB = 1000 字节）；不计入 PNG 文件。 视频模式下还显示码率上限：maxrate 为 \"auto\" 时，面板吃不下送来的数据就降一档，平静一分钟后再升一档。"
   },
   "fields": {
     "agent": "智能体",

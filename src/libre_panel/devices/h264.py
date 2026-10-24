@@ -12,8 +12,10 @@ project (docs/protocol/turzx-usb.md, "Video layer"):
 - ffmpeg rotates into the panel's framebuffer (``transpose``); the stream is
   bit-identical to rotating in Python and costs the render loop nothing.
 - The bit rate was capped at 2 Mbit/s there, for 1920x480 at 50 frames a second. A panel
-  with more pixels (the 12.3": 1920x720) or more frames gets proportionally more
-  (``maxrate`` "auto", :func:`bit_rate`), so its pictures and lettering stay as sharp.
+  with more pixels (the 12.3": 1920x720) or more frames starts with proportionally more
+  (``maxrate`` "auto", :func:`auto_rate`), so its pictures and lettering stay as sharp; and
+  "auto" then follows the panel (:class:`RateControl`): a step down while the panel takes
+  less than it is sent, a step up again after a calm minute, up to 8 Mbit/s.
 
 :class:`PictureSplitter` cuts ffmpeg's output into pictures by their NAL
 units. That works however the pipe splits the bytes (Windows pipes deliver
@@ -36,7 +38,7 @@ from pathlib import Path
 import psutil
 
 from libre_panel import bundled, winsession
-from libre_panel.devices.base import DeviceError
+from libre_panel.devices.base import Counters, DeviceError
 from libre_panel.i18n import t
 
 log = logging.getLogger(__name__)
@@ -65,18 +67,115 @@ class EncoderSettings:
 
 # The bit rate measured on the 9.2": 2 Mbit/s for its 1920x480 pixels at 50 frames a second.
 REFERENCE_RATE = (2.0, 1920 * 480, 50)
+# The steps "auto" moves along, in Mbit/s: a panel takes 170-300 KB/s on its USB link
+# (docs/protocol/turzx-usb.md), the top is for one that takes more.
+RATE_STEPS = (1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0)
+
+
+def auto_rate(settings: EncoderSettings, size: tuple[int, int]) -> float:
+    """The bit rate "auto" starts with for pictures of ``size``, in Mbit/s: the reference
+    rate scaled by the pixels and the frame rate, and never less than the reference (a
+    small panel has the bandwidth to spare)."""
+    rate, pixels, fps = REFERENCE_RATE
+    width, height = size
+    scaled = rate * (width * height / pixels) * (settings.fps / fps)
+    return max(rate, round(scaled, 1))
+
+
+def rate_text(mbit: float) -> str:
+    """A bit rate as ffmpeg takes it: 3.0 -> "3.0M"."""
+    return f"{mbit:.1f}M"
+
+
+def mbit(maxrate: str) -> float:
+    """A bit rate as config.toml gives it ("2M", "1500k", "2000000") in Mbit/s; 0 for "auto"."""
+    text = maxrate.strip()
+    if not text or text == "auto":
+        return 0.0
+    scale = {"k": 1e-3, "K": 1e-3, "M": 1.0}.get(text[-1])
+    if scale is not None:
+        text = text[:-1]
+    else:
+        scale = 1e-6
+    try:
+        return round(float(text) * scale, 3)
+    except ValueError:
+        return 0.0
 
 
 def bit_rate(settings: EncoderSettings, size: tuple[int, int]) -> str:
     """The highest bit rate for pictures of ``size``, as ffmpeg takes it: the settings' own,
-    or with "auto" the reference rate scaled by the pixels and the frame rate, and never
-    less than the reference (a small panel has the bandwidth to spare)."""
+    or with "auto" the rate it starts with (:func:`auto_rate`)."""
     if settings.maxrate != "auto":
         return settings.maxrate
-    rate, pixels, fps = REFERENCE_RATE
-    width, height = size
-    scaled = rate * (width * height / pixels) * (settings.fps / fps)
-    return f"{max(rate, round(scaled, 1)):.1f}M"
+    return rate_text(auto_rate(settings, size))
+
+
+class RateControl:
+    """The bit rate of ``maxrate`` "auto" while the panel runs.
+
+    It starts at :func:`auto_rate` and moves along :data:`RATE_STEPS`. A step down when the
+    panel takes less than it is sent, seen within a window of :attr:`WINDOW_S` either as the
+    sender waiting for room in the panel's queue :attr:`TROUBLE_WAITS` times (its decoder
+    lags) or as half the blocks, :attr:`TROUBLE_SLOW` at least, taking longer than a frame
+    (its link lags; the median, so that a busy PC's single late blocks do not count). A
+    step up after :attr:`CALM_S` without that, as long as the step above did not fail
+    lately: a failed step is held off for :attr:`HOLD_S`, twice as long each time it fails
+    again. :meth:`judge` is called with the run's counters as often as wanted (every
+    frame); it answers with the new rate when one is due, else ``None``. The driver starts
+    ffmpeg anew with the new rate.
+    """
+
+    WINDOW_S = 10.0
+    TROUBLE_WAITS = 5
+    TROUBLE_SLOW = 25
+    CALM_S = 60.0
+    HOLD_S = 600.0
+
+    def __init__(self, start: float) -> None:
+        self.steps = sorted({*RATE_STEPS, start})
+        self.rate = start
+        self.changes = 0
+        self._base: tuple[int, int, int] | None = None  # the counts when the window began
+        self._window = self._calm = 0.0
+        self._held: dict[float, float] = {}  # step -> until when it is not tried
+        self._failed: dict[float, int] = {}  # step -> how often it failed
+
+    def judge(self, counters: Counters, now: float) -> float | None:
+        counts = (counters.waits, counters.blocks, counters.slow_blocks)
+        if self._base is None:
+            self._base, self._window, self._calm = counts, now, now
+            return None
+        waits, blocks, slow = (new - old for new, old in zip(counts, self._base, strict=True))
+        trouble = waits >= self.TROUBLE_WAITS or (slow >= self.TROUBLE_SLOW and 2 * slow >= blocks)
+        if not trouble and now - self._window < self.WINDOW_S:
+            return None
+        self._base, self._window = counts, now  # a new window
+        if trouble:
+            self._calm = now
+            fails = self._failed.get(self.rate, 0)
+            self._failed[self.rate] = fails + 1
+            self._held[self.rate] = now + self.HOLD_S * 2**fails
+            return self._move(-1)
+        if now - self._calm < self.CALM_S:
+            return None
+        above = self._beside(+1)
+        if above is None or self._held.get(above, 0.0) > now:
+            return None
+        self._calm = now
+        return self._move(+1)
+
+    def _beside(self, direction: int) -> float | None:
+        i = self.steps.index(self.rate) + direction
+        return self.steps[i] if 0 <= i < len(self.steps) else None
+
+    def _move(self, direction: int) -> float | None:
+        rate = self._beside(direction)
+        if rate is None:
+            return None
+        self.rate = rate
+        self.changes += 1
+        return rate
 
 
 # How ffmpeg turns a theme frame into the panel's framebuffer, per rotation

@@ -50,6 +50,7 @@ import threading
 import time
 from collections import deque
 from collections.abc import Callable
+from dataclasses import replace
 
 from PIL import Image
 
@@ -59,8 +60,12 @@ from libre_panel.devices.h264 import (
     Encoder,
     EncoderSettings,
     EncoderStopped,
+    RateControl,
+    auto_rate,
     ffmpeg_command,
     find_ffmpeg,
+    mbit,
+    rate_text,
 )
 from libre_panel.devices.models import PanelModel, orientation_of
 from libre_panel.devices.turzx_usb import (
@@ -179,12 +184,17 @@ class _Restart:
 
 RESTART = _Restart()
 
+# The bit rate "auto" found for a panel (its model and picture size), kept per process: a
+# display made anew after a reconnect goes on at it instead of climbing again.
+RATES: dict[tuple[str, tuple[int, int]], RateControl] = {}
+
 
 class VideoSession:
     """Start, picture blocks with flow control, and stop, on one open transport."""
 
     HIGH, LOW = 2, 1  # queue depth that starts waiting, and the depth to wait for
     POLL_EVERY = 2  # blocks between depth queries
+    SLOW_BLOCK_S = 0.02  # a block that takes longer than a frame at 50 fps (healthy: ~1 ms)
     WAIT_S, GIVE_UP_S = 0.03, 1.5
     # Hang detection (SPUR II): a healthy block takes about 1 ms. When the median
     # of the last 40 exceeds 0.2 s, four depth readings 150 ms apart decide.
@@ -239,11 +249,14 @@ class VideoSession:
             self.transport.command(
                 CMD_H264_BLOCK, struct.pack(">I", len(block)), block, timeout_ms=5000
             )
-            self.send_times.append(self.clock() - began)
+            took = self.clock() - began
+            self.send_times.append(took)
             self.blocks += 1
             self.bytes += len(block)
             self.counters.blocks += 1
             self.counters.bytes += len(block)
+            if took > self.SLOW_BLOCK_S:
+                self.counters.slow_blocks += 1
             if self.blocks % self.POLL_EVERY == 0:
                 depth = self.depth()
                 if depth is not None and depth > self.HIGH:
@@ -337,6 +350,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         )
         self.session: VideoSession | None = None
         self.encoder: Encoder | None = None
+        self.rate: RateControl | None = None  # of maxrate "auto", once the picture size is known
         self._ffmpeg: str | None = None
         self._pictures: queue.Queue[bytes] = queue.Queue(maxsize=2)
         self._sender: threading.Thread | None = None
@@ -423,7 +437,15 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
     def _start_encoder(self, size: tuple[int, int]) -> None:
         self._stop_encoder()
         rotate = 270 if orientation_of(*size) == "landscape" else 180  # as to_native
-        command = ffmpeg_command(self._ffmpeg, size, rotate, self.settings)
+        settings = self.settings
+        if settings.maxrate == "auto":
+            key = (self.model.id if self.model else "", size)
+            self.rate = RATES.get(key)
+            if self.rate is None:
+                self.rate = RATES[key] = RateControl(auto_rate(settings, size))
+            settings = replace(settings, maxrate=rate_text(self.rate.rate))
+        self.counters.bit_rate = mbit(settings.maxrate)
+        command = ffmpeg_command(self._ffmpeg, size, rotate, settings)
         self._generation += 1
         generation = self._generation
         raised = False
@@ -450,6 +472,25 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             self.encoder = None
             self._discard_pictures()  # the new stream starts with a keyframe
 
+    def _follow_the_panel(self) -> None:
+        """``maxrate`` "auto": a step down while the panel takes less than it is sent, a step
+        up again after a calm minute (:class:`RateControl`). ffmpeg cannot change its rate on
+        the way, so a change starts it anew; the next frame does that."""
+        control, encoder = self.rate, self.encoder
+        if control is None or encoder is None:
+            return
+        before = control.rate
+        rate = control.judge(self.counters, time.monotonic())
+        if rate is None:
+            return
+        log.info(
+            "video: bit rate %s -> %s (%s)",
+            rate_text(before),
+            rate_text(rate),
+            "the panel takes less than it is sent" if rate < before else "calm for a minute",
+        )
+        self._stop_encoder()
+
     # -- frames ------------------------------------------------------------------
 
     def show(self, frame: Image.Image, region: tuple[int, int, int, int] | None = None) -> None:
@@ -464,6 +505,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             data = rgb_bytes(frame)
         else:
             data = frame.convert("RGB").tobytes()
+        self._follow_the_panel()
         encoder = self.encoder
         if encoder is None or encoder.size != frame.size or not encoder.alive:
             if encoder is not None and encoder.size == frame.size:

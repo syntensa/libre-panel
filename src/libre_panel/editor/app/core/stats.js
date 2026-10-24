@@ -37,9 +37,9 @@ export function statTiles(stats) {
       id: "data",
       label: t("Data rate"),
       value: number(s.kbps, 0),
-      note: s.kbps == null ? (known ? t("not counted") : "") : "KB/s",
+      note: s.kbps == null ? (known ? t("not counted") : "") : s.bit_rate ? t("KB/s · up to {rate} Mbit/s", { rate: number(s.bit_rate, 1) }) : "KB/s",
       level: "",
-      title: t("What goes to the panel, in KB/s (1 KB = 1000 bytes); not counted for the PNG file."),
+      title: t("What goes to the panel, in KB/s (1 KB = 1000 bytes); not counted for the PNG file. In video mode also the bit rate's cap: with maxrate \"auto\" it steps down while the panel takes less than it is sent, and up again after a calm minute."),
     },
     {
       id: "draw",
