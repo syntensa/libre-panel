@@ -376,10 +376,10 @@ class Autostart:
             return self.registry.get(APP_NAME) is not None or self.elevated()
         if self.kind == "unsupported":
             raise _not_supported()
-        path = self.path()
-        if not path.is_file():
+        try:  # the file may go between the look and the read (the app's disable, a test's)
+            text = self.path().read_text(encoding="utf-8", errors="replace")
+        except OSError:
             return False
-        text = path.read_text(encoding="utf-8", errors="replace")
         return not re.search(r"^Hidden\s*=\s*true\s*$", text, re.MULTILINE | re.IGNORECASE)
 
     def enable(self, command: list[str], elevated: bool = False) -> str:
