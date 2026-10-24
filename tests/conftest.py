@@ -88,6 +88,15 @@ def no_machine_names(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_community_list(monkeypatch):
+    """The community's list of themes is never asked of GitHub: its address is one of this
+    computer where nothing answers, until a test serves a list of its own."""
+    from libre_panel.editor import community
+
+    monkeypatch.setattr(community, "INDEX_URL", "http://127.0.0.1:9/community/themes/index.json")
+
+
+@pytest.fixture(autouse=True)
 def no_usb_panel(monkeypatch):
     """A panel plugged into the machine running the tests stays out of them: a config that
     names no theme looks for one on the USB bus to pick the panel's own. Nothing is on the

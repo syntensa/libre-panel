@@ -562,6 +562,38 @@
   font-size: 30px;
 }
 
+/* which themes, and Import… */
+.start-head-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* a .zip dragged over the gallery: dropped, it is added to your themes */
+.start.gallery.dropping {
+  outline: 2px dashed var(--accent);
+  outline-offset: -10px;
+  border-radius: 18px;
+}
+
+.gallery-drop {
+  position: fixed;
+  left: 50%;
+  bottom: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: 5;
+}
+
 .back-link {
   display: inline-flex;
   align-items: center;
@@ -643,13 +675,16 @@
   gap: 26px;
 }
 
-/* a collection (themes that belong together): apart from the rest, closed until it is opened */
-.theme-collection {
+/* a collection (themes that belong together): apart from the rest, closed until it is opened;
+   the community's themes (sharing.js) the same way */
+.theme-collection,
+.community-themes {
   padding-top: 8px;
   border-top: 1px solid var(--line-3);
 }
 
-.theme-collection-toggle {
+.theme-collection-toggle,
+.community-toggle {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -662,12 +697,14 @@
   text-align: left;
 }
 
-.theme-collection-toggle:hover {
+.theme-collection-toggle:hover,
+.community-toggle:hover {
   background: var(--surface);
   color: var(--text-2);
 }
 
-.theme-collection-text {
+.theme-collection-text,
+.community-text {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -675,7 +712,8 @@
   gap: 2px;
 }
 
-.theme-collection-title {
+.theme-collection-title,
+.community-title {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -683,7 +721,8 @@
   font-size: 15px;
 }
 
-.theme-collection-note {
+.theme-collection-note,
+.community-lead {
   font-size: 13px;
 }
 
@@ -696,7 +735,8 @@
   font-weight: 600;
 }
 
-.theme-collection-body {
+.theme-collection-body,
+.community-body {
   padding-top: 14px;
 }
 
@@ -864,15 +904,25 @@
 }
 
 /* "Edit" in the card's corner, beside the name and what it is made for (in two lines there):
-   always there, with its name */
-.theme-card-edit {
+   always there, with its name; on Start → Themes "Export…" before it */
+.theme-card-actions {
   position: absolute;
   right: 14px;
   bottom: 19px;
+  display: flex;
+  gap: 6px;
+}
+
+.theme-card-edit,
+.theme-card-export {
   height: 30px;
   padding: 0 11px;
   gap: 6px;
   font-size: 12.5px;
+}
+
+.theme-card-export {
+  padding: 0 8px;
 }
 
 .theme-card.editable .theme-card-text {
@@ -880,6 +930,16 @@
   flex-wrap: nowrap;
   align-items: flex-start;
   padding-right: 124px;
+}
+
+.theme-card.editable.exportable .theme-card-text {
+  padding-right: 162px;
+}
+
+/* a theme just added (imported, installed) */
+.theme-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .theme-card.editable .theme-card-note {
@@ -895,10 +955,36 @@
   padding-right: 0;
 }
 
-.theme-grid.upright .theme-card-edit {
+.theme-grid.upright .theme-card-actions {
   position: static;
   align-self: flex-start;
   margin: -4px 14px 14px;
+}
+
+/* the community's themes: a card with its picture, what it is and Install */
+.community-card .theme-card-main {
+  cursor: default;
+}
+
+.community-card-author {
+  margin-top: -8px;
+  font-size: 13px;
+}
+
+.community-card-text {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.community-card-install {
+  align-self: flex-start;
+  gap: 6px;
+}
+
+.community-note {
+  margin: 0 8px 14px;
 }
 
 /* what a click on the picture does, said over it while the pointer is there */

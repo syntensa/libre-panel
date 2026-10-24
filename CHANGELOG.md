@@ -3,6 +3,13 @@
 ## 0.7.1rc5 — 2026-10-24
 
 **Changes**
+- **Themes travel as files, and a community gallery**: Export… on a theme's card (Start →
+  Themes) saves it as a .zip with the pictures and fonts it names and nothing of your folders;
+  Import… (or the file dropped on the gallery) adds a shared one to yours under a free name,
+  checked before anything is in place (size, kinds of files, paths, a theme.json that parses).
+  Community themes, a closed section of the gallery, lists themes others shared in the
+  repository's `community/themes` folder, with a preview each and an Install button that
+  checks the download's hash; nothing is asked of the network until the section is opened.
 - **Stills as JPEG on TURZX USB panels**: `[device] still = "auto" | "png" | "jpeg"` says how a
   panel takes its pictures without smooth motion. JPEG (command 101) goes to the layer under
   the PNG one and is decoded in hardware; the frame is cut to the decoder's layer (464

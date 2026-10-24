@@ -6,7 +6,9 @@ Thanks for helping! The most valuable contributions right now:
    report to a "panel support" issue — every passing report turns a model
    from *unverified* into *supported*.
 2. **Themes.** Build one in the editor and share it (with a license for any
-   fonts/images you include). After changing a built-in theme,
+   fonts/images you include): *Export…* on its card in *Start → Themes* gives the zip,
+   and [community/themes/README.md](community/themes/README.md) says how to add it to the
+   community themes the app lists. After changing a built-in theme,
    `python tools/readme_images.py` renders the pictures in `docs/images`
    again.
 3. **Drivers** for the families marked *planned* in [docs/HARDWARE.md](docs/HARDWARE.md).

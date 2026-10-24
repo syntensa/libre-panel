@@ -247,8 +247,12 @@ vereinfachtes Chinesisch.
 
 Jedes Theme lässt sich oben in *Gestalten* über den Panel-Knopf auf jedes andere Panel
 bringen. Themes sind schlichtes JSON mit ihren Bildern und Schriften und können keinen Code
-ausführen ([Theme-Format](docs/THEMES.md)). Eins gebaut, das dir gefällt? Teile es in den
-[Discussions](https://github.com/syntensa/libre-panel/discussions). Ebenfalls eingebaut: die
+ausführen ([Theme-Format](docs/THEMES.md)). Eins gebaut, das dir gefällt? *Exportieren …* auf
+seiner Karte in *Start → Themes* speichert es als eine `.zip`, und *Importieren …* dort fügt
+eins hinzu, das dir jemand gegeben hat. Teile es in den
+[Discussions](https://github.com/syntensa/libre-panel/discussions) oder mit allen unter den
+[Themes der Community](community/themes/README.md), die die App auflistet und mit einem Klick
+installiert. Ebenfalls eingebaut: die
 acht Bildschirme von SPUR II als Legacy-Sammlung, siehe [Wo alles begann](#wo-alles-begann).
 
 <details>

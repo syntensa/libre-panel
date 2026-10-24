@@ -36,9 +36,10 @@ export function readable(message, status = 400) {
   return internal ? t("Something went wrong in Libre Panel: {reason}", { reason: text }) : text;
 }
 
-/** A request; resolves to the JSON answer, rejects with the server's error text (readable, and
- * the HTTP status as `error.status`; 0 when the server did not answer at all). */
-export async function api(method, url, body, { raw = false, signal } = {}) {
+/** A request; resolves to the JSON answer (`blob`: to the file the server sends), rejects with
+ * the server's error text (readable, and the HTTP status as `error.status`; 0 when the server
+ * did not answer at all). */
+export async function api(method, url, body, { raw = false, signal, blob = false } = {}) {
   const options = { method, headers: authHeaders(), signal };
   if (body !== undefined) {
     options.body = raw ? body : JSON.stringify(body);
@@ -53,6 +54,7 @@ export async function api(method, url, body, { raw = false, signal } = {}) {
     error.status = 0;
     throw error;
   }
+  if (blob && response.ok) return response.blob();
   const data = await response.json().catch(() => ({ error: response.statusText }));
   if (!response.ok) {
     const error = new Error(readable(data.error || response.statusText || String(response.status), response.status));
@@ -93,6 +95,13 @@ export const endpoints = {
   symbolsLookUrl: (pack) => withToken(`/api/symbols-look?pack=${enc(pack)}`),
   uploadAsset: (id, name, bytes) =>
     api("POST", `/api/themes/${enc(id)}/assets?name=${enc(name)}`, bytes, { raw: true }),
+  // Start → Themes: a theme as a .zip to share and such a file added to your themes
+  // (theme/share.py), and the themes the community shares on GitHub (editor/community.py)
+  themeZip: (id) => api("GET", `/api/themes/${enc(id)}/export`, undefined, { blob: true }),
+  importThemeZip: (bytes, name) => api("POST", `/api/themes/import?name=${enc(name)}`, bytes, { raw: true }),
+  communityThemes: () => get("/api/community/themes"),
+  communityPreviewUrl: (id) => withToken(`/api/community/themes/${enc(id)}/preview`),
+  installCommunityTheme: (id) => post("/api/community/install", { id }),
   sensors: () => get("/api/sensors"),
   readings: (keys = [], history = []) =>
     get(`/api/readings?keys=${enc(keys.join(","))}&history=${enc(history.join(","))}`),

@@ -108,8 +108,8 @@ rules.
   route, a route that does not exist included; only the app's own files (`/`, `/app/…`,
   `/static/…` and the files of plugins' pages under `/plugins/…`) come without it. An
   `<img>` cannot send a header, so the pictures (`/api/themes/<id>/preview`,
-  `/api/themes/<id>/assets/<file>` and the `GET` routes of a plugin's page) also take it as
-  `?token=<token>`; no other route does.
+  `/api/themes/<id>/assets/<file>`, `/api/community/themes/<id>/preview` and the `GET` routes
+  of a plugin's page) also take it as `?token=<token>`; no other route does.
 - **Reading** is `GET`. **Writing** is `POST`, with a JSON object as the body (`{}` when there
   is nothing to say). The server answers only to the host name it listens on
   (`127.0.0.1:<port>`, `localhost:<port>`), and a browser's request only from a page of the
@@ -187,3 +187,16 @@ small, from `GET /api/across/picture` (with the token in the query too); `{"set"
 null}}` takes it away. `GET /api/panels/photo` is one PNG of all panels that are on, where they
 stand, each with what it shows now (404 while none shows a picture), for *Picture of all
 panels* there.
+
+*Start → Themes* shares themes ([Sharing a theme](THEMES.md#sharing-a-theme)):
+`GET /api/themes/<id>/export` is a theme as a `.zip` (`Content-Disposition: attachment`),
+`POST /api/themes/import` takes one as the body (its bytes; `?name=` the file's name) and
+answers `{id, name, files}`, the folder it now has among the person's themes (`theme/share.py`
+checks the file first; 413 above 20 MB, 400 with the reason in words). A theme named `import`
+is still saved at `POST /api/themes/import`: its body is JSON, an import's a zip. The
+community's themes ([Community themes](THEMES.md#community-themes)) come through the server,
+never from the page: `GET /api/community/themes` is `{themes: [{id, name, author,
+description, sizes}], offline}` from the list on GitHub (asked only then, kept an hour,
+`editor/community.py`), `GET /api/community/themes/<id>/preview` an entry's PNG, and `POST
+/api/community/install` with `{"id": ...}` downloads its zip from beside the list, checks the
+SHA-256 and imports it, answering as an import does.
