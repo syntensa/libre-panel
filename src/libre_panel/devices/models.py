@@ -33,6 +33,7 @@ PROTOCOLS = {
     "usb-thermalright": "USB bulk or HID (VID 0x0416), Thermalright's Trofeo Vision, JPEG frames",
     "usb-beada": "USB bulk (VID 0x4E58), BeadaPanel's Panel-Link, 16-bit frames",
     "usb-nzxt": "USB bulk and HID (VID 0x1E71), an NZXT Kraken's LCD, frames through its memory",
+    "usb-thermaltake": "USB HID (VID 0x264A), Thermaltake's LCD, JPEG frames",
 }
 
 
@@ -643,6 +644,16 @@ MODELS: tuple[PanelModel, ...] = (
         shape="round",
         usb_ids=((0x1E71, 0x3014),),
     ),
+    PanelModel(
+        "thermaltake-lcd-6",
+        "Thermaltake",
+        "Thermaltake LCD",
+        6,
+        720,
+        1480,
+        "usb-thermaltake",
+        usb_ids=((0x264A, 0x2347),),
+    ),
 )
 
 # Families with a driver (devices/turzx.py lists them); the rest is planned.
@@ -663,6 +674,7 @@ _DRIVER_STATUS = {
         "usb-thermalright",
         "usb-beada",
         "usb-nzxt",
+        "usb-thermaltake",
     )
 }
 # Models confirmed on the panel: with `libre-panel doctor`, or by an owner who reports it runs.
@@ -730,6 +742,11 @@ _LIMITS = {
     **{m.id: _TROFEO for m in MODELS if m.protocol == "usb-thermalright"},
     **{m.id: _BEADA for m in MODELS if m.protocol == "usb-beada"},
     **{m.id: _KRAKEN for m in MODELS if m.protocol == "usb-nzxt"},
+    "thermaltake-lcd-6": (
+        "Not yet seen on the hardware. It takes whole JPEG pictures: no smooth motion. Its "
+        "brightness goes into the picture: dimming darkens it. Close TT RGB Plus while Libre "
+        "Panel runs. When Libre Panel quits, the panel shows its own screen again."
+    ),
 }
 MODELS = tuple(
     replace(

@@ -300,6 +300,7 @@ def test_each_panel_written_from_notes_says_what_it_cannot_do():
         "usb-thermalright",
         "usb-beada",
         "usb-nzxt",
+        "usb-thermaltake",
     )
     for model in MODELS:
         if model.protocol in new or model.id in ("turing-1.6-usb", "turing-2.1-usb"):

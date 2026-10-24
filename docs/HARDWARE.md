@@ -34,9 +34,9 @@ motion (the video mode is for the TURZX USB panels). The panel test's speed chec
   [turing-smart-screen-python](https://github.com/mathoudebine/turing-smart-screen-python),
   whose protocol Libre Panel follows), but nobody has confirmed this model with
   Libre Panel yet. Please run `libre-panel doctor` and report the result. For the panels of
-  JONSBO, Hongtai, VMAX, Lian Li, Thermalright, BeadaPanel and NZXT (and the Turing 1.6" and
-  2.1" USB panels) the protocol comes from other projects' notes and captures and from the
-  makers' own sources: nobody has run them with Libre Panel yet.
+  JONSBO, Hongtai, VMAX, Lian Li, Thermalright, BeadaPanel, NZXT and Thermaltake (and the
+  Turing 1.6" and 2.1" USB panels) the protocol comes from other projects' notes and captures
+  and from the makers' own sources: nobody has run them with Libre Panel yet.
 - **planned** — the panel is in the catalog (editor menu, sizes), the driver is
   not written yet. Design themes now; they will work once the driver lands.
 
@@ -96,6 +96,7 @@ the panel lists show it when you point at one.
 | Thermalright Trofeo Vision | yes | no | none: dimming darkens the picture | no: it shows its own picture again | whole JPEG pictures; close TRCC while Libre Panel runs |
 | BeadaPanel | yes | no | its own | yes: the backlight off | whole pictures in 16-bit colour, a few a second |
 | NZXT Kraken (LCD) | yes | no | its own (0–100) | yes: brightness 0 | each picture goes through the cooler's memory: a few a second; close NZXT CAM |
+| Thermaltake 6" LCD | yes | no | none known: dimming darkens the picture | no: it shows its own screen again | whole JPEG pictures; close TT RGB Plus |
 
 For all of them: close the maker's own program first. Two programs cannot drive one panel at
 once.
@@ -255,6 +256,30 @@ The protocol comes from [liquidctl](https://github.com/liquidctl/liquidctl) (GPL
 `kraken3.py`) and [krakenlcd](https://github.com/ossini/krakenlcd) (GPL-3.0, verified on a
 Kraken Z53); see the [protocol notes](protocol/nzxt-kraken.md). Not yet: the Kraken Elite 2023
 (`1e71:300c`), whose LCD liquidctl lists as broken; the Kraken X models have no screen.
+
+## Thermaltake
+
+| Model id | Size | Resolution (landscape) | Connection | Driver |
+|---|---|---|---|---|
+| `thermaltake-lcd-6` | 6" | 1480×720 | USB HID (`264a:2347`) | unverified |
+
+The 6" LCD that InfoPanel names after the TOUGHLIQUID Ultra, found by `auto`: Libre Panel
+connects to it with its text commands ("POST conn", "POST realtimeDisplay") and sends it JPEG
+pictures in HID reports, as Thermaltake's TT RGB Plus does; when Libre Panel quits, the screen
+goes back to the panel. A brightness command is known but not proven (InfoPanel does not send
+it either), so the brightness goes into the pixels. Close TT RGB Plus first. On Linux,
+`libre-panel system-setup --linux` gives your user access to it. The protocol comes from
+[InfoPanel](https://github.com/habibrehmansg/infopanel) (GPL-3.0); see the
+[protocol notes](protocol/thermaltake.md). Unverified.
+
+Some of Thermaltake's screens carry Hongtai's firmware (USB serial `33c3:7788`) and run as
+[Hongtai screens](#hongtai--jungle-leopard). **Not yet:** the others, such as the LCD Panel Kit
+and the pump screens of the Floe Ultra and TOUGHLIQUID Ultra coolers where they are neither the
+6" above nor Hongtai screens: no source we could read documents a protocol for them (InfoPanel
+has the 6" alone; turing-smart-screen-python and liquidctl have none), and Libre Panel does not
+guess one. A `libre-panel devices` listing and the product's name in a
+["panel support" issue](https://github.com/syntensa/libre-panel/issues/new?template=panel_support.yml)
+help.
 
 ## Lian Li and others
 

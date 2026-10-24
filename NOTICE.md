@@ -39,10 +39,12 @@ Leopard screens (JL-PROTOCOL.md: the command frame, the picture's envelope, the 
 of Lian Li's TURZX-like screens (from the MIT-licensed lian-li-linux driver: the JPEG layer,
 the cleared PNG layer, the picture queue), and of Thermalright's Trofeo Vision as far as its
 notes from the vendor's application go (the bars' 462 rows, the 4:2:0 JPEG and its size, the
-packet count), and of BeadaPanel's (the Status-Link and Panel-Link messages, the start and
-end tags by the panel's version, the reset before a stream). Libre Panel's drivers
-(`devices/jonsbo_ds916.py`, `devices/ms9132.py`, `devices/hongtai.py`, `devices/lianli_usb.py`,
-`devices/thermalright.py`, `devices/beadapanel.py`) are its own code.
+packet count), of BeadaPanel's (the Status-Link and Panel-Link messages, the start and end
+tags by the panel's version, the reset before a stream) and of Thermaltake's 6" LCD (from TT RGB
+Plus's packets: the framed text commands, their checksum, the picture's pieces). Libre Panel's
+drivers (`devices/jonsbo_ds916.py`, `devices/ms9132.py`, `devices/hongtai.py`,
+`devices/lianli_usb.py`, `devices/thermalright.py`, `devices/beadapanel.py`,
+`devices/thermaltake.py`) are its own code.
 
 **turing-smart-screen** (.NET) — Copyright (c) 2021 machi_pon, MIT.
 <https://github.com/usausa/turing-smart-screen>. The protocol of Thermalright's Trofeo Vision
@@ -247,6 +249,7 @@ The WebView2 runtime that draws the window is not in the downloads: Windows 11 h
 and Windows 10 gets it with Microsoft Edge.
 
 Product names such as TURZX, Turing Smart Screen, Lian Li, Thermalright, BeadaPanel, NZXT,
-Kraken, WeAct and Noctua (and its fans' model names) are trademarks of their respective owners;
-Libre Panel is not affiliated with them. The fan looks named after Noctua's fans are drawings of
-Libre Panel's own, made from the blades' shape, without any of Noctua's pictures or logos.
+Kraken, Thermaltake, WeAct and Noctua (and its fans' model names) are trademarks of their
+respective owners; Libre Panel is not affiliated with them. The fan looks named after Noctua's
+fans are drawings of Libre Panel's own, made from the blades' shape, without any of Noctua's
+pictures or logos.

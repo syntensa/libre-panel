@@ -523,7 +523,8 @@ def test_a_computer_in_a_folder_is_read(tmp_path):
         + "".join(
             f'ATTRS{{idVendor}}=="1e71", ATTRS{{idProduct}}=="{pid}", TAG+="uaccess"\n'
             for pid in ("3008", "300e", "3012", "3014")
-        ),
+        )
+        + 'ATTRS{idVendor}=="264a", ATTRS{idProduct}=="2347", TAG+="uaccess"\n',
     )
     root.write("etc/modules-load.d/libre-panel.conf", "nct6775\n")
     for name in ("sys/class/powercap/intel-rapl:0/energy_uj",):
