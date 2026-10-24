@@ -1763,11 +1763,23 @@ def build_game(b: _Build, _src: Source) -> None:
                 ("limiter", "game.limiter", "", t("Limited by")),
                 ("peak", "game.frametime_peak", "{value:.0f} ms", t("Longest frame")))  # fmt: skip
         room_w = number_w * 0.36
-        cols = 2 if room_w >= b.ts * 12 else 1
-        lines, col_w = math.ceil(len(rows) / cols), room_w / cols
-        step = max(b.ts * 2.4, min(number_h * 0.9 / lines, col_w * 0.6))
-        value_size = max(b.ts * 1.05, step * 0.4)
-        label_size = max(b.ts * 0.85, min(step * 0.17, b.ts * 1.2))
+        # The names are lettered with 14 % of their size between the letters; the widest
+        # sets one size for all four, so none shrinks alone and none touches the next
+        # (German's "Begrenzt durch" ran into "Längstes Bild" on the 12.3"). Two columns
+        # where the names stay readable at that size, else one (French and Polish names
+        # are long)
+        per_size = max(
+            _width_per_size(b.style["text_font"], text.upper()) + 0.14 * (len(text) - 1)
+            for _, _, _, text in rows
+        )
+        for cols in (2, 1) if room_w >= b.ts * 12 else (1,):
+            lines, col_w = math.ceil(len(rows) / cols), room_w / cols
+            step = max(b.ts * 2.4, min(number_h * 0.9 / lines, col_w * 0.6))
+            value_size = max(b.ts * 1.05, step * 0.4)
+            width = col_w - b.ts  # a gutter between the columns, and before the edge
+            label_size = min(max(b.ts * 0.85, min(step * 0.17, b.ts * 1.2)), width / per_size)
+            if label_size >= b.ts * 0.6:
+                break
         compact = step <= b.ts * 2.4  # (a small card: the rows from the number's top, as ever)
         block = step * (lines - 1) + label_size * 1.3 + CAP * value_size
         first = cap if compact else y + (number_h - block) / 2
@@ -1778,7 +1790,6 @@ def build_game(b: _Build, _src: Source) -> None:
             end = line + CAP * b.ts * 1.2 if compact else below + CAP * value_size
             if end > y + number_h:
                 break
-            width = col_w - b.ts * 0.5
             if name != "limiter":
                 b.label(f"{name}-label", text, at, line, label_size, width=width)
                 b.value(name, key, fmt, at, below, value_size, color=b.c("text2"), width=width,
