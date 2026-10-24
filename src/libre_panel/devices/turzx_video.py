@@ -184,9 +184,10 @@ class _Restart:
 
 RESTART = _Restart()
 
-# The bit rate "auto" found for a panel (its model and picture size), kept per process: a
-# display made anew after a reconnect goes on at it instead of climbing again.
-RATES: dict[tuple[str, tuple[int, int]], RateControl] = {}
+# The bit rate "auto" found for a panel (its model, its place on the bus and the picture size),
+# kept per process: a display made anew after a reconnect goes on at it instead of climbing
+# again, and two panels of one model (each on a link of its own) climb each for itself.
+RATES: dict[tuple[str, str, tuple[int, int]], RateControl] = {}
 
 
 class VideoSession:
@@ -441,7 +442,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         rotate = 270 if orientation_of(*size) == "landscape" else 180  # as to_native
         settings = self.settings
         if settings.maxrate == "auto":
-            key = (self.model.id if self.model else "", size)
+            place = str(getattr(self.transport, "place", None) or self.transport.pid)
+            key = (self.model.id if self.model else "", place, size)
             self.rate = RATES.get(key)
             if self.rate is None:
                 self.rate = RATES[key] = RateControl(auto_rate(settings, size))

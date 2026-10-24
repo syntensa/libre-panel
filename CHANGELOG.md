@@ -34,8 +34,11 @@
   (`h264_nvenc`, `h264_amf`, `h264_qsv`: the graphics card encodes, at little cost to the
   processor), the keyframe spacing and 60 frames a second, each written at once, with Live's
   tiles and the log's lines about the video underneath, and a way back to the measured
-  settings; the same under `[device.video]` in config.toml. The panel's firmware name is in
-  the log when it connects ([Video](docs/CONFIGURATION.md#video))
+  settings; the same under `[device.video]` in config.toml. *Run every step by itself* tries
+  them all in turn (about ten minutes), samples every panel's numbers, the companion's too,
+  judges each step (pictures reached the panel, the frame rate held, the queue did not keep
+  filling), brings the settings from before back and shows a table to copy into an issue.
+  The panel's firmware name is in the log when it connects ([Video](docs/CONFIGURATION.md#video))
 
 ## 0.7.0 — 2026-10-22
 

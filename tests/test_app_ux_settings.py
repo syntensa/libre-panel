@@ -14,6 +14,7 @@ from test_app_browser import (  # noqa: E402, F401
     a_panel_app,
     app_answer,
     app_url,
+    background,
     browser_page,
     choose_theme,
     no_setup_card,
@@ -516,6 +517,35 @@ def test_the_video_experiment_writes_each_choice_at_once_and_leads_back(
         assert (video.maxrate, video.profile, video.encoder) == ("auto", "baseline", "libx264")
         assert (video.fps, video.device_fps) == (50, 60)
         expect(back).to_be_disabled()
+
+
+def test_the_video_experiment_runs_every_step_by_itself_on_the_running_app(
+    background,  # noqa: F811
+    monkeypatch,
+):
+    """With the background app: the run tries every step in turn (shortened here), a table
+    says the outcome per step and panel (a PNG file takes no video), and the settings from
+    before the run (quality 20) are back at the end."""
+    from test_app_browser import radio
+    from test_editor_settings import lacking_ffmpeg, panel_on_the_bus
+
+    from libre_panel.editor import experiment
+
+    monkeypatch.setattr(experiment.Experiment, "scale", 0.002)
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    lacking_ffmpeg(monkeypatch, found=True)
+    _app, url = background
+    with browser_page(url, "settings/panel") as page:
+        card = page.locator("#panel-video-experiment")
+        radio(page, "Quality", "20").click()
+        waits_for(page, lambda: settings_config().device.video.crf == 20)
+        card.get_by_role("button", name="Run every step by itself").click()
+        expect(card.locator(".experiment-run-state")).to_contain_text("Done", timeout=30000)
+        rows = card.locator(".experiment-results tbody tr")
+        expect(rows.first).to_contain_text("auto cap, four minutes")
+        expect(rows.first).to_have_attribute("data-verdict", "no video")
+        assert settings_config().device.video.crf == 20  # the person's own, back
+        expect(card.get_by_role("button", name="Copy the table")).to_be_visible()
 
 
 def test_live_says_how_the_panel_runs_in_a_calm_sentence(app_url):  # noqa: F811

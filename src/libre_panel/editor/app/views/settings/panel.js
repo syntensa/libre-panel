@@ -31,7 +31,7 @@ import { toastError } from "../../ui/toast.js";
 import { openDialog } from "../../ui/dialog.js";
 import { Arrangement, arranged, arrangementItem } from "./arrangement.js";
 import { NewPanel } from "./newpanel.js";
-import { Card, CommitField, Disclosure, SettingRow, Status, usePolling } from "./parts.js";
+import { Card, CommitField, Disclosure, SettingRow, Status, copyText, usePolling } from "./parts.js";
 import { StartScreenCard } from "./startscreen.js";
 
 /** Write settings, and ask about the panel again: what they change shows there. */
@@ -258,6 +258,82 @@ const EXPERIMENT_LINE = /video|ffmpeg|firmware|decoder/i;
 /** The experiment's settings as they are, with a value of the person's own kept in the choices. */
 const withOwn = (choices, own) => (choices.includes(own) ? choices : [...choices, own]);
 
+// The run's steps by their id (experiment.py), in words.
+const STEP_LABELS = () => ({
+  auto: t("auto cap, four minutes"),
+  "crf-18": t("quality 18"),
+  ultrafast: t("preset ultrafast"),
+  main: t("profile main"),
+  high: t("profile high"),
+  "keyframe-2": t("keyframe every 2 s"),
+  h264_amf: t("AMD's encoder"),
+  h264_nvenc: t("NVIDIA's encoder"),
+  h264_qsv: t("Intel's encoder"),
+  "fps-60": t("60 frames a second"),
+  flood: t("flood: 24 Mbit/s at quality 16"),
+});
+const VERDICTS = () => ({ ok: t("ok"), stutter: t("stutters"), failed: t("failed"), "no video": t("no video") });
+const num = (value, digits = 0) => (value == null ? "–" : Number(value).toFixed(digits));
+
+/** The results as plain text, to paste into an issue. */
+function resultsText(results) {
+  const labels = STEP_LABELS();
+  const lines = ["step\tpanel\tfps\tKB/s\tcap\twaited\tdropped\tfaults\tverdict"];
+  for (const result of results) {
+    for (const p of result.panels) {
+      lines.push([labels[result.id] || result.id, p.panel, num(p.fps), num(p.kbps), p.bit_rate ?? "–", p.waits, p.drops, p.faults, p.verdict].join("\t"));
+    }
+  }
+  return lines.join("\n");
+}
+
+/**
+ * The run of the experiment: a button starts it (every step in turn, each panel's numbers
+ * sampled, the settings from before back at the end), a line says where it stands, and the
+ * results stand in a table, a row per step and panel, with a copy for an issue.
+ */
+function ExperimentRun() {
+  const run = usePolled(endpoints.experiment, 1500);
+  const data = run.data || {};
+  const running = Boolean(data.running);
+  const labels = STEP_LABELS();
+  const verdicts = VERDICTS();
+  const act = async (action) => {
+    try {
+      await endpoints.experimentAction(action);
+      run.reload();
+    } catch (error) {
+      toastError(error);
+    }
+  };
+  const step = running && data.step >= 0 ? data.steps[data.step] : null;
+  return html`<div class="experiment-run">
+    <div class="experiment-run-bar">
+      ${running
+        ? html`<button type="button" class="btn" onClick=${() => act("stop")}>${t("Stop the run")}</button>
+            <span class="experiment-run-state">${t("Step {n} of {of}: {step} — {s} s to go", { n: data.step + 1, of: data.of, step: step ? labels[step.id] || step.id : "", s: data.left_s })}</span>`
+        : html`<button type="button" class="btn btn-primary" onClick=${() => act("start")}>${t("Run every step by itself")}</button>
+            <span class="experiment-run-state muted">${data.ended === "done" ? t("Done; the settings from before are back.") : data.ended === "stopped" ? t("Stopped; the settings from before are back.") : t("About ten minutes: each step in turn, the panels' numbers sampled, then the settings from before come back. Keep an eye on the panels: whether the picture is there is yours to judge.")}</span>`}
+    </div>
+    ${data.error ? html`<p class="experiment-run-error">${data.error}</p>` : null}
+    ${data.results?.length
+      ? html`<table class="experiment-results">
+          <thead><tr><th>${t("Step")}</th><th>${t("Panel")}</th><th>fps</th><th>KB/s</th><th>${t("Cap")}</th><th>${t("Waited")}</th><th>${t("Dropped")}</th><th>${t("Faults")}</th><th>${t("Verdict")}</th></tr></thead>
+          <tbody>
+            ${data.results.flatMap((result) =>
+              result.panels.length
+                ? result.panels.map((p) => html`<tr key=${`${result.id}-${p.panel}`} data-verdict=${p.verdict}>
+                    <td>${labels[result.id] || result.id}</td><td>${p.panel}</td><td class="mono">${num(p.fps)}</td><td class="mono">${num(p.kbps)}</td><td class="mono">${p.bit_rate ?? "–"}</td><td class="mono">${p.waits}</td><td class="mono">${p.drops}</td><td class="mono">${p.faults}</td><td class=${`verdict ${p.verdict.replace(" ", "-")}`}>${verdicts[p.verdict] || p.verdict}</td>
+                  </tr>`)
+                : [html`<tr key=${result.id} data-verdict="no video"><td>${labels[result.id] || result.id}</td><td colspan="8">${t("no panel")}</td></tr>`],
+            )}
+          </tbody>
+        </table>
+        <button type="button" class="link-btn" onClick=${() => copyText(resultsText(data.results))}>${t("Copy the table")}</button>`
+      : null}
+  </div>`;
+}
+
 /**
  * Settings → Panel → Video experiment: what the panels take beyond what was measured on the 9.2"
  * (the bit rate's cap, the quality, x264's speed, the profile, the encoder, the keyframes), each
@@ -303,6 +379,7 @@ function ExperimentCard({ video }) {
       />
     <//>
     ${row(t("Keyframe every"), t("Seconds between keyframes. 10 was measured; at a high bit rate a short spacing no longer makes flat areas pulse, and a glitch heals sooner."), "keyframe_s", KEYFRAMES, (value) => t("{n} s", { n: value }))}
+    <${ExperimentRun} />
     <div class="live-tiles experiment-tiles" role="list" aria-label=${t("How the panel is doing")}>
       ${statTiles(stats).map(
         (tile) => html`<div class=${`live-tile ${tile.level}`} role="listitem" key=${tile.id} data-tile=${tile.id} title=${tile.title}>

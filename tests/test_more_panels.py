@@ -531,6 +531,24 @@ def test_a_panel_beside_the_first_has_smooth_motion_of_its_own_with_its_own_clip
     assert "video" not in path.read_text(encoding="utf-8")
 
 
+def test_the_video_experiment_s_settings_reach_a_panel_beside_the_first_as_it_runs():
+    """The experiment writes [device.video]; a panel beside the first takes the encoder's
+    settings from there (its own table has mode and clip alone), and every loop opens its
+    panel again on such a change (app._same_device), the one beside the first too."""
+    from libre_panel.app import _same_device
+    from libre_panel.config import DeviceConfig, VideoConfig
+
+    bar = "turing-9.2-usb"
+    config = parse_config({"video": {"crf": 18, "encoder": "h264_amf", "fps": 60, "device_fps": 70},
+                           "panels": [{"model": bar, "video": {"mode": "on"}}]})  # fmt: skip
+    beside = config.for_panel(0).device.video
+    assert (beside.crf, beside.encoder, beside.fps, beside.device_fps) == (18, "h264_amf", 60, 70)
+    assert beside.mode == "on"
+    before, after = DeviceConfig(video=VideoConfig(crf=25)), DeviceConfig(video=VideoConfig(crf=18))
+    assert not _same_device(before, after)  # opened again, with the new encoder settings
+    assert _same_device(before, DeviceConfig(brightness=10, video=VideoConfig(crf=25)))
+
+
 def test_a_panel_beside_the_first_takes_its_readings_just_after_the_first_panel_s():
     from test_app_cli import MemoryStream, StepClock
 

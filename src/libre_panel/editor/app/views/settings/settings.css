@@ -271,6 +271,52 @@
 }
 
 /* the standby clip's name: the field, and the button that takes the panel's own name */
+.experiment-run {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line, rgba(127, 127, 127, 0.2));
+}
+
+.experiment-run-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.experiment-run-state {
+  font-size: 13px;
+}
+
+.experiment-run-error {
+  margin: 8px 0 0;
+  color: var(--bad, #e5484d);
+  font-size: 13px;
+}
+
+.experiment-results {
+  width: 100%;
+  margin-top: 12px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.experiment-results th,
+.experiment-results td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--line, rgba(127, 127, 127, 0.2));
+}
+
+.experiment-results th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.experiment-results .verdict.ok { color: var(--ok, #3fb950); }
+.experiment-results .verdict.stutter { color: var(--warn, #d29922); }
+.experiment-results .verdict.failed { color: var(--bad, #e5484d); }
+
 .experiment-tiles {
   margin-top: 14px;
 }

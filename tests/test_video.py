@@ -701,7 +701,8 @@ def test_auto_rate_steps_down_on_a_slow_panel_and_the_counters_say_the_cap(panel
                 break
         assert display.rate.rate == 1.5  # one step down, with ffmpeg started anew
         assert display.counters.bit_rate == 1.5 and "1.5M" in display.encoder.command
-        assert turzx_video.RATES[("turing-9.2-usb", (1920, 480))] is display.rate
+        assert list(turzx_video.RATES.values()) == [display.rate]
+        assert next(iter(turzx_video.RATES))[::2] == ("turing-9.2-usb", (1920, 480))
     finally:
         panel.block_delay = 0.0
         display.close()

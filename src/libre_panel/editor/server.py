@@ -369,6 +369,35 @@ class EditorState:
         self.news = News(config_path)  # whom Start tells what is new (news.py)
         self.updates = Updates(config_path)  # whether a newer version is out (updates.py)
         self._doctor: Any = None  # the panel test of Live → Diagnose (doctor_session.py)
+        self._experiment: Any = None  # the video experiment's run (experiment.py)
+
+    def experiment(self, controls: Any) -> Any:
+        """The video experiment's run, made on first use: it writes the settings as the app
+        does and reads every panel's numbers from the app's panel loop."""
+        with self._lock:
+            if self._experiment is None:
+                from libre_panel.editor.experiment import Experiment
+
+                def settings() -> Any:
+                    return app_settings.Settings(self.config_path, controls, self.restart)
+
+                def status_of() -> Any:
+                    return getattr(getattr(controls, "panel", None), "status", None)
+
+                def gpu() -> str:
+                    hub = getattr(status_of(), "hub", None)
+                    try:
+                        return str(hub.snapshot().value("gpu.name") or "") if hub else ""
+                    except Exception:  # (a name is a nice-to-have: the step is left out)
+                        return ""
+
+                self._experiment = Experiment(
+                    write=lambda changes: settings().write({"set": changes}),
+                    read=lambda: settings().read()["config"]["video"],
+                    status_of=status_of,
+                    gpu=gpu,
+                )
+            return self._experiment
 
     def doctor(self) -> Any:
         """The panel test, made on first use: it gives the app's panel loop's panel to the
@@ -2088,6 +2117,33 @@ class EditorHandler(BaseHTTPRequestHandler):
         body = logview.text().encode("utf-8")
         self._send(200, body, "text/plain; charset=utf-8", filename="libre-panel-log.txt")
 
+    def _experiment(self) -> None:
+        """``GET /api/experiment``: the video experiment's run as it stands (experiment.py)."""
+        self._json(self.state.experiment(self.controls).state())
+
+    def _experiment_action(self) -> None:
+        """``POST /api/experiment {"action": "start"}`` or ``"stop"``: the video experiment,
+        begun on the running app's panels, or ended, with the settings from before it back."""
+        from libre_panel.editor.experiment import ExperimentError
+
+        payload = self._read_json()
+        if payload is None:
+            return
+        action = payload.get("action") if isinstance(payload, dict) else None
+        runner = self.state.experiment(self.controls)
+        if action == "start":
+            if self.controls is None:
+                return self._error("the experiment needs the running app", HTTPStatus.CONFLICT)
+            try:
+                runner.start()
+            except ExperimentError as exc:
+                return self._error(str(exc), HTTPStatus.CONFLICT)
+        elif action == "stop":
+            runner.stop()
+        else:
+            return self._error('expected {"action": "start" or "stop"}')
+        self._json(runner.state())
+
     def _logs_action(self) -> None:
         """``POST /api/logs {"verbose": true}``: every detail into the log until the app starts
         again, or only what matters."""
@@ -2345,6 +2401,7 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/app", lambda h, m, u: h._app_state()),
     Route("GET", "/api/doctor", lambda h, m, u: h._json(h.state.doctor().status())),
     Route("GET", "/api/logs", lambda h, m, u: h._logs(parse_qs(u.query))),
+    Route("GET", "/api/experiment", lambda h, m, u: h._experiment()),
     Route("GET", "/api/logs/file", lambda h, m, u: h._logs_file(), picture=True),
     Route("GET", "/api/hardware", lambda h, m, u: h._hardware(_refresh_asked(u.query))),
     Route("GET", "/api/fan-look", lambda h, m, u: h._fan_look(parse_qs(u.query)), picture=True),
@@ -2388,6 +2445,7 @@ ROUTES: tuple[Route, ...] = (
     Route("POST", "/api/app", lambda h, m, u: h._app_action()),
     Route("POST", "/api/doctor", lambda h, m, u: h._doctor_action()),
     Route("POST", "/api/logs", lambda h, m, u: h._logs_action()),
+    Route("POST", "/api/experiment", lambda h, m, u: h._experiment_action()),
     Route("POST", "/api/language", lambda h, m, u: h._set_language()),
     Route("POST", "/api/pages", lambda h, m, u: h._set_panel_page()),
     Route("POST", "/api/sequence", lambda h, m, u: h._set_sequence()),

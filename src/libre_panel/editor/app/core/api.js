@@ -124,6 +124,8 @@ export const endpoints = {
   doctor: () => get("/api/doctor"),
   doctorAction: (action, answer) => post("/api/doctor", answer === undefined ? { action } : { action, answer }),
   logs: (level = "DEBUG") => get(`/api/logs?level=${enc(level)}`),
+  experiment: () => get("/api/experiment"),
+  experimentAction: (action) => post("/api/experiment", { action }),
   setDetailedLog: (verbose) => post("/api/logs", { verbose }),
   logsFile: () => withToken("/api/logs/file"),
   // Settings → System → Backup: the settings and own themes in one file, and back (backup.py)

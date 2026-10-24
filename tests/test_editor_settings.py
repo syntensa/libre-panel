@@ -264,6 +264,17 @@ def test_the_video_experiment_s_settings_are_written_and_checked(server):
     assert load_config().device.video.maxrate == "16M"  # nothing of that was written
 
 
+def test_the_video_experiment_s_run_is_asked_for_and_needs_the_running_app(server):
+    status, data = request(server, "GET", "/api/experiment")
+    assert status == 200 and data["running"] is False and data["results"] == []
+    status, data = request(server, "POST", "/api/experiment", {"action": "start"})
+    assert status == 409 and "running app" in data["error"]  # a plain editor has no panel loop
+    status, data = request(server, "POST", "/api/experiment", {"action": "stop"})
+    assert status == 200 and data["running"] is False
+    status, data = request(server, "POST", "/api/experiment", {"action": "dance"})
+    assert status == 400
+
+
 def test_writes_that_come_at_once_all_arrive(server):
     """Each starts from the file the one before left: none is lost."""
     changes = [
