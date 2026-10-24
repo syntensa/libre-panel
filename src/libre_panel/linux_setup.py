@@ -46,9 +46,9 @@ log = logging.getLogger(__name__)
 
 # the USB vendor ids the udev rule is for: TURZX USB panels, the JONSBO ZC-360's screens
 USB_VENDORS = ("1cbe", "43a8", "345f")
-# and the screens whose vendor id other devices have too, with their product ids: Thermalright's
-# Trofeo Vision (0416 is Winbond's)
-USB_PRODUCTS = (("0416", "5302"), ("0416", "5408"))
+# and other makers' screens, with their product ids (a vendor id may have other devices too):
+# Thermalright's Trofeo Vision (0416 is Winbond's), BeadaPanel
+USB_PRODUCTS = (("0416", "5302"), ("0416", "5408"), ("4e58", "1001"))
 UDEV_RULES = "/etc/udev/rules.d/60-libre-panel.rules"
 RAPL_RULES = "/etc/udev/rules.d/60-libre-panel-rapl.rules"
 MODULES = "/etc/modules-load.d/libre-panel.conf"

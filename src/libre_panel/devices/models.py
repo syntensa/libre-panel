@@ -31,6 +31,7 @@ PROTOCOLS = {
     "serial-hongtai": "USB serial (VID 0x33C3, 2 Mbaud), Hongtai / Jungle Leopard JPEG frames",
     "usb-lianli": "USB bulk (VID 0x1CBE), Lian Li's TURZX-like protocol with JPEG frames",
     "usb-thermalright": "USB bulk or HID (VID 0x0416), Thermalright's Trofeo Vision, JPEG frames",
+    "usb-beada": "USB bulk (VID 0x4E58), BeadaPanel's Panel-Link, 16-bit frames",
 }
 
 
@@ -472,6 +473,131 @@ MODELS: tuple[PanelModel, ...] = (
         "usb-thermalright",
         usb_ids=((0x0416, 0x5302),),
     ),
+    # BeadaPanel: one USB id for all; the panel says which it is. The sizes are the diagonals
+    # of the millimetres the vendor's Linux driver gives (the 2 and 2W are round), the 3's and
+    # the 7's as the vendor announced them.
+    PanelModel(
+        "beadapanel-2",
+        "BeadaPanel",
+        "BeadaPanel 2",
+        2.1,
+        480,
+        480,
+        "usb-beada",
+        shape="round",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-2w",
+        "BeadaPanel",
+        "BeadaPanel 2W",
+        2.8,
+        480,
+        480,
+        "usb-beada",
+        shape="round",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-3",
+        "BeadaPanel",
+        "BeadaPanel 3",
+        3.5,
+        320,
+        480,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-4",
+        "BeadaPanel",
+        "BeadaPanel 4",
+        4.3,
+        480,
+        800,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-5",
+        "BeadaPanel",
+        "BeadaPanel 5",
+        5,
+        480,
+        800,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-5s",
+        "BeadaPanel",
+        "BeadaPanel 5S",
+        5,
+        480,
+        854,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-6",
+        "BeadaPanel",
+        "BeadaPanel 6",
+        6.8,
+        480,
+        1280,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-7",
+        "BeadaPanel",
+        "BeadaPanel 7",
+        7,
+        480,
+        800,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-7s",
+        "BeadaPanel",
+        "BeadaPanel 7S",
+        7.8,
+        400,
+        1280,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-8",
+        "BeadaPanel",
+        "BeadaPanel 8",
+        8.8,
+        480,
+        1920,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-9",
+        "BeadaPanel",
+        "BeadaPanel 9",
+        9.16,
+        462,
+        1920,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-11",
+        "BeadaPanel",
+        "BeadaPanel 11",
+        10.2,
+        440,
+        1920,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
 )
 
 # Families with a driver (devices/turzx.py lists them); the rest is planned.
@@ -490,6 +616,7 @@ _DRIVER_STATUS = {
         "serial-hongtai",
         "usb-lianli",
         "usb-thermalright",
+        "usb-beada",
     )
 }
 # Models confirmed on the panel: with `libre-panel doctor`, or by an owner who reports it runs.
@@ -523,6 +650,11 @@ _TROFEO = (
     "backlight control: dimming darkens the picture. Close Thermalright's program while Libre "
     "Panel runs. When Libre Panel quits, the panel shows its own picture again."
 )
+_BEADA = (
+    "Not yet seen on the hardware. It takes whole pictures in 16-bit colour, a few a second: no "
+    "smooth motion, and soft gradients show steps. Close the maker's program while Libre Panel "
+    "runs: two programs cannot drive it at once."
+)
 _LIMITS = {
     "turing-1.6-usb": _UNSEEN,
     "turing-2.1-usb": _UNSEEN,
@@ -545,6 +677,7 @@ _LIMITS = {
     "lianli-hydroshift2-lcd": _LIANLI,
     "lianli-hydroshift2-oled": _LIANLI,
     **{m.id: _TROFEO for m in MODELS if m.protocol == "usb-thermalright"},
+    **{m.id: _BEADA for m in MODELS if m.protocol == "usb-beada"},
 }
 MODELS = tuple(
     replace(

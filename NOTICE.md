@@ -39,14 +39,23 @@ Leopard screens (JL-PROTOCOL.md: the command frame, the picture's envelope, the 
 of Lian Li's TURZX-like screens (from the MIT-licensed lian-li-linux driver: the JPEG layer,
 the cleared PNG layer, the picture queue), and of Thermalright's Trofeo Vision as far as its
 notes from the vendor's application go (the bars' 462 rows, the 4:2:0 JPEG and its size, the
-packet count). Libre Panel's drivers (`devices/jonsbo_ds916.py`, `devices/ms9132.py`,
-`devices/hongtai.py`, `devices/lianli_usb.py`, `devices/thermalright.py`) are its own code.
+packet count), and of BeadaPanel's (the Status-Link and Panel-Link messages, the start and
+end tags by the panel's version, the reset before a stream). Libre Panel's drivers
+(`devices/jonsbo_ds916.py`, `devices/ms9132.py`, `devices/hongtai.py`, `devices/lianli_usb.py`,
+`devices/thermalright.py`, `devices/beadapanel.py`) are its own code.
 
 **turing-smart-screen** (.NET) — Copyright (c) 2021 machi_pon, MIT.
 <https://github.com/usausa/turing-smart-screen>. The protocol of Thermalright's Trofeo Vision
 screens (the question and its answer, the picture's header and packets, the turn for each
 variant, how often a picture goes) comes from its `LcdDriver.TrofeoVision` and
 `LcdDriver.TrofeoVisionLy`. Libre Panel's driver (`devices/thermalright.py`) is its own code.
+
+**BeadaPanel's own sources** — NXElec's beadapanelDaemon, panelLink and BeadaTools (GPL-3.0,
+<https://github.com/NXElec>) and JT365's beada Linux driver (GPL-2.0-or-later,
+<https://github.com/JT365/beada>). The BeadaPanel protocol (the Status-Link and Panel-Link
+messages and their checksum, the panel's information, the model codes, the stream's format,
+the backlight's range) comes from them. Libre Panel's driver (`devices/beadapanel.py`) is its
+own code.
 
 **LibreHardwareMonitor** (MPL-2.0) — the sensor source for the GPU,
 temperatures, power and fans on Windows. The Windows downloads carry its
@@ -229,7 +238,7 @@ licence:
 The WebView2 runtime that draws the window is not in the downloads: Windows 11 has it,
 and Windows 10 gets it with Microsoft Edge.
 
-Product names such as TURZX, Turing Smart Screen, Lian Li, Thermalright, WeAct and Noctua (and
-its fans' model names) are trademarks of their respective owners; Libre Panel is not affiliated
-with them. The fan looks named after Noctua's fans are drawings of Libre Panel's own, made
+Product names such as TURZX, Turing Smart Screen, Lian Li, Thermalright, BeadaPanel, WeAct and
+Noctua (and its fans' model names) are trademarks of their respective owners; Libre Panel is not
+affiliated with them. The fan looks named after Noctua's fans are drawings of Libre Panel's own, made
 from the blades' shape, without any of Noctua's pictures or logos.

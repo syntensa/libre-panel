@@ -24,6 +24,9 @@ BARS = [
     "lianli-universal-9.2",
     "thermalright-trofeo-9.16",
     "thermalright-trofeo-11.3",
+    "beadapanel-8",
+    "beadapanel-9",
+    "beadapanel-11",
 ]
 OTHERS = [model.id for model in MODELS if model.id not in BARS]
 NINE, THREE, FIVE = (get_model(id) for id in ("turing-9.2-usb", "turing-3.5", "turing-5"))

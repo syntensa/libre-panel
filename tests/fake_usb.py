@@ -72,7 +72,8 @@ def plug(monkeypatch, vendor: int, *devices: tuple[FakeUsbDevice, int]) -> None:
     """Put these devices (each with its product id) on the bus that usb_link looks at."""
 
     def find(wanted, products):
-        assert wanted == vendor
+        if wanted != vendor:  # (another maker's: none of those)
+            return []
         return [(device, pid) for pid in products for device, has in devices if has == pid]
 
     monkeypatch.setattr(usb_link, "find", find)

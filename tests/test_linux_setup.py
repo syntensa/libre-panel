@@ -150,8 +150,8 @@ def test_a_new_computer_gets_the_rule_the_driver_and_a_reload():
                 f"--attr-match=idVendor={v}",
                 f"--attr-match=idProduct={p}",
             )
-            for v, p in (("0416", "5302"), ("0416", "5408"))
-        ),  # (the vendor id of these has other devices too)
+            for v, p in (("0416", "5302"), ("0416", "5408"), ("4e58", "1001"))
+        ),  # (other makers' screens, by their product ids)
     ]
 
 
@@ -516,7 +516,8 @@ def test_a_computer_in_a_folder_is_read(tmp_path):
         'ATTRS{idVendor}=="1CBE", TAG+="uaccess"\nATTRS{idVendor}=="43a8", TAG+="uaccess"\n'
         'ATTRS{idVendor}=="345f", TAG+="uaccess"\n'
         'ATTRS{idVendor}=="0416", ATTRS{idProduct}=="5302", TAG+="uaccess"\n'
-        'ATTRS{idVendor}=="0416", ATTRS{idProduct}=="5408", TAG+="uaccess"\n',
+        'ATTRS{idVendor}=="0416", ATTRS{idProduct}=="5408", TAG+="uaccess"\n'
+        'ATTRS{idVendor}=="4e58", ATTRS{idProduct}=="1001", TAG+="uaccess"\n',
     )
     root.write("etc/modules-load.d/libre-panel.conf", "nct6775\n")
     for name in ("sys/class/powercap/intel-rapl:0/energy_uj",):

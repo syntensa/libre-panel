@@ -34,9 +34,9 @@ motion (the video mode is for the TURZX USB panels). The panel test's speed chec
   [turing-smart-screen-python](https://github.com/mathoudebine/turing-smart-screen-python),
   whose protocol Libre Panel follows), but nobody has confirmed this model with
   Libre Panel yet. Please run `libre-panel doctor` and report the result. For the panels of
-  JONSBO, Hongtai, VMAX, Lian Li and Thermalright (and the Turing 1.6" and 2.1" USB panels) the
-  protocol comes from other projects' notes and captures: nobody has run them with Libre Panel
-  yet.
+  JONSBO, Hongtai, VMAX, Lian Li, Thermalright and BeadaPanel (and the Turing 1.6" and 2.1" USB
+  panels) the protocol comes from other projects' notes and captures and from the makers' own
+  sources: nobody has run them with Libre Panel yet.
 - **planned** — the panel is in the catalog (editor menu, sizes), the driver is
   not written yet. Design themes now; they will work once the driver lands.
 
@@ -94,6 +94,7 @@ the panel lists show it when you point at one.
 | Hongtai / Jungle Leopard | yes | no | its own (0–100) | no: it shows its own animation again | whole JPEG pictures of at most 80 KB over a serial port: a few a second, and a busy picture loses detail |
 | Lian Li | yes | no | its own (0–100) | not known yet | whole JPEG pictures; close L-Connect while Libre Panel runs |
 | Thermalright Trofeo Vision | yes | no | none: dimming darkens the picture | no: it shows its own picture again | whole JPEG pictures; close TRCC while Libre Panel runs |
+| BeadaPanel | yes | no | its own | yes: the backlight off | whole pictures in 16-bit colour, a few a second |
 
 For all of them: close the maker's own program first. Two programs cannot drive one panel at
 once.
@@ -191,6 +192,36 @@ the [protocol notes](protocol/thermalright.md). Unverified.
 Not yet: the 9.16" with the LY1 controller (`0416:5409`), which only InfoPanel documents, and
 Thermalright's other screens (Frozen Warframe, Elite Vision, the AIO pump screens and others on
 `0416:5302`, `0416:5406`, `87ad:70db` and as USB mass storage), whose pictures differ.
+
+## BeadaPanel
+
+| Model id | Size | Resolution (landscape) | The maker's models | Driver |
+|---|---|---|---|---|
+| `beadapanel-2` | 2.1" round | 480×480 | 2 | unverified |
+| `beadapanel-2w` | 2.8" round | 480×480 | 2W | unverified |
+| `beadapanel-3` | 3.5" | 480×320 | 3, 3C | unverified |
+| `beadapanel-4` | 4.3" | 800×480 | 4, 4C | unverified |
+| `beadapanel-5` | 5" | 800×480 | 5, 5C, 5T | unverified |
+| `beadapanel-5s` | 5" | 854×480 | 5S | unverified |
+| `beadapanel-6` | 6.8" | 1280×480 | 6, 6C, 6S | unverified |
+| `beadapanel-7` | 7" | 800×480 | 7, 7C | unverified |
+| `beadapanel-7s` | 7.8" | 1280×400 | 7S | unverified |
+| `beadapanel-8` | 8.8" | 1920×480 | 8, Y | unverified |
+| `beadapanel-9` | 9.16" | 1920×462 | 9, Z | unverified |
+| `beadapanel-11` | 10.2" | 1920×440 | 11, X | unverified |
+
+Every BeadaPanel is the same USB device (`4e58:1001`, found by `auto`); the panel says which
+model it is and the size of its pictures. Libre Panel sends the plain Panel-Link stream that
+every model takes: whole pictures in 16-bit colour (RGB565), a few a second, so soft
+gradients show steps (the maker's faster "write-through" stream is not used). The backlight
+is the panel's own; `dark_on_quit` turns it off. Close the maker's program and AIDA64 first.
+On Windows the panel needs no driver of its own (it comes up as a WinUSB device); on Linux,
+`libre-panel system-setup --linux` gives your user access to it. The sizes in inches are the
+diagonals of the millimetres in the maker's Linux driver (the 3's and the 7's as the maker
+announced them). The protocol comes from the maker's own sources (NXElec's demos and Raspberry
+Pi daemon, the [beada](https://github.com/JT365/beada) Linux driver) and
+[InfoPanel](https://github.com/habibrehmansg/infopanel); see the
+[protocol notes](protocol/beadapanel.md). Unverified.
 
 ## Lian Li and others
 

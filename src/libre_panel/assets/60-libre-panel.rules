@@ -17,3 +17,6 @@ SUBSYSTEM=="usb", ATTRS{idVendor}=="345f", ATTRS{idProduct}=="9132", MODE="0660"
 # Thermalright's Trofeo Vision: the 6.86" (a HID device) and the 9.16" and 11.3" bars
 SUBSYSTEM=="usb", ATTRS{idVendor}=="0416", ATTRS{idProduct}=="5302", MODE="0660", TAG+="uaccess"
 SUBSYSTEM=="usb", ATTRS{idVendor}=="0416", ATTRS{idProduct}=="5408", MODE="0660", TAG+="uaccess"
+
+# BeadaPanel (NXElec), every size
+SUBSYSTEM=="usb", ATTRS{idVendor}=="4e58", ATTRS{idProduct}=="1001", MODE="0660", TAG+="uaccess"
