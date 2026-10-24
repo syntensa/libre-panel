@@ -662,13 +662,14 @@ def test_auto_rate_steps_down_on_a_slow_panel_and_the_counters_say_the_cap(panel
     display.open()
     try:
         panel.block_delay = 0.05  # 20 blocks a second: every block takes longer than a frame
-        frames = noisy_frames(60)
+        frames = noisy_frames(20)
         display.show(frames[0])
         assert display.rate is not None and display.counters.bit_rate == 2.0
         assert "2.0M" in display.encoder.command
-        for frame in frames[1:]:
+        deadline = time.monotonic() + 20.0  # ffmpeg and the pipes hold some frames first
+        for frame in itertools.cycle(frames[1:]):
             display.show(frame)
-            if display.rate.rate < 2.0:
+            if display.rate.rate < 2.0 or time.monotonic() > deadline:
                 break
         assert display.rate.rate == 1.5  # one step down, with ffmpeg started anew
         assert display.counters.bit_rate == 1.5 and "1.5M" in display.encoder.command
