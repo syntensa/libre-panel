@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.1rc2 — 2026-10-24
+## 0.7.1rc3 — 2026-10-24
 
 **Changes**
 - **The screens use their room**: the card of what plays (Lumen, Encore, every size) sets the
