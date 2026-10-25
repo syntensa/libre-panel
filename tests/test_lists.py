@@ -162,6 +162,49 @@ def test_a_list_of_fans_turns_each_one_with_its_speed():
     assert renderer.warnings == []
 
 
+def test_a_lists_fans_turn_over_its_names_and_numbers_as_pieces_of_their_own():
+    """The names and numbers stay the piece they are while the fans turn over them, each a
+    piece of its own: a frame composes the fans again, not the whole list. Where a fan would
+    lie on a name or on another fan, they are laid on the list as before. The frames are the
+    ones a renderer that lays every fan on the list draws."""
+    from PIL import ImageChops
+
+    theme = list_theme(items="fan.*", style="fans", font_size=20, max=3000)
+    split, joined = Renderer(theme, animate=True), Renderer(theme, animate=True)
+    joined.keep_static = False
+    snap = demo_snapshot(fixed_time=1_700_000_000)
+    kept = None
+    for k in range(6):
+        a, boxes = split.render(snap, now=100.0 + k / 25)
+        b, _ = joined.render(snap, now=100.0 + k / 25)
+        assert ImageChops.difference(a, b).getbbox() is None, k
+        pieces = dict(split._last[0])
+        assert boxes["list"] == [10, 10, 300, 180]
+        assert sorted(wid for wid in pieces if wid.startswith("list\0")) == [
+            f"list\0fan{i}" for i in range(6)
+        ]
+        assert kept is None or pieces["list"] is kept  # the names and numbers: kept
+        kept = pieces["list"]
+    assert [wid for wid, _ in joined._last[0]] == ["list"]
+
+    crowded = Renderer(theme, animate=True)
+    crowded._list_fan_places = lambda widget, count: [(0.0, 0.0)] * count  # all in one place
+    crowded.render(snap, now=100.0)
+    assert [wid for wid, _ in crowded._last[0]] == ["list"]
+
+
+def test_a_pattern_is_matched_again_once_the_readings_are_others():
+    """The keys a pattern matches are kept while the readings' keys stay the same: a reading
+    that comes, or goes, shows at once."""
+    found = readings(fan__board__1=(900.0, "RPM", "Fan 1"), fan__board__2=(800.0, "RPM", "Fan 2"))
+    assert [key for key, _ in picked("fan.*", found)] == ["fan.board.1", "fan.board.2"]
+    more = {**found, **readings(fan__board__10=(700.0, "RPM", "Fan 10"))}
+    assert [key for key, _ in picked("fan.*", more)] == ["fan.board.1", "fan.board.2",
+                                                          "fan.board.10"]  # fmt: skip
+    del more["fan.board.1"]
+    assert [key for key, _ in picked("fan.*", more)] == ["fan.board.2", "fan.board.10"]
+
+
 def test_fans_that_never_ran_are_left_out_where_asked(monkeypatch):
     """A mainboard's header with nothing on it reads 0 all along; a fan that ran once stays,
     and so does the graphics card's (it stands while the card is cool)."""

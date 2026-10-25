@@ -719,6 +719,43 @@ def test_incremental_frames_equal_full_renders(theme_id, mode):
         assert ImageChops.difference(a, b).getbbox() is None, f"frame {i} differs"
 
 
+@pytest.mark.parametrize(
+    "theme_id", ["arena-1920x720", "arena-pair-1920x720", "lumen", "lumen-1280x720"]
+)
+def test_frames_with_what_stays_kept_equal_frames_made_anew(theme_id):
+    """What stays the same from frame to frame is kept (Renderer.keep_static): a lit ring's
+    groove with its sweep lit on it, the background with its picture, the names and numbers
+    under a list's turning fans, and the parts of a frame are laid into it as they are. In
+    video mode, with the values on the move, every frame is the one a renderer draws that
+    makes all of that anew and composes every frame whole: the 12.3"'s Arena and its pair
+    version, and Lumen on a bar (1920 x 480) and at 1280 x 720."""
+    from datetime import datetime, timedelta
+
+    from PIL import ImageChops
+
+    from libre_panel.sensors.demo import demo_snapshot
+    from libre_panel.theme.model import find_theme, load_theme
+
+    theme = load_theme(find_theme(theme_id))
+    kept, anew = Renderer(theme, animate=True), Renderer(theme, animate=True)
+    anew.keep_static = anew.incremental = False
+    for renderer in (kept, anew):
+        renderer.continuous, renderer.fps = True, 50
+    start = datetime(2026, 9, 27, 23, 59, 58)
+    for i in range(50):
+        now = 1000.0 + i / 50
+        if i % 10 == 0:  # new readings five times a second: rings, bars and numbers glide
+            snapshot = demo_snapshot(fixed_time=1_700_000_000 + 3 * i)
+            for renderer in (kept, anew):
+                renderer.new_sample(now, 0.2)
+        snapshot.now = start + timedelta(seconds=i / 50)  # the seconds tick, the date changes
+        a, boxes_a = kept.render(snapshot, now)
+        b, boxes_b = anew.render(snapshot, now)
+        assert boxes_a == boxes_b
+        apart = ImageChops.difference(a, b)
+        assert apart.getbbox() is None, f"frame {i}: {max(e[1] for e in apart.getextrema())} apart"
+
+
 def test_background_builds_keep_frames_coming():
     """In video mode a slow piece is built in the helper thread: the frame goes
     out at once with the previous piece, and the new one follows."""
