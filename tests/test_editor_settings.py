@@ -92,7 +92,7 @@ def test_the_settings_are_the_config_with_its_defaults_filled_in(server):
     }
     assert (config["video"]["mode"], config["video"]["fps"], config["video"]["local_clip"]) == (
         "auto",
-        50,
+        30,
         "",
     )
     assert config["video"]["clip_asked"] is False  # nobody has asked yet
@@ -534,7 +534,7 @@ def test_no_panel_found_says_so_and_has_nothing_to_tell_about_video(server, monk
     assert status == 200
     assert data["found"] is None and data["model"] is None and data["running"] is None
     assert data["configured"] == "auto"
-    assert data["video"] == {"mode": "auto", "fps": 50, "on": False, "usb": True, "gaps": []}
+    assert data["video"] == {"mode": "auto", "fps": 30, "on": False, "usb": True, "gaps": []}
 
 
 def test_a_panel_on_the_bus_is_named_and_the_video_mode_says_what_it_lacks(server, monkeypatch):

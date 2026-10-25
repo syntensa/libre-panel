@@ -239,7 +239,7 @@ def test_the_overview_says_all_good_calmly_and_the_short_form_says_nothing(
     ) as page:
         expect(page.locator("#health-title")).to_have_text("All good")
         assert health(page) == []
-        expect(page.locator("[data-glance='video']")).to_contain_text("On, 50 fps")
+        expect(page.locator("[data-glance='video']")).to_contain_text("On, 30 fps")
         page.evaluate(SHORT_FORM)
         page.wait_for_function("window.libre.store.get().serviceStates !== null")
         page.wait_for_timeout(500)
@@ -500,7 +500,7 @@ def test_smooth_motion_asks_for_the_clip_and_takes_the_panels_own_name_on_a_clic
         clip.get_by_role("button", name="Use this name").click()
         waits_for(page, lambda: settings_config().device.video.local_clip == CLIP)
         assert settings_config().device.video.clip_asked is True  # Start need not ask
-        expect(card).to_contain_text("On, 50 fps")
+        expect(card).to_contain_text("On, 30 fps")
         expect(card.locator(".clip-row")).to_have_count(0)
         # the name is kept under Advanced, in plain words; the address opens it
         page.goto(f"{app_url}#/settings/panel/panel-advanced")

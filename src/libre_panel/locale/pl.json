@@ -2441,7 +2441,6 @@
     "the load of the last minute along the bottom of a tall card, under the rows": "obciążenie z ostatniej minuty wzdłuż dolnej krawędzi wysokiej karty, pod wierszami",
     "KB/s · up to {rate} Mbit/s": "KB/s · do {rate} Mbit/s",
     "What goes to the panel, in KB/s (1 KB = 1000 bytes); not counted for the PNG file. In video mode also the bit rate's cap: with maxrate \"auto\" it steps down while the panel takes less than it is sent, and up again after a calm minute.": "Co trafia do panelu, w KB/s (1 KB = 1000 bajtów); nie liczone dla pliku PNG. W trybie wideo także górna granica przepływności: z maxrate \"auto\" schodzi o stopień, dopóki panel przyjmuje mniej, niż dostaje, i wraca w górę po spokojnej minucie.",
-    "50 is the smoothest; 25 and 30 ask less of the PC. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "50 jest najpłynniejsze; 25 i 30 mniej obciążają PC. 60 to eksperyment: panelowi podaje się 70, aby jego odtwarzacz był z przodu.",
     "AMD (h264_amf)": "AMD (h264_amf)",
     "Intel (h264_qsv)": "Intel (h264_qsv)",
     "NVIDIA (h264_nvenc)": "NVIDIA (h264_nvenc)",
@@ -2648,7 +2647,9 @@
     "white": "biały",
     "Automatic picks {encoder}.": "Wybór automatyczny: {encoder}.",
     "{encoder} was passed over:": "Pominięto {encoder}:",
-    "no picture came from it": "nie dał żadnego obrazu"
+    "no picture came from it": "nie dał żadnego obrazu",
+    "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 wygląda płynnie i jest wartością domyślną. 50 jest jeszcze płynniejsze i kosztuje o około dwie trzecie więcej czasu procesora (zmierzone z dwoma panelami: 2,0 zamiast 1,2 rdzenia); 25 obciąża najmniej. 60 to eksperyment: panel dostaje 70, żeby jego odtwarzacz był z przodu.",
+    "50 frames a second": "50 klatek na sekundę"
   },
   "fields": {
     "agent": "agent",

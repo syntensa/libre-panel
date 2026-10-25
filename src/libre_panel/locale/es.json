@@ -2441,7 +2441,6 @@
     "the load of the last minute along the bottom of a tall card, under the rows": "la carga del último minuto a lo largo del borde inferior de una tarjeta alta, bajo las filas",
     "KB/s · up to {rate} Mbit/s": "KB/s · hasta {rate} Mbit/s",
     "What goes to the panel, in KB/s (1 KB = 1000 bytes); not counted for the PNG file. In video mode also the bit rate's cap: with maxrate \"auto\" it steps down while the panel takes less than it is sent, and up again after a calm minute.": "Lo que va al panel, en KB/s (1 KB = 1000 bytes); no se cuenta para el archivo PNG. En modo vídeo también el tope de la tasa de bits: con maxrate \"auto\" baja un escalón mientras el panel admite menos de lo que recibe, y vuelve a subir tras un minuto tranquilo.",
-    "50 is the smoothest; 25 and 30 ask less of the PC. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "50 es lo más fluido; 25 y 30 exigen menos al PC. 60 es un experimento: al panel se le indican 70, para que su reproductor vaya por delante.",
     "AMD (h264_amf)": "AMD (h264_amf)",
     "Intel (h264_qsv)": "Intel (h264_qsv)",
     "NVIDIA (h264_nvenc)": "NVIDIA (h264_nvenc)",
@@ -2648,7 +2647,9 @@
     "white": "blanco",
     "Automatic picks {encoder}.": "Elección automática: {encoder}.",
     "{encoder} was passed over:": "{encoder} se descartó:",
-    "no picture came from it": "no salió ninguna imagen de él"
+    "no picture came from it": "no salió ninguna imagen de él",
+    "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 se ve fluido y es el valor predeterminado. 50 es aún más fluido y cuesta unos dos tercios más de tiempo de procesador (medido con dos paneles: 2,0 núcleos en lugar de 1,2); 25 es lo que menos exige. 60 es un experimento: al panel se le indica 70, para que su reproductor vaya por delante.",
+    "50 frames a second": "50 fotogramas por segundo"
   },
   "fields": {
     "agent": "agente",

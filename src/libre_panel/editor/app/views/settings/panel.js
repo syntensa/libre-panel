@@ -233,7 +233,7 @@ function VideoCard() {
       />
     <//>
     ${applies
-      ? html`<${SettingRow} title=${t("Frames per second")} hint=${t("50 is the smoothest; 25 and 30 ask less of the PC. 60 is an experiment: the panel is told 70, so that its player stays ahead.")}>
+      ? html`<${SettingRow} title=${t("Frames per second")} hint=${t("30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.")}>
           <${Segmented}
             label=${t("Frames per second")}
             value=${fps}
@@ -251,7 +251,7 @@ function VideoCard() {
 
 // The video mode's defaults (config.py); the experiment's "Back to the defaults" writes them.
 const MEASURED = { "video.maxrate": "auto", "video.crf": 20, "video.preset": "superfast", "video.profile": "auto",
-                   "video.encoder": "auto", "video.keyframe_s": 10, "video.fps": 50, "video.device_fps": 60 };  // fmt: skip
+                   "video.encoder": "auto", "video.keyframe_s": 10, "video.fps": 30, "video.device_fps": 60 };  // fmt: skip
 const RATES = ["auto", "4M", "8M", "16M", "24M", "32M"];
 const QUALITIES = [16, 18, 20, 22, 25];
 const PRESETS = ["ultrafast", "superfast", "veryfast"];
@@ -272,6 +272,7 @@ const STEP_LABELS = () => ({
   h264_amf: t("AMD's encoder"),
   h264_nvenc: t("NVIDIA's encoder"),
   h264_qsv: t("Intel's encoder"),
+  "fps-50": t("50 frames a second"),
   "fps-60": t("60 frames a second"),
   flood: t("flood: 24 Mbit/s at quality 16"),
 });

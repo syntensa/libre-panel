@@ -1240,7 +1240,7 @@ def test_main_loop_in_video_mode(panel, monkeypatch):
     stop.set()
     thread.join(20)
     assert not thread.is_alive()
-    assert status.target == 'Turing 9.2", video 50 fps'
+    assert status.target == 'Turing 9.2", video 30 fps'
     # about 50 a second after ffmpeg and the panel started; the rate itself is
     # checked by test_main_loop_sends_every_frame_at_the_stream_rate, this one
     # also passes on a machine busy with other work
@@ -1515,7 +1515,7 @@ def test_a_clip_name_written_while_the_panel_runs_starts_the_video_mode_without_
             ("value", "video.local_clip", "usr/data/standby.h264"),
             ("value", "video.clip_asked", True),
         )
-        assert wait_until(lambda: status.target == 'Turing 9.2", video 50 fps')
+        assert wait_until(lambda: status.target == 'Turing 9.2", video 30 fps')
         assert panel.clip_names == ["usr/data/standby.h264"]
         assert len(opened) == 2 and thread.is_alive()  # the same loop, the panel opened again
     finally:
@@ -1570,7 +1570,7 @@ def test_the_colour_check_s_a_and_b_and_its_one_click_start_ffmpeg_anew_on_the_o
     opened, status, stop, thread = running_panel(isolated_home, monkeypatch, panel, video)
     try:
         assert wait_until(
-            lambda: status.target == 'Turing 9.2", video 50 fps' and status.frames > 5
+            lambda: status.target == 'Turing 9.2", video 30 fps' and status.frames > 5
         )
         assert fed() == ["rgb0"]
         colour_show.begin(1, seconds=3.0)

@@ -2441,7 +2441,6 @@
     "the load of the last minute along the bottom of a tall card, under the rows": "die Last der letzten Minute am unteren Rand einer hohen Karte, unter den Zeilen",
     "KB/s · up to {rate} Mbit/s": "KB/s · bis {rate} Mbit/s",
     "What goes to the panel, in KB/s (1 KB = 1000 bytes); not counted for the PNG file. In video mode also the bit rate's cap: with maxrate \"auto\" it steps down while the panel takes less than it is sent, and up again after a calm minute.": "Was zum Panel geht, in KB/s (1 KB = 1000 Bytes); für die PNG-Datei nicht gezählt. Im Videomodus auch die Obergrenze der Bitrate: mit maxrate \"auto\" geht sie eine Stufe hinunter, solange das Panel weniger abnimmt, als es bekommt, und nach einer ruhigen Minute wieder hinauf.",
-    "50 is the smoothest; 25 and 30 ask less of the PC. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "50 ist am flüssigsten; 25 und 30 fordern den PC weniger. 60 ist ein Versuch: dem Panel werden 70 gemeldet, damit sein Player vorausbleibt.",
     "AMD (h264_amf)": "AMD (h264_amf)",
     "Intel (h264_qsv)": "Intel (h264_qsv)",
     "NVIDIA (h264_nvenc)": "NVIDIA (h264_nvenc)",
@@ -2648,7 +2647,9 @@
     "white": "Weiß",
     "Automatic picks {encoder}.": "Automatisch gewählt: {encoder}.",
     "{encoder} was passed over:": "{encoder} wurde übergangen:",
-    "no picture came from it": "es kam kein Bild von ihm"
+    "no picture came from it": "es kam kein Bild von ihm",
+    "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 sieht flüssig aus und ist der Standard. 50 ist noch flüssiger und kostet etwa zwei Drittel mehr Prozessorzeit (gemessen mit zwei Panels: 2,0 statt 1,2 Kerne); 25 braucht am wenigsten. 60 ist ein Experiment: Dem Panel werden 70 gemeldet, damit sein Player vorn bleibt.",
+    "50 frames a second": "50 Bilder pro Sekunde"
   },
   "fields": {
     "agent": "Agent",

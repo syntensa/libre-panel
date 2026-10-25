@@ -24,7 +24,7 @@
 </picture>
 
 <p align="center">
-  <b>A video mode at 50 fps, screens of its own and an editor to build yours, up to four panels
+  <b>A video mode at up to 50 fps, screens of its own and an editor to build yours, up to four panels
   at once with companion screens, and all of it works out of the box, with no other program.</b>
 </p>
 
@@ -156,7 +156,8 @@ once](docs/CONFIGURATION.md#more-panels-at-once) and [Scenes](docs/CONFIGURATION
 
 TURZX USB panels have a video decoder, and Libre Panel feeds it up to 50 frames a second:
 numbers count to each new reading, rings and bars glide, graphs scroll a little on every frame
-and fans turn at their own speed.
+and fans turn at their own speed. 30 by default, which looks smooth and asks far less of the PC;
+50 is smoother still, at about two thirds more processor time (Settings → Panel).
 
 <details>
 <summary>More</summary>
@@ -507,7 +508,7 @@ opens it in the browser for now ([details](docs/BACKGROUND.md#the-apps-window)).
 ### Out of the box
 
 **Everything works out of the box.** Sensors, fans, graphics card, game frame rates (Windows)
-and the 50 fps video mode need no other program, and nothing else is to be downloaded or
+and the video mode need no other program, and nothing else is to be downloaded or
 installed. The downloads carry the programs the features run, in a `tools` folder next to the
 program: ffmpeg for the video mode (Windows and Linux), and on Windows PresentMon for game
 frame rates and the installer of the PawnIO driver. One setup step does the rest: the installer
@@ -525,7 +526,7 @@ without administrator rights.
 | **Processor power** | read by the sensor service | the same | a switch in that card, off until you turn it on |
 | **Graphics card** | built in (LibreHardwareMonitor) | built in | AMD, Intel and NVIDIA, read without rights |
 | **Game frame rates** | PresentMon is in the download; the third box adds you to *Performance Log Users* | PresentMon is in the download; *Unlock all sensors* adds you | Windows only |
-| **50 fps video mode** | ffmpeg is in the download | ffmpeg is in the download | ffmpeg is in the download |
+| **Video mode** | ffmpeg is in the download | ffmpeg is in the download | ffmpeg is in the download |
 | **The panel's USB access** | nothing to do | nothing to do | the same card writes the udev rule |
 | **Settings** | in your own folder | in the folder `data` beside the program: it moves with it | in your own folder |
 

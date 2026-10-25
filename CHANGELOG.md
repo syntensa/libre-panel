@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+**Changes**
+- **30 frames a second by default**: the video mode runs at 30 instead of 50. On the panels it
+  still looks smooth, and it asks far less of the PC: measured with two panels, 7.5 % of a
+  16-thread processor (1.2 cores) at 30 against 12.4 % (2.0 cores) at 50. Settings → Panel →
+  Frames per second says what 50 costs, for whoever wants it; the video experiment has a step
+  at 50. A panel set to 50 by hand keeps it.
+
 ## 0.7.1rc6 — 2026-10-25
 
 **Changes**

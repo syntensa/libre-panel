@@ -2442,7 +2442,6 @@
     "the load of the last minute along the bottom of a tall card, under the rows": "нагрузка за последнюю минуту вдоль нижнего края высокой карточки, под строками",
     "KB/s · up to {rate} Mbit/s": "КБ/с · до {rate} Мбит/с",
     "What goes to the panel, in KB/s (1 KB = 1000 bytes); not counted for the PNG file. In video mode also the bit rate's cap: with maxrate \"auto\" it steps down while the panel takes less than it is sent, and up again after a calm minute.": "Что уходит на панель, в КБ/с (1 КБ = 1000 байт); для файла PNG не учитывается. В режиме видео также предел битрейта: при maxrate «auto» он ступенчато снижается, пока панель принимает меньше, чем ей отправляют, и снова повышается после спокойной минуты.",
-    "50 is the smoothest; 25 and 30 ask less of the PC. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "50 — самый плавный; 25 и 30 меньше нагружают ПК. 60 — эксперимент: панели сообщается 70, чтобы её плеер оставался впереди.",
     "AMD (h264_amf)": "AMD (h264_amf)",
     "Intel (h264_qsv)": "Intel (h264_qsv)",
     "NVIDIA (h264_nvenc)": "NVIDIA (h264_nvenc)",
@@ -2648,7 +2647,9 @@
     "white": "белый",
     "Automatic picks {encoder}.": "Автоматический выбор: {encoder}.",
     "{encoder} was passed over:": "{encoder} пропущен:",
-    "no picture came from it": "он не выдал ни одной картинки"
+    "no picture came from it": "он не выдал ни одной картинки",
+    "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 выглядит плавно и используется по умолчанию. 50 ещё плавнее, но требует примерно на две трети больше процессорного времени (измерено с двумя панелями: 2,0 ядра вместо 1,2); 25 нагружает меньше всего. 60 — эксперимент: панели сообщается 70, чтобы её проигрыватель не отставал.",
+    "50 frames a second": "50 кадров в секунду"
   },
   "fields": {
     "agent": "агент",

@@ -32,7 +32,7 @@ MEASURED: dict[str, Any] = {
     "video.profile": "auto",
     "video.encoder": "auto",
     "video.keyframe_s": 10.0,
-    "video.fps": 50,
+    "video.fps": 30,
     "video.device_fps": 60,
 }
 HARDWARE_ENCODERS = {"amd": "h264_amf", "nvidia": "h264_nvenc", "intel": "h264_qsv"}
@@ -70,6 +70,7 @@ def steps(vendor: str = "") -> list[Step]:
     encoder = HARDWARE_ENCODERS.get(vendor)
     if encoder:
         found.append(Step(encoder, {"video.encoder": encoder}, 30.0))
+    found.append(Step("fps-50", {"video.fps": 50, "video.device_fps": 60}, 30.0))
     found.append(Step("fps-60", {"video.fps": 60, "video.device_fps": 70}, 30.0))
     found.append(Step("flood", {"video.maxrate": "24M", "video.crf": 16}, 30.0))
     return found

@@ -24,7 +24,7 @@
 </picture>
 
 <p align="center">
-  <b>Ein Videomodus mit 50 fps, eigene Bildschirme und ein Editor für deine, bis zu vier Panels
+  <b>Ein Videomodus mit bis zu 50 fps, eigene Bildschirme und ein Editor für deine, bis zu vier Panels
   zugleich mit Companion-Bildschirmen, und alles läuft sofort, ohne weiteres Programm.</b>
 </p>
 
@@ -157,7 +157,9 @@ once](docs/CONFIGURATION.md#more-panels-at-once) und [Scenes](docs/CONFIGURATION
 
 TURZX-USB-Panels haben einen Videodecoder, und Libre Panel füttert ihn mit bis zu 50 Bildern
 pro Sekunde: Zahlen zählen zum nächsten Messwert, Ringe und Balken gleiten, Verläufe scrollen
-mit jedem Bild ein Stück weiter, und Lüfter drehen mit ihrer echten Drehzahl.
+mit jedem Bild ein Stück weiter, und Lüfter drehen mit ihrer echten Drehzahl. Standard sind 30,
+die flüssig aussehen und den PC deutlich weniger fordern; 50 sind noch flüssiger, bei etwa zwei
+Dritteln mehr Prozessorzeit (Einstellungen → Panel).
 
 <details>
 <summary>Mehr</summary>
@@ -522,7 +524,7 @@ das AppImage öffnet sie vorerst im Browser
 ### Sofort startklar
 
 **Alles funktioniert sofort, out of the box.** Sensoren, Lüfter, Grafikkarte, Bildraten in
-Spielen (Windows) und der Videomodus mit 50 fps brauchen kein weiteres Programm, und es muss
+Spielen (Windows) und der Videomodus brauchen kein weiteres Programm, und es muss
 nichts weiter heruntergeladen oder installiert werden. Die Downloads bringen die Programme mit,
 die die Funktionen ausführen, in einem Ordner `tools` neben dem Programm: ffmpeg für den
 Videomodus (Windows und Linux) und unter Windows PresentMon für die Bildraten in Spielen sowie
@@ -541,7 +543,7 @@ ohne Administratorrechte.
 | **Leistung des Prozessors** | liest der Sensordienst | ebenso | ein Schalter in dieser Karte, aus, bis du ihn einschaltest |
 | **Grafikkarte** | eingebaut (LibreHardwareMonitor) | eingebaut | AMD, Intel und NVIDIA, ohne Rechte gelesen |
 | **Bildraten in Spielen** | PresentMon steckt im Download; das dritte Kästchen nimmt dich in die Gruppe *Leistungsprotokollbenutzer* auf | PresentMon steckt im Download; *Alle Sensoren freischalten* nimmt dich auf | nur unter Windows |
-| **Videomodus mit 50 fps** | ffmpeg steckt im Download | ffmpeg steckt im Download | ffmpeg steckt im Download |
+| **Videomodus** | ffmpeg steckt im Download | ffmpeg steckt im Download | ffmpeg steckt im Download |
 | **USB-Zugriff aufs Panel** | nichts zu tun | nichts zu tun | dieselbe Karte schreibt die udev-Regel |
 | **Einstellungen** | in deinem eigenen Ordner | im Ordner `data` neben dem Programm: Sie ziehen mit um | in deinem eigenen Ordner |
 

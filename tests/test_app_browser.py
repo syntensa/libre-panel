@@ -3305,10 +3305,10 @@ def test_settings_panel(app_url, isolated_home, monkeypatch):
         )
         assert settings_config().device.video.clip_asked is True  # typed here: Start need not ask
         video = page.locator("#main .settings-row-status").first
-        playwright.expect(video).to_contain_text("On, 50 fps")
-        radio(page, "Frames per second", "30").click()
-        waits_for(page, lambda: settings_config().device.video.fps == 30)
         playwright.expect(video).to_contain_text("On, 30 fps")
+        radio(page, "Frames per second", "50").click()
+        waits_for(page, lambda: settings_config().device.video.fps == 50)
+        playwright.expect(video).to_contain_text("On, 50 fps")
         radio(page, "Smooth motion", "Off").click()
         waits_for(page, lambda: settings_config().device.video.mode == "off")
         playwright.expect(video).to_contain_text("single pictures")

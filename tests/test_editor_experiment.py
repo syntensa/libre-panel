@@ -17,7 +17,9 @@ from libre_panel.editor.experiment import (
 
 def test_the_steps_try_each_thing_apart_and_the_graphics_card_s_encoder_where_there_is_one():
     ids = [s.id for s in steps()]
-    assert ids == ["auto", "crf-18", "ultrafast", "main", "high", "keyframe-2", "fps-60", "flood"]
+    assert ids == [
+        "auto", "crf-18", "ultrafast", "main", "high", "keyframe-2", "fps-50", "fps-60", "flood"
+    ]  # fmt: skip
     assert [s.id for s in steps("amd")][6] == "h264_amf"
     assert [s.id for s in steps("nvidia")][6] == "h264_nvenc"
     assert [s.id for s in steps("intel")][6] == "h264_qsv"
@@ -128,7 +130,7 @@ def test_the_run_tries_every_step_judges_every_panel_and_brings_the_settings_bac
     assert by_id["fps-60"]["verdict"] == "stutter"
     assert by_id["h264_amf"]["verdict"] == "ok"
     state = run.state()
-    assert state["of"] == 9 and len(state["results"]) == 9 and state["ended"] == "done"
+    assert state["of"] == 10 and len(state["results"]) == 10 and state["ended"] == "done"
     with pytest.raises(ExperimentError):
         run.running = True
         run.start()

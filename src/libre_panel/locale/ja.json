@@ -2442,7 +2442,6 @@
     "the load of the last minute along the bottom of a tall card, under the rows": "縦長のカードの下端、行の下に、直近1分間の負荷を表示",
     "KB/s · up to {rate} Mbit/s": "KB/s · 最大 {rate} Mbit/s",
     "What goes to the panel, in KB/s (1 KB = 1000 bytes); not counted for the PNG file. In video mode also the bit rate's cap: with maxrate \"auto\" it steps down while the panel takes less than it is sent, and up again after a calm minute.": "パネルに送られるデータ量（KB/s、1 KB = 1000バイト）。PNGファイルへの出力は含みません。ビデオモードではビットレートの上限も表示され、maxrateが「auto」の場合は、パネルが受け取る量が送信量より少ない間は一段階下がり、安定した1分間が過ぎると再び上がります。",
-    "50 is the smoothest; 25 and 30 ask less of the PC. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "50が最もなめらかです。25や30はPCの負荷が軽くなります。60は実験的な設定で、パネルのプレーヤーが先行するように、パネルには70と通知されます。",
     "AMD (h264_amf)": "AMD (h264_amf)",
     "Intel (h264_qsv)": "Intel (h264_qsv)",
     "NVIDIA (h264_nvenc)": "NVIDIA (h264_nvenc)",
@@ -2648,7 +2647,9 @@
     "white": "白",
     "Automatic picks {encoder}.": "自動の選択：{encoder}。",
     "{encoder} was passed over:": "{encoder}は見送られました：",
-    "no picture came from it": "画像が出力されませんでした"
+    "no picture came from it": "画像が出力されませんでした",
+    "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 でも十分なめらかで、これが既定値です。50 はさらになめらかですが、プロセッサー時間が約 3 分の 2 増えます（パネル 2 枚で実測：1.2 コアに対して 2.0 コア）。25 が最も負荷が軽くなります。60 は実験的な設定です。プレーヤーが遅れないよう、パネルには 70 を伝えます。",
+    "50 frames a second": "毎秒50フレーム"
   },
   "fields": {
     "agent": "エージェント",

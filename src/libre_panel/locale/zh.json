@@ -2441,7 +2441,6 @@
     "the load of the last minute along the bottom of a tall card, under the rows": "高卡片底部沿边显示最近一分钟的负载，位于各行之下",
     "KB/s · up to {rate} Mbit/s": "KB/s · 上限 {rate} Mbit/s",
     "What goes to the panel, in KB/s (1 KB = 1000 bytes); not counted for the PNG file. In video mode also the bit rate's cap: with maxrate \"auto\" it steps down while the panel takes less than it is sent, and up again after a calm minute.": "发送到面板的数据量，单位 KB/s（1 KB = 1000 字节）；不计入 PNG 文件。 视频模式下还显示码率上限：maxrate 为 \"auto\" 时，面板吃不下送来的数据就降一档，平静一分钟后再升一档。",
-    "50 is the smoothest; 25 and 30 ask less of the PC. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "50 最流畅；25 和 30 对 PC 的要求更低。 60 为实验：向面板报 70，让它的播放器保持领先。",
     "AMD (h264_amf)": "AMD (h264_amf)",
     "Intel (h264_qsv)": "Intel (h264_qsv)",
     "NVIDIA (h264_nvenc)": "NVIDIA (h264_nvenc)",
@@ -2648,7 +2647,9 @@
     "white": "白色",
     "Automatic picks {encoder}.": "自动选择：{encoder}。",
     "{encoder} was passed over:": "已跳过 {encoder}：",
-    "no picture came from it": "它没有输出画面"
+    "no picture came from it": "它没有输出画面",
+    "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 已经很流畅，也是默认值。50 更流畅，但大约多耗三分之二的处理器时间（两块面板实测：2.0 个核心对 1.2 个）；25 负担最小。60 是实验：向面板报告 70，让它的播放器保持领先。",
+    "50 frames a second": "每秒 50 帧"
   },
   "fields": {
     "agent": "智能体",
