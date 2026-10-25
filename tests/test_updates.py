@@ -6,6 +6,7 @@ import base64
 import hashlib
 import io
 import json
+import os
 import threading
 import urllib.error
 import urllib.request
@@ -575,7 +576,9 @@ def test_the_appimage_takes_the_running_one_s_place(tmp_path, monkeypatch):
     state = done(install)
     downloaded = image.with_name(FILES["appimage"])
     assert state["where"] == str(image.parent) and downloaded.read_bytes() == b"new AppImage"
-    assert downloaded.stat().st_mode & 0o111 and image.read_bytes() == b"old"  # not yet
+    if os.name != "nt":  # (Windows has no execute bit to set)
+        assert downloaded.stat().st_mode & 0o111
+    assert image.read_bytes() == b"old"  # not yet
     quit = []
     install.install(lambda: quit.append(1))
     done(install)
@@ -597,6 +600,7 @@ def test_an_appimage_in_a_folder_it_may_not_write_is_not_fetched(tmp_path, monke
 
 def test_the_tarball_goes_into_downloads_and_its_folder_is_shown(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))  # (Path.home() on Windows)
     (tmp_path / "Downloads").mkdir()
     install = rig_install(tmp_path, "linux", b"tarball")
     install.download(latest("linux", 7))
