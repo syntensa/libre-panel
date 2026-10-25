@@ -889,6 +889,42 @@ def test_the_sensor_settings_show_the_service_and_take_it_away_after_asking(app_
     assert posted == [{"action": "remove"}]
 
 
+def test_the_sensor_settings_say_which_version_of_the_service_runs(app_url):
+    """Where the service is described, one small line names the version it said when the app
+    spoke to it; a service that has not said one gets no line."""
+    import json
+
+    answer = windows_download(service={"state": "running", "disabled": False}, pawnio="2.0.1")
+
+    def sources(version):
+        found = {
+            "background": True,
+            "sources": [
+                {"name": "librehardwaremonitor", "readings": 3, "problem": False, "hint": None,
+                 "details": [], "status": {"mode": "service", "version": version}},
+            ],
+        }  # fmt: skip
+
+        def handler(route, request):
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(found))
+
+        return handler
+
+    for version, line in (("0.7.1rc5", "Sensor service 0.7.1rc5"), ("", None)):
+        routes = {
+            "**/api/unlock": unlock_route(answer, []),
+            "**/api/plugins/control/sources": sources(version),
+        }
+        with browser_page(app_url, "settings/sensors", routes=routes) as page:
+            card = page.locator("#sensor-service")
+            expect(card).to_contain_text("Running")
+            page.wait_for_function("window.libre.store.get().sourceStates !== null")
+            if line:
+                expect(card.locator("[data-service-version]")).to_have_text(line)
+            else:
+                expect(card.locator("[data-service-version]")).to_have_count(0)
+
+
 def test_the_sensor_settings_name_the_service_as_a_way_to_read(app_url):
     with browser_page(app_url, "settings/sensors") as page:
         page.wait_for_selector("#sensor-advanced")

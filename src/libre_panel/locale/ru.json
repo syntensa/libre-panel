@@ -269,6 +269,7 @@
     "Search for a town or a district below.": "Найдите ниже город или район.",
     "Searching …": "Поиск …",
     "Sensor service": "Служба датчиков",
+    "Sensor service {version}": "Служба датчиков {version}",
     "sensor service": "служба датчиков",
     "Sensors such as temp.board.system or a pattern like temp.nvme.*.": "Датчики вида temp.board.system или шаблон вроде temp.nvme.*.",
     "Set it up": "Настроить",
@@ -2596,6 +2597,7 @@
     "Through the sensor service {version}": "Через службу датчиков {version}",
     "Video (ffmpeg)": "Видео (ffmpeg)",
     "Video of panel {n} (ffmpeg)": "Видео панели {n} (ffmpeg)",
+    "Load on this PC": "Нагрузка на этот ПК",
     "What Libre Panel costs this PC now: each of its processes, the threads of the main one and the sensor service's rounds, measured while this card is on screen.": "Сколько Libre Panel сейчас стоит этому ПК: каждый его процесс, потоки главного и циклы службы датчиков — измеряется, пока эта карточка на экране.",
     "of the PC": "от ПК",
     "{core} of one core · {n} logical processors": "{core} от одного ядра · логических процессоров: {n}"

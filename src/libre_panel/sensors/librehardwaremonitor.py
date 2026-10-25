@@ -415,10 +415,10 @@ class LhmStatus:
     service: str = ""  # why the installed sensor service is not what is read now
     # What its rounds cost (Live -> Diagnose -> Load, /api/load); None: not reported, as by a
     # sensor service older than this, or the web server, whose rounds are its own program's.
-    # Neither this nor the version is in the status the pages show (plugins/pages.py).
+    # This is not in the status the pages show (plugins/pages.py); the version is.
     timing: Timing | None = field(default=None, compare=False, metadata={"page": False})
-    # the sensor service's version, once it said hello
-    version: str = field(default="", compare=False, metadata={"page": False})
+    # the sensor service's version, once it said hello (Settings -> Sensors says it)
+    version: str = field(default="", compare=False)
 
 
 # What sets up the sensor service, which reads the CPU with the rights it needs (and PawnIO).

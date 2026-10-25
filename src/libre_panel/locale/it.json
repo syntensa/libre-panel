@@ -269,6 +269,7 @@
     "Search for a town or a district below.": "Cercare sotto una città o un quartiere.",
     "Searching …": "Ricerca …",
     "Sensor service": "Servizio sensori",
+    "Sensor service {version}": "Servizio sensori {version}",
     "sensor service": "servizio sensori",
     "Sensors such as temp.board.system or a pattern like temp.nvme.*.": "Sensori come temp.board.system o un pattern come temp.nvme.*.",
     "Set it up": "Configura",
@@ -2596,6 +2597,7 @@
     "Through the sensor service {version}": "Tramite il servizio sensori {version}",
     "Video (ffmpeg)": "Video (ffmpeg)",
     "Video of panel {n} (ffmpeg)": "Video del pannello {n} (ffmpeg)",
+    "Load on this PC": "Carico su questo PC",
     "What Libre Panel costs this PC now: each of its processes, the threads of the main one and the sensor service's rounds, measured while this card is on screen.": "Quanto costa ora Libre Panel a questo PC: ciascuno dei suoi processi, i thread del principale e i cicli del servizio sensori, misurati finché questa card è visibile.",
     "of the PC": "del PC",
     "{core} of one core · {n} logical processors": "{core} di un core · {n} processori logici"
