@@ -52,6 +52,10 @@ jobs:
           export PATH="$RUNNER_TEMP/tools:$PATH"
           ffmpeg -hide_banner -encoders | grep libx264
       - run: pytest -q -rs --durations=20
+      - name: The stacks of a test that hung
+        if: failure()
+        shell: bash
+        run: cat "$RUNNER_TEMP/hang-traceback.txt" 2>/dev/null || true
       - name: Render the built-in themes
         run: |
           libre-panel preview libre-default -o libre-default.png

@@ -8,8 +8,7 @@
   pictures fine (the experiment's AMD step ran, its "auto" step had x264). The test now runs
   the video mode's own command at 480×480, fed as the video mode feeds it, and counts the
   H.264 that comes out; answers kept by the old test are asked again, the log says why an
-  encoder was passed over. On Windows the frames go into ffmpeg through Python's own write
-  again (the test jobs hung on the direct write).
+  encoder was passed over.
 
 ## 0.7.1rc5 — 2026-10-25
 

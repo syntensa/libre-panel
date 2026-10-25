@@ -1804,10 +1804,13 @@ def test_a_frame_goes_into_the_pipe_as_its_bytes(mode, pixels):
         raw = "RGBA" if pixels == "rgb0" else "RGB"
         assert wanted == frame.tobytes("raw", raw)
     read, write = os.pipe()
+    got = []  # read while it is written: Windows' pipe holds 4 KB, less than the frame
+    reader = threading.Thread(target=lambda: got.append(open(read, "rb").read()), daemon=True)
+    reader.start()
     with open(write, "wb", buffering=0) as out:
         write_frame(out, frame, pixels)
-    with open(read, "rb") as got:
-        assert got.read() == wanted
+    reader.join(10)
+    assert got == [wanted]
     kept = io.BytesIO()  # no file descriptor
     write_frame(kept, frame, pixels)
     assert kept.getvalue() == wanted
