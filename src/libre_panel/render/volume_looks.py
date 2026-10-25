@@ -193,6 +193,9 @@ class BarLook(VolumeLook):
         "es": "Barra",
         "pl": "Pasek",
         "pt": "Barra",
+        "it": "Barra",
+        "ru": "Полоса",
+        "ja": "バー",
     }
 
     def place(self, frame: tuple[int, int], size: tuple[int, int], slide: float) -> tuple[int, int]:
@@ -232,6 +235,9 @@ class LevelsLook(VolumeLook):
         "es": "Niveles",
         "pl": "Poziomy",
         "pt": "Níveis",
+        "it": "Livelli",
+        "ru": "Уровни",
+        "ja": "レベル",
     }
     BARS = 16
 
@@ -278,6 +284,9 @@ class RingLook(VolumeLook):
         "es": "Anillo",
         "pl": "Pierścień",
         "pt": "Anel",
+        "it": "Anello",
+        "ru": "Кольцо",
+        "ja": "リング",
     }
 
     def picture(self, toast: Any, level: float, size: tuple[int, int]) -> Image.Image:
@@ -315,6 +324,9 @@ class BigLook(VolumeLook):
         "es": "Grande",
         "pl": "Duży",
         "pt": "Grande",
+        "it": "Grande",
+        "ru": "Крупный",
+        "ja": "大",
     }
 
     def place(self, frame: tuple[int, int], size: tuple[int, int], slide: float) -> tuple[int, int]:

@@ -1,5 +1,5 @@
-"""French, Spanish, Polish, Portuguese (Brazil) and Simplified Chinese: each catalog complete and
-in step with the German one, which test_i18n holds to the code."""
+"""French, Spanish, Italian, Polish, Portuguese (Brazil), Russian, Japanese and Simplified Chinese:
+each catalog complete and in step with the German one, which test_i18n holds to the code."""
 
 import json
 import re
@@ -11,7 +11,7 @@ from i18n_keys import all_messages, tables
 from libre_panel import i18n
 from libre_panel.i18n import format_date
 
-LANGUAGES = ["fr", "es", "pl", "pt", "zh"]
+LANGUAGES = ["fr", "es", "it", "pl", "pt", "ru", "ja", "zh"]
 PLACEHOLDER = re.compile(r"\{[^{}]*\}")
 SHY = "­"
 
@@ -94,8 +94,11 @@ def test_names_of_days_and_months(language):
     [
         ("fr", "dimanche 27 septembre"),
         ("es", "domingo 27 de septiembre"),
+        ("it", "domenica 27 settembre"),
         ("pl", "niedziela 27 września"),
         ("pt", "domingo 27 de setembro"),
+        ("ru", "воскресенье 27 сентября"),
+        ("ja", "日曜日 9月27日"),
         ("zh", "星期日 9月27日"),
     ],
 )
@@ -103,6 +106,17 @@ def test_dates(language, expected):
     i18n.set_language(language)
     assert format_date(datetime(2026, 9, 27), "%A %d %B") == expected
     assert format_date(datetime(2026, 9, 27), "%B") == catalog(language)["months"][8]
+
+
+@pytest.mark.parametrize(
+    ("language", "text"),
+    [("fr", "26,7"), ("it", "26,7"), ("ru", "26,7"), ("ja", "26.7"), ("zh", "26.7")],
+)
+def test_numbers_as_the_language_writes_them(language, text):
+    from libre_panel.services.cooling_text import num
+
+    i18n.set_language(language)
+    assert num(26.7, 1) == text
 
 
 class Strict(datetime):
@@ -130,4 +144,4 @@ def test_no_name_goes_through_strftime(language):
 def test_texts_switch_with_the_language(language):
     i18n.set_language(language)
     assert i18n.t("Save") == catalog(language)["messages"]["Save"] != "Save"
-    assert i18n.t("{n} min", n=5) == "5 min"
+    assert i18n.t("{n} min", n=5) == catalog(language)["messages"]["{n} min"].format(n=5)

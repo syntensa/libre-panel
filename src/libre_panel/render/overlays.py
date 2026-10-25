@@ -315,6 +315,9 @@ class CardStyle(ToastStyle):
         "es": "Tarjeta",
         "pl": "Karta",
         "pt": "Cartão",
+        "it": "Card",
+        "ru": "Карточка",
+        "ja": "カード",
     }
     FADE_IN_S = 0.18
     leave_s = 0.25

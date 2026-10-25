@@ -93,6 +93,9 @@ class Autopilot(ConsolePage):
         "es": "Piloto automático",
         "pl": "Autopilot",
         "pt": "Piloto automático",
+        "it": "Pilota automatico",
+        "ru": "Автопилот",
+        "ja": "オートパイロット",
     }
     routes = {
         ("GET", "settings"): "read",
