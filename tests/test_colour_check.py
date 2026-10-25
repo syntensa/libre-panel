@@ -535,6 +535,42 @@ def test_the_a_b_shows_the_picture_fed_both_ways_and_then_the_theme_again(monkey
     loop.close()
 
 
+def test_a_display_of_a_plugin_without_a_feed_shows_the_picture_all_the_same(monkeypatch):
+    """A streaming display that is no Display (a plugin's) has no set_feed: it gets the
+    picture, and the loop goes on."""
+
+    class Plain:
+        streaming, stream_fps, restarted = True, 50, False
+
+        def __init__(self):
+            self.frames = []
+
+        def open(self):
+            pass
+
+        def set_brightness(self, percent):
+            pass
+
+        def describe(self):
+            return "memory"
+
+        def show(self, frame, region=None):
+            self.frames.append(frame)
+
+        def close(self):
+            pass
+
+    from test_app_cli import StepClock
+
+    display = Plain()
+    config = Config(theme="pico", sensors=SensorsConfig(providers=["demo"]))
+    loop = app.MainLoop(config, display=display, clock=StepClock(1000.0))
+    colour_show.begin(1, seconds=30)
+    loop.step()
+    assert display.frames[-1] is check_picture(display.frames[-1].size, "A")
+    loop.close()
+
+
 def test_a_panel_in_a_process_of_its_own_is_told_of_the_a_b(monkeypatch):
     now = [50.0]
     monkeypatch.setattr(colour_show, "clock", lambda: now[0])

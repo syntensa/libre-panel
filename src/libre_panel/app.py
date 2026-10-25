@@ -1349,8 +1349,9 @@ class MainLoop:
                 # the colour check's picture (Settings → Panel), fed to ffmpeg as its moment says
                 checking = colour_show.now(number) if streaming else None
                 feed = checking[1] if checking is not None else None
-                if display.feed != feed:
-                    display.set_feed(feed)
+                set_feed = getattr(display, "set_feed", None)  # (a plugin's display may lack it)
+                if set_feed is not None and getattr(display, "feed", None) != feed:
+                    set_feed(feed)
                 if checking is not None:
                     frame = colour_show.picture(frame.size, checking[0])
                 if identify.showing():  # which panel is which: its number instead, a moment
