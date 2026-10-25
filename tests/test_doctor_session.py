@@ -13,6 +13,7 @@ from fake_panel import FakePanel, transport_for  # noqa: E402
 from libre_panel import logview  # noqa: E402
 from libre_panel.devices import turzx_usb  # noqa: E402
 from libre_panel.devices.base import DeviceError  # noqa: E402
+from libre_panel.doctor import Doctor  # noqa: E402
 from libre_panel.doctor_session import Session, SessionError  # noqa: E402
 
 
@@ -45,6 +46,12 @@ class Loop:
         self.running = resume
 
 
+def doctor_that_only_notes_its_pauses(pauses):
+    """``make_doctor`` for a Session: the doctor waits in the brightness check (1.5 s after each
+    change, for the person to see it) are put in ``pauses`` instead of being slept through."""
+    return lambda **options: Doctor(pause=pauses.append, **options)
+
+
 def until(session, *states, timeout=20.0):
     end = time.monotonic() + timeout
     while time.monotonic() < end:
@@ -56,8 +63,12 @@ def until(session, *states, timeout=20.0):
 
 
 def test_the_app_answers_the_doctors_questions_and_gets_the_panel_back(panel):
-    loop = Loop()
-    session = Session(loop, devices=lambda: 'Panel found: Turing 9.2" USB')
+    loop, pauses = Loop(), []
+    session = Session(
+        loop,
+        devices=lambda: 'Panel found: Turing 9.2" USB',
+        make_doctor=doctor_that_only_notes_its_pauses(pauses),
+    )
     session.start()
     with pytest.raises(SessionError):
         session.start()  # one at a time
@@ -93,10 +104,11 @@ def test_the_app_answers_the_doctors_questions_and_gets_the_panel_back(panel):
     assert "template=panel_support.yml" in report["form"] and "doctor=" in report["form"]
     assert "result=" not in report["form"]  # it did not pass: the person says what happens
     assert loop.calls == ["hold", ("release", True)] and loop.running
+    assert pauses == [1.5, 1.5]  # the dark panel and the bright one, each left a moment to see
 
 
 def test_a_panel_that_passes_is_reported_as_working(panel):
-    session = Session(Loop(running=False))
+    session = Session(Loop(running=False), make_doctor=doctor_that_only_notes_its_pauses([]))
     session.start()
     while (status := until(session, "asking", "done", "failed"))["state"] == "asking":
         kind = status["question"]["kind"]

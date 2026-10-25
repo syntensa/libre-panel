@@ -134,7 +134,8 @@ def shown_ids(theme, readings=None, images=None):
 
     found = {k: Reading(k, v) for k, v in (readings or {}).items()}
     snapshot = Snapshot(readings=found, images=images or {})
-    return {w["id"] for w in theme.widgets if not Renderer(theme)._missing(w, snapshot)}
+    renderer = Renderer(theme)  # (one for all the widgets: a renderer for each took seconds)
+    return {w["id"] for w in theme.widgets if not renderer._missing(w, snapshot)}
 
 
 def test_horizon_grows_the_cpu_up_and_the_gpu_down_from_one_line():
