@@ -1,3 +1,4 @@
+import faulthandler
 import itertools
 import os
 import sys
@@ -25,6 +26,24 @@ def pytest_runtest_logreport(report):
     encoding = sys.__stdout__.encoding or "utf-8"
     sys.__stdout__.write(out.encode(encoding, "replace").decode(encoding))
     sys.__stdout__.flush()
+
+
+# On GitHub Actions a test that hangs ends the run after ten minutes with every thread's stack
+# in the log, instead of holding the job until its limit cuts it off as "cancelled" with nothing
+# said (a job's limit is 50 minutes; no test of this suite needs more than a few).
+HANG_S = 600
+
+
+@pytest.fixture(autouse=True)
+def _hang_guard():
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        yield
+        return
+    faulthandler.dump_traceback_later(HANG_S, exit=True)
+    try:
+        yield
+    finally:
+        faulthandler.cancel_dump_traceback_later()
 
 
 @pytest.fixture(autouse=True)
