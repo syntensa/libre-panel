@@ -148,32 +148,48 @@ def resolve_profile(profile: str, model_id: str) -> str:
 _PROBED: dict[tuple[str, str], bool] = {}
 
 
+# The pictures a probe of an encoder feeds: a size every card's encoder takes (AMD's and
+# NVIDIA's refuse very small ones) and enough frames for its first picture to come out.
+PROBE_SIZE = (480, 480)
+PROBE_FRAMES = 10
+
+
 def encoder_works(ffmpeg: str, encoder: str) -> bool:
     """Whether ``ffmpeg`` can encode with ``encoder`` on this PC (a hardware encoder needs
-    its card and its driver): two small pictures through it, asked once a week (the answer
-    is kept in video-state.json: a new driver may change it) and taken once per run."""
+    its card and its driver): the command the video mode runs, fed a few pictures as it feeds
+    them, must give back H.264. Asked once a week (the answer is kept in video-state.json: a
+    new driver may change it) and taken once per run."""
     key = (ffmpeg, encoder)
     if key not in _PROBED:
         works = video_state.probed(ffmpeg, encoder)  # asked within the week
         if works is None:
-            command = [
-                ffmpeg, "-hide_banner", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt",
-                "rgb24", "-s", "64x64", "-framerate", "5", "-i", "-", "-frames:v", "2",
-                "-c:v", encoder, "-f", "null", "-",
-            ]  # fmt: skip
-            try:
-                done = subprocess.run(
-                    command, input=bytes(64 * 64 * 3 * 2), capture_output=True, timeout=20,
-                    creationflags=NO_WINDOW,
-                )  # fmt: skip
-                works = done.returncode == 0
-            except (OSError, subprocess.TimeoutExpired):
-                works = False
+            works, said = _probe(ffmpeg, encoder)
             video_state.keep_probe(ffmpeg, encoder, works)
+            if not works:
+                log.info("video: %s cannot encode here (%s); x264 does", encoder, said or "-")
         _PROBED[key] = works
-        if not works:
-            log.info("video: %s cannot encode here; x264 does", encoder)
     return _PROBED[key]
+
+
+def _probe(ffmpeg: str, encoder: str) -> tuple[bool, str]:
+    """Whether the video mode's own command with ``encoder`` turns a few pictures into H.264,
+    and the last thing ffmpeg said. A card's encoder may hold its last pictures back when the
+    input ends, or end with an error code after it encoded: what counts is that H.264 came."""
+    settings = EncoderSettings(encoder=encoder, profile="main", pixels="rgb0")
+    command = ffmpeg_command(ffmpeg, PROBE_SIZE, None, settings)
+    width, height = PROBE_SIZE
+    frames = bytes(width * height * 4) * PROBE_FRAMES
+    try:
+        done = subprocess.run(
+            command, input=frames, capture_output=True, timeout=20, creationflags=NO_WINDOW
+        )
+        out, err = done.stdout or b"", done.stderr or b""
+    except subprocess.TimeoutExpired as exc:  # (what it gave until then counts)
+        out, err = exc.stdout or b"", exc.stderr or b""
+    except OSError as exc:
+        return False, str(exc)
+    said = err.decode("utf-8", "replace").strip().splitlines()
+    return b"\x00\x00\x01" in out, said[-1] if said else ""
 
 
 def resolve_encoder(encoder: str, ffmpeg: str, failed: Collection[str] = ()) -> str:

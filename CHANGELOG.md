@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+**Fixes**
+- **"Automatic" chose x264 where the graphics card's encoder works**: the test of an encoder
+  fed it 64×64 pictures, which a card's encoder may refuse although it encodes the panel's
+  pictures fine (the experiment's AMD step ran, its "auto" step had x264). The test now runs
+  the video mode's own command at 480×480, fed as the video mode feeds it, and counts the
+  H.264 that comes out; answers kept by the old test are asked again, the log says why an
+  encoder was passed over. On Windows the frames go into ffmpeg through Python's own write
+  again (the test jobs hung on the direct write).
+
 ## 0.7.1rc5 — 2026-10-25
 
 **Changes**

@@ -1,6 +1,7 @@
 """Video mode: H.264 pictures, the video session, the display and the main loop's pacing."""
 
 import itertools
+import json
 import shutil
 import subprocess
 import threading
@@ -197,6 +198,41 @@ def test_a_new_run_starts_at_the_rate_the_last_one_got_to(isolated_home):
     assert video_state.rate(key) == 0.0  # a file that cannot be read counts as empty
 
 
+def test_a_probe_feeds_what_the_video_mode_feeds_and_counts_the_pictures(
+    isolated_home, monkeypatch
+):
+    """The probe runs the video mode's own command (four bytes a pixel, a size every card's
+    encoder takes) and counts H.264 coming out, not ffmpeg's exit code: a card's encoder may end
+    with an error after it encoded. An answer kept by the way of asking of before is asked again.
+    """
+    from libre_panel.devices.h264 import encoder_works
+
+    isolated_home.mkdir()
+    seen = []
+
+    def run(command, **kwargs):
+        seen.append(command)
+        size = command[command.index("-s") + 1]
+        assert command[command.index("-pix_fmt") + 1] == "rgb0" and size == "480x480"
+        assert len(kwargs["input"]) == 480 * 480 * 4 * h264.PROBE_FRAMES
+        return SimpleNamespace(returncode=1, stdout=b"\x00\x00\x00\x01\x67\x64", stderr=b"x\n")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(h264, "_PROBED", {})
+    video_state.keep_probe("ffmpeg-here", "h264_amf", False)  # an answer of the old way
+    state = json.loads((isolated_home / video_state.STATE_FILENAME).read_text(encoding="utf-8"))
+    del state["encoders"]["h264_amf ffmpeg-here"]["way"]
+    (isolated_home / video_state.STATE_FILENAME).write_text(json.dumps(state), encoding="utf-8")
+    assert encoder_works("ffmpeg-here", "h264_amf") is True and len(seen) == 1  # asked anew
+
+    def silent(command, **kwargs):
+        raise subprocess.TimeoutExpired(command, 20, output=b"", stderr=b"no device\n")
+
+    monkeypatch.setattr(subprocess, "run", silent)
+    monkeypatch.setattr(h264, "_PROBED", {})
+    assert encoder_works("ffmpeg-there", "h264_nvenc") is False  # nothing came: it does not
+
+
 def test_the_answer_of_a_probe_is_kept_for_a_week(isolated_home, monkeypatch):
     """Whether ffmpeg can start a card's encoder is asked once, kept in video-state.json, and
     taken by the next runs for a week; then it is asked again (a new driver may change it)."""
@@ -207,7 +243,7 @@ def test_the_answer_of_a_probe_is_kept_for_a_week(isolated_home, monkeypatch):
 
     def run(command, **kwargs):
         asked.append((command[0], command[command.index("-c:v") + 1]))
-        return SimpleNamespace(returncode=0)
+        return SimpleNamespace(returncode=0, stdout=b"\x00\x00\x00\x01\x67", stderr=b"")
 
     monkeypatch.setattr(subprocess, "run", run)
     monkeypatch.setattr(h264, "_PROBED", {})

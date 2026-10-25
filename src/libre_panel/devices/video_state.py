@@ -28,6 +28,9 @@ log = logging.getLogger(__name__)
 
 STATE_FILENAME = "video-state.json"
 PROBE_S = 7 * 24 * 3600.0  # a probe's answer holds a week
+# The way of asking: answers of an earlier way are asked again (the probe of 0.7.1rc5 and
+# before fed 64x64 pictures, which a card's encoder may refuse although it works).
+PROBE_WAY = 2
 
 _lock = threading.Lock()  # two panels in one run write the same file
 
@@ -91,6 +94,8 @@ def probed(ffmpeg: str, encoder: str, now: float | None = None) -> bool | None:
     if not isinstance(entry, dict):
         return None
     works, asked = entry.get("works"), entry.get("asked")
+    if entry.get("way") != PROBE_WAY:
+        return None
     if not isinstance(works, bool) or not isinstance(asked, int | float):
         return None
     now = time.time() if now is None else now
@@ -99,4 +104,4 @@ def probed(ffmpeg: str, encoder: str, now: float | None = None) -> bool | None:
 
 def keep_probe(ffmpeg: str, encoder: str, works: bool, now: float | None = None) -> None:
     asked = int(time.time() if now is None else now)  # (down: never later than now)
-    _write("encoders", f"{encoder} {ffmpeg}", {"works": works, "asked": asked})
+    _write("encoders", f"{encoder} {ffmpeg}", {"works": works, "asked": asked, "way": PROBE_WAY})
