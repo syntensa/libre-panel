@@ -353,6 +353,19 @@ def test_light_runs_towards_white_in_a_halo_of_its_colour():
     assert away[3] < halo[3]
 
 
+def test_the_light_in_a_part_of_a_mask_is_that_part_of_its_whole_light():
+    """A ring's tip is lit in a small window of the coverage around it: worked out there alone,
+    its halo still from all of the coverage, it is that part of the light of all of it."""
+    rng = np.random.default_rng(7)
+    mask = np.clip(rng.normal(0.4, 0.4, (130, 120)), 0, 1).astype(np.float32)
+    per_column = np.linspace(0, 255, 120)[:, None] * np.ones(3)
+    for colour in (np.asarray((19, 229, 215), np.float32), per_column):
+        whole = lit.light(mask, colour, 9.0)
+        for x0, y0, x1, y1 in ((31, 31, 99, 99), (0, 0, 120, 130), (5, 60, 17, 129)):
+            part = lit.light(mask, colour, 9.0, (x0, y0, x1, y1))
+            assert np.array_equal(part, whole[y0:y1, x0:x1])
+
+
 def test_a_lit_ring_is_a_thin_arc_of_light_on_the_middle_of_its_groove():
     ring = {**lit_widgets()[0], "x": 20, "y": 20, "w": 120, "h": 120, "start_angle": -90,
             "end_angle": 270}  # fmt: skip
@@ -811,3 +824,26 @@ def test_a_rings_light_is_its_whole_sweeps_up_to_the_tip_pixel_for_pixel(
             made = np.asarray(lit._ring_light(widget, frac, colour, stroke, room, halo), np.float32)
             shown = [a[..., :3] * a[..., 3:4] / 255 for a in (whole, made)]
             assert np.abs(shown[0] - shown[1]).max() <= 1.5, (frac, colour)
+
+
+@pytest.mark.parametrize(
+    ("sweep", "ticks", "paint"),
+    [((-90, 270), 0, "#13E5D7"), ((135, 405), 0, "#FF784080"), ((-90, 270), 12, "#A3AEFF")],
+)
+def test_a_rings_kept_lit_sweep_gives_the_pixels_of_its_light_made_anew(sweep, ticks, paint):
+    """A gliding ring's groove with its whole sweep lit on it is kept by colour, and each
+    value only cuts it at the tip and lights the tip on the groove anew: the pixels of the
+    arc's light made and laid on the groove whole, at every value, on a closed ring and an
+    open one, with ticks, in a colour that lets the groove show through too."""
+    ring = {**lit_widgets()[0], "w": 174, "h": 174, "thickness": 11, "start_angle": sweep[0],
+            "end_angle": sweep[1], "ticks": ticks, "color": paint}  # fmt: skip
+    theme = theme_of([ring])
+    kept, plain = Renderer(theme), Renderer(theme)
+    plain.keep_static = False
+    widget = kept.widgets[0]
+    colours = kept._paint(widget, None)
+    for frac in (0.0, 0.001, 0.02, 0.3, 0.5, 0.9, 0.996, 1.0):
+        a = lit.gauge_piece(kept, widget, frac, colours)
+        b = lit.gauge_piece(plain, widget, frac, colours)
+        assert (a.x, a.y, a.box) == (b.x, b.y, b.box), frac
+        assert a.layer.tobytes() == b.layer.tobytes(), frac

@@ -28,6 +28,10 @@ MAX_ITEMS = 64
 # mainboard that has read 0 all along has no fan on it
 _RAN: set[str] = set()
 
+# The keys a pattern matched, by pattern, and the keys it was matched among: they stay the same
+# from frame to frame, and a list of every temperature and fan matched each key on every frame
+_MATCHED: dict[str, tuple[frozenset[str], list[str]]] = {}
+
 
 @dataclass(frozen=True)
 class Entry:
@@ -90,6 +94,19 @@ def used(item: Item) -> bool:
     return item.key in _RAN or item.key == "gpu.fan" or item.key.startswith("fan.gpu")
 
 
+def _matching(readings: dict[str, Reading], pattern: str) -> list[str]:
+    """The keys of ``readings`` that match ``pattern``, in natural order (callers must not
+    change the list): matched again only when the keys are not the ones it was matched among."""
+    hit = _MATCHED.get(pattern)
+    if hit is not None and readings.keys() == hit[0]:
+        return hit[1]
+    keys = sorted(fnmatch.filter(readings, pattern), key=_natural)
+    if len(_MATCHED) >= 256:  # (patterns typed in the editor, one by one)
+        _MATCHED.clear()
+    _MATCHED[pattern] = (frozenset(readings), keys)
+    return keys
+
+
 def pick(widget: dict[str, Any], readings: dict[str, Reading]) -> list[Item]:
     entries = parse_items(widget.get("items", ""))
     excluded = [e.pattern for e in entries if e.exclude]
@@ -102,7 +119,7 @@ def pick(widget: dict[str, Any], readings: dict[str, Reading]) -> list[Item]:
         if entry.exclude:
             continue
         if _GLOB.search(entry.pattern):
-            keys = sorted(fnmatch.filter(readings, entry.pattern), key=_natural)
+            keys = _matching(readings, entry.pattern)
         else:
             keys = [entry.pattern] if entry.pattern in readings else []
         for key in keys:

@@ -3,6 +3,12 @@
 ## 0.7.1rc5 — 2026-10-24
 
 **Changes**
+- **The renderer keeps more between frames**: the lit rings keep their groove and sweep and
+  redraw only the tip, the background is laid once for the whole panel, the fans of a list
+  turn over the list instead of redrawing its names and numbers, composed parts go into the
+  frame without a conversion, and list patterns are matched only when the readings' keys
+  change. The same pixels (a test proves it on four screens), 13 to 19 % less processor
+  time per frame on the game screen.
 - **Update with one click**: where a newer version is out, Start's card and Settings → About
   offer "Update to …". The download comes only from this repository's releases over HTTPS and
   is checked against the published size and the release's `SHA256SUMS` (every release from

@@ -640,6 +640,12 @@ class Renderer:
         # Only regions whose pieces changed are composed again, so a mostly
         # static screen costs little at 50 fps. The result is pixel-identical.
         self.incremental = True
+        # What stays the same from frame to frame is kept, made once: the background with its
+        # picture, a lit ring's groove with its whole sweep lit on it (a value only cuts it at
+        # the tip), the names and numbers under a list's turning fans (the fans go over them);
+        # and the parts of a frame go into it as they are. False makes all of that anew every
+        # frame (for tests: the pixels are the same).
+        self.keep_static = True
         self._last: tuple[list[tuple[str, Piece]], Image.Image] | None = None
         # The last canvas in RGB, as it was (never handed out), and the parts of the canvas
         # composed since (None: all of it): only those are converted for the next frame.
@@ -648,6 +654,7 @@ class Renderer:
         # Per region, what lies under the first piece that changes (a graph that
         # moves every frame over a card): the same pieces need not be laid again.
         self._underlays: dict[tuple[int, int, int, int], tuple[list[Piece], Image.Image]] = {}
+        self._grounds: tuple[RGBA | None, Image.Image] | None = None  # (_ground)
         # Video panels take a frame every 20 ms. With background builds a
         # changed piece is built in a helper thread while frames keep going out
         # with the previous piece; the change shows a frame or two later.
@@ -674,6 +681,11 @@ class Renderer:
         # the look of the weather symbols and the moon the user chose (config.toml ``symbols``)
         self.symbols = DEFAULT_SYMBOLS
         self._fans: OrderedDict[tuple[Any, ...], Piece] = OrderedDict()  # fan pieces, by look
+        # the turning fans of a list of them as pieces over it (_list_turning): this frame's,
+        # by list id; whether they lie on nothing of the list; each fan's piece and where
+        self._over: dict[str, list[tuple[Piece, str]]] = {}
+        self._fans_clear: dict[str, tuple[Piece, tuple, bool]] = {}
+        self._turning: dict[tuple[str, str], tuple[tuple, Image.Image, Piece]] = {}
         self._downloads: dict[str, tuple[Any, Any]] = {}  # download widget id -> what it shows
         self.screen = self._make_screen()
 
@@ -1068,6 +1080,8 @@ class Renderer:
         if reused:
             done, part = len(hit[0]), hit[1].copy()
             self._underlays[region] = self._underlays.pop(region)  # used: the last to go
+        elif self.keep_static:
+            done, part = 0, self._ground().crop(region)
         else:
             done = 0
             part = Image.new("RGBA", (x1 - x0, y1 - y0), self.color(self.theme.background_color))
@@ -1081,6 +1095,18 @@ class Renderer:
             except Exception as exc:  # one broken widget must not blank the panel
                 self._warn(f"widget {wid!r} failed: {exc}")
         return part
+
+    def _ground(self) -> Image.Image:
+        """The theme's background colour with its picture laid over it, the size of the panel:
+        made once (and again for another colour: the cover's), and cut for every region that
+        is composed from the ground up (callers must not change it)."""
+        color = self.color(self.theme.background_color)
+        if self._grounds is None or self._grounds[0] != color:
+            ground = Image.new("RGBA", (self.theme.width, self.theme.height), color)
+            if self._background is not None:
+                ground.alpha_composite(self._background)
+            self._grounds = (color, ground)
+        return self._grounds[1]
 
     def _keep_underlay(self, region: tuple[int, int, int, int], under: list[Piece], part) -> None:
         self._underlays.pop(region, None)
@@ -1122,12 +1148,21 @@ class Renderer:
         if not self.incremental:
             self._rgb = None
             return canvas.convert("RGB")
+        # An RGBA picture pasted into an RGB one gives its colours as they are, without a
+        # conversion (the whole frame's took two milliseconds on the 12.3", the parts of a
+        # frame on the move about one): the RGB picture's fourth byte, which nothing shows or
+        # hands on, takes the alpha.
+        as_is = self.keep_static
         if kept is None or kept[0] is not canvas or fresh is None:
-            rgb = canvas.convert("RGB")
+            if as_is:
+                rgb = Image.new("RGB", canvas.size)
+                rgb.paste(canvas)
+            else:
+                rgb = canvas.convert("RGB")
         else:
             rgb = kept[1]
             for part, region in fresh:
-                rgb.paste(part.convert("RGB"), region[:2])
+                rgb.paste(part if as_is else part.convert("RGB"), region[:2])
         self._rgb, self._fresh = (canvas, rgb), []
         return rgb.copy()
 
@@ -1464,6 +1499,7 @@ class Renderer:
                     over.append((self._draw_bar_dot(widget, snapshot, now), "dot"))
                 elif widget["type"] == "graph" and widget.get("end_dot"):
                     over.append((self._draw_end_dot(widget, snapshot, now), "dot"))
+                over += self._over.pop(widget["id"], ())  # (a list's fans)
                 for top, name in over:
                     if top is not None:
                         pieces.append((f"{widget['id']}\0{name}", top))
@@ -2622,12 +2658,15 @@ class Renderer:
     def _list_turning(self, widget: dict[str, Any], piece: Piece, items: list[lists.Item],
                       max_rpm: float, now: float) -> Piece:  # fmt: skip
         """The fans of a list of them, each turning with its speed (as a fan widget does),
-        on the names and numbers (``piece``, kept while they stay the same)."""
+        on the names and numbers (``piece``, kept while they stay the same). Where no name or
+        number lies under a fan, the fans go over the list as pieces of their own (the frame
+        lays them on it: :attr:`_over`) and the names and numbers stay as they are: a frame
+        composes the fans again, not the whole list (Arena's on the 12.3"), the same pixels."""
         size = self._list_fan_grid(widget, len(items))[4]
         color = self.color(widget["color2"])[:3]
         frame = "ring" if widget["levels"] else "none"
-        layer = piece.layer.copy()
         ox, oy = widget["x"] - piece.x, widget["y"] - piece.y
+        fans = []
         for (x0, y0), item in zip(self._list_fan_places(widget, len(items)), items, strict=True):
             key = f"{widget['id']}\0{item.key}"
             rotor = self._rotors.get(key)
@@ -2643,8 +2682,56 @@ class Renderer:
                 rotor.settle(item.number, max_rpm)
             image = fan.fan_image(color, size, size, rotor, frame, look, paint)
             x, y = ox + x0 + (size - image.width) / 2, oy + y0 + (size - image.height) / 2
-            self._paste(layer, image, round(x), round(y))
+            fans.append((image, round(x), round(y)))
+        if self.keep_static and "_card" not in widget and self._fans_apart(widget, piece, fans):
+            self._over[widget["id"]] = self._fan_pieces(widget["id"], piece, fans)
+            return piece
+        layer = piece.layer.copy()
+        for image, x, y in fans:
+            self._paste(layer, image, x, y)
         return replace(piece, layer=layer)
+
+    @staticmethod
+    def _within(layer: Image.Image, image: Image.Image, x: int, y: int) -> tuple[int, ...] | None:
+        """The part of ``layer`` that ``image`` at (x, y) covers (as :meth:`_paste` lays it)."""
+        x0, y0 = max(x, 0), max(y, 0)
+        x1, y1 = min(x + image.width, layer.width), min(y + image.height, layer.height)
+        return (x0, y0, x1, y1) if x1 > x0 and y1 > y0 else None
+
+    def _fans_apart(self, widget: dict[str, Any], piece: Piece, fans: list[tuple]) -> bool:
+        """Whether the fans lie apart from each other and on nothing of ``piece`` (its names
+        and numbers): then laid over it one by one, they give the pixels they give laid on it
+        (kept while the piece and the places stay the same)."""
+        boxes = tuple(self._within(piece.layer, image, x, y) for image, x, y in fans)
+        hit = self._fans_clear.get(widget["id"])
+        if hit is not None and hit[0] is piece and hit[1] == boxes:
+            return hit[2]
+        shown = [box for box in boxes if box is not None]
+        apart = all(
+            a[2] <= b[0] or b[2] <= a[0] or a[3] <= b[1] or b[3] <= a[1]
+            for i, a in enumerate(shown) for b in shown[i + 1 :]
+        )  # fmt: skip
+        alpha = piece.layer.getchannel("A")
+        clear = apart and all(alpha.crop(box).getbbox() is None for box in shown)
+        self._fans_clear[widget["id"]] = (piece, boxes, clear)
+        return clear
+
+    def _fan_pieces(self, wid: str, piece: Piece, fans: list[tuple]) -> list[tuple[Piece, str]]:
+        """The fans of a list as pieces over it, each cut as it lies on the list: the same
+        piece while a fan shows the same picture in the same place (a fan that stands)."""
+        out = []
+        for i, (image, x, y) in enumerate(fans):
+            box = self._within(piece.layer, image, x, y)
+            if box is None:
+                continue
+            name, place = f"fan{i}", (box, piece.x, piece.y)
+            hit = self._turning.get((wid, name))
+            if hit is None or hit[0] != place or hit[1] is not image:
+                part = image.crop((box[0] - x, box[1] - y, box[2] - x, box[3] - y))
+                fan_piece = Piece(part, piece.x + box[0], piece.y + box[1])
+                hit = self._turning[(wid, name)] = (place, image, fan_piece)
+            out.append((hit[2], name))
+        return out
 
     def _list_cells(self, layer: Image.Image | None, levels: Image.Image | None,
                     widget: dict[str, Any], rows: list[tuple]) -> None:  # fmt: skip
