@@ -2643,7 +2643,10 @@
     "red": "红色",
     "skin tone": "肤色",
     "violet": "紫色",
-    "white": "白色"
+    "white": "白色",
+    "Automatic picks {encoder}.": "自动选择：{encoder}。",
+    "{encoder} was passed over:": "已跳过 {encoder}：",
+    "no picture came from it": "它没有输出画面"
   },
   "fields": {
     "agent": "智能体",

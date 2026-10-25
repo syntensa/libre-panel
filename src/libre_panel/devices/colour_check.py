@@ -433,16 +433,19 @@ def check(
     done: Callable[[dict[str, Any]], None] | None = None,
 ) -> list[dict[str, Any]]:
     """Every encoder in turn (:func:`check_encoder`); one of the card's that ffmpeg cannot start
-    here (``works``: :func:`~h264.encoder_works`) is "unavailable", without a run. ``done`` hears
-    of each result as it comes."""
+    here (``works``: :func:`~h264.encoder_works`, the probe the video mode's "auto" goes by) is
+    "unavailable", without a run, with what ffmpeg said in the probe. ``done`` hears of each
+    result as it comes."""
     works = works or h264.encoder_works
     results = []
     for encoder in encoders:
         if stop is not None and stop.is_set():
             break
         if encoder != "libx264" and not works(ffmpeg, encoder):
-            result = {"encoder": encoder, "state": "unavailable", "verdict": None,
-                      "worst": None, "error": "", "feeds": {}}  # fmt: skip
+            # (why: the last line ffmpeg said when the video mode's own command was probed)
+            said = h264.probe_said(ffmpeg, encoder)
+            result = {"encoder": encoder, "state": "unavailable", "verdict": None, "worst": None,
+                      "error": "", "said": said, "feeds": {}}  # fmt: skip
         else:
             result = check_encoder(ffmpeg, encoder, settings, size, rotate, command, stop)
         if result["state"] == "stopped":

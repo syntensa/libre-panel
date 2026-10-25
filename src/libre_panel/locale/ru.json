@@ -2643,7 +2643,10 @@
     "red": "красный",
     "skin tone": "оттенок кожи",
     "violet": "фиолетовый",
-    "white": "белый"
+    "white": "белый",
+    "Automatic picks {encoder}.": "Автоматический выбор: {encoder}.",
+    "{encoder} was passed over:": "{encoder} пропущен:",
+    "no picture came from it": "он не выдал ни одной картинки"
   },
   "fields": {
     "agent": "агент",

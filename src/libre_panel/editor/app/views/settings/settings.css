@@ -333,7 +333,8 @@
   justify-self: start;
 }
 
-.colour-now {
+.colour-now,
+.colour-pick {
   margin: 0;
   font-size: 13px;
   color: var(--text-2);
@@ -391,6 +392,11 @@
 .colour-note {
   margin: 0;
   font-size: 12px;
+}
+
+.colour-auto {
+  display: grid;
+  gap: 4px;
 }
 
 .colour-advice,

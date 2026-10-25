@@ -2643,7 +2643,10 @@
     "red": "赤",
     "skin tone": "肌の色",
     "violet": "紫",
-    "white": "白"
+    "white": "白",
+    "Automatic picks {encoder}.": "自動の選択：{encoder}。",
+    "{encoder} was passed over:": "{encoder}は見送られました：",
+    "no picture came from it": "画像が出力されませんでした"
   },
   "fields": {
     "agent": "エージェント",

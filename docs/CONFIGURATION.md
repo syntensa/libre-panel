@@ -1596,7 +1596,8 @@ answer too.
 - `video-state.json` beside `config.toml` keeps what `"auto"` found out for the next start:
   the bit rate each panel got to (the next start begins there, within the steps, instead of
   climbing them again), whether ffmpeg can start the graphics card's encoder (asked again
-  after a week, as a new driver may change it) and a card's encoder that ended before its first
+  after a week, as a new driver may change it; with the last line ffmpeg said, which
+  *Check the colours* shows for an encoder "auto" passed over) and a card's encoder that ended before its first
   picture fed four bytes a pixel (for a week every start feeds it three, the way of before, at
   once; then four are tried again); delete the file to have all of it found out anew.
 
@@ -1620,7 +1621,9 @@ answer too.
 (under the video experiment) sends a test picture through every encoder this PC can start, fed
 both ways, away from the panel, and measures the colours that come out: per encoder two rows of
 swatches, the largest difference and the verdict (identical, a level shift, a matrix shift or
-other). The card says what that means for the encoder the panel runs: nothing to do, or a
+other). It says which encoder the panel runs and what it is fed, which one `encoder = "auto"`
+picks and, for a graphics card's encoder it passed over, the last line ffmpeg said when it was
+tried; and what the check means for the encoder the panel runs: nothing to do, or a
 button *Use the processor's conversion*, which writes `pixels = "rgb"` (and later *Back to the
 card's conversion*, `"auto"`); the running panels follow at once, each with a new ffmpeg, the
 panels beside the first too. *Show it on the panel* shows the test picture on the panel chosen

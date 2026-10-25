@@ -2643,7 +2643,10 @@
     "red": "rouge",
     "skin tone": "teint de peau",
     "violet": "violet",
-    "white": "blanc"
+    "white": "blanc",
+    "Automatic picks {encoder}.": "Choix automatique : {encoder}.",
+    "{encoder} was passed over:": "{encoder} a été écarté :",
+    "no picture came from it": "aucune image n'en est sortie"
   },
   "fields": {
     "agent": "agent",

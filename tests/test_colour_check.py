@@ -312,6 +312,52 @@ def test_the_check_runs_with_the_panel_s_size_and_says_what_to_do(isolated_home)
     assert state["advice"] == "shift" and state["video"] and state["app"]
 
 
+def test_the_card_says_what_auto_picks_and_why_a_card_s_encoder_was_passed_over(
+    isolated_home, monkeypatch
+):
+    """The probe (the video mode's own command) keeps the last line ffmpeg said, in this run
+    and a week long in video-state.json; the card shows "auto"'s pick and that line for each of
+    the card's encoders it passed over, from the answers known, without asking ffmpeg itself."""
+    import subprocess
+
+    isolated_home.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(h264, "_PROBED", {})
+    monkeypatch.setattr(h264, "_SAID", {})
+    monkeypatch.setattr(h264, "find_ffmpeg", lambda configured="": "/a/ffmpeg")
+    asked = []
+
+    def run(command, **kwargs):
+        asked.append(command[command.index("-c:v") + 1])
+        said = b"[h264_amf @ 0x1] AMF failed to initialise\nConversion failed!\n"
+        return SimpleNamespace(returncode=1, stdout=b"", stderr=said)
+
+    monkeypatch.setattr(subprocess, "run", run)
+    runner = ColourCheck(None)
+    assert runner.auto(VideoConfig())["picked"] is None and asked == []  # not asked: not known
+    assert h264.encoder_works("/a/ffmpeg", "h264_amf") is False and asked == ["h264_amf"]
+    auto = runner.auto(VideoConfig())
+    amf = "[h264_amf @ 0x1] AMF failed to initialise"  # what tells why, not ffmpeg's last words
+    assert auto == {"set": "auto", "picked": "libx264",
+                    "passed": [{"encoder": "h264_amf", "said": amf}]}  # fmt: skip
+    monkeypatch.setattr(h264, "_PROBED", {})  # the next run: from video-state.json
+    monkeypatch.setattr(h264, "_SAID", {})
+    assert runner.auto(VideoConfig())["passed"][0]["said"].endswith("AMF failed to initialise")
+    said = video_state.probe_said("/a/ffmpeg", "h264_amf")
+    assert said == amf
+    week = time.time() + video_state.PROBE_S + 60
+    assert video_state.probe_said("/a/ffmpeg", "h264_amf", now=week) == ""
+    assert runner.auto(VideoConfig(encoder="h264_nvenc"))["picked"] == "h264_nvenc"  # by hand
+    state = runner.state(1)
+    assert state["auto"]["picked"] == "libx264" and state["in_use"]["encoder"] == "libx264"
+    assert state["advice"] == "processor" and asked == ["h264_amf"]  # (nothing asked again)
+    works = ColourCheck(None, works=lambda ffmpeg, encoder: encoder == "h264_amf")
+    assert works.auto(VideoConfig())["picked"] == "h264_amf"
+    (unavailable,) = check("/a/ffmpeg", settings_for(), (480, 480), 180, encoders=["h264_amf"])
+    assert unavailable["state"] == "unavailable" and unavailable["said"] == said
+    assert h264.reason("x\n[out#0/h264 @ 0x2] Nothing was written into output file\n") == "x"
+    assert h264.reason("Conversion failed!\n") == "Conversion failed!" and h264.reason("") == ""
+
+
 def test_without_ffmpeg_the_check_says_why(isolated_home, monkeypatch):
     from libre_panel.devices.base import DeviceError
 
@@ -334,7 +380,9 @@ def test_the_route(isolated_home, monkeypatch):
 
     from libre_panel.editor.server import make_server
 
-    monkeypatch.setattr(h264, "encoder_works", lambda ffmpeg, encoder: False)
+    monkeypatch.setattr(h264, "_probe", lambda ffmpeg, encoder: (False, "no such card here"))
+    monkeypatch.setattr(h264, "_PROBED", {})
+    monkeypatch.setattr(h264, "_SAID", {})
     server = make_server(port=0)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     port = server.server_address[1]
@@ -356,6 +404,9 @@ def test_the_route(isolated_home, monkeypatch):
             assert [r["state"] for r in state["check"]["results"]] == [
                 "unavailable", "unavailable", "unavailable", "done"]  # fmt: skip
             assert state["advice"] == "processor"  # x264 is what "auto" starts here
+            assert state["auto"]["picked"] == "libx264"
+            assert state["auto"]["passed"] == [{"encoder": "h264_amf", "said": "no such card here"}]
+            assert state["check"]["results"][1]["said"] == "no such card here"  # NVIDIA's
     finally:
         server.shutdown()
         server.server_close()

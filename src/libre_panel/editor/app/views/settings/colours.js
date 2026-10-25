@@ -95,7 +95,7 @@ function EncoderResult({ result }) {
           <${Swatches} label=${t("Old feed")} side="old" patches=${result.patches} />`
       : null}
     ${decoded ? html`<p class="colour-note muted">${t("The stream decodes to {format}, not yuv420p.", { format: decoded })}</p>` : null}
-    ${result.error ? html`<p class="colour-note muted mono">${result.error}</p>` : null}
+    ${result.error || result.said ? html`<p class="colour-note muted mono">${result.error || result.said}</p>` : null}
   </div>`;
 }
 
@@ -107,12 +107,14 @@ function checkText(data) {
     `Libre Panel colour check: ${(picture.size || []).join("x")} (${picture.model || "-"}), video.pixels ${data.pixels}`,
   ];
   if (data.in_use) lines.push(`panel ${data.panel}${data.in_use.running ? "" : " (would start)"}: ${data.in_use.encoder}, ${data.in_use.feed}`);
+  if (data.auto?.picked) lines.push(`video.encoder ${data.auto.set}: ${data.auto.picked}`);
+  for (const passed of data.auto?.passed || []) lines.push(`  passed over: ${passed.encoder} (${passed.said || "no picture"})`);
   for (const result of check.results) {
     const worst = result.worst?.patch ? ` (largest difference ${num(result.worst.difference)} in ${result.worst.channel} of ${result.worst.patch})` : "";
     const said = Object.entries(result.feeds || {})
       .map(([pixels, feed]) => `${pixels}: ${feed.pixels}${feed.card ? " on the card" : ""}${feed.decoded ? `, ${feed.decoded}` : ""}${feed.says ? ` (${feed.says})` : ""}${feed.error ? `, ${feed.error}` : ""}`)
       .join("; ");
-    lines.push(`${result.encoder}: ${result.verdict || result.state}${worst}${said ? ` [${said}]` : ""}`);
+    lines.push(`${result.encoder}: ${result.verdict || result.state}${worst}${said ? ` [${said}]` : ""}${result.said ? ` (${result.said})` : ""}`);
     for (const patch of result.patches || []) {
       const side = (seen) => (seen ? `${seen.yuv.map(num).join(" ")} -> ${seen.rgb.join(",")}` : "-");
       lines.push(`  ${patch.id.padEnd(9)} ${patch.rgb.join(",").padEnd(11)} new ${side(patch.new).padEnd(28)} old ${side(patch.old)}`);
@@ -157,6 +159,22 @@ function nowText(data) {
   return use.card
     ? t("Panel {n} now: {encoder}, its colours converted on the graphics card", { n: data.panel, encoder })
     : t("Panel {n} now: {encoder}, its colours converted on the processor", { n: data.panel, encoder });
+}
+
+/** What "auto" picks for the encoder, and each of the card's it passed over with why (the last
+ * line ffmpeg said when the video mode's command was tried with it). */
+function AutoPick({ auto }) {
+  const names = ENCODER_NAMES();
+  if (!auto || auto.set !== "auto" || !auto.picked) return null;
+  return html`<div class="colour-auto">
+    <p class="colour-pick">${t("Automatic picks {encoder}.", { encoder: names[auto.picked] || auto.picked })}</p>
+    ${auto.passed.map(
+      (passed) => html`<p class="colour-note muted" key=${passed.encoder} data-passed=${passed.encoder}>
+        ${t("{encoder} was passed over:", { encoder: names[passed.encoder] || passed.encoder })}${" "}
+        <span class="mono">${passed.said || t("no picture came from it")}</span>
+      </p>`,
+    )}
+  </div>`;
 }
 
 /** The test picture on the panel for the eye: A and B in turn, then the theme again. */
@@ -209,6 +227,7 @@ export function ColourCard() {
     ${data
       ? html`<div class="colour-check">
           <p class="colour-now">${nowText(data)}</p>
+          <${AutoPick} auto=${data.auto} />
           ${data.check.error ? html`<p class="experiment-run-error">${data.check.error}</p>` : null}
           ${data.check.results.map((result) => html`<${EncoderResult} key=${result.encoder} result=${result} />`)}
           ${checking ? html`<p class="muted">${t("Checking…")}</p>` : null}

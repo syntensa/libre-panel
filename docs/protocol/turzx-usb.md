@@ -227,7 +227,9 @@ x264, Constrained Baseline, yuv420p, Annex B:
   violet `#A78BFA`, an orange, a skin tone), goes ten times through the very
   command the display builds (its encoder settings, its `transpose`), once fed
   `pixels = "auto"` and once `"rgb"`, for every encoder of the card ffmpeg can
-  start here and for x264, one run after the other, each with a time limit. ffmpeg
+  start here (the probe "auto" goes by: the video mode's own command, whose last
+  line from ffmpeg the card shows for an encoder passed over) and for x264, one
+  run after the other, each with a time limit. ffmpeg
   decodes each stream to raw video in the decoder's own pixel format, converting
   nothing (the result names it: yuv420p, or yuvj420p for a stream that says it is
   full range, read the same); the turn is undone and the mean Y, U and V of the

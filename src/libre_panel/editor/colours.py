@@ -5,7 +5,9 @@
   the one on the bus, else the one chosen in Settings, else the 9.2"; its encoder settings as
   the display takes them. The panels are not touched.
 - **What it means for that panel**: the encoder it runs and what it feeds it (its counters'
-  ``encoder``, "h264_amf, rgb0"), and from the check's verdict on that encoder the one thing to
+  ``encoder``, "h264_amf, rgb0"), the one "auto" picks and why it passed over a card's encoder
+  (the last line ffmpeg said in the probe, :meth:`ColourCheck.auto`), and from the check's
+  verdict on the encoder in use the one thing to
   do (:func:`advice`): nothing, or ``video.pixels = "rgb"`` (the processor's conversion, written
   by the card's button through the settings; the display starts ffmpeg anew by itself), or back.
 - **The A/B on that panel** (colour_show.py): for 30 s its test picture, fed the new way and the
@@ -106,7 +108,6 @@ class ColourCheck:
         self.error = ""
         self.ended = ""  # "done", "stopped", "" while it runs or never ran
         self.picture: dict[str, Any] = {}  # the panel, the model and the size it was made for
-        self.auto = ""  # the encoder the panel's settings start (video.encoder resolved)
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.show_error = ""
@@ -160,7 +161,7 @@ class ColourCheck:
             config = self._config(number)
             video = config.device.video
             picture = self._picture(number, config)
-            self.results, self.error, self.ended, self.auto = [], "", "", ""
+            self.results, self.error, self.ended = [], "", ""
             self.picture = picture
             try:
                 ffmpeg = h264.find_ffmpeg(video.ffmpeg)
@@ -188,12 +189,7 @@ class ColourCheck:
 
         try:
             log.info("colour check: a %dx%d test picture (%s)", *size, picture["model"])
-            works = self.works or h264.encoder_works
-            self.auto = (
-                video.encoder
-                if video.encoder != "auto"
-                else next((e for e in h264.AUTO_ENCODERS if works(ffmpeg, e)), "libx264")
-            )
+            works = self.works or h264.encoder_works  # (the probe "auto" goes by)
             colour_check.check(ffmpeg, settings, size, rotation_of(size), works=works,
                                command=self.command, stop=stop,
                                done=self.results.append)  # fmt: skip
@@ -269,25 +265,58 @@ class ColourCheck:
 
     # -- what the card shows ---------------------------------------------------------------------
 
+    def auto(self, video: Any) -> dict[str, Any]:
+        """What video.encoder starts: the one set, or what "auto" picks (the first of the card's
+        encoders the probe found working, else x264) and each of the card's it passed over, with
+        the last line ffmpeg said in the probe. Only answers the probe has given already (this
+        run's, or the week's in video-state.json): none is asked for here; "picked" is None until
+        they are all known (the check asks them)."""
+        found: dict[str, Any] = {"set": video.encoder, "picked": None, "passed": []}
+        if video.encoder != "auto":
+            found["picked"] = video.encoder
+            return found
+        try:
+            ffmpeg = h264.find_ffmpeg(video.ffmpeg)
+        except DeviceError:
+            return found
+        for candidate in h264.AUTO_ENCODERS:
+            works = (
+                self.works(ffmpeg, candidate)
+                if self.works is not None
+                else h264.known_works(ffmpeg, candidate)
+            )
+            if works is None:
+                return found  # not asked yet
+            if works:
+                found["picked"] = candidate
+                return found
+            found["passed"].append(
+                {"encoder": candidate, "said": h264.probe_said(ffmpeg, candidate)}
+            )
+        found["picked"] = "libx264"
+        return found
+
     def state(self, number: int = 1) -> dict[str, Any]:
         config = self._config(number)
         video = config.device.video
         status = self._status(number)
         stats = getattr(status, "stats", None) or {}
         running = in_use_of(stats.get("encoder")) if stats.get("streaming") else None
+        auto = self.auto(video)
+        picked = auto["picked"]
         in_use = None
         if running is not None:
             encoder, feed = running
             in_use = {"encoder": encoder, "feed": feed, "running": True}
-        elif self.auto:  # what its settings would start, as the check found the encoders
+        elif picked:  # what its settings would start, as the probe found the encoders
             refused = False
-            if self.auto in PASS_THROUGH and video.pixels != "rgb":
+            if picked in PASS_THROUGH and video.pixels != "rgb":
                 try:
-                    refused = video_state.refused(h264.find_ffmpeg(video.ffmpeg), self.auto)
+                    refused = video_state.refused(h264.find_ffmpeg(video.ffmpeg), picked)
                 except DeviceError:
                     refused = False
             feed = "rgb24" if video.pixels == "rgb" or refused else "rgb0"
-            in_use = {"encoder": self.auto, "feed": feed, "running": False}
+            in_use = {"encoder": picked, "feed": feed, "running": False}
         if in_use is not None:
             in_use["card"] = by_card(in_use["encoder"], in_use["feed"])
         showing = colour_show.state()
@@ -297,6 +326,7 @@ class ColourCheck:
             "app": self.controls is not None,
             "video": self.shows_video(number),
             "pixels": video.pixels,
+            "auto": auto,
             "in_use": in_use,
             "advice": advice(in_use, self.results, video.pixels),
             "check": {

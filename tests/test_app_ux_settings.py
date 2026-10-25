@@ -773,6 +773,9 @@ def test_the_colour_check_measures_each_encoder_and_says_what_it_means(
         expect(advice).to_have_attribute("data-advice", "processor")
         expect(advice).to_contain_text("Nothing to do")
         expect(card.locator(".colour-now")).to_contain_text("x264 (processor)")
+        expect(card.locator(".colour-pick")).to_have_text("Automatic picks x264 (processor).")
+        passed = card.locator("[data-passed='h264_amf']")  # the card's encoder "auto" passed over
+        expect(passed).to_contain_text("AMD (h264_amf) was passed over:")
         expect(card.get_by_role("button", name="Copy as text")).to_be_visible()
         show = card.get_by_role("button", name="Show it on the panel")
         expect(show).to_be_disabled()
@@ -810,6 +813,8 @@ def test_the_colour_check_offers_the_processor_s_conversion_and_back(
         expect(amd).to_contain_text("Matrix shift")
         expect(amd.locator(".colour-worst")).to_contain_text("Largest difference")
         expect(card.locator(".colour-now")).to_contain_text("AMD (h264_amf)")
+        expect(card.locator(".colour-pick")).to_have_text("Automatic picks AMD (h264_amf).")
+        expect(card.locator("[data-passed]")).to_have_count(0)
         advice = card.locator(".colour-advice")
         expect(advice).to_have_attribute("data-advice", "shift")
         card.get_by_role("button", name="Use the processor's conversion").click()
