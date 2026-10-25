@@ -5,7 +5,7 @@ import threading
 from libre_panel.sensors.base import want
 
 
-def wait_for(predicate, timeout=10.0):
+def wait_for(predicate, timeout=30.0):
     """True as soon as ``predicate()`` is; False after ``timeout`` seconds."""
     pause = threading.Event()
     for _ in range(int(timeout / 0.005)):

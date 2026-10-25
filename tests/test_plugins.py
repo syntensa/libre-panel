@@ -59,7 +59,7 @@ def events_of(package):
     return sys.modules[package].events
 
 
-def wait_for(predicate, timeout=10.0):
+def wait_for(predicate, timeout=30.0):
     end = time.monotonic() + timeout
     while time.monotonic() < end:
         if predicate():
@@ -1094,7 +1094,8 @@ def test_main_loop_shows_toasts_and_fades_between_themes(monkeypatch, isolated_h
         count = len(Capture.frames)
         host.request_theme("white", by="test", transition="fade")
         assert wait_for(lambda: status.theme == "white")
-        time.sleep(2.5)
+        # the fade (2 s, from the new theme's first frame, which a busy machine draws late)
+        assert wait_for(lambda: ImageStat.Stat(Capture.frames[-1].convert("L")).mean[0] > 250, 60)
     finally:
         stop.set()
         thread.join(10)

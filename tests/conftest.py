@@ -38,19 +38,40 @@ def isolated_home(tmp_path, monkeypatch):
 @pytest.fixture(autouse=True)
 def editor_tokens(monkeypatch):
     """The token of every editor server a test starts is kept by its port (editor_token.py),
-    for the clients of the tests to send: a server answers nothing without it."""
+    for the clients of the tests to send: a server answers nothing without it. And the requests
+    that server is still answering when the test ends are answered before the next one starts."""
+    import threading
+
     import editor_token
 
-    from libre_panel.editor.server import EditorServer
+    from libre_panel.editor.server import EditorHandler, EditorServer
 
-    made = EditorServer.__init__
+    made, served = EditorServer.__init__, EditorHandler._serve
+    under_way, count = threading.Condition(), [0]
 
     def init(self, *args, **kwargs):
         made(self, *args, **kwargs)
         editor_token.TOKENS[self.server_address[1]] = self.token
 
+    def serve(self, method):
+        with under_way:
+            count[0] += 1
+        try:
+            return served(self, method)
+        finally:
+            with under_way:
+                count[0] -= 1
+                under_way.notify_all()
+
     monkeypatch.setattr(EditorServer, "__init__", init)
+    monkeypatch.setattr(EditorHandler, "_serve", serve)
     yield
+    # A request that a closed browser left under way (the library's pictures are drawn one after
+    # another, a request each) goes on in its thread of the server, which shutting the server
+    # down does not wait for. It ends before the next test starts: it would draw with the
+    # renderer that test has put in place, and show up in what that test counts.
+    with under_way:
+        under_way.wait_for(lambda: count[0] == 0, timeout=120)
     editor_token.TOKENS.clear()
 
 

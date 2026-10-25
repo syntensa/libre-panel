@@ -471,7 +471,7 @@ def test_no_icon_update_during_or_after_the_stop(tray):
     tray._last = None
     updater = threading.Thread(target=tray.refresh)
     updater.start()
-    time.sleep(0.1)  # the update is running
+    assert wait_for(lambda: "update start" in events)  # the update is running
     tray.stop_icon()
     updater.join()
     tray.refresh()  # the tray's poll loop may still come by once
@@ -519,7 +519,7 @@ def test_quit_goes_on_where_an_x11_tray_s_loop_does_not_end(isolated_home):
     running = threading.Thread(target=tray.run)
     running.start()
     try:
-        time.sleep(0.3)
+        assert wait_for(lambda: tray.stop_icon in app._on_quit)  # the tray is running
         app.quit()
         running.join(Tray.STOP_S + 3)
         assert not running.is_alive()

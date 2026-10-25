@@ -39,10 +39,12 @@ def request(port, method, path, body=None, headers=None, host=None):
     hdrs.update(headers or {})
     hdrs = {name: value for name, value in hdrs.items() if value is not None}
     data = body if isinstance(body, bytes) or body is None else json.dumps(body).encode()
-    conn.request(method, path, body=data, headers=hdrs)
-    response = conn.getresponse()
-    raw = response.read()
-    conn.close()
+    try:  # (closed also when the answer does not come: no connection is left for the next)
+        conn.request(method, path, body=data, headers=hdrs)
+        response = conn.getresponse()
+        raw = response.read()
+    finally:
+        conn.close()
     try:
         return response.status, json.loads(raw)
     except ValueError:
@@ -378,7 +380,7 @@ def test_every_renderer_a_preview_makes_is_closed_and_freed(plugin_folder, serve
             assert status == 200, path
             assert len(made) - before >= count, path  # (a plugin's presets come too)
             assert len(closed) == len(made), path
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 30
         while any(ref() is not None for ref in made) and time.monotonic() < deadline:
             time.sleep(0.02)  # (the handler's last frame goes with its answer)
         assert not [ref for ref in made if ref() is not None]

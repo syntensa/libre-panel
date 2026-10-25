@@ -25,7 +25,7 @@ def write_config(home, theme="libre-default", brightness=60, driver="virtual"):
     )
 
 
-def wait_for(predicate, timeout=10.0):
+def wait_for(predicate, timeout=30.0):
     end = time.monotonic() + timeout
     while time.monotonic() < end:
         if predicate():

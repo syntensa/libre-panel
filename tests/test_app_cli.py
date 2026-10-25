@@ -236,7 +236,7 @@ def test_running_panel_picks_up_theme_changes(tmp_path, isolated_home):
     thread = threading.Thread(target=run, args=(config,), kwargs={"stop": stop}, daemon=True)
     thread.start()
     try:
-        deadline = time.time() + 10
+        deadline = time.time() + 60  # (a busy machine)
         while not out.exists() and time.time() < deadline:
             time.sleep(0.05)
         assert size_of(out) == (480, 320)
@@ -274,7 +274,7 @@ def test_a_theme_that_is_gone_leaves_the_panel_lit_with_its_own(tmp_path, isolat
     )
     thread.start()
     try:
-        deadline = time.time() + 10
+        deadline = time.time() + 60  # (a busy machine)
         while not out.exists() and time.time() < deadline:
             time.sleep(0.05)
         assert size_of(out) == (480, 320)  # the panel's own theme

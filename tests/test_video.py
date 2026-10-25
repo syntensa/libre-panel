@@ -597,6 +597,16 @@ def settle(panel, quiet=0.3, timeout=5.0, at_least=0):
             return
 
 
+def arrive(panel, count, timeout=60.0):
+    """Wait until ``count`` pictures have reached the panel: ffmpeg, started and paused by a
+    busy machine, is as slow as it is, and a test of what comes out of it waits for that rather
+    than for a number of frames sent (the ceiling is for a pipeline that has really stopped)."""
+    end = time.monotonic() + timeout
+    while len(panel.blocks) < count and time.monotonic() < end:
+        time.sleep(0.02)
+    assert len(panel.blocks) >= count, f"{len(panel.blocks)} of {count} pictures after {timeout} s"
+
+
 @needs_ffmpeg
 def test_a_frame_goes_to_ffmpeg_without_a_copy_of_it(panel, monkeypatch):
     """The RGB bytes are taken from the frame as the renderer made it (RGBA): a copy of the
@@ -755,7 +765,7 @@ def test_closing_ends_a_frozen_ffmpeg_behind_a_shim(panel, monkeypatch):
         except psutil.NoSuchProcess:
             return False
 
-    end = time.monotonic() + 5
+    end = time.monotonic() + 30
     while any(running(child) for child in children) and time.monotonic() < end:
         time.sleep(0.05)
     alive = [child for child in children if running(child)]
@@ -1007,7 +1017,9 @@ def test_video_display_heals_after_a_usb_error(panel):
         time.sleep(0.2)
         panel.fail_next_writes = 1  # the next block fails
         stream_frames(display, frames[10:20])
-        time.sleep(0.3)
+        # (the block goes when ffmpeg's picture is there: late on a busy machine; the frames
+        # that follow are the display's chance to see the error and reconnect)
+        assert wait_until(lambda: display.counters.usb_errors == 1, 60)
         stream_frames(display, frames[20:])
         settle(panel)
         assert panel.commands.count(110) == 2  # a full start after reconnecting
@@ -1069,7 +1081,7 @@ def test_a_hung_decoder_restarts_the_panel(panel, monkeypatch):
     assert 123 not in panel.commands  # nothing more is sent to a hung decoder
 
     again = TurzxVideoDisplay(video_config())  # the main loop opens it again, soon
-    tries, deadline = 0, time.monotonic() + 10
+    tries, deadline = 0, time.monotonic() + 60
     while True:
         tries += 1
         try:
@@ -1308,14 +1320,25 @@ def test_the_main_loop_draws_streaming_frames_at_their_planned_time(monkeypatch)
     stop = threading.Event()
     thread = threading.Thread(target=app.run, args=(config,), kwargs={"stop": stop})
     thread.start()
-    time.sleep(1.0)
+
+    def steps_of(planned):
+        return [b - a for a, b in zip(planned[1:], planned[2:], strict=False)]
+
+    def on_the_grid(planned):
+        return sum(abs(step - 0.02) < 1e-6 for step in steps_of(planned))
+
+    # Until it has run on its grid for a while: a slow start or a busy moment (a runner
+    # whose timer ticks every 15 ms) is waited out, not counted as the loop's fault.
+    end = time.monotonic() + 60
+    while on_the_grid(list(times)) < 25 and time.monotonic() < end:
+        time.sleep(0.05)
     stop.set()
     thread.join(10)
-    steps = [b - a for a, b in zip(times[1:], times[2:], strict=False)]
+    steps = steps_of(times)
     # never a short step after a late one; on the grid unless the loop fell a
     # whole frame behind (slow runners) and started a new one
     assert min(steps) > 0.02 - 1e-6, min(steps)
-    assert sum(abs(step - 0.02) < 1e-6 for step in steps) >= 5
+    assert on_the_grid(times) >= 5
 
 
 class StreamingDisplay(Display):
@@ -1350,7 +1373,9 @@ def test_main_loop_sends_every_frame_at_the_stream_rate(monkeypatch, tmp_path):
     stop = threading.Event()
     thread = threading.Thread(target=app.run, args=(config,), kwargs={"stop": stop})
     thread.start()
-    time.sleep(1.2)
+    end = time.monotonic() + 60  # frames enough to tell a rate from, however long they take
+    while (not displays or len(displays[0].shown) < 60) and time.monotonic() < end:
+        time.sleep(0.05)
     stop.set()
     thread.join(10)
     shown = displays[0].shown
@@ -1483,6 +1508,18 @@ def test_a_mode_sets_the_stream_rate(monkeypatch):
     thread = threading.Thread(target=app.run, args=(config,), kwargs={"stop": stop, "host": host})
     thread.start()
 
+    def wait_for_frames(count, pace=None):
+        """Wait until ``count`` frames have been shown from now on and, if ``pace`` is given,
+        the last two were more than that many seconds apart (the loop has slowed down)."""
+        end = time.monotonic() + 60  # a busy machine needs longer for the same frames
+        begin = len(displays[0].shown) if displays else 0
+        while time.monotonic() < end:
+            shown = displays[0].shown[begin:] if displays else []
+            if len(shown) >= count and (pace is None or shown[-1][0] - shown[-2][0] > pace):
+                return
+            time.sleep(0.02)
+        raise AssertionError(f"{count} frames at a pace over {pace} s were not drawn in 60 s")
+
     def rate(seconds):
         begin = len(displays[0].shown) if displays else 0
         time.sleep(seconds)
@@ -1490,10 +1527,10 @@ def test_a_mode_sets_the_stream_rate(monkeypatch):
         return (len(shown) - 1) / (shown[-1][0] - shown[0][0])
 
     try:
-        time.sleep(0.5)
+        wait_for_frames(10)  # started, and drawing
         normal = rate(1.0)
         host.set_mode("game")
-        time.sleep(0.2)
+        wait_for_frames(2, pace=0.06)  # the 10 fps of the mode (100 ms) have begun
         game = rate(1.5)
     finally:
         stop.set()
@@ -1534,14 +1571,19 @@ def test_a_stopped_ffmpeg_is_one_restart_in_the_counters(panel):
     try:
         frames = moving_frames(20)
         stream_frames(display, frames[:10])
+        # Of ten frames nine pictures are out: the splitter holds the last one back until
+        # another starts. Killed earlier, a slow machine loses what ffmpeg has yet to write,
+        # which is the kill's doing and no loss of the restart.
+        arrive(panel, 9)
         display.encoder.proc.kill()
         display.encoder.proc.wait()
         time.sleep(0.2)
         stream_frames(display, frames[10:])
+        arrive(panel, 18)  # the nine of the first ffmpeg and the nine of the second
         settle(panel)
         assert counters.ffmpeg_restarts == 1 and counters.panel_restarts == 0
         assert counters.usb_errors == 0
-        assert counters.blocks == len(panel.blocks) >= 15 and counters.bytes > 0
+        assert counters.blocks == len(panel.blocks) >= 18 and counters.bytes > 0
     finally:
         display.close()
 
@@ -1558,7 +1600,7 @@ def test_a_usb_error_is_counted_once_and_the_video_comes_back(panel):
         time.sleep(0.2)
         panel.fail_next_writes = 1  # the next block fails
         stream_frames(display, frames[10:20])
-        time.sleep(0.3)
+        assert wait_until(lambda: counters.usb_errors == 1, 60)  # (see the test above)
         stream_frames(display, frames[20:])
         settle(panel)
         assert counters.usb_errors == 1 and counters.ffmpeg_restarts == 0
@@ -1586,7 +1628,7 @@ def test_a_restart_of_the_panel_is_counted_across_displays(panel, monkeypatch):
 
     again = TurzxVideoDisplay(video_config())
     again.counters = counters
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + 60
     while True:
         try:
             again.open()

@@ -3,6 +3,10 @@
 ## 0.7.1rc5 — 2026-10-24
 
 **Changes**
+- **The app's server reads every request to the end before it answers**: a route that
+  answered without reading its body closed the connection with data unread, which on Windows
+  could throw the answer away (the renewal of the notify key). Tests that waited a fixed time
+  now wait for what they need, so a busy machine does not fail them.
 - **What Libre Panel costs your PC**: a Load card in Live → Diagnose shows Libre Panel's
   processor share and memory as the Task Manager counts them, per process (the app, each
   panel's process, each ffmpeg, PresentMon, the window, the sensor service), the threads of

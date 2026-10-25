@@ -769,6 +769,7 @@ class EditorHandler(BaseHTTPRequestHandler):
         if not open_:  # a page of this run of the app asks (light mode, light.py)
             self.state.last_request = time.monotonic()
         route.handle(self, match, url)
+        self._discard_body()  # a route that answers without asking for its body
 
     # -- plugin editor pages ---------------------------------------------------
 

@@ -88,7 +88,7 @@ def test_the_loop_draws_a_slow_panel_calmly_and_sends_it_parts(monkeypatch):
     stop = threading.Event()
     thread = threading.Thread(target=app.run, args=(config,), kwargs={"stop": stop}, daemon=True)
     thread.start()
-    deadline = time.time() + 10
+    deadline = time.time() + 30
     while time.time() < deadline and len(made.get("display", Slow(None)).parts) < 3:
         time.sleep(0.05)
     stop.set()
