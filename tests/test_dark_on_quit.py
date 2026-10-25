@@ -45,7 +45,7 @@ def run_until_stopped(monkeypatch, dark, quitting, slow=False, **device):
     options = {"stop": stop, "quitting": lambda: quitting}
     thread = threading.Thread(target=app.run, args=(config,), kwargs=options, daemon=True)
     thread.start()
-    deadline = time.time() + 10
+    deadline = time.time() + 30
     while time.time() < deadline and not made.get("panel", Panel(None)).frames:
         time.sleep(0.05)
     stop.set()

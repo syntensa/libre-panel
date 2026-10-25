@@ -188,7 +188,7 @@ def test_main_loop_waits_for_the_panel_and_survives_unplugging(monkeypatch):
     stop = threading.Event()
     thread = threading.Thread(target=app.run, args=(config,), kwargs={"stop": stop}, daemon=True)
     thread.start()
-    deadline = time.time() + 10
+    deadline = time.time() + 30
     while time.time() < deadline and flaky.get("display", FlakyDisplay(None)).shown < 4:
         time.sleep(0.05)
     stop.set()

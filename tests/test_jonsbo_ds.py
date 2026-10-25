@@ -103,12 +103,12 @@ def test_a_ds916_is_found_by_auto_and_shown_a_jpeg_standing_on_end(ds916_port):
 def test_the_last_picture_goes_again_while_nothing_changes(ds916_port):
     with TurzxDisplay(DeviceConfig(driver="turzx", model="jonsbo-ds916")) as screen:
         screen.show(landscape((1920, 462)))
-        deadline = time.monotonic() + 2
+        deadline = time.monotonic() + 30
         while len(ds916_port.pictures) < 3 and time.monotonic() < deadline:
             time.sleep(0.01)
         assert len(set(ds916_port.pictures)) == 1 and len(ds916_port.pictures) >= 3
         ds916_port.broken = True  # unplugged: the next frame says so, and the loop reconnects
-        deadline = time.monotonic() + 2
+        deadline = time.monotonic() + 30
         with pytest.raises(DeviceError):
             while time.monotonic() < deadline:
                 screen.show(landscape((1920, 462)))

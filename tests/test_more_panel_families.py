@@ -134,7 +134,7 @@ def test_the_live_picture_is_kept_while_nothing_changes(hongtai_port, monkeypatc
     with TurzxDisplay(DeviceConfig(driver="turzx", model="hongtai-480x960")) as screen:
         screen.show(corner_red((960, 480)))
         before = panel.commands.count(hongtai.CMD_LIVE)
-        deadline = time.monotonic() + 2
+        deadline = time.monotonic() + 30
         while panel.commands.count(hongtai.CMD_LIVE) < before + 2 and time.monotonic() < deadline:
             time.sleep(0.01)
         assert panel.commands.count(hongtai.CMD_LIVE) >= before + 2

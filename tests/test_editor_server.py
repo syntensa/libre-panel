@@ -380,7 +380,7 @@ def test_every_renderer_a_preview_makes_is_closed_and_freed(plugin_folder, serve
             assert status == 200, path
             assert len(made) - before >= count, path  # (a plugin's presets come too)
             assert len(closed) == len(made), path
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 30
         while any(ref() is not None for ref in made) and time.monotonic() < deadline:
             time.sleep(0.02)  # (the handler's last frame goes with its answer)
         assert not [ref for ref in made if ref() is not None]

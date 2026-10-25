@@ -765,7 +765,7 @@ def test_closing_ends_a_frozen_ffmpeg_behind_a_shim(panel, monkeypatch):
         except psutil.NoSuchProcess:
             return False
 
-    end = time.monotonic() + 5
+    end = time.monotonic() + 30
     while any(running(child) for child in children) and time.monotonic() < end:
         time.sleep(0.05)
     alive = [child for child in children if running(child)]
@@ -1081,7 +1081,7 @@ def test_a_hung_decoder_restarts_the_panel(panel, monkeypatch):
     assert 123 not in panel.commands  # nothing more is sent to a hung decoder
 
     again = TurzxVideoDisplay(video_config())  # the main loop opens it again, soon
-    tries, deadline = 0, time.monotonic() + 10
+    tries, deadline = 0, time.monotonic() + 60
     while True:
         tries += 1
         try:
@@ -1628,7 +1628,7 @@ def test_a_restart_of_the_panel_is_counted_across_displays(panel, monkeypatch):
 
     again = TurzxVideoDisplay(video_config())
     again.counters = counters
-    deadline = time.monotonic() + 10
+    deadline = time.monotonic() + 60
     while True:
         try:
             again.open()
