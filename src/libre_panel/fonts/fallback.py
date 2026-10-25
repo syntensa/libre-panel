@@ -7,6 +7,11 @@ for with the first system font that has it, at the same size and weight and on t
 Windows' Segoe UI, Segoe UI Symbol, Yu Gothic, Microsoft YaHei, Malgun Gothic, Nirmala UI, Ebrima
 and the like, and on Linux what fontconfig names (``fc-match``) or Noto Sans and DejaVu Sans.
 
+The ideographs are the same characters in Japanese and in Chinese text, but each language draws
+them in forms of its own, and a font has one language's. For them the East Asian fonts of the app's
+language come first (``scripts`` of :class:`Fallbacks`): Yu Gothic or Noto Sans CJK JP for Japanese,
+Microsoft YaHei or Noto Sans CJK SC for Chinese.
+
 What a font covers is read from its ``cmap`` table (no new dependency, and a font file is read once
 per process), so text that the face covers, all the Latin the bundled fonts carry, goes straight to
 Pillow: it draws exactly as before and costs a check of ``str.isascii``. Right-to-left text is
@@ -31,6 +36,8 @@ from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageDraw, ImageFont
+
+from libre_panel import i18n
 
 log = logging.getLogger(__name__)
 
@@ -203,6 +210,21 @@ _WINDOWS = (
     ("arial.ttf", "arialbd.ttf", 0),
 )
 
+# The East Asian fonts of a language, tried first for the characters whose forms depend on it (the
+# language of the app: ja, zh): the same entries as the tables, by language.
+_WINDOWS_EAST_ASIAN = {
+    "ja": (
+        ("YuGothR.ttc", "YuGothB.ttc", 0),
+        ("meiryo.ttc", "meiryob.ttc", 0),
+        ("msgothic.ttc", None, 0),
+    ),
+    "zh": (
+        ("msyh.ttc", "msyhbd.ttc", 0),
+        ("msjh.ttc", "msjhbd.ttc", 0),
+        ("simsun.ttc", None, 0),
+    ),
+}
+
 # Linux (and anything else with fonts in files): the usual places of Noto Sans and DejaVu Sans, for
 # where fontconfig is not installed; with it, ``fc-match`` finds the rest.
 _FOLDERS = (
@@ -216,6 +238,12 @@ _FOLDERS = (
     "/usr/share/fonts/noto-cjk",
     "/usr/share/fonts/google-noto-cjk",
     "/usr/share/fonts/truetype/wqy",
+    "/usr/share/fonts/opentype/ipafont-gothic",  # Japanese: IPAGothic, Takao and VL Gothic
+    "/usr/share/fonts/ipa-gothic",
+    "/usr/share/fonts/OTF",
+    "/usr/share/fonts/truetype/takao-gothic",
+    "/usr/share/fonts/truetype/vlgothic",
+    "/usr/share/fonts/vlgothic",
 )
 _POSIX = (
     ("NotoSans-Regular.ttf", "NotoSans-Bold.ttf", 0),
@@ -228,7 +256,44 @@ _POSIX = (
     ("NotoSansSymbols-Regular.ttf", None, 0),
     ("NotoSansSymbols2-Regular.ttf", None, 0),
     ("NotoEmoji-Regular.ttf", None, 0),
+    ("ipag.ttf", None, 0),  # Japanese, for where no font above has the ideographs
+    ("TakaoGothic.ttf", None, 0),
+    ("VL-Gothic-Regular.ttf", None, 0),
 )
+# Noto Sans CJK is one collection of five faces: Japanese, Korean, Simplified and Traditional
+# Chinese, Hong Kong (in this order), or a file for each of them.
+_POSIX_EAST_ASIAN = {
+    "ja": (
+        ("NotoSansCJK-Regular.ttc", "NotoSansCJK-Bold.ttc", 0),
+        ("NotoSansCJKjp-Regular.otf", "NotoSansCJKjp-Bold.otf", 0),
+        ("ipag.ttf", None, 0),
+        ("ipagp.ttf", None, 0),
+        ("TakaoGothic.ttf", None, 0),
+        ("VL-Gothic-Regular.ttf", None, 0),
+    ),
+    "zh": (
+        ("NotoSansCJK-Regular.ttc", "NotoSansCJK-Bold.ttc", 2),
+        ("NotoSansCJKsc-Regular.otf", "NotoSansCJKsc-Bold.otf", 0),
+        ("wqy-zenhei.ttc", None, 0),
+        ("wqy-microhei.ttc", None, 0),
+    ),
+}
+# fontconfig's name of the languages that have forms of their own
+_FONTCONFIG_LANGUAGES = {"ja": "ja", "zh": "zh-cn"}
+
+
+def east_asian(ch: str) -> bool:
+    """Whether the forms of ``ch`` depend on the language: the ideographs, the kana, the symbols
+    and punctuation that go with them and the full-width forms."""
+    code = ord(ch)
+    return (
+        0x2E80 <= code <= 0x9FFF
+        or 0xF900 <= code <= 0xFAFF
+        or 0xFE30 <= code <= 0xFE4F
+        or 0xFF00 <= code <= 0xFFEF
+        or 0x20000 <= code <= 0x3FFFF
+    )
+
 
 _SERIALS = itertools.count(1)
 QUERIES = 48  # questions to fontconfig in a process; most texts need none
@@ -237,36 +302,64 @@ QUERIES = 48  # questions to fontconfig in a process; most texts need none
 class Fallbacks:
     """Where to find a glyph a font lacks: system font files tried in order, then ``query`` (a
     function ``(ch, bold) -> [(path, index), ...]``, fontconfig's), which is asked for a character
-    no listed font has, a few times at most. Answers are kept: a character is looked for once."""
+    no listed font has, a few times at most. Answers are kept: a character is looked for once.
+
+    ``scripts``: by language, the fonts that come first for the characters whose forms depend on
+    it (:func:`east_asian`) while ``language()`` (the app's) is that language; the others as
+    always. A language the app is switched to later is taken in at the next text."""
 
     def __init__(
         self,
         fonts: Iterable[tuple[str | os.PathLike, str | os.PathLike | None, int]] = (),
         query: Callable[[str, bool], Iterable[tuple[str, int]]] | None = None,
+        language: Callable[[], str] | None = None,
+        scripts: Mapping[str, Iterable[tuple[str | os.PathLike, str | os.PathLike | None, int]]]
+        | None = None,
     ) -> None:
-        self.fonts = [(os.fspath(a), os.fspath(b) if b else None, i) for a, b, i in fonts]
+        self.fonts = self._listed(fonts)
+        self.scripts = {name: self._listed(first) for name, first in (scripts or {}).items()}
         self.query = query
+        self.language = language
         self.serial = next(_SERIALS)  # tells one set from another (what is cached by font)
-        self._learned: dict[bool, list[tuple[str, int]]] = {False: [], True: []}
-        self._found: dict[tuple[str, bool], tuple[str, int] | None] = {}
+        self._learned: dict[tuple[bool, str], list[tuple[str, int]]] = {}
+        self._found: dict[tuple[str, bool, str], tuple[str, int] | None] = {}
         self._asked = 0
         self._lock = threading.Lock()
 
+    @staticmethod
+    def _listed(
+        fonts: Iterable[tuple[str | os.PathLike, str | os.PathLike | None, int]],
+    ) -> list[tuple[str, str | None, int]]:
+        return [(os.fspath(a), os.fspath(b) if b else None, i) for a, b, i in fonts]
+
+    def variant(self) -> str:
+        """The language whose East Asian fonts come first now ("": the usual order)."""
+        if self.language is None:
+            return ""
+        try:
+            language = self.language()
+        except Exception:  # (the order of the fonts is not worth a broken panel)
+            return ""
+        return language if language in self.scripts else ""
+
     def find(self, ch: str, bold: bool = False) -> tuple[str, int] | None:
         """The file and the index in it of the first font that has a glyph for ``ch``."""
-        key = (ch, bold)
+        key = (ch, bold, self.variant() if east_asian(ch) else "")
         try:
             return self._found[key]
         except KeyError:
             pass
         with self._lock:
             if key not in self._found:
-                self._found[key] = self._search(ord(ch), bold)
+                self._found[key] = self._search(ord(ch), bold, key[2])
         return self._found[key]
 
-    def _search(self, code: int, bold: bool) -> tuple[str, int] | None:
-        listed = ((b if bold and b else a, i) for a, b, i in self.fonts)
-        for path, index in (*listed, *self._learned[bold]):
+    def _search(self, code: int, bold: bool, variant: str) -> tuple[str, int] | None:
+        first = self.scripts.get(variant, [])
+        fonts = [*first, *(font for font in self.fonts if font not in first)]
+        learned = self._learned.setdefault((bold, variant), [])
+        listed = ((b if bold and b else a, i) for a, b, i in fonts)
+        for path, index in (*listed, *learned):
             if self._has(code, path, index):
                 return path, index
         if self.query is None or self._asked >= QUERIES:
@@ -279,7 +372,7 @@ class Fallbacks:
             return None
         for path, index in answers:
             if self._has(code, path, index):
-                self._learned[bold].append((path, index))  # the next character may be in it too
+                learned.append((path, index))  # the next character may be in it too
                 return path, index
         return None
 
@@ -291,14 +384,19 @@ class Fallbacks:
 
 def _fontconfig(ch: str, bold: bool) -> list[tuple[str, int]]:
     """The fonts fontconfig would take for ``ch``, best first (``fc-match -s``: the ones that have
-    it come first)."""
+    it come first, those made for the app's language among them for an ideograph)."""
     import shutil
     import subprocess
 
     program = shutil.which("fc-match")
     if program is None:
         return []
-    pattern = f":charset={ord(ch):x}" + (":weight=bold" if bold else "")
+    language = _FONTCONFIG_LANGUAGES.get(i18n.language()) if east_asian(ch) else None
+    pattern = (
+        f":charset={ord(ch):x}"
+        + (f":lang={language}" if language else "")
+        + (":weight=bold" if bold else "")
+    )
     run = subprocess.run(
         [program, "-s", "-f", "%{file}\t%{index}\n", pattern],
         capture_output=True,
@@ -316,22 +414,30 @@ def _fontconfig(ch: str, bold: bool) -> list[tuple[str, int]]:
 
 def discover(platform: str, environ: Mapping[str, str]) -> Fallbacks:
     """The system fonts to fall back to on ``platform`` (``sys.platform``): those of the table
-    that exist, and on a system with font files in folders, fontconfig."""
+    that exist, and on a system with font files in folders, fontconfig. The East Asian fonts of
+    the app's language come first for the characters whose forms depend on it."""
     if platform == "win32":
         root = environ.get("WINDIR") or environ.get("SystemRoot") or "C:\\Windows"
         folders = [Path(root) / "Fonts"]
-        table, query = _WINDOWS, None
+        table, query, east_asian_tables = _WINDOWS, None, _WINDOWS_EAST_ASIAN
     else:
         folders = [Path(folder) for folder in _FOLDERS]
-        table, query = _POSIX, _fontconfig
-    fonts = []
-    for regular, bold, index in table:
-        for folder in folders:
-            if (folder / regular).is_file():
-                heavy = folder / bold if bold and (folder / bold).is_file() else None
-                fonts.append((folder / regular, heavy, index))
-                break
-    return Fallbacks(fonts, query)
+        table, query, east_asian_tables = _POSIX, _fontconfig, _POSIX_EAST_ASIAN
+
+    def installed(
+        entries: Iterable[tuple[str, str | None, int]],
+    ) -> list[tuple[Path, Path | None, int]]:
+        found = []
+        for regular, bold, index in entries:
+            for folder in folders:
+                if (folder / regular).is_file():
+                    heavy = folder / bold if bold and (folder / bold).is_file() else None
+                    found.append((folder / regular, heavy, index))
+                    break
+        return found
+
+    scripts = {name: installed(entries) for name, entries in east_asian_tables.items()}
+    return Fallbacks(installed(table), query, i18n.language, scripts)
 
 
 _system: Fallbacks | None = None
@@ -444,6 +550,7 @@ class FallbackFont(ImageFont.FreeTypeFont):
     def _start(self, chain: Fallbacks | None = None) -> None:
         self._chain = chain
         self._seen: Fallbacks | None = None
+        self._variant = ""
         self._plans: dict[str, tuple[tuple[Any, str], ...] | None] = {}
         self._faces: dict[Any, Any] = {}
         self._drops: dict[str, int] = {}
@@ -492,10 +599,14 @@ class FallbackFont(ImageFont.FreeTypeFont):
         """``text`` in runs, ``(spec, run)`` (spec None: the font itself); None where the font
         has all of it."""
         chain = self._chain or system_fallbacks()
+        variant = chain.variant()
         if chain is not self._seen:  # (the set of fonts changed: tests)
             self._plans.clear()
             self._faces.clear()
             self._seen = chain
+        elif variant != self._variant:  # (the app's language was changed: other forms first)
+            self._plans.clear()
+        self._variant = variant
         plans = self._plans
         if text in plans:
             return plans[text]
