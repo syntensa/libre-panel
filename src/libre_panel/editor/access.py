@@ -27,11 +27,11 @@ import logging
 import os
 import re
 import secrets
-import sys
 import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from libre_panel import rights
 from libre_panel.config import CONFIG_FILENAME, config_dir
 from libre_panel.i18n import t
 
@@ -187,12 +187,7 @@ def read_token(url: str | None = None) -> str | None:
 
 def elevated() -> bool:
     """Whether this program runs with administrator rights (Windows) or as root (elsewhere)."""
-    if sys.platform == "win32":
-        from libre_panel.autostart import is_admin
-
-        return is_admin()
-    geteuid = getattr(os, "geteuid", None)
-    return geteuid is not None and geteuid() == 0
+    return rights.elevated()
 
 
 def folder_risk(folder: Path, home: Path | None = None, posix: bool | None = None) -> str:

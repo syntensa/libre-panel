@@ -46,7 +46,6 @@ import collections
 import csv
 import functools
 import logging
-import shutil
 import statistics
 import subprocess
 import sys
@@ -58,7 +57,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from libre_panel import bundled, winsession
+from libre_panel import bundled, rights, winsession
 from libre_panel.sensors.base import Reading, SensorProvider, wanted
 
 log = logging.getLogger(__name__)
@@ -108,14 +107,18 @@ def set_target(exe: str | None) -> None:
 
 def find_presentmon(path: str = "") -> str | None:
     """The PresentMon program: the path named in the settings, the one a download carries
-    (its ``tools`` folder), PATH, or Intel's folder under Program Files."""
+    (its ``tools`` folder), PATH, or Intel's folder under Program Files. With the highest rights
+    only one from a safe place (rights.py): a named one elsewhere is passed over for the others."""
     if path:
-        return path if Path(path).is_file() else shutil.which(path)
+        named = path if Path(path).is_file() else rights.which(path)
+        if named is None or rights.safe_place(named):
+            return named
+        log.warning("PresentMon %s is not started: Libre Panel runs with the highest rights", named)
     own = bundled.find(bundled.program_name("PresentMon"))
     if own:
         return own
     for name in ("PresentMon", "PresentMon-x64", "presentmon"):
-        found = shutil.which(name)
+        found = rights.which(name)
         if found:
             return found
     # Only where installing needs administrator rights: Libre Panel may run elevated, and a

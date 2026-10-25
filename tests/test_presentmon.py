@@ -947,7 +947,7 @@ def test_presentmon_is_not_looked_for_in_the_downloads(tmp_path, monkeypatch):
     downloads.mkdir()
     (downloads / "PresentMon-2.3.0-x64.exe").write_bytes(b"MZ")
     monkeypatch.setattr(presentmon.Path, "home", staticmethod(lambda: tmp_path))
-    monkeypatch.setattr(presentmon.shutil, "which", lambda name: None)
+    monkeypatch.setattr(presentmon.rights.shutil, "which", lambda name: None)
     assert real_find_presentmon() is None
     named = str(downloads / "PresentMon-2.3.0-x64.exe")
     assert real_find_presentmon(named) == named  # named in the settings: fine

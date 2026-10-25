@@ -927,12 +927,36 @@ class Settings:
             "command": cli_command("autostart enable --elevated"),
             "program": command[0] if command else "",
             "risky": bool(command) and writable_by_user(Path(command[0]), Path.home()),
+            # what this run, with the highest rights, does not load or start (rights.py)
+            "held_back": self._held_back(config),
             "language": {
                 "setting": config.language,
                 "active": i18n.language(),
                 "languages": dict(i18n.LANGUAGES),
             },
         }
+
+    @staticmethod
+    def _held_back(config: Config) -> dict[str, list[str]]:
+        """``{plugins, programs}``: the plugin folders not loaded and the settings whose program
+        is not started because Libre Panel runs with the highest rights; empty without them."""
+        from libre_panel import rights
+        from libre_panel.plugins.loader import registry
+
+        if not rights.elevated():
+            return {"plugins": [], "programs": []}
+        named = {
+            "video.ffmpeg": config.device.video.ffmpeg,
+            "[sensors.presentmon] path": str(
+                config.sensors.options.get("presentmon", {}).get("path", "")
+            ),
+        }
+        programs = [
+            setting
+            for setting, path in named.items()
+            if path and Path(path).expanduser().is_file() and not rights.safe_place(path)
+        ]
+        return {"plugins": list(registry().held_back), "programs": programs}
 
     def set_system(self, payload: Any) -> dict[str, Any]:
         """``{"autostart": true}`` or ``{"elevated": true}``: what the command line's

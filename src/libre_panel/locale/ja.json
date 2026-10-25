@@ -1739,7 +1739,6 @@
     "Your place, for the weather and for sunrise and sunset, and the weather itself.": "天気、日の出・日の入りに使う場所と、天気そのもの。",
     "the video program ffmpeg": "ビデオプログラムffmpeg",
     "the video program named under Advanced": "「詳細設定」で指定したビデオプログラム",
-    "Rarely needed: for the temperature and power of the processor and the mainboard's fans only where the sensor service is not set up (Settings → Sensors), or for a sensor plugin that reads the hardware itself. Off unless you turn it on.": "必要になることはまれです。センサーサービスが設定されていない環境でのプロセッサの温度・電力とマザーボードのファン、またはハードウェアを自分で読み取るセンサープラグイン用です。オンにするまではオフです。",
     "More sources": "その他のソース",
     "A new picture whenever something changes, up to {n} a second.": "何かが変わるたびに新しい画像を描画します（最大毎秒{n}枚）。",
     "In numbers": "数値で見る",
@@ -2649,7 +2648,15 @@
     "{encoder} was passed over:": "{encoder}は見送られました：",
     "no picture came from it": "画像が出力されませんでした",
     "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 でも十分なめらかで、これが既定値です。50 はさらになめらかですが、プロセッサー時間が約 3 分の 2 増えます（パネル 2 枚で実測：1.2 コアに対して 2.0 コア）。25 が最も負荷が軽くなります。60 は実験的な設定です。プレーヤーが遅れないよう、パネルには 70 を伝えます。",
-    "50 frames a second": "毎秒50フレーム"
+    "50 frames a second": "毎秒50フレーム",
+    "Held back while Libre Panel runs as administrator": "Libre Panelが管理者として動作している間は使わないもの",
+    "Libre Panel runs with administrator rights, and the video program named under Advanced lies in a folder that other programs may change: it is not started with those rights. Without administrator rights it is used again.": "Libre Panelは管理者権限で動作しており、「詳細設定」で指定したビデオプログラムは他のプログラムが変更できるフォルダーにあります。そのため、この権限では起動しません。管理者権限なしで動作すれば再び使われます。",
+    "Rarely needed: for the temperature and power of the processor and the mainboard's fans only where the sensor service is not set up (Settings → Sensors). With these rights Libre Panel loads no plugin folders and starts programs only from folders that only administrators may change. Off unless you turn it on.": "必要になることはまれです。センサーサービスが設定されていない環境（設定 → センサー）でのプロセッサの温度・電力とマザーボードのファン用です。この権限で動作している間、Libre Panelはプラグインフォルダーを読み込まず、管理者だけが変更できるフォルダーからのみプログラムを起動します。オンにするまではオフです。",
+    "So that no other program gets those rights, Libre Panel then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change. Held back: {list}. The sensor service reads the locked sensors without these rights, so Libre Panel itself seldom needs them.": "他のプログラムにこの権限を渡さないよう、Libre Panelはユーザーフォルダーからプラグインフォルダーを読み込まず、管理者だけが変更できるフォルダーからのみプログラムを起動します。使わないもの：{list}。センサーサービスはこの権限なしでロックされたセンサーを読み取るため、Libre Panel自体がこの権限を必要とすることはまれです。",
+    "So that no other program gets those rights, it then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change.": "他のプログラムにこの権限を渡さないよう、ユーザーフォルダーからプラグインフォルダーを読み込まず、管理者だけが変更できるフォルダーからのみプログラムを起動します。",
+    "a video program Libre Panel may start with administrator rights": "Libre Panelが管理者権限で起動できるビデオプログラム",
+    "the plugin {name}": "プラグイン {name}",
+    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "管理者権限では、Libre Panelはvideo.ffmpegのffmpegを起動しません。他のプログラムが変更できるフォルダーにあるためです"
   },
   "fields": {
     "agent": "エージェント",

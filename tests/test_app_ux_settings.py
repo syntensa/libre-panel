@@ -115,6 +115,19 @@ def test_the_overview_tells_each_thing_with_what_mends_it(app_url):  # noqa: F81
         assert of(panelInfo=on, clipQuestion={**asked, "ask": False})["items"][0][0] == "video-clip"
         ffmpeg = {**found, "video": {**PANEL["video"], "gaps": ["clip", "ffmpeg"]}}
         assert of(panelInfo=ffmpeg)["items"] == [["video-ffmpeg", "warn", "Advanced"]]
+        # with administrator rights: the video program held back, plugin folders not loaded
+        start = "Start and system"
+        held = {**found, "video": {**PANEL["video"], "gaps": ["ffmpeg-rights"]}}
+        assert of(panelInfo=held)["items"] == [["video-ffmpeg", "warn", start]]
+        back = {"held_back": {"plugins": ["fans"], "programs": ["video.ffmpeg"]}}
+        assert of(panelInfo=held, system=back)["items"] == [
+            ["video-ffmpeg", "warn", start],
+            ["rights", "warn", start],
+        ]
+        ffmpeg_only = {"held_back": {"plugins": [], "programs": ["video.ffmpeg"]}}
+        assert of(panelInfo=held, system=ffmpeg_only)["items"] == [["video-ffmpeg", "warn", start]]
+        nothing = {"held_back": {"plugins": [], "programs": []}}
+        assert of(panelInfo=found, system=nothing)["items"] == []
         proving = {**found, "video": {**PANEL["video"], "gaps": ["model"]}}
         assert of(panelInfo=proving)["items"] == []  # not proven on it: off is no fault
         # sensors: the sensor service, else the hint of the running app

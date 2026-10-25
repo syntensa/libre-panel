@@ -11,10 +11,12 @@ On Windows some sensors (CPU temperature and power, RAM temperature,
 mainboard fans) can be read only by a process with administrator rights. The
 built-in LibreHardwareMonitor source reads them inside Libre Panel (so Libre Panel
 itself needs the rights), or asks the web server of a LibreHardwareMonitor that has
-them; a plugin that reads the hardware itself needs them as well. For these,
-``enable(..., elevated=True)`` sets up a Task Scheduler task that starts Libre
-Panel at login with the highest rights, instead of the Run value. Setting it up
-and removing it needs an administrator; it is never done without being asked.
+them. For these, ``enable(..., elevated=True)`` sets up a Task Scheduler task that
+starts Libre Panel at login with the highest rights, instead of the Run value.
+Setting it up and removing it needs an administrator; it is never done without
+being asked. With those rights Libre Panel loads and starts nothing that programs
+without them could change (rights.py), and the sensor service reads those sensors
+without them.
 """
 
 from __future__ import annotations

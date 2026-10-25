@@ -92,7 +92,10 @@ async function startWithRights(info, on) {
     : "";
   const sure = await confirmDialog({
     title: t("Start with administrator rights?"),
-    message: t("Libre Panel will start with the highest rights at every login, without a question. Turn it off again here, as an administrator.") + warning,
+    message:
+      t("Libre Panel will start with the highest rights at every login, without a question. Turn it off again here, as an administrator.") +
+      ` ${t("So that no other program gets those rights, it then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change.")}` +
+      warning,
     confirm: t("Set it up"),
   });
   if (sure) await saveSystem({ elevated: true });
@@ -140,7 +143,7 @@ function StartCard() {
     ${windows
       ? html`<${SettingRow}
           title=${t("With administrator rights")}
-          hint=${t("Rarely needed: for the temperature and power of the processor and the mainboard's fans only where the sensor service is not set up (Settings → Sensors), or for a sensor plugin that reads the hardware itself. Off unless you turn it on.")}
+          hint=${t("Rarely needed: for the temperature and power of the processor and the mainboard's fans only where the sensor service is not set up (Settings → Sensors). With these rights Libre Panel loads no plugin folders and starts programs only from folders that only administrators may change. Off unless you turn it on.")}
           status=${!info.elevated && !info.can_elevate
             ? html`<${Status}>${t("Setting it up needs Libre Panel to run as administrator.")}<//>`
             : null}

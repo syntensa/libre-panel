@@ -38,6 +38,11 @@ which have no pip: copy the plugin into the settings folder,
 downloads or installs code itself, and the editor cannot either: plugins are
 code you chose to install.
 
+While Libre Panel runs with administrator rights (Windows) or as root, it loads no
+plugin folders from a place that programs without those rights may change, as the
+settings folder in your profile is: they would get the rights through it. Settings →
+Overview names the plugins it held back. A plugin installed with pip is loaded as before.
+
 ## Writing a plugin
 
 A plugin declares the plugin API it was written for. This is version 1.

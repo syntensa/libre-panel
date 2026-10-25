@@ -9,6 +9,7 @@ const GAPS = {
   clip: () => t("the name of the standby clip"),
   ffmpeg: () => t("the video program ffmpeg"),
   "ffmpeg-path": () => t("the video program named under Advanced"),
+  "ffmpeg-rights": () => t("a video program Libre Panel may start with administrator rights"),
 };
 
 /**

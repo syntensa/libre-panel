@@ -39,6 +39,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from libre_panel import rights
 from libre_panel.config import config_dir
 
 log = logging.getLogger(__name__)
@@ -359,8 +360,9 @@ RUN_TIMEOUT_S = 30.0
 
 
 def program(name: str) -> str | None:
-    """Where the agent's own program is (on PATH), or None."""
-    return shutil.which(name)
+    """Where the agent's own program is (on PATH), or None; with the highest rights only one
+    from a safe place (rights.py)."""
+    return rights.which(name)
 
 
 def _hidden() -> dict[str, Any]:

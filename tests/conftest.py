@@ -102,10 +102,13 @@ def editor_tokens(monkeypatch):
 def not_elevated(monkeypatch):
     """The tests run with the rights of an ordinary user, whoever runs them (a CI runner on
     Windows is an administrator, a container is root): the settings that name a program change
-    unless a test says Libre Panel runs with the highest rights."""
+    unless a test says Libre Panel runs with the highest rights, and plugin folders and programs
+    are used wherever they lie (rights.py)."""
+    from libre_panel import rights
     from libre_panel.editor import access
 
     monkeypatch.setattr(access, "elevated", lambda: False)
+    monkeypatch.setattr(rights, "elevated", lambda: False)
 
 
 @pytest.fixture(autouse=True)

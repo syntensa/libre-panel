@@ -1739,7 +1739,6 @@
     "Your place, for the weather and for sunrise and sunset, and the weather itself.": "Tu lugar, para el tiempo y para la salida y puesta del sol, y el propio tiempo.",
     "the video program ffmpeg": "el programa de vídeo ffmpeg",
     "the video program named under Advanced": "el programa de vídeo indicado en “Avanzado”",
-    "Rarely needed: for the temperature and power of the processor and the mainboard's fans only where the sensor service is not set up (Settings → Sensors), or for a sensor plugin that reads the hardware itself. Off unless you turn it on.": "Rara vez necesario: para la temperatura y la potencia del procesador y los ventiladores de la placa base solo donde el servicio de sensores no está configurado (Ajustes → Sensores), o para un plugin de sensores que lee el hardware por sí mismo. Desactivado hasta que lo actives.",
     "More sources": "Más fuentes",
     "A new picture whenever something changes, up to {n} a second.": "Una imagen nueva cada vez que algo cambia, hasta {n} por segundo.",
     "In numbers": "En cifras",
@@ -2649,7 +2648,15 @@
     "{encoder} was passed over:": "{encoder} se descartó:",
     "no picture came from it": "no salió ninguna imagen de él",
     "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 se ve fluido y es el valor predeterminado. 50 es aún más fluido y cuesta unos dos tercios más de tiempo de procesador (medido con dos paneles: 2,0 núcleos en lugar de 1,2); 25 es lo que menos exige. 60 es un experimento: al panel se le indica 70, para que su reproductor vaya por delante.",
-    "50 frames a second": "50 fotogramas por segundo"
+    "50 frames a second": "50 fotogramas por segundo",
+    "Held back while Libre Panel runs as administrator": "Retenido mientras Libre Panel se ejecuta como administrador",
+    "Libre Panel runs with administrator rights, and the video program named under Advanced lies in a folder that other programs may change: it is not started with those rights. Without administrator rights it is used again.": "Libre Panel se ejecuta con derechos de administrador, y el programa de vídeo indicado en “Avanzado” está en una carpeta que otros programas pueden cambiar: no se inicia con esos derechos. Sin derechos de administrador se vuelve a usar.",
+    "Rarely needed: for the temperature and power of the processor and the mainboard's fans only where the sensor service is not set up (Settings → Sensors). With these rights Libre Panel loads no plugin folders and starts programs only from folders that only administrators may change. Off unless you turn it on.": "Rara vez necesario: para la temperatura y la potencia del procesador y los ventiladores de la placa base solo donde el servicio de sensores no está configurado (Ajustes → Sensores). Con estos derechos, Libre Panel no carga carpetas de plugins e inicia programas solo desde carpetas que solo los administradores pueden cambiar. Desactivado hasta que lo actives.",
+    "So that no other program gets those rights, Libre Panel then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change. Held back: {list}. The sensor service reads the locked sensors without these rights, so Libre Panel itself seldom needs them.": "Para que ningún otro programa obtenga esos derechos, Libre Panel no carga entonces carpetas de plugins de tu carpeta de usuario e inicia programas solo desde carpetas que solo los administradores pueden cambiar. Retenido: {list}. El servicio de sensores lee los sensores bloqueados sin estos derechos, así que Libre Panel rara vez los necesita.",
+    "So that no other program gets those rights, it then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change.": "Para que ningún otro programa obtenga esos derechos, no carga entonces carpetas de plugins de tu carpeta de usuario e inicia programas solo desde carpetas que solo los administradores pueden cambiar.",
+    "a video program Libre Panel may start with administrator rights": "un programa de vídeo que Libre Panel pueda iniciar con derechos de administrador",
+    "the plugin {name}": "el plugin {name}",
+    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "con derechos de administrador, Libre Panel no inicia el ffmpeg de video.ffmpeg: está en una carpeta que otros programas pueden cambiar"
   },
   "fields": {
     "agent": "agente",

@@ -1654,6 +1654,9 @@ driver, stays, as other programs may use it, and so does your membership in the 
 "Performance Log Users" ([above](#more-sensor-sources)).
 
 A setting always wins: `video.ffmpeg` and `[sensors.presentmon] path` name another program.
+Only while Libre Panel runs with administrator rights does it pass over one that lies where
+programs without those rights may change it (outside Program Files and Windows): it then
+takes the one in this folder or on the `PATH` that is safe, and Settings → Overview says so.
 Without them Libre Panel looks in this folder first, then on the `PATH`. It never looks in
 your Downloads folder. A pip install has no such folder: install ffmpeg yourself, and
 PresentMon if you want game frame rates.

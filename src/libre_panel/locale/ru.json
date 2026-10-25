@@ -1739,7 +1739,6 @@
     "Your place, for the weather and for sunrise and sunset, and the weather itself.": "Ваше место — для погоды, восхода и заката — и сама погода.",
     "the video program ffmpeg": "видеопрограмма ffmpeg",
     "the video program named under Advanced": "видеопрограмма, указанная в разделе «Дополнительно»",
-    "Rarely needed: for the temperature and power of the processor and the mainboard's fans only where the sensor service is not set up (Settings → Sensors), or for a sensor plugin that reads the hardware itself. Off unless you turn it on.": "Нужно редко: для температуры и мощности процессора и вентиляторов материнской платы только там, где служба датчиков не настроена (Настройки → Датчики), или для плагина датчиков, который сам читает оборудование. Выключено, пока вы не включите.",
     "More sources": "Другие источники",
     "A new picture whenever something changes, up to {n} a second.": "Новое изображение при каждом изменении, до {n} в секунду.",
     "In numbers": "В цифрах",
@@ -2649,7 +2648,15 @@
     "{encoder} was passed over:": "{encoder} пропущен:",
     "no picture came from it": "он не выдал ни одной картинки",
     "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 выглядит плавно и используется по умолчанию. 50 ещё плавнее, но требует примерно на две трети больше процессорного времени (измерено с двумя панелями: 2,0 ядра вместо 1,2); 25 нагружает меньше всего. 60 — эксперимент: панели сообщается 70, чтобы её проигрыватель не отставал.",
-    "50 frames a second": "50 кадров в секунду"
+    "50 frames a second": "50 кадров в секунду",
+    "Held back while Libre Panel runs as administrator": "Не используется, пока Libre Panel работает от имени администратора",
+    "Libre Panel runs with administrator rights, and the video program named under Advanced lies in a folder that other programs may change: it is not started with those rights. Without administrator rights it is used again.": "Libre Panel работает с правами администратора, а видеопрограмма, указанная в разделе «Дополнительно», лежит в папке, которую могут изменить другие программы: с этими правами она не запускается. Без прав администратора она снова используется.",
+    "Rarely needed: for the temperature and power of the processor and the mainboard's fans only where the sensor service is not set up (Settings → Sensors). With these rights Libre Panel loads no plugin folders and starts programs only from folders that only administrators may change. Off unless you turn it on.": "Нужно редко: для температуры и мощности процессора и вентиляторов материнской платы только там, где служба датчиков не настроена (Настройки → Датчики). С этими правами Libre Panel не загружает папки плагинов и запускает программы только из папок, которые могут изменять лишь администраторы. Выключено, пока вы не включите.",
+    "So that no other program gets those rights, Libre Panel then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change. Held back: {list}. The sensor service reads the locked sensors without these rights, so Libre Panel itself seldom needs them.": "Чтобы эти права не получила другая программа, Libre Panel тогда не загружает папки плагинов из вашей папки пользователя и запускает программы только из папок, которые могут изменять лишь администраторы. Не используется: {list}. Служба датчиков читает заблокированные датчики без этих прав, поэтому самому Libre Panel они нужны редко.",
+    "So that no other program gets those rights, it then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change.": "Чтобы эти права не получила другая программа, он тогда не загружает папки плагинов из вашей папки пользователя и запускает программы только из папок, которые могут изменять лишь администраторы.",
+    "a video program Libre Panel may start with administrator rights": "видеопрограмма, которую Libre Panel может запустить с правами администратора",
+    "the plugin {name}": "плагин {name}",
+    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "с правами администратора Libre Panel не запускает ffmpeg из video.ffmpeg: он лежит в папке, которую могут изменить другие программы"
   },
   "fields": {
     "agent": "агент",

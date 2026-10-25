@@ -66,15 +66,18 @@ def other_usb_model() -> PanelModel | None:
 def video_gaps(video, model: PanelModel | None, *, proven: bool = True) -> list[str]:
     """What the video mode lacks, as codes: ``"model"`` (not proven on this panel; it is then
     the only one), ``"clip"`` (``local_clip`` is not set), ``"ffmpeg"`` (not found) and
-    ``"ffmpeg-path"`` (``video.ffmpeg`` names no program). ``proven=False`` does not ask for a
-    proven model, as ``mode = "on"`` does not."""
+    ``"ffmpeg-path"`` (``video.ffmpeg`` names no program), ``"ffmpeg-rights"`` (it names one
+    that Libre Panel does not start with the highest rights, and there is no other: rights.py).
+    ``proven=False`` does not ask for a proven model, as ``mode = "on"`` does not."""
     if proven and model is not None and not model.video:
         return ["model"]
     gaps = [] if video.local_clip else ["clip"]
-    from libre_panel.devices.h264 import find_ffmpeg
+    from libre_panel.devices.h264 import FfmpegHeldBack, find_ffmpeg
 
     try:
         find_ffmpeg(video.ffmpeg)
+    except FfmpegHeldBack:
+        gaps.append("ffmpeg-rights")
     except DeviceError:
         gaps.append("ffmpeg-path" if video.ffmpeg else "ffmpeg")
     return gaps
@@ -97,6 +100,10 @@ def video_mode(video, model: PanelModel | None) -> tuple[bool, list[str]]:
         "clip": t("video.local_clip is not set (see docs/CONFIGURATION.md, Video)"),
         # said without the path: doctor reports are shared
         "ffmpeg-path": t("ffmpeg is not at the path in video.ffmpeg (config.toml)"),
+        "ffmpeg-rights": t(
+            "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: "
+            "it lies in a folder that other programs may change"
+        ),
         "ffmpeg": t(
             "the video mode needs ffmpeg: the downloads of Libre Panel carry it; "
             "with pip install it, or set video.ffmpeg in config.toml to the ffmpeg program"

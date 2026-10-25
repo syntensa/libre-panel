@@ -1739,7 +1739,6 @@
     "Your place, for the weather and for sunrise and sunset, and the weather itself.": "你的地点（用于天气、日出日落）以及天气功能本身。",
     "the video program ffmpeg": "视频程序 ffmpeg",
     "the video program named under Advanced": "“高级”中指定的视频程序",
-    "Rarely needed: for the temperature and power of the processor and the mainboard's fans only where the sensor service is not set up (Settings → Sensors), or for a sensor plugin that reads the hardware itself. Off unless you turn it on.": "很少需要：仅在传感器服务未配置时（设置 → 传感器）用于处理器温度/功耗和主板风扇，或用于自行读取硬件的传感器插件。默认关闭，除非你开启。",
     "More sources": "更多数据源",
     "A new picture whenever something changes, up to {n} a second.": "每次变化时生成新图像，最高每秒 {n} 张。",
     "In numbers": "数据总览",
@@ -2649,7 +2648,15 @@
     "{encoder} was passed over:": "已跳过 {encoder}：",
     "no picture came from it": "它没有输出画面",
     "30 looks smooth and is the default. 50 is smoother still and costs about two thirds more processor time (measured with two panels: 2.0 instead of 1.2 cores); 25 asks least. 60 is an experiment: the panel is told 70, so that its player stays ahead.": "30 已经很流畅，也是默认值。50 更流畅，但大约多耗三分之二的处理器时间（两块面板实测：2.0 个核心对 1.2 个）；25 负担最小。60 是实验：向面板报告 70，让它的播放器保持领先。",
-    "50 frames a second": "每秒 50 帧"
+    "50 frames a second": "每秒 50 帧",
+    "Held back while Libre Panel runs as administrator": "Libre Panel 以管理员身份运行时暂不使用的内容",
+    "Libre Panel runs with administrator rights, and the video program named under Advanced lies in a folder that other programs may change: it is not started with those rights. Without administrator rights it is used again.": "Libre Panel 正以管理员权限运行，而“高级”中指定的视频程序位于其他程序可以修改的文件夹中：不会以这些权限启动它。不以管理员权限运行时会再次使用它。",
+    "Rarely needed: for the temperature and power of the processor and the mainboard's fans only where the sensor service is not set up (Settings → Sensors). With these rights Libre Panel loads no plugin folders and starts programs only from folders that only administrators may change. Off unless you turn it on.": "很少需要：仅在传感器服务未配置时（设置 → 传感器）用于处理器温度/功耗和主板风扇。拥有这些权限时，Libre Panel 不加载插件文件夹，只从仅管理员可修改的文件夹启动程序。默认关闭，除非你开启。",
+    "So that no other program gets those rights, Libre Panel then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change. Held back: {list}. The sensor service reads the locked sensors without these rights, so Libre Panel itself seldom needs them.": "为了不让其他程序获得这些权限，Libre Panel 此时不会从你的用户文件夹加载插件文件夹，只从仅管理员可修改的文件夹启动程序。暂不使用：{list}。传感器服务无需这些权限即可读取被锁定的传感器，因此 Libre Panel 本身很少需要它们。",
+    "So that no other program gets those rights, it then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change.": "为了不让其他程序获得这些权限，它此时不会从你的用户文件夹加载插件文件夹，只从仅管理员可修改的文件夹启动程序。",
+    "a video program Libre Panel may start with administrator rights": "Libre Panel 可以用管理员权限启动的视频程序",
+    "the plugin {name}": "插件 {name}",
+    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "以管理员权限运行时，Libre Panel 不会启动 video.ffmpeg 中的 ffmpeg：它位于其他程序可以修改的文件夹中"
   },
   "fields": {
     "agent": "智能体",

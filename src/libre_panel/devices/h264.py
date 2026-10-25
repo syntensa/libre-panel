@@ -36,7 +36,6 @@ from __future__ import annotations
 import collections
 import logging
 import queue
-import shutil
 import subprocess
 import sys
 import threading
@@ -47,7 +46,7 @@ from typing import Any
 
 import psutil
 
-from libre_panel import bundled, winsession
+from libre_panel import bundled, rights, winsession
 from libre_panel.devices import video_state
 from libre_panel.devices.base import Counters, DeviceError
 from libre_panel.i18n import t
@@ -349,24 +348,44 @@ ROTATION_FILTERS = {
 }
 
 
+class FfmpegHeldBack(DeviceError):
+    """``video.ffmpeg`` names a program that Libre Panel, running with the highest rights, does
+    not start (rights.py), and there is no other."""
+
+
 def find_ffmpeg(configured: str = "") -> str:
     """The ffmpeg program: the configured path, the one a download carries (its ``tools``
-    folder), PATH, or next to Libre Panel."""
+    folder), PATH, or next to Libre Panel. With the highest rights only one from a safe place
+    (rights.py): a configured one elsewhere is passed over for the others."""
     exe = bundled.program_name("ffmpeg")
+    held_back = False
     if configured:
         path = Path(configured).expanduser()
-        if path.is_file():
+        if not path.is_file():
+            raise DeviceError(
+                t("ffmpeg not found at {path} (video.ffmpeg in config.toml)", path=path)
+            )
+        if rights.safe_place(path):
             return str(path)
-        raise DeviceError(t("ffmpeg not found at {path} (video.ffmpeg in config.toml)", path=path))
+        log.warning("video.ffmpeg %s is not started: Libre Panel runs with the highest rights",
+                    path)  # fmt: skip
+        held_back = True
     own = bundled.find(exe)  # first: the build the download was tested with
     if own:
         return own
-    found = shutil.which("ffmpeg")
+    found = rights.which("ffmpeg")
     if found:
         return found
     beside = Path(sys.executable).resolve().parent / exe
-    if beside.is_file():
+    if beside.is_file() and rights.safe_place(beside):
         return str(beside)
+    if held_back:
+        raise FfmpegHeldBack(
+            t(
+                "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: "
+                "it lies in a folder that other programs may change"
+            )
+        )
     raise DeviceError(
         t(
             "the video mode needs ffmpeg: the downloads of Libre Panel carry it; "

@@ -74,6 +74,7 @@ export function useHealth() {
   useShared(loadServiceStates, 5000);
   useShared(loadUnlock, 0); // (a run of the setup follows itself)
   useShared(loadOnce, 0);
+  useShared(loadSystem, 0); // what a run with administrator rights holds back
   // the question about the standby clip, where smooth motion lacks its name: it is for the panel
   // at hand, and asked again when that changes
   const panel = useStore((s) => [
@@ -96,6 +97,7 @@ export function useHealth() {
     sourceStates: s.sourceStates,
     serviceStates: s.serviceStates,
     clipQuestion: s.clipQuestion,
+    system: s.systemInfo,
   }));
   return healthOf(facts);
 }
@@ -240,6 +242,14 @@ export function healthOf(facts) {
         title,
         text: t("It needs the program ffmpeg, which turns the pictures into video and is not on this computer. The downloads of Libre Panel bring it (on Linux, your software centre has it too); then start the panel again."),
         action: go(t("Advanced"), "settings", "panel/panel-advanced"),
+      });
+    } else if (video.gaps.includes("ffmpeg-rights")) {
+      add({
+        id: "video-ffmpeg",
+        tone: "warn",
+        title,
+        text: t("Libre Panel runs with administrator rights, and the video program named under Advanced lies in a folder that other programs may change: it is not started with those rights. Without administrator rights it is used again."),
+        action: go(t("Start and system"), "settings", "system"),
       });
     } else if (video.gaps.includes("ffmpeg-path")) {
       add({
@@ -407,6 +417,22 @@ export function healthOf(facts) {
   }
   if (panel.notice) {
     add({ id: "theme", tone: "warn", title: t("A theme is missing"), text: panel.notice, action: go(t("Choose a theme"), "home", "themes") });
+  }
+  // -- administrator rights: the plugin folders and programs this run does not use (rights.py)
+  const held = facts.system?.held_back;
+  const ffmpegSaid = items.some((item) => item.id === "video-ffmpeg");
+  const heldBack = [
+    ...(held?.plugins || []).map((name) => t("the plugin {name}", { name })),
+    ...(held?.programs || []).filter((setting) => !(ffmpegSaid && setting === "video.ffmpeg")),
+  ];
+  if (heldBack.length) {
+    add({
+      id: "rights",
+      tone: "warn",
+      title: t("Held back while Libre Panel runs as administrator"),
+      text: t("So that no other program gets those rights, Libre Panel then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change. Held back: {list}. The sensor service reads the locked sensors without these rights, so Libre Panel itself seldom needs them.", { list: heldBack.join(", ") }),
+      action: go(t("Start and system"), "settings", "system"),
+    });
   }
   if (running && settings?.restart?.length) {
     add({

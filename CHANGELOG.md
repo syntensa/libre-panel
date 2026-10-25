@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+**Security**
+- **With administrator rights, nothing that other programs can change is loaded or
+  started.** Started with the highest rights (*Start with Windows → With administrator
+  rights*, or "Run as administrator"), Libre Panel used to load the plugin folders in your
+  profile and start the ffmpeg named in config.toml with those rights, and any program you
+  run may change both. Now it loads no plugin folders from there and starts ffmpeg,
+  PresentMon and the AI agents' programs only from Program Files, Windows or its own
+  folder (as root on Linux: folders that belong to root). A `video.ffmpeg` elsewhere is
+  passed over for the program that came with Libre Panel, so smooth motion goes on;
+  Settings → Overview says what was held back. The sensor service reads the locked sensors
+  without these rights, so they are seldom needed. Thanks to an outside review for pointing
+  at it.
+
 **Changes**
 - **30 frames a second by default**: the video mode runs at 30 instead of 50. On the panels it
   still looks smooth, and it asks far less of the PC: measured with two panels, 7.5 % of a

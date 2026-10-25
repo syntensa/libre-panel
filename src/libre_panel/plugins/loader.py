@@ -27,6 +27,7 @@ from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Any
 
+from libre_panel import rights
 from libre_panel.config import config_dir
 
 log = logging.getLogger(__name__)
@@ -92,6 +93,8 @@ class Found:
 class Registry:
     parts: dict[str, dict[str, Found]] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
+    # the plugin folders not loaded because Libre Panel runs with the highest rights (rights.py)
+    held_back: list[str] = field(default_factory=list)
 
     def add(self, found: Found) -> None:
         kind = self.parts.setdefault(found.kind, {})
@@ -197,7 +200,15 @@ def discover(folder: Path | None = None) -> Registry:
             registry.add(Found(kind, entry.name, entry.value, source))
     root = folder or plugins_dir()
     if root.is_dir():
-        for plugin in sorted(p for p in root.iterdir() if (p / PLUGIN_FILENAME).is_file()):
+        plugins = sorted(p for p in root.iterdir() if (p / PLUGIN_FILENAME).is_file())
+        if plugins and not rights.safe_place(root):
+            # with the highest rights, code that programs without them may change: never
+            registry.held_back = [plugin.name for plugin in plugins]
+            log.warning("plugins: Libre Panel runs with the highest rights and loads no plugin "
+                        "folder from %s, where others may change them: %s", root,
+                        ", ".join(registry.held_back))  # fmt: skip
+            plugins = []
+        for plugin in plugins:
             _read_folder(plugin, registry)
     for error in registry.errors:
         log.error("plugins: %s", error)
