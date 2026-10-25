@@ -52,7 +52,7 @@ from libre_panel.editor import access, history
 from libre_panel.editor import settings as app_settings
 from libre_panel.editor.news import News
 from libre_panel.editor.presets import presets_for_editor
-from libre_panel.editor.updates import Updates
+from libre_panel.editor.updates import Install, UpdateError, Updates
 from libre_panel.fonts import BUILTIN_PREFIX, DEFAULT_FONT, builtin_font_path, builtin_fonts
 from libre_panel.i18n import t
 from libre_panel.icons import ICON_NAMES
@@ -368,6 +368,7 @@ class EditorState:
         self.start_screen_jobs: Any = None  # the panel's own screens (a test puts a fake panel)
         self.news = News(config_path)  # whom Start tells what is new (news.py)
         self.updates = Updates(config_path)  # whether a newer version is out (updates.py)
+        self.install = Install()  # "Update to …": its download and putting it in place
         self._doctor: Any = None  # the panel test of Live → Diagnose (doctor_session.py)
         self._experiment: Any = None  # the video experiment's run (experiment.py)
 
@@ -1465,6 +1466,29 @@ class EditorHandler(BaseHTTPRequestHandler):
         """Whether a newer version is out (updates.py); ``?now=1`` asks GitHub at once."""
         self._json(self.state.updates.state(self._check_updates(), now="now" in query))
 
+    def _update_install(self) -> None:
+        """``{"action": "download"}``: fetch the newer version for this kind of install and
+        check it; ``{"action": "install"}``: put it in place, and this app quits for it to
+        start (the Windows setup, the portable zip, the AppImage), or show the folder of the
+        download (the Linux tarball). Answers as ``GET /api/update/install`` (updates.py)."""
+        payload = self._read_json()
+        if payload is None:
+            return
+        action = payload.get("action") if isinstance(payload, dict) else None
+        try:
+            if action == "download":
+                update = self.state.updates.state(self._check_updates())
+                answer = self.state.install.download(update["latest"] if update["newer"] else None)
+            elif action == "install":
+                controls = self.controls
+                quit = None if controls is None else (lambda: controls.act("quit"))
+                answer = self.state.install.install(quit)
+            else:
+                return self._error('expected {"action": "download" or "install"}')
+        except UpdateError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        self._json(answer)
+
     def _update_later(self) -> None:
         """``{"later": "0.7.0"}``: the card of that version was closed (updates.py)."""
         payload = self._read_json()
@@ -2381,6 +2405,7 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/sequence", lambda h, m, u: h._sequence()),
     Route("GET", "/api/news", lambda h, m, u: h._json(h.state.news.state())),
     Route("GET", "/api/update", lambda h, m, u: h._update(parse_qs(u.query))),
+    Route("GET", "/api/update/install", lambda h, m, u: h._json(h.state.install.state())),
     Route("GET", "/api/history", lambda h, m, u: h._history(parse_qs(u.query))),
     # a notice from another program: with the notify key instead of the token (notify.py)
     Route("POST", "/api/ai/hook", lambda h, m, u: h._ai_in("hook", u), notify=True),
@@ -2451,6 +2476,7 @@ ROUTES: tuple[Route, ...] = (
     Route("POST", "/api/sequence", lambda h, m, u: h._set_sequence()),
     Route("POST", "/api/news", lambda h, m, u: h._see_news()),
     Route("POST", "/api/update", lambda h, m, u: h._update_later()),
+    Route("POST", "/api/update/install", lambda h, m, u: h._update_install()),
     Route("POST", "/api/start-screen", lambda h, m, u: h._start_screen_action()),
     *(
         Route("POST", path, lambda h, m, u, name=name: h._settings(name, body=True))

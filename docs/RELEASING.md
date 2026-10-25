@@ -42,8 +42,9 @@ workflow fills that release in.
 The tag starts `release.yml`: it checks that the tag matches the version and
 that CHANGELOG.md has its section, runs the tests, builds the PyInstaller
 bundles and tests each download. Only when all of that passed, it publishes
-the GitHub Release with all files, its notes taken from the CHANGELOG
-section. Then the PyPI upload, after approval, if it is set up.
+the GitHub Release with all files and `SHA256SUMS`, the SHA-256 of each (the
+app's *Update to* checks its download against it), its notes taken from the
+CHANGELOG section. Then the PyPI upload, after approval, if it is set up.
 
 A version like `0.7.0rc1` (with a section `## 0.7.0rc1` in CHANGELOG.md) is a
 pre-release to try before everyone has it: it becomes a **draft**, which only
@@ -52,10 +53,12 @@ out. Without git: *Actions → Release → Run workflow* on `main`, with the ver
 (`0.7.0rc1`) in *Version for a draft release*; a pushed tag `v0.7.0rc1` does the
 same. Not *Draft a new release → Publish release* on github.com: that publishes
 it for everyone. *Publish release* on the draft's page makes it a public
-pre-release (and makes its tag); the app's update check never offers one, and an
-installed pre-release hears of the release that follows it (`0.7.0` after
-`0.7.0rc1`). A run keeps none of the files it built: they are only ever in a
-release (on a public repository anyone signed in could download a run's files).
+pre-release (and makes its tag); the app's update check offers it only to an
+installed pre-release of the same minor version (`0.7.0rc2` to `0.7.0rc1`), never
+to a release, and an installed pre-release hears of the release that follows it
+(`0.7.0` after `0.7.0rc1`). A run keeps none of the files it built: they are only
+ever in a release (on a public repository anyone signed in could download a run's
+files).
 
 Every download is tested on its own system before it is attached:
 

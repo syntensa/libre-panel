@@ -344,6 +344,135 @@ def test_report_a_panel_tells_windows_how_to_open_a_terminal(app_url):  # noqa: 
         expect(link).to_have_attribute("href", "https://example.invalid/form")
 
 
+# -- Update to: the release's download, checked, then Install and restart ------------------------
+
+SETUP_FILE = "libre-panel-9.1.0-windows-x64-setup.exe"
+FILES_OF = "https://github.com/syntensa/libre-panel/releases/download/v9.1.0/"
+NEWER = {
+    "version": "9.1.0",
+    "page": "https://github.com/syntensa/libre-panel/releases/tag/v9.1.0",
+    "download": FILES_OF + SETUP_FILE,
+    "notes": "Something new on every screen.",
+    "published": "2026-11-01T10:00:00Z",
+    "asset": {"name": SETUP_FILE, "url": FILES_OF + SETUP_FILE, "size": 100_000_000},
+    "sums": FILES_OF + "SHA256SUMS",
+}
+
+
+def newer_out(kind="setup", latest=NEWER):
+    """/api/update: Libre Panel looks, and 9.1.0 is out."""
+    from libre_panel import __version__
+
+    return answer({"check": True, "current": __version__, "kind": kind, "latest": latest,
+                   "newer": True, "asked": 1_790_000_000, "error": "", "later": ""})  # fmt: skip
+
+
+class InstallRoute:
+    """/api/update/install as the server answers it: ``state`` (which a test moves on, as the
+    download would), and what a POST makes of it (``answers``: by its action)."""
+
+    def __init__(self, **answers):
+        from libre_panel.editor.updates import IDLE
+
+        self.idle = {**IDLE}
+        self.state, self.answers, self.posts = self.idle, answers, []
+
+    def at(self, state, **more):
+        return {**self.idle, "version": "9.1.0", "how": "setup", "file": SETUP_FILE,
+                "total": 100_000_000, "state": state, **more}  # fmt: skip
+
+    def __call__(self, route, request):
+        if request.method == "POST":
+            action = json.loads(request.post_data)["action"]
+            self.posts.append(action)
+            self.state = self.answers[action]
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(self.state))
+
+
+def test_update_to_downloads_checks_and_installs_on_a_second_click(app_url):  # noqa: F811
+    """Settings → About: what the button does is said first; the download's progress, its
+    check, then Install and restart, which the app closes for."""
+    install = InstallRoute()
+    install.answers = {
+        "download": install.at("downloading", done=40_000_000),
+        "install": install.at("installing", checked=True),
+    }
+    routes = {"**/api/update*": newer_out(), "**/api/update/install": install}
+    with browser_page(app_url, "settings/about", routes=routes) as page:
+        row = page.locator("[data-about-update]")
+        expect(row).to_contain_text("Libre Panel 9.1.0 is out")
+        expect(row).to_contain_text("Something new on every screen.")
+        expect(row).to_contain_text("installs the new version without questions (Windows may ask")
+        expect(row.get_by_role("link", name="What is new")).to_have_attribute("href", NEWER["page"])
+        row.get_by_role("button", name="Update to 9.1.0").click()
+        expect(row.get_by_role("status")).to_have_text("Downloading: 40.0 MB of 100.0 MB")
+        expect(row.locator("progress")).to_have_attribute("value", "40000000")
+        install.state = install.at("downloading", done=70_000_000)
+        expect(row.get_by_role("status")).to_have_text("Downloading: 70.0 MB of 100.0 MB")
+        install.state = install.at("verifying", done=100_000_000)
+        expect(row.get_by_role("status")).to_have_text("Checking the download …")
+        expect(row.get_by_role("button", name="Install and restart")).to_have_count(0)
+        install.state = install.at("ready", done=100_000_000, checked=True)
+        expect(row.get_by_role("status")).to_contain_text("checked against the release's checksums")
+        row.get_by_role("button", name="Install and restart").click()
+        expect(row.get_by_role("status")).to_have_text(
+            "Installing: Libre Panel closes and starts again in a moment."
+        )
+        assert install.posts == ["download", "install"]
+
+
+def test_what_went_wrong_with_the_update_is_said_in_words(app_url):  # noqa: F811
+    install = InstallRoute()
+    words = "The download is not the file the release names: its SHA-256 differs. It is not …"
+    install.answers = {"download": install.at("error", error=words)}
+    install.state = install.at("error", error="The download did not work: no network")
+    routes = {"**/api/update*": newer_out(), "**/api/update/install": install}
+    with browser_page(app_url, "settings/about", routes=routes) as page:
+        row = page.locator("[data-about-update]")
+        expect(row.get_by_role("alert")).to_have_text("The download did not work: no network")
+        row.get_by_role("button", name="Try again").click()
+        expect(row.get_by_role("alert")).to_have_text(words)
+        assert install.posts == ["download"]
+
+
+def test_the_linux_tarball_is_downloaded_and_its_folder_shown(app_url):  # noqa: F811
+    tarball = {**NEWER, "asset": {**NEWER["asset"], "name": "libre-panel-9.1.0-linux-x64.tar.gz"}}
+    install = InstallRoute()
+    ready = install.at("ready", how="open", checked=False, where="/home/kim/Downloads")
+    install.state = install.answers["install"] = ready
+    routes = {"**/api/update*": newer_out("linux", tarball), "**/api/update/install": install}
+    with browser_page(app_url, "settings/about", routes=routes) as page:
+        row = page.locator("[data-about-update]")
+        expect(row).to_contain_text("unpack it in place of this folder yourself")
+        expect(row.get_by_role("status")).to_contain_text("only its size was checked")
+        expect(row.get_by_role("status")).to_contain_text("It is in /home/kim/Downloads.")
+        row.get_by_role("button", name="Show the download").click()
+        expect(row.get_by_role("button", name="Install and restart")).to_have_count(0)
+        assert install.posts == ["install"]
+
+
+def test_installed_with_pip_about_gives_the_command_and_no_button(app_url):  # noqa: F811
+    pip = {**NEWER, "download": "", "asset": None, "sums": ""}
+    routes = {"**/api/update*": newer_out("python", pip)}
+    with browser_page(app_url, "settings/about", routes=routes) as page:
+        row = page.locator("[data-about-update]")
+        expect(row.locator("code")).to_contain_text("libre-panel@v9.1.0")
+        expect(row.get_by_role("button", name="Update to 9.1.0")).to_have_count(0)
+        expect(row.get_by_role("link", name="What is new")).to_be_visible()
+
+
+def test_start_s_card_of_the_new_version_has_the_button_too(app_url, isolated_home):  # noqa: F811
+    choose_theme(isolated_home, "lumen")
+    install = InstallRoute()
+    install.answers = {"download": install.at("downloading", done=1_000_000)}
+    routes = {"**/api/update*": newer_out(), "**/api/update/install": install}
+    with browser_page(app_url, "home", routes=routes, allow=PICTURE) as page:
+        card = page.locator("[data-update='new']")
+        expect(card.get_by_role("link", name="Download")).not_to_have_class("btn btn-primary")
+        card.get_by_role("button", name="Update to 9.1.0").click()
+        expect(card.get_by_role("status")).to_have_text("Downloading: 1.0 MB of 100.0 MB")
+
+
 # -- the sections in plain words, what few change under Advanced --------------------------------
 
 

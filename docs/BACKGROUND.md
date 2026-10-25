@@ -32,6 +32,41 @@ With the downloads:
 
 Installed with pip, add the `tray` extra: `pipx install "libre-panel[usb,serial,tray]"`.
 
+## Updating
+
+Where Libre Panel looks for new versions (*Settings → Start and system → New versions*), a
+newer one shows on *Start* and in *Settings → About* with **Update to …**. That click fetches
+the download that fits how Libre Panel was installed, from the release's own files on GitHub
+(over HTTPS only), with its progress, and checks it against the release's `SHA256SUMS`
+(an older release without that file has its size checked). Nothing is installed until the
+second click, **Install and restart**, and the line above the button says what it will do:
+
+- **Windows setup:** Libre Panel quits, the setup runs without questions
+  (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`) into the same folder, for all users or for you
+  only and with the boxes ticked as before (for all users Windows asks for administrator
+  rights), and Libre Panel starts again, also where the setup was cancelled.
+- **Portable zip:** the new version is unpacked into a new folder beside this one
+  (`libre-panel-<version>`) with a copy of its `data` folder, your settings; Libre Panel quits
+  and starts from the new folder, and autostart follows it. The old folder stays: delete it
+  once the new one runs.
+- **AppImage:** the new one is downloaded next to the running one, made executable and takes
+  its place under its file name, so that autostart and shortcuts keep working; Libre Panel
+  quits and starts it.
+- **Linux tarball:** it goes into *Downloads* and *Show the download* opens that folder: unpack
+  it in place of the old folder yourself, as the first time.
+- **pip:** the command that brings the new version is shown instead.
+
+What went wrong is said in words, with *Try again*. Only releases are offered; a pre-release
+that runs is offered the pre-releases of its own minor version too (`0.7.1rc2` after
+`0.7.1rc1`).
+
+By hand, as ever: quit Libre Panel, download the file from the
+[releases](https://github.com/syntensa/libre-panel/releases) and put it where the old one was (the
+setup does that by itself and keeps your settings, which are not in the program's folder; for
+the zip, take the `data` folder along). `sha256sum -c SHA256SUMS --ignore-missing` in the
+download's folder checks it. Installed with pip:
+`pipx install --force "libre-panel[usb,serial,tray] @ git+https://github.com/syntensa/libre-panel@v<version>"`.
+
 ## Tray menu
 
 | Item | What it does |

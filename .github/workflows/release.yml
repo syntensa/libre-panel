@@ -229,6 +229,13 @@ jobs:
           ' CHANGELOG.md | sed -E "s#\]\((docs/|[A-Z]+\.md)#](${base}/\1#g" > notes.md
           test -s notes.md
           printf '\n**Which file?** Windows: `…-setup.exe`, Linux: `….AppImage`; see [Install](https://github.com/%s#install-and-first-start).\n' "$GITHUB_REPOSITORY" >> notes.md
+      - name: SHA-256 sums of the files
+        # SHA256SUMS among the release's files, as sha256sum writes it: the app's "Update to"
+        # checks its download against it (editor/updates.py), anyone can (sha256sum -c)
+        run: |
+          (cd artifacts && sha256sum -- *) > SHA256SUMS
+          mv SHA256SUMS artifacts/
+          cat artifacts/SHA256SUMS
       - name: Publish the release with all files
         env:
           GH_TOKEN: ${{ github.token }}

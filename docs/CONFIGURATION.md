@@ -177,11 +177,14 @@ The panel draws on as before; the app takes a moment longer to open again.
 ## New versions
 
 With `check_updates = true` Libre Panel asks GitHub once a day for its latest release
-(`api.github.com/repos/syntensa/libre-panel/releases/latest`), and Start shows a newer one with
-what is new and the download that fits how it was installed: the setup, the portable .zip, the
-AppImage or the Linux .tar.gz (installed with pip: the command that brings it). The request
-carries what any does (the computer's address and "libre-panel/<version>"); nothing of you or
-the panel. The answer is kept in `updates.json` beside config.toml, with the version whose card
+(`api.github.com/repos/syntensa/libre-panel/releases/latest`; a pre-release that runs asks for
+the latest releases and hears of the pre-releases of its own minor version too, never of a
+draft), and Start shows a newer one with what is new and the download that fits how it was
+installed: the setup, the portable .zip, the AppImage or the Linux .tar.gz (installed with pip:
+the command that brings it). *Update to …* there and in *Settings → About* fetches that
+download, checks it and installs it on a second click ([Updating](BACKGROUND.md#updating)). The
+request carries what any does (the computer's address and "libre-panel/<version>"); nothing of
+you or the panel. The answer is kept in `updates.json` beside config.toml, with the version whose card
 was closed (*Later*): that card does not come again, the next version's does. Without the
 setting Start asks once; `false` never looks. *Settings → Start and system → New versions*
 switches it and looks at once (*Look now*).

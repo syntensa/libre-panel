@@ -1,7 +1,7 @@
-// Settings → About Libre Panel: the version and the licence, where to find help and how to
-// report a panel that is not on the list of supported ones (step by step, with what is
-// connected listed by the app itself), the folders (with "open"), and the notices of the
-// software Libre Panel is built on.
+// Settings → About Libre Panel: the version (and, where a newer one is out, "Update to" it) and
+// the licence, where to find help and how to report a panel that is not on the list of supported
+// ones (step by step, with what is connected listed by the app itself), the folders (with
+// "open"), and the notices of the software Libre Panel is built on.
 
 import { t } from "../../core/i18n.js";
 import { loadAbout, loadReport, openFolder } from "../../core/settings.js";
@@ -9,11 +9,30 @@ import { useStore } from "../../core/state.js";
 import { html, useEffect, useState } from "../../lib/preact.js";
 import { navigate } from "../../shell/views.js";
 import { Icon } from "../../ui/icons.js";
+import { PipCommand, UpdateNow, useUpdate } from "../home/update.js";
 import { Markdown } from "./markdown.js";
 import { Card, Disclosure, Note, SettingRow, copyText } from "./parts.js";
 
 const external = (href, label) =>
   html`<a class="btn" href=${href} target="_blank" rel="noopener noreferrer">${label}<${Icon} name="external" size=${14} /></a>`;
+
+/** A newer version, where Libre Panel looks for one (Settings → Start and system): what is new
+ * and "Update to" it, or, installed with pip, the command. */
+function NewVersion() {
+  const update = useUpdate();
+  if (!update?.check || !update.newer || !update.latest) return null;
+  const { latest } = update;
+  const page = external(latest.page, t("What is new"));
+  return html`<${SettingRow}
+    title=${t("Libre Panel {version} is out", { version: latest.version })}
+    hint=${latest.notes || null}
+    stacked
+    data-about-update
+  >
+    ${update.kind === "python" ? html`<${PipCommand} version=${latest.version} />` : null}
+    ${latest.asset ? html`<${UpdateNow} update=${update} extra=${page} />` : html`<div class="update-card-form">${page}</div>`}
+  <//>`;
+}
 
 function Version() {
   const info = useStore((s) => s.aboutInfo);
@@ -25,6 +44,7 @@ function Version() {
     >
       ${external(info.links.project, t("Project page"))}
     <//>
+    <${NewVersion} />
     <${SettingRow}
       title=${t("Licence")}
       hint=${t("GNU General Public License, version 3 or later (GPL-3.0-or-later). You may use, study, share and change it.")}
