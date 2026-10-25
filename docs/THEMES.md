@@ -1013,11 +1013,18 @@ soonest. The requests carry what any does (the computer's address, `libre-panel/
 nothing of you or your panel.
 
 Each theme shows with its picture, its name, its author, the panel sizes it is made for and
-what it shows. **Install** downloads its zip from beside the list (a redirect to another
-host is not followed), checks it against the SHA-256 the list names (a file that differs is
-not installed) and then imports it as above, so it lands among your themes, marked, in a
-folder named as the list names it.
+what it shows. Those made for the panel chosen in the header come first, marked *Fits*; the
+others wait under *All sizes*, and where none fits the section says so. **Install** downloads
+its zip from beside the list (a redirect to another host is not followed), checks it against
+the SHA-256 the list names and that the theme in it is made for the sizes the list names (a
+file that differs is not installed) and then imports it as above, so it lands among your
+themes, marked, in a folder named as the list names it; **Show on the panel** then puts it on
+the chosen panel. One made for another size asks first, as it would be scaled.
 
-To share yours with everyone: export it, add the zip and a picture under `community/themes/`
-in a pull request, with an entry in `index.json`. How, and the format of the list, are in
-[community/themes/README.md](../community/themes/README.md).
+To share yours with everyone: *Share with everyone…* (the globe on its card, on your own
+themes) asks what it is called, who made it and what it shows, saves it as a `.zip` and opens
+GitHub's *Share a theme* form, filled in, for the file to be dragged in. A workflow checks it
+in a job that may write nothing, draws its picture with the demo readings and opens the pull
+request; someone looks at it before it is merged. By hand: export it, add the zip and a
+picture under `community/themes/` in a pull request, with an entry in `index.json`. How, and
+the format of the list, are in [community/themes/README.md](../community/themes/README.md).

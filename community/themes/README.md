@@ -1,13 +1,31 @@
 # Community themes
 
 Themes that people share with everyone who uses Libre Panel. The app shows them on
-*Start → Themes* under **Community themes**, with their pictures, and installs one with a
-click. It reads `index.json` in this folder (on the `main` branch) and downloads a theme's
-`.zip` from here, nowhere else; before anything is put in place it checks the zip against
-the SHA-256 in `index.json`, and then as it checks any shared theme
+*Start → Themes* under **Community themes**, with their pictures, those made for the chosen
+panel first, and installs one with a click. It reads `index.json` in this folder (on the
+`main` branch) and downloads a theme's `.zip` from here, nowhere else; before anything is put
+in place it checks the zip against the SHA-256 in `index.json` and that the theme in it is
+made for the sizes the entry names, and then as it checks any shared theme
 ([Sharing a theme](../../docs/THEMES.md#sharing-a-theme)).
 
 ## Share yours
+
+1. In Libre Panel, on *Start → Themes*, click the globe on your theme's card: **Share with
+   everyone…**. Say what it is called, who made it and what it shows, and tick that every
+   picture and font in it may be shared.
+2. **Save the theme**: the `.zip` lands in your downloads. **Open the form**: GitHub's
+   *Share a theme* form opens, filled in. Drag the `.zip` into *The theme* and send it (that
+   needs a free GitHub account).
+3. A check runs by itself ([community-theme.yml](../../.github/workflows/community-theme.yml)):
+   it looks at the theme as the app looks at every shared theme, works out the panel size it is
+   made for, draws its picture with made-up readings, and opens a pull request with the zip,
+   the picture and the entry. It answers on your issue, with what to change where something is
+   wrong; edit the issue and it runs again.
+4. Someone has a look and merges it. Within the hour it shows in everyone's app.
+
+### By hand
+
+The same without the app's help, for themes made elsewhere or more at once:
 
 1. Make the theme in Libre Panel. On *Start → Themes*, **Export…** on its card saves it as
    `<name>.zip`: its `theme.json` and the pictures and fonts it uses, nothing else.

@@ -25,6 +25,7 @@ import re
 import secrets
 import shutil
 import stat
+import tempfile
 import threading
 import zipfile
 import zlib
@@ -350,3 +351,14 @@ def import_theme(
         if staging.exists():
             shutil.rmtree(staging, ignore_errors=True)
     return {"id": chosen, "name": theme.name, "files": len(kept)}
+
+
+def inspect_shared(data: bytes) -> dict[str, Any]:
+    """What a shared theme's zip holds, checked as an import checks it and kept nowhere:
+    ``{"name", "size": [width, height], "author", "license"}``; :class:`ShareError` as
+    :func:`import_theme` has it."""
+    with tempfile.TemporaryDirectory() as place:
+        done = import_theme(data, themes=Path(place))
+        theme = load_theme(Path(place) / done["id"])
+    return {"name": theme.name, "size": [theme.width, theme.height], "author": theme.author,
+            "license": theme.license}  # fmt: skip

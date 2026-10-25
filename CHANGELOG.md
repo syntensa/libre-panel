@@ -16,6 +16,14 @@
   at it.
 
 **New**
+- **Community themes: sharing in two clicks, and what fits your panel first.** *Share with
+  everyone…* (the globe on your theme's card) asks what it is called and shows, saves the
+  theme and opens GitHub's form, filled in: drag the file in and send. A workflow checks it
+  where it can write nothing, draws its picture with the demo readings and opens the pull
+  request. In the list, the themes made for the panel chosen in the header come first,
+  marked *Fits*; one made for another size asks before it installs, an installed one goes on
+  the panel with one click, and a download whose theme is not the size its entry says is
+  not installed.
 - **JONSBO ZC-360: each screen a panel of its own.** One click in Settings → Panels makes the
   three fan screens three panels of 640×180 and back: each shows a theme of its own, the
   header's panel switch picks the one Live shows and Design edits, and the three keep one

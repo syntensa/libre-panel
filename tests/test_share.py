@@ -18,6 +18,7 @@ from test_editor_server import request, server  # noqa: F401
 from libre_panel.config import user_themes_dir
 from libre_panel.editor import access, community
 from libre_panel.fonts import builtin_font_path
+from libre_panel.theme import share
 from libre_panel.theme.model import find_theme, load_theme, save_theme
 from libre_panel.theme.share import ShareError, export_theme, import_theme, referenced_files
 
@@ -350,6 +351,22 @@ def test_a_download_that_is_not_the_listed_file_is_not_installed(server, github)
     status, answer = request(server, "POST", "/api/community/install", {"id": "aurora"})
     assert status == 400 and "checksum differs" in answer["error"]
     assert what_is_there() == []
+
+
+def test_a_theme_made_for_another_panel_than_its_entry_says_is_not_installed(
+    server,  # noqa: F811
+    github,
+):
+    theme = zipped({"aurora/theme.json": theme_json(name="Aurora", display={"model": "custom",
+                    "width": 800, "height": 480}), "aurora/assets/back.png": png()})  # fmt: skip
+    index = json.loads(github["/main/community/themes/index.json"])
+    index["themes"][0]["sha256"] = hashlib.sha256(theme).hexdigest()
+    github["/main/community/themes/index.json"] = json.dumps(index).encode()
+    github["/main/community/themes/aurora/aurora.zip"] = theme
+    status, answer = request(server, "POST", "/api/community/install", {"id": "aurora"})
+    assert status == 400 and "made for 800 × 480" in answer["error"]
+    assert what_is_there() == []
+    assert share.inspect_shared(theme)["size"] == [800, 480]
 
 
 def test_offline_the_section_says_so_and_nothing_is_installed(server):  # noqa: F811

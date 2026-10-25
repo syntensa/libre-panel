@@ -987,6 +987,63 @@
   margin: 0 8px 14px;
 }
 
+/* the chosen panel's community themes first, every size a click away */
+.community-scope {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 8px 12px;
+}
+
+.community-fits {
+  align-self: flex-start;
+}
+
+.community-card-show {
+  align-self: flex-start;
+  gap: 6px;
+}
+
+/* sharing a theme with everyone: what it is called and shows, then GitHub's form */
+.share-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.share-count {
+  align-self: flex-end;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.share-allowed {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.share-allowed input {
+  margin-top: 2px;
+}
+
+.share-steps {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 22px;
+  color: var(--text-2);
+  line-height: 1.5;
+}
+
+.share-steps .done {
+  color: var(--text);
+}
+
 /* what a click on the picture does, said over it while the pointer is there */
 .theme-card-picture {
   position: relative;
