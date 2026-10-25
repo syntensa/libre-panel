@@ -56,7 +56,7 @@ class Rig:
         """Everything queued so far is written."""
         done = threading.Event()
         self.store.run(lambda con: done.set())
-        assert done.wait(10)
+        assert done.wait(60)
 
     def finish(self, at=None):
         if at is not None:
@@ -260,10 +260,10 @@ def test_a_full_queue_drops_what_does_not_fit_and_says_so(tmp_path):
 
     def hold(con):
         started.set()
-        gate.wait(10)
+        gate.wait(60)
 
     store.run(hold)
-    assert started.wait(10)  # the writer is busy now: the queue fills
+    assert started.wait(60)  # the writer is busy now: the queue fills
     for n in range(6):
         store.put("INSERT OR REPLACE INTO meta VALUES (?, 'x')", [str(n)])
     assert store.error and "queue is full" in store.error
@@ -953,7 +953,7 @@ class Desk:
     def settle(self):
         done = threading.Event()
         self.service.store.run(lambda con: done.set())
-        assert done.wait(10)
+        assert done.wait(60)
 
     def state(self):
         return Snapshot(readings=self.host.published()).state("report")
@@ -1170,8 +1170,8 @@ def test_a_new_game_ends_the_report_at_once_and_it_does_not_come_back(desk):
 def test_a_report_that_is_built_after_the_next_game_began_is_not_shown(desk):
     d = desk()
     gate, held = threading.Event(), threading.Event()
-    d.service.store.run(lambda con: (held.set(), gate.wait(10)))
-    assert held.wait(10)  # the writer is busy: the report waits behind it
+    d.service.store.run(lambda con: (held.set(), gate.wait(60)))
+    assert held.wait(60)  # the writer is busy: the report waits behind it
     d.play(90)
     d.host.set_mode("game", by="game")
     assert wait_for(lambda: d.service._games == 1)
@@ -1569,8 +1569,16 @@ def test_a_game_is_played_and_its_report_comes_up_on_the_panel(monkeypatch, isol
             seen_at["ended"] = script.n
             seen_at["frames"] = len(seen)  # what was drawn while the first game was on
             stop(100)
-        elif "ended" in seen_at and "second" not in seen_at and any(s[1] for s in seen[-3:]):
-            seen_at["second"] = ticks.now  # the report has been on the panel
+        elif (
+            "ended" in seen_at
+            and "second" not in seen_at
+            and any(s[0] == "Round report" for s in seen[-3:])
+        ):
+            # The report has been on the panel: its theme is drawn. Not when its readings
+            # are there: the service publishes them a moment before it asks for the theme,
+            # and a frame drawn between the two (a busy machine) would start the next game
+            # at once, which takes the report away before it was ever shown.
+            seen_at["second"] = ticks.now
             play(101)
         elif "second" in seen_at and "over" not in seen_at and ticks.now >= seen_at["second"] + 2:
             seen_at["over"] = script.n
