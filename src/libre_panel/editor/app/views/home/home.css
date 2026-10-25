@@ -1377,6 +1377,33 @@
   user-select: all;
 }
 
+/* "Update to" (update.js, on the card and in Settings → About): what it does, the download's
+   progress, then "Install and restart" */
+.update-now {
+  max-width: 640px;
+  margin-top: 10px;
+}
+
+.update-now p.update-now-line,
+.update-now p.update-now-error {
+  margin: 6px 0 0;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.update-now p.update-now-error {
+  color: var(--danger-text);
+}
+
+.update-now progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  margin-top: 12px;
+  accent-color: var(--accent);
+}
+
 /* scenes: a chip to put one on, a cross to take it out */
 .scene-chips li {
   padding: 0;

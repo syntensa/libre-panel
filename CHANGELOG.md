@@ -3,6 +3,14 @@
 ## 0.7.1rc5 — 2026-10-24
 
 **Changes**
+- **Update with one click**: where a newer version is out, Start's card and Settings → About
+  offer "Update to …". The download comes only from this repository's releases over HTTPS and
+  is checked against the published size and the release's `SHA256SUMS` (every release from
+  now on carries that file). A second click installs it: the Windows setup runs silently after
+  the app has quit and the app starts again, a portable zip is unpacked beside the running
+  folder with the settings copied, an AppImage replaces itself in place; a Linux tarball only
+  lands in Downloads. A pre-release is offered pre-releases of its own line, a release only
+  releases.
 - **Themes travel as files, and a community gallery**: Export… on a theme's card (Start →
   Themes) saves it as a .zip with the pictures and fonts it names and nothing of your folders;
   Import… (or the file dropped on the gallery) adds a shared one to yours under a free name,
