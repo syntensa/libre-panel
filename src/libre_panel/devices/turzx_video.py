@@ -55,6 +55,7 @@ from dataclasses import replace
 from PIL import Image
 
 from libre_panel import timing
+from libre_panel.devices import video_state
 from libre_panel.devices.base import Counters, DeviceError, FrameError
 from libre_panel.devices.h264 import (
     Encoder,
@@ -188,7 +189,8 @@ RESTART = _Restart()
 
 # The bit rate "auto" found for a panel (its model, its place on the bus and the picture size),
 # kept per process: a display made anew after a reconnect goes on at it instead of climbing
-# again, and two panels of one model (each on a link of its own) climb each for itself.
+# again, and two panels of one model (each on a link of its own) climb each for itself. The
+# next run starts where this one got to (video_state).
 RATES: dict[tuple[str, str, tuple[int, int]], RateControl] = {}
 
 
@@ -343,6 +345,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
     START_S = 15.0  # the same until its first picture: a cold start (virus scanner, busy PC)
     SWITCH_S = 3.0  # a planned switch: this long for the new ffmpeg's first picture
     SWITCH_HOLD_S = 60.0  # a switch that did not come about waits this long to be tried again
+    RATE_KEPT_S = 10.0  # the rate "auto" found goes into video-state.json at most this often
 
     def __init__(self, config, model: PanelModel | None = None) -> None:
         super().__init__(config, model)
@@ -377,6 +380,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self._coming = self._quiet = 0
         self._switch_began = self._switch_held = 0.0
         self._handing = threading.Lock()
+        self._rate_key: tuple[str, str, tuple[int, int]] | None = None
+        self._rate_kept, self._rate_kept_at = 0.0, -1e9  # what video-state.json has, and when
         self._restarts: list[float] = []
         self._last_frame: Image.Image | None = None
 
@@ -477,8 +482,11 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             place = str(getattr(transport, "place", None) or getattr(transport, "pid", "") or "")
             key = (self.model.id if self.model else "", place, size)
             self.rate = RATES.get(key)
-            if self.rate is None:
-                self.rate = RATES[key] = RateControl(auto_rate(settings, size))
+            if self.rate is None:  # where the last run got to, if it is known
+                start = auto_rate(settings, size)
+                self.rate = RATES[key] = RateControl(start, video_state.rate(key))
+            if key != self._rate_key:
+                self._rate_key, self._rate_kept = key, self.rate.rate
             settings = replace(settings, maxrate=rate_text(self.rate.rate))
         command = ffmpeg_command(self._ffmpeg, size, rotate, settings)
         self._streams += 1
@@ -543,6 +551,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
                 rate_text(rate),
                 "the panel takes less than it is sent" if rate < before else "calm for a minute",
             )
+        self._keep_rate(now)
         due = rate_text(control.rate) != encoder.maxrate and now >= self._switch_held
         if due and self._leaving is None and encoder.alive:
             self._switch()
@@ -588,6 +597,17 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self._switch_held = time.monotonic() + self.SWITCH_HOLD_S
         self.encoder, self.counters.bit_rate = leaving, mbit(leaving.maxrate)
         coming.close()
+
+    def _keep_rate(self, now: float, at_once: bool = False) -> None:
+        """The bit rate "auto" got to, for the next run (video-state.json): written when it
+        changed, at most every :attr:`RATE_KEPT_S`, and when the panel is closed."""
+        control = self.rate
+        if control is None or self._rate_key is None or control.rate == self._rate_kept:
+            return
+        if not at_once and now - self._rate_kept_at < self.RATE_KEPT_S:
+            return
+        video_state.keep_rate(self._rate_key, control.rate)
+        self._rate_kept, self._rate_kept_at = control.rate, now
 
     def _floor_said(self) -> None:
         """Once: the panel cannot keep up at the lowest rate, so it is the pictures."""
@@ -718,6 +738,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self._start_video()
 
     def close(self) -> None:
+        self._keep_rate(time.monotonic(), at_once=True)
         self._stop_video()
         if self.transport is not None and self.session is not None and self._error is None:
             try:

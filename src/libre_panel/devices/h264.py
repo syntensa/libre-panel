@@ -38,6 +38,7 @@ from pathlib import Path
 import psutil
 
 from libre_panel import bundled, winsession
+from libre_panel.devices import video_state
 from libre_panel.devices.base import Counters, DeviceError
 from libre_panel.i18n import t
 
@@ -128,23 +129,28 @@ _PROBED: dict[tuple[str, str], bool] = {}
 
 def encoder_works(ffmpeg: str, encoder: str) -> bool:
     """Whether ``ffmpeg`` can encode with ``encoder`` on this PC (a hardware encoder needs
-    its card and its driver): two small pictures through it, asked once per run."""
+    its card and its driver): two small pictures through it, asked once a week (the answer
+    is kept in video-state.json: a new driver may change it) and taken once per run."""
     key = (ffmpeg, encoder)
     if key not in _PROBED:
-        command = [
-            ffmpeg, "-hide_banner", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
-            "-s", "64x64", "-framerate", "5", "-i", "-", "-frames:v", "2", "-c:v", encoder,
-            "-f", "null", "-",
-        ]  # fmt: skip
-        try:
-            done = subprocess.run(
-                command, input=bytes(64 * 64 * 3 * 2), capture_output=True, timeout=20,
-                creationflags=NO_WINDOW,
-            )  # fmt: skip
-            _PROBED[key] = done.returncode == 0
-        except (OSError, subprocess.TimeoutExpired):
-            _PROBED[key] = False
-        if not _PROBED[key]:
+        works = video_state.probed(ffmpeg, encoder)  # asked within the week
+        if works is None:
+            command = [
+                ffmpeg, "-hide_banner", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt",
+                "rgb24", "-s", "64x64", "-framerate", "5", "-i", "-", "-frames:v", "2",
+                "-c:v", encoder, "-f", "null", "-",
+            ]  # fmt: skip
+            try:
+                done = subprocess.run(
+                    command, input=bytes(64 * 64 * 3 * 2), capture_output=True, timeout=20,
+                    creationflags=NO_WINDOW,
+                )  # fmt: skip
+                works = done.returncode == 0
+            except (OSError, subprocess.TimeoutExpired):
+                works = False
+            video_state.keep_probe(ffmpeg, encoder, works)
+        _PROBED[key] = works
+        if not works:
             log.info("video: %s cannot encode here; x264 does", encoder)
     return _PROBED[key]
 
@@ -183,7 +189,8 @@ class RateControl:
     lately: a failed step is held off for :attr:`HOLD_S`, twice as long each time it fails
     again. :meth:`judge` is called with the run's counters as often as wanted (every
     frame); it answers with the new rate when one is due, else ``None``. The driver switches
-    to a new ffmpeg at the new rate.
+    to a new ffmpeg at the new rate. ``remembered``, the rate an earlier run got to
+    (video-state.json), is where a new run starts: the step at or below it.
     """
 
     WINDOW_S = 10.0
@@ -192,9 +199,9 @@ class RateControl:
     CALM_S = 60.0
     HOLD_S = 600.0
 
-    def __init__(self, start: float) -> None:
+    def __init__(self, start: float, remembered: float = 0.0) -> None:
         self.steps = [step for step in sorted({*RATE_STEPS, start}) if step >= start]
-        self.rate = start
+        self.rate = max((step for step in self.steps if step <= remembered), default=start)
         self.changes = 0
         self.floored = False  # trouble at the start rate: the frames, not the bits
         self._base: tuple[int, int, int] | None = None  # the counts when the window began
