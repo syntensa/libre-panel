@@ -3,6 +3,11 @@
 ## 0.7.1rc5 — 2026-10-24
 
 **Changes**
+- **The GitHub page and the website, shorter and quicker to grasp**: a grid of the features
+  under the download buttons, "Several panels at once" as a section of its own with a picture
+  of three panels, a compact tour with the rest of each part folded away, the theme and panel
+  tables kept, the FAQ folded; nothing was dropped, the long theme descriptions live in
+  THEMES.md. The round report's clips show its new layout.
 - **Video frames cost less**: the frames go into ffmpeg as four bytes a pixel, as Pillow holds
   them, written from the encoder's own thread; AMD's and NVIDIA's encoders take them as they
   are and convert on the card (BT.601 limited range, as before), x264 and Intel's get the same
