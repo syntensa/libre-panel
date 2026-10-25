@@ -84,7 +84,7 @@ function Picture({ item, width }) {
   useMounted(); // as the panel would show it: its version for a panel on end
   const shown = themeEntry(versionFor(item.id)) || item;
   const [w, h] = shown.size || [480, 320];
-  return html`<img src=${endpoints.previewUrl(shown.id, width)} alt="" loading="lazy" decoding="async" width=${w} height=${h} />`;
+  return html`<img src=${endpoints.previewUrl(shown.id, width)} alt="" loading="lazy" fetchpriority="low" decoding="async" width=${w} height=${h} />`;
 }
 
 /**

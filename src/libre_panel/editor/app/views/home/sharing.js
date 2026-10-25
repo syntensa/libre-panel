@@ -88,7 +88,7 @@ function CommunityCard({ entry, busy, onInstall }) {
   return html`<article class="theme-card community-card" data-community=${entry.id}>
     <div class="theme-card-main">
       <span class="theme-card-picture">
-        <img src=${endpoints.communityPreviewUrl(entry.id)} alt="" loading="lazy" decoding="async" />
+        <img src=${endpoints.communityPreviewUrl(entry.id)} alt="" loading="lazy" fetchpriority="low" decoding="async" />
       </span>
       <span class="theme-card-text">
         <span class="theme-card-title"><span class="theme-card-name">${entry.name}</span></span>

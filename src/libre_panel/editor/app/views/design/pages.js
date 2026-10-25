@@ -226,7 +226,7 @@ function PageCard({ item, current, open }) {
     </div>
     ${item.theme
       ? html`<button type="button" class="page-card-main" onClick=${() => open(item)} title=${t("Edit its theme")}>
-          <img alt="" src=${endpoints.previewUrl(versionFor(item.theme), 240)} loading="lazy" />
+          <img alt="" src=${endpoints.previewUrl(versionFor(item.theme), 240)} loading="lazy" fetchpriority="low" />
           ${current ? html`<span class="page-card-badge">${t("Being edited")}</span>` : null}
         </button>`
       : null /* the normal theme shows then, as the choice under it says: no empty picture */}

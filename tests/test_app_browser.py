@@ -153,17 +153,6 @@ def open_collections(page):
         toggle.click()
 
 
-def pictures_arrived(page, timeout=60_000):
-    """Wait until the pictures the page has asked for have come. The server draws a theme's
-    preview one after another, 3 to 5 seconds each on a busy machine, and what else is asked
-    of it (a theme to open) waits for its turn. (A lazy picture far below is not asked for yet.)"""
-    page.wait_for_function(
-        "[...document.images].some((img) => img.complete)"
-        " && [...document.images].every((img) => !img.currentSrc || img.complete)",
-        timeout=timeout,
-    )
-
-
 def own_themes(page):
     """The ids of Libre Panel's own themes and yours that Start leads with: not a collection's,
     not one kept for a page (the round report; music's or the clock's page only while it is
@@ -298,7 +287,6 @@ def test_start_has_a_gallery_of_every_theme(app_url, isolated_home):
         other = next(i for i in shown if i != "libre-default")
         card = page.locator(f'.theme-card[data-theme="{other}"]')
         card.hover()
-        pictures_arrived(page)  # the server is busy with the gallery's pictures until then
         card.locator(".theme-card-edit").click()  # opens it in Design
         expect(page.locator(".tab[aria-current='page']")).to_have_text("Design", timeout=30000)
         assert js(page, "window.libre.store.get().doc.id") == other
