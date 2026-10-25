@@ -427,6 +427,51 @@ def test_a_reading_that_is_not_a_number_is_no_reading_and_poisons_nothing(value)
     assert renderer._cache["m"][0][0] == "50" and not renderer.moving
 
 
+def test_readings_are_looked_at_once_while_they_stay_the_same_objects():
+    """The check for numbers that are none looks at the readings that are not the objects it
+    saw in the same place the frame before (in video mode a new dict every frame, of nearly
+    all the same readings); a new one, new keys, or one that was not a number, and it looks
+    again. The result is the check's without a memory, frame by frame."""
+    from libre_panel.render.renderer import _Finite, _finite
+
+    looked = []
+
+    class Seen(Reading):  # a Reading that says when its value is read
+        def __getattribute__(self, name):
+            if name == "value":
+                looked.append(object.__getattribute__(self, "key"))
+            return object.__getattribute__(self, name)
+
+    steady = {f"r{n}": Seen(f"r{n}", float(n)) for n in range(20)}
+    check = _Finite()
+
+    def frame(**fresh):
+        looked.clear()
+        snapshot = Snapshot(readings={**steady, **fresh})
+        out = check(snapshot)
+        seen = sorted(looked)
+        expected = _finite(Snapshot(readings=dict(snapshot.readings)))
+        assert {k: r.value for k, r in out.readings.items()} == {
+            k: r.value for k, r in expected.readings.items()
+        }
+        return out, seen
+
+    assert len(frame()[1]) == 20  # all, the first time
+    assert frame()[1] == []  # a new dict, the same readings: none
+    load = Seen("load", 3.0)
+    assert frame(load=load)[1] == sorted([*steady, "load"])  # new keys: all again
+    assert frame(load=load)[1] == []
+    assert frame(load=Seen("load", 4.0))[1] == ["load"]  # a new reading in its place: that one
+    nan = Seen("load", math.nan)
+    out, seen = frame(load=nan)
+    assert seen == ["load"] and out.readings["load"].value is None  # not drawn
+    assert out.readings["r3"] is steady["r3"]
+    out, seen = frame(load=nan)
+    assert len(seen) == 21 and out.readings["load"].value is None  # looked at again: all
+    assert frame(load=load)[1] == sorted([*steady, "load"])
+    assert frame(load=load)[1] == []
+
+
 def test_a_value_that_is_not_a_number_is_a_gap_in_a_graphs_history():
     """In the PNG path (a graph of ``history`` readings) and in video mode (the motion's
     history): a gap in the curve, and no range worked out from NaN."""

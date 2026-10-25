@@ -80,6 +80,7 @@ class Meter:
             "blocks_per_s": rate(3) if video else None,
             "max_depth": counters.max_depth if video else None,
             "bit_rate": counters.bit_rate if video else None,
+            "encoder": (counters.encoder or None) if video else None,  # "h264_amf, rgb0 turned"
             "waits": counters.waits if video else None,
             "drops": counters.drops if video else None,
             "usb_errors": counters.usb_errors,

@@ -279,10 +279,10 @@ const num = (value, digits = 0) => (value == null ? "–" : Number(value).toFixe
 /** The results as plain text, to paste into an issue. */
 function resultsText(results) {
   const labels = STEP_LABELS();
-  const lines = ["step\tpanel\tfps\tKB/s\tcap\twaited\tdropped\tfaults\tverdict"];
+  const lines = ["step\tpanel\tfps\tKB/s\tcap\tencoder\twaited\tdropped\tfaults\tverdict"];
   for (const result of results) {
     for (const p of result.panels) {
-      lines.push([labels[result.id] || result.id, p.panel, num(p.fps), num(p.kbps), p.bit_rate ?? "–", p.waits, p.drops, p.faults, p.verdict].join("\t"));
+      lines.push([labels[result.id] || result.id, p.panel, num(p.fps), num(p.kbps), p.bit_rate ?? "–", p.encoder ?? "–", p.waits, p.drops, p.faults, p.verdict].join("\t"));
     }
   }
   return lines.join("\n");

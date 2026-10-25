@@ -75,6 +75,7 @@ class Counters:
     max_depth: int = 0  # video: the deepest queue the panel reported
     slow_blocks: int = 0  # video: blocks the panel took longer than a frame to accept
     bit_rate: float = 0.0  # video: the bit rate's cap in force, Mbit/s ("auto" moves it)
+    encoder: str = ""  # video: the encoder and what it is fed ("h264_amf, rgb0 turned")
     usb_errors: int = 0  # errors on the panel's link that made the driver reconnect
     panel_restarts: int = 0  # video: restarts of the panel to clear a hung decoder
     ffmpeg_restarts: int = 0  # video: times ffmpeg stopped by itself and was started again

@@ -13,9 +13,11 @@ of a reading's name a heading, in the language of the panel).
 
 from __future__ import annotations
 
+import math
 import re
 import string
 from contextvars import ContextVar
+from functools import lru_cache
 from typing import Any
 
 _ALLOWED_FIELDS = {"value", "unit", "label"}
@@ -128,6 +130,26 @@ _FORMATTER = _SafeFormatter()
 
 
 def safe_format(fmt: str, value: Any, unit: str = "", label: str = "") -> str:
+    """``fmt`` with the reading's ``value``, ``unit`` and ``label``. A text depends on nothing
+    else, so the last ones made are kept (:func:`_kept`): a steady value, a list's names, the
+    same few numbers of a value that glides back and forth are made once."""
+    try:
+        hash(value)
+    except TypeError:  # (a value that is no key, e.g. a list: made each time)
+        return _made(fmt, value, unit, label)
+    # the value's type and the sign of a zero go with it: 1, 1.0 and True are equal as keys
+    # but not as texts, nor are 0.0 and -0.0 ("{value:.0f}" makes "0" and "-0")
+    sign = math.copysign(1.0, value) if isinstance(value, float) and value == 0 else 0.0
+    return _kept(fmt, value.__class__, value, sign, unit, label)
+
+
+@lru_cache(maxsize=1024)
+def _kept(fmt: str, kind: type, value: Any, sign: float, unit: str, label: str) -> str:
+    """The text :func:`_made` makes, kept by all it depends on (errors are not kept)."""
+    return _made(fmt, value, unit, label)
+
+
+def _made(fmt: str, value: Any, unit: str, label: str) -> str:
     token = _UNIT.set(unit or "")
     try:
         text = _FORMATTER.format(fmt, value=value, unit=unit, label=label)

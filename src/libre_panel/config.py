@@ -144,6 +144,10 @@ port = ""
 # The app asks for that name once, on Start (the tray points to it), and sets this to true when
 # it was answered, whichever way. Put false to be asked again.
 # clip_asked = false
+# How the frames reach ffmpeg: "auto" the cheapest way (AMD's and NVIDIA's encoders take them
+# as drawn and convert the colours on the graphics card); "rgb" the way of before (ffmpeg
+# converts them on the processor), should colours on the panel look shifted.
+# pixels = "auto"
 
 [sensors]
 # Sensor sources, queried in this order: for each reading the first source that
@@ -437,6 +441,10 @@ class VideoConfig:
     # processor; h264_nvenc (NVIDIA) and h264_qsv (Intel) are an experiment to set by hand
     profile: str = "auto"  # "auto" | "baseline" | "main" | "high"
     encoder: str = "auto"  # "auto" | "libx264" | "h264_nvenc" | "h264_amf" | "h264_qsv"
+    # How the frames reach ffmpeg: "auto" four bytes a pixel as they are drawn (rgb0), which
+    # AMD's and NVIDIA's encoders convert on the card; "rgb" the way of before (rgb24, the
+    # colours converted by ffmpeg for every encoder), should colours shift on a panel
+    pixels: str = "auto"  # "auto" | "rgb"
     ffmpeg: str = ""  # path to ffmpeg; empty = the download's own (bundled.py), else PATH
     # The name the video start command (110) needs: the panel's own standby
     # clip, so its standby behaviour stays as it was.
@@ -1101,7 +1109,7 @@ _MAXRATE = re.compile(r"^(auto|[0-9]+(\.[0-9]+)?[kKM]?)$")
 
 
 def _parse_video(v: dict[str, Any]) -> VideoConfig:
-    from libre_panel.devices.h264 import ENCODERS, PROFILES, X264_PRESETS
+    from libre_panel.devices.h264 import ENCODERS, PIXELS, PROFILES, X264_PRESETS
 
     video = VideoConfig()
     video.mode = _expect(v.get("mode", video.mode), str, "video.mode")
@@ -1125,6 +1133,9 @@ def _parse_video(v: dict[str, Any]) -> VideoConfig:
     video.encoder = _expect(v.get("encoder", video.encoder), str, "video.encoder")
     if video.encoder not in ENCODERS:
         raise ConfigError(f"video.encoder: must be one of {', '.join(ENCODERS)}")
+    video.pixels = _expect(v.get("pixels", video.pixels), str, "video.pixels")
+    if video.pixels not in PIXELS:
+        raise ConfigError(f"video.pixels: must be one of {', '.join(PIXELS)}")
     video.keyframe_s = float(
         _expect(v.get("keyframe_s", video.keyframe_s), (int, float), "video.keyframe_s")
     )

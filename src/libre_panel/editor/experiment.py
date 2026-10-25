@@ -124,6 +124,7 @@ def judge(samples: list[dict[str, Any]], first: dict[str, Any], last: dict[str, 
         "kbps": kbps,
         "blocks_per_s": blocks,
         "bit_rate": last.get("bit_rate"),
+        "encoder": last.get("encoder"),  # and what it is fed: "h264_amf, rgb0 turned"
         "waits": waits,
         "drops": drops,
         "faults": faults,
@@ -271,6 +272,7 @@ class Experiment:
             kbps = "-" if p["kbps"] is None else f"{p['kbps']:.0f}"
             parts.append(
                 f"panel {p['panel']} {p['verdict']} ({fps} fps, {kbps} KB/s, cap {p['bit_rate']}, "
-                f"waited {p['waits']}, dropped {p['drops']}, faults {p['faults']})"
+                f"{p.get('encoder') or 'encoder -'}, waited {p['waits']}, dropped {p['drops']}, "
+                f"faults {p['faults']})"
             )
         return "; ".join(parts) or "no panel"

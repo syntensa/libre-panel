@@ -51,6 +51,7 @@ import time
 from collections import deque
 from collections.abc import Callable
 from dataclasses import replace
+from typing import Any
 
 from PIL import Image
 
@@ -63,11 +64,14 @@ from libre_panel.devices.h264 import (
     EncoderStopped,
     RateControl,
     auto_rate,
+    feed_text,
     ffmpeg_command,
     find_ffmpeg,
     mbit,
+    passes_through,
     rate_text,
     resolve_encoder,
+    resolve_feed,
     resolve_profile,
 )
 from libre_panel.devices.models import PanelModel, orientation_of
@@ -102,20 +106,75 @@ DEFAULT_BLOCK = 202752
 POWER_ON_FPS = 30
 
 
-def rgb_bytes(frame: Image.Image) -> bytes:
-    """The RGB bytes of an RGB or RGBA ``frame`` in one piece: Image.tobytes makes them in
-    pieces of 64 KB and joins them, a second copy of the picture on every frame (4 MB on the
-    12.3"). As tobytes makes them where Pillow does not take this way."""
+# The bytes ffmpeg reads for a pixel format (EncoderSettings.pixels), as Pillow packs them:
+# rgb0 is RGBA's four bytes, whose fourth ffmpeg leaves aside (as RGB never showed it).
+RAW_MODES = {"rgb24": "RGB", "rgb0": "RGBA"}
+
+
+def frame_bytes(frame: Image.Image, pixels: str = "rgb24") -> bytes:
+    """The bytes of an RGB or RGBA ``frame`` as ffmpeg reads ``pixels``, in one piece:
+    Image.tobytes makes them in pieces of 64 KB and joins them, a second copy of the picture
+    on every frame (4 MB on the 12.3"). As tobytes makes them where Pillow does not take this
+    way; a frame of another mode is converted."""
+    raw = RAW_MODES[pixels]
+    if frame.mode not in ("RGB", "RGBA"):
+        return frame.convert(raw).tobytes()
+    size = frame.width * frame.height * len(raw)
     try:
         frame.load()
-        encoder = Image._getencoder(frame.mode, "raw", ("RGB",))
+        encoder = Image._getencoder(frame.mode, "raw", (raw,))
         encoder.setimage(frame.im, (0, 0, *frame.size))
-        _, done, data = encoder.encode(frame.width * frame.height * 3)
-        if done == 1 and len(data) == frame.width * frame.height * 3:
+        _, done, data = encoder.encode(size)
+        if done == 1 and len(data) == size:
             return data
     except Exception:  # (another Pillow)
         pass
-    return frame.tobytes("raw", "RGB")
+    return frame.tobytes("raw", raw)
+
+
+def rgb_bytes(frame: Image.Image) -> bytes:
+    """The RGB bytes of an RGB or RGBA ``frame`` in one piece (:func:`frame_bytes`)."""
+    return frame_bytes(frame, "rgb24")
+
+
+PIPE_CHUNK = 1 << 16  # what Pillow packs at a time on its way into the pipe (a pipe's buffer)
+
+
+def write_frame(out: Any, frame: Image.Image, pixels: str) -> None:
+    """``frame`` into ffmpeg's stdin ``out``, packed as ``pixels``. Run by the encoder's writer
+    thread: Pillow packs and writes with the interpreter free for the render loop, through a
+    small buffer of its own (no copy of the picture as bytes: 4 to 6 MB a frame on the 12.3",
+    and for four bytes a pixel a plain copy of each row). Without a file descriptor or with
+    another Pillow: its bytes, written all. An OSError when ffmpeg is gone."""
+    try:
+        fd = out.fileno()
+        frame.load()
+        encoder = Image._getencoder(frame.mode, "raw", (RAW_MODES[pixels],))
+        encoder.setimage(frame.im, (0, 0, *frame.size))
+        to_file = encoder.encode_to_file
+    except Exception:  # (nothing written yet: the slower way)
+        to_file = None
+    if to_file is not None and frame.mode in ("RGB", "RGBA"):
+        code = to_file(fd, PIPE_CHUNK)
+        if code < 0:
+            raise OSError(f"the frame did not go into the pipe (Pillow's code {code})")
+        return
+    view = memoryview(frame_bytes(frame, pixels))
+    while view:  # an unbuffered pipe may take less than asked
+        view = view[out.write(view) :]
+
+
+def _frame_for(
+    encoder: Encoder, frame: Image.Image, settings: EncoderSettings
+) -> Callable[[Any], None]:
+    """``frame`` as ``encoder`` takes it (its own settings, else ``settings``): the job its
+    writer thread does (:func:`write_frame`). Frames are not drawn on once shown."""
+    pixels = (getattr(encoder, "settings", None) or settings).pixels
+
+    def write(out: Any) -> None:
+        write_frame(out, frame, pixels)
+
+    return write
 
 
 class DecoderHung(DeviceError):
@@ -359,6 +418,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self.encoder: Encoder | None = None
         self.rate: RateControl | None = None  # of maxrate "auto", once the picture size is known
         self._encoders_failed: set[str] = set()  # of "auto": one that stopped before a picture
+        # an encoder of the card that ended before a picture fed rgb0: ffmpeg converts for it
+        self._feeds_failed: set[str] = set()
         self._encoder_said = ""  # the encoder the log was told of
         self._ffmpeg: str | None = None
         self._pictures: queue.Queue[bytes] = queue.Queue(maxsize=2)
@@ -464,14 +525,19 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         rotate = 270 if orientation_of(*size) == "landscape" else 180  # as to_native
         settings = self.settings
         model_id = self.model.id if self.model else ""
+        name = resolve_encoder(settings.encoder, self._ffmpeg, self._encoders_failed)
+        # (one of the card's that took no rgb0: as before, rgb24 and NV12 made by ffmpeg)
+        pixels = "rgb" if name in self._feeds_failed else self.video.pixels
         settings = replace(
             settings,
             profile=resolve_profile(settings.profile, model_id),
-            encoder=resolve_encoder(settings.encoder, self._ffmpeg, self._encoders_failed),
+            encoder=name,
+            pixels=resolve_feed(pixels),
         )
-        if settings.encoder != self._encoder_said:
-            self._encoder_said = settings.encoder
-            log.info("video: encoding with %s, profile %s", settings.encoder, settings.profile)
+        said = f"{feed_text(settings)}, profile {settings.profile}"
+        if said != self._encoder_said:
+            self._encoder_said = said
+            log.info("video: encoding with %s", said)
         if settings.maxrate == "auto":
             transport = self.transport  # (None in a test that starts the encoder alone)
             place = str(getattr(transport, "place", None) or getattr(transport, "pid", "") or "")
@@ -509,6 +575,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
 
         encoder = Encoder(command, size, deliver)
         encoder.name, encoder.maxrate = settings.encoder, settings.maxrate
+        encoder.settings = settings  # (what it is fed: _feed gives each its own)
         if beside:
             self._leaving, self._coming = self.encoder, generation
             self._switch_began = time.monotonic()
@@ -516,6 +583,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             self._generation = generation
         self.encoder = encoder
         self.counters.bit_rate = mbit(settings.maxrate)
+        self.counters.encoder = feed_text(settings)
 
     def _stop_encoder(self) -> None:
         if self.encoder is not None:
@@ -591,6 +659,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         )
         self._switch_held = time.monotonic() + self.SWITCH_HOLD_S
         self.encoder, self.counters.bit_rate = leaving, mbit(leaving.maxrate)
+        if getattr(leaving, "settings", None) is not None:
+            self.counters.encoder = feed_text(leaving.settings)
         coming.close()
 
     def _keep_rate(self, now: float, at_once: bool = False) -> None:
@@ -625,57 +695,76 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         if self._error is not None:
             self._heal(self._error)
         self._last_frame = frame
-        if frame.mode in ("RGB", "RGBA"):  # the RGB bytes straight away: no copy of the picture
-            data = rgb_bytes(frame)
-        else:
-            data = frame.convert("RGB").tobytes()
         self._hand_over()
         self._follow_the_panel()
         encoder = self._leaving or self.encoder  # during a switch: the one the panel shows
         if encoder is None or encoder.size != frame.size or not encoder.alive:
             if encoder is not None and encoder.size == frame.size:
-                self._restarting(encoder.reason())
+                self._stopped(encoder.reason())
             self._start_encoder(frame.size)
         try:
-            self._feed(data)
+            self._feed(frame)
         except EncoderStopped as exc:
             if self._error is not None:
                 return  # the panel failed meanwhile; the next frame reconnects
-            if self._gave_up(exc):
-                pass  # (counted as no restart: "auto" moves on to the next encoder)
-            else:
-                self._restarting(str(exc))
+            self._stopped(str(exc))
             self._start_encoder(frame.size)
-            self._feed(data)
+            self._feed(frame)
 
-    def _gave_up(self, exc: Exception) -> bool:
-        """Whether an encoder "auto" chose stopped before its first picture (the card or the
-        driver would not have it): then "auto" leaves it out from here on."""
+    def _stopped(self, reason: str) -> None:
+        """ffmpeg stopped by itself: a restart, unless it stopped before its first picture
+        and the next start goes another way (:meth:`_gave_up`)."""
+        if not self._gave_up(reason):
+            self._restarting(reason)
+
+    def _gave_up(self, reason: object) -> bool:
+        """Whether the encoder stopped before its first picture, and is not started again as it
+        was (uncounted as a restart): one of the card's that ended fed rgb0 gets the frames as
+        before, converted to NV12 by ffmpeg (its driver may take no RGB); an encoder "auto"
+        chose that the card or the driver would not have is left out from here on, and x264
+        takes over."""
         encoder = self._leaving or self.encoder  # during a switch only the old one can stop here
         name = getattr(encoder, "name", "")
-        if self.settings.encoder != "auto" or name == "libx264" or encoder.pictures:
+        if encoder is None or encoder.pictures:
+            return False
+        settings = getattr(encoder, "settings", None)
+        ended = not encoder.alive  # (one that hangs is no matter of the frames' format)
+        if settings is not None and passes_through(settings) and ended:
+            if name not in self._feeds_failed:
+                self._feeds_failed.add(name)
+                log.warning(
+                    "video: %s ended before a picture fed %s (%s); ffmpeg converts the frames "
+                    "for it",
+                    name,
+                    settings.pixels,
+                    reason,
+                )
+                return True
+        if self.settings.encoder != "auto" or name == "libx264":
             return False
         self._encoders_failed.add(name)
-        log.warning("video: %s stopped before a picture (%s); x264 takes over", name, exc)
+        log.warning("video: %s stopped before a picture (%s); x264 takes over", name, reason)
         return True
 
-    def _feed(self, data: bytes) -> None:
-        """Hand a frame to ffmpeg. Waiting is right while the panel sets the pace
-        (the pictures queue is full; USB timeouts bound that); ffmpeg taking nothing
-        while the panel waits for pictures has stalled. Before its first picture
-        ffmpeg may still be starting, which takes longer: restarting it then would
-        only drop the frames it already has. During a switch the old ffmpeg, whose
-        pictures the panel shows, is the one waited for; the new one gets the frame
-        only if it takes it at once (while it starts it takes none, and the panel
-        must not wait for that)."""
+    def _feed(self, frame: Image.Image) -> None:
+        """Hand a frame to ffmpeg, as its encoder takes it (packed into the pipe in its writer
+        thread, :func:`write_frame`). Waiting is right while the panel sets the pace (the
+        pictures queue is full; USB timeouts bound that); ffmpeg taking nothing while the
+        panel waits for pictures has stalled. Before its first picture ffmpeg may still be
+        starting, which takes longer: restarting it then would only drop the frames it
+        already has. During a switch the old ffmpeg, whose pictures the panel shows, is the
+        one waited for; the new one gets the frame (as it takes it) only if it takes it at
+        once (while it starts it takes none, and the panel must not wait for that)."""
+        frame.load()  # (here: the writer thread only reads it)
         encoder = self._leaving
         if encoder is None:
             encoder = self.encoder
         else:
             try:
-                self.encoder.write(data, timeout=0)
+                self.encoder.write(_frame_for(self.encoder, frame, self.settings), timeout=0)
             except EncoderStopped:
                 pass  # starting, or stopped: _hand_over sees to it
+        data = _frame_for(encoder, frame, self.settings)
         idle = 0.0
         while True:
             try:

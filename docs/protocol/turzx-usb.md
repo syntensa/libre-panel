@@ -190,6 +190,39 @@ x264, Constrained Baseline, yuv420p, Annex B:
   `repeat-headers=1` lets the decoder join at any keyframe.
 - ffmpeg rotates (`transpose=1` = PIL's `ROTATE_270`); the stream is
   bit-identical to rotating before encoding.
+- **How the frames reach ffmpeg.** Libre Panel writes each frame into ffmpeg's
+  stdin as raw video of the theme's size, packed into the pipe by Pillow from
+  ffmpeg's writer thread (no copy of the frame as bytes, the render loop free
+  meanwhile). By default (`[video] pixels = "auto"`) as `-pix_fmt rgb0`: the
+  four bytes a pixel Pillow keeps, the fourth (the canvas's alpha) left aside,
+  as RGB never showed it. AMD's and NVIDIA's encoders take rgb0 themselves
+  (FFmpeg's `libavcodec/amfenc.c` lists `rgb0`/`rgba`/`bgr0`/`bgra` and maps them
+  to `AMF_SURFACE_RGBA`/`BGRA`; `nvenc.c` takes them as `NV_ENC_BUFFER_FORMAT_ABGR`/
+  `ARGB` and converts to 4:2:0, `rgb_mode` yuv420), so ffmpeg runs `transpose`
+  and nothing else for them: no `-pix_fmt nv12`, no scaler in the filter graph
+  (checked with `-loglevel debug` against the FFmpeg 8.1 build the downloads
+  carry, whose Linux build lists both encoders: no `auto_scale` for either;
+  FFmpeg 6.1 the same for h264_nvenc). The card converts RGB to YUV; it is told
+  the colours swscale used before, `-colorspace smpte170m -color_range tv`
+  (BT.601, limited range): AMF takes that as its output colour profile
+  (`AMF_VIDEO_CONVERTER_COLOR_PROFILE_601`; left unset, AMF picks the profile by
+  the picture's size), and FFmpeg marks NVENC's own conversion of packed RGB as
+  BT.601 in limited range (matrix 5, `videoFullRangeFlag` 0 in the stream)
+  whatever it is told. Whether a panel's picture then looks exactly as before
+  only a panel shows (**unverified** on AMD and NVIDIA). For x264 and Intel's QSV,
+  which take YUV only, ffmpeg converts rgb0 on the processor: the YUV is the
+  same, byte for byte, as from rgb24 (checked with FFmpeg 6.1 and 8.1), so
+  x264's stream is the same as before. `pixels = "rgb"` is the feed of before
+  (`rgb24`, NV12 made by ffmpeg for every card); a card's encoder that ends
+  before its first picture fed rgb0 is started again so by itself, before
+  "auto" leaves it out for x264.
+- Measured with Arena on the 12.3" (1920×720, 50 fps) and FFmpeg 8.1 on a
+  4-core PC, the CPU time of Libre Panel and ffmpeg together per frame, before
+  and after, in paired runs on a busy machine (its absolute numbers are about
+  twice a quiet one's): with a card's encoder (the part up to the encoder)
+  29.1 → 20.5 ms; with x264 40.9 → 35.5 ms; Intel's (up to its encoder) about
+  2 ms less. ffmpeg's `transpose` turns four bytes a pixel for less than Pillow
+  does (three for more), so ffmpeg turns the frames for every encoder.
 - The stream above took about 170–300 KB/s: that is its own rate at the 2M
   cap, not a limit of the link. The link carries far more: 12–16 MB/s of JPEG
   stills were measured on the 9.2" (20 fps of 800 KB frames; sjcsoftware/

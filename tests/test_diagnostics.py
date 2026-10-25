@@ -255,6 +255,7 @@ def test_the_meter_says_nothing_before_its_first_second_and_what_nothing_counted
     stats = status.stats
     assert stats["kbps"] is None  # no driver counted bytes
     assert stats["blocks_per_s"] is stats["max_depth"] is stats["waits"] is stats["drops"] is None
+    assert stats["encoder"] is None
     assert (stats["usb_errors"], stats["panel_restarts"], stats["ffmpeg_restarts"]) == (0, 0, 0)
 
 
@@ -262,6 +263,7 @@ def test_the_meter_reads_the_video_link_and_the_faults_from_the_counters():
     status = app_module.RunStatus()
     meter = Meter(status, 0.0)
     counters = status.counters
+    counters.encoder = "h264_amf, rgb0"  # the encoder and what it is fed
     for n in range(1, 151):  # three seconds at 50 pictures a second
         meter.drew(0.004)
         counters.blocks += 1
@@ -273,7 +275,7 @@ def test_the_meter_reads_the_video_link_and_the_faults_from_the_counters():
         meter.tick(n / 50, 50, True)
     stats = status.stats
     assert stats["blocks_per_s"] == pytest.approx(50, abs=1) and stats["max_depth"] == 2
-    assert (stats["waits"], stats["drops"]) == (3, 2)
+    assert (stats["waits"], stats["drops"]) == (3, 2) and stats["encoder"] == "h264_amf, rgb0"
     assert (stats["usb_errors"], stats["panel_restarts"], stats["ffmpeg_restarts"]) == (4, 1, 2)
 
 

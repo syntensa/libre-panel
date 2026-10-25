@@ -10,7 +10,15 @@ project (docs/protocol/turzx-usb.md, "Video layer"):
   areas, so at 1 s and below flat backgrounds visibly pulse.
   ``repeat-headers=1`` lets the decoder join at any keyframe.
 - ffmpeg rotates into the panel's framebuffer (``transpose``); the stream is
-  bit-identical to rotating in Python and costs the render loop nothing.
+  bit-identical to rotating in Python and costs the render loop nothing (on four bytes
+  a pixel ffmpeg turns a frame for less than Pillow does, measured on the 12.3").
+- The frames go in as Pillow keeps them, four bytes a pixel (``rgb0``: ffmpeg leaves the
+  fourth aside, as RGB never showed it), packed into the pipe by Pillow itself
+  (:func:`resolve_feed`). AMD's and NVIDIA's encoders take them so and convert to YUV on
+  the card, told to do it as swscale does on the processor (BT.601, limited range): ffmpeg
+  makes no NV12 for them. For x264 and Intel's, ffmpeg converts (the same YUV as from three
+  bytes a pixel, for less). ``video.pixels = "rgb"`` gives the feed of before (rgb24, NV12 made
+  by ffmpeg for every card), should colours shift on a panel.
 - The bit rate was capped at 2 Mbit/s there, for 1920x480 at 50 frames a second. A panel
   with more pixels (the 12.3": 1920x720) or more frames starts with proportionally more
   (``maxrate`` "auto", :func:`auto_rate`), so its pictures and lettering stay as sharp; and
@@ -34,6 +42,7 @@ import threading
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import psutil
 
@@ -53,6 +62,16 @@ PROFILES = ("auto", "baseline", "main", "high")
 ENCODERS = ("auto", "libx264", "h264_nvenc", "h264_amf", "h264_qsv")
 HIGH_PROFILE_MODELS = frozenset({"turing-9.2-usb", "turing-12.3-usb"})
 AUTO_ENCODERS = ("h264_amf",)
+# How frames reach ffmpeg (config.toml video.pixels): "auto" four bytes a pixel, as Pillow keeps
+# them (rgb0); "rgb" three (rgb24) and NV12 made by ffmpeg for every card, the way of before,
+# should colours shift on a panel.
+PIXELS = ("auto", "rgb")
+# The encoders that take four bytes a pixel themselves and convert them on the card (FFmpeg's
+# libavcodec/amfenc.c and nvenc.c list rgb0 among their formats): no conversion on the processor.
+PASS_THROUGH = frozenset({"h264_amf", "h264_nvenc"})
+# swscale's conversion of RGB to YUV, which the cards are told to make as well (the stream of
+# before was made so): BT.601 coefficients, limited range
+CARD_COLOURS = ["-colorspace", "smpte170m", "-color_range", "tv"]
 
 NAL_SLICE, NAL_IDR = 1, 5
 # NAL types that open a new picture when they follow a slice (H.264 7.4.1.2.3):
@@ -74,6 +93,8 @@ class EncoderSettings:
     threads: int = 1  # frame threads add a frame of latency each
     profile: str = "high"  # PROFILES, resolved (never "auto" here: resolve_profile)
     encoder: str = "libx264"  # ENCODERS, resolved (never "auto" here: resolve_encoder)
+    # the frames as they go into ffmpeg (resolve_feed): "rgb24", or "rgb0" (four bytes a pixel)
+    pixels: str = "rgb24"
 
 
 # The bit rate measured on the 9.2": 2 Mbit/s for its 1920x480 pixels at 50 frames a second.
@@ -164,6 +185,19 @@ def resolve_encoder(encoder: str, ffmpeg: str, failed: Collection[str] = ()) -> 
         if candidate not in failed and encoder_works(ffmpeg, candidate):
             return candidate
     return "libx264"
+
+
+def resolve_feed(pixels: str) -> str:
+    """The frames' pixel format in ffmpeg's terms for ``video.pixels``: "auto" is rgb0, four
+    bytes a pixel as Pillow keeps them, the cheapest for every encoder (measured on the 12.3":
+    less to pack, a faster ``transpose``, and the cards' encoders convert it themselves);
+    "rgb" is rgb24, the way of before."""
+    return "rgb24" if pixels == "rgb" else "rgb0"
+
+
+def feed_text(settings: EncoderSettings) -> str:
+    """The encoder and what it is fed, as the log and the counters say it: "h264_amf, rgb0"."""
+    return f"{settings.encoder}, {settings.pixels}"
 
 
 def bit_rate(settings: EncoderSettings, size: tuple[int, int]) -> str:
@@ -286,7 +320,8 @@ def find_ffmpeg(configured: str = "") -> str:
 def ffmpeg_command(
     ffmpeg: str, size: tuple[int, int], rotate: int | None, settings: EncoderSettings
 ) -> list[str]:
-    """ffmpeg reading raw RGB frames of ``size`` on stdin, writing H.264 (Annex B) to stdout."""
+    """ffmpeg reading raw frames of ``size`` on stdin (``settings.pixels``), turning them into
+    the panel's framebuffer (``rotate``), writing H.264 (Annex B) to stdout."""
     width, height = size
     keyint = max(1, round(settings.fps * settings.keyframe_s))
     maxrate = bit_rate(settings, size)
@@ -298,7 +333,7 @@ def ffmpeg_command(
         "-f",
         "rawvideo",
         "-pix_fmt",
-        "rgb24",
+        settings.pixels,
         "-s",
         f"{width}x{height}",
         "-framerate",
@@ -311,6 +346,12 @@ def ffmpeg_command(
     if video_filter:
         command += ["-vf", video_filter]
     return command + codec_args(settings, keyint, maxrate) + ["-f", "h264", "-"]
+
+
+def passes_through(settings: EncoderSettings) -> bool:
+    """Whether the encoder takes the frames as they come: one of the card's that converts
+    RGB itself, fed four bytes a pixel (ffmpeg then converts nothing on the processor)."""
+    return settings.encoder in PASS_THROUGH and settings.pixels == "rgb0"
 
 
 def codec_args(settings: EncoderSettings, keyint: int, maxrate: str) -> list[str]:
@@ -344,7 +385,8 @@ def codec_args(settings: EncoderSettings, keyint: int, maxrate: str) -> list[str
             "yuv420p",
         ]
     common = ["-bf", "0", "-g", str(keyint), "-maxrate", maxrate, "-bufsize", maxrate]
-    common += ["-pix_fmt", "nv12"]
+    # the card converts the frames itself, with swscale's colours; else ffmpeg makes NV12
+    common += CARD_COLOURS if passes_through(settings) else ["-pix_fmt", "nv12"]
     if encoder == "h264_nvenc":  # NVIDIA: the quality of crf, within the cap
         tuned = ["-preset", "p1", "-tune", "ll", "-zerolatency", "1", "-no-scenecut", "1"]
         rate = ["-rc", "vbr", "-cq", str(settings.crf), "-b:v", "0", "-forced-idr", "1"]
@@ -438,7 +480,9 @@ class Encoder:
     """One ffmpeg process: raw frames in, pictures out.
 
     A writer thread feeds ffmpeg, so a stalled ffmpeg cannot block the render
-    loop for longer than the ``write`` timeout. A reader thread cuts the output
+    loop for longer than the ``write`` timeout. A frame is its bytes, or a callable
+    that writes them itself to ffmpeg's stdin in that thread (the display packs a
+    picture into the pipe so, off the render loop). A reader thread cuts the output
     into pictures and hands each to ``deliver``, which may block: that is the
     back-pressure from the panel, passed through the pipe to the render loop.
     """
@@ -453,7 +497,7 @@ class Encoder:
         self.size = size
         self.command = command
         self._deliver = deliver
-        self._frames: queue.Queue[bytes | None] = queue.Queue(maxsize=1)
+        self._frames: queue.Queue[bytes | Callable[[Any], None] | None] = queue.Queue(maxsize=1)
         self._closing = threading.Event()
         self._done = threading.Event()  # ffmpeg's output ended
         self.errors: collections.deque[str] = collections.deque(maxlen=10)
@@ -494,7 +538,7 @@ class Encoder:
         code = self.proc.poll()
         return f"exit code {code}" if code is not None else "no output"
 
-    def write(self, frame: bytes, timeout: float = 2.0) -> None:
+    def write(self, frame: bytes | Callable[[Any], None], timeout: float = 2.0) -> None:
         if not self.alive:
             raise EncoderStopped(f"ffmpeg stopped ({self.reason()})")
         try:
@@ -509,6 +553,9 @@ class Encoder:
                 frame = self._frames.get()
                 if frame is None or self._closing.is_set():
                     break
+                if callable(frame):  # it writes itself, all of it or an OSError
+                    frame(stdin)
+                    continue
                 view = memoryview(frame)
                 while view:  # an unbuffered pipe may take less than asked
                     view = view[stdin.write(view) :]
