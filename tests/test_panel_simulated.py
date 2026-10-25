@@ -315,5 +315,5 @@ def test_doctor_says_whether_the_panel_gets_the_video_mode(panel, tmp_path):
     assert "nowhere" not in text  # no paths in a report that gets shared
     ffmpeg = tmp_path / "ffmpeg"
     ffmpeg.write_text("")
-    assert "on, 50 fps" in run(VideoConfig(local_clip="usr/data/clip.h264", ffmpeg=str(ffmpeg)))
+    assert "on, 30 fps" in run(VideoConfig(local_clip="usr/data/clip.h264", ffmpeg=str(ffmpeg)))
     assert 'off (mode = "off")' in run(VideoConfig(mode="off"))

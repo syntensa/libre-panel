@@ -680,7 +680,7 @@ def test_the_video_experiment_writes_each_choice_at_once_and_leads_back(
         waits_for(page, lambda: settings_config().device.video.crf == 20)
         video = settings_config().device.video
         assert (video.maxrate, video.profile, video.encoder) == ("auto", "auto", "auto")
-        assert (video.fps, video.device_fps) == (50, 60)
+        assert (video.fps, video.device_fps) == (30, 60)
         expect(back).to_be_disabled()
 
 
