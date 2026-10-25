@@ -1,18 +1,23 @@
 """Render the images in docs/images from the built-in themes.
 
-    python tools/readme_images.py [docs/images]
+    python tools/readme_images.py [docs/images] [--only NAME ...] [--media docs/media]
 
 Each theme as the panel shows it (<theme>.png), the README's hero, gallery,
 "fits your machine" and module pictures, and the 1280x640 social preview
 (upload it in the repository's settings). With Playwright installed, also
 the screenshots of the app. Demo sensor values and a fixed time keep the pictures stable.
 Libre Panel's own themes lead: Lumen in the hero, the gallery and the social preview.
-:func:`pictures` names every file it writes.
+The picture of three panels at once is the app's own *Picture of all panels*, of virtual panels;
+the stills of the feature grid (tile-*.png) are made of the pictures here and of the clips'
+posters in docs/media, so tools/readme_media.py runs first. :func:`pictures` names every file
+it writes; ``--only`` makes some of them.
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import os
 import tempfile
 import threading
@@ -41,7 +46,8 @@ THEMES = ("lumen", "lumen-companion", "studio", "encore", "nimbus", "almanac", "
 # The pictures made of them, and the screenshots of the app (those need Playwright).
 COMPOSED = ("hero.png", "gallery.png", "social-preview.png", "studio-adapts.png", "vertical.png",
             "module-sizes.png", "weather-sizes.png", "looks.png", "module-layouts.png",
-            "module-catalog.png", "module-layouts-more.png", "more-panels.png")  # fmt: skip
+            "module-catalog.png", "module-layouts-more.png", "more-panels.png",
+            "panels-at-once.png")  # fmt: skip
 APP_SHOTS = ("editor-new.png", "editor.png", "editor-drag.png", "palette.png", "start.png",
              "settings.png")  # fmt: skip
 
@@ -49,7 +55,9 @@ APP_SHOTS = ("editor-new.png", "editor.png", "editor-drag.png", "palette.png", "
 def pictures() -> list[str]:
     """Every file this script writes into its folder, by name: what the README and the
     website may show from docs/images."""
-    return [f"{theme_id}.png" for theme_id in THEMES] + list(COMPOSED) + list(APP_SHOTS)
+    return (
+        [f"{theme_id}.png" for theme_id in THEMES] + list(COMPOSED) + list(APP_SHOTS) + list(TILES)
+    )
 
 
 def snapshot():
@@ -762,44 +770,249 @@ def more_panels() -> Image.Image:
     return picture
 
 
+# Three panels where they stand (millimetres, top left corners): the 12.3" with Lumen, and under
+# it the 9.2" bar with Lumen Companion beside the 5.2" with Encore. Lumen's version for the 12.3"
+# has the weather where the bar's has what plays, which Encore shows; its companion has every core,
+# the fans, the drives and the processes.
+PANELS_AT_ONCE = (
+    ("turing-12.3-usb", "lumen", (35, 0)),
+    ("turing-9.2-usb", "lumen-companion", (0, 125)),
+    ("turing-5.2-usb", "encore", (247, 121)),
+)  # fmt: skip
+PANELS_WIDTH = 2000  # the picture of all panels is up to 4000 pixels across: more than a page shows
+
+
+class _StillTime:
+    """``time`` for the app's panel loops: the time of day stands at :data:`WHEN`."""
+
+    def __getattr__(self, name: str):  # noqa: ANN204
+        import time
+
+        return getattr(time, name)
+
+    def time(self) -> float:
+        return WHEN
+
+
+def panels_at_once(wait_s: float = 90.0) -> Image.Image:
+    """The app's own *Picture of all panels* (``GET /api/panels/photo``) of the panels of
+    :data:`PANELS_AT_ONCE`: the background app runs them as virtual panels, on the demo's values
+    alone (no player, no sky, no names of this PC) at the time of the other pictures, its graphs
+    with the demo's history. The further panels run in threads, not in processes of their own,
+    so that they see the same still time."""
+    import json
+    import time
+    import urllib.error
+    import urllib.request
+    from collections import deque
+    from unittest import mock
+
+    from libre_panel import app as panel_app
+    from libre_panel import panel_process
+    from libre_panel.autostart import Autostart
+    from libre_panel.editor import access
+    from libre_panel.plugins import loader
+    from libre_panel.sensors import base, demo
+    from libre_panel.service import BackgroundApp
+    from libre_panel.theme.model import theme_for
+
+    home = Path(tempfile.mkdtemp()) / "libre-panel"  # a home of its own, with a plain name
+    home.mkdir()
+    (first_model, first_theme, first_at), *more = PANELS_AT_ONCE
+    lines = [
+        f'language = "en"\ntheme = "{first_theme}"\nfps = 5\n',
+        f'[device]\ndriver = "virtual"\nmodel = "{first_model}"\nat = {list(first_at)}\n',
+        f'[sensors]\nproviders = ["demo"]\n\n[sensors.demo]\nfixed_time = {WHEN}\n',
+    ]
+    for model, theme, at in more:
+        lines.append(f'[[panels]]\ndriver = "virtual"\nmodel = "{model}"\ntheme = "{theme}"\n'
+                     f"at = {list(at)}\n")  # fmt: skip
+    (home / "config.toml").write_text("\n".join(lines), encoding="utf-8")
+
+    seed = demo.DemoProvider({"fixed_time": WHEN})
+    remember, build_hub = base.remember, panel_app.build_hub
+
+    def demo_history(history, readings):  # noqa: ANN001, ANN202 (the graphs as in the others)
+        for key in readings:
+            if key in demo._WAVES and key not in history:
+                past = demo.demo_history(seed, key, demo.HISTORY_SAMPLES)
+                history[key] = deque(past, maxlen=base.HISTORY_LENGTH)
+        return remember(history, {k: v for k, v in readings.items() if k not in demo._WAVES})
+
+    def demo_only(config, demo=False):  # noqa: ANN001, ANN202 (the demo's sources alone)
+        return build_hub(config, demo=True)
+
+    def in_a_thread(*args, **kwargs):  # noqa: ANN002, ANN003, ANN202
+        raise RuntimeError("the picture's panels run in threads")
+
+    neutral_machine()
+    patches = (
+        mock.patch.dict(os.environ, {"LIBRE_PANEL_HOME": str(home)}),
+        mock.patch.object(loader, "_installed", lambda group: iter(())),  # no mod of this PC
+        mock.patch.object(panel_app, "time", _StillTime()),
+        mock.patch.object(panel_app, "build_hub", demo_only),
+        mock.patch.object(panel_process, "PanelProcess", in_a_thread),
+        mock.patch.object(base, "remember", demo_history),
+    )
+    with contextlib.ExitStack() as stack:
+        for patch in patches:
+            stack.enter_context(patch)
+        app = BackgroundApp(port=0, autostart=Autostart("linux", home=home))
+        stack.enter_context(mock.patch.object(app.hotkeys, "apply", lambda *args: None))
+        app.start()
+        try:
+            first = theme_for(first_theme, "landscape", (1920, 720))
+            wanted = [pair_version(first) or first, *(theme for _model, theme, _at in more)]
+            ends = time.monotonic() + wait_s
+            while True:  # each panel shows its theme (the first its pair version), and a frame
+                status = app.panel.status
+                beside = [status.more.get(n) for n in range(len(more))]
+                shown = [status.theme, *(getattr(each, "theme", "") for each in beside)]
+                frames = [app.plugin_host.shown, *(getattr(each, "shown", None) for each in beside)]
+                if all(s.startswith(w) for s, w in zip(shown, wanted, strict=True)) and all(
+                    frame is not None for frame in frames
+                ):
+                    break
+                if time.monotonic() > ends:
+                    raise RuntimeError(f"the panels did not show their themes: {shown}")
+                time.sleep(0.5)
+            time.sleep(2.0)  # (a frame or two more: a theme that has just come in, drawn whole)
+            request = urllib.request.Request(
+                app.editor.url.rstrip("/") + "/api/panels/photo",
+                headers={access.HEADER: app.editor.token},
+            )
+            with urllib.request.urlopen(request, timeout=60) as answer:
+                data = answer.read()
+        except urllib.error.HTTPError as error:
+            raise RuntimeError(json.loads(error.read() or b"{}").get("error", error)) from error
+        finally:
+            app.quit()
+            app.shutdown()
+    picture = Image.open(io.BytesIO(data)).convert("RGB")
+    height = round(picture.height * PANELS_WIDTH / picture.width)
+    return picture.resize((PANELS_WIDTH, height), Image.Resampling.LANCZOS)
+
+
+# The feature grid of the README and the website: a still of each feature, small and in one
+# shape (the first screen loads them all: no clips there). Each is a part of a clip's poster in
+# docs/media (tools/readme_media.py makes them: run it first) or of a picture here, as
+# (folder, file, (left, top, right, bottom) as shares of it), cut to the tile's shape round the
+# middle of that part.
+TILE_SIZE = (600, 300)
+TILES = {
+    "tile-video-mode.png": ("media", "close-up-rings.png", (0, 0, 1, 1)),
+    "tile-panels.png": ("images", "panels-at-once.png", (0.06, 0.08, 0.96, 0.92)),
+    "tile-cards.png": ("media", "card-ignition.png", (0, 0, 0.58, 1)),
+    "tile-notices.png": ("media", "volume-looks.png", (0.42, 0, 1, 1)),
+    "tile-game.png": ("media", "game-entrance.png", (0, 0, 0.58, 1)),
+    "tile-screens.png": ("media", "encore.png", (0, 0, 0.58, 1)),
+    "tile-screens-in-turn.png": ("media", "screens-in-turn.png", (0, 0, 0.58, 1)),
+    "tile-start-screen.png": ("media", "start-screen.png", (0.21, 0, 0.79, 1)),
+    "tile-vertical.png": ("images", "vertical.png", (0, 0, 1, 1)),
+    "tile-agents.png": ("images", "agents.png", (0, 0, 0.5, 1)),
+    "tile-sizes.png": ("images", "gallery.png", (0, 0.43, 1, 1)),
+    "tile-app.png": ("media", "app-drag-module.png", (0, 0, 1, 0.889)),
+}  # fmt: skip
+
+
+def tile(source: Image.Image, part: tuple[float, float, float, float]) -> Image.Image:
+    """``part`` of ``source`` in the shape of a tile, round its middle, at :data:`TILE_SIZE`."""
+    w, h = TILE_SIZE
+    left, top = part[0] * source.width, part[1] * source.height
+    right, bottom = part[2] * source.width, part[3] * source.height
+    if (right - left) / (bottom - top) > w / h:  # wider than a tile: narrower, round its middle
+        cut = (right - left - (bottom - top) * w / h) / 2
+        left, right = left + cut, right - cut
+    else:
+        cut = (bottom - top - (right - left) * h / w) / 2
+        top, bottom = top + cut, bottom - cut
+    box = (round(left), round(top), round(right), round(bottom))
+    return source.convert("RGB").crop(box).resize(TILE_SIZE, Image.Resampling.LANCZOS)
+
+
+def tiles(out: Path, media: Path) -> None:
+    """The stills of :data:`TILES` in ``out``, of the pictures in ``out`` and the posters in
+    ``media``."""
+    for name, (folder, source, part) in TILES.items():
+        path = (media if folder == "media" else out) / source
+        if not path.is_file():
+            raise FileNotFoundError(f"{name} is made of {path}: make that first")
+        with Image.open(path) as picture:
+            tile(picture, part).save(out / name, optimize=True)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("out", nargs="?", default="docs/images", type=Path)
-    out = parser.parse_args().out
+    parser.add_argument("--media", default="docs/media", type=Path, metavar="DIR",
+                        help="the clips' posters for the tiles (default docs/media)")  # fmt: skip
+    parser.add_argument("--only", nargs="+", metavar="NAME",
+                        help="make only these pictures (as pictures() names them)")  # fmt: skip
+    args = parser.parse_args()
+    out = args.out
+    if unknown := sorted(set(args.only or ()) - set(pictures())):
+        parser.error(f"no such picture: {', '.join(unknown)}")
+
+    def wanted(*names: str) -> bool:
+        return args.only is None or bool(set(names) & set(args.only))
+
     out.mkdir(parents=True, exist_ok=True)
     for theme_id in THEMES:  # true pixels, as the panel shows them
-        render(theme_id).save(out / f"{theme_id}.png", optimize=True)
-    big = {theme_id: render(theme_id, 2) for theme_id in THEMES}  # sharp when scaled
-    hero(big["lumen"]).save(out / "hero.png", optimize=True)
+        if wanted(f"{theme_id}.png"):
+            render(theme_id).save(out / f"{theme_id}.png", optimize=True)
+    big: dict[str, Image.Image] = {}
+
+    def sharp(theme_id: str) -> Image.Image:  # sharp when scaled
+        if theme_id not in big:
+            big[theme_id] = render(theme_id, 2)
+        return big[theme_id]
+
+    if wanted("hero.png"):
+        hero(sharp("lumen")).save(out / "hero.png", optimize=True)
     # Studio with nothing playing: the weather in its card, Lumen above it with the track
     media = tuple(k for k in snapshot().readings if k.startswith("media."))
-    gallery({**big, "studio": render("studio", 2, media)}).save(out / "gallery.png", optimize=True)
-    social(big["lumen"]).save(out / "social-preview.png", optimize=True)
+    if wanted("gallery.png"):
+        shots = {theme_id: sharp(theme_id) for theme_id in THEMES}
+        gallery({**shots, "studio": render("studio", 2, media)}).save(
+            out / "gallery.png", optimize=True
+        )
+    if wanted("social-preview.png"):
+        social(sharp("lumen")).save(out / "social-preview.png", optimize=True)
     # (the card shows what plays before the weather: without either, it shows the day)
     quiet = tuple(k for k in snapshot().readings if k.startswith(("weather.", "media.")))
     gpu = tuple(k for k in snapshot().readings if k.startswith("gpu."))
-    adapts(
-        [
-            (
-                render("studio", 2, quiet),
-                "Nothing playing, weather off",
-                "· the day takes the card",
-            ),
-            (render("studio", 2, gpu), "No GPU sensor", "· the disk takes its ring"),
-        ]
-    ).save(out / "studio-adapts.png", optimize=True)
-    vertical().save(out / "vertical.png", optimize=True)
-    module_sizes().save(out / "module-sizes.png", optimize=True)
-    weather_sizes().save(out / "weather-sizes.png", optimize=True)
-    looks().save(out / "looks.png", optimize=True)
-    module_layouts().save(out / "module-layouts.png", optimize=True)
-    module_catalog().save(out / "module-catalog.png", optimize=True)
-    new_module_layouts().save(out / "module-layouts-more.png", optimize=True)
-    more_panels().save(out / "more-panels.png", optimize=True)
-    try:
-        editor_shots(out)
-    except ImportError:
-        print("Playwright is not installed: the editor pictures are left as they are")
+    if wanted("studio-adapts.png"):
+        adapts(
+            [
+                (
+                    render("studio", 2, quiet),
+                    "Nothing playing, weather off",
+                    "· the day takes the card",
+                ),
+                (render("studio", 2, gpu), "No GPU sensor", "· the disk takes its ring"),
+            ]
+        ).save(out / "studio-adapts.png", optimize=True)
+    made = {
+        "vertical.png": vertical,
+        "module-sizes.png": module_sizes,
+        "weather-sizes.png": weather_sizes,
+        "looks.png": looks,
+        "module-layouts.png": module_layouts,
+        "module-catalog.png": module_catalog,
+        "module-layouts-more.png": new_module_layouts,
+        "more-panels.png": more_panels,
+        "panels-at-once.png": panels_at_once,
+    }
+    for name, make in made.items():
+        if wanted(name):
+            make().save(out / name, optimize=True)
+    if wanted(*APP_SHOTS):
+        try:
+            editor_shots(out)
+        except ImportError:
+            print("Playwright is not installed: the editor pictures are left as they are")
+    if wanted(*TILES):  # (last: they are made of the pictures above)
+        tiles(out, args.media)
     print(f"wrote the images to {out}")
 
 

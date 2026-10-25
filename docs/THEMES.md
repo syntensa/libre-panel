@@ -17,6 +17,31 @@ community ([Sharing a theme](#sharing-a-theme)). A user theme with the same name
 built-in one wins. The editor writes this format for you; this page is for people who want
 to write or review themes by hand.
 
+## Every built-in theme
+
+Libre Panel's own themes, what each is made for and what it shows (the README lists them in
+short). Every theme moves to any other panel from the panel button at the top of *Design*.
+
+| Theme | Made for | |
+|---|---|---|
+| **Lumen** | 8.8" and 9.2" bars (1920×480); the default there | Libre Panel's own: what plays, else the weather, else the day; the time with the load scrolling past as light and the fans turning; lit rings for CPU, GPU and RAM named after your hardware, over the network |
+| **Studio** | 8.8" and 9.2" bars | calm: a large clock, the card slot and lit rings for CPU, RAM and GPU |
+| **Encore** | 8.8" and 9.2" bars | for music: the cover large and its colours behind the whole screen, the time with rolling digits, the volume as levels that rise |
+| **Nimbus** | 8.8" and 9.2" bars | for the weather: now and the next hours, the next days, the moon as it is lit tonight, a small clock |
+| **Almanac** | 8.8" and 9.2" bars | a clock with the month: the time large, or on a face whose second hand glides (**Almanac Analog**), beside the month with today and the week |
+| **Arena** | 8.8" and 9.2" bars | for game mode: the game's frame rate large with its 1% low, frame time and course, CPU and GPU as instruments, every core, the temperatures and, small in a corner, the time |
+| **Agents** | 8.8" and 9.2" bars, 12.3" | what Claude Code and Codex do: a moving sign for each (working, waiting for you, idle), the tool at work, how much of the plan's limits is used and when they begin anew, beside the time; **Agents Claude** shows Claude Code alone, with how full its context is ([AI activity](CONFIGURATION.md#ai-activity)) |
+| **Libre Default** | 3.5" (480×320); the default on every other panel | two lit rings, temperature, disk and network, a history that scrolls; what plays, the weather or the day in the corner |
+| **Slate** | 5" (800×480) | four cards: CPU, GPU, memory and network |
+| **Orbit** | round 2.1" and 2.8" | three rings around a large clock |
+| **Column** | 3.5" portrait | the clock, a row per resource and the network |
+| **Pico** | 0.96" (160×80) | CPU with its temperature, and memory |
+| **Companions** | a panel beside the first, 9.2" either way up and 12.3" | Lumen Companion (every core, the temperatures with the fans, the drives, the processes), Arena Companion, Encore Companion and Almanac Companion: what the first panel's screen leaves out, while it leaves out what they show ([more panels at once](CONFIGURATION.md#more-panels-at-once)) |
+| **High Contrast** | every size from 2.1" to 12.3", upright too | white on black in very large digits, to read from across the room: the temperatures of the processor and the graphics card, orange when warm and red when hot, and the time |
+
+Also built in: the eight screens of SPUR II as a legacy collection, and the round report
+([Libre Panel's screens](#libre-panels-screens), [the SPUR II screens](#the-spur-ii-screens)).
+
 ## theme.json
 
 ```json

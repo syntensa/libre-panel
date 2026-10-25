@@ -2104,7 +2104,6 @@
     "Shift": "Umschalt",
     "Use the shortcuts": "Kürzel verwenden",
     "Off: no key is taken, and the combinations stay for later.": "Aus: Keine Taste wird belegt, und die Kombinationen bleiben für später.",
-    "V1.x hardware; runs, as its owners report": "V1.x-Hardware; läuft, wie seine Besitzer berichten",
     "Classic": "Klassisch",
     "Vivid": "Lebendig",
     "the first: calm and simple": "das erste: ruhig und schlicht",
@@ -2598,7 +2597,8 @@
     "Video of panel {n} (ffmpeg)": "Video von Panel {n} (ffmpeg)",
     "What Libre Panel costs this PC now: each of its processes, the threads of the main one and the sensor service's rounds, measured while this card is on screen.": "Was Libre Panel diesen PC gerade kostet: jeder seiner Prozesse, die Threads des Hauptprozesses und die Runden des Sensordienstes, gemessen, solange diese Karte zu sehen ist.",
     "of the PC": "vom PC",
-    "{core} of one core · {n} logical processors": "{core} von einem Kern · {n} logische Prozessoren"
+    "{core} of one core · {n} logical processors": "{core} von einem Kern · {n} logische Prozessoren",
+    "V1.x hardware; verified on the hardware: runs, as its owners report": "V1.x-Hardware; auf der Hardware bestätigt: läuft, wie die Besitzer berichten"
   },
   "fields": {
     "agent": "Agent",
