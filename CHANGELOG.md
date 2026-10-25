@@ -14,7 +14,8 @@
   (a sensor service from before says "not reported by this service version"). Copy as text
   for an issue; the panel report carries it too. Nothing is measured while the card is not
   on screen.
-- **Panels**: the TURZX 9.2" is confirmed by an owner's doctor report, every check passed (#19).
+- **Panels**: the TURZX 9.2", 8.8" and 12.3" are listed as verified on the hardware: the 9.2" with an
+  owner's doctor report, every check passed (#19), the 8.8" rev. C with another (#20).
 - **More makers' screens, unverified**: drivers for Thermalright's Trofeo Vision (the 6.86"
   and the 9.16" and 11.3" bars), every BeadaPanel model (on the Panel-Link stream they all
   take), the NZXT Krakens with an LCD (Z53/Z63/Z73, Kraken 2023, Elite RGB 2024, Plus 2024:

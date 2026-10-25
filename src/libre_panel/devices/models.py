@@ -223,7 +223,7 @@ MODELS: tuple[PanelModel, ...] = (
         1920,
         "usb-turing",
         usb_ids=((0x1CBE, 0x0088),),
-        notes="V1.x hardware; runs, as its owners report",
+        notes="V1.x hardware; verified on the hardware: runs, as its owners report",
     ),
     PanelModel(
         # The framebuffer is 480x1920, but the bezel hides its last 18 columns:

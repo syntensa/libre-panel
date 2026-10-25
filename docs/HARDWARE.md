@@ -53,10 +53,10 @@ motion (the video mode is for the TURZX USB panels). The panel test's speed chec
 | `turing-5` | 5" | 800×480 | USB serial, rev. C | unverified |
 | `turing-5.2-usb` | 5.2" | 1280×720 | USB, V1.x | unverified — stills as JPEG: it shows no PNG |
 | `turing-8-usb` | 8" | 1280×800 | USB, V1.x | unverified |
-| `turing-8.8` | 8.8" | 1920×480 | USB serial, rev. C (V0.x) | **supported** — runs, as its owners report |
-| `turing-8.8-usb` | 8.8" | 1920×480 | USB, V1.x | **supported** — runs, as its owners report |
-| `turing-9.2-usb` | 9.2" | 1920×480 | USB, V1.x | **supported** — stills and video mode at 50 fps, for hours on end; an owner's doctor report confirms it, every check passed |
-| `turing-12.3-usb` | 12.3" | 1920×720 | USB, V1.x | **supported** — runs from the first start |
+| `turing-8.8` | 8.8" | 1920×480 | USB serial, rev. C (V0.x) | **supported** — verified on the hardware: runs, as its owners report, the latest with a doctor report (#20) |
+| `turing-8.8-usb` | 8.8" | 1920×480 | USB, V1.x | **supported** — verified on the hardware: runs, as its owners report |
+| `turing-9.2-usb` | 9.2" | 1920×480 | USB, V1.x | **supported** — verified on the hardware: stills and video mode at 50 fps, for hours on end; an owner's doctor report, every check passed (#19) |
+| `turing-12.3-usb` | 12.3" | 1920×720 | USB, V1.x | **supported** — verified on the hardware: runs from the first start, as stills and as video |
 
 USB (V1.x) panels identify as VID `0x1CBE` with a size-specific PID; see
 [protocol notes](protocol/turzx-usb.md). The 9.2" panel is 480×1920, not the
