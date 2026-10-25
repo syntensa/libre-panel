@@ -29,6 +29,24 @@
   16-thread processor (1.2 cores) at 30 against 12.4 % (2.0 cores) at 50. Settings → Panel →
   Frames per second says what 50 costs, for whoever wants it; the video experiment has a step
   at 50. A panel set to 50 by hand keeps it.
+- **The graphics card converts the colours only where it is proven right**: with
+  `video.pixels = "auto"` the processor converts until a colour check has compared the card's
+  conversion with it; the first time the video mode starts a card's encoder with a new ffmpeg
+  or graphics driver, that check runs by itself in the background (a few frames, a few seconds,
+  never on the panel). Where the colours come out identical the card takes over (it saves the
+  processor a few milliseconds a frame), else the processor stays. The card is told BT.601 and
+  the range outright: AMD's through its own scaler (`vpp_amf`), Intel's through `vpp_qsv`;
+  NVIDIA's converts by itself. Settings → Panel → *Check the colours* says who converts and why,
+  with the day it was checked and *Check again*. `"card"` and `"rgb"` force a way.
+- **Every stream says it is BT.601**, in the range it has, whichever encoder made it: a player
+  on the PC shows it as the panel does (AMD's encoder tagged its stream BT.709 in full range).
+
+**Fixes**
+- **Black looked grey on the 12.3" in video mode**: its decoder shows the video as full range,
+  so the video of limited range looked washed out while the stills were right. It now gets full
+  range by itself (`[device] video_range`, each panel its own); *Is black too light on the
+  panel? Compare* under *Check the colours* shows any panel both, and *A looks right* or *B
+  looks right* writes the one that does.
 
 ## 0.7.1rc6 — 2026-10-25
 

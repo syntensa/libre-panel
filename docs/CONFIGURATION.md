@@ -84,6 +84,9 @@ still = "auto"                 # TURZX USB panels without the video mode: each p
                                # "png" or as "jpeg" (decoded by the panel's hardware:
                                # faster); "auto" is JPEG on the 5.2", which shows no PNG,
                                # and PNG on the others
+video_range = "auto"           # TURZX USB panels in video mode: the range of the video's
+                               # values, "limited" (16-235) or "full" (0-255); "auto" is
+                               # full on the 12.3", limited on the others (see Video)
 dark_on_quit = false           # true: black and its light off when Libre Panel quits
                                # (Windows shutting down too); lit again at the next start;
                                # Turing 3.5" and UsbPCMonitor turn their screen off too
@@ -1597,9 +1600,12 @@ answer too.
   the bit rate each panel got to (the next start begins there, within the steps, instead of
   climbing them again), whether ffmpeg can start the graphics card's encoder (asked again
   after a week, as a new driver may change it; with the last line ffmpeg said, which
-  *Check the colours* shows for an encoder "auto" passed over) and a card's encoder that ended before its first
-  picture fed four bytes a pixel (for a week every start feeds it three, the way of before, at
-  once; then four are tried again); delete the file to have all of it found out anew.
+  *Check the colours* shows for an encoder "auto" passed over), a card's encoder that ended
+  before its first picture converting the colours itself (for a week the processor converts
+  for it at once; then the card is tried again) and the colour check's verdict on each card's
+  encoder in each range (`pixels = "auto"`: whether the card converts; it holds for that
+  ffmpeg, its version and the graphics driver's, at most a week); delete the file to have all
+  of it found out anew.
 
 | Setting | Default | |
 |---|---|---|
@@ -1612,24 +1618,51 @@ answer too.
 | `maxrate` | `"auto"` | highest bit rate: `"auto"` starts at 2 Mbit/s for the 9.2" (1920×480 at 50 fps) and proportionally more for a panel with more pixels or frames (the 12.3": 3 Mbit/s), then follows the panel up the steps 3 · 4 · 6 · 8 · 12 · 16 · 24 · 32 Mbit/s: a step down while the panel takes less than it is sent, never below the start (a panel that cannot keep up there cannot keep up with the pictures: fewer `fps` help), a step up after a calm minute; the *Data rate* tile under Live says the cap in force. Or a fixed rate such as `"1500k"` or `"4M"` |
 | `profile` | `"auto"` | (these and the rows below are also on the card *Video experiment* under Settings → Panel, with how the panel is doing underneath; *Run every step by itself* there tries them all in turn and judges each from the panels' numbers) the H.264 profile: `"auto"` is `"high"` on the 9.2" and the 12.3" (measured to show there; it compresses far better) and `"baseline"` elsewhere; `"main"` and `"high"` ask more of a panel's decoder (if the panel shows nothing, go back to `"baseline"`) |
 | `encoder` | `"auto"` | the encoder: `"auto"` is the graphics card's where it was measured to show and ffmpeg can start it (AMD's `"h264_amf"`, probed once a week; one that stops before its first picture is left out), else `"libx264"` on the processor; `"h264_nvenc"` (NVIDIA) and `"h264_qsv"` (Intel) are an experiment to set by hand (`crf` and `preset` are x264's, a hardware encoder takes the quality from `maxrate`, NVIDIA's from `crf` too). What ffmpeg says about an encoder it cannot start is in the log |
-| `pixels` | `"auto"` | how the frames reach ffmpeg (the app checks it for you, see below): `"auto"` four bytes a pixel, as Libre Panel draws them, which AMD's and NVIDIA's encoders turn into video colours on the graphics card themselves (told to do it as ffmpeg does on the processor, BT.601 in limited range), and from which ffmpeg makes them for x264 and Intel's for less than from three; `"rgb"` the way of before: three bytes a pixel, the colours made by ffmpeg on the processor for every encoder. The log's line `video: encoding with ...` says which it is (`h264_amf, rgb0` or `h264_amf, rgb24`). A card's encoder that ends before its first picture fed four bytes a pixel is started again the way of before, by itself |
+| `pixels` | `"auto"` | who turns the frames' colours into video (see below): `"auto"` the graphics card where the colour check found it converting exactly as ffmpeg does on the processor, else the processor. The default, because the card's conversion saves the processor a few milliseconds a frame but cannot be trusted unseen: the colour check measured AMD's encoder converting with BT.709 and a full-range tag when left to itself, while the panel's decoder applies BT.601 whatever the stream says. `"card"` the card always (AMD's, NVIDIA's and Intel's encoders; x264 has none); `"rgb"` the processor always, fed three bytes a pixel, the way of before. The log's line `video: encoding with ...` says which it is (`h264_amf, rgb0, card`, `h264_amf, rgb0` or `h264_amf, rgb24`). A card's encoder that ends before its first picture converting the colours itself is started again with the processor's conversion, by itself |
 | `ffmpeg` | `""` | path to ffmpeg; empty = the download's own, else look in `PATH` |
 | `local_clip` | `""` | see above |
 | `clip_asked` | `false` | `true` once the app has asked for `local_clip` (a name written there, or *Not now*); then it does not ask again |
 
-**The colours (`pixels`): the app checks it for you.** Settings → Panel → *Check the colours*
-(under the video experiment) sends a test picture through every encoder this PC can start, fed
-both ways, away from the panel, and measures the colours that come out: per encoder two rows of
-swatches, the largest difference and the verdict (identical, a level shift, a matrix shift or
-other). It says which encoder the panel runs and what it is fed, which one `encoder = "auto"`
-picks and, for a graphics card's encoder it passed over, the last line ffmpeg said when it was
-tried; and what the check means for the encoder the panel runs: nothing to do, or a
-button *Use the processor's conversion*, which writes `pixels = "rgb"` (and later *Back to the
-card's conversion*, `"auto"`); the running panels follow at once, each with a new ffmpeg, the
-panels beside the first too. *Show it on the panel* shows the test picture on the panel chosen
-at the top for 30 seconds, A (the card's conversion) and B (the processor's) every 3 seconds,
-then its theme again. How the check measures is in
+**The colours (`pixels`): the app checks it for you.** Every stream says of itself that it is
+BT.601 (its colour matrix, primaries and transfer) in the range the panel gets, on every path
+and every encoder, so that what plays it elsewhere shows it as the panel does. With
+`pixels = "auto"` the processor converts until a check has compared the graphics card's
+conversion with it: the first time the video mode starts one of the card's encoders with a new
+ffmpeg, ffmpeg version or graphics driver, a check runs once by itself in the background (five
+frames of a test picture each way, a few seconds, never on the panel and never while another
+check runs). Where every patch comes out within ±2 code values the card converts from then on
+(the panel switches at its next frame); else the processor goes on. The card's conversion is
+told to convert as ffmpeg does: AMD's through its own scaler (`vpp_amf`, BT.601 in the panel's
+range), Intel's through `vpp_qsv` with the matrix and the range set; NVIDIA's encoder converts
+by itself, in limited range only, and on a panel that gets full range the processor converts
+for it.
+
+Settings → Panel → *Check the colours* (under the video experiment) says who converts for the
+panel chosen at the top and why: *The graphics card converts the colours: checked identical on
+...*, or *The processor converts the colours: the card's differ (matrix shift, ...)*, the card
+gives no picture converting them itself, it makes limited range only, or the check is still to
+come; *Check again* runs the check again, with *Back to the automatic choice* where `pixels`
+forces a way. The check sends the test picture through every encoder this PC can start, the
+card's way and the processor's, away from the panel, in the range the panel gets, and measures
+the colours that come out: per encoder two rows of swatches, the largest difference and the
+verdict (identical, a level shift, a matrix shift or other); it also says which encoder the
+panel runs, which one `encoder = "auto"` picks and, for a graphics card's encoder it passed
+over, the last line ffmpeg said when it was tried. *Show it on the panel* shows the test
+picture on that panel for 30 seconds, A (the card's conversion) and B (the processor's) every
+3 seconds, then its theme again. How the check measures is in
 [the protocol notes](protocol/turzx-usb.md#encoder).
+
+**Black too light (`video_range`).** The panel's decoder shows the video's values either in
+limited range (16 is black, 235 white: what video usually is) or as full range (0 to 255). A
+panel that shows a limited-range video as full range shows black as dark grey and every colour
+paler, in video mode only; its stills are right. `[device] video_range` (and each `[[panels]]`
+table's own) says which the panel gets: `"auto"` as its model is known to show video (full on
+the 12.3", whose video looked washed out in limited range; limited on the others), `"limited"`
+or `"full"`. Full range is made by ffmpeg on the processor (BT.601 in full range), or by AMD's
+and Intel's card where the check found it right; the stream says so of itself. *Is black too
+light on the panel? Compare* under *Check the colours* shows the test picture on that panel in
+limited (A) and full range (B) every 3 seconds; *A looks right* or *B looks right* writes that
+panel's `video_range`, and the panel follows at once.
 
 The settings were measured on the 9.2" panel; the details are in
 [the protocol notes](protocol/turzx-usb.md#two-layers-h264-video--png-overlay-smooth-path).

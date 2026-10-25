@@ -1,17 +1,25 @@
 """Settings → Panel → Check the colours, run by the app (``/api/colour-check``).
 
-- **The check** (devices/colour_check.py) in a thread of its own, with the settings and the
-  frame size of the panel the app is about (the header's choice): its model as it runs, else
-  the one on the bus, else the one chosen in Settings, else the 9.2"; its encoder settings as
-  the display takes them. The panels are not touched.
-- **What it means for that panel**: the encoder it runs and what it feeds it (its counters'
-  ``encoder``, "h264_amf, rgb0"), the one "auto" picks and why it passed over a card's encoder
-  (the last line ffmpeg said in the probe, :meth:`ColourCheck.auto`), and from the check's
-  verdict on the encoder in use the one thing to
-  do (:func:`advice`): nothing, or ``video.pixels = "rgb"`` (the processor's conversion, written
-  by the card's button through the settings; the display starts ffmpeg anew by itself), or back.
-- **The A/B on that panel** (colour_show.py): for 30 s its test picture, fed the new way and the
-  old way in turn; ended in a ``finally`` whatever happens, and when the app closes.
+- **The check** (devices/colour_check.py) in a thread of its own, with the settings, the frame
+  size and the range of the panel the app is about (the header's choice): its model as it runs,
+  else the one on the bus, else the one chosen in Settings, else the 9.2"; its encoder settings
+  as the display takes them; limited or full range as [device] video_range has it for that
+  model. A card's encoder converting the colours itself is compared with the processor's
+  conversion; what that conversion costs a frame is measured too. The panels are not touched.
+  Each verdict on a card's encoder is kept for the automatic choice (devices/card_choice.py),
+  which the display follows at its next frame.
+- **Who converts for that panel** (:meth:`ColourCheck.choice`): the encoder it runs (its
+  counters' ``encoder``, "h264_amf, rgb0" or "h264_amf, rgb0, card"), the one "auto" picks and
+  why it passed over a card's encoder (the last line ffmpeg said in the probe,
+  :meth:`ColourCheck.auto`), who converts and why: the card where a check found it identical
+  (and when), else the processor with the reason (the card's colours differ, it gives no picture
+  converting itself, it makes limited range only on a panel in full range, the check is still to
+  come), or video.pixels forcing a way, with the way back to the automatic choice.
+- **The A/B on that panel** (colour_show.py): for 30 s its test picture, made two ways in turn:
+  converted by the card and by the processor (for a card's encoder that can), or in limited and
+  in full range (*Is black too light on the panel? Compare*; the person's answer is written as
+  that panel's video_range by the card's buttons, through the settings). Ended in a ``finally``
+  whatever happens, and when the app closes.
 """
 
 from __future__ import annotations
@@ -24,15 +32,15 @@ from typing import Any
 
 from libre_panel import colour_show
 from libre_panel.config import ConfigError, load_config
-from libre_panel.devices import colour_check, h264, video_state
+from libre_panel.devices import card_choice, colour_check, h264, video_state
 from libre_panel.devices.base import DeviceError
-from libre_panel.devices.h264 import PASS_THROUGH, ffmpeg_command
-from libre_panel.devices.models import find_model, get_model
+from libre_panel.devices.h264 import ffmpeg_command
+from libre_panel.devices.models import PanelModel, find_model, get_model
 
 log = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "turing-9.2-usb"  # the size of the picture where no panel says its own
-SHIFTS = ("level", "matrix", "other")
+WAIT_S = 30.0  # the person's check waits this long for a check in the background to end
 
 
 class ColourError(ValueError):
@@ -41,46 +49,42 @@ class ColourError(ValueError):
         self.status = status
 
 
-def in_use_of(text: str | None) -> tuple[str, str] | None:
-    """The encoder and its feed from the counters' ``encoder`` ("h264_amf, rgb0")."""
+def in_use_of(text: str | None) -> tuple[str, str, bool] | None:
+    """The encoder, its feed and whether the card converts, from the counters' ``encoder``
+    ("h264_amf, rgb0", "h264_amf, rgb0, card")."""
     parts = [part.strip() for part in (text or "").split(",")]
     if len(parts) < 2 or not parts[0] or parts[1] not in ("rgb0", "rgb24"):
         return None
-    return parts[0], parts[1]
+    return parts[0], parts[1], parts[2:3] == ["card"]
 
 
-def by_card(encoder: str, feed: str) -> bool:
-    """Whether the colours of ``encoder`` fed ``feed`` are converted on the graphics card."""
-    return encoder in PASS_THROUGH and feed == "rgb0"
+def why_of(encoder: str, pixels: str, full: bool, kept: dict | None, refused: bool) -> str:
+    """Why the card converts for ``encoder`` or not, the reason the card shows:
 
-
-def advice(in_use: dict[str, Any] | None, results: list[dict[str, Any]], pixels: str) -> str:
-    """The one thing to do, by the check's verdict on the encoder in use:
-
-    "back": the processor converts for the cards (``video.pixels = "rgb"``): back to the card's
-    conversion offered; "processor": that encoder takes YUV only, ffmpeg converts either way;
-    "refused": a card's encoder that took no four bytes a pixel, converted for by itself;
-    "nothing": the card converts as the processor does; "shift": it does not, the processor's
-    conversion offered; "" while the check has nothing to say on it."""
-    if pixels == "rgb":
-        return "back"
-    if in_use is None:
-        return ""
-    encoder = in_use["encoder"]
-    if encoder not in PASS_THROUGH:
-        return "processor"
-    if in_use["feed"] != "rgb0":
+    "x264": an encoder of the processor (it takes YUV only); "limited-only": the panel shows
+    full range and the card makes limited range only with this encoder; "refused": it gives no
+    picture converting the frames itself; "card" and "rgb": video.pixels forces that way; else
+    for "auto" the verdict ``kept`` (card_choice.py): "identical" (the card converts), "differs"
+    (the processor), or "unchecked" (none yet: the processor)."""
+    if encoder not in h264.CARD_ENCODERS:
+        return "x264"
+    if not card_choice.can(encoder, full):
+        return "limited-only"
+    if refused or (kept is not None and kept.get("state") == "refused"):
         return "refused"
-    result = next((r for r in results if r["encoder"] == encoder), None)
-    if result is None:
-        return ""
-    if result["state"] == "refused":
-        return "refused"
-    if result.get("verdict") == "identical":
-        return "nothing"
-    if result.get("verdict") in SHIFTS:
-        return "shift"
-    return ""
+    if pixels in ("card", "rgb"):
+        return pixels
+    if kept is None:
+        return "unchecked"
+    return "identical" if kept.get("card") else "differs"
+
+
+def way_of(why: str, pixels: str) -> str:
+    """Who converts for that reason (:func:`why_of`): "card", "processor" or "rgb" (the
+    processor, fed three bytes a pixel)."""
+    if why in ("card", "identical"):
+        return "card"
+    return "rgb" if pixels == "rgb" else "processor"
 
 
 class ColourCheck:
@@ -108,10 +112,13 @@ class ColourCheck:
         self.error = ""
         self.ended = ""  # "done", "stopped", "" while it runs or never ran
         self.picture: dict[str, Any] = {}  # the panel, the model and the size it was made for
+        self.saving_ms: float | None = None  # what the processor's conversion costs a frame
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.show_error = ""
         self.show_ended = ""
+        self.show_kind = ""  # of the last A/B begun: "feed" or "range" (colour_show.WAYS)
+        self.show_panel = 0
         self._show_stop = threading.Event()
         self._show_thread: threading.Thread | None = None
 
@@ -134,9 +141,23 @@ class ColourCheck:
             return status
         return (getattr(status, "more", None) or {}).get(number - 2)
 
+    def _full(self, config: Any, model: PanelModel | None) -> bool:
+        """Whether the panel gets its video in full range ([device] video_range, for "auto" as
+        its model is known to show it)."""
+        from libre_panel.devices.turzx_video import full_range
+
+        return full_range(config.device.video_range, model)
+
+    def _model(self, number: int, config: Any) -> PanelModel | None:
+        """The model of panel ``number`` as it runs, else as Settings name it (no look at the
+        bus: the card asks every second)."""
+        status = self._status(number)
+        return find_model(getattr(status, "model", "") or "") or find_model(config.device.model)
+
     def _picture(self, number: int, config: Any) -> dict[str, Any]:
-        """The model and the frame size of panel ``number``: as it runs, else the panel on the
-        bus (the first), else the one chosen in Settings, else the 9.2" (landscape)."""
+        """The model, the frame size and the range of panel ``number``: as it runs, else the
+        panel on the bus (the first), else the one chosen in Settings, else the 9.2"
+        (landscape)."""
         status = self._status(number)
         model = find_model(getattr(status, "model", "") or "")
         if model is None and number == 1:
@@ -150,7 +171,8 @@ class ColourCheck:
         size = getattr(status, "size", None)
         if not size:
             size = model.size(config.device.orientation or "landscape")
-        return {"panel": number, "model": model.id, "size": [int(size[0]), int(size[1])]}
+        return {"panel": number, "model": model.id, "size": [int(size[0]), int(size[1])],
+                "full": self._full(config, model)}  # fmt: skip
 
     # -- the check -----------------------------------------------------------------------------
 
@@ -161,7 +183,7 @@ class ColourCheck:
             config = self._config(number)
             video = config.device.video
             picture = self._picture(number, config)
-            self.results, self.error, self.ended = [], "", ""
+            self.results, self.error, self.ended, self.saving_ms = [], "", "", None
             self.picture = picture
             try:
                 ffmpeg = h264.find_ffmpeg(video.ffmpeg)
@@ -182,17 +204,31 @@ class ColourCheck:
         from libre_panel.devices.turzx_video import resolved, rotation_of, video_settings
 
         size = (picture["size"][0], picture["size"][1])
+        full = picture["full"]
         base = video_settings(video)
 
         def settings(encoder: str, pixels: str) -> h264.EncoderSettings:
-            return resolved(base, picture["model"], encoder, pixels)
+            return resolved(base, picture["model"], encoder, pixels, full)
+
+        def done(result: dict[str, Any]) -> None:
+            self.results.append(result)
+            card_choice.record(ffmpeg, result, full)  # (the automatic choice follows it)
 
         try:
-            log.info("colour check: a %dx%d test picture (%s)", *size, picture["model"])
-            works = self.works or h264.encoder_works  # (the probe "auto" goes by)
-            colour_check.check(ffmpeg, settings, size, rotation_of(size), works=works,
-                               command=self.command, stop=stop,
-                               done=self.results.append)  # fmt: skip
+            with colour_check.exclusive(WAIT_S) as free:
+                if not free:
+                    self.error = "another colour check runs; try again in a moment"
+                    return
+                log.info("colour check: a %dx%d test picture (%s, %s range)", *size,
+                         picture["model"], "full" if full else "limited")  # fmt: skip
+                works = self.works or h264.encoder_works  # (the probe "auto" goes by)
+                colour_check.check(ffmpeg, settings, size, rotation_of(size), works=works,
+                                   command=self.command, stop=stop, done=done,
+                                   full=full)  # fmt: skip
+            if not stop.is_set() and any(
+                r.get("compared", [""])[0] == "card" and r["state"] == "done" for r in self.results
+            ):  # what the card's own conversion saves
+                self.saving_ms = colour_check.conversion_ms(ffmpeg, size, rotation_of(size))
         except Exception as exc:  # the app shows it
             self.error = str(exc) or type(exc).__name__
             log.exception("the colour check stopped at a fault")
@@ -205,22 +241,37 @@ class ColourCheck:
     def shows_video(self, number: int) -> bool:
         """Whether panel ``number`` of the running app streams video now (its counters name
         the encoder only then)."""
-        stats = getattr(self._status(number), "stats", None) or {}
-        return bool(stats.get("streaming")) and in_use_of(stats.get("encoder")) is not None
+        return self._running(number) is not None
 
-    def start_show(self, number: int) -> None:
+    def _running(self, number: int) -> tuple[str, str, bool] | None:
+        """The encoder panel ``number`` runs, its feed and whether the card converts: its
+        counters' while it streams video, else None."""
+        stats = getattr(self._status(number), "stats", None) or {}
+        return in_use_of(stats.get("encoder")) if stats.get("streaming") else None
+
+    def start_show(self, number: int, kind: str = "feed") -> None:
+        """Panel ``number``'s test picture, A and B of ``kind`` in turn: "feed", the card's
+        conversion against the processor's (a card's encoder that can only); "range", limited
+        against full range (any encoder)."""
         with self._lock:
             if self.controls is None:
                 raise ColourError("showing it on the panel needs the running app")
-            self._config(number)  # (a panel that is there)
+            if kind not in colour_show.WAYS:
+                raise ColourError(f"kind: one of {', '.join(colour_show.WAYS)}", 400)
+            config = self._config(number)  # (a panel that is there)
             thread = self._show_thread
             if thread is not None and thread.is_alive():
                 raise ColourError("a panel shows the test picture already")
-            if not self.shows_video(number):
+            running = self._running(number)
+            if running is None:
                 raise ColourError(f"panel {number} shows no video now")
+            full = self._full(config, self._model(number, config))
+            if kind == "feed" and not card_choice.can(running[0], full):  # (A, B the same)
+                raise ColourError(f"panel {number} runs {running[0]}: the processor converts")
             self.show_error, self.show_ended = "", ""
+            self.show_kind, self.show_panel = kind, number
             try:  # at once: the card says so as the click is answered
-                colour_show.begin(number)
+                colour_show.begin(number, kind=kind)
             except Exception as exc:
                 colour_show.end()
                 raise ColourError(f"the test picture did not go to panel {number}: {exc}") from exc
@@ -296,51 +347,87 @@ class ColourCheck:
         found["picked"] = "libx264"
         return found
 
+    def choice(self, number: int, config: Any, encoder: str | None) -> dict[str, Any]:
+        """Who converts the colours for ``encoder`` on panel ``number`` and why
+        (:func:`why_of`), with the verdict kept for it (card_choice.py: ``verdict``, ``worst``,
+        ``when``, ``by``) and whether its check in the background runs now."""
+        video = config.device.video
+        model = self._model(number, config)
+        full = self._full(config, model)
+        found: dict[str, Any] = {"encoder": encoder, "pixels": video.pixels, "full": full,
+                                 "range": config.device.video_range,
+                                 "model_range": model.video_range if model else "limited",
+                                 "way": None, "why": "", "verdict": None, "worst": None,
+                                 "when": None, "by": None, "checking": False}  # fmt: skip
+        if not encoder:
+            return found
+        kept, refused = None, False
+        if encoder in h264.CARD_ENCODERS:
+            try:
+                ffmpeg = h264.find_ffmpeg(video.ffmpeg)
+            except DeviceError:
+                ffmpeg = None
+            if ffmpeg is not None:
+                refused = video_state.refused(ffmpeg, encoder)
+                if card_choice.can(encoder, full):
+                    kept = card_choice.verdict(ffmpeg, encoder, full)
+                    found["checking"] = card_choice.checking(ffmpeg, encoder, full)
+        why = why_of(encoder, video.pixels, full, kept, refused)
+        found.update(why=why, way=way_of(why, video.pixels))
+        if kept is not None:
+            found.update({key: kept.get(key) for key in ("verdict", "worst", "when", "by")})
+        return found
+
     def state(self, number: int = 1) -> dict[str, Any]:
         config = self._config(number)
         video = config.device.video
-        status = self._status(number)
-        stats = getattr(status, "stats", None) or {}
-        running = in_use_of(stats.get("encoder")) if stats.get("streaming") else None
+        running = self._running(number)
         auto = self.auto(video)
-        picked = auto["picked"]
+        encoder = running[0] if running is not None else auto["picked"]
+        choice = self.choice(number, config, encoder)
         in_use = None
         if running is not None:
-            encoder, feed = running
-            in_use = {"encoder": encoder, "feed": feed, "running": True}
-        elif picked:  # what its settings would start, as the probe found the encoders
-            refused = False
-            if picked in PASS_THROUGH and video.pixels != "rgb":
-                try:
-                    refused = video_state.refused(h264.find_ffmpeg(video.ffmpeg), picked)
-                except DeviceError:
-                    refused = False
-            feed = "rgb24" if video.pixels == "rgb" or refused else "rgb0"
-            in_use = {"encoder": picked, "feed": feed, "running": False}
-        if in_use is not None:
-            in_use["card"] = by_card(in_use["encoder"], in_use["feed"])
+            encoder, feed, card = running
+            in_use = {"encoder": encoder, "feed": feed, "card": card, "running": True}
+        elif encoder:  # what its settings would start, as the probe found the encoders
+            feed = "rgb24" if choice["way"] == "rgb" else "rgb0"
+            in_use = {"encoder": encoder, "feed": feed, "card": choice["way"] == "card",
+                      "running": False}  # fmt: skip
+        if self.controls is None:
+            ab = "app"
+        elif running is None:
+            ab = "video"
+        elif choice["why"] in ("x264", "limited-only"):  # (A and B would be the same)
+            ab = choice["why"]
+        else:
+            ab = ""
         showing = colour_show.state()
         thread = self._show_thread
         return {
             "panel": number,
             "app": self.controls is not None,
-            "video": self.shows_video(number),
+            "video": running is not None,
+            "ab": ab,  # why the A/B of the card's conversion is not offered ("": it is)
             "pixels": video.pixels,
             "auto": auto,
             "in_use": in_use,
-            "advice": advice(in_use, self.results, video.pixels),
+            "choice": choice,
             "check": {
                 "running": self.running,
                 "results": list(self.results),
                 "error": self.error,
                 "ended": self.ended,
                 "picture": self.picture,
+                "saving_ms": self.saving_ms,
                 "encoders": list(colour_check.ENCODERS),
             },
             "show": {
                 "running": thread is not None and thread.is_alive(),
                 "panel": showing["panel"] if showing else None,
+                "kind": showing["kind"] if showing else self.show_kind,
+                "of": self.show_panel,  # the panel of the last A/B begun
                 "letter": showing["letter"] if showing else None,
+                "value": showing["value"] if showing else None,
                 "left_s": round(showing["left_s"]) if showing else 0,
                 "seconds": colour_show.SHOW_S,
                 "switch_s": colour_show.SWITCH_S,

@@ -641,6 +641,7 @@ class _Warmup:
 _FOLLOWED = (
     "brightness", "rotate", "night", "night_from", "night_to", "night_brightness",
     "dark_when_away", "away_brightness", "at",
+    "video_range",  # (the video display starts ffmpeg anew in the new range)
 )  # fmt: skip
 NIGHT_CHECK_S = 30.0  # how often the loop looks whether night began or ended
 
@@ -1346,12 +1347,15 @@ class MainLoop:
                 frame = self.alarm.draw(frame, now, renderer.theme.palette.get("crit"),
                                         still=not renderer.animate)  # fmt: skip
                 number = 1 if self.panel is None else self.panel + 2
-                # the colour check's picture (Settings → Panel), fed to ffmpeg as its moment says
+                # the colour check's picture (Settings → Panel), its video made as its moment
+                # says: converted by the card or the processor ("feed"), or in which range
                 checking = colour_show.now(number) if streaming else None
-                feed = checking[1] if checking is not None else None
-                set_feed = getattr(display, "set_feed", None)  # (a plugin's display may lack it)
-                if set_feed is not None and getattr(display, "feed", None) != feed:
-                    set_feed(feed)
+                for kind, attr, method in (("feed", "feed", "set_feed"),
+                                           ("range", "range", "set_range")):  # fmt: skip
+                    wanted = checking[2] if checking is not None and checking[1] == kind else None
+                    told = getattr(display, method, None)  # (a plugin's display may lack it)
+                    if told is not None and getattr(display, attr, None) != wanted:
+                        told(wanted)
                 if checking is not None:
                     frame = colour_show.picture(frame.size, checking[0])
                 if identify.showing():  # which panel is which: its number instead, a moment

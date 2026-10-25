@@ -74,6 +74,14 @@ Their video mode (up to 50 frames a second) encodes with ffmpeg, which the Windo
 downloads carry; nothing else is to be installed. With a pip install, install ffmpeg yourself
 ([Video](CONFIGURATION.md#video)).
 
+The 12.3"'s video decoder shows the video's values as full range (0-255) whatever the stream
+says: in limited range, as video usually is, black looked dark grey and the colours pale in
+video mode (with the processor's conversion and the graphics card's alike), while its stills
+were right. So Libre Panel makes its video in full range by itself (`[device] video_range =
+"auto"`); the other panels get limited range. *Settings → Panel → Check the colours → Is black
+too light on the panel? Compare* shows any panel both, and writes the one that looks right
+([Video](CONFIGURATION.md#video)).
+
 Two or more panels can run at once, a USB one and a serial one or two of a kind, each with a
 theme of its own ([More panels at once](CONFIGURATION.md#more-panels-at-once)). Of two
 panels of the same kind each finds one; which shows which theme goes by the order the system

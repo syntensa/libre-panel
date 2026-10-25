@@ -158,6 +158,9 @@ class Display:
     # (Settings → Panel → Check the colours): "auto" or "rgb" as video.pixels takes them; None
     # the rest of the time, when video.pixels holds (set_feed)
     feed: str | None = None
+    # So for the range of the video's values ("limited" or "full"), while a colour check compares
+    # them on the panel; None: [device] video_range holds (set_range)
+    range: str | None = None
 
     def __init__(self, config: DeviceConfig) -> None:
         self.config = config
@@ -178,6 +181,10 @@ class Display:
         """A colour check's feed for the video (:attr:`feed`); the video display starts ffmpeg
         anew with it at its next frame, and the others have no video to feed."""
         self.feed = pixels
+
+    def set_range(self, video_range: str | None) -> None:
+        """A colour check's range for the video (:attr:`range`), as :meth:`set_feed`."""
+        self.range = video_range
 
     def screen_off(self) -> bool:
         """Libre Panel quits ([device] dark_on_quit): the panel's own command that turns its

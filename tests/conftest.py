@@ -55,7 +55,10 @@ def isolated_home(tmp_path, monkeypatch):
     """Every test gets its own config/user-themes directory."""
     home = tmp_path / "home"
     monkeypatch.setenv("LIBRE_PANEL_HOME", str(home))
-    return home
+    yield home
+    choice = sys.modules.get("libre_panel.devices.card_choice")
+    if choice is not None:  # (a colour check in the background ends in the test that began it)
+        choice.forget(wait=30)
 
 
 @pytest.fixture(autouse=True)
