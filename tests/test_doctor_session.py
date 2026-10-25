@@ -239,6 +239,9 @@ def test_a_step_of_the_loop_that_hangs_writes_where_every_thread_stands(tmp_path
         watch.disarm()
         watch.arm()  # a step in time writes nothing
         watch.disarm()
+        # a timer that was not taken back would have fired by now (it began at the arm): the dump
+        # of the hang above is the only one only if this has waited for it
+        time.sleep(watch.seconds * 2)
     finally:
         watch.close()
     hang = (tmp_path / HANG_FILENAME).read_text("utf-8")

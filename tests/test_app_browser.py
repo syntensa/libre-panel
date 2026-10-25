@@ -15,6 +15,12 @@ from libre_panel.editor import access  # noqa: E402
 from libre_panel.editor.server import make_server  # noqa: E402
 from libre_panel.theme.model import version_base  # noqa: E402
 
+# Every expectation of the browser tests (this file's and those that import from it) waits for what
+# it expects for 15 s instead of the 5 s Playwright gives it: a slow runner (Windows under load)
+# needs the room. What holds is found at once, so a test that passes takes no longer; one that
+# fails waits the longer before it says so. (An expectation with a timeout of its own keeps it.)
+expect.set_options(timeout=15_000)
+
 
 class AppUrl(str):
     """The address of an app's server and its access token, which the browser is given apart
