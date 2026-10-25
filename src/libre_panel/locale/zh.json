@@ -2484,7 +2484,13 @@
     "auto is high on the 9.2\" and the 12.3\" (measured to show there; it compresses far better) and baseline elsewhere; main and high ask more of the panel's decoder.": "auto 在 9.2\" 和 12.3\" 上为 high（已实测可显示；压缩效果好得多），其他面板为 baseline；main 和 high 对面板解码器要求更高。",
     "auto is the graphics card's encoder where it was measured to show and ffmpeg can start it (AMD's), else x264 on the processor. NVIDIA's and Intel's are an experiment. An encoder that cannot start says why in the log.": "auto 在已实测可显示且 ffmpeg 能启动的显卡编码器（AMD）上使用它，否则用处理器上的 x264。NVIDIA 和 Intel 仍属实验。无法启动的编码器会在日志里说明原因。",
     "the PC was slow": "PC 速度慢",
-    "x264's crf: lower is sharper and needs more bits. 20 is the default, 18 near lossless to the eye, 25 the first measurement's. (NVIDIA's encoder takes it too; AMD's and Intel's take their quality from the cap.)": "x264 的 crf：越低越清晰，需要的比特也越多。20 为默认值，18 在肉眼看来接近无损，25 是首次实测的值。（NVIDIA 的编码器也采用它；AMD 和 Intel 的编码器则由上限决定质量。）"
+    "x264's crf: lower is sharper and needs more bits. 20 is the default, 18 near lossless to the eye, 25 the first measurement's. (NVIDIA's encoder takes it too; AMD's and Intel's take their quality from the cap.)": "x264 的 crf：越低越清晰，需要的比特也越多。20 为默认值，18 在肉眼看来接近无损，25 是首次实测的值。（NVIDIA 的编码器也采用它；AMD 和 Intel 的编码器则由上限决定质量。）",
+    "PC power": "整机功耗",
+    "0.1% low": "0.1% 低帧",
+    "This round has no report: it is no longer kept, or it had no frame rates.": "这一局没有报告：它已不再保存，或没有帧率。",
+    "The round report is kept as a picture in {folder}": "回合报告已作为图片保存在 {folder}",
+    "Keeps the round report of this round as a picture in your Pictures folder and opens it": "将这一局的回合报告作为图片保存到你的“图片”文件夹并打开它",
+    "Keep as a picture": "保存为图片"
   },
   "fields": {
     "agent": "智能体",

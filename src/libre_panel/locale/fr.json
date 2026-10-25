@@ -2484,7 +2484,13 @@
     "auto is high on the 9.2\" and the 12.3\" (measured to show there; it compresses far better) and baseline elsewhere; main and high ask more of the panel's decoder.": "auto vaut high sur le 9,2\" et le 12,3\" (où l'image a été vérifiée ; cela compresse bien mieux) et baseline ailleurs ; main et high demandent plus au décodeur du panneau.",
     "auto is the graphics card's encoder where it was measured to show and ffmpeg can start it (AMD's), else x264 on the processor. NVIDIA's and Intel's are an experiment. An encoder that cannot start says why in the log.": "auto désigne l'encodeur de la carte graphique là où il a été vérifié et où ffmpeg peut le démarrer (AMD), sinon x264 sur le processeur. NVIDIA et Intel restent un essai. Un encodeur qui ne démarre pas dit pourquoi dans le journal.",
     "the PC was slow": "le PC était lent",
-    "x264's crf: lower is sharper and needs more bits. 20 is the default, 18 near lossless to the eye, 25 the first measurement's. (NVIDIA's encoder takes it too; AMD's and Intel's take their quality from the cap.)": "Le crf de x264 : plus bas, c'est plus net et il faut plus de bits. 20 est la valeur par défaut, 18 presque sans perte à l'œil, 25 celle de la première mesure. (L'encodeur NVIDIA le prend aussi ; ceux d'AMD et d'Intel tirent leur qualité du plafond.)"
+    "x264's crf: lower is sharper and needs more bits. 20 is the default, 18 near lossless to the eye, 25 the first measurement's. (NVIDIA's encoder takes it too; AMD's and Intel's take their quality from the cap.)": "Le crf de x264 : plus bas, c'est plus net et il faut plus de bits. 20 est la valeur par défaut, 18 presque sans perte à l'œil, 25 celle de la première mesure. (L'encodeur NVIDIA le prend aussi ; ceux d'AMD et d'Intel tirent leur qualité du plafond.)",
+    "PC power": "Puissance du PC",
+    "0.1% low": "0,1 % bas",
+    "This round has no report: it is no longer kept, or it had no frame rates.": "Cette partie n’a pas de bilan : elle n’est plus conservée, ou elle n’avait pas d’images par seconde.",
+    "The round report is kept as a picture in {folder}": "Le bilan de partie est gardé en image dans {folder}",
+    "Keeps the round report of this round as a picture in your Pictures folder and opens it": "Garde le bilan de cette partie en image dans votre dossier Images et l’ouvre",
+    "Keep as a picture": "Garder en image"
   },
   "fields": {
     "agent": "agent",

@@ -28,6 +28,12 @@ down, judged from how long each waits for the other) and ``game.app`` (the
 program). The peak is there all the time a game runs, 0 when no frame came, so
 a graph of it never stops.
 
+And what every frame of the round has come to (``FrameTimes``): ``game.fps_avg``,
+``game.fps_1low`` and ``game.fps_01low`` (the frame rate at the 99th and the 99.9th
+percentile of the frame times), ``game.frametime_avg`` and ``game.frametime_max`` (ms). A
+round is a program's frames since it began to draw (half a minute without one begins a new
+round); the game's, since the ``game`` service found it and for as long as it is the game.
+
 The game is the program that the ``game`` service found (``set_target``);
 without it, or where that program drew nothing for the last half minute (a launcher
 another program of the game draws for), the program with the most frames. The desktop
@@ -60,6 +66,8 @@ log = logging.getLogger(__name__)
 SESSION_NAME = "LibrePanel"  # the one Windows recording session of Libre Panel
 WINDOW = 1.0  # seconds the frame rate is taken over
 LOWS_WINDOW = 30.0  # seconds the 1% lows are taken over
+FINE_MS = 100.0  # a round's frame times up to this are counted in steps of 0.01 ms, longer of 1 ms
+ROUND_EVERY_S = 1.0  # what a round's frames come to is worked out anew at most this often
 HOLD_SECONDS = 3.0  # with no game found for us: the peak goes on this long after the last frame
 IGNORED = {
     "dwm.exe", "explorer.exe", "<unknown>", "steamwebhelper.exe", "discord.exe",
@@ -125,6 +133,73 @@ def find_presentmon(path: str = "") -> str | None:
 Waits = tuple[float, float, float, float]  # CPU busy, CPU wait, GPU busy, GPU wait (ms)
 Frame = tuple[float, float, Waits | None]  # when it came, how long it took, its waits
 
+_FINE_STEPS = round(FINE_MS * 100)
+# What the frames of a round come to: the readings' names after ``game.``, unit and label.
+ROUND_READINGS = {
+    "fps_avg": ("fps", "Average FPS of the round"),
+    "fps_1low": ("fps", "1% low of the round"),
+    "fps_01low": ("fps", "0.1% low of the round"),
+    "frametime_avg": ("ms", "Average frame time of the round"),
+    "frametime_max": ("ms", "Longest frame of the round"),
+}
+
+
+class FrameTimes:
+    """Every frame time of a round, counted by its length: in steps of 0.01 ms up to
+    ``FINE_MS``, of 1 ms above (a stutter that long is one however it is rounded). So a round
+    of any length takes at most some 15,000 counts, and its lows are those of all its frames,
+    exact to the step; a ring of the last frames would forget the start of a long round."""
+
+    def __init__(self) -> None:
+        self.counts: dict[int, int] = {}  # step -> frames of that length
+        self.frames = 0
+        self.total_ms = 0.0
+        self.longest = 0.0
+        self._figures: tuple[float, dict[str, float] | None] | None = None  # (when, figures)
+
+    def add(self, ms: float) -> None:
+        step = max(1, round(ms * 100)) if ms < FINE_MS else _FINE_STEPS + round(ms - FINE_MS)
+        self.counts[step] = self.counts.get(step, 0) + 1
+        self.frames += 1
+        self.total_ms += ms
+        self.longest = max(self.longest, ms)
+
+    def percentile(self, per_mille: int) -> float | None:
+        """The frame time (ms) that ``per_mille`` thousandths of the frames take at most, by
+        the nearest rank (990: the 99th percentile); None without frames."""
+        if not self.frames:
+            return None
+        rank = -(-self.frames * per_mille // 1000)  # rounded up, in whole numbers
+        slower = self.frames - rank + 1  # the frames from that rank on, the slowest first
+        seen = 0
+        for step in sorted(self.counts, reverse=True):
+            seen += self.counts[step]
+            if seen >= slower:
+                return step / 100 if step <= _FINE_STEPS else FINE_MS + step - _FINE_STEPS
+        return None  # (not reached)
+
+    def figures(self, now: float | None = None) -> dict[str, float] | None:
+        """What the frames come to, by the names of ``ROUND_READINGS``: the mean frame rate
+        (all frames over the time they took), the 1 % and 0.1 % lows (the rate at the 99th
+        and the 99.9th percentile of the frame times), the mean and the longest frame time.
+        None without frames. With ``now`` (seconds) worked out at most every
+        ``ROUND_EVERY_S``: a long round has many lengths to go through."""
+        if now is not None and self._figures is not None and now - self._figures[0] < ROUND_EVERY_S:
+            return self._figures[1]
+        found = None
+        if self.frames:
+            mean = self.total_ms / self.frames
+            found = {
+                "fps_avg": 1000 / mean,
+                "fps_1low": 1000 / (self.percentile(990) or mean),
+                "fps_01low": 1000 / (self.percentile(999) or mean),
+                "frametime_avg": mean,
+                "frametime_max": self.longest,
+            }
+        if now is not None:
+            self._figures = (now, found)
+        return found
+
 
 class FrameCounter:
     """Frames per program as they come; the rate of the one that counts.
@@ -132,17 +207,24 @@ class FrameCounter:
     The one that counts is ``target`` (the game the service found), else (or where the
     target drew nothing in the last half minute) the program with the most frames in the
     last second.
+
+    Each program's round (``FrameTimes``) holds its frames since it began to draw; half a minute
+    without a frame ends it. The target's lasts as long as it is the target (a game paused in
+    its menu is still the same round), and ends when another program, or none, is.
     """
 
     def __init__(self) -> None:
         self._frames: dict[str, deque[Frame]] = {}  # app -> frames of the last LOWS_WINDOW
         self._peaks: dict[str, float] = {}  # app -> longest frame since the last readings()
+        self._rounds: dict[str, FrameTimes] = {}  # app -> every frame of its round
         self.target: str | None = None
         self._last: tuple[str, float] | None = None  # the program that counted, and when
 
     def set_target(self, exe: str | None) -> None:
         exe = exe.lower() if exe else None
         if exe != self.target:
+            for app in [app for app in self._rounds if app.lower() == self.target]:
+                del self._rounds[app]  # the game's round is over
             self.target = exe
             self._last = None
 
@@ -150,8 +232,11 @@ class FrameCounter:
         if not app or app.lower() in IGNORED or not 0 < ms < 5000:
             return
         frames = self._frames.setdefault(app, deque())
+        if frames and at - frames[-1][0] > LOWS_WINDOW and app.lower() != self.target:
+            self._rounds.pop(app, None)  # half a minute without a frame: another round
         frames.append((at, ms, waits))
         self._peaks[app] = max(self._peaks.get(app, 0.0), ms)
+        self._rounds.setdefault(app, FrameTimes()).add(ms)
         while frames and at - frames[0][0] > LOWS_WINDOW:
             frames.popleft()
 
@@ -188,6 +273,8 @@ class FrameCounter:
             if not frames:
                 del self._frames[app]
                 self._peaks.pop(app, None)
+                if app.lower() != self.target:  # (the game's round goes on while it is the game)
+                    self._rounds.pop(app, None)
                 continue
             counts[app] = sum(1 for at, _ms, _waits in reversed(frames) if now - at <= WINDOW)
         if self.target is not None:
@@ -221,6 +308,12 @@ class FrameCounter:
         limiter = limited_by([w for _at, _ms, w in recent if w is not None], mean)
         if limiter:
             out["game.limiter"] = Reading("game.limiter", limiter, "", "Limited by")
+        round_ = self._rounds.get(app)
+        figures = round_.figures(now) if round_ is not None else None
+        for name, value in (figures or {}).items():
+            unit, label = ROUND_READINGS[name]
+            key = f"game.{name}"
+            out[key] = Reading(key, round(value, 1 if unit == "fps" else 2), unit, label)
         return out
 
 

@@ -83,11 +83,16 @@ def _phase(state: str) -> str | None:
 
 # FOLDERID_Downloads: {374DE290-123F-4565-9164-39C4925E467B}
 FOLDERID_DOWNLOADS = (0x374DE290, 0x123F, 0x4565, (0x91, 0x64, 0x39, 0xC4, 0x92, 0x5E, 0x46, 0x7B))
+# FOLDERID_Pictures: {33E28130-4E1E-4676-835A-98395C3BC3BB}
+FOLDERID_PICTURES = (0x33E28130, 0x4E1E, 0x4676, (0x83, 0x5A, 0x98, 0x39, 0x5C, 0x3B, 0xC3, 0xBB))
 
 
-def shell_downloads(shell: Any = None, ole: Any = None) -> str | None:
-    """The Downloads folder as the Windows shell knows it (the user may have moved it), or
-    None. ``shell`` and ``ole`` are shell32 and ole32 (tests bring fakes)."""
+def shell_downloads(
+    shell: Any = None, ole: Any = None, folder: tuple[Any, ...] = FOLDERID_DOWNLOADS
+) -> str | None:
+    """The Downloads folder (or another known ``folder``: ``FOLDERID_PICTURES``) as the Windows
+    shell knows it (the user may have moved it), or None. ``shell`` and ``ole`` are shell32
+    and ole32 (tests bring fakes)."""
     import ctypes
     from ctypes import wintypes
 
@@ -111,7 +116,7 @@ def shell_downloads(shell: Any = None, ole: Any = None) -> str | None:
         ole = ctypes.WinDLL("ole32")  # type: ignore[attr-defined]
         ole.CoTaskMemFree.argtypes = [ctypes.c_void_p]
         ole.CoTaskMemFree.restype = None
-    a, b, c, d = FOLDERID_DOWNLOADS
+    a, b, c, d = folder
     guid = GUID(a, b, c, (ctypes.c_ubyte * 8)(*d))
     out = ctypes.c_void_p()
     if shell.SHGetKnownFolderPath(ctypes.byref(guid), 0, None, ctypes.byref(out)) != 0:
@@ -155,6 +160,37 @@ def downloads_folder(
         if folder.is_absolute() and _normal(folder) != _normal(home):
             return folder
     return home / "Downloads"
+
+
+def pictures_folder(
+    platform: str | None = None,
+    home: Path | None = None,
+    run: Callable[..., Any] = subprocess.run,
+    known_folder: Callable[[], str | None] = lambda: shell_downloads(folder=FOLDERID_PICTURES),
+) -> Path:
+    """The user's Pictures folder, as ``downloads_folder`` finds the Downloads folder (the
+    shell's known folder, ``xdg-user-dir PICTURES``); failing that ``~/Pictures`` where it is
+    there, else ``~/Documents``, else the home folder. Nothing is created."""
+    home = home or Path.home()
+    found: str | None = None
+    try:
+        if (platform or sys.platform) == "win32":
+            found = known_folder()
+        elif (platform or sys.platform).startswith("linux"):
+            done = run(
+                ["xdg-user-dir", "PICTURES"], capture_output=True, text=True, timeout=3, check=False
+            )
+            found = done.stdout.strip() if done.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        log.debug("the Pictures folder is not known to the system: %s", exc)
+    if found:
+        folder = Path(found)
+        if folder.is_absolute() and _normal(folder) != _normal(home):
+            return folder
+    for name in ("Pictures", "Documents"):
+        if (home / name).is_dir():
+            return home / name
+    return home
 
 
 # -- what is going on ---------------------------------------------------------------------------

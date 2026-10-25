@@ -23,12 +23,14 @@ from libre_panel.services import downloads
 from libre_panel.services import steam as steam_module
 from libre_panel.services.downloads import (
     DONE_S,
+    FOLDERID_PICTURES,
     HISTORY_S,
     MB,
     PLACES_S,
     Downloads,
     Tracker,
     downloads_folder,
+    pictures_folder,
     shell_downloads,
 )
 
@@ -584,6 +586,30 @@ def test_the_shell_may_not_know(tmp_path):
     assert shell_downloads(FakeShell("x", result=-2147024894), ole) is None  # an error code
     assert shell_downloads(FakeShell("x", null=True), ole) is None  # success, but no text
     assert ole.freed == []
+
+
+def test_the_pictures_folder_is_the_systems_else_pictures_documents_or_home(tmp_path):
+    home = tmp_path / "home"
+    run = XdgUserDir(f"{tmp_path / 'Bilder'}\n")
+    assert pictures_folder("linux", home, run) == tmp_path / "Bilder"
+    assert run.calls == [(["xdg-user-dir", "PICTURES"], 3)]
+    nothing = XdgUserDir(f"{home}\n")  # (no setting: the home folder)
+    assert pictures_folder("linux", home, nothing) == home  # none of the folders is there
+    (home / "Documents").mkdir(parents=True)
+    assert pictures_folder("linux", home, nothing) == home / "Documents"
+    (home / "Pictures").mkdir()
+    assert pictures_folder("linux", home, nothing) == home / "Pictures"
+    asked = XdgUserDir(error=AssertionError("xdg-user-dir on Windows"))
+    moved = tmp_path / "P" / "Pics"
+    assert pictures_folder("win32", home, asked, lambda: str(moved)) == moved
+    assert pictures_folder("win32", home, asked, lambda: None) == home / "Pictures"
+
+
+def test_the_shell_is_asked_for_the_pictures_folder_by_its_own_id(tmp_path):
+    shell, ole = FakeShell(str(tmp_path / "Pics")), FakeOle()
+    assert shell_downloads(shell, ole, FOLDERID_PICTURES) == str(tmp_path / "Pics")
+    ((guid, _flags, _token),) = shell.asked
+    assert guid == (0x33E28130, 0x4E1E, 0x4676, (0x83, 0x5A, 0x98, 0x39, 0x5C, 0x3B, 0xC3, 0xBB))
 
 
 def test_without_windows_there_is_no_shell_to_ask(monkeypatch):

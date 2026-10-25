@@ -22,6 +22,7 @@ import time
 import webbrowser
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -84,6 +85,7 @@ from libre_panel.theme.model import (
     resolve_asset,
     save_theme,
     switches_for,
+    theme_for,
     valid_theme_name,
     version_base,
     with_accent,
@@ -129,6 +131,11 @@ ON_DEMAND = (
     ("game.frametime", "ms", "Frame time"),
     ("game.low", "fps", "1% low"),
     ("game.frametime_peak", "ms", "Frame time peak"),
+    ("game.fps_avg", "fps", "Average FPS of the round"),
+    ("game.fps_1low", "fps", "1% low of the round"),
+    ("game.fps_01low", "fps", "0.1% low of the round"),
+    ("game.frametime_avg", "ms", "Average frame time of the round"),
+    ("game.frametime_max", "ms", "Longest frame of the round"),
     ("game.limiter", "", "Limited by"),
     ("game.app", "", "Game"),
     ("game.name", "", "Game"),
@@ -1704,6 +1711,87 @@ class EditorHandler(BaseHTTPRequestHandler):
         name = f"libre-panel-{time.strftime('%Y-%m-%d')}.png"
         self._send(200, buffer.getvalue(), "image/png", filename=name)
 
+    def _round_picture(self) -> None:
+        """``POST /api/history/picture {"id": 1760000000123}``: the report of that round (Live →
+        History) as the panel shows it (the round report's page, in the version of its theme for
+        the panel), in a picture of the panel as *Picture of all panels* takes one, kept in the
+        person's Pictures folder (in ``Libre Panel``), which then opens: ``{"file", "folder",
+        "opened"}``. 404 for a round that is not kept or had no frame rates."""
+        from libre_panel import arrangement
+        from libre_panel.devices.models import find_model
+        from libre_panel.services.downloads import pictures_folder
+        from libre_panel.services.memory import Memory
+        from libre_panel.services.round_report import readings
+        from libre_panel.tray import open_path
+
+        payload = self._read_json()
+        if payload is None:
+            return None
+        ident = payload.get("id") if isinstance(payload, dict) else None
+        if not isinstance(ident, int) or isinstance(ident, bool):
+            return self._error('expected {"id": 1760000000123}, a round of /api/history')
+        try:
+            config = load_config(self.state.config_path)
+        except ConfigError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        memory = config.services.options.get(Memory.name, {})
+        compare = memory.get("report_compare", Memory.options["report_compare"][1])
+        compare = compare if isinstance(compare, int) and compare > 0 else 10
+        found = history.round_report(history.database(config), ident, compare)
+        if found is None:
+            return self._error(
+                t("This round has no report: it is no longer kept, or it had no frame rates."),
+                HTTPStatus.NOT_FOUND,
+            )
+        report, last = found
+        # the theme of the round report's page ("" there: no theme of its own, only the data)
+        name = memory.get("report_theme") or Memory.options["report_theme"][1]
+        status = getattr(getattr(self.controls, "panel", None), "status", None)
+        told = getattr(status, "model", "") or ""
+        model = find_model(config.device.model) or (find_model(told) if told else None)
+        way = "portrait" if config.device.orientation == "portrait" else "landscape"
+        name = theme_for(str(name), config.device.orientation, model.size(way) if model else None)
+        try:
+            theme = load_theme(find_theme(name))
+        except ThemeError as exc:
+            return self._error(str(exc), HTTPStatus.NOT_FOUND)
+        found_readings = {
+            key: Reading(key, value, unit, label)
+            for key, (value, unit, label) in readings(report).items()
+        }
+        images = {}
+        host = getattr(self.controls, "plugin_host", None)
+        logo = host.images().get("game.logo") if host is not None and last else None
+        if logo is not None:  # the game service keeps the last game's logo: this round's
+            images["game.logo"] = logo
+        ended = float(report["session"]["ended"])
+        snapshot = Snapshot(readings=found_readings, now=datetime.fromtimestamp(ended),
+                            images=images)  # fmt: skip
+        renderer = Renderer(with_accent(theme, self.state.accent()), preview=True)
+        renderer.symbols = self.state.symbols()
+        renderer.switches = dict(self.state.chosen_switches(name))
+        try:
+            frame, _boxes = renderer.render(snapshot)
+        finally:
+            renderer.close()
+        size = arrangement.millimetres(find_model(theme.model) or model, frame.size)
+        width, height = size or (frame.width * arrangement.GUESS_MM_PER_PX,
+                                 frame.height * arrangement.GUESS_MM_PER_PX)  # fmt: skip
+        picture = arrangement.photo([((0.0, 0.0, width, height), frame, False, 1)])
+        folder = pictures_folder() / "Libre Panel"
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            path = history.free_name(folder, history.picture_name(report["session"]["game"], ended))
+            picture.save(path, "PNG", optimize=True)
+        except OSError as exc:
+            return self._error(str(exc), HTTPStatus.CONFLICT)
+        try:
+            open_path(folder)
+            opened = True
+        except OSError:
+            opened = False  # (kept all the same: the answer says where)
+        self._json({"file": str(path), "folder": str(folder), "opened": opened})
+
     def _send_modules(self) -> None:
         """``POST /api/panels/send {"panel": 2, "modules": [...]}``: modules of the theme in
         Design sent to the theme another panel shows (distribute.py), a copy of its own first
@@ -2382,6 +2470,7 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/news", lambda h, m, u: h._json(h.state.news.state())),
     Route("GET", "/api/update", lambda h, m, u: h._update(parse_qs(u.query))),
     Route("GET", "/api/history", lambda h, m, u: h._history(parse_qs(u.query))),
+    Route("POST", "/api/history/picture", lambda h, m, u: h._round_picture()),
     # a notice from another program: with the notify key instead of the token (notify.py)
     Route("POST", "/api/ai/hook", lambda h, m, u: h._ai_in("hook", u), notify=True),
     Route("POST", "/api/ai/status", lambda h, m, u: h._ai_in("status", u), notify=True),

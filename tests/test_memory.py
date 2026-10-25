@@ -586,6 +586,100 @@ def test_the_frame_rate_at_the_first_percent_and_the_means_of_a_round(rig):
     assert session["frametime_mean"] > 0 and session["limit_gpu_s"] == 200
 
 
+def figures(fps_1low, **more):
+    """What the frames of a round have come to so far, as PresentMon says it (game.fps_1low ...)."""
+    return {"fps_avg": 140.0, "fps_1low": fps_1low, "fps_01low": fps_1low * 0.8,
+            "frametime_avg": 7.1, "frametime_max": 40.0, **more}  # fmt: skip
+
+
+def test_a_round_keeps_what_its_frames_came_to_as_the_program_that_drew_longest_told_it(rig):
+    r = rig(report_min_s=10.0)
+    t = T0
+    for i in range(5):  # the launcher, for a moment
+        launcher = sample(t + i, "Space Game", 60.0, program="launcher")
+        launcher.frames = figures(30.0, frametime_max=900.0)
+        r.recorder.add(launcher)
+    for i in range(100):  # then the game, whose figures grow with its frames
+        played = sample(t + 5 + i, "Space Game", 140.0)
+        played.frames = figures(90.0 + i / 10)
+        r.recorder.add(played)
+    r.recorder.add(sample(t + 105))  # the end: the last figures the game told, after the launcher
+    session = r.reported(1)["session"]
+    assert session["fps_1low"] == pytest.approx(99.9) and session["fps_01low"] == pytest.approx(
+        79.92
+    )
+    assert (session["fps_avg"], session["frametime_avg"], session["frametime_max"]) == (
+        140.0, 7.1, 40.0,
+    )  # fmt: skip
+    r.settle()
+    r.recorder.add(sample(t + 200, "Other Game", 100.0))  # a round PresentMon told nothing of
+    r.recorder.add(sample(t + 220))
+    r.settle()
+    row = r.finish().execute("SELECT fps_1low, frametime_max FROM sessions ORDER BY id").fetchall()
+    assert row == [(pytest.approx(99.9), 40.0), (None, None)]
+
+
+def test_a_round_keeps_the_course_of_its_temperatures_in_a_few_points_however_long(rig):
+    r = rig(report_min_s=10.0)
+    for i in range(1000):  # 1000 s: 62 points of 16 s each, half of them merged twice and more
+        r.recorder.add(sample(T0 + i, "Space Game", 140.0, cpu_temp=50.0 + i / 100, gpu_temp=60.0))
+    r.recorder.add(sample(T0 + 1000))
+    course = r.reported(1)["session"]["course"]
+    assert course["seconds"] == 16.0
+    assert len(course["cpu_temp"]) == len(course["gpu_temp"]) == 63  # 62 whole and one begun
+    assert memory.COURSE_POINTS <= len(course["cpu_temp"]) <= 2 * memory.COURSE_POINTS
+    assert course["cpu_temp"][0] == pytest.approx(50.075, abs=0.05)  # the mean of its 16 s
+    assert course["cpu_temp"][-1] == pytest.approx(59.96, abs=0.05) and set(course["gpu_temp"]) == {
+        60.0
+    }
+    short = memory._Course(("cpu_temp", "gpu_temp"))
+    for value in (40.0, None, 42.0):  # a sample may lack a temperature
+        short.add({"cpu_temp": value})
+    assert short.course() == {"seconds": 1.0, "cpu_temp": [40.0, None, 42.0],
+                              "gpu_temp": [None, None, None]}  # fmt: skip
+    assert memory._Course(("cpu_temp",)).course() is None  # nothing told: no course
+
+
+def test_a_round_keeps_the_highest_power_the_pc_drew_where_the_power_service_says_it(rig):
+    r = rig(report_min_s=10.0)
+    for i in range(60):
+        r.recorder.add(sample(T0 + i, "Space Game", 140.0, power=380.0 + i))
+    r.recorder.add(sample(T0 + 60))
+    assert r.reported(1)["session"]["power_max"] == 439.0
+    for i in range(60):
+        r.recorder.add(sample(T0 + 100 + i, "Space Game", 140.0))  # no power service
+    r.recorder.add(sample(T0 + 160))
+    assert r.reported(2)["session"]["power_max"] is None
+
+
+def test_a_file_made_before_the_frame_figures_gets_their_columns_and_keeps_its_rounds(tmp_path):
+    from libre_panel.services import memory_store
+
+    path = tmp_path / "memory.db"
+    con = sqlite3.connect(path)
+    con.executescript(memory_store.SCHEMA)
+    for column in ("power_max", *memory_store.FRAME_FIGURES, "course"):  # as an older version
+        con.execute(f"ALTER TABLE sessions DROP COLUMN {column}")
+    con.execute(
+        "INSERT INTO sessions (id, game, program, started, ended, duration_s, fps_s, fps_mean,"
+        " levels, closed) VALUES (1, 'Space Game', 'spacegame', 10, 310, 300, 300, 120.0, '{}', 1)"
+    )
+    con.commit()
+    columns = {row[1] for row in con.execute("PRAGMA table_info(sessions)")}
+    con.close()
+    assert "fps_1low" not in columns and "course" not in columns  # (as an older version made it)
+    rig = Rig(tmp_path)
+    rig.settle()
+    con = rig.finish()
+    columns = {row[1] for row in con.execute("PRAGMA table_info(sessions)")}
+    assert {"power_max", "course", *memory_store.FRAME_FIGURES} <= columns
+    assert con.execute("SELECT fps_mean, fps_1low, course FROM sessions").fetchall() == [
+        (120.0, None, None)
+    ]
+    found = memory.round_report.build(con, 1, 0, 10)
+    assert found["session"]["course"] is None and found["session"]["fps_1low"] is None
+
+
 # -- the readings it takes ------------------------------------------------------------------------
 
 
@@ -733,11 +827,16 @@ def test_the_game_comes_from_the_game_service_and_the_rates_from_presentmon():
         reading("game.low", 101.0, "fps"),
         reading("game.frametime", 6.9, "ms"),
         reading("game.limiter", "gpu"),
+        reading("game.fps_1low", 97.0, "fps"),
+        reading("game.frametime_max", 38.5, "ms"),
+        reading("game.fps_01low", "--"),  # (no number: none)
+        reading("power.watts", 412.0, "W"),
     )
     s = Reader(Settings()).read(snap, T0)
     assert (s.game, s.program, s.fps, s.low, s.frametime, s.limiter) == (
         "Space Game", "spacegame", 143.5, 101.0, 6.9, "gpu",
     )  # fmt: skip
+    assert s.frames == {"fps_1low": 97.0, "frametime_max": 38.5} and s.values["power"] == 412.0
     odd = snapshot_of(reading("game.name", ""), reading("game.fps", 100.0))
     assert Reader(Settings()).read(odd, T0).game is None  # no game: rates are none of ours
     other = snapshot_of(reading("game.name", "G"), reading("game.limiter", "mystery"))
@@ -786,7 +885,8 @@ SESSION_KEYS = {
     "id", "game", "program", "started", "ended", "duration_s", "fps_s", "fps_mean", "fps_p01",
     "fps_low_mean", "frametime_mean", "levels", "limit_cpu_s", "limit_gpu_s", "limit_cap_s",
     "cpu_temp_max", "gpu_temp_max", "gpu_hotspot_max", "cpu_power_max", "gpu_power_max",
-    "vram_used_max", "outside_temp", "closed",
+    "vram_used_max", "power_max", "outside_temp", "closed", "fps_avg", "fps_1low", "fps_01low",
+    "frametime_avg", "frametime_max", "course",
 }  # fmt: skip
 
 
@@ -796,6 +896,17 @@ class Clock:
 
     def __call__(self):
         return self.now
+
+
+def round_figures(fps_1low=96.0):
+    """What the round's frames have come to, as PresentMon says it while a game is played."""
+    return {
+        "game.fps_avg": Reading("game.fps_avg", 119.5, "fps"),
+        "game.fps_1low": Reading("game.fps_1low", fps_1low, "fps"),
+        "game.fps_01low": Reading("game.fps_01low", 70.0, "fps"),
+        "game.frametime_avg": Reading("game.frametime_avg", 8.37, "ms"),
+        "game.frametime_max": Reading("game.frametime_max", 41.0, "ms"),
+    }
 
 
 def readings_of(**given):
@@ -907,6 +1018,43 @@ def test_a_game_that_ends_brings_the_report_and_its_theme(desk):
     assert published["report.head.peaks"].value == "Highest values of the round"
     assert published["report.limit"].value == "GPU 100 %"
     assert d.host.published()["report"].label == "Round report"
+
+
+def test_after_a_round_the_snapshot_has_what_its_frames_came_to_its_course_and_the_pcs_power(desk):
+    d = desk()
+    for i in range(90):
+        figures = round_figures(fps_1low=90.0 + i / 10)  # the last one counts: all the round
+        found = readings_of(cpu__temp=60.0 + i / 10, gpu__temp=55.0, power__watts=400.0 + i)
+        d.sample(**{**found, **in_game(120.0), **figures})
+    d.sample()  # the game is gone
+    assert wait_for(lambda: d.host.theme == "round-report")
+    snapshot = Snapshot(readings=d.host.published())
+    for key, value, unit, label in (
+        ("report.fps_avg", 119.5, "fps", "Average FPS"),
+        ("report.fps_1low", 98.9, "fps", "1% low"),
+        ("report.fps_01low", 70.0, "fps", "0.1% low"),
+        ("report.frametime_avg", 8.37, "ms", "Frame time"),
+        ("report.frametime_max", 41.0, "ms", "Longest frame"),
+        ("report.power", 489.0, "W", "PC power"),
+    ):
+        reading = snapshot.readings[key]
+        assert (reading.value, reading.unit, reading.label) == (pytest.approx(value), unit, label)
+    assert snapshot.value("report.fps_1low_delta") is None  # the first round: nothing to be against
+    assert snapshot.value("report.head.course") == "Temperature"
+    course = json.loads(snapshot.value("report.course.cpu_temp"))
+    assert len(course) == 90 and course[0] == 60.0 and course[-1] == pytest.approx(68.9)
+    assert set(json.loads(snapshot.value("report.course.gpu_temp"))) == {55.0}
+    assert snapshot.readings["report.course.cpu_temp"].label == "CPU temp"
+    state = d.state()["session"]
+    assert state["fps_1low"] == pytest.approx(98.9) and state["course"]["seconds"] == 1.0
+    d.sample(seconds=40)  # the report is over: its readings go with it
+    d.sample(seconds=5)
+    assert not [key for key in d.host.published() if key.startswith("report.")]
+    d.play(90, fps=130.0, **{"power.watts": 450.0})  # the next round, against this one
+    assert wait_for(lambda: d.state() is not None and d.state()["comparison"]["count"] == 1)
+    published = d.host.published()
+    assert published["report.fps_1low"].value is None  # PresentMon told no figures this time
+    assert published["report.power_delta"].value == pytest.approx(450.0 - 489.0)
 
 
 def test_the_totals_of_a_game_are_published_while_it_is_played_and_gone_with_it(desk):

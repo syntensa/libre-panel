@@ -90,7 +90,10 @@ def test_a_12_3_inch_panel_gets_its_versions_in_the_loop(isolated_home):
 @pytest.mark.parametrize("name", TWELVE)
 def test_the_versions_for_a_size_draw_whole_with_nothing_running_together(name, suffix):
     """Larger type in the same width: nothing runs into anything it did not touch on the bar
-    (the frame rate's figure ran into the words beside it), and nothing past the frame."""
+    (the frame rate's figure ran into the words beside it), and nothing past the frame. A card
+    that holds a part is no part running into it: a version may set its cards out otherwise
+    (the round report's has who held the rate down in the round's card, the bar beside the
+    share of each frame rate)."""
     import json
 
     from test_libre_themes import drawn, overlapping
@@ -107,5 +110,15 @@ def test_the_versions_for_a_size_draw_whole_with_nothing_running_together(name, 
     for key, (x, y, w, h) in boxes.items():
         assert x >= 0 and y >= 0 and x + w <= width and y + h <= height, (key, (x, y, w, h))
     bar, _, _, bar_boxes = draw(name)
-    new = overlapping(theme, boxes) - overlapping(bar, bar_boxes)
+    kinds = {w["id"]: w for w in theme.widgets}
+
+    def held(pair):
+        outer, inner = sorted(pair, key=lambda wid: boxes[wid][2] * boxes[wid][3], reverse=True)
+        (ax, ay, aw, ah), (bx, by, bw, bh) = boxes[outer], boxes[inner]
+        card = kinds[outer]["type"] == "rect" and outer.endswith("-card")
+        return card and ax <= bx and ay <= by and bx + bw <= ax + aw and by + bh <= ay + ah
+
+    new = {
+        pair for pair in overlapping(theme, boxes) - overlapping(bar, bar_boxes) if not held(pair)
+    }
     assert not new, sorted(tuple(sorted(pair)) for pair in new)

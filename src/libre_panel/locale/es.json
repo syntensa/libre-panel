@@ -2484,7 +2484,13 @@
     "auto is high on the 9.2\" and the 12.3\" (measured to show there; it compresses far better) and baseline elsewhere; main and high ask more of the panel's decoder.": "auto es high en el de 9,2\" y el de 12,3\" (comprobado que se ve allí; comprime mucho mejor) y baseline en los demás; main y high exigen más al decodificador del panel.",
     "auto is the graphics card's encoder where it was measured to show and ffmpeg can start it (AMD's), else x264 on the processor. NVIDIA's and Intel's are an experiment. An encoder that cannot start says why in the log.": "auto es el codificador de la tarjeta gráfica donde está comprobado que se ve y ffmpeg puede arrancarlo (AMD), si no x264 en el procesador. NVIDIA e Intel son un experimento. Un codificador que no arranca dice por qué en el registro.",
     "the PC was slow": "el PC iba lento",
-    "x264's crf: lower is sharper and needs more bits. 20 is the default, 18 near lossless to the eye, 25 the first measurement's. (NVIDIA's encoder takes it too; AMD's and Intel's take their quality from the cap.)": "El crf de x264: más bajo es más nítido y necesita más bits. 20 es el valor predeterminado, 18 casi sin pérdidas a la vista, 25 el de la primera medición. (El codificador de NVIDIA también lo toma; los de AMD e Intel toman su calidad del tope.)"
+    "x264's crf: lower is sharper and needs more bits. 20 is the default, 18 near lossless to the eye, 25 the first measurement's. (NVIDIA's encoder takes it too; AMD's and Intel's take their quality from the cap.)": "El crf de x264: más bajo es más nítido y necesita más bits. 20 es el valor predeterminado, 18 casi sin pérdidas a la vista, 25 el de la primera medición. (El codificador de NVIDIA también lo toma; los de AMD e Intel toman su calidad del tope.)",
+    "PC power": "Potencia del PC",
+    "0.1% low": "0,1 % bajo",
+    "This round has no report: it is no longer kept, or it had no frame rates.": "Esta partida no tiene informe: ya no está guardada o no tenía FPS.",
+    "The round report is kept as a picture in {folder}": "El informe de partida se ha guardado como imagen en {folder}",
+    "Keeps the round report of this round as a picture in your Pictures folder and opens it": "Guarda el informe de esta partida como imagen en tu carpeta Imágenes y la abre",
+    "Keep as a picture": "Guardar como imagen"
   },
   "fields": {
     "agent": "agente",

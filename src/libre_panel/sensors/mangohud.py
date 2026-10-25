@@ -16,8 +16,10 @@ it in ``[sensors.mangohud]``::
 
 Readings, as PresentMon's on Windows: ``game.fps`` (the last second), ``game.frametime``
 (ms), ``game.low`` (the 1% lows of the last 30 s), ``game.frametime_peak`` (the longest frame
-time since the last reading) and ``game.app`` (the program, from the file's name). MangoHud
-logs a frame every ``log_interval`` milliseconds, so the lows are those of its samples.
+time since the last reading), ``game.app`` (the program, from the file's name) and what the
+round's frames come to (``game.fps_avg``, ``game.fps_1low``, ``game.fps_01low``,
+``game.frametime_avg``, ``game.frametime_max``). MangoHud logs a frame every ``log_interval``
+milliseconds, so the lows are those of its samples.
 
 The file is read only while a theme or a service shows ``game.*`` readings. Nothing runs
 beside the game and nothing touches it: only the file MangoHud writes is read.

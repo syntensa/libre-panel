@@ -228,6 +228,30 @@ def test_a_downward_graph_hangs_from_its_top_and_is_filled_from_there():
     assert 0 < frame.getpixel((50, 1))[0] < frame.getpixel((50, 12))[0]  # it fades upwards
 
 
+def test_a_course_a_service_published_whole_is_drawn_across_the_graph_and_stands_still():
+    """The round report's temperatures: a reading whose value is a list (``null`` a gap) is
+    drawn whole across the graph, the first point at its left edge, in video mode as still."""
+    import json
+
+    course = json.dumps([10.0, 10.0, None, 90.0, 90.0])
+    snap = Snapshot(readings={"v": Reading("v", course)}, history={"v": [50.0] * 10})
+    for continuous in (False, True):
+        renderer = Renderer(theme(spike_graph(), size=(200, 60)))
+        renderer.continuous = continuous
+        renderer.new_sample(100.0, 1.0)
+        first = renderer.render(snap, 100.0)[0]
+        assert renderer.render(snap, 100.5)[0].tobytes() == first.tobytes()  # still
+        lit = {x: [y for y in range(60) if first.getpixel((x, y))[0] > 120] for x in (10, 100, 190)}
+        assert max(lit[10]) > 45 and min(lit[190]) < 15  # low at the left, high at the right
+        assert lit[100] == []  # the gap between the two halves
+    hidden = {**spike_graph(), "hide_if_missing": True}
+    renderer = Renderer(theme(hidden, size=(200, 60)))
+    assert not renderer._missing(renderer.theme.widgets[0], Snapshot(readings=snap.readings))
+    for text in ("[1]", "[", "not a list", "{}"):  # too short, or no list: as any reading
+        assert not renderer._missing(renderer.theme.widgets[0], reading(text, [1.0, 2.0]))
+        assert renderer._missing(renderer.theme.widgets[0], reading(text, []))
+
+
 def spike_graph(**kw):
     """A graph of 11 readings that spans their 10 seconds in video mode too (without its own
     ``seconds`` a graph moves a pixel per point, 25 a second, as SPUR II's)."""

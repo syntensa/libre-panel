@@ -442,7 +442,11 @@ def test_the_round_report_reads_what_the_memory_service_publishes():
     assert {f"report.{name}" for name in round_itself} <= ours
     assert {f"report.level.{n}" for n in range(6)} <= ours
     assert {f"report.{peak}" for peak in ("cpu_temp", "gpu_temp", "gpu_hotspot", "cpu_power",
-                                         "gpu_power", "vram_used")} <= ours  # fmt: skip
+                                         "gpu_power", "vram_used", "power")} <= ours  # fmt: skip
+    # what every frame of the round came to, and the temperature over it
+    assert {f"report.{name}" for name in ("fps_1low", "fps_01low", "frametime_avg",
+                                         "frametime_max", "course.cpu_temp",
+                                         "course.gpu_temp")} <= ours  # fmt: skip
     # the box titles that name something are the panel's language, not the theme's
     by = {w["id"]: w for w in theme.widgets}
     assert by["round-title"]["format"] == "{value:upper}" and by["game"]["fit"] == "ellipsis"
@@ -457,9 +461,12 @@ def test_the_round_report_sets_the_round_against_the_earlier_ones_when_there_wer
         for w in theme.widgets
         if w["id"].endswith(("-mean", "-delta", "-delta-label")) or w["id"] in heads
     }
-    assert len(compared) == 18  # six rows of the peaks (two each), four, two (a tick has none)
+    # seven rows of the peaks (two each), the frame rate's two, the four frame figures' and the
+    # two of a round recorded before they were counted, the heads (a tick has none)
+    assert len(compared) == 24
+    older = {"low-seconds-delta", "frame-seconds-delta"}
     ids = report_ids(theme, 7)
-    assert compared <= ids and "first-round" not in ids
+    assert compared - older <= ids and "first-round" not in ids and not ids & older
     ids = report_ids(theme, 0)  # the first round of a game: the round alone, and it says so
     assert not ids & compared and "first-round" in ids
     assert {"fps", "low-value", "frame-value", "limit-gpu-bar", "round-head"} <= ids

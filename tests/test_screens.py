@@ -371,15 +371,17 @@ def test_the_round_report_reads_only_what_the_memory_service_publishes():
     theme = load_theme(find_theme("round-report"))
     read = keys_read(theme)
     assert read <= set(demo_report(1_700_000_000)), read - set(demo_report(1_700_000_000))
-    round_itself = ("title", "game", "when", "length", "outside", "fps", "low", "frametime")
+    round_itself = ("title", "game", "when", "length", "outside", "fps", "low", "frametime",
+                    "fps_1low", "fps_01low", "frametime_avg", "frametime_max",
+                    "course.cpu_temp", "course.gpu_temp", "head.course")  # fmt: skip
     assert {f"report.{name}" for name in round_itself} <= read
     assert {f"report.level.{n}" for n in range(6)} <= read
     assert {f"report.{peak}" for peak in ("cpu_temp", "gpu_temp", "gpu_hotspot", "cpu_power",
-                                         "gpu_power", "vram_used")} <= read  # fmt: skip
+                                         "gpu_power", "vram_used", "power")} <= read  # fmt: skip
     # its headings are the service's words, in the panel's language: none of the theme's own
-    # but "Round" (translated) and signs
+    # but "Round" (translated), signs and the degrees on the temperature's scale
     texts = {w["text"] for w in theme.widgets if w["type"] == "text"}
-    assert texts <= {"Round", "Ø FPS", "Δ", "·", "%", "ms", "°C", "W", "GB"}
+    assert texts <= {"Round", "Ø FPS", "Δ", "·", "%", "ms", "°C", "W", "GB", "–", "90", "60"}
     rounds = [w for w in theme.widgets if w["type"] == "text" and w["text"] == "Round"]
     assert rounds and all(w["translate"] for w in rounds)
 
@@ -394,9 +396,12 @@ def test_the_round_report_sets_the_round_against_the_earlier_ones_when_there_wer
     compared = {w["id"] for w in load_theme(find_theme("round-report")).widgets
                 if w["id"].endswith(("-mean", "-delta", "-delta-label"))
                 or w["id"] in ("mean-head", "delta-head")}  # fmt: skip
-    assert len(compared) == 18  # the six peaks' mean and difference, the frame rate's, heads
+    # the seven peaks' mean and difference, the frame rate's, the four frame figures' (and the
+    # two of a round recorded before they were counted), the heads
+    assert len(compared) == 24
+    older = {"low-seconds-delta", "frame-seconds-delta"}
     seven = ids(7)
-    assert compared <= seven and "first-round" not in seven
+    assert compared - older <= seven and "first-round" not in seven and not seven & older
     first = ids(0)  # the first round of a game: the round alone, and it says so
     assert not first & compared and "first-round" in first
     assert {"fps", "low-value", "frame-value", "round-head"} <= first
@@ -435,6 +440,125 @@ def test_the_round_report_shows_who_held_the_rate_down_in_one_bar():
     assert {"limit-gpu", "limit-cpu", "limit-cap", "limit-label"} <= report_ids(mixed)
     nothing = report_ids({})
     assert not nothing & {"limit-label", "limit-groove", "limit-gpu-bar", "limit-cap-bar"}
+
+
+REPORTS = ["round-report", "round-report-1920x720", "round-report-1280x720",
+           "round-report-vertical", "spur-round-report"]  # fmt: skip
+NEW_PARTS = ("low", "frame", "longest", "course-", "power-", "vram_used-rule")
+
+
+def older_round():
+    """The demo's round as one recorded before its frames were counted: no frame figures, no
+    course of the temperatures, no power of the PC (but the means of the seconds' lows)."""
+    from libre_panel.sensors.demo import demo_report
+
+    readings = {k: r.value for k, r in demo_report(1_700_000_000).items()}
+    for key in list(readings):
+        if key.startswith(("report.fps_avg", "report.fps_1low", "report.fps_01low",
+                           "report.frametime_avg", "report.frametime_max", "report.course.",
+                           "report.power")):  # fmt: skip
+            readings[key] = None
+    return readings
+
+
+def test_the_round_report_shows_what_every_frame_came_to_and_an_older_round_its_seconds():
+    from libre_panel.sensors.demo import demo_report
+
+    by = {w["id"]: w for w in load_theme(find_theme("round-report")).widgets}
+    for part, sensor in (("low", "fps_1low"), ("low01", "fps_01low"), ("frame", "frametime_avg"),
+                         ("longest", "frametime_max")):  # fmt: skip
+        assert by[f"{part}-value"]["sensor"] == by[f"{part}-label"]["sensor"] == f"report.{sensor}"
+        assert by[f"{part}-delta"]["sensor"] == f"report.{sensor}_delta"
+    assert by["low-label"]["y"] == by["low01-label"]["y"] < by["frame-label"]["y"]  # two by two
+    now = report_ids({k: r.value for k, r in demo_report(1_700_000_000).items()})
+    assert {"low-value", "low01-value", "frame-value", "longest-value", "longest-unit"} <= now
+    assert not {w for w in now if "-seconds-" in w}
+    older = report_ids(older_round())  # the means of the seconds' 1 % lows and frame times
+    assert {"low-seconds-value", "low-seconds-delta", "frame-seconds-value"} <= older
+    assert by["low-seconds-value"]["sensor"] == "report.low"
+    assert by["frame-seconds-value"]["sensor"] == "report.frametime"
+    assert not older & {"low-value", "low01-value", "frame-value", "longest-value"}
+
+
+def test_the_round_report_draws_the_temperature_over_the_round_and_the_pcs_power():
+    theme = load_theme(find_theme("round-report"))
+    by = {w["id"]: w for w in theme.widgets}
+    cpu, gpu = by["course-cpu_temp"], by["course-gpu_temp"]
+    assert (cpu["type"], cpu["sensor"], gpu["sensor"]) == (
+        "graph", "report.course.cpu_temp", "report.course.gpu_temp",
+    )  # fmt: skip
+    assert (cpu["x"], cpu["y"], cpu["w"], cpu["h"]) == (gpu["x"], gpu["y"], gpu["w"], gpu["h"])
+    assert (cpu["min"], cpu["max"]) == (gpu["min"], gpu["max"]) == (30, 100)  # one scale
+    assert (cpu["color"], gpu["color"]) == ("@cpu", "@gpu")
+    card = by["course-card"]
+    assert card["x"] < cpu["x"] and cpu["x"] + cpu["w"] < card["x"] + card["w"]
+    renderer = Renderer(theme, preview=True)
+    renderer.render(demo())
+    assert {"course-cpu_temp", "course-gpu_temp", "course-title", "power-value"} <= drawn_ids(
+        renderer
+    )
+    assert "course-none" not in drawn_ids(renderer)
+    older = report_ids(older_round())  # no course kept: a dash; no power: no row
+    assert "course-none" in older and not older & {"course-cpu_temp", "power-value"}
+    assert "vram_used-rule" not in older  # (the line under the video memory is the power row's)
+    rows = [
+        by[f"{name}-value"]["y"]
+        for name in (
+            "cpu_temp",
+            "gpu_temp",
+            "gpu_hotspot",
+            "cpu_power",
+            "gpu_power",
+            "vram_used",
+            "power",
+        )
+    ]
+    assert rows == sorted(rows)  # the PC's power last, where its row is missed least
+
+
+@pytest.mark.parametrize("name", REPORTS)
+@pytest.mark.parametrize("round_", ["demo", "older"])
+def test_every_round_report_draws_whole_and_its_new_parts_run_into_nothing(name, round_):
+    """Each size's round report (and SPUR II's) with the demo's round and with an older one: no
+    warning, the frame figures and the temperature drawn, and nothing that was added runs into
+    anything but the card it stands on (the two courses lie on each other)."""
+    from test_spur_themes import keys_read
+
+    from libre_panel.sensors.demo import demo_report
+
+    data = data_of(name)
+    snapshot = demo()
+    if round_ == "older":
+        snapshot.readings.update({k: Reading(k, v) for k, v in older_round().items()})
+    theme, renderer, frame, boxes = drawn(data, builtin_themes_dir() / name, snapshot)
+    assert theme.warnings == [] and renderer.warnings == []
+    assert frame.size == (theme.width, theme.height)
+    ours = {key for key in keys_read(theme) if key.startswith("report.")}
+    assert ours <= set(demo_report(1_700_000_000)), ours - set(demo_report(1_700_000_000))
+    shown = set(boxes)
+    if round_ == "demo":
+        assert {"low01-value", "longest-value", "course-cpu_temp", "course-gpu_temp",
+                "power-value"} <= shown  # fmt: skip
+    else:
+        assert {"low-seconds-value", "frame-seconds-value", "course-none"} <= shown
+    kinds = {w["id"]: w for w in theme.widgets}
+
+    def holds(outer, inner):
+        (ax, ay, aw, ah), (bx, by_, bw, bh) = boxes[outer], boxes[inner]
+        return (
+            kinds[outer]["type"] == "rect"
+            and ax <= bx
+            and ay <= by_
+            and (bx + bw <= ax + aw and by_ + bh <= ay + ah)
+        )
+
+    new = [
+        tuple(sorted(pair))
+        for pair in overlapping(theme, boxes)
+        if any(part.startswith(NEW_PARTS) for part in pair)
+        and not any(holds(a, b) for a, b in (tuple(pair), tuple(pair)[::-1]))
+    ]
+    assert set(new) <= {("course-cpu_temp", "course-gpu_temp")}, new
 
 
 # -- the volume, on every screen ---------------------------------------------------------------

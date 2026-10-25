@@ -83,7 +83,7 @@ def test_the_last_rounds_and_the_games_played_most(db):
     assert [r["game"] for r in found["rounds"]] == ["Doom", "Hades", "Doom"]  # newest first
     assert found["rounds"][0] == {
         "game": "Doom", "started": NOW - 600, "seconds": 600, "fps": 144.0, "fps_low": 98.0,
-        "cpu_temp_max": 88.0, "gpu_temp_max": 70.0,
+        "cpu_temp_max": 88.0, "gpu_temp_max": 70.0, "id": (NOW - 600) * 1000,
     }  # fmt: skip
     doom, hades = found["games"]
     assert doom["game"] == "Doom" and doom["rounds"] == 2 and doom["seconds"] == 1800

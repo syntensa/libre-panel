@@ -2,11 +2,12 @@
 // what the memory kept on this computer.
 // The temperatures, the load and the power of the CPU and the GPU over a day, a week or a month
 // (the time in games behind them), what that came to, the games played most and the last
-// rounds. The server reads the memory's database (/api/history, editor/history.py); without
-// the memory service there is nothing kept, and the view says so with the switch that keeps it.
+// rounds, each of which keeps its round report as a picture (/api/history/picture). The server
+// reads the memory's database (/api/history, editor/history.py); without the memory service
+// there is nothing kept, and the view says so with the switch that keeps it.
 // Built on the shell: see ../../README.md.
 
-import { get } from "../../core/api.js";
+import { get, post } from "../../core/api.js";
 import { usePolled } from "../../core/console.js";
 import { t } from "../../core/i18n.js";
 import { enableService } from "../../core/settings.js";
@@ -14,6 +15,7 @@ import { html, useEffect, useLayoutEffect, useRef, useState } from "../../lib/pr
 import { navigate } from "../../shell/views.js";
 import { Segmented } from "../../ui/controls.js";
 import { Icon } from "../../ui/icons.js";
+import { toast, toastError } from "../../ui/toast.js";
 
 const SPANS = () => [
   { value: "day", label: t("24 hours") },
@@ -282,6 +284,25 @@ function Games({ games }) {
   </section>`;
 }
 
+/** The round report of a round, as the panel shows it, kept as a picture in the Pictures folder
+ * (which then opens); only a round with frame rates has a report. */
+function KeepPicture({ round }) {
+  const [busy, setBusy] = useState(false);
+  if (round.fps === null || round.id === undefined) return null;
+  const keep = async () => {
+    setBusy(true);
+    try {
+      const done = await post("/api/history/picture", { id: round.id });
+      toast(t("The round report is kept as a picture in {folder}", { folder: done.folder }), { kind: "success" });
+    } catch (error) {
+      toastError(error);
+    }
+    setBusy(false);
+  };
+  return html`<button type="button" class="link-btn history-round-picture" disabled=${busy} onClick=${keep}
+    title=${t("Keeps the round report of this round as a picture in your Pictures folder and opens it")}>${t("Keep as a picture")}</button>`;
+}
+
 function Rounds({ rounds }) {
   if (!rounds.length) return null;
   return html`<section class="history-rounds">
@@ -293,6 +314,7 @@ function Rounds({ rounds }) {
           <strong>${round.game}</strong>
           <span>${duration(round.seconds)}</span>
           <span class="muted">${round.fps === null ? "" : t("{fps} fps, 1% low {low}", { fps: whole(round.fps), low: whole(round.fps_low) })}</span>
+          <${KeepPicture} round=${round} />
         </li>`,
       )}
     </ul>

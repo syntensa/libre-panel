@@ -703,7 +703,15 @@ as that installation is
 | `game.frametime_peak` | the longest frame time since the last reading, in ms. A stutter of 60 ms between two readings shows in the next one even though the readings are a second apart. It is there all the time a game runs (0 when no frame came), so a graph of it never stops |
 | `game.limiter` | `cpu`, `gpu` or `cap`: who holds the frame rate down. It is judged from how long each side waits for the other, not from the load: the CPU if the GPU waits longer for it than it waits for the GPU, the GPU in the other case, and `cap` when neither waits much and both work much less than a frame takes (a frame rate limit, or vertical sync). Needs PresentMon 2 |
 | `game.app` | the program |
+| `game.fps_avg`, `game.fps_1low`, `game.fps_01low` | what every frame of the round has come to so far: the mean frame rate (all the frames over the time they took), and the 1 % and 0.1 % lows as the frame rate at the 99th and the 99.9th percentile of the frame times (the frame time that 99 % and 99.9 % of the frames do not exceed) |
+| `game.frametime_avg`, `game.frametime_max` | the same round's mean frame time and its longest frame, in ms |
 
+- **A round** is a program's frames since it began to draw: half a minute without a frame
+  begins a new one. The game the `game` service found keeps its round as long as it is the
+  game (paused in its menu or minimized, it is the same round), and ends it when the game is
+  over. Every frame counts: each one's length is counted in steps of 0.01 ms (of 1 ms above
+  100 ms), so a round of any length takes the same little memory, and its lows are exact to
+  that step.
 - **When it runs.** PresentMon runs while a theme on the panel shows `game.*`
   readings, or the `game` service is on (see [Game mode](#game-mode)), and
   ends a minute after neither is. The recording session has to exist
@@ -735,9 +743,9 @@ Libre Panel looks in the folder MangoHud.conf names (else the home folder), or i
 given in `[sensors.mangohud] folder = "..."`, for the newest log written in the last ten
 seconds. The source needs no entry in `providers`: on Linux it is there by itself and reads
 only while a theme shows `game.*`. `game.fps`, `game.frametime`, `game.low`,
-`game.frametime_peak` and `game.app` (the program, from the log's name) mean what they mean
-above; the lows are those of MangoHud's samples (one every `log_interval` ms). There is no
-`game.limiter`.
+`game.frametime_peak`, `game.app` (the program, from the log's name) and the round's figures
+(`game.fps_1low` ...) mean what they mean above; the lows are those of MangoHud's samples (one
+every `log_interval` ms). There is no `game.limiter`.
 
 **Values from JSON** (`json.*`): what the address of a NAS, a router, a Proxmox host or a
 second PC answers, or a file another program writes. Nothing to sign up for: the address is
@@ -1353,7 +1361,11 @@ last rounds of the same program. Nothing is sent anywhere.
 *Live → History* in the app shows what it kept: the temperature, the load and the power of
 the CPU and the GPU over 24 hours, 7 days or 30 days (the time in games behind
 them, gaps where the PC was off), what that came to, the games played most and the
-last rounds. Where the memory is off, *History* says so and switches it on.
+last rounds. *Keep as a picture* beside a round with frame rates makes its round report
+again, as the panel shows it (the report page's theme, in its version for the panel), in a
+picture of the panel, saves it in your Pictures folder (in `Libre Panel` there; where the
+system names none, `Pictures` or `Documents` in your home folder) and opens that folder. Where
+the memory is off, *History* says so and switches it on.
 
 ```toml
 [services]
@@ -1379,7 +1391,7 @@ fps_levels = [60, 90, 120, 144, 165]   # the frame-rate ranges of the report's c
 | Table | What it holds |
 |---|---|
 | `minutes` | a row a minute: the means, and the highest values of temperature and power, of the load, clocks, memory, network and volume; the frame rate in a game; how long music played; the outside temperature (with the weather on); each fan's speed |
-| `sessions` | a row per game, written every minute while it is played and again when it ends: the game's name and its program, how long, the frame rates (mean, the 1 % quantile, the 1 % low), how long at which frame rate, how long the CPU, the GPU or a frame limit held it back, the highest temperatures, power and video memory |
+| `sessions` | a row per game, written every minute while it is played and again when it ends: the game's name and its program, how long, the frame rates (mean, the 1 % quantile, the 1 % low), what every frame came to (the mean rate, the 1 % and 0.1 % lows, the mean and the longest frame time), how long at which frame rate, how long the CPU, the GPU or a frame limit held it back, the highest temperatures, power (the PC's too, with the [power service](#power-use)) and video memory, and the course of the CPU's and the GPU's temperature (60 to 120 points, each the mean of as many seconds, however long the round). A file of an older version gets the new columns when the service opens it; its rounds have none of those numbers |
 | `cooling` | the cooling state whenever it moves: temperatures, power and load, each fan's speed and duty, and what each FanControl curve reads. At least 12 s apart (5 s in a game) and at least one a minute, so that a longer gap means the service did not run |
 | `fancontrol` | every change to FanControl's curves and fans, with the time (FanControl's file is only read, never written) |
 | `meta` | the names of the CPU, the GPU and the temperature sensors as the readings give them ("GPU Core"), noted with `cooling` on, so that the [cooling analysis](#cooling-analysis) can speak of them by name |
@@ -1414,16 +1426,22 @@ fps_levels = [60, 90, 120, 144, 165]   # the frame-rate ranges of the report's c
   (compared by the game's name where the program is not known). It shows the
   theme for `report_seconds`, ahead of an autopilot's choice and of the music
   and idle pages; a new game ends it at once, and a round that ends because Libre
-  Panel quits has none. `round-report` is Libre Panel's report for 8.8" and 9.2" bars,
-  in three cards, with the game's logo (the one the [`game` service](#game-mode)
-  keeps, `@game.logo`) beside its name; `spur-round-report` is SPUR II's report
-  screen. Copy one in the editor to change it, choose another on the round
+  Panel quits has none. `round-report` is Libre Panel's report for 8.8" and 9.2" bars
+  (with versions for the 12.3", the 5.2" and a bar on end), in four cards: the round with
+  what all its frames came to (the 1 % and 0.1 % lows, the mean and the longest frame
+  time), the share of each frame rate and who held it down, the CPU's and the GPU's
+  temperature over the round, and the highest values with the PC's power where the
+  [power service](#power-use) runs; the game's logo (the one the [`game` service](#game-mode)
+  keeps, `@game.logo`) is beside its name. A round recorded before these were counted shows
+  the means of the seconds' lows instead, and a dash for the temperature. `spur-round-report`
+  is SPUR II's report screen. Copy one in the editor to change it, choose another on the round
   report's page in *Design → Pages*, or let a screen of a plugin draw the data
   ([Plugins](PLUGINS.md#the-round-report)).
 - **Cost.** One sample a second, whatever the theme's `refresh_ms`. While the
   service runs the sources it needs run too, although no theme shows them: the
   load (`cpu.load`, `gpu.load`), temperatures, power and clocks, the fans, the
-  game's frame rates, and with `music` the player's state (not its title).
+  game's frame rates, and with `music` the player's state (not its title). The
+  PC's power (`power.watts`) is kept where the power service publishes it.
   A write that cannot be made (the disk is full, the file is locked) is said
   once in the log and never holds the panel back.
 - The options are read when the service starts: change `config.toml` and it

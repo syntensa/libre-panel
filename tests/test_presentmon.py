@@ -1,6 +1,7 @@
 """PresentMon: the readings from its frames (the peak, who limits the frame rate, the game the
-service found), its session that must be there before the game, and the job that ends it with
-Libre Panel. The program, its output and Windows' job calls are faked; no Windows is needed."""
+service found, what every frame of the round came to), its session that must be there before
+the game, and the job that ends it with Libre Panel. The program, its output and Windows' job
+calls are faked; no Windows is needed."""
 
 import ctypes
 import gc
@@ -13,7 +14,7 @@ import pytest
 from fake_sensors import show, wait_for
 
 from libre_panel.sensors import base, presentmon
-from libre_panel.sensors.presentmon import FrameCounter, JobObject, PresentMonProvider
+from libre_panel.sensors.presentmon import FrameCounter, FrameTimes, JobObject, PresentMonProvider
 from libre_panel.sensors.presentmon import find_presentmon as real_find_presentmon
 
 
@@ -181,6 +182,84 @@ def test_the_limiter_goes_by_the_middle_of_the_waits_not_by_a_hitch():
     end = play(counter, "Game.exe", 101, 8.0, waits=waits(2.0, 5.0, 7.5, 0.1))  # the GPU holds it
     counter.add("Game.exe", 8.0, end, waits(2.0, 0.1, 7.5, 400.0))  # one frame says otherwise
     assert counter.readings(end)["game.limiter"].value == "gpu"
+
+
+# -- what every frame of a round came to --------------------------------------------------------
+
+
+def times(*runs):
+    """``FrameTimes`` of ``(count, ms)`` runs of frames."""
+    found = FrameTimes()
+    for count, ms in runs:
+        for _ in range(count):
+            found.add(ms)
+    return found
+
+
+def test_the_lows_are_the_rates_at_the_99th_and_the_999th_percentile_of_the_frame_times():
+    # 10,000 frames: 9850 of 10 ms, 135 of 20 ms and 15 of 100 ms. Slowest first, the 100th
+    # (the 99th percentile, by its rank) takes 20 ms, the 10th (the 99.9th) 100 ms.
+    found = times((9850, 10.0), (135, 20.0), (15, 100.0))
+    assert (found.percentile(990), found.percentile(999)) == (20.0, 100.0)
+    figures = found.figures()
+    assert (figures["fps_1low"], figures["fps_01low"]) == (50.0, 10.0)
+    assert figures["frametime_avg"] == pytest.approx(10.27)  # all the frames over their time
+    assert figures["fps_avg"] == pytest.approx(1000 / 10.27)
+    assert figures["frametime_max"] == 100.0
+    # by the nearest rank: 1 % of 1000 frames slow is not yet the 99th percentile, 11 are
+    assert times((990, 10.0), (10, 50.0)).figures()["fps_1low"] == 100.0
+    assert times((989, 10.0), (11, 50.0)).figures()["fps_1low"] == 20.0
+    assert times((1, 16.0)).figures()["fps_01low"] == pytest.approx(62.5)  # one frame: itself
+    assert FrameTimes().figures() is None and FrameTimes().percentile(990) is None
+
+
+def test_the_frame_times_are_counted_in_steps_so_a_long_round_takes_little_room():
+    found = times((3, 6.944), (1, 6.946))  # in steps of 0.01 ms
+    assert found.percentile(999) == 6.95 and found.longest == 6.946
+    assert times((1, 250.4)).percentile(990) == 250.0  # a stutter: in whole ms
+    assert times((1, 0.001)).percentile(990) == 0.01  # (never nothing: no rate of infinity)
+    many = FrameTimes()
+    for n in range(300_000):  # every length there is, many times over
+        many.add(0.5 + n % 50_000 / 10)
+    assert many.frames == 300_000 and len(many.counts) <= 15_000
+
+
+def test_the_figures_are_worked_out_at_most_once_a_second_while_frames_come():
+    found = times((100, 10.0))
+    first = found.figures(now=100.0)
+    found.add(100.0)
+    assert found.figures(now=100.5) == first  # (as half a second ago)
+    assert found.figures(now=101.0)["frametime_max"] == 100.0
+
+
+def test_a_programs_round_is_every_frame_since_it_began_to_draw():
+    counter = FrameCounter()
+    counter.add("Game.exe", 250.0, 100.0)  # a stutter at the start of the round
+    end = play(counter, "Game.exe", 5000, 8.0, start=100.25)  # then 40 s of 8 ms frames
+    out = counter.readings(end)
+    assert out["game.frametime_max"].value == 250.0  # long out of the 30 s of the 1% low
+    assert out["game.frametime_peak"].value == 250.0 and out["game.low"].value == 125.0
+    assert (out["game.fps_1low"].value, out["game.fps_01low"].value) == (125.0, 125.0)
+    assert out["game.frametime_avg"].value == pytest.approx(8.05, abs=0.01)
+    assert out["game.fps_avg"].unit == "fps" and out["game.frametime_avg"].unit == "ms"
+    assert out["game.fps_1low"].label == "1% low of the round"
+    # half a minute without a frame ends it: the next frames begin another round
+    later = play(counter, "Game.exe", 200, 8.0, start=end + 40.0)
+    assert counter.readings(later)["game.frametime_max"].value == 8.0
+
+
+def test_the_games_round_lasts_while_it_is_the_game_and_ends_with_it():
+    counter = FrameCounter()
+    counter.set_target("game.exe")
+    end = play(counter, "Game.exe", 200, 8.0)
+    counter.add("Game.exe", 90.0, end)
+    end = play(counter, "Game.exe", 200, 8.0, start=end + 0.1)
+    assert counter.readings(end)["game.frametime_max"].value == 90.0
+    end = play(counter, "Game.exe", 200, 8.0, start=end + 60.0)  # paused a minute: the same round
+    assert counter.readings(end)["game.frametime_max"].value == 90.0
+    counter.set_target(None)  # the game is over: so is its round
+    end = play(counter, "Game.exe", 200, 8.0, start=end + 1.0)
+    assert counter.readings(end)["game.frametime_max"].value == 8.0
 
 
 # -- PresentMon's output ---------------------------------------------------------------------------
