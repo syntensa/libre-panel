@@ -43,7 +43,6 @@ The name sent with 110 stays in the panel's memory until it restarts.
 from __future__ import annotations
 
 import logging
-import os
 import queue
 import statistics
 import struct
@@ -149,8 +148,6 @@ def write_frame(out: Any, frame: Image.Image, pixels: str) -> None:
     and for four bytes a pixel a plain copy of each row). Without a file descriptor or with
     another Pillow: its bytes, written all. An OSError when ffmpeg is gone."""
     try:
-        if os.name == "nt":  # (Windows: the bytes through Python's own write; a hang in the
-            raise OSError  # Windows CI followed Pillow's write into the pipe's descriptor)
         fd = out.fileno()
         frame.load()
         encoder = Image._getencoder(frame.mode, "raw", (RAW_MODES[pixels],))

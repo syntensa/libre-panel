@@ -15,6 +15,12 @@ from libre_panel.editor import access  # noqa: E402
 from libre_panel.editor.server import make_server  # noqa: E402
 from libre_panel.theme.model import version_base  # noqa: E402
 
+# Every expectation of the browser tests (this file's and those that import from it) waits for what
+# it expects for 15 s instead of the 5 s Playwright gives it: a slow runner (Windows under load)
+# needs the room. What holds is found at once, so a test that passes takes no longer; one that
+# fails waits the longer before it says so. (An expectation with a timeout of its own keeps it.)
+expect.set_options(timeout=15_000)
+
 
 class AppUrl(str):
     """The address of an app's server and its access token, which the browser is given apart
@@ -153,17 +159,6 @@ def open_collections(page):
         toggle.click()
 
 
-def pictures_arrived(page, timeout=60_000):
-    """Wait until the pictures the page has asked for have come. The server draws a theme's
-    preview one after another, 3 to 5 seconds each on a busy machine, and what else is asked
-    of it (a theme to open) waits for its turn. (A lazy picture far below is not asked for yet.)"""
-    page.wait_for_function(
-        "[...document.images].some((img) => img.complete)"
-        " && [...document.images].every((img) => !img.currentSrc || img.complete)",
-        timeout=timeout,
-    )
-
-
 def own_themes(page):
     """The ids of Libre Panel's own themes and yours that Start leads with: not a collection's,
     not one kept for a page (the round report; music's or the clock's page only while it is
@@ -298,7 +293,6 @@ def test_start_has_a_gallery_of_every_theme(app_url, isolated_home):
         other = next(i for i in shown if i != "libre-default")
         card = page.locator(f'.theme-card[data-theme="{other}"]')
         card.hover()
-        pictures_arrived(page)  # the server is busy with the gallery's pictures until then
         card.locator(".theme-card-edit").click()  # opens it in Design
         expect(page.locator(".tab[aria-current='page']")).to_have_text("Design", timeout=30000)
         assert js(page, "window.libre.store.get().doc.id") == other
@@ -899,6 +893,42 @@ def test_the_sensor_settings_show_the_service_and_take_it_away_after_asking(app_
         expect(card).to_contain_text("Not set up")
         expect(card.get_by_role("button", name="Unlock all sensors")).to_be_visible()
     assert posted == [{"action": "remove"}]
+
+
+def test_the_sensor_settings_say_which_version_of_the_service_runs(app_url):
+    """Where the service is described, one small line names the version it said when the app
+    spoke to it; a service that has not said one gets no line."""
+    import json
+
+    answer = windows_download(service={"state": "running", "disabled": False}, pawnio="2.0.1")
+
+    def sources(version):
+        found = {
+            "background": True,
+            "sources": [
+                {"name": "librehardwaremonitor", "readings": 3, "problem": False, "hint": None,
+                 "details": [], "status": {"mode": "service", "version": version}},
+            ],
+        }  # fmt: skip
+
+        def handler(route, request):
+            route.fulfill(status=200, content_type="application/json", body=json.dumps(found))
+
+        return handler
+
+    for version, line in (("0.7.1rc5", "Sensor service 0.7.1rc5"), ("", None)):
+        routes = {
+            "**/api/unlock": unlock_route(answer, []),
+            "**/api/plugins/control/sources": sources(version),
+        }
+        with browser_page(app_url, "settings/sensors", routes=routes) as page:
+            card = page.locator("#sensor-service")
+            expect(card).to_contain_text("Running")
+            page.wait_for_function("window.libre.store.get().sourceStates !== null")
+            if line:
+                expect(card.locator("[data-service-version]")).to_have_text(line)
+            else:
+                expect(card.locator("[data-service-version]")).to_have_count(0)
 
 
 def test_the_sensor_settings_name_the_service_as_a_way_to_read(app_url):

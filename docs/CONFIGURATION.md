@@ -225,7 +225,7 @@ They work while Libre Panel runs in the background.
 
 ## Notices from other programs
 
-With `allow_notify = true` (*Settings → Services → Notices from other programs*) a script, a
+With `allow_notify = true` (*Settings → Game mode and more → Notices from other programs*) a script, a
 Stream Deck button or the command line shows a short notice on the panel:
 
 ```sh
@@ -1071,7 +1071,7 @@ its own for each state (no maker's logo). Two themes are made for it, each for t
 12.3" panel, under *All themes*: Agents (Claude Code and Codex side by side) and Agents Claude
 (Claude Code alone, with how full its context is).
 
-Switch it on in *Settings → Services → AI activity*, then *Set up* each program there. The app
+Switch it on in *Settings → Game mode and more → AI activity*, then *Set up* each program there. The app
 shows what it adds before it writes it:
 
 - **Claude Code**: hooks in `~/.claude/settings.json` (on Windows in

@@ -120,9 +120,11 @@ def test_a_pair_version_has_its_version_for_the_12_3():
 
 
 def _shown(name):
-    """What the theme ``name`` shows, drawn: the readings (each list's rows as they are
-    picked), the histories, the time and the date; also what shows only without a reading
-    (the date in place of the weather)."""
+    """What the theme ``name`` shows: the readings (each list's rows as they are picked), the
+    histories, the time and the date; also what shows only without a reading (the date in place
+    of the weather). It is read from the widgets the renderer made of the theme (modules
+    expanded): drawing a frame changes none of them (checked for every theme), and takes the
+    time of the whole test."""
     import re
 
     from libre_panel.render import lists
@@ -138,7 +140,6 @@ def _shown(name):
         return reading.origin or sensor if reading is not None else sensor
 
     renderer = Renderer(load_theme(builtin_themes_dir() / name), preview=True)
-    renderer.render(snap)
     out = set()
     for w in renderer.widgets:
         if w["type"] == "list":

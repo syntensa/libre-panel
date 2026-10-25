@@ -584,7 +584,7 @@ def test_a_source_that_says_how_it_is_read_is_explained(running):
     lhm = next(s for s in sources if s["name"] == "librehardwaremonitor")
     assert lhm["status"] == {  # as the source says it, for a screen that words it itself
         "mode": "inprocess", "elevated": False, "ring0": False, "pawnio": None, "error": "",
-        "service": "",
+        "service": "", "version": "",
     }  # fmt: skip
     # (on Windows the configured LibreHardwareMonitor is there as well, and says its own; on Linux
     # the source of the kernel's chips says what it found; the others say nothing)
@@ -620,6 +620,27 @@ class FakeLhm:
 
     def close(self):
         pass
+
+
+def test_the_sensor_service_says_its_version_to_the_sources_route(running):
+    """Settings → Sensors names the version of the sensor service that the app spoke to."""
+    from libre_panel.sensors.base import SensorProvider
+    from libre_panel.sensors.librehardwaremonitor import LhmStatus
+
+    class Lhm(SensorProvider):
+        name = "librehardwaremonitor"
+
+        def read(self):
+            return {}
+
+        def status(self):
+            return LhmStatus("service", True, True, "2.0.1", version="0.7.1rc5")
+
+    app, port = running
+    app.panel.status.hub.providers.insert(0, Lhm())
+    sources = get(port, "control/sources")[1]["sources"]
+    lhm = next(s for s in sources if s["name"] == "librehardwaremonitor")
+    assert lhm["status"]["version"] == "0.7.1rc5" and "timing" not in lhm["status"]
 
 
 def pretend_windows(app, status, readings=None):

@@ -28,10 +28,12 @@ def pytest_runtest_logreport(report):
     sys.__stdout__.flush()
 
 
-# On GitHub Actions a test that hangs ends the run after ten minutes with every thread's stack
-# in the log, instead of holding the job until its limit cuts it off as "cancelled" with nothing
-# said (a job's limit is 50 minutes; no test of this suite needs more than a few).
+# On GitHub Actions a test that hangs ends the run after ten minutes, with every thread's stack
+# in a file that the workflow prints (pytest captures the standard error a test writes to),
+# instead of holding the job until its limit cuts it off as "cancelled" with nothing said.
 HANG_S = 600
+HANG_FILE = Path(os.environ.get("RUNNER_TEMP") or ".") / "hang-traceback.txt"
+_hang_out = []
 
 
 @pytest.fixture(autouse=True)
@@ -39,7 +41,9 @@ def _hang_guard():
     if os.environ.get("GITHUB_ACTIONS") != "true":
         yield
         return
-    faulthandler.dump_traceback_later(HANG_S, exit=True)
+    if not _hang_out:
+        _hang_out.append(open(HANG_FILE, "w", encoding="utf-8"))  # noqa: SIM115 (the run's)
+    faulthandler.dump_traceback_later(HANG_S, exit=True, file=_hang_out[0])
     try:
         yield
     finally:

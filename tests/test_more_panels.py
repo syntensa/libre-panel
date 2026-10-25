@@ -256,7 +256,9 @@ def test_a_slow_source_holds_up_no_reading_of_every_frame():
         assert entered.wait(5)
         began = time.monotonic()
         assert HubView(hub).fresh()["cpu.load"].value == 12.0
-        assert time.monotonic() - began < 1.0
+        # (a reading that waited for the slow source would take its 5 s: 3 s tell them apart,
+        # and leave a slow runner room)
+        assert time.monotonic() - began < 3.0
     finally:
         release.set()
         taking.join(5)

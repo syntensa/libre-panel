@@ -7,6 +7,7 @@ and the catalog must not carry texts nobody uses any more.
 from __future__ import annotations
 
 import ast
+import functools
 import json
 import re
 from pathlib import Path
@@ -89,8 +90,11 @@ def theme_messages() -> set[str]:
     return found
 
 
-def all_messages() -> set[str]:
-    return python_messages() | js_messages() | dynamic_messages() | theme_messages()
+@functools.cache
+def all_messages() -> frozenset[str]:
+    """Every text shown through the translation layer. Worked out once for the whole run (it reads
+    every source file of the app: two or three seconds, and every language's test asks twice)."""
+    return frozenset(python_messages() | js_messages() | dynamic_messages() | theme_messages())
 
 
 def tables() -> dict[str, set[str]]:
