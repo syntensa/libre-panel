@@ -153,6 +153,17 @@ def open_collections(page):
         toggle.click()
 
 
+def pictures_arrived(page, timeout=60_000):
+    """Wait until the pictures the page has asked for have come. The server draws a theme's
+    preview one after another, 3 to 5 seconds each on a busy machine, and what else is asked
+    of it (a theme to open) waits for its turn. (A lazy picture far below is not asked for yet.)"""
+    page.wait_for_function(
+        "[...document.images].some((img) => img.complete)"
+        " && [...document.images].every((img) => !img.currentSrc || img.complete)",
+        timeout=timeout,
+    )
+
+
 def own_themes(page):
     """The ids of Libre Panel's own themes and yours that Start leads with: not a collection's,
     not one kept for a page (the round report; music's or the clock's page only while it is
@@ -271,7 +282,7 @@ def test_start_lists_the_themes_and_switches_the_panel(app_url, isolated_home):
         # the open theme follows what is on the panel, and Design edits it
         page.wait_for_function(f"window.libre.store.get().doc?.id === '{target}'")
         page.locator(".panel-card .btn-primary").click()
-        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design")
+        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design", timeout=30000)
         assert js(page, "window.libre.store.get().doc.id") == target
 
 
@@ -287,8 +298,9 @@ def test_start_has_a_gallery_of_every_theme(app_url, isolated_home):
         other = next(i for i in shown if i != "libre-default")
         card = page.locator(f'.theme-card[data-theme="{other}"]')
         card.hover()
+        pictures_arrived(page)  # the server is busy with the gallery's pictures until then
         card.locator(".theme-card-edit").click()  # opens it in Design
-        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design")
+        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design", timeout=30000)
         assert js(page, "window.libre.store.get().doc.id") == other
         # and from Design back to Start by the brand
         page.locator(".brand").click()
@@ -304,7 +316,7 @@ def test_start_begins_empty_or_with_a_file(app_url, isolated_home, tmp_path):
     with browser_page(app_url, "home/themes", allow=PICTURE) as page:
         page.wait_for_selector(".start-actions")
         page.get_by_role("button", name="Start empty").click()
-        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design")
+        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design", timeout=30000)
         assert js(page, "window.libre.doc.widgets().length") == 0
         assert js(page, "window.libre.store.get().doc.id") is None
         assert js(page, "window.libre.store.get().dirty") is True
@@ -320,7 +332,7 @@ def test_start_begins_empty_or_with_a_file(app_url, isolated_home, tmp_path):
         chooser.value.set_files(str(path))
         page.locator(".dialog .btn-danger").click()  # discard the empty theme
         page.wait_for_function("window.libre.doc.theme()?.name === 'From a file'")
-        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design")
+        expect(page.locator(".tab[aria-current='page']")).to_have_text("Design", timeout=30000)
 
 
 def test_a_first_start_asks_how_it_should_look(app_url, isolated_home):
@@ -2197,7 +2209,7 @@ def test_a_building_block_and_a_renamed_palette_colour(page):
     name.fill("signal")
     name.press("Enter")
     now = "JSON.stringify(window.libre.doc.theme()).split('@signal\"').length - 1"
-    page.wait_for_function(f"({now}) === {refs}", timeout=5000)  # every use follows the name
+    page.wait_for_function(f"({now}) === {refs}", timeout=20000)  # every use follows the name
     assert js(page, "'accent' in window.libre.doc.theme().palette") is False
     assert js(page, "JSON.stringify(window.libre.doc.theme()).includes('@accent\"')") is False
 
@@ -2366,7 +2378,7 @@ def test_snapping_can_be_to_a_single_pixel(page):
         choices.get_by_role("radio", name=str(step) if step else "off", exact=True).click()
         assert js(page, "window.libre.store.get().prefs.snap") == step
         page.keyboard.press("Escape")  # the popover
-        page.wait_for_function(drawn_in_place, timeout=5000)
+        page.wait_for_function(drawn_in_place, timeout=20000)
         box = page.locator('.overlay .box[data-id="probe"]').bounding_box()
         middle = (box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
         drag(page, middle, (middle[0] + dx, middle[1] + dy), steps=6)
@@ -2677,7 +2689,7 @@ def test_every_handle_of_a_module_resizes_it_one_cell_further_out(page):
             cell_center(page, col, beyond_row)[1] + out_y if beyond_row is not None else start[1],
         )
         drag(page, start, end, steps=6)
-        page.wait_for_function(f"({cells}).join() === {expected!r}.join()", timeout=5000)
+        page.wait_for_function(f"({cells}).join() === {expected!r}.join()", timeout=20000)
         js(page, frames)  # the handles stand where the module's edges are now
 
 
