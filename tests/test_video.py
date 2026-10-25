@@ -884,6 +884,9 @@ def test_a_step_of_the_bit_rate_leaves_no_gap(panel, monkeypatch):
         settle(panel)
         assert display.encoder is not old and "3.0M" in display.encoder.command
         assert display._leaving is None and old.proc.poll() is not None  # the old one is closed
+        for encoder in (old, display.encoder):  # both fed rgb0, each as its own settings say
+            assert encoder.command[encoder.command.index("-pix_fmt") + 1] == "rgb0"
+            assert encoder.settings.pixels == "rgb0"
         assert display.counters.bit_rate == 3.0 and display.counters.drops == 0
         assert display.counters.ffmpeg_restarts == 0
     finally:
@@ -1691,3 +1694,192 @@ def test_a_frame_s_bytes_come_in_one_piece_and_as_tobytes_makes_them(monkeypatch
     monkeypatch.setattr(Image, "_getencoder", other_pillow)
     frame = Image.new("RGBA", (5, 3), (10, 20, 30, 40))
     assert turzx_video.rgb_bytes(frame) == bytes((10, 20, 30)) * 15 and len(calls) == 2
+
+
+# -- how the frames reach ffmpeg (video.pixels) ----------------------------------------------
+
+
+def command_for(encoder, pixels, size=(1920, 720), rotate=270):
+    return ffmpeg_command(
+        "ffmpeg", size, rotate, EncoderSettings(encoder=encoder, pixels=pixels, maxrate="3.0M")
+    )
+
+
+def after(command, flag):
+    return command[command.index(flag) + 1]
+
+
+def test_four_bytes_a_pixel_go_in_and_the_cards_convert_them_themselves():
+    """ "auto" feeds rgb0 (Pillow's four bytes a pixel, the fourth left aside) to every encoder;
+    AMD's and NVIDIA's take it as it is (no NV12 made by ffmpeg) and are told swscale's
+    colours, BT.601 in limited range; x264 and Intel's get YUV made by ffmpeg, as before.
+    ffmpeg turns the frames for all of them. "rgb" is the feed of before, to the letter."""
+    from libre_panel.devices.h264 import CARD_COLOURS, feed_text, passes_through, resolve_feed
+
+    assert resolve_feed("auto") == "rgb0" and resolve_feed("rgb") == "rgb24"
+    for encoder in ("h264_amf", "h264_nvenc"):
+        fed = command_for(encoder, "rgb0")
+        assert after(fed, "-pix_fmt") == "rgb0" and "nv12" not in fed
+        assert after(fed, "-vf") == "transpose=1" and "-s" in fed and after(fed, "-s") == "1920x720"
+        assert fed[fed.index(CARD_COLOURS[0]) : fed.index(CARD_COLOURS[0]) + 4] == CARD_COLOURS
+        assert passes_through(EncoderSettings(encoder=encoder, pixels="rgb0"))
+        before = command_for(encoder, "rgb24")
+        assert after(before, "-pix_fmt") == "rgb24" and before.count("-pix_fmt") == 2
+        assert before[before.index("-pix_fmt", before.index("-c:v")) + 1] == "nv12"
+        assert "-colorspace" not in before
+    qsv = command_for("h264_qsv", "rgb0")
+    assert after(qsv, "-pix_fmt") == "rgb0" and "nv12" in qsv and "-colorspace" not in qsv
+    x264 = command_for("libx264", "rgb0")
+    assert after(x264, "-pix_fmt") == "rgb0" and "yuv420p" in x264 and "-colorspace" not in x264
+    for encoder in ("libx264", "h264_qsv"):  # the same command but for what goes in
+        old, new = command_for(encoder, "rgb24"), command_for(encoder, "rgb0")
+        assert new == [("rgb0" if word == "rgb24" else word) for word in old]
+    for encoder in ("libx264", "h264_qsv", "h264_amf", "h264_nvenc"):
+        portrait = command_for(encoder, "rgb0", (480, 1920), 180)
+        assert after(portrait, "-vf") == "hflip,vflip" and after(portrait, "-s") == "480x1920"
+    assert EncoderSettings().pixels == "rgb24"  # (the command of before, as the tools check it)
+    assert feed_text(EncoderSettings(encoder="h264_amf", pixels="rgb0")) == "h264_amf, rgb0"
+
+
+def test_the_pixels_setting():
+    assert parse_config({}).device.video.pixels == "auto"
+    assert parse_config({"video": {"pixels": "rgb"}}).device.video.pixels == "rgb"
+    for bad in ("rgba", 1, ""):
+        with pytest.raises(ConfigError, match="video.pixels"):
+            parse_config({"video": {"pixels": bad}})
+    two = parse_config({"video": {"pixels": "rgb"}, "panels": [{"device": {"model": "auto"}}]})
+    assert two.for_panel(0).device.video.pixels == "rgb"  # a panel beside: the first one's
+
+
+@pytest.mark.parametrize("mode", ["RGB", "RGBA", "L"])
+@pytest.mark.parametrize("pixels", ["rgb24", "rgb0"])
+def test_a_frame_goes_into_the_pipe_as_its_bytes(mode, pixels):
+    """write_frame: Pillow packs the frame into the pipe itself, the bytes frame_bytes makes;
+    without a file descriptor (or with another Pillow) the bytes are written, all of them."""
+    import io
+    import os
+
+    from libre_panel.devices.turzx_video import frame_bytes, write_frame
+
+    frame = Image.effect_noise((64, 24), 60).convert("RGB").convert(mode)
+    wanted = frame_bytes(frame, pixels)
+    assert len(wanted) == 64 * 24 * (4 if pixels == "rgb0" else 3)
+    if mode != "L":
+        raw = "RGBA" if pixels == "rgb0" else "RGB"
+        assert wanted == frame.tobytes("raw", raw)
+    read, write = os.pipe()
+    with open(write, "wb", buffering=0) as out:
+        write_frame(out, frame, pixels)
+    with open(read, "rb") as got:
+        assert got.read() == wanted
+    kept = io.BytesIO()  # no file descriptor
+    write_frame(kept, frame, pixels)
+    assert kept.getvalue() == wanted
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("size, rotate", [((1920, 480), 270), ((480, 1920), 180)])
+def test_x264_makes_the_same_stream_of_four_bytes_a_pixel(size, rotate):
+    """swscale makes the same YUV of rgb0 as of rgb24 (the fourth byte, the canvas's alpha as
+    the renderer's RGB frames keep it, is left aside): x264's stream is the same, bit for bit,
+    landscape (turned) and portrait (upside down)."""
+    from libre_panel.devices.turzx_video import frame_bytes
+
+    frames = [frame.resize(size) for frame in noisy_frames(6)]
+    see_through = Image.new("RGBA", size, (200, 30, 90, 7))  # an alpha that is no colour's
+    for frame in frames:
+        frame.paste(see_through, (0, 0), Image.new("L", size, 0))  # (pixels kept, alpha in)
+    streams = []
+    for pixels in ("rgb24", "rgb0"):
+        command = ffmpeg_command(FFMPEG, size, rotate, EncoderSettings(pixels=pixels, fps=25))
+        data = b"".join(frame_bytes(frame, pixels) for frame in frames)
+        streams.append(subprocess.run(command, input=data, capture_output=True, check=True).stdout)
+    assert streams[0] and streams[0] == streams[1]
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("pixels", ["auto", "rgb"])
+def test_a_portrait_theme_comes_out_upside_down_as_before(panel, pixels):
+    """A theme on end goes into the 9.2"'s framebuffer turned by 180 degrees (as to_native),
+    with either feed; what reaches the panel decodes to that."""
+    display = TurzxVideoDisplay(video_config(pixels=pixels))
+    display.open()
+    frames = [frame.transpose(Image.Transpose.ROTATE_90) for frame in moving_frames(30)]
+    try:
+        stream_frames(display, frames)
+        fed = "rgb0" if pixels == "auto" else "rgb24"
+        assert after(display.encoder.command, "-pix_fmt") == fed
+        assert "hflip,vflip" in display.encoder.command
+        assert display.counters.encoder == f"libx264, {fed}"
+        settle(panel, timeout=15, at_least=25)
+    finally:
+        display.close()
+    decoded = decode(panel.stream())
+    assert len(decoded) >= 25
+    for source, picture in zip(frames, decoded, strict=False):
+        native = turzx_usb.to_native(source)
+        assert max(ImageStat.Stat(ImageChops.difference(native, picture)).mean) < 6
+
+
+@needs_ffmpeg
+def test_a_card_that_takes_no_rgb0_gets_rgb24_then_x264_takes_over(panel, monkeypatch, caplog):
+    """One of the card's encoders that ends before its first picture, fed rgb0, is started
+    again fed as before (rgb24, NV12 made by ffmpeg: a driver may take no RGB); when that
+    ends too, "auto" leaves it out and x264 takes over, fed rgb0. None of it counts as a
+    restart, and the panel shows the frames. (NVIDIA's encoder ends here at once: no card.)"""
+    monkeypatch.setattr(h264, "AUTO_ENCODERS", ("h264_nvenc",))
+    monkeypatch.setattr(h264, "encoder_works", lambda ffmpeg, encoder: True)
+    commands = []
+    real = turzx_video.ffmpeg_command
+
+    def command(*args):
+        commands.append(real(*args))
+        return commands[-1]
+
+    monkeypatch.setattr(turzx_video, "ffmpeg_command", command)
+    display = TurzxVideoDisplay(video_config())
+    display.open()
+    frames = moving_frames(80)
+    try:
+        with caplog.at_level("WARNING", logger="libre_panel.devices.turzx_video"):
+            for frame in frames:
+                display.show(frame)
+                time.sleep(0.02)
+                if display.encoder.pictures >= 20:
+                    break
+        assert display.encoder.name == "libx264", [c[c.index("-c:v") + 1] for c in commands]
+        fed = [(c[c.index("-c:v") + 1], after(c, "-pix_fmt")) for c in commands]
+        assert fed == [("h264_nvenc", "rgb0"), ("h264_nvenc", "rgb24"), ("libx264", "rgb0")]
+        assert display._feeds_failed == {"h264_nvenc"} == display._encoders_failed
+        assert display.counters.ffmpeg_restarts == 0
+        assert display.counters.encoder == "libx264, rgb0"
+        said = [r.getMessage() for r in caplog.records]
+        assert any("ffmpeg converts the frames" in s for s in said)
+        assert any("x264 takes over" in s for s in said)
+        settle(panel, timeout=15, at_least=10)
+    finally:
+        display.close()
+    assert len(panel.blocks) >= 10
+    shown = [frame_number(picture) for picture in decode(panel.stream())]
+    assert all(a < b for a, b in itertools.pairwise(shown))  # x264's frames, in their order
+
+
+def test_only_a_card_that_ended_fed_rgb0_gets_rgb24_next(monkeypatch):
+    """The step back to rgb24 is for an encoder of the card that ended (exited) before its
+    first picture while fed rgb0, once; one that hangs, that showed pictures, or x264, does
+    not take it; a card's encoder set by hand then counts as a restart, as before."""
+    display = TurzxVideoDisplay(video_config(encoder="h264_nvenc"))
+
+    def stopped(pixels, alive=False, pictures=0, name="h264_nvenc"):
+        settings = EncoderSettings(encoder=name, pixels=pixels)
+        display.encoder = SimpleNamespace(name=name, pictures=pictures, alive=alive,
+                                          settings=settings)  # fmt: skip
+        return display._gave_up("exit code 1")
+
+    assert stopped("rgb0", alive=True) is False  # it hangs: no matter of the format
+    assert stopped("rgb0", pictures=3) is False  # it showed pictures: a restart
+    assert stopped("rgb0", name="libx264") is False and display._feeds_failed == set()
+    assert stopped("rgb0") is True and display._feeds_failed == {"h264_nvenc"}
+    assert stopped("rgb0") is False  # (once)
+    assert stopped("rgb24") is False  # set by hand: then a restart, counted
+    assert display._encoders_failed == set()

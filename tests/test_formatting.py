@@ -68,3 +68,40 @@ def test_untrusted_format_strings_are_refused(fmt):
 def test_type_errors_become_format_errors():
     with pytest.raises(FormatError):
         safe_format("{value:.0f}", "text")
+
+
+def test_texts_are_kept_by_all_they_depend_on():
+    """A steady value is formatted once (the last 1024 texts are kept); another value, unit,
+    label or format makes a new one; the value's type and a zero's sign count (1, 1.0 and True
+    are equal as keys, not as texts); errors are not kept, a value that is no key still works."""
+    from libre_panel.render import formatting
+
+    formatting._kept.cache_clear()
+    made = []
+    real = formatting._made
+
+    def counting(*args):
+        made.append(args)
+        return real(*args)
+
+    formatting._made = counting
+    try:
+        for _ in range(5):
+            assert safe_format("{value:.1f} {unit}", 41.25, "°C") == "41.2 °C"
+        assert len(made) == 1  # once, then kept
+        assert safe_format("{value:.1f} {unit}", 41.3, "°C") == "41.3 °C"  # a new value
+        assert safe_format("{value:.1f} {unit}", 41.25, "°F") == "41.2 °F"  # a new unit
+        assert safe_format("{label:upper}", 1, label="cpu") == "CPU"
+        assert safe_format("{label:upper}", 1, label="gpu") == "GPU"  # a new label
+        assert len(made) == 5
+        assert [safe_format("{value}", v) for v in (1, 1.0, True, 1)] == ["1", "1.0", "True", "1"]
+        assert [safe_format("{value:.0f}", v) for v in (-0.0, 0.0, -0.0)] == ["-0", "0", "-0"]
+        for _ in range(2):  # an error each time, not a text kept
+            with pytest.raises(FormatError):
+                safe_format("{nope}", 1)
+        assert safe_format("{value}", [1, 2]) == "[1, 2]"  # no key: made each time
+        assert safe_format("{value}", [1, 2]) == "[1, 2]"
+        assert len(made) == 5 + 3 + 2 + 2 + 2
+    finally:
+        formatting._made = real
+    assert formatting._kept.cache_info().maxsize == 1024

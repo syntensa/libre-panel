@@ -12,9 +12,11 @@ where only a few values moved costs little.
 from __future__ import annotations
 
 import calendar
+import itertools
 import json
 import logging
 import math
+import operator
 import queue
 import re
 import threading
@@ -231,24 +233,47 @@ def _undrawable(value: Any) -> bool:
     return isinstance(value, int) and value.bit_length() > 1023
 
 
-def _finite(snapshot: Snapshot) -> Snapshot:
+class _Finite:
     """``snapshot`` with every reading that is NaN, infinite or too large for a float taken for
     none: a source can send one (a payload "nan"), and no widget, card or list must draw it or
-    glide to it."""
-    bad = []
-    for key, reading in snapshot.readings.items():  # (every frame: no call per reading)
-        value = reading.value
-        if isinstance(value, float):
-            if not math.isfinite(value):
-                bad.append(key)
-        elif isinstance(value, int) and value.bit_length() > 1023:
-            bad.append(key)
-    if not bad:
+    glide to it.
+
+    Only the readings not looked at the frame before are looked at: in video mode the readings
+    are a new dict every frame, nearly all of them the same Reading objects (frozen) under the
+    same keys in the same order. The last frame's keys and readings are kept (held, so that
+    an object found drawable is never another); what is not the same object in the same place
+    is looked at, all of them when the keys differ or a reading was not drawable."""
+
+    def __init__(self) -> None:
+        self._keys: list[str] = []
+        self._readings: list[Any] = []
+
+    def __call__(self, snapshot: Snapshot) -> Snapshot:
+        readings = snapshot.readings
+        keys, values = list(readings), list(readings.values())  # (at C speed, as below)
+        if keys == self._keys:
+            looked = list(itertools.compress(values, map(operator.is_not, values, self._readings)))
+        else:
+            looked = values
+        bad = set()
+        for reading in looked:  # (no call per reading)
+            value = reading.value
+            if isinstance(value, float):
+                if not math.isfinite(value):
+                    bad.add(id(reading))
+            elif isinstance(value, int) and value.bit_length() > 1023:
+                bad.add(id(reading))
+        if bad:  # (rare: all are looked at again next time)
+            self._keys, self._readings = [], []
+            fixed = {k: replace(r, value=None) if id(r) in bad else r for k, r in readings.items()}
+            return replace(snapshot, readings=fixed)
+        self._keys, self._readings = keys, values
         return snapshot
-    readings = {**snapshot.readings}
-    for key in bad:
-        readings[key] = replace(readings[key], value=None)
-    return replace(snapshot, readings=readings)
+
+
+def _finite(snapshot: Snapshot) -> Snapshot:
+    """:class:`_Finite` without a memory: every reading is looked at."""
+    return _Finite()(snapshot)
 
 
 COURSE_POINTS = 4000  # a course a service publishes whole is drawn up to this long
@@ -679,6 +704,7 @@ class Renderer:
         # The last canvas in RGB, as it was (never handed out), and the parts of the canvas
         # composed since (None: all of it): only those are converted for the next frame.
         self._rgb: tuple[Image.Image, Image.Image] | None = None
+        self._finite = _Finite()  # (the readings it found drawable the frame before)
         self._fresh: list[tuple[Image.Image, tuple[int, int, int, int]]] | None = None
         # Per region, what lies under the first piece that changes (a graph that
         # moves every frame over a card): the same pieces need not be laid again.
@@ -1468,7 +1494,7 @@ class Renderer:
         self, snapshot: Snapshot, now: float | None = None
     ) -> tuple[Image.Image, dict[str, Box]]:
         now = clock() if now is None else now
-        snapshot = _finite(snapshot)
+        snapshot = self._finite(snapshot)
         if self._slots and self.animate and not self.preview and not self._slots_warm:
             self._slots_warm = True  # (once, with the first frame, or with the warm-up's)
             self._warm_slots(snapshot, now)

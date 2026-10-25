@@ -31,7 +31,7 @@ def test_the_steps_try_each_thing_apart_and_the_graphics_card_s_encoder_where_th
 def stats(**changes):
     base = {"fps": 49.8, "target_fps": 50, "streaming": True, "kbps": 380.0, "blocks_per_s": 50.0,
             "max_depth": 2, "waits": 3, "drops": 0, "usb_errors": 0, "panel_restarts": 0,
-            "ffmpeg_restarts": 0, "bit_rate": 3.0}  # fmt: skip
+            "ffmpeg_restarts": 0, "bit_rate": 3.0, "encoder": "h264_amf, rgb0"}  # fmt: skip
     return {**base, **changes}
 
 
@@ -45,6 +45,9 @@ def test_a_panel_s_numbers_are_judged():
         2,
         3.0,
     )
+    assert ok["encoder"] == "h264_amf, rgb0"  # what the encoder was fed, said with the numbers
+    assert "h264_amf, rgb0" in Experiment._summary({"panels": [{"panel": 1, **ok}]})
+    assert "encoder -" in Experiment._summary({"panels": [{"panel": 1, **ok, "encoder": None}]})
     assert judge([stats(fps=40.0)], first, last)["verdict"] == "stutter"
     assert judge([stats()], first, stats(waits=20))["verdict"] == "stutter"  # kept waiting
     assert judge([stats(blocks_per_s=0.0)], first, last)["verdict"] == "failed"  # no pictures

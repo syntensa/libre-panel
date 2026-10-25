@@ -3,6 +3,14 @@
 ## 0.7.1rc5 — 2026-10-24
 
 **Changes**
+- **Video frames cost less**: the frames go into ffmpeg as four bytes a pixel, as Pillow holds
+  them, written from the encoder's own thread; AMD's and NVIDIA's encoders take them as they
+  are and convert on the card (BT.601 limited range, as before), x264 and Intel's get the same
+  YUV as before, bit for bit. About 8 ms less processor time per frame with a card's encoder
+  and 4 ms with x264 on the 12.3", measured here. A card's encoder that refuses the new feed
+  is tried once with the old one, then x264 takes over as before. `[video] pixels = "rgb"`
+  restores the old feed if colours ever look different. Formatted texts and the check of the
+  readings are kept between frames too.
 - **The app's server reads every request to the end before it answers**: a route that
   answered without reading its body closed the connection with data unread, which on Windows
   could throw the answer away (the renewal of the notify key). Tests that waited a fixed time
