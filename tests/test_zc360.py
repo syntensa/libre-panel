@@ -215,3 +215,79 @@ def test_the_zc360_is_a_model_with_its_own_lumen(bus):
         assert all(s.frames == 1 for s in bus)
     finally:
         display.close()
+
+
+# -- each screen a panel of its own ------------------------------------------------------------
+
+
+def alone(port: str = "", brightness: int = 70) -> zc.Zc360Display:
+    config = DeviceConfig(driver="turzx", model=zc.SCREEN_MODEL_ID, port=port,
+                          brightness=brightness)  # fmt: skip
+    display = zc.Zc360Display(config, find_model(zc.SCREEN_MODEL_ID))
+    display.open()
+    return display
+
+
+def test_a_screen_is_a_panel_of_its_own_by_its_place_on_the_bus(bus):
+    by_place = sorted(bus, key=lambda s: s.address)  # (the fake screens have no ports)
+    assert zc.screen_number("2") == 1 and zc.screen_number("") is None
+    assert zc.screen_number("4") is None and zc.screen_number("1,2,3") is None
+    second = alone(port="2", brightness=40)
+    try:
+        screen = by_place[1]
+        assert screen.commands() == [56, 84, 86] and not by_place[0].writes
+        assert zc._cipher().decrypt(screen.writes[1][2:10])[:2] == bytes((84, 40))
+        second.show(Image.new("RGB", (640, 180), "#ff0000"))
+        assert native_colour(screen) == (255, 0, 0) and screen.commands()[-1] == zc.CMD_COMMIT
+        assert not any(s.frame_writes() for s in bus if s is not screen)
+        second.show(Image.new("RGB", (180, 640), "#00ff00"))  # a portrait card: turned to fit
+        assert native_colour(screen) == (0, 255, 0)
+        with pytest.raises(DeviceError, match="screen 2 open"):  # another panel has it
+            alone(port="2")
+        first = alone()  # without a port: the first free one
+        try:
+            assert by_place[0].commands() == [56, 84, 86]
+            assert not zc.all_free() and zc.present()  # "auto" leaves the ZC-360 to them
+            second.set_brightness(20)  # each panel its own screen's
+            assert zc._cipher().decrypt(screen.writes[-1][2:10])[:2] == bytes((84, 20))
+            assert zc._cipher().decrypt(by_place[0].writes[-1][2:10])[:2] != bytes((84, 20))
+        finally:
+            first.close()
+    finally:
+        second.close()
+    assert zc.all_free()
+
+
+def test_a_screen_that_is_not_there_is_a_fault(bus, monkeypatch):
+    monkeypatch.setattr(zc, "_devices", lambda: bus[:2])
+    with pytest.raises(DeviceError, match="screen 3 is not on the USB bus"):
+        alone(port="3")
+    assert not any(base.place_taken(zc._place(s)) for s in bus)
+
+
+def test_the_screens_take_turns_across_the_panels_processes(bus, monkeypatch):
+    said = []
+    monkeypatch.setattr(zc, "_wait", lambda handle: said.append("turn"))
+    monkeypatch.setattr(zc, "_done", lambda handle: said.append("done"))
+    for screen in bus:
+        write = screen.write
+        monkeypatch.setattr(
+            screen, "write", lambda e, d, t, w=write: said.append(len(d)) or w(e, d, t)
+        )
+    display = alone(port="1")
+    try:
+        said.clear()
+        display.show(Image.new("RGB", (640, 180), "#ff0000"))
+        # the frame and its answer in one turn (then the first frame's 88, a command)
+        assert said == ["turn", *[4096] * 90, "done", 32]
+    finally:
+        display.close()
+
+
+def test_a_screen_of_its_own_has_lumen_in_its_size(bus):
+    model = find_model(zc.SCREEN_MODEL_ID)
+    assert model.size("landscape") == (640, 180) and model.driver == "unverified"
+    assert models_for_usb(0x43A8, 0x0E61) == [find_model(zc.MODEL_ID)]  # "auto": all three
+    assert theme_for(default_theme(model), "landscape", (640, 180)) == "lumen-640x180"
+    for theme in ("lumen-media", "lumen-clock", "lumen-rings", "lumen-memory"):
+        assert theme_for(f"{theme}-640x180", "landscape", (640, 180)) == f"{theme}-640x180"

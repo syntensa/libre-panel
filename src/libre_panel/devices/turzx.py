@@ -203,7 +203,7 @@ class TurzxDisplay(Display):
             except DeviceError as exc:  # (a screen of a kind it does not drive: look on)
                 impl.close()
                 missing = exc
-        if jonsbo_zc360.present():
+        if jonsbo_zc360.all_free():
             impl = self._driver(find_model(jonsbo_zc360.MODEL_ID), configured=False)
             impl.open()
             return impl

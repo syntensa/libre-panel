@@ -131,6 +131,17 @@ version for it: what plays, the time, CPU and GPU, a part on each screen.
 - On Linux, `libre-panel system-setup --linux` gives your user access to the screens as it does
   to the TURZX panels.
 
+**Each screen a panel of its own.** *Settings → Panels* turns the one picture into three panels
+with one click (*Each screen its own panel*), and back (*Back to one picture*): each screen then
+shows a theme of its own, the header's panel switch chooses the one that *Live* shows and
+*Design* edits, and screens 2 and 3 follow screen 1's brightness. They start with Lumen for
+640×180: CPU, GPU and memory, each a lit ring beside its history; the time, what plays, the time
+with the CPU, and CPU and GPU together are there too. Behind the click: `device.model =
+"jonsbo-zc360-screen"` with `device.port` "1", "2" or "3", the screen by the place it hangs
+on in the ZC-360's own USB hub (*Which is which?* shows the numbers). The three still take
+their pictures one after the other, also from the panels' own processes; the four panels
+Libre Panel runs at most leave room for one more beside them.
+
 The protocol comes from the notes of the MIT-licensed
 [jonsbo-zc360-linux-driver](https://github.com/RimuruNava/jonsbo-zc360-linux-driver).
 
