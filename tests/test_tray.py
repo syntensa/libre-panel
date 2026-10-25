@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -367,11 +368,21 @@ def test_real_tray_icon_on_x11(isolated_home):
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
+        start_new_session=True,  # one group for the X server, the tray and the app: ended together
     )
+
+    def kill_all():
+        """Everything the script started: killing xvfb-run alone leaves the app and the tray
+        holding the pipe, and reading the output below would wait for them for ever."""
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
     try:
         log = isolated_home / "logs" / "libre-panel.log"
         if not wait_for(lambda: log.exists() and "tray icon ready" in log.read_text(), 30):
-            proc.kill()  # say what happened instead of a bare "assert False"
+            kill_all()  # say what happened instead of a bare "assert False"
             seen = log.read_text(errors="replace") if log.exists() else "(no log)"
             output = proc.stdout.read().decode(errors="replace")
             pytest.fail(f"no tray icon after 30 s\n--- log\n{seen}\n--- output\n{output}")
@@ -390,8 +401,7 @@ def test_real_tray_icon_on_x11(isolated_home):
             assert json.loads(response.read())["available"] is True
         assert proc.wait(30) == 0
     finally:
-        if proc.poll() is None:
-            proc.kill()
+        kill_all()
     output = proc.stdout.read().decode(errors="replace")
     assert "Traceback" not in output, output
     assert running_instance() is None
