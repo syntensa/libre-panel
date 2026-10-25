@@ -458,6 +458,9 @@ class BackgroundApp:
             self.light_mode = config.light_mode
         except ConfigError as exc:
             log.error("services not started: %s", exc)  # they start once the config is fixed
+        from libre_panel import colour_show
+
+        colour_show.recover()  # a colour check the app ended during: said, its marker gone
         self.panel.start()
         url = self.editor.start()
         self.light.start()

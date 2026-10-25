@@ -39,7 +39,7 @@ from libre_panel.config import (
     place_at,
     user_themes_dir,
 )
-from libre_panel.devices.h264 import ENCODERS, PROFILES, X264_PRESETS
+from libre_panel.devices.h264 import ENCODERS, PIXELS, PROFILES, X264_PRESETS
 from libre_panel.editor import access
 from libre_panel.i18n import t
 
@@ -450,6 +450,7 @@ class Settings:
                     "maxrate": video.maxrate,
                     "profile": video.profile,
                     "encoder": video.encoder,
+                    "pixels": video.pixels,
                     "local_clip": video.local_clip,
                     "clip_asked": video.clip_asked,
                     "ffmpeg": video.ffmpeg,
@@ -1364,6 +1365,8 @@ RULES: dict[str, Any] = {
     "video.maxrate": lambda n, v, c: _rate(n, v),
     "video.profile": lambda n, v, c: _choice(n, v, PROFILES),
     "video.encoder": lambda n, v, c: _choice(n, v, ENCODERS),
+    # how the frames reach ffmpeg (Settings → Panel → Check the colours writes it)
+    "video.pixels": lambda n, v, c: _choice(n, v, PIXELS),
     "video.local_clip": lambda n, v, c: _text(n, v, 200),
     "video.clip_asked": lambda n, v, c: _flag(n, v),
     "video.ffmpeg": lambda n, v, c: _text(n, v, 260),

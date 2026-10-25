@@ -31,6 +31,7 @@ import { fitsPanel } from "../home/themes.js";
 import { toastError } from "../../ui/toast.js";
 import { openDialog } from "../../ui/dialog.js";
 import { Arrangement, arranged, arrangementItem } from "./arrangement.js";
+import { ColourCard } from "./colours.js";
 import { NewPanel } from "./newpanel.js";
 import { Card, CommitField, Disclosure, SettingRow, Status, copyText, usePolling } from "./parts.js";
 import { StartScreenCard } from "./startscreen.js";
@@ -244,7 +245,8 @@ function VideoCard() {
     ${applies && video.gaps.includes("clip") ? html`<${ClipRow} value=${clip} />` : null}
     <${MotionRow} motion=${config.device.motion} serial=${info.model?.connection === "serial"} />
   <//>
-  ${applies ? html`<${ExperimentCard} video=${config.video} />` : null}`;
+  ${applies ? html`<${ExperimentCard} video=${config.video} />` : null}
+  ${applies ? html`<${ColourCard} />` : null}`;
 }
 
 // The video mode's defaults (config.py); the experiment's "Back to the defaults" writes them.

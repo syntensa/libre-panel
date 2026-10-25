@@ -1,6 +1,19 @@
 # Changelog
 
-## Unreleased
+## 0.7.1rc6 — 2026-10-25
+
+**Changes**
+- **Check the colours, in the app**: Settings → Panel has a card *Check the colours* under the
+  video experiment. One click encodes a test picture with every encoder that works on this PC,
+  fed the new way (four bytes a pixel, the colours made on the graphics card) and the old way
+  (made by the processor), decodes both and compares them patch by patch: *identical*, a
+  *level shift* (black and white) or a *matrix shift* (the colours). Where the card's encoder
+  in use shifts them, one button makes the processor convert them, and another takes it back:
+  no file to edit. The card says which encoder "Automatic" picked and why it passed a card's
+  encoder over. *Show it on the panel* switches the test picture between both ways every
+  3 seconds for half a minute, with A and B in a corner. A card's encoder that refuses four
+  bytes a pixel is fed three from the start (kept a week), and the test of an encoder accepts
+  one that takes three.
 
 **Fixes**
 - **A theme opens at once from the gallery**: the previews of the gallery take two turns at a

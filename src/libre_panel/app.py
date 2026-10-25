@@ -15,7 +15,16 @@ from typing import Any
 
 from PIL import Image, ImageOps
 
-from libre_panel import arrangement, i18n, identify, modes, presence, timing, winsession
+from libre_panel import (
+    arrangement,
+    colour_show,
+    i18n,
+    identify,
+    modes,
+    presence,
+    timing,
+    winsession,
+)
 from libre_panel import clock as loop_clock
 from libre_panel.accent import accent_of
 from libre_panel.config import Config, ConfigError, brightness_now, config_dir, load_config
@@ -637,9 +646,11 @@ NIGHT_CHECK_S = 30.0  # how often the loop looks whether night began or ended
 
 
 def _same_device(a, b) -> bool:
-    """Brightness and the picture's turn change on the open panel; anything else
-    needs it opened again."""
-    return replace(a, **{name: getattr(b, name) for name in _FOLLOWED}) == b
+    """Brightness and the picture's turn change on the open panel, and how the frames go into
+    ffmpeg (video.pixels: the video display starts ffmpeg anew); anything else needs it opened
+    again."""
+    followed = {name: getattr(b, name) for name in _FOLLOWED}
+    return replace(a, **followed, video=replace(a.video, pixels=b.video.pixels)) == b
 
 
 class MainLoop:
@@ -1232,6 +1243,8 @@ class MainLoop:
                         reported = None  # the new display has not said which panel it is
                     for name in _FOLLOWED:  # (on the open panel)
                         setattr(device, name, getattr(fresh.device, name))
+                    # the video display's own settings: it feeds the next ffmpeg so
+                    device.video.pixels = fresh.device.video.pixels
                     if _brightness(fresh) != link.brightness:
                         link.set_brightness(_brightness(fresh))
                     before = config  # (the scene it had: a scene's change goes across them)
@@ -1332,8 +1345,16 @@ class MainLoop:
                 self.alarm.follow(_alarm(snapshot), now)
                 frame = self.alarm.draw(frame, now, renderer.theme.palette.get("crit"),
                                         still=not renderer.animate)  # fmt: skip
+                number = 1 if self.panel is None else self.panel + 2
+                # the colour check's picture (Settings → Panel), fed to ffmpeg as its moment says
+                checking = colour_show.now(number) if streaming else None
+                feed = checking[1] if checking is not None else None
+                set_feed = getattr(display, "set_feed", None)  # (a plugin's display may lack it)
+                if set_feed is not None and getattr(display, "feed", None) != feed:
+                    set_feed(feed)
+                if checking is not None:
+                    frame = colour_show.picture(frame.size, checking[0])
                 if identify.showing():  # which panel is which: its number instead, a moment
-                    number = 1 if self.panel is None else self.panel + 2
                     accent = renderer.theme.palette.get("accent") or "#2EE6D6"
                     frame = identify.picture(number, frame.size, accent)
                 self.meter.drew(self.clock() - drawing)

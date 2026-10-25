@@ -233,6 +233,26 @@ def test_a_probe_feeds_what_the_video_mode_feeds_and_counts_the_pictures(
     assert encoder_works("ffmpeg-there", "h264_nvenc") is False  # nothing came: it does not
 
 
+def test_a_card_that_takes_three_bytes_a_pixel_but_not_four_still_works(isolated_home, monkeypatch):
+    """A card's encoder that refuses four bytes a pixel but encodes three is one "auto" takes;
+    that it refused the four is kept, so the video mode feeds it three from the start."""
+    from libre_panel.devices.h264 import encoder_works
+
+    isolated_home.mkdir()
+    fed = []
+
+    def run(command, **kwargs):
+        pixels = command[command.index("-pix_fmt") + 1]
+        fed.append(pixels)
+        out = b"\x00\x00\x00\x01\x67" if pixels == "rgb24" else b""
+        return SimpleNamespace(returncode=0 if out else 1, stdout=out, stderr=b"bad input\n")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr(h264, "_PROBED", {})
+    assert encoder_works("ffmpeg-here", "h264_amf") is True and fed == ["rgb0", "rgb24"]
+    assert video_state.refused("ffmpeg-here", "h264_amf") is True
+
+
 def test_the_answer_of_a_probe_is_kept_for_a_week(isolated_home, monkeypatch):
     """Whether ffmpeg can start a card's encoder is asked once, kept in video-state.json, and
     taken by the next runs for a week; then it is asked again (a new driver may change it)."""
@@ -1441,15 +1461,16 @@ def test_device_changes_open_the_panel_again():
     assert app._same_device(a, DeviceConfig(video=VideoConfig(clip_asked=True)))
 
 
-def running_panel(home, monkeypatch, panel):
+def running_panel(home, monkeypatch, panel, video=""):
     """The main loop on a 9.2" of the simulated bus, with a config.toml in ``home`` that has
-    no clip name, as the background app runs it; returns what a test needs to watch and stop it."""
+    no clip name (or ``video``'s lines in [video]), as the background app runs it; returns what
+    a test needs to watch and stop it."""
     from libre_panel.config import load_config
 
     home.mkdir(parents=True, exist_ok=True)
     (home / "config.toml").write_text(
         'theme = "slate"\nfps = 5\n\n[device]\ndriver = "turzx"\nmodel = "turing-9.2-usb"\n\n'
-        '[sensors]\nproviders = ["demo"]\n\n[video]\n',
+        f'[sensors]\nproviders = ["demo"]\n\n[video]\n{video}',
         encoding="utf-8",
     )
     opened = []
@@ -1520,6 +1541,57 @@ def test_saying_not_now_leaves_the_running_panel_as_it_is(panel, monkeypatch, is
         stop.set()
         thread.join(20)
     assert not thread.is_alive()
+
+
+@needs_ffmpeg
+def test_the_colour_check_s_a_and_b_and_its_one_click_start_ffmpeg_anew_on_the_open_panel(
+    panel, monkeypatch, isolated_home
+):
+    """Settings → Panel → Check the colours: its A and B on the panel feed ffmpeg the new way
+    and the old way in turn, each a new ffmpeg on the open panel (no second start sequence),
+    and afterwards it is fed as video.pixels says; the one click that writes video.pixels is
+    followed so too, without opening the panel again."""
+    from libre_panel import colour_show
+    from libre_panel.config import edit_config
+
+    commands = []
+    real = turzx_video.ffmpeg_command
+
+    def command(*args):
+        commands.append(real(*args))
+        return commands[-1]
+
+    def fed():
+        return [after(c, "-pix_fmt") for c in commands]
+
+    monkeypatch.setattr(turzx_video, "ffmpeg_command", command)
+    monkeypatch.setattr(colour_show, "SWITCH_S", 0.8)
+    video = 'mode = "on"\nlocal_clip = "usr/data/clip.h264"\n'
+    opened, status, stop, thread = running_panel(isolated_home, monkeypatch, panel, video)
+    try:
+        assert wait_until(
+            lambda: status.target == 'Turing 9.2", video 50 fps' and status.frames > 5
+        )
+        assert fed() == ["rgb0"]
+        colour_show.begin(1, seconds=3.0)
+        try:
+            assert wait_until(lambda: "rgb24" in fed())  # B: the processor's conversion
+            assert wait_until(lambda: colour_show.state() is None)
+        finally:
+            colour_show.end()
+        assert wait_until(lambda: fed()[-1] == "rgb0" and status.stats.get("encoder", "")
+                          .endswith("rgb0"))  # fmt: skip
+        # A is the feed it had (no new ffmpeg for it), B the old one, then A again
+        assert fed()[:3] == ["rgb0", "rgb24", "rgb0"]
+        edit_config(("value", "video.pixels", "rgb"))  # "Use the processor's conversion"
+        assert wait_until(lambda: fed()[-1] == "rgb24")
+        assert len(opened) == 1 and panel.commands.count(110) == 1  # the panel stayed open
+        arrived = len(panel.blocks)
+        assert wait_until(lambda: len(panel.blocks) > arrived + 10)  # and shows the pictures
+    finally:
+        stop.set()
+        thread.join(20)
+    assert not thread.is_alive() and not NEVER & set(panel.commands)
 
 
 def test_a_mode_sets_the_stream_rate(monkeypatch):

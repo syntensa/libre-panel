@@ -215,7 +215,44 @@ x264, Constrained Baseline, yuv420p, Annex B:
   x264's stream is the same as before. `pixels = "rgb"` is the feed of before
   (`rgb24`, NV12 made by ffmpeg for every card); a card's encoder that ends
   before its first picture fed rgb0 is started again so by itself, before
-  "auto" leaves it out for x264.
+  "auto" leaves it out for x264; `video-state.json` keeps that for a week per
+  encoder and ffmpeg, so the next connections start it fed rgb24 at once.
+- **Checking the colours** (Settings → Panel → *Check the colours*,
+  `devices/colour_check.py`). The panel's decoder applies one fixed matrix to
+  every stream, BT.601 in limited range (the one swscale converted for), whatever
+  the stream says of its colours: equal YUV in the stream is equal colours on the
+  panel. So the check compares YUV, measured on the PC and away from the panel:
+  a test picture at the size of the panel's frames, of large flat patches (black,
+  five greys, white, pure red, green and blue, the themes' accent `#2EE6D6` and
+  violet `#A78BFA`, an orange, a skin tone), goes ten times through the very
+  command the display builds (its encoder settings, its `transpose`), once fed
+  `pixels = "auto"` and once `"rgb"`, for every encoder of the card ffmpeg can
+  start here (the probe "auto" goes by: the video mode's own command, whose last
+  line from ffmpeg the card shows for an encoder passed over) and for x264, one
+  run after the other, each with a time limit. ffmpeg
+  decodes each stream to raw video in the decoder's own pixel format, converting
+  nothing (the result names it: yuv420p, or yuvj420p for a stream that says it is
+  full range, read the same); the turn is undone and the mean Y, U and V of the
+  middle of every patch (half its width and height, at least 8 pixels from its
+  edges, where chroma and blocks blur) are taken over all ten pictures. The two
+  feeds are **identical** when every patch is within ±2 code values; a **level
+  shift** when the greys stay grey (U and V at 128) in both but black and white
+  differ in Y (full against limited range: 0/255 against 16/235); a **matrix
+  shift** when black, the greys and white agree and the saturated colours differ
+  (BT.709 against BT.601); else **other**. The swatches the app shows are the
+  measured YUV turned into RGB with BT.601 in limited range, as the panel shows
+  it. Measured here with x264, both feeds give the same YUV to the code value;
+  ffmpeg's `scale=out_range=full` gives a level shift (black 0 against 16) and
+  `scale=out_color_matrix=bt709` a matrix shift (green's Y 173 against 145).
+  Whether AMD's and NVIDIA's conversion on the card agrees is what the check is
+  for, on the PC that has the card (**unverified** so far). With a shift,
+  `pixels = "rgb"` (the card's button *Use the processor's conversion*) gives the
+  colours of before. *Show it on the panel* shows the test picture on a panel for
+  30 s, fed every 3 s the other way (a new ffmpeg each time, the panel stays open;
+  a large A or B in a corner), written nowhere: the panel's loop asks for it on
+  each frame, so its theme and feed come back when it ends, when it is stopped, or
+  with the app (a marker beside `config.toml` tells the next start that the app
+  ended during one; nothing else is left to undo).
 - Measured with Arena on the 12.3" (1920×720, 50 fps) and FFmpeg 8.1 on a
   4-core PC, the CPU time of Libre Panel and ffmpeg together per frame, before
   and after, in paired runs on a busy machine (its absolute numbers are about

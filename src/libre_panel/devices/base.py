@@ -154,6 +154,10 @@ class Display:
     # The panel this is, once it is open and the driver knows (a panel found by its USB ids
     # learns its model when it connects); None before, and for drivers that do not say.
     model: PanelModel | None = None
+    # How a video display feeds ffmpeg while a colour check shows the panel its picture
+    # (Settings → Panel → Check the colours): "auto" or "rgb" as video.pixels takes them; None
+    # the rest of the time, when video.pixels holds (set_feed)
+    feed: str | None = None
 
     def __init__(self, config: DeviceConfig) -> None:
         self.config = config
@@ -169,6 +173,11 @@ class Display:
 
     def set_brightness(self, percent: int) -> None:
         """0-100. Drivers without brightness control ignore it."""
+
+    def set_feed(self, pixels: str | None) -> None:
+        """A colour check's feed for the video (:attr:`feed`); the video display starts ffmpeg
+        anew with it at its next frame, and the others have no video to feed."""
+        self.feed = pixels
 
     def screen_off(self) -> bool:
         """Libre Panel quits ([device] dark_on_quit): the panel's own command that turns its

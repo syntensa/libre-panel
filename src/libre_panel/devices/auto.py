@@ -51,6 +51,8 @@ class AutoDisplay(Display):
             panel.open()
             if self._brightness is not None:
                 panel.set_brightness(self._brightness)
+            if self.feed is not None:  # (a colour check under way)
+                panel.set_feed(self.feed)
         except Exception as exc:  # no panel, missing USB libraries, no permission, ...
             panel.close()
             self._last_error = exc
@@ -92,6 +94,11 @@ class AutoDisplay(Display):
         self._brightness = percent
         if self._impl:
             self._impl.set_brightness(percent)
+
+    def set_feed(self, pixels: str | None) -> None:
+        self.feed = pixels
+        if self._impl:
+            self._impl.set_feed(pixels)
 
     def screen_off(self) -> bool:
         return bool(self._impl and self._impl.screen_off())

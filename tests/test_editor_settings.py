@@ -1162,7 +1162,7 @@ def test_the_settings_that_name_a_program_or_a_file_are_the_ones_locked():
         "device.dark_when_away", "device.away_brightness", "device.at", "device.still",
         "video.mode", "video.fps", "video.local_clip", "video.clip_asked", "refresh_ms",
         "video.device_fps", "video.crf", "video.preset", "video.keyframe_s", "video.maxrate",
-        "video.profile", "video.encoder",
+        "video.profile", "video.encoder", "video.pixels",
         "check_updates", "allow_notify", "light_mode", "symbols", "accent", "across",
         "hotkeys.enabled", "hotkeys.pause",
         "hotkeys.brightness_up", "hotkeys.brightness_down", "hotkeys.open", "hotkeys.next_scene",

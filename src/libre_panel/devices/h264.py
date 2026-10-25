@@ -18,7 +18,8 @@ project (docs/protocol/turzx-usb.md, "Video layer"):
   the card, told to do it as swscale does on the processor (BT.601, limited range): ffmpeg
   makes no NV12 for them. For x264 and Intel's, ffmpeg converts (the same YUV as from three
   bytes a pixel, for less). ``video.pixels = "rgb"`` gives the feed of before (rgb24, NV12 made
-  by ffmpeg for every card), should colours shift on a panel.
+  by ffmpeg for every card), should colours shift on a panel: Settings → Panel → Check the
+  colours measures whether they do (colour_check.py) and writes it with one click.
 - The bit rate was capped at 2 Mbit/s there, for 1920x480 at 50 frames a second. A panel
   with more pixels (the 12.3": 1920x720) or more frames starts with proportionally more
   (``maxrate`` "auto", :func:`auto_rate`), so its pictures and lettering stay as sharp; and
@@ -146,6 +147,7 @@ def resolve_profile(profile: str, model_id: str) -> str:
 
 
 _PROBED: dict[tuple[str, str], bool] = {}
+_SAID: dict[tuple[str, str], str] = {}  # the last line ffmpeg said in this run's probe
 
 
 # The pictures a probe of an encoder feeds: a size every card's encoder takes (AMD's and
@@ -164,21 +166,50 @@ def encoder_works(ffmpeg: str, encoder: str) -> bool:
         works = video_state.probed(ffmpeg, encoder)  # asked within the week
         if works is None:
             works, said = _probe(ffmpeg, encoder)
-            video_state.keep_probe(ffmpeg, encoder, works)
+            video_state.keep_probe(ffmpeg, encoder, works, said)
+            _SAID[key] = said
             if not works:
                 log.info("video: %s cannot encode here (%s); x264 does", encoder, said or "-")
         _PROBED[key] = works
     return _PROBED[key]
 
 
+def known_works(ffmpeg: str, encoder: str) -> bool | None:
+    """:func:`encoder_works`'s answer as far as it is known without asking ffmpeg: this run's,
+    else the week's in video-state.json; None when it was not asked."""
+    key = (ffmpeg, encoder)
+    if key in _PROBED:
+        return _PROBED[key]
+    return video_state.probed(ffmpeg, encoder)
+
+
+def probe_said(ffmpeg: str, encoder: str) -> str:
+    """The last line ffmpeg said when ``encoder`` was probed (in this run, else within the week:
+    video-state.json): why a card's encoder was passed over; "" when nothing is known."""
+    said = _SAID.get((ffmpeg, encoder))
+    return said if said is not None else video_state.probe_said(ffmpeg, encoder)
+
+
 def _probe(ffmpeg: str, encoder: str) -> tuple[bool, str]:
     """Whether the video mode's own command with ``encoder`` turns a few pictures into H.264,
     and the last thing ffmpeg said. A card's encoder may hold its last pictures back when the
-    input ends, or end with an error code after it encoded: what counts is that H.264 came."""
-    settings = EncoderSettings(encoder=encoder, profile="main", pixels="rgb0")
+    input ends, or end with an error code after it encoded: what counts is that H.264 came.
+    Fed four bytes a pixel first, as the video mode feeds it; one that refuses them but takes
+    three works too, and that it refused is kept (the video mode then feeds it three)."""
+    works, said = _probe_fed(ffmpeg, encoder, "rgb0")
+    if works or encoder == "libx264":
+        return works, said
+    if _probe_fed(ffmpeg, encoder, "rgb24")[0]:
+        video_state.keep_refusal(ffmpeg, encoder)
+        return True, said
+    return False, said
+
+
+def _probe_fed(ffmpeg: str, encoder: str, pixels: str) -> tuple[bool, str]:
+    settings = EncoderSettings(encoder=encoder, profile="main", pixels=pixels)
     command = ffmpeg_command(ffmpeg, PROBE_SIZE, None, settings)
     width, height = PROBE_SIZE
-    frames = bytes(width * height * 4) * PROBE_FRAMES
+    frames = bytes(width * height * (4 if pixels == "rgb0" else 3)) * PROBE_FRAMES
     try:
         done = subprocess.run(
             command, input=frames, capture_output=True, timeout=20, creationflags=NO_WINDOW
@@ -188,8 +219,19 @@ def _probe(ffmpeg: str, encoder: str) -> tuple[bool, str]:
         out, err = exc.stdout or b"", exc.stderr or b""
     except OSError as exc:
         return False, str(exc)
-    said = err.decode("utf-8", "replace").strip().splitlines()
-    return b"\x00\x00\x01" in out, said[-1] if said else ""
+    return b"\x00\x00\x01" in out, reason(err.decode("utf-8", "replace"))
+
+
+# ffmpeg's closing words after an error, which say nothing of the error itself
+_GENERIC = ("Conversion failed!", "Nothing was written into output file")
+
+
+def reason(said: str) -> str:
+    """The line of what ffmpeg said that tells why: its last, unless that is only its closing
+    words after an error (then the one before)."""
+    lines = [line.strip() for line in said.splitlines() if line.strip()]
+    telling = [line for line in lines if not any(words in line for words in _GENERIC)]
+    return (telling or lines or [""])[-1]
 
 
 def resolve_encoder(encoder: str, ffmpeg: str, failed: Collection[str] = ()) -> str:
