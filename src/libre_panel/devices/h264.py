@@ -14,12 +14,21 @@ project (docs/protocol/turzx-usb.md, "Video layer"):
   a pixel ffmpeg turns a frame for less than Pillow does, measured on the 12.3").
 - The frames go in as Pillow keeps them, four bytes a pixel (``rgb0``: ffmpeg leaves the
   fourth aside, as RGB never showed it), packed into the pipe by Pillow itself
-  (:func:`resolve_feed`). AMD's and NVIDIA's encoders take them so and convert to YUV on
-  the card, told to do it as swscale does on the processor (BT.601, limited range): ffmpeg
-  makes no NV12 for them. For x264 and Intel's, ffmpeg converts (the same YUV as from three
-  bytes a pixel, for less). ``video.pixels = "rgb"`` gives the feed of before (rgb24, NV12 made
-  by ffmpeg for every card), should colours shift on a panel: Settings → Panel → Check the
-  colours measures whether they do (colour_check.py) and writes it with one click.
+  (:func:`resolve_feed`). Who turns them into YUV (``video.pixels``): ffmpeg on the processor
+  (swscale: BT.601 in limited range; the same YUV as from three bytes a pixel, for less), or
+  the graphics card (:data:`CARD_ENCODERS`, :func:`card_chain`): AMD's through ``vpp_amf`` and
+  Intel's through ``vpp_qsv``, each told BT.601 and the range outright, NVIDIA's with its own
+  converter. "auto" lets the card convert where the colour check found its colours the same as
+  the processor's on this PC (card_choice.py: AMD's own converter, which ``h264_amf`` used
+  before, made BT.709 under a full-range tag), else the processor; "card" and "rgb" (three
+  bytes a pixel, the way of before) force a way.
+- Every stream says of itself that it is BT.601, in the range its values have, whoever made it:
+  the encoder is told so (:func:`colour_tags`), and ffmpeg's ``h264_metadata`` stamps it into
+  each SPS (:func:`stamp`), as AMD's encoder tagged its stream full range of limited values. The
+  range is limited (16-235), or full (0-255) for a panel whose decoder shows every stream as
+  full range (the 12.3": ``[device] video_range``); then swscale makes full-range YUV
+  (:data:`FULL_RANGE`), and of the cards only those told the range outright convert
+  (:data:`FULL_RANGE_CARDS`).
 - The bit rate was capped at 2 Mbit/s there, for 1920x480 at 50 frames a second. A panel
   with more pixels (the 12.3": 1920x720) or more frames starts with proportionally more
   (``maxrate`` "auto", :func:`auto_rate`), so its pictures and lettering stay as sharp; and
@@ -63,16 +72,76 @@ PROFILES = ("auto", "baseline", "main", "high")
 ENCODERS = ("auto", "libx264", "h264_nvenc", "h264_amf", "h264_qsv")
 HIGH_PROFILE_MODELS = frozenset({"turing-9.2-usb", "turing-12.3-usb"})
 AUTO_ENCODERS = ("h264_amf",)
-# How frames reach ffmpeg (config.toml video.pixels): "auto" four bytes a pixel, as Pillow keeps
-# them (rgb0); "rgb" three (rgb24) and NV12 made by ffmpeg for every card, the way of before,
-# should colours shift on a panel.
-PIXELS = ("auto", "rgb")
-# The encoders that take four bytes a pixel themselves and convert them on the card (FFmpeg's
-# libavcodec/amfenc.c and nvenc.c list rgb0 among their formats): no conversion on the processor.
-PASS_THROUGH = frozenset({"h264_amf", "h264_nvenc"})
-# swscale's conversion of RGB to YUV, which the cards are told to make as well (the stream of
-# before was made so): BT.601 coefficients, limited range
-CARD_COLOURS = ["-colorspace", "smpte170m", "-color_range", "tv"]
+# Who turns the frames into YUV (config.toml video.pixels): "auto" the graphics card where the
+# colour check found it converting as the processor does on this PC (card_choice.py), else ffmpeg
+# on the processor, the frames four bytes a pixel as Pillow keeps them (rgb0); "card" the card
+# (CARD_ENCODERS; the others as the processor); "rgb" the processor, fed three bytes a pixel
+# (rgb24), the way of before. Inside, the processor's way of "auto" is "processor".
+PIXELS = ("auto", "rgb", "card")
+# The encoders whose graphics card can convert the frames (four bytes a pixel) itself, so that
+# ffmpeg converts nothing on the processor (card_chain says how).
+CARD_ENCODERS = frozenset({"h264_amf", "h264_nvenc", "h264_qsv"})
+
+
+def colour_tags(full: bool = False) -> list[str]:
+    """What every encoder is told of the colours, and what a card converting itself is told to
+    make: BT.601, as swscale converts on the processor (the stream of before was made so), in
+    limited range or (``full``) full range, said in full, so that no decoder guesses from the
+    picture's size."""
+    return [
+        "-colorspace", "smpte170m", "-color_primaries", "smpte170m", "-color_trc", "smpte170m",
+        "-color_range", "pc" if full else "tv",
+    ]  # fmt: skip
+
+
+def stamp(full: bool = False) -> list[str]:
+    """The same stamped into every stream's SPS (its VUI) after the encoder, whatever it wrote
+    there: AMD's encoder tagged limited values full range (and BT.709), and a decoder that reads
+    the tag stretches them, washed out. 6: SMPTE 170M (BT.601) primaries, transfer and matrix."""
+    return [
+        "-bsf:v",
+        f"h264_metadata=video_full_range_flag={int(full)}:colour_primaries=6"
+        ":transfer_characteristics=6:matrix_coefficients=6",
+    ]
+
+
+COLOUR_TAGS = colour_tags()
+STAMP = stamp()
+# Full-range YUV for a panel whose decoder shows every stream as full range: swscale converts the
+# turned frame with BT.601 into 0-255 (the encoder's pixel format follows: format=...).
+FULL_RANGE = "scale=out_range=full:out_color_matrix=bt601"
+# The cards that are told the range outright (vpp_amf, vpp_qsv) and so may make full-range YUV;
+# NVIDIA's own converter makes limited range of RGB (FFmpeg's nvenc.c marks it so). On a
+# full-range panel the processor converts for the others.
+FULL_RANGE_CARDS = frozenset({"h264_amf", "h264_qsv"})
+
+
+def card_chain(encoder: str, full: bool = False) -> tuple[list[str], list[str]]:
+    """How the graphics card converts the frames (four bytes a pixel, turned on the processor
+    as before) for ``encoder``: ffmpeg's options before the input (the device it opens) and the
+    filters after the turn.
+
+    - AMD: the frames uploaded to the card (AMF takes RGBA, not RGB0: ``format=rgba`` sets the
+      fourth byte opaque on the way) and converted by ``vpp_amf``, told BT.601 and the range,
+      into NV12 that ``h264_amf`` takes on the card (FFmpeg 8.1's libavfilter/vf_vpp_amf.c:
+      AMF_VIDEO_CONVERTER_COLOR_PROFILE_601 or _FULL_601);
+    - Intel: ``vpp_qsv`` takes BGRA (RGB32), the input said to be full-range RGB
+      (``setrange``), told the matrix, primaries, transfer and range outright;
+    - NVIDIA: no such filter in the build (``scale_cuda`` has no matrix): ``h264_nvenc`` takes the
+      frames as they are and converts them with its own converter, BT.601 in limited range.
+    """
+    if encoder == "h264_amf":
+        vpp = ("vpp_amf=format=nv12:color_profile=bt601:color_range="
+               f"{'full' if full else 'studio'}:primaries=smpte170m:trc=smpte170m")  # fmt: skip
+        return ["-init_hw_device", "amf=amf", "-filter_hw_device", "amf"], [
+            "format=rgba", "hwupload", vpp]  # fmt: skip
+    if encoder == "h264_qsv":
+        vpp = (f"vpp_qsv=format=nv12:out_range={'pc' if full else 'tv'}:out_color_matrix=smpte170m"
+               ":out_color_primaries=smpte170m:out_color_transfer=smpte170m")  # fmt: skip
+        return ["-init_hw_device", "qsv=qsv", "-filter_hw_device", "qsv"], [
+            "format=bgra", "setrange=full", vpp]  # fmt: skip
+    return [], []
+
 
 NAL_SLICE, NAL_IDR = 1, 5
 # NAL types that open a new picture when they follow a slice (H.264 7.4.1.2.3):
@@ -96,6 +165,10 @@ class EncoderSettings:
     encoder: str = "libx264"  # ENCODERS, resolved (never "auto" here: resolve_encoder)
     # the frames as they go into ffmpeg (resolve_feed): "rgb24", or "rgb0" (four bytes a pixel)
     pixels: str = "rgb24"
+    # the card converts them itself (video.pixels "card": passes_through), else ffmpeg does
+    card: bool = False
+    # full-range YUV (0-255), for a panel whose decoder shows every stream so (video_range)
+    full: bool = False
 
 
 # The bit rate measured on the 9.2": 2 Mbit/s for its 1920x480 pixels at 50 frames a second.
@@ -194,22 +267,13 @@ def _probe(ffmpeg: str, encoder: str) -> tuple[bool, str]:
     """Whether the video mode's own command with ``encoder`` turns a few pictures into H.264,
     and the last thing ffmpeg said. A card's encoder may hold its last pictures back when the
     input ends, or end with an error code after it encoded: what counts is that H.264 came.
-    Fed four bytes a pixel first, as the video mode feeds it; one that refuses them but takes
-    three works too, and that it refused is kept (the video mode then feeds it three)."""
-    works, said = _probe_fed(ffmpeg, encoder, "rgb0")
-    if works or encoder == "libx264":
-        return works, said
-    if _probe_fed(ffmpeg, encoder, "rgb24")[0]:
-        video_state.keep_refusal(ffmpeg, encoder)
-        return True, said
-    return False, said
-
-
-def _probe_fed(ffmpeg: str, encoder: str, pixels: str) -> tuple[bool, str]:
-    settings = EncoderSettings(encoder=encoder, profile="main", pixels=pixels)
+    Fed as the video mode feeds it by default: four bytes a pixel, which ffmpeg turns into the
+    encoder's YUV (a card's own conversion, video.pixels "card", is the colour check's to try:
+    one that gives nothing so is fed so no more, turzx_video)."""
+    settings = EncoderSettings(encoder=encoder, profile="main", pixels="rgb0")
     command = ffmpeg_command(ffmpeg, PROBE_SIZE, None, settings)
     width, height = PROBE_SIZE
-    frames = bytes(width * height * (4 if pixels == "rgb0" else 3)) * PROBE_FRAMES
+    frames = bytes(width * height * 4) * PROBE_FRAMES
     try:
         done = subprocess.run(
             command, input=frames, capture_output=True, timeout=20, creationflags=NO_WINDOW
@@ -246,16 +310,17 @@ def resolve_encoder(encoder: str, ffmpeg: str, failed: Collection[str] = ()) -> 
 
 
 def resolve_feed(pixels: str) -> str:
-    """The frames' pixel format in ffmpeg's terms for ``video.pixels``: "auto" is rgb0, four
-    bytes a pixel as Pillow keeps them, the cheapest for every encoder (measured on the 12.3":
-    less to pack, a faster ``transpose``, and the cards' encoders convert it themselves);
-    "rgb" is rgb24, the way of before."""
+    """The frames' pixel format in ffmpeg's terms for a way of converting them: "processor" and
+    "card" (and "auto", either) are rgb0, four bytes a pixel as Pillow keeps them, the cheapest
+    for every encoder (measured on the 12.3": less to pack, a faster ``transpose``); "rgb" is
+    rgb24, the way of before."""
     return "rgb24" if pixels == "rgb" else "rgb0"
 
 
 def feed_text(settings: EncoderSettings) -> str:
-    """The encoder and what it is fed, as the log and the counters say it: "h264_amf, rgb0"."""
-    return f"{settings.encoder}, {settings.pixels}"
+    """The encoder and what it is fed, as the log and the counters say it: "h264_amf, rgb0",
+    and ", card" when the card converts the frames itself."""
+    return f"{settings.encoder}, {settings.pixels}" + (", card" if passes_through(settings) else "")
 
 
 def bit_rate(settings: EncoderSettings, size: tuple[int, int]) -> str:
@@ -383,11 +448,14 @@ def ffmpeg_command(
     width, height = size
     keyint = max(1, round(settings.fps * settings.keyframe_s))
     maxrate = bit_rate(settings, size)
+    card = passes_through(settings)
+    device, converts = card_chain(settings.encoder, settings.full) if card else ([], [])
     command = [
         ffmpeg,
         "-hide_banner",
         "-loglevel",
         "error",
+        *device,
         "-f",
         "rawvideo",
         "-pix_fmt",
@@ -400,16 +468,22 @@ def ffmpeg_command(
         "-",
         "-an",
     ]
-    video_filter = ROTATION_FILTERS[rotate]
+    filters = [ROTATION_FILTERS[rotate], *converts]
+    if settings.full and not card:  # full-range YUV, made on the processor
+        made = "yuv420p" if settings.encoder == "libx264" else "nv12"
+        filters += [FULL_RANGE, f"format={made}"]
+    video_filter = ",".join(part for part in filters if part)
     if video_filter:
         command += ["-vf", video_filter]
-    return command + codec_args(settings, keyint, maxrate) + ["-f", "h264", "-"]
+    command += codec_args(settings, keyint, maxrate)
+    return command + [*stamp(settings.full), "-f", "h264", "-"]
 
 
 def passes_through(settings: EncoderSettings) -> bool:
-    """Whether the encoder takes the frames as they come: one of the card's that converts
-    RGB itself, fed four bytes a pixel (ffmpeg then converts nothing on the processor)."""
-    return settings.encoder in PASS_THROUGH and settings.pixels == "rgb0"
+    """Whether the graphics card converts the frames (:func:`card_chain`): one of the card's
+    encoders, told to (``settings.card``), fed four bytes a pixel; ffmpeg converts nothing on
+    the processor then."""
+    return settings.card and settings.encoder in CARD_ENCODERS and settings.pixels == "rgb0"
 
 
 def codec_args(settings: EncoderSettings, keyint: int, maxrate: str) -> list[str]:
@@ -441,10 +515,12 @@ def codec_args(settings: EncoderSettings, keyint: int, maxrate: str) -> list[str
             ":ipratio=2.0:repeat-headers=1",
             "-pix_fmt",
             "yuv420p",
+            *colour_tags(settings.full),
         ]
     common = ["-bf", "0", "-g", str(keyint), "-maxrate", maxrate, "-bufsize", maxrate]
-    # the card converts the frames itself, with swscale's colours; else ffmpeg makes NV12
-    common += CARD_COLOURS if passes_through(settings) else ["-pix_fmt", "nv12"]
+    common += colour_tags(settings.full)  # (a card that converts itself is told to make them)
+    if not passes_through(settings):  # ffmpeg makes the NV12, with swscale's colours
+        common += ["-pix_fmt", "nv12"]
     if encoder == "h264_nvenc":  # NVIDIA: the quality of crf, within the cap
         tuned = ["-preset", "p1", "-tune", "ll", "-zerolatency", "1", "-no-scenecut", "1"]
         rate = ["-rc", "vbr", "-cq", str(settings.crf), "-b:v", "0", "-forced-idr", "1"]

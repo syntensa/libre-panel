@@ -233,24 +233,27 @@ def test_a_probe_feeds_what_the_video_mode_feeds_and_counts_the_pictures(
     assert encoder_works("ffmpeg-there", "h264_nvenc") is False  # nothing came: it does not
 
 
-def test_a_card_that_takes_three_bytes_a_pixel_but_not_four_still_works(isolated_home, monkeypatch):
-    """A card's encoder that refuses four bytes a pixel but encodes three is one "auto" takes;
-    that it refused the four is kept, so the video mode feeds it three from the start."""
+def test_a_card_s_encoder_is_probed_with_the_processor_s_conversion(isolated_home, monkeypatch):
+    """The probe runs what the video mode runs by default: four bytes a pixel that ffmpeg turns
+    into NV12 for a card's encoder too, as it is told BT.601 in limited range. A card that would
+    give nothing converting them itself is "auto"'s all the same (that is "card", which the
+    colour check tries), and nothing about its own conversion is kept by the probe."""
     from libre_panel.devices.h264 import encoder_works
 
     isolated_home.mkdir()
     fed = []
 
     def run(command, **kwargs):
-        pixels = command[command.index("-pix_fmt") + 1]
-        fed.append(pixels)
-        out = b"\x00\x00\x00\x01\x67" if pixels == "rgb24" else b""
-        return SimpleNamespace(returncode=0 if out else 1, stdout=out, stderr=b"bad input\n")
+        fed.append(command)
+        return SimpleNamespace(returncode=0, stdout=b"\x00\x00\x00\x01\x67", stderr=b"")
 
     monkeypatch.setattr(subprocess, "run", run)
     monkeypatch.setattr(h264, "_PROBED", {})
-    assert encoder_works("ffmpeg-here", "h264_amf") is True and fed == ["rgb0", "rgb24"]
-    assert video_state.refused("ffmpeg-here", "h264_amf") is True
+    assert encoder_works("ffmpeg-here", "h264_amf") is True and len(fed) == 1
+    (command,) = fed
+    assert after(command, "-pix_fmt") == "rgb0" and "nv12" in command
+    assert after(command, "-colorspace") == "smpte170m" and after(command, "-color_range") == "tv"
+    assert video_state.refused("ffmpeg-here", "h264_amf") is False
 
 
 def test_the_answer_of_a_probe_is_kept_for_a_week(isolated_home, monkeypatch):
@@ -1547,13 +1550,21 @@ def test_saying_not_now_leaves_the_running_panel_as_it_is(panel, monkeypatch, is
 def test_the_colour_check_s_a_and_b_and_its_one_click_start_ffmpeg_anew_on_the_open_panel(
     panel, monkeypatch, isolated_home
 ):
-    """Settings → Panel → Check the colours: its A and B on the panel feed ffmpeg the new way
-    and the old way in turn, each a new ffmpeg on the open panel (no second start sequence),
-    and afterwards it is fed as video.pixels says; the one click that writes video.pixels is
-    followed so too, without opening the panel again."""
+    """Settings → Panel → Check the colours: its A and B on the panel are converted by the card
+    and by the processor in turn, each a new ffmpeg on the open panel (no second start
+    sequence), and afterwards it goes as video.pixels says ("auto": the processor, as a check
+    found the card shifting the colours); the range's A and B so too (limited, full); a click
+    that writes video.pixels is followed so too, without opening the panel again. x264 stands in
+    for the card's encoder."""
     from libre_panel import colour_show
     from libre_panel.config import edit_config
+    from libre_panel.devices import card_choice
 
+    card_stand_in(monkeypatch)
+    ffmpeg = find_ffmpeg("")
+    card_choice.record(ffmpeg, {"encoder": "libx264", "compared": ["card", "processor"],
+                                "state": "done", "verdict": "matrix", "worst": None},
+                       full=False)  # fmt: skip
     commands = []
     real = turzx_video.ffmpeg_command
 
@@ -1561,8 +1572,12 @@ def test_the_colour_check_s_a_and_b_and_its_one_click_start_ffmpeg_anew_on_the_o
         commands.append(real(*args))
         return commands[-1]
 
-    def fed():
-        return [after(c, "-pix_fmt") for c in commands]
+    def ways():
+        def way(c):
+            full = " full" if "out_range=full" in after(c, "-vf") else ""
+            return ("card" if by_card(c) else after(c, "-pix_fmt")) + full
+
+        return [way(c) for c in commands]
 
     monkeypatch.setattr(turzx_video, "ffmpeg_command", command)
     monkeypatch.setattr(colour_show, "SWITCH_S", 0.8)
@@ -1572,19 +1587,32 @@ def test_the_colour_check_s_a_and_b_and_its_one_click_start_ffmpeg_anew_on_the_o
         assert wait_until(
             lambda: status.target == 'Turing 9.2", video 30 fps' and status.frames > 5
         )
-        assert fed() == ["rgb0"]
+        assert ways() == ["rgb0"]  # the processor's: the check found the card's shifted
         colour_show.begin(1, seconds=3.0)
         try:
-            assert wait_until(lambda: "rgb24" in fed())  # B: the processor's conversion
+            assert wait_until(lambda: "card" in ways())  # A: the card's conversion
+            assert wait_until(lambda: ways().count("rgb0") >= 2)  # B: the processor's
             assert wait_until(lambda: colour_show.state() is None)
         finally:
             colour_show.end()
-        assert wait_until(lambda: fed()[-1] == "rgb0" and status.stats.get("encoder", "")
+        assert wait_until(lambda: ways()[-1] == "rgb0" and status.stats.get("encoder", "")
                           .endswith("rgb0"))  # fmt: skip
-        # A is the feed it had (no new ffmpeg for it), B the old one, then A again
-        assert fed()[:3] == ["rgb0", "rgb24", "rgb0"]
-        edit_config(("value", "video.pixels", "rgb"))  # "Use the processor's conversion"
-        assert wait_until(lambda: fed()[-1] == "rgb24")
+        assert ways()[:3] == ["rgb0", "card", "rgb0"]
+        before = len(commands)
+        colour_show.begin(1, seconds=2.4, kind="range")
+        try:
+            assert wait_until(lambda: "rgb0 full" in ways()[before:])  # B: full range
+            assert wait_until(lambda: colour_show.state() is None)
+        finally:
+            colour_show.end()
+        assert wait_until(lambda: ways()[-1] == "rgb0")  # limited again, as the 9.2" has it
+        edit_config(("value", "video.pixels", "card"))  # forced: the card converts
+        assert wait_until(lambda: ways()[-1] == "card")
+        assert wait_until(lambda: status.stats.get("encoder", "") == "libx264, rgb0, card")
+        edit_config(("value", "video.pixels", "rgb"))
+        assert wait_until(lambda: ways()[-1] == "rgb24")
+        edit_config(("value", "device.video_range", "full"))  # "B looks right"
+        assert wait_until(lambda: ways()[-1] == "rgb24 full")
         assert len(opened) == 1 and panel.commands.count(110) == 1  # the panel stayed open
         arrived = len(panel.blocks)
         assert wait_until(lambda: len(panel.blocks) > arrived + 10)  # and shows the pictures
@@ -1807,9 +1835,12 @@ def test_a_frame_s_bytes_come_in_one_piece_and_as_tobytes_makes_them(monkeypatch
 # -- how the frames reach ffmpeg (video.pixels) ----------------------------------------------
 
 
-def command_for(encoder, pixels, size=(1920, 720), rotate=270):
+def command_for(encoder, pixels, size=(1920, 720), rotate=270, card=False):
     return ffmpeg_command(
-        "ffmpeg", size, rotate, EncoderSettings(encoder=encoder, pixels=pixels, maxrate="3.0M")
+        "ffmpeg",
+        size,
+        rotate,
+        EncoderSettings(encoder=encoder, pixels=pixels, maxrate="3.0M", card=card),
     )
 
 
@@ -1817,29 +1848,62 @@ def after(command, flag):
     return command[command.index(flag) + 1]
 
 
-def test_four_bytes_a_pixel_go_in_and_the_cards_convert_them_themselves():
-    """ "auto" feeds rgb0 (Pillow's four bytes a pixel, the fourth left aside) to every encoder;
-    AMD's and NVIDIA's take it as it is (no NV12 made by ffmpeg) and are told swscale's
-    colours, BT.601 in limited range; x264 and Intel's get YUV made by ffmpeg, as before.
-    ffmpeg turns the frames for all of them. "rgb" is the feed of before, to the letter."""
-    from libre_panel.devices.h264 import CARD_COLOURS, feed_text, passes_through, resolve_feed
+def test_four_bytes_a_pixel_go_in_and_the_processor_converts_them_unless_the_card_may():
+    """The processor's way feeds rgb0 (Pillow's four bytes a pixel, the fourth left aside) to
+    every encoder and ffmpeg turns them into the encoder's YUV (NV12 for the cards', yuv420p for
+    x264: swscale, BT.601 in limited range); every encoder is told so, and every stream is
+    stamped so after it (h264_metadata). The card's way lets AMD's, Intel's and NVIDIA's convert
+    themselves (card_chain: no NV12 made by ffmpeg on the processor); x264 has none. ffmpeg
+    turns the frames for all of them. "rgb" is the feed of before, to the letter."""
+    from libre_panel.devices.h264 import (
+        COLOUR_TAGS,
+        STAMP,
+        feed_text,
+        passes_through,
+        resolve_feed,
+    )
+    from libre_panel.devices.turzx_video import resolved, video_settings
 
-    assert resolve_feed("auto") == "rgb0" and resolve_feed("rgb") == "rgb24"
-    for encoder in ("h264_amf", "h264_nvenc"):
-        fed = command_for(encoder, "rgb0")
-        assert after(fed, "-pix_fmt") == "rgb0" and "nv12" not in fed
-        assert after(fed, "-vf") == "transpose=1" and "-s" in fed and after(fed, "-s") == "1920x720"
-        assert fed[fed.index(CARD_COLOURS[0]) : fed.index(CARD_COLOURS[0]) + 4] == CARD_COLOURS
-        assert passes_through(EncoderSettings(encoder=encoder, pixels="rgb0"))
-        before = command_for(encoder, "rgb24")
-        assert after(before, "-pix_fmt") == "rgb24" and before.count("-pix_fmt") == 2
-        assert before[before.index("-pix_fmt", before.index("-c:v")) + 1] == "nv12"
-        assert "-colorspace" not in before
-    qsv = command_for("h264_qsv", "rgb0")
-    assert after(qsv, "-pix_fmt") == "rgb0" and "nv12" in qsv and "-colorspace" not in qsv
-    x264 = command_for("libx264", "rgb0")
-    assert after(x264, "-pix_fmt") == "rgb0" and "yuv420p" in x264 and "-colorspace" not in x264
-    for encoder in ("libx264", "h264_qsv"):  # the same command but for what goes in
+    def tags(command):
+        at = command.index(COLOUR_TAGS[0])
+        return command[at : at + len(COLOUR_TAGS)]
+
+    def stamped(command):  # the bitstream filter, last before the output
+        return command[-len(STAMP) - 3 : -3] == STAMP and command[-3:] == ["-f", "h264", "-"]
+
+    assert COLOUR_TAGS == ["-colorspace", "smpte170m", "-color_primaries", "smpte170m",
+                           "-color_trc", "smpte170m", "-color_range", "tv"]  # fmt: skip
+    assert STAMP == ["-bsf:v", "h264_metadata=video_full_range_flag=0:colour_primaries=6"
+                     ":transfer_characteristics=6:matrix_coefficients=6"]  # fmt: skip
+    assert [resolve_feed(way) for way in ("auto", "processor", "card", "rgb")] == [
+        "rgb0", "rgb0", "rgb0", "rgb24"]  # fmt: skip
+    for encoder in ("h264_amf", "h264_nvenc", "h264_qsv"):
+        own = command_for(encoder, "rgb0", card=True)  # the card's way
+        assert after(own, "-pix_fmt") == "rgb0" and "nv12" not in own[own.index("-c:v") :]
+        assert after(own, "-vf").startswith("transpose=1") and after(own, "-s") == "1920x720"
+        assert tags(own) == COLOUR_TAGS and stamped(own)
+        assert passes_through(EncoderSettings(encoder=encoder, pixels="rgb0", card=True))
+        for pixels in ("rgb0", "rgb24"):  # the processor's way and "rgb": ffmpeg makes NV12
+            fed = command_for(encoder, pixels)
+            assert after(fed, "-pix_fmt") == pixels and fed.count("-pix_fmt") == 2
+            assert fed[fed.index("-pix_fmt", fed.index("-c:v")) + 1] == "nv12"
+            assert after(fed, "-vf") == "transpose=1" and "-init_hw_device" not in fed
+            assert tags(fed) == COLOUR_TAGS and stamped(fed)
+            assert not passes_through(EncoderSettings(encoder=encoder, pixels=pixels))
+        assert not passes_through(EncoderSettings(encoder=encoder, pixels="rgb24", card=True))
+    base = video_settings(VideoConfig())
+    for encoder in ("h264_amf", "h264_nvenc", "h264_qsv"):
+        assert resolved(base, "turing-12.3-usb", encoder, "card").card
+        for way in ("auto", "processor", "rgb"):  # ("auto" is decided by the display)
+            assert not resolved(base, "turing-12.3-usb", encoder, way).card
+    assert not resolved(base, "turing-12.3-usb", "libx264", "card").card  # x264 has no card
+    full = [e for e in ("h264_amf", "h264_nvenc", "h264_qsv")
+            if resolved(base, "turing-12.3-usb", e, "card", full=True).card]  # fmt: skip
+    assert full == ["h264_amf", "h264_qsv"]  # NVIDIA's makes limited range only
+    x264 = command_for("libx264", "rgb0", card=True)  # (told to: there is nothing to tell)
+    assert after(x264, "-pix_fmt") == "rgb0" and "yuv420p" in x264 and tags(x264) == COLOUR_TAGS
+    assert stamped(x264) and after(x264, "-vf") == "transpose=1"
+    for encoder in ("libx264", "h264_qsv", "h264_amf", "h264_nvenc"):  # the same but what goes in
         old, new = command_for(encoder, "rgb24"), command_for(encoder, "rgb0")
         assert new == [("rgb0" if word == "rgb24" else word) for word in old]
     for encoder in ("libx264", "h264_qsv", "h264_amf", "h264_nvenc"):
@@ -1847,16 +1911,367 @@ def test_four_bytes_a_pixel_go_in_and_the_cards_convert_them_themselves():
         assert after(portrait, "-vf") == "hflip,vflip" and after(portrait, "-s") == "480x1920"
     assert EncoderSettings().pixels == "rgb24"  # (the command of before, as the tools check it)
     assert feed_text(EncoderSettings(encoder="h264_amf", pixels="rgb0")) == "h264_amf, rgb0"
+    card = EncoderSettings(encoder="h264_amf", pixels="rgb0", card=True)
+    assert feed_text(card) == "h264_amf, rgb0, card"
 
 
 def test_the_pixels_setting():
     assert parse_config({}).device.video.pixels == "auto"
     assert parse_config({"video": {"pixels": "rgb"}}).device.video.pixels == "rgb"
-    for bad in ("rgba", 1, ""):
+    assert parse_config({"video": {"pixels": "card"}}).device.video.pixels == "card"
+    for bad in ("rgba", 1, "", "processor"):
         with pytest.raises(ConfigError, match="video.pixels"):
             parse_config({"video": {"pixels": bad}})
     two = parse_config({"video": {"pixels": "rgb"}, "panels": [{"device": {"model": "auto"}}]})
     assert two.for_panel(0).device.video.pixels == "rgb"  # a panel beside: the first one's
+
+
+@pytest.mark.parametrize("full", [False, True])
+@pytest.mark.parametrize("size, rotate, turn", [((1920, 720), 270, "transpose=1"),
+                                                ((480, 1920), 180, "hflip,vflip")])  # fmt: skip
+def test_the_card_s_chain_for_each_encoder_range_and_turn(full, size, rotate, turn):
+    """The card's way, exactly: AMD's frames turned on the processor, made RGBA (AMF takes no
+    RGB0), uploaded to an AMF device and converted by vpp_amf with BT.601 and the panel's range;
+    Intel's made BGRA, said to be full-range RGB and converted by vpp_qsv with the matrix,
+    primaries, transfer and range outright; NVIDIA's taken as they are (its own converter, no
+    filter can tell it a matrix): limited range only, so on a full-range panel the processor
+    converts for it. Each stream told and stamped the range it has. The processor's way in full
+    range: swscale's BT.601 into 0-255."""
+    from libre_panel.devices.h264 import FULL_RANGE, colour_tags, stamp
+
+    range_ = "pc" if full else "tv"
+
+    def make(encoder, card):
+        settings = EncoderSettings(encoder=encoder, pixels="rgb0", maxrate="3.0M", card=card,
+                                   full=full)  # fmt: skip
+        return ffmpeg_command("ffmpeg", size, rotate, settings)
+
+    def head(command):  # what comes before the input
+        return command[: command.index("-f")]
+
+    amf = make("h264_amf", True)
+    assert head(amf) == ["ffmpeg", "-hide_banner", "-loglevel", "error", "-init_hw_device",
+                         "amf=amf", "-filter_hw_device", "amf"]  # fmt: skip
+    assert after(amf, "-vf") == (
+        f"{turn},format=rgba,hwupload,vpp_amf=format=nv12:color_profile=bt601"
+        f":color_range={'full' if full else 'studio'}:primaries=smpte170m:trc=smpte170m"
+    )
+    qsv = make("h264_qsv", True)
+    assert head(qsv) == ["ffmpeg", "-hide_banner", "-loglevel", "error", "-init_hw_device",
+                         "qsv=qsv", "-filter_hw_device", "qsv"]  # fmt: skip
+    assert after(qsv, "-vf") == (
+        f"{turn},format=bgra,setrange=full,vpp_qsv=format=nv12:out_range={range_}"
+        ":out_color_matrix=smpte170m:out_color_primaries=smpte170m:out_color_transfer=smpte170m"
+    )
+    nvenc = make("h264_nvenc", True)
+    assert head(nvenc) == ["ffmpeg", "-hide_banner", "-loglevel", "error"]
+    assert after(nvenc, "-vf") == turn and nvenc.count("-pix_fmt") == 1
+    for command in (amf, qsv, nvenc):
+        assert command.count("-pix_fmt") == 1 and after(command, "-pix_fmt") == "rgb0"
+        assert after(command, "-color_range") == range_
+        assert command[-5:] == [*stamp(full), "-f", "h264", "-"]
+        assert all(word in command for word in colour_tags(full))
+    for encoder, made in (("h264_amf", "nv12"), ("h264_nvenc", "nv12"), ("libx264", "yuv420p")):
+        processor = make(encoder, False)
+        assert "-init_hw_device" not in processor
+        assert after(processor, "-vf") == (f"{turn},{FULL_RANGE},format={made}" if full else turn)
+        assert after(processor, "-color_range") == range_
+        assert processor[-5:] == [*stamp(full), "-f", "h264", "-"]
+    assert FULL_RANGE == "scale=out_range=full:out_color_matrix=bt601"
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("full", [False, True])
+@pytest.mark.parametrize("pixels", ["auto", "rgb", "card"])
+def test_every_stream_says_it_is_bt601_in_its_range(pixels, full):
+    """Whichever way the colours were converted, the stream says BT.601 in the panel's range
+    (limited: tv; full: pc), as ffprobe reads it: x264's as told; and one an encoder tagged
+    otherwise (as AMD's did: full range and BT.709) is stamped so after it, its SPS and PPS
+    before every keyframe as before, one slice a picture. In full range black is 0, else 16."""
+    from libre_panel.devices.h264 import COLOUR_TAGS, PictureSplitter, colour_tags, stamp
+    from libre_panel.devices.turzx_video import frame_bytes, resolved, video_settings
+
+    ffprobe = shutil.which("ffprobe")
+    if ffprobe is None:
+        pytest.skip("needs ffprobe")
+    settings = resolved(video_settings(VideoConfig(keyframe_s=1.0)), "turing-9.2-usb",
+                        "libx264", pixels, full=full)  # fmt: skip
+    picture = Image.new("RGB", (1920, 480), (200, 40, 60))
+    picture.paste((0, 0, 0), (0, 0, 960, 480))
+    frames = frame_bytes(picture, settings.pixels) * 60
+    plain = ffmpeg_command(FFMPEG, (1920, 480), 270, settings)
+    tags = colour_tags(full)
+    assert tags[:-1] == COLOUR_TAGS[:-1]
+    wrong = ["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+             "-color_range", "tv" if full else "pc"]  # fmt: skip
+    at = plain.index(tags[0])
+    mistagged = plain[:at] + wrong + plain[at + len(tags) :]  # (the encoder's own tags)
+    unstamped = [word for word in plain if word not in stamp(full)]
+    seen = {}
+    for name, command in (("plain", plain), ("mistagged", mistagged), ("unstamped", unstamped)):
+        stream = subprocess.run(command, input=frames, capture_output=True, check=True).stdout
+        probed = subprocess.run(
+            [ffprobe, "-v", "error", "-f", "h264", "-i", "-", "-show_entries",
+             "stream=color_range,color_space,color_primaries,color_transfer", "-of", "json"],
+            input=stream, capture_output=True, check=True,
+        ).stdout  # fmt: skip
+        splitter = PictureSplitter()
+        pictures = splitter.feed(stream) + splitter.flush()
+        kinds = [tuple(kind for _, kind in nal_units(p)) for p in pictures]
+        seen[name] = (json.loads(probed)["streams"][0], kinds, splitter.multi_slice, stream)
+    bt601 = {"color_range": "pc" if full else "tv", "color_space": "smpte170m",
+             "color_primaries": "smpte170m", "color_transfer": "smpte170m"}  # fmt: skip
+    assert seen["plain"][0] == bt601 and seen["mistagged"][0] == bt601  # stamped over
+    assert seen["unstamped"][0] == bt601  # (x264 as told)
+    kinds = seen["plain"][1]
+    assert len(kinds) == 60 and kinds == seen["unstamped"][1]  # the stamp moves no picture
+    assert kinds[0][:2] == (7, 8) and kinds[0][-1] == NAL_IDR and kinds[1] == (1,)
+    assert sum(1 for k in kinds if k[:2] == (7, 8)) == sum(1 for k in kinds if NAL_IDR in k) >= 2
+    assert not any(multi for _, _, multi, _ in seen.values())
+    luma = subprocess.run(  # the values themselves, as the panel's decoder takes them: the
+        [FFMPEG, "-v", "error", "-f", "h264", "-i", "-", "-frames:v", "1", "-f", "rawvideo",
+         "-"],  # decoder's own 4:2:0, converted to nothing (its Y plane first)
+        input=seen["plain"][3], capture_output=True, check=True,
+    ).stdout  # fmt: skip
+    black = Image.frombytes("L", (480, 1920), luma[: 480 * 1920]).crop((100, 200, 380, 700))
+    assert round(ImageStat.Stat(black).mean[0]) == (0 if full else 16)
+
+
+def test_the_video_range_setting_per_panel_and_by_model():
+    """[device] video_range: "auto" (the default) as the model is known to show video, full on
+    the 12.3" and limited elsewhere; "limited" or "full" for that panel; each [[panels]] table
+    its own."""
+    from libre_panel.devices.models import get_model
+    from libre_panel.devices.turzx_video import full_range
+
+    assert parse_config({}).device.video_range == "auto"
+    assert get_model("turing-12.3-usb").video_range == "full"
+    assert get_model("turing-9.2-usb").video_range == "limited"
+    assert full_range("auto", get_model("turing-12.3-usb"))
+    assert not full_range("auto", get_model("turing-9.2-usb")) and not full_range("auto", None)
+    assert full_range("full", get_model("turing-9.2-usb"))
+    assert not full_range("limited", get_model("turing-12.3-usb"))
+    panels = [{"model": "auto", "video_range": "limited"}, {"model": "auto"}]
+    two = parse_config({"device": {"video_range": "full"}, "panels": panels})
+    assert two.device.video_range == "full"
+    assert two.for_panel(0).device.video_range == "limited"
+    assert two.for_panel(1).device.video_range == "auto"  # its own, not the first one's
+    for bad in ("tv", "pc", 1, ""):
+        with pytest.raises(ConfigError, match="video_range"):
+            parse_config({"device": {"video_range": bad}})
+    with pytest.raises(ConfigError, match=r"panels\[0\]\.video_range"):
+        parse_config({"panels": [{"video_range": "pc"}]})
+
+
+def card_stand_in(monkeypatch, shift=""):
+    """x264 as one of the card's encoders, for the machine without a graphics card: its "card"
+    way a software chain behind the same function (h264.card_chain), with a ``null`` filter to
+    tell it by; ``shift`` its own conversion's options (``out_color_matrix=bt709``: a matrix
+    shift, as AMD's own converter made), else swscale's BT.601 as the processor's."""
+    from libre_panel.devices.h264 import FULL_RANGE
+
+    real = h264.card_chain
+
+    def chain(encoder, full=False):
+        if encoder != "libx264":
+            return real(encoder, full)
+        own = f"scale={shift}," if shift else ""
+        return [], ["null", (f"{FULL_RANGE}," if full and not shift else own) + "format=yuv420p"]
+
+    monkeypatch.setattr(h264, "card_chain", chain)
+    monkeypatch.setattr(h264, "CARD_ENCODERS", h264.CARD_ENCODERS | {"libx264"})
+    monkeypatch.setattr(h264, "FULL_RANGE_CARDS", h264.FULL_RANGE_CARDS | {"libx264"})
+
+
+def by_card(command):
+    """Whether the card's way made ``command`` (the stand-in's ``null`` filter)."""
+    return "-vf" in command and "null" in after(command, "-vf").split(",")
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("shift, card", [("", True), ("out_color_matrix=bt709", False)])
+def test_auto_lets_the_card_convert_once_a_check_in_the_background_found_it_right(
+    panel, monkeypatch, isolated_home, shift, card
+):
+    """video.pixels "auto" with one of the card's encoders and no verdict yet: the processor
+    converts, and a check runs once in the background (never on the panel: the panel gets the
+    processor's pictures meanwhile); where it finds the card's conversion identical the panel
+    goes over to it at its next frame (a new ffmpeg, the panel stays open), where it finds a
+    shift the processor stays. The verdict is kept for the next start. x264 stands in."""
+    from libre_panel.devices import card_choice
+
+    card_stand_in(monkeypatch, shift)
+    commands = []
+    real = turzx_video.ffmpeg_command
+
+    def command(*args):
+        commands.append(real(*args))
+        return commands[-1]
+
+    monkeypatch.setattr(turzx_video, "ffmpeg_command", command)
+    began = []
+    real_ensure = card_choice.ensure
+    monkeypatch.setattr(card_choice, "ensure",
+                        lambda *a, **k: began.append(a[:3]) or real_ensure(*a, **k))  # fmt: skip
+    video = 'mode = "on"\nlocal_clip = "usr/data/clip.h264"\n'
+    opened, status, stop, thread = running_panel(isolated_home, monkeypatch, panel, video)
+    ffmpeg = find_ffmpeg("")
+    try:
+        assert wait_until(lambda: status.frames > 5 and commands)
+        assert not by_card(commands[0])  # the processor's until the check has spoken
+        assert wait_until(lambda: card_choice.verdict(ffmpeg, "libx264", False) is not None)
+        kept = card_choice.verdict(ffmpeg, "libx264", False)
+        assert kept["card"] is card and kept["by"] == "background"
+        assert kept["verdict"] == ("identical" if card else "matrix")
+        if card:
+            assert wait_until(lambda: by_card(commands[-1]))
+            assert wait_until(lambda: status.stats.get("encoder", "").endswith(", card"))
+        else:
+            time.sleep(1.5)
+            assert not any(by_card(c) for c in commands)
+        assert len(opened) == 1 and panel.commands.count(110) == 1
+        arrived = len(panel.blocks)
+        assert wait_until(lambda: len(panel.blocks) > arrived + 10)
+    finally:
+        stop.set()
+        thread.join(20)
+    assert not thread.is_alive() and not NEVER & set(panel.commands)
+    assert began and all(b == (ffmpeg, "libx264", False) for b in began)
+    entry = video_state._part("cards")[f"libx264 limited {ffmpeg}"]
+    assert entry["card"] is card and entry["version"] == card_choice.version(ffmpeg)
+
+
+def test_who_converts_under_auto_and_when_a_way_is_forced(monkeypatch, isolated_home):
+    """The display's choice (:meth:`_pixels`): "auto" the card only where a verdict for that
+    encoder, range, ffmpeg and version says identical; never for x264, for NVIDIA's on a panel
+    in full range, or for an encoder that gave up converting itself; "card" and "rgb" force a
+    way (the card only where it can); a colour check's A or B overrides them all."""
+    from libre_panel.devices import card_choice
+
+    isolated_home.mkdir(parents=True)  # (config.toml's folder: video-state.json is kept there)
+    monkeypatch.setattr(card_choice, "version", lambda ffmpeg: "ffmpeg version 8.1 | driver 1")
+
+    def result(encoder, verdict="identical", state="done"):
+        return {"encoder": encoder, "compared": ["card", "processor"], "state": state,
+                "verdict": verdict, "worst": None}  # fmt: skip
+
+    def way(encoder, pixels="auto", video_range="auto", model="turing-9.2-usb"):
+        config = video_config(pixels=pixels)
+        config.video_range, config.model = video_range, model
+        from libre_panel.devices.models import get_model
+
+        display = TurzxVideoDisplay(config, get_model(model))
+        display._ffmpeg = "/ffmpeg"
+        return display, display._pixels(encoder)
+
+    assert way("h264_amf")[1] == "processor"  # no verdict yet
+    card_choice.record("/ffmpeg", result("h264_amf"), full=False)
+    assert way("h264_amf")[1] == "card"
+    assert way("h264_amf", video_range="full")[1] == "processor"  # (no verdict in full range)
+    assert way("h264_amf", model="turing-12.3-usb")[1] == "processor"  # full there by itself
+    card_choice.record("/ffmpeg", result("h264_amf"), full=True)
+    assert way("h264_amf", model="turing-12.3-usb")[1] == "card"
+    assert way("h264_amf", model="turing-12.3-usb", video_range="limited")[1] == "card"
+    card_choice.record("/ffmpeg", result("h264_amf", "matrix"), full=False)
+    assert way("h264_amf")[1] == "processor"
+    card_choice.record("/ffmpeg", result("h264_nvenc"), full=False)
+    assert way("h264_nvenc")[1] == "card"
+    assert card_choice.record("/ffmpeg", result("h264_nvenc"), full=True) is None  # can't
+    assert way("h264_nvenc", video_range="full")[1] == "processor"
+    assert way("h264_nvenc", "card", video_range="full")[1] == "processor"  # limited only
+    assert way("libx264")[1] == way("libx264", "card")[1] == "processor"
+    assert way("h264_qsv", "card")[1] == "card" and way("h264_qsv", "rgb")[1] == "rgb"
+    display, _ = way("h264_nvenc")
+    display._feeds_failed.add("h264_nvenc")  # it gave no picture converting itself
+    assert display._pixels("h264_nvenc") == "processor"
+    display.feed = "card"
+    assert display._pixels("h264_nvenc") == "processor"
+    display, _ = way("h264_amf", "card")
+    display.feed = "processor"  # B of a check's A/B
+    assert display._pixels("h264_amf") == "processor"
+    card_choice.forget()
+    monkeypatch.setattr(card_choice, "version", lambda ffmpeg: "ffmpeg version 8.2 | driver 1")
+    assert way("h264_nvenc")[1] == "processor"  # a new ffmpeg: no verdict until checked again
+    monkeypatch.setattr(card_choice, "version", lambda ffmpeg: "ffmpeg version 8.1 | driver 2")
+    card_choice.forget()
+    assert way("h264_nvenc")[1] == "processor"  # a new driver too
+    monkeypatch.setattr(card_choice, "version", lambda ffmpeg: "ffmpeg version 8.1 | driver 1")
+    card_choice.forget()
+    assert way("h264_nvenc")[1] == "card"
+    week = time.time() + video_state.PROBE_S + 60
+    monkeypatch.setattr(time, "time", lambda: week)
+    card_choice.forget()
+    assert way("h264_nvenc")[1] == "processor"  # a week later: checked again
+
+
+@needs_ffmpeg
+def test_a_card_that_gives_no_picture_converting_itself_gets_the_processor_then_x264(
+    panel, monkeypatch, caplog
+):
+    """One of the card's encoders that ends before its first picture converting the frames
+    itself ("card") is started again with the processor's conversion (NV12 made by ffmpeg: a
+    driver may take no RGB); when that ends too, "auto" leaves it out and x264 takes over, fed
+    rgb0. None of it counts as a restart, and the panel shows the frames. (NVIDIA's encoder
+    ends here at once: no card.)"""
+    monkeypatch.setattr(h264, "AUTO_ENCODERS", ("h264_nvenc",))
+    monkeypatch.setattr(h264, "encoder_works", lambda ffmpeg, encoder: True)
+    commands = []
+    real = turzx_video.ffmpeg_command
+
+    def command(*args):
+        commands.append(real(*args))
+        return commands[-1]
+
+    monkeypatch.setattr(turzx_video, "ffmpeg_command", command)
+    display = TurzxVideoDisplay(video_config(pixels="card"))
+    display.open()
+    frames = moving_frames(80)
+    try:
+        with caplog.at_level("WARNING", logger="libre_panel.devices.turzx_video"):
+            for frame in frames:
+                display.show(frame)
+                time.sleep(0.02)
+                if display.encoder.pictures >= 20:
+                    break
+        assert display.encoder.name == "libx264", [c[c.index("-c:v") + 1] for c in commands]
+        fed = [(c[c.index("-c:v") + 1], "nv12" in c[c.index("-c:v") :]) for c in commands]
+        assert fed == [("h264_nvenc", False), ("h264_nvenc", True), ("libx264", False)]
+        assert all(after(c, "-pix_fmt") == "rgb0" for c in commands)
+        assert display._feeds_failed == {"h264_nvenc"} == display._encoders_failed
+        assert display.counters.ffmpeg_restarts == 0
+        assert display.counters.encoder == "libx264, rgb0"
+        said = [r.getMessage() for r in caplog.records]
+        assert any("ffmpeg converts the frames" in s for s in said)
+        assert any("x264 takes over" in s for s in said)
+        settle(panel, timeout=15, at_least=10)
+    finally:
+        display.close()
+    assert len(panel.blocks) >= 10
+    shown = [frame_number(picture) for picture in decode(panel.stream())]
+    assert all(a < b for a, b in itertools.pairwise(shown))  # x264's frames, in their order
+
+
+def test_only_a_card_that_ended_converting_itself_gets_the_processor_next(monkeypatch):
+    """The step back to the processor's conversion is for an encoder of the card that ended
+    (exited) before its first picture converting the frames itself, once; one that hangs, that
+    showed pictures, the processor's way or x264, does not take it; a card's encoder set by hand
+    then counts as a restart, as before."""
+    display = TurzxVideoDisplay(video_config(encoder="h264_nvenc", pixels="card"))
+
+    def stopped(card=True, alive=False, pictures=0, name="h264_nvenc", pixels="rgb0"):
+        settings = EncoderSettings(encoder=name, pixels=pixels, card=card)
+        display.encoder = SimpleNamespace(name=name, pictures=pictures, alive=alive,
+                                          settings=settings)  # fmt: skip
+        return display._gave_up("exit code 1")
+
+    assert stopped(alive=True) is False  # it hangs: no matter of the format
+    assert stopped(pictures=3) is False  # it showed pictures: a restart
+    assert stopped(name="libx264") is False and display._feeds_failed == set()
+    assert stopped(pixels="rgb24") is False and display._feeds_failed == set()
+    assert stopped() is True and display._feeds_failed == {"h264_nvenc"}
+    assert stopped() is False  # (once)
+    assert stopped(card=False) is False  # set by hand: then a restart, counted
+    assert display._encoders_failed == set()
 
 
 @pytest.mark.parametrize("mode", ["RGB", "RGBA", "L"])
@@ -1930,67 +2345,3 @@ def test_a_portrait_theme_comes_out_upside_down_as_before(panel, pixels):
     for source, picture in zip(frames, decoded, strict=False):
         native = turzx_usb.to_native(source)
         assert max(ImageStat.Stat(ImageChops.difference(native, picture)).mean) < 6
-
-
-@needs_ffmpeg
-def test_a_card_that_takes_no_rgb0_gets_rgb24_then_x264_takes_over(panel, monkeypatch, caplog):
-    """One of the card's encoders that ends before its first picture, fed rgb0, is started
-    again fed as before (rgb24, NV12 made by ffmpeg: a driver may take no RGB); when that
-    ends too, "auto" leaves it out and x264 takes over, fed rgb0. None of it counts as a
-    restart, and the panel shows the frames. (NVIDIA's encoder ends here at once: no card.)"""
-    monkeypatch.setattr(h264, "AUTO_ENCODERS", ("h264_nvenc",))
-    monkeypatch.setattr(h264, "encoder_works", lambda ffmpeg, encoder: True)
-    commands = []
-    real = turzx_video.ffmpeg_command
-
-    def command(*args):
-        commands.append(real(*args))
-        return commands[-1]
-
-    monkeypatch.setattr(turzx_video, "ffmpeg_command", command)
-    display = TurzxVideoDisplay(video_config())
-    display.open()
-    frames = moving_frames(80)
-    try:
-        with caplog.at_level("WARNING", logger="libre_panel.devices.turzx_video"):
-            for frame in frames:
-                display.show(frame)
-                time.sleep(0.02)
-                if display.encoder.pictures >= 20:
-                    break
-        assert display.encoder.name == "libx264", [c[c.index("-c:v") + 1] for c in commands]
-        fed = [(c[c.index("-c:v") + 1], after(c, "-pix_fmt")) for c in commands]
-        assert fed == [("h264_nvenc", "rgb0"), ("h264_nvenc", "rgb24"), ("libx264", "rgb0")]
-        assert display._feeds_failed == {"h264_nvenc"} == display._encoders_failed
-        assert display.counters.ffmpeg_restarts == 0
-        assert display.counters.encoder == "libx264, rgb0"
-        said = [r.getMessage() for r in caplog.records]
-        assert any("ffmpeg converts the frames" in s for s in said)
-        assert any("x264 takes over" in s for s in said)
-        settle(panel, timeout=15, at_least=10)
-    finally:
-        display.close()
-    assert len(panel.blocks) >= 10
-    shown = [frame_number(picture) for picture in decode(panel.stream())]
-    assert all(a < b for a, b in itertools.pairwise(shown))  # x264's frames, in their order
-
-
-def test_only_a_card_that_ended_fed_rgb0_gets_rgb24_next(monkeypatch):
-    """The step back to rgb24 is for an encoder of the card that ended (exited) before its
-    first picture while fed rgb0, once; one that hangs, that showed pictures, or x264, does
-    not take it; a card's encoder set by hand then counts as a restart, as before."""
-    display = TurzxVideoDisplay(video_config(encoder="h264_nvenc"))
-
-    def stopped(pixels, alive=False, pictures=0, name="h264_nvenc"):
-        settings = EncoderSettings(encoder=name, pixels=pixels)
-        display.encoder = SimpleNamespace(name=name, pictures=pictures, alive=alive,
-                                          settings=settings)  # fmt: skip
-        return display._gave_up("exit code 1")
-
-    assert stopped("rgb0", alive=True) is False  # it hangs: no matter of the format
-    assert stopped("rgb0", pictures=3) is False  # it showed pictures: a restart
-    assert stopped("rgb0", name="libx264") is False and display._feeds_failed == set()
-    assert stopped("rgb0") is True and display._feeds_failed == {"h264_nvenc"}
-    assert stopped("rgb0") is False  # (once)
-    assert stopped("rgb24") is False  # set by hand: then a restart, counted
-    assert display._encoders_failed == set()

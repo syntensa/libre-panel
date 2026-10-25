@@ -334,6 +334,7 @@
 }
 
 .colour-now,
+.colour-range-now,
 .colour-pick {
   margin: 0;
   font-size: 13px;
@@ -421,6 +422,24 @@
 
 .colour-ab .muted {
   flex: 1 1 260px;
+}
+
+.colour-range {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line, rgba(127, 127, 127, 0.2));
+}
+
+.colour-range .colour-ab {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.colour-range-answer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .experiment-tiles {

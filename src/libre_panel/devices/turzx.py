@@ -137,6 +137,8 @@ class TurzxDisplay(Display):
         self._impl, self.model = impl, impl.model
         if self.feed is not None:  # (a colour check under way)
             impl.set_feed(self.feed)
+        if self.range is not None:
+            impl.set_range(self.range)
 
     def _driver(self, model: PanelModel | None, configured: bool = True) -> Display:
         global _told
@@ -240,6 +242,11 @@ class TurzxDisplay(Display):
         self.feed = pixels
         if self._impl:
             self._impl.set_feed(pixels)
+
+    def set_range(self, video_range: str | None) -> None:
+        self.range = video_range
+        if self._impl:
+            self._impl.set_range(video_range)
 
     def screen_off(self) -> bool:
         return bool(self._impl and self._impl.screen_off())

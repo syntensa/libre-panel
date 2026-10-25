@@ -7,9 +7,13 @@
   encoder, when that was asked and the last line ffmpeg said (why "auto" passed it over, which
   Settings → Panel → Check the colours shows): the answer holds for :data:`PROBE_S`, then it
   is asked again (a new driver may change it).
-- **An encoder of the card that took no four bytes a pixel** (it ended before its first
-  picture fed rgb0), per ffmpeg program and encoder, and when: for :data:`PROBE_S` every
-  connection starts it fed as before (rgb24, NV12 made by ffmpeg), then rgb0 is tried again.
+- **An encoder of the card that gave nothing converting the frames itself** (it ended before
+  its first picture so), per ffmpeg program and encoder, and when: for :data:`PROBE_S` every
+  connection has the processor convert for it, then the card's way is tried again.
+- **Whether the card converts the colours as the processor does** (card_choice.py), per
+  encoder, range and ffmpeg program, with that program's version and when it was checked: the
+  colour check's verdict, by which ``video.pixels = "auto"`` lets the card convert or not; asked
+  again after :data:`PROBE_S`, or at once for another version of ffmpeg.
 
 The file is written only where config.toml's folder is there; one that cannot be read counts
 as empty, and what is not in it is found out as before.
@@ -142,3 +146,27 @@ def keep_refusal(ffmpeg: str, encoder: str, now: float | None = None) -> None:
     """``encoder`` of ``ffmpeg`` ended before its first picture fed four bytes a pixel."""
     when = int(time.time() if now is None else now)
     _write("feeds", f"{encoder} {ffmpeg}", {"refused": "rgb0", "when": when})
+
+
+def _card_key(ffmpeg: str, encoder: str, full: bool) -> str:
+    return f"{encoder} {'full' if full else 'limited'} {ffmpeg}"
+
+
+def card_choice(
+    ffmpeg: str, encoder: str, full: bool, version: str, now: float | None = None
+) -> dict[str, Any] | None:
+    """The colour check's verdict on the card's conversion of ``encoder`` (in full or limited
+    range) kept for this ffmpeg program in this ``version`` within the week; None when there is
+    none (or the clock went back since)."""
+    entry = _part("cards").get(_card_key(ffmpeg, encoder, full))
+    if not isinstance(entry, dict) or entry.get("version") != version:
+        return None
+    when = entry.get("when")
+    if not isinstance(when, int | float) or not isinstance(entry.get("card"), bool):
+        return None
+    now = time.time() if now is None else now
+    return entry if 0 <= now - when < PROBE_S else None
+
+
+def keep_card_choice(ffmpeg: str, encoder: str, full: bool, entry: dict[str, Any]) -> None:
+    _write("cards", _card_key(ffmpeg, encoder, full), entry)

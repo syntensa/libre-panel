@@ -63,6 +63,10 @@ class PanelModel:
     hidden: tuple[int, int, int, int] = (0, 0, 0, 0)
     # Video mode (H.264) proven on this model: ``video.mode = "auto"`` uses it here.
     video: bool = False
+    # How its H.264 decoder shows the video's values ([device] video_range "auto"): "limited"
+    # (16-235, as a stream says by default), or "full" (0-255) for one that shows every stream
+    # as full range, whatever the stream says
+    video_range: str = "limited"
 
     def size(self, orientation: str) -> tuple[int, int]:
         """Frame size for ``portrait`` or ``landscape``."""
@@ -250,6 +254,10 @@ MODELS: tuple[PanelModel, ...] = (
         1920,
         "usb-turing",
         usb_ids=((0x1CBE, 0x0123),),
+        # an owner's panel showed limited-range video washed out (black grey) with the card's
+        # conversion and with the processor's, the stream tagged limited, and right as stills:
+        # its decoder takes every stream as full range
+        video_range="full",
     ),
     PanelModel(
         "usbpcmonitor-3.5",

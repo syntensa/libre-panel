@@ -56,10 +56,9 @@ from typing import Any
 from PIL import Image
 
 from libre_panel import timing
-from libre_panel.devices import video_state
+from libre_panel.devices import card_choice, h264, video_state
 from libre_panel.devices.base import Counters, DeviceError, FrameError
 from libre_panel.devices.h264 import (
-    PASS_THROUGH,
     Encoder,
     EncoderSettings,
     EncoderStopped,
@@ -199,16 +198,29 @@ def video_settings(video: Any) -> EncoderSettings:
 
 
 def resolved(
-    settings: EncoderSettings, model_id: str, encoder: str, pixels: str
+    settings: EncoderSettings, model_id: str, encoder: str, pixels: str, full: bool = False
 ) -> EncoderSettings:
     """``settings`` as ffmpeg is started with them: the profile for the panel's model, the
-    encoder chosen and the frames as ``pixels`` ("auto" or "rgb") feeds them."""
+    encoder chosen, the frames fed and converted as ``pixels`` says ("processor", "rgb" or
+    "card"; "auto" is the processor's here: the display decides it, :meth:`TurzxVideoDisplay.
+    _pixels`), by the card itself only for "card" and one of the card's encoders that can (in
+    full range for a ``full`` panel: h264.FULL_RANGE_CARDS), and the video's range."""
     return replace(
         settings,
         profile=resolve_profile(settings.profile, model_id),
         encoder=encoder,
         pixels=resolve_feed(pixels),
+        card=pixels == "card" and card_choice.can(encoder, full),
+        full=full,
     )
+
+
+def full_range(video_range: str, model: PanelModel | None) -> bool:
+    """Whether a panel gets its video in full range: [device] video_range "full", or "auto" on a
+    model whose decoder shows every stream as full range (PanelModel.video_range)."""
+    if video_range == "auto":
+        return model is not None and model.video_range == "full"
+    return video_range == "full"
 
 
 class DecoderHung(DeviceError):
@@ -444,8 +456,9 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self.encoder: Encoder | None = None
         self.rate: RateControl | None = None  # of maxrate "auto", once the picture size is known
         self._encoders_failed: set[str] = set()  # of "auto": one that stopped before a picture
-        # an encoder of the card that ended before a picture fed rgb0: ffmpeg converts for it
-        # (kept a week in video-state.json, so that the next connection starts so at once)
+        # an encoder of the card that ended before a picture converting the frames itself
+        # ("card"): ffmpeg converts for it (kept a week in video-state.json, so that the next
+        # connection starts so at once)
         self._feeds_failed: set[str] = set()
         self._feeds_asked: set[str] = set()  # the encoders video-state.json was asked about
         self._encoder_said = ""  # the encoder the log was told of
@@ -554,8 +567,12 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         model_id = self.model.id if self.model else ""
         name = resolve_encoder(self.settings.encoder, self._ffmpeg, self._encoders_failed)
         self._ask_refused(name)
-        settings = resolved(self.settings, model_id, name, self._pixels(name))
+        full = self._full()
+        if self.video.pixels == "auto" and self.feed is None and self.range is None:
+            self._ask_the_card(name, full, size, rotate, model_id)  # (not for a check's A/B)
+        settings = resolved(self.settings, model_id, name, self._pixels(name), full)
         said = f"{feed_text(settings)}, profile {settings.profile}"
+        said += ", full range" if settings.full else ", limited range"
         if said != self._encoder_said:
             self._encoder_said = said
             log.info("video: encoding with %s", said)
@@ -607,35 +624,68 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self.counters.encoder = feed_text(settings)
 
     def _pixels(self, name: str) -> str:
-        """How the frames go into the encoder ``name`` ("auto" or "rgb"): as a colour check
-        shows them (:attr:`feed`), else as video.pixels says; for one of the card's that took
-        no rgb0, as before (rgb24, and NV12 made by ffmpeg)."""
-        if name in self._feeds_failed:
-            return "rgb"
-        return self.feed or self.video.pixels
+        """Who converts the frames' colours for the encoder ``name``: "card", "processor", or
+        "rgb" (the processor, fed three bytes a pixel). As a colour check shows them on the
+        panel (:attr:`feed`), else as video.pixels says: "auto" the card where a colour check
+        found it converting as the processor does (card_choice.py), else the processor. The
+        card only for one of its encoders that has not given up converting the frames itself
+        and, for a panel in full range, that makes full range (else the processor makes it)."""
+        wanted = self.feed or self.video.pixels
+        full = self._full()
+        able = card_choice.can(name, full) and name not in self._feeds_failed
+        if wanted == "auto":
+            return "card" if able and card_choice.chosen(self._ffmpeg, name, full) else "processor"
+        if wanted == "card" and not able:
+            return "processor"
+        return wanted
+
+    def _ask_the_card(
+        self, name: str, full: bool, size: tuple[int, int], rotate: int, model_id: str
+    ) -> None:
+        """For "auto": the background check of whether the card converts for ``name`` as the
+        processor does, where there is no verdict for it yet (card_choice.ensure); its settings
+        are this display's."""
+        if self._ffmpeg is None or not card_choice.can(name, full) or name in self._feeds_failed:
+            return
+        base = self.settings
+
+        def settings(encoder: str, pixels: str) -> EncoderSettings:
+            return resolved(base, model_id, encoder, pixels, full)
+
+        card_choice.ensure(self._ffmpeg, name, full, settings, size, rotate)
+
+    def _full(self) -> bool:
+        """Whether this panel gets its video in full range: as a colour check compares it
+        (:attr:`range`), else as [device] video_range says for this model (:func:`full_range`)."""
+        return full_range(self.range or self.config.video_range, self.model)
 
     def _ask_refused(self, name: str) -> None:
-        """Once per encoder of the card: whether it took no four bytes a pixel within the week
-        (video-state.json), so that this connection starts with the feed that works."""
-        if name not in PASS_THROUGH or name in self._feeds_asked or self._ffmpeg is None:
+        """Once per encoder of the card: whether it gave nothing converting four bytes a pixel
+        itself within the week (video-state.json), so that this connection starts with the
+        processor's conversion at once where "card" is asked for."""
+        if name not in h264.CARD_ENCODERS or name in self._feeds_asked or self._ffmpeg is None:
             return
         self._feeds_asked.add(name)
         if name not in self._feeds_failed and video_state.refused(self._ffmpeg, name):
             self._feeds_failed.add(name)
             log.info(
-                "video: %s took no four bytes a pixel lately (video-state.json); ffmpeg "
-                "converts the frames for it",
+                "video: %s gave no picture converting the frames itself lately "
+                "(video-state.json); ffmpeg converts them for it",
                 name,
             )
 
     def _feed_changed(self) -> bool:
         """Whether the frames are to go into ffmpeg otherwise than the running one takes them
-        (video.pixels changed, or a colour check shows its other feed): a new ffmpeg then."""
+        (video.pixels or video_range changed, or a colour check shows its other way): a new
+        ffmpeg then."""
         encoder = self.encoder
         settings = getattr(encoder, "settings", None)
         if encoder is None or settings is None:
             return False
-        return settings.pixels != resolve_feed(self._pixels(settings.encoder))
+        wanted = self._pixels(settings.encoder)
+        if settings.full != self._full():
+            return True
+        return settings.pixels != resolve_feed(wanted) or settings.card != (wanted == "card")
 
     def _stop_encoder(self) -> None:
         if self.encoder is not None:
@@ -746,7 +796,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             self._restart_panel(self._error)  # a new connection does not help
         if self._error is not None:
             self._heal(self._error)
-        if self.feed is None:  # (a colour check's picture is not what stays on the panel)
+        if self.feed is None and self.range is None:  # (a colour check's picture does not stay)
             self._last_frame = frame
         self._hand_over()
         self._follow_the_panel()
@@ -780,10 +830,10 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
 
     def _gave_up(self, reason: object) -> bool:
         """Whether the encoder stopped before its first picture, and is not started again as it
-        was (uncounted as a restart): one of the card's that ended fed rgb0 gets the frames as
-        before, converted to NV12 by ffmpeg (its driver may take no RGB); an encoder "auto"
-        chose that the card or the driver would not have is left out from here on, and x264
-        takes over."""
+        was (uncounted as a restart): one of the card's that ended converting the frames itself
+        ("card") gets them converted to NV12 by ffmpeg (its driver may take no RGB), and for a
+        week the next connections too; an encoder "auto" chose that the card or the driver
+        would not have is left out from here on, and x264 takes over."""
         encoder = self._leaving or self.encoder  # during a switch only the old one can stop here
         name = getattr(encoder, "name", "")
         if encoder is None or encoder.pictures:

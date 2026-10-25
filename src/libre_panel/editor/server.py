@@ -2369,9 +2369,10 @@ class EditorHandler(BaseHTTPRequestHandler):
             self._error(str(exc), exc.status)
 
     def _colour_check_action(self) -> None:
-        """``POST /api/colour-check {"action": "check" | "show" | "stop", "panel": n}``: the
-        check begun with panel ``n``'s settings and size, its picture shown on that panel for the
-        eye (the running app only), or that ended."""
+        """``POST /api/colour-check {"action": "check" | "show" | "range" | "stop", "panel": n}``:
+        the check begun with panel ``n``'s settings, size and range, its picture shown on that
+        panel for the eye (the running app only): converted by the card and the processor in
+        turn ("show"), or in limited and full range ("range"), or that ended."""
         from libre_panel.editor.colours import ColourError
 
         payload = self._read_json()
@@ -2385,10 +2386,12 @@ class EditorHandler(BaseHTTPRequestHandler):
                 runner.start_check(number)
             elif action == "show":
                 runner.start_show(number)
+            elif action == "range":
+                runner.start_show(number, kind="range")
             elif action == "stop":
                 runner.stop_show()
             else:
-                return self._error('expected {"action": "check", "show" or "stop"}')
+                return self._error('expected {"action": "check", "show", "range" or "stop"}')
             self._json(runner.state(number if isinstance(number, int) else 1))
         except ColourError as exc:
             self._error(str(exc), exc.status)

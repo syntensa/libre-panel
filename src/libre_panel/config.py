@@ -38,6 +38,9 @@ SYMBOL_PACKS = ("classic", "vivid")
 MOTIONS = ("auto", "full", "calm")
 # How a TURZX USB panel takes its stills: "auto" (JPEG on the 5.2", PNG elsewhere), "png", "jpeg"
 STILLS = ("auto", "png", "jpeg")
+# The range of the video's values on a TURZX USB panel ([device] video_range): "auto" as the model
+# is known to show them (PanelModel.video_range), "limited" (16-235), "full" (0-255)
+VIDEO_RANGES = ("auto", "limited", "full")
 DEFAULT_SYMBOLS = "vivid"
 
 _DEFAULT_CONFIG_TEMPLATE = """\
@@ -116,6 +119,11 @@ orientation = ""
 # numbers jump, a picture a second, no fades between themes) and full on the others; "full"
 # or "calm" for every panel.
 motion = "auto"
+# Smooth motion (video mode): the range of the video's values as the panel shows them, "auto"
+# (as the model is known to: full on the 12.3", limited elsewhere), "limited" or "full". If
+# black looks grey in video mode and right as stills, the panel wants "full" (Settings →
+# Panel → Check the colours compares them on the panel).
+# video_range = "auto"
 # true: the panel goes dark when Libre Panel quits (Windows shutting down too), and lights up
 # again when it starts; false: it keeps the last picture.
 dark_on_quit = false
@@ -144,9 +152,12 @@ port = ""
 # The app asks for that name once, on Start (the tray points to it), and sets this to true when
 # it was answered, whichever way. Put false to be asked again.
 # clip_asked = false
-# How the frames reach ffmpeg: "auto" the cheapest way (AMD's and NVIDIA's encoders take them
-# as drawn and convert the colours on the graphics card); "rgb" the way of before (ffmpeg
-# converts them on the processor), should colours on the panel look shifted.
+# Who turns the frames' colours into video: "auto" the graphics card where a colour check found
+# it converting exactly as the processor does (it runs once by itself in the background, again
+# for a new ffmpeg or graphics driver), else ffmpeg on the processor (BT.601: the colours as
+# drawn); "card" the card always (AMD's, NVIDIA's and Intel's encoders; an AMD card was
+# measured shifting the colours); "rgb" the processor always, the way of before (three bytes a
+# pixel). Settings → Panel → Check the colours says who converts and why.
 # pixels = "auto"
 
 [sensors]
@@ -443,10 +454,13 @@ class VideoConfig:
     # processor; h264_nvenc (NVIDIA) and h264_qsv (Intel) are an experiment to set by hand
     profile: str = "auto"  # "auto" | "baseline" | "main" | "high"
     encoder: str = "auto"  # "auto" | "libx264" | "h264_nvenc" | "h264_amf" | "h264_qsv"
-    # How the frames reach ffmpeg: "auto" four bytes a pixel as they are drawn (rgb0), which
-    # AMD's and NVIDIA's encoders convert on the card; "rgb" the way of before (rgb24, the
-    # colours converted by ffmpeg for every encoder), should colours shift on a panel
-    pixels: str = "auto"  # "auto" | "rgb"
+    # How the frames reach ffmpeg and who converts their colours: "auto" four bytes a pixel as
+    # they are drawn (rgb0), converted on the graphics card where a colour check found the card
+    # converting as the processor does (devices/card_choice.py), else by ffmpeg on the processor
+    # (BT.601); "rgb" the processor always, the way of before (rgb24); "card" the card always
+    # (AMD's, NVIDIA's and Intel's encoders; the colour check measured AMD's shifting the
+    # colours when left to itself)
+    pixels: str = "auto"  # "auto" | "rgb" | "card"
     ffmpeg: str = ""  # path to ffmpeg; empty = the download's own (bundled.py), else PATH
     # The name the video start command (110) needs: the panel's own standby
     # clip, so its standby behaviour stays as it was.
@@ -471,6 +485,10 @@ class DeviceConfig:
     # layer under it, decoded in hardware: faster); "auto" is JPEG on the 5.2", which shows no
     # PNG, and PNG on the others, where it is proven (STILLS)
     still: str = "auto"
+    # TURZX USB panels in video mode: the range of the video's values, as the panel's decoder
+    # shows them: "limited" (16-235), "full" (0-255), "auto" as the model is known to (VIDEO_RANGES;
+    # the 12.3"'s decoder shows every stream as full range). Each panel's own ([[panels]] too)
+    video_range: str = "auto"
     dark_on_quit: bool = False  # a black picture and its light off when Libre Panel quits
     dark_on_sleep: bool = True  # so too while the computer sleeps (Windows), lit when it wakes
     # a brightness of its own at night (night_now): from night_from to night_to, over midnight
@@ -973,6 +991,10 @@ def _parse_device(dev: dict[str, Any], where: str) -> DeviceConfig:
     if still not in STILLS:
         raise ConfigError(f'{where}.still: "auto", "png" or "jpeg"')
     device.still = still
+    video_range = _expect(dev.get("video_range", device.video_range), str, f"{where}.video_range")
+    if video_range not in VIDEO_RANGES:
+        raise ConfigError(f'{where}.video_range: "auto", "limited" or "full"')
+    device.video_range = video_range
     for name in ("dark_on_quit", "dark_on_sleep", "night", "dark_when_away"):
         given = dev.get(name, getattr(device, name))
         setattr(device, name, _expect(given, bool, f"{where}.{name}"))
