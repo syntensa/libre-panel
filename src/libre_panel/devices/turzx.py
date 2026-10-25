@@ -42,8 +42,25 @@ OTHER_DRIVERS = {
     "usb-jonsbo": "libre_panel.devices.jonsbo_zc360:Zc360Display",
     "usb-ms9132": "libre_panel.devices.ms9132:Ms9132Display",  # (never found by auto)
     "usb-lianli": "libre_panel.devices.lianli_usb:LianLiDisplay",
+    "usb-thermalright": "libre_panel.devices.thermalright:TrofeoDisplay",
+    "usb-beada": "libre_panel.devices.beadapanel:BeadaDisplay",
+    "usb-nzxt": "libre_panel.devices.nzxt_kraken:KrakenDisplay",
+    "usb-thermaltake": "libre_panel.devices.thermaltake:ThermaltakeDisplay",
 }
 DRIVERS = {**SERIAL_DRIVERS, **OTHER_DRIVERS}
+
+
+def other_usb_model() -> PanelModel | None:
+    """The USB screen of another maker on the bus (Lian Li, Thermalright, BeadaPanel, an NZXT
+    Kraken, Thermaltake), as ``auto`` would find it, in this order, without opening it; None
+    for none."""
+    from libre_panel.devices import beadapanel, lianli_usb, nzxt_kraken, thermalright, thermaltake
+
+    for family in (lianli_usb, thermalright, beadapanel, nzxt_kraken, thermaltake):
+        model = family.present_model()
+        if model is not None:
+            return model
+    return None
 
 
 def video_gaps(video, model: PanelModel | None, *, proven: bool = True) -> list[str]:
@@ -156,9 +173,9 @@ class TurzxDisplay(Display):
         return impl
 
     def _open_any(self) -> Display:
-        """A USB panel, else a Lian Li screen, else a JONSBO ZC-360, else a serial one
-        (``device.model = "auto"``)."""
-        from libre_panel.devices import jonsbo_zc360, lianli_usb
+        """A USB panel, else another maker's USB screen (Lian Li, Thermalright, BeadaPanel, NZXT,
+        Thermaltake), else a JONSBO ZC-360, else a serial one (``device.model = "auto"``)."""
+        from libre_panel.devices import jonsbo_zc360
         from libre_panel.devices.serial_link import find_port
 
         usb = self._driver(None)
@@ -168,11 +185,15 @@ class TurzxDisplay(Display):
         except DeviceError as exc:
             usb.close()
             missing = exc
-        lianli = lianli_usb.present_model()
-        if lianli is not None:
-            impl = self._driver(lianli, configured=False)
-            impl.open()
-            return impl
+        other = other_usb_model()
+        if other is not None:
+            impl = self._driver(other, configured=False)
+            try:
+                impl.open()
+                return impl
+            except DeviceError as exc:  # (a screen of a kind it does not drive: look on)
+                impl.close()
+                missing = exc
         if jonsbo_zc360.present():
             impl = self._driver(find_model(jonsbo_zc360.MODEL_ID), configured=False)
             impl.open()

@@ -30,6 +30,10 @@ PROTOCOLS = {
     "usb-ms9132": "USB bulk (MacroSilicon MS9132), a USB display chip",
     "serial-hongtai": "USB serial (VID 0x33C3, 2 Mbaud), Hongtai / Jungle Leopard JPEG frames",
     "usb-lianli": "USB bulk (VID 0x1CBE), Lian Li's TURZX-like protocol with JPEG frames",
+    "usb-thermalright": "USB bulk or HID (VID 0x0416), Thermalright's Trofeo Vision, JPEG frames",
+    "usb-beada": "USB bulk (VID 0x4E58), BeadaPanel's Panel-Link, 16-bit frames",
+    "usb-nzxt": "USB bulk and HID (VID 0x1E71), an NZXT Kraken's LCD, frames through its memory",
+    "usb-thermaltake": "USB HID (VID 0x264A), Thermaltake's LCD, JPEG frames",
 }
 
 
@@ -441,6 +445,215 @@ MODELS: tuple[PanelModel, ...] = (
         "usb-lianli",
         usb_ids=((0x1CBE, 0xA068),),
     ),
+    PanelModel(
+        "thermalright-trofeo-9.16",
+        "Thermalright",
+        "Thermalright Trofeo Vision",
+        9.16,
+        462,
+        1920,
+        "usb-thermalright",
+        usb_ids=((0x0416, 0x5408),),
+    ),
+    PanelModel(
+        "thermalright-trofeo-11.3",
+        "Thermalright",
+        "Thermalright Trofeo Vision",
+        11.3,
+        440,
+        1920,
+        "usb-thermalright",
+        usb_ids=((0x0416, 0x5408),),
+    ),
+    PanelModel(
+        "thermalright-trofeo-6.86",
+        "Thermalright",
+        "Thermalright Trofeo Vision",
+        6.86,
+        480,
+        1280,
+        "usb-thermalright",
+        usb_ids=((0x0416, 0x5302),),
+    ),
+    # BeadaPanel: one USB id for all; the panel says which it is. The sizes are the diagonals
+    # of the millimetres the vendor's Linux driver gives (the 2 and 2W are round), the 3's and
+    # the 7's as the vendor announced them.
+    PanelModel(
+        "beadapanel-2",
+        "BeadaPanel",
+        "BeadaPanel 2",
+        2.1,
+        480,
+        480,
+        "usb-beada",
+        shape="round",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-2w",
+        "BeadaPanel",
+        "BeadaPanel 2W",
+        2.8,
+        480,
+        480,
+        "usb-beada",
+        shape="round",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-3",
+        "BeadaPanel",
+        "BeadaPanel 3",
+        3.5,
+        320,
+        480,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-4",
+        "BeadaPanel",
+        "BeadaPanel 4",
+        4.3,
+        480,
+        800,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-5",
+        "BeadaPanel",
+        "BeadaPanel 5",
+        5,
+        480,
+        800,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-5s",
+        "BeadaPanel",
+        "BeadaPanel 5S",
+        5,
+        480,
+        854,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-6",
+        "BeadaPanel",
+        "BeadaPanel 6",
+        6.8,
+        480,
+        1280,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-7",
+        "BeadaPanel",
+        "BeadaPanel 7",
+        7,
+        480,
+        800,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-7s",
+        "BeadaPanel",
+        "BeadaPanel 7S",
+        7.8,
+        400,
+        1280,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-8",
+        "BeadaPanel",
+        "BeadaPanel 8",
+        8.8,
+        480,
+        1920,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-9",
+        "BeadaPanel",
+        "BeadaPanel 9",
+        9.16,
+        462,
+        1920,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "beadapanel-11",
+        "BeadaPanel",
+        "BeadaPanel 11",
+        10.2,
+        440,
+        1920,
+        "usb-beada",
+        usb_ids=((0x4E58, 0x1001),),
+    ),
+    PanelModel(
+        "nzxt-kraken-z",
+        "NZXT",
+        "NZXT Kraken Z",
+        2.36,
+        320,
+        320,
+        "usb-nzxt",
+        shape="round",
+        usb_ids=((0x1E71, 0x3008),),
+    ),
+    PanelModel(
+        "nzxt-kraken-2023",
+        "NZXT",
+        "NZXT Kraken 2023",
+        1.54,
+        240,
+        240,
+        "usb-nzxt",
+        shape="round",
+        usb_ids=((0x1E71, 0x300E),),
+    ),
+    PanelModel(
+        "nzxt-kraken-elite-2024",
+        "NZXT",
+        "NZXT Kraken Elite RGB 2024",
+        2.72,
+        640,
+        640,
+        "usb-nzxt",
+        shape="round",
+        usb_ids=((0x1E71, 0x3012),),
+    ),
+    PanelModel(
+        "nzxt-kraken-plus-2024",
+        "NZXT",
+        "NZXT Kraken Plus 2024",
+        1.54,
+        240,
+        240,
+        "usb-nzxt",
+        shape="round",
+        usb_ids=((0x1E71, 0x3014),),
+    ),
+    PanelModel(
+        "thermaltake-lcd-6",
+        "Thermaltake",
+        "Thermaltake LCD",
+        6,
+        720,
+        1480,
+        "usb-thermaltake",
+        usb_ids=((0x264A, 0x2347),),
+    ),
 )
 
 # Families with a driver (devices/turzx.py lists them); the rest is planned.
@@ -458,6 +671,10 @@ _DRIVER_STATUS = {
         "usb-ms9132",
         "serial-hongtai",
         "usb-lianli",
+        "usb-thermalright",
+        "usb-beada",
+        "usb-nzxt",
+        "usb-thermaltake",
     )
 }
 # Models confirmed on the panel: with `libre-panel doctor`, or by an owner who reports it runs.
@@ -486,6 +703,21 @@ _LIANLI = (
     "Not yet seen on the hardware. It takes whole JPEG pictures: no smooth motion. Close "
     "L-Connect while Libre Panel runs: two programs cannot drive it at once."
 )
+_TROFEO = (
+    "Not yet seen on the hardware. It takes whole JPEG pictures: no smooth motion. It has no "
+    "backlight control: dimming darkens the picture. Close Thermalright's program while Libre "
+    "Panel runs. When Libre Panel quits, the panel shows its own picture again."
+)
+_BEADA = (
+    "Not yet seen on the hardware. It takes whole pictures in 16-bit colour, a few a second: no "
+    "smooth motion, and soft gradients show steps. Close the maker's program while Libre Panel "
+    "runs: two programs cannot drive it at once."
+)
+_KRAKEN = (
+    "Not yet seen on the hardware. Each picture goes through the cooler's picture memory: a few "
+    "a second, no smooth motion. Close NZXT CAM while Libre Panel runs. When Libre Panel quits, "
+    "the cooler shows the liquid's temperature again."
+)
 _LIMITS = {
     "turing-1.6-usb": _UNSEEN,
     "turing-2.1-usb": _UNSEEN,
@@ -507,6 +739,14 @@ _LIMITS = {
     "lianli-universal-9.2": _LIANLI,
     "lianli-hydroshift2-lcd": _LIANLI,
     "lianli-hydroshift2-oled": _LIANLI,
+    **{m.id: _TROFEO for m in MODELS if m.protocol == "usb-thermalright"},
+    **{m.id: _BEADA for m in MODELS if m.protocol == "usb-beada"},
+    **{m.id: _KRAKEN for m in MODELS if m.protocol == "usb-nzxt"},
+    "thermaltake-lcd-6": (
+        "Not yet seen on the hardware. It takes whole JPEG pictures: no smooth motion. Its "
+        "brightness goes into the picture: dimming darkens it. Close TT RGB Plus while Libre "
+        "Panel runs. When Libre Panel quits, the panel shows its own screen again."
+    ),
 }
 MODELS = tuple(
     replace(

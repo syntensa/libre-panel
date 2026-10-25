@@ -3,6 +3,13 @@
 ## 0.7.1rc5 — 2026-10-24
 
 **Changes**
+- **More makers' screens, unverified**: drivers for Thermalright's Trofeo Vision (the 6.86"
+  and the 9.16" and 11.3" bars), every BeadaPanel model (on the Panel-Link stream they all
+  take), the NZXT Krakens with an LCD (Z53/Z63/Z73, Kraken 2023, Elite RGB 2024, Plus 2024:
+  still pictures through the cooler's picture memory, never its pump or fans) and
+  Thermaltake's 6" LCD, each written from the published sources (credited in NOTICE.md) and
+  none yet seen on real hardware: `auto` finds them, Settings lists them, HARDWARE.md says
+  what each cannot do. `auto` now looks on past a maker's screen it does not drive.
 - **The round report tells more**: the round's 1 % and 0.1 % lows, its average and longest
   frame time (every frame of the round counted, exact to 0.01 ms, however long the round),
   the course of the CPU and GPU temperatures over the round, and the PC's peak power where

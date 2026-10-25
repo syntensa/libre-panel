@@ -828,15 +828,16 @@ class Settings:
 
     @staticmethod
     def _find_panel(config: Config) -> dict[str, Any] | None:
-        """A panel on the bus: a TURZX USB one, a Lian Li screen, a ZC-360, else a serial one by
-        its USB ids."""
-        from libre_panel.devices import jonsbo_zc360, lianli_usb
+        """A panel on the bus: a TURZX USB one, another maker's USB screen, a ZC-360, else a
+        serial one by its USB ids."""
+        from libre_panel.devices import jonsbo_zc360
         from libre_panel.devices.models import get_model
         from libre_panel.devices.serial_link import find_port
+        from libre_panel.devices.turzx import other_usb_model
         from libre_panel.devices.turzx_usb import present_model
 
         try:
-            model = present_model(config.device.beside) or lianli_usb.present_model()
+            model = present_model(config.device.beside) or other_usb_model()
             if model is None and jonsbo_zc360.present():
                 model = get_model(jonsbo_zc360.MODEL_ID)
         except Exception:  # no USB library is no panel

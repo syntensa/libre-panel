@@ -142,7 +142,19 @@ def test_a_new_computer_gets_the_rule_the_driver_and_a_reload():
         ("/usr/bin/udevadm", "trigger", "--subsystem-match=usb", "--attr-match=idVendor=1cbe"),
         ("/usr/bin/udevadm", "trigger", "--subsystem-match=usb", "--attr-match=idVendor=43a8"),
         ("/usr/bin/udevadm", "trigger", "--subsystem-match=usb", "--attr-match=idVendor=345f"),
+        *(
+            (
+                "/usr/bin/udevadm",
+                "trigger",
+                "--subsystem-match=usb",
+                f"--attr-match=idVendor={v}",
+                f"--attr-match=idProduct={p}",
+            )
+            for v, p in setup.USB_PRODUCTS
+        ),  # (other makers' screens, by their product ids)
+        ("/usr/bin/udevadm", "trigger", "--subsystem-match=hidraw"),  # (a Kraken's commands)
     ]
+    assert ("4e58", "1001") in setup.USB_PRODUCTS and ("1e71", "3008") in setup.USB_PRODUCTS
 
 
 def test_the_energy_counters_stay_closed_unless_asked_for():
@@ -359,7 +371,8 @@ def test_doing_it_twice_changes_nothing_the_second_time():
     again = setup.apply(plan(facts()), system)  # the same plan again, from a stale reading
     assert system.files == files
     assert again[0].items == {UDEV_RULES: "unchanged"}
-    assert again[1].items == {"nct6775": "loaded"} and len(system.ran) == ran + 4  # only udevadm
+    udevadm = 2 + len(setup.USB_VENDORS) + len(setup.USB_PRODUCTS)  # reload, then the triggers
+    assert again[1].items == {"nct6775": "loaded"} and len(system.ran) == ran + udevadm  # only
 
 
 def test_the_first_driver_that_finds_its_chip_ends_the_search():
@@ -503,7 +516,15 @@ def test_a_computer_in_a_folder_is_read(tmp_path):
     root.write(
         "etc/udev/rules.d/99-other.rules",  # (a rule that gives every kind of USB panel)
         'ATTRS{idVendor}=="1CBE", TAG+="uaccess"\nATTRS{idVendor}=="43a8", TAG+="uaccess"\n'
-        'ATTRS{idVendor}=="345f", TAG+="uaccess"\n',
+        'ATTRS{idVendor}=="345f", TAG+="uaccess"\n'
+        'ATTRS{idVendor}=="0416", ATTRS{idProduct}=="5302", TAG+="uaccess"\n'
+        'ATTRS{idVendor}=="0416", ATTRS{idProduct}=="5408", TAG+="uaccess"\n'
+        'ATTRS{idVendor}=="4e58", ATTRS{idProduct}=="1001", TAG+="uaccess"\n'
+        + "".join(
+            f'ATTRS{{idVendor}}=="1e71", ATTRS{{idProduct}}=="{pid}", TAG+="uaccess"\n'
+            for pid in ("3008", "300e", "3012", "3014")
+        )
+        + 'ATTRS{idVendor}=="264a", ATTRS{idProduct}=="2347", TAG+="uaccess"\n',
     )
     root.write("etc/modules-load.d/libre-panel.conf", "nct6775\n")
     for name in ("sys/class/powercap/intel-rapl:0/energy_uj",):
@@ -554,6 +575,16 @@ def test_a_panel_the_person_may_not_open_is_told(tmp_path):
         {},
         False,
     )
+
+
+def test_a_screen_whose_vendor_has_other_devices_too_counts_by_its_product(tmp_path):
+    root = Sysfs(tmp_path / "pc")
+    root.write("sys/bus/usb/devices/1-1/idVendor", "0416")  # (Winbond's: not a screen)
+    root.write("sys/bus/usb/devices/1-1/idProduct", "5020")
+    assert REAL_GATHER(root.root, which=lambda name: None).panel is False
+    root.write("sys/bus/usb/devices/1-2/idVendor", "0416")  # a Trofeo Vision bar
+    root.write("sys/bus/usb/devices/1-2/idProduct", "5408")
+    assert REAL_GATHER(root.root, which=lambda name: None).panel is True
 
 
 def test_the_command_line_says_what_it_will_do(capsys):
