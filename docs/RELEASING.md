@@ -204,13 +204,15 @@ Website → Run workflow*).
 The README (both languages), the website and the release notes show pictures from `docs/images`
 (made by `python tools/readme_images.py`) and clips from `docs/media` (made by
 `python tools/readme_media.py`). Neither folder is kept up to date between releases: make both
-for every release, look at each picture, and commit them before the tag, so that the README, the
-website and the release notes all show the release's own look.
+for every release, the clips first (the stills of the feature grid, `tile-*.png`, are made of
+their posters), look at each picture, and commit them before the tag, so that the README, the
+website and the release notes all show the release's own look. `--only NAME ...` makes some of
+the pictures (`--only tile-cards.png panels-at-once.png`).
 
 | Where | What it shows |
 |---|---|
-| README.md, README.de.md | `docs/media/*.gif`: `video-mode` on top (with `docs/images/hero.png` for those who ask for less motion), `close-up-rings`, `close-up-curves`, `card-ignition`, `volume-looks`, `game-entrance`, `small-panel`, `app-drag-module`, `app-look`, `app-command-palette`, and `where-it-started.png` linking its GIF; `docs/images/gallery.png` and `module-catalog.png` |
-| site/, site/de/ | every clip of `docs/media` as WebM and MP4 with its poster (`*.png`), the GIF only where a browser has no script or no video; from `docs/images` the themes (`lumen`, `studio`, `libre-default`, `slate`, `orbit`, `column`, `pico`), `looks`, `studio-adapts`, `editor-new` and, for links shared elsewhere, `social-preview` |
+| README.md, README.de.md | `docs/media/video-mode.gif` on top (with `docs/images/hero.png` for those who ask for less motion); the feature grid's stills `docs/images/tile-*.png` (PNG, not clips: the first screen stays light); `panels-at-once.png` (the app's *Picture of all panels* of three virtual panels; a photo of real panels may take its place under the same name) and `more-panels.gif`; a clip or picture for each part of the tour (`close-up-rings`, `card-ignition`, `volume-looks`, `round-report`, `nimbus`, `screens-in-turn`, `start-screen`, `small-panel`, `app-drag-module`; `vertical.png`, `agents.png`) with the others linked from its *More*; `where-it-started.png` linking its GIF; `gallery.png` and `module-catalog.png` |
+| site/, site/de/ | every clip of `docs/media` as WebM and MP4 with its poster (`*.png`), the GIF only where a browser has no script or no video; from `docs/images` the feature grid's `tile-*.png`, `panels-at-once`, the themes (`lumen`, `studio`, `libre-default`, `slate`, `orbit`, `column`, `pico`), `looks`, `studio-adapts`, `editor-new` and, for links shared elsewhere, `social-preview` |
 | CHANGELOG.md (the release notes) | `docs/media/video-mode.gif`, `card-ignition.gif`, `game-entrance.gif`, `app-drag-module.gif` and `app-look.gif` on the tag (raw.githubusercontent.com, so the tag must hold them), in the highlights at the top of the version's section |
 | The repository's social preview | `docs/images/social-preview.png`, uploaded by hand in *Settings → General → Social preview* |
 
