@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import socket
 import stat
 import threading
 
@@ -48,10 +49,12 @@ def ask(port, method, path, token=None):
 def raw(port, method, path, headers):
     """A request with exactly these headers (and the Host), the status and the body."""
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
-    conn.request(method, path, headers={"Host": f"127.0.0.1:{port}", **headers})
-    response = conn.getresponse()
-    body = response.read()
-    conn.close()
+    try:
+        conn.request(method, path, headers={"Host": f"127.0.0.1:{port}", **headers})
+        response = conn.getresponse()
+        body = response.read()
+    finally:
+        conn.close()
     return response.status, body
 
 
@@ -189,6 +192,66 @@ def test_no_route_answers_without_the_token_but_the_apps_own_files(port):
     assert ask(port, "POST", "/api/nothing")[0] == 403
     assert ask(port, "GET", "/api/nothing", token)[0] == 404
     assert ask(port, "POST", "/api/nothing", token)[0] == 404
+
+
+class Counted:
+    """The reading side of a connection, counting what is taken from it."""
+
+    def __init__(self, rfile):
+        self.rfile, self.taken = rfile, 0
+
+    def read(self, size=-1):
+        data = self.rfile.read(size)
+        self.taken += len(data)
+        return data
+
+    def readline(self, size=-1):
+        line = self.rfile.readline(size)
+        self.taken += len(line)
+        return line
+
+    def __getattr__(self, name):
+        return getattr(self.rfile, name)
+
+
+def test_a_route_has_read_the_whole_request_before_the_connection_is_closed(port, monkeypatch):
+    """A socket closed with unread data is reset, and Windows then drops the answer the client
+    was given: ``ConnectionAbortedError`` [WinError 10053], once in a while, in the test that
+    asks every route. Linux hands the answer over first, so only what the server read tells.
+    It holds for every answer: with a token or without, from a route that takes the request's
+    body and from one that does not."""
+    from queue import Queue
+
+    taken = Queue()
+    real_setup, real_finish = EditorHandler.setup, EditorHandler.finish
+
+    def setup(self):
+        real_setup(self)
+        self.rfile = Counted(self.rfile)
+
+    def finish(self):
+        taken.put(self.rfile.taken)
+        real_finish(self)
+
+    monkeypatch.setattr(EditorHandler, "setup", setup)
+    monkeypatch.setattr(EditorHandler, "finish", finish)
+    token = token_of(port)
+    unread = []
+    for route in (route for route in ROUTES if route.method == "POST"):
+        for given in (token, None, "wrong"):
+            body = b'{"unused": [1, 2, 3]}'
+            head = (
+                f"POST {sample(route)} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+                + (f"{access.HEADER}: {given}\r\n" if given is not None else "")
+                + f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n\r\n"
+            ).encode()
+            with socket.create_connection(("127.0.0.1", port), timeout=30) as sock:
+                sock.sendall(head + body)
+                while sock.recv(65536):  # to the end of the answer
+                    pass
+            if taken.get(timeout=30) != len(head) + len(body):
+                unread.append((route.template, "token" if given == token else given))
+    assert not unread
 
 
 def test_other_methods_are_not_served_at_all(port):

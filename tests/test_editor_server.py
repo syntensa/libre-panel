@@ -39,10 +39,12 @@ def request(port, method, path, body=None, headers=None, host=None):
     hdrs.update(headers or {})
     hdrs = {name: value for name, value in hdrs.items() if value is not None}
     data = body if isinstance(body, bytes) or body is None else json.dumps(body).encode()
-    conn.request(method, path, body=data, headers=hdrs)
-    response = conn.getresponse()
-    raw = response.read()
-    conn.close()
+    try:  # (closed also when the answer does not come: no connection is left for the next)
+        conn.request(method, path, body=data, headers=hdrs)
+        response = conn.getresponse()
+        raw = response.read()
+    finally:
+        conn.close()
     try:
         return response.status, json.loads(raw)
     except ValueError:
