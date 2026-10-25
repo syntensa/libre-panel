@@ -3,6 +3,7 @@
 ## 0.7.1rc5 — 2026-10-24
 
 **Changes**
+- **Panels**: the TURZX 9.2" is confirmed by an owner's doctor report, every check passed (#19).
 - **More makers' screens, unverified**: drivers for Thermalright's Trofeo Vision (the 6.86"
   and the 9.16" and 11.3" bars), every BeadaPanel model (on the Panel-Link stream they all
   take), the NZXT Krakens with an LCD (Z53/Z63/Z73, Kraken 2023, Elite RGB 2024, Plus 2024:

@@ -679,7 +679,7 @@ _DRIVER_STATUS = {
 }
 # Models confirmed on the panel: with `libre-panel doctor`, or by an owner who reports it runs.
 _CONFIRMED: set[str] = {
-    "turing-9.2-usb",  # stills and 50 fps video, for hours on end
+    "turing-9.2-usb",  # stills and 50 fps video, for hours on end; an owner's doctor report (#19)
     "turing-8.8-usb",  # "works wonderfully", an owner's report in the TURZX forum
     "turing-12.3-usb",  # recognised and running from the first start, on the maintainer's desk
     "turing-3.5",  # rev. A: runs, its screen turned off with the command Libre Panel sends
