@@ -274,6 +274,9 @@ def test_auto_finds_a_kraken_after_the_others(bus, monkeypatch):
         assert screen.model.id == "nzxt-kraken-plus-2024"
 
 
+@pytest.mark.skipif(
+    os.name == "nt", reason="Windows cannot make a folder named 3-4:1.0, as the kernel does"
+)
 def test_the_hidraw_node_is_found_in_sysfs(tmp_path):
     device = type("Device", (), {"bus": 3, "address": 12})()
     usb = tmp_path / "sys/bus/usb/devices/3-4"
