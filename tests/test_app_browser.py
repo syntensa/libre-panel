@@ -4392,6 +4392,66 @@ def test_a_new_panel_is_added_step_by_step(app_url, isolated_home):
         assert not panel.follow_brightness and panel.game_theme == "arena-companion"
 
 
+ZC360 = """async ([name, args]) => (await import("/app/views/settings/zc360.js"))[name](...args)"""
+
+
+def test_the_zc360_s_screens_become_panels_of_their_own_and_one_picture_again(
+    app_url, isolated_home
+):
+    """Settings → Panels: one click makes the ZC-360's one picture three panels (its screens,
+    by their place, with CPU, GPU and memory), and one click makes it one picture again."""
+    from libre_panel.config import set_config_value
+
+    choose_theme(isolated_home, "lumen")
+    set_config_value("device.model", "jonsbo-zc360")
+    screen = "jonsbo-zc360-screen"
+    with browser_page(app_url, "settings/panels") as page:
+
+        def call(name, *args):
+            return page.evaluate(ZC360, [name, list(args)])
+
+        # where it is: panel 1, or a place in [[panels]] (as set, or as it runs)
+        assert call("zc360Places", "jonsbo-zc360", [], []) == {"whole": -1, "screens": []}
+        assert call("zc360Places", "turing-9.2-usb", [{"model": "auto"}], ["jonsbo-zc360"]) == {
+            "whole": 0, "screens": []}  # fmt: skip
+        assert call("zc360Places", screen, [{"model": screen}], []) == {
+            "whole": None, "screens": [-1, 0]}  # fmt: skip
+        # beside another panel: what that place had (its brightness) goes to the three
+        beside = [{"model": "auto", "follow_brightness": False, "brightness": 40,
+                   "output": "libre-panel-frame-1.png", "theme": "x"}]  # fmt: skip
+        plan = call("splitZc360", 0, beside, 3)
+        assert plan["theme"] is None and [
+            (p["model"], p["port"], p["theme"], p["brightness"]) for p in plan["changes"]["panels"]
+        ] == [(screen, str(n), f"lumen-{part}-640x180", 40)
+              for n, part in ((1, "cpu"), (2, "gpu"), (3, "memory"))]  # fmt: skip
+        assert all("output" not in p for p in plan["changes"]["panels"])  # (their own files)
+        assert call("splitZc360", -1, [{}, {}], 3) is None  # no room for two more
+        back = call("joinZc360", [0, 1, 2], plan["changes"]["panels"])
+        assert [(p["model"], p["port"], p["theme"]) for p in back["changes"]["panels"]] == [
+            ("jonsbo-zc360", "", "")]  # fmt: skip
+
+        card = page.locator("#panel-more")
+        row = card.locator("[data-zc360='whole']")
+        expect(row).to_contain_text("three screens show one picture")
+        row.get_by_role("button", name="Each screen its own panel").click()
+        waits_for(page, lambda: len(settings_config().panels) == 2)
+        config = settings_config()
+        assert (config.device.model, config.device.port) == (screen, "1")
+        assert [(p.device.model, p.device.port, p.theme, p.follow_brightness)
+                for p in config.panels] == [
+            (screen, "2", "lumen-gpu-640x180", True),
+            (screen, "3", "lumen-memory-640x180", True),
+        ]  # fmt: skip
+        waits_for(page, lambda: settings_config().theme == "lumen-cpu-640x180")
+        row = card.locator("[data-zc360='screens']")
+        expect(row).to_contain_text("panels of their own")
+        row.get_by_role("button", name="Back to one picture").click()
+        waits_for(page, lambda: settings_config().panels == [])
+        config = settings_config()
+        assert (config.device.model, config.device.port) == ("jonsbo-zc360", "")
+        waits_for(page, lambda: settings_config().theme == "lumen")
+
+
 def test_a_second_panel_is_added_given_a_theme_and_taken_out_again(app_url, isolated_home):
     """Settings → Panels: a panel beside this one, with a theme and a way up of its
     own, written to [[panels]]; taken out again, there is none."""

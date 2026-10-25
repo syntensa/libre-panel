@@ -337,6 +337,18 @@ MODELS: tuple[PanelModel, ...] = (
         notes='three 3.38" screens under the fans, each a USB device ("TURZX-338inch-r")',
     ),
     PanelModel(
+        "jonsbo-zc360-screen",
+        "JONSBO",
+        "ZC-360 fan screen",
+        3.38,
+        180,
+        640,
+        "usb-jonsbo",
+        # (no USB ids of its own: they are the ZC-360's, which "auto" finds as one panel; the
+        # three as panels of their own are set up in the app, device.port says which screen)
+        notes="one of the ZC-360's three screens under the fans as a panel of its own",
+    ),
+    PanelModel(
         "jonsbo-tf3-pump",
         "JONSBO",
         "TF3-360SC pump screen",
@@ -725,6 +737,11 @@ _LIMITS = {
     "jonsbo-zc360": (
         "Not yet seen on the hardware. Its three screens take their pictures one after the "
         "other, so what moves changes less often than on a single panel. No smooth motion."
+    ),
+    "jonsbo-zc360-screen": (
+        "Not yet seen on the hardware. The ZC-360's three screens take their pictures one "
+        "after the other, also as panels of their own, so what moves changes less often than "
+        "on a single panel. No smooth motion."
     ),
     "jonsbo-ds916": (
         "Not yet seen on the hardware. It takes whole JPEG pictures: no smooth motion, and "

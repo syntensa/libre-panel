@@ -28,13 +28,24 @@ against a frame of the vendor's application:
 Their order from left to right is that of their serial numbers, or ``device.port``: "2,1,3"
 puts the left third of the picture on the second of them, and so on. "Which is which?"
 shows each screen its number.
+
+Each screen can also be a panel of its own (model ``jonsbo-zc360-screen``, 640x180, set up
+in Settings → Panels): ``device.port`` "1" to "3" says which, in the order of the USB ports
+they hang on in the ZC-360 (read from the bus without opening a screen, which Windows lets
+only one program do; a serial number is not), the first free one without it. The panels
+run in processes of their own, so the screens take turns through a lock file in the
+settings folder, still one after the other as above.
 """
 
 from __future__ import annotations
 
 import logging
+import sys
+import threading
 import time
-from typing import Any
+from collections.abc import Iterator
+from contextlib import contextmanager
+from typing import IO, Any
 
 from PIL import Image
 
@@ -48,6 +59,7 @@ log = logging.getLogger(__name__)
 VENDOR_ID = 0x43A8
 PRODUCT_ID = 0x0E61
 MODEL_ID = "jonsbo-zc360"
+SCREEN_MODEL_ID = "jonsbo-zc360-screen"  # one of the three as a panel of its own
 SCREENS = 3
 WIDTH, HEIGHT = 640, 180  # one screen, landscape
 
@@ -180,6 +192,97 @@ def present() -> bool:
         return False
 
 
+def all_free() -> bool:
+    """Whether a ZC-360 is on the USB bus with its three screens free, as a panel set to "auto"
+    takes it: not where the screens are panels of their own."""
+    try:
+        return sum(not place_taken(_place(d)) for d in _devices()) >= SCREENS
+    except DeviceError:
+        return False
+
+
+def _position(device: Any) -> tuple[Any, ...]:
+    """Where a screen hangs on the bus, without opening it: its bus and the ports on the way
+    (the ZC-360's own hub keeps them), then its address."""
+    try:
+        ports = tuple(device.port_numbers or ())
+    except Exception:  # noqa: BLE001 - a backend without them
+        ports = ()
+    return (getattr(device, "bus", 0) or 0, ports, getattr(device, "address", 0) or 0)
+
+
+def screen_number(port: str) -> int | None:
+    """Which screen a panel of one of them shows on (from 0): ``device.port`` "1" to "3";
+    None for the first free one."""
+    text = port.strip()
+    if text in {str(n) for n in range(1, SCREENS + 1)}:
+        return int(text) - 1
+    if text:
+        log.warning('device.port %r is no screen of the ZC-360 ("1" to "3"): ignored', port)
+    return None
+
+
+# -- the screens take turns: one is written at a time, across the panels' own processes ------
+
+_turn = threading.Lock()
+_turns: list[IO[bytes]] = []  # the lock file, opened once
+
+
+def _turns_file() -> IO[bytes] | None:
+    if not _turns:
+        from libre_panel.config import config_dir
+
+        try:
+            folder = config_dir()
+            folder.mkdir(parents=True, exist_ok=True)
+            _turns.append(open(folder / "zc360.lock", "a+b"))  # noqa: SIM115 - kept open
+        except OSError:
+            log.debug("ZC-360: no lock file for the screens' turns", exc_info=True)
+            return None
+    return _turns[0]
+
+
+if sys.platform == "win32":
+    import msvcrt
+
+    def _wait(handle: IO[bytes]) -> None:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)  # (tries for ten seconds)
+
+    def _done(handle: IO[bytes]) -> None:
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+
+else:
+    import fcntl
+
+    def _wait(handle: IO[bytes]) -> None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+
+    def _done(handle: IO[bytes]) -> None:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def one_at_a_time() -> Iterator[None]:
+    """While a screen is written, no other screen of the ZC-360 is, whichever panel's process
+    writes it. Without the lock file the writes go as they come."""
+    with _turn:
+        handle = _turns_file()
+        locked = False
+        if handle is not None:
+            try:
+                _wait(handle)
+                locked = True
+            except OSError:
+                log.debug("ZC-360: the screens' turn was not had", exc_info=True)
+        try:
+            yield
+        finally:
+            if locked and handle is not None:
+                _done(handle)
+
+
 class Screen:
     """One of the three: its USB device, claimed from open() to close()."""
 
@@ -231,9 +334,10 @@ class Screen:
         body = b"".join(writes)
         if body == self.sent:
             return 0
-        for chunk in writes:
-            self.device.write(ENDPOINT_OUT, chunk, WRITE_TIMEOUT_MS)
-        state = self.answer()
+        with one_at_a_time():
+            for chunk in writes:
+                self.device.write(ENDPOINT_OUT, chunk, WRITE_TIMEOUT_MS)
+            state = self.answer()
         self.sent = body if state == SHOWING else None
         if state == FIRST_FRAME:  # a controller just powered: on to showing frames
             self.command(CMD_COMMIT)
@@ -248,12 +352,19 @@ class Zc360Display(Display):
         super().__init__(config)
         self.model = model or get_model(MODEL_ID)
         self.screens: list[Screen] = []
-        self.order = screen_order(getattr(config, "port", "") or "")
+        port = getattr(config, "port", "") or ""
+        # one of the three as a panel of its own: which (None: the first free one)
+        self.single = self.model.id == SCREEN_MODEL_ID
+        self.which = screen_number(port) if self.single else None
+        self.order = [0] if self.single else screen_order(port)
 
     def describe(self) -> str:
         return self.model.label
 
     def open(self) -> None:
+        if self.single:
+            self._open_one()
+            return
         free = [d for d in _devices() if not place_taken(_place(d))]
         if len(free) < SCREENS:
             raise DeviceError(
@@ -281,6 +392,40 @@ class Zc360Display(Display):
         self.screens = screens
         log.info("ZC-360: screens %s", ", ".join(s.serial or "?" for s in screens))
 
+    def _open_one(self) -> None:
+        """One screen, a panel of its own: the one ``device.port`` names, else the first free."""
+        found = sorted(_devices(), key=_position)
+        if self.which is not None:
+            if self.which >= len(found):
+                raise DeviceError(t("the ZC-360's screen {n} is not on the USB bus",
+                                    n=self.which + 1))  # fmt: skip
+            device = found[self.which]
+            if place_taken(_place(device)):
+                raise DeviceError(t("another panel has the ZC-360's screen {n} open",
+                                    n=self.which + 1))  # fmt: skip
+        else:
+            free = [d for d in found if not place_taken(_place(d))]
+            if not free:
+                raise DeviceError(t("no screen of the ZC-360 is free on the USB bus"))
+            device = free[0]
+        screen = Screen(device, "")
+        if not take_place(screen.place):
+            raise DeviceError(t("another panel has a screen of the ZC-360 open"))
+        try:
+            screen.claim()
+            screen.serial = _serial(device)  # (its own now: for the log)
+            time.sleep(CLAIM_SETTLE_S)
+            self._sent(screen.command, CMD_INIT)
+            self._sent(screen.command, CMD_BRIGHTNESS, self._level(self.config.brightness))
+            self._sent(screen.command, CMD_ROTATION, 0)
+        except Exception:
+            screen.release()
+            leave_place(screen.place)
+            raise
+        self.screens = [screen]
+        log.info("ZC-360: screen %s alone (%s)",
+                 found.index(device) + 1, screen.serial or "?")  # fmt: skip
+
     @staticmethod
     def _level(percent: int) -> int:
         return max(0, min(100, int(percent)))
@@ -300,6 +445,9 @@ class Zc360Display(Display):
             raise DeviceError(t("the ZC-360 is not open"))
         if frame.width < frame.height:  # a portrait frame (the doctor's card): turned to fit
             frame = frame.transpose(Image.Transpose.ROTATE_270)
+        if self.single:  # (which is which: the panel's number comes in its frame)
+            self.counters.bytes += self._sent(self.screens[0].show, frame)
+            return
         if frame.size != (WIDTH * SCREENS, HEIGHT):
             frame = frame.resize((WIDTH * SCREENS, HEIGHT))
         if identify.showing():  # which is which: each screen its number

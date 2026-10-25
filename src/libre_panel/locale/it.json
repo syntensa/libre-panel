@@ -2656,7 +2656,17 @@
     "So that no other program gets those rights, it then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change.": "Perché nessun altro programma ottenga quei diritti, allora non carica cartelle di plugin dalla cartella utente e avvia programmi solo da cartelle che solo gli amministratori possono modificare.",
     "a video program Libre Panel may start with administrator rights": "un programma video che Libre Panel possa avviare con i diritti di amministratore",
     "the plugin {name}": "il plugin {name}",
-    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "con i diritti di amministratore Libre Panel non avvia il ffmpeg di video.ffmpeg: si trova in una cartella che altri programmi possono modificare"
+    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "con i diritti di amministratore Libre Panel non avvia il ffmpeg di video.ffmpeg: si trova in una cartella che altri programmi possono modificare",
+    "Back to one picture": "Di nuovo un'unica immagine",
+    "Each screen its own panel": "Ogni display un pannello a sé",
+    "Not yet seen on the hardware. The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "Non ancora provato sull'hardware. I tre display dello ZC-360 ricevono le immagini uno dopo l'altro, anche come pannelli a sé, perciò ciò che si muove si aggiorna meno spesso che su un singolo pannello. Nessun movimento fluido.",
+    "The ZC-360's screens are panels of their own. “Which is which?” shows their numbers on them.": "I display dello ZC-360 sono pannelli a sé. “Quale è quale?” mostra su di essi il loro numero.",
+    "The ZC-360's three screens show one picture. As panels of their own they need room for two more panels: take one out first.": "I tre display dello ZC-360 mostrano un'unica immagine. Come pannelli a sé serve spazio per altri due pannelli: prima toglierne uno.",
+    "The ZC-360's three screens show one picture. Each can be a panel of its own instead, with a theme of its own; they keep one brightness.": "I tre display dello ZC-360 mostrano un'unica immagine. Ognuno può invece essere un pannello a sé, con un tema proprio; la luminosità resta una sola.",
+    "another panel has the ZC-360's screen {n} open": "un altro pannello ha aperto il display {n} dello ZC-360",
+    "no screen of the ZC-360 is free on the USB bus": "nessun display dello ZC-360 è libero sul bus USB",
+    "one of the ZC-360's three screens under the fans as a panel of its own": "uno dei tre display dello ZC-360 sotto le ventole come pannello a sé",
+    "the ZC-360's screen {n} is not on the USB bus": "il display {n} dello ZC-360 non è sul bus USB"
   },
   "fields": {
     "agent": "agente",

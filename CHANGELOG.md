@@ -15,6 +15,14 @@
   without these rights, so they are seldom needed. Thanks to an outside review for pointing
   at it.
 
+**New**
+- **JONSBO ZC-360: each screen a panel of its own.** One click in Settings → Panels makes the
+  three fan screens three panels of 640×180 and back: each shows a theme of its own, the
+  header's panel switch picks the one Live shows and Design edits, and the three keep one
+  brightness. Seven versions of Lumen for one screen; the three start with CPU, GPU and
+  memory, each a lit ring beside its history. (Asked for in #13; not yet seen on the
+  hardware.)
+
 **Changes**
 - **30 frames a second by default**: the video mode runs at 30 instead of 50. On the panels it
   still looks smooth, and it asks far less of the PC: measured with two panels, 7.5 % of a

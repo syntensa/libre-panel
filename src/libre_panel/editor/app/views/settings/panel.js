@@ -35,6 +35,7 @@ import { ColourCard } from "./colours.js";
 import { NewPanel } from "./newpanel.js";
 import { Card, CommitField, Disclosure, SettingRow, Status, copyText, usePolling } from "./parts.js";
 import { StartScreenCard } from "./startscreen.js";
+import { Zc360Row, joinZc360, splitZc360, zc360Places } from "./zc360.js";
 
 /** Write settings, and ask about the panel again: what they change shows there. */
 async function change(changes) {
@@ -672,6 +673,17 @@ function MorePanelsCard() {
       });
     }),
   ];
+  // the ZC-360's three screens: one picture, or each a panel of its own (zc360.js)
+  const zc360 = zc360Places(
+    device.model !== "auto" ? device.model : info?.model?.id,
+    panels,
+    panels.map((_, n) => running.find((item) => item.index === n)?.model),
+  );
+  const rebuild = async (plan) => {
+    if (!plan) return;
+    await change(plan.changes);
+    if (plan.theme) store.set({ pages: await endpoints.setPage("normal", { theme: plan.theme }) });
+  };
   const place = (places) =>
     change({ "device.at": places[0], panels: panels.map((panel, n) => ({ ...panel, at: places[n + 1] })) });
   const lineUp = () => change({ "device.at": null, panels: panels.map((panel) => ({ ...panel, at: null })) });
@@ -701,6 +713,12 @@ function MorePanelsCard() {
           onClick=${() => newPanel({ model: model.id, ...(model.port ? { port: model.port } : {}) })}>${t("Set it up")}</button>
       </div>`,
     )}
+    <${Zc360Row}
+      places=${zc360}
+      room=${panels.length + 2 <= MORE_PANELS}
+      onSplit=${() => rebuild(splitZc360(zc360.whole, panels, MORE_PANELS)).catch(toastError)}
+      onJoin=${() => rebuild(joinZc360(zc360.screens, panels)).catch(toastError)}
+    />
     ${panels.length
       ? html`<${Arrangement} items=${arrangement} onPlace=${place} onReset=${lineUp}
           picture=${picture} onPicture=${choosePicture} onNoPicture=${() => change({ across: null })} />`

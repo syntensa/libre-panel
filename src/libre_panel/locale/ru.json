@@ -2656,7 +2656,17 @@
     "So that no other program gets those rights, it then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change.": "Чтобы эти права не получила другая программа, он тогда не загружает папки плагинов из вашей папки пользователя и запускает программы только из папок, которые могут изменять лишь администраторы.",
     "a video program Libre Panel may start with administrator rights": "видеопрограмма, которую Libre Panel может запустить с правами администратора",
     "the plugin {name}": "плагин {name}",
-    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "с правами администратора Libre Panel не запускает ffmpeg из video.ffmpeg: он лежит в папке, которую могут изменить другие программы"
+    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "с правами администратора Libre Panel не запускает ffmpeg из video.ffmpeg: он лежит в папке, которую могут изменить другие программы",
+    "Back to one picture": "Снова одно изображение",
+    "Each screen its own panel": "Каждый экран — отдельная панель",
+    "Not yet seen on the hardware. The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "Пока не проверялось на реальном устройстве. Три экрана ZC-360 получают изображения по очереди, и как отдельные панели тоже, поэтому движущееся обновляется реже, чем на одиночной панели. Плавного движения нет.",
+    "The ZC-360's screens are panels of their own. “Which is which?” shows their numbers on them.": "Экраны ZC-360 работают как отдельные панели. «Какая из них какая?» покажет на них их номера.",
+    "The ZC-360's three screens show one picture. As panels of their own they need room for two more panels: take one out first.": "Три экрана ZC-360 показывают одно изображение. Чтобы стать отдельными панелями, им нужно место ещё для двух панелей: сначала уберите одну.",
+    "The ZC-360's three screens show one picture. Each can be a panel of its own instead, with a theme of its own; they keep one brightness.": "Три экрана ZC-360 показывают одно изображение. Вместо этого каждый может быть отдельной панелью со своей темой; яркость остаётся общей.",
+    "another panel has the ZC-360's screen {n} open": "другая панель уже открыла экран {n} ZC-360",
+    "no screen of the ZC-360 is free on the USB bus": "на шине USB нет свободного экрана ZC-360",
+    "one of the ZC-360's three screens under the fans as a panel of its own": "один из трёх экранов ZC-360 под вентиляторами как отдельная панель",
+    "the ZC-360's screen {n} is not on the USB bus": "экрана {n} ZC-360 нет на шине USB"
   },
   "fields": {
     "agent": "агент",

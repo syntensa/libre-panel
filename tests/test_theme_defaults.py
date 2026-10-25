@@ -18,6 +18,7 @@ BARS = [
     "turing-8.8-usb",
     "turing-9.2-usb",
     "jonsbo-zc360",
+    "jonsbo-zc360-screen",  # 640x180: 3.6 times
     "jonsbo-ds916",
     "hongtai-1920x462",
     "lianli-universal-8.8",

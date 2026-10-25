@@ -2656,7 +2656,17 @@
     "So that no other program gets those rights, it then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change.": "Aby żaden inny program nie dostał tych uprawnień, nie wczytuje wtedy folderów wtyczek z twojego folderu użytkownika i uruchamia programy tylko z folderów, które mogą zmieniać wyłącznie administratorzy.",
     "a video program Libre Panel may start with administrator rights": "program wideo, który Libre Panel może uruchomić z uprawnieniami administratora",
     "the plugin {name}": "wtyczka {name}",
-    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "z uprawnieniami administratora Libre Panel nie uruchamia ffmpeg z video.ffmpeg: leży w folderze, który inne programy mogą zmienić"
+    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "z uprawnieniami administratora Libre Panel nie uruchamia ffmpeg z video.ffmpeg: leży w folderze, który inne programy mogą zmienić",
+    "Back to one picture": "Z powrotem jeden obraz",
+    "Each screen its own panel": "Każdy ekran osobnym panelem",
+    "Not yet seen on the hardware. The ZC-360's three screens take their pictures one after the other, also as panels of their own, so what moves changes less often than on a single panel. No smooth motion.": "Jeszcze nie sprawdzony na sprzęcie. Trzy ekrany ZC-360 dostają obrazy jeden po drugim, także jako osobne panele, więc to, co się rusza, zmienia się rzadziej niż na jednym panelu. Bez płynnego ruchu.",
+    "The ZC-360's screens are panels of their own. “Which is which?” shows their numbers on them.": "Ekrany ZC-360 są osobnymi panelami. „Który jest który?” pokazuje na nich ich numery.",
+    "The ZC-360's three screens show one picture. As panels of their own they need room for two more panels: take one out first.": "Trzy ekrany ZC-360 pokazują jeden obraz. Jako osobne panele potrzebują miejsca na dwa kolejne panele: najpierw usuń jeden.",
+    "The ZC-360's three screens show one picture. Each can be a panel of its own instead, with a theme of its own; they keep one brightness.": "Trzy ekrany ZC-360 pokazują jeden obraz. Zamiast tego każdy może być osobnym panelem z własnym motywem; jasność pozostaje wspólna.",
+    "another panel has the ZC-360's screen {n} open": "inny panel ma otwarty ekran {n} ZC-360",
+    "no screen of the ZC-360 is free on the USB bus": "żaden ekran ZC-360 nie jest wolny na magistrali USB",
+    "one of the ZC-360's three screens under the fans as a panel of its own": "jeden z trzech ekranów ZC-360 pod wentylatorami jako osobny panel",
+    "the ZC-360's screen {n} is not on the USB bus": "ekranu {n} ZC-360 nie ma na magistrali USB"
   },
   "fields": {
     "agent": "agent",
