@@ -429,13 +429,46 @@ class Tool:
         self.calls.append((command, options))
 
 
+class Clock:
+    """The provider's clock in the hands of a test: it stands still until ``advance`` moves it.
+    It counts how often the thread that looks after PresentMon has read it, once in each round of
+    its loop, so a test that waits for something that must NOT happen knows that the thread went
+    through its rounds meanwhile (``rounds``) instead of sleeping and hoping that it did."""
+
+    def __init__(self):
+        self.now = 100.0
+        self.looks = 0
+        self.changed = threading.Condition()
+
+    def __call__(self):
+        with self.changed:
+            if threading.current_thread().name == "sensors-presentmon":
+                self.looks += 1
+                self.changed.notify_all()
+            return self.now
+
+    def advance(self, seconds):
+        with self.changed:
+            self.now += seconds
+
+    def rounds(self, count):
+        """Wait until the thread has gone round ``count`` more times: the round before the last
+        was complete (what it saw was acted on) when the last began."""
+        with self.changed:
+            until = self.looks + count
+            assert self.changed.wait_for(lambda: self.looks >= until, timeout=30)
+
+
 @pytest.fixture
 def make():
     made = []
 
-    def build(*queued, job=None, **options):
+    def build(*queued, job=None, clock=None, **options):
         launcher, tool = Launcher(*queued), Tool()
-        provider = PresentMonProvider(options, popen=launcher, job=job or FakeJob(), tool=tool)
+        more = {"clock": clock} if clock is not None else {}
+        provider = PresentMonProvider(
+            options, popen=launcher, job=job or FakeJob(), tool=tool, **more
+        )
         made.append(provider)
         return provider, launcher, tool
 
@@ -578,7 +611,8 @@ def test_an_ended_presentmon_is_started_again_soon_when_no_game_runs(make):
 
 
 def test_while_a_game_runs_it_is_started_again_only_slowly(make, monkeypatch):
-    provider, launcher, _tool = make()
+    clock = Clock()
+    provider, launcher, _tool = make(clock=clock)
     theme = show("game.fps")
     presentmon.set_target("racer.exe")
     provider.read()
@@ -586,14 +620,18 @@ def test_while_a_game_runs_it_is_started_again_only_slowly(make, monkeypatch):
     feed_game(first, 10)
     assert wait_for(lambda: "game.frametime_peak" in provider.read())
     first.finish(1)
-    time.sleep(0.12)  # far longer than the quick restart, shorter than BLOCKED_SECONDS (0.25)
-    assert len(launcher.started) == 1
+    clock.rounds(4)  # it saw the end, and went on looking: the quick restart (RESTART_SECONDS) ...
+    clock.advance(presentmon.RESTART_SECONDS * 2)  # ... is long past, ...
+    clock.rounds(4)
+    assert len(launcher.started) == 1  # ... and the slow one (BLOCKED_SECONDS) is not
+    clock.advance(presentmon.BLOCKED_SECONDS)
     assert wait_for(lambda: len(launcher.started) == 2)  # but it comes
     assert theme is not None
 
 
 def test_a_session_the_anti_cheat_refuses_is_tried_again_slowly_and_said_once(make, caplog):
-    provider, launcher, _tool = make()
+    clock = Clock()
+    provider, launcher, _tool = make(clock=clock)
     theme = show("game.fps")
     with caplog.at_level("INFO", logger=presentmon.__name__):
         provider.read()
@@ -604,12 +642,17 @@ def test_a_session_the_anti_cheat_refuses_is_tried_again_slowly_and_said_once(ma
         )
         first.finish(1)
         assert wait_for(lambda: provider.blocked)
-        time.sleep(0.1)
-        assert len(launcher.started) == 1  # BLOCKED_SECONDS (0.25) has not passed
+        clock.rounds(3)
+        clock.advance(presentmon.BLOCKED_SECONDS / 2)
+        clock.rounds(3)
+        assert len(launcher.started) == 1  # BLOCKED_SECONDS has not passed
+        clock.advance(presentmon.BLOCKED_SECONDS)
         assert wait_for(lambda: len(launcher.started) == 2)
         second = launcher.processes[1]
         second.stderr.feed("error: failed to start trace session (access denied).")
         second.finish(1)
+        clock.rounds(3)  # (it saw the end by now: the slow wait began at this time)
+        clock.advance(presentmon.BLOCKED_SECONDS)
         assert wait_for(lambda: len(launcher.started) == 3)
     said = [r.message for r in caplog.records if "anti-cheat" in r.message]
     assert len(said) == 1  # the same trouble is said once
@@ -761,7 +804,8 @@ def test_while_windows_ends_the_session_no_presentmon_is_started(make, monkeypat
     not again when Windows ended it, nor to stop the recording session on the way out."""
     from libre_panel import winsession
 
-    provider, launcher, tool = make()
+    clock = Clock()
+    provider, launcher, tool = make(clock=clock)
     theme = show("game.fps")
     provider.read()
     first = first_process(launcher)
@@ -770,7 +814,9 @@ def test_while_windows_ends_the_session_no_presentmon_is_started(make, monkeypat
     monkeypatch.setattr(winsession, "ENDING", threading.Event())
     winsession.ENDING.set()
     first.finish(1)  # Windows ended it
-    time.sleep(0.1)  # far longer than the quick restart (RESTART_SECONDS is 0.01)
+    clock.rounds(4)  # it saw the end
+    clock.advance(presentmon.RESTART_SECONDS * 10)  # and the quick restart is long past
+    clock.rounds(4)
     assert len(launcher.started) == 1
     provider.close()
     assert tool.calls == [] and theme is not None

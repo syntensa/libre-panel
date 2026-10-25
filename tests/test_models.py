@@ -219,8 +219,22 @@ def test_built_in_layouts_keep_clear_of_hidden_strips():
         w, h = theme.width, theme.height
         visible = (hidden["left"], hidden["top"], w - hidden["right"], h - hidden["bottom"])
         full, boxes = Renderer(theme).render(snapshot, 1000.0)
+        # A widget the renderer gives no box was not drawn (it shows only with a reading the demo
+        # has not, a round report's, say): taking out all of them at once must leave the frame as
+        # it is, which holds for each of them, and costs one render, not one for each.
+        undrawn = {widget["id"] for widget in data["widgets"] if widget["id"] not in boxes}
+        if undrawn:
+            rest = copy.deepcopy(data)
+            rest["widgets"] = [x for x in rest["widgets"] if x["id"] not in undrawn]
+            frame = Renderer(parse_theme(rest, root)).render(snapshot, 1000.0)[0]
+            assert ImageChops.difference(full, frame).getbbox() is None, (
+                f"{entry['id']}: {sorted(undrawn)} have no box and still change the frame"
+            )
         for widget in data["widgets"]:
-            x, y, bw, bh = boxes.get(widget["id"], (0, 0, 0, 0))
+            if widget["id"] in undrawn:
+                checked += 1
+                continue
+            x, y, bw, bh = boxes[widget["id"]]
             left, top, right, bottom = visible
             box_inside = x >= left and y >= top and x + bw <= right and y + bh <= bottom
             if widget["type"] == "rect" or box_inside:

@@ -322,9 +322,9 @@ ruht, und wie viel von den Limits des Abos verbraucht ist.
 <br>
 
 Jedes mit einem bewegten Zeichen, dem Werkzeug bei der Arbeit und der Zeit, bis die Limits neu
-beginnen. Unter *Einstellungen → Dienste → KI-Aktivität* siehst du, was in den Einstellungen
-der Programme ergänzt wird, bevor etwas geschrieben wird, und nimmst es dort wieder heraus;
-nichts verlässt diesen PC ([KI-Aktivität](docs/CONFIGURATION.md#ai-activity)).
+beginnen. Unter *Einstellungen → Spielmodus und mehr → KI-Aktivität* siehst du, was in den
+Einstellungen der Programme ergänzt wird, bevor etwas geschrieben wird, und nimmst es dort
+wieder heraus; nichts verlässt diesen PC ([KI-Aktivität](docs/CONFIGURATION.md#ai-activity)).
 </details>
 
 ### Jede Panelgröße

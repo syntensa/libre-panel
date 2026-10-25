@@ -652,6 +652,153 @@ def test_theme_pictures_and_files(server, isolated_home):
     assert request(server, "GET", "/api/themes/mine/assets/..%2F..%2Fconfig.toml")[0] == 404
 
 
+class Drawing:
+    """The pictures of the gallery drawn by hand: every renderer waits at ``gate`` until the test
+    opens it. ``asked`` counts the requests that came to the door of the drawings (they wait there
+    for a turn) and ``left`` those that went through it, so a test knows where every request is
+    without waiting a moment and hoping."""
+
+    def __init__(self, state):
+        self.gate = threading.Event()
+        self.condition = threading.Condition()
+        self.running = self.peak = self.drawn = 0
+        self.asked = self.left = 0
+        self.state = state
+        self.turns(state.preview_slots)
+
+    def turns(self, turns):
+        """Count the requests at the door, ``turns``: the semaphore of the server's state."""
+        drawing = self
+        door = turns
+
+        class Door:
+            def __enter__(self):
+                with drawing.condition:
+                    drawing.asked += 1
+                    drawing.condition.notify_all()
+                door.acquire()
+
+            def __exit__(self, *exc):
+                door.release()
+                with drawing.condition:
+                    drawing.left += 1
+                    drawing.condition.notify_all()
+
+        self.state.preview_slots = Door()
+
+    def wait_for(self, what):
+        with self.condition:
+            assert self.condition.wait_for(what, timeout=30), "a request did not get there"
+
+    def renderer(self):
+        drawing = self
+
+        class SlowRenderer:
+            module_boxes: dict = {}
+
+            def __init__(self, theme, preview=False):
+                self.theme = theme
+
+            def render(self, snapshot):
+                from PIL import Image
+
+                with drawing.condition:
+                    drawing.running += 1
+                    drawing.peak = max(drawing.peak, drawing.running)
+                    drawing.drawn += 1
+                    drawing.condition.notify_all()
+                drawing.gate.wait(30)
+                with drawing.condition:
+                    drawing.running -= 1
+                return Image.new("RGB", (self.theme.width, self.theme.height)), []
+
+            def close(self):
+                pass
+
+        return SlowRenderer
+
+    def ask(self, widths):
+        """Requests for the pictures of a theme in these widths, each in a thread of its own;
+        the call it returns joins them and gives their statuses."""
+        statuses = []
+
+        def one(width):
+            statuses.append(request(self.port, "GET", f"/api/themes/studio/preview?w={width}")[0])
+
+        threads = [threading.Thread(target=one, args=(w,), daemon=True) for w in widths]
+        for thread in threads:
+            thread.start()
+
+        def join():
+            for thread in threads:
+                thread.join(30)
+            return statuses
+
+        return join
+
+
+@pytest.fixture
+def drawing(monkeypatch):
+    from libre_panel.editor import server as editor
+
+    srv = make_server(port=0)
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+    drawing = Drawing(srv.editor_state)
+    drawing.port = srv.server_address[1]
+    monkeypatch.setattr(editor, "Renderer", drawing.renderer())
+    yield drawing
+    drawing.gate.set()  # (a test that failed must not leave its requests waiting)
+    srv.shutdown()
+    srv.server_close()
+    srv.editor_state.close()
+
+
+def test_a_theme_opens_while_the_pictures_of_the_gallery_are_being_drawn(drawing):
+    """Start asks for a screenful of pictures at once, and the theme that is clicked to open
+    must not wait for them: they are drawn a few at a time, the others wait for a turn, and
+    what opens the theme needs neither a turn nor anything they hold."""
+    from libre_panel.editor.server import preview_slot_count
+
+    slots = preview_slot_count()
+    assert slots >= 1
+    widths = range(100, 100 + slots + 4)  # (every width is a picture of its own)
+    join = drawing.ask(widths)
+    drawing.wait_for(lambda: drawing.running == slots and drawing.asked == len(widths))
+    # every turn is taken and the others wait: the theme is there all the same
+    status, data = request(drawing.port, "GET", "/api/themes/spur-ii")
+    assert status == 200 and data["id"] == "spur-ii" and data["theme"]["widgets"]
+    assert request(drawing.port, "GET", "/api/themes")[0] == 200
+    assert drawing.running == slots and not drawing.gate.is_set()  # (still drawing)
+    drawing.gate.set()
+    assert join() == [200] * len(widths)
+    assert drawing.peak == slots  # never more than the turns at once
+    assert drawing.drawn == len(widths)
+
+
+def test_a_picture_is_not_drawn_for_a_page_that_has_left_and_not_twice(drawing):
+    """A page that is left closes the connections of its pictures: the one that waited for its
+    turn is not drawn. A picture that is asked for twice meanwhile is drawn once."""
+    import socket
+
+    drawing.turns(threading.BoundedSemaphore(1))  # (a single turn: the others wait for it)
+    first = drawing.ask([320])
+    drawing.wait_for(lambda: drawing.running == 1)
+    again = drawing.ask([320])  # (the same picture, while it is being drawn)
+    drawing.wait_for(lambda: drawing.asked == 2)
+    gone = socket.create_connection(("127.0.0.1", drawing.port), timeout=10)
+    gone.sendall(
+        f"GET /api/themes/studio/preview?w=777 HTTP/1.1\r\nHost: 127.0.0.1:{drawing.port}\r\n"
+        f"{access.HEADER}: {token_of(drawing.port)}\r\n\r\n".encode()
+    )
+    drawing.wait_for(lambda: drawing.asked == 3)
+    gone.close()  # the page leaves
+    drawing.gate.set()
+    drawing.wait_for(lambda: drawing.left == 3)  # all three went through the turn
+    assert first() == again() == [200]
+    assert drawing.drawn == 1  # the picture drawn once, nothing for the page that left
+
+
 def test_the_theme_list_names_each_theme(server, isolated_home):
     """Lists and galleries show a theme's name and panel, from the list itself."""
     (isolated_home / "themes" / "broken").mkdir(parents=True)

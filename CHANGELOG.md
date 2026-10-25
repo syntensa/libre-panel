@@ -3,6 +3,14 @@
 ## Unreleased
 
 **Fixes**
+- **A theme opens at once from the gallery**: the previews of the gallery take two turns at a
+  time and go to the browser last, so Edit opens Design in a fifth of a second instead of
+  waiting for every picture (1.4 s and more before, measured).
+- **Japanese on the panel in Japanese glyphs on Linux**: the panel's fallback fonts follow the
+  app's language, Japanese faces first for Japanese, Chinese ones for Chinese.
+- **"Load on this PC"** is the Diagnose card's title (German "Auslastung dieses PCs"), and
+  Settings → Sensors names the sensor service's version. The README and the configuration
+  guide name *Settings → Game mode and more* where the AI activity and the notices are.
 - **"Automatic" chose x264 where the graphics card's encoder works**: the test of an encoder
   fed it 64×64 pictures, which a card's encoder may refuse although it encodes the panel's
   pictures fine (the experiment's AMD step ran, its "auto" step had x264). The test now runs

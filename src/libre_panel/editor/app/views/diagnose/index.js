@@ -538,7 +538,7 @@ function LoadCard() {
   return html`<section class="settings-card diagnose-load" aria-labelledby="diagnose-load-title" ref=${card}>
     <div class="settings-card-head split">
       <div>
-        <h2 id="diagnose-load-title">${t("Load")}</h2>
+        <h2 id="diagnose-load-title">${t("Load on this PC")}</h2>
         <p>${t("What Libre Panel costs this PC now: each of its processes, the threads of the main one and the sensor service's rounds, measured while this card is on screen.")}</p>
       </div>
     </div>

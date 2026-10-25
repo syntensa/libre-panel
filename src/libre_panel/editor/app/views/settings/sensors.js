@@ -311,7 +311,11 @@ async function removeService() {
 
 function SensorService() {
   const info = useStore((s) => s.unlockInfo);
+  const states = useStore((s) => s.sourceStates);
   if (!info || info.platform !== "win32") return null;
+  // the version the running service said (the sources' states: Sources polls them)
+  const lhm = (states?.sources || []).find((source) => source.name === "librehardwaremonitor");
+  const version = lhm?.status?.version || "";
   const busy = Boolean(info.job?.running);
   const service = info.service;
   let actions = null;
@@ -343,6 +347,7 @@ function SensorService() {
     >
       ${actions}
     <//>
+    ${version ? html`<div class="settings-row" data-service-version><span class="settings-row-hint">${t("Sensor service {version}", { version })}</span></div>` : null}
     <${SettingRow} title=${t("PawnIO driver")} hint=${t("Signed and open source: the service reads the CPU and the mainboard through it.")} status=${driver} />
     ${rates
       ? html`<${SettingRow} title=${t("Game frame rates")} hint=${t("Recording them needs membership in Performance Log Users, which unlocking gives you.")} status=${rates} />`

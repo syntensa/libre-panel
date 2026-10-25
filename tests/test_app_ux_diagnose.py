@@ -189,11 +189,23 @@ class Load:
         route.fulfill(status=200, content_type="application/json", body=json.dumps(self.answer))
 
 
+def test_the_load_card_has_a_title_of_its_own_that_german_words_as_utilisation(app_url):  # noqa: F811
+    """The card is titled by what it measures, not by "Load" (a word that German has twice: the
+    load of the processor is its Auslastung, a burden its Last)."""
+    from libre_panel import i18n
+
+    i18n.set_language("de")
+    with browser_page(app_url, "live/diagnose", routes={"**/api/load": Load(LOAD).route}) as page:
+        expect(page.locator(".diagnose-load #diagnose-load-title")).to_have_text(
+            "Auslastung dieses PCs"
+        )
+
+
 def test_the_load_card_shows_what_libre_panel_costs_and_copies_it_as_text(app_url):  # noqa: F811
     load = Load(LOAD)
     with browser_page(app_url, "live/diagnose", routes={"**/api/load": load.route}) as page:
         card = page.locator(".diagnose-load")
-        expect(card.locator("#diagnose-load-title")).to_have_text("Load")
+        expect(card.locator("#diagnose-load-title")).to_have_text("Load on this PC")
         expect(card.locator('[data-load="cpu"]')).to_have_text("5.1 %")
         expect(card.locator('[data-load="memory"]')).to_have_text("735 MB")
         expect(card.locator(".load-headline")).to_contain_text(

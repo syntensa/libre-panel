@@ -317,8 +317,8 @@ and how much of the plan's limits is used.
 <br>
 
 Each with a moving sign, the tool at work and the time until the limits begin anew.
-*Settings → Services → AI activity* shows what it adds to the programs' settings before it
-writes, and takes it out again; nothing leaves this PC
+*Settings → Game mode and more → AI activity* shows what it adds to the programs' settings
+before it writes, and takes it out again; nothing leaves this PC
 ([AI activity](docs/CONFIGURATION.md#ai-activity)).
 </details>
 

@@ -495,8 +495,10 @@ class PresentMonProvider(SensorProvider):
         popen: Callable[..., Any] = subprocess.Popen,
         job: Any = None,
         tool: Callable[..., Any] | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         super().__init__(options)
+        self._clock = clock  # seconds that only go forward (a test moves them by hand)
         self.path = str(self.options.get("path", ""))
         self._counter = FrameCounter()
         self._lock = threading.Lock()
@@ -522,7 +524,7 @@ class PresentMonProvider(SensorProvider):
             return {}
         self._start()
         with self._lock:
-            return self._counter.readings(time.monotonic())
+            return self._counter.readings(self._clock())
 
     def close(self) -> None:
         self._stop.set()
@@ -552,7 +554,7 @@ class PresentMonProvider(SensorProvider):
         idle_since: float | None = None
         try:
             while not self._stop.is_set():
-                now = time.monotonic()
+                now = self._clock()
                 if wanted("game."):
                     idle_since = None
                 elif idle_since is None:
@@ -599,7 +601,7 @@ class PresentMonProvider(SensorProvider):
             return None
         self._process, self._program = process, program
         self._bind_to_job(process)
-        run = _Run(process, time.monotonic())
+        run = _Run(process, self._clock())
         for target, name in ((self._read_frames, "frames"), (self._read_errors, "errors")):
             reader = threading.Thread(
                 target=target, args=(run,), name=f"presentmon-{name}", daemon=True
@@ -638,7 +640,7 @@ class PresentMonProvider(SensorProvider):
                 frame = columns.frame_of(row)
                 if frame is not None:
                     with self._lock:
-                        self._counter.add(frame[0], frame[1], time.monotonic(), frame[2])
+                        self._counter.add(frame[0], frame[1], self._clock(), frame[2])
         except (OSError, ValueError, csv.Error):  # the pipe closed under us
             pass
 

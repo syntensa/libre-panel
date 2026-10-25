@@ -45,7 +45,7 @@ function ThemeList({ onClose }) {
             if (versionFor(theme.id) !== current) openTheme(theme.id);
           }}
         >
-          <img src=${endpoints.previewUrl(versionFor(theme.id), 240)} alt="" loading="lazy" />
+          <img src=${endpoints.previewUrl(versionFor(theme.id), 240)} alt="" loading="lazy" fetchpriority="low" />
           <span class="theme-row-text">
             <span class="theme-row-name">${theme.name || theme.id}</span>
             <span class="theme-row-note">${theme.id === active ? t("shown on the panel") : sourceText(theme)} · <span class="mono">${theme.id}</span></span>

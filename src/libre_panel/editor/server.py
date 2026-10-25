@@ -14,7 +14,9 @@ import io
 import json
 import logging
 import math
+import os
 import re
+import select
 import socket
 import sys
 import threading
@@ -363,6 +365,18 @@ def _plugin_specs() -> dict[str, Any]:
     }
 
 
+def preview_slot_count() -> int:
+    """How many pictures for lists and libraries (a theme's, a building block's) are drawn at
+    once: two, fewer on a PC with fewer cores. A page asks for a screenful of them together, and
+    drawing them all at once would take the processor from the request that matters, the theme
+    that was just clicked to open."""
+    try:
+        cores = len(os.sched_getaffinity(0))
+    except (AttributeError, OSError):  # (Windows and macOS have no such call)
+        cores = os.cpu_count() or 1
+    return max(1, min(2, cores - 1))
+
+
 class EditorState:
     def __init__(self, config_path: Path | None = None, controls: Any = None) -> None:
         self.config_path = config_path
@@ -372,7 +386,10 @@ class EditorState:
         self.pages: dict[str, Any] = {}  # plugin editor pages, created on first use
         self.previews: dict[tuple, bytes] = {}  # pictures of saved themes
         self.last_request: float | None = None  # when a page of the app last asked (monotonic)
-        self.previews_lock = threading.Lock()
+        self.previews_lock = threading.Lock()  # (held for a moment: the cache, never a drawing)
+        # the drawings of those pictures wait here for their turn; the requests that are
+        # answered at once (a theme to open, its live picture) never wait for it
+        self.preview_slots = threading.BoundedSemaphore(preview_slot_count())
         self.restart = app_settings.Restart()  # settings the panel loop takes in when it restarts
         self.start_screen_jobs: Any = None  # the panel's own screens (a test puts a fake panel)
         self.news = News(config_path)  # whom Start tells what is new (news.py)
@@ -633,6 +650,25 @@ def _panel_s(config: Config, n: int, written: dict[str, Any]) -> bool:
     return bool(model) and written.get("model") == model
 
 
+def _draw_theme(
+    theme: Any, width: int, accent: str | None, symbols: str, chosen: tuple[tuple[str, bool], ...]
+) -> bytes:
+    """A theme as a PNG ``width`` wide at most, as the panel shows it with those choices."""
+    renderer = Renderer(with_accent(theme, accent), preview=True)
+    renderer.symbols = symbols
+    renderer.switches = dict(chosen)
+    try:
+        frame, _boxes = renderer.render(demo_snapshot(fixed_time=1_700_000_000))
+    finally:
+        renderer.close()
+    frame = frame.convert("RGB")
+    if frame.width > width:
+        frame = frame.resize((width, max(1, round(frame.height * width / frame.width))))
+    buffer = io.BytesIO()
+    frame.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
 class EditorHandler(BaseHTTPRequestHandler):
     server_version = f"LibrePanelEditor/{__version__}"
     state: EditorState
@@ -885,32 +921,41 @@ class EditorHandler(BaseHTTPRequestHandler):
         chosen = self.state.chosen_switches(theme_id)  # (as the panel shows it)
         accent = self.state.accent()
         key = (theme_id, stamp, width, i18n.language(), self.state.symbols(), chosen, accent)
-        with self.state.previews_lock:
-            png = self.state.previews.get(key)
+        png = self._kept_preview(key)
         if png is None:
-            try:
-                theme = load_theme(folder)
-            except ThemeError as exc:
-                return self._error(str(exc), HTTPStatus.NOT_FOUND)
-            renderer = Renderer(with_accent(theme, accent), preview=True)
-            renderer.symbols = self.state.symbols()
-            renderer.switches = dict(chosen)
-            try:
-                frame, _boxes = renderer.render(demo_snapshot(fixed_time=1_700_000_000))
-            finally:
-                renderer.close()
-            frame = frame.convert("RGB")
-            if frame.width > width:
-                frame = frame.resize((width, max(1, round(frame.height * width / frame.width))))
-            buffer = io.BytesIO()
-            frame.save(buffer, format="PNG")
-            png = buffer.getvalue()
-            with self.state.previews_lock:
-                cache = self.state.previews
-                while len(cache) >= 48:  # the oldest go first
-                    cache.pop(next(iter(cache)))
-                cache[key] = png
+            # A page asks for a screenful of these at once: they are drawn two at a time
+            # (preview_slots), the others wait for a turn, and a request that is answered at
+            # once (the theme to open) does not wait for any of them.
+            with self.state.preview_slots:
+                png = self._kept_preview(key)  # (drawn while this one waited)
+                if png is None:
+                    if self._client_gone():  # the page left: nobody waits for this picture
+                        return
+                    try:
+                        theme = load_theme(folder)
+                    except ThemeError as exc:
+                        return self._error(str(exc), HTTPStatus.NOT_FOUND)
+                    png = _draw_theme(theme, width, accent, self.state.symbols(), chosen)
+                    with self.state.previews_lock:
+                        cache = self.state.previews
+                        while len(cache) >= 48:  # the oldest go first
+                            cache.pop(next(iter(cache)))
+                        cache[key] = png
         self._send(200, png, "image/png")
+
+    def _kept_preview(self, key: tuple) -> bytes | None:
+        with self.state.previews_lock:
+            return self.state.previews.get(key)
+
+    def _client_gone(self) -> bool:
+        """Whether the browser closed this request's connection (a page it left, a picture it
+        no longer needs): then there is nobody to draw for. An answer is not sent in the
+        middle of a request, and a client that is still there has sent nothing more."""
+        try:
+            ready, _, _ = select.select([self.connection], [], [], 0)
+            return bool(ready) and self.connection.recv(1, socket.MSG_PEEK) == b""
+        except (OSError, ValueError):
+            return True
 
     def _fan_look(self, query: dict[str, list[str]]) -> None:
         """``GET /api/fan-look?look=libre&paint=own``: a fan of that look as a picture
@@ -2065,12 +2110,13 @@ class EditorHandler(BaseHTTPRequestHandler):
             except ThemeError as exc:
                 log.debug("no preview for %s: %s", preset["id"], exc)
                 continue
-            renderer = Renderer(theme, preview=True)
-            renderer.symbols = self.state.symbols()
-            try:
-                frame, _boxes = renderer.render(snapshot)
-            finally:
-                renderer.close()
+            with self.state.preview_slots:  # (a turn at a time, as the themes' pictures)
+                renderer = Renderer(theme, preview=True)
+                renderer.symbols = self.state.symbols()
+                try:
+                    frame, _boxes = renderer.render(snapshot)
+                finally:
+                    renderer.close()
             buffer = io.BytesIO()
             frame.save(buffer, format="PNG")
             previews[preset["id"]] = base64.b64encode(buffer.getvalue()).decode("ascii")
@@ -2404,13 +2450,14 @@ class EditorHandler(BaseHTTPRequestHandler):
                 )  # fmt: skip
             except ThemeError as exc:
                 return self._error(str(exc))
-            renderer = Renderer(theme, preview=True)
-            renderer.symbols = self.state.symbols()
-            try:
-                frame, _boxes = renderer.render(snapshot)
-                x, y, w, h = renderer.module_boxes["m"]
-            finally:
-                renderer.close()
+            with self.state.preview_slots:  # (a turn at a time, as the themes' pictures)
+                renderer = Renderer(theme, preview=True)
+                renderer.symbols = self.state.symbols()
+                try:
+                    frame, _boxes = renderer.render(snapshot)
+                    x, y, w, h = renderer.module_boxes["m"]
+                finally:
+                    renderer.close()
             buffer = io.BytesIO()
             frame.crop((x, y, x + w, y + h)).save(buffer, format="PNG")
             previews[kind] = base64.b64encode(buffer.getvalue()).decode("ascii")

@@ -141,7 +141,7 @@ function StepRow({ row, index, count, current, options, onChange, onMove, onRemo
   const short = !(seconds >= shortest);
   return html`<li class=${`sequence-step${current ? " current" : ""}${short ? " invalid" : ""}`} data-step=${index}>
     <span class="sequence-index">${index + 1}</span>
-    <span class="quick-theme-picture"><img src=${endpoints.previewUrl(versionFor(row.theme), 320)} alt="" loading="lazy" decoding="async" /></span>
+    <span class="quick-theme-picture"><img src=${endpoints.previewUrl(versionFor(row.theme), 320)} alt="" loading="lazy" fetchpriority="low" decoding="async" /></span>
     <${Select} class="sequence-theme" label=${t("Theme of screen {n}", { n: index + 1 })} value=${row.theme} options=${options}
       onChange=${(theme) => onChange({ ...row, theme })} />
     <span class="sequence-time">

@@ -12,6 +12,7 @@ import pytest
 from fake_fonts import make_collection, make_font
 from PIL import Image, ImageDraw, ImageFont, features
 
+from libre_panel import i18n
 from libre_panel.fonts import builtin_font_path, fallback
 from libre_panel.fonts.fallback import (
     FallbackFont,
@@ -306,6 +307,141 @@ def test_fontconfig_answers_with_files_and_indexes(monkeypatch):
     assert seen[-1][-1] == ":charset=1f600:weight=bold"
     monkeypatch.setattr("shutil.which", lambda name: None)  # no fontconfig: no answer
     assert fallback._fontconfig("中", False) == []
+
+
+def test_the_east_asian_fonts_of_the_language_come_first_for_the_ideographs(tmp_path):
+    """Japanese and Chinese draw the same ideographs in forms of their own, and a font has one
+    language's: a Chinese font listed before a Japanese one drew Japanese text in Chinese forms.
+    The fonts of the app's language come first, for those characters only."""
+    chinese = make_font(tmp_path / "chinese.ttf", "直骨Ж")
+    chinese_bold = make_font(tmp_path / "chinese-bold.ttf", "直骨Ж")
+    japanese = make_font(tmp_path / "japanese.ttf", "直骨あЖ")
+    japanese_bold = make_font(tmp_path / "japanese-bold.ttf", "直骨あЖ")
+    zh, ja = (chinese, chinese_bold, 0), (japanese, japanese_bold, 0)
+    language = ["en"]
+    fonts = Fallbacks([zh, ja], language=lambda: language[0], scripts={"ja": [ja], "zh": [zh]})
+    assert fonts.find("直") == (str(chinese), 0)  # no language of those: the order of the list
+    language[0] = "ja"
+    assert fonts.find("直") == (str(japanese), 0)
+    assert fonts.find("直", bold=True) == (str(japanese_bold), 0)
+    assert fonts.find("骨") == (str(japanese), 0) and fonts.find("あ") == (str(japanese), 0)
+    assert fonts.find("Ж") == (str(chinese), 0)  # what is no ideograph keeps the order of the list
+    language[0] = "zh"  # the language was changed in the app: the next text takes it in
+    assert fonts.find("直") == (str(chinese), 0) and fonts.find("直", True) == (
+        str(chinese_bold),
+        0,
+    )
+    language[0] = "de"
+    assert fonts.find("直") == (str(chinese), 0)
+    language[0] = "ja"
+    assert fonts.find("直") == (str(japanese), 0)  # (and what was found for a language is kept)
+    assert Fallbacks([zh, ja]).find("直") == (str(chinese), 0)  # without a language: as it was
+
+
+def test_the_face_of_the_language_in_a_collection_is_the_one(tmp_path):
+    """Noto Sans CJK is one file of faces: the first is Japanese, the third Simplified Chinese."""
+    noto = make_collection(tmp_path / "noto.ttc", "直", "直", "直", "直", "直")
+    zenhei = make_font(tmp_path / "zenhei.ttf", "直")
+    language = ["ja"]
+    fonts = Fallbacks(
+        [(noto, None, 0), (zenhei, None, 0)],
+        language=lambda: language[0],
+        scripts={"ja": [(noto, None, 0)], "zh": [(noto, None, 2), (zenhei, None, 0)]},
+    )
+    assert fonts.find("直") == (str(noto), 0)
+    language[0] = "zh"
+    assert fonts.find("直") == (str(noto), 2)
+
+
+def japanese_machine(tmp_path, monkeypatch, with_noto: bool):
+    """The folders of a Linux PC with a Chinese font (WenQuanYi) and a Japanese one (IPAGothic),
+    and Noto Sans CJK if asked: every font has the ideographs."""
+    wqy, ipa = tmp_path / "wqy", tmp_path / "ipafont-gothic"
+    wqy.mkdir()
+    ipa.mkdir()
+    make_collection(wqy / "wqy-zenhei.ttc", "直")
+    make_font(ipa / "ipag.ttf", "直")
+    folders = [wqy, ipa]
+    if with_noto:
+        noto = tmp_path / "noto-cjk"
+        noto.mkdir()
+        make_collection(noto / "NotoSansCJK-Regular.ttc", "直", "直", "直", "直", "直")
+        folders.append(noto)
+    monkeypatch.setattr(fallback, "_FOLDERS", tuple(str(folder) for folder in folders))
+
+
+@pytest.mark.parametrize("language, noto, wanted", [
+    ("ja", False, ("ipafont-gothic/ipag.ttf", 0)),
+    ("zh", False, ("wqy/wqy-zenhei.ttc", 0)),
+    ("de", False, ("wqy/wqy-zenhei.ttc", 0)),  # (as it was: the order of the table)
+    ("ja", True, ("noto-cjk/NotoSansCJK-Regular.ttc", 0)),
+    ("zh", True, ("noto-cjk/NotoSansCJK-Regular.ttc", 2)),
+])  # fmt: skip
+def test_on_linux_the_fonts_of_the_apps_language_draw_the_ideographs(
+    tmp_path, monkeypatch, language, noto, wanted
+):
+    japanese_machine(tmp_path, monkeypatch, noto)
+    monkeypatch.setattr(fallback, "_fontconfig", lambda ch, bold: [])
+    found = discover("linux", {})
+    i18n.set_language(language)
+    path, index = found.find("直")
+    assert (Path(path).relative_to(tmp_path).as_posix(), index) == wanted
+    for other in ("ja", "zh"):  # the language can be changed while the app runs
+        i18n.set_language(other)
+        assert found.variant() == other
+
+
+@pytest.mark.parametrize("language, wanted", [
+    ("ja", "YuGothR.ttc"), ("zh", "msyh.ttc"), ("de", "YuGothR.ttc"),  # (de: the table's order)
+])  # fmt: skip
+def test_on_windows_the_fonts_of_the_apps_language_draw_the_ideographs(tmp_path, language, wanted):
+    folder = tmp_path / "Fonts"
+    folder.mkdir()
+    make_font(folder / "segoeui.ttf", "x")
+    for name in ("YuGothR.ttc", "msyh.ttc"):
+        make_font(folder / name, "直")
+    found = discover("win32", {"WINDIR": str(tmp_path)})
+    i18n.set_language(language)
+    assert Path(found.find("直")[0]).name == wanted
+
+
+def test_the_text_of_a_face_follows_the_language_of_the_app(tmp_path, use):
+    """A face that drew a text keeps how it laid it out, until the language is another."""
+    wide = make_font(tmp_path / "japanese.ttf", "直", advance=1000)
+    narrow = make_font(tmp_path / "chinese.ttf", "直", advance=500)
+    language = ["ja"]
+    chain = use(
+        Fallbacks(
+            [(narrow, None, 0), (wide, None, 0)],
+            language=lambda: language[0],
+            scripts={"ja": [(wide, None, 0)], "zh": [(narrow, None, 0)]},
+        )
+    )
+    font = face("Barlow-Medium", 40, chain)
+    assert font.getlength("直") == 40 and font.getlength("直") == 40  # (the second one is kept)
+    language[0] = "zh"
+    assert font.getlength("直") == 20
+
+
+def test_fontconfig_is_asked_for_the_language_of_the_app_for_the_ideographs(monkeypatch):
+    seen = []
+
+    def run(command, **options):
+        seen.append(command[-1])
+        return types.SimpleNamespace(stdout="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/fc-match")
+    for language, ch, bold, wanted in [
+        ("en", "中", False, ":charset=4e2d"),
+        ("ja", "中", False, ":charset=4e2d:lang=ja"),
+        ("zh", "中", True, ":charset=4e2d:lang=zh-cn:weight=bold"),
+        ("ja", "😀", False, ":charset=1f600"),  # (no ideograph: the language has no say)
+        ("de", "ｱ", False, ":charset=ff71"),
+    ]:
+        i18n.set_language(language)
+        fallback._fontconfig(ch, bold)
+        assert seen[-1] == wanted, language
 
 
 def test_the_fonts_of_the_system_are_found_once_and_can_be_replaced(monkeypatch, use):

@@ -442,9 +442,9 @@ def test_a_process_that_cannot_be_measured_leaves_out_only_itself():
     assert machine.looked == 1  # not asked again at every sample, only every LOOK_S
 
 
-def test_the_pages_get_the_status_of_libre_hardware_monitor_without_its_times():
-    """The sources' states (Settings → Sensors, the console's pages) stay as they were: the round
-    times are for the load only."""
+def test_the_pages_get_the_status_of_libre_hardware_monitor_with_its_version_without_its_times():
+    """The sources' states (Settings → Sensors, the console's pages) bring the version of the
+    sensor service, which Settings says; the round times are for the load only."""
     from types import SimpleNamespace
 
     from libre_panel.plugins.pages import _status_of
@@ -454,4 +454,4 @@ def test_the_pages_get_the_status_of_libre_hardware_monitor_without_its_times():
     )
     said = _status_of(SimpleNamespace(status=lambda: status))
     assert said == {"mode": "service", "elevated": True, "ring0": True, "pawnio": "2.0.1",
-                    "error": "", "service": ""}  # fmt: skip
+                    "error": "", "service": "", "version": "0.7.1"}  # fmt: skip
