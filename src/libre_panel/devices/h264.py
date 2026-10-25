@@ -182,8 +182,8 @@ class RateControl:
     step up after :attr:`CALM_S` without that, as long as the step above did not fail
     lately: a failed step is held off for :attr:`HOLD_S`, twice as long each time it fails
     again. :meth:`judge` is called with the run's counters as often as wanted (every
-    frame); it answers with the new rate when one is due, else ``None``. The driver starts
-    ffmpeg anew with the new rate.
+    frame); it answers with the new rate when one is due, else ``None``. The driver switches
+    to a new ffmpeg at the new rate.
     """
 
     WINDOW_S = 10.0

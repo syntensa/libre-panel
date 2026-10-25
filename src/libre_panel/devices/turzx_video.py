@@ -331,7 +331,9 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
     sender for the 121 blocks. When the panel is slow, the small queue
     between reader and sender fills and ffmpeg's pipe slows the render loop
     down: fewer frames, never torn ones. A stopped ffmpeg is restarted; a USB
-    error reconnects and starts the video again.
+    error reconnects and starts the video again. A planned change of ffmpeg (a
+    step of the bit rate) starts the new one beside the old one, whose pictures
+    the panel shows until the new one has its first (:meth:`_switch`).
     """
 
     name = "turzx-video"
@@ -339,6 +341,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
     RESTARTS_PER_MINUTE = 3
     STALL_S = 2.0  # ffmpeg taking no frames this long, while the panel waits for pictures
     START_S = 15.0  # the same until its first picture: a cold start (virus scanner, busy PC)
+    SWITCH_S = 3.0  # a planned switch: this long for the new ffmpeg's first picture
+    SWITCH_HOLD_S = 60.0  # a switch that did not come about waits this long to be tried again
 
     def __init__(self, config, model: PanelModel | None = None) -> None:
         super().__init__(config, model)
@@ -363,7 +367,16 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self._sender: threading.Thread | None = None
         self._stop_sender = threading.Event()
         self._error: Exception | None = None
-        self._generation = 0
+        self._generation = 0  # the stream whose pictures go to the panel
+        self._streams = 0  # the last generation given to an encoder
+        # A switch under way: the old ffmpeg, which the panel shows until the new one (encoder)
+        # has its first picture, and the new one's generation until then. The stream a switch
+        # ended, whose last pictures are no drops. The lock decides who comes first: the new
+        # one's first picture or the end of its time.
+        self._leaving: Encoder | None = None
+        self._coming = self._quiet = 0
+        self._switch_began = self._switch_held = 0.0
+        self._handing = threading.Lock()
         self._restarts: list[float] = []
         self._last_frame: Image.Image | None = None
 
@@ -428,8 +441,10 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         timing.raise_priority()  # a busy PC must not starve the panel (SPUR II)
         while not stop.is_set():
             try:
-                picture = self._pictures.get(timeout=0.2)
+                generation, picture = self._pictures.get(timeout=0.2)
             except queue.Empty:
+                continue
+            if generation == self._quiet:  # a switch's old stream: none after the new one's first
                 continue
             try:
                 session.send(picture)
@@ -441,8 +456,11 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
 
     # -- encoder ---------------------------------------------------------------
 
-    def _start_encoder(self, size: tuple[int, int]) -> None:
-        self._stop_encoder()
+    def _start_encoder(self, size: tuple[int, int], beside: bool = False) -> None:
+        """A new ffmpeg for pictures of ``size``; ``beside``: next to the one running now,
+        which goes on until the new one has its first picture (:meth:`_switch`)."""
+        if not beside:
+            self._stop_encoder()
         rotate = 270 if orientation_of(*size) == "landscape" else 180  # as to_native
         settings = self.settings
         model_id = self.model.id if self.model else ""
@@ -462,10 +480,9 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             if self.rate is None:
                 self.rate = RATES[key] = RateControl(auto_rate(settings, size))
             settings = replace(settings, maxrate=rate_text(self.rate.rate))
-        self.counters.bit_rate = mbit(settings.maxrate)
         command = ffmpeg_command(self._ffmpeg, size, rotate, settings)
-        self._generation += 1
-        generation = self._generation
+        self._streams += 1
+        generation = self._streams
         raised = False
 
         def deliver(picture: bytes) -> None:
@@ -473,43 +490,104 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             if not raised:  # ffmpeg's reader thread, forwarding the pictures: above normal too
                 raised = True
                 timing.raise_priority()
+            if generation == self._coming:  # a switch: the new stream's first picture
+                with self._handing:
+                    if generation == self._coming:  # (not given up meanwhile)
+                        self._quiet, self._generation = self._generation, generation
+                        self._coming = 0
             while generation == self._generation and self._error is None:
                 try:
-                    self._pictures.put(picture, timeout=0.2)
+                    self._pictures.put((generation, picture), timeout=0.2)
                     return
                 except queue.Full:
                     continue
-            self.counters.drops += 1  # the stream was replaced, or the panel failed meanwhile
+            if generation != self._quiet:  # what a switch leaves behind is no loss: the other shows
+                self.counters.drops += 1  # the stream was replaced, or the panel failed meanwhile
 
-        self.encoder = Encoder(command, size, deliver)
-        self.encoder.name = settings.encoder
+        encoder = Encoder(command, size, deliver)
+        encoder.name, encoder.maxrate = settings.encoder, settings.maxrate
+        if beside:
+            self._leaving, self._coming = self.encoder, generation
+            self._switch_began = time.monotonic()
+        else:
+            self._generation = generation
+        self.encoder = encoder
+        self.counters.bit_rate = mbit(settings.maxrate)
 
     def _stop_encoder(self) -> None:
         if self.encoder is not None:
-            self._generation += 1  # pictures of the old stream are dropped
-            self.encoder.close()
-            self.encoder = None
+            with self._handing:
+                self._generation = self._coming = 0  # pictures of the old streams are dropped
+            for encoder in (self._leaving, self.encoder):  # (both during a switch)
+                if encoder is not None:
+                    encoder.close()
+            self.encoder = self._leaving = None
             self._discard_pictures()  # the new stream starts with a keyframe
 
     def _follow_the_panel(self) -> None:
         """``maxrate`` "auto": a step down while the panel takes less than it is sent, a step
         up again after a calm minute (:class:`RateControl`). ffmpeg cannot change its rate on
-        the way, so a change starts it anew; the next frame does that."""
+        the way, so a change starts a new one beside it (:meth:`_switch`)."""
         control, encoder = self.rate, self.encoder
         if control is None or encoder is None:
             return
+        now = time.monotonic()
         before = control.rate
-        rate = control.judge(self.counters, time.monotonic())
+        rate = control.judge(self.counters, now)
         if rate is None:
             self._floor_said()
+        else:
+            log.info(
+                "video: bit rate %s -> %s (%s)",
+                rate_text(before),
+                rate_text(rate),
+                "the panel takes less than it is sent" if rate < before else "calm for a minute",
+            )
+        due = rate_text(control.rate) != encoder.maxrate and now >= self._switch_held
+        if due and self._leaving is None and encoder.alive:
+            self._switch()
+
+    def _switch(self) -> None:
+        """A planned change of ffmpeg (a step of the bit rate) without a still picture: the
+        new ffmpeg starts beside the old one, both get the frames, and the panel shows the old
+        one's pictures until the new one has its first (:meth:`_hand_over`). Starting ffmpeg
+        anew instead leaves the picture standing still for its start and the first keyframe."""
+        try:
+            self._start_encoder(self.encoder.size, beside=True)
+        except DeviceError as exc:
+            self._switch_held = time.monotonic() + self.SWITCH_HOLD_S
+            log.warning("video: no new ffmpeg (%s); the old one goes on for a minute", exc)
+
+    def _hand_over(self) -> None:
+        """A switch under way: done once the new ffmpeg has its first picture on the way to
+        the panel (the old one is closed then; the pictures it still had are not counted as
+        dropped). When the new one has none within :attr:`SWITCH_S`, or stopped, it is closed
+        and the old one goes on; the switch is tried again after :attr:`SWITCH_HOLD_S`."""
+        leaving, coming = self._leaving, self.encoder
+        if leaving is None:
             return
-        log.info(
-            "video: bit rate %s -> %s (%s)",
-            rate_text(before),
-            rate_text(rate),
-            "the panel takes less than it is sent" if rate < before else "calm for a minute",
+        waited = time.monotonic() - self._switch_began
+        if not coming.pictures and coming.alive and waited < self.SWITCH_S:
+            return
+        with self._handing:
+            taken = self._coming == 0  # its first picture is on its way to the panel
+            if not taken:
+                if coming.pictures:
+                    return  # it is being handed on just now
+                self._quiet, self._coming = self._coming, 0
+        self._leaving = None
+        if taken:
+            leaving.close()
+            return
+        log.warning(
+            "video: the new ffmpeg had no picture after %.1f s (%s); the old one goes on, "
+            "and the switch waits a minute",
+            waited,
+            coming.reason(),
         )
-        self._stop_encoder()
+        self._switch_held = time.monotonic() + self.SWITCH_HOLD_S
+        self.encoder, self.counters.bit_rate = leaving, mbit(leaving.maxrate)
+        coming.close()
 
     def _floor_said(self) -> None:
         """Once: the panel cannot keep up at the lowest rate, so it is the pictures."""
@@ -536,8 +614,9 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             data = rgb_bytes(frame)
         else:
             data = frame.convert("RGB").tobytes()
+        self._hand_over()
         self._follow_the_panel()
-        encoder = self.encoder
+        encoder = self._leaving or self.encoder  # during a switch: the one the panel shows
         if encoder is None or encoder.size != frame.size or not encoder.alive:
             if encoder is not None and encoder.size == frame.size:
                 self._restarting(encoder.reason())
@@ -557,7 +636,7 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
     def _gave_up(self, exc: Exception) -> bool:
         """Whether an encoder "auto" chose stopped before its first picture (the card or the
         driver would not have it): then "auto" leaves it out from here on."""
-        encoder = self.encoder
+        encoder = self._leaving or self.encoder  # during a switch only the old one can stop here
         name = getattr(encoder, "name", "")
         if self.settings.encoder != "auto" or name == "libx264" or encoder.pictures:
             return False
@@ -570,20 +649,31 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         (the pictures queue is full; USB timeouts bound that); ffmpeg taking nothing
         while the panel waits for pictures has stalled. Before its first picture
         ffmpeg may still be starting, which takes longer: restarting it then would
-        only drop the frames it already has."""
+        only drop the frames it already has. During a switch the old ffmpeg, whose
+        pictures the panel shows, is the one waited for; the new one gets the frame
+        only if it takes it at once (while it starts it takes none, and the panel
+        must not wait for that)."""
+        encoder = self._leaving
+        if encoder is None:
+            encoder = self.encoder
+        else:
+            try:
+                self.encoder.write(data, timeout=0)
+            except EncoderStopped:
+                pass  # starting, or stopped: _hand_over sees to it
         idle = 0.0
         while True:
             try:
-                self.encoder.write(data, timeout=0.25)
+                encoder.write(data, timeout=0.25)
                 return
             except EncoderStopped:
-                if not self.encoder.alive or self._error is not None:
+                if not encoder.alive or self._error is not None:
                     raise
                 if self._pictures.full():
                     idle = 0.0
                     continue
                 idle += 0.25
-                limit = self.STALL_S if self.encoder.pictures else self.START_S
+                limit = self.STALL_S if encoder.pictures else self.START_S
                 if idle >= limit:
                     raise EncoderStopped(f"ffmpeg took no frames for {limit:g} s") from None
 
