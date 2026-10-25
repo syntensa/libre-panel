@@ -25,7 +25,6 @@
     "Context": "コンテキスト",
     "5 hours": "5時間",
     "AI activity": "AIの稼働状況",
-    "AI activity is switched off (Settings → Services).": "AIの稼働状況はオフになっています（設定 → サービス）。",
     "Also its status line, with the plan's usage": "ステータスラインも設定し、プランの使用量を表示する",
     "Ask Claude Code for the plan's usage": "Claude Codeにプランの使用量を問い合わせる",
     "Ask Codex for the plan's usage": "Codexにプランの使用量を問い合わせる",
@@ -2073,7 +2072,6 @@
     "Make a new key?": "新しいキーを作成しますか？",
     "New key": "新しいキー",
     "Notices from other programs": "他のプログラムからの通知",
-    "Notices from other programs are switched off (Settings → Services).": "他のプログラムからの通知はオフです（設定 → サービス）。",
     "Render finished": "レンダリング完了",
     "The notify key is missing or wrong.": "通知用のキーがないか、正しくありません。",
     "Try it": "試す",
@@ -2656,7 +2654,9 @@
     "So that no other program gets those rights, it then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change.": "他のプログラムにこの権限を渡さないよう、ユーザーフォルダーからプラグインフォルダーを読み込まず、管理者だけが変更できるフォルダーからのみプログラムを起動します。",
     "a video program Libre Panel may start with administrator rights": "Libre Panelが管理者権限で起動できるビデオプログラム",
     "the plugin {name}": "プラグイン {name}",
-    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "管理者権限では、Libre Panelはvideo.ffmpegのffmpegを起動しません。他のプログラムが変更できるフォルダーにあるためです"
+    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "管理者権限では、Libre Panelはvideo.ffmpegのffmpegを起動しません。他のプログラムが変更できるフォルダーにあるためです",
+    "Notices from other programs are switched off (Settings → Game mode and more).": "他のプログラムからの通知はオフです（設定 → ゲームモードなど）。",
+    "AI activity is switched off (Settings → Game mode and more).": "AIの稼働状況はオフになっています（設定 → ゲームモードなど）。"
   },
   "fields": {
     "agent": "エージェント",

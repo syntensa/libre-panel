@@ -25,7 +25,6 @@
     "Context": "Contexte",
     "5 hours": "5 heures",
     "AI activity": "Activité IA",
-    "AI activity is switched off (Settings → Services).": "L'activité IA est désactivée (Réglages → Services).",
     "Also its status line, with the plan's usage": "Aussi sa ligne d'état, avec l'utilisation de l'abonnement",
     "Ask Claude Code for the plan's usage": "Demander à Claude Code l'utilisation de l'abonnement",
     "Ask Codex for the plan's usage": "Demander à Codex l'utilisation de l'abonnement",
@@ -2073,7 +2072,6 @@
     "Make a new key?": "Créer une nouvelle clé ?",
     "New key": "Nouvelle clé",
     "Notices from other programs": "Notifications d'autres programmes",
-    "Notices from other programs are switched off (Settings → Services).": "Les notifications d'autres programmes sont désactivées (Paramètres → Services).",
     "Render finished": "Rendu terminé",
     "The notify key is missing or wrong.": "La clé de notification manque ou est fausse.",
     "Try it": "Essayer",
@@ -2656,7 +2654,9 @@
     "So that no other program gets those rights, it then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change.": "Pour qu'aucun autre programme n'obtienne ces droits, il ne charge alors aucun dossier de plugin depuis votre dossier utilisateur et ne lance des programmes que depuis des dossiers que seuls les administrateurs peuvent modifier.",
     "a video program Libre Panel may start with administrator rights": "un programme vidéo que Libre Panel peut lancer avec les droits d'administrateur",
     "the plugin {name}": "le plugin {name}",
-    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "avec les droits d'administrateur, Libre Panel ne lance pas le ffmpeg de video.ffmpeg : il se trouve dans un dossier que d'autres programmes peuvent modifier"
+    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "avec les droits d'administrateur, Libre Panel ne lance pas le ffmpeg de video.ffmpeg : il se trouve dans un dossier que d'autres programmes peuvent modifier",
+    "Notices from other programs are switched off (Settings → Game mode and more).": "Les notifications d'autres programmes sont désactivées (Paramètres → Mode jeu et plus).",
+    "AI activity is switched off (Settings → Game mode and more).": "L'activité IA est désactivée (Paramètres → Mode jeu et plus)."
   },
   "fields": {
     "agent": "agent",

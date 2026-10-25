@@ -1428,7 +1428,7 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error(str(exc), HTTPStatus.CONFLICT)
         if not config.allow_notify:
             return self._error(
-                t("Notices from other programs are switched off (Settings → Services)."),
+                t("Notices from other programs are switched off (Settings → Game mode and more)."),
                 HTTPStatus.FORBIDDEN,
             )
         params: dict[str, Any] = {k: v[0] for k, v in parse_qs(url.query).items()}
@@ -1454,8 +1454,8 @@ class EditorHandler(BaseHTTPRequestHandler):
 
     def _ai_in(self, kind: str, url: ParseResult) -> None:
         """A hook event of Claude Code or Codex, or Claude Code's status line (agents.py): only
-        while AI activity is on (Settings → Services) and with the AI key (``?key=`` or the
-        header). The status line is answered with the line it shows."""
+        while AI activity is on (Settings → Game mode and more) and with the AI key (``?key=``
+        or the header). The status line is answered with the line it shows."""
         params: dict[str, str] = {k: v[0] for k, v in parse_qs(url.query).items()}
         try:
             config = load_config(self.state.config_path)
@@ -1463,7 +1463,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error(str(exc), HTTPStatus.CONFLICT)
         if "agents" not in config.services.enabled:
             return self._error(
-                t("AI activity is switched off (Settings → Services)."), HTTPStatus.FORBIDDEN
+                t("AI activity is switched off (Settings → Game mode and more)."),
+                HTTPStatus.FORBIDDEN,
             )
         given = self.headers.get(agents.HEADER) or params.get("key", "")
         if not access.matches(given, agents.read_key()):
@@ -1519,7 +1520,8 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error('expected {"agent": "claude"|"codex", "action": ...}')
         if not on and action != "remove":
             return self._error(
-                t("AI activity is switched off (Settings → Services)."), HTTPStatus.CONFLICT
+                t("AI activity is switched off (Settings → Game mode and more)."),
+                HTTPStatus.CONFLICT,
             )
         path = paths[agent]
         try:

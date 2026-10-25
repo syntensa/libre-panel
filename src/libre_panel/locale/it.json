@@ -25,7 +25,6 @@
     "Context": "Contesto",
     "5 hours": "5 ore",
     "AI activity": "Attività IA",
-    "AI activity is switched off (Settings → Services).": "L'attività IA è disattivata (Impostazioni → Servizi).",
     "Also its status line, with the plan's usage": "Anche la sua riga di stato, con l'utilizzo del piano",
     "Ask Claude Code for the plan's usage": "Chiedere a Claude Code l'utilizzo del piano",
     "Ask Codex for the plan's usage": "Chiedere a Codex l'utilizzo del piano",
@@ -2073,7 +2072,6 @@
     "Make a new key?": "Creare una nuova chiave?",
     "New key": "Nuova chiave",
     "Notices from other programs": "Notifiche da altri programmi",
-    "Notices from other programs are switched off (Settings → Services).": "Le notifiche da altri programmi sono disattivate (Impostazioni → Servizi).",
     "Render finished": "Rendering terminato",
     "The notify key is missing or wrong.": "La chiave delle notifiche manca o non è corretta.",
     "Try it": "Prova",
@@ -2656,7 +2654,9 @@
     "So that no other program gets those rights, it then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change.": "Perché nessun altro programma ottenga quei diritti, allora non carica cartelle di plugin dalla cartella utente e avvia programmi solo da cartelle che solo gli amministratori possono modificare.",
     "a video program Libre Panel may start with administrator rights": "un programma video che Libre Panel possa avviare con i diritti di amministratore",
     "the plugin {name}": "il plugin {name}",
-    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "con i diritti di amministratore Libre Panel non avvia il ffmpeg di video.ffmpeg: si trova in una cartella che altri programmi possono modificare"
+    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "con i diritti di amministratore Libre Panel non avvia il ffmpeg di video.ffmpeg: si trova in una cartella che altri programmi possono modificare",
+    "Notices from other programs are switched off (Settings → Game mode and more).": "Le notifiche da altri programmi sono disattivate (Impostazioni → Modalità gioco e altro).",
+    "AI activity is switched off (Settings → Game mode and more).": "L'attività IA è disattivata (Impostazioni → Modalità gioco e altro)."
   },
   "fields": {
     "agent": "agente",

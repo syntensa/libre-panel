@@ -25,7 +25,6 @@
     "Context": "Kontext",
     "5 hours": "5 Stunden",
     "AI activity": "KI-Aktivität",
-    "AI activity is switched off (Settings → Services).": "KI-Aktivität ist ausgeschaltet (Einstellungen → Dienste).",
     "Also its status line, with the plan's usage": "Auch seine Statuszeile, mit der Nutzung des Abos",
     "Ask Claude Code for the plan's usage": "Claude Code nach der Nutzung des Abos fragen",
     "Ask Codex for the plan's usage": "Codex nach der Nutzung des Abos fragen",
@@ -2073,7 +2072,6 @@
     "Make a new key?": "Neuen Schlüssel erstellen?",
     "New key": "Neuer Schlüssel",
     "Notices from other programs": "Hinweise von anderen Programmen",
-    "Notices from other programs are switched off (Settings → Services).": "Hinweise von anderen Programmen sind ausgeschaltet (Einstellungen → Dienste).",
     "Render finished": "Rendern fertig",
     "The notify key is missing or wrong.": "Der Hinweis-Schlüssel fehlt oder ist falsch.",
     "Try it": "Ausprobieren",
@@ -2656,7 +2654,9 @@
     "So that no other program gets those rights, it then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change.": "Damit kein anderes Programm diese Rechte bekommt, lädt es dann keine Plugin-Ordner aus deinem Benutzerordner und startet Programme nur aus Ordnern, die nur Administratoren ändern dürfen.",
     "a video program Libre Panel may start with administrator rights": "ein Videoprogramm, das Libre Panel mit Administratorrechten starten darf",
     "the plugin {name}": "das Plugin {name}",
-    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "mit Administratorrechten startet Libre Panel das ffmpeg aus video.ffmpeg nicht: Es liegt in einem Ordner, den andere Programme ändern können"
+    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "mit Administratorrechten startet Libre Panel das ffmpeg aus video.ffmpeg nicht: Es liegt in einem Ordner, den andere Programme ändern können",
+    "Notices from other programs are switched off (Settings → Game mode and more).": "Hinweise von anderen Programmen sind ausgeschaltet (Einstellungen → Spielmodus und mehr).",
+    "AI activity is switched off (Settings → Game mode and more).": "KI-Aktivität ist ausgeschaltet (Einstellungen → Spielmodus und mehr)."
   },
   "fields": {
     "agent": "Agent",

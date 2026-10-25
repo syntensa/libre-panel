@@ -25,7 +25,6 @@
     "Context": "Contexto",
     "5 hours": "5 horas",
     "AI activity": "Actividad de IA",
-    "AI activity is switched off (Settings → Services).": "La actividad de IA está desactivada (Ajustes → Servicios).",
     "Also its status line, with the plan's usage": "También su línea de estado, con el uso del plan",
     "Ask Claude Code for the plan's usage": "Preguntar a Claude Code por el uso del plan",
     "Ask Codex for the plan's usage": "Preguntar a Codex por el uso del plan",
@@ -2073,7 +2072,6 @@
     "Make a new key?": "¿Crear una clave nueva?",
     "New key": "Clave nueva",
     "Notices from other programs": "Avisos de otros programas",
-    "Notices from other programs are switched off (Settings → Services).": "Los avisos de otros programas están desactivados (Ajustes → Servicios).",
     "Render finished": "Render terminado",
     "The notify key is missing or wrong.": "Falta la clave de avisos o es incorrecta.",
     "Try it": "Probar",
@@ -2656,7 +2654,9 @@
     "So that no other program gets those rights, it then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change.": "Para que ningún otro programa obtenga esos derechos, no carga entonces carpetas de plugins de tu carpeta de usuario e inicia programas solo desde carpetas que solo los administradores pueden cambiar.",
     "a video program Libre Panel may start with administrator rights": "un programa de vídeo que Libre Panel pueda iniciar con derechos de administrador",
     "the plugin {name}": "el plugin {name}",
-    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "con derechos de administrador, Libre Panel no inicia el ffmpeg de video.ffmpeg: está en una carpeta que otros programas pueden cambiar"
+    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "con derechos de administrador, Libre Panel no inicia el ffmpeg de video.ffmpeg: está en una carpeta que otros programas pueden cambiar",
+    "Notices from other programs are switched off (Settings → Game mode and more).": "Los avisos de otros programas están desactivados (Ajustes → Modo juego y más).",
+    "AI activity is switched off (Settings → Game mode and more).": "La actividad de IA está desactivada (Ajustes → Modo juego y más)."
   },
   "fields": {
     "agent": "agente",

@@ -73,7 +73,7 @@ language = "auto"
 # check_updates = true
 
 # Whether other programs may show a notice on the panel (libre-panel notify, a script, a
-# Stream Deck button), with the key in notify.json; see Settings → Services.
+# Stream Deck button), with the key in notify.json; see Settings → Game mode and more.
 # allow_notify = false
 
 # Light mode: while the app's window is closed, Libre Panel lets go of what only the app needs

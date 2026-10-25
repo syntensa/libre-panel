@@ -734,7 +734,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser(
         "notify",
-        help="show a notice on the panel (switched on in Settings → Services)",
+        help="show a notice on the panel (switched on in Settings → Game mode and more)",
     )
     p.add_argument("text", help="what the notice says (at most 160 characters)")
     p.add_argument("--title", default="", help="a heading above it")

@@ -1,8 +1,8 @@
 """AI activity: what Claude Code and Codex do on this PC, for a screen that shows it.
 
 The readings come from libre_panel.agents: their hooks and Claude Code's status line (set up in
-Settings → Services → AI activity, which shows what it adds), and in the background the plan's
-usage, asked of the programs themselves while a theme shows ``ai.*``:
+Settings → Game mode and more → AI activity, which shows what it adds), and in the background
+the plan's usage, asked of the programs themselves while a theme shows ``ai.*``:
 
 ``[services.agents]``::
 

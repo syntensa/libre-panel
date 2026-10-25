@@ -25,7 +25,6 @@
     "Context": "上下文",
     "5 hours": "5 小时",
     "AI activity": "AI 活动",
-    "AI activity is switched off (Settings → Services).": "AI 活动已关闭（设置 → 服务）。",
     "Also its status line, with the plan's usage": "同时设置其状态栏，显示套餐用量",
     "Ask Claude Code for the plan's usage": "向 Claude Code 查询套餐用量",
     "Ask Codex for the plan's usage": "向 Codex 查询套餐用量",
@@ -2073,7 +2072,6 @@
     "Make a new key?": "生成新密钥？",
     "New key": "新密钥",
     "Notices from other programs": "来自其他程序的通知",
-    "Notices from other programs are switched off (Settings → Services).": "来自其他程序的通知已关闭（设置 → 服务）。",
     "Render finished": "渲染完成",
     "The notify key is missing or wrong.": "通知密钥缺失或错误。",
     "Try it": "试一试",
@@ -2656,7 +2654,9 @@
     "So that no other program gets those rights, it then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change.": "为了不让其他程序获得这些权限，它此时不会从你的用户文件夹加载插件文件夹，只从仅管理员可修改的文件夹启动程序。",
     "a video program Libre Panel may start with administrator rights": "Libre Panel 可以用管理员权限启动的视频程序",
     "the plugin {name}": "插件 {name}",
-    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "以管理员权限运行时，Libre Panel 不会启动 video.ffmpeg 中的 ffmpeg：它位于其他程序可以修改的文件夹中"
+    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "以管理员权限运行时，Libre Panel 不会启动 video.ffmpeg 中的 ffmpeg：它位于其他程序可以修改的文件夹中",
+    "Notices from other programs are switched off (Settings → Game mode and more).": "来自其他程序的通知已关闭（设置 → 游戏模式及其他）。",
+    "AI activity is switched off (Settings → Game mode and more).": "AI 活动已关闭（设置 → 游戏模式及其他）。"
   },
   "fields": {
     "agent": "智能体",

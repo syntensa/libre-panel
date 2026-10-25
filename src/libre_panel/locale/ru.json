@@ -25,7 +25,6 @@
     "Context": "Контекст",
     "5 hours": "5 часов",
     "AI activity": "Активность ИИ",
-    "AI activity is switched off (Settings → Services).": "Активность ИИ отключена (Настройки → Службы).",
     "Also its status line, with the plan's usage": "Также его строка состояния — с использованием тарифа",
     "Ask Claude Code for the plan's usage": "Запрашивать у Claude Code использование тарифа",
     "Ask Codex for the plan's usage": "Запрашивать у Codex использование тарифа",
@@ -2073,7 +2072,6 @@
     "Make a new key?": "Создать новый ключ?",
     "New key": "Новый ключ",
     "Notices from other programs": "Уведомления от других программ",
-    "Notices from other programs are switched off (Settings → Services).": "Уведомления от других программ отключены (Настройки → Службы).",
     "Render finished": "Рендер завершён",
     "The notify key is missing or wrong.": "Ключ уведомлений отсутствует или неверен.",
     "Try it": "Попробовать",
@@ -2656,7 +2654,9 @@
     "So that no other program gets those rights, it then loads no plugin folders from your user folder and starts programs only from folders that only administrators may change.": "Чтобы эти права не получила другая программа, он тогда не загружает папки плагинов из вашей папки пользователя и запускает программы только из папок, которые могут изменять лишь администраторы.",
     "a video program Libre Panel may start with administrator rights": "видеопрограмма, которую Libre Panel может запустить с правами администратора",
     "the plugin {name}": "плагин {name}",
-    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "с правами администратора Libre Panel не запускает ffmpeg из video.ffmpeg: он лежит в папке, которую могут изменить другие программы"
+    "with administrator rights Libre Panel does not start the ffmpeg in video.ffmpeg: it lies in a folder that other programs may change": "с правами администратора Libre Panel не запускает ffmpeg из video.ffmpeg: он лежит в папке, которую могут изменить другие программы",
+    "Notices from other programs are switched off (Settings → Game mode and more).": "Уведомления от других программ отключены (Настройки → Игровой режим и другое).",
+    "AI activity is switched off (Settings → Game mode and more).": "Активность ИИ отключена (Настройки → Игровой режим и другое)."
   },
   "fields": {
     "agent": "агент",

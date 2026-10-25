@@ -13,7 +13,7 @@ Three ways in, all on this computer; no account and none of their keys is read:
   answers a headless usage request without a message to the model, at most every three
   minutes; Codex's app-server reads its account's limits every minute.
 
-Hooks and the status line are set up from the app (Settings → Services → AI activity): it
+Hooks and the status line are set up from the app (Settings → Game mode and more → AI activity): it
 shows what it adds to ``~/.claude/settings.json`` and ``~/.codex/hooks.json``, keeps a copy
 of each file, and takes out again only what it added. The address carries the AI key, a
 secret of its own in ``ai.json`` beside config.toml (as the notify key).
