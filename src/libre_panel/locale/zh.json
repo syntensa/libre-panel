@@ -2551,7 +2551,13 @@
     "There is no download of Libre Panel {version} for this kind of install: get it from its page.": "此安装方式没有 Libre Panel {version} 的下载：请从其页面获取。",
     "There is no newer version to update to.": "没有可更新到的新版本。",
     "Update to {version}": "更新到 {version}",
-    "{size} MB": "{size} MB"
+    "{size} MB": "{size} MB",
+    "PC power": "整机功耗",
+    "0.1% low": "0.1% 低帧",
+    "This round has no report: it is no longer kept, or it had no frame rates.": "这一局没有报告：它已不再保存，或没有帧率。",
+    "The round report is kept as a picture in {folder}": "回合报告已作为图片保存在 {folder}",
+    "Keeps the round report of this round as a picture in your Pictures folder and opens it": "将这一局的回合报告作为图片保存到你的“图片”文件夹并打开它",
+    "Keep as a picture": "保存为图片"
   },
   "fields": {
     "agent": "智能体",

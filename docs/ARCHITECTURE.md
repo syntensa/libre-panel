@@ -186,7 +186,11 @@ metadata, named in config.toml as `across`, answered with `{across, stamp}`) and
 small, from `GET /api/across/picture` (with the token in the query too); `{"set": {"across":
 null}}` takes it away. `GET /api/panels/photo` is one PNG of all panels that are on, where they
 stand, each with what it shows now (404 while none shows a picture), for *Picture of all
-panels* there.
+panels* there. Live → History reads what the memory kept from `GET /api/history?span=day`
+(`week`, `month`; each round with its `id`), and `POST /api/history/picture {"id": ...}` keeps
+a round's report as the panel shows it, in such a picture of the panel, in the person's
+Pictures folder (in `Libre Panel` there) and opens that folder: `{file, folder, opened}`
+(404 for a round that is not kept or had no frame rates).
 
 *Start → Themes* shares themes ([Sharing a theme](THEMES.md#sharing-a-theme)):
 `GET /api/themes/<id>/export` is a theme as a `.zip` (`Content-Disposition: attachment`),

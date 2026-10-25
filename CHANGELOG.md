@@ -3,6 +3,13 @@
 ## 0.7.1rc5 — 2026-10-24
 
 **Changes**
+- **The round report tells more**: the round's 1 % and 0.1 % lows, its average and longest
+  frame time (every frame of the round counted, exact to 0.01 ms, however long the round),
+  the course of the CPU and GPU temperatures over the round, and the PC's peak power where
+  the power service runs, on all five report screens; `game.fps_avg`, `game.fps_1low`,
+  `game.fps_01low`, `game.frametime_avg` and `game.frametime_max` are readings for any screen.
+  Live → History keeps a round's report as a picture (Pictures → Libre Panel). Rounds from
+  before show the old figures and a dash for the course.
 - **A step of the bit rate without a gap, and what auto found is kept**: when "auto" steps
   the cap, a second ffmpeg starts beside the running one and takes over with its first
   picture; the panel keeps showing the old stream until then (one that shows nothing within

@@ -18,7 +18,7 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DATABASE = "memory.db"
 QUEUE_SIZE = 5000  # jobs; at about one a second this is more than an hour of a stuck disk
 RETRY_S = 30.0  # a database that cannot be opened is tried again after this long
@@ -29,7 +29,9 @@ MEANS = (
     "cpu_clock", "gpu_clock", "mem_used", "vram_used", "net_down", "net_up", "volume",
 )  # fmt: skip
 PEAKS = ("cpu_temp", "gpu_temp", "gpu_hotspot", "cpu_power", "gpu_power")
-SESSION_PEAKS = (*PEAKS, "vram_used")
+SESSION_PEAKS = (*PEAKS, "vram_used", "power")  # power: the PC's, of the power service
+# What every frame of a round came to (the game.* readings of the same names, sensors/presentmon)
+FRAME_FIGURES = ("fps_avg", "fps_1low", "fps_01low", "frametime_avg", "frametime_max")
 # What the cooling state holds as numbers; the other temperatures are in a column of their own.
 COOLING_VALUES = (
     "cpu_temp", "cpu_power", "cpu_load", "gpu_temp", "gpu_hotspot", "gpu_power", "gpu_load",
@@ -59,7 +61,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     levels TEXT,                     -- {{"edges": [...], "seconds": [...]}}
     limit_cpu_s INTEGER, limit_gpu_s INTEGER, limit_cap_s INTEGER,
     {_columns(SESSION_PEAKS, "_max")},
-    outside_temp REAL, closed INTEGER
+    outside_temp REAL, closed INTEGER,
+    {_columns(FRAME_FIGURES)},
+    course TEXT                      -- {{"seconds": s, "cpu_temp": [...], "gpu_temp": [...]}}
 );
 CREATE INDEX IF NOT EXISTS sessions_started ON sessions(started);
 CREATE TABLE IF NOT EXISTS cooling (
@@ -77,6 +81,21 @@ CREATE TABLE IF NOT EXISTS fancontrol (
     state TEXT                       -- fancontrol.state_of(): curves and fans
 );
 """
+# Columns that came after the first version, added to a file made before them (the rows it
+# has keep NULL there: nothing was measured).
+ADDED = {
+    "sessions": (
+        "power_max REAL", *(f"{name} REAL" for name in FRAME_FIGURES), "course TEXT",
+    ),
+}  # fmt: skip
+
+
+def _add_columns(connection: sqlite3.Connection) -> None:
+    for table, columns in ADDED.items():
+        there = {row[1] for row in connection.execute(f"PRAGMA table_info({table})")}
+        for column in columns:
+            if column.split()[0] not in there:
+                connection.execute(f"ALTER TABLE {table} ADD COLUMN {column}")
 
 
 def read_only(path: str | Path) -> sqlite3.Connection:
@@ -141,6 +160,7 @@ class Store:
                 connection.execute("PRAGMA journal_mode=WAL")
                 connection.execute("PRAGMA synchronous=NORMAL")  # safe against a crash
                 connection.executescript(SCHEMA)
+                _add_columns(connection)
                 connection.execute(
                     "INSERT OR REPLACE INTO meta VALUES ('schema', ?)", (str(SCHEMA_VERSION),)
                 )

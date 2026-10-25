@@ -251,6 +251,35 @@ def _finite(snapshot: Snapshot) -> Snapshot:
     return replace(snapshot, readings=readings)
 
 
+COURSE_POINTS = 4000  # a course a service publishes whole is drawn up to this long
+
+
+@lru_cache(maxsize=32)
+def _course(text: str) -> tuple[float | None, ...] | None:
+    """A course a service published whole: a reading whose value is a list of numbers as text
+    (``"[61.5, 63.0, null, 64.2]"``, ``null`` a gap), such as the round's temperatures
+    (``report.course.cpu_temp``). None for any other value, or fewer than two points."""
+    try:
+        found = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(found, list) or not 1 < len(found) <= COURSE_POINTS:
+        return None
+    return tuple(
+        float(v)
+        if isinstance(v, int | float) and not isinstance(v, bool) and not _undrawable(v)
+        else None
+        for v in found
+    )
+
+
+def course_of(value: Any) -> tuple[float | None, ...] | None:
+    """The course in a reading's value (see ``_course``), else None."""
+    if not isinstance(value, str) or not value.startswith("["):
+        return None
+    return _course(value)
+
+
 def _gaps(values: list[float]) -> list[float | None]:
     """A history with a gap (None) where a value is NaN, infinite or too large for a float,
     else the history itself."""
@@ -1581,6 +1610,8 @@ class Renderer:
         elif widget["type"] == "icon" and widget["icon"] == "weather":
             key = widget.get("sensor") or "weather.code"
         elif widget["type"] == "graph":
+            if course_of(snapshot.value(widget["sensor"])) is not None:
+                return False
             return len(snapshot.history.get(widget["sensor"], [])) < 2
         else:
             key = widget.get("sensor") or None  # an icon has an empty one
@@ -3251,6 +3282,14 @@ class Renderer:
         return self._cached(plain, (ix, iy, look), lambda: Piece(dot, ix - pad, iy - pad))
 
     def _draw_graph(self, widget: dict[str, Any], snapshot: Snapshot, now: float) -> Piece | None:
+        course = course_of(snapshot.value(widget["sensor"]))
+        if course is not None:  # a course published whole: across the width, and still
+            numbers = [v for v in course if v is not None]
+            bounds = self._graph_bounds(widget, numbers) if numbers else None
+            key = ("course", course, bounds)
+            return self._cached(
+                widget, key, lambda: self._graph_piece(widget, list(course), len(course), bounds)
+            )
         if self.continuous:
             return self._timeline(widget, snapshot, now)
         slots = max(2, widget["history"])

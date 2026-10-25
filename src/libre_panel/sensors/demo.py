@@ -49,6 +49,11 @@ _WAVES: dict[str, tuple[str, str, float, float, float]] = {
     "game.frametime": ("Frame time", "ms", 7.1, 0.6, 7),
     "game.low": ("1% low", "fps", 104, 4, 19),
     "game.frametime_peak": ("Frame time peak", "ms", 9.4, 1.8, 7),
+    "game.fps_avg": ("Average FPS of the round", "fps", 139, 1, 61),
+    "game.fps_1low": ("1% low of the round", "fps", 97, 2, 67),
+    "game.fps_01low": ("0.1% low of the round", "fps", 71, 3, 71),
+    "game.frametime_avg": ("Average frame time of the round", "ms", 7.2, 0.05, 61),
+    "game.frametime_max": ("Longest frame of the round", "ms", 38, 0, 1),
     "temp.cpu.ccd1": ("CPU CCD1", "°C", 52, 12, 29),
     "gpu.hotspot": ("GPU hot spot", "°C", 71, 12, 31),
     "temp.nvme.composite": ("NVMe SSD", "°C", 41, 3, 61),
@@ -411,6 +416,8 @@ def demo_report(t: float, earlier: int = 7) -> dict[str, Reading]:
         "fps_mean": 142.1, "fps_p01": 101.2, "fps_low_mean": 99.0, "frametime_mean": 6.9,
         "cpu_temp_max": 72.4, "gpu_temp_max": 57.1, "gpu_hotspot_max": 78.0,
         "cpu_power_max": 94.0, "gpu_power_max": 318.0, "vram_used_max": 14.5,
+        "power_max": 452.0, "fps_avg": 142.0, "fps_1low": 94.0, "fps_01low": 66.0,
+        "frametime_avg": 7.0, "frametime_max": 41.0,
     }  # fmt: skip
     session = {
         "game": "Starfall", "started": t - 2760, "ended": t - 60, "duration_s": 2700,
@@ -419,6 +426,8 @@ def demo_report(t: float, earlier: int = 7) -> dict[str, Reading]:
         "levels": {"edges": [60, 90, 120, 144, 165], "seconds": [26, 52, 235, 1150, 1040, 107]},
         "cpu_temp_max": 74.1, "gpu_temp_max": 56.0, "gpu_hotspot_max": 80.0,
         "cpu_power_max": 96.0, "gpu_power_max": 327.0, "vram_used_max": 14.8,
+        "power_max": 468.0, "fps_avg": 148.0, "fps_1low": 97.0, "fps_01low": 71.0,
+        "frametime_avg": 6.76, "frametime_max": 38.0, "course": demo_course(),
     }  # fmt: skip
     comparison = {
         "count": earlier,
@@ -427,6 +436,17 @@ def demo_report(t: float, earlier: int = 7) -> dict[str, Reading]:
     }
     found = round_report.readings({"session": session, "comparison": comparison})
     return {key: Reading(key, value, unit, label) for key, (value, unit, label) in found.items()}
+
+
+def demo_course(points: int = 90) -> dict[str, Any]:
+    """The temperatures over a round of 45 minutes (made up): the CPU and the GPU warm up in the
+    first minutes, then go up and down with the game, as the memory service keeps them."""
+    cpu, gpu = [], []
+    for i in range(points):
+        warm = 1 - math.exp(-i / 9)
+        cpu.append(round(48 + 22 * warm + 2.5 * math.sin(i / 3.1) + 0.8 * math.sin(i / 1.3), 1))
+        gpu.append(round(41 + 13 * warm + 1.5 * math.sin(i / 5.3 + 1), 1))
+    return {"seconds": 30.0, "cpu_temp": cpu, "gpu_temp": gpu}
 
 
 def demo_session() -> dict[str, Reading]:

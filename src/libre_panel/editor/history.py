@@ -1,5 +1,6 @@
 """What the memory keeps, for the app's History (views/history): the readings of a day, a week
-or a month as a course, and the rounds of the games played in that time.
+or a month as a course, and the rounds of the games played in that time, and the report of one
+of them again (``round_report``), for a picture of it.
 
 Only read, from the memory service's database (services/memory_store.py) beside its writer: WAL
 lets both. The minutes are put together in steps that make a course of a few hundred points
@@ -9,11 +10,14 @@ time the PC was off, and the course has a gap there. Everything stays on this co
 
 from __future__ import annotations
 
+import re
 import sqlite3
+import time
 from pathlib import Path
 from typing import Any
 
 from libre_panel.config import Config
+from libre_panel.services import round_report as report
 from libre_panel.services.cooling import default_database
 from libre_panel.services.memory_store import read_only
 
@@ -24,6 +28,7 @@ SERIES = ("cpu_temp", "gpu_temp", "cpu_load", "gpu_load", "cpu_power", "gpu_powe
 PEAKED = ("cpu_temp", "gpu_temp", "cpu_power", "gpu_power")  # with a highest value per minute
 ROUNDS = 8  # the last rounds listed one by one
 GAMES = 12  # the games listed, the most played first
+NOT_IN_NAMES = re.compile(r'[\\/:*?"<>|\x00-\x1f]+')  # what no file name may hold (Windows)
 
 
 def database(config: Config) -> Path:
@@ -77,14 +82,14 @@ def _summary(con: sqlite3.Connection, since: int) -> dict[str, Any]:
 def _rounds(con: sqlite3.Connection, since: int) -> list[dict[str, Any]]:
     rows = con.execute(
         "SELECT game, started, duration_s, fps_mean, COALESCE(fps_low_mean, fps_p01),"
-        " cpu_temp_max, gpu_temp_max FROM sessions"
+        " cpu_temp_max, gpu_temp_max, id FROM sessions"
         " WHERE started >= ? AND duration_s > 0 ORDER BY started DESC LIMIT ?",
         [since, ROUNDS],
     ).fetchall()
-    keys = ("game", "started", "seconds", "fps", "fps_low", "cpu_temp_max", "gpu_temp_max")
+    keys = ("game", "started", "seconds", "fps", "fps_low", "cpu_temp_max", "gpu_temp_max", "id")
     return [
-        {key: value if key in ("game", "started", "seconds") else _round(value) for key, value in
-         zip(keys, row, strict=True)}
+        {key: value if key in ("game", "started", "seconds", "id") else _round(value)
+         for key, value in zip(keys, row, strict=True)}
         for row in rows
     ]  # fmt: skip
 
@@ -162,3 +167,37 @@ def history(path: Path, span: str, now: float) -> dict[str, Any]:
     finally:
         con.close()
     return answer
+
+
+def round_report(path: Path, ident: int, compare: int) -> tuple[dict[str, Any], bool] | None:
+    """The report of the round ``ident`` (a ``rounds`` entry's ``id``) against the last
+    ``compare`` rounds of its program before it, as the memory service built it when the round
+    ended (services/round_report.py), and whether it is the last round kept (the game's logo
+    the panel still has is its). None for a round that is not kept or had no frame rates."""
+    if not path.is_file():
+        return None
+    con = read_only(path)
+    try:
+        found = report.build(con, ident, 0, compare)
+        last = con.execute("SELECT id FROM sessions ORDER BY started DESC LIMIT 1").fetchone()
+    except sqlite3.Error:
+        return None
+    finally:
+        con.close()
+    return (found, last is not None and last[0] == ident) if found is not None else None
+
+
+def picture_name(game: Any, ended: float) -> str:
+    """A file name for the picture of a round: the game's name, without what a file name cannot
+    hold, and when the round ended ("Starfall 2026-10-24 21-48.png")."""
+    words = NOT_IN_NAMES.sub(" ", game if isinstance(game, str) else "").split()
+    name = " ".join(words).strip(" .")[:60].strip()
+    return f"{name or 'Libre Panel'} {time.strftime('%Y-%m-%d %H-%M', time.localtime(ended))}.png"
+
+
+def free_name(folder: Path, name: str) -> Path:
+    """``name`` in ``folder``, or "name (2).png" and so on where a file has it already."""
+    path, n = folder / name, 2
+    while path.exists():
+        path, n = folder / f"{Path(name).stem} ({n}){Path(name).suffix}", n + 1
+    return path

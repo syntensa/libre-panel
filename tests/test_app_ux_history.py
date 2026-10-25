@@ -1,6 +1,6 @@
 """History in a real browser: what it says while nothing is kept and the switch that keeps it,
-then the course of a week of readings, what it came to and the games; skipped without
-Playwright or Chromium."""
+then the course of a week of readings, what it came to and the games, and a round's report kept
+as a picture; skipped without Playwright or Chromium."""
 
 import sqlite3
 import time
@@ -109,3 +109,29 @@ def test_a_day_and_a_week_of_readings_with_the_games(app_url, isolated_home):  #
         assert page.url.endswith("#/live/history/week")
         expect(page.locator(".history-round-list li")).to_have_count(3)
         expect(tiles.nth(2)).to_contain_text("72 h")
+
+
+def test_a_last_round_is_kept_as_a_picture_and_its_folder_opens(
+    app_url,  # noqa: F811
+    isolated_home,
+    tmp_path,
+    monkeypatch,
+):
+    from libre_panel import tray
+    from libre_panel.config import set_config_value
+    from libre_panel.services import downloads
+
+    choose_theme(isolated_home, "lumen")
+    set_config_value("services.enabled", ["memory"])
+    kept(isolated_home, days=1)
+    pictures, opened = tmp_path / "Pictures", []
+    monkeypatch.setattr(downloads, "pictures_folder", lambda: pictures)
+    monkeypatch.setattr(tray, "open_path", opened.append)
+    with browser_page(app_url, "live/history", allow=PICTURE) as page:
+        rounds = page.locator(".history-round-list li")
+        expect(rounds).to_have_count(1)
+        rounds.first.get_by_role("button", name="Keep as a picture").click()
+        expect(page.locator(".toast")).to_contain_text("The round report is kept as a picture in")
+        waits_for(page, lambda: opened == [pictures / "Libre Panel"])
+    (picture,) = (pictures / "Libre Panel").iterdir()
+    assert picture.name.startswith("Cyber Racer ") and picture.suffix == ".png"

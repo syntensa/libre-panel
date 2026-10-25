@@ -1,7 +1,8 @@
 """The round report: a game just played, set against the last ones of the same program.
 
 ``build`` reads the memory's database; ``readings`` turns the report into plain readings
-(``report.fps``, ``report.level.0``, ...) for a theme made of the usual widgets. A screen that
+(``report.fps``, ``report.level.0``, ...) for a theme made of the usual widgets, and the course
+of the temperatures into a list a graph draws whole (``report.course.cpu_temp``). A screen that
 draws more reads the whole report from the state ``report`` (docs/PLUGINS.md has its shape).
 ``session_readings`` does the same for a round that is still under way (``session.time``,
 ``session.fps``, ...): its totals so far.
@@ -15,15 +16,20 @@ import time
 from typing import Any
 
 from libre_panel.i18n import t
-from libre_panel.services.memory_store import SESSION_PEAKS
+from libre_panel.services.memory_store import FRAME_FIGURES, SESSION_PEAKS
 
 # What is averaged over the earlier games.
 VALUES = (
     "fps_mean", "fps_p01", "fps_low_mean", "frametime_mean", *(f"{k}_max" for k in SESSION_PEAKS),
+    *FRAME_FIGURES,
 )  # fmt: skip
 PEAK_UNITS = {
     "cpu_temp": "°C", "gpu_temp": "°C", "gpu_hotspot": "°C",
-    "cpu_power": "W", "gpu_power": "W", "vram_used": "GB",
+    "cpu_power": "W", "gpu_power": "W", "vram_used": "GB", "power": "W",
+}  # fmt: skip
+FRAME_UNITS = {
+    "fps_avg": "fps", "fps_1low": "fps", "fps_01low": "fps", "frametime_avg": "ms",
+    "frametime_max": "ms",
 }  # fmt: skip
 
 
@@ -48,17 +54,21 @@ def build(
         return None
     session = dict(row)
     session["levels"] = _levels(session["levels"])
+    session["course"] = _course(session.get("course"))
     column, value = (
         ("program", session["program"]) if session["program"] else ("game", session["game"])
     )
-    earlier = cursor.execute(
-        f"SELECT * FROM sessions WHERE {column} = ? AND id <> ? AND started < ? AND closed = 1 "
-        "AND duration_s >= ? AND fps_s > 0 ORDER BY started DESC LIMIT ?",
-        (value, session["id"], session["started"], min_s, compare),
-    ).fetchall()
+    earlier = [
+        dict(r)  # (a file the service has not opened since an update lacks the newer columns)
+        for r in cursor.execute(
+            f"SELECT * FROM sessions WHERE {column} = ? AND id <> ? AND started < ? "
+            "AND closed = 1 AND duration_s >= ? AND fps_s > 0 ORDER BY started DESC LIMIT ?",
+            (value, session["id"], session["started"], min_s, compare),
+        )
+    ]
     means = {}
     for name in VALUES:
-        found = [r[name] for r in earlier if r[name] is not None]
+        found = [r[name] for r in earlier if r.get(name) is not None]
         means[name] = sum(found) / len(found) if found else None
     shares = []
     for r in earlier:
@@ -81,6 +91,15 @@ def _levels(text: Any) -> dict[str, list[float]]:
     return {"edges": found.get("edges") or [], "seconds": found.get("seconds") or []}
 
 
+def _course(text: Any) -> dict[str, Any] | None:
+    """The course of a round's temperatures as stored (memory._Course), or None."""
+    try:
+        found = json.loads(text) if text else None
+    except (TypeError, ValueError):
+        found = None
+    return found if isinstance(found, dict) else None
+
+
 def level_names(edges: list[float]) -> list[str]:
     """The frame-rate ranges the levels stand for: "< 60", "60–90", ..., "165+"."""
     if not edges:
@@ -95,6 +114,15 @@ def peak_labels() -> dict[str, str]:
     return {
         "cpu_temp": t("CPU temp"), "gpu_temp": t("GPU temp"), "gpu_hotspot": t("GPU hot spot"),
         "cpu_power": t("CPU power"), "gpu_power": t("GPU power"), "vram_used": t("Video memory"),
+        "power": t("PC power"),
+    }  # fmt: skip
+
+
+def frame_labels() -> dict[str, str]:
+    """The names of what the round's frames came to, in the language of the panel."""
+    return {
+        "fps_avg": t("Average FPS"), "fps_1low": t("1% low"), "fps_01low": t("0.1% low"),
+        "frametime_avg": t("Frame time"), "frametime_max": t("Longest frame"),
     }  # fmt: skip
 
 
@@ -118,7 +146,8 @@ def session_readings(totals: dict[str, Any]) -> dict[str, tuple[Any, str, str]]:
         out[f"session.level.{i}"] = (share, "%", name)
     labels = peak_labels()
     for name, unit in PEAK_UNITS.items():
-        out[f"session.{name}_max"] = (totals["peaks"].get(name), unit, labels[name])
+        if name != "power":  # (the PC's, from the power service: the report's alone)
+            out[f"session.{name}_max"] = (totals["peaks"].get(name), unit, labels[name])
     return out
 
 
@@ -165,7 +194,19 @@ def readings(report: dict[str, Any]) -> dict[str, tuple[Any, str, str]]:
         "report.limit": (_held_back(session), "", t("Held back by")),
         "report.head.levels": (levels, "", ""),
         "report.head.peaks": (t("Highest values of the round"), "", ""),
+        "report.head.course": (t("Temperature"), "", ""),
     }  # fmt: skip
+    # what every frame of the round came to (none for a round recorded before it was counted)
+    labels = frame_labels()
+    for name, unit in FRAME_UNITS.items():
+        out[f"report.{name}"] = (session.get(name), unit, labels[name])
+        out[f"report.{name}_delta"] = (against(name), unit, t("Against the average"))
+    # the course of the temperatures: a list as text, which a graph draws across its width
+    course = session.get("course") or {}
+    for name, label in (("cpu_temp", t("CPU temp")), ("gpu_temp", t("GPU temp"))):
+        points = course.get(name)
+        drawn = isinstance(points, list) and len(points) > 1
+        out[f"report.course.{name}"] = (json.dumps(points) if drawn else None, "°C", label)
     held = {name: session.get(f"limit_{name}_s") or 0 for name in ("gpu", "cpu", "cap")}
     total_held = sum(held.values())
     for name, seconds in held.items():  # each one's share, for a bar in up to three colours

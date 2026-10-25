@@ -2551,7 +2551,13 @@
     "There is no download of Libre Panel {version} for this kind of install: get it from its page.": "Für diese Art der Installation gibt es keinen Download von Libre Panel {version}: Hol es dir von seiner Seite.",
     "There is no newer version to update to.": "Es gibt keine neuere Version, auf die aktualisiert werden kann.",
     "Update to {version}": "Auf {version} aktualisieren",
-    "{size} MB": "{size} MB"
+    "{size} MB": "{size} MB",
+    "PC power": "PC-Leistung",
+    "0.1% low": "0,1 % Tiefs",
+    "This round has no report: it is no longer kept, or it had no frame rates.": "Diese Runde hat keinen Bericht: Sie ist nicht mehr gespeichert oder hatte keine Bildraten.",
+    "The round report is kept as a picture in {folder}": "Der Rundenbericht ist als Bild in {folder} gespeichert",
+    "Keeps the round report of this round as a picture in your Pictures folder and opens it": "Speichert den Rundenbericht dieser Runde als Bild in deinem Bilder-Ordner und öffnet ihn",
+    "Keep as a picture": "Als Bild behalten"
   },
   "fields": {
     "agent": "Agent",

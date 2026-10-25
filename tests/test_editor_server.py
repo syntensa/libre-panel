@@ -523,6 +523,100 @@ def test_pages_of_the_panel(server, isolated_home):
         assert request(server, "POST", "/api/pages", wrong)[0] == 400, wrong
 
 
+def kept_rounds(home):
+    """A memory with two rounds of Starfall, the last one with its frame figures and the course of
+    its temperatures, and a round of another game without frame rates; their ids."""
+    import sqlite3
+
+    from libre_panel.sensors.demo import demo_course
+    from libre_panel.services.memory_store import SCHEMA
+
+    folder = home / "plugins-data" / "memory"
+    folder.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(folder / "memory.db")
+    con.executescript(SCHEMA)
+    levels = json.dumps(
+        {"edges": [60, 90, 120, 144, 165], "seconds": [26, 52, 235, 1150, 1040, 107]}
+    )
+    starfall = {"game": "Starfall", "program": "starfall", "duration_s": 2700, "fps_s": 2610,
+                "levels": levels, "closed": 1}  # fmt: skip
+    rows = [
+        {**starfall, "id": 1_700_000_000_000, "started": 1_700_000_000, "ended": 1_700_002_700,
+         "fps_mean": 140.0, "cpu_temp_max": 72.0},
+        {**starfall, "id": 1_700_090_000_000, "started": 1_700_090_000, "ended": 1_700_092_700,
+         "fps_mean": 148.3, "cpu_temp_max": 74.1, "power_max": 468.0, "fps_1low": 97.0,
+         "fps_01low": 71.0, "frametime_avg": 6.76, "frametime_max": 38.0,
+         "course": json.dumps(demo_course())},
+        {"id": 1_700_100_000_000, "game": "Puzzle: Box?", "program": "puzzle",
+         "started": 1_700_100_000, "ended": 1_700_100_600, "duration_s": 600, "fps_s": 0,
+         "closed": 1},
+    ]  # fmt: skip
+    for row in rows:
+        names = ", ".join(row)
+        con.execute(f"INSERT INTO sessions ({names}) VALUES ({','.join('?' * len(row))})",
+                    list(row.values()))  # fmt: skip
+    con.commit()
+    con.close()
+    return [row["id"] for row in rows]
+
+
+def test_a_round_of_history_is_kept_as_a_picture_of_its_report(
+    server, isolated_home, tmp_path, monkeypatch
+):
+    """Live → History's *Keep as a picture*: the round's report as the panel shows it, in a
+    picture of the panel, in the Pictures folder, which opens; again: a file of its own."""
+    from io import BytesIO
+    from pathlib import Path
+
+    from PIL import Image
+
+    from libre_panel import tray
+    from libre_panel.config import set_config_value
+    from libre_panel.editor import server as editor_server
+    from libre_panel.services import downloads
+
+    first, last, puzzle = kept_rounds(isolated_home)
+    pictures, opened, themes = tmp_path / "Pictures", [], []
+    monkeypatch.setattr(downloads, "pictures_folder", lambda: pictures)
+    monkeypatch.setattr(tray, "open_path", opened.append)
+    made = editor_server.Renderer
+
+    def renderer(theme, **kw):
+        themes.append(theme.root.name)
+        return made(theme, **kw)
+
+    monkeypatch.setattr(editor_server, "Renderer", renderer)
+    status, data = request(server, "GET", "/api/history?span=month")
+    assert status == 200 and puzzle not in {r["id"] for r in data["rounds"] if r["fps"]}
+
+    status, data = request(server, "POST", "/api/history/picture", {"id": last})
+    assert status == 200, data
+    folder = pictures / "Libre Panel"
+    assert data == {"file": data["file"], "folder": str(folder), "opened": True}
+    assert opened == [folder] and themes == ["round-report"]  # the report page's own
+    kept = Path(data["file"])
+    assert kept.parent == folder and kept.name.startswith("Starfall 2023-11-1")
+    assert kept.suffix == ".png"
+    picture = Image.open(BytesIO(kept.read_bytes()))
+    assert picture.width > 1920 and picture.height > 480  # the panel in a frame, as photographed
+    assert 2 < picture.width / picture.height < 1920 / 480
+    assert len(picture.convert("L").getcolors(65536) or ()) > 50  # the report on it, not a blank
+
+    again = request(server, "POST", "/api/history/picture", {"id": last})[1]
+    assert Path(again["file"]).name == kept.name.replace(".png", " (2).png")  # nothing written over
+    set_config_value("device.model", "turing-12.3-usb")  # its version for the 12.3"
+    set_config_value("services.memory.report_theme", "round-report")
+    assert request(server, "POST", "/api/history/picture", {"id": first})[0] == 200
+    assert themes[-1] == "round-report-1920x720"
+
+    status, data = request(server, "POST", "/api/history/picture", {"id": puzzle})
+    assert status == 404 and "no frame rates" in data["error"]  # no report without them
+    assert request(server, "POST", "/api/history/picture", {"id": 5})[0] == 404
+    for wrong in ({"id": "1700"}, {"id": True}, {}, [1]):
+        assert request(server, "POST", "/api/history/picture", wrong)[0] == 400, wrong
+    assert len(list(folder.iterdir())) == 3
+
+
 def test_pages_say_whether_a_theme_was_chosen(server, isolated_home):
     """A first start has no theme line in config.toml: Start then asks which look to use.
     Choosing one (or any other way of writing the line) ends it."""

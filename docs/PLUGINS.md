@@ -284,14 +284,19 @@ numbers while it leaves with a transition.
     "levels": {"edges": [60, 90, 120, 144, 165], "seconds": [26, 52, 235, 1150, 1040, 107]},
     "limit_cpu_s": 160, "limit_gpu_s": 2440, "limit_cap_s": 10,
     "cpu_temp_max": 74.1, "gpu_temp_max": 56.0, "gpu_hotspot_max": 80.0,
-    "cpu_power_max": 96.0, "gpu_power_max": 327.0, "vram_used_max": 14.8,
-    "outside_temp": 12.6, "closed": 1
+    "cpu_power_max": 96.0, "gpu_power_max": 327.0, "vram_used_max": 14.8, "power_max": 468.0,
+    "outside_temp": 12.6, "closed": 1,
+    "fps_avg": 148.0, "fps_1low": 97.0, "fps_01low": 71.0, "frametime_avg": 6.76,
+    "frametime_max": 38.0,
+    "course": {"seconds": 30.0, "cpu_temp": [48.0, 52.3, 53.6, "..."], "gpu_temp": [42.3, "..."]}
   },
   "comparison": {
     "count": 7,
     "mean": {"fps_mean": 142.1, "fps_p01": 101.2, "fps_low_mean": 99.0, "frametime_mean": 6.9,
              "cpu_temp_max": 72.4, "gpu_temp_max": 57.1, "gpu_hotspot_max": 78.0,
-             "cpu_power_max": 94.0, "gpu_power_max": 318.0, "vram_used_max": 14.5},
+             "cpu_power_max": 94.0, "gpu_power_max": 318.0, "vram_used_max": 14.5,
+             "power_max": 452.0, "fps_avg": 142.0, "fps_1low": 94.0, "fps_01low": 66.0,
+             "frametime_avg": 7.0, "frametime_max": 41.0},
     "levels": [0.02, 0.03, 0.12, 0.40, 0.36, 0.07]
   },
   "seconds": 30,
@@ -307,7 +312,9 @@ numbers while it leaves with a transition.
 | `fps_mean`, `fps_p01`, `fps_low_mean`, `frametime_mean` | the mean of the per-second frame rates; the rate that 1 % of the seconds fell below; the mean of PresentMon's 1 % low; the mean frame time in ms |
 | `levels` | `seconds` in each range of frame rates: below `edges[0]`, between two edges, above the last (one more than there are edges; the `fps_levels` option) |
 | `limit_cpu_s`, `limit_gpu_s`, `limit_cap_s` | the seconds `game.limiter` said the CPU, the GPU or a frame limit held the rate down |
-| `*_max` | the highest value of the round: °C, W, GB (`gpu_hotspot_max` where the card has a hot spot); `null` where there is no such reading |
+| `*_max` | the highest value of the round: °C, W, GB (`gpu_hotspot_max` where the card has a hot spot, `power_max` the PC's, from the `power` service's `power.watts`); `null` where there is no such reading |
+| `fps_avg`, `fps_1low`, `fps_01low`, `frametime_avg`, `frametime_max` | what every frame of the round came to (the `game.*` readings of these names at the round's end): the mean frame rate, the frame rate at the 99th and the 99.9th percentile of the frame times, the mean and the longest frame time in ms; those of the program that told them longest (the game, not its launcher); `null` for a round PresentMon or MangoHud told none of, or that was recorded before they were counted |
+| `course` | the CPU's and the GPU's temperature over the round, `{"seconds": 30.0, "cpu_temp": [...], "gpu_temp": [...]}`: 60 to 120 points, each the mean of `seconds` seconds (`null` where nothing told one), however long the round was; `null` for a round recorded before |
 | `outside_temp` | °C, from the weather, `null` without |
 | `comparison.count` | how many earlier rounds are in it (0: the first round) |
 | `comparison.mean` | the same numbers, averaged over those rounds (`null` where none had it) |
@@ -321,8 +328,12 @@ the panel):
 |---|---|
 | `report.title`, `report.game`, `report.when`, `report.versus` | texts: "Round report", the game, "21:03 – 21:48", "Compared with the last 7 rounds" |
 | `report.length`, `report.outside` | s, °C |
-| `report.fps`, `report.low`, `report.frametime` | the means: fps, fps, ms |
+| `report.fps`, `report.low`, `report.frametime` | the means of the seconds: fps, fps, ms |
 | `report.fps_delta`, `report.low_delta`, `report.frametime_delta` | this round minus the mean of the earlier ones |
+| `report.fps_avg`, `report.fps_1low`, `report.fps_01low`, `report.frametime_avg`, `report.frametime_max` | what every frame came to: fps, fps, fps, ms, ms (labels "Average FPS", "1% low", "0.1% low", "Frame time", "Longest frame"); no value for a round without them |
+| `report.fps_avg_delta`, `report.fps_1low_delta`, ... | this round minus the mean of the earlier rounds that had them |
+| `report.course.cpu_temp`, `report.course.gpu_temp` | °C: the course, as text a `graph` draws whole across its box (`"[61.5, 63.0, null, ...]"`); `report.head.course` is its heading ("Temperature") |
+| `report.power`, `report.power_mean`, `report.power_delta` | W: the PC's highest power, where the `power` service runs |
 | `report.count` | how many earlier rounds the comparison is made of (0: the first round) |
 | `report.limit` | text: who held the rate down, by share, "GPU 94 %  CPU 6 %" |
 | `report.limit.gpu`, `report.limit.cpu`, `report.limit.cap` | the same shares as numbers in percent, for a bar in their colours (no value for one that held the rate down for under half a percent of that time, as in the text) |

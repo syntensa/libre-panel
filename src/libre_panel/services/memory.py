@@ -9,9 +9,10 @@ Titles of tracks, windows and files are never read, so none can be kept; of a ga
 name and the program's name are.
 
 When a game has been played long enough, the service builds a round report: the round
-against the last ones of the same program. It publishes it (``report`` and ``report.*``) and
-shows a theme for a while, which a new game ends at once. The game itself comes from the
-``game`` service (``game.name``) and the frame rates from PresentMon (``game.*``).
+against the last ones of the same program, what all its frames came to, and how warm the CPU
+and the GPU were over it. It publishes it (``report`` and ``report.*``) and shows a theme for a
+while, which a new game ends at once. The game itself comes from the ``game`` service
+(``game.name``) and the frame rates from PresentMon or MangoHud (``game.*``).
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ from libre_panel.services import fancontrol, round_report
 from libre_panel.services.memory_store import (
     COOLING_VALUES,
     DATABASE,
+    FRAME_FIGURES,
     MEANS,
     PEAKS,
     SESSION_PEAKS,
@@ -61,6 +63,10 @@ DAY_S = 86400
 COOLING_MIN_S = 12.0
 COOLING_MIN_GAME_S = 5.0
 COOLING_MAX_S = 60.0
+# The course of a round's temperatures has COURSE_POINTS to twice as many points, each the mean
+# of as many seconds: two and two become one when there are twice as many (``_Course``).
+COURSE_POINTS = 60
+COURSE = ("cpu_temp", "gpu_temp")
 # How far a value must move to count; below that it is noise.
 MOVE_TEMP = 2.0  # K
 MOVE_RPM = 40.0  # a fan's speed jitters by about 25
@@ -74,7 +80,7 @@ SOURCES = {
     "gpu_temp": "gpu.temp", "cpu_power": "cpu.power", "gpu_power": "gpu.power",
     "cpu_clock": "cpu.freq", "gpu_clock": "gpu.freq", "mem_used": "mem.used",
     "vram_used": "gpu.mem.used", "net_down": "net.down", "net_up": "net.up",
-    "volume": "audio.volume",
+    "volume": "audio.volume", "power": "power.watts",
 }  # fmt: skip
 # What the service asks the sources for, so that those that work on demand run for it.
 WANTED = (
@@ -142,6 +148,7 @@ class Sample:
     fps: float | None = None
     low: float | None = None
     frametime: float | None = None
+    frames: dict[str, float] = field(default_factory=dict)  # what the round's frames came to
     limiter: str | None = None
     music: bool = False
     outside: float | None = None
@@ -203,6 +210,10 @@ class Reader:
         sample.fps = _positive(snapshot.value("game.fps"))
         sample.low = _positive(snapshot.value("game.low"))
         sample.frametime = _positive(snapshot.value("game.frametime"))
+        for name in FRAME_FIGURES:
+            value = _positive(snapshot.value(f"game.{name}"))
+            if value is not None:
+                sample.frames[name] = value
         limiter = snapshot.value("game.limiter")
         sample.limiter = limiter if limiter in ("cpu", "gpu", "cap") else None
         program = snapshot.value("game.app")
@@ -314,7 +325,7 @@ MINUTE_COLUMNS = (
 SESSION_COLUMNS = (
     "id", "game", "program", "started", "ended", "duration_s", "fps_s", "fps_mean", "fps_p01",
     "fps_low_mean", "frametime_mean", "levels", "limit_cpu_s", "limit_gpu_s", "limit_cap_s",
-    *(f"{k}_max" for k in SESSION_PEAKS), "outside_temp", "closed",
+    *(f"{k}_max" for k in SESSION_PEAKS), "outside_temp", "closed", *FRAME_FIGURES, "course",
 )  # fmt: skip
 COOLING_COLUMNS = (
     "ts", "mode", "game", *COOLING_VALUES, "outside_temp", "temps", "fans", "sources",
@@ -381,6 +392,56 @@ class _Minute:
         ]  # fmt: skip
 
 
+class _Course:
+    """How some values went over a round, as ``COURSE_POINTS`` to twice as many points, each
+    the mean of the same number of samples: when there are twice as many, two and two become
+    one. A round of any length keeps the same few numbers, and the whole round is in them."""
+
+    def __init__(self, names: tuple[str, ...]) -> None:
+        self.names = names
+        self.width = 1  # samples to a point
+        self.points: list[tuple[dict[str, float], dict[str, int]]] = []  # sums and counts
+        self.filled = 0  # samples in the last point
+
+    def add(self, values: dict[str, float | None]) -> None:
+        if not self.points or self.filled >= self.width:
+            if len(self.points) == 2 * COURSE_POINTS:
+                self._halve()
+            self.points.append(({}, {}))
+            self.filled = 0
+        self.filled += 1
+        sums, counts = self.points[-1]
+        for name in self.names:
+            value = values.get(name)
+            if value is not None:
+                sums[name] = sums.get(name, 0.0) + value
+                counts[name] = counts.get(name, 0) + 1
+
+    def _halve(self) -> None:
+        pairs = zip(self.points[::2], self.points[1::2], strict=True)
+        self.points = [
+            (
+                {k: s1.get(k, 0.0) + s2.get(k, 0.0) for k in s1.keys() | s2.keys()},
+                {k: c1.get(k, 0) + c2.get(k, 0) for k in c1.keys() | c2.keys()},
+            )
+            for (s1, c1), (s2, c2) in pairs
+        ]
+        self.width *= 2
+
+    def course(self) -> dict[str, Any] | None:
+        """``{"seconds": per point, name: [mean or None, ...]}``; None while nothing told a
+        value."""
+        if not any(counts for _sums, counts in self.points):
+            return None
+        found: dict[str, Any] = {"seconds": self.width * SAMPLE_S}
+        for name in self.names:
+            found[name] = [
+                round(sums[name] / counts[name], 1) if counts.get(name) else None
+                for sums, counts in self.points
+            ]
+        return found
+
+
 class _Session:
     """A game being played, from its first sample to its last."""
 
@@ -397,10 +458,18 @@ class _Session:
         self.limits: Counter[str] = Counter()
         self.peaks: dict[str, float] = {}
         self.outside = sample.outside
+        # what the frames came to, by program: (seconds it told them, the last it told); the
+        # round's are those of the program that told them longest (the game, not its launcher)
+        self.frames: dict[str, tuple[int, dict[str, float]]] = {}
+        self.course = _Course(COURSE)
 
     def add(self, sample: Sample) -> None:
         if not self.program and sample.program:
             self.program = sample.program
+        if sample.frames:
+            seconds = self.frames.get(sample.program, (0, {}))[0]
+            self.frames[sample.program] = (seconds + 1, dict(sample.frames))
+        self.course.add(sample.values)
         if sample.fps is not None:
             self.fps.append(sample.fps)
             self.total += sample.fps
@@ -436,6 +505,8 @@ class _Session:
             "edges": list(self.edges),
             "seconds": [self.levels[i] for i in range(len(self.edges) + 1)],
         }
+        frames = max(self.frames.values(), key=lambda told: told[0])[1] if self.frames else {}
+        course = self.course.course()
         return [
             self.id, self.game, self.program, round(self.started), round(at),
             round(at - self.started), len(ranked), _mean(ranked),
@@ -443,6 +514,7 @@ class _Session:
             _mean(self.low), _mean(self.frametime), json.dumps(levels),
             self.limits["cpu"], self.limits["gpu"], self.limits["cap"],
             *(self.peaks.get(k) for k in SESSION_PEAKS), self.outside, 1 if closed else 0,
+            *(frames.get(k) for k in FRAME_FIGURES), json.dumps(course) if course else None,
         ]  # fmt: skip
 
 
