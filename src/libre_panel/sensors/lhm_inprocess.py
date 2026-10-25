@@ -20,7 +20,8 @@ thread of its own. ``LibreHardwareMonitorProvider`` takes this way when it can
   zero. The GPU, the loads, memory use and the network need neither.
 - **Cost.** Updating every hardware node can take over ten milliseconds, and .NET holds
   Python's lock all the while. So only the nodes with a sensor that a theme on show reads
-  (``wanted``) are updated, with a short pause between two of them for the renderer.
+  (``wanted``) are updated, with a short pause between two of them for the renderer. What
+  each node's update took is in the status (``timing``): *Live → Diagnose → Load* shows it.
 """
 
 from __future__ import annotations
@@ -40,8 +41,10 @@ from libre_panel.sensors.base import Reading, wanted, wanted_keys
 from libre_panel.sensors.librehardwaremonitor import (
     LhmSensor,
     LhmStatus,
+    Timing,
     readings_from_sensors,
     ring0_steps,
+    time_round,
 )
 
 log = logging.getLogger(__name__)
@@ -442,6 +445,7 @@ class InProcessSource:
         on_ready: Callable[[LhmStatus], None] | None = None,
         on_failure: Callable[[str], None] | None = None,
         clock: Callable[[], float] = time.monotonic,
+        timer: Callable[[], float] = time.perf_counter,
     ) -> None:
         self.poll_seconds = max(0.1, poll_seconds)
         # 0 or less keeps the last readings; a source slower than the limit must not hide
@@ -451,6 +455,8 @@ class InProcessSource:
         self._on_ready = on_ready
         self._on_failure = on_failure
         self._clock = clock
+        self._timer = timer  # what each node's update took (Live -> Diagnose -> Load)
+        self._timing = Timing()
         self._nodes: list[_Node] = []
         self._node_of: dict[str, _Node] = {}  # sensor id -> node
         self._needed: tuple[Any, list[_Node]] | None = None  # for what was read, who was needed
@@ -610,22 +616,26 @@ class InProcessSource:
 
     def refresh(self) -> None:
         """One round: update what is read, then make the readings. Now and then a round reads
-        all hardware (SURVEY_SECONDS), so that sensors that appear later are found."""
+        all hardware (SURVEY_SECONDS), so that sensors that appear later are found. Each
+        node's update is timed: the round's times are in the status."""
         now = self._clock()
-        if self._surveyed is None or now - self._surveyed >= SURVEY_SECONDS:
+        full = self._surveyed is None or now - self._surveyed >= SURVEY_SECONDS
+        if full:
             self._surveyed = now
             nodes = list(self._nodes)
         else:
             nodes = self.needed()
-        for position, node in enumerate(nodes):
-            if position:
-                self._stop.wait(PAUSE_SECONDS)  # the renderer gets the GIL between two
-            self._update(node)
+        done = time_round(nodes, self._update, self._pause, full, self._timer)
+        with self._lock:
+            self._timing = self._timing.after(done)
         if nodes:
             self._publish()
         else:  # nothing is read: the source is alive, its readings are what they were
             with self._lock:
                 self._beat = self._clock()
+
+    def _pause(self) -> None:
+        self._stop.wait(PAUSE_SECONDS)  # the renderer gets the GIL between two nodes
 
     def _publish(self) -> None:
         ring0 = ring0_state(self._nodes)
@@ -647,7 +657,10 @@ class InProcessSource:
 
     def status(self) -> LhmStatus:
         with self._lock:
-            return LhmStatus("inprocess", self._elevated, self._ring0, self._pawnio, self._error)
+            return LhmStatus(
+                "inprocess", self._elevated, self._ring0, self._pawnio, self._error,
+                timing=self._timing,
+            )  # fmt: skip
 
     def wait_ready(self, timeout: float) -> bool:
         """Whether the first readings are in (or it gave up) within ``timeout`` seconds."""

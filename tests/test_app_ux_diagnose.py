@@ -137,3 +137,142 @@ def test_a_port_other_devices_have_too_is_asked_about_and_can_be_none(app_url): 
         question.locator('[data-answer="none"]').click()
         expect(page.locator('[data-diagnose="report"]')).to_be_visible()
         assert doctor.answers == [{"id": 1}]
+
+
+MB = 1024**2
+LOAD = {
+    "ready": True, "cpus": 8, "window_s": 2.0, "sample_ms": 1.4, "age_s": 0.3,
+    "total": {"cpu_core": 41.0, "cpu_pc": 5.12, "rss": 735 * MB},
+    "processes": [
+        {"role": "main", "panel": None, "name": "", "count": 1, "cpu_core": 25.0, "cpu_pc": 3.12,
+         "rss": 200 * MB, "label": "main process"},
+        {"role": "panel", "panel": 2, "name": "", "count": 1, "cpu_core": 10.0, "cpu_pc": 1.25,
+         "rss": 90 * MB, "label": "panel 2"},
+        {"role": "ffmpeg", "panel": 2, "name": "", "count": 1, "cpu_core": 4.0, "cpu_pc": 0.5,
+         "rss": 40 * MB, "label": "ffmpeg (panel 2)"},
+        {"role": "webview", "panel": None, "name": "", "count": 2, "cpu_core": 0.0, "cpu_pc": 0.0,
+         "rss": 150 * MB, "label": "WebView2"},
+        {"role": "service", "panel": None, "name": "", "count": 1, "cpu_core": 2.0, "cpu_pc": 0.25,
+         "rss": 80 * MB, "label": "sensor service", "found_by": "service manager"},
+        {"role": "other", "panel": None, "name": "conhost.exe", "count": 1, "cpu_core": None,
+         "cpu_pc": None, "rss": 5 * MB, "label": "other: conhost.exe"},
+    ],
+    "threads": [
+        {"name": "panel", "count": 1, "cpu_core": 15.0, "cpu_pc": 1.88},
+        {"name": "lhm-service", "count": 1, "cpu_core": 2.0, "cpu_pc": 0.25},
+        {"name": "other", "count": 3, "cpu_core": 8.0, "cpu_pc": 1.0},
+    ],
+    "service": {"state": "running", "found_by": "service manager"},
+    "sensors": {
+        "mode": "service", "version": "0.7.1", "error": "", "reported": True,
+        "last": {"ms": 9.8, "full": False, "parts": [
+            {"kind": "Cpu", "name": "8-Core Processor", "ms": 6.1},
+            {"kind": "GpuNvidia", "name": "Graphics Card", "ms": 3.7}]},
+        "full": {"ms": 30.3, "full": True, "parts": [
+            {"kind": "SuperIO", "name": "Super I/O Chip", "ms": 20.0},
+            {"kind": "Cpu", "name": "8-Core Processor", "ms": 6.1},
+            {"kind": "GpuNvidia", "name": "Graphics Card", "ms": 3.7},
+            {"kind": "Memory", "name": "Total Memory", "ms": 0.5}]},
+    },
+    "text": "Libre Panel load over 2.0 s, 8 logical processors\nmain process 3.1 %\n",
+}  # fmt: skip
+
+
+class Load:
+    """/api/load's answers, counted."""
+
+    def __init__(self, answer):
+        self.answer, self.asked = answer, 0
+
+    def route(self, route, request):
+        self.asked += 1
+        route.fulfill(status=200, content_type="application/json", body=json.dumps(self.answer))
+
+
+def test_the_load_card_shows_what_libre_panel_costs_and_copies_it_as_text(app_url):  # noqa: F811
+    load = Load(LOAD)
+    with browser_page(app_url, "live/diagnose", routes={"**/api/load": load.route}) as page:
+        card = page.locator(".diagnose-load")
+        expect(card.locator("#diagnose-load-title")).to_have_text("Load")
+        expect(card.locator('[data-load="cpu"]')).to_have_text("5.1 %")
+        expect(card.locator('[data-load="memory"]')).to_have_text("735 MB")
+        expect(card.locator(".load-headline")).to_contain_text(
+            "41.0 % of one core · 8 logical processors"
+        )
+        rows = card.locator(".load-table tbody tr")
+        expect(rows).to_have_count(6)
+        expect(rows.nth(0)).to_contain_text("Main process")
+        expect(rows.nth(0)).to_contain_text("3.1 %")
+        expect(rows.nth(0)).to_contain_text("25.0 %")
+        expect(rows.nth(0)).to_contain_text("200 MB")
+        expect(rows.nth(1)).to_contain_text("Panel 2")
+        expect(rows.nth(2)).to_contain_text("Video of panel 2 (ffmpeg)")
+        expect(rows.nth(3)).to_contain_text("Browser engine of the window ×2")
+        expect(rows.nth(4)).to_contain_text("Sensor service")
+        expect(rows.nth(5)).to_contain_text("conhost.exe")
+        expect(rows.nth(5)).to_contain_text("–")  # not measured yet
+        threads = card.locator(".load-threads")
+        expect(threads.locator("li").first).not_to_be_visible()  # folded
+        threads.locator("summary").click()
+        expect(threads.locator("li")).to_have_count(3)
+        expect(threads.locator("li").first).to_contain_text("panel")
+        expect(threads.locator("li").last).to_contain_text("Other threads ×3")
+        sensors = card.locator('[data-load="sensors"]')
+        expect(sensors).to_contain_text("Through the sensor service 0.7.1")
+        rounds = sensors.locator(".load-round")
+        expect(rounds).to_have_count(2)
+        expect(rounds.nth(0)).to_contain_text("Last round (every second)")
+        expect(rounds.nth(0)).to_contain_text("9.8 ms")
+        expect(rounds.nth(0)).to_contain_text("8-Core Processor 6.1 ms")
+        expect(rounds.nth(1)).to_contain_text("All hardware (now and then)")
+        expect(rounds.nth(1)).to_contain_text("30.3 ms")
+        expect(rounds.nth(1).locator(".load-part")).to_have_count(3)  # the three slowest
+        expect(rounds.nth(1)).not_to_contain_text("Total Memory")
+        expect(card).to_contain_text("Per PC is what the Task Manager shows")
+        expect(card).to_contain_text("Measuring took 1.4 ms.")
+        page.evaluate(
+            "Object.defineProperty(navigator.clipboard, 'writeText',"
+            " {value: async (text) => { window.copied = text; }})"
+        )
+        card.locator('[data-load="copy"]').click()
+        assert page.evaluate("window.copied") == LOAD["text"]
+        # every two seconds while it is on screen; not once it has left
+        asked = load.asked
+        page.wait_for_timeout(2300)
+        assert load.asked > asked
+        page.evaluate("location.hash = '#/settings'")
+        page.wait_for_timeout(300)
+        asked = load.asked
+        page.wait_for_timeout(2500)
+        assert load.asked == asked
+
+
+def test_the_load_card_measures_first_and_tells_an_older_service(app_url):  # noqa: F811
+    load = Load({"ready": False, "cpus": 8, "window_s": 2.0})
+    with browser_page(app_url, "live/diagnose", routes={"**/api/load": load.route}) as page:
+        card = page.locator(".diagnose-load")
+        expect(card).to_contain_text("Measuring …")
+        expect(card.locator('[data-load="copy"]')).to_be_disabled()
+        older = {
+            **LOAD["sensors"],
+            "version": "0.6.0",
+            "reported": False,
+            "last": None,
+            "full": None,
+        }
+        load.answer = {**LOAD, "sensors": older}
+        expect(card.locator('[data-load="unreported"]')).to_have_text(
+            "Not reported by this service version."
+        )
+        expect(card.locator('[data-load="sensors"]')).to_contain_text(
+            "Through the sensor service 0.6.0"
+        )
+        expect(card.locator('[data-load="copy"]')).to_be_enabled()
+
+
+def test_the_load_card_reads_the_real_measurement(app_url):  # noqa: F811
+    """With the server's own sampler: this process, measured."""
+    with browser_page(app_url, "live/diagnose") as page:
+        card = page.locator(".diagnose-load")
+        expect(card.locator('[data-load="cpu"]')).to_contain_text("%", timeout=15000)
+        expect(card.locator(".load-table tbody tr").first).to_contain_text("Main process")

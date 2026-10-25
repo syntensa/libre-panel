@@ -259,7 +259,7 @@ nothing while no theme shows it.
 
 | Panel | Sizes | Connects as | Status |
 |---|---|---|---|
-| Turing / TURZX | 1.6", 2.1" round, 2.8" round, 4.6", 5.2", 8", 8.8", 9.2", 12.3" | USB device (`1cbe:…`) | 9.2": proven for hours, as stills and as 50 fps video. 8.8" and 12.3": run, as their owners report. Other sizes: the same protocol, unverified |
+| Turing / TURZX | 1.6", 2.1" round, 2.8" round, 4.6", 5.2", 8", 8.8", 9.2", 12.3" | USB device (`1cbe:…`) | 9.2": proven for hours, as stills and as 50 fps video, and confirmed by an owner's doctor report. 8.8" and 12.3": run, as their owners report. Other sizes: the same protocol, unverified |
 | Turing Smart Screen | 2.1" round, 3.5", 5", 8.8" | virtual COM port | 3.5" and 8.8": run, as their owners report. 2.1" and 5": unverified |
 | UsbPCMonitor | 3.5", 5", 7" | virtual COM port | unverified |
 | XuanFang | 3.5" | virtual COM port | unverified |

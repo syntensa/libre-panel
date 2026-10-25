@@ -582,7 +582,9 @@ def test_the_appimage_takes_the_running_one_s_place(tmp_path, monkeypatch):
     quit = []
     install.install(lambda: quit.append(1))
     done(install)
-    assert image.read_bytes() == b"new AppImage" and image.stat().st_mode & 0o111
+    assert image.read_bytes() == b"new AppImage"
+    if os.name != "nt":
+        assert image.stat().st_mode & 0o111
     assert not downloaded.exists() and quit == [1]
     assert install.spawned == [
         (restart_command("appimage", updates.os.getpid(), image), image.parent)

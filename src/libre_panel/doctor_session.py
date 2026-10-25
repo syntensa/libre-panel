@@ -75,11 +75,14 @@ class Session:
     where no loop holds the panel); ``make_doctor`` makes the doctor (tests give it a panel)."""
 
     def __init__(self, panel: Any = None, config_path: Path | None = None,
-                 make_doctor: Any = None, devices: Any = None) -> None:  # fmt: skip
+                 make_doctor: Any = None, devices: Any = None,
+                 load: Any = None) -> None:  # fmt: skip
         self.panel = panel
         self.config_path = config_path
         self.make_doctor = make_doctor
         self.devices = devices  # the list of what is plugged in, for the report form
+        self.load = load  # what Libre Panel costs the PC, as text (load_report.py), for the report
+        self._load_text = ""  # ... as it was when the test began
         self._lock = threading.Lock()
         self._answers: queue.Queue[dict[str, Any]] = queue.Queue()
         self._cancel = threading.Event()
@@ -104,7 +107,7 @@ class Session:
         }
         if report is not None:
             out["report"] = {
-                "text": report.text(),
+                "text": self._text(report),
                 "passed": report.passed,
                 "failed": report.failed,
                 "summary": report.summary,
@@ -122,7 +125,7 @@ class Session:
             self._answers = queue.Queue()
             self._cancel = threading.Event()
             self.state, self.question, self.error, self.report = "running", None, "", None
-            self._doctor = None
+            self._doctor, self._load_text = None, ""
             self._thread = threading.Thread(target=self._run, name="panel test", daemon=True)
             self._thread.start()
         return self.status()
@@ -180,6 +183,7 @@ class Session:
 
         ran = held = False
         try:
+            self._measure_load()  # before the test holds the panel: Libre Panel as it runs
             if self.panel is not None:
                 ran, held = self.panel.hold(), True
             try:
@@ -206,6 +210,19 @@ class Session:
             if held:
                 self.panel.release(ran)
 
+    def _measure_load(self) -> None:
+        if self.load is None:
+            return
+        try:
+            self._load_text = self.load()
+        except Exception:  # noqa: BLE001 - the load is a help in the report, not a must
+            log.debug("no load for the report", exc_info=True)
+
+    def _text(self, report: Any) -> str:
+        """The doctor's report, and what Libre Panel cost the PC before the test."""
+        text = report.text()
+        return f"{text}\n{self._load_text}" if self._load_text else text
+
     @staticmethod
     def _say(text: str) -> None:
         if text.strip():
@@ -213,7 +230,7 @@ class Session:
 
     def _form(self, report: Any) -> str:
         """The report form on GitHub with this test filled in (the person sends it)."""
-        fields = {"doctor": report.text()}
+        fields = {"doctor": self._text(report)}
         if report.model is not None:
             fields["product"] = report.model.label
         if report.passed:

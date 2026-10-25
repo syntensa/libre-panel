@@ -5,7 +5,8 @@ in the last ``REQUEST_SECONDS`` up to date, once a second, as Libre Panel does w
 a theme on show reads. While anyone asks, every piece is read now and then as well
 (``REFRESH_SECONDS``), so that the rest of the list is not hours old; while nobody asks, nothing
 is read at all. A request never touches the hardware: it is answered from what the thread read
-last, so however often clients ask, the hardware is read once a second.
+last, so however often clients ask, the hardware is read once a second. Each piece's update is
+timed, and the answers say what the last round and the last full one took.
 
 ``serve(stream, handler)`` is one connection: a request in, an answer out, at most ``RATE`` a
 second, until the client goes or says nothing for ``IDLE_SECONDS``. ``winpipe`` gives it the
@@ -23,7 +24,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from libre_panel import __version__
-from libre_panel.sensors.librehardwaremonitor import LhmSensor
+from libre_panel.sensors.librehardwaremonitor import LhmSensor, RoundTime, Timing, time_round
 from libre_panel.sensorservice.protocol import (
     HEADER,
     MAX_ANSWER,
@@ -78,6 +79,7 @@ class Reader:
         refresh_seconds: float = REFRESH_SECONDS,
         pawnio: Callable[[], str | None] | None = None,
         clock: Callable[[], float] = time.monotonic,
+        timer: Callable[[], float] = time.perf_counter,
     ) -> None:
         self.poll_seconds = max(0.05, poll_seconds)
         self.request_seconds = request_seconds
@@ -85,6 +87,8 @@ class Reader:
         self._opener = opener
         self._pawnio = pawnio
         self._clock = clock
+        self._timer = timer
+        self._timing = Timing()  # what the rounds took
         self._nodes: list[Any] = []  # lhm_inprocess._Node, read by the thread only
         self._asked: dict[str, float] = {}  # hardware id -> when a client last named it
         self._last_request: float | None = None  # when a client last asked at all
@@ -170,19 +174,22 @@ class Reader:
                     # clients ask, for none of the hardware: what was read stays good (as
                     # Libre Panel's own source keeps it), only nobody reads anything now
                     self._snapshot = dataclasses.replace(self._snapshot, stamp=now)
+                self._timing = self._timing.after(RoundTime())  # a round that reads nothing
                 return False
         full = everything or self._full is None or now - self._full >= self.refresh_seconds
         # a full round reads all hardware, also a part without sensors yet: LibreHardwareMonitor
         # lists some only once they have a value (a fan that starts), and the update finds them
         nodes = [n for n in self._nodes if full or (n.entries and n.hardware_id in recent)]
-        for position, node in enumerate(nodes):
-            if position:
-                self._stop.wait(PAUSE_SECONDS)
-            self._update(node)
+        done = time_round(nodes, self._update, self._pause, full, self._timer)
         if full:
             self._full = now
+        with self._lock:
+            self._timing = self._timing.after(done)
         self._publish()
         return True
+
+    def _pause(self) -> None:
+        self._stop.wait(PAUSE_SECONDS)  # between two pieces of a round
 
     def _publish(self) -> None:
         from libre_panel.sensors.lhm_inprocess import live_sensors, ring0_state
@@ -214,6 +221,11 @@ class Reader:
     def snapshot(self) -> Snapshot:
         with self._lock:
             return self._snapshot
+
+    def timing(self) -> Timing:
+        """What the last round, and the last full one, took (each part's update)."""
+        with self._lock:
+            return self._timing
 
     def close(self) -> None:
         """Stop; the thread closes the computer, so nothing is closed while it reads."""
@@ -252,6 +264,7 @@ class Handler:
             ring0=snap.ring0,
             pawnio=snap.pawnio,
             error=snap.error,
+            timing=self.reader.timing(),
         )
 
 

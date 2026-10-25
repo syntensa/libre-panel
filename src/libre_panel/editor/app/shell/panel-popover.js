@@ -91,7 +91,7 @@ function PanelChoice({ theme, models }) {
                 <span class="model-shape ${model.shape === "round" ? "round" : ""}"></span>
                 <span class="model-name">${panelName(model)}</span>
                 <span class="model-size mono">${model.landscape[0]} × ${model.landscape[1]}</span>
-                <span class="model-proto">${model.protocol_name.startsWith("USB bulk") ? "USB" : t("serial")}</span>
+                <span class="model-proto">${model.protocol.startsWith("usb") ? "USB" : t("serial")}</span>
               </button>`,
             )}
           </div>`,

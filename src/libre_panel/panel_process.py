@@ -43,6 +43,13 @@ START_S = 30.0  # a process that says nothing for so long after its start is end
 # what comes back of the panel's RunStatus (not its picture, the drivers' counters or a hub)
 SENT = ("state", "target", "theme", "default_theme", "missing_theme", "sequence", "size",
         "model", "detail", "frames", "mode", "stats")  # fmt: skip
+_PIDS: dict[int, int] = {}  # the panels' processes started here: process id -> panel number
+
+
+def panel_pids() -> dict[int, int]:
+    """Each panel's process started here and not ended: its process id -> the panel's number
+    (2: the first beside [device]'s). What Live -> Diagnose -> Load calls them by."""
+    return dict(_PIDS)
 
 
 # -- the first panel's side ------------------------------------------------------------------
@@ -109,6 +116,8 @@ class PanelProcess:
         self.process = ctx.Process(target=child, args=(n, str(path), theirs, self._logs),
                                    name=f"panel-{n + 2}", daemon=True)  # fmt: skip
         self.process.start()
+        if self.process.pid is not None:
+            _PIDS[self.process.pid] = n + 2
         theirs.close()
         self._threads = [
             threading.Thread(target=target, name=f"panel-{n + 2}-{name}", daemon=True)
@@ -137,6 +146,8 @@ class PanelProcess:
         if not ended:
             self.process.terminate()
             self.process.join(2.0)
+        if not self.process.is_alive():
+            _PIDS.pop(self.process.pid, None)
         self._stop.set()
         self._unmark()
         _forget(self._wanting)

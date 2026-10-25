@@ -272,7 +272,7 @@ zur Seite, wenn seine Messwerte fehlen, und kostet nichts, solange kein Theme es
 
 | Panel | Größen | Meldet sich als | Stand |
 |---|---|---|---|
-| Turing / TURZX | 1,6", rund 2,1", rund 2,8", 4,6", 5,2", 8", 8,8", 9,2", 12,3" | USB-Gerät (`1cbe:…`) | 9,2": stundenlang erprobt, als Standbild und als Video mit 50 fps. 8,8" und 12,3": laufen, wie ihre Besitzer berichten. Andere Größen: dasselbe Protokoll, ungeprüft |
+| Turing / TURZX | 1,6", rund 2,1", rund 2,8", 4,6", 5,2", 8", 8,8", 9,2", 12,3" | USB-Gerät (`1cbe:…`) | 9,2": stundenlang erprobt, als Standbild und als Video mit 50 fps, und durch den Doctor-Bericht eines Besitzers bestätigt. 8,8" und 12,3": laufen, wie ihre Besitzer berichten. Andere Größen: dasselbe Protokoll, ungeprüft |
 | Turing Smart Screen | rund 2,1", 3,5", 5", 8,8" | virtueller COM-Port | 3,5" und 8,8": laufen, wie ihre Besitzer berichten. 2,1" und 5": ungeprüft |
 | UsbPCMonitor | 3,5", 5", 7" | virtueller COM-Port | ungeprüft |
 | XuanFang | 3,5" | virtueller COM-Port | ungeprüft |

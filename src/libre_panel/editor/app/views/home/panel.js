@@ -38,7 +38,7 @@ export function usePanelModel() {
   return panelModelNow();
 }
 
-const protocolName = (model) => (model.protocol_name.startsWith("USB bulk") ? "USB" : t("serial"));
+const protocolName = (model) => (model.protocol.startsWith("usb") ? "USB" : t("serial"));
 
 /** How the model's panel plugs in, unless another model has the same name (two Turing 8.8″). */
 const connection = (model, models) => (models.filter((other) => other.label === model.label).length > 1 ? null : protocolName(model));

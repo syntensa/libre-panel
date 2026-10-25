@@ -1166,3 +1166,52 @@ def test_the_pages_of_a_panel_beside_the_first_are_read_and_written(tmp_path):
         srv.shutdown()
         srv.server_close()
         srv.editor_state.close()
+
+
+def test_the_load_has_its_route_and_is_measured_only_while_asked(editor):
+    """Live → Diagnose → Load: the first answer comes at once (no measurement waits for a
+    request), the next ones say what this process and its children cost; the thread that
+    measures ends with the server."""
+    from fake_sensors import wait_for
+
+    status, body = request(editor.port, "GET", "/api/load")
+    assert status == 200 and body["ready"] is False and body["cpus"] >= 1
+    sampler = editor.state.load_sampler()
+    assert sampler is editor.state.load_sampler()  # one for the server
+    assert wait_for(lambda: request(editor.port, "GET", "/api/load")[1]["ready"], 10)
+    body = request(editor.port, "GET", "/api/load")[1]
+    main = body["processes"][0]
+    assert main["role"] == "main" and main["rss"] > 0 and main["cpu_core"] is not None
+    assert body["total"]["cpu_pc"] == pytest.approx(
+        body["total"]["cpu_core"] / body["cpus"], abs=0.02
+    )
+    assert any(thread["name"] == "load-report" for thread in body["threads"])
+    assert body["sensors"] is None  # no panel loop here, and no LibreHardwareMonitor
+    assert body["text"].startswith("Libre Panel load over")
+    editor.state.close()
+    assert sampler._thread is None
+
+
+def test_the_load_takes_the_round_times_of_the_panel_loops_libre_hardware_monitor():
+    from libre_panel.editor.server import EditorState
+    from libre_panel.sensors import librehardwaremonitor as lhm
+
+    class Provider(lhm.LibreHardwareMonitorProvider):
+        def __init__(self):  # (nothing is read: only the status is asked for)
+            pass
+
+        def status(self):
+            done = lhm.RoundTime((lhm.PartTime("/amdcpu/0", "CPU", "Cpu", 0.003),))
+            return lhm.LhmStatus("service", True, True, timing=lhm.Timing(done), version="0.7.1")
+
+    hub = SimpleNamespace(providers=[object(), Provider()])
+    state = EditorState(
+        controls=SimpleNamespace(panel=SimpleNamespace(status=SimpleNamespace(hub=hub)))
+    )
+    try:
+        status = state._lhm_status()
+        assert status.mode == "service" and status.timing.last.seconds == 0.003
+        assert state.doctor().load is not None  # the panel report carries the load
+        assert EditorState()._lhm_status() is None  # a plain editor with no readings yet
+    finally:
+        state.close()

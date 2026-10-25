@@ -3,6 +3,21 @@
 ## 0.7.1rc5 — 2026-10-24
 
 **Changes**
+- **What Libre Panel costs your PC**: a Load card in Live → Diagnose shows Libre Panel's
+  processor share and memory as the Task Manager counts them, per process (the app, each
+  panel's process, each ffmpeg, PresentMon, the window, the sensor service), the threads of
+  the app by name, and how long LibreHardwareMonitor's rounds take with their slowest parts
+  (a sensor service from before says "not reported by this service version"). Copy as text
+  for an issue; the panel report carries it too. Nothing is measured while the card is not
+  on screen.
+- **Panels**: the TURZX 9.2" is confirmed by an owner's doctor report, every check passed (#19).
+- **More makers' screens, unverified**: drivers for Thermalright's Trofeo Vision (the 6.86"
+  and the 9.16" and 11.3" bars), every BeadaPanel model (on the Panel-Link stream they all
+  take), the NZXT Krakens with an LCD (Z53/Z63/Z73, Kraken 2023, Elite RGB 2024, Plus 2024:
+  still pictures through the cooler's picture memory, never its pump or fans) and
+  Thermaltake's 6" LCD, each written from the published sources (credited in NOTICE.md) and
+  none yet seen on real hardware: `auto` finds them, Settings lists them, HARDWARE.md says
+  what each cannot do. `auto` now looks on past a maker's screen it does not drive.
 - **The round report tells more**: the round's 1 % and 0.1 % lows, its average and longest
   frame time (every frame of the round counted, exact to 0.01 ms, however long the round),
   the course of the CPU and GPU temperatures over the round, and the PC's peak power where

@@ -792,3 +792,30 @@ def test_a_fan_that_starts_later_is_found_by_the_next_survey(monkeypatch):
     source.refresh()
     assert source.read()["fan.lpc.fan_4"].value == 700.0
     assert chip.Sensors[-1].ValuesTimeWindow == "zero"
+
+
+def test_the_status_says_what_each_round_takes_part_by_part():
+    """Live → Diagnose → Load: each node's update is timed, the last round's and the last
+    survey's times are in the status (the same as the sensor service answers)."""
+    now, ticks = [100.0], [0.0]
+    computer = small_computer()
+    took = {"/gpu-nvidia/0": 0.004, "/lpc/nct0000/0": 0.02}
+    for item in computer.everything():
+        seconds = took.get(item.Identifier, 0.001)
+        item.on_update = lambda hardware, s=seconds: ticks.__setitem__(0, ticks[0] + s)
+    source = opened(computer, clock=lambda: now[0], timer=lambda: ticks[0])
+    assert source.status().timing == lhm.Timing()  # opened: no round yet
+    source.refresh()  # no theme reads anything: a round that reads nothing
+    assert source.status().timing == lhm.Timing(lhm.RoundTime(), None)
+    theme = show("gpu.temp")
+    source.refresh()
+    last = source.status().timing.last
+    assert [(p.hardware_id, p.kind) for p in last.parts] == [("/gpu-nvidia/0", "GpuNvidia")]
+    assert last.seconds == pytest.approx(0.004) and not last.full
+    now[0] += inside.SURVEY_SECONDS
+    source.refresh()
+    timing = source.status().timing
+    assert timing.last is timing.full and timing.full.full and len(timing.full.parts) == 6
+    assert timing.full.seconds == pytest.approx(0.004 + 0.02 + 4 * 0.001)
+    assert source.status() == lhm.LhmStatus("inprocess", True, True, "2.0.1")  # (as before)
+    del theme

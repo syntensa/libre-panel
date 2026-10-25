@@ -286,3 +286,134 @@
 .log-entry.info .log-message {
   color: var(--text);
 }
+
+/* -- the load ----------------------------------------------------------------------------------- */
+
+.load-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 22px;
+}
+
+.load-figure {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.load-figure strong {
+  font-size: 24px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.load-figure span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.load-headline p {
+  flex-basis: 100%;
+  font-size: 12.5px;
+}
+
+.load-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.load-table th,
+.load-table td {
+  padding: 5px 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.load-table th:first-child,
+.load-table td:first-child {
+  padding-left: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+.load-table th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.load-table .mono,
+.load-threads .mono,
+.load-round .mono {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.load-threads {
+  font-size: 13px;
+}
+
+.load-threads summary {
+  cursor: pointer;
+}
+
+.load-threads ol {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 240px;
+  margin: 8px 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.load-threads li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.load-threads p {
+  font-size: 12.5px;
+}
+
+.load-sensors {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.load-sensors h3 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.load-sensors h3 .muted {
+  font-weight: 400;
+}
+
+.load-round {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.load-round-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.load-round p {
+  font-size: 12.5px;
+}
