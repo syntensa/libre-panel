@@ -241,7 +241,7 @@ def test_auto_looks_on_past_a_thermalright_screen_it_does_not_drive(bus, monkeyp
     looked = []
     monkeypatch.setattr(turzx_usb.UsbTransport, "open", staticmethod(no_usb_panel))
     monkeypatch.setattr(lianli_usb, "present_model", lambda: None)
-    monkeypatch.setattr(jonsbo_zc360, "present", lambda: looked.append("zc360") or False)
+    monkeypatch.setattr(jonsbo_zc360, "all_free", lambda: looked.append("zc360") or False)
     monkeypatch.setattr(serial_link, "_ports", lambda: [])
     hid = FakeHidScreen(kind=0x3A)
     bus((hid, 0x5302))
