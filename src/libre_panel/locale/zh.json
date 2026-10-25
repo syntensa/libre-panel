@@ -2104,7 +2104,6 @@
     "Shift": "Shift",
     "Use the shortcuts": "使用快捷键",
     "Off: no key is taken, and the combinations stay for later.": "关闭：不占用任何按键，组合键保留供以后使用。",
-    "V1.x hardware; runs, as its owners report": "V1.x 硬件；据用户反馈可运行",
     "Classic": "经典",
     "Vivid": "生动",
     "the first: calm and simple": "前者：平静而简洁",
@@ -2598,7 +2597,8 @@
     "Video of panel {n} (ffmpeg)": "面板 {n} 的视频（ffmpeg）",
     "What Libre Panel costs this PC now: each of its processes, the threads of the main one and the sensor service's rounds, measured while this card is on screen.": "Libre Panel 当前占用这台电脑的资源：它的每个进程、主进程的线程以及传感器服务的轮次，仅在此卡片可见时测量。",
     "of the PC": "占整机",
-    "{core} of one core · {n} logical processors": "占单核 {core} · {n} 个逻辑处理器"
+    "{core} of one core · {n} logical processors": "占单核 {core} · {n} 个逻辑处理器",
+    "V1.x hardware; verified on the hardware: runs, as its owners report": "V1.x 硬件；已在硬件上验证：可运行，用户已反馈"
   },
   "fields": {
     "agent": "智能体",
