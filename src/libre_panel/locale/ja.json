@@ -25,7 +25,6 @@
     "Context": "コンテキスト",
     "5 hours": "5時間",
     "AI activity": "AIの稼働状況",
-    "AI activity is switched off (Settings → Services).": "AIの稼働状況はオフになっています（設定 → サービス）。",
     "Also its status line, with the plan's usage": "ステータスラインも設定し、プランの使用量を表示する",
     "Ask Claude Code for the plan's usage": "Claude Codeにプランの使用量を問い合わせる",
     "Ask Codex for the plan's usage": "Codexにプランの使用量を問い合わせる",
@@ -2073,7 +2072,6 @@
     "Make a new key?": "新しいキーを作成しますか？",
     "New key": "新しいキー",
     "Notices from other programs": "他のプログラムからの通知",
-    "Notices from other programs are switched off (Settings → Services).": "他のプログラムからの通知はオフです（設定 → サービス）。",
     "Render finished": "レンダリング完了",
     "The notify key is missing or wrong.": "通知用のキーがないか、正しくありません。",
     "Try it": "試す",
@@ -2666,7 +2664,9 @@
     "another panel has the ZC-360's screen {n} open": "別のパネルがZC-360の画面{n}を開いています",
     "no screen of the ZC-360 is free on the USB bus": "USBバス上に空いているZC-360の画面がありません",
     "one of the ZC-360's three screens under the fans as a panel of its own": "ファンの下にあるZC-360の3つの画面のうち1つを個別のパネルとして",
-    "the ZC-360's screen {n} is not on the USB bus": "ZC-360の画面{n}がUSBバス上にありません"
+    "the ZC-360's screen {n} is not on the USB bus": "ZC-360の画面{n}がUSBバス上にありません",
+    "Notices from other programs are switched off (Settings → Game mode and more).": "他のプログラムからの通知はオフです（設定 → ゲームモードなど）。",
+    "AI activity is switched off (Settings → Game mode and more).": "AIの稼働状況はオフになっています（設定 → ゲームモードなど）。"
   },
   "fields": {
     "agent": "エージェント",

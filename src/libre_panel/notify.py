@@ -1,7 +1,7 @@
 """Notices from other programs: a short message on the panel that the command line (``libre-panel
 notify``), a script or a Stream Deck button sends to the running app (``/api/notify``).
 
-Only where config.toml's ``allow_notify`` is on (Settings → Services), and only with the
+Only where config.toml's ``allow_notify`` is on (Settings → Game mode and more), and only with the
 notify key: a secret of its own in ``notify.json`` beside config.toml, made when it is first
 needed and readable by this user only. It lets a program show a notice and nothing else, so
 it may go into a Stream Deck button or a script without giving the app away; *New key* in

@@ -1,4 +1,4 @@
-// Settings → Services → Notices from other programs: the switch (config.toml's allow_notify),
+// Settings → Game mode and more → Notices from other programs: the switch (config.toml's allow_notify),
 // then the command and the address that show a notice, with the key they carry
 // (/api/notify-key, notify.py), a new key, and a try on the panel.
 

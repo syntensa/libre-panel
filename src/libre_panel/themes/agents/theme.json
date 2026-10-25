@@ -3,7 +3,7 @@
   "name": "Agents",
   "author": "Libre Panel contributors",
   "license": "CC0-1.0",
-  "description": "What Claude Code and Codex do: each one's sign moving while it works or waits for you, the tool at work and how much of the plan's 5-hour and weekly limits is used (AI activity, Settings → Services). The time beside them.",
+  "description": "What Claude Code and Codex do: each one's sign moving while it works or waits for you, the tool at work and how much of the plan's 5-hour and weekly limits is used (AI activity, Settings → Game mode and more). The time beside them.",
   "display": {
     "model": "turing-9.2-usb",
     "orientation": "landscape",

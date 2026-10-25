@@ -25,7 +25,6 @@
     "Context": "Контекст",
     "5 hours": "5 часов",
     "AI activity": "Активность ИИ",
-    "AI activity is switched off (Settings → Services).": "Активность ИИ отключена (Настройки → Службы).",
     "Also its status line, with the plan's usage": "Также его строка состояния — с использованием тарифа",
     "Ask Claude Code for the plan's usage": "Запрашивать у Claude Code использование тарифа",
     "Ask Codex for the plan's usage": "Запрашивать у Codex использование тарифа",
@@ -2073,7 +2072,6 @@
     "Make a new key?": "Создать новый ключ?",
     "New key": "Новый ключ",
     "Notices from other programs": "Уведомления от других программ",
-    "Notices from other programs are switched off (Settings → Services).": "Уведомления от других программ отключены (Настройки → Службы).",
     "Render finished": "Рендер завершён",
     "The notify key is missing or wrong.": "Ключ уведомлений отсутствует или неверен.",
     "Try it": "Попробовать",
@@ -2666,7 +2664,9 @@
     "another panel has the ZC-360's screen {n} open": "другая панель уже открыла экран {n} ZC-360",
     "no screen of the ZC-360 is free on the USB bus": "на шине USB нет свободного экрана ZC-360",
     "one of the ZC-360's three screens under the fans as a panel of its own": "один из трёх экранов ZC-360 под вентиляторами как отдельная панель",
-    "the ZC-360's screen {n} is not on the USB bus": "экрана {n} ZC-360 нет на шине USB"
+    "the ZC-360's screen {n} is not on the USB bus": "экрана {n} ZC-360 нет на шине USB",
+    "Notices from other programs are switched off (Settings → Game mode and more).": "Уведомления от других программ отключены (Настройки → Игровой режим и другое).",
+    "AI activity is switched off (Settings → Game mode and more).": "Активность ИИ отключена (Настройки → Игровой режим и другое)."
   },
   "fields": {
     "agent": "агент",

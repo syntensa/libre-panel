@@ -1,4 +1,4 @@
-// Settings → Services → AI activity, below the service: whether Claude Code and Codex are there
+// Settings → Game mode and more → AI activity, below the service: whether Claude Code and Codex are there
 // and set up (their hooks, and Claude Code's status line), with Set up and Remove. Setting up
 // shows first what Libre Panel adds to their settings file (/api/ai/setup, agents.py), keeps a
 // copy of the file, and takes out again only what it added.

@@ -25,7 +25,6 @@
     "Context": "Contesto",
     "5 hours": "5 ore",
     "AI activity": "Attività IA",
-    "AI activity is switched off (Settings → Services).": "L'attività IA è disattivata (Impostazioni → Servizi).",
     "Also its status line, with the plan's usage": "Anche la sua riga di stato, con l'utilizzo del piano",
     "Ask Claude Code for the plan's usage": "Chiedere a Claude Code l'utilizzo del piano",
     "Ask Codex for the plan's usage": "Chiedere a Codex l'utilizzo del piano",
@@ -2073,7 +2072,6 @@
     "Make a new key?": "Creare una nuova chiave?",
     "New key": "Nuova chiave",
     "Notices from other programs": "Notifiche da altri programmi",
-    "Notices from other programs are switched off (Settings → Services).": "Le notifiche da altri programmi sono disattivate (Impostazioni → Servizi).",
     "Render finished": "Rendering terminato",
     "The notify key is missing or wrong.": "La chiave delle notifiche manca o non è corretta.",
     "Try it": "Prova",
@@ -2666,7 +2664,9 @@
     "another panel has the ZC-360's screen {n} open": "un altro pannello ha aperto il display {n} dello ZC-360",
     "no screen of the ZC-360 is free on the USB bus": "nessun display dello ZC-360 è libero sul bus USB",
     "one of the ZC-360's three screens under the fans as a panel of its own": "uno dei tre display dello ZC-360 sotto le ventole come pannello a sé",
-    "the ZC-360's screen {n} is not on the USB bus": "il display {n} dello ZC-360 non è sul bus USB"
+    "the ZC-360's screen {n} is not on the USB bus": "il display {n} dello ZC-360 non è sul bus USB",
+    "Notices from other programs are switched off (Settings → Game mode and more).": "Le notifiche da altri programmi sono disattivate (Impostazioni → Modalità gioco e altro).",
+    "AI activity is switched off (Settings → Game mode and more).": "L'attività IA è disattivata (Impostazioni → Modalità gioco e altro)."
   },
   "fields": {
     "agent": "agente",

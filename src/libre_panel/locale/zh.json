@@ -25,7 +25,6 @@
     "Context": "上下文",
     "5 hours": "5 小时",
     "AI activity": "AI 活动",
-    "AI activity is switched off (Settings → Services).": "AI 活动已关闭（设置 → 服务）。",
     "Also its status line, with the plan's usage": "同时设置其状态栏，显示套餐用量",
     "Ask Claude Code for the plan's usage": "向 Claude Code 查询套餐用量",
     "Ask Codex for the plan's usage": "向 Codex 查询套餐用量",
@@ -2073,7 +2072,6 @@
     "Make a new key?": "生成新密钥？",
     "New key": "新密钥",
     "Notices from other programs": "来自其他程序的通知",
-    "Notices from other programs are switched off (Settings → Services).": "来自其他程序的通知已关闭（设置 → 服务）。",
     "Render finished": "渲染完成",
     "The notify key is missing or wrong.": "通知密钥缺失或错误。",
     "Try it": "试一试",
@@ -2666,7 +2664,9 @@
     "another panel has the ZC-360's screen {n} open": "另一块面板已打开 ZC-360 的屏幕 {n}",
     "no screen of the ZC-360 is free on the USB bus": "USB 总线上没有空闲的 ZC-360 屏幕",
     "one of the ZC-360's three screens under the fans as a panel of its own": "ZC-360 风扇下三块屏幕之一，作为独立面板",
-    "the ZC-360's screen {n} is not on the USB bus": "ZC-360 的屏幕 {n} 不在 USB 总线上"
+    "the ZC-360's screen {n} is not on the USB bus": "ZC-360 的屏幕 {n} 不在 USB 总线上",
+    "Notices from other programs are switched off (Settings → Game mode and more).": "来自其他程序的通知已关闭（设置 → 游戏模式及其他）。",
+    "AI activity is switched off (Settings → Game mode and more).": "AI 活动已关闭（设置 → 游戏模式及其他）。"
   },
   "fields": {
     "agent": "智能体",

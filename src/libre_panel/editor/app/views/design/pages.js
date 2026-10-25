@@ -142,7 +142,7 @@ function themeGroup(item, model) {
  * (``suggested``), then the others in groups, each A to Z. Two themes of one name (a copy
  * of yours, a plugin's) are told apart by their ids. A mode's page may show the normal theme
  * (""); music's and the idle clock's always show one of their own. Here and on game mode's
- * card in Settings → Services. */
+ * card in Settings → Game mode and more. */
 export function PageThemeSelect({ page, theme, label, suggested = [], normal = true, empty = null, onChoose = null }) {
   const themes = useStore((s) => s.themes);
   useEffect(() => {

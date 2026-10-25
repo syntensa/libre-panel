@@ -3,7 +3,7 @@
   "name": "Agents Claude",
   "author": "Libre Panel contributors",
   "license": "CC0-1.0",
-  "description": "What Claude Code does: its sign moving while it works or waits for you, the tool at work, the model, how full the context is and how much of the plan's 5-hour and weekly limits is used (AI activity, Settings → Services). The time beside it.",
+  "description": "What Claude Code does: its sign moving while it works or waits for you, the tool at work, the model, how full the context is and how much of the plan's 5-hour and weekly limits is used (AI activity, Settings → Game mode and more). The time beside it.",
   "display": {
     "model": "turing-12.3-usb",
     "orientation": "landscape",
