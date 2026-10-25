@@ -50,14 +50,19 @@ def tail(path: Path, lines: int) -> list[str]:
 
 
 def _status_of(provider: Any) -> dict[str, Any] | None:
-    """What a sensor source says about itself: its ``status()`` as a dict, or None."""
+    """What a sensor source says about itself: its ``status()`` as a dict, or None. A field
+    marked ``metadata={"page": False}`` is left out (what another view asks for itself)."""
     status = getattr(provider, "status", None)
     if not callable(status):
         return None
     try:
         found = status()
         if dataclasses.is_dataclass(found) and not isinstance(found, type):
-            return dataclasses.asdict(found)
+            said = dataclasses.asdict(found)
+            for spec in dataclasses.fields(found):
+                if spec.metadata.get("page") is False:
+                    said.pop(spec.name, None)
+            return said
         return dict(found) if isinstance(found, dict) else None
     except Exception:  # a source that cannot say must not break the page
         log.debug(

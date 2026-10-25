@@ -381,6 +381,7 @@ class EditorState:
         self.install = Install()  # "Update to …": its download and putting it in place
         self._doctor: Any = None  # the panel test of Live → Diagnose (doctor_session.py)
         self._experiment: Any = None  # the video experiment's run (experiment.py)
+        self._load: Any = None  # what Libre Panel costs the PC, Live → Diagnose (load_report.py)
 
     def experiment(self, controls: Any) -> Any:
         """The video experiment's run, made on first use: it writes the settings as the app
@@ -421,9 +422,38 @@ class EditorState:
                     return app_settings.Settings(self.config_path, self.controls,
                                                  self.restart).report()["text"]  # fmt: skip
 
+                def load() -> str:  # the report says what Libre Panel cost before the test
+                    from libre_panel.load_report import WINDOW_S
+
+                    return self.load_sampler().text(wait=WINDOW_S + 1.0)
+
                 panel = getattr(self.controls, "panel", None)
-                self._doctor = Session(panel, self.config_path, devices=devices)
+                self._doctor = Session(panel, self.config_path, devices=devices, load=load)
             return self._doctor
+
+    def load_sampler(self) -> Any:
+        """What Libre Panel costs this PC (load_report.py), made on first use: it samples only
+        while Live → Diagnose → Load (or the panel report) asks."""
+        with self._lock:
+            if self._load is None:
+                from libre_panel.load_report import LoadSampler
+
+                self._load = LoadSampler(lhm=self._lhm_status)
+            return self._load
+
+    def _lhm_status(self) -> Any:
+        """The status of LibreHardwareMonitor's source in the panel loop's hub (or this editor's
+        own), with what its rounds take; None where it is not read."""
+        status = getattr(getattr(self.controls, "panel", None), "status", None)
+        hub = getattr(status, "hub", None) or self._hub
+        if hub is None:
+            return None
+        from libre_panel.sensors.librehardwaremonitor import LibreHardwareMonitorProvider
+
+        for provider in list(hub.providers):
+            if isinstance(provider, LibreHardwareMonitorProvider):
+                return provider.status()
+        return None
 
     def start_screen(self) -> Any:
         """What writes the panel's boot logo and standby clip (devices/panel_files.py)."""
@@ -504,6 +534,9 @@ class EditorState:
         with self._lock:
             if self._hub is not None:
                 self._hub.close()
+            load = self._load
+        if load is not None:
+            load.close()
 
 
 _PART = re.compile(r"\{(\w+)([+*]?)\}")
@@ -2583,6 +2616,7 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/i18n", lambda h, m, u: h._json(h._i18n())),
     Route("GET", "/api/app", lambda h, m, u: h._app_state()),
     Route("GET", "/api/doctor", lambda h, m, u: h._json(h.state.doctor().status())),
+    Route("GET", "/api/load", lambda h, m, u: h._json(h.state.load_sampler().report())),
     Route("GET", "/api/logs", lambda h, m, u: h._logs(parse_qs(u.query))),
     Route("GET", "/api/experiment", lambda h, m, u: h._experiment()),
     Route("GET", "/api/logs/file", lambda h, m, u: h._logs_file(), picture=True),

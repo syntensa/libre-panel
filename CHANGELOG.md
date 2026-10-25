@@ -3,6 +3,13 @@
 ## 0.7.1rc5 — 2026-10-24
 
 **Changes**
+- **What Libre Panel costs your PC**: a Load card in Live → Diagnose shows Libre Panel's
+  processor share and memory as the Task Manager counts them, per process (the app, each
+  panel's process, each ffmpeg, PresentMon, the window, the sensor service), the threads of
+  the app by name, and how long LibreHardwareMonitor's rounds take with their slowest parts
+  (a sensor service from before says "not reported by this service version"). Copy as text
+  for an issue; the panel report carries it too. Nothing is measured while the card is not
+  on screen.
 - **Panels**: the TURZX 9.2" is confirmed by an owner's doctor report, every check passed (#19).
 - **More makers' screens, unverified**: drivers for Thermalright's Trofeo Vision (the 6.86"
   and the 9.16" and 11.3" bars), every BeadaPanel model (on the Panel-Link stream they all

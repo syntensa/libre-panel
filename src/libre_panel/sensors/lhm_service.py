@@ -30,7 +30,12 @@ from collections.abc import Callable, Iterable
 from typing import Any, Protocol
 
 from libre_panel.sensors.base import Reading, wanted, wanted_keys
-from libre_panel.sensors.librehardwaremonitor import LhmSensor, LhmStatus, readings_from_sensors
+from libre_panel.sensors.librehardwaremonitor import (
+    LhmSensor,
+    LhmStatus,
+    Timing,
+    readings_from_sensors,
+)
 from libre_panel.sensorservice import SERVICE_NAME
 from libre_panel.sensorservice.protocol import (
     PROTOCOL,
@@ -110,13 +115,17 @@ def open_link() -> Link:
     return link
 
 
-def status_of(readings: Readings | None, why: str = "") -> LhmStatus:
-    """The status of the source after an answer (or none, and why)."""
+def status_of(readings: Readings | None, why: str = "", version: str = "") -> LhmStatus:
+    """The status of the source after an answer (or none, and why). ``timing`` is what the
+    service's rounds took, None where it does not say (a service older than that)."""
     if readings is None:
-        return LhmStatus("service", error=why)
+        return LhmStatus("service", error=why, version=version)
     error = readings.error if readings.state == "failed" else ""
     # the service runs with the system's rights: what keeps the CPU's sensors away is PawnIO
-    return LhmStatus("service", True, readings.ring0, readings.pawnio, error)
+    return LhmStatus(
+        "service", True, readings.ring0, readings.pawnio, error,
+        timing=readings.timing, version=version,
+    )  # fmt: skip
 
 
 class ServiceSource:
@@ -194,7 +203,7 @@ class ServiceSource:
         been silent for ``wait_seconds`` the provider is told."""
         self._disconnect()
         with self._lock:
-            self._status = LhmStatus("service", error=why)
+            self._status = LhmStatus("service", error=why, version=self.version)
         if not self._failed and self._clock() - since >= self.wait_seconds:
             self._failed = True
             log.info("the sensor service does not answer: %s", why)
@@ -249,7 +258,7 @@ class ServiceSource:
         fresh = answer.age is not None and (
             self.stale_seconds <= 0 or answer.age <= self.stale_seconds
         )
-        status = status_of(answer)
+        status = status_of(answer, version=self.version)
         with self._lock:
             self._status = status
             if fresh:
@@ -366,8 +375,23 @@ def check(
         f"CPU temperature, power and clock: {state}",
         f"PawnIO driver: {pawnio}",
     ]
+    lines.append(round_line(answer.timing))
     for key in ("cpu.temp", "cpu.power", "gpu.temp", "mem.temp"):
         reading = readings.get(key)
         if reading is not None and isinstance(reading.value, float):
             lines.append(f"{key}: {reading.value:.1f} {reading.unit}".rstrip())
     return bool(answer.sensors), lines
+
+
+def round_line(timing: Timing | None) -> str:
+    """What the service's rounds take, in a line (``sensors --check-service``)."""
+    if timing is None:
+        return "round time: not reported by this service version"
+    said = []
+    for what, done in (("last round", timing.last), ("all hardware", timing.full)):
+        if done is not None:
+            parts = len(done.parts)
+            said.append(
+                f"{what} {done.seconds * 1000:.1f} ms ({parts} part{'' if parts == 1 else 's'})"
+            )
+    return "round time: " + (", ".join(said) or "no round yet")

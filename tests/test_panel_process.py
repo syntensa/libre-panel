@@ -4,13 +4,15 @@ first's log, and it ends when told to; where a process cannot start, a thread ru
 
 import logging
 import threading
+import time
 
 from fake_sensors import wait_for
 
 from libre_panel import app, identify
 from libre_panel.config import load_config
 from libre_panel.devices import base
-from libre_panel.panel_process import RemoteStatus
+from libre_panel.load_report import LoadSampler
+from libre_panel.panel_process import RemoteStatus, panel_pids
 from libre_panel.render import fan
 from libre_panel.sensors.base import wanted
 
@@ -53,11 +55,20 @@ def test_a_panel_beside_the_first_runs_in_a_process_of_its_own(tmp_path, monkeyp
         # what its theme reads is wanted here too, where the sources are: Lumen shows no
         # processes, its companion does, so the processes are counted for it
         assert wait_for(lambda: wanted("proc."), timeout=10)
+        # Live → Diagnose → Load calls its process "panel 2", and measures it
+        assert list(panel_pids().values()) == [2]
+        sampler = LoadSampler(service=lambda: None, window=lambda: None)
+        sampler.sample()
+        time.sleep(0.3)
+        rows = sampler.sample()["processes"]
+        panel = next(row for row in rows if row["role"] == "panel")
+        assert panel["panel"] == 2 and panel["label"] == "panel 2" and panel["rss"] > 0
     finally:
         stop.set()
         loop.join(30)
     assert not loop.is_alive()
     assert not wanted("proc.")  # (its process ended: nobody wants them any more)
+    assert panel_pids() == {}
 
 
 def test_a_panel_whose_process_cannot_start_runs_in_a_thread(tmp_path, monkeypatch):

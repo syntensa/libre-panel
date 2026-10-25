@@ -44,7 +44,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -346,6 +346,64 @@ def fetch_tree(url: str, timeout: float = REQUEST_SECONDS) -> dict[str, Any]:
 
 
 @dataclass(frozen=True)
+class PartTime:
+    """How long one piece of hardware took in a round: its ``Update()`` and the reading of its
+    sensors after it (what holds Python's lock in Libre Panel, and the CPU in the service)."""
+
+    hardware_id: str
+    name: str
+    kind: str  # LibreHardwareMonitor's HardwareType: Cpu, GpuNvidia, SuperIO, Network ...
+    seconds: float
+
+
+@dataclass(frozen=True)
+class RoundTime:
+    """One round of updates, the parts in the order they were updated. ``full``: it updated
+    all hardware (the survey now and then), not only what the themes on show read."""
+
+    parts: tuple[PartTime, ...] = ()
+    full: bool = False
+
+    @property
+    def seconds(self) -> float:
+        return sum(part.seconds for part in self.parts)
+
+
+@dataclass(frozen=True)
+class Timing:
+    """What the rounds of a source cost: the last one, and the last that updated all
+    hardware (None: none yet)."""
+
+    last: RoundTime | None = None
+    full: RoundTime | None = None
+
+    def after(self, done: RoundTime) -> Timing:
+        """These times once ``done`` is over."""
+        return Timing(done, done if done.full else self.full)
+
+
+def time_round(
+    nodes: Iterable[Any],
+    update: Callable[[Any], None],
+    pause: Callable[[], None],
+    full: bool,
+    timer: Callable[[], float] = time.perf_counter,
+) -> RoundTime:
+    """Update each of ``nodes`` (``update(node)``, ``pause()`` between two) and time each:
+    the round of the sensor service and of the source inside Libre Panel alike. A node is
+    one of lhm_inprocess's: its id, name and type are what the times say."""
+    parts = []
+    for position, node in enumerate(nodes):
+        if position:
+            pause()
+        started = timer()
+        update(node)
+        took = max(0.0, timer() - started)
+        parts.append(PartTime(node.hardware_id, node.name, node.hardware_type, took))
+    return RoundTime(tuple(parts), full)
+
+
+@dataclass(frozen=True)
 class LhmStatus:
     """How LibreHardwareMonitor is read, and what keeps its CPU sensors away."""
 
@@ -355,6 +413,12 @@ class LhmStatus:
     pawnio: str | None = None  # version of the installed PawnIO driver ("" unknown), None: none
     error: str = ""  # why it could not start, or does not answer (service, inprocess)
     service: str = ""  # why the installed sensor service is not what is read now
+    # What its rounds cost (Live -> Diagnose -> Load, /api/load); None: not reported, as by a
+    # sensor service older than this, or the web server, whose rounds are its own program's.
+    # Neither this nor the version is in the status the pages show (plugins/pages.py).
+    timing: Timing | None = field(default=None, compare=False, metadata={"page": False})
+    # the sensor service's version, once it said hello
+    version: str = field(default="", compare=False, metadata={"page": False})
 
 
 # What sets up the sensor service, which reads the CPU with the rights it needs (and PawnIO).
