@@ -15,12 +15,13 @@ import pytest
 from editor_token import token_of
 from test_editor_server import request
 
+from libre_panel import rights
 from libre_panel.config import config_dir
 from libre_panel.editor import access
 from libre_panel.editor import server as editor
 from libre_panel.editor.server import ROUTES, EditorHandler, make_server
 
-real_elevated = access.elevated  # (conftest.py replaces it for the tests; this is the real one)
+real_elevated = rights.elevated  # (conftest.py replaces it for the tests; this is the real one)
 URL = "http://127.0.0.1:8765/"
 TOKEN = "T" * 43
 
@@ -528,17 +529,17 @@ def test_the_editor_command_prints_the_address_with_the_token(monkeypatch, capsy
 
 
 def test_root_and_an_administrator_are_elevated(monkeypatch):
-    monkeypatch.setattr(access.sys, "platform", "linux")
-    monkeypatch.setattr(access.os, "geteuid", lambda: 0, raising=False)
+    monkeypatch.setattr(rights.sys, "platform", "linux")
+    monkeypatch.setattr(rights.os, "geteuid", lambda: 0, raising=False)
     assert real_elevated() is True
-    monkeypatch.setattr(access.os, "geteuid", lambda: 1000, raising=False)
+    monkeypatch.setattr(rights.os, "geteuid", lambda: 1000, raising=False)
     assert real_elevated() is False
-    monkeypatch.delattr(access.os, "geteuid", raising=False)  # no such thing there
+    monkeypatch.delattr(rights.os, "geteuid", raising=False)  # no such thing there
     assert real_elevated() is False
 
     from libre_panel import autostart
 
-    monkeypatch.setattr(access.sys, "platform", "win32")
+    monkeypatch.setattr(rights.sys, "platform", "win32")
     for answer in (True, False):
         monkeypatch.setattr(autostart, "is_admin", lambda answer=answer: answer)
         assert real_elevated() is answer
