@@ -61,8 +61,8 @@ _DEFAULT_CONFIG_TEMPLATE = """\
 #   { theme = "studio", minutes = 10 },
 # ]
 
-# "auto" (the system language), "en", "de", "fr", "es", "pl" or "pt" (Brazil): the app, the
-# tray and the date and weather texts on the panel.
+# "auto" (the system language), "en", "de", "fr", "es", "it", "pl", "pt" (Brazil), "ru", "ja" or
+# "zh": the app, the tray and the date and weather texts on the panel.
 language = "auto"
 
 # Optional: override how often sensors are read (milliseconds); the theme sets it.

@@ -162,6 +162,9 @@ class Control(ConsolePage):
         "es": "Control",
         "pl": "Sterowanie",
         "pt": "Controle",
+        "it": "Controllo",
+        "ru": "Управление",
+        "ja": "操作",
     }
     routes = {
         ("GET", "status"): "status",

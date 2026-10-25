@@ -1,8 +1,11 @@
 # Changelog
 
-## 0.7.1rc5 — 2026-10-24
+## 0.7.1rc5 — 2026-10-25
 
 **Changes**
+- **Japanese, Russian and Italian**: the app, the panel texts and the tray in ten languages
+  now (Settings → Start and system → Language); the three new ones have not had a native
+  speaker's review yet, so corrections are welcome.
 - **The GitHub page and the website, shorter and quicker to grasp**: a grid of the features
   under the download buttons, "Several panels at once" as a section of its own with a picture
   of three panels, a compact tour with the rest of each part folded away, the theme and panel

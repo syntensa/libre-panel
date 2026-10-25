@@ -49,7 +49,7 @@ a restart, and its *Restart the panel* button does that without quitting Libre P
 ```toml
 # theme = "slate"              # built-in or user theme; without one the panel's own
                                # default shows (see "The theme on the panel")
-language = "auto"              # "auto" (system language), "en", "de", "fr", "es", "pl" or "pt"
+language = "auto"              # "auto" (system language), "en", "de", "fr", "es", "it", "pl", "pt", "ru", "ja", "zh"
 # refresh_ms = 1000            # override the theme's refresh interval
 # check_updates = true        # look once a day for a newer version (not set: Start asks)
 # allow_notify = false        # other programs may show a notice (see below)
@@ -1520,16 +1520,18 @@ limits = [
 
 ## Language
 
-Libre Panel speaks English, German, French, Spanish, Polish, Portuguese
-(Brazil) and Simplified Chinese: `"en"`, `"de"`, `"fr"`, `"es"`, `"pl"`, `"pt"`, `"zh"`.
+Libre Panel speaks English, German, French, Spanish, Italian, Polish,
+Portuguese (Brazil), Russian, Japanese and Simplified Chinese: `"en"`, `"de"`,
+`"fr"`, `"es"`, `"it"`, `"pl"`, `"pt"`, `"ru"`, `"ja"`, `"zh"`.
 `language = "auto"`
 follows the system language, and English where Libre Panel does not speak it;
 *Settings → Start and system → Language* (and Ctrl+K) writes this setting. It
 covers the app, the tray menu, messages about the panel, and the panel itself:
 weekday and month names (in German with "27.", in Spanish and Portuguese with
-"27 de", in Polish in the genitive, "27 września", in Chinese as "9月27日"), and weather
-descriptions; characters the built-in fonts do not have (Chinese among them) are drawn with
-a font of the system. Texts that are part of a theme (such as "CPU TEMP")
+"27 de", in Polish and Russian in the genitive, "27 września" and "27 сентября", in Chinese
+and Japanese as "9月27日"), and weather descriptions; characters the built-in fonts do not have
+(Chinese and Japanese, and Cyrillic in Barlow) are drawn with a font of the system. Texts
+that are part of a theme (such as "CPU TEMP")
 stay as the theme's author wrote them. Command-line output for diagnostics
 (`models`, `devices`, `sensors`, `doctor`) is in English.
 

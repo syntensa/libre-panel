@@ -1,4 +1,5 @@
-"""Languages: English (the source text), German, French, Spanish, Polish and Portuguese (Brazil).
+"""Languages: English (the source text), German, French, Spanish, Italian, Polish, Portuguese
+(Brazil), Russian, Japanese and Simplified Chinese.
 
 Texts are looked up by their English wording in ``locale/<lang>.json``; the
 same catalog serves the tray, the editor (through ``/api/i18n``) and the
@@ -26,16 +27,19 @@ LANGUAGES = {
     "de": "Deutsch",
     "fr": "Français",
     "es": "Español",
+    "it": "Italiano",
     "pl": "Polski",
     "pt": "Português (Brasil)",
+    "ru": "Русский",
+    "ja": "日本語",
     "zh": "简体中文",
 }
 # what follows a day's number before a month's name: "27. September", "27 de septiembre"
 DAY_BEFORE_MONTH = {"de": ".", "es": " de", "pt": " de"}
 # a day with its month's name written as the language writes it instead: "9月27日"
-MONTH_DAY = {"zh": "{month}月{day}日"}
+MONTH_DAY = {"zh": "{month}月{day}日", "ja": "{month}月{day}日"}
 _DAY_AND_MONTH = re.compile(r"%-?d\.? %[bB]|%[bB] %-?d")
-DECIMAL_COMMA = {"de", "fr", "es", "pl", "pt"}  # 1,5 rather than 1.5
+DECIMAL_COMMA = {"de", "fr", "es", "it", "pl", "pt", "ru"}  # 1,5 rather than 1.5
 LOCALE_DIR = Path(__file__).resolve().parent / "locale"
 
 _current = "en"
@@ -113,8 +117,9 @@ def format_date(moment: datetime, fmt: str) -> str:
 
     A day number followed by a month name is joined as the language does it: German gives it a
     period ("27. September"), Spanish and Portuguese a "de" ("27 de septiembre"), and Polish
-    names the month in the genitive there ("27 września", ``months_after_day``); Chinese writes
-    the two as numbers, the month first ("9月27日", :data:`MONTH_DAY`).
+    names the month in the genitive there ("27 września", ``months_after_day``), as Russian does
+    ("27 сентября"); Chinese and Japanese write the two as numbers, the month first ("9月27日",
+    :data:`MONTH_DAY`).
 
     Only the codes go through ``strftime``, one at a time, never the names or the text around
     them: on Windows, Python before 3.12 passes its format through the ANSI code page, where a
