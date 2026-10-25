@@ -713,6 +713,140 @@ def test_the_video_experiment_runs_every_step_by_itself_on_the_running_app(
         expect(card.get_by_role("button", name="Copy the table")).to_be_visible()
 
 
+def colour_check_on(monkeypatch, works=lambda ffmpeg, encoder: False, command=None):
+    """Settings → Panel → Check the colours with this machine's ffmpeg; the graphics card's
+    encoders as ``works`` says (none: the same on every machine), the display's ffmpeg command
+    as ``command`` makes it."""
+    import shutil
+
+    from test_editor_settings import panel_on_the_bus
+
+    from libre_panel.devices import h264
+    from libre_panel.editor import server
+    from libre_panel.editor.colours import ColourCheck
+
+    ffmpeg = shutil.which("ffmpeg")
+    if ffmpeg is None:
+        pytest.skip("needs ffmpeg with libx264")
+    panel_on_the_bus(monkeypatch, "turing-9.2-usb")
+    monkeypatch.setattr(h264, "find_ffmpeg", lambda configured="": ffmpeg)
+    monkeypatch.setattr(h264, "encoder_works", works)
+
+    def colours(state):
+        if state._colours is None:
+            state._colours = ColourCheck(state.config_path, state.controls, works=works,
+                                         command=command or h264.ffmpeg_command)  # fmt: skip
+        return state._colours
+
+    monkeypatch.setattr(server.EditorState, "colours", colours)
+
+
+def test_the_colour_check_measures_each_encoder_and_says_what_it_means(
+    app_url,  # noqa: F811
+    monkeypatch,
+):
+    """One click: every encoder in a row of its own, those of the graphics card that are not
+    here said so, x264's two rows of swatches the same, and with x264 in use nothing to do;
+    the result copies as text, and the picture on the panel needs the background app."""
+    colour_check_on(monkeypatch)
+    with browser_page(app_url, "settings/panel") as page:
+        card = page.locator("#panel-colour-check")
+        expect(card.locator("h2")).to_have_text("Check the colours")
+        expect(card.get_by_role("button", name="Copy as text")).to_have_count(0)  # nothing yet
+        card.get_by_role("button", name="Check the colours").click()
+        x264 = card.locator(".colour-encoder[data-encoder='libx264']")
+        expect(x264).to_have_attribute("data-verdict", "identical", timeout=30000)
+        expect(x264).to_contain_text("Identical")
+        for name in ("h264_amf", "h264_nvenc", "h264_qsv"):
+            block = card.locator(f".colour-encoder[data-encoder='{name}']")
+            expect(block).to_have_attribute("data-verdict", "unavailable")
+            expect(block).to_contain_text("Not available here")
+        rows = x264.locator(".colour-row")
+        expect(rows).to_have_count(2)
+        expect(rows.nth(0)).to_contain_text("New feed")
+        expect(rows.nth(1)).to_contain_text("Old feed")
+        expect(rows.nth(0).locator(".colour-swatch")).to_have_count(14)
+        new, old = (rows.nth(i).locator(".colour-swatch").evaluate_all(
+            "cells => cells.map((c) => c.style.background)") for i in (0, 1))  # fmt: skip
+        assert new == old and len(set(new)) == 14  # the same colours, each patch its own
+        advice = card.locator(".colour-advice")
+        expect(advice).to_have_attribute("data-advice", "processor")
+        expect(advice).to_contain_text("Nothing to do")
+        expect(card.locator(".colour-now")).to_contain_text("x264 (processor)")
+        expect(card.get_by_role("button", name="Copy as text")).to_be_visible()
+        show = card.get_by_role("button", name="Show it on the panel")
+        expect(show).to_be_disabled()
+        expect(card.locator(".colour-ab")).to_contain_text("running in the background")
+
+
+def test_the_colour_check_offers_the_processor_s_conversion_and_back(
+    app_url,  # noqa: F811
+    isolated_home,
+    monkeypatch,
+):
+    """AMD's encoder (here x264 in its place, converting the new feed with BT.709) shifts the
+    colours: the card says so and offers the processor's conversion, which one click writes
+    (video.pixels = "rgb"); then the way back, which writes "auto"."""
+    from dataclasses import replace
+
+    from libre_panel.devices import h264
+
+    def card_s(ffmpeg, size, rotate, settings):
+        shift = settings.encoder == "h264_amf" and settings.pixels == "rgb0"
+        if settings.encoder == "h264_amf":
+            settings = replace(settings, encoder="libx264")
+        command = h264.ffmpeg_command(ffmpeg, size, rotate, settings)
+        if shift:
+            command[command.index("-vf") + 1] += ",scale=out_color_matrix=bt709"
+        return command
+
+    colour_check_on(monkeypatch, works=lambda ffmpeg, encoder: encoder == "h264_amf",
+                    command=card_s)  # fmt: skip
+    with browser_page(app_url, "settings/panel") as page:
+        card = page.locator("#panel-colour-check")
+        card.get_by_role("button", name="Check the colours").click()
+        amd = card.locator(".colour-encoder[data-encoder='h264_amf']")
+        expect(amd).to_have_attribute("data-verdict", "matrix", timeout=30000)
+        expect(amd).to_contain_text("Matrix shift")
+        expect(amd.locator(".colour-worst")).to_contain_text("Largest difference")
+        expect(card.locator(".colour-now")).to_contain_text("AMD (h264_amf)")
+        advice = card.locator(".colour-advice")
+        expect(advice).to_have_attribute("data-advice", "shift")
+        card.get_by_role("button", name="Use the processor's conversion").click()
+        waits_for(page, lambda: settings_config().device.video.pixels == "rgb")
+        expect(advice).to_have_attribute("data-advice", "back")
+        expect(advice).to_contain_text("as the check advises for AMD (h264_amf)")
+        card.get_by_role("button", name="Back to the card's conversion").click()
+        waits_for(page, lambda: settings_config().device.video.pixels == "auto")
+        expect(advice).to_have_attribute("data-advice", "shift")
+
+
+def test_the_colour_check_shows_its_picture_on_the_panel_and_stops(
+    background,  # noqa: F811
+    monkeypatch,
+):
+    """With the background app: a panel without smooth motion has no A/B (the card says why);
+    one that shows video gets it: A and B said with the seconds left, and Stop ends it."""
+    from libre_panel import colour_show
+    from libre_panel.editor.colours import ColourCheck
+
+    colour_check_on(monkeypatch)
+    _app, url = background
+    with browser_page(url, "settings/panel") as page:
+        card = page.locator("#panel-colour-check")
+        show = card.get_by_role("button", name="Show it on the panel")
+        expect(show).to_be_disabled()
+        expect(card.locator(".colour-ab")).to_contain_text("Panel 1 shows no smooth motion now")
+        monkeypatch.setattr(ColourCheck, "shows_video", lambda self, number: True)
+        expect(show).to_be_enabled(timeout=10000)
+        show.click()
+        expect(card.locator(".colour-ab")).to_contain_text("On panel 1: A: the card's conversion")
+        assert colour_show.now(1) == ("A", "auto")
+        card.get_by_role("button", name="Stop showing it").click()
+        expect(show).to_be_visible(timeout=10000)
+        assert colour_show.state() is None
+
+
 def test_live_says_how_the_panel_runs_in_a_calm_sentence(app_url):  # noqa: F811
     """The numbers are the detail; the sentence above them says what they mean: smooth, slower
     than planned (and what helps), picture by picture, waiting (and why), paused, a fault."""

@@ -1595,8 +1595,10 @@ answer too.
   that does not help three times in a row, it asks you to replug the panel.
 - `video-state.json` beside `config.toml` keeps what `"auto"` found out for the next start:
   the bit rate each panel got to (the next start begins there, within the steps, instead of
-  climbing them again) and whether ffmpeg can start the graphics card's encoder (asked again
-  after a week, as a new driver may change it); delete the file to have both found out anew.
+  climbing them again), whether ffmpeg can start the graphics card's encoder (asked again
+  after a week, as a new driver may change it) and a card's encoder that ended before its first
+  picture fed four bytes a pixel (for a week every start feeds it three, the way of before, at
+  once; then four are tried again); delete the file to have all of it found out anew.
 
 | Setting | Default | |
 |---|---|---|
@@ -1609,10 +1611,22 @@ answer too.
 | `maxrate` | `"auto"` | highest bit rate: `"auto"` starts at 2 Mbit/s for the 9.2" (1920×480 at 50 fps) and proportionally more for a panel with more pixels or frames (the 12.3": 3 Mbit/s), then follows the panel up the steps 3 · 4 · 6 · 8 · 12 · 16 · 24 · 32 Mbit/s: a step down while the panel takes less than it is sent, never below the start (a panel that cannot keep up there cannot keep up with the pictures: fewer `fps` help), a step up after a calm minute; the *Data rate* tile under Live says the cap in force. Or a fixed rate such as `"1500k"` or `"4M"` |
 | `profile` | `"auto"` | (these and the rows below are also on the card *Video experiment* under Settings → Panel, with how the panel is doing underneath; *Run every step by itself* there tries them all in turn and judges each from the panels' numbers) the H.264 profile: `"auto"` is `"high"` on the 9.2" and the 12.3" (measured to show there; it compresses far better) and `"baseline"` elsewhere; `"main"` and `"high"` ask more of a panel's decoder (if the panel shows nothing, go back to `"baseline"`) |
 | `encoder` | `"auto"` | the encoder: `"auto"` is the graphics card's where it was measured to show and ffmpeg can start it (AMD's `"h264_amf"`, probed once a week; one that stops before its first picture is left out), else `"libx264"` on the processor; `"h264_nvenc"` (NVIDIA) and `"h264_qsv"` (Intel) are an experiment to set by hand (`crf` and `preset` are x264's, a hardware encoder takes the quality from `maxrate`, NVIDIA's from `crf` too). What ffmpeg says about an encoder it cannot start is in the log |
-| `pixels` | `"auto"` | how the frames reach ffmpeg (not in the app): `"auto"` four bytes a pixel, as Libre Panel draws them, which AMD's and NVIDIA's encoders turn into video colours on the graphics card themselves (told to do it as ffmpeg does on the processor, BT.601 in limited range), and from which ffmpeg makes them for x264 and Intel's for less than from three; `"rgb"` the way of before: three bytes a pixel, the colours made by ffmpeg on the processor for every encoder. Put `"rgb"` if the colours on the panel look shifted with a graphics card's encoder (and say so in an issue); the log's line `video: encoding with ...` says which it is (`h264_amf, rgb0` or `h264_amf, rgb24`). A card's encoder that ends before its first picture fed four bytes a pixel is started again the way of before, by itself |
+| `pixels` | `"auto"` | how the frames reach ffmpeg (the app checks it for you, see below): `"auto"` four bytes a pixel, as Libre Panel draws them, which AMD's and NVIDIA's encoders turn into video colours on the graphics card themselves (told to do it as ffmpeg does on the processor, BT.601 in limited range), and from which ffmpeg makes them for x264 and Intel's for less than from three; `"rgb"` the way of before: three bytes a pixel, the colours made by ffmpeg on the processor for every encoder. The log's line `video: encoding with ...` says which it is (`h264_amf, rgb0` or `h264_amf, rgb24`). A card's encoder that ends before its first picture fed four bytes a pixel is started again the way of before, by itself |
 | `ffmpeg` | `""` | path to ffmpeg; empty = the download's own, else look in `PATH` |
 | `local_clip` | `""` | see above |
 | `clip_asked` | `false` | `true` once the app has asked for `local_clip` (a name written there, or *Not now*); then it does not ask again |
+
+**The colours (`pixels`): the app checks it for you.** Settings → Panel → *Check the colours*
+(under the video experiment) sends a test picture through every encoder this PC can start, fed
+both ways, away from the panel, and measures the colours that come out: per encoder two rows of
+swatches, the largest difference and the verdict (identical, a level shift, a matrix shift or
+other). The card says what that means for the encoder the panel runs: nothing to do, or a
+button *Use the processor's conversion*, which writes `pixels = "rgb"` (and later *Back to the
+card's conversion*, `"auto"`); the running panels follow at once, each with a new ffmpeg, the
+panels beside the first too. *Show it on the panel* shows the test picture on the panel chosen
+at the top for 30 seconds, A (the card's conversion) and B (the processor's) every 3 seconds,
+then its theme again. How the check measures is in
+[the protocol notes](protocol/turzx-usb.md#encoder).
 
 The settings were measured on the 9.2" panel; the details are in
 [the protocol notes](protocol/turzx-usb.md#two-layers-h264-video--png-overlay-smooth-path).

@@ -18,7 +18,8 @@ project (docs/protocol/turzx-usb.md, "Video layer"):
   the card, told to do it as swscale does on the processor (BT.601, limited range): ffmpeg
   makes no NV12 for them. For x264 and Intel's, ffmpeg converts (the same YUV as from three
   bytes a pixel, for less). ``video.pixels = "rgb"`` gives the feed of before (rgb24, NV12 made
-  by ffmpeg for every card), should colours shift on a panel.
+  by ffmpeg for every card), should colours shift on a panel: Settings → Panel → Check the
+  colours measures whether they do (colour_check.py) and writes it with one click.
 - The bit rate was capped at 2 Mbit/s there, for 1920x480 at 50 frames a second. A panel
   with more pixels (the 12.3": 1920x720) or more frames starts with proportionally more
   (``maxrate`` "auto", :func:`auto_rate`), so its pictures and lettering stay as sharp; and

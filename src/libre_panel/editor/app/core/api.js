@@ -137,6 +137,9 @@ export const endpoints = {
   load: () => get("/api/load"),
   experiment: () => get("/api/experiment"),
   experimentAction: (action) => post("/api/experiment", { action }),
+  // Settings → Panel → Check the colours, for panel ``panel`` (1: the first; editor/colours.py)
+  colourCheck: (panel = 1) => get(`/api/colour-check?panel=${panel}`),
+  colourCheckAction: (action, panel = 1) => post("/api/colour-check", { action, panel }),
   setDetailedLog: (verbose) => post("/api/logs", { verbose }),
   logsFile: () => withToken("/api/logs/file"),
   // Settings → System → Backup: the settings and own themes in one file, and back (backup.py)

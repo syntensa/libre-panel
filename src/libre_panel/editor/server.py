@@ -381,6 +381,7 @@ class EditorState:
         self.install = Install()  # "Update to …": its download and putting it in place
         self._doctor: Any = None  # the panel test of Live → Diagnose (doctor_session.py)
         self._experiment: Any = None  # the video experiment's run (experiment.py)
+        self._colours: Any = None  # the colour check and its A/B on a panel (colours.py)
         self._load: Any = None  # what Libre Panel costs the PC, Live → Diagnose (load_report.py)
 
     def experiment(self, controls: Any) -> Any:
@@ -410,6 +411,15 @@ class EditorState:
                     gpu=gpu,
                 )
             return self._experiment
+
+    def colours(self) -> Any:
+        """The colour check (Settings → Panel → Check the colours), made on first use."""
+        with self._lock:
+            if self._colours is None:
+                from libre_panel.editor.colours import ColourCheck
+
+                self._colours = ColourCheck(self.config_path, self.controls)
+            return self._colours
 
     def doctor(self) -> Any:
         """The panel test, made on first use: it gives the app's panel loop's panel to the
@@ -534,9 +544,11 @@ class EditorState:
         with self._lock:
             if self._hub is not None:
                 self._hub.close()
-            load = self._load
+            load, colours = self._load, self._colours
         if load is not None:
             load.close()
+        if colours is not None:  # (a panel showing the colour check's picture shows its theme)
+            colours.close()
 
 
 _PART = re.compile(r"\{(\w+)([+*]?)\}")
@@ -2296,6 +2308,45 @@ class EditorHandler(BaseHTTPRequestHandler):
             return self._error('expected {"action": "start" or "stop"}')
         self._json(runner.state())
 
+    def _colour_check(self, query: dict[str, list[str]]) -> None:
+        """``GET /api/colour-check?panel=1``: the colour check as it stands, what panel ``n``
+        (1 the first) runs and feeds, what to do about it, and the A/B (editor/colours.py)."""
+        from libre_panel.editor.colours import ColourError
+
+        try:
+            number = int((query.get("panel") or ["1"])[0])
+        except ValueError:
+            return self._error("panel: expected a whole number")
+        try:
+            self._json(self.state.colours().state(number))
+        except ColourError as exc:
+            self._error(str(exc), exc.status)
+
+    def _colour_check_action(self) -> None:
+        """``POST /api/colour-check {"action": "check" | "show" | "stop", "panel": n}``: the
+        check begun with panel ``n``'s settings and size, its picture shown on that panel for the
+        eye (the running app only), or that ended."""
+        from libre_panel.editor.colours import ColourError
+
+        payload = self._read_json()
+        if payload is None:
+            return
+        action = payload.get("action") if isinstance(payload, dict) else None
+        number = payload.get("panel", 1) if isinstance(payload, dict) else 1
+        runner = self.state.colours()
+        try:
+            if action == "check":
+                runner.start_check(number)
+            elif action == "show":
+                runner.start_show(number)
+            elif action == "stop":
+                runner.stop_show()
+            else:
+                return self._error('expected {"action": "check", "show" or "stop"}')
+            self._json(runner.state(number if isinstance(number, int) else 1))
+        except ColourError as exc:
+            self._error(str(exc), exc.status)
+
     def _logs_action(self) -> None:
         """``POST /api/logs {"verbose": true}``: every detail into the log until the app starts
         again, or only what matters."""
@@ -2620,6 +2671,7 @@ ROUTES: tuple[Route, ...] = (
     Route("GET", "/api/load", lambda h, m, u: h._json(h.state.load_sampler().report())),
     Route("GET", "/api/logs", lambda h, m, u: h._logs(parse_qs(u.query))),
     Route("GET", "/api/experiment", lambda h, m, u: h._experiment()),
+    Route("GET", "/api/colour-check", lambda h, m, u: h._colour_check(parse_qs(u.query))),
     Route("GET", "/api/logs/file", lambda h, m, u: h._logs_file(), picture=True),
     Route("GET", "/api/hardware", lambda h, m, u: h._hardware(_refresh_asked(u.query))),
     Route("GET", "/api/fan-look", lambda h, m, u: h._fan_look(parse_qs(u.query)), picture=True),
@@ -2664,6 +2716,7 @@ ROUTES: tuple[Route, ...] = (
     Route("POST", "/api/doctor", lambda h, m, u: h._doctor_action()),
     Route("POST", "/api/logs", lambda h, m, u: h._logs_action()),
     Route("POST", "/api/experiment", lambda h, m, u: h._experiment_action()),
+    Route("POST", "/api/colour-check", lambda h, m, u: h._colour_check_action()),
     Route("POST", "/api/language", lambda h, m, u: h._set_language()),
     Route("POST", "/api/pages", lambda h, m, u: h._set_panel_page()),
     Route("POST", "/api/sequence", lambda h, m, u: h._set_sequence()),

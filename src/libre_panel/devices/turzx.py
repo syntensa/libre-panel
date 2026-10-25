@@ -135,6 +135,8 @@ class TurzxDisplay(Display):
             impl = self._driver(self.model)
             impl.open()
         self._impl, self.model = impl, impl.model
+        if self.feed is not None:  # (a colour check under way)
+            impl.set_feed(self.feed)
 
     def _driver(self, model: PanelModel | None, configured: bool = True) -> Display:
         global _told
@@ -233,6 +235,11 @@ class TurzxDisplay(Display):
     def set_brightness(self, percent: int) -> None:
         if self._impl:
             self._impl.set_brightness(percent)
+
+    def set_feed(self, pixels: str | None) -> None:
+        self.feed = pixels
+        if self._impl:
+            self._impl.set_feed(pixels)
 
     def screen_off(self) -> bool:
         return bool(self._impl and self._impl.screen_off())

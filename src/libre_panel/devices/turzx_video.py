@@ -60,6 +60,7 @@ from libre_panel import timing
 from libre_panel.devices import video_state
 from libre_panel.devices.base import Counters, DeviceError, FrameError
 from libre_panel.devices.h264 import (
+    PASS_THROUGH,
     Encoder,
     EncoderSettings,
     EncoderStopped,
@@ -178,6 +179,39 @@ def _frame_for(
         write_frame(out, frame, pixels)
 
     return write
+
+
+def rotation_of(size: tuple[int, int]) -> int:
+    """How ffmpeg turns a frame of ``size`` into the panel's framebuffer (as to_native does): a
+    landscape frame a quarter turn clockwise, a portrait one half a turn."""
+    return 270 if orientation_of(*size) == "landscape" else 180
+
+
+def video_settings(video: Any) -> EncoderSettings:
+    """The encoder settings of ``[device.video]`` as config.toml has them (the profile and the
+    encoder may still be "auto": :func:`resolved`)."""
+    return EncoderSettings(
+        fps=video.fps,
+        crf=video.crf,
+        preset=video.preset,
+        keyframe_s=video.keyframe_s,
+        maxrate=video.maxrate,
+        profile=video.profile,
+        encoder=video.encoder,
+    )
+
+
+def resolved(
+    settings: EncoderSettings, model_id: str, encoder: str, pixels: str
+) -> EncoderSettings:
+    """``settings`` as ffmpeg is started with them: the profile for the panel's model, the
+    encoder chosen and the frames as ``pixels`` ("auto" or "rgb") feeds them."""
+    return replace(
+        settings,
+        profile=resolve_profile(settings.profile, model_id),
+        encoder=encoder,
+        pixels=resolve_feed(pixels),
+    )
 
 
 class DecoderHung(DeviceError):
@@ -408,21 +442,15 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         super().__init__(config, model)
         self.video = config.video
         self.stream_fps = self.video.fps
-        self.settings = EncoderSettings(
-            fps=self.video.fps,
-            crf=self.video.crf,
-            preset=self.video.preset,
-            keyframe_s=self.video.keyframe_s,
-            maxrate=self.video.maxrate,
-            profile=self.video.profile,
-            encoder=self.video.encoder,
-        )
+        self.settings = video_settings(self.video)
         self.session: VideoSession | None = None
         self.encoder: Encoder | None = None
         self.rate: RateControl | None = None  # of maxrate "auto", once the picture size is known
         self._encoders_failed: set[str] = set()  # of "auto": one that stopped before a picture
         # an encoder of the card that ended before a picture fed rgb0: ffmpeg converts for it
+        # (kept a week in video-state.json, so that the next connection starts so at once)
         self._feeds_failed: set[str] = set()
+        self._feeds_asked: set[str] = set()  # the encoders video-state.json was asked about
         self._encoder_said = ""  # the encoder the log was told of
         self._ffmpeg: str | None = None
         self._pictures: queue.Queue[bytes] = queue.Queue(maxsize=2)
@@ -525,18 +553,11 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         which goes on until the new one has its first picture (:meth:`_switch`)."""
         if not beside:
             self._stop_encoder()
-        rotate = 270 if orientation_of(*size) == "landscape" else 180  # as to_native
-        settings = self.settings
+        rotate = rotation_of(size)
         model_id = self.model.id if self.model else ""
-        name = resolve_encoder(settings.encoder, self._ffmpeg, self._encoders_failed)
-        # (one of the card's that took no rgb0: as before, rgb24 and NV12 made by ffmpeg)
-        pixels = "rgb" if name in self._feeds_failed else self.video.pixels
-        settings = replace(
-            settings,
-            profile=resolve_profile(settings.profile, model_id),
-            encoder=name,
-            pixels=resolve_feed(pixels),
-        )
+        name = resolve_encoder(self.settings.encoder, self._ffmpeg, self._encoders_failed)
+        self._ask_refused(name)
+        settings = resolved(self.settings, model_id, name, self._pixels(name))
         said = f"{feed_text(settings)}, profile {settings.profile}"
         if said != self._encoder_said:
             self._encoder_said = said
@@ -587,6 +608,37 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         self.encoder = encoder
         self.counters.bit_rate = mbit(settings.maxrate)
         self.counters.encoder = feed_text(settings)
+
+    def _pixels(self, name: str) -> str:
+        """How the frames go into the encoder ``name`` ("auto" or "rgb"): as a colour check
+        shows them (:attr:`feed`), else as video.pixels says; for one of the card's that took
+        no rgb0, as before (rgb24, and NV12 made by ffmpeg)."""
+        if name in self._feeds_failed:
+            return "rgb"
+        return self.feed or self.video.pixels
+
+    def _ask_refused(self, name: str) -> None:
+        """Once per encoder of the card: whether it took no four bytes a pixel within the week
+        (video-state.json), so that this connection starts with the feed that works."""
+        if name not in PASS_THROUGH or name in self._feeds_asked or self._ffmpeg is None:
+            return
+        self._feeds_asked.add(name)
+        if name not in self._feeds_failed and video_state.refused(self._ffmpeg, name):
+            self._feeds_failed.add(name)
+            log.info(
+                "video: %s took no four bytes a pixel lately (video-state.json); ffmpeg "
+                "converts the frames for it",
+                name,
+            )
+
+    def _feed_changed(self) -> bool:
+        """Whether the frames are to go into ffmpeg otherwise than the running one takes them
+        (video.pixels changed, or a colour check shows its other feed): a new ffmpeg then."""
+        encoder = self.encoder
+        settings = getattr(encoder, "settings", None)
+        if encoder is None or settings is None:
+            return False
+        return settings.pixels != resolve_feed(self._pixels(settings.encoder))
 
     def _stop_encoder(self) -> None:
         if self.encoder is not None:
@@ -697,11 +749,20 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
             self._restart_panel(self._error)  # a new connection does not help
         if self._error is not None:
             self._heal(self._error)
-        self._last_frame = frame
+        if self.feed is None:  # (a colour check's picture is not what stays on the panel)
+            self._last_frame = frame
         self._hand_over()
         self._follow_the_panel()
         encoder = self._leaving or self.encoder  # during a switch: the one the panel shows
-        if encoder is None or encoder.size != frame.size or not encoder.alive:
+        if (
+            encoder is not None
+            and encoder.alive
+            and encoder.size == frame.size
+            and self._feed_changed()
+        ):
+            log.debug("video: the frames go in otherwise now; ffmpeg starts again")
+            self._start_encoder(frame.size)  # (the panel stays open: a new ffmpeg)
+        elif encoder is None or encoder.size != frame.size or not encoder.alive:
             if encoder is not None and encoder.size == frame.size:
                 self._stopped(encoder.reason())
             self._start_encoder(frame.size)
@@ -735,6 +796,8 @@ class TurzxVideoDisplay(TurzxUsbDisplay):
         if settings is not None and passes_through(settings) and ended:
             if name not in self._feeds_failed:
                 self._feeds_failed.add(name)
+                if self._ffmpeg is not None:  # for the next connections too, a week long
+                    video_state.keep_refusal(self._ffmpeg, name)
                 log.warning(
                     "video: %s ended before a picture fed %s (%s); ffmpeg converts the frames "
                     "for it",

@@ -317,6 +317,106 @@
 .experiment-results .verdict.stutter { color: var(--warn, #d29922); }
 .experiment-results .verdict.failed { color: var(--bad, #e5484d); }
 
+/* Settings → Panel → Check the colours: a block per encoder, two rows of swatches each */
+
+.colour-check {
+  display: grid;
+  gap: 12px;
+  padding: 16px 20px 18px;
+}
+
+#panel-colour-check .settings-card-head .btn {
+  white-space: nowrap;
+}
+
+.colour-check > .link-btn {
+  justify-self: start;
+}
+
+.colour-now {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.colour-encoder {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line, rgba(127, 127, 127, 0.2));
+}
+
+.colour-encoder-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 13px;
+}
+
+.colour-worst {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.colour-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.colour-row-label {
+  flex: 0 0 84px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.colour-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.colour-swatch {
+  width: 26px;
+  height: 18px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.35);
+}
+
+.colour-swatch.none {
+  background: repeating-linear-gradient(45deg, transparent 0 3px, rgba(127, 127, 127, 0.3) 3px 5px);
+}
+
+.colour-note {
+  margin: 0;
+  font-size: 12px;
+}
+
+.colour-advice,
+.colour-ab {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 13px;
+}
+
+.colour-advice {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(127, 127, 127, 0.1);
+}
+
+.colour-ab {
+  padding-top: 10px;
+  border-top: 1px solid var(--line, rgba(127, 127, 127, 0.2));
+}
+
+.colour-ab .muted {
+  flex: 1 1 260px;
+}
+
 .experiment-tiles {
   margin-top: 14px;
 }
